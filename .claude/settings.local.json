@@ -6,7 +6,24 @@
       "Bash(git init *)",
       "Bash(git add *)",
       "Bash(git -c 'user.name=Saurav Patro' -c user.email=saurav@local commit -q -m 'Snapshot: working single-device Little Log PWA *)",
-      "Bash(git branch *)"
+      "Bash(git branch *)",
+      "Read(//Users/sauravpatro/.ssh/**)",
+      "Bash(ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=6 -T git@github.com)",
+      "Bash(git config *)",
+      "Bash(ssh-keygen -t ed25519 -C \"little-log-github\" -f ~/.ssh/id_ed25519_github -N \"\" -q)",
+      "Bash(touch ~/.ssh/config)",
+      "Bash(chmod 600 ~/.ssh/config)",
+      "Bash(printf '\\\\nHost github.com\\\\n  HostName github.com\\\\n  User git\\\\n  IdentityFile ~/.ssh/id_ed25519_github\\\\n  IdentitiesOnly yes\\\\n')",
+      "Bash(ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8 -T git@github.com)",
+      "Bash(git commit *)",
+      "Bash(git ls-remote *)",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "Bash(sed -n '1,25p' index.html)",
+      "Bash(sed -n '28,80p' sw.js)",
+      "Bash(node --check firebase-init.js)",
+      "Bash(node --check store-firebase.js)",
+      "Bash(node --check sw.js)"
     ]
   }
 }

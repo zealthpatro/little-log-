@@ -13,6 +13,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Nunito+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!-- Firebase (cloud sync + sharing). Compat SDK keeps it usable from the inline app script. -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-init.js"></script>
 <style>
 /* ============ THEME ============ */
 :root{
@@ -3315,9 +3320,10 @@ async function savePosterImg(){
 /* ============================================================
    BOOT
    ============================================================ */
-(async function init(){
-  await PhotoStore.load();
-  const saved=await Store.load();
+/* Boot is now controlled by the cloud sync layer (see the auth + sync script below).
+   normalizeLoadedState() takes a state object (from the cloud, or from old local data
+   during one-time migration) and applies all the legacy-shape migrations. */
+function normalizeLoadedState(saved){
   if(saved&&saved.babies){
     state=Object.assign(state,saved);
     if(!state.timers)state.timers={};
@@ -3347,9 +3353,10 @@ async function savePosterImg(){
     if(!state.settings.tempUnit)state.settings.tempUnit='C';
     if(!state.settings.seen)state.settings.seen={};
   }
-  render();
-})();
+}
 </script>
+<!-- Cloud auth + sharing. Loads after the app so it can wire into state/persist/PhotoStore. -->
+<script src="store-firebase.js"></script>
 <script>
 /* PWA: register only on a real http(s) host. Skips file:// and the in-app artifact sandbox. */
 if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){

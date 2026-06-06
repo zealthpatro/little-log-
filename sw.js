@@ -1,6 +1,6 @@
 /* Little Log service worker.
    Bump CACHE on every deploy so old assets are cleared. */
-const CACHE = 'little-log-v1';
+const CACHE = 'little-log-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -25,6 +25,8 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
+  // Only manage same-origin requests. Let Firebase, Google sign-in and font CDNs pass through untouched.
+  if (new URL(req.url).origin !== self.location.origin) return;
 
   const accept = req.headers.get('accept') || '';
   const isHTML = req.mode === 'navigate' || accept.indexOf('text/html') !== -1;
