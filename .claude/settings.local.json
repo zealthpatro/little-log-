@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git --version)",
+      "Bash(gh auth *)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git -c 'user.name=Saurav Patro' -c user.email=saurav@local commit -q -m 'Snapshot: working single-device Little Log PWA *)",
+      "Bash(git branch *)"
+    ]
+  }
+}
