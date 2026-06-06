@@ -29,7 +29,23 @@
     + '.ll-auth-btn:hover{background:#FBF7EF;}.ll-auth-btn:disabled{opacity:.6;cursor:default;}'
     + '.ll-auth-msg{margin-top:16px;color:#9a8d80;font-size:13px;line-height:1.4;}'
     + '.ll-spin{width:30px;height:30px;border:3px solid #E0D7C7;border-top-color:#C97FA0;border-radius:50%;margin:6px auto 0;animation:llspin 0.9s linear infinite;}'
-    + '@keyframes llspin{to{transform:rotate(360deg);}}';
+    + '@keyframes llspin{to{transform:rotate(360deg);}}'
+    + '#llAcctBtn{position:fixed;top:max(10px,env(safe-area-inset-top));right:10px;z-index:9000;width:42px;height:42px;border-radius:50%;border:1px solid rgba(0,0,0,.08);background:rgba(255,255,255,.92);font-size:20px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.12);display:flex;align-items:center;justify-content:center;}'
+    + '#llModalOv{position:fixed;inset:0;z-index:99998;background:rgba(20,15,12,.45);display:flex;align-items:flex-end;justify-content:center;font-family:"Nunito Sans",system-ui,sans-serif;}'
+    + '.ll-modal{background:#fff;width:100%;max-width:440px;border-radius:22px 22px 0 0;padding:20px 20px 28px;max-height:85vh;overflow:auto;box-shadow:0 -8px 40px rgba(0,0,0,.2);}'
+    + '@media(min-width:480px){#llModalOv{align-items:center;}.ll-modal{border-radius:22px;}}'
+    + '.ll-modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}'
+    + '.ll-modal-head h2{font-family:"Fraunces",Georgia,serif;font-size:22px;margin:0;color:#2C2521;}'
+    + '#llModalX{border:none;background:none;font-size:28px;line-height:1;color:#9a8d80;cursor:pointer;}'
+    + '.ll-mems{display:flex;flex-direction:column;gap:8px;margin-bottom:18px;}'
+    + '.ll-mem{display:flex;align-items:center;justify-content:space-between;background:#FBF7EF;border-radius:12px;padding:10px 12px;}'
+    + '.ll-mem-name{font-weight:700;color:#2C2521;font-size:15px;}.ll-mem-email{color:#9a8d80;font-size:12px;}'
+    + '.ll-mem-role{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#C97FA0;font-weight:700;}'
+    + '.ll-invite{display:flex;flex-direction:column;gap:8px;border-top:1px solid #efe6d6;padding-top:16px;}'
+    + '.ll-invite label{font-weight:700;color:#2C2521;font-size:14px;}'
+    + '.ll-invite input,.ll-invite select{border:1px solid #E0D7C7;border-radius:10px;padding:11px 12px;font-size:15px;font-family:inherit;background:#fff;}'
+    + '.ll-modal-btn{border:none;border-radius:12px;padding:13px;font-size:15px;font-weight:700;background:#C97FA0;color:#fff;cursor:pointer;font-family:inherit;}'
+    + '.ll-modal-btn:disabled{opacity:.6;}.ll-ghost{background:#FBF7EF;color:#6E635B;margin-top:18px;width:100%;}';
   document.head.appendChild(st);
 
   function overlay() {
@@ -194,6 +210,7 @@
         state.activeBabyId = (state.babies[0] && state.babies[0].id) || null;
       booted = true;
       hideOverlay();
+      injectAccountButton();
       render();
     }
 
@@ -276,6 +293,72 @@
   };
   PhotoStore.load = async function () {};
   PhotoStore.save = async function () {};
+
+  /* ---------- account / family sharing UI ---------- */
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+  function injectAccountButton() {
+    if (document.getElementById('llAcctBtn')) return;
+    var b = document.createElement('button');
+    b.id = 'llAcctBtn'; b.title = 'Family & sharing'; b.textContent = '👨‍👩‍👧';
+    b.onclick = openFamily;
+    document.body.appendChild(b);
+  }
+
+  function modal(title, bodyHtml) {
+    closeModal();
+    var ov = document.createElement('div'); ov.id = 'llModalOv';
+    ov.innerHTML = '<div class="ll-modal"><div class="ll-modal-head"><h2>' + esc(title) + '</h2><button id="llModalX">×</button></div>' + bodyHtml + '</div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', function (e) { if (e.target === ov) closeModal(); });
+    document.getElementById('llModalX').onclick = closeModal;
+  }
+  function closeModal() { var m = document.getElementById('llModalOv'); if (m) m.remove(); }
+
+  function openFamily() {
+    var me = auth.currentUser; if (!me) return;
+    var myRole = window.LL.role || 'caregiver';
+    var info = window.LL.memberInfo || {};
+    var rows = Object.keys(info).map(function (uid) {
+      var m = info[uid] || {};
+      return '<div class="ll-mem"><div><div class="ll-mem-name">' + esc(m.name || m.email || 'Member') + (uid === me.uid ? ' (you)' : '')
+        + '</div><div class="ll-mem-email">' + esc(m.email || '') + '</div></div><div class="ll-mem-role">' + esc(m.role || 'caregiver') + '</div></div>';
+    }).join('') || '<div class="ll-auth-msg">Just you so far.</div>';
+
+    var invite = (myRole === 'owner')
+      ? '<div class="ll-invite"><label>Invite someone by email</label>'
+        + '<input id="llInvEmail" type="email" placeholder="name@email.com" autocomplete="off" autocapitalize="off">'
+        + '<select id="llInvRole"><option value="caregiver">Caregiver — can log entries</option><option value="owner">Owner — full control</option></select>'
+        + '<button id="llInvBtn" class="ll-modal-btn">Create invite</button>'
+        + '<div id="llInvMsg" class="ll-auth-msg"></div></div>'
+      : '<div class="ll-auth-msg">Only the owner can invite new people.</div>';
+
+    modal('Family & sharing', '<div class="ll-mems">' + rows + '</div>' + invite
+      + '<button id="llSignOut" class="ll-modal-btn ll-ghost">Sign out</button>');
+
+    document.getElementById('llSignOut').onclick = function () { closeModal(); window.LL.signOut(); };
+    if (myRole === 'owner') document.getElementById('llInvBtn').onclick = submitInvite;
+  }
+
+  async function submitInvite() {
+    var email = ((document.getElementById('llInvEmail').value) || '').trim().toLowerCase();
+    var roleSel = document.getElementById('llInvRole').value || 'caregiver';
+    var msg = document.getElementById('llInvMsg');
+    if (!email || email.indexOf('@') < 1) { msg.textContent = 'Please enter a valid email.'; return; }
+    var btn = document.getElementById('llInvBtn'); btn.disabled = true; btn.textContent = 'Creating…';
+    try {
+      await db.collection('invites').doc(email).set({
+        householdId: window.LL.householdId, role: roleSel,
+        invitedBy: auth.currentUser.uid, status: 'pending', createdAt: window.LL.serverTimestamp()
+      });
+      msg.innerHTML = '✅ Invite created. Tell <b>' + esc(email) + '</b> to open the app link and <b>Continue with Google</b> using that email — they\'ll join automatically.';
+      btn.textContent = 'Create invite'; btn.disabled = false;
+      document.getElementById('llInvEmail').value = '';
+    } catch (e) {
+      msg.textContent = 'Could not create invite: ' + ((e && e.message) || e);
+      btn.textContent = 'Create invite'; btn.disabled = false;
+    }
+  }
 
   /* ---------- auth state machine ---------- */
   showStatus('Loading…'); // cover the app until we know whether you're signed in
