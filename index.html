@@ -2346,7 +2346,61 @@ function saveGrowth(){
   addEvent(ev); persist(); closeSheet(); render(); toast('Measurement saved');
 }
 
+/* ---------- growth percentile charts (WHO / CDC) ---------- */
+let growthSource='who';
+function setGrowthSource(s){ growthSource=s; render(); }
+function setBabySex(s){ const b=activeBaby(); if(!b)return; b.sex=s; persist(); render(); }
+function growthRef(meas){ const b=activeBaby(); const sex=b&&b.sex; if(!sex||!window.GROWTH_REF)return null; const src=window.GROWTH_REF[growthSource]; return (src&&src[meas]&&src[meas][sex])||null; }
+function refConv(meas,v,unit){ return meas==='weight'?convW(v,'kg',unit):convH(v,'cm',unit); }
+function babyAgeMonths(t){ const b=activeBaby(); return (b&&b.birth)?((t-b.birth)/2629800000):null; }
+function interpBands(ref,mo){
+  if(mo<=ref[0][0]) return ref[0].slice(1);
+  if(mo>=ref[ref.length-1][0]) return ref[ref.length-1].slice(1);
+  for(let i=1;i<ref.length;i++){ if(mo<=ref[i][0]){ const a=ref[i-1],b=ref[i],f=(mo-a[0])/((b[0]-a[0])||1); return [1,2,3,4,5].map(k=>a[k]+(b[k]-a[k])*f); } }
+  return ref[ref.length-1].slice(1);
+}
+function estPercentile(meas,unit){
+  const ref=growthRef(meas); if(!ref)return null;
+  const g=growthEvents().filter(e=>e[meas]); if(!g.length)return null;
+  const e=g[g.length-1], mo=babyAgeMonths(e.time);
+  if(mo==null||mo<0||mo>ref[ref.length-1][0]+0.6)return null;
+  const val=meas==='weight'?convW(e.weight,e.wUnit||'kg',unit):convH(e.height,e.hUnit||'cm',unit);
+  const bands=interpBands(ref,mo).map(v=>refConv(meas,v,unit)), ps=[5,25,50,75,95];
+  if(val<=bands[0])return '<5th'; if(val>=bands[4])return '>95th';
+  for(let i=1;i<5;i++){ if(val<=bands[i]){ const f=(val-bands[i-1])/((bands[i]-bands[i-1])||1); return Math.round(ps[i-1]+(ps[i]-ps[i-1])*f)+'th'; } }
+  return '50th';
+}
+function pctLabel(meas,unit){ const p=estPercentile(meas,unit); return p?` · latest ~${p}`:''; }
+function growthControls(b){
+  return `<div class="gx-ctrl">
+    <div class="gx-seg">${['who','cdc'].map(s=>`<button class="${growthSource===s?'on':''}" onclick="setGrowthSource('${s}')">${s.toUpperCase()}</button>`).join('')}</div>
+    <div class="gx-seg">${[['M','Boy'],['F','Girl']].map(o=>`<button class="${b&&b.sex===o[0]?'on':''}" onclick="setBabySex('${o[0]}')">${o[1]}</button>`).join('')}</div>
+  </div>`;
+}
+function svgPercentile(meas,unit){
+  const ref=growthRef(meas); if(!ref)return '';
+  const W=320,H=180,padL=30,padR=12,padT=12,padB=20;
+  const XM=ref[ref.length-1][0];
+  const bpts=growthEvents().filter(e=>e[meas]).map(e=>({mo:babyAgeMonths(e.time), v:(meas==='weight'?convW(e.weight,e.wUnit||'kg',unit):convH(e.height,e.hUnit||'cm',unit))})).filter(p=>p.mo!=null&&p.mo>=0).sort((a,b)=>a.mo-b.mo);
+  let lo=Infinity,hi=-Infinity;
+  ref.forEach(r=>{ lo=Math.min(lo,refConv(meas,r[1],unit)); hi=Math.max(hi,refConv(meas,r[5],unit)); });
+  bpts.forEach(p=>{ if(p.mo<=XM){ lo=Math.min(lo,p.v); hi=Math.max(hi,p.v); } });
+  const vp=(hi-lo)*0.08||1; lo-=vp; hi+=vp;
+  const X=mo=>padL+(Math.min(mo,XM)/XM)*(W-padL-padR);
+  const Y=v=>padT+(1-((v-lo)/((hi-lo)||1)))*(H-padT-padB);
+  const bandPath=idx=>ref.map((r,i)=>(i?'L':'M')+X(r[0]).toFixed(1)+' '+Y(refConv(meas,r[idx],unit)).toFixed(1)).join(' ');
+  const top=ref.map((r,i)=>(i?'L':'M')+X(r[0]).toFixed(1)+' '+Y(refConv(meas,r[5],unit)).toFixed(1)).join(' ');
+  const botR=ref.slice().reverse().map(r=>'L'+X(r[0]).toFixed(1)+' '+Y(refConv(meas,r[1],unit)).toFixed(1)).join(' ');
+  const col=meas==='weight'?'var(--feed)':'var(--sleep)';
+  const bands=[1,2,3,4,5].map(idx=>`<path d="${bandPath(idx)}" fill="none" stroke="${idx===3?'var(--ink-soft)':'var(--line)'}" stroke-width="${idx===3?1.4:1}" ${idx===3?'':'stroke-dasharray="2 2"'}/>`).join('');
+  const bl=bpts.map((p,i)=>(i?'L':'M')+X(p.mo).toFixed(1)+' '+Y(p.v).toFixed(1)).join(' ');
+  const dots=bpts.map(p=>`<circle cx="${X(p.mo).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="3.2" fill="${col}" stroke="#fff" stroke-width="1.5"/>`).join('');
+  let xt=''; for(let m=0;m<=XM;m+=6){ xt+=`<text x="${X(m).toFixed(1)}" y="${H-5}" text-anchor="middle" font-size="9" fill="var(--ink-faint)">${m}m</text>`; }
+  const lbl=`<text x="${W-padR}" y="${(Y(refConv(meas,ref[ref.length-1][5],unit))-2).toFixed(1)}" text-anchor="end" font-size="8" fill="var(--ink-faint)">95th</text><text x="${W-padR}" y="${(Y(refConv(meas,ref[ref.length-1][1],unit))+8).toFixed(1)}" text-anchor="end" font-size="8" fill="var(--ink-faint)">5th</text>`;
+  return `<svg class="growth-line" viewBox="0 0 ${W} ${H}"><path d="${top+' '+botR+' Z'}" fill="${col}" opacity="0.07"/>${bands}${lbl}<path d="${bl}" fill="none" stroke="${col}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>${dots}${xt}</svg>`;
+}
 function renderGrowthSection(){
+  const b=activeBaby();
   const g=growthEvents();
   if(!g.length){
     return `<div class="sec-title" style="margin-top:24px">Growth</div>
@@ -2363,10 +2417,12 @@ function renderGrowthSection(){
       <div class="gx-box"><div class="n" style="color:var(--feed)">${lw?(+convW(lw.weight,lw.wUnit||'kg',wU).toFixed(2)):'·'}${lw?' '+wU:''}</div><div class="l">Latest weight</div>${wDelta?`<div class="d" style="color:${wDelta>0?'var(--diaper)':'var(--med)'}">${wDelta>0?'+':''}${wDelta} ${wU}</div>`:''}</div>
       <div class="gx-box"><div class="n" style="color:var(--sleep)">${lh?(+convH(lh.height,lh.hUnit||'cm',hU).toFixed(1)):'·'}${lh?' '+hU:''}</div><div class="l">Latest height</div>${hDelta?`<div class="d" style="color:${hDelta>0?'var(--diaper)':'var(--med)'}">${hDelta>0?'+':''}${hDelta} ${hU}</div>`:''}</div>
     </div>
-    ${wPts.length>=1?`<div class="stat-card"><h3>Weight</h3><div class="csub">${wPts.length} measurement${wPts.length>1?'s':''} · ${wU}</div>${svgLine(wPts,'feed',wU)}</div>`:''}
-    ${hPts.length>=1?`<div class="stat-card"><h3>Height</h3><div class="csub">${hPts.length} measurement${hPts.length>1?'s':''} · ${hU}</div>${svgLine(hPts,'sleep',hU)}</div>`:''}
+    ${growthControls(b)}
+    ${(b&&b.sex)?'':`<div class="stat-card"><div class="csub" style="margin:0">Choose your baby's sex above to see WHO/CDC percentile curves behind their measurements.</div></div>`}
+    ${wPts.length?`<div class="stat-card"><h3>Weight</h3><div class="csub">${(b&&b.sex)?growthSource.toUpperCase()+' percentiles'+pctLabel('weight',wU):wPts.length+' measurement'+(wPts.length>1?'s':'')} · ${wU}</div>${(b&&b.sex&&growthRef('weight'))?svgPercentile('weight',wU):svgLine(wPts,'feed',wU)}</div>`:''}
+    ${hPts.length?`<div class="stat-card"><h3>Height</h3><div class="csub">${(b&&b.sex)?growthSource.toUpperCase()+' percentiles'+pctLabel('height',hU):hPts.length+' measurement'+(hPts.length>1?'s':'')} · ${hU}</div>${(b&&b.sex&&growthRef('height'))?svgPercentile('height',hU):svgLine(hPts,'sleep',hU)}</div>`:''}
     <div class="add-row" onclick="openGrowth()">${I.plus} Add a measurement</div>
-    <p style="font-size:11.5px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:12px">Growth percentiles are best tracked with your pediatrician.</p>`;
+    <p style="font-size:11.5px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:12px">${(b&&b.sex)?'Bands: '+(growthSource==='who'?'WHO Child Growth Standards (0–24 mo)':'CDC growth charts (0–36 mo)')+'. ':''}A guide, not a diagnosis — your pediatrician is the best judge.</p>`;
 }
 function growthDelta(pts){ if(pts.length<2)return null; const d=pts[pts.length-1].v-pts[pts.length-2].v; return +d.toFixed(2); }
 function svgLine(pts,color,unit){
@@ -3509,6 +3565,8 @@ function normalizeLoadedState(saved){
 <script src="store-firebase.js"></script>
 <!-- Bear avatars + custom time picker. -->
 <script src="cubby-extras.js"></script>
+<!-- WHO/CDC growth reference percentiles. -->
+<script src="growth-data.js"></script>
 <script>
 /* PWA: register only on a real http(s) host. Skips file:// and the in-app artifact sandbox. */
 if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){

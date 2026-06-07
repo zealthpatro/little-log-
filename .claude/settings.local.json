@@ -45,7 +45,21 @@
       "Bash(sed -n '1336,1352p' index.html)",
       "Bash(sed -n '1412,1430p' index.html)",
       "Bash(sed -n '1431,1460p' index.html)",
-      "Bash(sed -n '1463,1490p' index.html)"
+      "Bash(sed -n '1463,1490p' index.html)",
+      "Bash(curl -sL \"https://www.cdc.gov/growthcharts/data/zscore/wtageinf.csv\" -o cdc_wfa.csv -w \"HTTP %{http_code} size %{size_download}\\\\n\")",
+      "Bash(head -3 cdc_wfa.csv)",
+      "Bash(curl -sL \"https://www.cdc.gov/growthcharts/data/zscore/lenageinf.csv\" -o cdc_lfa.csv -w \"HTTP %{http_code} size %{size_download}\\\\n\")",
+      "Bash(head -3 cdc_lfa.csv)",
+      "WebSearch",
+      "Bash(curl -sL \"https://ftp.cdc.gov/pub/Health_Statistics/NCHS/growthcharts/WHO-Boys-Weight-for-age-Percentiles.csv\" -o who_b_w.csv -w \"boys wt: HTTP %{http_code} size %{size_download}\\\\n\")",
+      "Bash(curl -sL \"https://ftp.cdc.gov/pub/Health_Statistics/NCHS/growthcharts/WHO-Girls-Weight-for-age%20Percentiles.csv\" -o who_g_w.csv -w \"girls wt: HTTP %{http_code} size %{size_download}\\\\n\")",
+      "Bash(curl -sL \"https://ftp.cdc.gov/pub/Health_Statistics/NCHS/growthcharts/WHO-Boys-Length-for-age-Percentiles.csv\" -o who_b_l.csv -w \"boys len: HTTP %{http_code} size %{size_download}\\\\n\")",
+      "Bash(curl -sL \"https://ftp.cdc.gov/pub/Health_Statistics/NCHS/growthcharts/WHO-Girls-Length-for-age-Percentiles.csv\" -o who_g_l.csv -w \"girls len: HTTP %{http_code} size %{size_download}\\\\n\")",
+      "Bash(sed -i '' 's/        mo=num\\(row\\\\[1\\\\]\\)/        mo=num\\(row[1]\\)\\\\n        if mo is None: continue/' parse_growth.py)",
+      "Bash(sed -i '' 's/        mo=num\\(row\\\\[0\\\\]\\)/        mo=num\\(row[0]\\)\\\\n        if mo is None: continue/' parse_growth.py)",
+      "Bash(python3 parse_growth.py)",
+      "Bash(node --check growth-data.js)",
+      "Bash(sed -i '' \"s/little-log-v7/little-log-v8/\" sw.js)"
     ]
   }
 }
