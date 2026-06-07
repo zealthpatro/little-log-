@@ -461,8 +461,18 @@
         relationship: rel, name: name,
         invitedBy: auth.currentUser.uid, status: 'pending', createdAt: window.LL.serverTimestamp()
       });
-      msg.innerHTML = '✅ Invite ready for <b>' + esc(email) + '</b>' + (rel ? ' (' + esc(rel) + ')' : '')
-        + '. Now <b>Copy</b> the app link above and send it to them. They sign in with Google using <b>' + esc(email) + '</b> and join automatically.';
+      var link = location.origin;
+      var babyName = (typeof state !== 'undefined' && state.babies && state.babies[0] && state.babies[0].name) ? state.babies[0].name : 'our baby';
+      var subject = 'Join me on Cubby 🐻';
+      var bodyTxt = 'I\'m using Cubby to keep track of ' + babyName + '\'s feeds, naps, nappies and more — and I\'d love you on it too.\n\n'
+        + '1) Open this link: ' + link + '\n'
+        + '2) Tap "Continue with Google" using THIS email: ' + email + '\n\n'
+        + 'You\'ll join automatically and see everything, live. (On a phone you can add it to your home screen like an app.)';
+      var mailto = 'mailto:' + encodeURIComponent(email) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(bodyTxt);
+      msg.innerHTML = '✅ Invite ready for <b>' + esc(email) + '</b>' + (rel ? ' (' + esc(rel) + ')' : '') + '.'
+        + '<button id="llInvEmailBtn" class="ll-modal-btn" style="margin-top:10px">📧 Email the invite</button>'
+        + '<div style="font-size:12px;color:#9a8d80;margin-top:8px">Opens your email app with the link ready to send. Or use <b>Copy</b> above for WhatsApp/text.</div>';
+      var eb = document.getElementById('llInvEmailBtn'); if (eb) eb.onclick = function () { window.location.href = mailto; };
       btn.textContent = 'Create invite'; btn.disabled = false;
       document.getElementById('llInvName').value = ''; document.getElementById('llInvEmail').value = '';
     } catch (e) {
