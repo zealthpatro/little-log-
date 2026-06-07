@@ -4,7 +4,7 @@ A warm, private, shareable baby-tracker PWA. Feeds, sleep, nappies, pumping, gro
 milestones, medicine, vaccines, illness, photos and keepsakes — with real multi-caregiver
 sharing, per-person bear avatars, and WHO/CDC growth-percentile charts.
 
-- **Live app:** https://cubby.saurav-918.workers.dev
+- **Live app:** https://little-cubby.com (custom domain) — also https://cubby.saurav-918.workers.dev
 - **Repo:** https://github.com/zealthpatro/little-log-
 - **Hosting:** Cloudflare (Workers static assets) — auto-deploys on push to `main`
 - **Backend:** Firebase (Google sign-in + Firestore) — project `little-log-a9caa`, free **Spark** plan
@@ -148,7 +148,7 @@ npx wrangler deploy        # uses wrangler.toml ([assets] directory="./")
 
 ### Required when the live domain changes
 Add the domain under **Firebase Console → Authentication → Settings → Authorized domains**
-(currently `cubby.saurav-918.workers.dev`, `localhost`, `little-log-a9caa.firebaseapp.com`).
+(currently `little-cubby.com`, `cubby.saurav-918.workers.dev`, `localhost`, `little-log-a9caa.firebaseapp.com`).
 
 ---
 
@@ -175,7 +175,8 @@ Icons: `python3 generate_icons.py`.
 | Thing | Value |
 |---|---|
 | GitHub | `zealthpatro/little-log-` (SSH key configured locally) |
-| Cloudflare project | `cubby` → `cubby.saurav-918.workers.dev` |
+| Cloudflare project | `cubby` → `cubby.saurav-918.workers.dev` + custom domain `little-cubby.com` |
+| Domain | `little-cubby.com` (registered in Cloudflare; added as a Worker Custom Domain) |
 | Firebase project | `little-log-a9caa` (Spark / free) |
 | Firebase services | Authentication (Google), Cloud Firestore. **No** Storage, **no** Functions. |
 | Firebase web config | in `firebase-init.js` (public by design; safe to commit) |

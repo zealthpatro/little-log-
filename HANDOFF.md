@@ -6,7 +6,7 @@ Quick orientation for picking this project back up (read `README.md` for the ful
 **Cubby** 🐻 — a shared baby-tracker PWA, **live and in real use** by the owner + family.
 Don't break production. Make a change → verify → push (auto-deploys).
 
-- Live: https://cubby.saurav-918.workers.dev
+- Live: https://little-cubby.com (custom domain) · https://cubby.saurav-918.workers.dev (fallback)
 - Repo: https://github.com/zealthpatro/little-log- (branch `main`)
 - Backend: Firebase `little-log-a9caa` (Google auth + Firestore, free Spark plan)
 
