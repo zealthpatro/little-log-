@@ -1,0 +1,8 @@
+.git
+.claude
+*.py
+*.md
+firestore.rules
+wrangler.toml
+.assetsignore
+.gitignore

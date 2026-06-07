@@ -1,0 +1,6 @@
+# Cubby: deploy as a static site on Cloudflare Workers (static assets, no server code).
+name = "cubby"
+compatibility_date = "2025-06-01"
+
+[assets]
+directory = "./"
