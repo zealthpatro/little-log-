@@ -1,60 +1,48 @@
-# Little Log, Cloudflare handoff
+# Cubby — handoff / resume notes
 
-This folder is a ready-to-deploy static PWA. Drop it into a repo and hand it to Claude Code.
+Quick orientation for picking this project back up (read `README.md` for the full picture).
 
-## What is here
+## What this is
+**Cubby** 🐻 — a shared baby-tracker PWA, **live and in real use** by the owner + family.
+Don't break production. Make a change → verify → push (auto-deploys).
 
-```
-index.html              the whole app (single file: HTML + CSS + JS)
-manifest.webmanifest     PWA manifest (name, icons, theme)
-sw.js                    service worker (offline + clean updates)
-_headers                 Cloudflare: keep sw.js and manifest uncached
-icons/                   app icons (192, 512, maskable, apple-touch, favicon)
-README.md                full project doc, architecture, and the sharing plan
-```
+- Live: https://cubby.saurav-918.workers.dev
+- Repo: https://github.com/zealthpatro/little-log- (branch `main`)
+- Backend: Firebase `little-log-a9caa` (Google auth + Firestore, free Spark plan)
 
-The app persists to `localStorage` on whatever device and browser opens it. No backend yet.
+## The 30-second model
+- `index.html` = the whole app (vanilla JS, single global `state`, `render()` re-renders all).
+- `store-firebase.js` = auth + cloud sync (overrides `persist()`/`PhotoStore`; real-time listeners;
+  family/sharing UI). App code never calls Firestore directly.
+- `cubby-extras.js` = bear avatars + custom time/date pickers + the unified "When" time strip.
+- `growth-data.js` = WHO/CDC percentile tables.
+- Data lives in `households/{hid}` (see README §3). Events are a subcollection; rest is the `app` blob.
 
-## Preview locally
-
+## Dev loop
 ```bash
-cd little-log-pwa
-python3 -m http.server 8080
-# visit http://localhost:8080
+python3 -m http.server 8080         # http://localhost:8080 (Google sign-in works on localhost)
+# edit files...
+node --check store-firebase.js cubby-extras.js growth-data.js   # always
+# verify in browser; then:
+# bump CACHE in sw.js (little-log-vN)
+git add -A && git commit -m "..." && git push     # Cloudflare auto-deploys in ~1 min
 ```
+Tip: the preview/SW caches aggressively — unregister SW + clear caches to see fresh changes.
+To verify a deploy: `curl -s "https://cubby.saurav-918.workers.dev/?cb=$RANDOM" | grep <marker>`.
 
-Use a server (not file://) so the service worker and storage behave correctly.
+## Gotchas
+- Editing JS strings: watch for accidental literal newlines inside `'...'` (broke a build once).
+- Bump `sw.js` `CACHE` or clients keep old assets.
+- New live domain → add it to Firebase Authorized domains or Google sign-in fails.
+- Firestore rules live in `firestore.rules` **and** must be published in the Firebase console
+  (the console copy is the source of truth at runtime).
 
-## Deploy to Cloudflare Pages
+## Decisions on record
+- In-app notifications only (no Blaze / no card). Push deferred.
+- Photos in Firestore (base64), not Firebase Storage (avoids Blaze).
+- Growth: WHO default; CDC toggle; IAP n/a for under-5.
+- One shared household; Google sign-in.
 
-Option A, dashboard: create a Pages project, connect the repo (or direct-upload this folder), no build command, output directory is the folder root.
-
-Option B, CLI:
-
-```bash
-npm install -g wrangler
-wrangler login
-wrangler pages deploy little-log-pwa --project-name little-log
-```
-
-Cloudflare prints the live URL. Add a custom domain in the Pages settings if you want.
-
-## Updating
-
-After editing `index.html` (or any asset), bump the cache name in `sw.js` (for example `little-log-v2`) so clients pick up the new version, then redeploy. `_headers` already prevents `sw.js` and the manifest from being cached, so the update propagates on the next visit.
-
-## Install on a phone
-
-Open the live URL in mobile Safari or Chrome, then "Add to Home Screen". It launches full-screen with the icon, and works offline.
-
-## Known drawback of this phase (read before the beta)
-
-This is single-device. Data lives in `localStorage` for that one browser:
-
-- Not shared across phones, and not a backup.
-- iOS Safari can evict `localStorage` after roughly 7 days of no use, so a long gap can lose data. Tell beta users, or move to the cloud phase before a serious beta.
-- Roughly a 5MB cap; downscaled photo thumbnails fit, but heavy photo use will hit it.
-
-## Next phase: accounts and sharing
-
-The full design (roles, Firestore security rules, invite flow, build order, trade-offs) is in `README.md`, section 6. Short version: two parents and a nanny on the same baby needs auth, a shared baby document with an owner role, and real-time sync. Firebase is the faster path for that; Cloudflare (Pages + Workers + D1 + an auth provider) keeps it one-vendor but is more wiring. Either way, that phase is a real build, best done in Claude Code where it can run the deploys.
+## Next planned
+- **Send-email flow** for invites (server-sent). Options being decided: EmailJS (client-side,
+  free, no Blaze) vs Firebase "Trigger Email" extension (Blaze + SMTP). See README §9.

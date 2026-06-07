@@ -1,247 +1,212 @@
-# Little Log
+# Cubby 🐻
 
-A warm, private, single-file baby activity tracker. Feeds, sleep, nappies, pumping, growth, milestones, medicine, vaccines, illness, photos and keepsakes, with multi-baby (twin) support and a "dusk nursery" design.
+A warm, private, shareable baby-tracker PWA. Feeds, sleep, nappies, pumping, growth,
+milestones, medicine, vaccines, illness, photos and keepsakes — with real multi-caregiver
+sharing, per-person bear avatars, and WHO/CDC growth-percentile charts.
 
-This document covers what the app is, how it is built, how to run it locally, how to put it live on the web, and the plan for real multi-caregiver sharing.
+- **Live app:** https://cubby.saurav-918.workers.dev
+- **Repo:** https://github.com/zealthpatro/little-log-
+- **Hosting:** Cloudflare (Workers static assets) — auto-deploys on push to `main`
+- **Backend:** Firebase (Google sign-in + Firestore) — project `little-log-a9caa`, free **Spark** plan
 
----
-
-## 1. What it is
-
-Little Log is one self-contained HTML file (vanilla JavaScript, custom CSS, canvas for image generation). No build step, no framework, no external runtime dependencies. It opens on a phone or desktop browser and works offline.
-
-Core ideas:
-
-- One-thumb logging, designed for a tired parent at 3am.
-- Privacy by default. Nothing leaves the device in the standalone version.
-- A genuinely differentiated feature: the data-fused **memory card**, which composes a monthly keepsake image from the baby's real logged numbers.
+> The app is fully cloud-hosted and always-on. No local machine is required to keep it
+> running — `localhost` is only for development.
 
 ---
 
-## 2. Features
-
-**Logging**
-- Feed: nursing timer, bottle (breast milk or formula), solids (with suggested foods, allergen flags, optional amount and photo), water. Adapts to each baby's feeding profile.
-- Sleep: live nap timer plus "log a past nap" with date and time.
-- Diaper: wet, dirty, both, dry (each with a distinct icon and colour).
-- Pump, growth (weight and height with charts), activity tags (tummy time, bath, play and more) and free notes.
-- Past-feed and past-nap entries support a date, not only a time.
-
-**Health**
-- Medicine schedules with in-app reminders (fire only while the app is open).
-- Editable vaccine schedule (CDC/ACIP template, with a disclaimer to follow your own pediatrician and country schedule).
-- Illness episodes with temperature logging (fever flag), symptoms, and medicines given during the window.
-- Doctors and Allergies are also surfaced here as entry points.
-
-**Profile (per baby)**
-- Identity header with a chosen profile photo (or colour initial), name and age.
-- Birth details (for the keepsake poster).
-- Food and allergies (milk type, solids, diet, allergens).
-- Care team: multiple doctors (pediatrician as primary, plus specialists) and a visit log.
-
-**Album and keepsakes**
-- Photo studio (canvas filters, frames, stamps).
-- Monthly memory card fused with real logged data.
-- Birth announcement poster.
-- Then vs Now comparison.
-- Milestones catalogue with progress and custom milestones.
-
-**Multi-baby / twins**
-- The single-child flow is unchanged for one baby.
-- With two or more babies, per-baby timers and a "Log for" selector let you log to one or all at once.
-
-**Design and care**
-- Light and night themes.
-- Pleasant rotating loading messages during image generation.
-- Wellbeing-aware copy: no guilt nudges, no feeding-gap pressure, neutral allergy reminders, medical disclaimers.
-
----
-
-## 3. Architecture
-
-- **One file**: `baby-tracker.html`. All HTML, CSS and JS inline.
-- **Rendering**: a single global `state` object, full re-render via `render()` on every interaction, and a 1s tick that updates live timers.
-- **Fonts**: Fraunces (display) and Nunito Sans (body).
-- **Persistence**: a small `Store` (app state) and `PhotoStore` (base64 photo thumbnails), each keyed in storage.
-  - Inside the Claude artifact it uses `window.storage`.
-  - On any normal web host it automatically falls back to `localStorage`.
-  - If neither exists, it keeps state in memory for the session.
-
-### Storage keys
-
-- `little-log-v1`: the full app state (babies, events, settings, timers, milestones, meds, vaccines, illnesses).
-- `little-log-photos-v1`: a map of photo id to base64 JPEG thumbnail.
-
-### Data model (state)
+## 1. Architecture at a glance
 
 ```
-state = {
-  babies: [{
-    id, name, fullName, color, birth, place, blood, birthWeight, birthLength, sign, parents,
-    feedType,            // 'breast' | 'formula' | 'combo'
-    solidsStarted, diet, // diet: 'all' | 'veg' | 'vegan'
-    allergies: [..],
-    avatarPhotoId,       // chosen profile photo (photoId)
-    doctors: [{ id, role, name, clinic, phone, nextVisit }]
-  }],
-  activeBabyId,
-  events: [{ id, babyId, type, time, ... }],  // type: feed | sleep | diaper | pump | note | activity | medicine | milestone | growth | vaccine | temperature | symptom | visit
-  settings: { unit, wUnit, hUnit, tempUnit, theme, seen },
-  timers: { [babyId]: { feed:{start,side}, sleep:{start} } },
-  milestones: [..], meds: [..], photos: [..], vaccines: { [babyId]: [..] }, illnesses: [..]
-}
+Phone / browser
+   │
+   ├─ index.html ............ the whole app (single-file vanilla JS UI, ~3.5k lines)
+   ├─ firebase-init.js ...... Firebase config + init (auth, Firestore, offline cache)
+   ├─ store-firebase.js ..... auth gate + real-time sync engine + sharing/family UI
+   ├─ cubby-extras.js ....... bear avatars (SVG), custom time/date pickers, "When" strip
+   ├─ growth-data.js ........ WHO + CDC growth percentile tables (generated)
+   └─ sw.js ................. service worker (offline shell, network-first HTML)
+        │
+        ▼
+   Firebase Auth (Google)  +  Cloud Firestore (shared "household" doc + subcollections)
+        │
+   Cloudflare serves the static files;  Firestore stores + syncs the data.
 ```
 
-Visits are stored as `events` of type `visit` (so they appear in the timeline) and can be tagged with `doctorId` and `doctorName`.
+**Key idea:** the original app kept all state in a single global `state` object persisted via a
+`Store`/`PhotoStore` abstraction. `store-firebase.js` swaps that persistence for Firestore
+**without rewriting the ~20 logging functions** — it overrides `persist()` and `PhotoStore`,
+and runs a diff-based sync engine. The app code still just mutates `state` and calls `persist()`.
 
 ---
 
-## 4. Run it locally
+## 2. File map
 
-It is a static file. Any of these work:
-
-```bash
-# Option A: just open it
-open baby-tracker.html         # macOS
-# or double-click the file
-
-# Option B: a tiny local server (better for testing storage)
-cd <folder-with-baby-tracker.html>
-python3 -m http.server 8080
-# then visit http://localhost:8080/baby-tracker.html
-```
-
-On a real served page (not file://), it persists to `localStorage` on that device and browser.
-
----
-
-## 5. Make it live (single-device, no accounts)
-
-This is the fastest path to a real URL. The app runs as a static site and persists per device and browser via `localStorage`. No backend, no accounts, no sharing yet.
-
-The repo includes a Firebase Hosting package, but any static host works (Netlify, Render static site, GitHub Pages, an S3 bucket, your own nginx).
-
-### Firebase Hosting
-
-Prerequisites: a Google account, Node.js installed.
-
-```bash
-# 1. Install the CLI (once)
-npm install -g firebase-tools
-
-# 2. Sign in
-firebase login
-
-# 3. From the project folder (the one containing firebase.json and public/)
-#    public/index.html is the app.
-firebase deploy --only hosting
-```
-
-You will be asked to pick or create a Firebase project the first time (`firebase use --add` or follow the prompt). After deploy, the CLI prints your live URL, for example `https://your-project.web.app`.
-
-To update later, change `public/index.html` and run `firebase deploy --only hosting` again.
-
-### Any other static host
-
-Upload `baby-tracker.html` (rename to `index.html`) to the host's web root. That is the whole app.
-
-### Caveat for this path
-
-`localStorage` is per device and per browser, and is capped (roughly 5MB). With downscaled photo thumbnails that is enough for typical use, but it is not shared across phones and is not a backup. For real cross-device use, and for sharing, see the next section.
+| File | Purpose |
+|---|---|
+| `index.html` | Entire UI + logging logic. Inline `<script>` defines `state`, `render()`, all `open*/save*` sheet functions, growth charts, fever nudge, visit summary. |
+| `firebase-init.js` | Public Firebase web config; initializes `auth`, `db`; enables auth persistence + Firestore offline cache. Exposes `window.LL`. |
+| `store-firebase.js` | Google sign-in screen; resolves/creates the household; one-time migration of old localStorage data; real-time listeners; diff-based `persist()`; photo storage in Firestore; Family & sharing UI (invite, relationship, remove member, copy/email link); first-run setup. |
+| `cubby-extras.js` | `cubbyBear()` parametric SVG avatars; per-member/per-baby variants + picker; the custom warm **time picker** and unified **"When?" (date+time)** picker (intercepts native `<input type=time>`). |
+| `growth-data.js` | `window.GROWTH_REF` = `{who,cdc}.{weight,height}.{M,F}` arrays of `[month,p5,p25,p50,p75,p95]`. Generated from official CDC/WHO data files (see §7). |
+| `firestore.rules` | Security rules — members-only access, owner vs caregiver, invite-by-email join. |
+| `wrangler.toml` | Cloudflare static-assets deploy config (`[assets] directory="./"`). |
+| `.assetsignore` | Keeps source/docs out of the public deploy. |
+| `sw.js` | Service worker; bump `CACHE` (`little-log-vN`) on every deploy. |
+| `manifest.webmanifest` | PWA manifest (name "Cubby", icons, theme). |
+| `generate_icons.py` | Pillow script that draws the bear app icons into `icons/`. |
+| `_headers` | Cloudflare/Netlify header hints (keeps sw/manifest uncached). |
 
 ---
 
-## 6. Make it shareable (two parents and a nanny, with an admin)
-
-Sharing is a real backend project, not a flag. Several caregivers logging to the same baby from different phones requires a server, accounts, and access rules. Here is the design and the build order so it can be reviewed before any code goes live.
-
-### What it needs
-
-1. **Authentication** so each caregiver signs in (Firebase Auth: email link or Google sign-in).
-2. **A shared baby document with members and roles**, enforced by Firestore security rules.
-3. **An invite flow** so the owner can add the other parent and the nanny.
-
-### Roles
-
-- **Owner**: full control. Can edit and remove any entry, including ones created by others. Can invite and remove members. One owner per baby (transferable).
-- **Caregiver**: can add entries and edit or remove their own. Cannot remove other people's entries or manage members.
-
-### Proposed data model (Firestore)
+## 3. Data model (Firestore)
 
 ```
-/babies/{babyId}
+households/{hid}
   ownerId: <uid>
-  members: { <uid>: 'owner' | 'caregiver' }   // map for fast rule checks
-  profile: { name, birth, ... }
+  members:    { <uid>: 'owner' | 'caregiver' }      // fast rule checks
+  memberInfo: { <uid>: { name, email, photoURL, role, relationship, avatar:{fur,acc}, setupDone } }
+  app:        { babies[], settings, milestones[], meds[], vaccines{}, illnesses[], photos[], timers{} }
+  updatedAt
 
-/babies/{babyId}/events/{eventId}
-  authorId: <uid>
-  type, time, ...
+households/{hid}/events/{eventId}   // one doc per log entry, includes authorId
+households/{hid}/photos/{photoId}   // { data: <base64 thumbnail>, authorId }   (no Firebase Storage)
 
-/invites/{inviteId}
-  babyId, role, email (or token), createdBy, status
+invites/{emailLowercase}            // { householdId, role, relationship, name, invitedBy, status }
+users/{uid}                         // { householdId, name, email }  — private pointer
 ```
 
-### Security rules (the contract)
+**Per-device (localStorage, not synced):** `little-log-prefs-v1` = `{ activeBabyId, theme }`.
+Everything else (including live nap/feed **timers**) is shared via `households/{hid}.app`.
 
-```
-match /babies/{babyId} {
-  allow read: if request.auth != null && request.auth.uid in resource.data.members;
-  allow update, delete: if request.auth != null
-    && resource.data.members[request.auth.uid] == 'owner';
+**Events** are the high-frequency, multi-writer data → their own subcollection (one doc each),
+so two caregivers logging at once never clobber each other. The rest of `state` rides in the
+`app` blob (last-write-wins, fine for low-frequency profile/settings edits).
 
-  match /events/{eventId} {
-    allow read: if request.auth != null
-      && request.auth.uid in get(/databases/$(database)/documents/babies/$(babyId)).data.members;
-    allow create: if request.auth != null
-      && request.auth.uid in get(/databases/$(database)/documents/babies/$(babyId)).data.members;
-    // owner can edit/remove anyone's entry; caregivers only their own
-    allow update, delete: if request.auth != null && (
-      get(/databases/$(database)/documents/babies/$(babyId)).data.members[request.auth.uid] == 'owner'
-      || resource.data.authorId == request.auth.uid
-    );
-  }
-}
-```
-
-### Build order
-
-1. Lock the data model and the rules above (this document is step 1).
-2. Wire the app's data layer to Firestore (`store-firebase.js`) so `Store` and `PhotoStore` read and write the shared baby document and its events. Photos move to Firebase Storage rather than base64 in a key.
-3. Add a minimal sign-in screen.
-4. Add the invite and accept flow, and a members screen on the owner's side.
-5. Real-time listeners so all three phones update live.
-
-### Trade-offs
-
-| | Standalone (localStorage) | Cloud (Firestore) |
-|---|---|---|
-| Sharing | No | Yes, multi-caregiver |
-| Cost | Free | Firebase usage (free tier covers small use) |
-| Offline | Full | Needs sync handling |
-| Privacy | On device only | Data lives on a server you control |
-| Effort | Done | A real build (auth, rules, sync, invites) |
+**Photos** are stored as base64 thumbnails in a Firestore subcollection (deliberately **not**
+Firebase Storage, which would force the paid Blaze plan). Keeps `photoSrc()` synchronous.
 
 ---
 
-## 7. File layout (Firebase package)
+## 4. Sync engine (store-firebase.js)
 
-```
-firebase/
-  firebase.json          # hosting config
-  firestore.rules        # security rules (single-user today; sharing rules above are the next step)
-  public/
-    index.html           # the app (copy of baby-tracker.html)
-    firebase-init.js     # Firebase config placeholders
-    store-firebase.js    # Firestore data layer (for the cloud path)
-  README.md              # this document
-```
+- `persist()` is overridden to a **debounced diff push**: it compares `state.events` to the
+  last-synced snapshot (`knownEvents`) and writes only added/changed/removed event docs, then
+  writes the `app` blob. The app's save functions are untouched.
+- Real-time `onSnapshot` listeners on the household doc, `events`, and `photos` merge remote
+  changes back into `state` / `PhotoStore.map` and call `render()`.
+- `applyingRemote` guard prevents echo loops; a `pushTimer` guard avoids stomping a just-started
+  local timer with a stale remote snapshot.
+- **Roles:** owner can edit/delete anyone's entries + manage members; caregiver can add and
+  edit/delete their own. Enforced in `firestore.rules`.
 
 ---
 
-## 8. Honest status
+## 5. Features
 
-- The standalone app is complete and, with the storage fallback, deploys and persists on any static host today.
-- Multi-caregiver sharing is designed (section 6) but not built. It is the next project, and the largest remaining item.
-- Reminders only fire while the app is open (no push). True push needs the cloud path plus a service worker.
-- A few smaller known items: orphaned milestone and vaccine timeline entries when un-marked, and a date-jump filter on the Log tab.
+- **Logging** (all share one **time strip** → tap to set date+time): feed (nursing timer,
+  bottle, solids, water), sleep (live timer + past nap with "still sleeping" toggle), diaper,
+  pump, activity/notes, growth, medicine, temperature, symptoms, visits.
+- **Sharing:** Google sign-in, one shared household, invite by email (Copy link / Email button /
+  relationship + co-owner), members list, remove member, first-run bear+relationship setup.
+- **Attribution:** every entry shows "logged by <relationship/name>" with the person's mini bear.
+- **Avatars:** unique bear per person and per baby (fur + accessory), changeable; baby photo can
+  take over (with a "keep bear or use photo?" prompt).
+- **Health nudges (in-app):** medicine due, vaccine overdue, illness day counter, **fever →
+  see-doctor nudge** + 24h home banner, **upcoming-appointment** banner.
+- **Doctor-visit summary:** one tap compiles the last 7 days (feeds/sleep/diapers/growth/
+  temps/symptoms/meds/allergies) into a copyable/shareable snapshot.
+- **Growth charts:** WHO (0–24mo) + CDC (0–36mo) percentile bands behind the baby's weight/height,
+  Boy/Girl selector, "latest ~Nth percentile" readout. (See §7 and §9 on IAP.)
+- **Keepsakes:** photo studio, monthly memory card, birth poster, milestones, twins support.
+- Light/night themes; offline-capable PWA; installable to home screen.
+
+---
+
+## 6. Develop & deploy
+
+### Local preview
+```bash
+cd little-log-pwa
+python3 -m http.server 8080      # then open http://localhost:8080
+```
+`localhost` is a Firebase-authorized domain by default, so Google sign-in works locally.
+After editing, hard-reload (the service worker is network-first for HTML); to fully reset,
+unregister the SW + clear caches in DevTools, or bump `CACHE` in `sw.js`.
+
+### Deploy (automatic)
+Cloudflare Pages/Workers is connected to the GitHub repo. **Every push to `main` auto-deploys.**
+Just:
+```bash
+git add -A && git commit -m "..." && git push
+```
+Bump `const CACHE = 'little-log-vN'` in `sw.js` whenever assets change so clients update.
+
+### Deploy (manual, if ever needed)
+```bash
+npx wrangler deploy        # uses wrangler.toml ([assets] directory="./")
+```
+
+### Required when the live domain changes
+Add the domain under **Firebase Console → Authentication → Settings → Authorized domains**
+(currently `cubby.saurav-918.workers.dev`, `localhost`, `little-log-a9caa.firebaseapp.com`).
+
+---
+
+## 7. Regenerating growth data
+
+`growth-data.js` is generated from official files (run from `/tmp` or anywhere):
+```bash
+# WHO (via CDC mirror), 0–24 months
+curl -sL "https://ftp.cdc.gov/pub/Health_Statistics/NCHS/growthcharts/WHO-Boys-Weight-for-age-Percentiles.csv" -o who_b_w.csv
+curl -sL "https://ftp.cdc.gov/pub/Health_Statistics/NCHS/growthcharts/WHO-Girls-Weight-for-age%20Percentiles.csv" -o who_g_w.csv
+curl -sL "https://ftp.cdc.gov/pub/Health_Statistics/NCHS/growthcharts/WHO-Boys-Length-for-age-Percentiles.csv" -o who_b_l.csv
+curl -sL "https://ftp.cdc.gov/pub/Health_Statistics/NCHS/growthcharts/WHO-Girls-Length-for-age-Percentiles.csv" -o who_g_l.csv
+# CDC infant, 0–36 months
+curl -sL "https://www.cdc.gov/growthcharts/data/zscore/wtageinf.csv" -o cdc_wfa.csv
+curl -sL "https://www.cdc.gov/growthcharts/data/zscore/lenageinf.csv" -o cdc_lfa.csv
+# then parse: see parse_growth.py (extracts [month,p5,p25,p50,p75,p95] per sex/measure)
+```
+Icons: `python3 generate_icons.py`.
+
+---
+
+## 8. Accounts / config reference
+
+| Thing | Value |
+|---|---|
+| GitHub | `zealthpatro/little-log-` (SSH key configured locally) |
+| Cloudflare project | `cubby` → `cubby.saurav-918.workers.dev` |
+| Firebase project | `little-log-a9caa` (Spark / free) |
+| Firebase services | Authentication (Google), Cloud Firestore. **No** Storage, **no** Functions. |
+| Firebase web config | in `firebase-init.js` (public by design; safe to commit) |
+
+Everything runs on **free tiers**. Nothing here requires a card on file.
+
+---
+
+## 9. Known limits & roadmap
+
+- **Push notifications** are **in-app only** (fire while the app is open/installed). True
+  background push needs Web Push + Cloud Functions → the paid **Blaze** plan. Deliberately deferred.
+- **Automated email** (e.g. invites sent *by Cubby's servers*) isn't built. Current "Email the
+  invite" uses a `mailto:` from the sender's own mail app (free). Server-sent email needs either
+  the Firebase "Trigger Email" extension (Blaze + SMTP) or a client-side service (e.g. EmailJS).
+  *Next up — see chat.*
+- **IAP growth charts**: the IAP 2015 charts cover **5–18 years only**; for under-5, IAP/India use
+  **WHO**, which is the app's default. IAP would only matter if Cubby later tracks older children.
+- **App-blob writes** are last-write-wins (fine for profile/settings; events are per-doc and safe).
+- Removed members keep a stale `users/{uid}.householdId` pointer until they next sign in (they
+  lose data access immediately via rules; client just shows an error until re-resolved).
+
+---
+
+## 10. Conventions for future changes
+
+- Add a logging field → mutate `state` + call `persist()`. Sync handles the rest.
+- New per-entry time → use the `timeStrip('when','Label')` component + `getWhen('when')`.
+- New shared data → put it in the `app` blob (`appBlobFromState` / `applyAppBlob`).
+- New UI in the family/sharing area → `store-firebase.js`; avatars/pickers → `cubby-extras.js`.
+- Always `node --check` each JS file, verify in the preview, bump `sw.js` `CACHE`, then push.
+```bash
+node --check store-firebase.js && node --check cubby-extras.js && node --check growth-data.js
+```
