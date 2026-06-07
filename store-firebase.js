@@ -58,7 +58,8 @@
     + '.nap-switch{width:44px;height:25px;border-radius:999px;background:#D9CDBB;position:relative;transition:.2s;flex:0 0 auto;}'
     + '.nap-switch::after{content:"";position:absolute;top:2px;left:2px;width:21px;height:21px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2);}'
     + '.nap-toggle input:checked + .nap-switch{background:var(--sleep,#7C8FB5);}'
-    + '.nap-toggle input:checked + .nap-switch::after{transform:translateX(19px);}';
+    + '.nap-toggle input:checked + .nap-switch::after{transform:translateX(19px);}'
+    + '.ll-mem-av{width:40px;height:40px;border-radius:50%;overflow:hidden;flex:0 0 auto;}.ll-mem-av svg{width:100%;height:100%;display:block;}';
   document.head.appendChild(st);
 
   function overlay() {
@@ -350,13 +351,15 @@
     var rows = Object.keys(info).map(function (uid) {
       var m = info[uid] || {};
       var who = m.relationship || (m.role === 'owner' ? 'Owner' : 'Caregiver');
-      return '<div class="ll-mem"><div><div class="ll-mem-name">' + esc(m.name || m.email || 'Member') + (uid === me.uid ? ' (you)' : '')
-        + '</div><div class="ll-mem-email">' + esc(m.email || '') + '</div></div><div class="ll-mem-role">' + esc(who) + '</div></div>';
+      var av = (typeof window.memberAvatarSvg === 'function') ? '<span class="ll-mem-av">' + window.memberAvatarSvg(uid, 40) + '</span>' : '';
+      return '<div class="ll-mem"><div style="display:flex;align-items:center;gap:10px">' + av + '<div><div class="ll-mem-name">' + esc(m.name || m.email || 'Member') + (uid === me.uid ? ' (you)' : '')
+        + '</div><div class="ll-mem-email">' + esc(m.email || '') + '</div></div></div><div class="ll-mem-role">' + esc(who) + '</div></div>';
     }).join('') || '<div class="ll-auth-msg">Just you so far.</div>';
 
     var youRow = '<div class="ll-invite" style="border-top:none;padding-top:4px"><label>Your relationship to baby</label>'
       + '<select id="llMyRel">' + relOptions(myRel) + '</select>'
-      + '<button id="llMyRelBtn" class="ll-modal-btn ll-ghost" style="margin-top:8px">Save</button>'
+      + '<button id="llMyRelBtn" class="ll-modal-btn ll-ghost" style="margin-top:8px">Save relationship</button>'
+      + '<button id="llMyBearBtn" class="ll-modal-btn ll-ghost" style="margin-top:8px">Change my bear avatar</button>'
       + '<div id="llMyRelMsg" class="ll-auth-msg"></div></div>';
 
     var invite = (myRole === 'owner')
@@ -378,6 +381,7 @@
 
     document.getElementById('llSignOut').onclick = function () { closeModal(); window.LL.signOut(); };
     document.getElementById('llMyRelBtn').onclick = saveMyRelationship;
+    document.getElementById('llMyBearBtn').onclick = function () { if (window.openBearPicker) window.openBearPicker('member', me.uid); };
     document.getElementById('llCopyLink').onclick = copyAppLink;
     if (myRole === 'owner') document.getElementById('llInvBtn').onclick = submitInvite;
   }

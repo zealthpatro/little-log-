@@ -757,7 +757,7 @@ function render(){
   app().innerHTML = `
     <div class="topbar">
       <div class="baby-pill" onclick="openBabySheet()">
-        <div class="avatar" style="background:${b.color}">${b.name.charAt(0).toUpperCase()}</div>
+        ${babyAvatarBox(b,'avatar')}
         <div class="baby-meta">
           <h1>${escapeHtml(b.name)}</h1>
           <span>${ageString(b.birth)}</span>
@@ -1055,7 +1055,7 @@ function tlItem(e){
   const by = authorTag(e);
   return `<div class="tl-item" onclick="openEdit('${e.id}')">
     <div class="tl-ico" style="background:var(--${m.c}-soft);color:var(--${m.c})">${icon}</div>
-    <div class="tl-body"><div class="t1">${eventTitle(e)}</div>${det?`<div class="t2">${escapeHtml(det)}</div>`:''}${by?`<div class="tl-by">logged by ${escapeHtml(by)}</div>`:''}</div>
+    <div class="tl-body"><div class="t1">${eventTitle(e)}</div>${det?`<div class="t2">${escapeHtml(det)}</div>`:''}${by?`<div class="tl-by">${(e.authorId&&typeof window.memberAvatarSvg==='function')?`<span class="tl-byav">${window.memberAvatarSvg(e.authorId,16)}</span>`:''}logged by ${escapeHtml(by)}</div>`:''}</div>
     ${e.photoId&&photoSrc(e.photoId)?`<img class="tl-thumb" src="${photoSrc(e.photoId)}">`:''}
     <div class="tl-time"><div class="clock">${fmtClock(e.time)}</div><div class="ago" data-since="${e.time}">${fmtSince(e.time)}</div></div>
   </div>`;
@@ -1526,7 +1526,7 @@ function deleteEvent(id){
 function openBabySheet(){
   let list=state.babies.map(b=>`
     <div class="baby-item" onclick="switchBaby('${b.id}')">
-      <div class="avatar" style="background:${b.color};width:38px;height:38px;font-size:16px">${b.name.charAt(0).toUpperCase()}</div>
+      ${babyAvatarBox(b,'avatar','width:38px;height:38px;font-size:16px')}
       <div style="flex:1"><div style="font-weight:800">${escapeHtml(b.name)}</div><div style="font-size:12px;color:var(--ink-soft);font-weight:600">${ageString(b.birth)}</div></div>
       ${b.id===state.activeBabyId?'<div style="color:var(--diaper);font-weight:800;font-size:13px">Active</div>':''}
     </div>`).join('');
@@ -1571,12 +1571,15 @@ function babyAvatarSrc(b){
   for(const p of photos){ const s=photoSrc(p.photoId); if(s) return s; }
   return '';
 }
+function babyAvatarBox(b, cls, extraStyle){
+  const src=babyAvatarSrc(b);
+  if(src) return `<div class="${cls}" style="background-image:url('${src}');background-size:cover;background-position:center;${extraStyle||''}"></div>`;
+  if(typeof window.babyBearSvg==='function') return `<div class="${cls} bear-av" style="${extraStyle||''}">${window.babyBearSvg(b)}</div>`;
+  return `<div class="${cls}" style="background:${b.color};${extraStyle||''}">${b.name.charAt(0).toUpperCase()}</div>`;
+}
 function babyIdentity(b,opts){
   opts=opts||{};
-  const src=babyAvatarSrc(b);
-  const inner = src
-    ? `<div class="avatar-lg" style="background-image:url('${src}');background-size:cover;background-position:center"></div>`
-    : `<div class="avatar-lg" style="background:${b.color}">${b.name.charAt(0).toUpperCase()}</div>`;
+  const inner = babyAvatarBox(b,'avatar-lg');
   const av = opts.pickable
     ? `<div class="avatar-pick" onclick="openAvatarPicker()">${inner}<span class="cam">${I.camera}</span></div>`
     : inner;
@@ -1598,12 +1601,13 @@ function openAvatarPicker(){
   const grid = photos.length
     ? `<div class="av-grid">${photos.map(p=>{const sel=(b.avatarPhotoId?b.avatarPhotoId===p.photoId:false);return `<div class="av-opt ${sel?'sel':''}" onclick="setAvatar('${p.photoId}')"><img src="${photoSrc(p.photoId)}"></div>`;}).join('')}</div>`
     : `<div class="csub" style="margin:4px 0 14px">No photos yet. Add some in the Album, then come back to pick a profile photo.</div>`;
-  openSheet(`<h2>Profile photo</h2><div class="sub">Pick which photo represents ${escapeHtml(b.name)}.</div>
+  openSheet(`<h2>Profile picture</h2><div class="sub">Use a photo, or customise ${escapeHtml(b.name)}'s bear avatar.</div>
     ${grid}
-    <button class="btn-ghost" onclick="clearAvatar()">${b.avatarPhotoId?'Use the colour initial instead':'Using colour initial'}</button>`,'star');
+    <button class="btn-ghost" onclick="window.openBearPicker&&window.openBearPicker('baby','${b.id}')">${I.star} Customise bear avatar</button>
+    ${b.avatarPhotoId?`<button class="btn-ghost" onclick="clearAvatar()">Use bear avatar instead</button>`:''}`,'star');
 }
 function setAvatar(photoId){ const b=activeBaby(); if(!b)return; b.avatarPhotoId=photoId; persist(); openBabyProfile(); toast('Profile photo set'); }
-function clearAvatar(){ const b=activeBaby(); if(!b)return; if(b.avatarPhotoId){ delete b.avatarPhotoId; persist(); } openBabyProfile(); toast('Using colour initial'); }
+function clearAvatar(){ const b=activeBaby(); if(!b)return; if(b.avatarPhotoId){ delete b.avatarPhotoId; persist(); } openBabyProfile(); toast('Using bear avatar'); }
 function openBirthDetails(){
   const b=activeBaby(); if(!b)return;
   const dt=b.birth?new Date(b.birth):new Date(); dt.setSeconds(0,0);
@@ -2867,7 +2871,17 @@ async function savePhoto(){
   const pid=uid(); await PhotoStore.set(pid,data);
   state.photos.push({id:uid(),babyId:state.activeBabyId,photoId:pid,caption:photoEditor.captionText||'',createdAt:now()});
   await persist(); photoEditor=null; render(); toast('Saved to gallery');
+  const b=activeBaby();
+  if(b && !b.avatarPhotoId){ askAvatarFromPhoto(b.id, pid); }
 }
+function askAvatarFromPhoto(babyId, photoId){
+  const b=(state.babies||[]).find(x=>x.id===babyId); if(!b)return;
+  openSheet(`<h2>Set as profile picture?</h2><div class="sub">Use this photo for ${escapeHtml(b.name)}, or keep the bear avatar.</div>
+    <img src="${photoSrc(photoId)}" style="width:120px;height:120px;object-fit:cover;border-radius:50%;display:block;margin:6px auto 18px">
+    <button class="btn-primary" style="background:var(--star)" onclick="setAvatarFor('${babyId}','${photoId}')">Use this photo</button>
+    <button class="btn-ghost" onclick="closeSheet()">Keep bear avatar</button>`,'star');
+}
+function setAvatarFor(babyId, photoId){ const b=(state.babies||[]).find(x=>x.id===babyId); if(!b)return; b.avatarPhotoId=photoId; persist(); closeSheet(); render(); toast('Profile photo set'); }
 function discardPhoto(){ photoEditor=null; render(); }
 function viewPhoto(id){
   const p=(state.photos||[]).find(x=>x.id===id); if(!p)return;
@@ -3384,6 +3398,8 @@ function normalizeLoadedState(saved){
 </script>
 <!-- Cloud auth + sharing. Loads after the app so it can wire into state/persist/PhotoStore. -->
 <script src="store-firebase.js"></script>
+<!-- Bear avatars + custom time picker. -->
+<script src="cubby-extras.js"></script>
 <script>
 /* PWA: register only on a real http(s) host. Skips file:// and the in-app artifact sandbox. */
 if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){
