@@ -4,10 +4,14 @@ const CACHE = 'little-log-v3';
 const ASSETS = [
   './',
   './index.html',
+  './firebase-init.js',
+  './store-firebase.js',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './icons/apple-touch-icon.png'
+  './icons/apple-touch-icon.png',
+  './icons/logo-512.png',
+  './icons/favicon.png'
 ];
 
 self.addEventListener('install', (e) => {

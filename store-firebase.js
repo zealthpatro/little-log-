@@ -23,6 +23,7 @@
     '#llAuthOv{position:fixed;inset:0;z-index:99999;background:linear-gradient(160deg,#F7F2E8,#EFE6D6);display:flex;align-items:center;justify-content:center;padding:24px;font-family:"Nunito Sans",system-ui,sans-serif;}'
     + '.ll-auth-card{background:#fff;border-radius:24px;padding:40px 28px;max-width:360px;width:100%;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.12);}'
     + '.ll-auth-logo{font-size:54px;line-height:1;margin-bottom:8px;}'
+    + '.ll-auth-logo-img{width:84px;height:84px;border-radius:20px;display:block;margin:0 auto 12px;box-shadow:0 6px 18px rgba(0,0,0,.12);}'
     + '.ll-auth-card h1{font-family:"Fraunces",Georgia,serif;font-size:30px;margin:6px 0 4px;color:#2C2521;}'
     + '.ll-auth-card p{color:#6E635B;font-size:15px;margin:0 0 24px;line-height:1.4;}'
     + '.ll-auth-btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;border:1px solid #E0D7C7;background:#fff;color:#2C2521;font-size:16px;font-weight:700;padding:14px 18px;border-radius:14px;cursor:pointer;font-family:inherit;}'
@@ -57,7 +58,7 @@
 
   function showSignIn(msg) {
     overlay().innerHTML =
-      '<div class="ll-auth-card"><div class="ll-auth-logo">🍼</div>'
+      '<div class="ll-auth-card"><img src="icons/logo-512.png" alt="Cubby" class="ll-auth-logo-img">'
       + '<h1>Cubby</h1><p>A warm, private baby log you can share with the people who care for them.</p>'
       + '<button id="llGoogleBtn" class="ll-auth-btn">Continue with Google</button>'
       + (msg ? '<div class="ll-auth-msg">' + msg + '</div>' : '') + '</div>';
@@ -65,7 +66,7 @@
   }
   function showStatus(msg) {
     overlay().innerHTML =
-      '<div class="ll-auth-card"><div class="ll-auth-logo">🍼</div>'
+      '<div class="ll-auth-card"><img src="icons/logo-512.png" alt="Cubby" class="ll-auth-logo-img">'
       + '<h1>Cubby</h1><div class="ll-spin"></div>'
       + '<div class="ll-auth-msg">' + (msg || 'Loading…') + '</div></div>';
   }
