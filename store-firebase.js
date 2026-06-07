@@ -337,9 +337,11 @@
   }
   function closeModal() { var m = document.getElementById('llModalOv'); if (m) m.remove(); }
 
-  var RELATIONSHIPS = ['Mother', 'Father', 'Grandmother', 'Grandfather', 'Aunt', 'Uncle', 'Nanny', 'Caregiver', 'Other'];
+  var RELATIONSHIPS = ['Mama Bear', 'Papa Bear', 'Nana Bear', 'Grandpa Bear', 'Auntie Bear', 'Uncle Bear', 'Nanny', 'Caregiver', 'Other'];
   function relOptions(sel) {
-    return '<option value="">Relationship…</option>' + RELATIONSHIPS.map(function (r) {
+    var list = RELATIONSHIPS.slice();
+    if (sel && list.indexOf(sel) < 0) list.unshift(sel); // keep any previously-saved label
+    return '<option value="">Relationship…</option>' + list.map(function (r) {
       return '<option value="' + r + '"' + (r === sel ? ' selected' : '') + '>' + r + '</option>';
     }).join('');
   }
@@ -363,6 +365,7 @@
       + '<select id="llMyRel">' + relOptions(myRel) + '</select>'
       + '<button id="llMyRelBtn" class="ll-modal-btn ll-ghost" style="margin-top:8px">Save relationship</button>'
       + '<button id="llMyBearBtn" class="ll-modal-btn ll-ghost" style="margin-top:8px">Change my bear avatar</button>'
+      + '<button id="llMyFeedbackBtn" class="ll-modal-btn ll-ghost" style="margin-top:8px">💬 Send feedback</button>'
       + '<div id="llMyRelMsg" class="ll-auth-msg"></div></div>';
 
     var invite = (myRole === 'owner')
@@ -380,14 +383,13 @@
       + '<div class="ll-auth-msg">Cubby doesn\'t send emails. Send this link yourself (text / WhatsApp); the invited person signs in with Google using the invited email and joins automatically.</div></div>';
 
     modal('Family & sharing', '<div class="ll-mems">' + rows + '</div>' + youRow + invite + share
-      + '<button id="llFeedbackBtn" class="ll-modal-btn ll-ghost">💬 Send feedback</button>'
       + '<button id="llSignOut" class="ll-modal-btn ll-ghost">Sign out</button>'
       + '<div class="ll-auth-msg" style="margin-top:10px">Cubby v' + (window.CUBBY_VERSION || '') + ' · beta</div>');
 
-    document.getElementById('llFeedbackBtn').onclick = openFeedback;
     document.getElementById('llSignOut').onclick = function () { closeModal(); window.LL.signOut(); };
     document.getElementById('llMyRelBtn').onclick = saveMyRelationship;
     document.getElementById('llMyBearBtn').onclick = function () { if (window.openBearPicker) window.openBearPicker('member', me.uid); };
+    document.getElementById('llMyFeedbackBtn').onclick = openFeedback;
     document.getElementById('llCopyLink').onclick = copyAppLink;
     if (myRole === 'owner') document.getElementById('llInvBtn').onclick = submitInvite;
     Array.prototype.forEach.call(document.querySelectorAll('.ll-rm'), function (b) {
