@@ -798,6 +798,13 @@ function escapeHtml(s){ return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'
 
 /* ---------- HOME ---------- */
 function lastOf(type){ return babyEvents().find(e=>e.type===type); }
+function meGreeting(){
+  let name='';
+  try{ const u=window.LL&&window.LL.auth&&window.LL.auth.currentUser; const mi=u&&window.LL.memberInfo&&window.LL.memberInfo[u.uid]; name=(mi&&(mi.relationship||((mi.name||'').split(' ')[0])))||''; }catch(e){}
+  const h=new Date().getHours();
+  const part = h<12?'Good morning':(h<17?'Good afternoon':'Good evening');
+  return name ? `${part}, ${escapeHtml(name)} 🐻` : `${part} 🐻`;
+}
 
 function renderHome(){
   const evs = babyEvents();
@@ -866,6 +873,7 @@ function renderHome(){
   const sleepMs = todayEvs.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+(e.end-e.time),0);
 
   return `<div class="fade-in">
+    <div class="greeting">${meGreeting()}</div>
     ${coachMark('home','Welcome to Cubby 👋','Your hub. A photo slideshow up top, one-tap logging below. The tabs hold your Log, Album and Health.')}
     ${renderHero()}
     ${timers}
@@ -2757,11 +2765,34 @@ function renderAlbum(){
 }
 let logTab='log';
 function setLogTab(t){ logTab=t; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
+let logRange='week';
+function setLogRange(r){ logRange=r; render(); }
+function heatDays(n){ const a=[]; const d=new Date(); d.setHours(0,0,0,0); for(let i=n-1;i>=0;i--){ const x=new Date(d); x.setDate(d.getDate()-i); a.push(x); } return a; }
+function renderHeatmap(){
+  const evs=babyEvents();
+  const days=heatDays(logRange==='month'?30:7);
+  const byDay={};
+  days.forEach(d=>{ byDay[dayKey(d.getTime())]={feed:0,sleepMs:0,diaper:0}; });
+  evs.forEach(e=>{ const k=dayKey(e.time); if(!byDay[k])return; if(e.type==='feed')byDay[k].feed++; else if(e.type==='diaper')byDay[k].diaper++; else if(e.type==='sleep'&&e.end)byDay[k].sleepMs+=(e.end-e.time); });
+  const rows=[
+    {label:'Feeds',color:'--feed',val:k=>byDay[k].feed, fmt:v=>v+' feeds'},
+    {label:'Sleep',color:'--sleep',val:k=>byDay[k].sleepMs/3600000, fmt:v=>v.toFixed(1)+'h sleep'},
+    {label:'Nappies',color:'--diaper',val:k=>byDay[k].diaper, fmt:v=>v+' nappies'}
+  ];
+  const max={}; rows.forEach((r,i)=>{ max[i]=Math.max(1,...days.map(d=>r.val(dayKey(d.getTime())))); });
+  const cell=(r,i,d)=>{ const k=dayKey(d.getTime()); const v=r.val(k); const dl=d.toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short'}); const title=dl+' · '+(v>0?r.fmt(v):'nothing logged');
+    return v>0 ? `<div class="hm-cell" title="${title}" style="background:var(${r.color});opacity:${(0.18+0.82*(v/max[i])).toFixed(2)}"></div>` : `<div class="hm-cell empty" title="${title}"></div>`; };
+  const grid=rows.map((r,i)=>`<div class="hm-row"><div class="hm-label">${r.label}</div><div class="hm-cells">${days.map(d=>cell(r,i,d)).join('')}</div></div>`).join('');
+  const dayRow = logRange==='week' ? `<div class="hm-row"><div class="hm-label"></div><div class="hm-cells">${days.map(d=>`<div class="hm-day">${d.toLocaleDateString(undefined,{weekday:'narrow'})}</div>`).join('')}</div></div>` : '';
+  const seg=`<div class="hm-seg"><button class="${logRange==='week'?'on':''}" onclick="setLogRange('week')">Week</button><button class="${logRange==='month'?'on':''}" onclick="setLogRange('month')">Month</button></div>`;
+  return `<div class="hm"><div class="hm-top"><div class="sec-title" style="margin:0">At a glance</div>${seg}</div>${grid}${dayRow}</div>`;
+}
 function renderLogTab(){
   const seg=`<div class="seg seg-full">
     <button class="${logTab==='log'?'on':''}" onclick="setLogTab('log')">Log</button>
     <button class="${logTab==='stats'?'on':''}" onclick="setLogTab('stats')">Stats</button></div>`;
-  return `<div class="fade-in">${coachMark('log','Log & Stats','Everything you log lands in this timeline. Flip to Stats for charts and growth curves.')}${seg}${logTab==='stats'?renderStats():renderTimeline()}</div>`;
+  const body = logTab==='stats' ? renderStats() : (renderHeatmap()+renderTimeline());
+  return `<div class="fade-in">${coachMark('log','Log & Stats','Everything you log lands in this timeline. The strips up top show your week at a glance. Flip to Stats for charts and growth curves.')}${seg}${body}</div>`;
 }
 
 function renderPhotos(){
@@ -2793,6 +2824,7 @@ function renderPhotos(){
     <div class="canvas-wrap"><canvas id="photoCanvas"></canvas></div>
     <div class="sec-title">Keepsake stamp</div><div class="chip-row">${stampChips}</div>
     <input class="cap-input" id="phCap" placeholder="Milestone label (optional) e.g. First smile" value="${escapeHtml(photoEditor.captionText||'')}" oninput="photoEditor.captionText=this.value;drawPhoto()">
+    ${timeStrip('when','Photo date')}
     ${photoEditor.stamp!=='none'?`<div class="sec-title">Stamp tone</div><div class="chip-row">${toneChips}</div>`:''}
     ${posMatters?`<div class="sec-title">Position</div><div class="chip-row">${posChips}</div>`:''}
     <div class="sec-title">Filter</div><div class="chip-row">${chips}</div>
@@ -2822,6 +2854,7 @@ function loadPhoto(input){
   img.onload=()=>{
     photoEditor={img,adj:{...PRESETS.Soft},preset:'Soft',frame:'Cream',
       stamp:'corner',stampPos:'bl',stampTone:'light',captionText:''};
+    initLogWhen();
     render(); drawPhoto();
     if(document.fonts&&document.fonts.ready) document.fonts.ready.then(drawPhoto);
   };
@@ -3037,7 +3070,7 @@ async function savePhoto(){
   const tmp=document.createElement('canvas'); composePhoto(tmp,560);
   const data=tmp.toDataURL('image/jpeg',0.62);
   const pid=uid(); await PhotoStore.set(pid,data);
-  state.photos.push({id:uid(),babyId:state.activeBabyId,photoId:pid,caption:photoEditor.captionText||'',createdAt:now()});
+  state.photos.push({id:uid(),babyId:state.activeBabyId,photoId:pid,caption:photoEditor.captionText||'',createdAt:getWhen('when')});
   await persist(); photoEditor=null; render(); toast('Saved to gallery');
   const b=activeBaby();
   if(b && !b.avatarPhotoId){ askAvatarFromPhoto(b.id, pid); }
@@ -3055,8 +3088,21 @@ function viewPhoto(id){
   const p=(state.photos||[]).find(x=>x.id===id); if(!p)return;
   openSheet(`<h2>Photo</h2><div class="sub">${p.caption?escapeHtml(p.caption)+' · ':''}${new Date(p.createdAt).toLocaleDateString()}</div>
     <img src="${photoSrc(p.photoId)}" style="width:100%;border-radius:16px;margin-bottom:16px">
-    <button class="btn-primary" style="background:var(--sleep)" onclick="downloadSaved('${id}')">${I.download} Download</button>
+    <button class="btn-primary" style="background:var(--star)" onclick="setAvatarFromView('${id}')">${I.star} Set as profile photo</button>
+    ${navigator.share?`<button class="btn-ghost" onclick="sharePhoto('${id}')">Share</button>`:''}
+    <button class="btn-ghost" onclick="downloadSaved('${id}')">${I.download} Download</button>
     <button class="btn-ghost btn-danger" onclick="deletePhoto('${id}')">${I.trash} Delete photo</button>`,'feed');
+}
+function setAvatarFromView(id){ const p=(state.photos||[]).find(x=>x.id===id); const b=activeBaby(); if(!p||!b)return; b.avatarPhotoId=p.photoId; persist(); closeSheet(); render(); toast('Profile photo set'); }
+async function sharePhoto(id){
+  const p=(state.photos||[]).find(x=>x.id===id); if(!p)return;
+  try{
+    const blob=await (await fetch(photoSrc(p.photoId))).blob();
+    const file=new File([blob],((activeBaby()||{}).name||'baby')+'.jpg',{type:'image/jpeg'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file],title:'Cubby photo'}); return; }
+    if(navigator.share){ await navigator.share({title:'Cubby photo'}); return; }
+    downloadSaved(id);
+  }catch(e){ downloadSaved(id); }
 }
 function downloadSaved(id){
   const p=(state.photos||[]).find(x=>x.id===id);

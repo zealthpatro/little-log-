@@ -59,7 +59,9 @@
       "Bash(sed -i '' 's/        mo=num\\(row\\\\[0\\\\]\\)/        mo=num\\(row[0]\\)\\\\n        if mo is None: continue/' parse_growth.py)",
       "Bash(python3 parse_growth.py)",
       "Bash(node --check growth-data.js)",
-      "Bash(sed -i '' \"s/little-log-v7/little-log-v8/\" sw.js)"
+      "Bash(sed -i '' \"s/little-log-v7/little-log-v8/\" sw.js)",
+      "Bash(sed -n '2760,2800p' index.html)",
+      "Bash(sed -n '3036,3070p' index.html)"
     ]
   }
 }
