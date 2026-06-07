@@ -12,6 +12,12 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
 
+    // Beta feedback: any signed-in user can submit; only the project owner reads it (console).
+    match /feedback/{id} {
+      allow create: if request.auth != null;
+      allow read, update, delete: if false;
+    }
+
     // Invites are keyed by the invitee's lowercased email.
     match /invites/{email} {
       allow read: if request.auth != null && request.auth.token.email.lower() == email;

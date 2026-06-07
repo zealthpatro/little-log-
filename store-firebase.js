@@ -380,8 +380,11 @@
       + '<div class="ll-auth-msg">Cubby doesn\'t send emails. Send this link yourself (text / WhatsApp); the invited person signs in with Google using the invited email and joins automatically.</div></div>';
 
     modal('Family & sharing', '<div class="ll-mems">' + rows + '</div>' + youRow + invite + share
-      + '<button id="llSignOut" class="ll-modal-btn ll-ghost">Sign out</button>');
+      + '<button id="llFeedbackBtn" class="ll-modal-btn ll-ghost">💬 Send feedback</button>'
+      + '<button id="llSignOut" class="ll-modal-btn ll-ghost">Sign out</button>'
+      + '<div class="ll-auth-msg" style="margin-top:10px">Cubby v' + (window.CUBBY_VERSION || '') + ' · beta</div>');
 
+    document.getElementById('llFeedbackBtn').onclick = openFeedback;
     document.getElementById('llSignOut').onclick = function () { closeModal(); window.LL.signOut(); };
     document.getElementById('llMyRelBtn').onclick = saveMyRelationship;
     document.getElementById('llMyBearBtn').onclick = function () { if (window.openBearPicker) window.openBearPicker('member', me.uid); };
@@ -403,7 +406,8 @@
     var uid = user.uid;
     var bear = (typeof window.memberAvatarSvg === 'function') ? window.memberAvatarSvg(uid, 84) : '';
     modal('Welcome to Cubby 🐻',
-      '<div class="ll-auth-msg" style="margin:0 0 6px">A couple of quick things so your family knows who\'s who.</div>'
+      '<div class="ll-auth-msg" style="margin:0 0 10px;text-align:left;line-height:1.5">An early beta — thanks for trying it! A few notes:<br>• Your log is <b>private</b> to your family.<br>• On a phone: <b>Share → Add to Home Screen</b> to install it like an app.<br>• Bug or idea? <b>Settings → Send feedback</b> (or the 👨‍👩‍👧 menu).</div>'
+      + '<div class="ll-auth-msg" style="margin:0 0 6px">First, how you appear to your family:</div>'
       + '<div class="ll-mem-av" id="llFrBear" style="width:84px;height:84px;margin:10px auto 4px;cursor:pointer">' + bear + '</div>'
       + '<div style="text-align:center;margin-bottom:6px"><button id="llFrBearBtn" class="ll-rm" style="color:#C97FA0">Customise my bear</button></div>'
       + '<div class="ll-invite" style="border-top:none;padding-top:8px"><label>Your relationship to baby</label><select id="llFrRel">' + relOptions('') + '</select></div>'
@@ -480,6 +484,34 @@
       btn.textContent = 'Create invite'; btn.disabled = false;
     }
   }
+
+  /* ---------- feedback ---------- */
+  function openFeedback() {
+    modal('Send feedback',
+      '<div class="ll-auth-msg" style="margin:0 0 8px">Bugs, ideas, anything — it goes straight to the Cubby team. Thank you for testing! 🐻</div>'
+      + '<textarea id="llFbText" class="ll-fb" placeholder="What happened, or what would make Cubby better?"></textarea>'
+      + '<button id="llFbSend" class="ll-modal-btn">Send</button>'
+      + '<div id="llFbMsg" class="ll-auth-msg"></div>');
+    document.getElementById('llFbSend').onclick = async function () {
+      var t = (document.getElementById('llFbText').value || '').trim();
+      var msg = document.getElementById('llFbMsg');
+      if (!t) { msg.textContent = 'Type a little something first.'; return; }
+      var btn = document.getElementById('llFbSend'); btn.disabled = true; btn.textContent = 'Sending…';
+      try {
+        var u = auth.currentUser;
+        await db.collection('feedback').add({
+          text: t.slice(0, 4000),
+          uid: u ? u.uid : null, email: u ? u.email : null, name: u ? u.displayName : null,
+          householdId: window.LL.householdId || null,
+          version: window.CUBBY_VERSION || '', userAgent: (navigator.userAgent || '').slice(0, 300),
+          at: window.LL.serverTimestamp()
+        });
+        modal('Thank you 🐻', '<div class="ll-auth-msg" style="margin:0 0 12px">Your feedback was sent — we read every one.</div><button id="llFbDone" class="ll-modal-btn">Close</button>');
+        document.getElementById('llFbDone').onclick = closeModal;
+      } catch (e) { msg.textContent = 'Could not send: ' + ((e && e.message) || e); btn.disabled = false; btn.textContent = 'Send'; }
+    };
+  }
+  window.openFeedback = openFeedback;
 
   /* ---------- auth state machine ---------- */
   showStatus('Loading…'); // cover the app until we know whether you're signed in
