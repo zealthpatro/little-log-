@@ -191,7 +191,7 @@ Everything runs on **free tiers**. Nothing here requires a card on file.
 - **Automated email** (e.g. invites sent *by Cubby's servers*) isn't built. Current "Email the
   invite" uses a `mailto:` from the sender's own mail app (free). Server-sent email needs either
   the Firebase "Trigger Email" extension (Blaze + SMTP) or a client-side service (e.g. EmailJS).
-  *Next up — see chat.*
+  **Full design + scaling plan (5k users / 100k+ emails, transactional vs marketing): see [`EMAIL.md`](EMAIL.md).**
 - **IAP growth charts**: the IAP 2015 charts cover **5–18 years only**; for under-5, IAP/India use
   **WHO**, which is the app's default. IAP would only matter if Cubby later tracks older children.
 - **App-blob writes** are last-write-wins (fine for profile/settings; events are per-doc and safe).
