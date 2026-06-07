@@ -17,6 +17,7 @@
   var applyingRemote = false;
   var pushTimer = null;
   var firstRunShown = false;
+  var lastHhSig = null; // signature of the last-applied household doc (dedupes our own write echoes)
 
   /* ---------- styles for the sign-in overlay ---------- */
   var st = document.createElement('style');
@@ -212,6 +213,12 @@
     normalizeLoadedState(state); // defensive legacy migrations
   }
   function stripMeta(ev) { var c = Object.assign({}, ev); delete c.authorId; return c; }
+  function stableStringify(o) {
+    if (o === null || typeof o !== 'object') return JSON.stringify(o);
+    if (Array.isArray(o)) return '[' + o.map(stableStringify).join(',') + ']';
+    return '{' + Object.keys(o).sort().map(function (k) { return JSON.stringify(k) + ':' + stableStringify(o[k]); }).join(',') + '}';
+  }
+  function hhSig(app, members, memberInfo) { return stableStringify([app || null, members || null, memberInfo || null]); }
 
   /* ---------- start real-time sync ---------- */
   function startSync(hid, user) {
@@ -243,6 +250,9 @@
       window.LL.members = d.members || {};
       window.LL.memberInfo = d.memberInfo || {};
       window.LL.householdId = hid;
+      var sig = hhSig(d.app, d.members, d.memberInfo);
+      if (booted && sig === lastHhSig) return; // our own write echo / duplicate emission — already on screen
+      lastHhSig = sig;
       applyingRemote = true; applyAppBlob(d.app); applyingRemote = false;
       gotApp = true;
       if (booted) render(); else maybeBoot();
@@ -263,7 +273,8 @@
       });
       applyingRemote = false;
       gotEvents = true;
-      if (booted) render(); else maybeBoot();
+      if (!booted) maybeBoot();
+      else if (!(snap.metadata && snap.metadata.hasPendingWrites)) render();
     }, function (e) { console.warn('events listen', e); }));
 
     unsub.push(photosRef.onSnapshot(function (snap) {
@@ -271,7 +282,7 @@
         if (ch.type === 'removed') delete PhotoStore.map[ch.doc.id];
         else PhotoStore.map[ch.doc.id] = ch.doc.data().data;
       });
-      if (booted) render();
+      if (booted && !(snap.metadata && snap.metadata.hasPendingWrites)) render();
     }, function (e) { console.warn('photos listen', e); }));
   }
 
@@ -298,7 +309,9 @@
     Object.keys(knownEvents).forEach(function (id) {
       if (!cur[id]) { delete knownEvents[id]; writes.push(eventsRef.doc(String(id)).delete()); }
     });
-    writes.push(hhRef.update({ app: appBlobFromState(), updatedAt: window.LL.serverTimestamp() }));
+    var appBlob = appBlobFromState();
+    lastHhSig = hhSig(appBlob, window.LL.members, window.LL.memberInfo); // mark our own write so its echo doesn't re-render
+    writes.push(hhRef.update({ app: appBlob, updatedAt: window.LL.serverTimestamp() }));
     try { await Promise.all(writes); } catch (e) { console.warn('push', e); }
   }
 
