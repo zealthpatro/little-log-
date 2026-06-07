@@ -741,6 +741,21 @@ function targetChips(reRender){
 /* ---- per-baby live timers ---- */
 function timersFor(id){ if(!state.timers[id]) state.timers[id]={}; return state.timers[id]; }
 
+/* ---- unified logging time strip (one intuitive "when" control for every flow) ---- */
+const CLOCK_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 1.5"/></svg>';
+let logTimes = { when:null, end:null };
+function initLogWhen(){ logTimes = { when: now(), end: now() }; }
+function getWhen(slot){ slot=slot||'when'; const v=logTimes[slot]; return v==null?now():v; }
+function setWhen(slot, ms){ logTimes[slot]=ms; document.querySelectorAll('.ts-label[data-slot="'+slot+'"]').forEach(function(el){ el.textContent=whenLabel(ms); }); }
+function whenLabel(ms){ return dayLabel(ms)+' · '+fmtClock(ms); }
+function timeStrip(slot,label){ slot=slot||'when'; label=label||'When'; if(logTimes[slot]==null) logTimes[slot]=now();
+  return `<div class="time-strip" onclick="openWhenPicker(getWhen('${slot}'), function(m){setWhen('${slot}',m);}, '${label}')">
+    <span class="ts-ico">${CLOCK_SVG}</span>
+    <span class="ts-text"><span class="ts-cap">${label}</span><span class="ts-label" data-slot="${slot}">${whenLabel(getWhen(slot))}</span></span>
+    <span class="ts-edit">Change</span></div>`;
+}
+window.getWhen=getWhen; window.setWhen=setWhen;
+
 /* ============================================================
    RENDER
    ============================================================ */
@@ -1159,6 +1174,7 @@ function openFeed(){
   const def = solidsStage ? 'solids' : (ft==='formula' ? 'bottle' : 'breast');
   feedDraft={method:def, side:'left', amount:120, unit:state.settings.unit||'ml', notes:'', content:(ft==='formula'?'formula':'breastmilk'), wAmount:30, foods:[], solidAmount:'', solidUnit:'tbsp', photoData:null};
   initTargets();
+  initLogWhen();
   renderFeedSheet();
 }
 function setFeedMethod(m){ feedDraft.method=m; renderFeedSheet(); }
@@ -1206,6 +1222,7 @@ function renderFeedSheet(){
         <button class="${d.unit==='ml'?'on':''}" onclick="feedDraft.unit='ml';renderFeedSheet()">ml</button>
         <button class="${d.unit==='oz'?'on':''}" onclick="feedDraft.unit='oz';renderFeedSheet()">oz</button>
       </div></div>
+      ${timeStrip('when','Time')}
       <button class="btn-primary" onclick="saveBottle()">Log bottle feed</button>`;
   } else if(d.method==='water'){
     body+=`<div class="field"><label>Amount (optional)</label>
@@ -1219,6 +1236,7 @@ function renderFeedSheet(){
         <button class="${d.unit==='oz'?'on':''}" onclick="feedDraft.unit='oz';renderFeedSheet()">oz</button>
       </div></div>
       ${months<6?`<div class="csub" style="margin:-4px 0 12px">Most babies don't need water before about 6 months. Worth a quick check with your pediatrician.</div>`:''}
+      ${timeStrip('when','Time')}
       <button class="btn-primary" style="background:var(--sleep)" onclick="saveWater()">Log water</button>`;
   } else {
     const diet=b.diet||'all';
@@ -1246,6 +1264,7 @@ function renderFeedSheet(){
           :`<button class="btn-ghost" style="width:100%" onclick="document.getElementById('foodPhoto').click()">${I.camera} Add a photo</button>`}
         <input type="file" id="foodPhoto" accept="image/*" style="display:none" onchange="loadFoodPhoto(this)">
       </div>
+      ${timeStrip('when','Time')}
       <button class="btn-primary" style="background:var(--note)" onclick="saveSolids()">Log solids</button>`;
   }
   openSheet(`<h2>Feed</h2><div class="sub">How are they feeding right now?</div>${body}`,'feed');
@@ -1274,27 +1293,23 @@ function openPastFeed(){
       <button class="${feedDraft.side==='right'?'on':''}" onclick="feedDraft.side='right';openPastFeed()">Right</button>
       <button class="${feedDraft.side==='both'?'on':''}" onclick="feedDraft.side='both';openPastFeed()">Both</button>
     </div></div>
-    <div class="row2">
-      <div class="field"><label>Date</label><input type="date" id="pfDate" value="${dval(new Date())}" max="${dval(new Date())}"></div>
-      <div class="field"><label>Time</label><input type="time" id="pfTime" value="${tval(new Date())}"></div>
-    </div>
+    ${timeStrip('when','Time')}
     <div class="field"><label>How long?</label>
       <div class="chip-row" style="flex-wrap:wrap;gap:8px">
         ${[5,10,15,20,30,45].map(m=>`<div class="chip" onclick="savePastFeed(${m})">${m} min</div>`).join('')}
       </div></div>`,'feed');
 }
 function savePastFeed(mins){
-  const ds=$('#pfDate')&&$('#pfDate').value, ts=$('#pfTime')&&$('#pfTime').value;
-  const t = (ds&&ts) ? timeOnDate(ds,ts) : (ts?timeToToday(ts):now());
+  const t=getWhen('when');
   commitEvent({type:'feed',method:'breast',side:feedDraft.side,time:t,dur:mins*60000});
   closeSheet(); render(); toast('Feed logged · '+mins+' min');
 }
 function saveBottle(){
-  commitEvent({type:'feed',method:'bottle',amount:feedDraft.amount,unit:feedDraft.unit,content:feedDraft.content,time:now()});
+  commitEvent({type:'feed',method:'bottle',amount:feedDraft.amount,unit:feedDraft.unit,content:feedDraft.content,time:getWhen('when')});
   state.settings.unit=feedDraft.unit; persist(); closeSheet(); render(); toast('Bottle logged · '+feedDraft.amount+feedDraft.unit);
 }
 function saveWater(){
-  commitEvent({type:'feed',method:'water',amount:feedDraft.wAmount||0,unit:feedDraft.unit,time:now()});
+  commitEvent({type:'feed',method:'water',amount:feedDraft.wAmount||0,unit:feedDraft.unit,time:getWhen('when')});
   state.settings.unit=feedDraft.unit; persist(); closeSheet(); render(); toast('Water logged');
 }
 const SOLID_FOODS=[
@@ -1337,7 +1352,7 @@ async function saveSolids(){
   if(!foods.length && !feedDraft.photoData){ toast('Pick a food, or add a note or photo'); return; }
   const notes=foods.join(', ');
   const amt=parseFloat(feedDraft.solidAmount);
-  const payload={type:'feed',method:'solids',notes,time:now()};
+  const payload={type:'feed',method:'solids',notes,time:getWhen('when')};
   if(!isNaN(amt)&&amt>0){ payload.amount=amt; payload.unit=feedDraft.solidUnit||'tbsp'; }
   if(feedDraft.photoData){ const pid=uid(); await PhotoStore.set(pid,feedDraft.photoData); payload.photoId=pid; }
   commitEvent(payload);
@@ -1359,7 +1374,7 @@ function renderSleepSheet(){
   openSheet(`<h2>Sleep</h2><div class="sub">Start a live timer, or log a nap that already finished.</div>
     ${targetChips('renderSleepSheet')}
     <button class="btn-primary" style="background:var(--sleep)" onclick="startSleep()">Start sleep timer</button>
-    <button class="btn-ghost" onclick="openPastSleep()">Log a past nap</button>`,'sleep');
+    <button class="btn-ghost" onclick="openPastSleep(true)">Log a past nap</button>`,'sleep');
 }
 function startSleep(){ const targets=targetsResolved(); targets.forEach(bid=>{ timersFor(bid).sleep={start:now()}; }); persist(); closeSheet(); go('home'); toast(targets.length>1?'Sleep timers started · sweet dreams':'Sleep timer started · sweet dreams'); }
 function stopSleep(babyId){
@@ -1369,16 +1384,13 @@ function stopSleep(babyId){
   state.events.push({id:uid(),babyId,type:'sleep',time:t.start,end});
   delete tt.sleep; persist(); render(); toast('Sleep logged · '+fmtDur(end-t.start));
 }
-function openPastSleep(){
-  const nowD=new Date(); const startD=new Date(now()-3600000);
+function openPastSleep(fresh){
+  if(fresh){ logTimes={ when: now()-3600000, end: now() }; }
   openSheet(`<h2>Past nap</h2><div class="sub">When did they fall asleep and wake?</div>
     ${targetChips('openPastSleep')}
-    <div class="field"><label>Date</label><input type="date" id="sDate" value="${dval(nowD)}" max="${dval(nowD)}"></div>
     <label class="nap-toggle"><span>Still sleeping (ongoing)</span><input type="checkbox" id="sOngoing" onchange="toggleNapOngoing()"><span class="nap-switch"></span></label>
-    <div class="row2">
-      <div class="field"><label>Asleep</label><input type="time" id="sStart" value="${tval(startD)}"></div>
-      <div class="field" id="sEndField"><label>Awake</label><input type="time" id="sEnd" value="${tval(nowD)}"></div>
-    </div>
+    ${timeStrip('when','Asleep')}
+    <div id="sEndField">${timeStrip('end','Awake')}</div>
     <button class="btn-primary" style="background:var(--sleep)" id="sSaveBtn" onclick="savePastSleep()">Log nap</button>`,'sleep');
 }
 function toggleNapOngoing(){
@@ -1387,9 +1399,8 @@ function toggleNapOngoing(){
   const b = $('#sSaveBtn'); if(b) b.textContent = on ? 'Start ongoing nap' : 'Log nap';
 }
 function savePastSleep(){
-  const ds=$('#sDate')&&$('#sDate').value;
   const ongoing = $('#sOngoing') && $('#sOngoing').checked;
-  let s = ds ? timeOnDate(ds,$('#sStart').value) : timeToToday($('#sStart').value);
+  let s = getWhen('when');
   if(ongoing){
     if(s>now()) s-=86400000; // start can't be in the future
     const targets=targetsResolved();
@@ -1398,8 +1409,8 @@ function savePastSleep(){
     toast(targets.length>1?'Naps in progress · sweet dreams':'Nap in progress · asleep since '+fmtClock(s));
     return;
   }
-  let e = ds ? timeOnDate(ds,$('#sEnd').value) : timeToToday($('#sEnd').value);
-  if(e<s) s-=86400000; // crossed midnight
+  let e = getWhen('end');
+  if(e<=s) e+=86400000; // awake after midnight -> next day
   commitEvent({type:'sleep',time:s,end:e});
   closeSheet(); render(); toast('Nap logged · '+fmtDur(e-s));
 }
@@ -1409,11 +1420,12 @@ function timeOnDate(dateStr,timeStr){ const[y,mo,da]=dateStr.split('-').map(Numb
 function timeToToday(str){ const[h,m]=str.split(':').map(Number); const d=new Date(); d.setHours(h,m,0,0); return d.getTime(); }
 
 /* ---------- DIAPER ---------- */
-function openDiaper(){ initTargets(); renderDiaperSheet(); }
+function openDiaper(){ initTargets(); initLogWhen(); renderDiaperSheet(); }
 function renderDiaperSheet(){
   const t=(kind,icon,color,label,sub)=>`<div class="opt" onclick="saveDiaper('${kind}')"><span style="color:var(--${color})">${icon}</span><span>${label}</span>${sub?`<span class="osub">${sub}</span>`:''}</div>`;
-  openSheet(`<h2>Diaper</h2><div class="sub">One tap to log.</div>
+  openSheet(`<h2>Diaper</h2><div class="sub">Set the time if needed, then tap to log.</div>
     ${targetChips('renderDiaperSheet')}
+    ${timeStrip('when','Time')}
     <div class="opt-grid">
       ${t('wet',I.drop,'sleep','Wet')}
       ${t('dirty',I.swirl,'note','Dirty')}
@@ -1422,14 +1434,14 @@ function renderDiaperSheet(){
     </div>`,'diaper');
 }
 function saveDiaper(kind){
-  commitEvent({type:'diaper',kind,time:now()});
+  commitEvent({type:'diaper',kind,time:getWhen('when')});
   closeSheet(); render(); toast('Diaper logged · '+kind);
 }
 
 /* ---------- PUMP ---------- */
 let pumpDraft={amount:60,unit:'ml',side:'both'};
 function openPump(){
-  pumpDraft={amount:60,unit:state.settings.unit,side:'both'}; initTargets(); renderPumpSheet();
+  pumpDraft={amount:60,unit:state.settings.unit,side:'both'}; initTargets(); initLogWhen(); renderPumpSheet();
 }
 function renderPumpSheet(){
   const d=pumpDraft;
@@ -1450,17 +1462,18 @@ function renderPumpSheet(){
       <button class="${d.side==='right'?'on':''}" onclick="pumpDraft.side='right';renderPumpSheet()">Right</button>
       <button class="${d.side==='both'?'on':''}" onclick="pumpDraft.side='both';renderPumpSheet()">Both</button>
     </div></div>
+    ${timeStrip('when','Time')}
     <button class="btn-primary" style="background:var(--pump)" onclick="savePump()">Log pump</button>`,'pump');
 }
 function savePump(){
-  commitEvent({type:'pump',amount:pumpDraft.amount,unit:pumpDraft.unit,side:pumpDraft.side,time:now()});
+  commitEvent({type:'pump',amount:pumpDraft.amount,unit:pumpDraft.unit,side:pumpDraft.side,time:getWhen('when')});
   state.settings.unit=pumpDraft.unit; persist(); closeSheet(); render(); toast('Pump logged');
 }
 
 /* ---------- ACTIVITY (tags + free-text note) ---------- */
 const ACTIVITIES=['Tummy time','Bath','Massage','Play','Walk','Sun time','Reading','Skin-to-skin'];
 let activityDraft={activity:'',mins:'',notes:''};
-function openActivity(){ activityDraft={activity:'',mins:'',notes:''}; initTargets(); renderActivitySheet(); }
+function openActivity(){ activityDraft={activity:'',mins:'',notes:''}; initTargets(); initLogWhen(); renderActivitySheet(); }
 function pickActivity(a){ activityDraft.activity=a; renderActivitySheet(); }
 function renderActivitySheet(){
   const d=activityDraft;
@@ -1472,6 +1485,7 @@ function renderActivitySheet(){
     <div class="field"><label>Minutes (optional)</label><input type="number" id="actMins" value="${d.mins}" placeholder="e.g. 15" oninput="activityDraft.mins=this.value"></div>
     <div class="field"><label>Note (optional)</label><textarea id="actNote" placeholder="Anything you want to remember" oninput="activityDraft.notes=this.value">${escapeHtml(d.notes||'')}</textarea></div>
     ${targetChips('renderActivitySheet')}
+    ${timeStrip('when','Time')}
     <button class="btn-primary" style="background:var(--note)" onclick="saveActivity()">Log it</button>`,'note');
 }
 function saveActivity(){
@@ -1480,7 +1494,7 @@ function saveActivity(){
   const mins=parseInt($('#actMins')?$('#actMins').value:'',10);
   const notes=$('#actNote')?$('#actNote').value.trim():'';
   if(!act && !notes){ toast('Add a tag or a note'); return; }
-  commitEvent({type:'activity',activity:act||null,mins:(mins>0?mins:null),notes,time:now()});
+  commitEvent({type:'activity',activity:act||null,mins:(mins>0?mins:null),notes,time:getWhen('when')});
   closeSheet(); render(); toast((act||'Note')+' logged');
 }
 /* legacy free-text note still supported for old entries */

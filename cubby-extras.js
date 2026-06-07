@@ -161,18 +161,12 @@
     if (typeof toast === 'function') toast('Avatar updated');
   }
 
-  /* ---------- custom time picker ---------- */
+  /* ---------- custom time picker (shared columns) ---------- */
   function pad(n) { return ('0' + n).slice(-2); }
+  function to12(h24) { return { h: (h24 % 12) || 12, ap: h24 < 12 ? 'AM' : 'PM' }; }
+  function to24(sel) { var h = sel.h % 12; if (sel.ap === 'PM') h += 12; return h; }
 
-  function openTimePicker(input) {
-    var val = input.value || '';
-    var hh, mm;
-    if (/^\d{1,2}:\d{2}$/.test(val)) { hh = +val.split(':')[0]; mm = +val.split(':')[1]; }
-    else { var d = new Date(); hh = d.getHours(); mm = d.getMinutes(); }
-    var ap = hh < 12 ? 'AM' : 'PM';
-    var h12 = hh % 12; if (h12 === 0) h12 = 12;
-    var sel = { h: h12, m: mm, ap: ap };
-
+  function timeColsHTML(sel) {
     function col(id, items, cur, fmt) {
       return '<div class="cu-tcol" id="' + id + '">' + items.map(function (it) {
         return '<button class="cu-tcell' + (it === cur ? ' on' : '') + '" data-v="' + it + '">' + (fmt ? fmt(it) : it) + '</button>';
@@ -180,53 +174,90 @@
     }
     var hours = []; for (var i = 1; i <= 12; i++) hours.push(i);
     var mins = []; for (var j = 0; j < 60; j++) mins.push(j);
-
-    cuModal(
-      '<div class="cu-head"><h2>Pick a time</h2><button id="cuX" class="cu-x">×</button></div>'
-      + '<div class="cu-tdisp" id="cuTDisp">' + sel.h + ':' + pad(sel.m) + ' ' + sel.ap + '</div>'
-      + '<div class="cu-time">'
-      + col('cuH', hours, sel.h)
-      + col('cuM', mins, sel.m, pad)
-      + '<div class="cu-tcol cu-tap">'
-      + '<button class="cu-tcell' + (sel.ap === 'AM' ? ' on' : '') + '" data-ap="AM">AM</button>'
-      + '<button class="cu-tcell' + (sel.ap === 'PM' ? ' on' : '') + '" data-ap="PM">PM</button>'
-      + '</div></div>'
-      + '<button id="cuTDone" class="cu-btn">Done</button>'
-    );
-
-    function refreshDisp() { document.getElementById('cuTDisp').textContent = sel.h + ':' + pad(sel.m) + ' ' + sel.ap; }
-    function wire(colId, key, attr) {
-      var c = document.getElementById(colId);
-      Array.prototype.forEach.call(c.querySelectorAll('.cu-tcell'), function (b) {
+    return '<div class="cu-time">' + col('cuH', hours, sel.h) + col('cuM', mins, sel.m, pad)
+      + '<div class="cu-tcol cu-tap"><button class="cu-tcell' + (sel.ap === 'AM' ? ' on' : '') + '" data-ap="AM">AM</button>'
+      + '<button class="cu-tcell' + (sel.ap === 'PM' ? ' on' : '') + '" data-ap="PM">PM</button></div></div>';
+  }
+  function wireTimeCols(sel, onChange) {
+    function wire(colId, key) {
+      var c = document.getElementById(colId); if (!c) return;
+      var cells = c.querySelectorAll('.cu-tcell');
+      Array.prototype.forEach.call(cells, function (b) {
         b.onclick = function () {
-          c.querySelectorAll('.cu-tcell').forEach(function (x) { x.classList.remove('on'); });
-          b.classList.add('on');
-          sel[key] = attr === 'ap' ? b.getAttribute('data-ap') : +b.getAttribute('data-v');
-          refreshDisp();
-          b.scrollIntoView({ block: 'center' });
+          Array.prototype.forEach.call(cells, function (x) { x.classList.remove('on'); });
+          b.classList.add('on'); sel[key] = +b.getAttribute('data-v');
+          if (onChange) onChange(); b.scrollIntoView({ block: 'center' });
         };
       });
       var on = c.querySelector('.cu-tcell.on'); if (on) on.scrollIntoView({ block: 'center' });
     }
     wire('cuH', 'h'); wire('cuM', 'm');
-    // AM/PM column: wire its buttons directly
     Array.prototype.forEach.call(document.querySelectorAll('.cu-tap .cu-tcell'), function (b) {
       b.onclick = function () {
         document.querySelectorAll('.cu-tap .cu-tcell').forEach(function (x) { x.classList.remove('on'); });
-        b.classList.add('on'); sel.ap = b.getAttribute('data-ap'); refreshDisp();
+        b.classList.add('on'); sel.ap = b.getAttribute('data-ap'); if (onChange) onChange();
       };
     });
+  }
 
+  function openTimePicker(input) {
+    var val = input.value || '', hh, mm;
+    if (/^\d{1,2}:\d{2}$/.test(val)) { hh = +val.split(':')[0]; mm = +val.split(':')[1]; }
+    else { var d = new Date(); hh = d.getHours(); mm = d.getMinutes(); }
+    var t = to12(hh); var sel = { h: t.h, m: mm, ap: t.ap };
+    cuModal('<div class="cu-head"><h2>Pick a time</h2><button id="cuX" class="cu-x">×</button></div>'
+      + '<div class="cu-tdisp" id="cuTDisp">' + sel.h + ':' + pad(sel.m) + ' ' + sel.ap + '</div>'
+      + timeColsHTML(sel) + '<button id="cuTDone" class="cu-btn">Done</button>');
+    function disp() { document.getElementById('cuTDisp').textContent = sel.h + ':' + pad(sel.m) + ' ' + sel.ap; }
+    wireTimeCols(sel, disp);
     document.getElementById('cuX').onclick = cuClose;
     document.getElementById('cuTDone').onclick = function () {
-      var h24 = sel.h % 12; if (sel.ap === 'PM') h24 += 12;
-      input.value = pad(h24) + ':' + pad(sel.m);
+      input.value = pad(to24(sel)) + ':' + pad(sel.m);
       input.dispatchEvent(new Event('change', { bubbles: true }));
       input.dispatchEvent(new Event('input', { bubbles: true }));
       cuClose();
     };
   }
   window.openTimePicker = openTimePicker;
+
+  /* ---------- unified "When?" picker (date + time) ---------- */
+  function ymd(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function dayWord(y, mo, da) {
+    var t = new Date(); var sd = new Date(y, mo, da);
+    var t0 = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+    var diff = Math.round((sd - t0) / 86400000);
+    if (diff === 0) return 'Today';
+    if (diff === -1) return 'Yesterday';
+    if (diff === 1) return 'Tomorrow';
+    return sd.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  }
+  window.openWhenPicker = function (ms, cb, title) {
+    var d = ms ? new Date(ms) : new Date();
+    var t12 = to12(d.getHours());
+    var sel = { y: d.getFullYear(), mo: d.getMonth(), da: d.getDate(), h: t12.h, m: d.getMinutes(), ap: t12.ap };
+    function curLabel() { return dayWord(sel.y, sel.mo, sel.da) + ' · ' + sel.h + ':' + pad(sel.m) + ' ' + sel.ap; }
+    cuModal(
+      '<div class="cu-head"><h2>' + esc(title || 'When?') + '</h2><button id="cuX" class="cu-x">×</button></div>'
+      + '<div class="cu-tdisp" id="cuWDisp">' + curLabel() + '</div>'
+      + '<div class="cu-daterow"><button class="cu-chip" data-day="0">Today</button><button class="cu-chip" data-day="-1">Yesterday</button>'
+      + '<input type="date" id="cuDate" value="' + ymd(d) + '" max="' + ymd(new Date()) + '"></div>'
+      + timeColsHTML(sel) + '<button id="cuWDone" class="cu-btn">Done</button>'
+    );
+    function disp() { document.getElementById('cuWDisp').textContent = curLabel(); }
+    function setDate(dt) { sel.y = dt.getFullYear(); sel.mo = dt.getMonth(); sel.da = dt.getDate(); document.getElementById('cuDate').value = ymd(dt); disp(); }
+    wireTimeCols(sel, disp);
+    Array.prototype.forEach.call(document.querySelectorAll('.cu-chip'), function (b) {
+      b.onclick = function () { var off = +b.getAttribute('data-day'); var dt = new Date(); dt.setDate(dt.getDate() + off); setDate(dt); };
+    });
+    document.getElementById('cuDate').onchange = function () {
+      var p = this.value.split('-'); if (p.length === 3) { sel.y = +p[0]; sel.mo = +p[1] - 1; sel.da = +p[2]; disp(); }
+    };
+    document.getElementById('cuX').onclick = cuClose;
+    document.getElementById('cuWDone').onclick = function () {
+      var out = new Date(sel.y, sel.mo, sel.da, to24(sel), sel.m, 0, 0).getTime();
+      cuClose(); if (typeof cb === 'function') cb(out);
+    };
+  };
 
   // Intercept native time inputs everywhere (capture phase, before native UI).
   function intercept(e) {
@@ -266,6 +297,15 @@
     + '.cu-tap{flex:0 0 70px;}'
     + '.cu-tcell{display:block;width:100%;border:none;background:none;padding:11px 0;font-size:19px;color:#9a8d80;cursor:pointer;font-family:inherit;text-align:center;}'
     + '.cu-tcell.on{color:#2C2521;font-weight:800;background:rgba(201,127,160,.16);}'
+    + '.cu-daterow{display:flex;gap:8px;align-items:center;margin:0 0 14px;flex-wrap:wrap;}'
+    + '.cu-chip{border:1px solid #E0D7C7;background:#FBF7EF;border-radius:999px;padding:9px 14px;font-size:13px;font-weight:700;color:#6E635B;cursor:pointer;font-family:inherit;}'
+    + '#cuDate{flex:1;min-width:120px;border:1px solid #E0D7C7;border-radius:10px;padding:10px 12px;font-size:14px;font-family:inherit;background:#fff;color:#2C2521;}'
+    + '.time-strip{display:flex;align-items:center;gap:11px;background:var(--surface-2,#FBF7EF);border:1.5px solid var(--line,#E0D7C7);border-radius:14px;padding:12px 14px;margin:0 0 14px;cursor:pointer;}'
+    + '.time-strip .ts-ico{color:var(--ink-soft,#9a8d80);display:flex;}.time-strip .ts-ico svg{width:20px;height:20px;}'
+    + '.time-strip .ts-text{flex:1;display:flex;flex-direction:column;line-height:1.25;}'
+    + '.time-strip .ts-cap{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft,#9a8d80);font-weight:700;}'
+    + '.time-strip .ts-label{font-size:15px;font-weight:800;color:var(--ink,#2C2521);}'
+    + '.time-strip .ts-edit{font-size:13px;font-weight:700;color:var(--star,#C97FA0);}'
     + '.bear-av{overflow:hidden;padding:0!important;}.bear-av svg{width:100%;height:100%;display:block;}'
     + '.tl-byav{display:inline-block;width:16px;height:16px;border-radius:50%;overflow:hidden;vertical-align:middle;margin-right:5px;}.tl-byav svg{width:100%;height:100%;display:block;}';
   document.head.appendChild(st);

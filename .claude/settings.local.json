@@ -40,7 +40,12 @@
       "Bash(sed -n '757,762p' index.html)",
       "Bash(sed -n '1527,1531p' index.html)",
       "Bash(sed -n '2832,2860p' index.html)",
-      "Bash(node --check /tmp/idx.js)"
+      "Bash(node --check /tmp/idx.js)",
+      "Bash(sed -n '1284,1300p' index.html)",
+      "Bash(sed -n '1336,1352p' index.html)",
+      "Bash(sed -n '1412,1430p' index.html)",
+      "Bash(sed -n '1431,1460p' index.html)",
+      "Bash(sed -n '1463,1490p' index.html)"
     ]
   }
 }
