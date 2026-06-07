@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>Little Log: Baby Tracker</title>
+<title>Cubby: Baby Tracker</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#FBF5E9">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Little Log">
+<meta name="apple-mobile-web-app-title" content="Cubby">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Nunito+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -834,7 +834,7 @@ function renderHome(){
   const sleepMs = todayEvs.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+(e.end-e.time),0);
 
   return `<div class="fade-in">
-    ${coachMark('home','Welcome to Little Log 👋','Your hub. A photo slideshow up top, one-tap logging below. The tabs hold your Log, Album and Health.')}
+    ${coachMark('home','Welcome to Cubby 👋','Your hub. A photo slideshow up top, one-tap logging below. The tabs hold your Log, Album and Health.')}
     ${renderHero()}
     ${timers}
     <div class="since-row stagger">
@@ -1756,7 +1756,7 @@ function saveBabyDetails(id){
 
 function openSettings(){
   const s=state.settings;
-  openSheet(`<h2>Settings</h2><div class="sub">Little Log preferences.</div>
+  openSheet(`<h2>Settings</h2><div class="sub">Cubby preferences.</div>
     <div class="set-item">
       <div class="si-ico" style="background:var(--sleep-soft);color:var(--sleep)">${I.moon}</div>
       <div class="si-body"><div class="a">Theme</div><div class="b">Night mode for dark feeds</div></div>
@@ -1808,7 +1808,7 @@ function renderOnboard(){
   newBabyColor=AVATAR_COLORS[0];
   const today=new Date().toISOString().slice(0,10);
   app().innerHTML=`<div class="onboard fade-in">
-    <div class="logo">Little Log</div>
+    <div class="logo">Cubby</div>
     <div class="tag">Feeds, sleep, nappies and every little milestone. One thumb, half asleep. Let's start with who we're tracking.</div>
     <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
     <div class="field"><label>Baby's name</label><input id="bName" placeholder="e.g. Mira" autofocus></div>

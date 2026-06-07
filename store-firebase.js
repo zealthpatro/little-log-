@@ -58,7 +58,7 @@
   function showSignIn(msg) {
     overlay().innerHTML =
       '<div class="ll-auth-card"><div class="ll-auth-logo">🍼</div>'
-      + '<h1>Little Log</h1><p>A warm, private baby log you can share with the people who care for them.</p>'
+      + '<h1>Cubby</h1><p>A warm, private baby log you can share with the people who care for them.</p>'
       + '<button id="llGoogleBtn" class="ll-auth-btn">Continue with Google</button>'
       + (msg ? '<div class="ll-auth-msg">' + msg + '</div>' : '') + '</div>';
     document.getElementById('llGoogleBtn').onclick = signInGoogle;
@@ -66,7 +66,7 @@
   function showStatus(msg) {
     overlay().innerHTML =
       '<div class="ll-auth-card"><div class="ll-auth-logo">🍼</div>'
-      + '<h1>Little Log</h1><div class="ll-spin"></div>'
+      + '<h1>Cubby</h1><div class="ll-spin"></div>'
       + '<div class="ll-auth-msg">' + (msg || 'Loading…') + '</div></div>';
   }
 

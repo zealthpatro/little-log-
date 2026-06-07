@@ -1,4 +1,4 @@
-/* Little Log: Firebase initialization.
+/* Cubby: Firebase initialization.
    These config values are public by design (Firebase web config is not a secret).
    Security is enforced by Firestore rules, not by hiding this. */
 (function () {

@@ -1,6 +1,6 @@
 {
-  "name": "Little Log",
-  "short_name": "Little Log",
+  "name": "Cubby",
+  "short_name": "Cubby",
   "description": "A warm, private baby activity tracker.",
   "start_url": "./index.html",
   "scope": "./",
