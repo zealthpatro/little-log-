@@ -16,6 +16,7 @@
   var knownEvents = {};      // id -> JSON of last-synced event (for diffing)
   var applyingRemote = false;
   var pushTimer = null;
+  var firstRunShown = false;
 
   /* ---------- styles for the sign-in overlay ---------- */
   var st = document.createElement('style');
@@ -232,6 +233,7 @@
       hideOverlay();
       injectAccountButton();
       render();
+      maybeFirstRun(user);
     }
 
     unsub.push(hhRef.onSnapshot(function (doc) {
@@ -352,8 +354,9 @@
       var m = info[uid] || {};
       var who = m.relationship || (m.role === 'owner' ? 'Owner' : 'Caregiver');
       var av = (typeof window.memberAvatarSvg === 'function') ? '<span class="ll-mem-av">' + window.memberAvatarSvg(uid, 40) + '</span>' : '';
+      var rm = (myRole === 'owner' && uid !== me.uid) ? '<button class="ll-rm" data-uid="' + uid + '" data-email="' + esc(m.email || '') + '" data-name="' + esc(m.name || m.email || 'this person') + '">Remove</button>' : '';
       return '<div class="ll-mem"><div style="display:flex;align-items:center;gap:10px">' + av + '<div><div class="ll-mem-name">' + esc(m.name || m.email || 'Member') + (uid === me.uid ? ' (you)' : '')
-        + '</div><div class="ll-mem-email">' + esc(m.email || '') + '</div></div></div><div class="ll-mem-role">' + esc(who) + '</div></div>';
+        + '</div><div class="ll-mem-email">' + esc(m.email || '') + '</div></div></div><div style="display:flex;align-items:center;gap:8px"><span class="ll-mem-role">' + esc(who) + '</span>' + rm + '</div></div>';
     }).join('') || '<div class="ll-auth-msg">Just you so far.</div>';
 
     var youRow = '<div class="ll-invite" style="border-top:none;padding-top:4px"><label>Your relationship to baby</label>'
@@ -384,6 +387,48 @@
     document.getElementById('llMyBearBtn').onclick = function () { if (window.openBearPicker) window.openBearPicker('member', me.uid); };
     document.getElementById('llCopyLink').onclick = copyAppLink;
     if (myRole === 'owner') document.getElementById('llInvBtn').onclick = submitInvite;
+    Array.prototype.forEach.call(document.querySelectorAll('.ll-rm'), function (b) {
+      b.onclick = function () { removeMember(b.getAttribute('data-uid'), b.getAttribute('data-email'), b.getAttribute('data-name')); };
+    });
+  }
+
+  function maybeFirstRun(user) {
+    if (firstRunShown) return;
+    var mi = (window.LL.memberInfo || {})[user.uid] || {};
+    if (mi.setupDone || mi.relationship) return;
+    firstRunShown = true;
+    openFirstRun(user);
+  }
+  function openFirstRun(user) {
+    var uid = user.uid;
+    var bear = (typeof window.memberAvatarSvg === 'function') ? window.memberAvatarSvg(uid, 84) : '';
+    modal('Welcome to Cubby 🐻',
+      '<div class="ll-auth-msg" style="margin:0 0 6px">A couple of quick things so your family knows who\'s who.</div>'
+      + '<div class="ll-mem-av" id="llFrBear" style="width:84px;height:84px;margin:10px auto 4px;cursor:pointer">' + bear + '</div>'
+      + '<div style="text-align:center;margin-bottom:6px"><button id="llFrBearBtn" class="ll-rm" style="color:#C97FA0">Customise my bear</button></div>'
+      + '<div class="ll-invite" style="border-top:none;padding-top:8px"><label>Your relationship to baby</label><select id="llFrRel">' + relOptions('') + '</select></div>'
+      + '<button id="llFrSave" class="ll-modal-btn">Save</button>');
+    function pickBear() { if (window.openBearPicker) window.openBearPicker('member', uid); }
+    document.getElementById('llFrBear').onclick = pickBear;
+    document.getElementById('llFrBearBtn').onclick = pickBear;
+    document.getElementById('llFrSave').onclick = async function () {
+      var rel = document.getElementById('llFrRel').value;
+      var u = {}; u['memberInfo.' + uid + '.setupDone'] = true; if (rel) u['memberInfo.' + uid + '.relationship'] = rel;
+      try { await hhRef.update(u); } catch (e) {}
+      closeModal();
+    };
+  }
+
+  async function removeMember(uid, email, name) {
+    if (!hhRef) return;
+    if (!window.confirm('Remove ' + (name || 'this person') + ' from your family? They\'ll lose access to the baby\'s log.')) return;
+    try {
+      var del = firebase.firestore.FieldValue.delete();
+      var u = {}; u['members.' + uid] = del; u['memberInfo.' + uid] = del;
+      await hhRef.update(u);
+      if (email) { try { await db.collection('invites').doc(email).delete(); } catch (e) {} }
+      openFamily();
+    } catch (e) { alert('Could not remove: ' + ((e && e.message) || e)); }
   }
 
   async function saveMyRelationship() {

@@ -306,6 +306,8 @@
     + '.time-strip .ts-cap{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft,#9a8d80);font-weight:700;}'
     + '.time-strip .ts-label{font-size:15px;font-weight:800;color:var(--ink,#2C2521);}'
     + '.time-strip .ts-edit{font-size:13px;font-weight:700;color:var(--star,#C97FA0);}'
+    + '.visit-sum{white-space:pre-wrap;font-family:"Nunito Sans",ui-monospace,monospace;font-size:13px;line-height:1.5;background:var(--surface-2,#FBF7EF);border:1px solid var(--line,#E0D7C7);border-radius:12px;padding:14px;color:var(--ink,#2C2521);overflow-x:auto;margin:0 0 14px;}'
+    + '.ll-rm{border:none;background:none;color:#C0563E;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;flex:0 0 auto;}'
     + '.bear-av{overflow:hidden;padding:0!important;}.bear-av svg{width:100%;height:100%;display:block;}'
     + '.tl-byav{display:inline-block;width:16px;height:16px;border-radius:50%;overflow:hidden;vertical-align:middle;margin-right:5px;}.tl-byav svg{width:100%;height:100%;display:block;}';
   document.head.appendChild(st);

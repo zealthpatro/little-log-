@@ -841,6 +841,20 @@ function renderHome(){
       <div class="ap-body"><div class="ap-t">${escapeHtml(ill.name)} · day ${days}</div><div class="ap-s">${lt?('last temp '+lt.temp+'°'+(lt.unit||'C')+(isFever(lt.temp,lt.unit)?' · fever':'')):'tap to manage'}</div></div>
       <button onclick="openTemp()">Temp</button></div>`;
   }
+  const fev=lastFeverEvent();
+  if(fev){
+    alerts += `<div class="alert-pill" style="border-color:var(--med)">
+      <div class="ap-ico" style="background:var(--med-soft);color:var(--med)">${I.stetho}</div>
+      <div class="ap-body"><div class="ap-t">Fever logged</div><div class="ap-s">${fev.temp}°${fev.unit||'C'} · ${fmtSince(fev.time)}</div></div>
+      <button onclick="openVisitSummary()">Summary</button></div>`;
+  }
+  const uv=upcomingVisit();
+  if(uv){
+    alerts += `<div class="alert-pill" style="border-color:var(--sleep)">
+      <div class="ap-ico" style="background:var(--sleep-soft);color:var(--sleep)">${I.stetho}</div>
+      <div class="ap-body"><div class="ap-t">Appointment soon</div><div class="ap-s">${escapeHtml(uv.name)} · ${new Date(uv.t).toLocaleDateString(undefined,{month:'short',day:'numeric'})}</div></div>
+      <button onclick="openVisitSummary()">Summary</button></div>`;
+  }
 
   // today summary
   const today = dayKey(now());
@@ -1702,6 +1716,7 @@ function openDoctor(){
     <div class="prof-cards" style="margin-bottom:11px">${docList}</div>
     <button class="btn-ghost" onclick="openDoctorEdit(null)">${I.plus} Add a doctor</button>
     <div class="sec-title" style="margin-top:20px">Visit log</div>
+    <button class="btn-ghost" onclick="openVisitSummary()">${I.stetho} Prepare visit summary</button>
     <button class="btn-ghost" onclick="openVisit()">${I.plus} Log a visit</button>
     <div style="margin-top:10px">${vlist}</div>`,'sleep');
 }
@@ -2134,7 +2149,87 @@ function saveTemp(){
   const ill=activeIllness();
   state.settings.tempUnit=tempDraft.unit;
   addEvent({type:'temperature',temp:+v.toFixed(1),unit:tempDraft.unit,time:now(),illnessId:ill?ill.id:null});
-  persist(); closeSheet(); render(); toast(isFever(v,tempDraft.unit)?('Logged '+v+'° · fever'):('Logged '+v+'°'));
+  persist(); closeSheet(); render();
+  if(isFever(v,tempDraft.unit)){ openFeverNudge(v,tempDraft.unit); }
+  else { toast('Logged '+v+'°'); }
+}
+/* ---------- fever nudge ---------- */
+function lastFeverEvent(){ const e=babyEvents().find(x=>x.type==='temperature'&&isFever(x.temp,x.unit)); return (e && now()-e.time<24*3600000)?e:null; }
+function feverGuidance(){
+  const b=activeBaby(); const mo=b?babyMonths():null;
+  if(mo!=null && mo<3) return 'For a baby under 3 months, any fever is worth a prompt call to your doctor.';
+  return 'Keep them comfortable and hydrated. Reach out to your doctor if the fever is high, lasts more than a day or two, or they just seem unwell.';
+}
+function openFeverNudge(v,unit){
+  openSheet(`<h2>That's a fever</h2><div class="sub">${v}°${unit} is at or above the fever line (38°C / 100.4°F).</div>
+    <div class="csub" style="margin:-4px 0 16px">${feverGuidance()} This isn't medical advice — trust your instincts and your pediatrician.</div>
+    <button class="btn-primary" style="background:var(--sleep)" onclick="closeSheet();openVisitSummary()">${I.stetho} Prepare a summary for the doctor</button>
+    <button class="btn-ghost" onclick="closeSheet();openSymptom()">Log a symptom</button>
+    <button class="btn-ghost" onclick="closeSheet()">Got it</button>`,'med');
+}
+/* ---------- doctor visit summary ---------- */
+function upcomingVisit(){
+  const b=activeBaby(); if(!b||!b.doctors) return null;
+  let best=null;
+  b.doctors.forEach(dc=>{ if(dc.nextVisit){ const t=new Date(dc.nextVisit+'T12:00').getTime(); const days=(t-now())/86400000; if(days>=-0.5 && days<=3 && (!best||t<best.t)) best={t:t,name:dc.name||dc.role||'Doctor'}; } });
+  return best;
+}
+function visitSummary(days){
+  days=days||7;
+  const b=activeBaby();
+  const since=now()-days*86400000;
+  const evs=babyEvents().filter(e=>e.time>=since);
+  const perDay=(n)=>days>0?(n/days):n;
+  const feeds=evs.filter(e=>e.type==='feed');
+  const nursing=feeds.filter(e=>e.method==='breast').length;
+  const bottles=feeds.filter(e=>e.method==='bottle');
+  const solids=feeds.filter(e=>e.method==='solids').length;
+  const water=feeds.filter(e=>e.method==='water').length;
+  const bottleVol=bottles.reduce((a,e)=>a+(+e.amount||0),0);
+  const sleeps=evs.filter(e=>e.type==='sleep'&&e.end);
+  const sleepMs=sleeps.reduce((a,e)=>a+(e.end-e.time),0);
+  const diapers=evs.filter(e=>e.type==='diaper');
+  const wet=diapers.filter(e=>e.kind==='wet'||e.kind==='both').length;
+  const dirty=diapers.filter(e=>e.kind==='dirty'||e.kind==='both').length;
+  const temps=evs.filter(e=>e.type==='temperature');
+  const fevers=temps.filter(e=>isFever(e.temp,e.unit));
+  let maxTemp=null; temps.forEach(e=>{ if(maxTemp==null||e.temp>maxTemp.temp) maxTemp=e; });
+  const symptoms=evs.filter(e=>e.type==='symptom');
+  const lw=lastGrowth('weight'), lh=lastGrowth('height');
+  const meds=babyMeds().filter(m=>m.active);
+  const L=[];
+  L.push(`Cubby summary — ${b.name} (${ageString(b.birth)})`);
+  L.push(`Last ${days} days (through ${new Date().toLocaleDateString()})`);
+  L.push('');
+  L.push(`Feeds: ${feeds.length} total (~${perDay(feeds.length).toFixed(1)}/day)`);
+  if(nursing) L.push(`  • Nursing: ${nursing}`);
+  if(bottles.length) L.push(`  • Bottles: ${bottles.length}${bottleVol?` (~${Math.round(perDay(bottleVol))} ${bottles[0].unit||'ml'}/day)`:''}`);
+  if(solids) L.push(`  • Solids: ${solids}`);
+  if(water) L.push(`  • Water: ${water}`);
+  L.push(`Sleep: ~${(perDay(sleepMs)/3600000).toFixed(1)} h/day (${sleeps.length} naps logged)`);
+  L.push(`Diapers: ~${perDay(diapers.length).toFixed(1)}/day (wet ${wet}, dirty ${dirty})`);
+  if(lw||lh) L.push(`Latest growth: ${lw?lw.weight+' '+(lw.wUnit||'kg'):''}${lw&&lh?', ':''}${lh?lh.height+' '+(lh.hUnit||'cm'):''}`);
+  if(temps.length) L.push(`Temperature: ${temps.length} reading(s), max ${maxTemp.temp}°${maxTemp.unit||'C'}${fevers.length?` · ${fevers.length} fever reading(s)`:''}`);
+  if(symptoms.length) L.push(`Symptoms: ${symptoms.map(s=>s.symptom+(s.severity?` (${s.severity})`:'')).join(', ')}`);
+  if(meds.length) L.push(`Medicines: ${meds.map(m=>m.name+' '+m.dose+(m.unit||'')).join(', ')}`);
+  if((b.allergies||[]).length) L.push(`Allergies: ${b.allergies.map(capWord).join(', ')}`);
+  return L.join('\n');
+}
+function openVisitSummary(){
+  const b=activeBaby(); if(!b) return;
+  const text=visitSummary(7);
+  openSheet(`<h2>Visit summary</h2><div class="sub">A snapshot of ${escapeHtml(b.name)}'s last 7 days for your appointment.</div>
+    <pre class="visit-sum">${escapeHtml(text)}</pre>
+    <button class="btn-primary" style="background:var(--sleep)" onclick="copyVisitSummary()">${I.list||''} Copy summary</button>
+    <button class="btn-ghost" onclick="closeSheet()">Close</button>`,'sleep');
+  window.__visitSummaryText=text;
+}
+function copyVisitSummary(){
+  const t=window.__visitSummaryText||'';
+  const done=()=>toast('Summary copied');
+  if(navigator.share){ navigator.share({title:'Cubby summary',text:t}).then(done).catch(()=>{ if(navigator.clipboard) navigator.clipboard.writeText(t).then(done); }); }
+  else if(navigator.clipboard){ navigator.clipboard.writeText(t).then(done).catch(()=>{}); }
+  else done();
 }
 let symptomDraft=null;
 function openSymptom(){
