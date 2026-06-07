@@ -46,7 +46,19 @@
     + '.ll-invite label{font-weight:700;color:#2C2521;font-size:14px;}'
     + '.ll-invite input,.ll-invite select{border:1px solid #E0D7C7;border-radius:10px;padding:11px 12px;font-size:15px;font-family:inherit;background:#fff;}'
     + '.ll-modal-btn{border:none;border-radius:12px;padding:13px;font-size:15px;font-weight:700;background:#C97FA0;color:#fff;cursor:pointer;font-family:inherit;}'
-    + '.ll-modal-btn:disabled{opacity:.6;}.ll-ghost{background:#FBF7EF;color:#6E635B;margin-top:18px;width:100%;}';
+    + '.ll-modal-btn:disabled{opacity:.6;}.ll-ghost{background:#FBF7EF;color:#6E635B;margin-top:18px;width:100%;}'
+    + '.ll-check{display:flex;align-items:flex-start;gap:8px;font-size:13px;color:#6E635B;line-height:1.35;cursor:pointer;}'
+    + '.ll-check input{margin-top:2px;flex:0 0 auto;width:16px;height:16px;}'
+    + '.ll-linkrow{display:flex;gap:8px;}'
+    + '.ll-linkrow input{flex:1;min-width:0;border:1px solid #E0D7C7;border-radius:10px;padding:11px 12px;font-size:13px;font-family:inherit;background:#FBF7EF;color:#6E635B;}'
+    + '.ll-linkrow .ll-modal-btn{width:auto;padding:11px 16px;white-space:nowrap;}'
+    + '.tl-by{font-size:11px;color:var(--ink-soft,#9a8d80);opacity:.85;margin-top:2px;}'
+    + '.nap-toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:6px 0 12px;font-size:14px;color:var(--ink,#2C2521);cursor:pointer;}'
+    + '.nap-toggle input{position:absolute;opacity:0;width:0;height:0;}'
+    + '.nap-switch{width:44px;height:25px;border-radius:999px;background:#D9CDBB;position:relative;transition:.2s;flex:0 0 auto;}'
+    + '.nap-switch::after{content:"";position:absolute;top:2px;left:2px;width:21px;height:21px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2);}'
+    + '.nap-toggle input:checked + .nap-switch{background:var(--sleep,#7C8FB5);}'
+    + '.nap-toggle input:checked + .nap-switch::after{transform:translateX(19px);}';
   document.head.appendChild(st);
 
   function overlay() {
@@ -99,7 +111,7 @@
   function savePrefs() {
     try {
       localStorage.setItem(LOCAL_PREFS_KEY, JSON.stringify({
-        activeBabyId: state.activeBabyId, timers: state.timers || {},
+        activeBabyId: state.activeBabyId,
         theme: (state.settings && state.settings.theme) || 'light'
       }));
     } catch (e) {}
@@ -107,11 +119,12 @@
 
   /* ---------- household resolution ---------- */
   function membersMap(uid, r) { var m = {}; m[uid] = r; return m; }
-  function memberInfoMap(user, r) { var m = {}; m[user.uid] = { name: user.displayName || '', email: user.email || '', photoURL: user.photoURL || '', role: r }; return m; }
-  function memberUpdate(user, r) {
+  function memberInfoMap(user, r, rel) { var m = {}; m[user.uid] = { name: user.displayName || '', email: user.email || '', photoURL: user.photoURL || '', role: r, relationship: rel || '' }; return m; }
+  function memberUpdate(user, r, opts) {
+    opts = opts || {};
     var u = {};
     u['members.' + user.uid] = r;
-    u['memberInfo.' + user.uid] = { name: user.displayName || '', email: user.email || '', photoURL: user.photoURL || '', role: r };
+    u['memberInfo.' + user.uid] = { name: opts.name || user.displayName || '', email: user.email || '', photoURL: user.photoURL || '', role: r, relationship: opts.relationship || '' };
     return u;
   }
 
@@ -147,7 +160,7 @@
       var inv = await db.collection('invites').doc(email).get();
       if (inv.exists) {
         var data = inv.data();
-        await db.collection('households').doc(data.householdId).update(memberUpdate(user, data.role || 'caregiver'));
+        await db.collection('households').doc(data.householdId).update(memberUpdate(user, data.role || 'caregiver', { relationship: data.relationship, name: data.name }));
         await userRef.set({ householdId: data.householdId, name: user.displayName || '', email: user.email || '' }, { merge: true });
         return data.householdId;
       }
@@ -177,18 +190,23 @@
       babies: state.babies || [], settings: state.settings || {},
       milestones: state.milestones || [], meds: state.meds || [],
       vaccines: state.vaccines || {}, illnesses: state.illnesses || [],
-      photos: state.photos || []
+      photos: state.photos || [],
+      timers: state.timers || {}   // shared so an ongoing nap/feed shows on every phone
     };
   }
   function applyAppBlob(app) {
     if (!app) return;
+    var localTheme = state.settings && state.settings.theme; // theme is per-device
     state.babies = app.babies || [];
     state.settings = Object.assign({}, app.settings || {});
+    if (localTheme) state.settings.theme = localTheme;
     state.milestones = app.milestones || [];
     state.meds = app.meds || [];
     state.vaccines = app.vaccines || {};
     state.illnesses = app.illnesses || [];
     state.photos = app.photos || [];
+    // Don't stomp a timer the local user just started but hasn't pushed yet.
+    if (!pushTimer) state.timers = app.timers || {};
     normalizeLoadedState(state); // defensive legacy migrations
   }
   function stripMeta(ev) { var c = Object.assign({}, ev); delete c.authorId; return c; }
@@ -204,7 +222,7 @@
 
     function maybeBoot() {
       if (booted || !(gotApp && gotEvents)) return;
-      state.timers = prefs.timers || {};
+      if (!state.timers) state.timers = {}; // timers come from the cloud app blob
       if (prefs.theme) state.settings.theme = prefs.theme;
       state.activeBabyId = prefs.activeBabyId || (state.babies[0] && state.babies[0].id) || null;
       if (state.activeBabyId && !state.babies.some(function (b) { return b.id === state.activeBabyId; }))
@@ -316,45 +334,88 @@
   }
   function closeModal() { var m = document.getElementById('llModalOv'); if (m) m.remove(); }
 
+  var RELATIONSHIPS = ['Mother', 'Father', 'Grandmother', 'Grandfather', 'Aunt', 'Uncle', 'Nanny', 'Caregiver', 'Other'];
+  function relOptions(sel) {
+    return '<option value="">Relationship…</option>' + RELATIONSHIPS.map(function (r) {
+      return '<option value="' + r + '"' + (r === sel ? ' selected' : '') + '>' + r + '</option>';
+    }).join('');
+  }
+
   function openFamily() {
     var me = auth.currentUser; if (!me) return;
     var myRole = window.LL.role || 'caregiver';
     var info = window.LL.memberInfo || {};
+    var myRel = (info[me.uid] && info[me.uid].relationship) || '';
+
     var rows = Object.keys(info).map(function (uid) {
       var m = info[uid] || {};
+      var who = m.relationship || (m.role === 'owner' ? 'Owner' : 'Caregiver');
       return '<div class="ll-mem"><div><div class="ll-mem-name">' + esc(m.name || m.email || 'Member') + (uid === me.uid ? ' (you)' : '')
-        + '</div><div class="ll-mem-email">' + esc(m.email || '') + '</div></div><div class="ll-mem-role">' + esc(m.role || 'caregiver') + '</div></div>';
+        + '</div><div class="ll-mem-email">' + esc(m.email || '') + '</div></div><div class="ll-mem-role">' + esc(who) + '</div></div>';
     }).join('') || '<div class="ll-auth-msg">Just you so far.</div>';
 
+    var youRow = '<div class="ll-invite" style="border-top:none;padding-top:4px"><label>Your relationship to baby</label>'
+      + '<select id="llMyRel">' + relOptions(myRel) + '</select>'
+      + '<button id="llMyRelBtn" class="ll-modal-btn ll-ghost" style="margin-top:8px">Save</button>'
+      + '<div id="llMyRelMsg" class="ll-auth-msg"></div></div>';
+
     var invite = (myRole === 'owner')
-      ? '<div class="ll-invite"><label>Invite someone by email</label>'
-        + '<input id="llInvEmail" type="email" placeholder="name@email.com" autocomplete="off" autocapitalize="off">'
-        + '<select id="llInvRole"><option value="caregiver">Caregiver — can log entries</option><option value="owner">Owner — full control</option></select>'
+      ? '<div class="ll-invite"><label>Invite a family member</label>'
+        + '<input id="llInvName" type="text" placeholder="Their name (optional)" autocomplete="off">'
+        + '<input id="llInvEmail" type="email" placeholder="their-google-email@gmail.com" autocomplete="off" autocapitalize="off">'
+        + '<select id="llInvRel">' + relOptions('') + '</select>'
+        + '<label class="ll-check"><input type="checkbox" id="llInvOwner"><span>Co-owner — full control (can edit everyone\'s entries &amp; invite others)</span></label>'
         + '<button id="llInvBtn" class="ll-modal-btn">Create invite</button>'
         + '<div id="llInvMsg" class="ll-auth-msg"></div></div>'
-      : '<div class="ll-auth-msg">Only the owner can invite new people.</div>';
+      : '<div class="ll-auth-msg">Only an owner can invite new people.</div>';
 
-    modal('Family & sharing', '<div class="ll-mems">' + rows + '</div>' + invite
+    var share = '<div class="ll-invite"><label>App link to share</label>'
+      + '<div class="ll-linkrow"><input id="llAppLink" readonly value="' + esc(location.origin) + '"><button id="llCopyLink" class="ll-modal-btn">Copy</button></div>'
+      + '<div class="ll-auth-msg">Cubby doesn\'t send emails. Send this link yourself (text / WhatsApp); the invited person signs in with Google using the invited email and joins automatically.</div></div>';
+
+    modal('Family & sharing', '<div class="ll-mems">' + rows + '</div>' + youRow + invite + share
       + '<button id="llSignOut" class="ll-modal-btn ll-ghost">Sign out</button>');
 
     document.getElementById('llSignOut').onclick = function () { closeModal(); window.LL.signOut(); };
+    document.getElementById('llMyRelBtn').onclick = saveMyRelationship;
+    document.getElementById('llCopyLink').onclick = copyAppLink;
     if (myRole === 'owner') document.getElementById('llInvBtn').onclick = submitInvite;
   }
 
+  async function saveMyRelationship() {
+    if (!hhRef) return;
+    var v = document.getElementById('llMyRel').value;
+    var msg = document.getElementById('llMyRelMsg');
+    var u = {}; u['memberInfo.' + auth.currentUser.uid + '.relationship'] = v;
+    try { await hhRef.update(u); msg.textContent = '✅ Saved.'; }
+    catch (e) { msg.textContent = 'Could not save: ' + ((e && e.message) || e); }
+  }
+
+  function copyAppLink() {
+    var inp = document.getElementById('llAppLink'), btn = document.getElementById('llCopyLink');
+    var done = function () { if (btn) { btn.textContent = 'Copied!'; setTimeout(function () { btn.textContent = 'Copy'; }, 1500); } };
+    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(inp.value).then(done).catch(function () { try { inp.select(); document.execCommand('copy'); done(); } catch (e) {} }); }
+    else { try { inp.select(); document.execCommand('copy'); done(); } catch (e) {} }
+  }
+
   async function submitInvite() {
+    var name = ((document.getElementById('llInvName').value) || '').trim();
     var email = ((document.getElementById('llInvEmail').value) || '').trim().toLowerCase();
-    var roleSel = document.getElementById('llInvRole').value || 'caregiver';
+    var rel = document.getElementById('llInvRel').value || '';
+    var owner = document.getElementById('llInvOwner').checked;
     var msg = document.getElementById('llInvMsg');
     if (!email || email.indexOf('@') < 1) { msg.textContent = 'Please enter a valid email.'; return; }
     var btn = document.getElementById('llInvBtn'); btn.disabled = true; btn.textContent = 'Creating…';
     try {
       await db.collection('invites').doc(email).set({
-        householdId: window.LL.householdId, role: roleSel,
+        householdId: window.LL.householdId, role: owner ? 'owner' : 'caregiver',
+        relationship: rel, name: name,
         invitedBy: auth.currentUser.uid, status: 'pending', createdAt: window.LL.serverTimestamp()
       });
-      msg.innerHTML = '✅ Invite created. Tell <b>' + esc(email) + '</b> to open the app link and <b>Continue with Google</b> using that email — they\'ll join automatically.';
+      msg.innerHTML = '✅ Invite ready for <b>' + esc(email) + '</b>' + (rel ? ' (' + esc(rel) + ')' : '')
+        + '. Now <b>Copy</b> the app link above and send it to them. They sign in with Google using <b>' + esc(email) + '</b> and join automatically.';
       btn.textContent = 'Create invite'; btn.disabled = false;
-      document.getElementById('llInvEmail').value = '';
+      document.getElementById('llInvName').value = ''; document.getElementById('llInvEmail').value = '';
     } catch (e) {
       msg.textContent = 'Could not create invite: ' + ((e && e.message) || e);
       btn.textContent = 'Create invite'; btn.disabled = false;

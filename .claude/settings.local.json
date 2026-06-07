@@ -29,7 +29,9 @@
       "Bash(lsof -nP -iTCP:8080 -sTCP:LISTEN)",
       "Bash(pkill -f \"http.server 8080\")",
       "mcp__Claude_Preview__preview_start",
-      "Bash(python3 generate_icons.py)"
+      "Bash(python3 generate_icons.py)",
+      "Bash(python3 -)",
+      "Bash(node --check /tmp/index_inline.js)"
     ]
   }
 }

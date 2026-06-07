@@ -1038,13 +1038,24 @@ function illnessIcon(name){
   if(n.includes('teeth')||n.includes('tooth')) return I.tooth;
   return I.thermo;
 }
+function authorTag(e){
+  if(!e || !e.authorId) return '';
+  var info = (window.LL && window.LL.memberInfo) || {};
+  var m = info[e.authorId];
+  if(!m) return '';
+  var label = m.relationship || (m.name ? String(m.name).split(' ')[0] : '') || 'Someone';
+  var me = window.LL && window.LL.auth && window.LL.auth.currentUser && window.LL.auth.currentUser.uid;
+  if(e.authorId === me) label += ' (you)';
+  return label;
+}
 function tlItem(e){
   const m=TYPE_META[e.type];
   const det=eventDetail(e);
   const icon = e.type==='activity' ? activityIcon(e.activity) : m.icon;
+  const by = authorTag(e);
   return `<div class="tl-item" onclick="openEdit('${e.id}')">
     <div class="tl-ico" style="background:var(--${m.c}-soft);color:var(--${m.c})">${icon}</div>
-    <div class="tl-body"><div class="t1">${eventTitle(e)}</div>${det?`<div class="t2">${escapeHtml(det)}</div>`:''}</div>
+    <div class="tl-body"><div class="t1">${eventTitle(e)}</div>${det?`<div class="t2">${escapeHtml(det)}</div>`:''}${by?`<div class="tl-by">logged by ${escapeHtml(by)}</div>`:''}</div>
     ${e.photoId&&photoSrc(e.photoId)?`<img class="tl-thumb" src="${photoSrc(e.photoId)}">`:''}
     <div class="tl-time"><div class="clock">${fmtClock(e.time)}</div><div class="ago" data-since="${e.time}">${fmtSince(e.time)}</div></div>
   </div>`;
@@ -1363,15 +1374,30 @@ function openPastSleep(){
   openSheet(`<h2>Past nap</h2><div class="sub">When did they fall asleep and wake?</div>
     ${targetChips('openPastSleep')}
     <div class="field"><label>Date</label><input type="date" id="sDate" value="${dval(nowD)}" max="${dval(nowD)}"></div>
+    <label class="nap-toggle"><span>Still sleeping (ongoing)</span><input type="checkbox" id="sOngoing" onchange="toggleNapOngoing()"><span class="nap-switch"></span></label>
     <div class="row2">
       <div class="field"><label>Asleep</label><input type="time" id="sStart" value="${tval(startD)}"></div>
-      <div class="field"><label>Awake</label><input type="time" id="sEnd" value="${tval(nowD)}"></div>
+      <div class="field" id="sEndField"><label>Awake</label><input type="time" id="sEnd" value="${tval(nowD)}"></div>
     </div>
-    <button class="btn-primary" style="background:var(--sleep)" onclick="savePastSleep()">Log nap</button>`,'sleep');
+    <button class="btn-primary" style="background:var(--sleep)" id="sSaveBtn" onclick="savePastSleep()">Log nap</button>`,'sleep');
+}
+function toggleNapOngoing(){
+  const on = $('#sOngoing') && $('#sOngoing').checked;
+  const f = $('#sEndField'); if(f) f.style.display = on ? 'none' : '';
+  const b = $('#sSaveBtn'); if(b) b.textContent = on ? 'Start ongoing nap' : 'Log nap';
 }
 function savePastSleep(){
   const ds=$('#sDate')&&$('#sDate').value;
+  const ongoing = $('#sOngoing') && $('#sOngoing').checked;
   let s = ds ? timeOnDate(ds,$('#sStart').value) : timeToToday($('#sStart').value);
+  if(ongoing){
+    if(s>now()) s-=86400000; // start can't be in the future
+    const targets=targetsResolved();
+    targets.forEach(bid=>{ timersFor(bid).sleep={start:s}; });
+    persist(); closeSheet(); go('home'); render();
+    toast(targets.length>1?'Naps in progress · sweet dreams':'Nap in progress · asleep since '+fmtClock(s));
+    return;
+  }
   let e = ds ? timeOnDate(ds,$('#sEnd').value) : timeToToday($('#sEnd').value);
   if(e<s) s-=86400000; // crossed midnight
   commitEvent({type:'sleep',time:s,end:e});
