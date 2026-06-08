@@ -90,7 +90,10 @@
       "Bash(perl -i -pe 's/ — /: /g' vaccination-schedule/uk/index.html vaccination-schedule/us/index.html de/impfkalender/index.html)",
       "Bash(perl -i -pe 's/–/-/g' vaccination-schedule/us/index.html vaccination-schedule/uae/index.html)",
       "Bash(node --check /tmp/app_inline.js)",
-      "Bash(python3 -c \"import xml.dom.minidom as m;m.parse\\('sitemap.xml'\\);print\\('OK'\\)\")"
+      "Bash(python3 -c \"import xml.dom.minidom as m;m.parse\\('sitemap.xml'\\);print\\('OK'\\)\")",
+      "Bash(awk 'NR>=1 && /function openActivity\\\\\\(/{f=1} f{print NR\": \"$0} f&&/^}/{c++; if\\(c>=1\\)exit}' index.html)",
+      "Bash(sed -n '1740,1750p' index.html)",
+      "Bash(awk '/function commitEvent/{f=1} f{print NR\": \"$0} f&&/^}/{exit}' index.html)"
     ]
   }
 }

@@ -1720,8 +1720,10 @@ function savePump(){
 
 /* ---------- ACTIVITY (tags + free-text note) ---------- */
 const ACTIVITIES=['Tummy time','Bath','Massage','Play','Walk','Sun time','Reading','Skin-to-skin'];
-let activityDraft={activity:'',mins:'',notes:''};
-function openActivity(){ activityDraft={activity:'',mins:'',notes:''}; initTargets(); initLogWhen(); renderActivitySheet(); }
+let activityDraft={activity:'',mins:'',notes:'',photoData:null};
+function openActivity(){ activityDraft={activity:'',mins:'',notes:'',photoData:null}; initTargets(); initLogWhen(); renderActivitySheet(); }
+function loadActivityPhoto(input){ const f=input.files[0]; if(!f)return; downscaleToData(f,1200,0.72,(data)=>{ activityDraft.photoData=data; renderActivitySheet(); }); }
+function clearActivityPhoto(){ activityDraft.photoData=null; renderActivitySheet(); }
 function pickActivity(a){ activityDraft.activity=a; renderActivitySheet(); }
 function renderActivitySheet(){
   const d=activityDraft;
@@ -1732,18 +1734,25 @@ function renderActivitySheet(){
     <div class="field" style="margin-top:8px"><label>Or name it</label><input id="actName" value="${escapeHtml(customVal)}" placeholder="e.g. Doctor visit, first swim" oninput="activityDraft.activity=this.value"></div>
     <div class="field"><label>Minutes (optional)</label><input type="number" id="actMins" value="${d.mins}" placeholder="e.g. 15" oninput="activityDraft.mins=this.value"></div>
     <div class="field"><label>Note (optional)</label><textarea id="actNote" placeholder="Anything you want to remember" oninput="activityDraft.notes=this.value">${escapeHtml(d.notes||'')}</textarea></div>
+    <div class="field"><label>Photo (optional)</label>
+      ${d.photoData?`<div class="food-preview"><img src="${d.photoData}"><button class="rm" onclick="clearActivityPhoto()">×</button></div>`:`<button class="btn-ghost" style="margin:0" onclick="document.getElementById('actPhoto').click()">${I.camera} Add a photo</button>`}
+      <input type="file" id="actPhoto" accept="image/*" style="display:none" onchange="loadActivityPhoto(this)">
+      <div class="csub" style="margin-top:6px">Snap the play, the sun time, the cuddle. It lands in the Album, ready to turn into a shareable card.</div>
+    </div>
     ${targetChips('renderActivitySheet')}
     ${timeStrip('when','Time')}
     <button class="btn-primary" style="background:var(--note)" onclick="saveActivity()">Log it</button>`,'note');
 }
-function saveActivity(){
+async function saveActivity(){
   const name=$('#actName')?$('#actName').value.trim():'';
   const act=name||activityDraft.activity||'';
   const mins=parseInt($('#actMins')?$('#actMins').value:'',10);
   const notes=$('#actNote')?$('#actNote').value.trim():'';
-  if(!act && !notes){ toast('Add a tag or a note'); return; }
-  commitEvent({type:'activity',activity:act||null,mins:(mins>0?mins:null),notes,time:getWhen('when')});
-  closeSheet(); render(); toast((act||'Note')+' logged');
+  if(!act && !notes && !activityDraft.photoData){ toast('Add a tag, a note or a photo'); return; }
+  const payload={type:'activity',activity:act||null,mins:(mins>0?mins:null),notes,time:getWhen('when')};
+  if(activityDraft.photoData){ const pid=uid(); await PhotoStore.set(pid,activityDraft.photoData); payload.photoId=pid; }
+  commitEvent(payload);
+  closeSheet(); render(); toast((act||'Moment')+' logged');
 }
 /* legacy free-text note still supported for old entries */
 function openNote(){ openActivity(); }
@@ -3285,16 +3294,19 @@ function renderLogTab(){
 
 function renderPhotos(){
   const gal=(state.photos||[]).filter(p=>p.babyId===state.activeBabyId && p.slot===undefined);
-  let galleryHtml = gal.length ? `<div class="sec-title">Saved photos</div><div class="gallery">${gal.map(p=>`<div class="gal-item" onclick="viewPhoto('${p.id}')"><img src="${photoSrc(p.photoId)}">${p.caption?`<div class="cap">${escapeHtml(p.caption)}</div>`:''}</div>`).join('')}</div>` : '';
+  let galleryHtml = gal.length ? `<div class="sec-title">Saved keepsakes</div><div class="gallery">${gal.map(p=>`<div class="gal-item" onclick="viewPhoto('${p.id}')"><img src="${photoSrc(p.photoId)}">${p.caption?`<div class="cap">${escapeHtml(p.caption)}</div>`:''}</div>`).join('')}</div>` : '';
+  const evPhotos=babyEvents().filter(e=>e.photoId&&photoSrc(e.photoId));
+  let momentsHtml = evPhotos.length ? `<div class="sec-title">Moments from the day</div><div class="csub" style="margin:-6px 0 10px">Photos tagged to feeds, play, sun time and more. Tap one to turn it into a shareable card.</div><div class="gallery">${evPhotos.map(e=>`<div class="gal-item" onclick="openActivityPhoto('${e.id}')"><img src="${photoSrc(e.photoId)}"><div class="cap">${escapeHtml(eventTitle(e))}</div></div>`).join('')}</div>` : '';
 
   if(!photoEditor){
+    const empty = !galleryHtml && !momentsHtml;
     return `<div>
       <div class="ph-drop" onclick="document.getElementById('phInput').click()">
         <div class="pd-ico">${I.camera}</div>
         <p>Add a photo</p><span>Upload, beautify with stamps, filters & frames, then save or download.</span>
       </div>
       <input type="file" id="phInput" accept="image/*" style="display:none" onchange="loadPhoto(this)">
-      ${galleryHtml||`<div class="empty-state">${I.camera}<p>No photos yet</p><span>Your framed keepsakes will appear here.</span></div>`}
+      ${empty?`<div class="empty-state">${I.camera}<p>No photos yet</p><span>Add a photo here, or snap one on any activity (play, sun time, a cuddle) and it appears as a moment.</span></div>`:galleryHtml+momentsHtml}
     </div>`;
   }
   // editor
@@ -3597,6 +3609,44 @@ function viewPhoto(id){
     <button class="btn-ghost btn-danger" onclick="deletePhoto('${id}')">${I.trash} Delete photo</button>`,'feed');
 }
 function setAvatarFromView(id){ const p=(state.photos||[]).find(x=>x.id===id); const b=activeBaby(); if(!p||!b)return; b.avatarPhotoId=p.photoId; persist(); closeSheet(); render(); toast('Profile photo set'); }
+/* ---- Activity photos -> shareable moments ---- */
+function openActivityPhoto(id){
+  const e=babyEvents().find(x=>x.id===id); if(!e||!e.photoId)return;
+  const when=new Date(e.time).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+  const by=authorTag(e);
+  openSheet(`<h2>${escapeHtml(eventTitle(e))}</h2><div class="sub">${escapeHtml(when)}${by?' · logged by '+escapeHtml(by):''}</div>
+    <img src="${photoSrc(e.photoId)}" style="width:100%;border-radius:16px;margin-bottom:16px">
+    <button class="btn-primary" style="background:var(--star)" onclick="makeMomentFromEvent('${id}')">✨ Make a shareable moment</button>
+    ${navigator.share?`<button class="btn-ghost" onclick="shareEventPhoto('${id}')">Share photo</button>`:''}
+    <button class="btn-ghost" onclick="openEdit('${id}')">Edit this log</button>`,'star');
+}
+function makeMomentFromEvent(id){
+  const e=babyEvents().find(x=>x.id===id); if(!e||!e.photoId)return;
+  closeSheet();
+  makeMomentFromPhoto(photoSrc(e.photoId), eventTitle(e), e.time);
+}
+function makeMomentFromPhoto(dataUrl, caption, when){
+  const img=new Image();
+  img.onload=()=>{
+    photoEditor={img,adj:{...PRESETS.Soft},preset:'Soft',frame:'Cream',stamp:'corner',stampPos:'bl',stampTone:'light',
+      captionText:caption||'',format:'square',font:'Fraunces',palette:'Cream',template:'classic'};
+    initLogWhen(); if(when){ setWhen('when', when); }
+    albumTab='photos'; go('album'); drawPhoto();
+    if(document.fonts&&document.fonts.ready) document.fonts.ready.then(drawPhoto);
+    toast('Make it yours, then save or share');
+  };
+  img.src=dataUrl;
+}
+async function shareEventPhoto(id){
+  const e=babyEvents().find(x=>x.id===id); if(!e||!e.photoId)return;
+  try{
+    const blob=await (await fetch(photoSrc(e.photoId))).blob();
+    const file=new File([blob],((activeBaby()||{}).name||'baby')+'.jpg',{type:'image/jpeg'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file],title:'Cubby moment'}); return; }
+    if(navigator.share){ await navigator.share({title:'Cubby moment'}); return; }
+  }catch(err){}
+  const a=document.createElement('a'); a.href=photoSrc(e.photoId); a.download=((activeBaby()||{}).name||'baby')+'-moment.jpg'; a.click();
+}
 async function sharePhoto(id){
   const p=(state.photos||[]).find(x=>x.id===id); if(!p)return;
   try{
