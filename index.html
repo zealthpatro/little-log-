@@ -2115,19 +2115,28 @@ function openSettings(){
       <div class="si-body"><div class="a">Cubby Pro</div><div class="b">Coming soon · join the waitlist</div></div>
     </div>
     <div class="set-label">Your data &amp; account</div>
-    <div class="set-item" onclick="exportData()" style="cursor:pointer">
+    <div class="set-item" onclick="openDataSheet()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--note-soft);color:var(--note)">${I.note}</div>
-      <div class="si-body"><div class="a">Export data</div><div class="b">Download everything as a JSON file</div></div>
+      <div class="si-body"><div class="a">Data</div><div class="b">Export or delete your data</div></div>
+      <span class="chev">${I.chev}</span>
     </div>
     <div class="set-item" onclick="confirmLogout()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--sleep-soft);color:var(--sleep);font-size:17px">👋</div>
       <div class="si-body"><div class="a">Log out</div><div class="b">Sign out · your data stays safely synced</div></div>
     </div>
+    <p style="font-size:11.5px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:14px">Cubby v${CUBBY_VERSION} · beta</p>`,'sleep');
+}
+function openDataSheet(){
+  openSheet(`<h2>Your data</h2><div class="sub">Keep a copy, or erase everything. Your logs live safely in your account either way.</div>
+    <div class="set-item" onclick="exportData()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--note-soft);color:var(--note)">${I.note}</div>
+      <div class="si-body"><div class="a">Export data</div><div class="b">Download everything as a JSON file</div></div>
+    </div>
     <div class="set-item" onclick="confirmReset()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--danger);color:#fff">${I.trash}</div>
       <div class="si-body"><div class="a" style="color:var(--danger)">Delete all data</div><div class="b">Erase every baby and log, can't be undone</div></div>
     </div>
-    <p style="font-size:11.5px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:14px">Cubby v${CUBBY_VERSION} · beta</p>`,'sleep');
+    <button class="btn-ghost" onclick="openSettings()">Back to settings</button>`,'sleep');
 }
 function exportData(){
   const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
