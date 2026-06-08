@@ -93,7 +93,8 @@
       "Bash(python3 -c \"import xml.dom.minidom as m;m.parse\\('sitemap.xml'\\);print\\('OK'\\)\")",
       "Bash(awk 'NR>=1 && /function openActivity\\\\\\(/{f=1} f{print NR\": \"$0} f&&/^}/{c++; if\\(c>=1\\)exit}' index.html)",
       "Bash(sed -n '1740,1750p' index.html)",
-      "Bash(awk '/function commitEvent/{f=1} f{print NR\": \"$0} f&&/^}/{exit}' index.html)"
+      "Bash(awk '/function commitEvent/{f=1} f{print NR\": \"$0} f&&/^}/{exit}' index.html)",
+      "Bash(awk 'NR>=3490 && NR<=3520{print NR\": \"$0}' index.html)"
     ]
   }
 }

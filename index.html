@@ -3247,6 +3247,7 @@ function composeShareCard(canvas,maxW){
   ctx.font=`800 ${Math.round(W*0.022)}px ${NUN}`;
   ctx.fillText('made with Cubby 🐻', cx, photoY+photoH+capH-Math.round(H*0.018));
   ctx.globalAlpha=1; ctx.textAlign='left';
+  drawStickers(ctx, W, H);
 }
 function composeAny(canvas,maxW){ if(photoEditor&&photoEditor.format&&photoEditor.format!=='orig') composeShareCard(canvas,maxW); else composePhoto(canvas,maxW); }
 let photoEditor=null, noiseTile=null, albumTab='photos';
@@ -3326,9 +3327,16 @@ function renderPhotos(){
   const fontChips=MOMENT_FONTS.map(([k,l])=>`<div class="chip ${(photoEditor.font||'Fraunces')===k?'sel':''}" onclick="setMomentFont('${k}')" style="font-family:${cssFont(k)}">${l}</div>`).join('');
   const palChips=Object.keys(MOMENT_PALETTES).map(k=>{const p=MOMENT_PALETTES[k];return `<div class="chip ${(photoEditor.palette||'Cream')===k?'sel':''}" onclick="setPalette('${k}')"><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:linear-gradient(135deg,${p.bg1},${p.accent});margin-right:6px;vertical-align:-1px"></span>${k}</div>`;}).join('');
   const tplChips=MOMENT_TEMPLATES.map(([k,l])=>`<div class="chip ${(photoEditor.template||'classic')===k?'sel':''}" onclick="setTemplate('${k}')">${l}</div>`).join('');
+  const stickerChips=STICKERS.map(e=>`<div class="chip ${photoEditor.activeSticker===e?'sel':''}" onclick="selectSticker('${e}')" style="font-size:18px;padding:6px 11px">${e}</div>`).join('');
+  const ssz=photoEditor.stickerSize||0.13;
+  const sizeChips=[['S',0.09],['M',0.13],['L',0.2]].map(([l,v])=>`<div class="chip ${Math.abs(ssz-v)<0.001?'sel':''}" onclick="setStickerSize(${v})">${l}</div>`).join('');
+  const nSt=(photoEditor.stickers||[]).length;
   return `<div class="fade-in">
-    <div class="canvas-wrap"><canvas id="photoCanvas"></canvas></div>
+    <div class="canvas-wrap"><canvas id="photoCanvas" onclick="placeSticker(event)" style="${photoEditor.activeSticker?'cursor:crosshair':''}"></canvas></div>
     <button class="btn-primary" style="background:var(--star);margin:0 0 12px" onclick="autoEnhance()">✨ Auto-enhance</button>
+    <div class="sec-title">Stickers ${photoEditor.activeSticker?'· tap the photo to place':''}</div>
+    <div class="chip-row">${stickerChips}</div>
+    <div class="chip-row" style="margin-top:6px">${sizeChips}${nSt?`<div class="chip" onclick="undoSticker()">↶ Undo</div><div class="chip" onclick="clearStickers()">Clear (${nSt})</div>`:''}</div>
     <div class="sec-title">Format ${isCard?'· ready to share':''}</div><div class="chip-row">${fmtChips}</div>
     <input class="cap-input" id="phCap" placeholder="${isCard?'Caption e.g. First smile':'Milestone label (optional) e.g. First smile'}" value="${escapeHtml(photoEditor.captionText||'')}" oninput="photoEditor.captionText=this.value;drawPhoto()">
     ${timeStrip('when','Photo date')}
@@ -3365,7 +3373,8 @@ function loadPhoto(input){
   img.onload=()=>{
     photoEditor={img,adj:{...PRESETS.Soft},preset:'Soft',frame:'Cream',
       stamp:'corner',stampPos:'bl',stampTone:'light',captionText:'',
-      format:'orig',font:'Fraunces',palette:'Cream',template:'classic'};
+      format:'orig',font:'Fraunces',palette:'Cream',template:'classic',
+      stickers:[],activeSticker:null,stickerSize:0.13};
     initLogWhen();
     render(); drawPhoto();
     if(document.fonts&&document.fonts.ready) document.fonts.ready.then(drawPhoto);
@@ -3404,6 +3413,27 @@ function setFormat(f){ photoEditor.format=f; render(); if(document.fonts&&docume
 function setMomentFont(f){ photoEditor.font=f; render(); if(document.fonts&&document.fonts.ready){ document.fonts.ready.then(drawPhoto); } else { drawPhoto(); } }
 function setPalette(p){ photoEditor.palette=p; render(); drawPhoto(); }
 function setTemplate(t){ photoEditor.template=t; render(); drawPhoto(); }
+/* ---- Sticker pack (tap a sticker, tap the photo to drop it) ---- */
+const STICKERS=['❤️','⭐','🐻','🌙','🌞','🍼','👑','🌈','✨','👣','🎀','☁️','🐣','🦋','🥹','🎈'];
+function selectSticker(e){ photoEditor.activeSticker=(photoEditor.activeSticker===e?null:e); render(); }
+function setStickerSize(s){ photoEditor.stickerSize=s; render(); }
+function placeSticker(ev){
+  if(!photoEditor||!photoEditor.activeSticker) return;
+  const c=ev.currentTarget, r=c.getBoundingClientRect();
+  const fx=(ev.clientX-r.left)/r.width, fy=(ev.clientY-r.top)/r.height;
+  if(!photoEditor.stickers) photoEditor.stickers=[];
+  photoEditor.stickers.push({e:photoEditor.activeSticker,x:Math.max(0,Math.min(1,fx)),y:Math.max(0,Math.min(1,fy)),s:photoEditor.stickerSize||0.13});
+  drawPhoto();
+}
+function undoSticker(){ if(photoEditor&&photoEditor.stickers) photoEditor.stickers.pop(); render(); drawPhoto(); }
+function clearStickers(){ if(photoEditor) photoEditor.stickers=[]; render(); drawPhoto(); }
+function drawStickers(ctx,W,H){
+  const st=photoEditor&&photoEditor.stickers; if(!st||!st.length) return;
+  ctx.save(); ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.shadowColor='rgba(0,0,0,0.25)'; ctx.shadowBlur=W*0.012; ctx.shadowOffsetY=W*0.004;
+  st.forEach(s=>{ ctx.font=`${Math.round(s.s*W)}px "Apple Color Emoji","Segoe UI Emoji",serif`; ctx.fillText(s.e, s.x*W, s.y*H); });
+  ctx.restore(); ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+}
 
 // precise, Precious-style age: { big, unit, full }
 function preciseAge(birth, at){
@@ -3473,6 +3503,7 @@ function composePhoto(canvas,maxW){
   } else if(ed.stamp!=='none'){
     drawStamp(ctx, ix, iy, iw, ih, b, age, dateStr);
   }
+  drawStickers(ctx, W, H);
 }
 
 // ---- original keepsake stamp designs (not copied from any app) ----
@@ -3653,7 +3684,8 @@ function makeMomentFromPhoto(dataUrl, caption, when){
   const img=new Image();
   img.onload=()=>{
     photoEditor={img,adj:{...PRESETS.Soft},preset:'Soft',frame:'Cream',stamp:'corner',stampPos:'bl',stampTone:'light',
-      captionText:caption||'',format:'square',font:'Fraunces',palette:'Cream',template:'classic'};
+      captionText:caption||'',format:'square',font:'Fraunces',palette:'Cream',template:'classic',
+      stickers:[],activeSticker:null,stickerSize:0.13};
     initLogWhen(); if(when){ setWhen('when', when); }
     albumTab='photos'; go('album'); drawPhoto();
     if(document.fonts&&document.fonts.ready) document.fonts.ready.then(drawPhoto);
@@ -3940,30 +3972,47 @@ function genThenNow(){
   imgs.forEach((it,idx)=>{ const im=new Image(); im.onload=()=>{ objs[idx]={img:im,createdAt:it.p.createdAt}; if(++loaded===2) drawThenNow(objs); }; im.src=it.data; });
 }
 function drawThenNow(objs){
-  const W=1200,H=720,gap=24,cw=(W-gap*3)/2;
+  const W=1200,H=780,gap=24,cw=(W-gap*3)/2;
   const c=document.createElement('canvas'); c.width=W; c.height=H; const ctx=c.getContext('2d');
-  ctx.fillStyle='#FBF5E9'; ctx.fillRect(0,0,W,H);
+  const g=ctx.createLinearGradient(0,0,W*0.4,H); g.addColorStop(0,'#FBF5E9'); g.addColorStop(1,'#EFE0C8');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
   const b=activeBaby();
+  const ph=H-gap*2-96;
   objs.forEach((o,i)=>{
-    const x=gap+i*(cw+gap), y=gap, ph=H-gap*2-70;
+    const x=gap+i*(cw+gap), y=gap;
+    ctx.save();
+    ctx.shadowColor='rgba(60,46,34,0.18)'; ctx.shadowBlur=W*0.02; ctx.shadowOffsetY=8;
+    ctx.fillStyle='#fff'; roundRect(ctx,x,y,cw,ph,20); ctx.fill(); ctx.restore();
     ctx.save(); roundRect(ctx,x,y,cw,ph,20); ctx.clip();
     const r=Math.max(cw/o.img.naturalWidth,ph/o.img.naturalHeight), w=o.img.naturalWidth*r, h=o.img.naturalHeight*r;
     ctx.drawImage(o.img, x+(cw-w)/2, y+(ph-h)/2, w, h); ctx.restore();
     ctx.textAlign='center';
-    ctx.fillStyle='#C97FA0'; ctx.font=`800 26px "Nunito Sans", sans-serif`;
+    ctx.fillStyle='#C97FA0'; ctx.font=`800 28px "Nunito Sans", sans-serif`;
     ctx.fillText(i===0?'THEN':'NOW', x+cw/2, y+ph+40);
     ctx.fillStyle='#8a7d72'; ctx.font=`700 22px "Nunito Sans", sans-serif`;
     const ageAt=preciseAge(b.birth,o.createdAt).full||'';
     ctx.fillText(ageAt, x+cw/2, y+ph+70);
   });
+  ctx.textAlign='center'; ctx.fillStyle='#b8ab9c'; ctx.font='800 18px "Nunito Sans", sans-serif';
+  ctx.fillText('made with Cubby 🐻', W/2, H-16);
   ctx.textAlign='left';
   const data=c.toDataURL('image/jpeg',0.92); window._lastCard=data; cardDraft={month:0,photoData:null};
   hideLoader();
   openSheet(`<h2>Then vs Now</h2><div class="sub">${escapeHtml(b.name)}, growing up.</div>
     <img src="${data}" class="card-prev">
+    ${navigator.share?`<button class="btn-primary" onclick="shareLastCard('thenvsnow')">Share</button>`:''}
     <button class="btn-primary" style="background:var(--sleep)" onclick="dlNamed('thenvsnow')">${I.download} Download</button>`,'sleep');
 }
 function dlNamed(n){ const a=document.createElement('a'); a.href=window._lastCard; a.download=(activeBaby().name||'baby')+'-'+n+'.jpg'; a.click(); toast('Downloaded'); }
+async function shareLastCard(n){
+  try{
+    const blob=await (await fetch(window._lastCard)).blob();
+    const file=new File([blob],((activeBaby()||{}).name||'baby')+'-'+n+'.jpg',{type:'image/jpeg'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file],title:'Cubby'}); return; }
+    if(navigator.share){ await navigator.share({title:'Cubby'}); return; }
+  }catch(e){}
+  dlNamed(n);
+}
 
 /* ---- Growth collage ---- */
 function makeCollage(){
