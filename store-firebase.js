@@ -207,6 +207,7 @@
       milestones: state.milestones || [], meds: state.meds || [],
       vaccines: state.vaccines || {}, illnesses: state.illnesses || [],
       photos: state.photos || [],
+      handoff: state.handoff || null,  // shared parent<->caregiver note
       timers: state.timers || {}   // shared so an ongoing nap/feed shows on every phone
     };
   }
@@ -221,6 +222,7 @@
     state.vaccines = app.vaccines || {};
     state.illnesses = app.illnesses || [];
     state.photos = app.photos || [];
+    state.handoff = app.handoff || null;
     // Don't stomp a timer the local user just started but hasn't pushed yet.
     if (!pushTimer) state.timers = app.timers || {};
     normalizeLoadedState(state); // defensive legacy migrations

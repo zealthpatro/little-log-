@@ -34,6 +34,8 @@
       + '<p>But the details (the last feed, the nap, the medicine) usually live in one parent\'s head, or on one phone. Cubby keeps everyone who cares for your baby, parents, grandparents, the nanny, daycare, on the same page, in real time.</p></section>'
       + '<section class="lp-feats">' + features + '</section>'
       + '<section class="lp-steps-wrap"><h2>How it works</h2><div class="lp-steps">' + steps + '</div></section>'
+      + '<section class="lp-why lp-working"><h2>Made for working parents</h2>'
+      + '<p>Leave your little one with a nanny, grandparent or daycare and still feel close. They log the feeds, naps and meals; you see it the moment it happens, and get a tidy recap of the whole day, from wherever you are.</p></section>'
       + '<section class="lp-pro"><h2>Free forever, with Pro for the extras</h2>'
       + '<div class="lp-cmp">'
       + '<div class="lp-col"><div class="lp-col-h">Free</div><ul>'

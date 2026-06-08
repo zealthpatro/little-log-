@@ -847,9 +847,109 @@ function renderGetStarted(){
   </div>`;
 }
 
+/* ---------- working-parent: while-you-were-away recap, daily recap, handoff ---------- */
+function loggerName(uid){ const info=(window.LL&&window.LL.memberInfo)||{}; const m=info[uid]; return (m&&(m.relationship||((m.name||'').split(' ')[0])))||''; }
+function awayRecap(){
+  const me = window.LL && window.LL.auth && window.LL.auth.currentUser && window.LL.auth.currentUser.uid;
+  const todayK = dayKey(now());
+  const todays = babyEvents().filter(e=>dayKey(e.time)===todayK);
+  const others = todays.filter(e=>e.authorId && e.authorId!==me);
+  if(others.length<1) return '';
+  const feeds = todays.filter(e=>e.type==='feed').length;
+  const napMs = todays.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+(e.end-e.time),0);
+  const dia = todays.filter(e=>e.type==='diaper').length;
+  const lastFeed = todays.filter(e=>e.type==='feed')[0];
+  const names=[...new Set(others.map(e=>loggerName(e.authorId)).filter(Boolean))];
+  const parts=[];
+  if(feeds) parts.push(feeds+' feed'+(feeds>1?'s':''));
+  if(napMs>=360000) parts.push((napMs/3600000).toFixed(napMs/3600000>=10?0:1)+'h sleep');
+  if(dia) parts.push(dia+' nappy'+(dia>1?' changes':' change'));
+  const summary=parts.join(' · ')||'activity logged';
+  const last=lastFeed?(' · last feed '+fmtClock(lastFeed.time)):'';
+  return `<div class="away-card" onclick="openDayRecap()">
+    <div class="away-h">Today so far 🐻</div>
+    <div class="away-s">${escapeHtml(summary+last)}</div>
+    ${names.length?`<div class="away-by">logged by ${names.map(escapeHtml).join(', ')} · tap for the full day</div>`:''}
+  </div>`;
+}
+function dayRecapText(){
+  const b=activeBaby(); if(!b) return '';
+  const todayK=dayKey(now());
+  const evs=babyEvents().filter(e=>dayKey(e.time)===todayK);
+  const feeds=evs.filter(e=>e.type==='feed');
+  const nursing=feeds.filter(e=>e.method==='breast').length;
+  const bottles=feeds.filter(e=>e.method==='bottle');
+  const bottleVol=bottles.reduce((a,e)=>a+(+e.amount||0),0);
+  const solids=feeds.filter(e=>e.method==='solids');
+  const foods=[...new Set(solids.map(e=>e.notes).filter(Boolean))];
+  const water=feeds.filter(e=>e.method==='water').length;
+  const naps=evs.filter(e=>e.type==='sleep'&&e.end);
+  const napMs=naps.reduce((a,e)=>a+(e.end-e.time),0);
+  const dia=evs.filter(e=>e.type==='diaper');
+  const wet=dia.filter(e=>e.kind==='wet'||e.kind==='both').length;
+  const dirty=dia.filter(e=>e.kind==='dirty'||e.kind==='both').length;
+  const temps=evs.filter(e=>e.type==='temperature');
+  const fevers=temps.filter(e=>isFever(e.temp,e.unit));
+  const acts=evs.filter(e=>e.type==='activity'&&(e.activity||e.notes));
+  const loggers=[...new Set(evs.map(e=>loggerName(e.authorId)).filter(Boolean))];
+  const L=[];
+  L.push(`${b.name}'s day · ${new Date().toLocaleDateString()}`);
+  L.push('');
+  let fl=`Feeds: ${feeds.length}`; const sub=[];
+  if(nursing) sub.push(`nursing ${nursing}`);
+  if(bottles.length) sub.push(`bottle ${bottles.length}${bottleVol?` ~${Math.round(bottleVol)}${bottles[0].unit||'ml'}`:''}`);
+  if(water) sub.push(`water ${water}`);
+  if(sub.length) fl+=` (${sub.join(', ')})`;
+  L.push(fl);
+  if(solids.length) L.push(`Solids: ${solids.length}${foods.length?` (${foods.join('; ')})`:''}`);
+  L.push(`Sleep: ${(napMs/3600000).toFixed(1)}h over ${naps.length} nap${naps.length!==1?'s':''}`);
+  L.push(`Nappies: ${dia.length} (wet ${wet}, dirty ${dirty})`);
+  if(acts.length) L.push(`Activities: ${acts.map(a=>a.activity||'note').join(', ')}`);
+  if(temps.length) L.push(`Temp: ${temps.length} reading${temps.length>1?'s':''}${fevers.length?`, ${fevers.length} fever`:''}`);
+  if(loggers.length) L.push(`Logged by: ${loggers.join(', ')}`);
+  return L.join('\n');
+}
+function openDayRecap(){
+  const b=activeBaby(); if(!b)return;
+  const text=dayRecapText(); window.__dayRecapText=text;
+  openSheet(`<h2>${escapeHtml(b.name)}'s day 🐻</h2><div class="sub">Today at a glance, for whoever's away.</div>
+    <pre class="visit-sum">${escapeHtml(text)}</pre>
+    <button class="btn-primary" style="background:var(--feed)" onclick="copyDayRecap()">Copy / share</button>
+    <button class="btn-ghost" onclick="closeSheet()">Close</button>`,'feed');
+}
+function copyDayRecap(){
+  const t=window.__dayRecapText||''; const done=()=>toast('Day recap copied');
+  if(navigator.share){ navigator.share({title:'Cubby day',text:t}).then(done).catch(()=>{ if(navigator.clipboard) navigator.clipboard.writeText(t).then(done); }); }
+  else if(navigator.clipboard){ navigator.clipboard.writeText(t).then(done).catch(()=>{}); }
+  else done();
+}
+function handoffCard(){
+  const h=state.handoff;
+  if(h&&h.text){
+    const by=h.by?loggerName(h.by):'';
+    return `<div class="handoff-card" onclick="openHandoff()"><div class="ho-h">🤝 Handoff note</div><div class="ho-s">${escapeHtml(h.text)}</div>${by?`<div class="ho-by">— ${escapeHtml(by)}</div>`:''}</div>`;
+  }
+  return `<div class="handoff-card empty" onclick="openHandoff()"><div class="ho-h">🤝 Add a handoff note</div><div class="ho-s">A quick update for whoever's with baby today.</div></div>`;
+}
+function openHandoff(){
+  const h=state.handoff||{};
+  openSheet(`<h2>Handoff note 🤝</h2><div class="sub">A shared note for whoever's caring for baby (parent, nanny, grandparent).</div>
+    <div class="field"><label>Note</label><textarea id="hoText" placeholder="e.g. Slight cold today, extra cuddles. Last fed 8am.">${escapeHtml(h.text||'')}</textarea></div>
+    <button class="btn-primary" onclick="saveHandoff()">Save note</button>
+    ${h.text?`<button class="btn-ghost btn-danger" onclick="clearHandoff()">Clear note</button>`:''}`,'feed');
+}
+function saveHandoff(){
+  const t=($('#hoText')?$('#hoText').value:'').trim();
+  const uid=window.LL&&window.LL.auth&&window.LL.auth.currentUser&&window.LL.auth.currentUser.uid;
+  state.handoff = t ? {text:t, by:uid||null, at:now()} : null;
+  persist(); closeSheet(); render(); toast(t?'Handoff note saved':'Note cleared');
+}
+function clearHandoff(){ state.handoff=null; persist(); closeSheet(); render(); toast('Note cleared'); }
 function renderHome(){
   const evs = babyEvents();
   const gsCard = renderGetStarted();
+  const shared = !!(window.LL&&window.LL.members&&Object.keys(window.LL.members).length>1);
+  const away = awayRecap();
   const lastFeed = evs.find(e=>e.type==='feed');
   const lastSleep = evs.find(e=>e.type==='sleep' && e.end);
   const lastDiaper = evs.find(e=>e.type==='diaper');
@@ -923,7 +1023,9 @@ function renderHome(){
 
   return `<div class="fade-in">
     <div class="greeting">${meGreeting()}</div>
-    <div class="greeting-sub">${homeNudgeLine()}</div>
+    ${away ? '' : `<div class="greeting-sub">${homeNudgeLine()}</div>`}
+    ${away}
+    ${(shared||(state.handoff&&state.handoff.text))?handoffCard():''}
     ${gsCard ? '' : coachMark('home','Welcome to Cubby 👋','Your hub. A photo slideshow up top, one-tap logging below. The tabs hold your Log, Album and Health.')}
     ${renderHero()}
     ${timers}
@@ -2887,7 +2989,7 @@ function renderLogTab(){
   const seg=`<div class="seg seg-full">
     <button class="${logTab==='log'?'on':''}" onclick="setLogTab('log')">Log</button>
     <button class="${logTab==='stats'?'on':''}" onclick="setLogTab('stats')">Stats</button></div>`;
-  const body = logTab==='stats' ? renderStats() : (tipLine('heat','These strips show your week at a glance, tap Week or Month to switch.')+renderHeatmap()+renderTimeline());
+  const body = logTab==='stats' ? renderStats() : (`<button class="btn-ghost" style="margin-bottom:14px" onclick="openDayRecap()">🐻 Today's recap</button>`+tipLine('heat','These strips show your week at a glance, tap Week or Month to switch.')+renderHeatmap()+renderTimeline());
   return `<div class="fade-in">${coachMark('log','Log & Stats','Everything you log lands in this timeline. The strips up top show your week at a glance. Flip to Stats for charts and growth curves.')}${seg}${body}</div>`;
 }
 
