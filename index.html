@@ -828,9 +828,28 @@ function monthiversary(){
   let m=(t.getFullYear()-bd.getFullYear())*12+(t.getMonth()-bd.getMonth());
   return m>=1 ? m : null;
 }
+function renderGetStarted(){
+  if(state.settings.seen && state.settings.seen['tip_getstarted']) return '';
+  const haveBaby=(state.babies||[]).length>0;
+  const haveLog=(state.events||[]).length>0;
+  const members=(window.LL&&window.LL.members)||{};
+  const shared=Object.keys(members).length>1;
+  if(haveBaby && haveLog && shared) return ''; // all done → auto-hide
+  const row=(done,label,sub,action)=>`<div class="gs-row${done?' done':''}"${(action&&!done)?` onclick="${action}"`:''}>
+    <span class="gs-check">${done?'✓':''}</span>
+    <div class="gs-body"><div class="gs-t">${label}</div><div class="gs-s">${sub}</div></div>
+    ${(action&&!done)?`<span class="gs-go">${I.chev}</span>`:''}</div>`;
+  return `<div class="gs-card">
+    <div class="gs-head"><div class="gs-title">Get started 🐻</div><button class="gs-x" onclick="dismissTip('getstarted')">×</button></div>
+    ${row(haveBaby,'Add your baby','Name, birthday, photo','')}
+    ${row(haveLog,'Log your first entry','One tap below — feed, sleep or nappy','openFeed()')}
+    ${row(shared,'Invite a co-parent','Share the log live with family',"window.openFamily&&window.openFamily()")}
+  </div>`;
+}
 
 function renderHome(){
   const evs = babyEvents();
+  const gsCard = renderGetStarted();
   const lastFeed = evs.find(e=>e.type==='feed');
   const lastSleep = evs.find(e=>e.type==='sleep' && e.end);
   const lastDiaper = evs.find(e=>e.type==='diaper');
@@ -905,8 +924,7 @@ function renderHome(){
   return `<div class="fade-in">
     <div class="greeting">${meGreeting()}</div>
     <div class="greeting-sub">${homeNudgeLine()}</div>
-    ${tipLine('share','New here? Tap the 👨‍👩‍👧 button (top-right) to invite family, pick your bear, or send feedback.')}
-    ${coachMark('home','Welcome to Cubby 👋','Your hub. A photo slideshow up top, one-tap logging below. The tabs hold your Log, Album and Health.')}
+    ${gsCard ? '' : coachMark('home','Welcome to Cubby 👋','Your hub. A photo slideshow up top, one-tap logging below. The tabs hold your Log, Album and Health.')}
     ${renderHero()}
     ${timers}
     <div class="since-row stagger">
@@ -914,6 +932,7 @@ function renderHome(){
       ${sinceCard('sleep','Last sleep', lastSleep)}
       ${sinceCard('diaper','Last diaper', lastDiaper)}
     </div>
+    ${gsCard}
     <div class="sec-title">Quick log</div>
     <div class="actions stagger">
       <button class="action" onclick="openFeed()">

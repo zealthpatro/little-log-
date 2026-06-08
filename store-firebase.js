@@ -31,6 +31,9 @@
     + '.ll-auth-btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;border:1px solid #E0D7C7;background:#fff;color:#2C2521;font-size:16px;font-weight:700;padding:14px 18px;border-radius:14px;cursor:pointer;font-family:inherit;}'
     + '.ll-auth-btn:hover{background:#FBF7EF;}.ll-auth-btn:disabled{opacity:.6;cursor:default;}'
     + '.ll-auth-msg{margin-top:16px;color:#9a8d80;font-size:13px;line-height:1.4;}'
+    + '.ll-values{text-align:left;margin:4px 0 20px;display:flex;flex-direction:column;gap:9px;}'
+    + '.ll-values div{display:flex;align-items:center;gap:10px;font-size:13.5px;color:#6E635B;font-weight:600;}'
+    + '.ll-values span{font-size:16px;flex:0 0 auto;width:20px;text-align:center;}'
     + '.ll-spin{width:30px;height:30px;border:3px solid #E0D7C7;border-top-color:#C97FA0;border-radius:50%;margin:6px auto 0;animation:llspin 0.9s linear infinite;}'
     + '@keyframes llspin{to{transform:rotate(360deg);}}'
     + '#llAcctBtn{position:fixed;top:max(10px,env(safe-area-inset-top));right:10px;z-index:9000;width:42px;height:42px;border-radius:50%;border:1px solid rgba(0,0,0,.08);background:rgba(255,255,255,.92);font-size:20px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.12);display:flex;align-items:center;justify-content:center;}'
@@ -75,6 +78,7 @@
     overlay().innerHTML =
       '<div class="ll-auth-card"><img src="icons/logo-512.png" alt="Cubby" class="ll-auth-logo-img">'
       + '<h1>Cubby</h1><p>A warm, private baby log you can share with the people who care for them.</p>'
+      + '<div class="ll-values"><div><span>⚡</span>Log feeds, sleep &amp; nappies in seconds</div><div><span>👨‍👩‍👧</span>Share with family — everyone sees it live</div><div><span>🔒</span>Private to your family</div></div>'
       + '<button id="llGoogleBtn" class="ll-auth-btn">Continue with Google</button>'
       + (msg ? '<div class="ll-auth-msg">' + msg + '</div>' : '') + '</div>';
     document.getElementById('llGoogleBtn').onclick = signInGoogle;
@@ -527,6 +531,7 @@
     };
   }
   window.openFeedback = openFeedback;
+  window.openFamily = openFamily;
 
   /* ---------- auth state machine ---------- */
   showStatus('Loading…'); // cover the app until we know whether you're signed in
