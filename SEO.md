@@ -23,6 +23,13 @@ Pre-rendered static HTML, fully crawlable, one folder per market:
 Each page has: per-page meta + OG + hreflang (cross-linked cluster), `MedicalWebPage` + `FAQPage` JSON-LD, a static age-by-age table, a "what changed" block where relevant, a "Track this in Cubby" CTA, an FAQ, and a sources/disclaimer footer.
 
 - **Shared assets**: `vax.css` (styling) and `vax.js` (the birthday calculator).
+
+### Articles section (`/articles/`)
+A content hub to grow the SEO cluster. Static HTML, same `vax.css`, `BlogPosting`/`CollectionPage` JSON-LD.
+- `/articles/` hub links the four vaccine pages + guides.
+- `/articles/baby-vaccination-schedules-compared/` (pillar; cross-links the four country pages).
+- `/articles/never-miss-a-baby-vaccine/` (product-led, conversion-oriented).
+- To add an article: copy an existing one, update `<head>` meta + `BlogPosting` JSON-LD + `datePublished`, write inside `<main class="wrap article">`, add a card to the hub, and add a `<url>` to `sitemap.xml`. Next clusters to write: first foods/solids by age, milestones, sleep windows.
 - **Birthday calculator**: progressive enhancement only. The table is fully rendered in static HTML (so it is crawlable); `vax.js` fills the "Your date" column when a parent picks a birthday. Rows carry `data-weeks` or `data-months`; dates = birth + that offset. Localised via the page `lang`.
 
 ## E-E-A-T / YMYL rules (do not skip)

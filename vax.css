@@ -55,4 +55,17 @@ td.when:empty::after{content:"\2014";color:var(--faint);font-weight:600}
   padding:7px 12px;border-radius:999px;text-decoration:none;color:var(--soft)}
 footer.src{margin-top:36px;padding-top:18px;border-top:1px solid var(--line);font-size:13px;color:var(--faint);font-weight:600}
 footer.src a{color:var(--faint)}
+/* Article hub + article prose */
+.art-grid{display:flex;flex-direction:column;gap:12px;margin:18px 0}
+.art-card{display:block;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px 20px;
+  text-decoration:none;color:var(--ink);box-shadow:0 5px 14px rgba(60,46,34,.06)}
+.art-card .k{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--pink-d)}
+.art-card .t{font-family:var(--serif);font-size:20px;font-weight:600;margin:5px 0 4px;line-height:1.25}
+.art-card .d{font-size:14.5px;color:var(--soft);font-weight:600;line-height:1.5}
+.art-meta{font-size:13px;color:var(--faint);font-weight:700;margin:0 0 18px}
+.article p{font-size:16.5px;line-height:1.7;color:#3a322c;margin:0 0 16px}
+.article h2{margin-top:32px}
+.article ul,.article ol{margin:0 0 16px;padding-left:22px}
+.article li{margin:7px 0;line-height:1.6;color:#3a322c}
+.article strong{color:var(--ink)}
 @media(max-width:480px){h1{font-size:27px}.lede{font-size:16.5px}th,td{padding:9px 9px;font-size:13.5px}}
