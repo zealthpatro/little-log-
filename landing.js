@@ -35,7 +35,7 @@
       + '<section class="lp-feats">' + features + '</section>'
       + '<section class="lp-steps-wrap"><h2>How it works</h2><div class="lp-steps">' + steps + '</div></section>'
       + '<section class="lp-pro"><div class="lp-pro-badge">Coming soon</div><h2>Cubby Pro</h2>'
-      + '<p>Cubby is free for the essentials, always. Pro will add HD photos &amp; unlimited storage, push reminders, PDF doctor reports, and smart sleep &amp; feed insights.</p>'
+      + '<p>Cubby is free for the essentials, always. Pro will add smart, adaptive routines (feeds, naps, tummy time, day 0 to 365), push reminders, HD photos &amp; unlimited storage, PDF doctor reports, and sleep &amp; feed insights.</p>'
       + '<p class="lp-pro-note">Sign in, then join the waitlist from Settings, Cubby Pro.</p></section>'
       + '<section class="lp-final"><h2>Everyone caring for your baby, in sync.</h2>' + cta + '<div class="lp-trust">Free · Private · made with 🐻</div></section>'
       + '<footer class="lp-foot">Cubby · a warm, private baby tracker 🐻</footer>'

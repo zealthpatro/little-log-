@@ -19,6 +19,10 @@ Implication: lead Pro with **smart sleep/feed insights**, not gimmicks.
 
 ## Cubby Pro — candidate features
 **On the waitlist now (advertised):**
+0. **Smart routines (Routine Manager)** — flagship. Age-aware, adaptive daily rhythms (feeds,
+   naps, tummy time, skin-to-skin, fresh air) across day 0→365 that re-flow when life changes.
+   Cue-first and gentle, never a rigid alarm. Full spec in **ROUTINES.md**. This is Cubby's answer
+   to the sleep/routine guidance that research shows parents actually pay for.
 1. **HD photos & unlimited storage** — full-res photos + unlimited album (free keeps light
    thumbnails). Maps to the Firebase Storage cost we deferred.
 2. **Push notifications** — medicine / "time to log" / fever / appointment alerts even when the
