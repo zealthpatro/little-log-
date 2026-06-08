@@ -75,7 +75,15 @@
   function hideOverlay() { var ov = document.getElementById('llAuthOv'); if (ov) ov.remove(); }
 
   function showSignIn(msg) {
-    overlay().innerHTML =
+    var ov = overlay();
+    if (typeof window.cubbyLanding === 'function') {
+      ov.classList.add('landing');
+      ov.innerHTML = window.cubbyLanding(msg);
+      Array.prototype.forEach.call(ov.querySelectorAll('.ll-cta'), function (b) { b.onclick = signInGoogle; });
+      return;
+    }
+    ov.classList.remove('landing');
+    ov.innerHTML =
       '<div class="ll-auth-card"><img src="icons/logo-512.png" alt="Cubby" class="ll-auth-logo-img">'
       + '<h1>Cubby</h1><p>A warm, private baby log you can share with the people who care for them.</p>'
       + '<div class="ll-values"><div><span>⚡</span>Log feeds, sleep &amp; nappies in seconds</div><div><span>👨‍👩‍👧</span>Share with family — everyone sees it live</div><div><span>🔒</span>Private to your family</div></div>'
@@ -84,6 +92,7 @@
     document.getElementById('llGoogleBtn').onclick = signInGoogle;
   }
   function showStatus(msg) {
+    overlay().classList.remove('landing');
     overlay().innerHTML =
       '<div class="ll-auth-card"><img src="icons/logo-512.png" alt="Cubby" class="ll-auth-logo-img">'
       + '<h1>Cubby</h1><div class="ll-spin"></div>'

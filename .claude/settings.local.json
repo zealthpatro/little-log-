@@ -71,7 +71,10 @@
       "Bash(grep -nE '\\\\$\\\\{[^}]*v\\\\.\\(name|vName\\)[^}]*\\\\}|vaccine' index.html)",
       "Bash(grep -noE 'value=\"\\\\$\\\\{[^}]+\\\\}\"' index.html)",
       "Bash(perl -0pi -e 's/\\\\$\\\\{m\\\\.title\\\\}/\\\\$\\\\{escapeHtml\\(m.title\\)\\\\}/g; s/\\\\$\\\\{m\\\\.cat\\\\}/\\\\$\\\\{escapeHtml\\(m.cat\\)\\\\}/g' index.html)",
-      "Bash(grep -cE '\\\\$\\\\{m\\\\.title\\\\}|\\\\$\\\\{m\\\\.cat\\\\}' index.html)"
+      "Bash(grep -cE '\\\\$\\\\{m\\\\.title\\\\}|\\\\$\\\\{m\\\\.cat\\\\}' index.html)",
+      "Bash(curl -sI https://cubby.saurav-918.workers.dev/?cb=__TRACKED_VAR__)",
+      "Bash(node --check landing.js)",
+      "Bash(sed -i '' \"s/little-log-v18/little-log-v19/\" sw.js)"
     ]
   }
 }
