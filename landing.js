@@ -28,7 +28,7 @@
       + '<p class="lp-tag">A warm, private baby log for everyone who cares for your little one: parents, grandparents, the nanny, daycare and more.</p>'
       + cta
       + (msg ? '<div class="lp-msg">' + msg + '</div>' : '')
-      + '<div class="lp-trust">Free · Private to your family · No app store</div>'
+      + '<div class="lp-trust">Free · Private to your family · Ready in seconds</div>'
       + '</header>'
       + '<section class="lp-why"><h2>Caring for a baby is a team sport.</h2>'
       + '<p>But the details (the last feed, the nap, the medicine) usually live in one parent\'s head, or on one phone. Cubby keeps everyone who cares for your baby, parents, grandparents, the nanny, daycare, on the same page, in real time.</p></section>'
@@ -55,7 +55,8 @@
       + '</ul></div>'
       + '</div>'
       + '<p class="lp-pro-note">Sign in, then join the Pro waitlist from Settings, Cubby Pro.</p></section>'
-      + '<section class="lp-final"><h2>Everyone caring for your baby, in sync.</h2>' + cta + '<div class="lp-trust">Free · Private · made with 🐻</div></section>'
+      + '<section class="lp-final"><h2>Everyone caring for your baby, in sync.</h2>' + cta + '<div class="lp-trust">Free · Private · made with 🐻</div>'
+      + '<div class="lp-pwa">No download, no app store. Add Cubby to your home screen for an app-like, offline-ready experience in any browser.</div></section>'
       + '<footer class="lp-foot">Cubby · a warm, private baby tracker 🐻</footer>'
       + '</div>';
   };
@@ -101,6 +102,7 @@
     + '.lp-col-pro li::before{content:"✦";color:#C97FA0;}'
     + '@media(max-width:520px){.lp-cmp{grid-template-columns:1fr;}}'
     + '.lp-final{text-align:center;padding:34px 0 6px;}'
+    + '.lp-pwa{max-width:380px;margin:16px auto 0;font-size:12px;line-height:1.5;color:#a99e92;font-weight:600;}'
     + '.lp-foot{text-align:center;color:#9a8d80;font-size:12.5px;font-weight:700;padding:28px 0 0;}'
     + '@media(max-width:480px){.lp-feats{grid-template-columns:1fr;}.lp-name{font-size:34px;}}';
   document.head.appendChild(st);
