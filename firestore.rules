@@ -35,6 +35,9 @@ service cloud.firestore {
       function isMember() {
         return request.auth != null && request.auth.uid in resource.data.members;
       }
+      function isOwner() {
+        return request.auth != null && resource.data.members[request.auth.uid] == 'owner';
+      }
       function invitedHere() {
         return request.auth != null
           && exists(/databases/$(database)/documents/invites/$(request.auth.token.email.lower()))
@@ -45,8 +48,13 @@ service cloud.firestore {
       allow create: if request.auth != null
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.members[request.auth.uid] == 'owner';
-      // Members edit the shared data; an invitee may join (adding themselves). Family is trusted.
-      allow update: if isMember() || invitedHere();
+      // Owner can change anything. A caregiver may edit shared data but NOT membership/owner
+      // (no privilege escalation). An invitee may join (this adds themselves to members).
+      allow update: if isOwner()
+        || ( isMember()
+             && request.resource.data.ownerId == resource.data.ownerId
+             && request.resource.data.members == resource.data.members )
+        || invitedHere();
       allow delete: if request.auth != null && resource.data.members[request.auth.uid] == 'owner';
 
       // Members of THIS household (resolved fresh each check).

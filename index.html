@@ -1150,7 +1150,7 @@ function tlItem(e){
   const by = authorTag(e);
   return `<div class="tl-item" onclick="openEdit('${e.id}')">
     <div class="tl-ico" style="background:var(--${m.c}-soft);color:var(--${m.c})">${icon}</div>
-    <div class="tl-body"><div class="t1">${eventTitle(e)}</div>${det?`<div class="t2">${escapeHtml(det)}</div>`:''}${by?`<div class="tl-by">${(e.authorId&&typeof window.memberAvatarSvg==='function')?`<span class="tl-byav">${window.memberAvatarSvg(e.authorId,16)}</span>`:''}logged by ${escapeHtml(by)}</div>`:''}</div>
+    <div class="tl-body"><div class="t1">${escapeHtml(eventTitle(e))}</div>${det?`<div class="t2">${escapeHtml(det)}</div>`:''}${by?`<div class="tl-by">${(e.authorId&&typeof window.memberAvatarSvg==='function')?`<span class="tl-byav">${window.memberAvatarSvg(e.authorId,16)}</span>`:''}logged by ${escapeHtml(by)}</div>`:''}</div>
     ${e.photoId&&photoSrc(e.photoId)?`<img class="tl-thumb" src="${photoSrc(e.photoId)}">`:''}
     <div class="tl-time"><div class="clock">${fmtClock(e.time)}</div><div class="ago" data-since="${e.time}">${fmtSince(e.time)}</div></div>
   </div>`;
@@ -1592,7 +1592,7 @@ function openEdit(id){
   if(e.type==='note') extra=`<div class="field"><label>Note</label><textarea id="eNote">${escapeHtml(e.notes||'')}</textarea></div>`;
   if(e.type==='activity') extra=`<div class="field"><label>Minutes</label><input type="number" id="eMins" value="${e.mins||''}"></div><div class="field"><label>Note</label><textarea id="eNote">${escapeHtml(e.notes||'')}</textarea></div>`;
   if(e.photoId&&photoSrc(e.photoId)) extra+=`<div class="field"><label>Photo</label><div class="food-preview"><img src="${photoSrc(e.photoId)}"><button class="rm" onclick="removeEventPhoto('${id}')">×</button></div></div>`;
-  openSheet(`<h2>${eventTitle(e)}</h2><div class="sub">${dayLabel(e.time)} at ${fmtClock(e.time)}</div>
+  openSheet(`<h2>${escapeHtml(eventTitle(e))}</h2><div class="sub">${dayLabel(e.time)} at ${fmtClock(e.time)}</div>
     <div class="field"><label>Time</label><input type="time" id="eTime" value="${tval(d)}"></div>
     ${extra}
     <button class="btn-primary" style="background:var(--${m.c})" onclick="saveEdit('${id}')">Save changes</button>
@@ -2683,9 +2683,9 @@ function renderMilestones(){
     return `<div class="ms-row ${a?'done':''}" onclick="openMilestone('${m.key}')">
       <div class="ms-check">${I.check}</div>
       ${a&&a.photoId?`<img class="ms-thumb" src="${photoSrc(a.photoId)}">`:''}
-      <div class="ms-body"><div class="a">${m.title}</div>
+      <div class="ms-body"><div class="a">${escapeHtml(m.title)}</div>
         <div class="b">${a?('Reached '+new Date(a.achievedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})):('typically ~'+m.mo+' mo')}</div></div>
-      <div class="ms-chip">${m.cat}</div>
+      <div class="ms-chip">${escapeHtml(m.cat)}</div>
     </div>`;
   }).join('');
 
@@ -2702,7 +2702,7 @@ function renderMilestones(){
         <div class="rt">${doneCount}</div></div>
       <div class="mh-body"><div class="a">${doneCount} moments captured</div><div class="b">${activeBaby().name} is ${months<24?Math.floor(months)+' months':Math.floor(months/12)+' years'} · every baby grows at their own pace</div></div>
     </div>
-    ${upcoming.length?`<div class="sec-title">Coming up</div>${upcoming.map(m=>`<div class="ms-row" onclick="openMilestone('${m.key}')"><div class="ms-check">${I.check}</div><div class="ms-body"><div class="a">${m.title}</div><div class="b">typically around ${m.mo} months</div></div><div class="ms-chip">${m.cat}</div></div>`).join('')}`:''}
+    ${upcoming.length?`<div class="sec-title">Coming up</div>${upcoming.map(m=>`<div class="ms-row" onclick="openMilestone('${m.key}')"><div class="ms-check">${I.check}</div><div class="ms-body"><div class="a">${escapeHtml(m.title)}</div><div class="b">typically around ${m.mo} months</div></div><div class="ms-chip">${escapeHtml(m.cat)}</div></div>`).join('')}`:''}
     ${customList?`<div class="sec-title">Your moments</div>${customList}`:''}
     <div class="sec-title">All milestones</div>
     ${list}

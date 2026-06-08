@@ -61,7 +61,17 @@
       "Bash(node --check growth-data.js)",
       "Bash(sed -i '' \"s/little-log-v7/little-log-v8/\" sw.js)",
       "Bash(sed -n '2760,2800p' index.html)",
-      "Bash(sed -n '3036,3070p' index.html)"
+      "Bash(sed -n '3036,3070p' index.html)",
+      "Bash(grep -nE '>\\\\$\\\\{[^}]*\\\\b\\(m\\\\.name|ms?\\\\.title|ill\\\\.name|v\\\\.vName|\\\\.medName|a\\\\.title|b\\\\.fullName|b\\\\.place|\\\\.activity\\)\\\\b' index.html)",
+      "Bash(grep '\\\\${')",
+      "Bash(grep -nE '\\\\$\\\\{m\\\\.name\\\\}|\\\\$\\\\{escapeHtml\\\\\\(m\\\\.name' index.html)",
+      "Bash(grep -nE '\\\\$\\\\{ill\\\\.name\\\\}|\\\\$\\\\{escapeHtml\\\\\\(ill\\\\.name' index.html)",
+      "Bash(grep -nE '\\\\$\\\\{\\(b\\\\.fullName|b\\\\.place|b\\\\.blood\\)' index.html)",
+      "Bash(grep -n \"class=\\\\\"a\\\\\">\\\\${\" index.html)",
+      "Bash(grep -nE '\\\\$\\\\{[^}]*v\\\\.\\(name|vName\\)[^}]*\\\\}|vaccine' index.html)",
+      "Bash(grep -noE 'value=\"\\\\$\\\\{[^}]+\\\\}\"' index.html)",
+      "Bash(perl -0pi -e 's/\\\\$\\\\{m\\\\.title\\\\}/\\\\$\\\\{escapeHtml\\(m.title\\)\\\\}/g; s/\\\\$\\\\{m\\\\.cat\\\\}/\\\\$\\\\{escapeHtml\\(m.cat\\)\\\\}/g' index.html)",
+      "Bash(grep -cE '\\\\$\\\\{m\\\\.title\\\\}|\\\\$\\\\{m\\\\.cat\\\\}' index.html)"
     ]
   }
 }
