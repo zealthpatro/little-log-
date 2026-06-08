@@ -317,6 +317,7 @@ body{
 
 /* settings */
 .set-item{display:flex;align-items:center;gap:14px;background:var(--surface);border-radius:var(--radius-sm);padding:15px;margin-bottom:10px;box-shadow:0 3px 9px var(--shadow);}
+.set-label{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-faint);margin:18px 4px 8px;}
 .set-item .si-ico{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;flex-shrink:0;}
 .set-item .si-ico svg{width:20px;height:20px;}
 .set-item .si-body{flex:1;}
@@ -2110,21 +2111,39 @@ function openSettings(){
       <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">✨</div>
       <div class="si-body"><div class="a">Cubby Pro</div><div class="b">Coming soon · join the waitlist</div></div>
     </div>
+    <div class="set-label">Your data &amp; account</div>
     <div class="set-item" onclick="exportData()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--note-soft);color:var(--note)">${I.note}</div>
-      <div class="si-body"><div class="a">Export data</div><div class="b">Download everything as JSON</div></div>
+      <div class="si-body"><div class="a">Export data</div><div class="b">Download everything as a JSON file</div></div>
     </div>
-    <button class="btn-ghost btn-danger" onclick="confirmReset()">Reset all data</button>
+    <div class="set-item" onclick="confirmLogout()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--sleep-soft);color:var(--sleep);font-size:17px">👋</div>
+      <div class="si-body"><div class="a">Log out</div><div class="b">Sign out · your data stays safely synced</div></div>
+    </div>
+    <div class="set-item" onclick="confirmReset()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--danger);color:#fff">${I.trash}</div>
+      <div class="si-body"><div class="a" style="color:var(--danger)">Delete all data</div><div class="b">Erase every baby and log, can't be undone</div></div>
+    </div>
     <p style="font-size:11.5px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:14px">Cubby v${CUBBY_VERSION} · beta</p>`,'sleep');
 }
 function exportData(){
   const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download='little-log-export.json'; a.click(); toast('Exported');
+  a.download='cubby-export.json'; a.click(); toast('Exported');
+}
+function confirmLogout(){
+  openSheet(`<h2>Log out?</h2><div class="sub">Your data stays safely synced. Sign back in with Google anytime to pick up right where you left off.</div>
+    <button class="btn-primary" onclick="doLogout()">Log out</button>
+    <button class="btn-ghost" onclick="closeSheet()">Cancel</button>`,'sleep');
+}
+function doLogout(){
+  closeSheet();
+  if(window.LL&&typeof window.LL.signOut==='function'){ window.LL.signOut(); }
+  else { try{ location.reload(); }catch(e){} }
 }
 function confirmReset(){
-  openSheet(`<h2>Reset everything?</h2><div class="sub">This permanently deletes all babies and logs. This can't be undone.</div>
-    <button class="btn-primary" style="background:var(--danger)" onclick="doReset()">Yes, delete all data</button>
+  openSheet(`<h2>Delete all data?</h2><div class="sub">This permanently erases every baby and log for your whole household, on every device. This can't be undone. Consider exporting first.</div>
+    <button class="btn-primary" style="background:var(--danger)" onclick="doReset()">Yes, delete everything</button>
     <button class="btn-ghost" onclick="closeSheet()">Cancel</button>`,'feed');
 }
 function doReset(){
