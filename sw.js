@@ -1,6 +1,6 @@
 /* Cubby service worker.
    Bump CACHE on every deploy so old assets are cleared. */
-const CACHE = 'little-log-v42';
+const CACHE = 'little-log-v43';
 const ASSETS = [
   './',
   './index.html',

@@ -3162,7 +3162,7 @@ function paintImage(ctx,img,x,y,w,h,a,cover){
 }
 // full IG-ready card: palette background, rounded photo, caption block in chosen font
 function composeShareCard(canvas,maxW){
-  const ed=photoEditor, img=ed.img, a=ed.adj;
+  const ed=photoEditor, cut=!!(ed.cutout&&ed.cutImg), img=cut?ed.cutImg:ed.img, a=ed.adj;
   const pal=MOMENT_PALETTES[ed.palette||'Cream'];
   let [W,H]=FMT_DIMS[ed.format]||FMT_DIMS.square;
   const scale=Math.min(1,(maxW||1080)/W); W=Math.round(W*scale); H=Math.round(H*scale);
@@ -3184,14 +3184,18 @@ function composeShareCard(canvas,maxW){
   const capH=Math.round(H*capFrac);
   const photoX=margin, photoY=margin, photoW=innerW, photoH=H-margin*2-capH;
   const rad=Math.round(W*0.05);
-  // photo card with soft shadow
-  ctx.save();
-  ctx.shadowColor='rgba(60,46,34,0.22)'; ctx.shadowBlur=W*0.04; ctx.shadowOffsetY=W*0.012;
-  ctx.fillStyle='#fff'; roundRect(ctx,photoX,photoY,photoW,photoH,rad); ctx.fill();
-  ctx.restore();
-  ctx.save(); roundRect(ctx,photoX,photoY,photoW,photoH,rad); ctx.clip();
-  paintImage(ctx,img,photoX,photoY,photoW,photoH,a,true);
-  ctx.restore();
+  // photo card with soft shadow (skip the white card when using a cutout, so the baby sits on the palette)
+  if(!cut){
+    ctx.save();
+    ctx.shadowColor='rgba(60,46,34,0.22)'; ctx.shadowBlur=W*0.04; ctx.shadowOffsetY=W*0.012;
+    ctx.fillStyle='#fff'; roundRect(ctx,photoX,photoY,photoW,photoH,rad); ctx.fill();
+    ctx.restore();
+    ctx.save(); roundRect(ctx,photoX,photoY,photoW,photoH,rad); ctx.clip();
+    paintImage(ctx,img,photoX,photoY,photoW,photoH,a,true);
+    ctx.restore();
+  } else {
+    paintImage(ctx,img,photoX,photoY,photoW,photoH,a,false);
+  }
   // caption block (template-aware)
   const cTop=photoY+photoH;
   const cx=W/2;
@@ -3333,7 +3337,11 @@ function renderPhotos(){
   const nSt=(photoEditor.stickers||[]).length;
   return `<div class="fade-in">
     <div class="canvas-wrap"><canvas id="photoCanvas" onclick="placeSticker(event)" style="${photoEditor.activeSticker?'cursor:crosshair':''}"></canvas></div>
-    <button class="btn-primary" style="background:var(--star);margin:0 0 12px" onclick="autoEnhance()">✨ Auto-enhance</button>
+    <div class="row2" style="margin:0 0 12px">
+      <button class="btn-primary" style="background:var(--star)" onclick="autoEnhance()">✨ Auto-enhance</button>
+      <button class="btn-primary" style="background:var(--diaper)" onclick="cutoutBackground()">✂️ Cut out background</button>
+    </div>
+    ${photoEditor.cutImg?`<div class="chip-row" style="margin:-4px 0 12px"><div class="chip ${photoEditor.cutout?'sel':''}" onclick="photoEditor.cutout=true;render();drawPhoto()">Cutout</div><div class="chip ${!photoEditor.cutout?'sel':''}" onclick="photoEditor.cutout=false;render();drawPhoto()">Original</div></div>`:''}
     <div class="sec-title">Stickers ${photoEditor.activeSticker?'· tap the photo to place':''}</div>
     <div class="chip-row">${stickerChips}</div>
     <div class="chip-row" style="margin-top:6px">${sizeChips}${nSt?`<div class="chip" onclick="undoSticker()">↶ Undo</div><div class="chip" onclick="clearStickers()">Clear (${nSt})</div>`:''}</div>
@@ -3391,6 +3399,53 @@ function imageStats(img){
   let sum=0,sr=0,sg=0,sb=0,mn=255,mx=0;
   for(let i=0;i<d.length;i+=4){ const r=d[i],g=d[i+1],b=d[i+2]; const l=0.299*r+0.587*g+0.114*b; sum+=l; sr+=r; sg+=g; sb+=b; if(l<mn)mn=l; if(l>mx)mx=l; }
   return {mean:sum/n, r:sr/n, g:sg/n, b:sb/n, min:mn, max:mx};
+}
+/* Background cutout: on-device person segmentation (MediaPipe, Apache-2.0).
+   The model + WASM are lazy-loaded from CDN only when the user taps the button. Nothing uploaded. */
+let _segmenter=null;
+async function getSegmenter(){
+  if(_segmenter) return _segmenter;
+  const V='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18';
+  const vision = await import(V);
+  const fileset = await vision.FilesetResolver.forVisionTasks(V+'/wasm');
+  _segmenter = await vision.ImageSegmenter.createFromOptions(fileset,{
+    baseOptions:{ modelAssetPath:'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite' },
+    runningMode:'IMAGE', outputCategoryMask:false, outputConfidenceMasks:true
+  });
+  return _segmenter;
+}
+async function cutoutBackground(){
+  if(!photoEditor) return;
+  if(photoEditor.cutImg){ photoEditor.cutout=true; render(); drawPhoto(); return; }
+  showLoader(['Finding your little one','Cutting out the background']);
+  try{
+    const seg=await getSegmenter();
+    const img=photoEditor.img, W=img.naturalWidth, H=img.naturalHeight;
+    const base=document.createElement('canvas'); base.width=W; base.height=H; base.getContext('2d').drawImage(img,0,0);
+    const res=seg.segment(base);
+    const masks=res.confidenceMasks||[];
+    if(!masks.length){ throw new Error('no mask'); }
+    // pick the mask most present in the centre (the subject), robust to channel ordering
+    const centre=(m)=>{ const a=m.getAsFloat32Array(), w=m.width, h=m.height; let s=0,n=0; for(let y=Math.floor(h*0.35);y<h*0.65;y++)for(let x=Math.floor(w*0.35);x<w*0.65;x++){ s+=a[y*w+x]; n++; } return s/Math.max(1,n); };
+    let mask=masks[0]; if(masks.length>1 && centre(masks[1])>centre(masks[0])) mask=masks[1];
+    const mArr=mask.getAsFloat32Array(), mw=mask.width, mh=mask.height;
+    // Robust to channel semantics: keep whichever side (subject vs bg) is more central.
+    const corner=(()=>{ let s=0,n=0; const smp=(xx,yy)=>{ s+=mArr[yy*mw+xx]; n++; };
+      for(let k=0;k<mw;k+=Math.max(1,(mw/24)|0)){ smp(k,0); smp(k,mh-1); }
+      for(let k=0;k<mh;k+=Math.max(1,(mh/24)|0)){ smp(0,k); smp(mw-1,k); } return s/Math.max(1,n); })();
+    const cen=centre(mask);
+    const invert = corner>cen; // if the mask is "on" at the edges, it's the background -> flip
+    const out=document.createElement('canvas'); out.width=W; out.height=H; const octx=out.getContext('2d');
+    octx.drawImage(img,0,0); const idata=octx.getImageData(0,0,W,H), d=idata.data;
+    let kept=0;
+    for(let y=0;y<H;y++){ const my=Math.min(mh-1,(y*mh/H)|0); for(let x=0;x<W;x++){ const mx=Math.min(mw-1,(x*mw/W)|0); let c=mArr[my*mw+mx]; if(invert) c=1-c; c=c<0?0:c>1?1:c; if(c>0.5)kept++; d[(y*W+x)*4+3]=(c*255)|0; } }
+    if(kept < W*H*0.02){ hideLoader(); toast('Could not find a clear subject to cut out'); return; }
+    octx.putImageData(idata,0,0);
+    try{ res.close&&res.close(); }catch(e){}
+    const url=out.toDataURL('image/png');
+    await new Promise(r=>{ const im=new Image(); im.onload=()=>{ photoEditor.cutImg=im; photoEditor.cutout=true; r(); }; im.src=url; });
+    hideLoader(); render(); drawPhoto(); toast('✂️ Background removed');
+  }catch(e){ hideLoader(); toast('Cutout unavailable here, try again on a stronger connection'); }
 }
 function autoEnhance(){
   if(!photoEditor) return;
@@ -3459,7 +3514,7 @@ function makeNoise(){
 function roundRect(ctx,x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
 
 function composePhoto(canvas,maxW){
-  const ed=photoEditor, img=ed.img, a=ed.adj;
+  const ed=photoEditor, img=(ed.cutout&&ed.cutImg)?ed.cutImg:ed.img, a=ed.adj;
   let iw=img.naturalWidth, ih=img.naturalHeight;
   const scale=Math.min(1,maxW/iw); iw=Math.round(iw*scale); ih=Math.round(ih*scale);
   const frame=ed.frame;

@@ -21,7 +21,7 @@ These are the trust + word-of-mouth core. Gating them would kill adoption.
 - [built] **Activity-photo "Make a moment"** — free to capture; gate premium output (formats/templates)
 - **"made with Cubby" watermark**: free cards carry it (free advertising); Pro removes it ← clean, gentle lever
 - **Free-tier volume cap**: e.g. N premium share cards / month free, unlimited on Pro
-- [planned] Background cutout / "sticker-me" (on-device, private) — Pro
+- [built] **Background cutout / "sticker-me"** (on-device MediaPipe, lazy-loaded, nothing uploaded) — Pro
 - [built] **Then & Now** card (share + download) — could keep free or gate
 - [built] **Sticker pack** (tap-to-place emoji stickers, all formats) — keep a few free, gate the full set
 - High-res export of birth poster / growth collage / monthly cards — Pro
