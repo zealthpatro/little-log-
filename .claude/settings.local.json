@@ -81,7 +81,14 @@
       "Bash(ls /System/Library/Fonts/Supplemental/ 2>/dev/null | grep -iE \"georgia|fraunces\" ; echo \"---\"; ls /System/Library/Fonts/ | grep -iE \"georgia|times|new\" ; echo \"--- supplemental sans ---\"; ls /System/Library/Fonts/Supplemental/ 2>/dev/null | grep -iE \"arial|helvet\" | head)",
       "Bash(cat)",
       "Bash(python3 /tmp/og_gen.py)",
-      "Bash(python3 -c \"import xml.dom.minidom as m; m.parse\\('sitemap.xml'\\); print\\('sitemap.xml: valid XML'\\)\")"
+      "Bash(python3 -c \"import xml.dom.minidom as m; m.parse\\('sitemap.xml'\\); print\\('sitemap.xml: valid XML'\\)\")",
+      "WebFetch(domain:www.nhs.uk)",
+      "WebFetch(domain:www.cdc.gov)",
+      "WebFetch(domain:www.rki.de)",
+      "WebFetch(domain:kindcare.ae)",
+      "WebFetch(domain:www.gov.uk)",
+      "Bash(perl -i -pe 's/ — /: /g' vaccination-schedule/uk/index.html vaccination-schedule/us/index.html de/impfkalender/index.html)",
+      "Bash(perl -i -pe 's/–/-/g' vaccination-schedule/us/index.html vaccination-schedule/uae/index.html)"
     ]
   }
 }
