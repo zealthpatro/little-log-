@@ -45,7 +45,7 @@
 <meta name="apple-mobile-web-app-title" content="Cubby">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Nunito+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Nunito+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700&family=Poppins:wght@600;700;800&family=Caveat:wght@600;700&display=swap" rel="stylesheet">
 <!-- Firebase (cloud sync + sharing). Compat SDK keeps it usable from the inline app script. -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -3125,6 +3125,86 @@ const PRESETS={
   Dreamy:{bright:108,contrast:90,sat:104,warm:20,vignette:8,grain:4},
   Vivid:{bright:102,contrast:112,sat:130,warm:6,vignette:6,grain:2}
 };
+/* ---- Shareable moment cards: Instagram-native formats, fonts, palettes ---- */
+const MOMENT_FORMATS=[['orig','Original'],['square','Square'],['portrait','Portrait'],['story','Story']];
+const MOMENT_FONTS=[['Fraunces','Fraunces'],['Playfair Display','Playfair'],['Poppins','Poppins'],['Caveat','Handwritten']];
+function cssFont(name){ return ({'Fraunces':'Fraunces, Georgia, serif','Playfair Display':'"Playfair Display", Georgia, serif','Poppins':'Poppins, system-ui, sans-serif','Caveat':'Caveat, "Comic Sans MS", cursive'})[name]||'Fraunces, serif'; }
+const MOMENT_PALETTES={
+  Cream:{bg1:'#FBF5E9',bg2:'#EFE0C8',ink:'#2C2521',sub:'#6E635B',accent:'#C97FA0'},
+  Blush:{bg1:'#FBEAF1',bg2:'#F3CFDE',ink:'#5a2740',sub:'#9a6e82',accent:'#C75C8A'},
+  Sage:{bg1:'#E8F1EC',bg2:'#CFE5D9',ink:'#28453b',sub:'#5b7d70',accent:'#56A08E'},
+  Sky:{bg1:'#E8EEF8',bg2:'#D2DEF2',ink:'#26345a',sub:'#5e6e95',accent:'#5E6AA8'},
+  Ink:{bg1:'#2b2622',bg2:'#181412',ink:'#F4ECE0',sub:'#bdae9d',accent:'#E5BD55'}
+};
+const FMT_DIMS={square:[1080,1080],portrait:[1080,1350],story:[1080,1920]};
+// paint the photo (with current adjustments) into a rect; caller sets any clip first
+function paintImage(ctx,img,x,y,w,h,a,cover){
+  ctx.save();
+  const warmSepia=(a.warm/100)*0.45;
+  ctx.filter=`brightness(${a.bright}%) contrast(${a.contrast}%) saturate(${a.sat}%) sepia(${warmSepia})`;
+  if(cover){ const r=Math.max(w/img.naturalWidth,h/img.naturalHeight); const dw=img.naturalWidth*r,dh=img.naturalHeight*r; ctx.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh); }
+  else { const r=Math.min(w/img.naturalWidth,h/img.naturalHeight); const dw=img.naturalWidth*r,dh=img.naturalHeight*r; ctx.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh); }
+  ctx.filter='none';
+  if(a.warm>0){ ctx.globalCompositeOperation='overlay'; ctx.fillStyle=`rgba(255,170,80,${(a.warm/100)*0.18})`; ctx.fillRect(x,y,w,h); ctx.globalCompositeOperation='source-over'; }
+  if(a.grain>0){ const nt=makeNoise(); ctx.globalAlpha=a.grain/100*0.5; ctx.globalCompositeOperation='overlay'; for(let xx=x;xx<x+w;xx+=140)for(let yy=y;yy<y+h;yy+=140) ctx.drawImage(nt,xx,yy); ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over'; }
+  if(a.vignette>0){ const g=ctx.createRadialGradient(x+w/2,y+h/2,Math.min(w,h)*0.3,x+w/2,y+h/2,Math.max(w,h)*0.72); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,`rgba(0,0,0,${a.vignette/100*0.7})`); ctx.fillStyle=g; ctx.fillRect(x,y,w,h); }
+  ctx.restore();
+}
+// full IG-ready card: palette background, rounded photo, caption block in chosen font
+function composeShareCard(canvas,maxW){
+  const ed=photoEditor, img=ed.img, a=ed.adj;
+  const pal=MOMENT_PALETTES[ed.palette||'Cream'];
+  let [W,H]=FMT_DIMS[ed.format]||FMT_DIMS.square;
+  const scale=Math.min(1,(maxW||1080)/W); W=Math.round(W*scale); H=Math.round(H*scale);
+  canvas.width=W; canvas.height=H;
+  const ctx=canvas.getContext('2d');
+  // soft diagonal background
+  const g=ctx.createLinearGradient(0,0,W*0.4,H); g.addColorStop(0,pal.bg1); g.addColorStop(1,pal.bg2);
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  const b=activeBaby();
+  const age=preciseAge(b.birth, getWhen('when')||now());
+  const when=new Date(getWhen('when')||now());
+  const dateStr=when.toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'});
+  const margin=Math.round(W*0.07);
+  const innerW=W-margin*2;
+  const capFrac = ed.format==='story'?0.24 : ed.format==='portrait'?0.20 : 0.17;
+  const capH=Math.round(H*capFrac);
+  const photoX=margin, photoY=margin, photoW=innerW, photoH=H-margin*2-capH;
+  const rad=Math.round(W*0.05);
+  // photo card with soft shadow
+  ctx.save();
+  ctx.shadowColor='rgba(60,46,34,0.22)'; ctx.shadowBlur=W*0.04; ctx.shadowOffsetY=W*0.012;
+  ctx.fillStyle='#fff'; roundRect(ctx,photoX,photoY,photoW,photoH,rad); ctx.fill();
+  ctx.restore();
+  ctx.save(); roundRect(ctx,photoX,photoY,photoW,photoH,rad); ctx.clip();
+  paintImage(ctx,img,photoX,photoY,photoW,photoH,a,true);
+  ctx.restore();
+  // caption block
+  const cTop=photoY+photoH;
+  const cx=W/2;
+  // accent: small bear + dot rule
+  ctx.textAlign='center'; ctx.textBaseline='alphabetic';
+  ctx.fillStyle=pal.accent;
+  ctx.font=`700 ${Math.round(W*0.03)}px "Nunito Sans",sans-serif`;
+  ctx.fillText('🐻', cx, cTop+capH*0.26);
+  // name / label in chosen font
+  const headline = ed.captionText || b.name;
+  ctx.fillStyle=pal.ink;
+  let nameSize = ed.font==='Caveat'? W*0.105 : W*0.078;
+  ctx.font=`700 ${Math.round(nameSize)}px ${cssFont(ed.font||'Fraunces')}`;
+  ctx.fillText(headline, cx, cTop+capH*0.52);
+  // age + date
+  ctx.fillStyle=pal.sub;
+  ctx.font=`700 ${Math.round(W*0.032)}px "Nunito Sans",sans-serif`;
+  const line2=(age.full?age.full:'')+(age.full?'   ·   ':'')+dateStr;
+  ctx.fillText(line2, cx, cTop+capH*0.70);
+  // tiny Cubby footer mark
+  ctx.fillStyle=pal.sub; ctx.globalAlpha=0.6;
+  ctx.font=`800 ${Math.round(W*0.022)}px "Nunito Sans",sans-serif`;
+  ctx.fillText('made with Cubby 🐻', cx, photoY+photoH+capH-Math.round(H*0.018));
+  ctx.globalAlpha=1; ctx.textAlign='left';
+}
+function composeAny(canvas,maxW){ if(photoEditor&&photoEditor.format&&photoEditor.format!=='orig') composeShareCard(canvas,maxW); else composePhoto(canvas,maxW); }
 let photoEditor=null, noiseTile=null, albumTab='photos';
 function setAlbumTab(t){ albumTab=t; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
 function renderAlbum(){
@@ -3193,15 +3273,23 @@ function renderPhotos(){
   const TONES=[['light','Light'],['dark','Dark'],['cream','Cream']];
   const toneChips=TONES.map(([k,l])=>`<div class="chip ${photoEditor.stampTone===k?'sel':''}" onclick="setStampTone('${k}')">${l}</div>`).join('');
   const posMatters=!['none','ribbon','month'].includes(photoEditor.stamp);
+  const fmt=photoEditor.format||'orig';
+  const isCard=fmt!=='orig';
+  const fmtChips=MOMENT_FORMATS.map(([k,l])=>`<div class="chip ${fmt===k?'sel':''}" onclick="setFormat('${k}')">${l}</div>`).join('');
+  const fontChips=MOMENT_FONTS.map(([k,l])=>`<div class="chip ${(photoEditor.font||'Fraunces')===k?'sel':''}" onclick="setMomentFont('${k}')" style="font-family:${cssFont(k)}">${l}</div>`).join('');
+  const palChips=Object.keys(MOMENT_PALETTES).map(k=>{const p=MOMENT_PALETTES[k];return `<div class="chip ${(photoEditor.palette||'Cream')===k?'sel':''}" onclick="setPalette('${k}')"><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:linear-gradient(135deg,${p.bg1},${p.accent});margin-right:6px;vertical-align:-1px"></span>${k}</div>`;}).join('');
   return `<div class="fade-in">
     <div class="canvas-wrap"><canvas id="photoCanvas"></canvas></div>
-    <div class="sec-title">Keepsake stamp</div><div class="chip-row">${stampChips}</div>
-    <input class="cap-input" id="phCap" placeholder="Milestone label (optional) e.g. First smile" value="${escapeHtml(photoEditor.captionText||'')}" oninput="photoEditor.captionText=this.value;drawPhoto()">
+    <div class="sec-title">Format ${isCard?'· ready to share':''}</div><div class="chip-row">${fmtChips}</div>
+    <input class="cap-input" id="phCap" placeholder="${isCard?'Caption e.g. First smile':'Milestone label (optional) e.g. First smile'}" value="${escapeHtml(photoEditor.captionText||'')}" oninput="photoEditor.captionText=this.value;drawPhoto()">
     ${timeStrip('when','Photo date')}
+    ${isCard?`<div class="sec-title">Font</div><div class="chip-row">${fontChips}</div>
+    <div class="sec-title">Colour</div><div class="chip-row">${palChips}</div>`
+    :`<div class="sec-title">Keepsake stamp</div><div class="chip-row">${stampChips}</div>
     ${photoEditor.stamp!=='none'?`<div class="sec-title">Stamp tone</div><div class="chip-row">${toneChips}</div>`:''}
     ${posMatters?`<div class="sec-title">Position</div><div class="chip-row">${posChips}</div>`:''}
+    <div class="sec-title">Frame</div><div class="chip-row">${frames}</div>`}
     <div class="sec-title">Filter</div><div class="chip-row">${chips}</div>
-    <div class="sec-title">Frame</div><div class="chip-row">${frames}</div>
     <div class="sec-title">Adjust</div>
     ${slider('Brightness','bright',80,120,a.bright)}
     ${slider('Warmth','warm',0,100,a.warm)}
@@ -3226,7 +3314,8 @@ function loadPhoto(input){
   const img=new Image();
   img.onload=()=>{
     photoEditor={img,adj:{...PRESETS.Soft},preset:'Soft',frame:'Cream',
-      stamp:'corner',stampPos:'bl',stampTone:'light',captionText:''};
+      stamp:'corner',stampPos:'bl',stampTone:'light',captionText:'',
+      format:'orig',font:'Fraunces',palette:'Cream'};
     initLogWhen();
     render(); drawPhoto();
     if(document.fonts&&document.fonts.ready) document.fonts.ready.then(drawPhoto);
@@ -3238,6 +3327,9 @@ function setFrame(f){ photoEditor.frame=f; render(); drawPhoto(); }
 function setStamp(s){ photoEditor.stamp=s; render(); drawPhoto(); }
 function setStampPos(p){ photoEditor.stampPos=p; render(); drawPhoto(); }
 function setStampTone(t){ photoEditor.stampTone=t; render(); drawPhoto(); }
+function setFormat(f){ photoEditor.format=f; render(); if(document.fonts&&document.fonts.ready){ document.fonts.ready.then(drawPhoto); } drawPhoto(); }
+function setMomentFont(f){ photoEditor.font=f; render(); if(document.fonts&&document.fonts.ready){ document.fonts.ready.then(drawPhoto); } else { drawPhoto(); } }
+function setPalette(p){ photoEditor.palette=p; render(); drawPhoto(); }
 
 // precise, Precious-style age: { big, unit, full }
 function preciseAge(birth, at){
@@ -3433,14 +3525,14 @@ function drawStamp(ctx, ix, iy, iw, ih, b, age, dateStr){
     setShadow(false); ctx.textAlign='left'; return;
   }
 }
-function drawPhoto(){ const c=$('#photoCanvas'); if(c&&photoEditor) composePhoto(c,1080); }
+function drawPhoto(){ const c=$('#photoCanvas'); if(c&&photoEditor) composeAny(c,1080); }
 function downloadPhoto(){
-  const tmp=document.createElement('canvas'); composePhoto(tmp,1600);
+  const tmp=document.createElement('canvas'); composeAny(tmp,1600);
   const a=document.createElement('a'); a.href=tmp.toDataURL('image/jpeg',0.92);
-  a.download=(activeBaby().name||'baby')+'-photo.jpg'; a.click(); toast('Downloaded');
+  a.download=(activeBaby().name||'baby')+'-moment.jpg'; a.click(); toast('Downloaded');
 }
 async function savePhoto(){
-  const tmp=document.createElement('canvas'); composePhoto(tmp,900);
+  const tmp=document.createElement('canvas'); composeAny(tmp,900);
   const data=tmp.toDataURL('image/jpeg',0.7);
   const pid=uid(); await PhotoStore.set(pid,data);
   state.photos.push({id:uid(),babyId:state.activeBabyId,photoId:pid,caption:photoEditor.captionText||'',createdAt:getWhen('when')});
