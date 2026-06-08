@@ -44,8 +44,15 @@ When a country page changes, also bump the in-app `DEFAULT_VACCINES` in `index.h
 - **No third-party analytics** (e.g. GA4). The landing claims "no third-party trackers / never sell your data"; adding GA would break that. Use Cloudflare's first-party RUM only.
 - No em-dashes in user-facing copy.
 
+## The country loop (built)
+The SEO pages and the app share one country concept, so a visitor lands on the right schedule.
+- **In-app schedules**: `VAX_SCHEDULES` in `index.html` (`us`/`uk`/`uae`/`de`) mirrors the four public pages. **Keep them in sync**: when you update a public page, update the matching `VAX_SCHEDULES` list (and vice-versa).
+- **Capture**: each page's "Start free" / "Open app" link carries `?c=<country>`. The app stores it (`localStorage 'cubby-country'`) and `detectCountry()` uses it.
+- **Default when there's no link**: `detectCountry()` falls back to `navigator.language`, then timezone (e.g. `Asia/Dubai` → uae, `Europe/London` → uk). No IP lookup, no permission prompt.
+- **Where it lives**: per baby (`baby.country`), chosen at onboarding / add-baby (picker pre-selected from `detectCountry()`), changeable any time via the vaccine tab banner ("Change country") -> `openVaccineCountry()`. Switching regenerates the plan but carries over doses already marked given.
+- `vaccinePlan()` seeds from `scheduleFor(baby)`. The vaccine tab shows real due dates (birth + offset), matching the public-page calculator.
+
 ## Not built yet (from the strategy doc)
 - Apple sign-in; demo-with-sample-data before the auth wall; first-party funnel events.
-- Onboarding birthdate + country gate that seeds a localized in-app schedule (closes the loop with these pages).
 - Expansion to more EU markets; the solids/milestones content cluster.
 - A proper named medical reviewer.

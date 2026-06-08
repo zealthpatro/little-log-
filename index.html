@@ -1804,6 +1804,7 @@ function openAddBaby(){
     <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
     <div class="field"><label>Name</label><input id="bName" placeholder="Baby's name" autofocus></div>
     <div class="field"><label>Birthday (optional)</label><input type="date" id="bDate" value="${today}" max="${today}"></div>
+    <div class="field"><label>Country (sets the vaccine schedule)</label><select id="bCountry">${VAX_COUNTRIES.map(([k,n])=>`<option value="${k}" ${k===detectCountry()?'selected':''}>${n}</option>`).join('')}</select></div>
     <button class="btn-primary" onclick="saveBaby()">Add baby</button>`,'diaper');
 }
 function pickColor(c){
@@ -1815,7 +1816,8 @@ function pickColor(c){
 function saveBaby(){
   const name=$('#bName').value.trim(); if(!name){toast('Give them a name first');return;}
   const bd=$('#bDate').value;
-  const b={id:uid(),name,color:newBabyColor,birth:bd?new Date(bd+'T08:00').getTime():null};
+  const cc=$('#bCountry')?$('#bCountry').value:detectCountry();
+  const b={id:uid(),name,color:newBabyColor,birth:bd?new Date(bd+'T08:00').getTime():null,country:(VAX_SCHEDULES[cc]?cc:'us')};
   state.babies.push(b); state.activeBabyId=b.id; persist(); closeSheet(); go('home'); toast('Welcome, '+name+'!');
 }
 
@@ -2140,6 +2142,7 @@ function renderOnboard(){
     <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
     <div class="field"><label>Baby's name</label><input id="bName" placeholder="e.g. Mira" autofocus></div>
     <div class="field"><label>Birthday (optional)</label><input type="date" id="bDate" value="${today}" max="${today}"></div>
+    <div class="field"><label>Country (sets the vaccine schedule)</label><select id="bCountry">${VAX_COUNTRIES.map(([k,n])=>`<option value="${k}" ${k===detectCountry()?'selected':''}>${n}</option>`).join('')}</select></div>
     <button class="btn-primary" style="--accent:var(--feed)" onclick="saveBaby()">Start tracking</button>
   </div>`;
 }
@@ -2752,16 +2755,96 @@ const DEFAULT_VACCINES=[
   ['DTaP (4th dose)','15-18 months',15],
   ['Hepatitis A (2nd dose)','18 months',18]
 ];
-const VX_GROUPS=['Birth','2 months','4 months','6 months','12 months','15-18 months','18 months'];
+const VX_GROUPS=['At birth','Birth','6 Wochen','6 weeks','8 weeks','12 weeks','16 weeks','2 months','2 Monate','4 months','4 Monate','6 months','11 Monate','12 months','12 Monate','15 months','15 Monate','15-18 months','18 months','18-24 months','3 years 4 months','4-6 years'];
+
+/* Country vaccine schedules. Verified against official sources and kept in sync with the
+   public /vaccination-schedule pages (see SEO.md). Each row: [name, group, dueMonths].
+   dueMonths is fractional for week-based ages (8 weeks = 8*7/30.44 = ~1.84). */
+const VAX_SCHEDULES={
+  us:{label:'United States (CDC)',list:DEFAULT_VACCINES},
+  uk:{label:'United Kingdom (NHS)',list:[
+    ['6-in-1 (1st dose)','8 weeks',1.84],['MenB (1st dose)','8 weeks',1.84],['Rotavirus (1st dose)','8 weeks',1.84],
+    ['6-in-1 (2nd dose)','12 weeks',2.76],['MenB (2nd dose)','12 weeks',2.76],['Rotavirus (2nd dose)','12 weeks',2.76],
+    ['6-in-1 (3rd dose)','16 weeks',3.68],['Pneumococcal / PCV (1st dose)','16 weeks',3.68],
+    ['MMRV (1st dose)','1 year',12],['Pneumococcal / PCV (2nd dose)','1 year',12],['MenB (3rd dose)','1 year',12],
+    ['6-in-1 (4th dose)','18 months',18],['MMRV (2nd dose)','18 months',18],
+    ['4-in-1 pre-school booster','3 years 4 months',40]
+  ]},
+  uae:{label:'United Arab Emirates',list:[
+    ['BCG','At birth',0],['Hepatitis B (1st dose)','At birth',0],
+    ['6-in-1 (1st dose)','2 months',2],['Pneumococcal / PCV (1st dose)','2 months',2],['Rotavirus (1st dose)','2 months',2],
+    ['6-in-1 (2nd dose)','4 months',4],['Pneumococcal / PCV (2nd dose)','4 months',4],['Rotavirus (2nd dose)','4 months',4],
+    ['6-in-1 (3rd dose)','6 months',6],['Pneumococcal / PCV (3rd dose)','6 months',6],['Rotavirus (3rd dose)','6 months',6],
+    ['MMR (1st dose)','12 months',12],['Varicella (1st dose)','12 months',12],
+    ['DTaP booster','18 months',18],['Hib booster','18 months',18],['MMR (2nd dose)','18 months',18],
+    ['DTaP/IPV pre-school booster','4-6 years',48]
+  ]},
+  de:{label:'Deutschland (STIKO)',list:[
+    ['Rotaviren (1.)','6 Wochen',1.38],
+    ['Rotaviren (2.)','2 Monate',2],['6-fach (1.)','2 Monate',2],['Pneumokokken (1.)','2 Monate',2],['Meningokokken B (1.)','2 Monate',2],
+    ['Rotaviren (3.)','4 Monate',4],['6-fach (2.)','4 Monate',4],['Pneumokokken (2.)','4 Monate',4],['Meningokokken B (2.)','4 Monate',4],
+    ['6-fach (3.)','11 Monate',11],['Pneumokokken (3.)','11 Monate',11],['MMR (1.)','11 Monate',11],['Varizellen (1.)','11 Monate',11],
+    ['Meningokokken B (3.)','12 Monate',12],
+    ['MMR (2.)','15 Monate',15],['Varizellen (2.)','15 Monate',15]
+  ]}
+};
+const VAX_COUNTRIES=[['us','United States (CDC)'],['uk','United Kingdom (NHS)'],['uae','United Arab Emirates'],['de','Deutschland (STIKO)']];
+
+/* Capture an explicit ?c= country from a vaccine-schedule page link, once. */
+(function(){ try{ const c=new URLSearchParams(location.search).get('c'); if(c){const k=c.toLowerCase(); if(VAX_SCHEDULES[k]) localStorage.setItem('cubby-country',k);} }catch(e){} })();
+
+/* Best-guess country for the vaccine schedule. No IP lookup, no permission prompt:
+   explicit page link first, then a stored hint, then browser language, then timezone. */
+function detectCountry(){
+  try{ const stored=localStorage.getItem('cubby-country'); if(stored && VAX_SCHEDULES[stored]) return stored; }catch(e){}
+  const lang=((navigator.language||navigator.userLanguage)||'').toLowerCase();
+  if(lang.indexOf('de')===0||lang==='de') return 'de';
+  if(lang.indexOf('en-gb')===0) return 'uk';
+  if(lang.indexOf('en-ae')===0||lang.indexOf('ar-ae')===0) return 'uae';
+  if(lang.indexOf('en-us')===0) return 'us';
+  try{ const tz=(Intl.DateTimeFormat().resolvedOptions().timeZone||'');
+    if(tz==='Asia/Dubai') return 'uae';
+    if(tz==='Europe/London') return 'uk';
+    if(['Europe/Berlin','Europe/Vienna','Europe/Zurich','Europe/Busingen'].indexOf(tz)>=0) return 'de';
+  }catch(e){}
+  return 'us';
+}
+function scheduleFor(b){ const c=(b&&b.country)||'us'; return (VAX_SCHEDULES[c]||VAX_SCHEDULES.us).list; }
+function vaxCountryName(c){ return (VAX_SCHEDULES[c]||VAX_SCHEDULES.us).label; }
 
 function vaccinePlan(){
   const id=state.activeBabyId;
   if(!state.vaccines) state.vaccines={};
   if(!state.vaccines[id]){
-    state.vaccines[id]=DEFAULT_VACCINES.map(([name,group,dueMonths])=>({id:uid(),name,group,dueMonths,given:false,givenAt:null,note:''}));
+    state.vaccines[id]=scheduleFor(activeBaby()).map(([name,group,dueMonths])=>({id:uid(),name,group,dueMonths,given:false,givenAt:null,note:''}));
     persist();
   }
   return state.vaccines[id];
+}
+/* Switch a baby's schedule country, regenerating the plan but carrying over anything already marked given. */
+function applyScheduleCountry(id,country){
+  const b=state.babies.find(x=>x.id===id); if(!b||!VAX_SCHEDULES[country]) return;
+  b.country=country;
+  if(!state.vaccines) state.vaccines={};
+  const givenByName={}; (state.vaccines[id]||[]).forEach(v=>{ if(v.given) givenByName[v.name]={givenAt:v.givenAt,note:v.note}; });
+  state.vaccines[id]=scheduleFor(b).map(([name,group,dueMonths])=>{
+    const g=givenByName[name];
+    return {id:uid(),name,group,dueMonths,given:!!g,givenAt:g?g.givenAt:null,note:g?g.note:''};
+  });
+  persist();
+}
+function openVaccineCountry(){
+  const b=activeBaby(); if(!b)return;
+  const cur=b.country||'us';
+  const rows=VAX_COUNTRIES.map(([k,n])=>`<div class="prof-card" onclick="chooseVaccineCountry('${k}')"><div class="cflex"><div class="a">${n}</div></div>${k===cur?'<div style="color:var(--diaper);font-weight:800;font-size:13px">Current</div>':`<span class="chev">${I.chev}</span>`}</div>`).join('');
+  openSheet(`<h2>Vaccine schedule</h2><div class="sub">Choose the country schedule for ${escapeHtml(b.name)}. Anything you have already marked as given is kept. You can still edit any item.</div>
+    <div class="prof-cards">${rows}</div>`,'diaper');
+}
+function chooseVaccineCountry(k){
+  const b=activeBaby(); if(!b)return;
+  if((b.country||'us')===k){ closeSheet(); return; }
+  if(!confirm('Switch to the '+vaxCountryName(k)+' schedule? This replaces the list (doses you already marked given are kept).')) return;
+  applyScheduleCountry(b.id,k); closeSheet(); render(); toast('Schedule updated');
 }
 function vxDueDate(v){ const b=activeBaby(); const birth=b&&b.birth?b.birth:now(); return birth + v.dueMonths*30.44*86400000; }
 function vxStatus(v){
@@ -2784,12 +2867,14 @@ function renderVaccines(){
   const R=30,C=2*Math.PI*R,off=C-(done/(plan.length||1))*C;
   const groups={}; plan.forEach(v=>{ (groups[v.group]=groups[v.group]||[]).push(v); });
   const order=[...VX_GROUPS.filter(g=>groups[g]), ...Object.keys(groups).filter(g=>!VX_GROUPS.includes(g))];
+  const bb=activeBaby();
   let list='';
   order.forEach(g=>{
     list+=`<div class="sec-title">${g}</div>`;
     groups[g].forEach(v=>{
       const st=vxStatus(v);
-      const sub=v.given?('given '+new Date(v.givenAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})):('due ~'+(v.dueMonths===0?'birth':v.dueMonths+' mo'));
+      const dueStr=(bb&&bb.birth)?new Date(vxDueDate(v)).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):(v.dueMonths===0?'at birth':'at ~'+v.dueMonths+' mo');
+      const sub=v.given?('given '+new Date(v.givenAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})):('due '+dueStr);
       const lbl={done:'Done',overdue:'Overdue',soon:'Due soon',upcoming:'Upcoming'}[st];
       list+=`<div class="ms-row ${v.given?'done':''}" onclick="openVaccine('${v.id}')">
         <div class="ms-check" style="${v.given?'background:var(--diaper);border-color:var(--diaper)':''}">${I.check}</div>
@@ -2804,7 +2889,7 @@ function renderVaccines(){
         <div class="rt">${done}</div></div>
       <div class="mh-body"><div class="a">${done} of ${plan.length} done</div><div class="b">${overdue?overdue+' overdue · ':''}tap any vaccine to mark it given</div></div>
     </div>
-    <div class="disclaimer">⚕️ This is the standard CDC/ACIP infant schedule as a starting template. Schedules vary by country (the UAE differs). Always follow your pediatrician and local health authority. Edit any item to match your child's actual plan.</div>
+    <div class="disclaimer">⚕️ Showing the ${vaxCountryName((bb&&bb.country)||'us')} schedule as a starting template. <span class="link-inline" onclick="openVaccineCountry()">Change country</span>. Always follow your doctor and local health authority, and edit any item to match your child's actual plan.</div>
     ${list}
     <div class="add-row" onclick="openAddVaccine()">${I.plus} Add a vaccine</div>`;
 }
