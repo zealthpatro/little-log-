@@ -1862,6 +1862,10 @@ function openFoodPrefs(){
       <button class="${(b.feedType||'combo')==='formula'?'on':''}" onclick="setFeedType('${b.id}','formula')">Formula</button>
       <button class="${(b.feedType||'combo')==='combo'?'on':''}" onclick="setFeedType('${b.id}','combo')">Both</button>
     </div></div>
+    <div class="field"><label>Bottle & pump unit</label><div class="unit-toggle">
+      <button class="${(state.settings.unit||'ml')==='ml'?'on':''}" onclick="state.settings.unit='ml';persist();openFoodPrefs()">ml</button>
+      <button class="${state.settings.unit==='oz'?'on':''}" onclick="state.settings.unit='oz';persist();openFoodPrefs()">oz</button>
+    </div></div>
     <div class="field"><label>Started solids?</label><div class="unit-toggle">
       <button class="${!feedSolidsOn(b)?'on':''}" onclick="setSolids('${b.id}',false)">Not yet</button>
       <button class="${feedSolidsOn(b)?'on':''}" onclick="setSolids('${b.id}',true)">Yes</button>
@@ -2022,14 +2026,6 @@ function openSettings(){
       <div class="seg">
         <button class="${s.theme==='light'?'on':''}" onclick="setTheme('light');openSettings()">Light</button>
         <button class="${s.theme==='night'?'on':''}" onclick="setTheme('night');openSettings()">Night</button>
-      </div>
-    </div>
-    <div class="set-item">
-      <div class="si-ico" style="background:var(--feed-soft);color:var(--feed)">${I.bottle}</div>
-      <div class="si-body"><div class="a">Default unit</div><div class="b">For bottles & pumping</div></div>
-      <div class="seg">
-        <button class="${s.unit==='ml'?'on':''}" onclick="setUnit('ml')">ml</button>
-        <button class="${s.unit==='oz'?'on':''}" onclick="setUnit('oz')">oz</button>
       </div>
     </div>
     <div class="set-item" onclick="openBabySheet()" style="cursor:pointer">
