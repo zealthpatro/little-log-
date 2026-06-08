@@ -3,7 +3,39 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>Cubby: Baby Tracker</title>
+<title>Cubby: Baby Tracker, Vaccine Schedule &amp; Keepsakes</title>
+<meta name="description" content="Cubby logs feeds, sleep and nappies, follows your baby's vaccine schedule with reminders, and keeps every memory, shared with everyone who cares for your little one. Free to start, no ads, private to your family.">
+<link rel="canonical" href="https://little-cubby.com/">
+<meta name="robots" content="index,follow">
+<meta name="author" content="Cubby">
+<!-- Open Graph: rich previews when a link is shared (word of mouth matters here) -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Cubby">
+<meta property="og:title" content="Cubby: Baby Tracker, Vaccine Schedule &amp; Keepsakes">
+<meta property="og:description" content="One calm place for feeds, naps, vaccines and memories, shared with everyone who cares for your baby. Free to start, no ads.">
+<meta property="og:url" content="https://little-cubby.com/">
+<meta property="og:image" content="https://little-cubby.com/og/cubby-home.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="en_GB">
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Cubby: Baby Tracker, Vaccine Schedule &amp; Keepsakes">
+<meta name="twitter:description" content="Track your baby, never miss a vaccine, keep every memory. Free, private, no ads.">
+<meta name="twitter:image" content="https://little-cubby.com/og/cubby-home.png">
+<!-- Structured data: app + organisation + FAQ (also powers SERP rich results) -->
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+{"@type":"SoftwareApplication","name":"Cubby","applicationCategory":"HealthApplication","operatingSystem":"Web, iOS, Android","description":"Baby tracker with vaccine schedules, multi-caregiver real-time sync, growth charts and keepsakes.","url":"https://little-cubby.com/","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"publisher":{"@type":"Organization","name":"Cubby","url":"https://little-cubby.com/"}},
+{"@type":"Organization","name":"Cubby","url":"https://little-cubby.com/","logo":"https://little-cubby.com/icons/logo-512.png"},
+{"@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"Is Cubby free?","acceptedAnswer":{"@type":"Answer","text":"Yes. Logging feeds, sleep, nappies and pumping, plus sharing with caregivers, is free. Pro adds extras like insights and exports."}},
+{"@type":"Question","name":"Can both parents and a nanny use the same baby?","acceptedAnswer":{"@type":"Answer","text":"Yes. Cubby syncs in real time across every caregiver, parents, grandparents, the nanny or daycare, with shared handoff notes."}},
+{"@type":"Question","name":"Does Cubby track vaccines?","acceptedAnswer":{"@type":"Answer","text":"Yes. Cubby includes an editable childhood vaccine schedule with due dates and reminders, which you can adapt to your country's schedule."}},
+{"@type":"Question","name":"Is my baby's data private?","acceptedAnswer":{"@type":"Answer","text":"Yes. No ads, no third-party trackers, and we never sell your data. Cubby talks only to its own secure backend."}}
+]}
+]}
+</script>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#FBF5E9">
 <link rel="icon" type="image/png" href="icons/favicon.png">
@@ -532,7 +564,39 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 </style>
 </head>
 <body>
-<div id="app"></div>
+<div id="app"><!-- Static, crawlable content. The app replaces this on first render(); no-JS crawlers and link previews read it. -->
+<noscript><style>#seo-fallback{display:block!important}</style></noscript>
+<main id="seo-fallback" style="max-width:680px;margin:0 auto;padding:40px 22px;font-family:'Nunito Sans',system-ui,sans-serif;color:#2C2521">
+<img src="icons/logo-512.png" alt="Cubby logo" width="76" height="76" style="border-radius:18px">
+<h1 style="font-family:'Fraunces',Georgia,serif;font-size:34px;margin:14px 0 6px">Cubby: a warm, private baby tracker</h1>
+<p style="font-size:17px;line-height:1.5;color:#6E635B">Log every feed, nap, nappy and vaccine in one calm place, shared in real time with everyone who cares for your little one: parents, grandparents, the nanny, daycare and more. Free to start, no ads, private to your family.</p>
+<p><a href="https://little-cubby.com/" style="font-weight:800;color:#C97FA0">Start free with Google</a></p>
+<h2 style="font-family:'Fraunces',Georgia,serif">What Cubby does</h2>
+<ul style="line-height:1.7;color:#3a322c">
+<li><strong>One-thumb logging</strong> for feeds, sleep, nappies and pumping, even at 3am.</li>
+<li><strong>Your whole care circle</strong> sees the same log, live, with who-did-what attribution.</li>
+<li><strong>Vaccine schedule</strong> with due dates and reminders so you never miss a dose.</li>
+<li><strong>Growth charts</strong> on WHO and CDC percentile curves.</li>
+<li><strong>Health hub</strong>: medicine reminders, gentle fever guidance and a one-tap doctor summary.</li>
+<li><strong>Keepsakes</strong>: monthly memory cards, milestones and a birth poster from your real moments.</li>
+<li><strong>Private by design</strong>: no ads, no third-party trackers, we never sell your data.</li>
+</ul>
+<h2 style="font-family:'Fraunces',Georgia,serif">Made for working parents and caregivers</h2>
+<p style="line-height:1.6;color:#6E635B">Leave your little one with a nanny, grandparent or daycare and still feel close. They log the feeds, naps and meals; you see it the moment it happens and get a tidy recap of the whole day, from wherever you are.</p>
+<h2 style="font-family:'Fraunces',Georgia,serif">Vaccine schedules by country</h2>
+<ul style="line-height:1.8">
+<li><a href="/vaccination-schedule/uk/">UK baby vaccination schedule (NHS)</a></li>
+<li><a href="/vaccination-schedule/us/">US baby vaccine schedule (CDC)</a></li>
+<li><a href="/vaccination-schedule/uae/">UAE baby vaccination schedule</a></li>
+<li><a href="/de/impfkalender/">Impfkalender Baby (STIKO)</a></li>
+</ul>
+<h2 style="font-family:'Fraunces',Georgia,serif">Questions</h2>
+<p><strong>Is Cubby free?</strong> Yes, logging and caregiver sharing are free. Pro adds extras.<br>
+<strong>Can both parents and a nanny use it?</strong> Yes, real-time sync across every caregiver.<br>
+<strong>Is my data private?</strong> Yes, no ads, no third-party trackers, never sold.</p>
+<p style="color:#9a8d80;font-size:13px;margin-top:28px">Cubby, a warm private baby tracker. Loading the app...</p>
+</main>
+</div>
 <div class="scrim" id="scrim" onclick="closeSheet()"></div>
 <div class="sheet" id="sheet"></div>
 <div class="toast" id="toast"></div>

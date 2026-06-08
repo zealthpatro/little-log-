@@ -75,7 +75,13 @@
       "Bash(curl -sI https://cubby.saurav-918.workers.dev/?cb=__TRACKED_VAR__)",
       "Bash(node --check landing.js)",
       "Bash(sed -i '' \"s/little-log-v18/little-log-v19/\" sw.js)",
-      "Bash(curl -s https://cubby.saurav-918.workers.dev/cubby-extras.js?cb=__TRACKED_VAR__)"
+      "Bash(curl -s https://cubby.saurav-918.workers.dev/cubby-extras.js?cb=__TRACKED_VAR__)",
+      "Bash(awk '/<body/{f=1} f{print NR\": \"$0} /<\\\\/body/{exit}' index.html)",
+      "Bash(python3 -c \"import PIL; print\\('PIL OK', PIL.__version__\\)\")",
+      "Bash(ls /System/Library/Fonts/Supplemental/ 2>/dev/null | grep -iE \"georgia|fraunces\" ; echo \"---\"; ls /System/Library/Fonts/ | grep -iE \"georgia|times|new\" ; echo \"--- supplemental sans ---\"; ls /System/Library/Fonts/Supplemental/ 2>/dev/null | grep -iE \"arial|helvet\" | head)",
+      "Bash(cat)",
+      "Bash(python3 /tmp/og_gen.py)",
+      "Bash(python3 -c \"import xml.dom.minidom as m; m.parse\\('sitemap.xml'\\); print\\('sitemap.xml: valid XML'\\)\")"
     ]
   }
 }
