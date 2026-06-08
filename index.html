@@ -3328,6 +3328,7 @@ function renderPhotos(){
   const tplChips=MOMENT_TEMPLATES.map(([k,l])=>`<div class="chip ${(photoEditor.template||'classic')===k?'sel':''}" onclick="setTemplate('${k}')">${l}</div>`).join('');
   return `<div class="fade-in">
     <div class="canvas-wrap"><canvas id="photoCanvas"></canvas></div>
+    <button class="btn-primary" style="background:var(--star);margin:0 0 12px" onclick="autoEnhance()">✨ Auto-enhance</button>
     <div class="sec-title">Format ${isCard?'· ready to share':''}</div><div class="chip-row">${fmtChips}</div>
     <input class="cap-input" id="phCap" placeholder="${isCard?'Caption e.g. First smile':'Milestone label (optional) e.g. First smile'}" value="${escapeHtml(photoEditor.captionText||'')}" oninput="photoEditor.captionText=this.value;drawPhoto()">
     ${timeStrip('when','Photo date')}
@@ -3372,6 +3373,29 @@ function loadPhoto(input){
   img.src=URL.createObjectURL(f);
 }
 function applyPreset(k){ photoEditor.adj={...PRESETS[k]}; photoEditor.preset=k; render(); drawPhoto(); }
+/* One-tap Auto-enhance: analyses the photo on-device (nothing uploaded) and
+   sets sensible brightness/contrast/warmth/saturation. Free + private. */
+function imageStats(img){
+  const s=64, c=document.createElement('canvas'); c.width=s; c.height=s;
+  const x=c.getContext('2d'); x.drawImage(img,0,0,s,s);
+  const d=x.getImageData(0,0,s,s).data; const n=s*s;
+  let sum=0,sr=0,sg=0,sb=0,mn=255,mx=0;
+  for(let i=0;i<d.length;i+=4){ const r=d[i],g=d[i+1],b=d[i+2]; const l=0.299*r+0.587*g+0.114*b; sum+=l; sr+=r; sg+=g; sb+=b; if(l<mn)mn=l; if(l>mx)mx=l; }
+  return {mean:sum/n, r:sr/n, g:sg/n, b:sb/n, min:mn, max:mx};
+}
+function autoEnhance(){
+  if(!photoEditor) return;
+  const st=imageStats(photoEditor.img);
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,Math.round(v)));
+  const bright=clamp(100*142/Math.max(40,st.mean),88,116);
+  const range=st.max-st.min;
+  const contrast=clamp(100+(165-range)*0.16,98,120);
+  const warm=clamp((st.b-st.r)*1.1,0,32);
+  const sat=clamp(((st.r+st.g+st.b)/3>155)?104:112,98,116);
+  photoEditor.adj={bright,contrast,sat,warm,vignette:6,grain:0};
+  photoEditor.preset='Auto';
+  render(); drawPhoto(); toast('✨ Auto-enhanced');
+}
 function setFrame(f){ photoEditor.frame=f; render(); drawPhoto(); }
 function setStamp(s){ photoEditor.stamp=s; render(); drawPhoto(); }
 function setStampPos(p){ photoEditor.stampPos=p; render(); drawPhoto(); }
