@@ -36,7 +36,6 @@
     + '.ll-values span{font-size:16px;flex:0 0 auto;width:20px;text-align:center;}'
     + '.ll-spin{width:30px;height:30px;border:3px solid #E0D7C7;border-top-color:#C97FA0;border-radius:50%;margin:6px auto 0;animation:llspin 0.9s linear infinite;}'
     + '@keyframes llspin{to{transform:rotate(360deg);}}'
-    + '#llAcctBtn{position:fixed;top:max(10px,env(safe-area-inset-top));right:10px;z-index:9000;width:42px;height:42px;border-radius:50%;border:1px solid rgba(0,0,0,.08);background:rgba(255,255,255,.92);font-size:20px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.12);display:flex;align-items:center;justify-content:center;}'
     + '#llModalOv{position:fixed;inset:0;z-index:99998;background:rgba(20,15,12,.45);display:flex;align-items:flex-end;justify-content:center;font-family:"Nunito Sans",system-ui,sans-serif;}'
     + '.ll-modal{background:#fff;width:100%;max-width:440px;border-radius:22px 22px 0 0;padding:20px 20px 28px;max-height:85vh;overflow:auto;box-shadow:0 -8px 40px rgba(0,0,0,.2);}'
     + '@media(min-width:480px){#llModalOv{align-items:center;}.ll-modal{border-radius:22px;}}'
@@ -346,13 +345,6 @@
   /* ---------- account / family sharing UI ---------- */
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
-  function injectAccountButton() {
-    if (document.getElementById('llAcctBtn')) return;
-    var b = document.createElement('button');
-    b.id = 'llAcctBtn'; b.title = 'Family & sharing'; b.textContent = '👨‍👩‍👧';
-    b.onclick = openFamily;
-    document.body.appendChild(b);
-  }
 
   function modal(title, bodyHtml) {
     closeModal();
