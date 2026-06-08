@@ -1684,6 +1684,7 @@ function openBabyProfile(){
   const b=activeBaby(); if(!b)return;
   openSheet(`${babyIdentity(b,{pickable:true})}
     <div class="prof-cards">
+      <div class="prof-card" onclick="window.openFamily&&window.openFamily()"><span class="lead" style="background:var(--diaper-soft);color:var(--diaper);font-size:18px">👨‍👩‍👧</span><div class="cflex"><div class="a">Family &amp; sharing</div><div class="b">Invite people, your bear, feedback</div></div><span class="chev">${I.chev}</span></div>
       <div class="prof-card" onclick="openBirthDetails()"><span class="lead" style="background:var(--star-soft);color:var(--star)">${I.star}</span><div class="cflex"><div class="a">Birth details</div><div class="b">Name, birthday, keepsake info</div></div><span class="chev">${I.chev}</span></div>
       <div class="prof-card" onclick="openFoodPrefs()"><span class="lead" style="background:var(--feed-soft);color:var(--feed)">${I.bottle}</span><div class="cflex"><div class="a">Food & allergies</div><div class="b">Milk, solids, diet, allergies</div></div><span class="chev">${I.chev}</span></div>
       <div class="prof-card" onclick="openDoctor()"><span class="lead" style="background:var(--sleep-soft);color:var(--sleep)">${I.stetho}</span><div class="cflex"><div class="a">Doctor &amp; visits</div><div class="b">Care team and visit log</div></div><span class="chev">${I.chev}</span></div>
@@ -1906,6 +1907,10 @@ function openSettings(){
     <div class="set-item" onclick="openBabyProfile()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--star-soft);color:var(--star)">${I.star}</div>
       <div class="si-body"><div class="a">Profile</div><div class="b">Birth details, food &amp; allergies</div></div>
+    </div>
+    <div class="set-item" onclick="window.openFamily&&window.openFamily()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--feed-soft);color:var(--feed);font-size:18px">👨‍👩‍👧</div>
+      <div class="si-body"><div class="a">Family &amp; sharing</div><div class="b">Invite people, your bear, feedback</div></div>
     </div>
     <div class="set-item" onclick="exportData()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--note-soft);color:var(--note)">${I.note}</div>
