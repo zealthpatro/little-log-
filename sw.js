@@ -1,6 +1,6 @@
 /* Cubby service worker.
    Bump CACHE on every deploy so old assets are cleared. */
-const CACHE = 'little-log-v30';
+const CACHE = 'little-log-v31';
 const ASSETS = [
   './',
   './index.html',
@@ -45,8 +45,16 @@ self.addEventListener('fetch', (e) => {
         .then((res) => { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); return res; })
         .catch(() => caches.match(req).then((r) => r || caches.match('./index.html')))
     );
+  } else if (new URL(req.url).pathname.endsWith('.js')) {
+    // Network-first for our own JS, so HTML and its scripts/CSS never drift out of sync
+    // (a stale cached script was rendering the Pro sheet unstyled). Cache is offline fallback.
+    e.respondWith(
+      fetch(req)
+        .then((res) => { if (res && res.status === 200) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); } return res; })
+        .catch(() => caches.match(req))
+    );
   } else {
-    // Cache-first for static assets (fonts, icons), revalidate in the background.
+    // Cache-first for truly-static assets (icons, manifest), revalidate in the background.
     e.respondWith(
       caches.match(req).then((cached) => {
         const net = fetch(req).then((res) => {
