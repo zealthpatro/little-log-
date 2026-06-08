@@ -489,9 +489,10 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .gx-box .d{font-size:11px;font-weight:800;margin-top:4px;}
 
 /* ---- home hero carousel ---- */
-.hero{position:relative;border-radius:var(--radius);overflow:hidden;aspect-ratio:16/10;margin:6px 0 16px;background:var(--surface-2);box-shadow:0 8px 22px var(--shadow);cursor:pointer;}
+.hero{position:relative;border-radius:var(--radius);overflow:hidden;aspect-ratio:4/3;margin:6px 0 16px;background:var(--surface-2);box-shadow:0 8px 22px var(--shadow);cursor:pointer;}
 .hero-slide{position:absolute;inset:0;opacity:0;transition:opacity .9s ease;}
-.hero-slide img{width:100%;height:100%;object-fit:cover;display:block;}
+.hero-slide .hero-bg{position:absolute;inset:0;background-size:cover;background-position:center;filter:blur(22px) brightness(.7);transform:scale(1.18);}
+.hero-slide img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block;}
 .hero-slide.active{opacity:1;}
 .hero-grad{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.5),transparent 48%);pointer-events:none;}
 .hero-cap{position:absolute;left:18px;bottom:16px;color:#fff;pointer-events:none;}
@@ -962,7 +963,7 @@ function renderHero(){
     </div>`;
   }
   const b=activeBaby();
-  const slides=ph.map((p,i)=>`<div class="hero-slide ${i===0?'active':''}"><img src="${photoSrc(p.photoId)}"></div>`).join('');
+  const slides=ph.map((p,i)=>`<div class="hero-slide ${i===0?'active':''}"><div class="hero-bg" style="background-image:url('${photoSrc(p.photoId)}')"></div><img src="${photoSrc(p.photoId)}"></div>`).join('');
   const dots=ph.length>1?`<div class="hero-dots">${ph.map((p,i)=>`<span class="${i===0?'on':''}"></span>`).join('')}</div>`:'';
   return `<div class="hero" onclick="go('album')">
     ${slides}
