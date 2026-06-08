@@ -1887,6 +1887,8 @@ function openBabyProfile(){
       <div class="prof-card" onclick="openBirthDetails()"><span class="lead" style="background:var(--star-soft);color:var(--star)">${I.star}</span><div class="cflex"><div class="a">Birth details</div><div class="b">Name, birthday, keepsake info</div></div><span class="chev">${I.chev}</span></div>
       <div class="prof-card" onclick="openFoodPrefs()"><span class="lead" style="background:var(--feed-soft);color:var(--feed)">${I.bottle}</span><div class="cflex"><div class="a">Food & allergies</div><div class="b">Milk, solids, diet, allergies</div></div><span class="chev">${I.chev}</span></div>
       <div class="prof-card" onclick="openDoctor()"><span class="lead" style="background:var(--sleep-soft);color:var(--sleep)">${I.stetho}</span><div class="cflex"><div class="a">Doctor &amp; visits</div><div class="b">Care team and visit log</div></div><span class="chev">${I.chev}</span></div>
+      <div class="prof-card" onclick="openSettings()"><span class="lead" style="background:var(--note-soft);color:var(--note)">${I.gear||I.note}</span><div class="cflex"><div class="a">Settings</div><div class="b">Theme, data, account</div></div><span class="chev">${I.chev}</span></div>
+      <div class="prof-card" onclick="confirmLogout()"><span class="lead" style="background:var(--feed-soft);color:var(--feed);font-size:18px">👋</span><div class="cflex"><div class="a">Log out</div><div class="b">Sign out, your data stays synced</div></div><span class="chev">${I.chev}</span></div>
     </div>`,'star');
 }
 function openAvatarPicker(){
