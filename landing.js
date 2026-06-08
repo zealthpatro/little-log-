@@ -34,6 +34,9 @@
       + '<p>But the details (the last feed, the nap, the medicine) usually live in one parent\'s head, or on one phone. Cubby keeps everyone who cares for your baby on the same page, in real time.</p></section>'
       + '<section class="lp-feats">' + features + '</section>'
       + '<section class="lp-steps-wrap"><h2>How it works</h2><div class="lp-steps">' + steps + '</div></section>'
+      + '<section class="lp-pro"><div class="lp-pro-badge">Coming soon</div><h2>Cubby Pro</h2>'
+      + '<p>Cubby is free for the essentials, always. Pro will add HD photos &amp; unlimited storage, push reminders, PDF doctor reports, and smart sleep &amp; feed insights.</p>'
+      + '<p class="lp-pro-note">Sign in, then join the waitlist from Settings, Cubby Pro.</p></section>'
       + '<section class="lp-final"><h2>Everyone caring for your baby, in sync.</h2>' + cta + '<div class="lp-trust">Free · Private · made with 🐻</div></section>'
       + '<footer class="lp-foot">Cubby · a warm, private baby tracker 🐻</footer>'
       + '</div>';
@@ -65,6 +68,10 @@
     + '.lp-sn{position:absolute;left:16px;top:15px;width:34px;height:34px;border-radius:50%;background:#C97FA0;color:#fff;font-weight:900;display:flex;align-items:center;justify-content:center;font-family:"Fraunces",Georgia,serif;}'
     + '.lp-st{font-weight:800;font-size:15px;}'
     + '.lp-ss{font-size:13px;color:#6E635B;font-weight:600;margin-top:2px;}'
+    + '.lp-pro{text-align:center;background:#fff;border:1px solid #EADFcf;border-radius:18px;padding:24px 20px;margin:30px 0 6px;box-shadow:0 5px 14px rgba(0,0,0,.05);}'
+    + '.lp-pro-badge{display:inline-block;background:#C97FA0;color:#fff;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:4px 11px;border-radius:999px;margin-bottom:8px;}'
+    + '.lp-pro p{color:#6E635B;font-size:14.5px;line-height:1.55;max-width:460px;margin:0 auto;font-weight:600;}'
+    + '.lp-pro-note{margin-top:10px !important;font-size:13px !important;color:#9a8d80 !important;}'
     + '.lp-final{text-align:center;padding:34px 0 6px;}'
     + '.lp-foot{text-align:center;color:#9a8d80;font-size:12.5px;font-weight:700;padding:28px 0 0;}'
     + '@media(max-width:480px){.lp-feats{grid-template-columns:1fr;}.lp-name{font-size:34px;}}';

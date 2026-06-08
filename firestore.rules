@@ -18,6 +18,11 @@ service cloud.firestore {
       allow read, update, delete: if false;
     }
 
+    // Pro waitlist: a user manages their own signup; only the project owner reads (console).
+    match /waitlist/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
     // Invites are keyed by the invitee's lowercased email.
     match /invites/{email} {
       allow read: if request.auth != null && request.auth.token.email.lower() == email;
