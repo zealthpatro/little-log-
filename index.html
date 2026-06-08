@@ -811,7 +811,7 @@ function meGreeting(){
 function homeNudgeLine(){
   const b=activeBaby(); if(!b) return '';
   const h=new Date().getHours();
-  if(h<5||h>=23) return `The 3am club 🐻 — you've got this. Sleep when you can 💛`;
+  if(h<5||h>=23) return `The 3am club 🐻, you've got this. Sleep when you can 💛`;
   const evs=babyEvents();
   const recentSleep=evs.filter(e=>e.type==='sleep'&&e.end&&(now()-e.end)<16*3600000);
   const longest=recentSleep.reduce((m,e)=>Math.max(m,e.end-e.time),0);
@@ -842,7 +842,7 @@ function renderGetStarted(){
   return `<div class="gs-card">
     <div class="gs-head"><div class="gs-title">Get started 🐻</div><button class="gs-x" onclick="dismissTip('getstarted')">×</button></div>
     ${row(haveBaby,'Add your baby','Name, birthday, photo','')}
-    ${row(haveLog,'Log your first entry','One tap below — feed, sleep or nappy','openFeed()')}
+    ${row(haveLog,'Log your first entry','One tap below, feed, sleep or nappy','openFeed()')}
     ${row(shared,'Invite a co-parent','Share the log live with family',"window.openFamily&&window.openFamily()")}
   </div>`;
 }
@@ -2229,7 +2229,7 @@ function feverGuidance(){
 }
 function openFeverNudge(v,unit){
   openSheet(`<h2>That's a fever</h2><div class="sub">${v}°${unit} is at or above the fever line (38°C / 100.4°F).</div>
-    <div class="csub" style="margin:-4px 0 16px">${feverGuidance()} This isn't medical advice — trust your instincts and your pediatrician.</div>
+    <div class="csub" style="margin:-4px 0 16px">${feverGuidance()} This isn't medical advice, trust your instincts and your pediatrician.</div>
     <button class="btn-primary" style="background:var(--sleep)" onclick="closeSheet();openVisitSummary()">${I.stetho} Prepare a summary for the doctor</button>
     <button class="btn-ghost" onclick="closeSheet();openSymptom()">Log a symptom</button>
     <button class="btn-ghost" onclick="closeSheet()">Got it</button>`,'med');
@@ -2265,7 +2265,7 @@ function visitSummary(days){
   const lw=lastGrowth('weight'), lh=lastGrowth('height');
   const meds=babyMeds().filter(m=>m.active);
   const L=[];
-  L.push(`Cubby summary — ${b.name} (${ageString(b.birth)})`);
+  L.push(`Cubby summary, ${b.name} (${ageString(b.birth)})`);
   L.push(`Last ${days} days (through ${new Date().toLocaleDateString()})`);
   L.push('');
   L.push(`Feeds: ${feeds.length} total (~${perDay(feeds.length).toFixed(1)}/day)`);
@@ -2490,7 +2490,7 @@ function renderGrowthSection(){
     ${wPts.length?`<div class="stat-card"><h3>Weight</h3><div class="csub">${(b&&b.sex)?growthSource.toUpperCase()+' percentiles'+pctLabel('weight',wU):wPts.length+' measurement'+(wPts.length>1?'s':'')} · ${wU}</div>${(b&&b.sex&&growthRef('weight'))?svgPercentile('weight',wU):svgLine(wPts,'feed',wU)}</div>`:''}
     ${hPts.length?`<div class="stat-card"><h3>Height</h3><div class="csub">${(b&&b.sex)?growthSource.toUpperCase()+' percentiles'+pctLabel('height',hU):hPts.length+' measurement'+(hPts.length>1?'s':'')} · ${hU}</div>${(b&&b.sex&&growthRef('height'))?svgPercentile('height',hU):svgLine(hPts,'sleep',hU)}</div>`:''}
     <div class="add-row" onclick="openGrowth()">${I.plus} Add a measurement</div>
-    <p style="font-size:11.5px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:12px">${(b&&b.sex)?'Bands: '+(growthSource==='who'?'WHO Child Growth Standards (0–24 mo)':'CDC growth charts (0–36 mo)')+'. ':''}A guide, not a diagnosis — your pediatrician is the best judge.</p>`;
+    <p style="font-size:11.5px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:12px">${(b&&b.sex)?'Bands: '+(growthSource==='who'?'WHO Child Growth Standards (0–24 mo)':'CDC growth charts (0–36 mo)')+'. ':''}A guide, not a diagnosis, your pediatrician is the best judge.</p>`;
 }
 function growthDelta(pts){ if(pts.length<2)return null; const d=pts[pts.length-1].v-pts[pts.length-2].v; return +d.toFixed(2); }
 function svgLine(pts,color,unit){
@@ -2848,7 +2848,7 @@ function renderLogTab(){
   const seg=`<div class="seg seg-full">
     <button class="${logTab==='log'?'on':''}" onclick="setLogTab('log')">Log</button>
     <button class="${logTab==='stats'?'on':''}" onclick="setLogTab('stats')">Stats</button></div>`;
-  const body = logTab==='stats' ? renderStats() : (tipLine('heat','These strips show your week at a glance — tap Week or Month to switch.')+renderHeatmap()+renderTimeline());
+  const body = logTab==='stats' ? renderStats() : (tipLine('heat','These strips show your week at a glance, tap Week or Month to switch.')+renderHeatmap()+renderTimeline());
   return `<div class="fade-in">${coachMark('log','Log & Stats','Everything you log lands in this timeline. The strips up top show your week at a glance. Flip to Stats for charts and growth curves.')}${seg}${body}</div>`;
 }
 

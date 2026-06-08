@@ -86,7 +86,7 @@
     ov.innerHTML =
       '<div class="ll-auth-card"><img src="icons/logo-512.png" alt="Cubby" class="ll-auth-logo-img">'
       + '<h1>Cubby</h1><p>A warm, private baby log you can share with the people who care for them.</p>'
-      + '<div class="ll-values"><div><span>⚡</span>Log feeds, sleep &amp; nappies in seconds</div><div><span>👨‍👩‍👧</span>Share with family — everyone sees it live</div><div><span>🔒</span>Private to your family</div></div>'
+      + '<div class="ll-values"><div><span>⚡</span>Log feeds, sleep &amp; nappies in seconds</div><div><span>👨‍👩‍👧</span>Share with family, everyone sees it live</div><div><span>🔒</span>Private to your family</div></div>'
       + '<button id="llGoogleBtn" class="ll-auth-btn">Continue with Google</button>'
       + (msg ? '<div class="ll-auth-msg">' + msg + '</div>' : '') + '</div>';
     document.getElementById('llGoogleBtn').onclick = signInGoogle;
@@ -264,7 +264,7 @@
       window.LL.memberInfo = d.memberInfo || {};
       window.LL.householdId = hid;
       var sig = hhSig(d.app, d.members, d.memberInfo);
-      if (booted && sig === lastHhSig) return; // our own write echo / duplicate emission — already on screen
+      if (booted && sig === lastHhSig) return; // our own write echo / duplicate emission, already on screen
       lastHhSig = sig;
       applyingRemote = true; applyAppBlob(d.app); applyingRemote = false;
       gotApp = true;
@@ -399,7 +399,7 @@
         + '<input id="llInvName" type="text" placeholder="Their name (optional)" autocomplete="off">'
         + '<input id="llInvEmail" type="email" placeholder="their-google-email@gmail.com" autocomplete="off" autocapitalize="off">'
         + '<select id="llInvRel">' + relOptions('') + '</select>'
-        + '<label class="ll-check"><input type="checkbox" id="llInvOwner"><span>Co-owner — full control (can edit everyone\'s entries &amp; invite others)</span></label>'
+        + '<label class="ll-check"><input type="checkbox" id="llInvOwner"><span>Co-owner, full control (can edit everyone\'s entries &amp; invite others)</span></label>'
         + '<button id="llInvBtn" class="ll-modal-btn">Create invite</button>'
         + '<div id="llInvMsg" class="ll-auth-msg"></div></div>'
       : '<div class="ll-auth-msg">Only an owner can invite new people.</div>';
@@ -434,7 +434,7 @@
     var uid = user.uid;
     var bear = (typeof window.memberAvatarSvg === 'function') ? window.memberAvatarSvg(uid, 84) : '';
     modal('Welcome to Cubby 🐻',
-      '<div class="ll-auth-msg" style="margin:0 0 10px;text-align:left;line-height:1.5">An early beta — thanks for trying it! A few notes:<br>• Your log is <b>private</b> to your family.<br>• On a phone: <b>Share → Add to Home Screen</b> to install it like an app.<br>• Bug or idea? <b>Settings → Send feedback</b> (or the 👨‍👩‍👧 menu).</div>'
+      '<div class="ll-auth-msg" style="margin:0 0 10px;text-align:left;line-height:1.5">An early beta, thanks for trying it! A few notes:<br>• Your log is <b>private</b> to your family.<br>• On a phone: <b>Share → Add to Home Screen</b> to install it like an app.<br>• Bug or idea? <b>Settings → Send feedback</b> (or the 👨‍👩‍👧 menu).</div>'
       + '<div class="ll-auth-msg" style="margin:0 0 6px">First, how you appear to your family:</div>'
       + '<div class="ll-mem-av" id="llFrBear" style="width:84px;height:84px;margin:10px auto 4px;cursor:pointer">' + bear + '</div>'
       + '<div style="text-align:center;margin-bottom:6px"><button id="llFrBearBtn" class="ll-rm" style="color:#C97FA0">Customise my bear</button></div>'
@@ -496,7 +496,7 @@
       var link = location.origin;
       var babyName = (typeof state !== 'undefined' && state.babies && state.babies[0] && state.babies[0].name) ? state.babies[0].name : 'our baby';
       var subject = 'Join me on Cubby 🐻';
-      var bodyTxt = 'I\'m using Cubby to keep track of ' + babyName + '\'s feeds, naps, nappies and more — and I\'d love you on it too.\n\n'
+      var bodyTxt = 'I\'m using Cubby to keep track of ' + babyName + '\'s feeds, naps, nappies and more, and I\'d love you on it too.\n\n'
         + '1) Open this link: ' + link + '\n'
         + '2) Tap "Continue with Google" using THIS email: ' + email + '\n\n'
         + 'You\'ll join automatically and see everything, live. (On a phone you can add it to your home screen like an app.)';
@@ -516,7 +516,7 @@
   /* ---------- feedback ---------- */
   function openFeedback() {
     modal('Send feedback',
-      '<div class="ll-auth-msg" style="margin:0 0 8px">Bugs, ideas, anything — it goes straight to the Cubby team. Thank you for testing! 🐻</div>'
+      '<div class="ll-auth-msg" style="margin:0 0 8px">Bugs, ideas, anything, it goes straight to the Cubby team. Thank you for testing! 🐻</div>'
       + '<textarea id="llFbText" class="ll-fb" placeholder="What happened, or what would make Cubby better?"></textarea>'
       + '<button id="llFbSend" class="ll-modal-btn">Send</button>'
       + '<div id="llFbMsg" class="ll-auth-msg"></div>');
@@ -534,7 +534,7 @@
           version: window.CUBBY_VERSION || '', userAgent: (navigator.userAgent || '').slice(0, 300),
           at: window.LL.serverTimestamp()
         });
-        modal('Thank you 🐻', '<div class="ll-auth-msg" style="margin:0 0 12px">Your feedback was sent — we read every one.</div><button id="llFbDone" class="ll-modal-btn">Close</button>');
+        modal('Thank you 🐻', '<div class="ll-auth-msg" style="margin:0 0 12px">Your feedback was sent, we read every one.</div><button id="llFbDone" class="ll-modal-btn">Close</button>');
         document.getElementById('llFbDone').onclick = closeModal;
       } catch (e) { msg.textContent = 'Could not send: ' + ((e && e.message) || e); btn.disabled = false; btn.textContent = 'Send'; }
     };

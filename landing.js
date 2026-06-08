@@ -1,22 +1,22 @@
-/* Cubby landing page — shown to signed-out visitors. Primary CTA = Continue with Google. */
+/* Cubby landing page, shown to signed-out visitors. Primary CTA = Continue with Google. */
 (function () {
   window.cubbyLanding = function (msg) {
     var cta = '<button class="lp-cta ll-cta">Continue with Google</button>';
     var features = [
-      ['⚡', 'One-thumb logging', 'Feeds, sleep, nappies, pumping — logged in seconds, even at 3am.'],
-      ['👨‍👩‍👧', 'Share with family, live', 'Both parents, grandparents, the nanny — everyone sees the same log, instantly.'],
-      ['🐻', 'Who did what', 'Every entry shows who logged it — Mama Bear, Papa Bear — each with their own cub.'],
+      ['⚡', 'One-thumb logging', 'Feeds, sleep, nappies, pumping, logged in seconds, even at 3am.'],
+      ['👨‍👩‍👧', 'Share with family, live', 'Both parents, grandparents, the nanny, everyone sees the same log, instantly.'],
+      ['🐻', 'Who did what', 'Every entry shows who logged it: Mama Bear, Papa Bear, each with their own cub.'],
       ['📈', 'Growth charts', 'WHO & CDC percentile curves behind your baby\'s weight and height.'],
       ['🩺', 'Health, handled', 'Medicine reminders, gentle fever guidance, and a one-tap summary for the doctor.'],
       ['📸', 'Keepsakes', 'Monthly memory cards, milestones and a birth poster from your real moments.'],
-      ['🔒', 'Private by design', 'Your log is locked to your family. No ads — we never sell your data.'],
-      ['📲', 'Works like an app', 'Add to your home screen — full-screen, offline-ready, no app store.']
+      ['🔒', 'Private by design', 'Your log is locked to your family. No ads, and we never sell your data.'],
+      ['📲', 'Works like an app', 'Add to your home screen, full-screen, offline-ready, no app store.']
     ].map(function (f) {
       return '<div class="lp-feat"><div class="lp-fi">' + f[0] + '</div><div><div class="lp-ft">' + f[1] + '</div><div class="lp-fs">' + f[2] + '</div></div></div>';
     }).join('');
     var steps = [
       ['1', 'Sign in with Google', 'Ten seconds, no password, no app store.'],
-      ['2', 'Add your baby', 'Name, birthday — and you\'re ready to log.'],
+      ['2', 'Add your baby', 'Name, birthday, and you\'re ready to log.'],
       ['3', 'Invite your partner', 'Start caring for your little one, together.']
     ].map(function (s) {
       return '<div class="lp-step"><div class="lp-sn">' + s[0] + '</div><div class="lp-st">' + s[1] + '</div><div class="lp-ss">' + s[2] + '</div></div>';
@@ -25,13 +25,13 @@
       + '<header class="lp-hero">'
       + '<div class="lp-logo"><img src="icons/logo-512.png" alt="Cubby"></div>'
       + '<h1 class="lp-name">Cubby</h1>'
-      + '<p class="lp-tag">The warm, private way for your whole family to care for your little one — together.</p>'
+      + '<p class="lp-tag">The warm, private way for your whole family to care for your little one, together.</p>'
       + cta
       + (msg ? '<div class="lp-msg">' + msg + '</div>' : '')
       + '<div class="lp-trust">Free · Private to your family · No app store</div>'
       + '</header>'
       + '<section class="lp-why"><h2>Caring for a baby is a team sport.</h2>'
-      + '<p>But the details — the last feed, the nap, the medicine — usually live in one parent\'s head, or on one phone. Cubby keeps everyone who cares for your baby on the same page, in real time.</p></section>'
+      + '<p>But the details (the last feed, the nap, the medicine) usually live in one parent\'s head, or on one phone. Cubby keeps everyone who cares for your baby on the same page, in real time.</p></section>'
       + '<section class="lp-feats">' + features + '</section>'
       + '<section class="lp-steps-wrap"><h2>How it works</h2><div class="lp-steps">' + steps + '</div></section>'
       + '<section class="lp-final"><h2>Everyone caring for your baby, in sync.</h2>' + cta + '<div class="lp-trust">Free · Private · made with 🐻</div></section>'
