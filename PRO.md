@@ -23,8 +23,10 @@ Implication: lead Pro with **smart sleep/feed insights**, not gimmicks.
    naps, tummy time, skin-to-skin, fresh air) across day 0→365 that re-flow when life changes.
    Cue-first and gentle, never a rigid alarm. Full spec in **ROUTINES.md**. This is Cubby's answer
    to the sleep/routine guidance that research shows parents actually pay for.
-1. **HD photos & unlimited storage** — full-res photos + unlimited album (free keeps light
-   thumbnails). Maps to the Firebase Storage cost we deferred.
+1. **HD photos & cloud backup** — full-res photos, safely backed up (free keeps ~560px
+   thumbnails). NOT "unlimited" (cost trap); generous fair-use quota. **Architecture: Cloudflare
+   R2** (zero egress fees, ~$0.015/GB/mo) rather than Firebase Storage (egress ~$0.12/GB makes
+   "unlimited viewing" expensive). See "Image storage" below.
 2. **Push notifications** — medicine / "time to log" / fever / appointment alerts even when the
    app is closed. The deferred Blaze feature.
 3. **Doctor reports & export** — polished PDF visit reports + full CSV/PDF data export.
@@ -39,6 +41,17 @@ Implication: lead Pro with **smart sleep/feed insights**, not gimmicks.
 - Ad-free (only relevant if we ever add ads to free — current plan: no ads).
 
 **Avoid:** community feed, gamification, shopping/affiliate clutter.
+
+## Image storage (today + Pro)
+- **Today:** ~560px JPEG thumbnails stored as base64 **inside Firestore** (`photos` subcollection,
+  ~40-80 KB each). No Firebase Storage → no Blaze. ~15-20k photos fit in the 1 GB free tier.
+  Trade-off: soft on a large hero.
+- **Pro (HD):** full-res can't live in Firestore (1 MB/doc cap + per-read cost). Use object storage.
+  - **Cloudflare R2 (recommended):** ~$0.015/GB/mo storage, **$0 egress**. 100 families × 2 GB ≈
+    ~$3/mo total, free viewing. We're already on Cloudflare.
+  - Firebase Storage: simpler SDK but **egress ~$0.12/GB** (charged every view) → "unlimited" gets
+    pricey. Avoid for view-heavy galleries.
+- Therefore advertise **"HD photos & cloud backup"** with a fair-use quota, not literal "unlimited".
 
 ## Pricing hypothesis (validate, don't commit)
 - Undercut Huckleberry: **~$4.99/mo or ~$39/yr**, family-friendly (covers the whole household).

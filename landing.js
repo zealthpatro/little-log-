@@ -4,7 +4,7 @@
     var cta = '<button class="lp-cta ll-cta">Continue with Google</button>';
     var features = [
       ['⚡', 'One-thumb logging', 'Feeds, sleep, nappies, pumping, logged in seconds, even at 3am.'],
-      ['👨‍👩‍👧', 'Share with family, live', 'Both parents, grandparents, the nanny, everyone sees the same log, instantly.'],
+      ['👨‍👩‍👧', 'Your whole care circle', 'Parents, grandparents, the nanny, daycare or playschool, anyone who helps sees the same log, live.'],
       ['🐻', 'Who did what', 'Every entry shows who logged it: Mama Bear, Papa Bear, each with their own cub.'],
       ['📈', 'Growth charts', 'WHO & CDC percentile curves behind your baby\'s weight and height.'],
       ['🩺', 'Health, handled', 'Medicine reminders, gentle fever guidance, and a one-tap summary for the doctor.'],
@@ -25,20 +25,20 @@
       + '<header class="lp-hero">'
       + '<div class="lp-logo"><img src="icons/logo-512.png" alt="Cubby"></div>'
       + '<h1 class="lp-name">Cubby</h1>'
-      + '<p class="lp-tag">The warm, private way for your whole family to care for your little one, together.</p>'
+      + '<p class="lp-tag">A warm, private baby log for everyone who cares for your little one: parents, grandparents, the nanny, daycare and more.</p>'
       + cta
       + (msg ? '<div class="lp-msg">' + msg + '</div>' : '')
       + '<div class="lp-trust">Free · Private to your family · No app store</div>'
       + '</header>'
       + '<section class="lp-why"><h2>Caring for a baby is a team sport.</h2>'
-      + '<p>But the details (the last feed, the nap, the medicine) usually live in one parent\'s head, or on one phone. Cubby keeps everyone who cares for your baby on the same page, in real time.</p></section>'
+      + '<p>But the details (the last feed, the nap, the medicine) usually live in one parent\'s head, or on one phone. Cubby keeps everyone who cares for your baby, parents, grandparents, the nanny, daycare, on the same page, in real time.</p></section>'
       + '<section class="lp-feats">' + features + '</section>'
       + '<section class="lp-steps-wrap"><h2>How it works</h2><div class="lp-steps">' + steps + '</div></section>'
       + '<section class="lp-pro"><h2>Free forever, with Pro for the extras</h2>'
       + '<div class="lp-cmp">'
       + '<div class="lp-col"><div class="lp-col-h">Free</div><ul>'
       + '<li>Unlimited logging: feeds, sleep, nappies, pumping</li>'
-      + '<li>Share with your family, live</li>'
+      + '<li>Share with family &amp; caregivers (nanny, daycare)</li>'
       + '<li>Growth charts (WHO &amp; CDC)</li>'
       + '<li>Health nudges &amp; doctor-visit summary</li>'
       + '<li>Photos, memory cards &amp; milestones</li>'
@@ -47,7 +47,7 @@
       + '<div class="lp-col lp-col-pro"><div class="lp-col-h">Pro <span class="lp-soon">soon</span></div><ul>'
       + '<li>Smart adaptive routines (day 0 to 365)</li>'
       + '<li>Push reminders &amp; alerts</li>'
-      + '<li>HD photos &amp; unlimited storage</li>'
+      + '<li>HD photos &amp; cloud backup</li>'
       + '<li>PDF doctor reports &amp; export</li>'
       + '<li>Sleep &amp; feed insights</li>'
       + '</ul></div>'
