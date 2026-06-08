@@ -5,12 +5,12 @@
     var features = [
       ['⚡', 'One-thumb logging', 'Feeds, sleep, nappies, pumping, logged in seconds, even at 3am.'],
       ['👨‍👩‍👧', 'Your whole care circle', 'Parents, grandparents, the nanny, daycare or playschool, anyone who helps sees the same log, live.'],
-      ['🐻', 'Who did what', 'Every entry shows who logged it: Mama Bear, Papa Bear, each with their own cub.'],
+      ['🐻', 'Who did what', 'Know exactly who logged each feed, nap and nappy: you, your partner, or the nanny.'],
       ['📈', 'Growth charts', 'WHO & CDC percentile curves behind your baby\'s weight and height.'],
       ['🩺', 'Health, handled', 'Medicine reminders, gentle fever guidance, and a one-tap summary for the doctor.'],
       ['📸', 'Keepsakes', 'Monthly memory cards, milestones and a birth poster from your real moments.'],
       ['🔒', 'Private by design', 'Your log is locked to your family. No ads, and we never sell your data.'],
-      ['📲', 'Works like an app', 'Add to your home screen, full-screen, offline-ready, no app store.']
+      ['📋', 'See the day from anywhere', 'Checking in from work? Get a tidy recap of feeds, naps and meals, live.']
     ].map(function (f) {
       return '<div class="lp-feat"><div class="lp-fi">' + f[0] + '</div><div><div class="lp-ft">' + f[1] + '</div><div class="lp-fs">' + f[2] + '</div></div></div>';
     }).join('');
