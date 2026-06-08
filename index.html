@@ -798,12 +798,34 @@ function escapeHtml(s){ return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'
 
 /* ---------- HOME ---------- */
 function lastOf(type){ return babyEvents().find(e=>e.type===type); }
+function myName(){
+  try{ const u=window.LL&&window.LL.auth&&window.LL.auth.currentUser; const mi=u&&window.LL.memberInfo&&window.LL.memberInfo[u.uid]; return (mi&&(mi.relationship||((mi.name||'').split(' ')[0])))||''; }catch(e){ return ''; }
+}
 function meGreeting(){
-  let name='';
-  try{ const u=window.LL&&window.LL.auth&&window.LL.auth.currentUser; const mi=u&&window.LL.memberInfo&&window.LL.memberInfo[u.uid]; name=(mi&&(mi.relationship||((mi.name||'').split(' ')[0])))||''; }catch(e){}
+  const name=myName();
   const h=new Date().getHours();
-  const part = h<12?'Good morning':(h<17?'Good afternoon':'Good evening');
+  const part = (h<5||h>=23)?'Still up':(h<12?'Good morning':(h<17?'Good afternoon':'Good evening'));
   return name ? `${part}, ${escapeHtml(name)} 🐻` : `${part} 🐻`;
+}
+function homeNudgeLine(){
+  const b=activeBaby(); if(!b) return '';
+  const h=new Date().getHours();
+  if(h<5||h>=23) return `The 3am club 🐻 — you've got this. Sleep when you can 💛`;
+  const evs=babyEvents();
+  const recentSleep=evs.filter(e=>e.type==='sleep'&&e.end&&(now()-e.end)<16*3600000);
+  const longest=recentSleep.reduce((m,e)=>Math.max(m,e.end-e.time),0);
+  if(longest>=3*3600000){ const hrs=longest/3600000; return `${escapeHtml(b.name)} slept ~${hrs>=10?Math.round(hrs):hrs.toFixed(1)}h recently 💤`; }
+  const todayK=dayKey(now());
+  const feedsToday=evs.filter(e=>e.type==='feed'&&dayKey(e.time)===todayK).length;
+  if(feedsToday>0) return `${feedsToday} feed${feedsToday>1?'s':''} logged today 🍼`;
+  return `A fresh day with ${escapeHtml(b.name)} 🌿`;
+}
+function monthiversary(){
+  const b=activeBaby(); if(!b||!b.birth) return null;
+  const bd=new Date(b.birth), t=new Date();
+  if(bd.getDate()!==t.getDate()) return null;
+  let m=(t.getFullYear()-bd.getFullYear())*12+(t.getMonth()-bd.getMonth());
+  return m>=1 ? m : null;
 }
 
 function renderHome(){
@@ -864,6 +886,13 @@ function renderHome(){
       <div class="ap-body"><div class="ap-t">Appointment soon</div><div class="ap-s">${escapeHtml(uv.name)} · ${new Date(uv.t).toLocaleDateString(undefined,{month:'short',day:'numeric'})}</div></div>
       <button onclick="openVisitSummary()">Summary</button></div>`;
   }
+  const mv=monthiversary();
+  if(mv && !(state.settings.seen&&state.settings.seen['tip_bday'+mv])){
+    alerts += `<div class="alert-pill" style="border-color:var(--star)">
+      <div class="ap-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🎉</div>
+      <div class="ap-body"><div class="ap-t">${escapeHtml((activeBaby()||{}).name||'Baby')} is ${mv} month${mv>1?'s':''} today!</div><div class="ap-s">Happy month-iversary 🐻</div></div>
+      <button onclick="dismissTip('bday${mv}')">Yay</button></div>`;
+  }
 
   // today summary
   const today = dayKey(now());
@@ -874,6 +903,8 @@ function renderHome(){
 
   return `<div class="fade-in">
     <div class="greeting">${meGreeting()}</div>
+    <div class="greeting-sub">${homeNudgeLine()}</div>
+    ${tipLine('share','New here? Tap the 👨‍👩‍👧 button (top-right) to invite family, pick your bear, or send feedback.')}
     ${coachMark('home','Welcome to Cubby 👋','Your hub. A photo slideshow up top, one-tap logging below. The tabs hold your Log, Album and Health.')}
     ${renderHero()}
     ${timers}
@@ -965,6 +996,11 @@ function coachMark(tab,title,text){
     <button class="cm-x" onclick="dismissCoach('${tab}')">Got it</button></div>`;
 }
 function dismissCoach(tab){ if(!state.settings.seen)state.settings.seen={}; state.settings.seen[tab]=true; persist(); render(); }
+function tipLine(key,text){
+  if(state.settings.seen && state.settings.seen['tip_'+key]) return '';
+  return `<div class="tip-line"><span>💡 ${text}</span><button onclick="dismissTip('${key}')">Got it</button></div>`;
+}
+function dismissTip(key){ if(!state.settings.seen)state.settings.seen={}; state.settings.seen['tip_'+key]=true; persist(); render(); }
 function nudge(ico,text){ return `<div class="nudge"><div class="nu-ico">${ico}</div><div class="nu-t">${text}</div></div>`; }
 function renderNudge(){
   const b=activeBaby(); if(!b)return '';
@@ -2428,6 +2464,7 @@ function renderGrowthSection(){
       <div class="gx-box"><div class="n" style="color:var(--feed)">${lw?(+convW(lw.weight,lw.wUnit||'kg',wU).toFixed(2)):'·'}${lw?' '+wU:''}</div><div class="l">Latest weight</div>${wDelta?`<div class="d" style="color:${wDelta>0?'var(--diaper)':'var(--med)'}">${wDelta>0?'+':''}${wDelta} ${wU}</div>`:''}</div>
       <div class="gx-box"><div class="n" style="color:var(--sleep)">${lh?(+convH(lh.height,lh.hUnit||'cm',hU).toFixed(1)):'·'}${lh?' '+hU:''}</div><div class="l">Latest height</div>${hDelta?`<div class="d" style="color:${hDelta>0?'var(--diaper)':'var(--med)'}">${hDelta>0?'+':''}${hDelta} ${hU}</div>`:''}</div>
     </div>
+    ${tipLine('growth','Set Boy/Girl to overlay WHO/CDC percentile curves behind the dots.')}
     ${growthControls(b)}
     ${(b&&b.sex)?'':`<div class="stat-card"><div class="csub" style="margin:0">Choose your baby's sex above to see WHO/CDC percentile curves behind their measurements.</div></div>`}
     ${wPts.length?`<div class="stat-card"><h3>Weight</h3><div class="csub">${(b&&b.sex)?growthSource.toUpperCase()+' percentiles'+pctLabel('weight',wU):wPts.length+' measurement'+(wPts.length>1?'s':'')} · ${wU}</div>${(b&&b.sex&&growthRef('weight'))?svgPercentile('weight',wU):svgLine(wPts,'feed',wU)}</div>`:''}
@@ -2689,7 +2726,7 @@ function saveMilestone(){
   }
   // mirror into timeline
   addEvent({type:'milestone',title:a.title,time:at,notes:note});
-  persist(); closeSheet(); render(); toast('🌟 '+(def?def.title:'Moment')+' captured');
+  persist(); closeSheet(); render(); toast('🎉 '+(def?def.title:'Moment')+'! What a star ⭐');
 }
 function unMilestone(key){
   state.milestones=state.milestones.filter(m=>m.key!==key);
@@ -2791,7 +2828,7 @@ function renderLogTab(){
   const seg=`<div class="seg seg-full">
     <button class="${logTab==='log'?'on':''}" onclick="setLogTab('log')">Log</button>
     <button class="${logTab==='stats'?'on':''}" onclick="setLogTab('stats')">Stats</button></div>`;
-  const body = logTab==='stats' ? renderStats() : (renderHeatmap()+renderTimeline());
+  const body = logTab==='stats' ? renderStats() : (tipLine('heat','These strips show your week at a glance — tap Week or Month to switch.')+renderHeatmap()+renderTimeline());
   return `<div class="fade-in">${coachMark('log','Log & Stats','Everything you log lands in this timeline. The strips up top show your week at a glance. Flip to Stats for charts and growth curves.')}${seg}${body}</div>`;
 }
 
