@@ -54,7 +54,54 @@
   <a class="hero-cta" href="/app/">Start free</a>
   <div class="trust">Free to start · No ads · We never sell your data</div>
 </header>
-<div class="hero-art"><img src="/og/cubby-home.png" alt="Cubby, a warm private baby tracker"></div>
+<div class="carousel" id="carousel">
+  <div class="cwin"><div class="slides">
+
+    <div class="slide">
+      <div class="co"><span class="pill">⚡ One-thumb logging</span><h3>Log a nap in seconds</h3><p>Tap once, even half-asleep at 3am. An ongoing nap shows live on every phone.</p></div>
+      <div class="phone"><div class="pscr">
+        <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Good evening, Papa Bear</b></div>
+        <div class="pcard"><div class="a">😴 Nap in progress</div><div class="pbig">1h 12m</div><div class="b">started 7:48 PM · by Mama Bear</div></div>
+        <div class="pbtn">Wake up</div>
+        <div class="pcard" style="margin-top:9px"><div class="a">🍼 Bottle · 120 ml</div><div class="b">5:30 PM · by Nanny</div></div>
+      </div></div>
+    </div>
+
+    <div class="slide">
+      <div class="co"><span class="pill">🍽 Feeds &amp; solids</span><h3>Log a meal one-handed</h3><p>Bottle, breast or solids with food tags, in a couple of taps. Photos optional.</p></div>
+      <div class="phone"><div class="pscr">
+        <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Add a meal</b></div>
+        <div class="pcard"><div class="a">🥣 Solids · 6:30 PM</div><div class="b" style="margin-top:6px"><span class="pchip">Banana</span><span class="pchip">Oats</span><span class="pchip">Water</span></div></div>
+        <div class="pcard"><div class="a">How much</div><div class="b">A few spoons · loved it</div></div>
+        <div class="pbtn" style="background:#E29A3B">Log meal</div>
+      </div></div>
+    </div>
+
+    <div class="slide">
+      <div class="co"><span class="pill">👨‍👩‍👧 Your care circle</span><h3>Everyone in sync, live</h3><p>Parents, grandparents and the nanny see the same log in real time, with who did what.</p></div>
+      <div class="phone"><div class="pscr">
+        <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Family &amp; sharing</b></div>
+        <div class="prow"><div class="pav" style="background:#C97FA0">M</div><div><div class="a">Mama Bear</div><div class="b">Mother</div></div></div>
+        <div class="prow"><div class="pav" style="background:#5E6AA8">P</div><div><div class="a">Papa Bear</div><div class="b">Father · you</div></div></div>
+        <div class="prow"><div class="pav" style="background:#56A08E">N</div><div><div class="a">Nanny</div><div class="b">Nanny</div></div></div>
+        <div class="pnote">Everyone sees the same log, the moment it happens 🐻</div>
+      </div></div>
+    </div>
+
+    <div class="slide">
+      <div class="co"><span class="pill">💼 For working parents</span><h3>Made for the working mum</h3><p>Away during the day? See feeds, naps and meals the moment the nanny logs them, plus a tidy recap.</p></div>
+      <div class="phone"><div class="pscr">
+        <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>While you were away</b></div>
+        <div class="pcard"><div class="a">🍼 3 feeds</div><div class="b">last at 2:10 PM</div></div>
+        <div class="pcard"><div class="a">😴 2 naps · 2h 10m</div><div class="b">11:05 AM and 1:40 PM</div></div>
+        <div class="pcard"><div class="a">🧷 4 nappies</div><div class="b">all changed on time</div></div>
+        <div class="pnote">logged by Nanny while you were at work 🐻</div>
+      </div></div>
+    </div>
+
+  </div></div>
+  <div class="dots" id="cdots"></div>
+</div>
 
 <!-- Honest trust signals (no fabricated reviews or numbers) -->
 <section class="section">
@@ -131,5 +178,18 @@
   Cubby, a warm private baby tracker 🐻
   <div class="tiny">Cubby is informational and not a substitute for medical advice. Always follow your doctor and your country's official guidance.</div>
 </footer>
+<script>
+(function(){
+  var wrap=document.querySelector('#carousel .slides'); if(!wrap)return;
+  var n=wrap.children.length, dots=document.getElementById('cdots'), i=0, timer;
+  for(var k=0;k<n;k++){ (function(k){ var b=document.createElement('button'); if(!k)b.className='on'; b.setAttribute('aria-label','Slide '+(k+1)); b.onclick=function(){go(k);reset();}; dots.appendChild(b); })(k); }
+  function go(x){ i=(x+n)%n; wrap.style.transform='translateX(-'+(i*100)+'%)'; var ds=dots.children; for(var j=0;j<ds.length;j++) ds[j].className=(j===i?'on':''); }
+  function reset(){ clearInterval(timer); timer=setInterval(function(){go(i+1);},4200); }
+  var c=document.getElementById('carousel');
+  c.addEventListener('mouseenter',function(){clearInterval(timer);});
+  c.addEventListener('mouseleave',reset);
+  reset();
+})();
+</script>
 </body>
 </html>
