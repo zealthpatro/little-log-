@@ -1,6 +1,9 @@
 # Cubby Pregnancy Tracker (build spec)
 
-Goal: make Cubby a continuous tracker from **day 0 (pregnancy) → birth → year 1 → toddler**. A pregnancy is created with a due date (or last-period date), tracked week by week, and **converts into a baby profile at birth**, flowing into the existing tracker.
+> Building it in a fresh session? Start with **`PREGNANCY-HANDOFF.md`** — a self-contained,
+> step-by-step handoff with exact code anchors. This file is the higher-level spec/source list.
+
+Goal: make Cubby **one continuous lifecycle inside the same app** from **day 0 (pregnancy) → welcoming the baby (birth) → year 1 → toddler**, not a separate module. A pregnancy is created with a due date (or last-period date), tracked week by week, and at birth Cubby **welcomes the baby** by turning that pregnancy into a baby profile (the pregnancy is kept as history), flowing straight into the tracker that already exists. Birth is a warm transition within the app, not a new product.
 
 YMYL stance (same as vaccines): official-source summaries, visible "informational, not medical advice", real citations, danger-sign guidance says "seek care", never "diagnose". No fabricated medical reviewer; add a named clinician later if available.
 

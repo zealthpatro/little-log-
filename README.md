@@ -2,35 +2,56 @@
 
 A warm, private, shareable baby-tracker PWA. Feeds, sleep, nappies, pumping, growth,
 milestones, medicine, vaccines, illness, photos and keepsakes — with real multi-caregiver
-sharing, per-person bear avatars, and WHO/CDC growth-percentile charts.
+sharing, per-person bear avatars, and WHO/CDC growth-percentile charts. Fronted by a public
+marketing + SEO site (home, features, articles, pricing, FAQ, programmatic vaccine schedules).
 
-- **Live app:** https://little-cubby.com (custom domain) — also https://cubby.saurav-918.workers.dev
+- **Live:** https://little-cubby.com (custom domain) — also https://cubby.saurav-918.workers.dev
+- **App:** https://little-cubby.com/app/ · **Marketing/SEO:** everything at the root `/`
 - **Repo:** https://github.com/zealthpatro/little-log-
 - **Hosting:** Cloudflare (Workers static assets) — auto-deploys on push to `main`
 - **Backend:** Firebase (Google sign-in + Firestore) — project `little-log-a9caa`, free **Spark** plan
 
 > The app is fully cloud-hosted and always-on. No local machine is required to keep it
 > running — `localhost` is only for development.
+> Last refreshed: 2026-06-09.
 
 ---
 
 ## 1. Architecture at a glance
 
+Two halves, one Cloudflare deploy: a **static marketing/SEO site at `/`** (indexable, no
+service worker) and the **PWA at `/app/`** (Google sign-in, service-worker cached).
+
 ```
 Phone / browser
    │
-   ├─ index.html ............ the whole app (single-file vanilla JS UI, ~3.5k lines)
-   ├─ firebase-init.js ...... Firebase config + init (auth, Firestore, offline cache)
-   ├─ store-firebase.js ..... auth gate + real-time sync engine + sharing/family UI
-   ├─ cubby-extras.js ....... bear avatars (SVG), custom time/date pickers, "When" strip
-   ├─ growth-data.js ........ WHO + CDC growth percentile tables (generated)
-   └─ sw.js ................. service worker (offline shell, network-first HTML)
-        │
-        ▼
-   Firebase Auth (Google)  +  Cloud Firestore (shared "household" doc + subcollections)
-        │
-   Cloudflare serves the static files;  Firestore stores + syncs the data.
+   ├─ /  (marketing + SEO — static, indexable)
+   │   ├─ index.html ............ marketing home (5-tab nav, hero carousel, proof, pricing)
+   │   ├─ features/ pricing/ faq/ articles/ ... the other tabs
+   │   ├─ vaccination-schedule/{uk,us,uae}/, de/impfkalender/ ... programmatic SEO pages
+   │   ├─ articles/<slug>/ ...... sourced content library (see §10, content engine)
+   │   ├─ site.css (marketing) + vax.css (articles/vaccine) ... shared styles
+   │   └─ sitemap.xml robots.txt og/*.png ... SEO plumbing
+   │
+   └─ /app/  (the PWA — behind Google sign-in)
+       ├─ index.html ........... the whole app (single-file vanilla JS UI, ~4.3k lines)
+       ├─ firebase-init.js ..... Firebase config + init (auth, Firestore, offline cache)
+       ├─ store-firebase.js .... auth gate + real-time sync engine + sharing/family UI
+       ├─ cubby-extras.js ...... bear avatars (SVG), custom time/date pickers, "When" strip
+       ├─ landing.js ........... signed-out landing + Pro/paywall copy
+       ├─ growth-data.js ....... WHO + CDC growth percentile tables (generated)
+       ├─ pregnancy-data.js .... week-by-week + antenatal data (Phase 1 data; UI WIP)
+       └─ sw.js ................ service worker (CACHE little-log-vNN; network-first HTML)
+            │
+            ▼
+       Firebase Auth (Google)  +  Cloud Firestore (shared "household" doc + subcollections)
+
+   Cloudflare serves the static files;  Firestore stores + syncs the app data.
 ```
+
+> The app was originally at root and moved to `/app/`. Root `/sw.js` is now a self-unregister
+> stub and root `index.html` redirects installed/standalone clients to `/app/`, so existing
+> testers migrate cleanly.
 
 **Key idea:** the original app kept all state in a single global `state` object persisted via a
 `Store`/`PhotoStore` abstraction. `store-firebase.js` swaps that persistence for Firestore
@@ -41,20 +62,42 @@ and runs a diff-based sync engine. The app code still just mutates `state` and c
 
 ## 2. File map
 
+### App (`/app/`)
 | File | Purpose |
 |---|---|
-| `index.html` | Entire UI + logging logic. Inline `<script>` defines `state`, `render()`, all `open*/save*` sheet functions, growth charts, fever nudge, visit summary. |
-| `firebase-init.js` | Public Firebase web config; initializes `auth`, `db`; enables auth persistence + Firestore offline cache. Exposes `window.LL`. |
-| `store-firebase.js` | Google sign-in screen; resolves/creates the household; one-time migration of old localStorage data; real-time listeners; diff-based `persist()`; photo storage in Firestore; Family & sharing UI (invite, relationship, remove member, copy/email link); first-run setup. |
-| `cubby-extras.js` | `cubbyBear()` parametric SVG avatars; per-member/per-baby variants + picker; the custom warm **time picker** and unified **"When?" (date+time)** picker (intercepts native `<input type=time>`). |
-| `growth-data.js` | `window.GROWTH_REF` = `{who,cdc}.{weight,height}.{M,F}` arrays of `[month,p5,p25,p50,p75,p95]`. Generated from official CDC/WHO data files (see §7). |
+| `app/index.html` | Entire UI + logging logic. Inline `<script>` defines `state`, `render()`, all `open*/save*` sheet functions, growth charts, fever nudge, visit summary, photo studio, tips ticker. |
+| `app/firebase-init.js` | Public Firebase web config; initializes `auth`, `db`; enables auth persistence + Firestore offline cache. Exposes `window.LL`. |
+| `app/store-firebase.js` | Google sign-in screen; resolves/creates the household; one-time migration of old localStorage data; real-time listeners; diff-based `persist()`; photo storage in Firestore; Family & sharing UI (invite, relationship, remove member, copy/email link); first-run setup. |
+| `app/cubby-extras.js` | `cubbyBear()` parametric SVG avatars; per-member/per-baby variants + picker; the custom warm **time picker** and unified **"When?" (date+time)** picker. |
+| `app/landing.js` | Signed-out in-app landing screen + Pro/paywall copy (incl. Nutrition tracker). |
+| `app/growth-data.js` | `window.GROWTH_REF` = `{who,cdc}.{weight,height}.{M,F}` arrays of `[month,p5,p25,p50,p75,p95]`. Generated from official CDC/WHO data files (see §7). |
+| `app/pregnancy-data.js` | `window.PREG` week-by-week (weeks 4-41) + antenatal schedules (UK/US/DE/UAE/generic) + danger signs. Data only; in-app UI is WIP (see `PREGNANCY.md`). |
+| `app/sw.js` | App service worker; bump `CACHE` (`little-log-vN`, currently **v47**) on app asset change. |
+| `app/manifest.webmanifest` | PWA manifest (name "Cubby", `start_url`/`scope` = `/app/`, icons). |
+
+### Marketing + SEO (root `/`)
+| File | Purpose |
+|---|---|
+| `index.html` | Marketing home: 5-tab nav, hero carousel, honest proof, real testimonials, pricing widget, Free/Pro comparison. Redirects installed PWA clients to `/app/`. |
+| `features/`, `pricing/`, `faq/`, `articles/` | The other four marketing tabs (`pricing/` has the interactive localized Pro widget; `articles/` is the content hub grouped by age). |
+| `vaccination-schedule/{uk,us,uae}/`, `de/impfkalender/` | Programmatic SEO vaccine-schedule pages per country (NHS/CDC/MOHAP/STIKO sourced). |
+| `articles/<slug>/` | Sourced article pages (BlogPosting JSON-LD, deep-linked sources, disclaimer). |
+| `site.css` / `vax.css` | Marketing styles / article + vaccine-page styles (shared). |
+| `sitemap.xml`, `robots.txt`, `og/*.png` | SEO plumbing (OG images are PIL-generated 1200x630). |
+| `/sw.js` (root) | Self-unregister stub to retire the old root service worker on existing testers. |
+
+### Shared / infra
+| File | Purpose |
+|---|---|
 | `firestore.rules` | Security rules — members-only access, owner vs caregiver, invite-by-email join. |
 | `wrangler.toml` | Cloudflare static-assets deploy config (`[assets] directory="./"`). |
-| `.assetsignore` | Keeps source/docs out of the public deploy. |
-| `sw.js` | Service worker; bump `CACHE` (`little-log-vN`) on every deploy. |
-| `manifest.webmanifest` | PWA manifest (name "Cubby", icons, theme). |
+| `.assetsignore` | Keeps `tools/`, docs, drafts, node_modules and the service-account key out of the deploy. |
+| `.gitignore` | Ignores `tools/serviceAccountKey.json`, node_modules, logs, `.DS_Store`. |
+| `_headers` | Cloudflare header hints (CSP/security; keeps sw/manifest uncached). |
 | `generate_icons.py` | Pillow script that draws the bear app icons into `icons/`. |
-| `_headers` | Cloudflare/Netlify header hints (keeps sw/manifest uncached). |
+| `tools/serve.js` | Minimal node static server for local preview (replaces broken `python3 -m http.server`). |
+| `tools/analytics.js` | Read-only `firebase-admin` usage report (needs the gitignored service-account key). |
+| `articles-drafts/` | Git-tracked but **never deployed**; staging for articles awaiting human review. |
 
 ---
 
@@ -117,7 +160,15 @@ Firebase Storage, which would force the paid Blaze plan). Keeps `photoSrc()` syn
   temps/symptoms/meds/allergies) into a copyable/shareable snapshot.
 - **Growth charts:** WHO (0–24mo) + CDC (0–36mo) percentile bands behind the baby's weight/height,
   Boy/Girl selector, "latest ~Nth percentile" readout. (See §7 and §9 on IAP.)
-- **Keepsakes:** photo studio, monthly memory card, birth poster, milestones, twins support.
+- **Activity photos:** log meal/activity images (e.g. "who ate what") attached to entries.
+- **Keepsakes / photo studio:** multiple templates, fonts and palettes, monthly memory card, birth
+  poster, "Then & Now", sticker pack, and Instagram-shareable share cards (`composeShareCard`).
+- **On-device photo polish (no servers):** one-tap **Auto-enhance** (histogram) and **background
+  cutout / sticker-me** via MediaPipe selfie segmentation (lazy-loaded from CDN). Generative AI is
+  deferred to post-beta — see `AI-EDITING.md`.
+- **Home extras:** rotating **tips ticker** and country-aware vaccine schedule on the app home.
+- **Country awareness:** per-baby country + `detectCountry()` (no IP geolocation) drives the
+  in-app vaccine schedule (US/UK/UAE/DE) and ties back to the SEO vaccine pages.
 - Light/night themes; offline-capable PWA; installable to home screen.
 
 ---
@@ -127,11 +178,13 @@ Firebase Storage, which would force the paid Blaze plan). Keeps `photoSrc()` syn
 ### Local preview
 ```bash
 cd little-log-pwa
-python3 -m http.server 8080      # then open http://localhost:8080
+node tools/serve.js              # static server on http://localhost:8080
+                                 # (python3 -m http.server broke in the sandbox; use this)
 ```
 `localhost` is a Firebase-authorized domain by default, so Google sign-in works locally.
-After editing, hard-reload (the service worker is network-first for HTML); to fully reset,
-unregister the SW + clear caches in DevTools, or bump `CACHE` in `sw.js`.
+The app is at `http://localhost:8080/app/`; the marketing site at `http://localhost:8080/`.
+After editing, hard-reload (the app SW is network-first for HTML); to fully reset, unregister
+the SW + clear caches in DevTools, or bump `CACHE` in `app/sw.js`.
 
 ### Deploy (automatic)
 Cloudflare Pages/Workers is connected to the GitHub repo. **Every push to `main` auto-deploys.**
@@ -139,7 +192,8 @@ Just:
 ```bash
 git add -A && git commit -m "..." && git push
 ```
-Bump `const CACHE = 'little-log-vN'` in `sw.js` whenever assets change so clients update.
+- **Marketing/article pages are not SW-cached** → live ~1 min after push, no cache bump needed.
+- **App assets are SW-cached** → bump `const CACHE = 'little-log-vN'` in `app/sw.js` when they change.
 
 ### Deploy (manual, if ever needed)
 ```bash
@@ -154,7 +208,7 @@ Add the domain under **Firebase Console → Authentication → Settings → Auth
 
 ## 7. Regenerating growth data
 
-`growth-data.js` is generated from official files (run from `/tmp` or anywhere):
+`app/growth-data.js` is generated from official files (run from `/tmp` or anywhere):
 ```bash
 # WHO (via CDC mirror), 0–24 months
 curl -sL "https://ftp.cdc.gov/pub/Health_Statistics/NCHS/growthcharts/WHO-Boys-Weight-for-age-Percentiles.csv" -o who_b_w.csv
@@ -179,7 +233,7 @@ Icons: `python3 generate_icons.py`.
 | Domain | `little-cubby.com` (registered in Cloudflare; added as a Worker Custom Domain) |
 | Firebase project | `little-log-a9caa` (Spark / free) |
 | Firebase services | Authentication (Google), Cloud Firestore. **No** Storage, **no** Functions. |
-| Firebase web config | in `firebase-init.js` (public by design; safe to commit) |
+| Firebase web config | in `app/firebase-init.js` (public by design; safe to commit) |
 
 Everything runs on **free tiers**. Nothing here requires a card on file.
 
@@ -198,16 +252,64 @@ Everything runs on **free tiers**. Nothing here requires a card on file.
 - **App-blob writes** are last-write-wins (fine for profile/settings; events are per-doc and safe).
 - Removed members keep a stale `users/{uid}.householdId` pointer until they next sign in (they
   lose data access immediately via rules; client just shows an error until re-resolved).
+- **Pregnancy module:** data exists (`app/pregnancy-data.js`); the in-app UI (mode/week view,
+  kick counter, contraction timer, birth plan, birth→baby conversion) is not built — see `PREGNANCY.md`.
+- **Pro / paywall:** localized pricing is live on the marketing site; the in-app Stripe paywall is
+  design-only until beta closes — see `PAYWALL.md` and `PRO.md`.
+- **On-device only** for photo AI; generative (server/VM Qwen/Seedream) is post-beta — `AI-EDITING.md`.
 
 ---
 
-## 10. Conventions for future changes
+## 10. Marketing site, SEO & content engine
+
+- **Marketing site** (root `/`): 5 tabs (home, features, articles, pricing, FAQ), built static and
+  indexable with SoftwareApplication/Organization/FAQPage JSON-LD, OG images, `sitemap.xml`,
+  `robots.txt` and `hreflang`. Pricing widget is localized (USD/GBP/EUR/AED/INR, monthly + discounted
+  annual). All visuals are original illustrations / initial avatars and all testimonials are real
+  (no stock photos, no fabricated proof). Full plan in `SEO.md`.
+- **Programmatic vaccine pages**: `vaccination-schedule/{uk,us,uae}/` + `de/impfkalender/`, each
+  sourced to the national authority, with a birthday calculator and links into the app at the right
+  country (closes the SEO→app loop without IP geolocation).
+- **Content engine** (sourced articles, YMYL-safe): a dedicated **Sonnet writer agent** follows
+  `CONTENT-RUNBOOK.md` to take the top `[ ]` item from `CONTENT-QUEUE.md`, research official sources
+  (NHS/CDC/WHO/AAP), write an original long-form article, self-review, wire the hub card + sitemap,
+  publish to `/articles/<slug>/`, and verify live. Rules (no fabrication / no copying / deep-link +
+  verify-200 / dated disclaimer / no diagnosis / no em-dashes) are in `CONTENT.md`. Unsourceable
+  pieces go to `articles-drafts/` for human review instead of publishing.
+  Run it on a cadence, e.g.: `/schedule every Mon, Wed and Fri at 9am — use model Sonnet. Follow
+  CONTENT-RUNBOOK.md ... PUBLISH the next [ ] article from CONTENT-QUEUE.md`.
+
+---
+
+## 11. Documentation index
+
+| Doc | What it covers |
+|---|---|
+| `README.md` | This file: full architecture, file map, data model, deploy. |
+| `HANDOFF.md` | Fast resume notes / 30-second mental model. |
+| `CHANGELOG.md` | Notable changes over time. |
+| `SEO.md` | Marketing/SEO + CRO strategy. |
+| `CONTENT.md` / `CONTENT-RUNBOOK.md` / `CONTENT-QUEUE.md` | Article rules / publish pipeline / backlog. |
+| `PRO.md` / `PAYWALL.md` | Pro feature list and paywall design (pre-beta). |
+| `PREGNANCY.md` | Phased pregnancy-module spec. |
+| `PREGNANCY-HANDOFF.md` | Build handoff for the pregnancy → birth → baby lifecycle (integrated into this app, not a separate module). |
+| `ROUTINES.md` | Routines / activity-planning notes. |
+| `ONBOARDING.md` | First-run / onboarding notes. |
+| `EMAIL.md` | Server-sent email design + scaling plan. |
+| `ANALYTICS.md` | Usage-reporting approach (`tools/analytics.js`). |
+| `AI-EDITING.md` | Post-beta generative photo-editing plan. |
+
+---
+
+## 12. Conventions for future changes
 
 - Add a logging field → mutate `state` + call `persist()`. Sync handles the rest.
 - New per-entry time → use the `timeStrip('when','Label')` component + `getWhen('when')`.
 - New shared data → put it in the `app` blob (`appBlobFromState` / `applyAppBlob`).
 - New UI in the family/sharing area → `store-firebase.js`; avatars/pickers → `cubby-extras.js`.
-- Always `node --check` each JS file, verify in the preview, bump `sw.js` `CACHE`, then push.
+- Always `node --check` each JS file, verify in the preview, bump `app/sw.js` `CACHE`, then push.
 ```bash
-node --check store-firebase.js && node --check cubby-extras.js && node --check growth-data.js
+node --check app/store-firebase.js && node --check app/cubby-extras.js \
+  && node --check app/growth-data.js && node --check app/landing.js \
+  && node --check app/pregnancy-data.js
 ```

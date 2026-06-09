@@ -58,6 +58,35 @@ Implication: lead Pro with **smart sleep/feed insights**, not gimmicks.
 - Possibly a one-time "lifetime/keepsake" option for photo storage.
 - Keep the free tier genuinely good so Pro is a delight, not a hostage.
 
+## Launch pricing — v1 "Base" plan (next venture, design-only for now)
+The first paid version ships **one cheap entry tier**, priced to maximise first conversions, with
+a free trial so there is no risk to try. Full Stripe/paywall build is deferred to the next venture;
+this is the plan to build against. (Beta stays 100% free.)
+
+- **Base** — headline **"from $5/mo"**, i.e. **billed annually at ~$59/year** (effective $4.92/mo).
+  - **7-day free trial**, card required, cancel anytime before day 7 = no charge.
+  - Monthly option can exist later (e.g. ~$7/mo) but the annual $5/mo is the hero; annual also
+    improves retention and cash flow and suits a yearly product (one baby-year).
+  - Localised like the existing Pro widget (USD/GBP/EUR/AED/INR) — reuse that currency table.
+- **What Base unlocks (v1):** pick the cheapest-to-serve, highest-pull perks so margin is safe at $5:
+  the **Moments/keepsakes** upgrades (premium templates, fonts, formats, watermark removal,
+  sticker pack, Then & Now) plus **doctor PDF report + data export**. These are on-device or
+  generated client-side, so they cost us nothing per user. See PAYWALL.md.
+- **Held back for a later, higher tier (not Base):** anything with real per-user infra cost —
+  **HD photos & cloud backup (R2)**, **push notifications (Blaze)**, **smart routines/insights**.
+  Those justify a future "Pro/Plus" tier above Base once demand + costs are proven.
+
+### Tier ladder (target)
+| Tier | Price | Who | Includes |
+|---|---|---|---|
+| **Free** | $0 forever | everyone | All logging, sharing, vaccines, growth, health nudges, basic keepsakes. Never paywall safety/basics. |
+| **Base** (v1 launch) | from $5/mo (annual ~$59/yr), 7-day trial | most paying parents | Free + premium keepsakes/moments, watermark-free shares, doctor PDF + export. Zero-marginal-cost features. |
+| **Pro/Plus** (later) | ~$15/mo annual / $19/mo | power users | Base + HD photos & cloud backup, push notifications, smart routines & insights. Cost-heavy features. |
+
+> The marketing site already shows the higher Pro price (~$15/mo annual / $19/mo). When the Base
+> plan goes live, surface it as the entry point ("from $5/mo, 7-day free trial") above Pro on the
+> pricing page and reuse the existing `CUR` currency table + monthly/annual toggle in `pricing/`.
+
 ## Validation plan
 1. **Waitlist** (built): Settings → Cubby Pro → Join; landing teaser. Stored in Firestore
    `waitlist/{uid}` with the user's email. Read counts in the console.

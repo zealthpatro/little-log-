@@ -47,6 +47,17 @@ These are the trust + word-of-mouth core. Gating them would kill adoption.
 3. **Volume cap** — free gets N/month; Pro unlimited.
 4. **Quality/format gate** — free gets standard; Pro gets HD / extra formats.
 
+## v1 "Base" plan mapping (next venture)
+The first paid tier is a single cheap entry plan: **from $5/mo (billed annually ~$59/yr) with a
+7-day free trial** (full pricing rationale + tier ladder in PRO.md). To protect margin at $5, the
+v1 Base plan gates only **zero-marginal-cost** features (on-device or client-generated):
+- **In Base v1:** premium share-card templates, premium fonts & palettes, Instagram Story/Portrait
+  formats, "made with Cubby" watermark removal, full sticker pack, Then & Now, Auto-enhance,
+  background cutout, plus doctor **PDF report + data export**.
+- **NOT in Base (hold for a later higher tier):** HD photos & cloud backup (R2), push
+  notifications (Blaze), smart routines, sleep/feed insights, nutrition analysis, video montage —
+  i.e. anything with per-user infra cost.
+
 ## Notes
 - Keep anything requiring paid cloud infra (push, HD storage, generative AI) clearly on the Pro side, since that's where the cost is, and it justifies the price.
 - Do NOT add generative AI art that uploads baby photos to a third-party API; it breaks the privacy promise. On-device AI (auto-enhance, cutout) is fine.
