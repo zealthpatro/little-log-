@@ -4,8 +4,8 @@ The agent takes the first `[ ]` item (top = highest priority), publishes it per 
 
 ## Backlog (priority order)
 
-- [ ] **Teething and first teeth** — slug: `baby-teething-and-tooth-care` — Newborn / 3-6 months — Care & dental
-  Sources: NHS teething (https://www.nhs.uk/conditions/baby/teething/ or find current under https://www.nhs.uk/baby/babys-development/), NHS children's teeth (https://www.nhs.uk/conditions/baby/looking-after-your-babys-teeth/)
+- [x] **Teething and first teeth** — slug: `baby-teething-and-tooth-care` — Newborn / 3-6 months — Care & dental
+  Sources: NHS teething (https://www.nhs.uk/conditions/baby/teething/ or find current under https://www.nhs.uk/baby/babys-development/), NHS children's teeth (https://www.nhs.uk/conditions/baby/looking-after-your-babys-teeth/) (published 9 June 2026)
 
 - [ ] **Baby sleep by age and wakeful phases** — slug: `baby-sleep-by-age` — 0-3 / 3-6 / 6-12 months — Sleep
   Sources: https://www.nhs.uk/baby/caring-for-a-newborn/helping-your-baby-to-sleep/ , NHS baby sleep hub
