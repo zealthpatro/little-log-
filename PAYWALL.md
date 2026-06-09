@@ -39,6 +39,7 @@ These are the trust + word-of-mouth core. Gating them would kill adoption.
 
 ### Insights
 - Sleep & feed pattern insights, trends, predictions — Pro
+- **Nutrition tracker** — turn logged meals + meal photos into a nutrition view over time (what was offered vs eaten). Free: log meals + photos. Pro: the nutrition analysis. [meal photos shipped]
 
 ## Levers (how to gate, not just what)
 1. **Feature gate** — whole feature is Pro (routines, PDF export, push).

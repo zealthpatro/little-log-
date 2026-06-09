@@ -50,6 +50,7 @@
       + '<li>Smart adaptive routines (day 0 to 365)</li>'
       + '<li>Push reminders &amp; alerts</li>'
       + '<li>HD photos &amp; cloud backup</li>'
+      + '<li>Nutrition tracker from meal photos &amp; logs</li>'
       + '<li>PDF doctor reports &amp; export</li>'
       + '<li>Sleep &amp; feed insights</li>'
       + '</ul></div>'
