@@ -1691,15 +1691,15 @@ function timeToToday(str){ const[h,m]=str.split(':').map(Number); const d=new Da
 function openDiaper(){ initTargets(); initLogWhen(); renderDiaperSheet(); }
 function renderDiaperSheet(){
   const t=(kind,icon,color,label,sub)=>`<div class="opt" onclick="saveDiaper('${kind}')"><span style="color:var(--${color})">${icon}</span><span>${label}</span>${sub?`<span class="osub">${sub}</span>`:''}</div>`;
-  openSheet(`<h2>Diaper</h2><div class="sub">Set the time if needed, then tap to log.</div>
+  openSheet(`<h2>Diaper</h2><div class="sub">Tap to log. Change the time below if it wasn't just now.</div>
     ${targetChips('renderDiaperSheet')}
-    ${timeStrip('when','Time')}
     <div class="opt-grid">
       ${t('wet',I.drop,'sleep','Wet')}
       ${t('dirty',I.swirl,'note','Dirty')}
       ${t('both',I.diaper,'feed','Both')}
       ${t('dry',I.check,'diaper','Dry','Checked, clean')}
-    </div>`,'diaper');
+    </div>
+    ${timeStrip('when','Time')}`,'diaper');
 }
 function saveDiaper(kind){
   commitEvent({type:'diaper',kind,time:getWhen('when')});
