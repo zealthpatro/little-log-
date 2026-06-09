@@ -64,8 +64,8 @@
   <div class="pricebox">
     <div class="pb-controls">
       <div class="bseg" id="bseg">
-        <button data-bill="monthly" class="on" onclick="setBill('monthly')">Monthly</button>
-        <button data-bill="annual" onclick="setBill('annual')">Annual <span class="save" id="saveBadge">save 21%</span></button>
+        <button data-bill="annual" class="on" onclick="setBill('annual')">Annual <span class="save" id="saveBadge">save 21%</span></button>
+        <button data-bill="monthly" onclick="setBill('monthly')">Monthly</button>
       </div>
       <select id="curSel" onchange="setCur(this.value)" aria-label="Currency">
         <option value="USD">$ USD</option>
@@ -75,8 +75,8 @@
         <option value="INR">₹ INR</option>
       </select>
     </div>
-    <div class="pb-price"><span id="pbAmt">$19</span><span class="per" id="pbPer">/month</span></div>
-    <div class="pb-sub" id="pbSub">Billed monthly</div>
+    <div class="pb-price"><span id="pbAmt">$15</span><span class="per" id="pbPer">/month</span></div>
+    <div class="pb-sub" id="pbSub">Billed annually · $179/year · save 21%</div>
     <a class="hero-cta" href="/app/">Join the waitlist</a>
     <div class="pb-note">Approximate local pricing, finalised at launch. Free plan stays free forever.</div>
   </div>
@@ -91,7 +91,7 @@ var CUR = {
   AED: { sym: 'AED ', pre: true,  mo: 69,   yr: 649   },
   INR: { sym: '₹',    pre: true,  mo: 1499, yr: 13999 }
 };
-var bill = 'monthly', cur = 'USD';
+var bill = 'annual', cur = 'USD';
 function fmt(c, n) { return c.sym + n.toLocaleString('en-US'); }
 function guessCur() {
   var l = (navigator.language || '').toLowerCase();
@@ -103,15 +103,15 @@ function guessCur() {
 }
 function renderPrice() {
   var c = CUR[cur];
-  var amt = bill === 'annual' ? c.yr : c.mo;
-  document.getElementById('pbAmt').textContent = fmt(c, amt);
-  document.getElementById('pbPer').textContent = bill === 'annual' ? '/year' : '/month';
+  document.getElementById('pbPer').textContent = '/month';
   if (bill === 'annual') {
     var perMo = Math.round(c.yr / 12);
     var save = Math.round((1 - c.yr / (c.mo * 12)) * 100);
-    document.getElementById('pbSub').textContent = 'Billed annually · about ' + fmt(c, perMo) + '/mo · save ' + save + '%';
+    document.getElementById('pbAmt').textContent = fmt(c, perMo);
+    document.getElementById('pbSub').textContent = 'Billed annually · ' + fmt(c, c.yr) + '/year · save ' + save + '%';
     document.getElementById('saveBadge').textContent = 'save ' + save + '%';
   } else {
+    document.getElementById('pbAmt').textContent = fmt(c, c.mo);
     document.getElementById('pbSub').textContent = 'Billed monthly';
   }
 }
