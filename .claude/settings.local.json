@@ -95,7 +95,10 @@
       "Bash(sed -n '1740,1750p' index.html)",
       "Bash(awk '/function commitEvent/{f=1} f{print NR\": \"$0} f&&/^}/{exit}' index.html)",
       "Bash(awk 'NR>=3490 && NR<=3520{print NR\": \"$0}' index.html)",
-      "Bash(node --check tools/analytics.js)"
+      "Bash(node --check tools/analytics.js)",
+      "Bash(perl -i -pe 's{\\([\"\\\\x27]\\)icons/}{$1/icons/}g' app/index.html app/landing.js app/store-firebase.js app/cubby-extras.js)",
+      "Bash(git checkout *)",
+      "Bash(git merge *)"
     ]
   }
 }

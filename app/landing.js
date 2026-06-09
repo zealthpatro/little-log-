@@ -23,7 +23,7 @@
     }).join('');
     return '<div class="lp">'
       + '<header class="lp-hero">'
-      + '<div class="lp-logo"><img src="icons/logo-512.png" alt="Cubby"></div>'
+      + '<div class="lp-logo"><img src="/icons/logo-512.png" alt="Cubby"></div>'
       + '<h1 class="lp-name">Cubby</h1>'
       + '<p class="lp-tag">A warm, private baby log for everyone who cares for your little one: parents, grandparents, the nanny, daycare and more.</p>'
       + cta

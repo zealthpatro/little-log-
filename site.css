@@ -1,0 +1,68 @@
+/* Cubby marketing site: shared nav + landing components. Loads after vax.css (reuses its vars). */
+.nav{position:sticky;top:0;z-index:50;background:rgba(251,245,233,.86);backdrop-filter:saturate(140%) blur(10px);border-bottom:1px solid var(--line)}
+.nav-in{max-width:1040px;margin:0 auto;display:flex;align-items:center;gap:18px;padding:11px 20px}
+.nav-brand{display:flex;align-items:center;gap:9px;text-decoration:none;color:var(--ink)}
+.nav-brand img{width:34px;height:34px;border-radius:10px}
+.nav-brand b{font-family:var(--serif);font-size:21px;font-weight:600}
+.nav-tabs{display:flex;gap:4px;margin-left:8px;flex:1;flex-wrap:wrap}
+.nav-tabs a{font-size:14.5px;font-weight:700;color:var(--soft);text-decoration:none;padding:8px 12px;border-radius:10px}
+.nav-tabs a:hover{background:var(--surface2);color:var(--ink)}
+.nav-tabs a.on{color:var(--ink);background:var(--surface)}
+.nav-cta{font-size:14.5px;font-weight:800;color:#fff;background:var(--pink);padding:10px 18px;border-radius:12px;text-decoration:none;white-space:nowrap;box-shadow:0 6px 16px rgba(201,127,160,.3)}
+.nav-cta:hover{filter:brightness(1.03)}
+@media(max-width:640px){.nav-tabs a{padding:7px 9px;font-size:13.5px}.nav-brand b{font-size:19px}}
+
+.page{max-width:1040px;margin:0 auto;padding:0 20px}
+.hero{text-align:center;padding:60px 20px 34px;max-width:760px;margin:0 auto}
+.hero h1{font-family:var(--serif);font-size:46px;line-height:1.08;font-weight:600;margin:0 0 16px;letter-spacing:-.01em}
+.hero p.sub{font-size:19px;line-height:1.55;color:var(--soft);font-weight:600;max-width:620px;margin:0 auto 24px}
+.hero-cta{display:inline-block;background:var(--pink);color:#fff;font-size:18px;font-weight:800;padding:16px 34px;border-radius:15px;text-decoration:none;box-shadow:0 10px 24px rgba(201,127,160,.34)}
+.hero-cta:hover{filter:brightness(1.03)}
+.trust{margin-top:14px;font-size:13px;color:var(--faint);font-weight:700}
+.hero-art{max-width:920px;margin:18px auto 0;padding:0 20px}
+.hero-art img{width:100%;border-radius:20px;box-shadow:0 18px 50px rgba(60,46,34,.16);display:block}
+@media(max-width:640px){.hero h1{font-size:34px}.hero p.sub{font-size:16.5px}}
+
+.section{padding:46px 0}
+.section.alt{background:var(--surface2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.section h2{font-family:var(--serif);font-size:30px;font-weight:600;text-align:center;margin:0 0 8px;line-height:1.2}
+.section .lead2{text-align:center;color:var(--soft);font-weight:600;font-size:16.5px;max-width:600px;margin:0 auto 22px;line-height:1.6}
+
+.proof{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;max-width:980px;margin:0 auto;padding:0 20px}
+.proof .it{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;text-align:center;box-shadow:0 4px 12px rgba(60,46,34,.05)}
+.proof .ic{font-size:24px}
+.proof .t{font-weight:800;font-size:14px;margin:6px 0 3px}
+.proof .d{font-size:12.5px;color:var(--soft);font-weight:600;line-height:1.4}
+@media(max-width:760px){.proof{grid-template-columns:1fr 1fr}}
+
+.feats{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:900px;margin:0 auto;padding:0 20px}
+.feat{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;display:flex;gap:12px;box-shadow:0 5px 14px rgba(60,46,34,.05)}
+.feat .fi{font-size:24px;flex:0 0 auto}
+.feat .ft{font-weight:800;font-size:15.5px;margin-bottom:3px}
+.feat .fs{font-size:13.5px;color:var(--soft);font-weight:600;line-height:1.5}
+@media(max-width:640px){.feats{grid-template-columns:1fr}}
+
+.quotes{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;max-width:980px;margin:0 auto;padding:0 20px}
+.quote{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 5px 14px rgba(60,46,34,.05)}
+.quote p{font-size:15px;line-height:1.55;color:var(--ink);font-weight:600;margin:0 0 12px}
+.quote .who{font-size:13px;font-weight:800;color:var(--soft)}
+.quote.ph{border-style:dashed;opacity:.85}
+.quote.ph p{color:var(--faint);font-style:italic}
+@media(max-width:760px){.quotes{grid-template-columns:1fr}}
+
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:760px;margin:0 auto;padding:0 20px}
+.col{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px}
+.col.pro{border-color:var(--pink);background:linear-gradient(180deg,#fff,#FBF7EF)}
+.col .ch{font-family:var(--serif);font-size:20px;font-weight:600;margin-bottom:4px}
+.col .price{font-size:14px;color:var(--soft);font-weight:700;margin-bottom:14px}
+.col ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}
+.col li{font-size:13.5px;color:var(--soft);font-weight:600;line-height:1.45;padding-left:23px;position:relative}
+.col li::before{content:"✓";position:absolute;left:0;color:var(--green);font-weight:900}
+.col.pro li::before{content:"✦";color:var(--pink)}
+.soon{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;background:var(--pink);color:#fff;padding:2px 8px;border-radius:999px;vertical-align:middle;margin-left:6px}
+@media(max-width:560px){.cmp{grid-template-columns:1fr}}
+
+.foot{border-top:1px solid var(--line);margin-top:30px;padding:30px 20px;text-align:center;color:var(--faint);font-weight:600;font-size:13.5px}
+.foot .fl{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:12px}
+.foot .fl a{color:var(--soft);text-decoration:none;font-weight:700}
+.foot .tiny{font-size:12px;color:var(--faint);max-width:560px;margin:10px auto 0;line-height:1.5}
