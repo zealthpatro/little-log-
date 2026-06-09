@@ -45,5 +45,21 @@ food/weaning · foods to avoid · allergens · sleep (safe sleep) · sleep by ag
 - AAP HealthyChildren: https://www.healthychildren.org/
 - WHO child growth & health: https://www.who.int/
 
+## Automated drafting workflow (recurring content agent)
+Content is produced by a dedicated writer agent (Sonnet is fine and cheaper), not the main build thread. Flow: **agent drafts → human reviews → publish.** Never auto-publish health claims.
+
+Agent brief (use verbatim per article):
+- Pick the next theme/age from the roadmap above (or the assigned one).
+- **Fetch the official source(s)** for it (NHS /baby, CDC act-early & infant-toddler-nutrition, WHO IYCF, womenshealth.gov, AAP HealthyChildren). Only state what those sources support.
+- Write an **original** long-form article (match the depth of a good 8-10 min read: intro, why it matters, a prominent safety note, 3-6 sections with practical serving/how-to guidance, an age-by-age or cheat-sheet table where useful, and an FAQ). **Do NOT copy any third-party blog**, original wording only.
+- Tag with age bracket + theme in `.art-meta`. Add `BlogPosting` JSON-LD, a "Trusted sources" list with deep links, and the "Reviewed <date> · not medical advice" disclaimer.
+- Follow the existing `/articles/<slug>/index.html` template (copy one).
+- **Write the file into `articles-drafts/<slug>/index.html`** (not `/articles/`). Return a short report: title, slug, sources used, and a list of any claim it could NOT source (flag for human).
+- Region note: India-context pieces (dal, khichdi, ragi, BLW) are welcome for that audience; anchor all nutrition/safety claims to CDC/WHO/NHS and mark practical tips as general guidance.
+
+Review + publish: a human checks accuracy + sources, then move the folder from `articles-drafts/` to `articles/`, add a hub card + a `sitemap.xml` entry, and deploy. `articles-drafts/` is git-tracked but never deployed (.assetsignore).
+
+Recurring cadence: e.g. 2-3 drafts/week via a scheduled task; review weekly.
+
 ## How to add an article
 Copy an existing `/articles/<slug>/index.html`, update head meta + `BlogPosting` JSON-LD + the `art-meta` (age · theme · Reviewed date), write 2-4 sourced sections, add the deep-linked "Trusted sources" list and disclaimer, add a card to the right age section in `/articles/index.html`, and add a `<url>` to `sitemap.xml`.
