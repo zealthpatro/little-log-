@@ -71,13 +71,17 @@
 .feat .fs{font-size:13.5px;color:var(--soft);font-weight:600;line-height:1.5}
 @media(max-width:640px){.feats{grid-template-columns:1fr}}
 
-.quotes{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;max-width:980px;margin:0 auto;padding:0 20px}
-.quote{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 5px 14px rgba(60,46,34,.05)}
-.quote p{font-size:15px;line-height:1.55;color:var(--ink);font-weight:600;margin:0 0 12px}
-.quote .who{font-size:13px;font-weight:800;color:var(--soft)}
-.quote.ph{border-style:dashed;opacity:.85}
-.quote.ph p{color:var(--faint);font-style:italic}
-@media(max-width:760px){.quotes{grid-template-columns:1fr}}
+.quotes{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;max-width:840px;margin:0 auto;padding:0 20px}
+.quote{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:0 6px 16px rgba(60,46,34,.06);display:flex;flex-direction:column}
+.quote .stars{color:#E5B84B;font-size:14px;letter-spacing:2px;margin-bottom:8px}
+.quote p{font-size:15.5px;line-height:1.6;color:var(--ink);font-weight:600;margin:0 0 16px;flex:1}
+.quote .who{display:flex;align-items:center;gap:11px}
+.qav{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:800;font-size:16px;flex:0 0 auto}
+.quote .nm{font-weight:800;font-size:13.5px;color:var(--ink)}
+.quote .rl{font-size:12px;color:var(--soft);font-weight:700}
+@media(max-width:680px){.quotes{grid-template-columns:1fr}}
+.palbum{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px}
+.ptile{aspect-ratio:1;border-radius:9px;display:grid;place-items:center;font-size:20px}
 
 .cmp{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:760px;margin:0 auto;padding:0 20px}
 .col{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px}
