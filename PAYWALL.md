@@ -8,6 +8,7 @@ These are the trust + word-of-mouth core. Gating them would kill adoption.
 - Multi-caregiver real-time sync + invites + handoff notes
 - Vaccine schedule + due dates + in-app reminders
 - Growth charts (WHO/CDC)
+- Pregnancy core: week-by-week view, antenatal schedule + appointment reminders, danger signs, basic logging (symptoms/weight/BP), kick counter, contraction timer, birth plan + hospital bag, and the birth → baby transition. This is trust/safety and the front of the lifecycle, so it stays free. [built]
 - Basic photo save + at least one free share format/template
 - Privacy (no ads, no third-party trackers) stays true regardless of tier
 
@@ -26,6 +27,11 @@ These are the trust + word-of-mouth core. Gating them would kill adoption.
 - [built] **Sticker pack** (tap-to-place emoji stickers, all formats) — keep a few free, gate the full set
 - High-res export of birth poster / growth collage / monthly cards — Pro
 - Monthly video montage — Pro (heavier; later)
+
+### Pregnancy (core is free; these are later Pro candidates)
+- PDF antenatal/birth summary for the doctor (the pregnancy record as a clean export) — Pro
+- Premium birth-plan export / shareable birth announcement card — Pro
+- Advanced pregnancy insights (weight/BP trends, kick/contraction history views) — Pro
 
 ### Health / data
 - PDF doctor visit reports + full data export — Pro

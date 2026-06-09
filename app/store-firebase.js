@@ -207,6 +207,7 @@
       vaccines: state.vaccines || {}, illnesses: state.illnesses || [],
       photos: state.photos || [],
       handoff: state.handoff || null,  // shared parent<->caregiver note
+      pregnancy: state.pregnancy || null,  // one continuous lifecycle: pregnancy -> baby
       timers: state.timers || {}   // shared so an ongoing nap/feed shows on every phone
     };
   }
@@ -222,6 +223,7 @@
     state.illnesses = app.illnesses || [];
     state.photos = app.photos || [];
     state.handoff = app.handoff || null;
+    state.pregnancy = app.pregnancy || null;
     // Don't stomp a timer the local user just started but hasn't pushed yet.
     if (!pushTimer) state.timers = app.timers || {};
     normalizeLoadedState(state); // defensive legacy migrations
