@@ -1638,12 +1638,28 @@ async function removeEventPhoto(id){
 /* ---------- SLEEP ---------- */
 function openSleep(){ initTargets(); renderSleepSheet(); }
 function renderSleepSheet(){
-  openSheet(`<h2>Sleep</h2><div class="sub">Start a live timer, or log a nap that already finished.</div>
+  initLogWhen();
+  openSheet(`<h2>Sleep</h2><div class="sub">Is the nap happening now, or did it already finish?</div>
     ${targetChips('renderSleepSheet')}
-    <button class="btn-primary" style="background:var(--sleep)" onclick="startSleep()">Start sleep timer</button>
-    <button class="btn-ghost" onclick="openPastSleep(true)">Log a past nap</button>`,'sleep');
+    <div class="opt-grid">
+      <div class="opt" onclick="startSleep()"><span style="color:var(--sleep)">${I.sleep}</span><span>Start a nap now</span><span class="osub">Live timer from now</span></div>
+      <div class="opt" onclick="openSleepOngoing()"><span style="color:var(--sleep)">${CLOCK_SVG}</span><span>Already napping</span><span class="osub">Started earlier, still asleep</span></div>
+    </div>
+    <button class="btn-ghost" onclick="openPastSleep(true)">Log a nap that finished earlier</button>`,'sleep');
 }
 function startSleep(){ const targets=targetsResolved(); targets.forEach(bid=>{ timersFor(bid).sleep={start:now()}; }); persist(); closeSheet(); go('home'); toast(targets.length>1?'Sleep timers started · sweet dreams':'Sleep timer started · sweet dreams'); }
+function openSleepOngoing(){
+  logTimes={ when: now()-1800000, end: now() }; // default: fell asleep 30 min ago
+  openSheet(`<h2>Already napping</h2><div class="sub">When did they fall asleep? We'll keep a live timer running until they wake.</div>
+    ${targetChips('openSleepOngoing')}
+    ${timeStrip('when','Fell asleep')}
+    <button class="btn-primary" style="background:var(--sleep)" onclick="startSleepFrom()">Start ongoing nap</button>`,'sleep');
+}
+function startSleepFrom(){
+  let s=getWhen('when'); if(s>now()) s-=86400000;
+  const targets=targetsResolved(); targets.forEach(bid=>{ timersFor(bid).sleep={start:s}; });
+  persist(); closeSheet(); go('home'); render(); toast(targets.length>1?'Naps in progress · sweet dreams':'Nap in progress · asleep since '+fmtClock(s));
+}
 function stopSleep(babyId){
   babyId=babyId||state.activeBabyId;
   const tt=timersFor(babyId); const t=tt.sleep; if(!t)return;
@@ -1653,29 +1669,14 @@ function stopSleep(babyId){
 }
 function openPastSleep(fresh){
   if(fresh){ logTimes={ when: now()-3600000, end: now() }; }
-  openSheet(`<h2>Past nap</h2><div class="sub">When did they fall asleep and wake?</div>
+  openSheet(`<h2>Finished nap</h2><div class="sub">When did they fall asleep and wake up?</div>
     ${targetChips('openPastSleep')}
-    <label class="nap-toggle"><span>Still sleeping (ongoing)</span><input type="checkbox" id="sOngoing" onchange="toggleNapOngoing()"><span class="nap-switch"></span></label>
-    ${timeStrip('when','Asleep')}
-    <div id="sEndField">${timeStrip('end','Awake')}</div>
-    <button class="btn-primary" style="background:var(--sleep)" id="sSaveBtn" onclick="savePastSleep()">Log nap</button>`,'sleep');
-}
-function toggleNapOngoing(){
-  const on = $('#sOngoing') && $('#sOngoing').checked;
-  const f = $('#sEndField'); if(f) f.style.display = on ? 'none' : '';
-  const b = $('#sSaveBtn'); if(b) b.textContent = on ? 'Start ongoing nap' : 'Log nap';
+    ${timeStrip('when','Fell asleep')}
+    ${timeStrip('end','Woke up')}
+    <button class="btn-primary" style="background:var(--sleep)" onclick="savePastSleep()">Log nap</button>`,'sleep');
 }
 function savePastSleep(){
-  const ongoing = $('#sOngoing') && $('#sOngoing').checked;
   let s = getWhen('when');
-  if(ongoing){
-    if(s>now()) s-=86400000; // start can't be in the future
-    const targets=targetsResolved();
-    targets.forEach(bid=>{ timersFor(bid).sleep={start:s}; });
-    persist(); closeSheet(); go('home'); render();
-    toast(targets.length>1?'Naps in progress · sweet dreams':'Nap in progress · asleep since '+fmtClock(s));
-    return;
-  }
   let e = getWhen('end');
   if(e<=s) e+=86400000; // awake after midnight -> next day
   commitEvent({type:'sleep',time:s,end:e});
@@ -2637,7 +2638,8 @@ function convH(v,from,to){ if(from===to)return v; return from==='cm'? v/2.54 : v
 
 let growthDraft=null;
 function openGrowth(){
-  growthDraft={weight:'',wUnit:state.settings.wUnit||'kg',height:'',hUnit:state.settings.hUnit||'cm',date:new Date().toISOString().slice(0,16)};
+  growthDraft={weight:'',wUnit:state.settings.wUnit||'kg',height:'',hUnit:state.settings.hUnit||'cm'};
+  initLogWhen();
   renderGrowthSheet();
 }
 function renderGrowthSheet(){
@@ -2661,14 +2663,14 @@ function renderGrowthSheet(){
         </div>
       </div>
     </div>
-    <div class="field"><label>When</label><input type="datetime-local" id="gDate" value="${d.date}" oninput="growthDraft.date=this.value"></div>
+    ${timeStrip('when','When')}
     <button class="btn-primary" style="background:var(--diaper)" onclick="saveGrowth()">Save measurement</button>`,'diaper');
 }
 function saveGrowth(){
   const d=growthDraft;
   const w=parseFloat(d.weight), h=parseFloat(d.height);
   if(!w && !h){ toast('Enter a weight or height'); return; }
-  const t=d.date?new Date(d.date).getTime():now();
+  const t=getWhen('when');
   const ev={type:'growth',time:t};
   if(w){ ev.weight=+w.toFixed(2); ev.wUnit=d.wUnit; state.settings.wUnit=d.wUnit; }
   if(h){ ev.height=+h.toFixed(1); ev.hUnit=d.hUnit; state.settings.hUnit=d.hUnit; }
