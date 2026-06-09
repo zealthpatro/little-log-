@@ -150,5 +150,45 @@ window.PREG = (function () {
     ]
   };
 
-  return { weeks: weeks, antenatal: antenatal, dangerSigns: dangerSigns, tri: tri };
+  // Common pregnancy conditions. Informational only; every threshold cites an official
+  // source and is shown as a "common guideline" the user confirms with their own provider.
+  var conditions = {
+    gdm: {
+      label: 'Gestational diabetes',
+      source: 'https://www.nice.org.uk/guidance/ng3',
+      sourceUS: 'https://www.acog.org/womens-health/faqs/gestational-diabetes',
+      note: 'If you test your blood glucose at home, your team will give you your own target range. These are common guideline targets, always confirm yours with your midwife or diabetes team.',
+      // capillary (finger-prick) glucose targets
+      targets: {
+        mmol: { fasting: 5.3, post1: 7.8, post2: 6.4 },  // NICE NG3 (mmol/L)
+        mgdl: { fasting: 95,  post1: 140, post2: 120 }    // ACOG (mg/dL)
+      }
+    },
+    bp: {
+      label: 'Blood pressure',
+      source: 'https://www.nice.org.uk/guidance/ng133',
+      note: 'Raised blood pressure can be a sign of pre-eclampsia. These are common thresholds, not a diagnosis. Always follow your own provider’s advice.',
+      raised: { sys: 140, dia: 90 },
+      severe: { sys: 160, dia: 110 },
+      symptoms: [
+        'A bad headache that will not go away',
+        'Vision changes: flashing lights, blurring or spots',
+        'Sudden swelling of your face, hands or feet',
+        'Pain just below your ribs',
+        'Feeling generally very unwell'
+      ]
+    },
+    supplements: {
+      source: 'https://www.nhs.uk/pregnancy/keeping-well/vitamins-supplements-and-nutrition/',
+      note: 'Common pregnancy supplements and medicines. Only take what your provider recommends for you, and follow their dose.',
+      suggestions: ['Folic acid', 'Vitamin D', 'Iron', 'Low-dose aspirin', 'Pregnancy multivitamin', 'Insulin', 'Metformin', 'Levothyroxine']
+    },
+    nausea: {
+      label: 'Nausea and vomiting',
+      source: 'https://www.nhs.uk/pregnancy/related-conditions/complications/severe-vomiting/',
+      note: 'Some nausea and vomiting is common in pregnancy. If you cannot keep food or fluids down, are losing weight, or feel very unwell, contact your midwife or doctor. Severe sickness can be treated.'
+    }
+  };
+
+  return { weeks: weeks, antenatal: antenatal, dangerSigns: dangerSigns, conditions: conditions, tri: tri };
 })();

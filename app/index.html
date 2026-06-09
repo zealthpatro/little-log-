@@ -2329,7 +2329,10 @@ function savePregnancy(){
   const appts=(((window.PREG&&PREG.antenatal[cc]&&PREG.antenatal[cc].items))||[]).map(it=>({id:uid(),week:it.week,title:it.title,note:it.note,done:false,at:null}));
   state.pregnancy={ id:uid(), dueDate, lmp, country:cc,
     careTeam:[], appts, symptoms:[], weights:[], bp:[], kicks:[], contractions:[],
-    birthPlan:'', bag:defaultBag(), bornBabyId:null, createdAt:now() };
+    birthPlan:'', bag:defaultBag(),
+    conditions:{}, glucose:[], urine:[], supplements:[], supplementLog:[], nausea:[],
+    glucoseUnit:(cc==='us'||cc==='uae')?'mgdl':'mmol',
+    bornBabyId:null, createdAt:now() };
   try{ localStorage.setItem('cubby-country', VAX_SCHEDULES[cc]?cc:detectCountry()); }catch(e){}
   pregView='week'; persist(); closeSheet(); render(); toast('Your pregnancy is set up 🤍');
 }
@@ -2337,6 +2340,7 @@ function savePregnancy(){
 /* ---- shell (topbar + nav) ---- */
 function pregGo(v){ pregView=v; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
 function renderPregShell(){
+  ensurePregFields(state.pregnancy);
   const wk=pregWeek(), tri=pregTri();
   let main='';
   if(pregView==='log') main=renderPregLog();
@@ -2386,6 +2390,7 @@ function renderPregHome(){
       <div class="pc-ico" style="background:var(--preg-soft)">📅</div>
       <div class="na-body"><div class="na-t">Next: ${escapeHtml(na.title)}</div><div class="na-s">Around week ${na.week}${na.note?' · '+escapeHtml(na.note):''}</div></div>
       <span class="chev">${I.chev}</span></div>`:''}
+    ${pregHealthQuick()}
     <div class="sec-title">This week</div>
     <div class="actions stagger">
       <button class="action" onclick="openKickCounter()"><div class="ico" style="background:var(--preg-soft);color:var(--preg)">👣</div><div class="label">Kicks</div><div class="hint">Count baby's movements</div></button>
@@ -2594,6 +2599,7 @@ function renderPregCare(){
     <div class="sec-title">Your care team</div>
     ${team||'<div class="csub">Add your midwife, doctor or clinic for quick reference.</div>'}
     <button class="btn-ghost" onclick="openAddCareTeam()">${I.plus} Add to care team</button>
+    ${pregHealthSection()}
     <div class="sec-title" style="margin-top:18px">Pregnancy</div>
     <div class="set-item" onclick="openDangerSigns()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--med-soft);color:var(--danger);font-size:18px">⚠️</div>
@@ -2682,6 +2688,192 @@ function welcomeBaby(){
   persist(); closeSheet(); render();
   toast('Welcome to the world, '+name+'! 🐻');
 }
+
+/* ============================================================
+   PREGNANCY HEALTH: opt-in condition trackers
+   (gestational diabetes, BP / pre-eclampsia, supplements, nausea)
+   Targets/thresholds trace to PREG.conditions (NICE / ACOG / NHS).
+   ============================================================ */
+const PREG_CONDS=[
+  {key:'gdm',         emoji:'🩸', label:'Gestational diabetes', short:'Glucose',     desc:'Log blood glucose and see it against your targets'},
+  {key:'bp',          emoji:'🩺', label:'Blood pressure watch', short:'BP',          desc:'Home BP and urine results with gentle flags'},
+  {key:'supplements', emoji:'💊', label:'Supplements & meds',   short:'Supplements', desc:'Daily folic acid, vitamin D, iron and more'},
+  {key:'nausea',      emoji:'🤢', label:'Nausea & hydration',   short:'Nausea',      desc:'Sickness, keeping fluids down and water'}
+];
+function ensurePregFields(p){
+  if(!p) return;
+  if(!p.conditions) p.conditions={};
+  if(!p.glucose) p.glucose=[];
+  if(!p.urine) p.urine=[];
+  if(!p.supplements) p.supplements=[];
+  if(!p.supplementLog) p.supplementLog=[];
+  if(!p.nausea) p.nausea=[];
+  if(!p.glucoseUnit) p.glucoseUnit=(p.country==='us'||p.country==='uae')?'mgdl':'mmol';
+}
+function condCfg(key){ return (window.PREG&&PREG.conditions&&PREG.conditions[key])||null; }
+function condOn(key){ const p=state.pregnancy; return !!(p&&p.conditions&&p.conditions[key]); }
+function anyCondOn(){ return PREG_CONDS.some(c=>condOn(c.key)); }
+function setCondition(key,on){ const p=state.pregnancy; ensurePregFields(p); p.conditions[key]=on; persist(); openManageConditions(); render(); }
+function openManageConditions(){
+  const rows=PREG_CONDS.map(c=>{ const on=condOn(c.key);
+    return `<div class="set-item">
+      <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">${c.emoji}</div>
+      <div class="si-body"><div class="a">${c.label}</div><div class="b">${c.desc}</div></div>
+      <div class="seg"><button class="${!on?'on':''}" onclick="setCondition('${c.key}',false)">Off</button><button class="${on?'on':''}" onclick="setCondition('${c.key}',true)">On</button></div>
+    </div>`; }).join('');
+  openSheet(`<h2>Health trackers</h2><div class="sub">Turn on only what's relevant to you, we'll keep the rest tucked away. You can change these anytime.</div>
+    ${rows}
+    <div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
+}
+function openCondition(key){ if(key==='gdm')openGlucoseTracker(); else if(key==='bp')openBPWatch(); else if(key==='supplements')openSupplements(); else if(key==='nausea')openNausea(); }
+function condSummary(key){
+  const p=state.pregnancy;
+  if(key==='gdm'){ const n=(p.glucose||[]).length; return n?`${n} reading${n===1?'':'s'} logged`:'Tap to log your first reading'; }
+  if(key==='bp'){ const n=(p.bp||[]).length; return n?`${n} BP reading${n===1?'':'s'} logged`:'Tap to log a reading'; }
+  if(key==='supplements'){ const n=(p.supplements||[]).length; return n?`${supplementsTakenToday().length}/${n} taken today`:'Add your supplements'; }
+  if(key==='nausea'){ const n=(p.nausea||[]).length; return n?`${n} check-in${n===1?'':'s'}`:'Tap for a quick check-in'; }
+  return '';
+}
+/* Care-tab section + Week-home quick actions */
+function pregHealthSection(){
+  const on=PREG_CONDS.filter(c=>condOn(c.key));
+  const rows=on.map(c=>`<div class="set-item" onclick="openCondition('${c.key}')" style="cursor:pointer">
+    <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">${c.emoji}</div>
+    <div class="si-body"><div class="a">${c.label}</div><div class="b">${condSummary(c.key)}</div></div><span class="chev">${I.chev}</span></div>`).join('');
+  return `<div class="sec-title" style="margin-top:18px">Your pregnancy health</div>
+    ${rows||'<div class="csub">Add trackers for things like gestational diabetes or blood pressure, only if they apply to you.</div>'}
+    <div class="set-item" onclick="openManageConditions()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--note-soft);color:var(--note);font-size:18px">⚙️</div>
+      <div class="si-body"><div class="a">Manage health trackers</div><div class="b">Turn trackers on or off</div></div><span class="chev">${I.chev}</span></div>`;
+}
+function pregHealthQuick(){
+  const on=PREG_CONDS.filter(c=>condOn(c.key));
+  if(!on.length) return '';
+  const btns=on.map(c=>`<button class="action" onclick="openCondition('${c.key}')"><div class="ico" style="background:var(--preg-soft);color:var(--preg)">${c.emoji}</div><div class="label">${c.short}</div><div class="hint">${condSummary(c.key)}</div></button>`).join('');
+  return `<div class="sec-title">Today's health</div><div class="actions stagger">${btns}</div>`;
+}
+
+/* ---- Gestational diabetes: glucose ---- */
+let glucoseDraft={context:'fasting'};
+function setGlucoseCtx(c){ glucoseDraft.context=c; renderGlucoseLog(); }
+function glucoseUnitLabel(u){ return u==='mmol'?'mmol/L':'mg/dL'; }
+function glucoseCtxLabel(c){ return c==='fasting'?'Fasting':(c==='other'?'Other':({'post1-breakfast':'After breakfast','post1-lunch':'After lunch','post1-dinner':'After dinner'}[c]||'After a meal')); }
+function glucoseTarget(context,unit){ const cfg=condCfg('gdm'); const t=cfg&&cfg.targets[unit]; if(!t)return null;
+  if(context==='fasting') return {label:'fasting',max:t.fasting};
+  if((''+context).indexOf('post1')===0) return {label:'1 hour after a meal',max:t.post1};
+  return null; }
+function glucoseOver(val,context,unit){ const t=glucoseTarget(context,unit); return t?(val>t.max):false; }
+function openGlucoseLog(){ ensurePregFields(state.pregnancy); glucoseDraft={context:'fasting'}; initLogWhen(); renderGlucoseLog(); }
+function renderGlucoseLog(){
+  const p=state.pregnancy; const unit=p.glucoseUnit, ul=glucoseUnitLabel(unit);
+  const ctxs=[['fasting','Fasting'],['post1-breakfast','After breakfast'],['post1-lunch','After lunch'],['post1-dinner','After dinner'],['other','Other']];
+  const chips=ctxs.map(([k,l])=>`<button class="tgt ${glucoseDraft.context===k?'on':''}" onclick="setGlucoseCtx('${k}')">${l}</button>`).join('');
+  openSheet(`<h2>Blood glucose</h2><div class="sub">Log a finger-prick reading. Tag when you took it so it lines up with your targets.</div>
+    <div class="field"><label>When in the day</label><div class="tgt-row">${chips}</div></div>
+    <div class="field"><label>Reading (${ul})</label><input type="number" inputmode="decimal" id="glVal" placeholder="${unit==='mmol'?'e.g. 5.1':'e.g. 92'}" autofocus></div>
+    ${timeStrip('when','When')}
+    <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="saveGlucose()">Save reading</button>
+    <button class="btn-ghost" onclick="toggleGlucoseUnit()">Using ${ul}, switch to ${glucoseUnitLabel(unit==='mmol'?'mgdl':'mmol')}</button>
+    <div class="preg-disclaim">${escapeHtml((condCfg('gdm')||{}).note||PREG_DISCLAIM)}</div>`,'preg');
+}
+function toggleGlucoseUnit(){ const p=state.pregnancy; p.glucoseUnit=(p.glucoseUnit==='mmol')?'mgdl':'mmol'; persist(); renderGlucoseLog(); }
+function saveGlucose(){ const p=state.pregnancy; const v=parseFloat($('#glVal').value); if(!v){toast('Enter a number');return;}
+  p.glucose.push({id:uid(),at:getWhen('when'),val:v,unit:p.glucoseUnit,context:glucoseDraft.context}); persist(); closeSheet(); render();
+  toast(glucoseOver(v,glucoseDraft.context,p.glucoseUnit)?'Saved. This looks above the common target, worth noting for your team.':'Saved'); }
+function deleteGlucose(id){ state.pregnancy.glucose=(state.pregnancy.glucose||[]).filter(g=>g.id!==id); persist(); openGlucoseTracker(); }
+function openGlucoseTracker(){
+  ensurePregFields(state.pregnancy);
+  const p=state.pregnancy; const unit=p.glucoseUnit, ul=glucoseUnitLabel(unit);
+  const all=(p.glucose||[]);
+  const list=all.slice().sort((a,b)=>b.at-a.at).slice(0,20);
+  const rated=all.filter(g=>glucoseTarget(g.context,g.unit));
+  const inRange=rated.filter(g=>!glucoseOver(g.val,g.context,g.unit)).length;
+  const pctIn=rated.length?Math.round(inRange/rated.length*100):null;
+  const rows=list.length?list.map(g=>{ const over=glucoseOver(g.val,g.context,g.unit);
+    return `<div class="log-list-item"><div class="lli-ico" style="${over?'background:var(--med-soft)':''}">🩸</div><div class="lli-body"><div class="lli-t">${g.val} ${glucoseUnitLabel(g.unit)}${over?' · above target':''}</div><div class="lli-s">${glucoseCtxLabel(g.context)} · ${dayLabel(g.at)} ${fmtClock(g.at)}</div></div><button class="lli-x" onclick="deleteGlucose('${g.id}')">${I.trash}</button></div>`; }).join(''):'<div class="csub">No readings yet.</div>';
+  const t=(condCfg('gdm')||{}).targets&&condCfg('gdm').targets[unit];
+  openSheet(`<h2>Gestational diabetes</h2><div class="sub">Your blood glucose readings, in ${ul}.</div>
+    ${pctIn!=null?`<div class="tool-stat"><div class="ts-cell"><div class="ts-big">${pctIn}%</div><div class="ts-cap">In target</div></div><div class="ts-cell"><div class="ts-big">${rated.length}</div><div class="ts-cap">Readings</div></div></div>`:''}
+    ${t?`<div class="preg-card"><div class="pc-ico">🎯</div><div><div class="pc-t">Common targets (${ul})</div><div class="pc-b">Fasting under ${t.fasting}, one hour after meals under ${t.post1}. Your own targets may differ, confirm with your team.</div></div></div>`:''}
+    <button class="btn-primary" style="background:var(--preg);margin-top:6px" onclick="openGlucoseLog()">🩸 Log a reading</button>
+    <div class="sec-title" style="margin-top:14px">Recent</div>${rows}
+    <div class="preg-disclaim">${escapeHtml((condCfg('gdm')||{}).note||PREG_DISCLAIM)}</div>`,'preg');
+}
+
+/* ---- Blood pressure / pre-eclampsia watch ---- */
+function bpFlag(b){ const cfg=condCfg('bp'); if(!cfg)return null; if(b.sys>=cfg.severe.sys||b.dia>=cfg.severe.dia) return {t:'very high',sev:true}; if(b.sys>=cfg.raised.sys||b.dia>=cfg.raised.dia) return {t:'raised',sev:false}; return null; }
+function openBPWatch(){
+  ensurePregFields(state.pregnancy);
+  const p=state.pregnancy; const cfg=condCfg('bp');
+  const bps=(p.bp||[]).slice().sort((a,b)=>b.at-a.at).slice(0,12);
+  const rows=bps.length?bps.map(b=>{ const f=bpFlag(b);
+    return `<div class="log-list-item"><div class="lli-ico" style="${f?'background:var(--med-soft)':''}">🩺</div><div class="lli-body"><div class="lli-t">${b.sys}/${b.dia} mmHg${f?' · '+f.t:''}</div><div class="lli-s">${dayLabel(b.at)} ${fmtClock(b.at)}</div></div><button class="lli-x" onclick="deletePregLog('bp','${b.id}')">${I.trash}</button></div>`; }).join(''):'<div class="csub">No BP readings yet.</div>';
+  const urines=(p.urine||[]).slice().sort((a,b)=>b.at-a.at).slice(0,5);
+  const urows=urines.map(u=>`<div class="log-list-item"><div class="lli-ico">🧪</div><div class="lli-body"><div class="lli-t">Urine protein: ${escapeHtml(u.result)}</div><div class="lli-s">${dayLabel(u.at)} ${fmtClock(u.at)}</div></div><button class="lli-x" onclick="deleteUrine('${u.id}')">${I.trash}</button></div>`).join('');
+  const sym=cfg?cfg.symptoms.map(s=>`<div class="danger-row"><span class="dr-dot">●</span><div class="dr-t">${escapeHtml(s)}</div></div>`).join(''):'';
+  openSheet(`<h2>Blood pressure watch</h2><div class="sub">Keep an eye on your blood pressure and any pre-eclampsia signs. This never replaces your provider's checks.</div>
+    <div style="display:flex;gap:8px"><button class="btn-primary" style="background:var(--preg);flex:1" onclick="openLogBP()">🩺 Log BP</button><button class="btn-primary" style="background:var(--note);flex:1" onclick="openUrineLog()">🧪 Urine result</button></div>
+    <div class="sec-title" style="margin-top:14px">Recent blood pressure</div>${rows}
+    ${urows?`<div class="sec-title" style="margin-top:12px">Urine protein</div>${urows}`:''}
+    <div class="sec-title" style="margin-top:14px">Tell your team straight away if you notice</div>${sym}
+    <div class="preg-disclaim">${escapeHtml((cfg||{}).note||'')} About ${(cfg||{}).raised?cfg.raised.sys:140}/${(cfg||{}).raised?cfg.raised.dia:90} or higher, or any sign above, means contact your midwife or doctor. ${(cfg||{}).severe?cfg.severe.sys:160}/${(cfg||{}).severe?cfg.severe.dia:110} or above, or feeling very unwell, seek urgent care.</div>`,'preg');
+}
+function openUrineLog(){
+  initLogWhen();
+  const opts=['Negative','Trace','+1','+2','+3'];
+  openSheet(`<h2>Urine protein</h2><div class="sub">From a home or clinic dip test, if you do them.</div>
+    <div class="field"><label>Result</label><div class="tgt-row" id="urChips">${opts.map(o=>`<button class="tgt" onclick="pickUrine(this,'${o}')">${o}</button>`).join('')}</div></div>
+    <input type="hidden" id="urResult" value="">
+    ${timeStrip('when','When')}
+    <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="saveUrine()">Save</button>`,'preg');
+}
+function pickUrine(el,v){ $('#urResult').value=v; document.querySelectorAll('#urChips .tgt').forEach(b=>b.classList.remove('on')); el.classList.add('on'); }
+function saveUrine(){ const v=$('#urResult').value; if(!v){toast('Pick a result');return;} ensurePregFields(state.pregnancy); state.pregnancy.urine.push({id:uid(),at:getWhen('when'),result:v}); persist(); closeSheet(); openBPWatch(); toast('Saved'); }
+function deleteUrine(id){ state.pregnancy.urine=(state.pregnancy.urine||[]).filter(u=>u.id!==id); persist(); openBPWatch(); }
+
+/* ---- Supplements & meds (daily adherence) ---- */
+function supplementsTakenToday(){ const p=state.pregnancy; const dk=dayKey(now()); return (p.supplementLog||[]).filter(l=>dayKey(l.at)===dk).map(l=>l.supplementId); }
+function isSupplementTakenToday(id){ return supplementsTakenToday().indexOf(id)>=0; }
+function openSupplements(){
+  ensurePregFields(state.pregnancy);
+  const p=state.pregnancy;
+  const rows=(p.supplements||[]).map(s=>{ const on=isSupplementTakenToday(s.id);
+    return `<div class="bag-row ${on?'done':''}"><div class="bg-tick" onclick="toggleSupplementToday('${s.id}')">${on?I.check:''}</div><div class="bg-t" onclick="toggleSupplementToday('${s.id}')">${escapeHtml(s.name)}</div><button class="bg-x" onclick="removeSupplement('${s.id}')">${I.trash}</button></div>`; }).join('');
+  const sugg=((condCfg('supplements')||{}).suggestions)||[];
+  const existing=(p.supplements||[]).map(s=>s.name.toLowerCase());
+  const chips=sugg.filter(s=>existing.indexOf(s.toLowerCase())<0).map(s=>`<button class="tgt" onclick="addSupplement('${s.replace(/'/g,"\\'")}')">+ ${s}</button>`).join('');
+  openSheet(`<h2>Supplements & meds</h2><div class="sub">Tick what you've taken today. Only take what your provider recommends for you.</div>
+    ${rows||'<div class="csub">Add your supplements below.</div>'}
+    ${chips?`<div class="field" style="margin-top:12px"><label>Add common ones</label><div class="tgt-row">${chips}</div></div>`:''}
+    <div class="field"><label>Add your own</label><input id="supNew" placeholder="e.g. Pregnacare" onkeydown="if(event.key==='Enter')addSupplementInput()"></div>
+    <button class="btn-primary" style="background:var(--preg)" onclick="addSupplementInput()">Add</button>
+    <div class="preg-disclaim">${escapeHtml((condCfg('supplements')||{}).note||PREG_DISCLAIM)}</div>`,'preg');
+}
+function addSupplement(name){ ensurePregFields(state.pregnancy); state.pregnancy.supplements.push({id:uid(),name:name}); persist(); openSupplements(); }
+function addSupplementInput(){ const el=$('#supNew'); const v=(el&&el.value.trim())||''; if(!v)return; addSupplement(v); }
+function removeSupplement(id){ const p=state.pregnancy; p.supplements=(p.supplements||[]).filter(s=>s.id!==id); p.supplementLog=(p.supplementLog||[]).filter(l=>l.supplementId!==id); persist(); openSupplements(); }
+function toggleSupplementToday(id){ const p=state.pregnancy; const dk=dayKey(now()); const idx=(p.supplementLog||[]).findIndex(l=>l.supplementId===id&&dayKey(l.at)===dk); if(idx>=0) p.supplementLog.splice(idx,1); else p.supplementLog.push({id:uid(),at:now(),supplementId:id}); persist(); openSupplements(); }
+
+/* ---- Nausea & hydration ---- */
+let nzFluids=true;
+function setNzFluids(v){ nzFluids=v; const y=$('#nzFy'),n=$('#nzFn'); if(y)y.classList.toggle('on',v); if(n)n.classList.toggle('on',!v); }
+function openNausea(){
+  ensurePregFields(state.pregnancy); nzFluids=true;
+  const p=state.pregnancy;
+  const list=(p.nausea||[]).slice().sort((a,b)=>b.at-a.at).slice(0,10);
+  const rows=list.map(n=>`<div class="log-list-item"><div class="lli-ico">🤢</div><div class="lli-body"><div class="lli-t">Sick ${n.vomits}×${n.keptFluids?', kept fluids down':', could not keep fluids down'}</div><div class="lli-s">${n.water?n.water+' glasses · ':''}${dayLabel(n.at)} ${fmtClock(n.at)}</div></div><button class="lli-x" onclick="deleteNausea('${n.id}')">${I.trash}</button></div>`).join('');
+  openSheet(`<h2>Nausea & hydration</h2><div class="sub">A quick check-in. Handy for spotting if things are getting worse.</div>
+    <div class="field"><label>Times you were sick today</label><input type="number" inputmode="numeric" id="nzV" placeholder="0" value="0"></div>
+    <div class="field"><label>Could you keep fluids down?</label><div class="seg"><button id="nzFy" class="on" onclick="setNzFluids(true)">Yes</button><button id="nzFn" onclick="setNzFluids(false)">No</button></div></div>
+    <div class="field"><label>Glasses of water (roughly)</label><input type="number" inputmode="numeric" id="nzW" placeholder="e.g. 6"></div>
+    <button class="btn-primary" style="background:var(--preg)" onclick="saveNausea()">Save check-in</button>
+    ${rows?`<div class="sec-title" style="margin-top:14px">Recent</div>${rows}`:''}
+    <div class="preg-disclaim">${escapeHtml((condCfg('nausea')||{}).note||PREG_DISCLAIM)}</div>`,'preg');
+}
+function saveNausea(){ ensurePregFields(state.pregnancy); const v=parseInt($('#nzV').value)||0, w=parseInt($('#nzW').value)||0;
+  state.pregnancy.nausea.push({id:uid(),at:now(),vomits:v,keptFluids:nzFluids,water:w}); persist(); closeSheet(); render();
+  toast(!nzFluids?'Saved. If you cannot keep fluids down, contact your midwife or doctor.':'Saved'); }
+function deleteNausea(id){ state.pregnancy.nausea=(state.pregnancy.nausea||[]).filter(n=>n.id!==id); persist(); openNausea(); }
 
 /* ============================================================
    MEDICINE
