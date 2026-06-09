@@ -55,9 +55,70 @@
       <li>Sleep &amp; feed insights and trends</li>
     </ul></div>
   </div>
-  <p class="lead2" style="margin-top:24px">Cubby Pro isn't on sale yet. Open the app and choose <strong>Settings → Cubby Pro</strong> to join the waitlist, and we'll let you know before anything launches. We'll never paywall logging or caregiver sharing.</p>
-  <div style="text-align:center;margin-top:18px"><a class="hero-cta" href="/app/">Open Cubby &amp; join the waitlist</a></div>
+  <p class="lead2" style="margin-top:24px">We'll never paywall logging or caregiver sharing. Pro is for the extras.</p>
 </section>
+
+<section class="section alt">
+  <h2>Cubby Pro pricing</h2>
+  <p class="lead2">Planned launch pricing. Pro isn't on sale yet, join the waitlist for early-bird access.</p>
+  <div class="pricebox">
+    <div class="pb-controls">
+      <div class="bseg" id="bseg">
+        <button data-bill="monthly" class="on" onclick="setBill('monthly')">Monthly</button>
+        <button data-bill="annual" onclick="setBill('annual')">Annual <span class="save" id="saveBadge">save 21%</span></button>
+      </div>
+      <select id="curSel" onchange="setCur(this.value)" aria-label="Currency">
+        <option value="USD">$ USD</option>
+        <option value="GBP">£ GBP</option>
+        <option value="EUR">€ EUR</option>
+        <option value="AED">AED</option>
+        <option value="INR">₹ INR</option>
+      </select>
+    </div>
+    <div class="pb-price"><span id="pbAmt">$19</span><span class="per" id="pbPer">/month</span></div>
+    <div class="pb-sub" id="pbSub">Billed monthly</div>
+    <a class="hero-cta" href="/app/">Join the waitlist</a>
+    <div class="pb-note">Approximate local pricing, finalised at launch. Free plan stays free forever.</div>
+  </div>
+</section>
+
+<script>
+/* Planned Cubby Pro pricing. Friendly local price points (not live FX), finalised at launch. */
+var CUR = {
+  USD: { sym: '$',    pre: true,  mo: 19,   yr: 179   },
+  GBP: { sym: '£',    pre: true,  mo: 15,   yr: 142   },
+  EUR: { sym: '€',    pre: true,  mo: 18,   yr: 169   },
+  AED: { sym: 'AED ', pre: true,  mo: 69,   yr: 649   },
+  INR: { sym: '₹',    pre: true,  mo: 1499, yr: 13999 }
+};
+var bill = 'monthly', cur = 'USD';
+function fmt(c, n) { return c.sym + n.toLocaleString('en-US'); }
+function guessCur() {
+  var l = (navigator.language || '').toLowerCase();
+  if (l.indexOf('en-gb') === 0) return 'GBP';
+  if (l.indexOf('en-ae') === 0 || l.indexOf('ar') === 0) return 'AED';
+  if (l.indexOf('en-in') === 0 || l.indexOf('hi') === 0) return 'INR';
+  if (l.indexOf('de') === 0 || l.indexOf('fr') === 0 || l.indexOf('es') === 0 || l.indexOf('it') === 0 || l.indexOf('nl') === 0) return 'EUR';
+  return 'USD';
+}
+function renderPrice() {
+  var c = CUR[cur];
+  var amt = bill === 'annual' ? c.yr : c.mo;
+  document.getElementById('pbAmt').textContent = fmt(c, amt);
+  document.getElementById('pbPer').textContent = bill === 'annual' ? '/year' : '/month';
+  if (bill === 'annual') {
+    var perMo = Math.round(c.yr / 12);
+    var save = Math.round((1 - c.yr / (c.mo * 12)) * 100);
+    document.getElementById('pbSub').textContent = 'Billed annually · about ' + fmt(c, perMo) + '/mo · save ' + save + '%';
+    document.getElementById('saveBadge').textContent = 'save ' + save + '%';
+  } else {
+    document.getElementById('pbSub').textContent = 'Billed monthly';
+  }
+}
+function setBill(b) { bill = b; document.querySelectorAll('#bseg button').forEach(function (x) { x.classList.toggle('on', x.dataset.bill === b); }); renderPrice(); }
+function setCur(v) { cur = v; var s = document.getElementById('curSel'); if (s) s.value = v; renderPrice(); }
+(function () { cur = guessCur(); document.getElementById('curSel').value = cur; renderPrice(); })();
+</script>
 
 <footer class="foot">
   <div class="fl"><a href="/">Home</a><a href="/features/">Features</a><a href="/articles/">Articles</a><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a><a href="/app/">Open app</a></div>
