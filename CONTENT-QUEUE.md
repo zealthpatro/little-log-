@@ -7,8 +7,8 @@ The agent takes the first `[ ]` item (top = highest priority), publishes it per 
 - [x] **Teething and first teeth** — slug: `baby-teething-and-tooth-care` — Newborn / 3-6 months — Care & dental
   Sources: NHS teething (https://www.nhs.uk/conditions/baby/teething/ or find current under https://www.nhs.uk/baby/babys-development/), NHS children's teeth (https://www.nhs.uk/conditions/baby/looking-after-your-babys-teeth/) (published 9 June 2026)
 
-- [ ] **Baby sleep by age and wakeful phases** — slug: `baby-sleep-by-age` — 0-3 / 3-6 / 6-12 months — Sleep
-  Sources: https://www.nhs.uk/baby/caring-for-a-newborn/helping-your-baby-to-sleep/ , NHS baby sleep hub
+- [x] **Baby sleep by age and wakeful phases** — slug: `baby-sleep-by-age` — 0-3 / 3-6 / 6-12 months — Sleep
+  Sources: https://www.nhs.uk/baby/caring-for-a-newborn/helping-your-baby-to-sleep/ , NHS baby sleep hub (published 9 June 2026)
 
 - [ ] **Fever and high temperature in babies: when to worry** — slug: `fever-in-babies-when-to-worry` — all — Health
   Sources: NHS high temperature in children (https://www.nhs.uk/conditions/fever-in-children/), NHS baby health (https://www.nhs.uk/baby/health/). Emphasise "seek help / call 111 or emergency" thresholds.
