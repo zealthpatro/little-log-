@@ -100,7 +100,12 @@
       "Bash(git checkout *)",
       "Bash(git merge *)",
       "Bash(node --check app/pregnancy-data.js)",
-      "Bash(node -e \"global.window={};require\\('./app/pregnancy-data.js'\\);const P=window.PREG;console.log\\('weeks:',Object.keys\\(P.weeks\\).length,'| schedules:',Object.keys\\(P.antenatal\\).join\\(','\\),'| danger signs:',P.dangerSigns.items.length,'| wk20:',P.weeks[20].size,'-',P.weeks[20].trimester\\);\")"
+      "Bash(node -e \"global.window={};require\\('./app/pregnancy-data.js'\\);const P=window.PREG;console.log\\('weeks:',Object.keys\\(P.weeks\\).length,'| schedules:',Object.keys\\(P.antenatal\\).join\\(','\\),'| danger signs:',P.dangerSigns.items.length,'| wk20:',P.weeks[20].size,'-',P.weeks[20].trimester\\);\")",
+      "Bash(curl -sS -m 20 -o /dev/null -w \"HTTP %{http_code} | final: %{url_effective} | server: \" -L \"https://little-cubby.com/\")",
+      "Bash(curl -sS -m 20 -I -L \"https://little-cubby.com/\")",
+      "Bash(curl -sS -m 20 -L \"https://little-cubby.com/\")",
+      "Bash(curl -sS -m 20 -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"https://cubby.saurav-918.workers.dev/\")",
+      "Bash(curl -s -m 20 https://little-cubby.com/)"
     ]
   }
 }
