@@ -98,7 +98,9 @@
       "Bash(node --check tools/analytics.js)",
       "Bash(perl -i -pe 's{\\([\"\\\\x27]\\)icons/}{$1/icons/}g' app/index.html app/landing.js app/store-firebase.js app/cubby-extras.js)",
       "Bash(git checkout *)",
-      "Bash(git merge *)"
+      "Bash(git merge *)",
+      "Bash(node --check app/pregnancy-data.js)",
+      "Bash(node -e \"global.window={};require\\('./app/pregnancy-data.js'\\);const P=window.PREG;console.log\\('weeks:',Object.keys\\(P.weeks\\).length,'| schedules:',Object.keys\\(P.antenatal\\).join\\(','\\),'| danger signs:',P.dangerSigns.items.length,'| wk20:',P.weeks[20].size,'-',P.weeks[20].trimester\\);\")"
     ]
   }
 }
