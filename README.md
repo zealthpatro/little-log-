@@ -71,7 +71,7 @@ and runs a diff-based sync engine. The app code still just mutates `state` and c
 | `app/cubby-extras.js` | `cubbyBear()` parametric SVG avatars; per-member/per-baby variants + picker; the custom warm **time picker** and unified **"When?" (date+time)** picker. |
 | `app/landing.js` | Signed-out in-app landing screen + Pro/paywall copy (incl. Nutrition tracker). |
 | `app/growth-data.js` | `window.GROWTH_REF` = `{who,cdc}.{weight,height}.{M,F}` arrays of `[month,p5,p25,p50,p75,p95]`. Generated from official CDC/WHO data files (see §7). |
-| `app/pregnancy-data.js` | `window.PREG` week-by-week (weeks 4-41) + antenatal schedules (UK/US/DE/UAE/generic) + danger signs. Data only; in-app UI is WIP (see `PREGNANCY.md`). |
+| `app/pregnancy-data.js` | `window.PREG` week-by-week (weeks 4-41) + antenatal schedules (UK/US/DE/UAE/generic) + danger signs + condition thresholds. The full pregnancy product ("Mommy To Be") is built on branch `pregnancy-tracker`, unmerged: see `PREGNANCY-HANDOFF-V2.md`. |
 | `app/sw.js` | App service worker; bump `CACHE` (`little-log-vN`, currently **v47**) on app asset change. |
 | `app/manifest.webmanifest` | PWA manifest (name "Cubby", `start_url`/`scope` = `/app/`, icons). |
 
@@ -252,8 +252,10 @@ Everything runs on **free tiers**. Nothing here requires a card on file.
 - **App-blob writes** are last-write-wins (fine for profile/settings; events are per-doc and safe).
 - Removed members keep a stale `users/{uid}.householdId` pointer until they next sign in (they
   lose data access immediately via rules; client just shows an error until re-resolved).
-- **Pregnancy module:** data exists (`app/pregnancy-data.js`); the in-app UI (mode/week view,
-  kick counter, contraction timer, birth plan, birth→baby conversion) is not built — see `PREGNANCY.md`.
+- **Pregnancy product ("Mommy To Be"):** fully built (journey, week view, health trackers, tools,
+  ultrasound Moments, birth→baby conversion, /pregnancy/ page, consent governance) on branch
+  `pregnancy-tracker`, awaiting PR review/merge. The track is owned by `PREGNANCY-HANDOFF-V2.md`;
+  keep `main` sessions for core jobs.
 - **Pro / paywall:** localized pricing is live on the marketing site; the in-app Stripe paywall is
   design-only until beta closes — see `PAYWALL.md` and `PRO.md`.
 - **On-device only** for photo AI; generative (server/VM Qwen/Seedream) is post-beta — `AI-EDITING.md`.
@@ -291,8 +293,9 @@ Everything runs on **free tiers**. Nothing here requires a card on file.
 | `SEO.md` | Marketing/SEO + CRO strategy. |
 | `CONTENT.md` / `CONTENT-RUNBOOK.md` / `CONTENT-QUEUE.md` | Article rules / publish pipeline / backlog. |
 | `PRO.md` / `PAYWALL.md` | Pro feature list and paywall design (pre-beta). |
-| `PREGNANCY.md` | Phased pregnancy-module spec. |
-| `PREGNANCY-HANDOFF.md` | Build handoff for the pregnancy → birth → baby lifecycle (integrated into this app, not a separate module). |
+| `PREGNANCY.md` | Phased pregnancy-module spec (original; sources list still canonical). |
+| `PREGNANCY-HANDOFF.md` | v1 build handoff, superseded (build is done). |
+| `PREGNANCY-HANDOFF-V2.md` | **The pregnancy track:** what's built on branch `pregnancy-tracker`, brand state (Mommy To Be / Den), rollout runbook, next-work queue. Start here for any pregnancy work. |
 | `ROUTINES.md` | Routines / activity-planning notes. |
 | `ONBOARDING.md` | First-run / onboarding notes. |
 | `EMAIL.md` | Server-sent email design + scaling plan. |

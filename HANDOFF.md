@@ -29,8 +29,9 @@ Don't break production. Make a change → verify → push (auto-deploys).
 - `app/cubby-extras.js` = bear avatars + custom time/date pickers + the unified "When" time strip.
 - `app/landing.js` = signed-out landing inside the app + Pro/paywall copy.
 - `app/growth-data.js` = WHO/CDC percentile tables.
-- `app/pregnancy-data.js` = `window.PREG` week-by-week + antenatal schedule data (Phase 1 data only;
-  in-app UI not built yet — see `PREGNANCY.md`).
+- `app/pregnancy-data.js` = `window.PREG` week-by-week + antenatal schedule data. The full
+  pregnancy product ("Mommy To Be") is BUILT on branch `pregnancy-tracker`, not merged yet:
+  see `PREGNANCY-HANDOFF-V2.md` (that doc owns the pregnancy track; this session stays core).
 - `app/sw.js` = service worker (`CACHE = little-log-vNN`, currently **v47**; bump on app asset change).
 - Data lives in `households/{hid}` (see README §3). Events are a subcollection; rest is the `app` blob.
 
@@ -82,7 +83,9 @@ Articles are produced by a **dedicated Sonnet writer agent**, not the main build
   (no copyrighted stock photos).
 
 ## Next planned (see the docs for detail)
-- **Pregnancy module UI** Phases 2-5 (data exists in `app/pregnancy-data.js`) — `PREGNANCY.md`.
+- **Pregnancy tracker (Mommy To Be)**: BUILT on branch `pregnancy-tracker`, awaiting PR review +
+  merge. All state, rollout runbook and next steps: `PREGNANCY-HANDOFF-V2.md`. Do pregnancy work
+  on that branch with that doc; keep `main` sessions for core little-cubby jobs.
 - **Pro paywall / Stripe** design — `PAYWALL.md`, `PRO.md` (design-only until beta closes).
 - **Content cadence**: run the queue 2-3×/week via the runbook agent — `CONTENT-RUNBOOK.md`.
 - **Send-email flow** for invites (server-sent) — `EMAIL.md`.
@@ -91,5 +94,6 @@ Articles are produced by a **dedicated Sonnet writer agent**, not the main build
 ## Doc index
 `README.md` (full) · `HANDOFF.md` (this) · `CHANGELOG.md` · `SEO.md` · `CONTENT.md` /
 `CONTENT-RUNBOOK.md` / `CONTENT-QUEUE.md` · `PRO.md` / `PAYWALL.md` · `PREGNANCY.md` /
-`PREGNANCY-HANDOFF.md` (build it) · `ROUTINES.md` · `ONBOARDING.md` · `EMAIL.md` ·
-`ANALYTICS.md` · `AI-EDITING.md`
+`PREGNANCY-HANDOFF.md` (v1, superseded) / **`PREGNANCY-HANDOFF-V2.md` (the pregnancy track:
+built on branch `pregnancy-tracker`, rollout + next steps)** · `ROUTINES.md` · `ONBOARDING.md` ·
+`EMAIL.md` · `ANALYTICS.md` · `AI-EDITING.md`
