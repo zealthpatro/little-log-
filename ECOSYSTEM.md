@@ -93,6 +93,28 @@ stores as Den when the shell is ready.
   Sprout, Coconut, Nest, Hatch, Willow (breast pumps), Halo (bassinets), Flutter, Luna, Lumen,
   Aura, Bloom/Blossom, Acorn, Snug (rides SNOO/Snuz), Hearth (Hearth Display family organizer).
 
+## Data governance: the household owns the story (June 2026)
+Principles, implemented in-app on branch `pregnancy-tracker`:
+- **The data belongs to the household (the baby's story), not to any one member.** Removing a
+  caregiver or partner revokes their ACCESS only; everything they ever logged stays, and a
+  `formerMemberInfo` tombstone keeps their entries attributed by name forever.
+- **Guardians** (usually mama + papa, max two): derived automatically (owner + the first member
+  whose relationship is Mother/Father/etc.), overridable in Settings -> Data -> Guardians. Only a
+  current guardian can change guardianship; the family always keeps at least one.
+- **Big, irreversible actions go through consent**: "Delete data" (granular: pick babies+logs /
+  photos / pregnancy / Our Den) and "Export data" create a consent request that EVERY guardian
+  must approve. Requests show as banners on every home surface; either guardian can decline
+  (nothing changes) and the requester is told gently. Exports unlock only on the requester's
+  device. A solo-guardian household completes immediately (with the same scope picker).
+- **Everyday corrections stay lightweight**: deleting a single mis-logged feed is not gated
+  (Firestore rules already limit caregivers to deleting only their own entries; the owner can
+  edit anyone's). The consent route covers bulk/irreversible actions.
+- **Enforcement level, honestly:** the consent route is app-level (UI) governance plus the
+  existing Firestore rules (members can't change membership, caregivers can't delete others'
+  entries, only the owner can delete the household). True server-side dual-consent on blob
+  writes would need Cloud Functions (Blaze) or a consent-doc rules design: noted as a later
+  hardening step when infra allows.
+
 ## Ground rules (ecosystem-wide, unchanged)
 - Free-tier infra only (no Blaze/Functions/Storage); one household blob syncs everything.
 - YMYL discipline on anything health: cited official sources, "seek care" never "diagnose",

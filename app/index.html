@@ -703,7 +703,7 @@ const Store = {
 };
 
 /* ---------- State ---------- */
-let state = { babies:[], activeBabyId:null, events:[], settings:{ unit:'ml', wUnit:'kg', hUnit:'cm', tempUnit:'C', theme:'light', seen:{} }, timers:{}, milestones:[], meds:[], photos:[], vaccines:{}, illnesses:[], pregnancy:null, den:null };
+let state = { babies:[], activeBabyId:null, events:[], settings:{ unit:'ml', wUnit:'kg', hUnit:'cm', tempUnit:'C', theme:'light', seen:{} }, timers:{}, milestones:[], meds:[], photos:[], vaccines:{}, illnesses:[], pregnancy:null, den:null, consents:[], guardians:null };
 let view = 'home';
 let tickInterval = null;
 const CUBBY_VERSION = '0.9.0';
@@ -995,7 +995,7 @@ function renderGetStarted(){
 }
 
 /* ---------- working-parent: while-you-were-away recap, daily recap, handoff ---------- */
-function loggerName(uid){ const info=(window.LL&&window.LL.memberInfo)||{}; const m=info[uid]; return (m&&(m.relationship||((m.name||'').split(' ')[0])))||''; }
+function loggerName(uid){ const info=(window.LL&&window.LL.memberInfo)||{}; const former=(window.LL&&window.LL.formerMemberInfo)||{}; const m=info[uid]||former[uid]; return (m&&(m.relationship||((m.name||'').split(' ')[0])))||''; }
 function awayRecap(){
   const me = window.LL && window.LL.auth && window.LL.auth.currentUser && window.LL.auth.currentUser.uid;
   const todayK = dayKey(now());
@@ -1175,6 +1175,7 @@ function renderHome(){
     ${away}
     ${(shared||(state.handoff&&state.handoff.text))?handoffCard():''}
     ${gsCard ? '' : coachMark('home','Welcome to Cubby 👋','Your hub. A photo slideshow up top, one-tap logging below. The tabs hold your Log, Album and Health.')}
+    ${consentBanners()}
     ${renderHero()}
     ${timers}
     <div class="since-row stagger">
@@ -1386,7 +1387,8 @@ function illnessIcon(name){
 function authorTag(e){
   if(!e || !e.authorId) return '';
   var info = (window.LL && window.LL.memberInfo) || {};
-  var m = info[e.authorId];
+  var former = (window.LL && window.LL.formerMemberInfo) || {};
+  var m = info[e.authorId] || former[e.authorId];
   if(!m) return '';
   var label = m.relationship || (m.name ? String(m.name).split(' ')[0] : '') || 'Someone';
   var me = window.LL && window.LL.auth && window.LL.auth.currentUser && window.LL.auth.currentUser.uid;
@@ -2225,15 +2227,26 @@ function openSettings(){
     <p style="font-size:11.5px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:14px">Cubby v${CUBBY_VERSION} · beta</p>`,'sleep');
 }
 function openDataSheet(){
-  openSheet(`<h2>Your data</h2><div class="sub">Keep a copy, or erase everything. Your logs live safely in your account either way.</div>
-    <div class="set-item" onclick="exportData()" style="cursor:pointer">
+  const recent=(state.consents||[]).slice(-3).reverse().map(c=>{
+    const badge=c.status==='pending'?'waiting':(c.status==='ready'?'ready':(c.status==='declined'?'declined':'done'));
+    return `<div class="log-list-item" onclick="openConsentReview('${c.id}')" style="cursor:pointer">
+      <div class="lli-ico" style="background:var(--note-soft)">🛡️</div>
+      <div class="lli-body"><div class="lli-t">${escapeHtml(c.label)}</div><div class="lli-s">by ${escapeHtml(c.requestedByName||'a family member')} · ${badge}</div></div></div>`;
+  }).join('');
+  openSheet(`<h2>Your data</h2><div class="sub">This is the household's shared story, so the big actions ask both guardians (usually mama and papa) to agree first.</div>
+    <div class="set-item" onclick="requestExport()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--note-soft);color:var(--note)">${I.note}</div>
-      <div class="si-body"><div class="a">Export data</div><div class="b">Download everything as a JSON file</div></div>
+      <div class="si-body"><div class="a">Export data</div><div class="b">Download everything as a JSON file, with consent</div></div>
     </div>
-    <div class="set-item" onclick="confirmReset()" style="cursor:pointer">
+    <div class="set-item" onclick="openDeleteRequest()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--danger);color:#fff">${I.trash}</div>
-      <div class="si-body"><div class="a" style="color:var(--danger)">Delete all data</div><div class="b">Erase every baby and log, can't be undone</div></div>
+      <div class="si-body"><div class="a" style="color:var(--danger)">Delete data...</div><div class="b">Choose what to erase, both guardians must agree</div></div>
     </div>
+    <div class="set-item" onclick="openGuardians()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:17px">🛡️</div>
+      <div class="si-body"><div class="a">Guardians</div><div class="b">${householdGuardians().map(u=>guardianName(u)).join(' + ')||'Who approves the big actions'}</div></div>
+    </div>
+    ${recent?`<div class="set-label">Recent decisions</div>${recent}`:''}
     <button class="btn-ghost" onclick="openSettings()">Back to settings</button>`,'sleep');
 }
 function exportData(){
@@ -2251,14 +2264,192 @@ function doLogout(){
   if(window.LL&&typeof window.LL.signOut==='function'){ window.LL.signOut(); }
   else { try{ location.reload(); }catch(e){} }
 }
-function confirmReset(){
-  openSheet(`<h2>Delete all data?</h2><div class="sub">This permanently erases every baby and log for your whole household, on every device. This can't be undone. Consider exporting first.</div>
-    <button class="btn-primary" style="background:var(--danger)" onclick="doReset()">Yes, delete everything</button>
-    <button class="btn-ghost" onclick="closeSheet()">Cancel</button>`,'feed');
+/* ============================================================
+   CONSENT: dual-guardian approval for the big, irreversible actions.
+   The data is the household's (the baby's story), not any one member's:
+   removing a member never removes what they logged, and deleting or
+   exporting the family's data needs every guardian (papa + mama) to agree.
+   Everyday single-entry corrections stay lightweight and are not gated.
+   ============================================================ */
+function myUid(){ try{ const u=window.LL&&window.LL.auth&&window.LL.auth.currentUser; return (u&&u.uid)||'local'; }catch(e){ return 'local'; } }
+function householdGuardians(){
+  const LL=window.LL;
+  if(!(LL&&LL.members&&Object.keys(LL.members).length)) return [myUid()];
+  if(state.guardians&&state.guardians.length){
+    const g=state.guardians.filter(u=>LL.members[u]);
+    if(g.length) return g;
+  }
+  const uids=Object.keys(LL.members);
+  const owner=uids.find(u=>LL.members[u]==='owner');
+  const rels=['mother','mom','mama','father','dad','papa','parent','guardian'];
+  const parents=uids.filter(u=>{ const r=(((LL.memberInfo||{})[u]||{}).relationship||'').toLowerCase(); return rels.indexOf(r)>=0; });
+  const set=[];
+  (owner?[owner]:[]).concat(parents).forEach(u=>{ if(set.indexOf(u)<0&&set.length<2) set.push(u); });
+  return set.length?set:[myUid()];
 }
-function doReset(){
-  state={babies:[],activeBabyId:null,events:[],settings:{unit:'ml',theme:state.settings.theme},timers:{},pregnancy:null,den:null};
+function isGuardian(){ return householdGuardians().indexOf(myUid())>=0; }
+function guardianName(uid){ if(uid===myUid()) return 'you'; return loggerName(uid)||'a guardian'; }
+const DEL_SCOPES=[
+  ['babies','Babies & their logs','Every baby profile, feed/sleep/nappy history, milestones, vaccines, medicines and illnesses'],
+  ['photos','Photos & keepsakes','Every saved photo and moment'],
+  ['pregnancy','Pregnancy','The pregnancy record, appointments, health trackers and tools'],
+  ['den','Our Den','Chores, shopping, meals, staff, expenses and weights']
+];
+let delDraft={};
+function openDeleteRequest(){
+  delDraft={};
+  const rows=DEL_SCOPES.map(([k,l,d])=>`
+    <div class="bag-row" id="dsc-${k}" onclick="toggleDelScope('${k}')" style="cursor:pointer">
+      <div class="bg-tick"></div>
+      <div style="flex:1"><div class="bg-t" style="text-decoration:none">${l}</div><div style="font-size:12px;color:var(--ink-soft);font-weight:600;line-height:1.4">${d}</div></div>
+    </div>`).join('');
+  const gs=householdGuardians();
+  const solo=gs.length<2;
+  openSheet(`<h2>Delete data</h2><div class="sub">Pick exactly what should go. ${solo?'You are the only guardian, so this happens straight away and can\'t be undone.':'Both guardians must agree before anything is erased. Nothing happens until then.'}</div>
+    ${rows}
+    <button class="btn-primary" style="background:var(--danger);margin-top:12px" onclick="submitDeleteRequest()">${solo?'Delete selected now':'Ask to delete selected'}</button>
+    <button class="btn-ghost" onclick="openDataSheet()">Back</button>
+    <div class="csub" style="margin-top:8px">Removing a family member never deletes what they logged: the story belongs to the household.</div>`,'feed');
+}
+function toggleDelScope(k){ delDraft[k]=!delDraft[k]; const el=$('#dsc-'+k); if(el){ el.classList.toggle('done',delDraft[k]); el.querySelector('.bg-tick').innerHTML=delDraft[k]?I.check:''; } }
+function submitDeleteRequest(){
+  const keys=DEL_SCOPES.map(s=>s[0]).filter(k=>delDraft[k]);
+  if(!keys.length){ toast('Pick what to delete first'); return; }
+  const label='Delete: '+keys.map(k=>DEL_SCOPES.find(s=>s[0]===k)[1]).join(', ');
+  requestConsent('delete', keys.reduce((o,k)=>(o[k]=true,o),{}), label);
+}
+function requestExport(){ requestConsent('export', null, 'Export the household\'s data'); }
+function requestConsent(type,scope,label){
+  if(!state.consents) state.consents=[];
+  const c={ id:uid(), type, scope:scope||null, label, requestedBy:myUid(), requestedByName:myName()||'A family member', at:now(), approvals:[myUid()], status:'pending' };
+  state.consents.push(c);
+  maybeCompleteConsent(c);
   persist(); closeSheet(); render();
+  if(c.status==='pending'){ const others=householdGuardians().filter(u=>c.approvals.indexOf(u)<0); toast('Asked '+others.map(guardianName).join(' and ')+' to agree'); }
+}
+function maybeCompleteConsent(c){
+  const gs=householdGuardians();
+  if(gs.every(g=>c.approvals.indexOf(g)>=0)){
+    if(c.type==='delete'){ executeScopedDelete(c.scope||{}); c.status='done'; c.doneAt=now(); toast('Deleted, as agreed'); }
+    else if(c.type==='export'){
+      if(c.requestedBy===myUid()){ exportData(); c.status='done'; c.doneAt=now(); }
+      else c.status='ready';
+    }
+  }
+}
+function approveConsent(id){
+  const c=(state.consents||[]).find(x=>x.id===id); if(!c||c.status!=='pending') return;
+  if(!isGuardian()){ toast('Only a guardian can agree to this'); return; }
+  if(c.approvals.indexOf(myUid())<0) c.approvals.push(myUid());
+  maybeCompleteConsent(c); persist(); closeSheet(); render();
+}
+function declineConsent(id){
+  const c=(state.consents||[]).find(x=>x.id===id); if(!c||c.status!=='pending') return;
+  if(!isGuardian()){ toast('Only a guardian can decide this'); return; }
+  c.status='declined'; c.declinedBy=myUid(); persist(); closeSheet(); render(); toast('Declined, nothing was changed');
+}
+function cancelConsent(id){
+  const c=(state.consents||[]).find(x=>x.id===id); if(!c) return;
+  if(c.status==='pending'&&c.requestedBy!==myUid()&&!isGuardian()) return;
+  state.consents=state.consents.filter(x=>x.id!==id); persist(); closeSheet(); render();
+}
+function downloadExport(id){
+  const c=(state.consents||[]).find(x=>x.id===id); if(!c||c.status!=='ready'||c.requestedBy!==myUid()) return;
+  exportData(); c.status='done'; c.doneAt=now(); persist(); render();
+}
+function executeScopedDelete(scope){
+  if(scope.babies){
+    state.babies=[]; state.activeBabyId=null; state.events=[]; state.timers={};
+    state.milestones=[]; state.vaccines={}; state.meds=[]; state.illnesses=[];
+  }
+  if(scope.photos){
+    try{ (state.photos||[]).forEach(p=>{ if(window.PhotoStore&&PhotoStore.del) PhotoStore.del(p.photoId); }); }catch(e){}
+    state.photos=[];
+    state.babies.forEach(b=>{ delete b.avatarPhotoId; });
+  }
+  if(scope.pregnancy) state.pregnancy=null;
+  if(scope.den) state.den=null;
+}
+function openConsentReview(id){
+  const c=(state.consents||[]).find(x=>x.id===id); if(!c) return;
+  const gs=householdGuardians();
+  const waiting=gs.filter(u=>c.approvals.indexOf(u)<0);
+  const scopeList=c.scope?DEL_SCOPES.filter(s=>c.scope[s[0]]).map(s=>`<div class="danger-row"><span class="dr-dot">●</span><div class="dr-t">${s[1]}<div style="font-weight:600;color:var(--ink-soft);font-size:12px">${s[2]}</div></div></div>`).join(''):'';
+  const mine=c.requestedBy===myUid();
+  const canDecide=c.status==='pending'&&isGuardian()&&c.approvals.indexOf(myUid())<0;
+  const statusLine=c.status==='pending'?(waiting.length?('Waiting for '+waiting.map(guardianName).join(' and ')):'Waiting'):(c.status==='ready'?'Agreed, ready to download':(c.status==='declined'?'Declined, nothing was changed':'Completed'));
+  openSheet(`<h2>${escapeHtml(c.label)}</h2><div class="sub">Asked by ${escapeHtml(mine?'you':(c.requestedByName||'a family member'))} · ${dayLabel(c.at)} · ${escapeHtml(statusLine)}</div>
+    ${scopeList}
+    ${c.type==='delete'&&c.status==='pending'?`<div class="preg-disclaim">If both guardians agree, this is erased for the whole family on every device and cannot be undone.</div>`:''}
+    ${canDecide?`<button class="btn-primary" style="background:${c.type==='delete'?'var(--danger)':'var(--diaper)'}" onclick="approveConsent('${c.id}')">I agree${c.type==='delete'?', delete it':''}</button>
+      <button class="btn-ghost" onclick="declineConsent('${c.id}')">Decline</button>`:''}
+    ${c.status==='ready'&&mine?`<button class="btn-primary" onclick="downloadExport('${c.id}')">Download export</button>`:''}
+    ${c.status==='pending'&&mine&&!canDecide?`<button class="btn-ghost" style="color:var(--danger)" onclick="cancelConsent('${c.id}')">Cancel my request</button>`:''}
+    ${(c.status==='declined'||c.status==='done')?`<button class="btn-ghost" onclick="cancelConsent('${c.id}')">Remove from history</button>`:''}
+    <button class="btn-ghost" onclick="closeSheet()">Close</button>`, c.type==='delete'?'feed':'sleep');
+}
+function consentBanners(){
+  const cs=state.consents||[]; if(!cs.length) return '';
+  let html='';
+  cs.forEach(c=>{
+    const mine=c.requestedBy===myUid();
+    if(c.status==='pending'&&isGuardian()&&c.approvals.indexOf(myUid())<0){
+      html+=`<div class="alert-pill" style="border-color:var(--star)">
+        <div class="ap-ico" style="background:var(--star-soft);font-size:17px">🛡️</div>
+        <div class="ap-body"><div class="ap-t">${escapeHtml(c.requestedByName||'A family member')} needs your OK</div><div class="ap-s">${escapeHtml(c.label)}</div></div>
+        <button onclick="openConsentReview('${c.id}')">Review</button></div>`;
+    } else if(c.status==='pending'&&mine){
+      const waiting=householdGuardians().filter(u=>c.approvals.indexOf(u)<0);
+      html+=`<div class="alert-pill" style="border-color:var(--note)">
+        <div class="ap-ico" style="background:var(--note-soft);font-size:17px">🛡️</div>
+        <div class="ap-body"><div class="ap-t">Waiting for ${escapeHtml(waiting.map(guardianName).join(' and ')||'agreement')}</div><div class="ap-s">${escapeHtml(c.label)}</div></div>
+        <button onclick="openConsentReview('${c.id}')">View</button></div>`;
+    } else if(c.status==='ready'&&mine){
+      html+=`<div class="alert-pill" style="border-color:var(--diaper)">
+        <div class="ap-ico" style="background:var(--diaper-soft);font-size:17px">🛡️</div>
+        <div class="ap-body"><div class="ap-t">Export agreed</div><div class="ap-s">Your download is ready</div></div>
+        <button onclick="downloadExport('${c.id}')">Download</button></div>`;
+    } else if(c.status==='declined'&&mine&&!c.seenDecline){
+      html+=`<div class="alert-pill" style="border-color:var(--danger)">
+        <div class="ap-ico" style="background:var(--med-soft);font-size:17px">🛡️</div>
+        <div class="ap-body"><div class="ap-t">Not this time</div><div class="ap-s">${escapeHtml(c.label)} was declined, nothing changed</div></div>
+        <button onclick="ackDecline('${c.id}')">OK</button></div>`;
+    }
+  });
+  return html;
+}
+function ackDecline(id){ const c=(state.consents||[]).find(x=>x.id===id); if(c) c.seenDecline=true; persist(); render(); }
+function openGuardians(){
+  const LL=window.LL;
+  const gs=householdGuardians();
+  if(!(LL&&LL.members&&Object.keys(LL.members).length>1)){
+    openSheet(`<h2>Guardians 🛡️</h2><div class="sub">Guardians are the people (usually mama and papa) who must both agree before the family's data is deleted or exported.</div>
+      <div class="csub">Right now it's just you. Invite your partner in Family &amp; sharing, then come back to make them a guardian.</div>
+      <button class="btn-primary" onclick="window.openFamily&&window.openFamily()">Open Family &amp; sharing</button>
+      <button class="btn-ghost" onclick="openDataSheet()">Back</button>`,'star');
+    return;
+  }
+  const canEdit=isGuardian();
+  const rows=Object.keys(LL.members).map(u=>{
+    const on=gs.indexOf(u)>=0;
+    const nm=loggerName(u)||'Family member';
+    return `<div class="set-item">
+      <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:16px">${on?'🛡️':'👤'}</div>
+      <div class="si-body"><div class="a">${escapeHtml(nm)}${u===myUid()?' (you)':''}</div><div class="b">${LL.members[u]==='owner'?'Owner':'Caregiver'}</div></div>
+      ${canEdit?`<div class="seg"><button class="${!on?'on':''}" onclick="setGuardian('${u}',false)">Off</button><button class="${on?'on':''}" onclick="setGuardian('${u}',true)">On</button></div>`:(on?'<div style="color:var(--star);font-weight:800;font-size:13px">Guardian</div>':'')}
+    </div>`;
+  }).join('');
+  openSheet(`<h2>Guardians 🛡️</h2><div class="sub">Guardians (usually mama and papa, up to two) must all agree before the family's data is deleted or exported.</div>
+    ${rows}
+    ${canEdit?'':'<div class="csub">Only a current guardian can change this.</div>'}
+    <button class="btn-ghost" onclick="openDataSheet()">Back</button>`,'star');
+}
+function setGuardian(uid,on){
+  if(!isGuardian()){ toast('Only a guardian can change this'); return; }
+  let gs=householdGuardians().slice();
+  if(on){ if(gs.indexOf(uid)<0){ if(gs.length>=2){ toast('Two guardians at most'); return; } gs.push(uid); } }
+  else { gs=gs.filter(u=>u!==uid); if(!gs.length){ toast('The family needs at least one guardian'); return; } }
+  state.guardians=gs; persist(); openGuardians();
 }
 
 /* ---------- ONBOARDING ---------- */
@@ -2385,6 +2576,7 @@ function renderPregHome(){
   const na=pregNextAppt();
   return `<div class="fade-in">
     <div class="greeting">${pregGreeting()}</div>
+    ${consentBanners()}
     <div class="week-hero">
       <div class="wh-top"><div class="wh-week">Week ${wk}</div><div class="wh-tri">${triName(tri)}</div></div>
       <div class="wh-count">${escapeHtml(countdown)}</div>
@@ -2931,6 +3123,7 @@ function renderDenHub(){
   return `<div class="fade-in">
     <div class="greeting">Our Den 🏡</div>
     <div class="greeting-sub">The whole household, in one calm place. Everyone in your family sees the same Den.</div>
+    ${consentBanners()}
     <div class="today-strip" style="margin-top:14px">
       <div class="cell"><div class="big">${openChores}</div><div class="cap">Chores open</div></div>
       <div class="cell"><div class="big">${toBuy}</div><div class="cap">To buy</div></div>

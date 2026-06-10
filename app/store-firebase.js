@@ -209,6 +209,8 @@
       handoff: state.handoff || null,  // shared parent<->caregiver note
       pregnancy: state.pregnancy || null,  // one continuous lifecycle: pregnancy -> baby
       den: state.den || null,  // household hub: chores, shopping, meals, staff, expenses, weights
+      consents: state.consents || [],  // dual-guardian approvals for big actions (delete/export)
+      guardians: state.guardians || null,  // explicit guardian uids (papa + mama); derived if null
       timers: state.timers || {}   // shared so an ongoing nap/feed shows on every phone
     };
   }
@@ -226,6 +228,8 @@
     state.handoff = app.handoff || null;
     state.pregnancy = app.pregnancy || null;
     state.den = app.den || null;
+    state.consents = app.consents || [];
+    state.guardians = app.guardians || null;
     // Don't stomp a timer the local user just started but hasn't pushed yet.
     if (!pushTimer) state.timers = app.timers || {};
     normalizeLoadedState(state); // defensive legacy migrations
@@ -266,6 +270,7 @@
       window.LL.role = (d.members && d.members[user.uid]) || 'caregiver';
       window.LL.members = d.members || {};
       window.LL.memberInfo = d.memberInfo || {};
+      window.LL.formerMemberInfo = d.formerMemberInfo || {};
       window.LL.householdId = hid;
       var sig = hhSig(d.app, d.members, d.memberInfo);
       if (booted && sig === lastHhSig) return; // our own write echo / duplicate emission, already on screen
@@ -450,10 +455,13 @@
 
   async function removeMember(uid, email, name) {
     if (!hhRef) return;
-    if (!window.confirm('Remove ' + (name || 'this person') + ' from your family? They\'ll lose access to the baby\'s log.')) return;
+    if (!window.confirm('Remove ' + (name || 'this person') + ' from your family? They\'ll lose access, but everything they logged stays part of the baby\'s story.')) return;
     try {
       var del = firebase.firestore.FieldValue.delete();
       var u = {}; u['members.' + uid] = del; u['memberInfo.' + uid] = del;
+      // Keep a tombstone so their past entries stay attributed by name forever.
+      var mi = (window.LL.memberInfo || {})[uid] || {};
+      u['formerMemberInfo.' + uid] = { name: mi.name || name || '', relationship: mi.relationship || '', avatar: mi.avatar || null };
       await hhRef.update(u);
       if (email) { try { await db.collection('invites').doc(email).delete(); } catch (e) {} }
       openFamily();
