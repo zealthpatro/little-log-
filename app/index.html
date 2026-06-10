@@ -708,6 +708,9 @@ let view = 'home';
 let tickInterval = null;
 const CUBBY_VERSION = '0.9.0';
 try{ window.CUBBY_VERSION = CUBBY_VERSION; }catch(e){}
+/* Rollout flags. Modules ship dark until their release: pregnancy rolls out first,
+   Our Den (home management) is built and tested but gated until its own launch. */
+const FEATURES = { den: false };
 
 const AVATAR_COLORS = ['#E29A3B','#5E6AA8','#56A08E','#C97FA0','#D2654E','#7B9E5B'];
 
@@ -916,7 +919,7 @@ function render(){
           <span>${ageString(b.birth)}</span>
         </div>
       </div>
-      <button class="icon-btn ${view==='den'?'icon-on':''}" onclick="goDen()" aria-label="our den" style="font-size:17px">🧺</button>
+      ${FEATURES.den?`<button class="icon-btn ${view==='den'?'icon-on':''}" onclick="goDen()" aria-label="our den" style="font-size:17px">🧺</button>`:''}
       <button class="icon-btn" onclick="toggleTheme()" aria-label="theme">${state.settings.theme==='night'?I.sun:I.moon}</button>
       <button class="icon-btn" onclick="openSettings()" aria-label="settings">${I.settings}</button>
     </div>
@@ -2194,10 +2197,10 @@ function openSettings(){
         <button class="${s.theme==='night'?'on':''}" onclick="setTheme('night');openSettings()">Night</button>
       </div>
     </div>
-    <div class="set-item" onclick="closeSheet();goDen()" style="cursor:pointer">
+    ${FEATURES.den?`<div class="set-item" onclick="closeSheet();goDen()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🏡</div>
       <div class="si-body"><div class="a">Our Den</div><div class="b">Chores, shopping, meals, staff, expenses</div></div>
-    </div>
+    </div>`:''}
     <div class="set-item" onclick="openBabySheet()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--diaper-soft);color:var(--diaper)">${I.home}</div>
       <div class="si-body"><div class="a">Manage babies</div><div class="b">${state.babies.length} added</div></div>
@@ -2298,7 +2301,8 @@ const DEL_SCOPES=[
 let delDraft={};
 function openDeleteRequest(){
   delDraft={};
-  const rows=DEL_SCOPES.map(([k,l,d])=>`
+  // The Our Den scope only shows once the module is rolled out (or if it holds data).
+  const rows=DEL_SCOPES.filter(([k])=>k!=='den'||FEATURES.den||!!state.den).map(([k,l,d])=>`
     <div class="bag-row" id="dsc-${k}" onclick="toggleDelScope('${k}')" style="cursor:pointer">
       <div class="bg-tick"></div>
       <div style="flex:1"><div class="bg-t" style="text-decoration:none">${l}</div><div style="font-size:12px;color:var(--ink-soft);font-weight:600;line-height:1.4">${d}</div></div>
@@ -2552,7 +2556,7 @@ function renderPregShell(){
         <div class="pp-orb">🤰</div>
         <div><h1>Cubby Den</h1><span>Week ${wk} · ${triName(tri)}</span></div>
       </div>
-      <button class="icon-btn ${pregView==='den'?'icon-on':''}" onclick="goDen()" aria-label="our den" style="font-size:17px">🧺</button>
+      ${FEATURES.den?`<button class="icon-btn ${pregView==='den'?'icon-on':''}" onclick="goDen()" aria-label="our den" style="font-size:17px">🧺</button>`:''}
       <button class="icon-btn" onclick="toggleTheme()" aria-label="theme">${state.settings.theme==='night'?I.sun:I.moon}</button>
       <button class="icon-btn" onclick="openSettings()" aria-label="settings">${I.settings}</button>
     </div>

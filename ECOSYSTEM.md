@@ -55,6 +55,9 @@ lives in their Den, the more their story (and switching cost) grows.
    (shared shopping list), home staff (nanny/cleaner/cook contacts and notes), meal plan for the
    week, expenses with a monthly view, and adult weight tracking for mom and dad. Lives in the
    same household blob; every member sees the same Den.
+   **Rollout status: built and tested, DARK-LAUNCHED behind `FEATURES.den=false` in
+   `app/index.html`. The pregnancy tracker rolls out first; flipping that flag (plus an SW cache
+   bump) is the whole Home launch.**
 
 ### Next (rough order)
 4. **Weight & wellness, deeper** : goals and trends per adult, postpartum-aware (links from the
