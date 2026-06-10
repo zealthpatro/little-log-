@@ -1,76 +1,102 @@
-# The Cubby ecosystem (vision)
+# Den: the family ecosystem (master plan)
 
-One family account, one continuous lifecycle, sold as distinct services that hand off to each
-other. A family should never leave Cubby from the first positive test to the toddler years.
+**Den is the master brand: a warm household OS.** One family account ("the den") that runs the
+whole home: the people in it, the life events moving through it, and the day-to-day machinery
+that keeps it going. Individual experiences (pregnancy, baby, home management, weight, health)
+are **flows inside Den**, not separate apps.
 
 ```
-  CUBBY DEN              ──birth──▶   CUBBY                    ──later──▶  (future services)
-  the pregnancy service               the baby tracker                     toddler, family health,
-  week view, antenatal                feeds, sleep, vaccines,              school-age...
-  schedule, GDM/BP/health             growth, keepsakes, care
-  trackers, kick/contraction          circle
-  tools, birth plan
+                                ┌──────────────────────────────┐
+                                │            DEN               │
+                                │   one household, one account │
+                                └──────────────┬───────────────┘
+        ┌───────────────┬──────────────┬───────┴───────┬───────────────┬──────────────┐
+        ▼               ▼              ▼               ▼               ▼              ▼
+   PREGNANCY        BABY (Cubby)    HOME            WEIGHT &        MOMENTS        HEALTH
+   week view,       feeds, sleep,   chores, things  WELLNESS        photos,        family meds,
+   antenatal,       vaccines,       to buy, staff,  mom & dad       keepsakes,     records,
+   GDM/BP, birth    growth, meds    meal plan,      weight trends,  milestones     visits
+   tools            keepsakes       expenses        goals
+        └───────────────┴──────────────┴───────────────┴───────────────┴──────────────┘
+                                       later: SMART HOME (device management),
+                                       nutrition intelligence, school-age flows
 ```
 
-## The two services today
+## Brand architecture
+- **Den** = the master brand and (eventually) the app name. Short, neutral, affable; checked
+  June 2026: no family-organizer app owns "Den" (closest is "ZenDen", a different name).
+- **Cubby** = the baby flow's friendly face (the bear, the cub). The bear world survives as the
+  warmth layer: the family is the den, the baby is the cub.
+- **Cubby Den** = the current pregnancy service branding (page at /pregnancy/). As the master
+  brand rolls out, pregnancy simply becomes the "Pregnancy" flow inside Den; "the den" then means
+  the family home, which is an even better story. Transition is incremental: little-cubby.com
+  stays live; no big-bang rebrand of the shipped product until Den's shell exists.
+- Future sub-flows get plain descriptive names inside Den (Home, Weight, Meals), not new brands.
 
-### 1. Cubby Den (pregnancy)
-- **Positioning:** "The den is where the cub grows." Pregnancy tracking, week by week to birth.
-- **Status:** fully built in-app (branch `pregnancy-tracker`): pregnancy mode + week view,
-  antenatal schedules by country (NHS/ACOG/G-BA/WHO), danger signs (CDC), logging (appointments,
-  symptoms, weight, BP, care team), opt-in condition trackers (gestational diabetes glucose with
-  NICE/ACOG targets, BP/pre-eclampsia watch, supplements, nausea/hydration), tools (kick counter,
-  contraction timer with 5-1-1, birth plan, hospital bag), and the birth transition.
-- **Marketing:** public sales page at `/pregnancy/`.
-- **The hinge:** "Baby has arrived" converts the pregnancy into a baby profile (country and sex
-  carry over, pregnancy kept as history). Den graduates into Cubby; that continuity IS the moat.
+## Why Den wins (competitive positioning, June 2026)
+The family-organizer category is crowded but shallow: Cozi (the incumbent), FamilyWall, Maple,
+TimeTree, Homsy, Nori (AI input), OurHome (chore gamification), Fami, Pairently (two-household).
+They are calendars with lists. **None of them owns the family's health spine** : pregnancy ->
+birth -> baby -> growth -> vaccines -> family health. Den enters with that spine already built
+and trusted (YMYL discipline, cited sources, no ads, private), then surrounds it with the
+day-to-day home machinery the category competes on. The data compounds: the longer a family
+lives in their Den, the more their story (and switching cost) grows.
 
-### 2. Cubby (baby, the existing product)
-- Logging, multi-caregiver sync, vaccines, growth, medicine, keepsakes; newborn to toddler.
-- Monetised per PRO.md / PAYWALL.md (v1 Base plan $5/yr-annual, 7-day trial).
+## The flows
 
-## Why an ecosystem
-- **Acquisition earlier in the funnel:** parents search for pregnancy apps months before baby
-  apps. Den acquires them at week 6, Cubby retains them to year 3+. Lifetime starts ~9 months
-  sooner and conversion at birth is built into the product, not a re-acquisition.
-- **Two storefront listings, one codebase:** Den and Cubby can be marketed (and later listed)
-  separately while sharing the same app, account, household and sync (see DISTRIBUTION notes
-  below). Cross-sell is a screen transition, not a new signup.
-- **Trust compounding:** the family's data history (pregnancy -> birth -> growth) makes leaving
-  costly in the best way: the product holds their story.
+### Shipped (branch `pregnancy-tracker`)
+1. **Pregnancy** : week view, antenatal schedules (NHS/ACOG/G-BA/WHO), danger signs (CDC),
+   appointments, symptoms/weight/BP, opt-in condition trackers (GDM glucose with NICE/ACOG
+   targets, pre-eclampsia watch, supplements, nausea), kick counter, contraction timer (5-1-1),
+   birth plan, hospital bag, and the birth transition into the baby flow.
+2. **Baby (Cubby)** : the existing shipped product: logging, multi-caregiver sync, vaccines,
+   growth charts, medicine, illness, keepsakes, family sharing.
+3. **Home (v1, "Our Den" hub)** : household chores (assignable, tickable), things to buy
+   (shared shopping list), home staff (nanny/cleaner/cook contacts and notes), meal plan for the
+   week, expenses with a monthly view, and adult weight tracking for mom and dad. Lives in the
+   same household blob; every member sees the same Den.
+
+### Next (rough order)
+4. **Weight & wellness, deeper** : goals and trends per adult, postpartum-aware (links from the
+   pregnancy weights), gentle and no-guilt; never diet advice (YMYL care applies).
+5. **Meals & nutrition intelligence** : meal plan -> shopping list in one tap; baby meal logs and
+   family meals converge; the existing Pro "nutrition tracker" candidate grows up into a family
+   nutrition view.
+6. **Family health** : the baby health pattern (meds, visits, records) extended to every member.
+7. **Moments** : the keepsakes engine becomes family-wide (not just baby photos).
+8. **Expenses, deeper** : budgets, staff payroll reminders, recurring bills.
+9. **Smart home (exploratory)** : device management is a natural "home OS" extension but a
+   different engineering world (integrations, hubs). Revisit when the core flows have traction.
+
+## Monetisation sketch
+- The health spine stays free (trust core: pregnancy, vaccines, danger signs, basic logging).
+- Den Pro (one subscription across all flows) gates: advanced insights (nutrition, weight
+  trends, sleep patterns), PDF exports (doctor summaries, expense reports), premium keepsakes,
+  push notifications, smart routines. One price, whole-family value. (Details: PAYWALL.md, PRO.md.)
+
+## Architecture note (why this is cheap to build)
+The Firestore data model is already a household: `households/{hid}` with a shared `app` blob and
+real-time member sync. Every new flow is more keys on the same blob (`state.pregnancy`,
+`state.den`, ...) and more sheets in the same single-file PWA. No new infra, free tier holds.
+Distribution plan (Capacitor wrap, store requirements) unchanged; the master app ships to the
+stores as Den when the shell is ready.
 
 ## Naming decisions (June 2026)
-- **"Ember" was considered and REJECTED:** Ember Technologies (ember.com, the smart-mug company)
-  ships an "Ember Baby Bottle System" with an **"Ember Baby" app** that tracks feedings and baby
-  growth, plus "Ember Cycle Train" (pregnancy/postpartum) already exists on the App Store. Direct
-  likelihood-of-confusion risk in our exact category; also an ASO dead end.
-- **"Cubby Den" chosen, and confirmed after a second full naming round.** A bear's den is where
-  cubs are born; derivative of our own mark (defensible), unique in the stores, and the lifecycle
-  story stays in the bear world ("the den opens" = the birth transition).
-- Round 2 (standalone names) explored and passed on: **Patter** ("pitter-patter of tiny feet",
-  clean in category, strongest alternative if a standalone brand is ever wanted), **Fern**
-  (fiddlehead = curled baby, clean), **Burrow** (Burrow furniture collision, different class),
-  Soon/Juniper/Hazel/Dawn (weak or health-adjacent neighbors).
-- Avoid for future sub-brands (all verified existing baby/pregnancy brands or giants):
-  Glow, Bump (The Bump), Nest, Hatch, Sprout (Sprout Pregnancy), Coconut (Coconut Baby),
-  **Cub/Cubs (Cubtale "Pregnancy & Baby" app uses "Cubs" as its core metaphor; Cub Baby Sleep
-  also exists)**, Willow (breast pump brand), Halo (Halo Bassinest), Flutter, Luna, Lumen, Aura,
-  Bloom/Blossom, Acorn (Acorns), Snug (rides SNOO/Snuz phonetics).
+- **"Den" chosen as master brand** after three naming rounds. Checked: no family-organizer or
+  household app owns "Den" (ZenDen is the closest, different name).
+- Pregnancy sub-brand history: "Ember" REJECTED (Ember Technologies ships an "Ember Baby"
+  feeding/growth tracking app; "Ember Cycle Train" also exists). "Cub/Cubs" REJECTED (Cubtale
+  pregnancy+baby app uses "Cubs" as its core metaphor; Cub Baby Sleep exists). Standalone round
+  explored Patter ("pitter-patter", clean, best standalone fallback), Fern (clean), Burrow
+  (furniture brand, different class).
+- Avoid for future names (verified existing brands in or near our categories): Glow, Bump,
+  Sprout, Coconut, Nest, Hatch, Willow (breast pumps), Halo (bassinets), Flutter, Luna, Lumen,
+  Aura, Bloom/Blossom, Acorn, Snug (rides SNOO/Snuz), Hearth (Hearth Display family organizer).
 
-## Distribution (summary; the full review was discussed June 2026)
-- Web/PWA stays the source of truth and the web funnel. Stores are the discovery funnel.
-- Path: Play Store first via TWA/Capacitor (~1-2 wks), then iOS via Capacitor (~3-5 wks).
-- iOS requirements to plan for: native Google sign-in plugin (webview OAuth is blocked), **Sign in
-  with Apple** (mandatory alongside Google), in-app **account deletion**, push notifications as the
-  guideline 4.2 "native value" justification (FCM + a Cloudflare Worker cron, no Blaze), IAP for
-  any in-app purchase (or web-purchase Netflix model), health-app review scrutiny (our cited
-  sources + "informational, not medical advice" framing is the review armor), privacy labels
-  (pregnancy data = sensitive category).
-- Costs: Apple $99/yr, Google Play $25 one-time. Apple Small Business Program = 15% IAP cut.
-
-## Ground rules that apply ecosystem-wide
-- Free tier infra only (no Blaze/Functions/Storage); one Firestore household blob syncs everything.
-- YMYL discipline everywhere: cited official sources, "seek care" never "diagnose", visible
-  disclaimers, no fabricated reviewers or stats.
-- No em-dashes in user-facing copy. Warm, no-guilt tone.
-- Pregnancy core stays free (trust/safety); Pro candidates listed in PAYWALL.md.
+## Ground rules (ecosystem-wide, unchanged)
+- Free-tier infra only (no Blaze/Functions/Storage); one household blob syncs everything.
+- YMYL discipline on anything health: cited official sources, "seek care" never "diagnose",
+  visible disclaimers, no fabricated stats or reviewers.
+- No em-dashes in user-facing copy. Warm, no-guilt tone everywhere: chores and weight especially
+  (these flows shame people in other apps; Den never does).
+- Don't break production: node --check, preview verify, bump app/sw.js CACHE on app changes.

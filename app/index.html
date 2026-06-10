@@ -626,6 +626,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .log-list-item .lli-t{font-weight:800;font-size:13.5px;}
 .log-list-item .lli-s{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:1px;}
 .log-list-item .lli-x{border:none;background:none;color:var(--ink-faint);cursor:pointer;padding:4px;}
+.icon-btn.icon-on{background:var(--star-soft);}
 </style>
 </head>
 <body>
@@ -702,7 +703,7 @@ const Store = {
 };
 
 /* ---------- State ---------- */
-let state = { babies:[], activeBabyId:null, events:[], settings:{ unit:'ml', wUnit:'kg', hUnit:'cm', tempUnit:'C', theme:'light', seen:{} }, timers:{}, milestones:[], meds:[], photos:[], vaccines:{}, illnesses:[], pregnancy:null };
+let state = { babies:[], activeBabyId:null, events:[], settings:{ unit:'ml', wUnit:'kg', hUnit:'cm', tempUnit:'C', theme:'light', seen:{} }, timers:{}, milestones:[], meds:[], photos:[], vaccines:{}, illnesses:[], pregnancy:null, den:null };
 let view = 'home';
 let tickInterval = null;
 const CUBBY_VERSION = '0.9.0';
@@ -904,6 +905,7 @@ function render(){
   else if(view==='log') main = renderLogTab();
   else if(view==='album') main = renderAlbum();
   else if(view==='health') main = renderHealth();
+  else if(view==='den') main = renderDenHub();
 
   app().innerHTML = `
     <div class="topbar">
@@ -914,6 +916,7 @@ function render(){
           <span>${ageString(b.birth)}</span>
         </div>
       </div>
+      <button class="icon-btn ${view==='den'?'icon-on':''}" onclick="goDen()" aria-label="our den" style="font-size:17px">🧺</button>
       <button class="icon-btn" onclick="toggleTheme()" aria-label="theme">${state.settings.theme==='night'?I.sun:I.moon}</button>
       <button class="icon-btn" onclick="openSettings()" aria-label="settings">${I.settings}</button>
     </div>
@@ -2189,6 +2192,10 @@ function openSettings(){
         <button class="${s.theme==='night'?'on':''}" onclick="setTheme('night');openSettings()">Night</button>
       </div>
     </div>
+    <div class="set-item" onclick="closeSheet();goDen()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🏡</div>
+      <div class="si-body"><div class="a">Our Den</div><div class="b">Chores, shopping, meals, staff, expenses</div></div>
+    </div>
     <div class="set-item" onclick="openBabySheet()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--diaper-soft);color:var(--diaper)">${I.home}</div>
       <div class="si-body"><div class="a">Manage babies</div><div class="b">${state.babies.length} added</div></div>
@@ -2250,7 +2257,7 @@ function confirmReset(){
     <button class="btn-ghost" onclick="closeSheet()">Cancel</button>`,'feed');
 }
 function doReset(){
-  state={babies:[],activeBabyId:null,events:[],settings:{unit:'ml',theme:state.settings.theme},timers:{},pregnancy:null};
+  state={babies:[],activeBabyId:null,events:[],settings:{unit:'ml',theme:state.settings.theme},timers:{},pregnancy:null,den:null};
   persist(); closeSheet(); render();
 }
 
@@ -2346,6 +2353,7 @@ function renderPregShell(){
   if(pregView==='log') main=renderPregLog();
   else if(pregView==='tools') main=renderPregTools();
   else if(pregView==='care') main=renderPregCare();
+  else if(pregView==='den') main=renderDenHub();
   else main=renderPregHome();
   app().innerHTML=`
     <div class="topbar">
@@ -2353,6 +2361,7 @@ function renderPregShell(){
         <div class="pp-orb">🤰</div>
         <div><h1>Cubby Den</h1><span>Week ${wk} · ${triName(tri)}</span></div>
       </div>
+      <button class="icon-btn ${pregView==='den'?'icon-on':''}" onclick="goDen()" aria-label="our den" style="font-size:17px">🧺</button>
       <button class="icon-btn" onclick="toggleTheme()" aria-label="theme">${state.settings.theme==='night'?I.sun:I.moon}</button>
       <button class="icon-btn" onclick="openSettings()" aria-label="settings">${I.settings}</button>
     </div>
@@ -2874,6 +2883,200 @@ function saveNausea(){ ensurePregFields(state.pregnancy); const v=parseInt($('#n
   state.pregnancy.nausea.push({id:uid(),at:now(),vomits:v,keptFluids:nzFluids,water:w}); persist(); closeSheet(); render();
   toast(!nzFluids?'Saved. If you cannot keep fluids down, contact your midwife or doctor.':'Saved'); }
 function deleteNausea(id){ state.pregnancy.nausea=(state.pregnancy.nausea||[]).filter(n=>n.id!==id); persist(); openNausea(); }
+
+/* ============================================================
+   OUR DEN: the household hub (home management for the whole family)
+   Chores, things to buy, meal plan, home staff, expenses, adult weights.
+   Lives in state.den, synced via the household blob like everything else.
+   ============================================================ */
+const DEN_DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const DEN_EXP_CATS=['Groceries','Baby','Home','Staff','Health','Eating out','Other'];
+function ensureDenFields(){
+  if(!state.den) state.den={};
+  const d=state.den;
+  if(!d.chores) d.chores=[];
+  if(!d.shopping) d.shopping=[];
+  if(!d.meals) d.meals=[];
+  if(!d.staff) d.staff=[];
+  if(!d.expenses) d.expenses=[];
+  if(!d.weights) d.weights=[];
+  return d;
+}
+function goDen(){
+  ensureDenFields();
+  if(state.babies.length){ view='den'; } else { pregView='den'; }
+  render(); $('#scroll')&&$('#scroll').scrollTo(0,0);
+}
+function denMonthSpend(){
+  const d=ensureDenFields(); const n=new Date();
+  return d.expenses.filter(e=>{ const t=new Date(e.at); return t.getMonth()===n.getMonth()&&t.getFullYear()===n.getFullYear(); })
+    .reduce((a,e)=>a+(+e.amount||0),0);
+}
+function denFmtAmt(v){ v=+v||0; return (Math.round(v*100)/100).toLocaleString(); }
+function renderDenHub(){
+  const d=ensureDenFields();
+  const openChores=d.chores.filter(c=>!c.done).length;
+  const toBuy=d.shopping.filter(s=>!s.done).length;
+  const spend=denMonthSpend();
+  const rows=[
+    ['🧹','Chores', openChores?openChores+' open':'All done, nice', 'openDenChores()','diaper'],
+    ['🛒','Things to buy', toBuy?toBuy+' on the list':'List is clear', 'openDenShopping()','feed'],
+    ['🍲','Meal plan', d.meals.length?d.meals.length+' meal'+(d.meals.length===1?'':'s')+' planned':'Plan the week', 'openDenMeals()','note'],
+    ['🧑‍🍳','Home staff', d.staff.length?d.staff.length+' added':'Nanny, cleaner, cook', 'openDenStaff()','sleep'],
+    ['💸','Expenses', spend?denFmtAmt(spend)+' this month':'Track what the home spends', 'openDenExpenses()','star'],
+    ['⚖️','Weights', d.weights.length?d.weights.length+' entr'+(d.weights.length===1?'y':'ies'):'Mom, dad, gentle trends', 'openDenWeights()','pump']
+  ].map(r=>`<div class="set-item" onclick="${r[3]}" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--${r[4]}-soft);color:var(--${r[4]});font-size:18px">${r[0]}</div>
+      <div class="si-body"><div class="a">${r[1]}</div><div class="b">${r[2]}</div></div><span class="chev">${I.chev}</span></div>`).join('');
+  return `<div class="fade-in">
+    <div class="greeting">Our Den 🏡</div>
+    <div class="greeting-sub">The whole household, in one calm place. Everyone in your family sees the same Den.</div>
+    <div class="today-strip" style="margin-top:14px">
+      <div class="cell"><div class="big">${openChores}</div><div class="cap">Chores open</div></div>
+      <div class="cell"><div class="big">${toBuy}</div><div class="cap">To buy</div></div>
+      <div class="cell"><div class="big">${denFmtAmt(spend)}</div><div class="cap">Spent this month</div></div>
+    </div>
+    <div class="sec-title">Home</div>
+    ${rows}
+    <div class="csub" style="margin-top:10px">No guilt here: chores roll over, lists forgive, and nobody is graded. It all syncs live to everyone in the family.</div>
+  </div>`;
+}
+
+/* ---- chores ---- */
+function openDenChores(){
+  const d=ensureDenFields();
+  const rows=d.chores.map(c=>`<div class="bag-row ${c.done?'done':''}">
+      <div class="bg-tick" onclick="toggleDenChore('${c.id}')">${c.done?I.check:''}</div>
+      <div class="bg-t" onclick="toggleDenChore('${c.id}')">${escapeHtml(c.text)}${c.who?` <span style="color:var(--ink-faint);font-weight:600">· ${escapeHtml(c.who)}</span>`:''}</div>
+      <button class="bg-x" onclick="deleteDenChore('${c.id}')">${I.trash}</button></div>`).join('');
+  openSheet(`<h2>Chores</h2><div class="sub">The day-to-day, shared. Add who's on it if you like, tick when done.</div>
+    ${rows||'<div class="csub">Nothing on the list. Enjoy it.</div>'}
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <div class="field" style="flex:2;margin-bottom:0"><label>Chore</label><input id="dcText" placeholder="e.g. Laundry" onkeydown="if(event.key==='Enter')addDenChore()"></div>
+      <div class="field" style="flex:1;margin-bottom:0"><label>Who</label><input id="dcWho" placeholder="optional"></div>
+    </div>
+    <button class="btn-primary" style="background:var(--diaper);margin-top:12px" onclick="addDenChore()">Add chore</button>
+    ${d.chores.some(c=>c.done)?`<button class="btn-ghost" onclick="clearDenChoresDone()">Clear completed</button>`:''}`,'diaper');
+}
+function addDenChore(){ const t=($('#dcText').value||'').trim(); if(!t){toast('What needs doing?');return;} ensureDenFields().chores.push({id:uid(),text:t,who:($('#dcWho').value||'').trim(),done:false}); persist(); openDenChores(); }
+function toggleDenChore(id){ const c=ensureDenFields().chores.find(x=>x.id===id); if(!c)return; c.done=!c.done; c.at=c.done?now():null; persist(); openDenChores(); }
+function deleteDenChore(id){ const d=ensureDenFields(); d.chores=d.chores.filter(x=>x.id!==id); persist(); openDenChores(); }
+function clearDenChoresDone(){ const d=ensureDenFields(); d.chores=d.chores.filter(c=>!c.done); persist(); openDenChores(); }
+
+/* ---- things to buy ---- */
+function openDenShopping(){
+  const d=ensureDenFields();
+  const rows=d.shopping.map(s=>`<div class="bag-row ${s.done?'done':''}">
+      <div class="bg-tick" onclick="toggleDenShop('${s.id}')">${s.done?I.check:''}</div>
+      <div class="bg-t" onclick="toggleDenShop('${s.id}')">${escapeHtml(s.text)}</div>
+      <button class="bg-x" onclick="deleteDenShop('${s.id}')">${I.trash}</button></div>`).join('');
+  openSheet(`<h2>Things to buy</h2><div class="sub">One shared list. Whoever's at the shop sees it live.</div>
+    ${rows||'<div class="csub">The list is clear.</div>'}
+    <div class="field" style="margin-top:12px"><label>Add an item</label><input id="dsText" placeholder="e.g. Nappies size 3" onkeydown="if(event.key==='Enter')addDenShop()"></div>
+    <button class="btn-primary" style="background:var(--feed)" onclick="addDenShop()">Add to list</button>
+    ${d.shopping.some(s=>s.done)?`<button class="btn-ghost" onclick="clearDenShopDone()">Clear bought</button>`:''}`,'feed');
+}
+function addDenShop(){ const t=($('#dsText').value||'').trim(); if(!t)return; ensureDenFields().shopping.push({id:uid(),text:t,done:false}); persist(); openDenShopping(); }
+function toggleDenShop(id){ const s=ensureDenFields().shopping.find(x=>x.id===id); if(!s)return; s.done=!s.done; persist(); openDenShopping(); }
+function deleteDenShop(id){ const d=ensureDenFields(); d.shopping=d.shopping.filter(x=>x.id!==id); persist(); openDenShopping(); }
+function clearDenShopDone(){ const d=ensureDenFields(); d.shopping=d.shopping.filter(s=>!s.done); persist(); openDenShopping(); }
+
+/* ---- meal plan ---- */
+let denMealDay=0;
+function setDenMealDay(i){ denMealDay=i; openDenMeals(); }
+function openDenMeals(){
+  const d=ensureDenFields();
+  const chips=DEN_DAYS.map((dy,i)=>`<button class="tgt ${denMealDay===i?'on':''}" onclick="setDenMealDay(${i})">${dy}</button>`).join('');
+  const list=d.meals.slice().sort((a,b)=>a.day-b.day).map(m=>`<div class="log-list-item">
+      <div class="lli-ico" style="background:var(--note-soft)">🍲</div>
+      <div class="lli-body"><div class="lli-t">${escapeHtml(m.text)}</div><div class="lli-s">${DEN_DAYS[m.day]||''}</div></div>
+      <button class="lli-x" onclick="deleteDenMeal('${m.id}')">${I.trash}</button></div>`).join('');
+  openSheet(`<h2>Meal plan</h2><div class="sub">Sketch the week's meals so 5pm never has to be a surprise.</div>
+    <div class="field"><label>Day</label><div class="tgt-row">${chips}</div></div>
+    <div class="field"><label>Meal</label><input id="dmText" placeholder="e.g. Dal and rice, veg curry" onkeydown="if(event.key==='Enter')addDenMeal()"></div>
+    <button class="btn-primary" style="background:var(--note)" onclick="addDenMeal()">Add to plan</button>
+    ${list?`<div class="sec-title" style="margin-top:14px">This week</div>${list}`:''}`,'note');
+}
+function addDenMeal(){ const t=($('#dmText').value||'').trim(); if(!t){toast('What are we eating?');return;} ensureDenFields().meals.push({id:uid(),day:denMealDay,text:t}); persist(); openDenMeals(); }
+function deleteDenMeal(id){ const d=ensureDenFields(); d.meals=d.meals.filter(x=>x.id!==id); persist(); openDenMeals(); }
+
+/* ---- home staff ---- */
+function openDenStaff(){
+  const d=ensureDenFields();
+  const rows=d.staff.map(s=>`<div class="log-list-item">
+      <div class="lli-ico" style="background:var(--sleep-soft)">🧑‍🍳</div>
+      <div class="lli-body"><div class="lli-t">${escapeHtml(s.name)}</div><div class="lli-s">${escapeHtml(s.role)}${s.phone?' · '+escapeHtml(s.phone):''}${s.note?' · '+escapeHtml(s.note):''}</div></div>
+      <button class="lli-x" onclick="deleteDenStaff('${s.id}')">${I.trash}</button></div>`).join('');
+  openSheet(`<h2>Home staff</h2><div class="sub">The people who help your home run: contacts and the little details in one place.</div>
+    ${rows||'<div class="csub">No one added yet.</div>'}
+    <div class="field" style="margin-top:12px"><label>Name</label><input id="dfName" placeholder="e.g. Maria"></div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1"><label>Role</label><select id="dfRole"><option>Nanny</option><option>Cleaner</option><option>Cook</option><option>Driver</option><option>Gardener</option><option>Other</option></select></div>
+      <div class="field" style="flex:1"><label>Phone (optional)</label><input id="dfPhone" inputmode="tel" placeholder="Phone"></div>
+    </div>
+    <div class="field"><label>Note (optional)</label><input id="dfNote" placeholder="e.g. Comes Mon and Thu, paid monthly"></div>
+    <button class="btn-primary" style="background:var(--sleep)" onclick="addDenStaff()">Add</button>`,'sleep');
+}
+function addDenStaff(){ const n=($('#dfName').value||'').trim(); if(!n){toast('Add a name');return;} ensureDenFields().staff.push({id:uid(),name:n,role:$('#dfRole').value,phone:($('#dfPhone').value||'').trim(),note:($('#dfNote').value||'').trim()}); persist(); openDenStaff(); }
+function deleteDenStaff(id){ const d=ensureDenFields(); d.staff=d.staff.filter(x=>x.id!==id); persist(); openDenStaff(); }
+
+/* ---- expenses ---- */
+let denExpCat='Groceries';
+function setDenExpCat(c){ denExpCat=c; openDenExpenses(); }
+function openDenExpenses(){
+  const d=ensureDenFields();
+  const chips=DEN_EXP_CATS.map(c=>`<button class="tgt ${denExpCat===c?'on':''}" onclick="setDenExpCat('${c}')">${c}</button>`).join('');
+  const recent=d.expenses.slice().sort((a,b)=>b.at-a.at).slice(0,12);
+  const rows=recent.map(e=>`<div class="log-list-item">
+      <div class="lli-ico" style="background:var(--star-soft)">💸</div>
+      <div class="lli-body"><div class="lli-t">${denFmtAmt(e.amount)} · ${escapeHtml(e.cat)}</div><div class="lli-s">${e.note?escapeHtml(e.note)+' · ':''}${dayLabel(e.at)}</div></div>
+      <button class="lli-x" onclick="deleteDenExpense('${e.id}')">${I.trash}</button></div>`).join('');
+  openSheet(`<h2>Expenses</h2><div class="sub">What the home spends, at a glance. Numbers are in your own currency.</div>
+    <div class="tool-stat"><div class="ts-cell"><div class="ts-big">${denFmtAmt(denMonthSpend())}</div><div class="ts-cap">This month</div></div><div class="ts-cell"><div class="ts-big">${d.expenses.length}</div><div class="ts-cap">Entries</div></div></div>
+    <div class="field"><label>Category</label><div class="tgt-row">${chips}</div></div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1"><label>Amount</label><input type="number" inputmode="decimal" id="dxAmt" placeholder="e.g. 250"></div>
+      <div class="field" style="flex:2"><label>Note (optional)</label><input id="dxNote" placeholder="e.g. Weekly groceries"></div>
+    </div>
+    <button class="btn-primary" style="background:var(--star)" onclick="addDenExpense()">Add expense</button>
+    ${rows?`<div class="sec-title" style="margin-top:14px">Recent</div>${rows}`:''}`,'star');
+}
+function addDenExpense(){ const v=parseFloat($('#dxAmt').value); if(!v){toast('Enter an amount');return;} ensureDenFields().expenses.push({id:uid(),at:now(),amount:v,cat:denExpCat,note:($('#dxNote').value||'').trim()}); persist(); openDenExpenses(); }
+function deleteDenExpense(id){ const d=ensureDenFields(); d.expenses=d.expenses.filter(x=>x.id!==id); persist(); openDenExpenses(); }
+
+/* ---- adult weights (mom & dad), gentle and no-guilt ---- */
+function denWeightWhos(){ const d=ensureDenFields(); const set=[]; d.weights.forEach(w=>{ if(set.indexOf(w.who)<0) set.push(w.who); }); ['Mom','Dad'].forEach(n=>{ if(set.indexOf(n)<0) set.push(n); }); return set; }
+function pickDenWho(el,n){ const inp=$('#dwWho'); if(inp)inp.value=n; document.querySelectorAll('#dwChips .tgt').forEach(b=>b.classList.remove('on')); el.classList.add('on'); }
+function openDenWeights(){
+  const d=ensureDenFields();
+  const unit=(state.settings.wUnit==='lb')?'lb':'kg';
+  const chips=denWeightWhos().map(n=>`<button class="tgt" onclick="pickDenWho(this,'${escapeHtml(n.replace(/'/g,"\\'"))}')">${escapeHtml(n)}</button>`).join('');
+  const byWho={};
+  d.weights.slice().sort((a,b)=>a.at-b.at).forEach(w=>{ (byWho[w.who]=byWho[w.who]||[]).push(w); });
+  const summary=Object.keys(byWho).map(n=>{ const arr=byWho[n]; const last=arr[arr.length-1]; const prev=arr.length>1?arr[arr.length-2]:null;
+    const delta=prev?(last.kg-prev.kg):null;
+    const dtxt=delta==null?'first entry':(Math.abs(delta)<0.05?'steady':(delta>0?'+':'')+(Math.round(delta*10)/10)+' '+(last.unit||unit)+' since last');
+    return `<div class="log-list-item"><div class="lli-ico" style="background:var(--pump-soft)">⚖️</div>
+      <div class="lli-body"><div class="lli-t">${escapeHtml(n)} · ${last.kg} ${last.unit||unit}</div><div class="lli-s">${dtxt} · ${dayLabel(last.at)}</div></div></div>`; }).join('');
+  const recent=d.weights.slice().sort((a,b)=>b.at-a.at).slice(0,8).map(w=>`<div class="log-list-item">
+      <div class="lli-ico" style="background:var(--pump-soft)">⚖️</div>
+      <div class="lli-body"><div class="lli-t">${escapeHtml(w.who)} · ${w.kg} ${w.unit||unit}</div><div class="lli-s">${dayLabel(w.at)} ${fmtClock(w.at)}</div></div>
+      <button class="lli-x" onclick="deleteDenWeight('${w.id}')">${I.trash}</button></div>`).join('');
+  openSheet(`<h2>Weights</h2><div class="sub">A gentle trend for the grown-ups, only if it's useful to you. No targets, no judgement.</div>
+    ${summary?`<div class="sec-title" style="margin-top:2px">Latest</div>${summary}`:''}
+    <div class="field" style="margin-top:10px"><label>Who</label><div class="tgt-row" id="dwChips">${chips}</div></div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1"><label>Name</label><input id="dwWho" placeholder="Mom, Dad, a name"></div>
+      <div class="field" style="flex:1"><label>Weight (${unit})</label><input type="number" inputmode="decimal" id="dwKg" placeholder="e.g. 70"></div>
+    </div>
+    <button class="btn-primary" style="background:var(--pump)" onclick="addDenWeight('${unit}')">Save</button>
+    ${recent?`<div class="sec-title" style="margin-top:14px">Recent</div>${recent}`:''}
+    <div class="csub" style="margin-top:10px">Informational only. For weight, diet or postpartum recovery advice, talk to your doctor.</div>`,'pump');
+}
+function addDenWeight(unit){ const n=($('#dwWho').value||'').trim(); const v=parseFloat($('#dwKg').value);
+  if(!n){toast('Whose weight is this?');return;} if(!v){toast('Enter a number');return;}
+  ensureDenFields().weights.push({id:uid(),at:now(),who:n,kg:v,unit}); persist(); openDenWeights(); }
+function deleteDenWeight(id){ const d=ensureDenFields(); d.weights=d.weights.filter(x=>x.id!==id); persist(); openDenWeights(); }
 
 /* ============================================================
    MEDICINE
