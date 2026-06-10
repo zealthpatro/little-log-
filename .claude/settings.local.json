@@ -111,7 +111,18 @@
       "Bash(curl -s \"https://little-cubby.com/articles/safe-baby-sleep/\")",
       "Bash(python3 -c ' *)",
       "Bash(node --check app/sw.js)",
-      "Bash(curl -s \"https://www.google.com/search?q=huckleberry+baby+tracker+alternative\" -o /dev/null -w \"%{http_code}\\\\n\")"
+      "Bash(curl -s \"https://www.google.com/search?q=huckleberry+baby+tracker+alternative\" -o /dev/null -w \"%{http_code}\\\\n\")",
+      "Bash(curl -s https://little-cubby.com/app/sw.js?cb=__TRACKED_VAR__)",
+      "Bash(curl -s https://little-cubby.com/site.css?cb=__TRACKED_VAR__)",
+      "Bash(curl -s https://little-cubby.com/?cb=__TRACKED_VAR__)",
+      "Bash(curl -s https://little-cubby.com/app/?cb=__TRACKED_VAR__)",
+      "Bash(python3 -c \"import sys; s=sys.stdin.read\\(\\); print\\('bottle present:', 'M10 2v3.5a4 4 0 0 1-1 2.6' in s, '| fork gone:', 'M8 2v6a4 4 0 0 0 8 0V2' not in s, '| frame css:', 'min-width:900px' in s\\)\")",
+      "Bash(python3 tools/gen_article_img.py --slug best-baby-tracker-app --title \"Best Baby Tracker Apps 2026\" --age \"All ages\" --theme \"Comparison\" --out .)",
+      "Bash(python3 tools/gen_article_img.py --slug cubby-vs-huckleberry --title \"Cubby vs Huckleberry\" --age \"All ages\" --theme \"Comparison\" --out .)",
+      "Bash(git check-ignore *)",
+      "Bash(node --check app/store-firebase.js)",
+      "mcp__visualize__read_me",
+      "mcp__visualize__show_widget"
     ]
   }
 }

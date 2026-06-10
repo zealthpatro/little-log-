@@ -73,12 +73,64 @@
   }
   function hideOverlay() { var ov = document.getElementById('llAuthOv'); if (ov) ov.remove(); }
 
+  /* Email magic-link sign-in (alongside Google, never instead of it). */
+  function emailRowHtml() {
+    return '<div class="ll-email-row" style="margin:14px auto 0;max-width:340px;text-align:center">'
+      + '<button type="button" class="ll-email-toggle" style="border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;color:#6E635B;text-decoration:underline;padding:6px">Prefer email? Get a sign-in link</button>'
+      + '<form class="ll-email-form" style="display:none;gap:8px;margin-top:8px">'
+      + '<input type="email" required placeholder="you@example.com" autocomplete="email" style="flex:1;min-width:0;font-family:inherit;font-size:15px;padding:11px 13px;border:1.5px solid #E7DECF;border-radius:11px;background:#FBF7EF;color:#2C2521">'
+      + '<button type="submit" style="border:none;background:#9A8C6E;color:#fff;font-family:inherit;font-weight:800;font-size:14px;padding:11px 14px;border-radius:11px;cursor:pointer;white-space:nowrap">Send link</button>'
+      + '</form><div class="ll-email-note" style="font-size:12px;font-weight:600;color:#6E635B;margin-top:7px"></div></div>';
+  }
+  function wireEmailRow(scope) {
+    var row = scope.querySelector('.ll-email-row'); if (!row) return;
+    var toggle = row.querySelector('.ll-email-toggle'), form = row.querySelector('.ll-email-form'), note = row.querySelector('.ll-email-note');
+    toggle.onclick = function () { toggle.style.display = 'none'; form.style.display = 'flex'; form.querySelector('input').focus(); };
+    form.onsubmit = function (ev) {
+      ev.preventDefault();
+      var email = form.querySelector('input').value.trim(); if (!email) return;
+      var btn = form.querySelector('button'); btn.disabled = true; btn.textContent = 'Sending…';
+      auth.sendSignInLinkToEmail(email, { url: location.origin + '/app/', handleCodeInApp: true })
+        .then(function () {
+          try { localStorage.setItem('cubby-email-signin', email); } catch (e) {}
+          form.style.display = 'none';
+          note.textContent = 'Check your inbox: we sent a sign-in link to ' + email + '. Open it on this device.';
+        })
+        .catch(function (err) {
+          btn.disabled = false; btn.textContent = 'Send link';
+          note.textContent = 'Could not send the link: ' + ((err && err.message) || err);
+        });
+    };
+  }
+  function maybeFinishEmailLink() {
+    try {
+      if (!auth.isSignInWithEmailLink(window.location.href)) return;
+    } catch (e) { return; }
+    var email = null;
+    try { email = localStorage.getItem('cubby-email-signin'); } catch (e) {}
+    if (!email) email = window.prompt('Confirm your email to finish signing in');
+    if (!email) return;
+    auth.signInWithEmailLink(email.trim(), window.location.href)
+      .then(function (res) {
+        try { localStorage.removeItem('cubby-email-signin'); } catch (e) {}
+        try { history.replaceState(null, '', location.pathname); } catch (e) {}
+        if (res && res.user && !res.user.displayName) {
+          return res.user.updateProfile({ displayName: email.split('@')[0] });
+        }
+      })
+      .catch(function (err) {
+        showSignIn('Email sign-in failed: ' + ((err && err.message) || err));
+      });
+  }
+
   function showSignIn(msg) {
     var ov = overlay();
     if (typeof window.cubbyLanding === 'function') {
       ov.classList.add('landing');
       ov.innerHTML = window.cubbyLanding(msg);
       Array.prototype.forEach.call(ov.querySelectorAll('.ll-cta'), function (b) { b.onclick = signInGoogle; });
+      var firstCta = ov.querySelector('.ll-cta');
+      if (firstCta) { firstCta.insertAdjacentHTML('afterend', emailRowHtml()); wireEmailRow(ov); }
       return;
     }
     ov.classList.remove('landing');
@@ -87,8 +139,10 @@
       + '<h1>Cubby</h1><p>A warm, private baby log you can share with the people who care for them.</p>'
       + '<div class="ll-values"><div><span>⚡</span>Log feeds, sleep &amp; nappies in seconds</div><div><span>👨‍👩‍👧</span>Share with family &amp; caregivers, live</div><div><span>🔒</span>Private to your family</div></div>'
       + '<button id="llGoogleBtn" class="ll-auth-btn">Continue with Google</button>'
+      + emailRowHtml()
       + (msg ? '<div class="ll-auth-msg">' + msg + '</div>' : '') + '</div>';
     document.getElementById('llGoogleBtn').onclick = signInGoogle;
+    wireEmailRow(ov);
   }
   function showStatus(msg) {
     overlay().classList.remove('landing');
@@ -539,6 +593,8 @@
   /* ---------- auth state machine ---------- */
   showStatus('Loading…'); // cover the app until we know whether you're signed in
   auth.getRedirectResult().catch(function () {});
+  maybeFinishEmailLink();
+
   auth.onAuthStateChanged(async function (user) {
     if (!user) { teardown(); showSignIn(''); return; }
     try { localStorage.setItem('cubby-member', '1'); } catch (e) {}

@@ -12,9 +12,9 @@
 <meta property="og:title" content="Cubby FAQ">
 <meta property="og:description" content="Common questions about Cubby: features, sharing, health, privacy and pricing.">
 <meta property="og:url" content="https://little-cubby.com/faq/">
-<meta property="og:image" content="https://little-cubby.com/og/cubby-home.png">
+<meta property="og:image" content="https://little-cubby.com/og/faq.png">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://little-cubby.com/og/cubby-home.png">
+<meta name="twitter:image" content="https://little-cubby.com/og/faq.png">
 <link rel="icon" type="image/png" href="/icons/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Nunito+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -22,7 +22,7 @@
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
 {"@type":"Question","name":"Is Cubby free?","acceptedAnswer":{"@type":"Answer","text":"Yes. Logging, caregiver sharing, your country's vaccine schedule, growth charts, the health hub and keepsakes are free, and always will be. Cubby Pro (coming soon) adds extras like routines, push reminders and premium keepsakes. We never paywall logging or sharing."}},
-{"@type":"Question","name":"How do I sign up for Cubby?","acceptedAnswer":{"@type":"Answer","text":"Open the app and continue with Google. It takes about ten seconds, with no password and no app store."}},
+{"@type":"Question","name":"How do I sign up for Cubby?","acceptedAnswer":{"@type":"Answer","text":"Open the app and continue with Google, or ask for an email sign-in link. It takes about ten seconds either way, with no password and no app store."}},
 {"@type":"Question","name":"Is Cubby an app I download?","acceptedAnswer":{"@type":"Answer","text":"Cubby runs in any modern browser. On a phone, tap Share then Add to Home Screen to install it like an app, with offline support."}},
 {"@type":"Question","name":"Does Cubby work offline?","acceptedAnswer":{"@type":"Answer","text":"Yes. You can log while offline and everything syncs automatically once you are back online."}},
 {"@type":"Question","name":"What can I track in Cubby?","acceptedAnswer":{"@type":"Answer","text":"Feeds (breast, bottle and solids), sleep with an ongoing-nap timer, nappies, pumping, activities like tummy time and sun time, medicines, temperature and illnesses, growth, vaccines, milestones and photos."}},
@@ -36,6 +36,9 @@
 {"@type":"Question","name":"Can I export or delete my data?","acceptedAnswer":{"@type":"Answer","text":"Yes. In Settings, Data lets you export everything as a JSON file, or delete all data permanently. You can also log out any time, your data stays safely synced."}},
 {"@type":"Question","name":"What does Cubby Pro cost?","acceptedAnswer":{"@type":"Answer","text":"Pro is planned at about 15 USD per month on the annual plan (19 USD month to month), with localized pricing. It isn't on sale yet, join the waitlist in the app and the free plan stays free."}}
 ]}
+</script>
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Home", "item": "https://little-cubby.com/"}, {"@type": "ListItem", "position": 2, "name": "FAQ", "item": "https://little-cubby.com/faq/"}]}
 </script>
 </head>
 <body>
@@ -54,9 +57,11 @@
     <dt>Is Cubby free?</dt>
     <dd>Yes. Logging, caregiver sharing, your country's vaccine schedule, growth charts, the health hub and keepsakes are free, and always will be. Pro (coming soon) adds extras. We never paywall logging or sharing.</dd>
     <dt>How do I sign up?</dt>
-    <dd>Open the app and continue with Google, about ten seconds, no password, no app store.</dd>
+    <dd>Open the app and continue with Google, or ask for an email sign-in link: we send a link, you tap it, you're in. About ten seconds either way, no password, no app store.</dd>
     <dt>Is Cubby an app I download?</dt>
-    <dd>It runs in any modern browser. On a phone, tap Share then "Add to Home Screen" to install it like an app.</dd>
+    <dd>It runs in any modern browser. On a phone, install it like an app in two taps so it opens full-screen from its own icon (see the next answer).</dd>
+    <dt>How do I install it on my iPhone or Android?</dt>
+    <dd>iPhone: open little-cubby.com/app in Safari, tap the Share button (the square with an arrow), scroll down and tap "Add to Home Screen", then "Add". Android: open it in Chrome, tap the menu (three dots), then "Add to Home screen" or "Install app". The bear icon appears on your home screen and Cubby opens like a normal app.</dd>
     <dt>Does it work offline?</dt>
     <dd>Yes. Log while offline and it syncs automatically once you're back online.</dd>
     <dt>Which devices work?</dt>
@@ -118,7 +123,7 @@
   <h2>Privacy, data &amp; account</h2>
   <dl class="faq">
     <dt>Is my data private and secure?</dt>
-    <dd>Yes. No ads, no third-party trackers, never sold. Your log is locked to the people you invite and talks only to Cubby's own secure backend.</dd>
+    <dd>Yes. No ads, no third-party trackers, never sold. Your log is locked to the people you invite, enforced by server-side security rules, and your data is encrypted in transit and at rest (it lives in Google Cloud Firestore). The site also ships strict browser security headers (HSTS, content-security policy, no framing). You can export or delete everything yourself in Settings, anytime.</dd>
     <dt>Can I export my data?</dt>
     <dd>Yes. Settings &gt; Data &gt; Export downloads everything as a JSON file.</dd>
     <dt>Can I delete everything?</dt>

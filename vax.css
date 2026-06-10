@@ -76,3 +76,6 @@ footer.src a{color:var(--faint)}
 .article li{margin:7px 0;line-height:1.6;color:#3a322c}
 .article strong{color:var(--ink)}
 @media(max-width:640px){h1{font-size:27px}.lede{font-size:17px}th,td{padding:9px 9px;font-size:13px}}
+
+/* A11y: visible keyboard focus everywhere (DESIGN.md) */
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--pump);outline-offset:2px;border-radius:4px}
