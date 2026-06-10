@@ -541,6 +541,7 @@
   auth.getRedirectResult().catch(function () {});
   auth.onAuthStateChanged(async function (user) {
     if (!user) { teardown(); showSignIn(''); return; }
+    try { localStorage.setItem('cubby-member', '1'); } catch (e) {}
     try {
       showStatus('Setting things up…');
       var hid = await resolveHousehold(user);

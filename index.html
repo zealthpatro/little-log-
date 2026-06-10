@@ -242,6 +242,20 @@
   c.addEventListener('mouseleave',reset);
   reset();
 })();
+/* Returning members: swap CTAs to "Open Cubby" and show a welcome-back strip (no redirect). */
+(function(){
+  try{
+    if(localStorage.getItem('cubby-member')!=='1') return;
+    document.querySelectorAll('.nav-cta,.hero-cta').forEach(function(a){ a.textContent='Open Cubby 🐻'; });
+    var nav=document.querySelector('.nav');
+    if(nav){
+      var s=document.createElement('div');
+      s.style.cssText='background:var(--surface2);border-bottom:1px solid var(--line);text-align:center;padding:8px 14px;font-size:13px;font-weight:700;color:var(--soft)';
+      s.innerHTML='Welcome back! <a href="/app/" style="color:var(--pink-d)">Open Cubby</a> to see today\'s log.';
+      nav.insertAdjacentElement('afterend',s);
+    }
+  }catch(e){}
+})();
 </script>
 </body>
 </html>
