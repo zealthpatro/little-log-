@@ -418,6 +418,7 @@ body{
 .chip-row{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;-webkit-overflow-scrolling:touch;}
 .chip-row::-webkit-scrollbar{height:0;}
 .chip{display:inline-flex;align-items:center;gap:5px;border:2px solid var(--line);background:var(--surface);border-radius:30px;padding:9px 15px;font-weight:800;font-size:12.5px;color:var(--ink-soft);cursor:pointer;white-space:nowrap;flex-shrink:0;font-family:var(--font-body);transition:all .15s;}
+.chip.lk{opacity:.55;}
 .chip svg{width:15px;height:15px;}
 .chip.allergen{border-color:var(--med);color:var(--med);}
 .chip.allergen.sel{background:var(--med);color:#fff;border-color:var(--med);}
@@ -1880,23 +1881,87 @@ function babyIdentity(b,opts){
     <div><div class="pi-name">${escapeHtml(b.name)}</div><div class="pi-sub">${ageString(b.birth)}${opts.pickable?` · <span class="link-inline" onclick="openAvatarPicker()">Change photo</span>`:''}</div></div></div>`;
 }
 /* ---------- Cubby Pro waitlist ---------- */
-function openPro(){
-  const feats=[
-    ['🗓️','Smart routines','Gentle, age-aware rhythms (feeds, naps, tummy time, skin-to-skin) from day 0 to 365 that adapt when life happens.'],
-    ['🔔','Push notifications','Reminders and alerts even when Cubby is closed.'],
-    ['📸','HD photos & cloud backup','Full-resolution photos, safely backed up.'],
-    ['🥑','Nutrition tracker','See nutrition from your logged meals and photos, what was offered, what was eaten, and how it adds up over time.'],
-    ['📄','Doctor reports & export','Polished PDF visit reports and full data export.'],
-    ['✨','Smart insights & keepsakes','Sleep & feed pattern insights, premium memory cards, a monthly video montage.']
-  ].map(f=>`<div class="pro-feat"><span class="pf-ico">${f[0]}</span><div><div class="pf-t">${f[1]}</div><div class="pf-s">${f[2]}</div></div></div>`).join('');
-  const joined = (()=>{ try{ return localStorage.getItem('cubby-pro-waitlist')==='1'; }catch(e){ return false; } })();
-  openSheet(`<h2>Cubby Pro ✨</h2><div class="sub">Cubby is free for the essentials, always. Pro is coming for the extras. Want first access?</div>
-    <div class="pro-list">${feats}</div>
-    ${joined
-      ? `<div class="pro-joined">✅ You're on the waitlist. We'll be in touch 🐻</div>`
-      : `<button class="btn-primary" style="background:var(--star)" onclick="joinProWaitlist()">Join the waitlist</button>`}
-    <div class="csub" style="text-align:center;margin-top:10px">No charge now. We'll email before anything launches.</div>`,'star');
+/* ============================================================
+   CUBBY PRO (Base plan): entitlement + payment loop
+   The entitlement lives at households/{hid}.pro and is written ONLY by the
+   billing Worker (workers/pro-billing) after Stripe events; clients read it
+   via window.LL.pro. Rules forbid any client write to that field.
+   Base unlocks zero-marginal-cost features (see PAYWALL.md): the premium
+   keepsake studio, watermark-free shares, and the doctor PDF report.
+   ============================================================ */
+const PRO_CFG = {
+  // Set these after deploying workers/pro-billing (see its README), then this
+  // sheet sells; while empty, the sheet falls back to the waitlist.
+  checkoutUrl: '',   // e.g. 'https://cubby-billing.<acct>.workers.dev/checkout'
+  portalUrl:   '',   // e.g. 'https://cubby-billing.<acct>.workers.dev/portal'
+  priceLine:   'from $5/mo, billed annually (about $59/year)'
+};
+function isPro(){
+  try{ if(localStorage.getItem('cubby-pro-dev')==='1') return true; }catch(e){}
+  const p = window.LL && window.LL.pro;
+  if(!p || !p.active) return false;
+  // 3-day grace past the paid period so a renewal hiccup never yanks features mid-day
+  return !p.until || (+p.until + 3*86400000) > now();
 }
+function requirePro(featureName){ if(isPro()) return true; openPro(featureName); return false; }
+function openPro(lockedFeature){
+  const feats=[
+    ['🎨','The full keepsake studio','Every template, font and palette, portrait and story formats, the whole sticker set.'],
+    ['✨','Auto-enhance & background cutout','One-tap polish and sticker-style cutouts, all on your device.'],
+    ['🖼️','Then & Now + watermark-free','Side-by-side keepsakes, and your shares without the "made with Cubby" mark.'],
+    ['📄','Doctor PDF report','A clean, printable visit report: recent days, growth, vaccines and medicines.']
+  ].map(f=>`<div class="pro-feat"><span class="pf-ico">${f[0]}</span><div><div class="pf-t">${f[1]}</div><div class="pf-s">${f[2]}</div></div></div>`).join('');
+  const canBuy = !!PRO_CFG.checkoutUrl;
+  const joined = (()=>{ try{ return localStorage.getItem('cubby-pro-waitlist')==='1'; }catch(e){ return false; } })();
+  if(isPro()){
+    const p=window.LL&&window.LL.pro||{};
+    openSheet(`<h2>Cubby Pro ✨</h2><div class="sub">You're on Pro. Thank you for supporting Cubby, it keeps the essentials free for everyone.</div>
+      <div class="pro-list">${feats}</div>
+      ${p.until?`<div class="csub" style="text-align:center">Renews ${new Date(+p.until).toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'})}</div>`:''}
+      ${PRO_CFG.portalUrl?`<button class="btn-ghost" onclick="openProPortal()">Manage subscription</button>`:''}`,'star');
+    return;
+  }
+  openSheet(`<h2>Cubby Pro ✨</h2>
+    <div class="sub">${lockedFeature?`<b>${escapeHtml(lockedFeature)}</b> is a Pro treat. `:''}Cubby is free for the essentials, always. Pro adds the delights.</div>
+    <div class="pro-list">${feats}</div>
+    ${canBuy
+      ? `<button class="btn-primary" style="background:var(--star)" onclick="startProCheckout()">Start 7-day free trial</button>
+         <div class="csub" style="text-align:center;margin-top:8px">${PRO_CFG.priceLine}. Cancel anytime in the trial and pay nothing. One plan covers your whole family.</div>`
+      : (joined
+        ? `<div class="pro-joined">✅ You're on the waitlist. We'll be in touch 🐻</div>`
+        : `<button class="btn-primary" style="background:var(--star)" onclick="joinProWaitlist()">Join the waitlist</button>
+           <div class="csub" style="text-align:center;margin-top:8px">Payments open soon, ${PRO_CFG.priceLine} with a 7-day free trial. No charge now.</div>`)}`,'star');
+}
+async function startProCheckout(){
+  const hid = window.LL && window.LL.householdId;
+  if(!hid){ toast('Sign in first'); return; }
+  if(!PRO_CFG.checkoutUrl){ openPro(); return; }
+  showLoader(['Opening secure checkout']);
+  try{
+    const r = await fetch(PRO_CFG.checkoutUrl, { method:'POST', headers:{'content-type':'application/json'},
+      body: JSON.stringify({ hid, origin: location.origin,
+        email: (window.LL.auth&&window.LL.auth.currentUser&&window.LL.auth.currentUser.email)||'' }) });
+    const d = await r.json(); hideLoader();
+    if(d && d.url) location.href = d.url; else toast('Could not start checkout, try again');
+  }catch(e){ hideLoader(); toast('Could not start checkout, try again'); }
+}
+async function openProPortal(){
+  const p = window.LL && window.LL.pro;
+  if(!PRO_CFG.portalUrl || !p || !p.customer){ toast('Manage your plan from the purchase email'); return; }
+  showLoader(['Opening your billing portal']);
+  try{
+    const r = await fetch(PRO_CFG.portalUrl, { method:'POST', headers:{'content-type':'application/json'},
+      body: JSON.stringify({ customer: p.customer, origin: location.origin }) });
+    const d = await r.json(); hideLoader();
+    if(d && d.url) location.href = d.url; else toast('Could not open the portal');
+  }catch(e){ hideLoader(); toast('Could not open the portal'); }
+}
+/* Returning from Stripe checkout: a warm hello (the webhook flips the household to Pro). */
+(function(){ try{
+  const q=new URLSearchParams(location.search);
+  if(q.get('pro')==='success'){ setTimeout(()=>toast('Welcome to Cubby Pro 🎉 Your trial has started'),1200); history.replaceState(null,'',location.pathname); }
+  else if(q.get('pro')==='cancel'){ history.replaceState(null,'',location.pathname); }
+}catch(e){} })();
 async function joinProWaitlist(){
   try{
     const LL=window.LL, u=LL&&LL.auth&&LL.auth.currentUser;
@@ -2142,7 +2207,7 @@ function openSettings(){
     </div>
     <div class="set-item" onclick="openPro()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">✨</div>
-      <div class="si-body"><div class="a">Cubby Pro</div><div class="b">Coming soon · join the waitlist</div></div>
+      <div class="si-body"><div class="a">Cubby Pro</div><div class="b">${isPro()?'Active · thank you 🐻':'The full keepsake studio, doctor reports & more'}</div></div>
     </div>
     <div class="set-label">Your data &amp; account</div>
     <div class="set-item" onclick="openDataSheet()" style="cursor:pointer">
@@ -2552,8 +2617,56 @@ function openVisitSummary(){
   openSheet(`<h2>Visit summary</h2><div class="sub">A snapshot of ${escapeHtml(b.name)}'s last 7 days for your appointment.</div>
     <pre class="visit-sum">${escapeHtml(text)}</pre>
     <button class="btn-primary" style="background:var(--sleep)" onclick="copyVisitSummary()">${I.list||''} Copy summary</button>
+    <button class="btn-ghost" onclick="openDoctorReport()">📄 Doctor PDF report ${isPro()?'':'· Pro'}</button>
     <button class="btn-ghost" onclick="closeSheet()">Close</button>`,'sleep');
   window.__visitSummaryText=text;
+}
+/* Printable doctor report: a clean page the browser prints / saves as PDF.
+   Zero infra: it is generated entirely on-device from the existing log. */
+function openDoctorReport(){
+  if(!requirePro('Doctor PDF report')) return;
+  const b=activeBaby(); if(!b) return;
+  const esc=escapeHtml;
+  const summary=visitSummary(14);
+  let growthLine='';
+  try{
+    const g=babyEvents().find(e=>e.type==='growth');
+    if(g){ const parts=[]; if(g.weight)parts.push(g.weight+' '+(g.wUnit||'kg')); if(g.height)parts.push(g.height+' '+(g.hUnit||'cm'));
+      growthLine=parts.join(' · ')+'  (measured '+new Date(g.time).toLocaleDateString()+')'; }
+  }catch(e){}
+  let vaxLine='';
+  try{
+    const plan=vaccinePlan();
+    const given=plan.filter(v=>v.given).length;
+    const nextV=plan.filter(v=>!v.given).sort((a,c)=>a.dueMonths-c.dueMonths)[0];
+    vaxLine=given+' of '+plan.length+' doses recorded as given'+(nextV?('  ·  next: '+nextV.name+' ('+nextV.group+')'):'');
+  }catch(e){}
+  let medsLines='';
+  try{ medsLines=babyMeds().filter(m=>m.active).map(m=>'- '+m.name+' · '+m.dose+' '+m.unit+(m.everyH?(' every '+m.everyH+'h'):'')).join('\n'); }catch(e){}
+  const dob=b.birth?new Date(b.birth).toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'}):'';
+  const w=window.open('','_blank');
+  if(!w){ toast('Allow pop-ups to create the report'); return; }
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(b.name)} · Cubby visit report</title>
+    <style>
+      body{font-family:Georgia,'Times New Roman',serif;color:#222;max-width:680px;margin:36px auto;padding:0 24px;line-height:1.55;}
+      h1{font-size:24px;margin:0 0 2px;} .meta{color:#666;font-size:13px;margin-bottom:22px;}
+      h2{font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:#8a7f6f;border-bottom:1px solid #ddd;padding-bottom:4px;margin:24px 0 8px;}
+      pre{font-family:inherit;white-space:pre-wrap;font-size:14px;margin:0;}
+      .foot{margin-top:30px;color:#999;font-size:11.5px;border-top:1px solid #eee;padding-top:10px;}
+      .noprint{margin:18px 0;} .noprint button{font-size:14px;padding:8px 18px;cursor:pointer;}
+      @media print{.noprint{display:none}}
+    </style></head><body>
+    <h1>${esc(b.name)}</h1>
+    <div class="meta">${dob?('Born '+esc(dob)+' · '):''}${esc(ageString(b.birth)||'')} · report generated ${new Date().toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'})} with Cubby</div>
+    <div class="noprint"><button onclick="window.print()">Print / Save as PDF</button></div>
+    <h2>Last 14 days</h2><pre>${esc(summary)}</pre>
+    ${growthLine?`<h2>Latest measurement</h2><pre>${esc(growthLine)}</pre>`:''}
+    ${vaxLine?`<h2>Vaccinations</h2><pre>${esc(vaxLine)}</pre>`:''}
+    ${medsLines?`<h2>Active medicines</h2><pre>${esc(medsLines)}</pre>`:''}
+    <div class="foot">Recorded by the family in Cubby. Informational only, not medical advice; please verify clinically.</div>
+    </body></html>`);
+  w.document.close();
+  try{ w.focus(); }catch(e){}
 }
 function copyVisitSummary(){
   const t=window.__visitSummaryText||'';
@@ -3160,6 +3273,12 @@ const PRESETS={
 const MOMENT_FORMATS=[['orig','Original'],['square','Square'],['portrait','Portrait'],['story','Story']];
 const MOMENT_FONTS=[['Fraunces','Fraunces'],['Playfair Display','Playfair'],['Poppins','Poppins'],['Caveat','Handwritten']];
 const MOMENT_TEMPLATES=[['classic','Classic'],['big','Big milestone'],['stats','Monthly stats']];
+/* What Base/Pro unlocks in the studio (see PAYWALL.md). Free keeps a real, generous
+   taster: Original+Square, the Fraunces font, two palettes, the Classic template and
+   six stickers. Locks render as gentle 🔒 chips that open the Pro sheet. */
+const PRO_LOCK={ formats:['portrait','story'], fonts:['Playfair Display','Poppins','Caveat'],
+  palettes:['Sage','Sky','Ink'], templates:['big','stats'], stickerFree:6 };
+function proLocked(group,key){ if(isPro()) return false; return group==='stickers' ? STICKERS.indexOf(key)>=PRO_LOCK.stickerFree : (PRO_LOCK[group]||[]).indexOf(key)>=0; }
 function cssFont(name){ return ({'Fraunces':'Fraunces, Georgia, serif','Playfair Display':'"Playfair Display", Georgia, serif','Poppins':'Poppins, system-ui, sans-serif','Caveat':'Caveat, "Comic Sans MS", cursive'})[name]||'Fraunces, serif'; }
 const MOMENT_PALETTES={
   Cream:{bg1:'#FBF5E9',bg2:'#EFE0C8',ink:'#2C2521',sub:'#6E635B',accent:'#C97FA0'},
@@ -3268,11 +3387,14 @@ function composeShareCard(canvas,maxW){
     ctx.fillStyle=pal.sub; ctx.font=`700 ${Math.round(W*0.032)}px ${NUN}`;
     ctx.fillText((age.full?age.full+'   ·   ':'')+dateStr, cx, cTop+capH*0.70);
   }
-  // tiny Cubby footer mark (all templates)
-  ctx.fillStyle=pal.sub; ctx.globalAlpha=0.6;
-  ctx.font=`800 ${Math.round(W*0.022)}px ${NUN}`;
-  ctx.fillText('made with Cubby 🐻', cx, photoY+photoH+capH-Math.round(H*0.018));
-  ctx.globalAlpha=1; ctx.textAlign='left';
+  // tiny Cubby footer mark (free shares; Pro is watermark-free)
+  if(!isPro()){
+    ctx.fillStyle=pal.sub; ctx.globalAlpha=0.6;
+    ctx.font=`800 ${Math.round(W*0.022)}px ${NUN}`;
+    ctx.fillText('made with Cubby 🐻', cx, photoY+photoH+capH-Math.round(H*0.018));
+    ctx.globalAlpha=1;
+  }
+  ctx.textAlign='left';
   drawStickers(ctx, W, H);
 }
 function composeAny(canvas,maxW){ if(photoEditor&&photoEditor.format&&photoEditor.format!=='orig') composeShareCard(canvas,maxW); else composePhoto(canvas,maxW); }
@@ -3349,11 +3471,11 @@ function renderPhotos(){
   const posMatters=!['none','ribbon','month'].includes(photoEditor.stamp);
   const fmt=photoEditor.format||'orig';
   const isCard=fmt!=='orig';
-  const fmtChips=MOMENT_FORMATS.map(([k,l])=>`<div class="chip ${fmt===k?'sel':''}" onclick="setFormat('${k}')">${l}</div>`).join('');
-  const fontChips=MOMENT_FONTS.map(([k,l])=>`<div class="chip ${(photoEditor.font||'Fraunces')===k?'sel':''}" onclick="setMomentFont('${k}')" style="font-family:${cssFont(k)}">${l}</div>`).join('');
-  const palChips=Object.keys(MOMENT_PALETTES).map(k=>{const p=MOMENT_PALETTES[k];return `<div class="chip ${(photoEditor.palette||'Cream')===k?'sel':''}" onclick="setPalette('${k}')"><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:linear-gradient(135deg,${p.bg1},${p.accent});margin-right:6px;vertical-align:-1px"></span>${k}</div>`;}).join('');
-  const tplChips=MOMENT_TEMPLATES.map(([k,l])=>`<div class="chip ${(photoEditor.template||'classic')===k?'sel':''}" onclick="setTemplate('${k}')">${l}</div>`).join('');
-  const stickerChips=STICKERS.map(e=>`<div class="chip ${photoEditor.activeSticker===e?'sel':''}" onclick="selectSticker('${e}')" style="font-size:18px;padding:6px 11px">${e}</div>`).join('');
+  const fmtChips=MOMENT_FORMATS.map(([k,l])=>{const lk=proLocked('formats',k);return `<div class="chip ${fmt===k?'sel':''}${lk?' lk':''}" onclick="setFormat('${k}')">${lk?'🔒 ':''}${l}</div>`;}).join('');
+  const fontChips=MOMENT_FONTS.map(([k,l])=>{const lk=proLocked('fonts',k);return `<div class="chip ${(photoEditor.font||'Fraunces')===k?'sel':''}${lk?' lk':''}" onclick="setMomentFont('${k.replace(/'/g,"\\'")}')" style="font-family:${cssFont(k)}">${lk?'🔒 ':''}${l}</div>`;}).join('');
+  const palChips=Object.keys(MOMENT_PALETTES).map(k=>{const p=MOMENT_PALETTES[k];const lk=proLocked('palettes',k);return `<div class="chip ${(photoEditor.palette||'Cream')===k?'sel':''}${lk?' lk':''}" onclick="setPalette('${k}')"><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:linear-gradient(135deg,${p.bg1},${p.accent});margin-right:6px;vertical-align:-1px"></span>${lk?'🔒 ':''}${k}</div>`;}).join('');
+  const tplChips=MOMENT_TEMPLATES.map(([k,l])=>{const lk=proLocked('templates',k);return `<div class="chip ${(photoEditor.template||'classic')===k?'sel':''}${lk?' lk':''}" onclick="setTemplate('${k}')">${lk?'🔒 ':''}${l}</div>`;}).join('');
+  const stickerChips=STICKERS.map(e=>{const lk=proLocked('stickers',e);return `<div class="chip ${photoEditor.activeSticker===e?'sel':''}${lk?' lk':''}" onclick="selectSticker('${e}')" style="font-size:18px;padding:6px 11px">${lk?'🔒':e}</div>`;}).join('');
   const ssz=photoEditor.stickerSize||0.13;
   const sizeChips=[['S',0.09],['M',0.13],['L',0.2]].map(([l,v])=>`<div class="chip ${Math.abs(ssz-v)<0.001?'sel':''}" onclick="setStickerSize(${v})">${l}</div>`).join('');
   const nSt=(photoEditor.stickers||[]).length;
@@ -3438,6 +3560,7 @@ async function getSegmenter(){
 }
 async function cutoutBackground(){
   if(!photoEditor) return;
+  if(!requirePro('Background cutout')) return;
   if(photoEditor.cutImg){ photoEditor.cutout=true; render(); drawPhoto(); return; }
   showLoader(['Finding your little one','Cutting out the background']);
   try{
@@ -3471,6 +3594,7 @@ async function cutoutBackground(){
 }
 function autoEnhance(){
   if(!photoEditor) return;
+  if(!requirePro('Auto-enhance')) return;
   const st=imageStats(photoEditor.img);
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,Math.round(v)));
   const bright=clamp(100*142/Math.max(40,st.mean),88,116);
@@ -3486,13 +3610,13 @@ function setFrame(f){ photoEditor.frame=f; render(); drawPhoto(); }
 function setStamp(s){ photoEditor.stamp=s; render(); drawPhoto(); }
 function setStampPos(p){ photoEditor.stampPos=p; render(); drawPhoto(); }
 function setStampTone(t){ photoEditor.stampTone=t; render(); drawPhoto(); }
-function setFormat(f){ photoEditor.format=f; render(); if(document.fonts&&document.fonts.ready){ document.fonts.ready.then(drawPhoto); } drawPhoto(); }
-function setMomentFont(f){ photoEditor.font=f; render(); if(document.fonts&&document.fonts.ready){ document.fonts.ready.then(drawPhoto); } else { drawPhoto(); } }
-function setPalette(p){ photoEditor.palette=p; render(); drawPhoto(); }
-function setTemplate(t){ photoEditor.template=t; render(); drawPhoto(); }
+function setFormat(f){ if(proLocked('formats',f)){ openPro('Portrait & Story formats'); return; } photoEditor.format=f; render(); if(document.fonts&&document.fonts.ready){ document.fonts.ready.then(drawPhoto); } drawPhoto(); }
+function setMomentFont(f){ if(proLocked('fonts',f)){ openPro('Premium fonts'); return; } photoEditor.font=f; render(); if(document.fonts&&document.fonts.ready){ document.fonts.ready.then(drawPhoto); } else { drawPhoto(); } }
+function setPalette(p){ if(proLocked('palettes',p)){ openPro('Premium palettes'); return; } photoEditor.palette=p; render(); drawPhoto(); }
+function setTemplate(t){ if(proLocked('templates',t)){ openPro('Premium templates'); return; } photoEditor.template=t; render(); drawPhoto(); }
 /* ---- Sticker pack (tap a sticker, tap the photo to drop it) ---- */
 const STICKERS=['❤️','⭐','🐻','🌙','🌞','🍼','👑','🌈','✨','👣','🎀','☁️','🐣','🦋','🥹','🎈'];
-function selectSticker(e){ photoEditor.activeSticker=(photoEditor.activeSticker===e?null:e); render(); }
+function selectSticker(e){ if(proLocked('stickers',e)){ openPro('The full sticker set'); return; } photoEditor.activeSticker=(photoEditor.activeSticker===e?null:e); render(); }
 function setStickerSize(s){ photoEditor.stickerSize=s; render(); }
 function placeSticker(ev){
   if(!photoEditor||!photoEditor.activeSticker) return;
@@ -4027,6 +4151,7 @@ async function saveCardImg(){
 /* ---- Then vs Now ---- */
 let pickSel=[];
 function openThenNow(){
+  if(!requirePro('Then & Now')) return;
   const gal=(state.photos||[]).filter(p=>p.babyId===state.activeBabyId);
   if(gal.length<2){ toast('Save at least 2 photos first'); return; }
   pickSel=[];
@@ -4070,8 +4195,10 @@ function drawThenNow(objs){
     const ageAt=preciseAge(b.birth,o.createdAt).full||'';
     ctx.fillText(ageAt, x+cw/2, y+ph+70);
   });
-  ctx.textAlign='center'; ctx.fillStyle='#b8ab9c'; ctx.font='800 18px "Nunito Sans", sans-serif';
-  ctx.fillText('made with Cubby 🐻', W/2, H-16);
+  if(!isPro()){
+    ctx.textAlign='center'; ctx.fillStyle='#b8ab9c'; ctx.font='800 18px "Nunito Sans", sans-serif';
+    ctx.fillText('made with Cubby 🐻', W/2, H-16);
+  }
   ctx.textAlign='left';
   const data=c.toDataURL('image/jpeg',0.92); window._lastCard=data; cardDraft={month:0,photoData:null};
   hideLoader();

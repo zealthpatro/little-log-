@@ -1,7 +1,18 @@
 # Cubby Pro — monetization research & roadmap
 
-Status: **waitlist only.** Nothing is built or charged. This captures the research behind the
-Pro waitlist so we validate demand before building.
+Status: **payment loop BUILT (June 2026), awaiting Stripe + Worker deploy to go live.**
+Everything client-side is in place: entitlement (`households/{hid}.pro`, written only by the
+billing Worker, rules-protected), `isPro()` gating, the upgrade sheet with 7-day-trial checkout
+(falls back to the waitlist until configured), the gated Base feature set (premium studio,
+watermark-free shares, doctor PDF report), and the Cloudflare Worker for Stripe checkout /
+webhook / portal.
+
+**Launch checklist (the only remaining steps, ~20 min):** follow `workers/pro-billing/README.md`:
+create the Stripe product/price ($59/yr), deploy the Worker, set its four secrets, add the
+Stripe webhook, **publish the updated `firestore.rules` in the Firebase console**, then set
+`PRO_CFG.checkoutUrl/portalUrl` in `app/index.html` and bump the SW cache. Test with Stripe
+test mode (card 4242...) before flipping live keys. Dev preview of Pro:
+`localStorage['cubby-pro-dev']='1'`.
 
 ## Positioning
 **Free forever for the essentials** (logging, sharing with family, growth charts, health nudges,

@@ -262,8 +262,9 @@
       window.LL.role = (d.members && d.members[user.uid]) || 'caregiver';
       window.LL.members = d.members || {};
       window.LL.memberInfo = d.memberInfo || {};
+      window.LL.pro = d.pro || null; // Pro entitlement: written only by the billing Worker
       window.LL.householdId = hid;
-      var sig = hhSig(d.app, d.members, d.memberInfo);
+      var sig = hhSig(d.app, d.members, d.memberInfo) + '|' + JSON.stringify(d.pro || null);
       if (booted && sig === lastHhSig) return; // our own write echo / duplicate emission, already on screen
       lastHhSig = sig;
       applyingRemote = true; applyAppBlob(d.app); applyingRemote = false;

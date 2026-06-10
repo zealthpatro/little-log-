@@ -1,5 +1,13 @@
 # Cubby Pro: paywall candidates (living list)
 
+> **June 2026: the v1 Base paywall is BUILT and wired** (see PRO.md status + the launch
+> checklist in `workers/pro-billing/README.md`). Live gates: portrait/story formats, premium
+> fonts (all but Fraunces), premium palettes (Sage/Sky/Ink), Big-milestone + Monthly-stats
+> templates, stickers beyond the first six, auto-enhance, background cutout, Then & Now,
+> the "made with Cubby" watermark (Pro removes it), and the new doctor PDF report. Free keeps
+> a generous taster: Original+Square, Fraunces, two palettes, Classic, six stickers, the text
+> visit summary, JSON export.
+
 A running list of what we *could* put behind Cubby Pro, updated as we build. This is a menu to choose from later, not a commitment. Pricing/flow is designed separately (see PRO.md when we get there). Competitor signal: Precious charges ~$4.99/mo for AI photo art and parents pay, so keepsakes/AI are proven willingness-to-pay.
 
 ## Guardrails (free forever, never paywall)
