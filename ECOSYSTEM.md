@@ -27,10 +27,12 @@ are **flows inside Den**, not separate apps.
   June 2026: no family-organizer app owns "Den" (closest is "ZenDen", a different name).
 - **Cubby** = the baby flow's friendly face (the bear, the cub). The bear world survives as the
   warmth layer: the family is the den, the baby is the cub.
-- **Cubby Den** = the current pregnancy service branding (page at /pregnancy/). As the master
-  brand rolls out, pregnancy simply becomes the "Pregnancy" flow inside Den; "the den" then means
-  the family home, which is an even better story. Transition is incremental: little-cubby.com
-  stays live; no big-bang rebrand of the shipped product until Den's shell exists.
+- **Mommy To Be** = the pregnancy service's INDEPENDENT brand (decided June 2026, replacing the
+  earlier "Cubby Den" service branding; page at /pregnancy/, in-app identity). It covers the whole
+  journey: trying ("we're trying" planning stage), just found out, week-by-week, birth. Honest
+  trademark note: it is a generic descriptive phrase, available (no app collision found; nearest
+  are Mommy+, HiMommy, Mommy Womb) but weakly protectable; the defensible equity stays in Den and
+  Cubby, with Mommy To Be as the approachable consumer-facing flow name.
 - Future sub-flows get plain descriptive names inside Den (Home, Weight, Meals), not new brands.
 
 ## Why Den wins (competitive positioning, June 2026)
@@ -45,10 +47,13 @@ lives in their Den, the more their story (and switching cost) grows.
 ## The flows
 
 ### Shipped (branch `pregnancy-tracker`)
-1. **Pregnancy** : week view, antenatal schedules (NHS/ACOG/G-BA/WHO), danger signs (CDC),
-   appointments, symptoms/weight/BP, opt-in condition trackers (GDM glucose with NICE/ACOG
-   targets, pre-eclampsia watch, supplements, nausea), kick counter, contraction timer (5-1-1),
-   birth plan, hospital bag, and the birth transition into the baby flow.
+1. **Pregnancy ("Mommy To Be")** : the full journey. A "we're trying" planning stage
+   (preconception checklist per NHS, optional fertile-window estimate, "I got a positive test"
+   celebration that converts to tracking), week view, antenatal schedules (NHS/ACOG/G-BA/WHO),
+   danger signs (CDC), appointments, symptoms/weight/BP, opt-in condition trackers (GDM glucose
+   with NICE/ACOG targets, pre-eclampsia watch, supplements, nausea), kick counter, contraction
+   timer (5-1-1), birth plan, hospital bag, a **Moments** album (ultrasounds and bump photos
+   paired with the week's "size of" comparison), and the birth transition into the baby flow.
 2. **Baby (Cubby)** : the existing shipped product: logging, multi-caregiver sync, vaccines,
    growth charts, medicine, illness, keepsakes, family sharing.
 3. **Home (v1, "Our Den" hub)** : household chores (assignable, tickable), things to buy

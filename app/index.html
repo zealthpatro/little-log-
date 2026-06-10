@@ -627,6 +627,15 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .log-list-item .lli-s{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:1px;}
 .log-list-item .lli-x{border:none;background:none;color:var(--ink-faint);cursor:pointer;padding:4px;}
 .icon-btn.icon-on{background:var(--star-soft);}
+.moment-card{background:var(--surface);border-radius:var(--radius-sm);overflow:hidden;box-shadow:0 4px 12px var(--shadow);margin-bottom:14px;}
+.moment-card img{width:100%;display:block;max-height:340px;object-fit:cover;background:#1c1a18;}
+.moment-cap{padding:12px 15px 11px;}
+.moment-cap .mc-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.moment-cap .mc-week{font-family:var(--font-display);font-size:18px;font-weight:600;color:var(--ink);}
+.moment-cap .mc-size{font-size:12.5px;font-weight:700;color:var(--preg);}
+.moment-cap .mc-note{font-size:13px;color:var(--ink-soft);font-weight:600;margin-top:4px;line-height:1.45;}
+.moment-cap .mc-row{display:flex;align-items:center;justify-content:space-between;margin-top:6px;}
+.moment-cap .mc-date{font-size:11.5px;color:var(--ink-faint);font-weight:700;}
 </style>
 </head>
 <body>
@@ -2469,7 +2478,7 @@ function renderOnboard(){
     <div class="field"><label>Country (sets the vaccine schedule)</label><select id="bCountry">${VAX_COUNTRIES.map(([k,n])=>`<option value="${k}" ${k===detectCountry()?'selected':''}>${n}</option>`).join('')}</select></div>
     <button class="btn-primary" style="--accent:var(--feed)" onclick="saveBaby()">Start tracking</button>
     <div style="text-align:center;font-size:12px;font-weight:800;color:var(--ink-faint);margin:14px 0 2px;letter-spacing:.04em">OR</div>
-    <button class="btn-ghost" onclick="openStartPregnancy()" style="color:var(--preg)">🤰 I'm expecting, track my pregnancy</button>
+    <button class="btn-ghost" onclick="openStartPregnancy()" style="color:var(--preg)">🌸 Mommy To Be: trying, expecting or counting weeks</button>
   </div>`;
 }
 
@@ -2500,13 +2509,23 @@ function pregDaysToGo(){ const p=state.pregnancy; if(!p||!p.dueDate) return null
 function pregCountryKey(c){ c=c||(state.pregnancy&&state.pregnancy.country)||detectCountry(); return (window.PREG&&PREG.antenatal[c])?c:'generic'; }
 function pregNextAppt(){ const p=state.pregnancy; if(!p) return null; const wk=pregWeek(); const open=(p.appts||[]).filter(a=>!a.done).sort((a,b)=>a.week-b.week); return open.find(a=>a.week>=wk)||open[0]||null; }
 
-/* ---- create a pregnancy ---- */
+/* ---- Mommy To Be: the journey starts wherever you are ---- */
 let pregDraft = {mode:'due', date:'', country:'us'};
-function openStartPregnancy(){ pregDraft={mode:'due', date:'', country:detectCountry()}; renderStartPregnancy(); }
-function setPregMode(m){ pregDraft.mode=m; pregDraft.date=(($('#pgDate')||{}).value)||pregDraft.date; renderStartPregnancy(); }
-function renderStartPregnancy(){
+function openStartPregnancy(){
+  pregDraft={mode:'due', date:'', country:detectCountry()};
+  openSheet(`<h2>Mommy To Be 🌸</h2><div class="sub">Wherever you are on the journey, start there. You can change anything later.</div>
+    <div class="prof-cards">
+      <div class="prof-card" onclick="openPlanningSetup()"><span class="lead" style="background:var(--diaper-soft);color:var(--diaper);font-size:18px">🌱</span><div class="cflex"><div class="a">We're trying</div><div class="b">Just starting out: get your body and home ready</div></div><span class="chev">${I.chev}</span></div>
+      <div class="prof-card" onclick="openExpectingSetup('lmp')"><span class="lead" style="background:var(--preg-soft);color:var(--preg);font-size:18px">🎉</span><div class="cflex"><div class="a">Just found out</div><div class="b">A positive test! We'll work out your weeks</div></div><span class="chev">${I.chev}</span></div>
+      <div class="prof-card" onclick="openExpectingSetup('due')"><span class="lead" style="background:var(--star-soft);color:var(--star);font-size:18px">🤰</span><div class="cflex"><div class="a">Already counting weeks</div><div class="b">You know your due date, pick up right where you are</div></div><span class="chev">${I.chev}</span></div>
+    </div>
+    <div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
+}
+function setPregMode(m){ pregDraft.mode=m; pregDraft.date=(($('#pgDate')||{}).value)||pregDraft.date; openExpectingSetup(m); }
+function openExpectingSetup(mode){
+  pregDraft.mode=mode||pregDraft.mode;
   const isDue = pregDraft.mode==='due';
-  openSheet(`<h2>You're expecting 🤍</h2><div class="sub">Congratulations. Let's set up your weeks. You can change any of this later.</div>
+  openSheet(`<h2>${isDue?'You\'re expecting 🤍':'Congratulations 🎉'}</h2><div class="sub">${isDue?'Let\'s set up your weeks. You can change any of this later.':'What a moment. Tell us your last period and we\'ll work out your weeks and due date.'}</div>
     <div class="seg" style="margin-bottom:16px">
       <button class="${isDue?'on':''}" onclick="setPregMode('due')">I know my due date</button>
       <button class="${!isDue?'on':''}" onclick="setPregMode('lmp')">Use last period</button>
@@ -2514,7 +2533,155 @@ function renderStartPregnancy(){
     <div class="field"><label>${isDue?'Due date (EDD)':'First day of your last period'}</label><input type="date" id="pgDate" value="${pregDraft.date}"></div>
     <div class="field"><label>Where you'll have your care</label><select id="pgCountry">${PREG_COUNTRY_OPTS.map(([k,n])=>`<option value="${k}" ${k===pregDraft.country?'selected':''}>${n}</option>`).join('')}</select></div>
     <button class="btn-primary" style="background:var(--preg)" onclick="savePregnancy()">Start tracking</button>
+    <button class="btn-ghost" onclick="openStartPregnancy()">Back</button>
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
+}
+/* ---- planning ("we're trying") stage ---- */
+function defaultPrecon(){
+  return ['Take folic acid, 400 micrograms daily','Check your vitamin D','Review any medicines with your GP or pharmacist','Book a preconception chat if you have a health condition','Ease off smoking and alcohol','Gentle movement most days']
+    .map(t=>({id:uid(),text:t,done:false}));
+}
+function openPlanningSetup(){
+  openSheet(`<h2>We're trying 🌱</h2><div class="sub">Lovely. We'll keep it gentle: a little preparation, an estimated fertile window if you want it, and zero pressure.</div>
+    <div class="field"><label>First day of your last period (optional)</label><input type="date" id="plLmp"></div>
+    <div class="field"><label>Usual cycle length (days)</label><input type="number" id="plCycle" value="28" min="21" max="40"></div>
+    <button class="btn-primary" style="background:var(--diaper)" onclick="savePlanning()">Start</button>
+    <button class="btn-ghost" onclick="openStartPregnancy()">Back</button>
+    <div class="preg-disclaim">Fertile-window estimates are rough guides, every body is different. This is informational only, not fertility advice.</div>`,'diaper');
+}
+function savePlanning(){
+  const dv=($('#plLmp')||{}).value;
+  const cyc=Math.max(21,Math.min(40,parseInt(($('#plCycle')||{}).value)||28));
+  state.pregnancy={ id:uid(), stage:'planning', dueDate:null, lmp:dv?new Date(dv+'T08:00').getTime():null, cycleLen:cyc,
+    country:pregCountryKey(detectCountry()), precon:defaultPrecon(),
+    careTeam:[], appts:[], symptoms:[], weights:[], bp:[], kicks:[], contractions:[],
+    birthPlan:'', bag:[], moments:[],
+    conditions:{}, glucose:[], urine:[], supplements:[], supplementLog:[], nausea:[],
+    glucoseUnit:'mmol', bornBabyId:null, createdAt:now() };
+  persist(); closeSheet(); render(); toast('Rooting for you 🌱');
+}
+function fertileEstimate(){
+  const p=state.pregnancy; if(!p||!p.lmp) return null;
+  const cyc=p.cycleLen||28;
+  const nextPeriod=p.lmp+cyc*86400000;
+  const ovulation=nextPeriod-14*86400000;
+  const start=ovulation-5*86400000, end=ovulation+86400000;
+  if(now()>nextPeriod+10*86400000) return {stale:true};
+  const f=ms=>new Date(ms).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+  return {start:f(start), end:f(end), next:f(nextPeriod), inWindow: now()>=start&&now()<=end};
+}
+function openPeriodUpdate(){
+  openSheet(`<h2>Period started</h2><div class="sub">Updating it keeps the estimate honest. And if it's a hard day, be kind to yourself.</div>
+    <div class="field"><label>First day</label><input type="date" id="puDate" value="${new Date().toISOString().slice(0,10)}"></div>
+    <button class="btn-primary" style="background:var(--diaper)" onclick="savePeriodUpdate()">Save</button>`,'diaper');
+}
+function savePeriodUpdate(){ const dv=($('#puDate')||{}).value; if(!dv){toast('Pick the date');return;} state.pregnancy.lmp=new Date(dv+'T08:00').getTime(); persist(); closeSheet(); render(); }
+function togglePrecon(id){ const it=(state.pregnancy.precon||[]).find(x=>x.id===id); if(!it)return; it.done=!it.done; persist(); render(); }
+function removePrecon(id){ state.pregnancy.precon=(state.pregnancy.precon||[]).filter(x=>x.id!==id); persist(); render(); }
+function addPrecon(){ const el=$('#pcNew'); const v=(el&&el.value.trim())||''; if(!v)return; state.pregnancy.precon.push({id:uid(),text:v,done:false}); persist(); render(); }
+function openPositiveTest(){
+  const p=state.pregnancy;
+  const dv=p.lmp?new Date(p.lmp).toISOString().slice(0,10):'';
+  openSheet(`<div class="welcome-burst">🎉🌸</div>
+    <h2 style="text-align:center">A positive test!</h2>
+    <div class="sub" style="text-align:center">Wonderful news. Let's turn trying into tracking: confirm your last period and we'll set up your weeks.</div>
+    <div class="field"><label>First day of your last period</label><input type="date" id="ptLmp" value="${dv}"></div>
+    <div class="field"><label>Where you'll have your care</label><select id="ptCountry">${PREG_COUNTRY_OPTS.map(([k,n])=>`<option value="${k}" ${k===p.country?'selected':''}>${n}</option>`).join('')}</select></div>
+    <button class="btn-primary" style="background:var(--preg)" onclick="confirmPositiveTest()">Start my pregnancy 🤍</button>
+    <div class="csub" style="text-align:center;margin-top:8px">A home test is a great sign. Your provider will confirm it properly.</div>`,'preg');
+}
+function confirmPositiveTest(){
+  const p=state.pregnancy;
+  const dv=($('#ptLmp')||{}).value; if(!dv){toast('We need your last period date');return;}
+  const cc=pregCountryKey(($('#ptCountry')||{}).value);
+  p.lmp=new Date(dv+'T08:00').getTime();
+  p.dueDate=p.lmp+PREG_TERM;
+  p.stage='expecting';
+  p.country=cc;
+  p.appts=(((window.PREG&&PREG.antenatal[cc]&&PREG.antenatal[cc].items))||[]).map(it=>({id:uid(),week:it.week,title:it.title,note:it.note,done:false,at:null}));
+  if(!(p.bag||[]).length) p.bag=defaultBag();
+  pregView='week'; persist(); closeSheet(); render(); toast('Congratulations, mommy to be 🤍');
+}
+function renderPlanningHome(){
+  const p=state.pregnancy;
+  const fe=fertileEstimate();
+  const feCard = !p.lmp ? `<div class="preg-card" onclick="openPeriodUpdate()" style="cursor:pointer"><div class="pc-ico">🗓️</div><div><div class="pc-t">Add your last period</div><div class="pc-b">We'll estimate your fertile window, only if you find it helpful.</div></div></div>`
+    : (fe&&fe.stale ? `<div class="preg-card" onclick="openPeriodUpdate()" style="cursor:pointer"><div class="pc-ico">🗓️</div><div><div class="pc-t">Update your period</div><div class="pc-b">It's been a while since the last one we know about. Tap to update, or if you think you might be pregnant, take a test 🤍</div></div></div>`
+    : `<div class="preg-card"><div class="pc-ico">${fe.inWindow?'✨':'🗓️'}</div><div><div class="pc-t">${fe.inWindow?'You may be in your fertile window':'Estimated fertile window'}</div><div class="pc-b">Around ${fe.start} to ${fe.end}. Next period around ${fe.next}. A rough guide only, every body is different.</div></div></div>`);
+  const items=(p.precon||[]).map(it=>`<div class="bag-row ${it.done?'done':''}"><div class="bg-tick" onclick="togglePrecon('${it.id}')">${it.done?I.check:''}</div><div class="bg-t" onclick="togglePrecon('${it.id}')">${escapeHtml(it.text)}</div><button class="bg-x" onclick="removePrecon('${it.id}')">${I.trash}</button></div>`).join('');
+  return `<div class="fade-in">
+    <div class="greeting">Getting ready 🌱</div>
+    <div class="greeting-sub">No pressure, no countdowns. Just gentle preparation for when your little one decides it's time.</div>
+    ${consentBanners()}
+    ${feCard}
+    <button class="btn-ghost" onclick="openPeriodUpdate()" style="margin-top:2px">🗓️ My period started</button>
+    <div class="sec-title">Getting your body ready</div>
+    ${items}
+    <div class="field" style="margin-top:10px"><label>Add your own</label><input id="pcNew" placeholder="e.g. Dentist check" onkeydown="if(event.key==='Enter')addPrecon()"></div>
+    <button class="btn-primary" style="background:var(--preg);margin-top:14px" onclick="openPositiveTest()">🎉 I got a positive test</button>
+    <button class="btn-ghost" style="color:var(--ink-faint)" onclick="confirmEndPregnancy()">Stop tracking</button>
+    <div class="preg-disclaim">Informational only, not medical or fertility advice. Folic acid before pregnancy is standard guidance (NHS); confirm what's right for you with your GP. If you've been trying for over a year (or six months if you're 35 or older), it's worth a kind chat with your doctor.</div>
+  </div>`;
+}
+
+/* ---- Moments: ultrasounds and bump photos, paired with the week's size ---- */
+let momentDraft={photoData:null, week:null, note:''};
+function momentSize(week){ const w=Math.max(4,Math.min(41,+week||4)); return (window.PREG&&PREG.weeks[w]&&PREG.weeks[w].size)||''; }
+function renderPregMoments(){
+  const p=state.pregnancy;
+  const list=(p.moments||[]).slice().sort((a,b)=>b.week-a.week||b.at-a.at);
+  const cards=list.map(m=>{
+    const src=photoSrc(m.photoId);
+    const size=momentSize(m.week);
+    return `<div class="moment-card">
+      ${src?`<img src="${src}" alt="Week ${m.week} scan">`:''}
+      <div class="moment-cap">
+        <div class="mc-top"><div class="mc-week">Week ${m.week}</div><div class="mc-size">${size?'🍐 about the size of a '+escapeHtml(size):''}</div></div>
+        ${m.note?`<div class="mc-note">${escapeHtml(m.note)}</div>`:''}
+        <div class="mc-row"><span class="mc-date">${dayLabel(m.at)}</span><button class="lli-x" onclick="deleteMoment('${m.id}')">${I.trash}</button></div>
+      </div>
+    </div>`;
+  }).join('');
+  return `<div class="fade-in">
+    <div class="greeting">Moments 📷</div>
+    <div class="greeting-sub">Your scans and bump pictures, paired with how big your baby was that week. The first photo album, before the album.</div>
+    <button class="btn-primary" style="background:var(--preg);margin:6px 0 14px" onclick="openAddMoment()">${I.camera} Add a moment</button>
+    ${cards||`<div class="preg-card"><div class="pc-ico">🖼️</div><div><div class="pc-t">Nothing here yet</div><div class="pc-b">Add your first ultrasound after a scan, or a bump photo any week. Each one is saved with the week and what size your baby was.</div></div></div>`}
+  </div>`;
+}
+function openAddMoment(){
+  momentDraft={photoData:null, week:pregWeek(), note:''};
+  renderAddMoment();
+}
+function renderAddMoment(){
+  const d=momentDraft;
+  const size=momentSize(d.week);
+  openSheet(`<h2>Add a moment</h2><div class="sub">An ultrasound, a bump photo, the test itself. Saved privately with the week it belongs to.</div>
+    <div class="field"><label>Photo</label>
+      ${d.photoData?`<div class="food-preview"><img src="${d.photoData}"><button class="rm" onclick="momentDraft.photoData=null;renderAddMoment()">×</button></div>`:`<button class="btn-ghost" style="margin:0" onclick="document.getElementById('momPhoto').click()">${I.camera} Choose a photo</button>`}
+      <input type="file" id="momPhoto" accept="image/*" style="display:none" onchange="loadMomentPhoto(this)">
+    </div>
+    <div class="field"><label>Week</label><input type="number" id="momWeek" min="1" max="42" value="${d.week}" oninput="momentDraft.week=this.value;var s=momentSize(this.value);var el=document.getElementById('momSize');if(el)el.textContent=s?('About the size of a '+s+' that week'):''"></div>
+    <div class="csub" id="momSize" style="margin:-6px 0 12px">${size?'About the size of a '+size+' that week':''}</div>
+    <div class="field"><label>Note (optional)</label><input id="momNote" placeholder="e.g. The 20 week scan, waving at us" value="${escapeHtml(d.note)}" oninput="momentDraft.note=this.value"></div>
+    <button class="btn-primary" style="background:var(--preg)" onclick="saveMoment()">Save moment</button>`,'preg');
+}
+function loadMomentPhoto(input){ const f=input.files[0]; if(!f)return; downscaleToData(f,1200,0.8,(data)=>{ momentDraft.photoData=data; renderAddMoment(); }); }
+function saveMoment(){
+  const d=momentDraft;
+  if(!d.photoData){ toast('Choose a photo first'); return; }
+  const week=Math.max(1,Math.min(42,parseInt(d.week)||pregWeek()));
+  const photoId=uid();
+  PhotoStore.set(photoId, d.photoData);
+  state.pregnancy.moments.push({id:uid(), photoId, week, note:(d.note||'').trim(), at:now()});
+  persist(); closeSheet(); pregGo('moments'); toast('Moment saved 🤍');
+}
+function deleteMoment(id){
+  const p=state.pregnancy;
+  const m=(p.moments||[]).find(x=>x.id===id); if(!m)return;
+  p.moments=p.moments.filter(x=>x.id!==id);
+  try{ PhotoStore.del(m.photoId); }catch(e){}
+  persist(); render();
 }
 function defaultBag(){
   return ['Maternity notes or records','ID and any paperwork','Comfortable going-home clothes','Toiletries and lip balm','Phone and a long charger','Snacks and a water bottle','Nappies and baby vests','Baby blanket and a going-home outfit','Car seat fitted and ready']
@@ -2529,9 +2696,9 @@ function savePregnancy(){
   if(pregDraft.mode==='due'){ dueDate=picked; }
   else { lmp=picked; dueDate=picked+PREG_TERM; }
   const appts=(((window.PREG&&PREG.antenatal[cc]&&PREG.antenatal[cc].items))||[]).map(it=>({id:uid(),week:it.week,title:it.title,note:it.note,done:false,at:null}));
-  state.pregnancy={ id:uid(), dueDate, lmp, country:cc,
+  state.pregnancy={ id:uid(), stage:'expecting', dueDate, lmp, country:cc,
     careTeam:[], appts, symptoms:[], weights:[], bp:[], kicks:[], contractions:[],
-    birthPlan:'', bag:defaultBag(),
+    birthPlan:'', bag:defaultBag(), moments:[],
     conditions:{}, glucose:[], urine:[], supplements:[], supplementLog:[], nausea:[],
     glucoseUnit:(cc==='us'||cc==='uae')?'mgdl':'mmol',
     bornBabyId:null, createdAt:now() };
@@ -2543,10 +2710,28 @@ function savePregnancy(){
 function pregGo(v){ pregView=v; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
 function renderPregShell(){
   ensurePregFields(state.pregnancy);
+  const planning = state.pregnancy.stage==='planning';
+  if(planning){
+    const main = pregView==='den' ? renderDenHub() : renderPlanningHome();
+    app().innerHTML=`
+      <div class="topbar">
+        <div class="preg-pill">
+          <div class="pp-orb">🌱</div>
+          <div><h1>Mommy To Be</h1><span>Getting ready</span></div>
+        </div>
+        ${FEATURES.den?`<button class="icon-btn ${pregView==='den'?'icon-on':''}" onclick="goDen()" aria-label="our den" style="font-size:17px">🧺</button>`:''}
+        <button class="icon-btn" onclick="toggleTheme()" aria-label="theme">${state.settings.theme==='night'?I.sun:I.moon}</button>
+        <button class="icon-btn" onclick="openSettings()" aria-label="settings">${I.settings}</button>
+      </div>
+      <div class="scroll" id="scroll">${main}</div>`;
+    startTick();
+    return;
+  }
   const wk=pregWeek(), tri=pregTri();
   let main='';
   if(pregView==='log') main=renderPregLog();
   else if(pregView==='tools') main=renderPregTools();
+  else if(pregView==='moments') main=renderPregMoments();
   else if(pregView==='care') main=renderPregCare();
   else if(pregView==='den') main=renderDenHub();
   else main=renderPregHome();
@@ -2554,7 +2739,7 @@ function renderPregShell(){
     <div class="topbar">
       <div class="preg-pill" onclick="pregGo('care')">
         <div class="pp-orb">🤰</div>
-        <div><h1>Cubby Den</h1><span>Week ${wk} · ${triName(tri)}</span></div>
+        <div><h1>Mommy To Be</h1><span>Week ${wk} · ${triName(tri)}</span></div>
       </div>
       ${FEATURES.den?`<button class="icon-btn ${pregView==='den'?'icon-on':''}" onclick="goDen()" aria-label="our den" style="font-size:17px">🧺</button>`:''}
       <button class="icon-btn" onclick="toggleTheme()" aria-label="theme">${state.settings.theme==='night'?I.sun:I.moon}</button>
@@ -2564,6 +2749,7 @@ function renderPregShell(){
     <div class="nav"><div class="nav-inner">
       <button class="nav-btn ${pregView==='week'?'active':''}" onclick="pregGo('week')">${I.home}Week</button>
       <button class="nav-btn ${pregView==='log'?'active':''}" onclick="pregGo('log')">${I.list}Log</button>
+      <button class="nav-btn ${pregView==='moments'?'active':''}" onclick="pregGo('moments')">${I.camera}Moments</button>
       <button class="nav-btn ${pregView==='tools'?'active':''}" onclick="pregGo('tools')">${I.heart}Tools</button>
       <button class="nav-btn ${pregView==='care'?'active':''}" onclick="pregGo('care')">${I.cross}Care</button>
     </div></div>`;
@@ -2907,6 +3093,10 @@ const PREG_CONDS=[
 ];
 function ensurePregFields(p){
   if(!p) return;
+  if(!p.stage) p.stage='expecting'; // pregnancies from before the journey stages
+  if(!p.moments) p.moments=[];
+  if(!p.precon) p.precon=[];
+  if(!p.cycleLen) p.cycleLen=28;
   if(!p.conditions) p.conditions={};
   if(!p.glucose) p.glucose=[];
   if(!p.urine) p.urine=[];
