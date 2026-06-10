@@ -44,9 +44,18 @@ other. A family should never leave Cubby from the first positive test to the tod
   ships an "Ember Baby Bottle System" with an **"Ember Baby" app** that tracks feedings and baby
   growth, plus "Ember Cycle Train" (pregnancy/postpartum) already exists on the App Store. Direct
   likelihood-of-confusion risk in our exact category; also an ASO dead end.
-- **"Cubby Den" chosen:** a bear's den is where cubs are born; derivative of our own mark
-  (defensible), unique in the stores, and the lifecycle story stays in the bear world.
-- Avoid for future sub-brands: Glow, Bump, Nest, Hatch (all major existing baby/pregnancy brands).
+- **"Cubby Den" chosen, and confirmed after a second full naming round.** A bear's den is where
+  cubs are born; derivative of our own mark (defensible), unique in the stores, and the lifecycle
+  story stays in the bear world ("the den opens" = the birth transition).
+- Round 2 (standalone names) explored and passed on: **Patter** ("pitter-patter of tiny feet",
+  clean in category, strongest alternative if a standalone brand is ever wanted), **Fern**
+  (fiddlehead = curled baby, clean), **Burrow** (Burrow furniture collision, different class),
+  Soon/Juniper/Hazel/Dawn (weak or health-adjacent neighbors).
+- Avoid for future sub-brands (all verified existing baby/pregnancy brands or giants):
+  Glow, Bump (The Bump), Nest, Hatch, Sprout (Sprout Pregnancy), Coconut (Coconut Baby),
+  **Cub/Cubs (Cubtale "Pregnancy & Baby" app uses "Cubs" as its core metaphor; Cub Baby Sleep
+  also exists)**, Willow (breast pump brand), Halo (Halo Bassinest), Flutter, Luna, Lumen, Aura,
+  Bloom/Blossom, Acorn (Acorns), Snug (rides SNOO/Snuz phonetics).
 
 ## Distribution (summary; the full review was discussed June 2026)
 - Web/PWA stays the source of truth and the web funnel. Stores are the discovery funnel.
