@@ -3,14 +3,14 @@
   window.cubbyLanding = function (msg) {
     var cta = '<button class="lp-cta ll-cta">Continue with Google</button>';
     var features = [
-      ['⚡', 'One-thumb logging', 'Feeds, sleep, nappies, pumping, logged in seconds, even at 3am.'],
-      ['👨‍👩‍👧', 'Your whole care circle', 'Parents, grandparents, the nanny, daycare or playschool, anyone who helps sees the same log, live.'],
-      ['🐻', 'Who did what', 'Know exactly who logged each feed, nap and nappy: you, your partner, or the nanny.'],
-      ['📈', 'Growth charts', 'WHO & CDC percentile curves behind your baby\'s weight and height.'],
-      ['🩺', 'Health, handled', 'Medicine reminders, gentle fever guidance, and a one-tap summary for the doctor.'],
-      ['📸', 'Keepsakes', 'Monthly memory cards, milestones and a birth poster from your real moments.'],
-      ['🔒', 'Private by design', 'Your log is locked to your family. No ads, and we never sell your data.'],
-      ['📋', 'See the day from anywhere', 'Checking in from work? Get a tidy recap of feeds, naps and meals, live.']
+      ['<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H13z"/></svg>', 'One-thumb logging', 'Feeds, sleep, nappies, pumping, logged in seconds, even at 3am.'],
+      ['<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.8 20a6.2 6.2 0 0 1 12.4 0"/><circle cx="17.2" cy="9.4" r="2.6"/><path d="M16 20a5.4 5.4 0 0 1 5.2-4.4"/></svg>', 'Your whole care circle', 'Parents, grandparents, the nanny, daycare or playschool, anyone who helps sees the same log, live.'],
+      ['<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="7"/><circle cx="5.8" cy="5.8" r="2.3"/><circle cx="18.2" cy="5.8" r="2.3"/><path d="M9.6 12.4h.01M14.4 12.4h.01M12 15.4h.01"/></svg>', 'Who did what', 'Know exactly who logged each feed, nap and nappy: you, your partner, or the nanny.'],
+      ['<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="13" y="7" width="3" height="10"/></svg>', 'Growth charts', 'WHO & CDC percentile curves behind your baby\'s weight and height.'],
+      ['<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v5a4 4 0 0 0 8 0V3"/><path d="M5 3H3.5M13 3h1.5"/><path d="M9 16v1a5 5 0 0 0 5 5 5 5 0 0 0 5-5v-3"/><circle cx="19" cy="11" r="2.2"/></svg>', 'Health, handled', 'Medicine reminders, gentle fever guidance, and a one-tap summary for the doctor.'],
+      ['<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h3l2-3h8l2 3h3v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/><circle cx="12" cy="13" r="4"/></svg>', 'Keepsakes', 'Monthly memory cards, milestones and a birth poster from your real moments.'],
+      ['<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/><path d="M12 15v2"/></svg>', 'Private by design', 'Your log is locked to your family. No ads, and we never sell your data.'],
+      ['<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>', 'See the day from anywhere', 'Checking in from work? Get a tidy recap of feeds, naps and meals, live.']
     ].map(function (f) {
       return '<div class="lp-feat"><div class="lp-fi">' + f[0] + '</div><div><div class="lp-ft">' + f[1] + '</div><div class="lp-fs">' + f[2] + '</div></div></div>';
     }).join('');
@@ -73,14 +73,14 @@
     + '.lp-cta{display:block;width:100%;max-width:340px;margin:0 auto;border:none;background:#C97FA0;color:#fff;font-size:17px;font-weight:800;padding:16px 22px;border-radius:15px;cursor:pointer;font-family:inherit;box-shadow:0 8px 20px rgba(201,127,160,.35);}'
     + '.lp-cta:hover{filter:brightness(1.03);}'
     + '.lp-msg{margin-top:12px;color:#b05a7a;font-size:13px;font-weight:700;}'
-    + '.lp-trust{margin-top:12px;font-size:12.5px;color:#9a8d80;font-weight:700;}'
+    + '.lp-trust{margin-top:12px;font-size:13px;color:#9a8d80;font-weight:700;}'
     + '.lp-why{text-align:center;padding:24px 6px 6px;}'
     + '.lp-why h2,.lp-steps-wrap h2,.lp-final h2,.lp-pro h2{font-family:"Fraunces",Georgia,serif;font-size:25px;color:#2C2521;margin:0 0 10px;line-height:1.25;}'
-    + '.lp-why p{color:#6E635B;font-size:15.5px;line-height:1.6;max-width:480px;margin:0 auto;font-weight:600;}'
+    + '.lp-why p{color:#6E635B;font-size:15px;line-height:1.6;max-width:480px;margin:0 auto;font-weight:600;}'
     + '.lp-feats{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:28px 0;}'
     + '.lp-feat{background:#fff;border-radius:16px;padding:16px;box-shadow:0 5px 14px rgba(0,0,0,.05);display:flex;gap:11px;align-items:flex-start;}'
-    + '.lp-fi{font-size:22px;flex:0 0 auto;line-height:1.2;}'
-    + '.lp-ft{font-weight:800;font-size:14.5px;margin-bottom:3px;}'
+    + '.lp-fi{flex:0 0 auto;width:40px;height:40px;border-radius:12px;background:#FBF7EF;color:#9A8C6E;display:grid;place-items:center;}.lp-fi svg{width:22px;height:22px;}'
+    + '.lp-ft{font-weight:800;font-size:15px;margin-bottom:3px;}'
     + '.lp-fs{font-size:13px;color:#6E635B;line-height:1.45;font-weight:600;}'
     + '.lp-steps-wrap{text-align:center;margin:14px 0 8px;}'
     + '.lp-steps{display:flex;flex-direction:column;gap:14px;max-width:430px;margin:18px auto 0;text-align:left;}'
@@ -90,7 +90,7 @@
     + '.lp-ss{font-size:13px;color:#6E635B;font-weight:600;margin-top:2px;}'
     + '.lp-pro{text-align:center;background:#fff;border:1px solid #EADFcf;border-radius:18px;padding:24px 20px;margin:30px 0 6px;box-shadow:0 5px 14px rgba(0,0,0,.05);}'
     + '.lp-pro-badge{display:inline-block;background:#C97FA0;color:#fff;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:4px 11px;border-radius:999px;margin-bottom:8px;}'
-    + '.lp-pro p{color:#6E635B;font-size:14.5px;line-height:1.55;max-width:460px;margin:0 auto;font-weight:600;}'
+    + '.lp-pro p{color:#6E635B;font-size:15px;line-height:1.55;max-width:460px;margin:0 auto;font-weight:600;}'
     + '.lp-pro-note{margin-top:14px !important;font-size:13px !important;color:#9a8d80 !important;}'
     + '.lp-cmp{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:18px 0 4px;text-align:left;}'
     + '.lp-col{background:#FBF7EF;border:1px solid #EADFcf;border-radius:14px;padding:16px;}'
@@ -98,13 +98,13 @@
     + '.lp-col-h{font-family:"Fraunces",Georgia,serif;font-size:18px;font-weight:600;color:#2C2521;margin-bottom:10px;}'
     + '.lp-soon{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;background:#C97FA0;color:#fff;padding:2px 7px;border-radius:999px;vertical-align:middle;margin-left:4px;}'
     + '.lp-col ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;}'
-    + '.lp-col li{font-size:12.5px;color:#6E635B;font-weight:600;line-height:1.4;padding-left:21px;position:relative;}'
+    + '.lp-col li{font-size:13px;color:#6E635B;font-weight:600;line-height:1.4;padding-left:21px;position:relative;}'
     + '.lp-col li::before{content:"✓";position:absolute;left:0;color:#56A08E;font-weight:900;}'
     + '.lp-col-pro li::before{content:"✦";color:#C97FA0;}'
     + '@media(max-width:520px){.lp-cmp{grid-template-columns:1fr;}}'
     + '.lp-final{text-align:center;padding:34px 0 6px;}'
     + '.lp-pwa{max-width:380px;margin:16px auto 0;font-size:12px;line-height:1.5;color:#a99e92;font-weight:600;}'
-    + '.lp-foot{text-align:center;color:#9a8d80;font-size:12.5px;font-weight:700;padding:28px 0 0;}'
+    + '.lp-foot{text-align:center;color:#9a8d80;font-size:13px;font-weight:700;padding:28px 0 0;}'
     + '@media(max-width:480px){.lp-feats{grid-template-columns:1fr;}.lp-name{font-size:34px;}}';
   document.head.appendChild(st);
 })();

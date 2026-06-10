@@ -106,7 +106,12 @@
       "Bash(curl -sS -m 20 -L \"https://little-cubby.com/\")",
       "Bash(curl -sS -m 20 -o /dev/null -w \"HTTP %{http_code}\\\\n\" \"https://cubby.saurav-918.workers.dev/\")",
       "Bash(curl -s -m 20 https://little-cubby.com/)",
-      "Bash(node --check app/landing.js)"
+      "Bash(node --check app/landing.js)",
+      "Bash(python3 tools/gen_article_img.py --slug safe-baby-sleep --title \"Safe baby sleep: reducing the risk of SIDS\" --age \"Newborn\" --theme \"Sleep & safety\" --out .)",
+      "Bash(curl -s \"https://little-cubby.com/articles/safe-baby-sleep/\")",
+      "Bash(python3 -c ' *)",
+      "Bash(node --check app/sw.js)",
+      "Bash(curl -s \"https://www.google.com/search?q=huckleberry+baby+tracker+alternative\" -o /dev/null -w \"%{http_code}\\\\n\")"
     ]
   }
 }

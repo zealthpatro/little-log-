@@ -92,7 +92,8 @@ Articles are produced by a **dedicated Sonnet writer agent**, not the main build
 - **Post-beta on-VM image AI** (Qwen/Seedream) — `AI-EDITING.md`.
 
 ## Doc index
-`README.md` (full) · `HANDOFF.md` (this) · `CHANGELOG.md` · `SEO.md` · `CONTENT.md` /
+`README.md` (full) · `HANDOFF.md` (this) · `DESIGN.md` (**design anchor**: system + audit, follow
+Part A for any UI) · `CHANGELOG.md` · `SEO.md` · `CONTENT.md` /
 `CONTENT-RUNBOOK.md` / `CONTENT-QUEUE.md` · `PRO.md` / `PAYWALL.md` · `PREGNANCY.md` /
 `PREGNANCY-HANDOFF.md` (v1, superseded) / **`PREGNANCY-HANDOFF-V2.md` (the pregnancy track:
 built on branch `pregnancy-tracker`, rollout + next steps)** · `ROUTINES.md` · `ONBOARDING.md` ·

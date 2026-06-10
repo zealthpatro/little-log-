@@ -291,6 +291,7 @@ Everything runs on **free tiers**. Nothing here requires a card on file.
 | `HANDOFF.md` | Fast resume notes / 30-second mental model. |
 | `CHANGELOG.md` | Notable changes over time. |
 | `SEO.md` | Marketing/SEO + CRO strategy. |
+| `DESIGN.md` | **Design anchor**: design system (tokens, type, spacing, iconography rules) + full design audit + prioritized fix list. New UI must follow Part A. |
 | `CONTENT.md` / `CONTENT-RUNBOOK.md` / `CONTENT-QUEUE.md` | Article rules / publish pipeline / backlog. |
 | `PRO.md` / `PAYWALL.md` | Pro feature list and paywall design (pre-beta). |
 | `PREGNANCY.md` | Phased pregnancy-module spec (original; sources list still canonical). |
