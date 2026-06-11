@@ -140,7 +140,9 @@
       + '<div class="ll-values"><div><span>⚡</span>Log feeds, sleep &amp; nappies in seconds</div><div><span>👨‍👩‍👧</span>Share with family &amp; caregivers, live</div><div><span>🔒</span>Private to your family</div></div>'
       + '<button id="llGoogleBtn" class="ll-auth-btn">Continue with Google</button>'
       + emailRowHtml()
-      + (msg ? '<div class="ll-auth-msg">' + msg + '</div>' : '') + '</div>';
+      + (msg ? '<div class="ll-auth-msg">' + msg + '</div>' : '')
+      + '<div style="margin-top:16px;font-size:12px;font-weight:700"><a href="/" style="color:#6E635B">About Cubby · little-cubby.com</a></div>'
+      + '</div>';
     document.getElementById('llGoogleBtn').onclick = signInGoogle;
     wireEmailRow(ov);
   }

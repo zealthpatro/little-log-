@@ -4447,13 +4447,13 @@ function normalizeLoadedState(saved){
 }
 </script>
 <!-- Cloud auth + sharing. Loads after the app so it can wire into state/persist/PhotoStore. -->
+<!-- Signed-out landing must load before store-firebase.js: showSignIn() falls back to a bare card if window.cubbyLanding isn't defined yet. -->
+<script src="landing.js"></script>
 <script src="store-firebase.js"></script>
 <!-- Bear avatars + custom time picker. -->
 <script src="cubby-extras.js"></script>
 <!-- WHO/CDC growth reference percentiles. -->
 <script src="growth-data.js"></script>
-<!-- Signed-out marketing landing page. -->
-<script src="landing.js"></script>
 <script>
 /* PWA: register only on a real http(s) host. Skips file:// and the in-app artifact sandbox. */
 if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){
