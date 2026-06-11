@@ -48,6 +48,7 @@
 @media (min-width:640px){#findr-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (min-width:980px){#findr-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 #findr-grid .art-card{margin:0}
+#findr-grid .art-card[hidden],#findr-grid .sect-head[hidden]{display:none!important}
 .sect-head{grid-column:1/-1;display:flex;align-items:baseline;gap:10px;margin:14px 0 -2px;padding-bottom:8px;border-bottom:1px solid var(--line)}
 .sect-head h2{font-family:var(--serif);font-size:18px;font-weight:600;color:var(--ink);margin:0;line-height:1}
 .sect-head .n{font-family:var(--sans);font-size:12px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.04em}
