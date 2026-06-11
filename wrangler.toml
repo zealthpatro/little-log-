@@ -1,6 +1,9 @@
-# Cubby: deploy as a static site on Cloudflare Workers (static assets, no server code).
+# Cubby: static site on Cloudflare Workers + a tiny edge worker that proxies
+# the reserved Firebase namespace (/__/*) for same-domain Google sign-in.
 name = "cubby"
+main = "worker.js"
 compatibility_date = "2025-06-01"
 
 [assets]
 directory = "./"
+binding = "ASSETS"
