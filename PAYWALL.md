@@ -7,6 +7,16 @@
 > the "made with Cubby" watermark (Pro removes it), and the new doctor PDF report. Free keeps
 > a generous taster: Original+Square, Fraunces, two palettes, Classic, six stickers, the text
 > visit summary, JSON export.
+>
+> **Pro tasters (June 2026): try-before-buy is live.** Premium styles apply freely on the
+> studio canvas (golden ✨ chips, no interrupt) and saving keepsakes in-app is unlimited;
+> the gate sits at *export*. Free quotas (`PRO_TASTE` in `app/index.html`, counts synced in
+> `state.settings.proTaste`): 3 premium-styled downloads/shares (one charge covers a whole
+> editing session), 3 auto-enhances, 3 background cutouts (refunded on failure), 1 Then & Now,
+> 1 doctor PDF. All free exports keep the watermark, now "made with Cubby 🐻 · little-cubby.com"
+> (the viral lever). When a quota runs out the Pro sheet opens with "You've enjoyed your free
+> tastes of X". Studio + memory cards have a "Share · Instagram-ready" button (native share
+> sheet with the image file → IG Stories/Feed); the Story format chip is labelled "Story · Insta".
 
 A running list of what we *could* put behind Cubby Pro, updated as we build. This is a menu to choose from later, not a commitment. Pricing/flow is designed separately (see PRO.md when we get there). Competitor signal: Precious charges ~$4.99/mo for AI photo art and parents pay, so keepsakes/AI are proven willingness-to-pay.
 

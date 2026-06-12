@@ -432,7 +432,9 @@ body.night .ob-card{background:rgba(38,32,28,.86);}
 .chip-row{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;-webkit-overflow-scrolling:touch;}
 .chip-row::-webkit-scrollbar{height:0;}
 .chip{display:inline-flex;align-items:center;gap:5px;border:2px solid var(--line);background:var(--surface);border-radius:30px;padding:9px 15px;font-weight:800;font-size:13px;color:var(--ink-soft);cursor:pointer;white-space:nowrap;flex-shrink:0;font-family:var(--font-body);transition:all .15s;}
-.chip.lk{opacity:.55;}
+.chip.lk{border-color:var(--star);background:var(--star-soft);color:var(--ink);}
+.chip.lk.sel{border-color:var(--star);background:var(--star);color:#fff;}
+.pro-pill{display:flex;align-items:center;justify-content:center;gap:6px;background:var(--star-soft);border:1.5px dashed var(--star);color:var(--ink);border-radius:14px;padding:8px 12px;font-size:13px;font-weight:700;margin:0 0 10px;text-align:center;}
 .chip svg{width:15px;height:15px;}
 .chip.allergen{border-color:var(--med);color:var(--med);}
 .chip.allergen.sel{background:var(--med);color:#fff;border-color:var(--med);}
@@ -1924,7 +1926,23 @@ function isPro(){
   return !p.until || (+p.until + 3*86400000) > now();
 }
 function requirePro(featureName){ if(isPro()) return true; openPro(featureName); return false; }
-function openPro(lockedFeature){
+/* Pro tasters: every Pro treat can be tried a few times for free (outputs keep the
+   small Cubby mark). Counts sync with the household via state.settings.proTaste. */
+const PRO_TASTE={styles:3,enhance:3,cutout:3,thennow:1,pdf:1};
+function tasteUsed(k){ return ((state.settings||{}).proTaste||{})[k]||0; }
+function tasteLeft(k){ return Math.max(0,(PRO_TASTE[k]||0)-tasteUsed(k)); }
+function useTaste(k,featureName){
+  if(isPro()) return true;
+  if(tasteLeft(k)<=0){ openPro(featureName,true); return false; }
+  state.settings.proTaste=state.settings.proTaste||{};
+  state.settings.proTaste[k]=tasteUsed(k)+1; persist();
+  const left=tasteLeft(k);
+  toast(left>0?`✨ Pro taster · ${left} free ${left===1?'try':'tries'} left`:'✨ That was your last free taste 🐻');
+  return true;
+}
+function refundTaste(k){ if(isPro())return; try{ const t=state.settings.proTaste; if(t&&t[k]>0){ t[k]--; persist(); } }catch(e){} }
+function proTag(k){ return isPro()?'':(tasteLeft(k)>0?` · ${tasteLeft(k)} free`:' · Pro ✨'); }
+function openPro(lockedFeature, tastedOut){
   const feats=[
     ['🎨','The full keepsake studio','Every template, font and palette, portrait and story formats, the whole sticker set.'],
     ['✨','Auto-enhance & background cutout','One-tap polish and sticker-style cutouts, all on your device.'],
@@ -1942,8 +1960,9 @@ function openPro(lockedFeature){
     return;
   }
   openSheet(`<h2>Cubby Pro ✨</h2>
-    <div class="sub">${lockedFeature?`<b>${escapeHtml(lockedFeature)}</b> is a Pro treat. `:''}Cubby is free for the essentials, always. Pro adds the delights.</div>
+    <div class="sub">${lockedFeature?(tastedOut?`You've enjoyed your free tastes of <b>${escapeHtml(lockedFeature)}</b>. `:`<b>${escapeHtml(lockedFeature)}</b> is a Pro treat. `):''}Cubby is free for the essentials, always. Pro adds the delights.</div>
     <div class="pro-list">${feats}</div>
+    <div class="csub" style="text-align:center;margin:2px 0 10px">Every treat comes with a free taste or two, so try before you decide 🐻</div>
     ${canBuy
       ? `<button class="btn-primary" style="background:var(--star)" onclick="startProCheckout()">Start 7-day free trial</button>
          <div class="csub" style="text-align:center;margin-top:8px">${PRO_CFG.priceLine}. Cancel anytime in the trial and pay nothing. One plan covers your whole family.</div>`
@@ -2680,15 +2699,15 @@ function openVisitSummary(){
   openSheet(`<h2>Visit summary</h2><div class="sub">A snapshot of ${escapeHtml(b.name)}'s last 7 days for your appointment.</div>
     <pre class="visit-sum">${escapeHtml(text)}</pre>
     <button class="btn-primary" style="background:var(--sleep)" onclick="copyVisitSummary()">${I.list||''} Copy summary</button>
-    <button class="btn-ghost" onclick="openDoctorReport()">📄 Doctor PDF report ${isPro()?'':'· Pro'}</button>
+    <button class="btn-ghost" onclick="openDoctorReport()">📄 Doctor PDF report ${isPro()?'':(tasteLeft('pdf')>0?'· ✨ try one free':'· Pro ✨')}</button>
     <button class="btn-ghost" onclick="closeSheet()">Close</button>`,'sleep');
   window.__visitSummaryText=text;
 }
 /* Printable doctor report: a clean page the browser prints / saves as PDF.
    Zero infra: it is generated entirely on-device from the existing log. */
 function openDoctorReport(){
-  if(!requirePro('Doctor PDF report')) return;
   const b=activeBaby(); if(!b) return;
+  if(!useTaste('pdf','Doctor PDF report')) return;
   const esc=escapeHtml;
   const summary=visitSummary(14);
   let growthLine='';
@@ -3335,15 +3354,23 @@ const PRESETS={
   Vivid:{bright:102,contrast:112,sat:130,warm:6,vignette:6,grain:2}
 };
 /* ---- Shareable moment cards: Instagram-native formats, fonts, palettes ---- */
-const MOMENT_FORMATS=[['orig','Original'],['square','Square'],['portrait','Portrait'],['story','Story']];
+const MOMENT_FORMATS=[['orig','Original'],['square','Square'],['portrait','Portrait'],['story','Story · Insta']];
 const MOMENT_FONTS=[['Fraunces','Fraunces'],['Playfair Display','Playfair'],['Poppins','Poppins'],['Caveat','Handwritten']];
 const MOMENT_TEMPLATES=[['classic','Classic'],['big','Big milestone'],['stats','Monthly stats']];
 /* What Base/Pro unlocks in the studio (see PAYWALL.md). Free keeps a real, generous
    taster: Original+Square, the Fraunces font, two palettes, the Classic template and
-   six stickers. Locks render as gentle 🔒 chips that open the Pro sheet. */
+   six stickers. Premium styles render as golden ✨ chips, apply freely on the canvas,
+   and the gate sits at export: a few watermarked shares free, then the Pro sheet. */
 const PRO_LOCK={ formats:['portrait','story'], fonts:['Playfair Display','Poppins','Caveat'],
   palettes:['Sage','Sky','Ink'], templates:['big','stats'], stickerFree:6 };
 function proLocked(group,key){ if(isPro()) return false; return group==='stickers' ? STICKERS.indexOf(key)>=PRO_LOCK.stickerFree : (PRO_LOCK[group]||[]).indexOf(key)>=0; }
+function usesProStyles(){
+  if(!photoEditor) return false;
+  const card=photoEditor.format&&photoEditor.format!=='orig';
+  if(proLocked('formats',photoEditor.format)) return true;
+  if(card&&(proLocked('fonts',photoEditor.font||'Fraunces')||proLocked('palettes',photoEditor.palette||'Cream')||proLocked('templates',photoEditor.template||'classic'))) return true;
+  return (photoEditor.stickers||[]).some(s=>proLocked('stickers',s.e));
+}
 function cssFont(name){ return ({'Fraunces':'Fraunces, Georgia, serif','Playfair Display':'"Playfair Display", Georgia, serif','Poppins':'Poppins, system-ui, sans-serif','Caveat':'Caveat, "Comic Sans MS", cursive'})[name]||'Fraunces, serif'; }
 const MOMENT_PALETTES={
   Cream:{bg1:'#FBF5E9',bg2:'#EFE0C8',ink:'#2C2521',sub:'#6E635B',accent:'#C97FA0'},
@@ -3456,7 +3483,7 @@ function composeShareCard(canvas,maxW){
   if(!isPro()){
     ctx.fillStyle=pal.sub; ctx.globalAlpha=0.6;
     ctx.font=`800 ${Math.round(W*0.022)}px ${NUN}`;
-    ctx.fillText('made with Cubby 🐻', cx, photoY+photoH+capH-Math.round(H*0.018));
+    ctx.fillText('made with Cubby 🐻 · little-cubby.com', cx, photoY+photoH+capH-Math.round(H*0.018));
     ctx.globalAlpha=1;
   }
   ctx.textAlign='left';
@@ -3536,19 +3563,19 @@ function renderPhotos(){
   const posMatters=!['none','ribbon','month'].includes(photoEditor.stamp);
   const fmt=photoEditor.format||'orig';
   const isCard=fmt!=='orig';
-  const fmtChips=MOMENT_FORMATS.map(([k,l])=>{const lk=proLocked('formats',k);return `<div class="chip ${fmt===k?'sel':''}${lk?' lk':''}" onclick="setFormat('${k}')">${lk?'🔒 ':''}${l}</div>`;}).join('');
-  const fontChips=MOMENT_FONTS.map(([k,l])=>{const lk=proLocked('fonts',k);return `<div class="chip ${(photoEditor.font||'Fraunces')===k?'sel':''}${lk?' lk':''}" onclick="setMomentFont('${k.replace(/'/g,"\\'")}')" style="font-family:${cssFont(k)}">${lk?'🔒 ':''}${l}</div>`;}).join('');
-  const palChips=Object.keys(MOMENT_PALETTES).map(k=>{const p=MOMENT_PALETTES[k];const lk=proLocked('palettes',k);return `<div class="chip ${(photoEditor.palette||'Cream')===k?'sel':''}${lk?' lk':''}" onclick="setPalette('${k}')"><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:linear-gradient(135deg,${p.bg1},${p.accent});margin-right:6px;vertical-align:-1px"></span>${lk?'🔒 ':''}${k}</div>`;}).join('');
-  const tplChips=MOMENT_TEMPLATES.map(([k,l])=>{const lk=proLocked('templates',k);return `<div class="chip ${(photoEditor.template||'classic')===k?'sel':''}${lk?' lk':''}" onclick="setTemplate('${k}')">${lk?'🔒 ':''}${l}</div>`;}).join('');
-  const stickerChips=STICKERS.map(e=>{const lk=proLocked('stickers',e);return `<div class="chip ${photoEditor.activeSticker===e?'sel':''}${lk?' lk':''}" onclick="selectSticker('${e}')" style="font-size:18px;padding:6px 11px">${lk?'🔒':e}</div>`;}).join('');
+  const fmtChips=MOMENT_FORMATS.map(([k,l])=>{const lk=proLocked('formats',k);return `<div class="chip ${fmt===k?'sel':''}${lk?' lk':''}" onclick="setFormat('${k}')">${lk?'✨ ':''}${l}</div>`;}).join('');
+  const fontChips=MOMENT_FONTS.map(([k,l])=>{const lk=proLocked('fonts',k);return `<div class="chip ${(photoEditor.font||'Fraunces')===k?'sel':''}${lk?' lk':''}" onclick="setMomentFont('${k.replace(/'/g,"\\'")}')" style="font-family:${cssFont(k)}">${lk?'✨ ':''}${l}</div>`;}).join('');
+  const palChips=Object.keys(MOMENT_PALETTES).map(k=>{const p=MOMENT_PALETTES[k];const lk=proLocked('palettes',k);return `<div class="chip ${(photoEditor.palette||'Cream')===k?'sel':''}${lk?' lk':''}" onclick="setPalette('${k}')"><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:linear-gradient(135deg,${p.bg1},${p.accent});margin-right:6px;vertical-align:-1px"></span>${lk?'✨ ':''}${k}</div>`;}).join('');
+  const tplChips=MOMENT_TEMPLATES.map(([k,l])=>{const lk=proLocked('templates',k);return `<div class="chip ${(photoEditor.template||'classic')===k?'sel':''}${lk?' lk':''}" onclick="setTemplate('${k}')">${lk?'✨ ':''}${l}</div>`;}).join('');
+  const stickerChips=STICKERS.map(e=>{const lk=proLocked('stickers',e);return `<div class="chip ${photoEditor.activeSticker===e?'sel':''}${lk?' lk':''}" onclick="selectSticker('${e}')" style="font-size:18px;padding:6px 11px">${e}</div>`;}).join('');
   const ssz=photoEditor.stickerSize||0.13;
   const sizeChips=[['S',0.09],['M',0.13],['L',0.2]].map(([l,v])=>`<div class="chip ${Math.abs(ssz-v)<0.001?'sel':''}" onclick="setStickerSize(${v})">${l}</div>`).join('');
   const nSt=(photoEditor.stickers||[]).length;
   return `<div class="fade-in">
     <div class="canvas-wrap"><canvas id="photoCanvas" onclick="placeSticker(event)" style="${photoEditor.activeSticker?'cursor:crosshair':''}"></canvas></div>
     <div class="row2" style="margin:0 0 12px">
-      <button class="btn-primary" style="background:var(--star)" onclick="autoEnhance()">✨ Auto-enhance</button>
-      <button class="btn-primary" style="background:var(--diaper)" onclick="cutoutBackground()">✂️ Cut out background</button>
+      <button class="btn-primary" style="background:var(--star)" onclick="autoEnhance()">✨ Auto-enhance${proTag('enhance')}</button>
+      <button class="btn-primary" style="background:var(--diaper)" onclick="cutoutBackground()">✂️ Cut out${proTag('cutout')}</button>
     </div>
     ${photoEditor.cutImg?`<div class="chip-row" style="margin:-4px 0 12px"><div class="chip ${photoEditor.cutout?'sel':''}" onclick="photoEditor.cutout=true;render();drawPhoto()">Cutout</div><div class="chip ${!photoEditor.cutout?'sel':''}" onclick="photoEditor.cutout=false;render();drawPhoto()">Original</div></div>`:''}
     <div class="sec-title">Stickers ${photoEditor.activeSticker?'· tap the photo to place':''}</div>
@@ -3572,10 +3599,13 @@ function renderPhotos(){
     ${slider('Saturation','sat',0,160,a.sat)}
     ${slider('Vignette','vignette',0,60,a.vignette)}
     ${slider('Grain','grain',0,40,a.grain)}
+    ${(!isPro()&&usesProStyles())?`<div class="pro-pill">✨ ${photoEditor._styleCharged?'Pro styles unlocked for this card, share away':`Pro styles on this card · ${tasteLeft('styles')} free share${tasteLeft('styles')===1?'':'s'} left`}</div>`:''}
     <div class="row2">
       <button class="btn-primary" onclick="savePhoto()">${I.check} Save</button>
       <button class="btn-primary" style="background:var(--sleep)" onclick="downloadPhoto()">${I.download} Download</button>
     </div>
+    ${navigator.share?`<button class="btn-primary" style="background:var(--pump)" onclick="shareComposed()">📤 Share · Instagram-ready</button>`:''}
+    ${(!isPro()&&isCard)?`<div class="csub" style="text-align:center;margin:6px 0 10px">Free shares carry a small "made with Cubby" mark · Pro shares are clean ✨</div>`:''}
     <button class="btn-ghost" onclick="discardPhoto()">Discard & start over</button>
     ${galleryHtml}
   </div>`;
@@ -3625,8 +3655,8 @@ async function getSegmenter(){
 }
 async function cutoutBackground(){
   if(!photoEditor) return;
-  if(!requirePro('Background cutout')) return;
   if(photoEditor.cutImg){ photoEditor.cutout=true; render(); drawPhoto(); return; }
+  if(!useTaste('cutout','Background cutout')) return;
   showLoader(['Finding your little one','Cutting out the background']);
   try{
     const seg=await getSegmenter();
@@ -3649,17 +3679,18 @@ async function cutoutBackground(){
     octx.drawImage(img,0,0); const idata=octx.getImageData(0,0,W,H), d=idata.data;
     let kept=0;
     for(let y=0;y<H;y++){ const my=Math.min(mh-1,(y*mh/H)|0); for(let x=0;x<W;x++){ const mx=Math.min(mw-1,(x*mw/W)|0); let c=mArr[my*mw+mx]; if(invert) c=1-c; c=c<0?0:c>1?1:c; if(c>0.5)kept++; d[(y*W+x)*4+3]=(c*255)|0; } }
-    if(kept < W*H*0.02){ hideLoader(); toast('Could not find a clear subject to cut out'); return; }
+    if(kept < W*H*0.02){ hideLoader(); refundTaste('cutout'); toast('Could not find a clear subject to cut out'); return; }
     octx.putImageData(idata,0,0);
     try{ res.close&&res.close(); }catch(e){}
     const url=out.toDataURL('image/png');
     await new Promise(r=>{ const im=new Image(); im.onload=()=>{ photoEditor.cutImg=im; photoEditor.cutout=true; r(); }; im.src=url; });
     hideLoader(); render(); drawPhoto(); toast('✂️ Background removed');
-  }catch(e){ hideLoader(); toast('Cutout unavailable here, try again on a stronger connection'); }
+  }catch(e){ hideLoader(); refundTaste('cutout'); toast('Cutout unavailable here, try again on a stronger connection'); }
 }
 function autoEnhance(){
   if(!photoEditor) return;
-  if(!requirePro('Auto-enhance')) return;
+  // one taste covers the whole editing session (retapping tweaks the same photo)
+  if(!photoEditor._enhCharged){ if(!useTaste('enhance','Auto-enhance')) return; photoEditor._enhCharged=true; }
   const st=imageStats(photoEditor.img);
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,Math.round(v)));
   const bright=clamp(100*142/Math.max(40,st.mean),88,116);
@@ -3675,13 +3706,14 @@ function setFrame(f){ photoEditor.frame=f; render(); drawPhoto(); }
 function setStamp(s){ photoEditor.stamp=s; render(); drawPhoto(); }
 function setStampPos(p){ photoEditor.stampPos=p; render(); drawPhoto(); }
 function setStampTone(t){ photoEditor.stampTone=t; render(); drawPhoto(); }
-function setFormat(f){ if(proLocked('formats',f)){ openPro('Portrait & Story formats'); return; } photoEditor.format=f; render(); if(document.fonts&&document.fonts.ready){ document.fonts.ready.then(drawPhoto); } drawPhoto(); }
-function setMomentFont(f){ if(proLocked('fonts',f)){ openPro('Premium fonts'); return; } photoEditor.font=f; render(); if(document.fonts&&document.fonts.ready){ document.fonts.ready.then(drawPhoto); } else { drawPhoto(); } }
-function setPalette(p){ if(proLocked('palettes',p)){ openPro('Premium palettes'); return; } photoEditor.palette=p; render(); drawPhoto(); }
-function setTemplate(t){ if(proLocked('templates',t)){ openPro('Premium templates'); return; } photoEditor.template=t; render(); drawPhoto(); }
+/* Premium styles apply freely (explore on the canvas); the taster gate sits at export. */
+function setFormat(f){ photoEditor.format=f; render(); if(document.fonts&&document.fonts.ready){ document.fonts.ready.then(drawPhoto); } drawPhoto(); }
+function setMomentFont(f){ photoEditor.font=f; render(); if(document.fonts&&document.fonts.ready){ document.fonts.ready.then(drawPhoto); } else { drawPhoto(); } }
+function setPalette(p){ photoEditor.palette=p; render(); drawPhoto(); }
+function setTemplate(t){ photoEditor.template=t; render(); drawPhoto(); }
 /* ---- Sticker pack (tap a sticker, tap the photo to drop it) ---- */
 const STICKERS=['❤️','⭐','🐻','🌙','🌞','🍼','👑','🌈','✨','👣','🎀','☁️','🐣','🦋','🥹','🎈'];
-function selectSticker(e){ if(proLocked('stickers',e)){ openPro('The full sticker set'); return; } photoEditor.activeSticker=(photoEditor.activeSticker===e?null:e); render(); }
+function selectSticker(e){ photoEditor.activeSticker=(photoEditor.activeSticker===e?null:e); render(); }
 function setStickerSize(s){ photoEditor.stickerSize=s; render(); }
 function placeSticker(ev){
   if(!photoEditor||!photoEditor.activeSticker) return;
@@ -3897,10 +3929,35 @@ function drawStamp(ctx, ix, iy, iw, ih, b, age, dateStr){
   }
 }
 function drawPhoto(){ const c=$('#photoCanvas'); if(c&&photoEditor) composeAny(c,1080); }
+/* The taster gate lives at export: premium styles are free to explore on the canvas
+   and to Save in-app; Download/Share of a premium-styled card costs one taste.
+   One charge covers the whole editing session (re-exports of the same card are free). */
+function exportGate(){
+  if(isPro()||!usesProStyles()) return true;
+  if(photoEditor._styleCharged) return true;
+  if(!useTaste('styles','Premium styles')) return false;
+  photoEditor._styleCharged=true; render(); return true;
+}
 function downloadPhoto(){
+  if(!exportGate()) return;
   const tmp=document.createElement('canvas'); composeAny(tmp,1600);
   const a=document.createElement('a'); a.href=tmp.toDataURL('image/jpeg',0.92);
   a.download=(activeBaby().name||'baby')+'-moment.jpg'; a.click(); toast('Downloaded');
+}
+/* Share straight to the OS share sheet (Instagram, WhatsApp, anywhere) as a real
+   image file; falls back to a download where file-sharing isn't supported. */
+async function shareComposed(){
+  if(!photoEditor) return;
+  if(!exportGate()) return;
+  const tmp=document.createElement('canvas'); composeAny(tmp,1600);
+  const name=(activeBaby().name||'baby')+'-moment.jpg';
+  try{
+    const blob=await new Promise(r=>tmp.toBlob(r,'image/jpeg',0.92));
+    const file=new File([blob],name,{type:'image/jpeg'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file],title:'Cubby moment'}); return; }
+  }catch(e){ if(e&&e.name==='AbortError') return; }
+  const a=document.createElement('a'); a.href=tmp.toDataURL('image/jpeg',0.92);
+  a.download=name; a.click(); toast('Saved the image, share it anywhere');
 }
 async function savePhoto(){
   const tmp=document.createElement('canvas'); composeAny(tmp,900);
@@ -4027,7 +4084,7 @@ function renderMemories(){
         <div class="mbody"><div class="mt">Birth announcement poster</div><div class="mh">Name, born-on, weight, length, place & star sign, printable</div></div>
       </button>
       <button class="mem-card" onclick="openMemoryCard()"><div class="mi" style="background:var(--star-soft);color:var(--star)">${I.star}</div><div class="mt">Memory card</div><div class="mh">A month's real stats</div></button>
-      <button class="mem-card" onclick="openThenNow()"><div class="mi" style="background:var(--sleep-soft);color:var(--sleep)">${I.camera}</div><div class="mt">Then vs Now</div><div class="mh">Side by side</div></button>
+      <button class="mem-card" onclick="openThenNow()"><div class="mi" style="background:var(--sleep-soft);color:var(--sleep)">${I.camera}</div><div class="mt">Then vs Now</div><div class="mh">Side by side${proTag('thennow')}</div></button>
       <button class="mem-card" onclick="makeCollage()"><div class="mi" style="background:var(--diaper-soft);color:var(--diaper)">${I.list}</div><div class="mt">Growth collage</div><div class="mh">${filled} photo${filled===1?'':'s'}</div></button>
     </div>
     <div class="sec-title">Monthly photos</div>
@@ -4194,6 +4251,7 @@ async function genCard(){
   openSheet(`<h2>${slotLabel(cardDraft.month)}</h2><div class="sub">${escapeHtml(activeBaby().name)}'s memory card</div>
     <img src="${data}" class="card-prev">
     <button class="btn-primary" onclick="saveCardImg()">${I.check} Save to gallery</button>
+    ${navigator.share?`<button class="btn-primary" style="background:var(--pump)" onclick="shareLastCard('memory-card')">📤 Share · Instagram-ready</button>`:''}
     <button class="btn-primary" style="background:var(--sleep)" onclick="dlCard()">${I.download} Download</button>`,'feed');
   window._lastCard=data;
 }
@@ -4216,7 +4274,7 @@ async function saveCardImg(){
 /* ---- Then vs Now ---- */
 let pickSel=[];
 function openThenNow(){
-  if(!requirePro('Then & Now')) return;
+  if(!isPro()&&tasteLeft('thennow')<=0){ openPro('Then & Now',true); return; }
   const gal=(state.photos||[]).filter(p=>p.babyId===state.activeBabyId);
   if(gal.length<2){ toast('Save at least 2 photos first'); return; }
   pickSel=[];
@@ -4233,6 +4291,7 @@ function togglePick(id){
 }
 function genThenNow(){
   if(pickSel.length!==2)return;
+  if(!useTaste('thennow','Then & Now')) return;
   showLoader(['Lining up then and now','Watching them grow up']);
   const imgs=pickSel.map(id=>{ const p=(state.photos||[]).find(x=>x.id===id); return {p,data:photoSrc(p.photoId)}; });
   let loaded=0; const objs=[];
@@ -4262,15 +4321,16 @@ function drawThenNow(objs){
   });
   if(!isPro()){
     ctx.textAlign='center'; ctx.fillStyle='#b8ab9c'; ctx.font='800 18px "Nunito Sans", sans-serif';
-    ctx.fillText('made with Cubby 🐻', W/2, H-16);
+    ctx.fillText('made with Cubby 🐻 · little-cubby.com', W/2, H-16);
   }
   ctx.textAlign='left';
   const data=c.toDataURL('image/jpeg',0.92); window._lastCard=data; cardDraft={month:0,photoData:null};
   hideLoader();
   openSheet(`<h2>Then vs Now</h2><div class="sub">${escapeHtml(b.name)}, growing up.</div>
     <img src="${data}" class="card-prev">
-    ${navigator.share?`<button class="btn-primary" onclick="shareLastCard('thenvsnow')">Share</button>`:''}
-    <button class="btn-primary" style="background:var(--sleep)" onclick="dlNamed('thenvsnow')">${I.download} Download</button>`,'sleep');
+    ${navigator.share?`<button class="btn-primary" onclick="shareLastCard('thenvsnow')">📤 Share · Instagram-ready</button>`:''}
+    <button class="btn-primary" style="background:var(--sleep)" onclick="dlNamed('thenvsnow')">${I.download} Download</button>
+    ${isPro()?'':'<div class="csub" style="text-align:center;margin-top:8px">Pro shares come without the Cubby mark ✨</div>'}`,'sleep');
 }
 function dlNamed(n){ const a=document.createElement('a'); a.href=window._lastCard; a.download=(activeBaby().name||'baby')+'-'+n+'.jpg'; a.click(); toast('Downloaded'); }
 async function shareLastCard(n){
