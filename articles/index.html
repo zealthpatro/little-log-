@@ -39,6 +39,12 @@
 .findr-row .lbl{font-family:var(--sans);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);min-width:46px;flex-shrink:0}
 .findr-chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch;scrollbar-width:none;flex:1}
 .findr-chips::-webkit-scrollbar{display:none}
+/* Mouse/desktop: a hidden-scrollbar row is unreachable, wrap chips onto multiple lines instead */
+@media(min-width:768px){
+  .findr-chips{flex-wrap:wrap;overflow-x:visible;row-gap:6px}
+  .findr-row{align-items:flex-start}
+  .findr-row .lbl{margin-top:8px}
+}
 .chip{flex:0 0 auto;font-family:var(--sans);font-size:13px;font-weight:700;color:var(--soft);background:var(--surface);border:1.5px solid var(--line);border-radius:999px;padding:6px 13px;cursor:pointer;white-space:nowrap;transition:all .12s ease}
 .chip:hover{border-color:var(--pink);color:var(--pink-d)}
 .chip.on{background:var(--pink);border-color:var(--pink);color:#fff}
