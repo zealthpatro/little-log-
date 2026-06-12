@@ -176,6 +176,37 @@ commit + sw bump), C-4, then the system passes C-5→C-7 as one normalization br
 - New TODO noticed: phone-mock *interiors* still use emoji tiles; the real app now uses SVG
   chips, so mocks slightly misrepresent the product. Update mock markup to match someday.
 
+## Shipped 12 June 2026 (wide-screen + mock-fidelity pass)
+- **Mock fidelity done** — all emoji glyphs inside phone mocks and slide pills (home + features,
+  39 glyphs) replaced with the house line-SVG set via `svg.mi{width:1em;height:1em}` (inherits
+  text size/color). Mocks now show what the app actually renders, and look identical on
+  iOS/Android/Windows (emoji previously rendered in each platform's own style).
+- **Carousel v2** — consistent slide height (`min-height:420px`); the phone mock anchors to the
+  card bottom with `margin-bottom:-140px` so only the in-use top of the device shows (clipped by
+  `.cwin`); text column enriched with 3 check bullets per slide (`.sl-points`, hidden on mobile).
+- **Wide screens (≥1200px)** — carousel 1100px, folds 1140px with bigger type, feats 1000px,
+  proof 1080px, quotes 960px; articles hub `.wrap` widened to 1060px (3-col card grid fills it).
+  Side margins are now proportionate instead of half the screen.
+
+## Feature promotion hierarchy (what gets the spotlight, in order)
+1. **One-thumb logging** — the core daily action; product truth first.
+2. **Care-circle sync (who-did-what, live)** — the differentiator vs Huckleberry/Glow; unlimited
+   caregivers free is the wedge.
+3. **Working-parent recap** — the emotional story for the paying demographic.
+4. **Meal photos + food tags (→ Pro nutrition)** — unique feature, monetization on-ramp.
+5. **Vaccine schedules + reminders** — the SEO wedge and trust anchor (official sources).
+6. **Growth charts (WHO/CDC)** — expected; table stakes, presented honestly.
+7. **Keepsakes/moments** — retention + share loop, closes the carousel on warmth.
+Rule: marketing surfaces (carousel order, features folds, feature cards) follow this order, and
+every mock must render the same iconography/layout the live app does (no emoji chrome).
+
+## Emoji policy (cross-platform note)
+Emoji render in each platform's own font: Apple style on iOS/macOS, Google style on Android,
+Segoe on Windows. They are *available* everywhere (ours are old, universally-supported code
+points), but they look different per device and can't be brand-controlled. Hence: **SVG for
+anything functional or brand-bearing** (tiles, pills, mocks, feature cards); emoji only in
+celebratory copy (greetings, milestones, toasts, tips) where platform-native styling is fine.
+
 **Explicitly NOT recommended now:** a desktop two-pane app layout (big re-flow risk pre-beta),
 any palette change (it's the brand's best asset), icon style change (set is good — the usage is
 the issue), CSS framework adoption (vanilla is fine at this size).
