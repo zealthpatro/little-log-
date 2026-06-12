@@ -493,8 +493,13 @@
   function openFirstRun(user) {
     var uid = user.uid;
     var bear = (typeof window.memberAvatarSvg === 'function') ? window.memberAvatarSvg(uid, 84) : '';
+    // Self-graduating copy: drops the "early beta" framing after the cutoff (45 days from 2026-06-12),
+    // matching the marketing "early access" reframe. No manual edit / cron needed.
+    var betaIntro = (Date.now() < Date.UTC(2026, 6, 27))
+      ? 'An early beta, thanks for trying it! A few notes:'
+      : 'Thanks for trying Cubby! A few notes:';
     modal('Welcome to Cubby 🐻',
-      '<div class="ll-auth-msg" style="margin:0 0 10px;text-align:left;line-height:1.5">An early beta, thanks for trying it! A few notes:<br>• Your log is <b>private</b> to your family.<br>• On a phone: <b>Share → Add to Home Screen</b> to install it like an app.<br>• Bug or idea? <b>Settings → Family &amp; sharing → Send feedback</b>.</div>'
+      '<div class="ll-auth-msg" style="margin:0 0 10px;text-align:left;line-height:1.5">' + betaIntro + '<br>• Your log is <b>private</b> to your family.<br>• On a phone: <b>Share → Add to Home Screen</b> to install it like an app.<br>• Bug or idea? <b>Settings → Family &amp; sharing → Send feedback</b>.</div>'
       + '<div class="ll-auth-msg" style="margin:0 0 6px">First, how you appear to your family:</div>'
       + '<div class="ll-mem-av" id="llFrBear" style="width:84px;height:84px;margin:10px auto 4px;cursor:pointer">' + bear + '</div>'
       + '<div style="text-align:center;margin-bottom:6px"><button id="llFrBearBtn" class="ll-rm" style="color:#C97FA0">Customise my bear</button></div>'

@@ -2230,7 +2230,7 @@ function openSettings(){
       <div class="si-ico" style="background:var(--sleep-soft);color:var(--sleep);font-size:17px">👋</div>
       <div class="si-body"><div class="a">Log out</div><div class="b">Sign out · your data stays safely synced</div></div>
     </div>
-    <p style="font-size:12px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:14px">Cubby v${CUBBY_VERSION} · beta</p>`,'sleep');
+    <p style="font-size:12px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:14px">Cubby v${CUBBY_VERSION} · ${Date.now()<Date.UTC(2026,6,27)?'beta':'early access'}</p>`,'sleep');
 }
 function openDataSheet(){
   openSheet(`<h2>Your data</h2><div class="sub">Keep a copy, or erase everything. Your logs live safely in your account either way.</div>
