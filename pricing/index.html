@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cubby Pricing: Free Forever, with Pro for the Extras</title>
-<meta name="description" content="Cubby is free for the essentials, always: logging, caregiver sharing, your country's vaccine schedule, growth charts and keepsakes. Cubby Pro adds routines, push reminders, premium keepsakes and more.">
+<title>Cubby Pricing: Free Forever + Pro from $5/mo</title>
+<meta name="description" content="Cubby is free for the essentials, always: logging, caregiver sharing, vaccine schedules and growth charts. Cubby Pro adds smart routines, push reminders, premium keepsakes and more, from ~$5/mo (billed annually at $59/yr), 7-day free trial.">
 <link rel="canonical" href="https://little-cubby.com/pricing/">
 <meta name="robots" content="index,follow">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Cubby">
-<meta property="og:title" content="Cubby Pricing: Free Forever, with Pro for the Extras">
-<meta property="og:description" content="Free for the essentials, always. Pro for the extras, coming soon.">
+<meta property="og:title" content="Cubby Pricing: Free Forever + Pro from $5/mo">
+<meta property="og:description" content="Free for the essentials, always. Pro from ~$5/mo (billed $59/yr) with a 7-day free trial, coming soon.">
 <meta property="og:url" content="https://little-cubby.com/pricing/">
 <meta property="og:image" content="https://little-cubby.com/og/pricing.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -20,7 +20,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Nunito+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/vax.css"><link rel="stylesheet" href="/site.css">
 <script type="application/ld+json">
-{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Home", "item": "https://little-cubby.com/"}, {"@type": "ListItem", "position": 2, "name": "Pricing", "item": "https://little-cubby.com/pricing/"}]}
+{"@context":"https://schema.org","@graph":[
+{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://little-cubby.com/"},{"@type":"ListItem","position":2,"name":"Pricing","item":"https://little-cubby.com/pricing/"}]},
+{"@type":"SoftwareApplication","name":"Cubby Pro","applicationCategory":"HealthApplication","operatingSystem":"Web, iOS, Android","description":"Smart routines, push reminders, premium keepsakes, HD photos and sleep insights for families who want more from Cubby.","url":"https://little-cubby.com/pricing/","offers":{"@type":"Offer","price":"59","priceCurrency":"USD","priceSpecification":{"@type":"UnitPriceSpecification","price":"59","priceCurrency":"USD","billingDuration":"P1Y","description":"Annual plan, approx $5/mo effective. 7-day free trial."}}}
+]}
 </script>
 </head>
 <body>
@@ -49,7 +52,7 @@
       <li>Photos, moment cards, milestones &amp; birth poster</li>
       <li>Private, no ads, no third-party trackers</li>
     </ul></div>
-    <div class="col pro"><div class="ch">Pro <span class="soon">soon</span></div><div class="price">Pricing announced at launch · join the waitlist</div><ul>
+    <div class="col pro"><div class="ch">Pro <span class="soon">soon</span></div><div class="price">~$5/mo · billed $59/yr · 7-day free trial</div><ul>
       <li>Smart adaptive routines, day 0 to 365</li>
       <li>Push notifications &amp; reminders when Cubby is closed</li>
       <li>Premium keepsakes: extra templates, fonts, background cutout</li>
@@ -64,11 +67,11 @@
 
 <section class="section alt">
   <h2>Cubby Pro pricing</h2>
-  <p class="lead2">Planned launch pricing. Pro isn't on sale yet, join the waitlist for early-bird access.</p>
+  <p class="lead2">Launching soon. Get early access in the app. Annual plan includes a 7-day free trial: cancel before day 7 and you won't be charged.</p>
   <div class="pricebox">
     <div class="pb-controls">
       <div class="bseg" id="bseg">
-        <button data-bill="annual" class="on" onclick="setBill('annual')">Annual <span class="save" id="saveBadge">save 21%</span></button>
+        <button data-bill="annual" class="on" onclick="setBill('annual')">Annual <span class="save" id="saveBadge">save 29%</span></button>
         <button data-bill="monthly" onclick="setBill('monthly')">Monthly</button>
       </div>
       <select id="curSel" onchange="setCur(this.value)" aria-label="Currency">
@@ -79,21 +82,21 @@
         <option value="INR">₹ INR</option>
       </select>
     </div>
-    <div class="pb-price"><span id="pbAmt">$15</span><span class="per" id="pbPer">/month</span></div>
-    <div class="pb-sub" id="pbSub">Billed annually · $179/year · save 21%</div>
-    <a class="hero-cta" href="/app/">Join the waitlist</a>
+    <div class="pb-price"><span id="pbAmt">$5</span><span class="per" id="pbPer">/month</span></div>
+    <div class="pb-sub" id="pbSub">Billed annually · $59/year · save 29%</div>
+    <a class="hero-cta" href="/app/">Get early access</a>
     <div class="pb-note">Approximate local pricing, finalised at launch. Free plan stays free forever.</div>
   </div>
 </section>
 
 <script>
-/* Planned Cubby Pro pricing. Friendly local price points (not live FX), finalised at launch. */
+/* Cubby Pro Base plan pricing. ~$5/mo effective on annual; monthly option at launch. */
 var CUR = {
-  USD: { sym: '$',    pre: true,  mo: 19,   yr: 179   },
-  GBP: { sym: '£',    pre: true,  mo: 15,   yr: 142   },
-  EUR: { sym: '€',    pre: true,  mo: 18,   yr: 169   },
-  AED: { sym: 'AED ', pre: true,  mo: 69,   yr: 649   },
-  INR: { sym: '₹',    pre: true,  mo: 1499, yr: 13999 }
+  USD: { sym: '$',    pre: true,  mo: 7,   yr: 59   },
+  GBP: { sym: '£',    pre: true,  mo: 6,   yr: 49   },
+  EUR: { sym: '€',    pre: true,  mo: 7,   yr: 55   },
+  AED: { sym: 'AED ', pre: true,  mo: 25,  yr: 219  },
+  INR: { sym: '₹',    pre: true,  mo: 599, yr: 4999 }
 };
 var bill = 'annual', cur = 'USD';
 function fmt(c, n) { return c.sym + n.toLocaleString('en-US'); }

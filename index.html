@@ -30,8 +30,9 @@
 <link rel="stylesheet" href="/site.css">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[
-{"@type":"SoftwareApplication","name":"Cubby","applicationCategory":"HealthApplication","operatingSystem":"Web, iOS, Android","description":"Baby tracker with vaccine schedules, multi-caregiver real-time sync, growth charts and keepsakes.","url":"https://little-cubby.com/","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"publisher":{"@type":"Organization","name":"Cubby","url":"https://little-cubby.com/"}},
-{"@type":"Organization","name":"Cubby","url":"https://little-cubby.com/","logo":"https://little-cubby.com/icons/logo-512.png"}
+{"@type":"SoftwareApplication","name":"Cubby","applicationCategory":"HealthApplication","operatingSystem":"Web, iOS, Android","description":"Baby tracker with vaccine schedules, multi-caregiver real-time sync, growth charts and keepsakes.","url":"https://little-cubby.com/","offers":[{"@type":"Offer","price":"0","priceCurrency":"USD","name":"Free"},{"@type":"Offer","price":"59","priceCurrency":"USD","name":"Pro","billingIncrement":"P1Y","description":"~$5/mo effective, billed annually. 7-day free trial."}],"publisher":{"@type":"Organization","name":"Cubby","url":"https://little-cubby.com/"}},
+{"@type":"Organization","name":"Cubby","url":"https://little-cubby.com/","logo":"https://little-cubby.com/icons/logo-512.png"},
+{"@type":"WebSite","name":"Cubby","url":"https://little-cubby.com/","potentialAction":{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"https://little-cubby.com/articles/?q={search_term_string}"},"query-input":"required name=search_term_string"}}
 ]}
 </script>
 </head>
@@ -203,7 +204,7 @@
       <li>Photos, moment cards &amp; milestones</li>
       <li>Private, and no ads</li>
     </ul></div>
-    <div class="col pro"><div class="ch">Pro <span class="soon">soon</span></div><div class="price">Join the waitlist in the app</div><ul>
+    <div class="col pro"><div class="ch">Pro <span class="soon">soon</span></div><div class="price">~$5/mo · billed $59/yr · 7-day trial</div><ul>
       <li>Smart adaptive routines (day 0 to 365)</li>
       <li>Push reminders &amp; alerts</li>
       <li>Premium share templates, fonts &amp; cutouts</li>
