@@ -4,7 +4,10 @@
 (function () {
   var firebaseConfig = {
     apiKey: "AIzaSyBj10mZkKlaX4BvYprssPdnUKsIXUCVvZU",
-    authDomain: "little-log-a9caa.firebaseapp.com",
+    /* Auth runs on our own domain: the edge worker proxies /__/auth/* to the
+       firebaseapp.com origin, so the Google popup says little-cubby.com.
+       (Revert to "little-log-a9caa.firebaseapp.com" if sign-in ever breaks.) */
+    authDomain: "little-cubby.com",
     projectId: "little-log-a9caa",
     storageBucket: "little-log-a9caa.firebasestorage.app",
     messagingSenderId: "657437500368",
