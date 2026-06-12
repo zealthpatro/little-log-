@@ -82,6 +82,59 @@ NEW_CARDS = [
     ('compare', 'newborn', '/articles/free-resources-uk-new-parents/',
      'Comparison · Newborn', 'Free resources for UK new parents: NHS, apps and local support',
      'A practical guide to the free NHS, government and community services available to new parents in the UK.'),
+
+    # COMPARISONS — global (2)
+    ('compare', 'all',     '/articles/cubby-vs-glow-baby/',
+     'Comparison · All ages', 'Cubby vs Glow Baby (2026): which baby tracker is better?',
+     'A direct comparison of Cubby and Glow Baby: features, privacy, vaccine schedules and price.'),
+    ('compare', 'all',     '/articles/cubby-vs-tinybeans/',
+     'Comparison · All ages', 'Cubby vs Tinybeans (2026): health tracker vs memory book',
+     'How Cubby and Tinybeans compare: health tracking vs photo sharing, privacy, price and who each app suits.'),
+
+    # INDIA (5)
+    ('care',      'newborn', '/articles/indian-baby-massage-maalish/',
+     'Care · Newborn', 'Indian baby massage (maalish): benefits, oils and how to do it safely',
+     'Traditional Indian oil massage for newborns: which oils are safe, the technique, benefits the evidence supports, and safety guidelines.'),
+    ('feeding',   '6-12',   '/articles/indian-first-foods-weaning/',
+     'Feeding · 6-12 months', 'Indian first foods: khichdi, ragi and starting solids',
+     'When and how to introduce traditional Indian weaning foods like khichdi, ragi porridge and dal: what is nutritious, what is safe, and what the WHO recommends.'),
+    ('wellbeing', 'newborn', '/articles/indian-postnatal-traditions/',
+     'Wellbeing · Newborn', 'Indian postnatal traditions: what to keep, what to adapt',
+     'The 40-day rest period, traditional postpartum diet and family support in Indian culture: what the evidence supports and how diaspora families adapt.'),
+    ('health',    'newborn', '/articles/jaundice-recognition-darker-skin/',
+     'Health · Newborn', 'Recognising newborn jaundice in babies with darker skin',
+     'Jaundice is harder to see on darker skin. How to check the whites of the eyes, palms and soles, when to ask for a bilirubin measurement, and what NHS guidance says.'),
+    ('health',    'all',    '/articles/baby-care-hot-weather/',
+     'Health · All ages', 'Keeping your baby safe in hot weather: signs of overheating and what to do',
+     'How heat affects babies, signs of overheating, keeping babies cool in hot climates, safe sleep in summer, and when to get medical help.'),
+
+    # AUSTRALIA (5)
+    ('health',    'newborn', '/articles/sids-red-nose-australia/',
+     'Health · Newborn', 'Safe sleep for Australian babies: Red Nose guidelines',
+     'Red Nose Australia safe sleeping guidelines: back to sleep, face uncovered, smoke free, safe environment, room sharing and breastfeeding.'),
+    ('feeding',   '6-12',   '/articles/starting-solids-australia/',
+     'Feeding · 6-12 months', 'Starting solids in Australia: NHMRC guidance for parents',
+     'When and how to introduce solid foods per the Australian NHMRC infant feeding guidelines: first foods, allergens, textures and what to avoid.'),
+    ('care',      'all',    '/articles/sun-safety-australia/',
+     'Care · All ages', 'Sun safety for babies in Australia: SunSmart guidelines',
+     'Australia has some of the world\'s highest UV levels. SunSmart guidelines for protecting babies under 12 months: shade, clothing and when sunscreen is appropriate.'),
+    ('health',    'all',    '/articles/heatwave-babies-australia/',
+     'Health · All ages', 'Heatwave safety for babies in Australia',
+     'What to do when temperatures exceed 35-40 degrees: keeping babies cool, signs of heat stress, when to call 000, and guidance from Australian state health authorities.'),
+    ('feeding',   'newborn', '/articles/breastfeeding-support-australia/',
+     'Feeding · Newborn', 'Breastfeeding support in Australia: where to get help',
+     'Free breastfeeding help in Australia: the Australian Breastfeeding Association helpline 1800 686 268, lactation consultants, Child and Family Health Nurses and online resources.'),
+
+    # CHINESE PARENTING (3)
+    ('wellbeing', 'newborn', '/articles/zuo-yuezi-postnatal-confinement/',
+     'Wellbeing · Newborn', 'Zuo yuezi: Chinese postnatal confinement explained',
+     'What the Chinese 30-day postpartum rest tradition involves, what modern evidence supports, and how diaspora families adapt it for today.'),
+    ('feeding',   '6-12',   '/articles/congee-baby-first-food/',
+     'Feeding · 6-12 months', 'Congee as a baby first food: the Chinese weaning tradition',
+     'How traditional Chinese rice congee works as a first weaning food, what to add for iron and protein, and how to make it by age.'),
+    ('care',      'newborn', '/articles/chinese-baby-care-traditions/',
+     'Care · Newborn', 'Chinese baby care traditions: what the evidence says',
+     'Traditional Chinese newborn practices including swaddling, herbal baths and outdoor exposure: what modern evidence supports and what to adapt.'),
 ]
 
 # ── Order in which categories cycle (determines first-fold order) ──
