@@ -336,7 +336,21 @@ body{
 .baby-item{display:flex;align-items:center;gap:13px;background:var(--surface);border-radius:var(--radius-sm);padding:13px 15px;margin-bottom:9px;box-shadow:0 3px 9px var(--shadow);}
 
 /* onboarding */
+.ob-wrap{position:relative;height:100%;overflow-y:auto;display:flex;align-items:center;justify-content:center;padding:24px 18px;}
+.ob-bg{position:absolute;inset:0;overflow:hidden;filter:blur(6px) saturate(.95);opacity:.62;transform:scale(1.04);pointer-events:none;}
+.ob-prev{padding:22px 16px;max-width:480px;margin:0 auto;}
+.ob-greet{font-family:var(--font-display);font-size:26px;font-weight:600;color:var(--ink);margin:6px 2px 16px;}
+.ob-tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;}
+.ob-tile{background:var(--surface);border-radius:var(--radius);box-shadow:0 5px 14px var(--shadow);padding:20px 18px;display:flex;flex-direction:column;gap:12px;min-height:104px;font-weight:800;color:var(--ink);}
+.ob-tile svg{width:26px;height:26px;color:var(--c);background:var(--cs);border-radius:14px;padding:9px;box-sizing:content-box;}
+.ob-pcard{background:var(--surface);border-radius:18px;box-shadow:0 5px 14px var(--shadow);padding:14px 16px;margin-bottom:10px;}
+.ob-pcard .a{font-weight:800;color:var(--ink);}
+.ob-pcard .bg{font-size:13px;color:var(--ink-soft);font-weight:600;margin-top:3px;}
+.ob-card{position:relative;z-index:1;width:100%;max-width:400px;background:rgba(255,255,255,.86);backdrop-filter:blur(6px) saturate(120%);-webkit-backdrop-filter:blur(6px) saturate(120%);border:1px solid var(--line);border-radius:28px;box-shadow:0 24px 60px var(--shadow-strong);}
+body.night .ob-card{background:rgba(38,32,28,.86);}
+.ob-logout{display:block;margin:16px auto 0;border:none;background:none;color:var(--ink-soft);font-family:var(--font-body);font-weight:700;font-size:13px;cursor:pointer;text-decoration:underline;}
 .onboard{display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;padding:40px 30px;text-align:center;}
+.onboard.ob-card{height:auto;padding:30px 26px;}
 .onboard .logo{font-family:var(--font-display);font-size:40px;font-weight:600;letter-spacing:-.02em;margin-bottom:6px;}
 .onboard .tag{color:var(--ink-soft);font-weight:600;margin-bottom:38px;font-size:15px;}
 .onboard .field{width:100%;text-align:left;}
@@ -2290,17 +2304,35 @@ function doReset(){
 }
 
 /* ---------- ONBOARDING ---------- */
+function obPreview(){
+  // Decorative, blurred "this is what you're setting up" backdrop. Not interactive, not real data.
+  return `<div class="ob-prev" aria-hidden="true">
+    <div class="ob-greet">Good evening 🐻</div>
+    <div class="ob-tiles">
+      <div class="ob-tile" style="--c:var(--feed);--cs:var(--feed-soft)">${I.feed}<span>Feed</span></div>
+      <div class="ob-tile" style="--c:var(--sleep);--cs:var(--sleep-soft)">${I.sleep}<span>Sleep</span></div>
+      <div class="ob-tile" style="--c:var(--diaper);--cs:var(--diaper-soft)">${I.diaper}<span>Nappy</span></div>
+      <div class="ob-tile" style="--c:var(--pump);--cs:var(--pump-soft)">${I.pump}<span>Pump</span></div>
+    </div>
+    <div class="ob-pcard"><div class="a">Nap in progress</div><div class="bg">1h 12m · by Mama Bear</div></div>
+    <div class="ob-pcard"><div class="a">Bottle · 120 ml</div><div class="bg">5:30 PM · by Nanny</div></div>
+  </div>`;
+}
 function renderOnboard(){
   newBabyColor=AVATAR_COLORS[0];
   const today=new Date().toISOString().slice(0,10);
-  app().innerHTML=`<div class="onboard fade-in">
-    <div class="logo">Cubby</div>
-    <div class="tag">Feeds, sleep, nappies and every little milestone. One thumb, half asleep. Let's start with who we're tracking.</div>
-    <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
-    <div class="field"><label>Baby's name</label><input id="bName" placeholder="e.g. Mira" autofocus></div>
-    <div class="field"><label>Birthday (optional)</label><input type="date" id="bDate" value="${today}" max="${today}"></div>
-    <div class="field"><label>Country (sets the vaccine schedule)</label><select id="bCountry">${VAX_COUNTRIES.map(([k,n])=>`<option value="${k}" ${k===detectCountry()?'selected':''}>${n}</option>`).join('')}</select></div>
-    <button class="btn-primary" style="--accent:var(--feed)" onclick="saveBaby()">Start tracking</button>
+  app().innerHTML=`<div class="ob-wrap">
+    <div class="ob-bg">${obPreview()}</div>
+    <div class="onboard ob-card fade-in">
+      <div class="logo">Cubby</div>
+      <div class="tag">Feeds, sleep, nappies and every little milestone. One thumb, half asleep. Let's start with who we're tracking.</div>
+      <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
+      <div class="field"><label>Baby's name</label><input id="bName" placeholder="e.g. Mira" autofocus></div>
+      <div class="field"><label>Birthday (optional)</label><input type="date" id="bDate" value="${today}" max="${today}"></div>
+      <div class="field"><label>Country (sets the vaccine schedule)</label><select id="bCountry">${VAX_COUNTRIES.map(([k,n])=>`<option value="${k}" ${k===detectCountry()?'selected':''}>${n}</option>`).join('')}</select></div>
+      <button class="btn-primary" style="--accent:var(--feed)" onclick="saveBaby()">Start tracking</button>
+      <button class="ob-logout" onclick="confirmLogout()">Log out</button>
+    </div>
   </div>`;
 }
 

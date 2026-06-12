@@ -37,6 +37,7 @@
     + '.ll-spin{width:30px;height:30px;border:3px solid #E0D7C7;border-top-color:#C97FA0;border-radius:50%;margin:6px auto 0;animation:llspin 0.9s linear infinite;}'
     + '@keyframes llspin{to{transform:rotate(360deg);}}'
     + '#llModalOv{position:fixed;inset:0;z-index:99998;background:rgba(20,15,12,.45);display:flex;align-items:flex-end;justify-content:center;font-family:"Nunito Sans",system-ui,sans-serif;}'
+    + '#llModalOv.ll-blur{background:rgba(40,30,22,.34);backdrop-filter:blur(9px) saturate(115%);-webkit-backdrop-filter:blur(9px) saturate(115%);}'
     + '.ll-modal{background:#fff;width:100%;max-width:440px;border-radius:22px 22px 0 0;padding:20px 20px 28px;max-height:85vh;overflow:auto;box-shadow:0 -8px 40px rgba(0,0,0,.2);}'
     + '@media(min-width:480px){#llModalOv{align-items:center;}.ll-modal{border-radius:22px;}}'
     + '.ll-modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}'
@@ -413,13 +414,18 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
 
-  function modal(title, bodyHtml) {
+  function modal(title, bodyHtml, opts) {
+    opts = opts || {};
     closeModal();
     var ov = document.createElement('div'); ov.id = 'llModalOv';
-    ov.innerHTML = '<div class="ll-modal"><div class="ll-modal-head"><h2>' + esc(title) + '</h2><button id="llModalX">×</button></div>' + bodyHtml + '</div>';
+    if (opts.blur) ov.className = 'll-blur';
+    var closeBtn = opts.locked ? '' : '<button id="llModalX">×</button>';
+    ov.innerHTML = '<div class="ll-modal"><div class="ll-modal-head"><h2>' + esc(title) + '</h2>' + closeBtn + '</div>' + bodyHtml + '</div>';
     document.body.appendChild(ov);
-    ov.addEventListener('click', function (e) { if (e.target === ov) closeModal(); });
-    document.getElementById('llModalX').onclick = closeModal;
+    if (!opts.locked) {
+      ov.addEventListener('click', function (e) { if (e.target === ov) closeModal(); });
+      document.getElementById('llModalX').onclick = closeModal;
+    }
   }
   function closeModal() { var m = document.getElementById('llModalOv'); if (m) m.remove(); }
 
@@ -504,7 +510,10 @@
       + '<div class="ll-mem-av" id="llFrBear" style="width:84px;height:84px;margin:10px auto 4px;cursor:pointer">' + bear + '</div>'
       + '<div style="text-align:center;margin-bottom:6px"><button id="llFrBearBtn" class="ll-rm" style="color:#C97FA0">Customise my bear</button></div>'
       + '<div class="ll-invite" style="border-top:none;padding-top:8px"><label>Your relationship to baby</label><select id="llFrRel">' + relOptions('') + '</select></div>'
-      + '<button id="llFrSave" class="ll-modal-btn">Save</button>');
+      + '<button id="llFrSave" class="ll-modal-btn">Save</button>'
+      + '<button id="llFrOut" class="ll-modal-btn ll-ghost" style="margin-top:10px">Log out</button>',
+      { locked: true, blur: true });
+    document.getElementById('llFrOut').onclick = function () { closeModal(); window.LL.signOut(); };
     function pickBear() { if (window.openBearPicker) window.openBearPicker('member', uid); }
     document.getElementById('llFrBear').onclick = pickBear;
     document.getElementById('llFrBearBtn').onclick = pickBear;
