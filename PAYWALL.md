@@ -66,6 +66,15 @@ v1 Base plan gates only **zero-marginal-cost** features (on-device or client-gen
   notifications (Blaze), smart routines, sleep/feed insights, nutrition analysis, video montage —
   i.e. anything with per-user infra cost.
 
+## Referral rewards (designed 12 June 2026, plumbing shipped, rewards NOT live)
+What exists in code: each member has a deterministic short code (djb2 of uid, base36, 6 chars,
+shown via Settings "Share Cubby"); `?ref=` on the marketing home or /app/ is stored in
+localStorage; on a brand-new family's first sign-in (fresh-household path only, never invited
+caregivers) the code is written to `users/{uid}.referredBy`. No reward is promised anywhere yet.
+At Base-plan launch: count `referredBy` per code (offline via tools/analytics.js, codes are
+recomputable from uids), grant retroactive credit, suggested: **1 free month of Base per referred
+family that's still active at launch, capped at 6**. Announce only when redeemable.
+
 ## Notes
 - Keep anything requiring paid cloud infra (push, HD storage, generative AI) clearly on the Pro side, since that's where the cost is, and it justifies the price.
 - Do NOT add generative AI art that uploads baby photos to a third-party API; it breaks the privacy promise. On-device AI (auto-enhance, cutout) is fine.

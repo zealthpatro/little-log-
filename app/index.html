@@ -2215,6 +2215,11 @@ function openSettings(){
       <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">✨</div>
       <div class="si-body"><div class="a">Cubby Pro</div><div class="b">${isPro()?'Active · thank you 🐻':'The full keepsake studio, doctor reports & more'}</div></div>
     </div>
+    <div class="set-item" onclick="shareCubby()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--pump-soft);color:var(--pump)">${I.heart}</div>
+      <div class="si-body"><div class="a">Share Cubby with a friend</div><div class="b">Know another tired parent? Send them your link</div></div>
+      <span class="chev">${I.chev}</span>
+    </div>
     <div class="set-label">Your data &amp; account</div>
     <div class="set-item" onclick="openDataSheet()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--note-soft);color:var(--note)">${I.note}</div>
@@ -2243,6 +2248,26 @@ function exportData(){
   const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download='cubby-export.json'; a.click(); toast('Exported');
+}
+/* Referral: deterministic short code from the signed-in uid (djb2 -> base36). */
+function refCode(){
+  try{
+    var u=(window.LL&&LL.auth&&LL.auth.currentUser&&LL.auth.currentUser.uid)||'';
+    if(!u) return '';
+    var h=5381; for(var i=0;i<u.length;i++){ h=(((h<<5)+h)+u.charCodeAt(i))>>>0; }
+    return h.toString(36).slice(0,6);
+  }catch(e){ return ''; }
+}
+function shareCubby(){
+  var b=activeBaby();
+  var who=(b&&b.name)?(b.name+"'s"):"our little one's";
+  var code=refCode();
+  var link='https://little-cubby.com/'+(code?('?ref='+code):'');
+  var text="We've been using Cubby to keep track of "+who+" feeds, naps and vaccines together. It's free, private to your family, no ads: "+link;
+  if(navigator.share){ navigator.share({text:text}).catch(function(){}); return; }
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){ toast('Copied! Paste it anywhere 🐻'); },function(){ window.prompt('Copy this note:',text); });
+  } else { window.prompt('Copy this note:',text); }
 }
 function confirmLogout(){
   openSheet(`<h2>Log out?</h2><div class="sub">Your data stays safely synced. Sign back in with Google anytime to pick up right where you left off.</div>
@@ -2973,6 +2998,8 @@ const VAX_COUNTRIES=[['us','United States (CDC)'],['uk','United Kingdom (NHS)'],
 
 /* Capture an explicit ?c= country from a vaccine-schedule page link, once. */
 (function(){ try{ const c=new URLSearchParams(location.search).get('c'); if(c){const k=c.toLowerCase(); if(VAX_SCHEDULES[k]) localStorage.setItem('cubby-country',k);} }catch(e){} })();
+/* Referral attribution: remember ?ref= until first sign-in (read in store-firebase.js). */
+(function(){ try{ const r=new URLSearchParams(location.search).get('ref'); if(r&&/^[a-z0-9]{4,12}$/i.test(r)) localStorage.setItem('cubby-ref',r.toLowerCase()); }catch(e){} })();
 
 /* Best-guess country for the vaccine schedule. No IP lookup, no permission prompt:
    explicit page link first, then a stored hint, then browser language, then timezone. */

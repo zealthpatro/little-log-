@@ -251,7 +251,17 @@
     m.events.forEach(function (ev) { writes.push(newRef.collection('events').doc(String(ev.id)).set(Object.assign({ authorId: user.uid }, ev))); });
     Object.keys(m.photos).forEach(function (pid) { writes.push(newRef.collection('photos').doc(pid).set({ data: m.photos[pid], authorId: user.uid })); });
     await Promise.all(writes);
-    await userRef.set({ householdId: newRef.id, name: user.displayName || '', email: user.email || '' }, { merge: true });
+    var userDoc = { householdId: newRef.id, name: user.displayName || '', email: user.email || '' };
+    // Referral attribution: brand-new family + a remembered ?ref= code -> record who referred them.
+    // (Invited caregivers above join an existing household; that's the care-circle loop, not a referral.)
+    try {
+      var refBy = localStorage.getItem('cubby-ref');
+      if (refBy && /^[a-z0-9]{4,12}$/.test(refBy) && !snap.exists) {
+        userDoc.referredBy = refBy;
+        localStorage.removeItem('cubby-ref');
+      }
+    } catch (e) {}
+    await userRef.set(userDoc, { merge: true });
     return newRef.id;
   }
 

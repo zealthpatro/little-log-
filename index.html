@@ -243,6 +243,13 @@
   c.addEventListener('mouseleave',reset);
   reset();
 })();
+/* Referral attribution: remember ?ref= until first sign-in (read in /app/'s store-firebase.js). */
+(function(){
+  try{
+    var r=new URLSearchParams(location.search).get('ref');
+    if(r&&/^[a-z0-9]{4,12}$/i.test(r)) localStorage.setItem('cubby-ref',r.toLowerCase());
+  }catch(e){}
+})();
 /* Returning members: swap CTAs to "Open Cubby" and show a welcome-back strip (no redirect). */
 (function(){
   try{
