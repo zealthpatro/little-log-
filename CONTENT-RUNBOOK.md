@@ -21,6 +21,7 @@ Point a schedule or loop at the **Master prompt** below. Everything it needs is 
 5. **No diagnosis/treatment instructions** beyond what the source says; prefer "seek care if…".
 6. **No em-dashes** in copy (use commas/colons).
 7. If a claim cannot be sourced, reword or remove it. If a whole topic can't be safely sourced, save to `articles-drafts/` and stop (report it), do not publish.
+8. **Article naming policy**: use the practice's actual name (maalish, zuo yuezi, ofuro) or a plain universal topic (safe sleep, starting solids, heatwave safety). Never prefix/suffix with a country or region ("Indian baby massage", "Starting solids in Australia", "for German parents"). The content body can and should reference the relevant country, authority, and cultural context; the `<title>`, `<h1>`, `og:title`, and JSON-LD headline must not use a country as a label.
 
 ## Steps per run
 1. **Pick the topic.** Open `CONTENT-QUEUE.md`, take the first item marked `[ ]` (top = highest priority). Note its slug, age bracket(s), theme, and listed sources.

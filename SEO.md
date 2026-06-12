@@ -25,11 +25,23 @@ Each page has: per-page meta + OG + hreflang (cross-linked cluster), `MedicalWeb
 - **Shared assets**: `vax.css` (styling) and `vax.js` (the birthday calculator).
 
 ### Articles section (`/articles/`)
-A content hub to grow the SEO cluster. Static HTML, same `vax.css`, `BlogPosting`/`CollectionPage` JSON-LD.
-- `/articles/` hub links the four vaccine pages + guides.
-- `/articles/baby-vaccination-schedules-compared/` (pillar; cross-links the four country pages).
-- `/articles/never-miss-a-baby-vaccine/` (product-led, conversion-oriented).
-- To add an article: copy an existing one, update `<head>` meta + `BlogPosting` JSON-LD + `datePublished`, write inside `<main class="wrap article">`, add a card to the hub, and add a `<url>` to `sitemap.xml`. Next clusters to write: first foods/solids by age, milestones, sleep windows.
+A content hub at 119 articles (June 2026), growing to ~245 via the global expansion plan (CONTENT-QUEUE.md).
+
+**Article naming policy**: title the article after what it IS. If a practice has a name (maalish, zuo yuezi, ofuro), that name is the title. Universal topics get plain descriptive titles. Never use country labels in `<title>`, `<h1>`, or `og:title`. Content body can and should reference the relevant country and authority.
+
+**Cluster strategy for SEO**: articles are grouped into 4 thematic clusters, each fully internally cross-linked before deployment week starts. Google sees a coherent topical cluster, not isolated pages.
+- Cluster A: cross-cultural universal articles (10) — the hub that every regional article links back to.
+- Cluster B: India + China (40 articles).
+- Cluster C: Australia + Japan (40 articles).
+- Cluster D: USA + Germany + Italy (60 articles).
+
+Germany is in the app (STIKO). USA is in the app (CDC). All articles for those markets can actively cross-link to the vaccine tracking feature.
+
+**Vaccine schedule cross-linking rule**: only link to Cubby's vaccine tracking feature for countries the app supports (UK, US, UAE, Germany). Japan, Australia, Italy, India articles must NOT claim Cubby tracks their national schedule.
+
+Structured data on every article: three `<script type="application/ld+json">` blocks: `BlogPosting`, `FAQPage`, `BreadcrumbList`.
+
+Hero images: 1200x480 `hero.png` in article folder. OG images: 1200x630 at `/og/articles/<slug>.png`.
 - **Birthday calculator**: progressive enhancement only. The table is fully rendered in static HTML (so it is crawlable); `vax.js` fills the "Your date" column when a parent picks a birthday. Rows carry `data-weeks` or `data-months`; dates = birth + that offset. Localised via the page `lang`.
 
 ## E-E-A-T / YMYL rules (do not skip)
