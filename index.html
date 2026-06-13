@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>/* lifecycle stage (Expecting/Baby): set root class pre-paint, no flash */(function(){try{var K='cubby-stage',p=document.documentElement.getAttribute('data-page-stage'),u=new URLSearchParams(location.search).get('stage'),s=(u==='expecting'||u==='baby')?u:((p==='expecting'||p==='baby')?p:(localStorage.getItem(K)||'baby'));if(u||p)localStorage.setItem(K,s);document.documentElement.classList.add('stage-'+s);}catch(e){document.documentElement.classList.add('stage-baby');}})();</script>
 <!-- Installed PWA users (start_url was "/") jump straight to the app -->
 <script>try{if((window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||navigator.standalone){location.replace('/app/');}}catch(e){}</script>
 <title>Cubby: Baby Tracker, Vaccine Schedule &amp; Keepsakes</title>
@@ -138,6 +139,19 @@
   </div></div>
   <div class="dots" id="cdots"></div>
 </div>
+
+<!-- Expecting? Route the pregnancy audience to the pregnancy journey -->
+<section class="section" style="padding-top:30px;padding-bottom:6px">
+  <div class="exp-strip">
+    <div class="es-emoji">🌸</div>
+    <div class="es-body">
+      <div class="es-k">Expecting a baby?</div>
+      <div class="es-t">Cubby starts before they arrive</div>
+      <div class="es-d">Trying, newly pregnant or counting weeks: follow your pregnancy week by week, keep your antenatal schedule and every scan, and when baby arrives the same Cubby becomes your baby tracker.</div>
+    </div>
+    <a class="es-cta" href="/pregnancy/">Explore pregnancy</a>
+  </div>
+</section>
 
 <!-- Honest trust signals (no fabricated reviews or numbers) -->
 <section class="section">

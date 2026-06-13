@@ -185,3 +185,23 @@ svg.mi{width:1em;height:1em;vertical-align:-0.13em}
   .proof{max-width:1080px}
   .quotes{max-width:960px}
 }
+
+/* ===== Lifecycle stage: Expecting / Baby ===== */
+/* Root carries .stage-baby or .stage-expecting (set pre-paint by the head snippet). */
+.stage-baby [data-stage="expecting"]{display:none!important}
+.stage-expecting [data-stage="baby"]{display:none!important}
+.stage-switch{text-align:center;padding:26px 20px 0}
+.stage-tabs{display:inline-flex;gap:4px;background:var(--surface2);border:1px solid var(--line);border-radius:999px;padding:5px}
+.stage-tabs button{font-family:var(--sans);font-size:15px;font-weight:800;color:var(--soft);background:none;border:none;border-radius:999px;padding:10px 24px;cursor:pointer;white-space:nowrap;transition:all .14s ease}
+.stage-tabs button:hover{color:var(--ink)}
+.stage-expecting .stage-tabs button[data-stage-tab="expecting"],
+.stage-baby .stage-tabs button[data-stage-tab="baby"]{background:var(--pink);color:#fff;box-shadow:0 5px 14px rgba(201,127,160,.32)}
+/* Expecting promo strip (home, articles) */
+.exp-strip{display:flex;align-items:center;gap:18px;flex-wrap:wrap;background:linear-gradient(135deg,#f6e6f0,#fbf5e9);border:1px solid #ecd7e4;border-radius:22px;padding:22px 26px;max-width:1040px;margin:0 auto}
+.exp-strip .es-emoji{font-size:34px;line-height:1;flex:0 0 auto}
+.exp-strip .es-body{flex:1;min-width:220px}
+.exp-strip .es-k{font-family:var(--sans);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#b06a9a;margin-bottom:3px}
+.exp-strip .es-t{font-family:var(--serif);font-size:21px;font-weight:600;color:var(--ink);line-height:1.2;margin-bottom:4px}
+.exp-strip .es-d{font-size:15px;font-weight:600;color:var(--soft);line-height:1.5}
+.exp-strip .es-cta{flex:0 0 auto;background:var(--pink);color:#fff;font-weight:800;font-size:15px;padding:13px 24px;border-radius:13px;text-decoration:none;white-space:nowrap;box-shadow:0 8px 20px rgba(201,127,160,.3)}
+@media(max-width:600px){.exp-strip{flex-direction:column;text-align:center}.exp-strip .es-cta{width:100%;text-align:center}}

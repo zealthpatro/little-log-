@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-page-stage="expecting">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>/* lifecycle stage (Expecting/Baby): visiting this page marks the visitor as expecting */(function(){try{var K='cubby-stage',p=document.documentElement.getAttribute('data-page-stage'),u=new URLSearchParams(location.search).get('stage'),s=(u==='expecting'||u==='baby')?u:((p==='expecting'||p==='baby')?p:(localStorage.getItem(K)||'baby'));if(u||p)localStorage.setItem(K,s);document.documentElement.classList.add('stage-'+s);}catch(e){document.documentElement.classList.add('stage-baby');}})();</script>
 <title>Cubby for Pregnancy: Tracker from Trying to Birth</title>
 <meta name="description" content="Cubby walks the whole journey: trying for a baby, the positive test, week-by-week tracking, your antenatal schedule (NHS, ACOG, WHO-aligned), gestational diabetes and blood pressure logs, kick counter, contraction timer, and a Moments album for your ultrasounds. When baby arrives, the same Cubby becomes your baby tracker. Free, private, no ads.">
 <link rel="canonical" href="https://little-cubby.com/pregnancy/">
