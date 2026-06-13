@@ -113,6 +113,75 @@ window.PREG = (function () {
         { week: 38, title: 'Late checks', note: 'Position and birth planning; visits more frequent near term.' }
       ]
     },
+    ca: {
+      label: 'Canada (SOGC-aligned)',
+      source: 'https://www.pregnancyinfo.ca/',
+      note: 'Care varies by province and provider (family doctor, OB or midwife). Typically every 4-6 weeks to ~30 weeks, every 2-3 weeks to 36 weeks, then weekly. Confirm your plan locally.',
+      items: [
+        { week: 8, title: 'First prenatal visit', note: 'History, blood pressure, urine, prenatal bloods and blood group. (8-12 weeks)' },
+        { week: 12, title: 'Dating + NT scan', note: 'First-trimester screening and a dating ultrasound. (11-14 weeks)' },
+        { week: 16, title: 'Antenatal visit', note: 'Blood pressure, urine; review screening results.' },
+        { week: 20, title: 'Anatomy ultrasound', note: 'Detailed scan of baby’s anatomy. (18-22 weeks)' },
+        { week: 26, title: 'Glucose challenge test', note: 'Gestational diabetes screening. (24-28 weeks)' },
+        { week: 28, title: 'Visit + anti-D + Tdap', note: 'Rh immune globulin if Rh-negative; whooping cough (Tdap) vaccine from ~27 weeks.' },
+        { week: 32, title: 'Antenatal visit', note: 'Growth, blood pressure and position.' },
+        { week: 36, title: 'Group B strep (GBS) swab', note: 'GBS screening; visits become more frequent. (35-37 weeks)' },
+        { week: 38, title: 'Antenatal visit', note: 'Position, blood pressure and birth planning.' },
+        { week: 40, title: 'Due-date check', note: 'Discuss options if baby arrives later than expected.' }
+      ]
+    },
+    au: {
+      label: 'Australia (Pregnancy Care Guidelines)',
+      source: 'https://www.health.gov.au/resources/pregnancy-care-guidelines/part-b-core-practices-in-pregnancy-care/antenatal-visits',
+      note: 'About 10 visits for a first pregnancy, ~7 if you have been pregnant before. First visit by 10 weeks; every 4-6 weeks, more often from ~28 weeks.',
+      items: [
+        { week: 8, title: 'First (booking) visit', note: 'History, blood pressure, urine, booking bloods and blood group. (by 10 weeks)' },
+        { week: 12, title: 'Dating scan + screening', note: 'Ultrasound to date the pregnancy; first-trimester combined screening offered. (11-13 weeks)' },
+        { week: 16, title: 'Antenatal visit', note: 'Blood pressure, urine; review screening results.' },
+        { week: 20, title: 'Morphology (anomaly) scan', note: 'Detailed scan of baby’s development. (18-22 weeks)' },
+        { week: 26, title: 'Glucose test (OGTT)', note: 'Gestational diabetes screening. (24-28 weeks)' },
+        { week: 28, title: 'Visit + anti-D + whooping cough', note: 'Bloods; anti-D if Rh-negative; whooping cough (pertussis) vaccine, recommended 20-32 weeks.' },
+        { week: 32, title: 'Antenatal visit', note: 'Growth, blood pressure and urine.' },
+        { week: 34, title: 'Antenatal visit', note: 'Second anti-D if Rh-negative; position.' },
+        { week: 36, title: 'Antenatal visit', note: 'Check baby’s position; birth planning.' },
+        { week: 38, title: 'Antenatal visit', note: 'Blood pressure, urine and growth.' },
+        { week: 40, title: 'Antenatal visit', note: 'Discuss going past 40 weeks.' }
+      ]
+    },
+    nz: {
+      label: 'New Zealand (LMC / Ministry of Health)',
+      source: 'https://www.health.govt.nz/your-health/pregnancy-and-kids',
+      note: 'Midwife-led (Lead Maternity Carer). Booking by ~10 weeks, then about every 4 weeks to 28 weeks, every 2-3 weeks to 36 weeks, then weekly to birth.',
+      items: [
+        { week: 10, title: 'Register with your LMC (midwife)', note: 'History, blood pressure, urine, booking bloods and blood group; supplements. (by 10 weeks)' },
+        { week: 12, title: 'Dating + screening scan', note: 'Ultrasound to date the pregnancy; first-trimester screening offered. (11-14 weeks)' },
+        { week: 16, title: 'Antenatal visit', note: 'Blood pressure, urine; review results.' },
+        { week: 20, title: 'Anatomy scan', note: 'Detailed scan of baby’s development. (18-21 weeks)' },
+        { week: 26, title: 'Glucose screening', note: 'Gestational diabetes test. (24-28 weeks)' },
+        { week: 28, title: 'Visit + anti-D + whooping cough', note: 'Anti-D if Rh-negative; whooping cough (pertussis) vaccine, free from ~16 weeks.' },
+        { week: 32, title: 'Antenatal visit', note: 'Growth, blood pressure and position.' },
+        { week: 36, title: 'Antenatal visit', note: 'Position; birth plan; group B strep discussion.' },
+        { week: 38, title: 'Weekly checks begin', note: 'Blood pressure, urine and position.' },
+        { week: 40, title: 'Due-date check', note: 'Discuss options if baby arrives later than expected.' }
+      ]
+    },
+    ie: {
+      label: 'Ireland (HSE Maternity & Infant Care)',
+      source: 'https://www2.hse.ie/pregnancy-birth/pregnancy-care/care-appointments/',
+      note: 'Combined Care: your GP and the maternity hospital share your care, free under the Maternity and Infant Care Scheme. GP first visit before 12 weeks plus about 5 more, alternating with hospital visits.',
+      items: [
+        { week: 10, title: 'GP first visit', note: 'History, blood pressure, urine and bloods; register for the Maternity and Infant Care Scheme. (before 12 weeks)' },
+        { week: 12, title: 'Hospital booking + dating scan', note: 'History, bloods and blood group; dating scan offered. (8-12 weeks)' },
+        { week: 16, title: 'Antenatal visit', note: 'Blood pressure, urine; review screening results.' },
+        { week: 20, title: 'Anomaly scan (hospital)', note: 'Detailed fetal anatomy scan. (20-22 weeks)' },
+        { week: 24, title: 'Antenatal visit', note: 'Blood pressure, urine and growth.' },
+        { week: 28, title: 'Visit + anti-D', note: 'Anti-D if Rh-negative; whooping cough vaccine offered (16-36 weeks); glucose test if indicated.' },
+        { week: 32, title: 'Antenatal visit', note: 'Growth, blood pressure and position.' },
+        { week: 36, title: 'Antenatal visit', note: 'Position; birth planning.' },
+        { week: 38, title: 'Antenatal visit', note: 'Blood pressure, urine and growth.' },
+        { week: 40, title: 'Late check', note: 'Discuss going past your due date.' }
+      ]
+    },
     generic: {
       label: 'General (WHO-aligned)',
       source: 'https://www.who.int/publications/i/item/9789241549912',
