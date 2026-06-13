@@ -109,6 +109,8 @@ Articles are produced by a **dedicated Sonnet writer agent**, not the main build
   set `PRO_CFG.checkoutUrl/portalUrl` in `app/index.html`, bump `app/sw.js`, test with card 4242.
 - Future Pro/Plus tier (~$15/mo annual, $19/mo monthly: HD photos+R2 backup, push, routines) is
   design-only and held until demand + per-user infra costs are proven.
+- Full operational handoff for this track: **`MONETIZATION-HANDOFF.md`**. A business-direction /
+  fundraising review brief for an outside evaluator: **`STRATEGY-REVIEW.md`**.
 
 ## Gotchas
 - Editing JS strings: watch for accidental literal newlines inside `'...'` (broke a build once).
