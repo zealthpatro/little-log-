@@ -3013,6 +3013,11 @@ function renderPregHome(){
 function renderPregLog(){
   const p=state.pregnancy;
   const appts=(p.appts||[]).slice().sort((a,b)=>a.week-b.week);
+  const _sk=pregCountryKey(p.country);
+  const _src=(window.PREG&&PREG.antenatal[_sk]&&PREG.antenatal[_sk].source)||'';
+  const apptIntro = _sk==='custom'
+    ? `<div class="csub" style="margin:-2px 0 12px">Your own plan. Add each appointment your provider gives you below.</div>`
+    : `<div class="csub" style="margin:-2px 0 12px">Based on ${escapeHtml(pregCareLabel(p.country))}${_src?` · <a href="${_src}" target="_blank" rel="noopener" style="color:var(--preg);font-weight:700">source</a>`:''}. A sourced, indicative starting point, every clinic and doctor runs their own flow, so tick off, reschedule, add or remove anything to match your plan.</div>`;
   const apptRows=appts.length?appts.map(a=>`
     <div class="appt-row ${a.done?'done':''}">
       <div class="ar-tick" onclick="toggleAppt('${a.id}')">${a.done?I.check:''}</div>
@@ -3025,6 +3030,7 @@ function renderPregLog(){
   const logs=pregRecentLogs();
   return `<div class="fade-in">
     <div class="sec-title">Appointments</div>
+    ${apptIntro}
     ${apptRows}
     <button class="btn-ghost" onclick="openAddAppt()">${I.plus} Add an appointment</button>
     <div class="sec-title" style="margin-top:18px">Quick log</div>
