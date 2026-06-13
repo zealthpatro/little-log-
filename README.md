@@ -341,6 +341,7 @@ Everything runs on **free tiers**. Nothing here requires a card on file.
 | `CHANGELOG.md` | Notable changes over time. |
 | `SEO.md` | Marketing/SEO + CRO strategy. |
 | `SEO-BACKLINKS.md` | Backlink & launch playbook: GSC/Bing steps, Product Hunt kit, directories, listicle + community outreach templates, guardrails. |
+| `PRODUCTHUNT.md` | Full Product Hunt launch kit: listing fields, description, maker comment, FAQ, launch-day timeline. Gallery images in `og/producthunt/` (regen via `tools/gen_ph_gallery.py`). |
 | `DESIGN.md` | **Design anchor**: design system (tokens, type, spacing, iconography rules) + full design audit + prioritized fix list. New UI must follow Part A. |
 | `CONTENT.md` / `CONTENT-RUNBOOK.md` / `CONTENT-QUEUE.md` | Article rules / publish pipeline / backlog. |
 | `PRO.md` / `PAYWALL.md` | Pro feature list, paywall + referral-reward design, and launch checklist (payment loop built, not yet live). |
