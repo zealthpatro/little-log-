@@ -1918,6 +1918,10 @@ const PRO_CFG = {
   portalUrl:   '',   // e.g. 'https://cubby-billing.<acct>.workers.dev/portal'
   priceLine:   'Cubby Pro · $9/month, or $90/year (save 17%) · 7-day free trial'
 };
+/* Pre-launch: payments aren't open yet, so the Pro sheet collects registrations
+   and shows the target launch window. Change this one string when the date moves;
+   set PRO_CFG.checkoutUrl (see workers/pro-billing) to flip the sheet to selling. */
+const PRO_LAUNCH = 'August 2026';
 function isPro(){
   try{ if(localStorage.getItem('cubby-pro-dev')==='1') return true; }catch(e){}
   const p = window.LL && window.LL.pro;
@@ -1967,9 +1971,9 @@ function openPro(lockedFeature, tastedOut){
       ? `<button class="btn-primary" style="background:var(--star)" onclick="startProCheckout()">Start 7-day free trial</button>
          <div class="csub" style="text-align:center;margin-top:8px">${PRO_CFG.priceLine}. Cancel anytime in the trial and pay nothing. One plan covers your whole family.</div>`
       : (joined
-        ? `<div class="pro-joined">✅ You're on the waitlist. We'll be in touch 🐻</div>`
-        : `<button class="btn-primary" style="background:var(--star)" onclick="joinProWaitlist()">Join the waitlist</button>
-           <div class="csub" style="text-align:center;margin-top:8px">Payments open soon, ${PRO_CFG.priceLine} with a 7-day free trial. No charge now.</div>`)}`,'star');
+        ? `<div class="pro-joined">✅ You're registered for Pro. We'll email you the moment it opens, ${PRO_LAUNCH} 🐻</div>`
+        : `<button class="btn-primary" style="background:var(--star)" onclick="joinProWaitlist()">Register for Pro</button>
+           <div class="csub" style="text-align:center;margin-top:8px">Cubby Pro arrives ${PRO_LAUNCH}. Register now to claim your 7-day free trial at launch, ${PRO_CFG.priceLine}. No charge today.</div>`)}`,'star');
 }
 async function startProCheckout(){
   const hid = window.LL && window.LL.householdId;
@@ -2011,8 +2015,8 @@ async function joinProWaitlist(){
       },{merge:true});
     }
     try{ localStorage.setItem('cubby-pro-waitlist','1'); }catch(e){}
-    openPro(); toast('🐻 You\'re on the Pro waitlist!');
-  }catch(e){ toast('Could not join: '+((e&&e.message)||e)); }
+    openPro(); toast('🐻 You\'re registered for Cubby Pro!');
+  }catch(e){ toast('Could not register: '+((e&&e.message)||e)); }
 }
 function openBabyProfile(){
   const b=activeBaby(); if(!b)return;
@@ -2246,7 +2250,7 @@ function openSettings(){
     </div>
     <div class="set-item" onclick="openPro()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">✨</div>
-      <div class="si-body"><div class="a">Cubby Pro</div><div class="b">${isPro()?'Active · thank you 🐻':'The full keepsake studio, doctor reports & more'}</div></div>
+      <div class="si-body"><div class="a">Cubby Pro</div><div class="b">${isPro()?'Active · thank you 🐻':`Keepsake studio, doctor reports & more · launching ${PRO_LAUNCH}`}</div></div>
     </div>
     <div class="set-item" onclick="shareCubby()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--pump-soft);color:var(--pump)">${I.heart}</div>
