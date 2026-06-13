@@ -340,6 +340,7 @@ Everything runs on **free tiers**. Nothing here requires a card on file.
 | `HANDOFF.md` | Fast resume notes / 30-second mental model. |
 | `CHANGELOG.md` | Notable changes over time. |
 | `SEO.md` | Marketing/SEO + CRO strategy. |
+| `SEO-BACKLINKS.md` | Backlink & launch playbook: GSC/Bing steps, Product Hunt kit, directories, listicle + community outreach templates, guardrails. |
 | `DESIGN.md` | **Design anchor**: design system (tokens, type, spacing, iconography rules) + full design audit + prioritized fix list. New UI must follow Part A. |
 | `CONTENT.md` / `CONTENT-RUNBOOK.md` / `CONTENT-QUEUE.md` | Article rules / publish pipeline / backlog. |
 | `PRO.md` / `PAYWALL.md` | Pro feature list, paywall + referral-reward design, and launch checklist (payment loop built, not yet live). |
