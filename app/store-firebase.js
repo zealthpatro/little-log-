@@ -109,15 +109,28 @@
       ev.preventDefault();
       var email = form.querySelector('input').value.trim(); if (!email) return;
       var btn = form.querySelector('button'); btn.disabled = true; btn.textContent = 'Sending…';
-      auth.sendSignInLinkToEmail(email, { url: location.origin + '/app/', handleCodeInApp: true })
+      // Send via our own Worker + Resend (Firebase's built-in sender has poor Gmail delivery).
+      // Completion is unchanged: the link is a standard Firebase email-sign-in link, finished
+      // below by signInWithEmailLink(). Falls back to Firebase's sender if the endpoint is down.
+      fetch('/api/send-signin-link', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: email }) })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) throw new Error(d.error || 'send_failed'); return d; }); })
         .then(function () {
           try { localStorage.setItem('cubby-email-signin', email); } catch (e) {}
           form.style.display = 'none';
           note.textContent = 'Check your inbox: we sent a sign-in link to ' + email + '. Open it on this device.';
         })
-        .catch(function (err) {
-          btn.disabled = false; btn.textContent = 'Send link';
-          note.textContent = 'Could not send the link: ' + ((err && err.message) || err);
+        .catch(function () {
+          // Endpoint unavailable (e.g. not deployed yet): fall back to Firebase's own sender.
+          auth.sendSignInLinkToEmail(email, { url: location.origin + '/app/', handleCodeInApp: true })
+            .then(function () {
+              try { localStorage.setItem('cubby-email-signin', email); } catch (e) {}
+              form.style.display = 'none';
+              note.textContent = 'Check your inbox: we sent a sign-in link to ' + email + '. Open it on this device.';
+            })
+            .catch(function (err) {
+              btn.disabled = false; btn.textContent = 'Send link';
+              note.textContent = 'Could not send the link: ' + ((err && err.message) || err);
+            });
         });
     };
   }

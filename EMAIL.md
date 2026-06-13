@@ -136,4 +136,16 @@ with their own SPF/DKIM, and leave the apex record for Firebase auth mail.
 - 2026-06-11: Magic-link sign-in shipped; Firebase auth emails moved to noreply@little-cubby.com
   (SPF/DKIM in Cloudflare) after Gmail dropped the default sender. Branded auth-email HTML
   deferred to the ESP phase (see §9b), where a Worker + `returnOobLink` takes over sending.
-- Transactional ≠ marketing: always separate streams, domains, and consent.
+- 2026-06-14: **§9b Worker sender BUILT (code)** on `pregnancy-tracker`. `worker.js` now exposes
+  `POST /api/send-signin-link`: mints the EMAIL_SIGNIN link via the Identity Toolkit Admin API
+  (service-account JWT signed with WebCrypto RS256 -> OAuth token -> `sendOobCode` with
+  `returnOobLink:true`) and sends a branded email via Resend. Client (`store-firebase.js`) calls
+  the endpoint and falls back to Firebase's own sender if it's unreachable; completion via
+  `signInWithEmailLink()` is unchanged. Same-origin guard + 60s per-email cooldown (edge cache);
+  pair with a Cloudflare Rate Limiting rule on the endpoint. **NOT yet live** -- needs (founder):
+  rotate the leaked Resend key; verify `mail.little-cubby.com` in Resend (DKIM/SPF DNS on a
+  subdomain so the apex stays Firebase's, per §2); a dedicated service account with the minimal
+  *Firebase Authentication Admin* role; `wrangler secret put RESEND_API_KEY` and
+  `FIREBASE_SERVICE_ACCOUNT`; deploy; test end-to-end. Accepts the service-account-in-Worker-secret
+  tradeoff (founder go-ahead 2026-06-14) -- the only way to custom-send Firebase auth links.
+- Transactional != marketing: always separate streams, domains, and consent.
