@@ -1858,7 +1858,7 @@ function openAddBaby(){
     <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
     <div class="field"><label>Name</label><input id="bName" placeholder="Baby's name" autofocus></div>
     <div class="field"><label>Birthday (optional)</label><input type="date" id="bDate" value="${today}" max="${today}"></div>
-    <div class="field"><label>Country (sets the vaccine schedule)</label><select id="bCountry">${VAX_COUNTRIES.map(([k,n])=>`<option value="${k}" ${k===detectCountry()?'selected':''}>${n}</option>`).join('')}</select></div>
+    <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label><select id="bCountry">${VAX_COUNTRIES.map(([k,n])=>`<option value="${k}" ${k===detectCountry()?'selected':''}>${n}</option>`).join('')}</select></div>
     <button class="btn-primary" onclick="saveBaby()">Add baby</button>`,'diaper');
 }
 function pickColor(c){
@@ -2348,7 +2348,7 @@ function renderOnboard(){
       <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
       <div class="field"><label>Baby's name</label><input id="bName" placeholder="e.g. Mira" autofocus></div>
       <div class="field"><label>Birthday (optional)</label><input type="date" id="bDate" value="${today}" max="${today}"></div>
-      <div class="field"><label>Country (sets the vaccine schedule)</label><select id="bCountry">${VAX_COUNTRIES.map(([k,n])=>`<option value="${k}" ${k===detectCountry()?'selected':''}>${n}</option>`).join('')}</select></div>
+      <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label><select id="bCountry">${VAX_COUNTRIES.map(([k,n])=>`<option value="${k}" ${k===detectCountry()?'selected':''}>${n}</option>`).join('')}</select></div>
       <button class="btn-primary" style="--accent:var(--feed)" onclick="saveBaby()">Start tracking</button>
       <button class="ob-logout" onclick="confirmLogout()">Log out</button>
     </div>
@@ -3043,9 +3043,24 @@ const VAX_SCHEDULES={
     ['6-fach (3.)','11 Monate',11],['Pneumokokken (3.)','11 Monate',11],['MMR (1.)','11 Monate',11],['Varizellen (1.)','11 Monate',11],
     ['Meningokokken B (3.)','12 Monate',12],
     ['MMR (2.)','15 Monate',15],['Varizellen (2.)','15 Monate',15]
-  ]}
+  ]},
+  // Added 2026-06-13, each sourced from the national authority + adversarially verified (3 had dose-age errors the verifier corrected):
+  //   who: https://cdn.who.int/media/docs/default-source/immunization/immunization_schedules/immunization-summary-table-2.pdf?sfvrsn=c10d5c2_12&download=true
+  //   in: http://www.acvip.org/iap-immunization.php
+  //   ca: https://www.canada.ca/en/public-health/services/publications/healthy-living/canadian-immunization-guide-part-1-key-immunization-information/page-13-recommended-immunization-schedules.html
+  //   ie: https://www2.hse.ie/babies-children/vaccines-your-child/
+  //   nz: https://www.healthnz.govt.nz/immunisations/national-immunisation-schedule
+  //   sa: https://www.moh.gov.sa/en/HealthAwareness/EducationalContent/HealthTips/Documents/Immunization-Schedule.pdf
+  //   sg: https://www.cda.gov.sg/public/vaccinations/
+  who:{label:'General (WHO)',list:[['BCG','At birth',0],['Hepatitis B (birth dose)','At birth (under 24h)',0],['OPV (bOPV, 1st dose)','6 weeks',1.38],['DTP-containing (1st dose)','6 weeks',1.38],['Hib (1st dose)','6 weeks',1.38],['Hepatitis B (2nd dose, with DTP1)','6 weeks',1.38],['Pneumococcal conjugate / PCV (1st dose)','6 weeks',1.38],['Rotavirus (1st dose)','6 weeks',1.38],['OPV (bOPV, 2nd dose)','10 weeks',2.3],['DTP-containing (2nd dose)','10 weeks',2.3],['Hib (2nd dose)','10 weeks',2.3],['Hepatitis B (3rd dose, with DTP2)','10 weeks',2.3],['Pneumococcal conjugate / PCV (2nd dose)','10 weeks',2.3],['Rotavirus (2nd dose)','10 weeks',2.3],['OPV (bOPV, 3rd dose)','14 weeks',3.22],['IPV (1st dose)','14 weeks',3.22],['DTP-containing (3rd dose)','14 weeks',3.22],['Hib (3rd dose)','14 weeks',3.22],['Hepatitis B (4th dose, with DTP3)','14 weeks',3.22],['Pneumococcal conjugate / PCV (3rd dose)','14 weeks',3.22],['Rotavirus (3rd dose, if 3-dose product)','14 weeks',3.22],['Measles-containing vaccine / MCV (1st dose)','9 months',9],['Rubella (1st dose, with measles vaccine)','9 months',9],['IPV (2nd dose, 4+ months after IPV1, e.g. with MCV)','9 months',9],['Measles-containing vaccine / MCV (2nd dose)','15-18 months',15],['DTP-containing (1st booster)','12-23 months',12],['DTP-containing booster (Td/DT, 2nd booster)','4-7 years',48]]},
+  in:{label:'India (IAP/ACVIP)',list:[['BCG','At birth',0],['Hepatitis B (birth dose / 1st dose)','At birth',0],['OPV (0 / birth dose)','At birth',0],['DTwP/DTaP (1st dose)','6 weeks',1.38],['Hib (1st dose)','6 weeks',1.38],['IPV (1st dose)','6 weeks',1.38],['Hepatitis B (2nd dose)','6 weeks',1.38],['Rotavirus (1st dose)','6 weeks',1.38],['PCV (1st dose)','6 weeks',1.38],['DTwP/DTaP (2nd dose)','10 weeks',2.3],['Hib (2nd dose)','10 weeks',2.3],['IPV (2nd dose)','10 weeks',2.3],['Rotavirus (2nd dose)','10 weeks',2.3],['PCV (2nd dose)','10 weeks',2.3],['DTwP/DTaP (3rd dose)','14 weeks',3.22],['Hib (3rd dose)','14 weeks',3.22],['IPV (3rd dose)','14 weeks',3.22],['Rotavirus (3rd dose)','14 weeks',3.22],['PCV (3rd dose)','14 weeks',3.22],['Hepatitis B (3rd dose)','6 months',6],['Typhoid Conjugate Vaccine (TCV)','9 months',9],['MMR (1st dose)','9 months',9],['Hepatitis A (1st dose)','12 months',12],['MMR (2nd dose)','15 months',15],['Varicella (1st dose)','15 months',15],['PCV (booster)','15 months',15],['DTwP/DTaP (1st booster)','16-18 months',16],['Hib (booster)','16-18 months',16],['IPV (booster)','16-18 months',16],['Hepatitis A (2nd dose)','18 months',18],['Varicella (2nd dose)','4-6 years',48],['DTwP/DTaP (2nd booster)','4-6 years',48],['IPV (booster)','4-6 years',48],['MMR (3rd dose)','4-6 years',48]]},
+  ca:{label:'Canada (national / NACI)',list:[['Hepatitis B (HB) (1st dose)','At birth',0],['DTaP-IPV-Hib (diphtheria-tetanus-pertussis-polio-Hib) (1st dose)','2 months',2],['Rotavirus (Rot) (1st dose)','2 months',2],['Pneumococcal conjugate (Pneu-C-15 or Pneu-C-20) (1st dose)','2 months',2],['DTaP-IPV-Hib (diphtheria-tetanus-pertussis-polio-Hib) (2nd dose)','4 months',4],['Rotavirus (Rot) (2nd dose)','4 months',4],['Pneumococcal conjugate (Pneu-C-15 or Pneu-C-20) (2nd dose)','4 months',4],['DTaP-IPV-Hib (diphtheria-tetanus-pertussis-polio-Hib) (3rd dose)','6 months',6],['Rotavirus (Rot) (3rd dose, only if pentavalent Rot-5 used)','6 months',6],['Pneumococcal conjugate (Pneu-C-15 or Pneu-C-20) booster','12 months (12-15 months)',12],['Meningococcal C conjugate (Men-C-C)','12 months',12],['MMR (measles-mumps-rubella) (1st dose)','12 months (12-15 months)',12],['Varicella (Var, chickenpox) (1st dose)','12 months (12-15 months)',12],['DTaP-IPV-Hib (diphtheria-tetanus-pertussis-polio-Hib) (4th dose)','18 months',18],['MMR (measles-mumps-rubella) (2nd dose)','18 months',18],['Varicella (Var, chickenpox) (2nd dose)','18 months',18],['DTaP-IPV or Tdap-IPV preschool booster','4 years (4-6 years)',48]]},
+  ie:{label:'Ireland (HSE)',list:[['6-in-1 (1st dose)','2 months',2],['PCV - pneumococcal (1st dose)','2 months',2],['MenB - meningococcal B (1st dose)','2 months',2],['Rotavirus oral (1st dose)','2 months',2],['6-in-1 (2nd dose)','4 months',4],['MenB - meningococcal B (2nd dose)','4 months',4],['Rotavirus oral (2nd dose)','4 months',4],['6-in-1 (3rd dose)','6 months',6],['PCV - pneumococcal (2nd dose)','6 months',6],['MMR (1st dose)','12 months',12],['MenB - meningococcal B (3rd/booster dose)','12 months',12],['Chickenpox / varicella (1st dose)','12 months',12],['6-in-1 (4th/booster dose)','13 months',13],['MenC - meningococcal C (1st dose)','13 months',13],['PCV - pneumococcal (3rd/booster dose)','13 months',13],['4-in-1 booster (diphtheria, tetanus, pertussis, polio)','4-5 years (junior infants)',48],['MMRV - MMR + chickenpox combined (2nd dose)','4-5 years (junior infants)',48]]},
+  nz:{label:'New Zealand',list:[['Rotavirus (1st dose)','6 weeks',1.38],['6-in-1 diphtheria/tetanus/whooping cough/polio/hepatitis B/Hib (1st dose)','6 weeks',1.38],['Pneumococcal (1st dose)','6 weeks',1.38],['Rotavirus (2nd dose)','3 months',3],['6-in-1 diphtheria/tetanus/whooping cough/polio/hepatitis B/Hib (2nd dose)','3 months',3],['Meningococcal B (1st dose)','3 months',3],['6-in-1 diphtheria/tetanus/whooping cough/polio/hepatitis B/Hib (3rd dose)','5 months',5],['Pneumococcal (2nd dose)','5 months',5],['Meningococcal B (2nd dose)','5 months',5],['MMR measles/mumps/rubella (1st dose)','12 months',12],['Pneumococcal (3rd dose)','12 months',12],['Meningococcal B (3rd dose)','12 months',12],['Hib (booster)','15 months',15],['MMR measles/mumps/rubella (2nd dose)','15 months',15],['Chickenpox / varicella (1 dose)','15 months',15],['4-in-1 diphtheria/tetanus/whooping cough/polio (booster)','4 years',48]]},
+  sa:{label:'Saudi Arabia (MOH)',list:[['Hepatitis B (1st dose)','At birth',0],['Hepatitis B (2nd dose)','2 months',2],['Rotavirus (1st dose)','2 months',2],['DTaP (1st dose)','2 months',2],['Hib (1st dose)','2 months',2],['PCV (1st dose)','2 months',2],['IPV (1st dose)','2 months',2],['Hepatitis B (3rd dose)','4 months',4],['Rotavirus (2nd dose)','4 months',4],['DTaP (2nd dose)','4 months',4],['Hib (2nd dose)','4 months',4],['PCV (2nd dose)','4 months',4],['IPV (2nd dose)','4 months',4],['BCG (1st dose)','6 months',6],['Hepatitis B (4th dose)','6 months',6],['Rotavirus (3rd dose)','6 months',6],['DTaP (3rd dose)','6 months',6],['Hib (3rd dose)','6 months',6],['PCV (3rd dose)','6 months',6],['IPV (3rd dose)','6 months',6],['OPV (1st dose)','6 months',6],['Measles (1st dose, single measles)','9 months',9],['MCV4 meningococcal (1st dose)','9 months',9],['MMR (1st dose)','12 months',12],['MCV4 meningococcal (2nd dose)','12 months',12],['PCV (4th dose, booster)','12 months',12],['OPV (2nd dose)','12 months',12],['DTaP (4th dose, booster)','18 months',18],['Hib (4th dose, booster)','18 months',18],['MMR (2nd dose)','18 months',18],['OPV (3rd dose)','18 months',18],['Hepatitis A (1st dose)','18 months',18],['Varicella (1st dose)','18 months',18],['Hepatitis A (2nd dose)','24 months',24],['DTaP (5th dose, booster)','4-6 years',48],['MMR (3rd dose, booster)','4-6 years',48],['OPV (4th dose, booster)','4-6 years',48],['Varicella (2nd dose)','4-6 years',48]]},
+  sg:{label:'Singapore (NCIS)',list:[['BCG (1st dose)','At birth',0],['Hepatitis B (1st dose)','At birth',0],['6-in-1: DTaP-IPV-Hib-HepB (1st dose)','2 months',2],['5-in-1: DTaP-IPV-Hib (2nd dose)','4 months',4],['PCV13 / Pneumococcal (1st dose)','4 months',4],['6-in-1: DTaP-IPV-Hib-HepB (3rd dose)','6 months',6],['PCV13 / Pneumococcal (2nd dose)','6 months',6],['PCV13 / Pneumococcal (booster)','12 months',12],['MMR (1st dose)','12 months',12],['Varicella / Chickenpox (1st dose)','12 months',12],['MMRV: MMR (2nd dose) + Varicella (2nd dose)','15 months',15],['5-in-1: DTaP-IPV-Hib (booster)','18 months',18]]},
 };
-const VAX_COUNTRIES=[['us','United States (CDC)'],['uk','United Kingdom (NHS)'],['uae','United Arab Emirates'],['de','Deutschland (STIKO)']];
+const VAX_COUNTRIES=[['us','United States (CDC)'],['uk','United Kingdom (NHS)'],['uae','United Arab Emirates'],['de','Deutschland (STIKO)'],['in','India (IAP)'],['ca','Canada (NACI)'],['ie','Ireland (HSE)'],['nz','New Zealand'],['sg','Singapore (NCIS)'],['sa','Saudi Arabia (MOH)'],['who','Other / General (WHO)']];
 
 /* Capture an explicit ?c= country from a vaccine-schedule page link, once. */
 (function(){ try{ const c=new URLSearchParams(location.search).get('c'); if(c){const k=c.toLowerCase(); if(VAX_SCHEDULES[k]) localStorage.setItem('cubby-country',k);} }catch(e){} })();
@@ -3061,10 +3076,22 @@ function detectCountry(){
   if(lang.indexOf('en-gb')===0) return 'uk';
   if(lang.indexOf('en-ae')===0||lang.indexOf('ar-ae')===0) return 'uae';
   if(lang.indexOf('en-us')===0) return 'us';
+  if(lang.indexOf('en-in')===0||lang.indexOf('hi')===0) return 'in';
+  if(lang.indexOf('en-ie')===0) return 'ie';
+  if(lang.indexOf('en-nz')===0) return 'nz';
+  if(lang.indexOf('en-sg')===0) return 'sg';
+  if(lang.indexOf('ar-sa')===0) return 'sa';
+  if(lang.indexOf('en-ca')===0||lang.indexOf('fr-ca')===0) return 'ca';
   try{ const tz=(Intl.DateTimeFormat().resolvedOptions().timeZone||'');
     if(tz==='Asia/Dubai') return 'uae';
     if(tz==='Europe/London') return 'uk';
     if(['Europe/Berlin','Europe/Vienna','Europe/Zurich','Europe/Busingen'].indexOf(tz)>=0) return 'de';
+    if(tz==='Asia/Kolkata'||tz==='Asia/Calcutta') return 'in';
+    if(tz==='Europe/Dublin') return 'ie';
+    if(tz==='Pacific/Auckland') return 'nz';
+    if(tz==='Asia/Singapore') return 'sg';
+    if(tz==='Asia/Riyadh') return 'sa';
+    if(['America/Toronto','America/Vancouver','America/Edmonton','America/Winnipeg','America/Halifax','America/St_Johns'].indexOf(tz)>=0) return 'ca';
   }catch(e){}
   return 'us';
 }
