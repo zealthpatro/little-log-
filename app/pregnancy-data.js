@@ -127,6 +127,12 @@ window.PREG = (function () {
         { week: 38, title: 'Late checks', note: 'More frequent checks as you approach birth.' },
         { week: 40, title: 'Due date check', note: 'Discuss options if baby arrives later than expected.' }
       ]
+    },
+    custom: {
+      label: 'Your own plan',
+      source: '',
+      note: 'Build your own visit list, the way your provider has set it out. Add each appointment as you go.',
+      items: []
     }
   };
 

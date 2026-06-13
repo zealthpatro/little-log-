@@ -2653,6 +2653,35 @@ const PREG_MS_WEEK = 7*86400000, PREG_TERM = 280*86400000;
 const PREG_DISCLAIM = 'Informational only, not medical advice. Always follow your midwife, doctor or health visitor, and confirm your own appointment plan with your provider.';
 let pregView = 'week';
 const PREG_COUNTRY_OPTS = [['uk','United Kingdom (NHS)'],['us','United States (ACOG)'],['de','Deutschland'],['uae','United Arab Emirates'],['generic','Other / general (WHO)']];
+/* Pregnancy care picker: every country is selectable. uk/us/de/uae have verified national schedules;
+   everyone else falls back to a WHO-aligned baseline (editable) until a verified schedule is added.
+   Country names render via Intl.DisplayNames (localised, no hardcoded name table). */
+const PREG_ISO = { uk:'GB', uae:'AE' };
+const PREG_MORE_COUNTRIES = ['in','ca','au','nz','ie','sg','sa','fr','it','es','nl','be','ch','at','se','no','dk','fi','pl','pt','gr','cz','ro','hu','br','mx','ar','cl','co','pe','ng','za','ke','eg','gh','ma','dz','tz','cn','jp','kr','id','ph','my','th','vn','pk','bd','lk','np','tr','ru','ua','il','qa','kw','bh','om','jo','lb'];
+function pregCountryName(code){
+  if(!code||code==='custom') return 'Custom plan';
+  if(code==='generic') return 'General (WHO-aligned)';
+  try{ var iso=PREG_ISO[code]||code.toUpperCase();
+    return (new Intl.DisplayNames([navigator.language||'en'],{type:'region'}).of(iso))||code.toUpperCase();
+  }catch(e){ return code.toUpperCase(); }
+}
+function pregCareLabel(code){
+  var sk=pregCountryKey(code);
+  if(sk==='custom') return 'Your own plan';
+  if(sk!=='generic' && window.PREG && PREG.antenatal[sk]) return PREG.antenatal[sk].label;
+  return pregCountryName(code)+' · WHO-aligned';
+}
+function pregCountryOptions(sel){
+  sel = sel || 'generic';
+  var opt=function(c,l){ return '<option value="'+c+'"'+(c===sel?' selected':'')+'>'+escapeHtml(l)+'</option>'; };
+  var html='';
+  ['uk','us','de','uae'].forEach(function(c){ var L=(window.PREG&&PREG.antenatal[c]&&PREG.antenatal[c].label)||c.toUpperCase(); html+=opt(c,L); });
+  var others=PREG_MORE_COUNTRIES.map(function(c){ return [c, pregCountryName(c)]; }).sort(function(a,b){ return a[1].localeCompare(b[1]); });
+  others.forEach(function(p){ html+=opt(p[0], p[1]); });
+  html+=opt('generic','Other / not listed (WHO-aligned)');
+  html+=opt('custom','Custom — build your own');
+  return html;
+}
 
 /* ---- derived (compute, never store) ---- */
 function pregWeek(){
@@ -2681,6 +2710,7 @@ function openStartPregnancy(){
       <div class="prof-card" onclick="openExpectingSetup('lmp')"><span class="lead" style="background:var(--preg-soft);color:var(--preg);font-size:18px">🎉</span><div class="cflex"><div class="a">Just found out</div><div class="b">A positive test! We'll work out your weeks</div></div><span class="chev">${I.chev}</span></div>
       <div class="prof-card" onclick="openExpectingSetup('due')"><span class="lead" style="background:var(--star-soft);color:var(--star);font-size:18px">🤰</span><div class="cflex"><div class="a">Already counting weeks</div><div class="b">You know your due date, pick up right where you are</div></div><span class="chev">${I.chev}</span></div>
     </div>
+    ${(state.pregnancyArchive&&state.pregnancyArchive.length)?`<button class="btn-ghost" style="color:var(--ink-faint);margin-top:4px" onclick="openKeptMemories()">🤍 View kept memories</button>`:''}
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
 }
 function setPregMode(m){ pregDraft.mode=m; pregDraft.date=(($('#pgDate')||{}).value)||pregDraft.date; openExpectingSetup(m); }
@@ -2693,7 +2723,7 @@ function openExpectingSetup(mode){
       <button class="${!isDue?'on':''}" onclick="setPregMode('lmp')">Use last period</button>
     </div>
     <div class="field"><label>${isDue?'Due date (EDD)':'First day of your last period'}</label><input type="date" id="pgDate" value="${pregDraft.date}"></div>
-    <div class="field"><label>Where you'll have your care</label><select id="pgCountry">${PREG_COUNTRY_OPTS.map(([k,n])=>`<option value="${k}" ${k===pregDraft.country?'selected':''}>${n}</option>`).join('')}</select></div>
+    <div class="field"><label>Where you'll have your care</label><select id="pgCountry">${pregCountryOptions(pregDraft.country)}</select></div>
     <button class="btn-primary" style="background:var(--preg)" onclick="savePregnancy()">Start tracking</button>
     <button class="btn-ghost" onclick="openStartPregnancy()">Back</button>
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
@@ -2715,7 +2745,7 @@ function savePlanning(){
   const dv=($('#plLmp')||{}).value;
   const cyc=Math.max(21,Math.min(40,parseInt(($('#plCycle')||{}).value)||28));
   state.pregnancy={ id:uid(), ownerUid:myUid(), stage:'planning', dueDate:null, lmp:dv?new Date(dv+'T08:00').getTime():null, cycleLen:cyc,
-    country:pregCountryKey(detectCountry()), precon:defaultPrecon(),
+    country:detectCountry(), precon:defaultPrecon(),
     careTeam:[], appts:[], symptoms:[], weights:[], bp:[], kicks:[], contractions:[],
     birthPlan:'', bag:[], moments:[],
     conditions:{}, glucose:[], urine:[], supplements:[], supplementLog:[], nausea:[],
@@ -2748,18 +2778,19 @@ function openPositiveTest(){
     <h2 style="text-align:center">A positive test!</h2>
     <div class="sub" style="text-align:center">Wonderful news. Let's turn trying into tracking: confirm your last period and we'll set up your weeks.</div>
     <div class="field"><label>First day of your last period</label><input type="date" id="ptLmp" value="${dv}"></div>
-    <div class="field"><label>Where you'll have your care</label><select id="ptCountry">${PREG_COUNTRY_OPTS.map(([k,n])=>`<option value="${k}" ${k===p.country?'selected':''}>${n}</option>`).join('')}</select></div>
+    <div class="field"><label>Where you'll have your care</label><select id="ptCountry">${pregCountryOptions(p.country)}</select></div>
     <button class="btn-primary" style="background:var(--preg)" onclick="confirmPositiveTest()">Start my pregnancy 🤍</button>
     <div class="csub" style="text-align:center;margin-top:8px">A home test is a great sign. Your provider will confirm it properly.</div>`,'preg');
 }
 function confirmPositiveTest(){
   const p=state.pregnancy;
   const dv=($('#ptLmp')||{}).value; if(!dv){toast('We need your last period date');return;}
-  const cc=pregCountryKey(($('#ptCountry')||{}).value);
+  const sel=(($('#ptCountry')||{}).value)||detectCountry();
+  const cc=pregCountryKey(sel);
   p.lmp=new Date(dv+'T08:00').getTime();
   p.dueDate=p.lmp+PREG_TERM;
   p.stage='expecting';
-  p.country=cc;
+  p.country=sel;
   p.appts=(((window.PREG&&PREG.antenatal[cc]&&PREG.antenatal[cc].items))||[]).map(it=>({id:uid(),week:it.week,title:it.title,note:it.note,done:false,at:null}));
   if(!(p.bag||[]).length) p.bag=defaultBag();
   pregView='week'; persist(); closeSheet(); render(); toast("You're expecting 🤍");
@@ -2852,13 +2883,14 @@ function defaultBag(){
 function savePregnancy(){
   const dv=($('#pgDate')||{}).value;
   if(!dv){ toast('Pick a date first'); return; }
-  const cc=pregCountryKey(($('#pgCountry')||{}).value);
+  const sel=(($('#pgCountry')||{}).value)||detectCountry();
+  const cc=pregCountryKey(sel);
   const picked=new Date(dv+'T08:00').getTime();
   let dueDate, lmp=null;
   if(pregDraft.mode==='due'){ dueDate=picked; }
   else { lmp=picked; dueDate=picked+PREG_TERM; }
   const appts=(((window.PREG&&PREG.antenatal[cc]&&PREG.antenatal[cc].items))||[]).map(it=>({id:uid(),week:it.week,title:it.title,note:it.note,done:false,at:null}));
-  state.pregnancy={ id:uid(), ownerUid:myUid(), stage:'expecting', dueDate, lmp, country:cc,
+  state.pregnancy={ id:uid(), ownerUid:myUid(), stage:'expecting', dueDate, lmp, country:sel,
     careTeam:[], appts, symptoms:[], weights:[], bp:[], kicks:[], contractions:[],
     birthPlan:'', bag:defaultBag(), moments:[],
     conditions:{}, glucose:[], urine:[], supplements:[], supplementLog:[], nausea:[],
@@ -3149,7 +3181,7 @@ function renderPregCare(){
   const amOwner=pregIsOwner();
   const seeCare=pregCanSee('careteam'), seeHealth=pregCanSee('health')||pregCanSee('conditions');
   const team=(p.careTeam||[]).map(m=>`<div class="log-list-item"><div class="lli-ico">👩‍⚕️</div><div class="lli-body"><div class="lli-t">${escapeHtml(m.name)}</div><div class="lli-s">${escapeHtml(m.role)}${m.phone?' · '+escapeHtml(m.phone):''}</div></div>${amOwner?`<button class="lli-x" onclick="removeCareTeam('${m.id}')">${I.trash}</button>`:''}</div>`).join('');
-  const cname=(window.PREG&&PREG.antenatal[p.country]&&PREG.antenatal[p.country].label)||'General (WHO-aligned)';
+  const cname=pregCareLabel(p.country);
   const careBlock = seeCare ? `
     <div class="sec-title">Your care team</div>
     ${team||'<div class="csub">Add your midwife, doctor or clinic for quick reference.</div>'}
@@ -3169,7 +3201,7 @@ function renderPregCare(){
       <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">📅</div>
       <div class="si-body"><div class="a">Due date &amp; schedule</div><div class="b">${pregDueLabel()||'Set your dates'} · ${escapeHtml(cname)}</div></div><span class="chev">${I.chev}</span></div>
     <button class="btn-primary" style="background:var(--preg);margin-top:14px" onclick="openWelcomeBaby()">🐻 Baby has arrived</button>
-    <button class="btn-ghost" style="color:var(--ink-faint)" onclick="confirmEndPregnancy()">Remove this pregnancy</button>
+    <button class="btn-ghost" style="color:var(--ink-faint)" onclick="confirmEndPregnancy()">End this pregnancy</button>
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>
   </div>`;
 }
@@ -3239,27 +3271,71 @@ function openEditPregnancy(){
   const dv=p.dueDate?new Date(p.dueDate).toISOString().slice(0,10):'';
   openSheet(`<h2>Due date &amp; schedule</h2><div class="sub">Update your dates or the antenatal schedule we suggest.</div>
     <div class="field"><label>Due date (EDD)</label><input type="date" id="epDue" value="${dv}"></div>
-    <div class="field"><label>Care schedule</label><select id="epC">${PREG_COUNTRY_OPTS.map(([k,n])=>`<option value="${k}" ${k===p.country?'selected':''}>${n}</option>`).join('')}</select></div>
+    <div class="field"><label>Care schedule</label><select id="epC">${pregCountryOptions(p.country)}</select></div>
     <button class="btn-primary" style="background:var(--preg)" onclick="saveEditPregnancy()">Save</button>
     <div class="preg-disclaim">Changing the schedule adds any new suggested appointments. Anything you've added or ticked is kept.</div>`,'preg');
 }
 function saveEditPregnancy(){
-  const p=state.pregnancy; const dv=$('#epDue').value; const cc=pregCountryKey($('#epC').value);
+  const p=state.pregnancy; const dv=$('#epDue').value; const sel=$('#epC').value||p.country; const cc=pregCountryKey(sel); const prevKey=pregCountryKey(p.country);
   if(dv){ p.dueDate=new Date(dv+'T08:00').getTime(); p.lmp=p.dueDate-PREG_TERM; }
-  if(cc!==p.country){
-    p.country=cc;
-    const have={}; (p.appts||[]).forEach(a=>{ have[a.title+'@'+a.week]=true; });
-    (((window.PREG&&PREG.antenatal[cc]&&PREG.antenatal[cc].items))||[]).forEach(it=>{ if(!have[it.title+'@'+it.week]) p.appts.push({id:uid(),week:it.week,title:it.title,note:it.note,done:false,at:null}); });
-    try{ localStorage.setItem('cubby-country', VAX_SCHEDULES[cc]?cc:detectCountry()); }catch(e){}
+  if(sel!==p.country){
+    p.country=sel;
+    if(cc!==prevKey){
+      const have={}; (p.appts||[]).forEach(a=>{ have[a.title+'@'+a.week]=true; });
+      (((window.PREG&&PREG.antenatal[cc]&&PREG.antenatal[cc].items))||[]).forEach(it=>{ if(!have[it.title+'@'+it.week]) p.appts.push({id:uid(),week:it.week,title:it.title,note:it.note,done:false,at:null}); });
+    }
+    try{ localStorage.setItem('cubby-country', VAX_SCHEDULES[sel]?sel:detectCountry()); }catch(e){}
   }
   persist(); closeSheet(); render(); toast('Updated');
 }
 function confirmEndPregnancy(){
-  openSheet(`<h2>Remove this pregnancy?</h2><div class="sub">This clears the pregnancy you're tracking and can't be undone. If your baby has arrived, use "Baby has arrived" instead so nothing is lost.</div>
-    <button class="btn-primary" style="background:var(--danger)" onclick="doEndPregnancy()">Remove pregnancy</button>
-    <button class="btn-ghost" onclick="closeSheet()">Keep tracking</button>`,'preg');
+  const p=state.pregnancy; if(!p){ closeSheet(); return; }
+  if(p.stage==='planning'){
+    openSheet(`<h2>Stop tracking?</h2><div class="sub">This clears your planning checklist and notes. You can start again any time, whenever you're ready.</div>
+      <button class="btn-primary" style="background:var(--preg)" onclick="endPregnancy(false)">Stop tracking</button>
+      <button class="btn-ghost" onclick="closeSheet()">Keep going</button>`,'preg');
+    return;
+  }
+  const moments=(p.moments&&p.moments.length)||0;
+  openSheet(`<h2>Closing this pregnancy</h2>
+    <div class="sub">Whatever brings you here, take it gently and in your own time. If you've experienced a loss, we're so sorry, and you don't have to do anything right now.</div>
+    ${moments?`<div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">Keep your ${moments===1?'memory':moments+' memories'}</div><div class="pc-b">Your scans and photos can stay saved privately on this device, for whenever you want them. Your health logs are cleared either way.</div></div></div>`:''}
+    ${moments?`<button class="btn-primary" style="background:var(--preg)" onclick="endPregnancy(true)">Keep my ${moments===1?'memory':'memories'}</button>`:''}
+    <button class="${moments?'btn-ghost':'btn-primary'}" style="${moments?'color:var(--ink-faint)':'background:var(--preg)'}" onclick="endPregnancy(false)">Close and clear everything</button>
+    <button class="btn-ghost" onclick="closeSheet()">Not now</button>
+    <div class="preg-disclaim">If you're struggling, you're not alone. Your midwife or doctor, or a pregnancy loss support line, can help, day or night. Informational only, not medical advice.</div>`,'preg');
 }
-function doEndPregnancy(){ if(window.LL&&window.LL.matClear)window.LL.matClear(); state.pregnancy=null; persist(); closeSheet(); render(); }
+function endPregnancy(keep){
+  const p=state.pregnancy; if(!p){ closeSheet(); return; }
+  if(keep){
+    state.pregnancyArchive=state.pregnancyArchive||[];
+    state.pregnancyArchive.unshift({ id:uid(), endedAt:now(), weeks:pregWeek(), moments:(p.moments||[]).slice() });
+    /* photos intentionally kept in PhotoStore */
+  } else {
+    (p.moments||[]).forEach(m=>{ try{ PhotoStore.del(m.photoId); }catch(e){} });
+  }
+  try{ if(window.LL&&window.LL.matClear) window.LL.matClear(); }catch(e){}
+  state.pregnancy=null; persist(); closeSheet(); render();
+  toast(keep?'Your memories are kept 🤍':'Done. Be gentle with yourself 🤍');
+}
+function openKeptMemories(){
+  const arr=state.pregnancyArchive||[];
+  const list=arr.flatMap(a=>(a.moments||[])).slice().sort((a,b)=>b.week-a.week||b.at-a.at);
+  const cards=list.map(m=>{
+    const src=photoSrc(m.photoId), size=momentSize(m.week);
+    return `<div class="moment-card">${src?`<img src="${src}" alt="Week ${m.week}">`:''}
+      <div class="moment-cap"><div class="mc-top"><div class="mc-week">Week ${m.week}</div><div class="mc-size">${size?'🍐 about the size of a '+escapeHtml(size):''}</div></div>
+      ${m.note?`<div class="mc-note">${escapeHtml(m.note)}</div>`:''}
+      <div class="mc-row"><span class="mc-date">${dayLabel(m.at)}</span></div></div></div>`;
+  }).join('');
+  openSheet(`<h2>Kept memories 🤍</h2><div class="sub">Yours to keep, privately, for as long as you like.</div>
+    ${cards||'<div class="sub">Nothing saved here.</div>'}
+    <button class="btn-ghost" style="color:var(--ink-faint);margin-top:10px" onclick="removeKeptMemories()">Remove these memories</button>`,'preg');
+}
+function removeKeptMemories(){
+  (state.pregnancyArchive||[]).forEach(a=>(a.moments||[]).forEach(m=>{ try{ PhotoStore.del(m.photoId); }catch(e){} }));
+  state.pregnancyArchive=[]; persist(); closeSheet(); render(); toast('Removed');
+}
 
 /* ---- Phase 5: welcoming the baby (the birth transition) ---- */
 let wbSex='';
