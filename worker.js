@@ -78,27 +78,43 @@ function emailHtml(link) {
     + '</td></tr></table></body></html>';
 }
 
+// Canonicalize an email for the anti-abuse cooldown key ONLY (never for delivery): drop +tags,
+// and dots in the local part for Gmail/Googlemail, so a+1@/a+2@/a.b@ share one cooldown bucket.
+function cooldownKeyFor(email) {
+  var at = email.indexOf('@'); if (at < 0) return email;
+  var local = email.slice(0, at), domain = email.slice(at + 1);
+  var plus = local.indexOf('+'); if (plus >= 0) local = local.slice(0, plus);
+  if (domain === 'gmail.com' || domain === 'googlemail.com') local = local.replace(/\./g, '');
+  return local + '@' + domain;
+}
+
 async function sendSigninLink(request, env) {
-  // Same-origin only (block cross-site abuse of the endpoint).
+  // Same-origin only. Require an Origin OR Referer matching our host, else reject — this closes
+  // the no-Origin bypass (scripted clients that omit the header). The real per-IP volume defense
+  // is a Cloudflare Rate Limiting rule on this path (REQUIRED before relying on it, see EMAIL.md).
   const url = new URL(request.url);
   const origin = request.headers.get('origin');
-  if (origin) { try { if (new URL(origin).host !== url.host) return json({ error: 'forbidden' }, 403); } catch (e) { return json({ error: 'forbidden' }, 403); } }
+  const referer = request.headers.get('referer');
+  let sameOrigin = false;
+  try {
+    if (origin) sameOrigin = new URL(origin).host === url.host;
+    else if (referer) sameOrigin = new URL(referer).host === url.host;
+  } catch (e) { sameOrigin = false; }
+  if (!sameOrigin) return json({ error: 'forbidden' }, 403);
 
   let body;
   try { body = await request.json(); } catch (e) { return json({ error: 'bad_request' }, 400); }
   const email = ((body && body.email) || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254) return json({ error: 'invalid_email' }, 400);
 
-  // Light anti-abuse: ~60s cooldown per email via the edge cache. Pair this with a
-  // Cloudflare Rate Limiting rule on /api/send-signin-link for real per-IP protection.
-  const cooldown = new Request('https://cooldown.cubby.internal/' + encodeURIComponent(email));
-  const cache = caches.default;
-  if (await cache.match(cooldown)) return json({ ok: true }); // silently skip a rapid re-send
-  await cache.put(cooldown, new Response('1', { headers: { 'cache-control': 'max-age=60' } }));
-
   let sa;
   try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return json({ error: 'server_config' }, 500); }
   if (!env.RESEND_API_KEY) return json({ error: 'server_config' }, 500);
+
+  // Light per-email cooldown (normalized key) to absorb rapid re-sends; set only AFTER a real send.
+  const cache = caches.default;
+  const cooldown = new Request('https://cooldown.cubby.internal/' + encodeURIComponent(cooldownKeyFor(email)));
+  if (await cache.match(cooldown)) return json({ ok: true, cached: true });
 
   try {
     const token = await getAccessToken(sa);
@@ -114,6 +130,7 @@ async function sendSigninLink(request, env) {
       })
     });
     if (!r.ok) return json({ error: 'send_failed' }, 502);
+    await cache.put(cooldown, new Response('1', { headers: { 'cache-control': 'max-age=60' } })); // start cooldown only on success
     return json({ ok: true });
   } catch (e) {
     return json({ error: 'failed' }, 500);

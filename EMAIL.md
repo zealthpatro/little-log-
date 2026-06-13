@@ -141,8 +141,12 @@ with their own SPF/DKIM, and leave the apex record for Firebase auth mail.
   (service-account JWT signed with WebCrypto RS256 -> OAuth token -> `sendOobCode` with
   `returnOobLink:true`) and sends a branded email via Resend. Client (`store-firebase.js`) calls
   the endpoint and falls back to Firebase's own sender if it's unreachable; completion via
-  `signInWithEmailLink()` is unchanged. Same-origin guard + 60s per-email cooldown (edge cache);
-  pair with a Cloudflare Rate Limiting rule on the endpoint. **NOT yet live** -- needs (founder):
+  `signInWithEmailLink()` is unchanged. Hardened after an adversarial review (2026-06-14): rejects
+  requests whose Origin/Referer don't match the host (closes the no-Origin bypass); per-email
+  cooldown uses a normalized key (drops +tags / Gmail dots) and is set only after a confirmed send.
+  **REQUIRED before/at deploy: a Cloudflare Rate Limiting rule on POST /api/send-signin-link**
+  (~5-10 req/IP/min) -- the cooldown is per-email/per-colo and is NOT the volume defence; the
+  per-IP rule is. (Optional next-level hardening: Cloudflare Turnstile on the form.) **NOT yet live** -- needs (founder):
   rotate the leaked Resend key; verify `mail.little-cubby.com` in Resend (DKIM/SPF DNS on a
   subdomain so the apex stays Firebase's, per §2); a dedicated service account with the minimal
   *Firebase Authentication Admin* role; `wrangler secret put RESEND_API_KEY` and
