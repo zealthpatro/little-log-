@@ -15,8 +15,70 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 HUB  = ROOT / "articles" / "index.html"
 
-# ── New cards to inject (20 articles) ─────────────────────────────
+# ── New cards to inject ───────────────────────────────────────────
 NEW_CARDS = [
+    # PREGNANCY (20)
+    ('pregnancy', 'pre-conception', '/articles/pre-conception-health/',
+     'Pregnancy · Pre-conception', 'Pre-conception health: folic acid, vitamins and preparing your body',
+     'What to do before trying to conceive: folic acid, vitamin D, lifestyle changes and when to see your GP. NHS-sourced.'),
+    ('pregnancy', 'pre-conception', '/articles/how-long-to-get-pregnant/',
+     'Pregnancy · Pre-conception', 'How long does it take to get pregnant?',
+     'How long most couples take to conceive, what affects the timeline, when to see a GP and what helps. NHS-sourced.'),
+    ('pregnancy', 'pre-conception', '/articles/understanding-your-fertility/',
+     'Pregnancy · Pre-conception', 'Understanding your cycle and fertile window',
+     'How the menstrual cycle works, when ovulation happens, what the fertile window is and how to recognise ovulation signs.'),
+    ('pregnancy', '1st-trimester', '/articles/your-booking-appointment/',
+     'Pregnancy · 1st trimester', 'Your booking appointment: what happens at your first antenatal visit',
+     'What to expect at your NHS booking appointment: blood tests, questions you will be asked, and what you receive.'),
+    ('pregnancy', '1st-trimester', '/articles/pregnancy-nausea-morning-sickness/',
+     'Pregnancy · 1st trimester', 'Pregnancy nausea and morning sickness: what actually helps',
+     'Why nausea happens in pregnancy, when it typically eases, what helps and when to seek medical support.'),
+    ('pregnancy', '1st-trimester', '/articles/the-12-week-scan/',
+     'Pregnancy · 1st trimester', 'The 12-week dating scan: what it checks and what to expect',
+     'What the NHS 12-week scan involves, what it measures, and what combined screening for Down\'s syndrome means.'),
+    ('pregnancy', '1st-trimester', '/articles/pregnancy-fatigue/',
+     'Pregnancy · 1st trimester', 'Pregnancy fatigue: why it happens and how to manage it',
+     'Why extreme tiredness is so common in early pregnancy, when it typically eases and practical ways to cope.'),
+    ('pregnancy', '1st-trimester', '/articles/miscarriage-early-pregnancy-loss/',
+     'Pregnancy · 1st trimester', 'Miscarriage: understanding early pregnancy loss',
+     'What miscarriage is, why it happens, what the NHS offers and how to find support after pregnancy loss.'),
+    ('pregnancy', '1st-trimester', '/articles/first-trimester-symptoms/',
+     'Pregnancy · 1st trimester', 'First trimester symptoms: what is normal and what to watch for',
+     'A guide to common first trimester symptoms, when to take a test, and which symptoms need prompt attention.'),
+    ('pregnancy', '2nd-trimester', '/articles/the-20-week-scan/',
+     'Pregnancy · 2nd trimester', 'The 20-week anomaly scan: what it checks and what to expect',
+     'What the NHS 20-week scan looks for, how to prepare, what happens if something unexpected is found.'),
+    ('pregnancy', '2nd-trimester', '/articles/pregnancy-nutrition/',
+     'Pregnancy · 2nd trimester', 'Pregnancy nutrition: what to eat and what to avoid',
+     'A complete guide to eating well in pregnancy: what to eat more of, what to limit and what to avoid entirely.'),
+    ('pregnancy', '2nd-trimester', '/articles/exercise-in-pregnancy/',
+     'Pregnancy · 2nd trimester', 'Exercise in pregnancy: what is safe and what to avoid',
+     'The NHS guidance on safe exercise in pregnancy, including which activities to continue, which to avoid and why.'),
+    ('pregnancy', '2nd-trimester', '/articles/gestational-diabetes/',
+     'Pregnancy · 2nd trimester', 'Gestational diabetes: screening, diagnosis and management',
+     'What gestational diabetes is, who is offered screening, how it is managed and what it means for your birth.'),
+    ('pregnancy', '2nd-trimester', '/articles/pregnancy-mental-health/',
+     'Pregnancy · 2nd trimester', 'Mental health in pregnancy: anxiety, depression and getting help',
+     'Why mental health conditions are common in pregnancy, what the signs are and how to access NHS support.'),
+    ('pregnancy', '3rd-trimester', '/articles/counting-kicks/',
+     'Pregnancy · 3rd trimester', 'Counting kicks: monitoring fetal movement in pregnancy',
+     'Why monitoring your baby\'s movements matters, what is normal and when to contact your maternity unit immediately.'),
+    ('pregnancy', '3rd-trimester', '/articles/pre-eclampsia/',
+     'Pregnancy · 3rd trimester', 'Pre-eclampsia: signs to recognise and when to call',
+     'What pre-eclampsia is, the symptoms to watch for and when to contact your maternity unit. NHS-sourced.'),
+    ('pregnancy', '3rd-trimester', '/articles/your-birth-plan/',
+     'Pregnancy · 3rd trimester', 'Writing a birth plan: what to include and how to approach it',
+     'What a birth plan is, what to include and how to discuss it with your midwife. NHS-sourced guidance.'),
+    ('pregnancy', '3rd-trimester', '/articles/hospital-bag-checklist/',
+     'Pregnancy · 3rd trimester', 'Hospital bag checklist: what to pack for birth',
+     'A complete NHS-informed checklist of what to pack for labour, birth and the days that follow.'),
+    ('pregnancy', '3rd-trimester', '/articles/pain-relief-in-labour/',
+     'Pregnancy · 3rd trimester', 'Pain relief in labour: the options explained',
+     'A guide to every pain relief option available in NHS labour wards, from TENS to epidural, with honest pros and cons.'),
+    ('pregnancy', '3rd-trimester', '/articles/group-b-strep/',
+     'Pregnancy · 3rd trimester', 'Group B strep in pregnancy: testing, risks and decisions',
+     'What group B strep is, how it is managed in UK pregnancies and what the options are for testing and treatment.'),
+
     # GROWTH (7)
     ('growth', 'all',     '/articles/baby-length-height-first-year/',
      'Growth · 0-12 months', 'Baby length and height in the first year: what is normal',
@@ -138,7 +200,7 @@ NEW_CARDS = [
 ]
 
 # ── Order in which categories cycle (determines first-fold order) ──
-CAT_ORDER = ['vaccines', 'sleep', 'feeding', 'development',
+CAT_ORDER = ['pregnancy', 'vaccines', 'sleep', 'feeding', 'development',
              'health', 'care', 'growth', 'wellbeing', 'compare']
 
 

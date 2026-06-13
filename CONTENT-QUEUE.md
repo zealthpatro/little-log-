@@ -2,6 +2,117 @@
 
 The agent takes the first `[ ]` item (top = highest priority), publishes it per CONTENT-RUNBOOK.md, then marks it `[x]`. Sources are starting points, always fetch and confirm the current official page (200) before citing; find the live equivalent if a link moved.
 
+## Pregnancy section (60 articles, 3 batches — 14 June 2026)
+
+New `pregnancy` category chip added to hub. Age tags: `pre-conception`, `1st-trimester`, `2nd-trimester`, `3rd-trimester`.
+Source of truth for all articles: NHS (https://www.nhs.uk/pregnancy/). Additional: NICE, Tommy's, Miscarriage Association, GBS Support, ACAS (maternity pay).
+
+### Batch 1 — core universal (20 articles, writing 14 June 2026)
+- [x] Pre-conception health: folic acid, vitamins and preparing your body — `pre-conception-health` — Pre-conception
+- [x] How long does it take to get pregnant? — `how-long-to-get-pregnant` — Pre-conception
+- [x] Understanding your cycle and fertile window — `understanding-your-fertility` — Pre-conception
+- [x] Your booking appointment: what happens at your first antenatal visit — `your-booking-appointment` — 1st trimester
+- [x] Pregnancy nausea and morning sickness: what actually helps — `pregnancy-nausea-morning-sickness` — 1st trimester
+- [x] The 12-week dating scan: what it checks and what to expect — `the-12-week-scan` — 1st trimester
+- [x] Pregnancy fatigue: why it happens and how to manage it — `pregnancy-fatigue` — 1st trimester
+- [x] Miscarriage: understanding early pregnancy loss — `miscarriage-early-pregnancy-loss` — 1st trimester
+- [x] First trimester symptoms: what is normal and what to watch for — `first-trimester-symptoms` — 1st trimester
+- [x] The 20-week anomaly scan: what it checks and what to expect — `the-20-week-scan` — 2nd trimester
+- [x] Pregnancy nutrition: what to eat and what to avoid — `pregnancy-nutrition` — 2nd trimester
+- [x] Exercise in pregnancy: what is safe and what to avoid — `exercise-in-pregnancy` — 2nd trimester
+- [x] Gestational diabetes: screening, diagnosis and management — `gestational-diabetes` — 2nd trimester
+- [x] Mental health in pregnancy: anxiety, depression and getting help — `pregnancy-mental-health` — 2nd trimester
+- [x] Counting kicks: monitoring fetal movement in pregnancy — `counting-kicks` — 3rd trimester
+- [x] Pre-eclampsia: signs to recognise and when to call — `pre-eclampsia` — 3rd trimester
+- [x] Writing a birth plan: what to include and how to approach it — `your-birth-plan` — 3rd trimester
+- [x] Hospital bag checklist: what to pack for birth — `hospital-bag-checklist` — 3rd trimester
+- [x] Pain relief in labour: the options explained — `pain-relief-in-labour` — 3rd trimester
+- [x] Group B strep in pregnancy: testing, risks and decisions — `group-b-strep` — 3rd trimester
+
+### Batch 2 — complications + cultural (20 articles, target: 15 June 2026 morning)
+- [ ] Anaemia in pregnancy: symptoms, treatment and iron needs — `anaemia-in-pregnancy` — 2nd trimester
+  Source: NHS anaemia in pregnancy (https://www.nhs.uk/conditions/iron-deficiency-anaemia/), NICE guideline NG25
+- [ ] Pelvic girdle pain (PGP): causes, management and recovery — `pelvic-girdle-pain` — 2nd/3rd trimester
+  Source: NHS pelvic girdle pain (https://www.nhs.uk/pregnancy/related-conditions/common-symptoms/pelvic-pain/), Pelvic Partnership
+- [ ] Heartburn and reflux in pregnancy: what helps and what to avoid — `pregnancy-heartburn-reflux` — 2nd/3rd trimester
+  Source: NHS heartburn in pregnancy (https://www.nhs.uk/pregnancy/related-conditions/common-symptoms/heartburn-and-acid-reflux/)
+- [ ] Overdue pregnancy: what to expect and your options — `overdue-pregnancy` — 3rd trimester
+  Source: NHS overdue pregnancy (https://www.nhs.uk/pregnancy/labour-and-birth/signs-of-labour/overdue-baby/)
+- [ ] Breech presentation: what it means and your options near term — `breech-presentation` — 3rd trimester
+  Source: NHS breech baby (https://www.nhs.uk/pregnancy/labour-and-birth/what-happens/if-your-baby-is-breech/), ECV procedure
+- [ ] Pregnancy after miscarriage or loss — `pregnancy-after-loss` — 1st trimester
+  Source: NHS, Tommy's, Miscarriage Association support resources
+- [ ] Twin pregnancy: what to expect from diagnosis to birth — `twin-pregnancy` — all trimesters
+  Source: NHS multiple pregnancies (https://www.nhs.uk/pregnancy/finding-out/multiple-pregnancy/), NICE twin guidance
+- [ ] NHS antenatal appointments: your schedule from booking to birth — `nhs-antenatal-schedule` — all trimesters
+  Source: NHS antenatal care schedule (https://www.nhs.uk/pregnancy/your-pregnancy-care/your-antenatal-appointments/)
+- [ ] Maternity leave and pay: what you are entitled to in the UK — `maternity-leave-pay-uk` — 3rd trimester
+  Source: GOV.UK maternity leave (https://www.gov.uk/maternity-pay-leave), ACAS
+- [ ] Paternity leave and pay: what partners are entitled to in the UK — `paternity-leave-pay-uk` — 3rd trimester
+  Source: GOV.UK paternity leave (https://www.gov.uk/paternity-pay-leave)
+- [ ] Godh bharai: the Indian pregnancy ceremony — `godh-bharai` — 3rd trimester
+  Cultural article. No medical claims. Cover ceremony purpose, timing, regional variations, modern adaptations.
+- [ ] Pregnancy traditions and beliefs in Indian culture — `pregnancy-traditions-india` — all trimesters
+  Cover dietary restrictions, activity beliefs, family customs. Evidence-check each claim. No fabricated health claims.
+- [ ] Chinese pregnancy traditions: what the evidence says — `chinese-pregnancy-traditions` — all trimesters
+  Cover pregnancy taboos, dietary customs, family involvement. Evidence-check traditional health claims.
+- [ ] Preparing for zuo yuezi: planning your postnatal confinement — `chinese-yuezi-preparation` — 3rd trimester
+  Cross-links to existing zuo-yuezi-postnatal-confinement article. Focuses on preparation during pregnancy.
+- [ ] Iwata obi: the Japanese pregnancy belly band tradition — `iwata-obi` — 2nd/3rd trimester
+  Source: note cultural tradition; cite Japanese Ministry of Health guidance on Inu no Hi. No fabricated medical claims.
+- [ ] Boshi techo: Japan's mother and child health handbook — `boshi-techo` — 1st trimester
+  Source: Japanese MHLW (Ministry of Health, Labour and Welfare), explain purpose and contents.
+- [ ] Antenatal care in Australia: your options and what is covered — `antenatal-care-australia` — all trimesters
+  Source: Australian Department of Health, Medicare, RANZCOG antenatal care guidelines
+- [ ] Birth choices in Australia: public, private and birth centres — `birth-choices-australia` — 3rd trimester
+  Source: RANZCOG, Australian Institute of Health and Welfare (AIHW), Medicare coverage overview
+- [ ] Genetic testing in pregnancy: NIPT, CVS and amniocentesis — `genetic-testing-pregnancy` — 1st/2nd trimester
+  Source: NHS NIPT guidance, NICE diagnostics guidance, NHS CVS and amniocentesis (https://www.nhs.uk/pregnancy/your-pregnancy-care/your-antenatal-appointments/amniocentesis/)
+- [ ] Vaginal birth after caesarean (VBAC): what the evidence says — `vaginal-birth-after-caesarean` — 3rd trimester
+  Source: NHS VBAC (https://www.nhs.uk/pregnancy/labour-and-birth/what-happens/birth-after-a-previous-caesarean-section/), RCOG guideline
+
+### Batch 3 — USA, Germany, Italy + advanced (20 articles, target: 15 June 2026 midday)
+- [ ] Prenatal care in the US: OB-GYN vs midwife and what to expect — `prenatal-care-usa` — all trimesters
+  Source: ACOG prenatal care guidelines, March of Dimes, CDC
+- [ ] US prenatal visit schedule: what happens at each appointment — `us-prenatal-visit-schedule` — all trimesters
+  Source: ACOG, HealthyChildren.org (AAP), March of Dimes
+- [ ] Maternity leave in the US: federal law, state provisions and planning — `us-maternity-leave` — 3rd trimester
+  Source: DOL FMLA fact sheet, state law overview (CA, NY), DOL.gov
+- [ ] Mutterpass: Germany's pregnancy health record explained — `mutterpass` — 1st trimester
+  Source: Gemeinsamer Bundesausschuss (G-BA) Mutterschafts-Richtlinien, BZGA
+- [ ] Hebamme: the role of a German midwife before and after birth — `hebamme-germany` — all trimesters
+  Source: Deutscher Hebammenverband, GKV (statutory health insurance) midwife entitlements
+- [ ] Elterngeld: German parental leave and pay explained — `elterngeld` — 3rd trimester
+  Source: BMFSFJ Elterngeld guide (https://www.elterngeld-digital.de/), Bundesministerium
+- [ ] Pregnancy care in Italy: what the public health system offers — `gravidanza-italy` — all trimesters
+  Source: Italian Ministry of Health (Ministero della Salute) linee guida gravidanza fisiologica
+- [ ] Congedo di maternita: Italian maternity leave explained — `congedo-maternita` — 3rd trimester
+  Source: INPS (Istituto Nazionale Previdenza Sociale), Italian Labour Code
+- [ ] Quarantina: the Italian postnatal rest tradition — `quarantina-italy` — 3rd trimester (cross-links to postnatal traditions article)
+  Cultural article. Cover tradition, modern interpretations, evidence on postnatal rest.
+- [ ] Caesarean section recovery: what to expect at home — `caesarean-section-recovery` — 3rd trimester/postnatal
+  Source: NHS caesarean (https://www.nhs.uk/conditions/caesarean-section/recovery/), RCOG
+- [ ] Skin-to-skin contact after birth: what it is and why it matters — `skin-to-skin-after-birth` — postnatal
+  Source: NHS, WHO evidence on kangaroo care, UNICEF Baby Friendly Initiative
+- [ ] The first week after birth: what to expect from postnatal care — `postnatal-first-week` — postnatal
+  Source: NHS postnatal care (https://www.nhs.uk/pregnancy/labour-and-birth/after-the-birth/), NICE postnatal care NG194
+- [ ] Perineal tears and stitches: recovery after birth — `perineal-tears-recovery` — postnatal
+  Source: NHS perineal tears (https://www.nhs.uk/pregnancy/labour-and-birth/after-the-birth/perineal-tears/), RCOG greentop guideline
+- [ ] Vitamin D in pregnancy: why it matters and how much to take — `vitamin-d-pregnancy` — all trimesters
+  Source: NHS vitamin D pregnancy (https://www.nhs.uk/pregnancy/keeping-well/vitamins-supplements-and-nutrition/), SACN 2016
+- [ ] Iron in pregnancy: sources, needs and avoiding anaemia — `iron-pregnancy` — all trimesters
+  Source: NHS iron in pregnancy, NICE NG25 on iron deficiency
+- [ ] Alcohol and caffeine in pregnancy: what the evidence says — `alcohol-caffeine-pregnancy` — all trimesters
+  Source: NHS alcohol in pregnancy, NHS caffeine guidance (200mg/day limit)
+- [ ] Birth positions: what options you have and what the evidence shows — `birth-positions` — 3rd trimester
+  Source: NHS labour positions, NICE intrapartum care guideline NG235
+- [ ] Induction of labour: why it happens and what to expect — `induction-of-labour` — 3rd trimester
+  Source: NHS induction (https://www.nhs.uk/pregnancy/labour-and-birth/signs-of-labour/inducing-labour/), NICE NG207
+- [ ] Preparing for a newborn: the practical home checklist — `preparing-for-a-newborn` — 3rd trimester
+  Source: NHS getting ready for your baby, Red Cross first aid recommendations
+- [ ] Pregnancy after 35: what changes and what to know — `pregnancy-after-35` — all trimesters
+  Source: NHS older mothers (https://www.nhs.uk/pregnancy/finding-out/pregnant-at-an-older-age/), RCOG
+
 ## Backlog (priority order)
 
 - [ ] **Newborn weight loss and regain** — slug: `newborn-weight-loss-and-regain` — Newborn — Growth
