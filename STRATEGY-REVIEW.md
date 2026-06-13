@@ -1,4 +1,4 @@
-# Cubby / Den — strategy review brief (for an external evaluator)
+# Cubby / Den: strategy review brief (for an external evaluator)
 
 **Prepared 2026-06-13. Audience: a fresh reviewer agent (or advisor) asked to pressure-test the
 direction and answer one question bluntly: is this on a sound path to a real business on near-zero
@@ -16,17 +16,17 @@ PWA + marketing/SEO site) and expanding into an **ecosystem** under a planned ma
 
 - **Cubby** (live): feeds, sleep, nappies, pumping, growth (WHO/CDC), vaccines (12 country
   schedules), medicine, illness, photos, keepsakes, real-time family sharing. Web PWA.
-- **Mommy To Be** (built, unmerged branch): full pregnancy journey — trying -> positive test ->
+- **Mommy To Be** (built, unmerged branch): full pregnancy journey, trying -> positive test ->
   week-by-week -> birth, antenatal schedules, gestational-diabetes/BP/nausea trackers, kick &
   contraction tools, an ultrasound "Moments" album, and a one-tap conversion into Cubby at birth.
-- **Our Den** (built, dark behind a flag): household hub — chores, shopping, meals, home staff,
+- **Our Den** (built, dark behind a flag): household hub, chores, shopping, meals, home staff,
   expenses, adult weights.
 - **Consent governance** (built): the data belongs to the household; bulk delete/export needs
   dual-guardian approval; removed members keep their log attribution.
 
 **The strategic wedge:** family-organizer apps (Cozi, FamilyWall, Maple, Homsy) are calendars +
 lists. None owns the **family health spine** (pregnancy -> birth -> baby -> vaccines -> growth).
-Cubby starts from that trusted spine and expands outward into home management — the reverse of how
+Cubby starts from that trusted spine and expands outward into home management, the reverse of how
 competitors would have to move.
 
 ## 2. Stage and honest status
@@ -43,7 +43,7 @@ competitors would have to move.
   trial, one sub per household, localized (USD/GBP/EUR/AED/INR). Unlocks **zero-marginal-cost**
   delights: the full keepsake studio, watermark-free shares, premium fonts/palettes/formats/
   stickers, auto-enhance, background cutout, Then & Now, and a doctor PDF report.
-- **Pro/Plus tier (future, ~$15/mo annual / $19/mo):** the cost-heavy features — HD photo backup,
+- **Pro/Plus tier (future, ~$15/mo annual / $19/mo):** the cost-heavy features, HD photo backup,
   push notifications, smart adaptive routines, sleep/feed insights. Held back until demand + costs
   are proven.
 - **Ecosystem cross-sell:** Mommy To Be acquires users ~9 months earlier than a baby app and
@@ -51,11 +51,11 @@ competitors would have to move.
   management) widens share-of-wallet later.
 
 ## 4. Competitive context (researched, 2026)
-- **Huckleberry** — Plus ~$11.99/mo (~$69/yr), Premium ~$14.99/mo; data-driven sleep guidance is
+- **Huckleberry**, Plus ~$11.99/mo (~$69/yr), Premium ~$14.99/mo; data-driven sleep guidance is
   the clearest thing parents pay for.
-- **Glow Baby** — free w/ ads, Premium ~$9.99/mo. **Nara Baby** — freemium, strong meds.
-- **Family orgs** — Cozi (incumbent), FamilyWall (~$4.99/mo, 5M+ installs), Maple, Homsy, Nori.
-- **Pregnancy** — Pregnancy+/BabyCenter/What to Expect dominate content; thinner on the
+- **Glow Baby**, free w/ ads, Premium ~$9.99/mo. **Nara Baby**, freemium, strong meds.
+- **Family orgs**, Cozi (incumbent), FamilyWall (~$4.99/mo, 5M+ installs), Maple, Homsy, Nori.
+- **Pregnancy**, Pregnancy+/BabyCenter/What to Expect dominate content; thinner on the
   health-tracking + lifecycle-continuity angle.
 - Takeaway used here: **lead paid tiers with genuine utility (sleep/health), not gimmicks**; we
   intentionally deferred the cost-heavy sleep/insights to the higher tier and launch Base on
@@ -63,8 +63,8 @@ competitors would have to move.
 
 ## 5. Cost structure (the crux of the funding question)
 Deliberately near-zero, by design:
-- **Hosting:** Cloudflare Workers static assets — effectively free at this scale.
-- **Backend:** Firebase **Spark (free)** — Google auth + Firestore. Photos are ~560px base64
+- **Hosting:** Cloudflare Workers static assets, effectively free at this scale.
+- **Backend:** Firebase **Spark (free)**, Google auth + Firestore. Photos are ~560px base64
   thumbnails stored *in Firestore* (no Firebase Storage, no Blaze). Free-tier ceilings: 1 GiB
   stored, 50k reads/day, 20k writes/day.
 - **Payments:** the billing Worker runs on Cloudflare's free tier. Stripe takes ~2.9% + $0.30
@@ -78,11 +78,11 @@ Deliberately near-zero, by design:
 2. **HD photo backup (future Pro/Plus):** needs object storage. Plan = **Cloudflare R2**
    (~$0.015/GB/mo, $0 egress), e.g. 100 families x 2 GB ≈ ~$3/mo. Cheap, but non-zero.
 3. **Push notifications (future):** FCM is free to send, but scheduled server-side sends need a
-   tiny always-on sender (a Cloudflare cron Worker — still ~$0) and Blaze if done via Firebase.
+   tiny always-on sender (a Cloudflare cron Worker, still ~$0) and Blaze if done via Firebase.
 4. **Growth, not infra, is the real spend:** ASO, content/SEO (already a strength, ~$0 in cash),
    and any paid acquisition. App Store ($99/yr) + Play ($25 once) for native distribution.
 
-**Rough unit economics (ASSUMPTIONS — challenge these):**
+**Rough unit economics (ASSUMPTIONS, challenge these):**
 - Net revenue per paying household ≈ **$57/yr** (annual Base after Stripe).
 - Marginal serving cost per free user ≈ **$0** today; per Base-Pro user ≈ **$0**.
 - Therefore gross margin on Base is ~100% minus payment fees until Firestore tips into Blaze.
@@ -104,7 +104,7 @@ Three honest paths for the reviewer to weigh:
   HD/R2, push), and real marketing. Capital need: meaningful. Only justified if the wedge +
   ecosystem can plausibly become venture-scale, and if early conversion data supports it.
 
-The build is engineered so **(A) and (B) cost almost nothing in infra** — the question is whether
+The build is engineered so **(A) and (B) cost almost nothing in infra**, the question is whether
 the *outcome* (revenue, reach) justifies staying lean or warrants (C).
 
 ## 7. Key assumptions to test (we believe these; we have not proven them)

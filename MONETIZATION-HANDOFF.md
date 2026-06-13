@@ -1,4 +1,4 @@
-# Monetization handoff — Cubby Pro payment loop
+# Monetization handoff: Cubby Pro payment loop
 
 **Version 1 · 2026-06-13.** Operational handoff for the Pro / payments work. Read this cold and
 you can take the payment loop from "built" to "charging real money".
@@ -36,7 +36,7 @@ the Pro sheet safely falls back to the existing waitlist, so nothing changed for
 - `isPro()` is true for Stripe status `trialing | active | past_due`, with a **3-day grace** past
   `current_period_end` so a renewal hiccup never yanks features mid-day.
 
-## 3. What is gated (the "lucrative" set — all zero marginal cost)
+## 3. What is gated (the "lucrative" set, all zero marginal cost)
 The premium keepsake studio (already-built, on-device/client-generated) is what Base sells:
 
 | Gated (Pro) | Free taster (kept generous) |
@@ -47,7 +47,7 @@ The premium keepsake studio (already-built, on-device/client-generated) is what 
 | Templates: Big milestone, Monthly stats | Classic |
 | Full sticker set | First 6 stickers |
 | Auto-enhance, Background cutout | (manual adjusts free) |
-| Then & Now keepsake | — |
+| Then & Now keepsake | none |
 | **Watermark-free** shares | "made with Cubby 🐻" footer (free advertising) |
 | **Doctor PDF report** (print/save, on-device) | Text visit summary, JSON export |
 
@@ -56,25 +56,25 @@ Locked options render as gentle `🔒` chips that open the Pro sheet naming the 
 smart routines/insights.** See `PAYWALL.md` / `PRO.md`.
 
 ## 4. Code map (all on `main`)
-- `app/index.html` — `PRO_CFG`, `isPro()`, `requirePro()`, `openPro()`, `startProCheckout()`,
+- `app/index.html`, `PRO_CFG`, `isPro()`, `requirePro()`, `openPro()`, `startProCheckout()`,
   `openProPortal()`, `PRO_LOCK` + `proLocked()`, the `?pro=success` return toast, gated setters
   (`setFormat/setMomentFont/setPalette/setTemplate/selectSticker/autoEnhance/cutoutBackground/
   openThenNow`), watermark `if(!isPro())` in `composeShareCard` + `drawThenNow`, and
   `openDoctorReport()` (off the visit-summary sheet). Grep banner: `CUBBY PRO (Base plan)`.
-- `app/store-firebase.js` — exposes `window.LL.pro` from the household doc; `pro` change is in
+- `app/store-firebase.js`, exposes `window.LL.pro` from the household doc; `pro` change is in
   the sync signature so it re-renders live.
-- `firestore.rules` — `proUnchanged()` guard on household create + update.
-- `workers/pro-billing/` — `worker.js` (/checkout, /webhook, /portal; Stripe REST + Google SA
+- `firestore.rules`, `proUnchanged()` guard on household create + update.
+- `workers/pro-billing/`, `worker.js` (/checkout, /webhook, /portal; Stripe REST + Google SA
   JWT, no SDKs), `wrangler.toml`, `README.md` (the deploy checklist). Excluded from the static
   deploy via `.assetsignore`.
-- `pricing/index.html` — `CUR` currency table (USD 7/59, GBP 6/49, EUR 7/55, AED 25/219,
+- `pricing/index.html`, `CUR` currency table (USD 7/59, GBP 6/49, EUR 7/55, AED 25/219,
   INR 599/4999), annual/monthly toggle. Reuse for any in-app price display.
 
-## 5. Go-live checklist (~20 min — full version in `workers/pro-billing/README.md`)
+## 5. Go-live checklist (~20 min, full version in `workers/pro-billing/README.md`)
 1. Stripe (test mode first): product "Cubby Pro", recurring **yearly $59** price -> `price_...`.
 2. `cd workers/pro-billing && npx wrangler deploy`.
 3. Secrets: `wrangler secret put` for `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `FIREBASE_SA_KEY`
-   (service-account JSON one line — same key as the gitignored `tools/serviceAccountKey.json`).
+   (service-account JSON one line, same key as the gitignored `tools/serviceAccountKey.json`).
 4. Stripe webhook -> `https://<worker>/webhook`, events `checkout.session.completed`,
    `customer.subscription.updated`, `customer.subscription.deleted`; then
    `wrangler secret put STRIPE_WEBHOOK_SECRET`.
