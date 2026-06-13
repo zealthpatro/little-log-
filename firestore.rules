@@ -75,6 +75,27 @@ service cloud.firestore {
       match /photos/{photoId} {
         allow read, create, update, delete: if request.auth != null && request.auth.uid in pm();
       }
+
+      // Maternal private health (Privacy Max, gate G1). The mother OWNS her health data.
+      // It is NOT in the circle-shared app blob. Each category is shared, by her explicit
+      // consent, only with the guardian uid(s) she lists in sharedWith. Mental health
+      // (category 'mood') is owner-only and can NEVER be shared. ownerUid is the subject's uid.
+      match /mhealth/{owner}/cat/{category} {
+        allow read: if request.auth != null && request.auth.uid in pm() && (
+            request.auth.uid == owner
+            || ( category != 'mood'
+                 && resource.data.sharedWith is list
+                 && request.auth.uid in resource.data.sharedWith )
+        );
+        // Only the owner writes her own health, and only as a member of this household.
+        allow create, update: if request.auth != null && request.auth.uid == owner
+            && request.auth.uid in pm()
+            && request.resource.data.ownerUid == owner
+            && ( category != 'mood'
+                 || !('sharedWith' in request.resource.data)
+                 || request.resource.data.sharedWith.size() == 0 );  // mood is never shareable
+        allow delete: if request.auth != null && request.auth.uid == owner && request.auth.uid in pm();
+      }
     }
   }
 }
