@@ -39,8 +39,11 @@ Point a schedule or loop at the **Master prompt** below. Everything it needs is 
    - Add to `sitemap.xml` before `</urlset>`:
      `<url><loc>https://little-cubby.com/articles/<slug>/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>`
 6. **Validate.**
+   - **The file is real HTML (do this FIRST — never commit an agent's notes/verification report as the article):**
+     `python3 -c "s=open('articles/<slug>/index.html').read();assert s.lstrip().startswith('<!DOCTYPE'),'not HTML';assert '<h1>' in s and s.rstrip().endswith('</html>'),'incomplete';print('HTML OK')"`
    - JSON-LD: `python3 -c "import re,json;[json.loads(x) for x in re.findall(r'<script type=\"application/ld\\+json\">(.*?)</script>', open('articles/<slug>/index.html').read(), re.S)];print('LD OK')"`
    - Sitemap: `python3 -c "import xml.dom.minidom as m;m.parse('sitemap.xml');print('sitemap OK')"`
+   - Every article needs: `<!DOCTYPE>`, `<title>`, meta description, canonical, BreadcrumbList **and** BlogPosting JSON-LD, an h1, a Related-articles list, and ends with `</html>`. If any are missing, fix before commit.
 7. **Mark done** in `CONTENT-QUEUE.md`: change that item's `[ ]` to `[x]` and append ` (published <today>)`.
 8. **Commit & push:**
    `git add -A && git commit -m "Article: <Title> (sourced, <age>/<theme>)" && git push origin main`

@@ -4,6 +4,9 @@ The agent takes the first `[ ]` item (top = highest priority), publishes it per 
 
 ## Backlog (priority order)
 
+- [ ] **Newborn weight loss and regain** — slug: `newborn-weight-loss-and-regain` — Newborn — Growth
+  REGENERATE: the prior file was a broken verification-report (no HTML), removed from the live site 13 Jun 2026. Write it properly. Sources: NHS newborn weight (https://www.nhs.uk/baby/babys-development/height-weight-and-reviews/), WHO/UK-WHO charts, AAP HealthyChildren on newborn weight loss (~7-10% loss, regained by ~2 weeks).
+
 - [x] **Teething and first teeth** — slug: `baby-teething-and-tooth-care` — Newborn / 3-6 months — Care & dental
   Sources: NHS teething (https://www.nhs.uk/conditions/baby/teething/ or find current under https://www.nhs.uk/baby/babys-development/), NHS children's teeth (https://www.nhs.uk/conditions/baby/looking-after-your-babys-teeth/) (published 9 June 2026)
 
