@@ -7,8 +7,10 @@ wrangler.toml
 .assetsignore
 .gitignore
 tools
+workers
 serviceAccountKey.json
 node_modules
 package.json
 package-lock.json
 articles-drafts
+worker.js

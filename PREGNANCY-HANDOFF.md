@@ -1,5 +1,10 @@
 # Pregnancy → Birth → Baby — lifecycle build handoff
 
+> **This is v1 (the build spec) and it is SUPERSEDED: the build is done.** For the current
+> state of the pregnancy track ("Mommy To Be", branch `pregnancy-tracker`, rollout runbook,
+> next-work queue) read **`PREGNANCY-HANDOFF-V2.md`** instead. Kept for the reusable code
+> anchors and patterns.
+
 This doc is **self-contained to read** (a fresh session can start from it cold), but the feature it
 describes is **not a standalone module**. It is the front end of **one continuous lifecycle inside
 the existing Cubby app**: the same `state`, the same household, the same sync, the same UI shell.

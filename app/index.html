@@ -167,7 +167,7 @@ body{
 .active-banner .info{flex:1;}
 .active-banner .info .lbl{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;opacity:.85;}
 .active-banner .info .time{font-family:var(--font-display);font-size:30px;font-weight:600;line-height:1;margin-top:3px;font-variant-numeric:tabular-nums;}
-.active-banner .info .sub{font-size:12.5px;opacity:.85;margin-top:4px;font-weight:600;}
+.active-banner .info .sub{font-size:13px;opacity:.85;margin-top:4px;font-weight:600;}
 .stop-btn{
   background:rgba(255,255,255,.95);border:none;border-radius:18px;
   padding:12px 18px;font-family:var(--font-body);font-weight:800;font-size:14px;
@@ -189,7 +189,7 @@ body{
   box-shadow:0 4px 12px var(--shadow);position:relative;
 }
 .since-card .dot{width:9px;height:9px;border-radius:50%;margin-bottom:7px;}
-.since-card .k{font-size:10.5px;color:var(--ink-faint);font-weight:700;text-transform:uppercase;letter-spacing:.05em;}
+.since-card .k{font-size:11px;color:var(--ink-faint);font-weight:700;text-transform:uppercase;letter-spacing:.05em;}
 .since-card .v{font-family:var(--font-display);font-size:18px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums;}
 .since-card .v.empty{color:var(--ink-faint);font-size:15px;}
 
@@ -230,7 +230,7 @@ body{
 /* ============ TIMELINE ============ */
 .day-group{margin-bottom:22px;}
 .day-head{font-family:var(--font-display);font-size:16px;font-weight:600;margin:0 4px 12px;display:flex;justify-content:space-between;align-items:baseline;}
-.day-head .day-sum{font-family:var(--font-body);font-size:11.5px;color:var(--ink-faint);font-weight:700;}
+.day-head .day-sum{font-family:var(--font-body);font-size:12px;color:var(--ink-faint);font-weight:700;}
 .tl-item{
   display:flex;align-items:center;gap:13px;background:var(--surface);
   border-radius:var(--radius-sm);padding:13px 15px;margin-bottom:9px;
@@ -241,7 +241,7 @@ body{
 .tl-ico svg{width:20px;height:20px;}
 .tl-body{flex:1;min-width:0;}
 .tl-body .t1{font-weight:800;font-size:15px;}
-.tl-body .t2{font-size:12.5px;color:var(--ink-soft);font-weight:600;margin-top:1px;}
+.tl-body .t2{font-size:13px;color:var(--ink-soft);font-weight:600;margin-top:1px;}
 .tl-time{text-align:right;flex-shrink:0;}
 .tl-time .clock{font-weight:800;font-size:14px;font-variant-numeric:tabular-nums;}
 .tl-time .ago{font-size:11px;color:var(--ink-faint);font-weight:600;margin-top:1px;}
@@ -255,11 +255,11 @@ body{
 .bar-track{width:100%;flex:1;display:flex;align-items:flex-end;}
 .bar{width:100%;border-radius:8px 8px 4px 4px;min-height:3px;transition:height .5s cubic-bezier(.2,.9,.3,1);}
 .bar-val{font-size:11px;font-weight:800;font-variant-numeric:tabular-nums;}
-.bar-day{font-size:10.5px;color:var(--ink-faint);font-weight:700;}
+.bar-day{font-size:11px;color:var(--ink-faint);font-weight:700;}
 .avg-row{display:flex;gap:12px;margin-bottom:16px;}
 .avg-box{flex:1;background:var(--surface);border-radius:var(--radius-sm);padding:15px;box-shadow:0 4px 12px var(--shadow);}
 .avg-box .n{font-family:var(--font-display);font-size:26px;font-weight:600;line-height:1;}
-.avg-box .l{font-size:11.5px;color:var(--ink-soft);font-weight:700;margin-top:5px;}
+.avg-box .l{font-size:12px;color:var(--ink-soft);font-weight:700;margin-top:5px;}
 
 /* ============ BOTTOM NAV ============ */
 .nav{
@@ -268,7 +268,7 @@ body{
   background:linear-gradient(to top,var(--bg) 55%,transparent);
 }
 .nav-inner{display:flex;justify-content:space-around;background:var(--surface);border-radius:24px;padding:8px;flex:1;box-shadow:0 8px 24px var(--shadow-strong);}
-.nav-btn{flex:1;border:none;background:none;cursor:pointer;padding:9px 0;border-radius:18px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--ink-faint);font-family:var(--font-body);font-weight:700;font-size:10.5px;transition:color .2s,background .2s;}
+.nav-btn{flex:1;border:none;background:none;cursor:pointer;padding:9px 0;border-radius:18px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--ink-faint);font-family:var(--font-body);font-weight:700;font-size:11px;transition:color .2s,background .2s;}
 .nav-btn svg{width:22px;height:22px;}
 .nav-btn.active{color:var(--ink);background:var(--surface-2);}
 
@@ -333,12 +333,26 @@ body{
 .set-item .si-body .a{font-weight:800;font-size:15px;}
 .set-item .si-body .b{font-size:12px;color:var(--ink-soft);font-weight:600;}
 .seg{display:flex;background:var(--surface-2);border-radius:12px;padding:3px;gap:3px;}
-.seg button{border:none;background:none;padding:8px 13px;border-radius:9px;font-weight:800;font-size:12.5px;color:var(--ink-soft);cursor:pointer;font-family:var(--font-body);}
+.seg button{border:none;background:none;padding:8px 13px;border-radius:9px;font-weight:800;font-size:13px;color:var(--ink-soft);cursor:pointer;font-family:var(--font-body);}
 .seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 2px 6px var(--shadow);}
 .baby-item{display:flex;align-items:center;gap:13px;background:var(--surface);border-radius:var(--radius-sm);padding:13px 15px;margin-bottom:9px;box-shadow:0 3px 9px var(--shadow);}
 
 /* onboarding */
+.ob-wrap{position:relative;height:100%;overflow-y:auto;display:flex;align-items:center;justify-content:center;padding:24px 18px;}
+.ob-bg{position:absolute;inset:0;overflow:hidden;filter:blur(6px) saturate(.95);opacity:.62;transform:scale(1.04);pointer-events:none;}
+.ob-prev{padding:22px 16px;max-width:480px;margin:0 auto;}
+.ob-greet{font-family:var(--font-display);font-size:26px;font-weight:600;color:var(--ink);margin:6px 2px 16px;}
+.ob-tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;}
+.ob-tile{background:var(--surface);border-radius:var(--radius);box-shadow:0 5px 14px var(--shadow);padding:20px 18px;display:flex;flex-direction:column;gap:12px;min-height:104px;font-weight:800;color:var(--ink);}
+.ob-tile svg{width:26px;height:26px;color:var(--c);background:var(--cs);border-radius:14px;padding:9px;box-sizing:content-box;}
+.ob-pcard{background:var(--surface);border-radius:18px;box-shadow:0 5px 14px var(--shadow);padding:14px 16px;margin-bottom:10px;}
+.ob-pcard .a{font-weight:800;color:var(--ink);}
+.ob-pcard .bg{font-size:13px;color:var(--ink-soft);font-weight:600;margin-top:3px;}
+.ob-card{position:relative;z-index:1;width:100%;max-width:400px;background:rgba(255,255,255,.86);backdrop-filter:blur(6px) saturate(120%);-webkit-backdrop-filter:blur(6px) saturate(120%);border:1px solid var(--line);border-radius:28px;box-shadow:0 24px 60px var(--shadow-strong);}
+body.night .ob-card{background:rgba(38,32,28,.86);}
+.ob-logout{display:block;margin:16px auto 0;border:none;background:none;color:var(--ink-soft);font-family:var(--font-body);font-weight:700;font-size:13px;cursor:pointer;text-decoration:underline;}
 .onboard{display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;padding:40px 30px;text-align:center;}
+.onboard.ob-card{height:auto;padding:30px 26px;}
 .onboard .logo{font-family:var(--font-display);font-size:40px;font-weight:600;letter-spacing:-.02em;margin-bottom:6px;}
 .onboard .tag{color:var(--ink-soft);font-weight:600;margin-bottom:38px;font-size:15px;}
 .onboard .field{width:100%;text-align:left;}
@@ -374,7 +388,7 @@ body{
 .med-due .info{flex:1;}
 .med-due .info .lbl{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;opacity:.85;}
 .med-due .info .nm{font-family:var(--font-display);font-size:20px;font-weight:600;line-height:1.05;margin-top:2px;}
-.med-due .info .sub{font-size:12.5px;opacity:.9;margin-top:3px;font-weight:600;}
+.med-due .info .sub{font-size:13px;opacity:.9;margin-top:3px;font-weight:600;}
 .med-due > svg{width:30px;height:30px;flex-shrink:0;}
 .med-card{display:flex;align-items:center;gap:13px;background:var(--surface);border-radius:var(--radius-sm);padding:13px 15px;margin-bottom:9px;box-shadow:0 3px 9px var(--shadow);}
 .med-card .mc-ico{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--med-soft);color:var(--med);flex-shrink:0;}
@@ -394,7 +408,7 @@ body{
 .ring svg{transform:rotate(-90deg);}
 .ring .rt{font-family:var(--font-display);font-weight:600;font-size:20px;position:absolute;inset:0;display:grid;place-items:center;}
 .ms-hero .mh-body .a{font-family:var(--font-display);font-size:18px;font-weight:600;}
-.ms-hero .mh-body .b{font-size:12.5px;color:var(--ink-soft);font-weight:600;margin-top:3px;}
+.ms-hero .mh-body .b{font-size:13px;color:var(--ink-soft);font-weight:600;margin-top:3px;}
 .ms-row{display:flex;align-items:center;gap:13px;background:var(--surface);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:9px;box-shadow:0 3px 9px var(--shadow);cursor:pointer;transition:transform .12s;}
 .ms-row:active{transform:scale(.985);}
 .ms-check{width:30px;height:30px;border-radius:50%;border:2.5px solid var(--line);flex-shrink:0;display:grid;place-items:center;color:#fff;transition:all .2s;}
@@ -402,9 +416,9 @@ body{
 .ms-row.done .ms-check{background:var(--star);border-color:var(--star);}
 .ms-row.done .ms-check svg{opacity:1;}
 .ms-body{flex:1;min-width:0;}
-.ms-body .a{font-weight:800;font-size:14.5px;}
+.ms-body .a{font-weight:800;font-size:15px;}
 .ms-row.done .ms-body .a{color:var(--ink-soft);}
-.ms-body .b{font-size:11.5px;color:var(--ink-faint);font-weight:700;margin-top:2px;}
+.ms-body .b{font-size:12px;color:var(--ink-faint);font-weight:700;margin-top:2px;}
 .ms-chip{font-size:10px;font-weight:800;padding:4px 9px;border-radius:20px;background:var(--surface-2);color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;flex-shrink:0;}
 .ms-thumb{width:40px;height:40px;border-radius:10px;object-fit:cover;flex-shrink:0;}
 
@@ -419,7 +433,10 @@ body{
 #photoCanvas{max-width:100%;height:auto;display:block;}
 .chip-row{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;-webkit-overflow-scrolling:touch;}
 .chip-row::-webkit-scrollbar{height:0;}
-.chip{display:inline-flex;align-items:center;gap:5px;border:2px solid var(--line);background:var(--surface);border-radius:30px;padding:9px 15px;font-weight:800;font-size:12.5px;color:var(--ink-soft);cursor:pointer;white-space:nowrap;flex-shrink:0;font-family:var(--font-body);transition:all .15s;}
+.chip{display:inline-flex;align-items:center;gap:5px;border:2px solid var(--line);background:var(--surface);border-radius:30px;padding:9px 15px;font-weight:800;font-size:13px;color:var(--ink-soft);cursor:pointer;white-space:nowrap;flex-shrink:0;font-family:var(--font-body);transition:all .15s;}
+.chip.lk{border-color:var(--star);background:var(--star-soft);color:var(--ink);}
+.chip.lk.sel{border-color:var(--star);background:var(--star);color:#fff;}
+.pro-pill{display:flex;align-items:center;justify-content:center;gap:6px;background:var(--star-soft);border:1.5px dashed var(--star);color:var(--ink);border-radius:14px;padding:8px 12px;font-size:13px;font-weight:700;margin:0 0 10px;text-align:center;}
 .chip svg{width:15px;height:15px;}
 .chip.allergen{border-color:var(--med);color:var(--med);}
 .chip.allergen.sel{background:var(--med);color:#fff;border-color:var(--med);}
@@ -444,7 +461,7 @@ body{
 .loader-ov{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;background:rgba(58,47,40,.34);backdrop-filter:blur(3px);animation:rise .22s ease;}
 .loader-card{background:var(--surface);border-radius:22px;padding:26px 30px;display:flex;flex-direction:column;align-items:center;gap:15px;box-shadow:0 14px 40px var(--shadow);max-width:74%;}
 .loader-spin{width:34px;height:34px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent,var(--feed));animation:spin .8s linear infinite;}
-.loader-msg{font-family:var(--font-body);font-weight:800;font-size:14.5px;color:var(--ink);text-align:center;line-height:1.35;}
+.loader-msg{font-family:var(--font-body);font-weight:800;font-size:15px;color:var(--ink);text-align:center;line-height:1.35;}
 @keyframes spin{to{transform:rotate(360deg);}}
 .prof-cards{display:flex;flex-direction:column;gap:11px;}
 .prof-card{display:flex;align-items:center;gap:13px;background:var(--surface-2);border-radius:16px;padding:15px 16px;cursor:pointer;transition:transform .15s;}
@@ -452,8 +469,8 @@ body{
 .prof-card .lead{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex-shrink:0;}
 .prof-card .lead svg{width:21px;height:21px;}
 .prof-card .cflex{flex:1;min-width:0;}
-.prof-card .cflex .a{font-weight:800;font-size:15.5px;}
-.prof-card .cflex .b{font-size:12.5px;color:var(--ink-soft);font-weight:600;margin-top:2px;}
+.prof-card .cflex .a{font-weight:800;font-size:15px;}
+.prof-card .cflex .b{font-size:13px;color:var(--ink-soft);font-weight:600;margin-top:2px;}
 .prof-card .chev{color:var(--ink-faint);flex-shrink:0;display:grid;place-items:center;}
 .prof-card .chev svg{width:18px;height:18px;}
 .tgt-row{display:flex;gap:8px;flex-wrap:wrap;}
@@ -475,7 +492,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .cap-input:focus{outline:none;border-color:var(--feed);}
 .toggle-row{display:flex;align-items:center;justify-content:space-between;background:var(--surface);border-radius:var(--radius-sm);padding:13px 16px;margin-bottom:14px;box-shadow:0 3px 9px var(--shadow);}
 .toggle-row .tr-a{font-weight:800;font-size:14px;}
-.toggle-row .tr-b{font-size:11.5px;color:var(--ink-soft);font-weight:600;}
+.toggle-row .tr-b{font-size:12px;color:var(--ink-soft);font-weight:600;}
 .sw{width:48px;height:28px;border-radius:20px;background:var(--line);position:relative;cursor:pointer;flex-shrink:0;transition:background .2s;}
 .sw.on{background:var(--feed);}
 .sw::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 2px 5px rgba(0,0,0,.25);}
@@ -496,16 +513,16 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .mem-card.hero .mi{background:rgba(255,255,255,.22);color:#fff;}
 .mem-card .mi svg{width:24px;height:24px;}
 .mem-card .mt{font-weight:800;font-size:15px;}
-.mem-card .mh{font-size:11.5px;font-weight:600;opacity:.8;margin-top:2px;}
+.mem-card .mh{font-size:12px;font-weight:600;opacity:.8;margin-top:2px;}
 .mem-card.hero .mbody{flex:1;}
 .month-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
 .month-slot{aspect-ratio:1;border-radius:var(--radius-sm);overflow:hidden;position:relative;cursor:pointer;background:var(--surface-2);border:2px dashed var(--line);display:grid;place-items:center;transition:transform .12s;}
 .month-slot:active{transform:scale(.95);}
 .month-slot.filled{border:none;box-shadow:0 4px 12px var(--shadow);}
 .month-slot img{width:100%;height:100%;object-fit:cover;}
-.month-slot .ml{position:absolute;bottom:0;left:0;right:0;padding:14px 6px 5px;background:linear-gradient(transparent,rgba(0,0,0,.6));color:#fff;font-size:10.5px;font-weight:800;text-align:center;}
+.month-slot .ml{position:absolute;bottom:0;left:0;right:0;padding:14px 6px 5px;background:linear-gradient(transparent,rgba(0,0,0,.6));color:#fff;font-size:11px;font-weight:800;text-align:center;}
 .month-slot .me{font-family:var(--font-display);font-size:15px;font-weight:600;color:var(--ink-faint);}
-.month-slot .me small{display:block;font-family:var(--font-body);font-size:9.5px;font-weight:800;letter-spacing:.04em;margin-top:2px;}
+.month-slot .me small{display:block;font-family:var(--font-body);font-size:10px;font-weight:800;letter-spacing:.04em;margin-top:2px;}
 .card-prev{width:100%;border-radius:16px;display:block;margin-bottom:16px;box-shadow:0 10px 28px var(--shadow-strong);}
 .pick-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;}
 .pick-item{aspect-ratio:1;border-radius:12px;overflow:hidden;position:relative;cursor:pointer;border:3px solid transparent;}
@@ -520,6 +537,17 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .vx-status.overdue{background:var(--med-soft);color:var(--med);}
 .vx-status.soon{background:var(--feed-soft);color:var(--feed);}
 .vx-status.upcoming{background:var(--surface-2);color:var(--ink-faint);}
+.vx-status.toconfirm{background:var(--surface-2);color:var(--ink-soft);}
+.vx-status.catchup{background:var(--feed-soft);color:var(--feed);}
+.vx-est{font-size:10px;font-weight:700;color:var(--ink-faint);text-transform:none;letter-spacing:0;}
+.vx-setup{display:flex;gap:13px;align-items:flex-start;background:linear-gradient(120deg,var(--diaper-soft),var(--sleep-soft));border-radius:var(--radius);padding:15px 16px;margin:0 0 14px;}
+.vx-setup .vs-emoji{font-size:22px;line-height:1.1;flex-shrink:0;}
+.vx-setup .vs-body{flex:1;min-width:0;}
+.vx-setup .vs-t{font-weight:800;font-size:14px;color:var(--ink);}
+.vx-setup .vs-s{font-size:12.5px;color:var(--ink-soft);font-weight:600;margin-top:3px;line-height:1.45;}
+.vx-setup .vs-btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:11px;}
+.vx-setup .vs-btn{border:none;border-radius:11px;padding:9px 13px;font-family:var(--font-body);font-weight:800;font-size:12.5px;cursor:pointer;background:var(--diaper);color:#fff;}
+.vx-setup .vs-btn.ghost{background:var(--surface);color:var(--ink-soft);border:1px solid var(--line);}
 .disclaimer{background:var(--surface-2);border:1px solid var(--line);border-radius:14px;padding:13px 15px;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:18px;line-height:1.5;}
 
 /* ---- growth charts ---- */
@@ -527,7 +555,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .gx-stat{display:flex;gap:12px;margin-bottom:16px;}
 .gx-box{flex:1;background:var(--surface);border-radius:var(--radius-sm);padding:15px;box-shadow:0 4px 12px var(--shadow);}
 .gx-box .n{font-family:var(--font-display);font-size:24px;font-weight:600;line-height:1;}
-.gx-box .l{font-size:11.5px;color:var(--ink-soft);font-weight:700;margin-top:5px;}
+.gx-box .l{font-size:12px;color:var(--ink-soft);font-weight:700;margin-top:5px;}
 .gx-box .d{font-size:11px;font-weight:800;margin-top:4px;}
 
 /* ---- home hero carousel ---- */
@@ -554,8 +582,8 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .alert-pill .ap-ico{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex-shrink:0;}
 .alert-pill .ap-ico svg{width:17px;height:17px;}
 .alert-pill .ap-body{flex:1;min-width:0;}
-.alert-pill .ap-t{font-weight:800;font-size:13.5px;line-height:1.15;}
-.alert-pill .ap-s{font-size:11.5px;color:var(--ink-soft);font-weight:600;margin-top:1px;}
+.alert-pill .ap-t{font-weight:800;font-size:13px;line-height:1.15;}
+.alert-pill .ap-s{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:1px;}
 .alert-pill button{border:none;background:var(--surface-2);font-weight:800;font-size:12px;border-radius:10px;padding:9px 12px;cursor:pointer;color:var(--ink);flex-shrink:0;font-family:var(--font-body);transition:transform .15s;}
 .alert-pill button:active{transform:scale(.93);}
 
@@ -565,7 +593,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .coach .cm-ico svg{width:18px;height:18px;}
 .coach .cm-body{flex:1;min-width:0;}
 .coach .cm-t{font-weight:800;font-size:14px;}
-.coach .cm-s{font-size:12.5px;color:var(--ink-soft);font-weight:600;margin-top:2px;line-height:1.45;}
+.coach .cm-s{font-size:13px;color:var(--ink-soft);font-weight:600;margin-top:2px;line-height:1.45;}
 .coach .cm-x{border:none;background:var(--surface-2);color:var(--ink);font-weight:800;border-radius:9px;padding:8px 12px;font-size:12px;cursor:pointer;flex-shrink:0;font-family:var(--font-body);}
 .coach .cm-x:active{transform:scale(.93);}
 .nudge{display:flex;gap:11px;align-items:center;background:linear-gradient(120deg,var(--star-soft),var(--feed-soft));border-radius:16px;padding:13px 16px;margin:16px 0;}
@@ -636,6 +664,12 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .moment-cap .mc-note{font-size:13px;color:var(--ink-soft);font-weight:600;margin-top:4px;line-height:1.45;}
 .moment-cap .mc-row{display:flex;align-items:center;justify-content:space-between;margin-top:6px;}
 .moment-cap .mc-date{font-size:11.5px;color:var(--ink-faint);font-weight:700;}
+/* Wide screens: present the app as a framed den, not a bare strip (DESIGN.md C-4) */
+@media(min-width:900px){
+  body{padding:28px 0;}
+  #app{height:calc(100dvh - 56px);border-radius:34px;border:1px solid var(--line);box-shadow:0 30px 70px var(--shadow-strong);overflow:hidden;}
+  .sheet{bottom:28px;border-radius:30px;}
+}
 </style>
 </head>
 <body>
@@ -725,7 +759,7 @@ const AVATAR_COLORS = ['#E29A3B','#5E6AA8','#56A08E','#C97FA0','#D2654E','#7B9E5
 
 /* ---------- Icons ---------- */
 const I = {
-  feed:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v6a4 4 0 0 0 8 0V2"/><path d="M12 12v8"/><path d="M9 20h6"/></svg>',
+  feed:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2h6"/><path d="M10 2v3.5a4 4 0 0 1-1 2.6L8 9.5A4 4 0 0 0 7 12v7a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3v-7a4 4 0 0 0-1-2.5l-1-1.4A4 4 0 0 1 14 5.5V2"/><path d="M7 13h10"/></svg>',
   bottle:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2h6"/><path d="M10 2v3.5a4 4 0 0 1-1 2.6L8 9.5A4 4 0 0 0 7 12v7a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3v-7a4 4 0 0 0-1-2.5l-1-1.4A4 4 0 0 1 14 5.5V2"/><path d="M7 13h10"/></svg>',
   sleep:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6.4 6.4 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>',
   diaper:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18v4a9 9 0 0 1-9 9 9 9 0 0 1-9-9V6Z"/><path d="M3 9c4 1 14 1 18 0"/></svg>',
@@ -1529,7 +1563,7 @@ function renderFeedSheet(){
   const months=babyMonths();
   const solidsStage = b.solidsStarted || months>=6;
   const meta={
-    breast:[I.feed,'Breast','Timed nursing'],
+    breast:[I.heart,'Breast','Timed nursing'],
     bottle:[I.bottle,'Bottle', ft==='breast'?'Expressed milk':ft==='formula'?'Formula':'Milk'],
     solids:[I.note,'Solids','Purees, finger food'],
     water:[I.drop,'Water','A few sips']
@@ -1913,7 +1947,7 @@ function openAddBaby(){
     <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
     <div class="field"><label>Name</label><input id="bName" placeholder="Baby's name" autofocus></div>
     <div class="field"><label>Birthday (optional)</label><input type="date" id="bDate" value="${today}" max="${today}"></div>
-    <div class="field"><label>Country (sets the vaccine schedule)</label><select id="bCountry">${VAX_COUNTRIES.map(([k,n])=>`<option value="${k}" ${k===detectCountry()?'selected':''}>${n}</option>`).join('')}</select></div>
+    <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label><select id="bCountry">${VAX_COUNTRIES.map(([k,n])=>`<option value="${k}" ${k===detectCountry()?'selected':''}>${n}</option>`).join('')}</select></div>
     <button class="btn-primary" onclick="saveBaby()">Add baby</button>`,'diaper');
 }
 function pickColor(c){
@@ -1958,23 +1992,108 @@ function babyIdentity(b,opts){
     <div><div class="pi-name">${escapeHtml(b.name)}</div><div class="pi-sub">${ageString(b.birth)}${opts.pickable?` · <span class="link-inline" onclick="openAvatarPicker()">Change photo</span>`:''}</div></div></div>`;
 }
 /* ---------- Cubby Pro waitlist ---------- */
-function openPro(){
-  const feats=[
-    ['🗓️','Smart routines','Gentle, age-aware rhythms (feeds, naps, tummy time, skin-to-skin) from day 0 to 365 that adapt when life happens.'],
-    ['🔔','Push notifications','Reminders and alerts even when Cubby is closed.'],
-    ['📸','HD photos & cloud backup','Full-resolution photos, safely backed up.'],
-    ['🥑','Nutrition tracker','See nutrition from your logged meals and photos, what was offered, what was eaten, and how it adds up over time.'],
-    ['📄','Doctor reports & export','Polished PDF visit reports and full data export.'],
-    ['✨','Smart insights & keepsakes','Sleep & feed pattern insights, premium memory cards, a monthly video montage.']
-  ].map(f=>`<div class="pro-feat"><span class="pf-ico">${f[0]}</span><div><div class="pf-t">${f[1]}</div><div class="pf-s">${f[2]}</div></div></div>`).join('');
-  const joined = (()=>{ try{ return localStorage.getItem('cubby-pro-waitlist')==='1'; }catch(e){ return false; } })();
-  openSheet(`<h2>Cubby Pro ✨</h2><div class="sub">Cubby is free for the essentials, always. Pro is coming for the extras. Want first access?</div>
-    <div class="pro-list">${feats}</div>
-    ${joined
-      ? `<div class="pro-joined">✅ You're on the waitlist. We'll be in touch 🐻</div>`
-      : `<button class="btn-primary" style="background:var(--star)" onclick="joinProWaitlist()">Join the waitlist</button>`}
-    <div class="csub" style="text-align:center;margin-top:10px">No charge now. We'll email before anything launches.</div>`,'star');
+/* ============================================================
+   CUBBY PRO: entitlement + payment loop
+   The entitlement lives at households/{hid}.pro and is written ONLY by the
+   billing Worker (workers/pro-billing) after Stripe events; clients read it
+   via window.LL.pro. Rules forbid any client write to that field.
+   Base unlocks zero-marginal-cost features (see PAYWALL.md): the premium
+   keepsake studio, watermark-free shares, and the doctor PDF report.
+   ============================================================ */
+const PRO_CFG = {
+  // Set these after deploying workers/pro-billing (see its README), then this
+  // sheet sells; while empty, the sheet falls back to the waitlist.
+  checkoutUrl: '',   // e.g. 'https://cubby-billing.<acct>.workers.dev/checkout'
+  portalUrl:   '',   // e.g. 'https://cubby-billing.<acct>.workers.dev/portal'
+  priceLine:   'Cubby Pro · $9/month, or $90/year (save 17%) · 7-day free trial'
+};
+/* Pre-launch: payments aren't open yet, so the Pro sheet collects registrations
+   and shows the target launch window. Change this one string when the date moves;
+   set PRO_CFG.checkoutUrl (see workers/pro-billing) to flip the sheet to selling. */
+const PRO_LAUNCH = 'August 2026';
+function isPro(){
+  try{ if(localStorage.getItem('cubby-pro-dev')==='1') return true; }catch(e){}
+  const p = window.LL && window.LL.pro;
+  if(!p || !p.active) return false;
+  // 3-day grace past the paid period so a renewal hiccup never yanks features mid-day
+  return !p.until || (+p.until + 3*86400000) > now();
 }
+function requirePro(featureName){ if(isPro()) return true; openPro(featureName); return false; }
+/* Pro tasters: every Pro treat can be tried a few times for free (outputs keep the
+   small Cubby mark). Counts sync with the household via state.settings.proTaste. */
+const PRO_TASTE={styles:3,enhance:3,cutout:3,thennow:1,pdf:1};
+function tasteUsed(k){ return ((state.settings||{}).proTaste||{})[k]||0; }
+function tasteLeft(k){ return Math.max(0,(PRO_TASTE[k]||0)-tasteUsed(k)); }
+function useTaste(k,featureName){
+  if(isPro()) return true;
+  if(tasteLeft(k)<=0){ openPro(featureName,true); return false; }
+  state.settings.proTaste=state.settings.proTaste||{};
+  state.settings.proTaste[k]=tasteUsed(k)+1; persist();
+  const left=tasteLeft(k);
+  toast(left>0?`✨ Pro taster · ${left} free ${left===1?'try':'tries'} left`:'✨ That was your last free taste 🐻');
+  return true;
+}
+function refundTaste(k){ if(isPro())return; try{ const t=state.settings.proTaste; if(t&&t[k]>0){ t[k]--; persist(); } }catch(e){} }
+function proTag(k){ return isPro()?'':(tasteLeft(k)>0?` · ${tasteLeft(k)} free`:' · Pro ✨'); }
+function openPro(lockedFeature, tastedOut){
+  const feats=[
+    ['🎨','The full keepsake studio','Every template, font and palette, portrait and story formats, the whole sticker set.'],
+    ['✨','Auto-enhance & background cutout','One-tap polish and sticker-style cutouts, all on your device.'],
+    ['🖼️','Then & Now + watermark-free','Side-by-side keepsakes, and your shares without the "made with Cubby" mark.'],
+    ['📄','Doctor PDF report','A clean, printable visit report: recent days, growth, vaccines and medicines.']
+  ].map(f=>`<div class="pro-feat"><span class="pf-ico">${f[0]}</span><div><div class="pf-t">${f[1]}</div><div class="pf-s">${f[2]}</div></div></div>`).join('');
+  const canBuy = !!PRO_CFG.checkoutUrl;
+  const joined = (()=>{ try{ return localStorage.getItem('cubby-pro-waitlist')==='1'; }catch(e){ return false; } })();
+  if(isPro()){
+    const p=window.LL&&window.LL.pro||{};
+    openSheet(`<h2>Cubby Pro ✨</h2><div class="sub">You're on Pro. Thank you for supporting Cubby, it keeps the essentials free for everyone.</div>
+      <div class="pro-list">${feats}</div>
+      ${p.until?`<div class="csub" style="text-align:center">Renews ${new Date(+p.until).toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'})}</div>`:''}
+      ${PRO_CFG.portalUrl?`<button class="btn-ghost" onclick="openProPortal()">Manage subscription</button>`:''}`,'star');
+    return;
+  }
+  openSheet(`<h2>Cubby Pro ✨</h2>
+    <div class="sub">${lockedFeature?(tastedOut?`You've enjoyed your free tastes of <b>${escapeHtml(lockedFeature)}</b>. `:`<b>${escapeHtml(lockedFeature)}</b> is a Pro treat. `):''}Cubby is free for the essentials, always. Pro adds the delights.</div>
+    <div class="pro-list">${feats}</div>
+    <div class="csub" style="text-align:center;margin:2px 0 10px">Every treat comes with a free taste or two, so try before you decide 🐻</div>
+    ${canBuy
+      ? `<button class="btn-primary" style="background:var(--star)" onclick="startProCheckout()">Start 7-day free trial</button>
+         <div class="csub" style="text-align:center;margin-top:8px">${PRO_CFG.priceLine}. Cancel anytime in the trial and pay nothing. One plan covers your whole family.</div>`
+      : (joined
+        ? `<div class="pro-joined">✅ You're registered for Pro. We'll email you the moment it opens, ${PRO_LAUNCH} 🐻</div>`
+        : `<button class="btn-primary" style="background:var(--star)" onclick="joinProWaitlist()">Register for Pro</button>
+           <div class="csub" style="text-align:center;margin-top:8px">Cubby Pro arrives ${PRO_LAUNCH}. Register now to claim your 7-day free trial at launch, ${PRO_CFG.priceLine}. No charge today.</div>`)}`,'star');
+}
+async function startProCheckout(){
+  const hid = window.LL && window.LL.householdId;
+  if(!hid){ toast('Sign in first'); return; }
+  if(!PRO_CFG.checkoutUrl){ openPro(); return; }
+  showLoader(['Opening secure checkout']);
+  try{
+    const r = await fetch(PRO_CFG.checkoutUrl, { method:'POST', headers:{'content-type':'application/json'},
+      body: JSON.stringify({ hid, origin: location.origin,
+        email: (window.LL.auth&&window.LL.auth.currentUser&&window.LL.auth.currentUser.email)||'' }) });
+    const d = await r.json(); hideLoader();
+    if(d && d.url) location.href = d.url; else toast('Could not start checkout, try again');
+  }catch(e){ hideLoader(); toast('Could not start checkout, try again'); }
+}
+async function openProPortal(){
+  const p = window.LL && window.LL.pro;
+  if(!PRO_CFG.portalUrl || !p || !p.customer){ toast('Manage your plan from the purchase email'); return; }
+  showLoader(['Opening your billing portal']);
+  try{
+    const r = await fetch(PRO_CFG.portalUrl, { method:'POST', headers:{'content-type':'application/json'},
+      body: JSON.stringify({ customer: p.customer, origin: location.origin }) });
+    const d = await r.json(); hideLoader();
+    if(d && d.url) location.href = d.url; else toast('Could not open the portal');
+  }catch(e){ hideLoader(); toast('Could not open the portal'); }
+}
+/* Returning from Stripe checkout: a warm hello (the webhook flips the household to Pro). */
+(function(){ try{
+  const q=new URLSearchParams(location.search);
+  if(q.get('pro')==='success'){ setTimeout(()=>toast('Welcome to Cubby Pro 🎉 Your trial has started'),1200); history.replaceState(null,'',location.pathname); }
+  else if(q.get('pro')==='cancel'){ history.replaceState(null,'',location.pathname); }
+}catch(e){} })();
 async function joinProWaitlist(){
   try{
     const LL=window.LL, u=LL&&LL.auth&&LL.auth.currentUser;
@@ -1985,8 +2104,8 @@ async function joinProWaitlist(){
       },{merge:true});
     }
     try{ localStorage.setItem('cubby-pro-waitlist','1'); }catch(e){}
-    openPro(); toast('🐻 You\'re on the Pro waitlist!');
-  }catch(e){ toast('Could not join: '+((e&&e.message)||e)); }
+    openPro(); toast('🐻 You\'re registered for Cubby Pro!');
+  }catch(e){ toast('Could not register: '+((e&&e.message)||e)); }
 }
 function openBabyProfile(){
   const b=activeBaby(); if(!b)return;
@@ -2224,7 +2343,12 @@ function openSettings(){
     </div>
     <div class="set-item" onclick="openPro()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">✨</div>
-      <div class="si-body"><div class="a">Cubby Pro</div><div class="b">Coming soon · join the waitlist</div></div>
+      <div class="si-body"><div class="a">Cubby Pro</div><div class="b">${isPro()?'Active · thank you 🐻':`Keepsake studio, doctor reports & more · launching ${PRO_LAUNCH}`}</div></div>
+    </div>
+    <div class="set-item" onclick="shareCubby()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--pump-soft);color:var(--pump)">${I.heart}</div>
+      <div class="si-body"><div class="a">Share Cubby with a friend</div><div class="b">Know another tired parent? Send them your link</div></div>
+      <span class="chev">${I.chev}</span>
     </div>
     <div class="set-label">Your data &amp; account</div>
     <div class="set-item" onclick="openDataSheet()" style="cursor:pointer">
@@ -2236,7 +2360,7 @@ function openSettings(){
       <div class="si-ico" style="background:var(--sleep-soft);color:var(--sleep);font-size:17px">👋</div>
       <div class="si-body"><div class="a">Log out</div><div class="b">Sign out · your data stays safely synced</div></div>
     </div>
-    <p style="font-size:11.5px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:14px">Cubby v${CUBBY_VERSION} · beta</p>`,'sleep');
+    <p style="font-size:12px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:14px">Cubby v${CUBBY_VERSION} · ${Date.now()<Date.UTC(2026,6,27)?'beta':'early access'}</p>`,'sleep');
 }
 function openDataSheet(){
   const recent=(state.consents||[]).slice(-3).reverse().map(c=>{
@@ -2265,6 +2389,26 @@ function exportData(){
   const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download='cubby-export.json'; a.click(); toast('Exported');
+}
+/* Referral: deterministic short code from the signed-in uid (djb2 -> base36). */
+function refCode(){
+  try{
+    var u=(window.LL&&LL.auth&&LL.auth.currentUser&&LL.auth.currentUser.uid)||'';
+    if(!u) return '';
+    var h=5381; for(var i=0;i<u.length;i++){ h=(((h<<5)+h)+u.charCodeAt(i))>>>0; }
+    return h.toString(36).slice(0,6);
+  }catch(e){ return ''; }
+}
+function shareCubby(){
+  var b=activeBaby();
+  var who=(b&&b.name)?(b.name+"'s"):"our little one's";
+  var code=refCode();
+  var link='https://little-cubby.com/'+(code?('?ref='+code):'');
+  var text="We've been using Cubby to keep track of "+who+" feeds, naps and vaccines together. It's free, private to your family, no ads: "+link;
+  if(navigator.share){ navigator.share({text:text}).catch(function(){}); return; }
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){ toast('Copied! Paste it anywhere 🐻'); },function(){ window.prompt('Copy this note:',text); });
+  } else { window.prompt('Copy this note:',text); }
 }
 function confirmLogout(){
   openSheet(`<h2>Log out?</h2><div class="sub">Your data stays safely synced. Sign back in with Google anytime to pick up right where you left off.</div>
@@ -2466,19 +2610,37 @@ function setGuardian(uid,on){
 }
 
 /* ---------- ONBOARDING ---------- */
+function obPreview(){
+  // Decorative, blurred "this is what you're setting up" backdrop. Not interactive, not real data.
+  return `<div class="ob-prev" aria-hidden="true">
+    <div class="ob-greet">Good evening 🐻</div>
+    <div class="ob-tiles">
+      <div class="ob-tile" style="--c:var(--feed);--cs:var(--feed-soft)">${I.feed}<span>Feed</span></div>
+      <div class="ob-tile" style="--c:var(--sleep);--cs:var(--sleep-soft)">${I.sleep}<span>Sleep</span></div>
+      <div class="ob-tile" style="--c:var(--diaper);--cs:var(--diaper-soft)">${I.diaper}<span>Nappy</span></div>
+      <div class="ob-tile" style="--c:var(--pump);--cs:var(--pump-soft)">${I.pump}<span>Pump</span></div>
+    </div>
+    <div class="ob-pcard"><div class="a">Nap in progress</div><div class="bg">1h 12m · by Mama Bear</div></div>
+    <div class="ob-pcard"><div class="a">Bottle · 120 ml</div><div class="bg">5:30 PM · by Nanny</div></div>
+  </div>`;
+}
 function renderOnboard(){
   newBabyColor=AVATAR_COLORS[0];
   const today=new Date().toISOString().slice(0,10);
-  app().innerHTML=`<div class="onboard fade-in">
-    <div class="logo">Cubby</div>
-    <div class="tag">Feeds, sleep, nappies and every little milestone. One thumb, half asleep. Let's start with who we're tracking.</div>
-    <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
-    <div class="field"><label>Baby's name</label><input id="bName" placeholder="e.g. Mira" autofocus></div>
-    <div class="field"><label>Birthday (optional)</label><input type="date" id="bDate" value="${today}" max="${today}"></div>
-    <div class="field"><label>Country (sets the vaccine schedule)</label><select id="bCountry">${VAX_COUNTRIES.map(([k,n])=>`<option value="${k}" ${k===detectCountry()?'selected':''}>${n}</option>`).join('')}</select></div>
-    <button class="btn-primary" style="--accent:var(--feed)" onclick="saveBaby()">Start tracking</button>
-    <div style="text-align:center;font-size:12px;font-weight:800;color:var(--ink-faint);margin:14px 0 2px;letter-spacing:.04em">OR</div>
-    <button class="btn-ghost" onclick="openStartPregnancy()" style="color:var(--preg)">🌸 Expecting? Trying, pregnant or counting weeks</button>
+  app().innerHTML=`<div class="ob-wrap">
+    <div class="ob-bg">${obPreview()}</div>
+    <div class="onboard ob-card fade-in">
+      <div class="logo">Cubby</div>
+      <div class="tag">Feeds, sleep, nappies and every little milestone. One thumb, half asleep. Let's start with who we're tracking.</div>
+      <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
+      <div class="field"><label>Baby's name</label><input id="bName" placeholder="e.g. Mira" autofocus></div>
+      <div class="field"><label>Birthday (optional)</label><input type="date" id="bDate" value="${today}" max="${today}"></div>
+      <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label><select id="bCountry">${VAX_COUNTRIES.map(([k,n])=>`<option value="${k}" ${k===detectCountry()?'selected':''}>${n}</option>`).join('')}</select></div>
+      <button class="btn-primary" style="--accent:var(--feed)" onclick="saveBaby()">Start tracking</button>
+      <div style="text-align:center;font-size:12px;font-weight:800;color:var(--ink-faint);margin:14px 0 2px;letter-spacing:.04em">OR</div>
+      <button class="btn-ghost" onclick="openStartPregnancy()" style="color:var(--preg)">🌸 Expecting? Trying, pregnant or counting weeks</button>
+      <button class="ob-logout" onclick="confirmLogout()">Log out</button>
+    </div>
   </div>`;
 }
 
@@ -3862,8 +4024,56 @@ function openVisitSummary(){
   openSheet(`<h2>Visit summary</h2><div class="sub">A snapshot of ${escapeHtml(b.name)}'s last 7 days for your appointment.</div>
     <pre class="visit-sum">${escapeHtml(text)}</pre>
     <button class="btn-primary" style="background:var(--sleep)" onclick="copyVisitSummary()">${I.list||''} Copy summary</button>
+    <button class="btn-ghost" onclick="openDoctorReport()">📄 Doctor PDF report ${isPro()?'':(tasteLeft('pdf')>0?'· ✨ try one free':'· Pro ✨')}</button>
     <button class="btn-ghost" onclick="closeSheet()">Close</button>`,'sleep');
   window.__visitSummaryText=text;
+}
+/* Printable doctor report: a clean page the browser prints / saves as PDF.
+   Zero infra: it is generated entirely on-device from the existing log. */
+function openDoctorReport(){
+  const b=activeBaby(); if(!b) return;
+  if(!useTaste('pdf','Doctor PDF report')) return;
+  const esc=escapeHtml;
+  const summary=visitSummary(14);
+  let growthLine='';
+  try{
+    const g=babyEvents().find(e=>e.type==='growth');
+    if(g){ const parts=[]; if(g.weight)parts.push(g.weight+' '+(g.wUnit||'kg')); if(g.height)parts.push(g.height+' '+(g.hUnit||'cm'));
+      growthLine=parts.join(' · ')+'  (measured '+new Date(g.time).toLocaleDateString()+')'; }
+  }catch(e){}
+  let vaxLine='';
+  try{
+    const plan=vaccinePlan();
+    const given=plan.filter(v=>v.given).length;
+    const nextV=plan.filter(v=>!v.given).sort((a,c)=>a.dueMonths-c.dueMonths)[0];
+    vaxLine=given+' of '+plan.length+' doses recorded as given'+(nextV?('  ·  next: '+nextV.name+' ('+nextV.group+')'):'');
+  }catch(e){}
+  let medsLines='';
+  try{ medsLines=babyMeds().filter(m=>m.active).map(m=>'- '+m.name+' · '+m.dose+' '+m.unit+(m.everyH?(' every '+m.everyH+'h'):'')).join('\n'); }catch(e){}
+  const dob=b.birth?new Date(b.birth).toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'}):'';
+  const w=window.open('','_blank');
+  if(!w){ toast('Allow pop-ups to create the report'); return; }
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(b.name)} · Cubby visit report</title>
+    <style>
+      body{font-family:Georgia,'Times New Roman',serif;color:#222;max-width:680px;margin:36px auto;padding:0 24px;line-height:1.55;}
+      h1{font-size:24px;margin:0 0 2px;} .meta{color:#666;font-size:13px;margin-bottom:22px;}
+      h2{font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:#8a7f6f;border-bottom:1px solid #ddd;padding-bottom:4px;margin:24px 0 8px;}
+      pre{font-family:inherit;white-space:pre-wrap;font-size:14px;margin:0;}
+      .foot{margin-top:30px;color:#999;font-size:12px;border-top:1px solid #eee;padding-top:10px;}
+      .noprint{margin:18px 0;} .noprint button{font-size:14px;padding:8px 18px;cursor:pointer;}
+      @media print{.noprint{display:none}}
+    </style></head><body>
+    <h1>${esc(b.name)}</h1>
+    <div class="meta">${dob?('Born '+esc(dob)+' · '):''}${esc(ageString(b.birth)||'')} · report generated ${new Date().toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'})} with Cubby</div>
+    <div class="noprint"><button onclick="window.print()">Print / Save as PDF</button></div>
+    <h2>Last 14 days</h2><pre>${esc(summary)}</pre>
+    ${growthLine?`<h2>Latest measurement</h2><pre>${esc(growthLine)}</pre>`:''}
+    ${vaxLine?`<h2>Vaccinations</h2><pre>${esc(vaxLine)}</pre>`:''}
+    ${medsLines?`<h2>Active medicines</h2><pre>${esc(medsLines)}</pre>`:''}
+    <div class="foot">Recorded by the family in Cubby. Informational only, not medical advice; please verify clinically.</div>
+    </body></html>`);
+  w.document.close();
+  try{ w.focus(); }catch(e){}
 }
 function copyVisitSummary(){
   const t=window.__visitSummaryText||'';
@@ -4065,7 +4275,7 @@ function renderGrowthSection(){
     ${wPts.length?`<div class="stat-card"><h3>Weight</h3><div class="csub">${(b&&b.sex)?growthSource.toUpperCase()+' percentiles'+pctLabel('weight',wU):wPts.length+' measurement'+(wPts.length>1?'s':'')} · ${wU}</div>${(b&&b.sex&&growthRef('weight'))?svgPercentile('weight',wU):svgLine(wPts,'feed',wU)}</div>`:''}
     ${hPts.length?`<div class="stat-card"><h3>Height</h3><div class="csub">${(b&&b.sex)?growthSource.toUpperCase()+' percentiles'+pctLabel('height',hU):hPts.length+' measurement'+(hPts.length>1?'s':'')} · ${hU}</div>${(b&&b.sex&&growthRef('height'))?svgPercentile('height',hU):svgLine(hPts,'sleep',hU)}</div>`:''}
     <div class="add-row" onclick="openGrowth()">${I.plus} Add a measurement</div>
-    <p style="font-size:11.5px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:12px">${(b&&b.sex)?'Bands: '+(growthSource==='who'?'WHO Child Growth Standards (0–24 mo)':'CDC growth charts (0–36 mo)')+'. ':''}A guide, not a diagnosis, your pediatrician is the best judge.</p>`;
+    <p style="font-size:12px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:12px">${(b&&b.sex)?'Bands: '+(growthSource==='who'?'WHO Child Growth Standards (0–24 mo)':'CDC growth charts (0–36 mo)')+'. ':''}A guide, not a diagnosis, your pediatrician is the best judge.</p>`;
 }
 function growthDelta(pts){ if(pts.length<2)return null; const d=pts[pts.length-1].v-pts[pts.length-2].v; return +d.toFixed(2); }
 function svgLine(pts,color,unit){
@@ -4158,12 +4368,31 @@ const VAX_SCHEDULES={
     ['6-fach (3.)','11 Monate',11],['Pneumokokken (3.)','11 Monate',11],['MMR (1.)','11 Monate',11],['Varizellen (1.)','11 Monate',11],
     ['Meningokokken B (3.)','12 Monate',12],
     ['MMR (2.)','15 Monate',15],['Varizellen (2.)','15 Monate',15]
-  ]}
+  ]},
+  // Added 2026-06-13, each sourced from the national authority + adversarially verified (3 had dose-age errors the verifier corrected):
+  //   who: https://cdn.who.int/media/docs/default-source/immunization/immunization_schedules/immunization-summary-table-2.pdf?sfvrsn=c10d5c2_12&download=true
+  //   in: http://www.acvip.org/iap-immunization.php
+  //   ca: https://www.canada.ca/en/public-health/services/publications/healthy-living/canadian-immunization-guide-part-1-key-immunization-information/page-13-recommended-immunization-schedules.html
+  //   ie: https://www2.hse.ie/babies-children/vaccines-your-child/
+  //   nz: https://www.healthnz.govt.nz/immunisations/national-immunisation-schedule
+  //   sa: https://www.moh.gov.sa/en/HealthAwareness/EducationalContent/HealthTips/Documents/Immunization-Schedule.pdf
+  //   sg: https://www.cda.gov.sg/public/vaccinations/
+  //   au: https://www.health.gov.au/childhood-immunisation/immunisation-schedule (universal schedule; ATSI-only + seasonal flu excluded)
+  au:{label:'Australia (NIP)',list:[['Hepatitis B (birth dose)','At birth',0],['6-in-1 / DTPa-hepB-IPV-Hib (1st dose)','2 months (from 6 weeks)',2],['Pneumococcal / PCV (1st dose)','2 months',2],['Rotavirus (1st dose)','2 months',2],['6-in-1 / DTPa-hepB-IPV-Hib (2nd dose)','4 months',4],['Pneumococcal / PCV (2nd dose)','4 months',4],['Rotavirus (2nd dose)','4 months',4],['6-in-1 / DTPa-hepB-IPV-Hib (3rd dose)','6 months',6],['Meningococcal ACWY','12 months',12],['MMR (1st dose)','12 months',12],['Pneumococcal / PCV (3rd dose)','12 months',12],['MMRV (MMR 2nd dose + varicella)','18 months',18],['Hib (booster)','18 months',18],['DTPa (4th dose)','18 months',18],['DTPa-IPV (4-in-1 pre-school booster)','4 years',48]]},
+  who:{label:'General (WHO)',list:[['BCG','At birth',0],['Hepatitis B (birth dose)','At birth (under 24h)',0],['OPV (bOPV, 1st dose)','6 weeks',1.38],['DTP-containing (1st dose)','6 weeks',1.38],['Hib (1st dose)','6 weeks',1.38],['Hepatitis B (2nd dose, with DTP1)','6 weeks',1.38],['Pneumococcal conjugate / PCV (1st dose)','6 weeks',1.38],['Rotavirus (1st dose)','6 weeks',1.38],['OPV (bOPV, 2nd dose)','10 weeks',2.3],['DTP-containing (2nd dose)','10 weeks',2.3],['Hib (2nd dose)','10 weeks',2.3],['Hepatitis B (3rd dose, with DTP2)','10 weeks',2.3],['Pneumococcal conjugate / PCV (2nd dose)','10 weeks',2.3],['Rotavirus (2nd dose)','10 weeks',2.3],['OPV (bOPV, 3rd dose)','14 weeks',3.22],['IPV (1st dose)','14 weeks',3.22],['DTP-containing (3rd dose)','14 weeks',3.22],['Hib (3rd dose)','14 weeks',3.22],['Hepatitis B (4th dose, with DTP3)','14 weeks',3.22],['Pneumococcal conjugate / PCV (3rd dose)','14 weeks',3.22],['Rotavirus (3rd dose, if 3-dose product)','14 weeks',3.22],['Measles-containing vaccine / MCV (1st dose)','9 months',9],['Rubella (1st dose, with measles vaccine)','9 months',9],['IPV (2nd dose, 4+ months after IPV1, e.g. with MCV)','9 months',9],['Measles-containing vaccine / MCV (2nd dose)','15-18 months',15],['DTP-containing (1st booster)','12-23 months',12],['DTP-containing booster (Td/DT, 2nd booster)','4-7 years',48]]},
+  in:{label:'India (IAP/ACVIP)',list:[['BCG','At birth',0],['Hepatitis B (birth dose / 1st dose)','At birth',0],['OPV (0 / birth dose)','At birth',0],['DTwP/DTaP (1st dose)','6 weeks',1.38],['Hib (1st dose)','6 weeks',1.38],['IPV (1st dose)','6 weeks',1.38],['Hepatitis B (2nd dose)','6 weeks',1.38],['Rotavirus (1st dose)','6 weeks',1.38],['PCV (1st dose)','6 weeks',1.38],['DTwP/DTaP (2nd dose)','10 weeks',2.3],['Hib (2nd dose)','10 weeks',2.3],['IPV (2nd dose)','10 weeks',2.3],['Rotavirus (2nd dose)','10 weeks',2.3],['PCV (2nd dose)','10 weeks',2.3],['DTwP/DTaP (3rd dose)','14 weeks',3.22],['Hib (3rd dose)','14 weeks',3.22],['IPV (3rd dose)','14 weeks',3.22],['Rotavirus (3rd dose)','14 weeks',3.22],['PCV (3rd dose)','14 weeks',3.22],['Hepatitis B (3rd dose)','6 months',6],['Typhoid Conjugate Vaccine (TCV)','9 months',9],['MMR (1st dose)','9 months',9],['Hepatitis A (1st dose)','12 months',12],['MMR (2nd dose)','15 months',15],['Varicella (1st dose)','15 months',15],['PCV (booster)','15 months',15],['DTwP/DTaP (1st booster)','16-18 months',16],['Hib (booster)','16-18 months',16],['IPV (booster)','16-18 months',16],['Hepatitis A (2nd dose)','18 months',18],['Varicella (2nd dose)','4-6 years',48],['DTwP/DTaP (2nd booster)','4-6 years',48],['IPV (booster)','4-6 years',48],['MMR (3rd dose)','4-6 years',48]]},
+  ca:{label:'Canada (national / NACI)',list:[['Hepatitis B (HB) (1st dose)','At birth',0],['DTaP-IPV-Hib (diphtheria-tetanus-pertussis-polio-Hib) (1st dose)','2 months',2],['Rotavirus (Rot) (1st dose)','2 months',2],['Pneumococcal conjugate (Pneu-C-15 or Pneu-C-20) (1st dose)','2 months',2],['DTaP-IPV-Hib (diphtheria-tetanus-pertussis-polio-Hib) (2nd dose)','4 months',4],['Rotavirus (Rot) (2nd dose)','4 months',4],['Pneumococcal conjugate (Pneu-C-15 or Pneu-C-20) (2nd dose)','4 months',4],['DTaP-IPV-Hib (diphtheria-tetanus-pertussis-polio-Hib) (3rd dose)','6 months',6],['Rotavirus (Rot) (3rd dose, only if pentavalent Rot-5 used)','6 months',6],['Pneumococcal conjugate (Pneu-C-15 or Pneu-C-20) booster','12 months (12-15 months)',12],['Meningococcal C conjugate (Men-C-C)','12 months',12],['MMR (measles-mumps-rubella) (1st dose)','12 months (12-15 months)',12],['Varicella (Var, chickenpox) (1st dose)','12 months (12-15 months)',12],['DTaP-IPV-Hib (diphtheria-tetanus-pertussis-polio-Hib) (4th dose)','18 months',18],['MMR (measles-mumps-rubella) (2nd dose)','18 months',18],['Varicella (Var, chickenpox) (2nd dose)','18 months',18],['DTaP-IPV or Tdap-IPV preschool booster','4 years (4-6 years)',48]]},
+  ie:{label:'Ireland (HSE)',list:[['6-in-1 (1st dose)','2 months',2],['PCV - pneumococcal (1st dose)','2 months',2],['MenB - meningococcal B (1st dose)','2 months',2],['Rotavirus oral (1st dose)','2 months',2],['6-in-1 (2nd dose)','4 months',4],['MenB - meningococcal B (2nd dose)','4 months',4],['Rotavirus oral (2nd dose)','4 months',4],['6-in-1 (3rd dose)','6 months',6],['PCV - pneumococcal (2nd dose)','6 months',6],['MMR (1st dose)','12 months',12],['MenB - meningococcal B (3rd/booster dose)','12 months',12],['Chickenpox / varicella (1st dose)','12 months',12],['6-in-1 (4th/booster dose)','13 months',13],['MenC - meningococcal C (1st dose)','13 months',13],['PCV - pneumococcal (3rd/booster dose)','13 months',13],['4-in-1 booster (diphtheria, tetanus, pertussis, polio)','4-5 years (junior infants)',48],['MMRV - MMR + chickenpox combined (2nd dose)','4-5 years (junior infants)',48]]},
+  nz:{label:'New Zealand',list:[['Rotavirus (1st dose)','6 weeks',1.38],['6-in-1 diphtheria/tetanus/whooping cough/polio/hepatitis B/Hib (1st dose)','6 weeks',1.38],['Pneumococcal (1st dose)','6 weeks',1.38],['Rotavirus (2nd dose)','3 months',3],['6-in-1 diphtheria/tetanus/whooping cough/polio/hepatitis B/Hib (2nd dose)','3 months',3],['Meningococcal B (1st dose)','3 months',3],['6-in-1 diphtheria/tetanus/whooping cough/polio/hepatitis B/Hib (3rd dose)','5 months',5],['Pneumococcal (2nd dose)','5 months',5],['Meningococcal B (2nd dose)','5 months',5],['MMR measles/mumps/rubella (1st dose)','12 months',12],['Pneumococcal (3rd dose)','12 months',12],['Meningococcal B (3rd dose)','12 months',12],['Hib (booster)','15 months',15],['MMR measles/mumps/rubella (2nd dose)','15 months',15],['Chickenpox / varicella (1 dose)','15 months',15],['4-in-1 diphtheria/tetanus/whooping cough/polio (booster)','4 years',48]]},
+  sa:{label:'Saudi Arabia (MOH)',list:[['Hepatitis B (1st dose)','At birth',0],['Hepatitis B (2nd dose)','2 months',2],['Rotavirus (1st dose)','2 months',2],['DTaP (1st dose)','2 months',2],['Hib (1st dose)','2 months',2],['PCV (1st dose)','2 months',2],['IPV (1st dose)','2 months',2],['Hepatitis B (3rd dose)','4 months',4],['Rotavirus (2nd dose)','4 months',4],['DTaP (2nd dose)','4 months',4],['Hib (2nd dose)','4 months',4],['PCV (2nd dose)','4 months',4],['IPV (2nd dose)','4 months',4],['BCG (1st dose)','6 months',6],['Hepatitis B (4th dose)','6 months',6],['Rotavirus (3rd dose)','6 months',6],['DTaP (3rd dose)','6 months',6],['Hib (3rd dose)','6 months',6],['PCV (3rd dose)','6 months',6],['IPV (3rd dose)','6 months',6],['OPV (1st dose)','6 months',6],['Measles (1st dose, single measles)','9 months',9],['MCV4 meningococcal (1st dose)','9 months',9],['MMR (1st dose)','12 months',12],['MCV4 meningococcal (2nd dose)','12 months',12],['PCV (4th dose, booster)','12 months',12],['OPV (2nd dose)','12 months',12],['DTaP (4th dose, booster)','18 months',18],['Hib (4th dose, booster)','18 months',18],['MMR (2nd dose)','18 months',18],['OPV (3rd dose)','18 months',18],['Hepatitis A (1st dose)','18 months',18],['Varicella (1st dose)','18 months',18],['Hepatitis A (2nd dose)','24 months',24],['DTaP (5th dose, booster)','4-6 years',48],['MMR (3rd dose, booster)','4-6 years',48],['OPV (4th dose, booster)','4-6 years',48],['Varicella (2nd dose)','4-6 years',48]]},
+  sg:{label:'Singapore (NCIS)',list:[['BCG (1st dose)','At birth',0],['Hepatitis B (1st dose)','At birth',0],['6-in-1: DTaP-IPV-Hib-HepB (1st dose)','2 months',2],['5-in-1: DTaP-IPV-Hib (2nd dose)','4 months',4],['PCV13 / Pneumococcal (1st dose)','4 months',4],['6-in-1: DTaP-IPV-Hib-HepB (3rd dose)','6 months',6],['PCV13 / Pneumococcal (2nd dose)','6 months',6],['PCV13 / Pneumococcal (booster)','12 months',12],['MMR (1st dose)','12 months',12],['Varicella / Chickenpox (1st dose)','12 months',12],['MMRV: MMR (2nd dose) + Varicella (2nd dose)','15 months',15],['5-in-1: DTaP-IPV-Hib (booster)','18 months',18]]},
 };
-const VAX_COUNTRIES=[['us','United States (CDC)'],['uk','United Kingdom (NHS)'],['uae','United Arab Emirates'],['de','Deutschland (STIKO)']];
+const VAX_COUNTRIES=[['us','United States (CDC)'],['uk','United Kingdom (NHS)'],['uae','United Arab Emirates'],['de','Deutschland (STIKO)'],['in','India (IAP)'],['ca','Canada (NACI)'],['au','Australia (NIP)'],['ie','Ireland (HSE)'],['nz','New Zealand'],['sg','Singapore (NCIS)'],['sa','Saudi Arabia (MOH)'],['who','Other / General (WHO)']];
 
 /* Capture an explicit ?c= country from a vaccine-schedule page link, once. */
 (function(){ try{ const c=new URLSearchParams(location.search).get('c'); if(c){const k=c.toLowerCase(); if(VAX_SCHEDULES[k]) localStorage.setItem('cubby-country',k);} }catch(e){} })();
+/* Referral attribution: remember ?ref= until first sign-in (read in store-firebase.js). */
+(function(){ try{ const r=new URLSearchParams(location.search).get('ref'); if(r&&/^[a-z0-9]{4,12}$/i.test(r)) localStorage.setItem('cubby-ref',r.toLowerCase()); }catch(e){} })();
 
 /* Best-guess country for the vaccine schedule. No IP lookup, no permission prompt:
    explicit page link first, then a stored hint, then browser language, then timezone. */
@@ -4174,10 +4403,24 @@ function detectCountry(){
   if(lang.indexOf('en-gb')===0) return 'uk';
   if(lang.indexOf('en-ae')===0||lang.indexOf('ar-ae')===0) return 'uae';
   if(lang.indexOf('en-us')===0) return 'us';
+  if(lang.indexOf('en-in')===0||lang.indexOf('hi')===0) return 'in';
+  if(lang.indexOf('en-ie')===0) return 'ie';
+  if(lang.indexOf('en-nz')===0) return 'nz';
+  if(lang.indexOf('en-sg')===0) return 'sg';
+  if(lang.indexOf('ar-sa')===0) return 'sa';
+  if(lang.indexOf('en-ca')===0||lang.indexOf('fr-ca')===0) return 'ca';
+  if(lang.indexOf('en-au')===0) return 'au';
   try{ const tz=(Intl.DateTimeFormat().resolvedOptions().timeZone||'');
     if(tz==='Asia/Dubai') return 'uae';
     if(tz==='Europe/London') return 'uk';
     if(['Europe/Berlin','Europe/Vienna','Europe/Zurich','Europe/Busingen'].indexOf(tz)>=0) return 'de';
+    if(tz==='Asia/Kolkata'||tz==='Asia/Calcutta') return 'in';
+    if(tz==='Europe/Dublin') return 'ie';
+    if(tz==='Pacific/Auckland') return 'nz';
+    if(tz==='Asia/Singapore') return 'sg';
+    if(tz==='Asia/Riyadh') return 'sa';
+    if(['America/Toronto','America/Vancouver','America/Edmonton','America/Winnipeg','America/Halifax','America/St_Johns'].indexOf(tz)>=0) return 'ca';
+    if(tz.indexOf('Australia/')===0) return 'au';
   }catch(e){}
   return 'us';
 }
@@ -4198,10 +4441,10 @@ function applyScheduleCountry(id,country){
   const b=state.babies.find(x=>x.id===id); if(!b||!VAX_SCHEDULES[country]) return;
   b.country=country;
   if(!state.vaccines) state.vaccines={};
-  const givenByName={}; (state.vaccines[id]||[]).forEach(v=>{ if(v.given) givenByName[v.name]={givenAt:v.givenAt,note:v.note}; });
+  const byName={}; (state.vaccines[id]||[]).forEach(v=>{ if(v.given||v.missed) byName[v.name]={given:v.given,givenAt:v.givenAt,note:v.note,estimated:v.estimated,missed:v.missed}; });
   state.vaccines[id]=scheduleFor(b).map(([name,group,dueMonths])=>{
-    const g=givenByName[name];
-    return {id:uid(),name,group,dueMonths,given:!!g,givenAt:g?g.givenAt:null,note:g?g.note:''};
+    const g=byName[name];
+    return {id:uid(),name,group,dueMonths,given:!!(g&&g.given),givenAt:g&&g.given?g.givenAt:null,note:g?(g.note||''):'',estimated:!!(g&&g.estimated),missed:!!(g&&g.missed)};
   });
   persist();
 }
@@ -4219,65 +4462,106 @@ function chooseVaccineCountry(k){
   applyScheduleCountry(b.id,k); closeSheet(); render(); toast('Schedule updated');
 }
 function vxDueDate(v){ const b=activeBaby(); const birth=b&&b.birth?b.birth:now(); return birth + v.dueMonths*30.44*86400000; }
+/* 5-state, calm by default: an un-recorded past-due dose is "to confirm", never "overdue".
+   Red/"catch up" is earned only when a parent confirms a dose was genuinely missed (v.missed). */
 function vxStatus(v){
   if(v.given) return 'done';
-  const due=vxDueDate(v), diff=due-now();
-  if(diff<0) return 'overdue';
-  if(diff<30*86400000) return 'soon';
-  return 'upcoming';
+  const diff=vxDueDate(v)-now(), wk2=14*86400000;
+  if(diff>wk2) return 'upcoming';
+  if(diff>=-wk2) return 'soon';                 // within ±2 weeks of the due date
+  return v.missed ? 'catchup' : 'toconfirm';    // well past due, un-recorded
 }
+const VX_LABEL={done:'Done',upcoming:'Upcoming',soon:'Due soon',toconfirm:'To confirm',catchup:'Catch up'};
+/* Home alert fires ONLY for a parent-confirmed missed dose, never for un-recorded "to confirm". */
 function vaccineOverdue(){
-  const od=vaccinePlan().filter(v=>!v.given && vxDueDate(v)<now()).sort((a,b)=>vxDueDate(a)-vxDueDate(b));
+  const od=vaccinePlan().filter(v=>!v.given && v.missed && vxDueDate(v)<now()).sort((a,b)=>vxDueDate(a)-vxDueDate(b));
   if(!od.length) return null;
   const v=od[0]; v._due=vxDueDate(v); return v;
 }
 
 function renderVaccines(){
   const plan=vaccinePlan();
+  const bb=activeBaby();
   const done=plan.filter(v=>v.given).length;
-  const overdue=plan.filter(v=>vxStatus(v)==='overdue').length;
+  const toConfirm=plan.filter(v=>vxStatus(v)==='toconfirm').length;
+  const catchup=plan.filter(v=>vxStatus(v)==='catchup').length;
   const R=30,C=2*Math.PI*R,off=C-(done/(plan.length||1))*C;
   const groups={}; plan.forEach(v=>{ (groups[v.group]=groups[v.group]||[]).push(v); });
   const order=[...VX_GROUPS.filter(g=>groups[g]), ...Object.keys(groups).filter(g=>!VX_GROUPS.includes(g))];
-  const bb=activeBaby();
   let list='';
   order.forEach(g=>{
     list+=`<div class="sec-title">${g}</div>`;
     groups[g].forEach(v=>{
       const st=vxStatus(v);
       const dueStr=(bb&&bb.birth)?new Date(vxDueDate(v)).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):(v.dueMonths===0?'at birth':'at ~'+v.dueMonths+' mo');
-      const sub=v.given?('given '+new Date(v.givenAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})):('due '+dueStr);
-      const lbl={done:'Done',overdue:'Overdue',soon:'Due soon',upcoming:'Upcoming'}[st];
+      const estTag=(v.given&&v.estimated)?' <span class="vx-est">est.</span>':'';
+      const sub=v.given?('given '+new Date(v.givenAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})+estTag):('due '+dueStr);
       list+=`<div class="ms-row ${v.given?'done':''}" onclick="openVaccine('${v.id}')">
         <div class="ms-check" style="${v.given?'background:var(--diaper);border-color:var(--diaper)':''}">${I.check}</div>
         <div class="ms-body"><div class="a">${escapeHtml(v.name)}</div><div class="b">${sub}</div></div>
-        <div class="vx-status ${st}">${lbl}</div></div>`;
+        <div class="vx-status ${st}">${VX_LABEL[st]}</div></div>`;
     });
   });
+  // Calm, age-aware hero: never lead with red. "On track" is the resting state.
+  const heroSub = catchup ? (catchup+' to catch up · talk to your doctor') : (toConfirm ? 'tap any vaccine to update it' : 'tap any vaccine to update it');
+  const heroTitle = (toConfirm && !catchup) ? `${escapeHtml((bb||{}).name||'Baby')} is on track 🌿` : `${done} of ${plan.length} done`;
   return `
     <div class="ms-hero">
       <div class="ring"><svg width="74" height="74"><circle cx="37" cy="37" r="${R}" fill="none" stroke="var(--line)" stroke-width="7"/>
         <circle cx="37" cy="37" r="${R}" fill="none" stroke="var(--diaper)" stroke-width="7" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${off}"/></svg>
         <div class="rt">${done}</div></div>
-      <div class="mh-body"><div class="a">${done} of ${plan.length} done</div><div class="b">${overdue?overdue+' overdue · ':''}tap any vaccine to mark it given</div></div>
+      <div class="mh-body"><div class="a">${heroTitle}</div><div class="b">${done} of ${plan.length} recorded · ${heroSub}</div></div>
     </div>
+    ${vaxSetupCard(bb,plan,toConfirm)}
     <div class="disclaimer">⚕️ Showing the ${vaxCountryName((bb&&bb.country)||'us')} schedule as a starting template. <span class="link-inline" onclick="openVaccineCountry()">Change country</span>. Always follow your doctor and local health authority, and edit any item to match your child's actual plan.</div>
     ${list}
     <div class="add-row" onclick="openAddVaccine()">${I.plus} Add a vaccine</div>`;
 }
+/* Catch-up card: turns "what's un-recorded" into a calm two-tap setup, never a wall of red. */
+function vaxSetupCard(b,plan,toConfirm){
+  if(!toConfirm) return '';
+  const nm=escapeHtml((b||{}).name||'your baby');
+  if(b && b.vaxSetupSeen){
+    return `<div class="vx-setup"><span class="vs-emoji">🐻</span><div class="vs-body"><div class="vs-t">Set up ${nm}'s vaccine history</div><div class="vs-s">Record what's already done so the list shows what's actually next.</div><div class="vs-btns"><button class="vs-btn" onclick="vaxCatchupReopen()">Start</button></div></div></div>`;
+  }
+  return `<div class="vx-setup"><span class="vs-emoji">🐻</span><div class="vs-body">
+    <div class="vs-t">Has ${nm} had vaccinations so far?</div>
+    <div class="vs-s">No guilt, just a tidy record. We'll set the schedule to match. Estimated dates are tagged "est." and you can fix any later.</div>
+    <div class="vs-btns">
+      <button class="vs-btn" onclick="vaxCatchUpAllDone()">Yes, all up to date</button>
+      <button class="vs-btn ghost" onclick="vaxCatchupDismiss('check')">Let me check the list</button>
+      <button class="vs-btn ghost" onclick="vaxCatchupDismiss('later')">Not sure / later</button>
+    </div></div></div>`;
+}
+function vaxCatchUpAllDone(){
+  const b=activeBaby(); if(!b) return;
+  let n=0;
+  vaccinePlan().forEach(v=>{ if(!v.given && vxDueDate(v)<now()){ v.given=true; v.givenAt=vxDueDate(v); v.estimated=true; v.missed=false; n++; } });
+  b.vaxSetupSeen=true; persist(); render();
+  toast(n?('Recorded '+n+' past doses (est. dates) 🎉'):'All caught up 🎉');
+}
+function vaxCatchupDismiss(mode){
+  const b=activeBaby(); if(b){ b.vaxSetupSeen=true; persist(); }
+  render();
+  if(mode==='check') toast('Tap any dose to mark it given');
+}
+function vaxCatchupReopen(){ const b=activeBaby(); if(b){ b.vaxSetupSeen=false; persist(); render(); } }
 let vxDraft=null;
 function openVaccine(id){
   const v=vaccinePlan().find(x=>x.id===id); if(!v)return;
   const today=new Date().toISOString().slice(0,10);
   const dv=v.givenAt?new Date(v.givenAt).toISOString().slice(0,10):today;
+  const estNote=(v.given&&v.estimated)?`<div class="sub" style="margin-top:-6px;color:var(--ink-faint)">Date is estimated from the schedule. Set the real date to confirm it.</div>`:'';
+  const past=!v.given && vxDueDate(v)<now();
   openSheet(`<h2>${escapeHtml(v.name)}</h2><div class="sub">${v.group} · due ~${v.dueMonths===0?'birth':v.dueMonths+' months'}</div>
-    ${v.given?`<div class="field"><label>Date given</label><input type="date" id="vxDate" value="${dv}" max="${today}"></div>
+    ${v.given?`<div class="field"><label>Date given</label><input type="date" id="vxDate" value="${dv}" max="${today}"></div>${estNote}
       <div class="field"><label>Note (optional)</label><input id="vxNote" value="${escapeHtml(v.note||'')}" placeholder="Batch no, reaction, clinic"></div>
       <button class="btn-primary" style="background:var(--diaper)" onclick="saveVaccine('${id}')">Save</button>
       <button class="btn-ghost" onclick="unmarkVaccine('${id}')">Mark as not given</button>`
     :`<div class="field"><label>Date given</label><input type="date" id="vxDate" value="${today}" max="${today}"></div>
       <div class="field"><label>Note (optional)</label><input id="vxNote" placeholder="Batch no, reaction, clinic"></div>
-      <button class="btn-primary" style="background:var(--diaper)" onclick="markVaccine('${id}')">${I.check} Mark as given</button>`}
+      <button class="btn-primary" style="background:var(--diaper)" onclick="markVaccine('${id}')">${I.check} Mark as given</button>
+      ${past?(v.missed?`<button class="btn-ghost" onclick="vaxSetMissed('${id}',false)">Not missed (back to to-confirm)</button>`:`<button class="btn-ghost" onclick="vaxSetMissed('${id}',true)">This dose was missed</button>`):''}`}
     <button class="btn-ghost" onclick="editVaccine('${id}')">Edit name or due age</button>
     <button class="btn-ghost btn-danger" onclick="deleteVaccine('${id}')">${I.trash} Remove from list</button>`,'diaper');
 }
@@ -4285,16 +4569,19 @@ function markVaccine(id){
   const v=vaccinePlan().find(x=>x.id===id); if(!v)return;
   const dt=$('#vxDate')?$('#vxDate').value:'';
   v.given=true; v.givenAt=dt?new Date(dt+'T12:00').getTime():now(); v.note=$('#vxNote')?$('#vxNote').value:'';
+  v.estimated=false; v.missed=false;
   addEvent({type:'vaccine',vName:v.name,notes:v.note,time:v.givenAt});
   persist(); closeSheet(); render(); toast('💉 '+v.name+' logged');
 }
 function saveVaccine(id){
   const v=vaccinePlan().find(x=>x.id===id); if(!v)return;
-  const dt=$('#vxDate')?$('#vxDate').value:''; if(dt)v.givenAt=new Date(dt+'T12:00').getTime();
+  const dt=$('#vxDate')?$('#vxDate').value:''; if(dt){ v.givenAt=new Date(dt+'T12:00').getTime(); v.estimated=false; }
   v.note=$('#vxNote')?$('#vxNote').value:'';
   persist(); closeSheet(); render(); toast('Updated');
 }
-function unmarkVaccine(id){ const v=vaccinePlan().find(x=>x.id===id); if(v){ v.given=false; v.givenAt=null; } persist(); closeSheet(); render(); }
+function unmarkVaccine(id){ const v=vaccinePlan().find(x=>x.id===id); if(v){ v.given=false; v.givenAt=null; v.estimated=false; } persist(); closeSheet(); render(); }
+/* Parent-confirmed missed dose -> "catch up" (the only path to amber). */
+function vaxSetMissed(id,on){ const v=vaccinePlan().find(x=>x.id===id); if(v){ v.missed=!!on; v.given=false; v.givenAt=null; } persist(); closeSheet(); render(); }
 function editVaccine(id){
   const v=vaccinePlan().find(x=>x.id===id); if(!v)return;
   openSheet(`<h2>Edit vaccine</h2><div class="sub">Adjust to match your schedule.</div>
@@ -4467,9 +4754,23 @@ const PRESETS={
   Vivid:{bright:102,contrast:112,sat:130,warm:6,vignette:6,grain:2}
 };
 /* ---- Shareable moment cards: Instagram-native formats, fonts, palettes ---- */
-const MOMENT_FORMATS=[['orig','Original'],['square','Square'],['portrait','Portrait'],['story','Story']];
+const MOMENT_FORMATS=[['orig','Original'],['square','Square'],['portrait','Portrait'],['story','Story · Insta']];
 const MOMENT_FONTS=[['Fraunces','Fraunces'],['Playfair Display','Playfair'],['Poppins','Poppins'],['Caveat','Handwritten']];
 const MOMENT_TEMPLATES=[['classic','Classic'],['big','Big milestone'],['stats','Monthly stats']];
+/* What Base/Pro unlocks in the studio (see PAYWALL.md). Free keeps a real, generous
+   taster: Original+Square, the Fraunces font, two palettes, the Classic template and
+   six stickers. Premium styles render as golden ✨ chips, apply freely on the canvas,
+   and the gate sits at export: a few watermarked shares free, then the Pro sheet. */
+const PRO_LOCK={ formats:['portrait','story'], fonts:['Playfair Display','Poppins','Caveat'],
+  palettes:['Sage','Sky','Ink'], templates:['big','stats'], stickerFree:6 };
+function proLocked(group,key){ if(isPro()) return false; return group==='stickers' ? STICKERS.indexOf(key)>=PRO_LOCK.stickerFree : (PRO_LOCK[group]||[]).indexOf(key)>=0; }
+function usesProStyles(){
+  if(!photoEditor) return false;
+  const card=photoEditor.format&&photoEditor.format!=='orig';
+  if(proLocked('formats',photoEditor.format)) return true;
+  if(card&&(proLocked('fonts',photoEditor.font||'Fraunces')||proLocked('palettes',photoEditor.palette||'Cream')||proLocked('templates',photoEditor.template||'classic'))) return true;
+  return (photoEditor.stickers||[]).some(s=>proLocked('stickers',s.e));
+}
 function cssFont(name){ return ({'Fraunces':'Fraunces, Georgia, serif','Playfair Display':'"Playfair Display", Georgia, serif','Poppins':'Poppins, system-ui, sans-serif','Caveat':'Caveat, "Comic Sans MS", cursive'})[name]||'Fraunces, serif'; }
 const MOMENT_PALETTES={
   Cream:{bg1:'#FBF5E9',bg2:'#EFE0C8',ink:'#2C2521',sub:'#6E635B',accent:'#C97FA0'},
@@ -4578,11 +4879,14 @@ function composeShareCard(canvas,maxW){
     ctx.fillStyle=pal.sub; ctx.font=`700 ${Math.round(W*0.032)}px ${NUN}`;
     ctx.fillText((age.full?age.full+'   ·   ':'')+dateStr, cx, cTop+capH*0.70);
   }
-  // tiny Cubby footer mark (all templates)
-  ctx.fillStyle=pal.sub; ctx.globalAlpha=0.6;
-  ctx.font=`800 ${Math.round(W*0.022)}px ${NUN}`;
-  ctx.fillText('made with Cubby 🐻', cx, photoY+photoH+capH-Math.round(H*0.018));
-  ctx.globalAlpha=1; ctx.textAlign='left';
+  // tiny Cubby footer mark (free shares; Pro is watermark-free)
+  if(!isPro()){
+    ctx.fillStyle=pal.sub; ctx.globalAlpha=0.6;
+    ctx.font=`800 ${Math.round(W*0.022)}px ${NUN}`;
+    ctx.fillText('made with Cubby 🐻 · little-cubby.com', cx, photoY+photoH+capH-Math.round(H*0.018));
+    ctx.globalAlpha=1;
+  }
+  ctx.textAlign='left';
   drawStickers(ctx, W, H);
 }
 function composeAny(canvas,maxW){ if(photoEditor&&photoEditor.format&&photoEditor.format!=='orig') composeShareCard(canvas,maxW); else composePhoto(canvas,maxW); }
@@ -4659,19 +4963,19 @@ function renderPhotos(){
   const posMatters=!['none','ribbon','month'].includes(photoEditor.stamp);
   const fmt=photoEditor.format||'orig';
   const isCard=fmt!=='orig';
-  const fmtChips=MOMENT_FORMATS.map(([k,l])=>`<div class="chip ${fmt===k?'sel':''}" onclick="setFormat('${k}')">${l}</div>`).join('');
-  const fontChips=MOMENT_FONTS.map(([k,l])=>`<div class="chip ${(photoEditor.font||'Fraunces')===k?'sel':''}" onclick="setMomentFont('${k}')" style="font-family:${cssFont(k)}">${l}</div>`).join('');
-  const palChips=Object.keys(MOMENT_PALETTES).map(k=>{const p=MOMENT_PALETTES[k];return `<div class="chip ${(photoEditor.palette||'Cream')===k?'sel':''}" onclick="setPalette('${k}')"><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:linear-gradient(135deg,${p.bg1},${p.accent});margin-right:6px;vertical-align:-1px"></span>${k}</div>`;}).join('');
-  const tplChips=MOMENT_TEMPLATES.map(([k,l])=>`<div class="chip ${(photoEditor.template||'classic')===k?'sel':''}" onclick="setTemplate('${k}')">${l}</div>`).join('');
-  const stickerChips=STICKERS.map(e=>`<div class="chip ${photoEditor.activeSticker===e?'sel':''}" onclick="selectSticker('${e}')" style="font-size:18px;padding:6px 11px">${e}</div>`).join('');
+  const fmtChips=MOMENT_FORMATS.map(([k,l])=>{const lk=proLocked('formats',k);return `<div class="chip ${fmt===k?'sel':''}${lk?' lk':''}" onclick="setFormat('${k}')">${lk?'✨ ':''}${l}</div>`;}).join('');
+  const fontChips=MOMENT_FONTS.map(([k,l])=>{const lk=proLocked('fonts',k);return `<div class="chip ${(photoEditor.font||'Fraunces')===k?'sel':''}${lk?' lk':''}" onclick="setMomentFont('${k.replace(/'/g,"\\'")}')" style="font-family:${cssFont(k)}">${lk?'✨ ':''}${l}</div>`;}).join('');
+  const palChips=Object.keys(MOMENT_PALETTES).map(k=>{const p=MOMENT_PALETTES[k];const lk=proLocked('palettes',k);return `<div class="chip ${(photoEditor.palette||'Cream')===k?'sel':''}${lk?' lk':''}" onclick="setPalette('${k}')"><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:linear-gradient(135deg,${p.bg1},${p.accent});margin-right:6px;vertical-align:-1px"></span>${lk?'✨ ':''}${k}</div>`;}).join('');
+  const tplChips=MOMENT_TEMPLATES.map(([k,l])=>{const lk=proLocked('templates',k);return `<div class="chip ${(photoEditor.template||'classic')===k?'sel':''}${lk?' lk':''}" onclick="setTemplate('${k}')">${lk?'✨ ':''}${l}</div>`;}).join('');
+  const stickerChips=STICKERS.map(e=>{const lk=proLocked('stickers',e);return `<div class="chip ${photoEditor.activeSticker===e?'sel':''}${lk?' lk':''}" onclick="selectSticker('${e}')" style="font-size:18px;padding:6px 11px">${e}</div>`;}).join('');
   const ssz=photoEditor.stickerSize||0.13;
   const sizeChips=[['S',0.09],['M',0.13],['L',0.2]].map(([l,v])=>`<div class="chip ${Math.abs(ssz-v)<0.001?'sel':''}" onclick="setStickerSize(${v})">${l}</div>`).join('');
   const nSt=(photoEditor.stickers||[]).length;
   return `<div class="fade-in">
     <div class="canvas-wrap"><canvas id="photoCanvas" onclick="placeSticker(event)" style="${photoEditor.activeSticker?'cursor:crosshair':''}"></canvas></div>
     <div class="row2" style="margin:0 0 12px">
-      <button class="btn-primary" style="background:var(--star)" onclick="autoEnhance()">✨ Auto-enhance</button>
-      <button class="btn-primary" style="background:var(--diaper)" onclick="cutoutBackground()">✂️ Cut out background</button>
+      <button class="btn-primary" style="background:var(--star)" onclick="autoEnhance()">✨ Auto-enhance${proTag('enhance')}</button>
+      <button class="btn-primary" style="background:var(--diaper)" onclick="cutoutBackground()">✂️ Cut out${proTag('cutout')}</button>
     </div>
     ${photoEditor.cutImg?`<div class="chip-row" style="margin:-4px 0 12px"><div class="chip ${photoEditor.cutout?'sel':''}" onclick="photoEditor.cutout=true;render();drawPhoto()">Cutout</div><div class="chip ${!photoEditor.cutout?'sel':''}" onclick="photoEditor.cutout=false;render();drawPhoto()">Original</div></div>`:''}
     <div class="sec-title">Stickers ${photoEditor.activeSticker?'· tap the photo to place':''}</div>
@@ -4695,10 +4999,13 @@ function renderPhotos(){
     ${slider('Saturation','sat',0,160,a.sat)}
     ${slider('Vignette','vignette',0,60,a.vignette)}
     ${slider('Grain','grain',0,40,a.grain)}
+    ${(!isPro()&&usesProStyles())?`<div class="pro-pill">✨ ${photoEditor._styleCharged?'Pro styles unlocked for this card, share away':`Pro styles on this card · ${tasteLeft('styles')} free share${tasteLeft('styles')===1?'':'s'} left`}</div>`:''}
     <div class="row2">
       <button class="btn-primary" onclick="savePhoto()">${I.check} Save</button>
       <button class="btn-primary" style="background:var(--sleep)" onclick="downloadPhoto()">${I.download} Download</button>
     </div>
+    ${navigator.share?`<button class="btn-primary" style="background:var(--pump)" onclick="shareComposed()">📤 Share · Instagram-ready</button>`:''}
+    ${(!isPro()&&isCard)?`<div class="csub" style="text-align:center;margin:6px 0 10px">Free shares carry a small "made with Cubby" mark · Pro shares are clean ✨</div>`:''}
     <button class="btn-ghost" onclick="discardPhoto()">Discard & start over</button>
     ${galleryHtml}
   </div>`;
@@ -4749,6 +5056,7 @@ async function getSegmenter(){
 async function cutoutBackground(){
   if(!photoEditor) return;
   if(photoEditor.cutImg){ photoEditor.cutout=true; render(); drawPhoto(); return; }
+  if(!useTaste('cutout','Background cutout')) return;
   showLoader(['Finding your little one','Cutting out the background']);
   try{
     const seg=await getSegmenter();
@@ -4771,16 +5079,18 @@ async function cutoutBackground(){
     octx.drawImage(img,0,0); const idata=octx.getImageData(0,0,W,H), d=idata.data;
     let kept=0;
     for(let y=0;y<H;y++){ const my=Math.min(mh-1,(y*mh/H)|0); for(let x=0;x<W;x++){ const mx=Math.min(mw-1,(x*mw/W)|0); let c=mArr[my*mw+mx]; if(invert) c=1-c; c=c<0?0:c>1?1:c; if(c>0.5)kept++; d[(y*W+x)*4+3]=(c*255)|0; } }
-    if(kept < W*H*0.02){ hideLoader(); toast('Could not find a clear subject to cut out'); return; }
+    if(kept < W*H*0.02){ hideLoader(); refundTaste('cutout'); toast('Could not find a clear subject to cut out'); return; }
     octx.putImageData(idata,0,0);
     try{ res.close&&res.close(); }catch(e){}
     const url=out.toDataURL('image/png');
     await new Promise(r=>{ const im=new Image(); im.onload=()=>{ photoEditor.cutImg=im; photoEditor.cutout=true; r(); }; im.src=url; });
     hideLoader(); render(); drawPhoto(); toast('✂️ Background removed');
-  }catch(e){ hideLoader(); toast('Cutout unavailable here, try again on a stronger connection'); }
+  }catch(e){ hideLoader(); refundTaste('cutout'); toast('Cutout unavailable here, try again on a stronger connection'); }
 }
 function autoEnhance(){
   if(!photoEditor) return;
+  // one taste covers the whole editing session (retapping tweaks the same photo)
+  if(!photoEditor._enhCharged){ if(!useTaste('enhance','Auto-enhance')) return; photoEditor._enhCharged=true; }
   const st=imageStats(photoEditor.img);
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,Math.round(v)));
   const bright=clamp(100*142/Math.max(40,st.mean),88,116);
@@ -4796,6 +5106,7 @@ function setFrame(f){ photoEditor.frame=f; render(); drawPhoto(); }
 function setStamp(s){ photoEditor.stamp=s; render(); drawPhoto(); }
 function setStampPos(p){ photoEditor.stampPos=p; render(); drawPhoto(); }
 function setStampTone(t){ photoEditor.stampTone=t; render(); drawPhoto(); }
+/* Premium styles apply freely (explore on the canvas); the taster gate sits at export. */
 function setFormat(f){ photoEditor.format=f; render(); if(document.fonts&&document.fonts.ready){ document.fonts.ready.then(drawPhoto); } drawPhoto(); }
 function setMomentFont(f){ photoEditor.font=f; render(); if(document.fonts&&document.fonts.ready){ document.fonts.ready.then(drawPhoto); } else { drawPhoto(); } }
 function setPalette(p){ photoEditor.palette=p; render(); drawPhoto(); }
@@ -5018,10 +5329,35 @@ function drawStamp(ctx, ix, iy, iw, ih, b, age, dateStr){
   }
 }
 function drawPhoto(){ const c=$('#photoCanvas'); if(c&&photoEditor) composeAny(c,1080); }
+/* The taster gate lives at export: premium styles are free to explore on the canvas
+   and to Save in-app; Download/Share of a premium-styled card costs one taste.
+   One charge covers the whole editing session (re-exports of the same card are free). */
+function exportGate(){
+  if(isPro()||!usesProStyles()) return true;
+  if(photoEditor._styleCharged) return true;
+  if(!useTaste('styles','Premium styles')) return false;
+  photoEditor._styleCharged=true; render(); return true;
+}
 function downloadPhoto(){
+  if(!exportGate()) return;
   const tmp=document.createElement('canvas'); composeAny(tmp,1600);
   const a=document.createElement('a'); a.href=tmp.toDataURL('image/jpeg',0.92);
   a.download=(activeBaby().name||'baby')+'-moment.jpg'; a.click(); toast('Downloaded');
+}
+/* Share straight to the OS share sheet (Instagram, WhatsApp, anywhere) as a real
+   image file; falls back to a download where file-sharing isn't supported. */
+async function shareComposed(){
+  if(!photoEditor) return;
+  if(!exportGate()) return;
+  const tmp=document.createElement('canvas'); composeAny(tmp,1600);
+  const name=(activeBaby().name||'baby')+'-moment.jpg';
+  try{
+    const blob=await new Promise(r=>tmp.toBlob(r,'image/jpeg',0.92));
+    const file=new File([blob],name,{type:'image/jpeg'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file],title:'Cubby moment'}); return; }
+  }catch(e){ if(e&&e.name==='AbortError') return; }
+  const a=document.createElement('a'); a.href=tmp.toDataURL('image/jpeg',0.92);
+  a.download=name; a.click(); toast('Saved the image, share it anywhere');
 }
 async function savePhoto(){
   const tmp=document.createElement('canvas'); composeAny(tmp,900);
@@ -5148,7 +5484,7 @@ function renderMemories(){
         <div class="mbody"><div class="mt">Birth announcement poster</div><div class="mh">Name, born-on, weight, length, place & star sign, printable</div></div>
       </button>
       <button class="mem-card" onclick="openMemoryCard()"><div class="mi" style="background:var(--star-soft);color:var(--star)">${I.star}</div><div class="mt">Memory card</div><div class="mh">A month's real stats</div></button>
-      <button class="mem-card" onclick="openThenNow()"><div class="mi" style="background:var(--sleep-soft);color:var(--sleep)">${I.camera}</div><div class="mt">Then vs Now</div><div class="mh">Side by side</div></button>
+      <button class="mem-card" onclick="openThenNow()"><div class="mi" style="background:var(--sleep-soft);color:var(--sleep)">${I.camera}</div><div class="mt">Then vs Now</div><div class="mh">Side by side${proTag('thennow')}</div></button>
       <button class="mem-card" onclick="makeCollage()"><div class="mi" style="background:var(--diaper-soft);color:var(--diaper)">${I.list}</div><div class="mt">Growth collage</div><div class="mh">${filled} photo${filled===1?'':'s'}</div></button>
     </div>
     <div class="sec-title">Monthly photos</div>
@@ -5315,6 +5651,7 @@ async function genCard(){
   openSheet(`<h2>${slotLabel(cardDraft.month)}</h2><div class="sub">${escapeHtml(activeBaby().name)}'s memory card</div>
     <img src="${data}" class="card-prev">
     <button class="btn-primary" onclick="saveCardImg()">${I.check} Save to gallery</button>
+    ${navigator.share?`<button class="btn-primary" style="background:var(--pump)" onclick="shareLastCard('memory-card')">📤 Share · Instagram-ready</button>`:''}
     <button class="btn-primary" style="background:var(--sleep)" onclick="dlCard()">${I.download} Download</button>`,'feed');
   window._lastCard=data;
 }
@@ -5337,6 +5674,7 @@ async function saveCardImg(){
 /* ---- Then vs Now ---- */
 let pickSel=[];
 function openThenNow(){
+  if(!isPro()&&tasteLeft('thennow')<=0){ openPro('Then & Now',true); return; }
   const gal=(state.photos||[]).filter(p=>p.babyId===state.activeBabyId);
   if(gal.length<2){ toast('Save at least 2 photos first'); return; }
   pickSel=[];
@@ -5353,6 +5691,7 @@ function togglePick(id){
 }
 function genThenNow(){
   if(pickSel.length!==2)return;
+  if(!useTaste('thennow','Then & Now')) return;
   showLoader(['Lining up then and now','Watching them grow up']);
   const imgs=pickSel.map(id=>{ const p=(state.photos||[]).find(x=>x.id===id); return {p,data:photoSrc(p.photoId)}; });
   let loaded=0; const objs=[];
@@ -5380,15 +5719,18 @@ function drawThenNow(objs){
     const ageAt=preciseAge(b.birth,o.createdAt).full||'';
     ctx.fillText(ageAt, x+cw/2, y+ph+70);
   });
-  ctx.textAlign='center'; ctx.fillStyle='#b8ab9c'; ctx.font='800 18px "Nunito Sans", sans-serif';
-  ctx.fillText('made with Cubby 🐻', W/2, H-16);
+  if(!isPro()){
+    ctx.textAlign='center'; ctx.fillStyle='#b8ab9c'; ctx.font='800 18px "Nunito Sans", sans-serif';
+    ctx.fillText('made with Cubby 🐻 · little-cubby.com', W/2, H-16);
+  }
   ctx.textAlign='left';
   const data=c.toDataURL('image/jpeg',0.92); window._lastCard=data; cardDraft={month:0,photoData:null};
   hideLoader();
   openSheet(`<h2>Then vs Now</h2><div class="sub">${escapeHtml(b.name)}, growing up.</div>
     <img src="${data}" class="card-prev">
-    ${navigator.share?`<button class="btn-primary" onclick="shareLastCard('thenvsnow')">Share</button>`:''}
-    <button class="btn-primary" style="background:var(--sleep)" onclick="dlNamed('thenvsnow')">${I.download} Download</button>`,'sleep');
+    ${navigator.share?`<button class="btn-primary" onclick="shareLastCard('thenvsnow')">📤 Share · Instagram-ready</button>`:''}
+    <button class="btn-primary" style="background:var(--sleep)" onclick="dlNamed('thenvsnow')">${I.download} Download</button>
+    ${isPro()?'':'<div class="csub" style="text-align:center;margin-top:8px">Pro shares come without the Cubby mark ✨</div>'}`,'sleep');
 }
 function dlNamed(n){ const a=document.createElement('a'); a.href=window._lastCard; a.download=(activeBaby().name||'baby')+'-'+n+'.jpg'; a.click(); toast('Downloaded'); }
 async function shareLastCard(n){
@@ -5624,6 +5966,8 @@ function normalizeLoadedState(saved){
 }
 </script>
 <!-- Cloud auth + sharing. Loads after the app so it can wire into state/persist/PhotoStore. -->
+<!-- Signed-out landing must load before store-firebase.js: showSignIn() falls back to a bare card if window.cubbyLanding isn't defined yet. -->
+<script src="landing.js"></script>
 <script src="store-firebase.js"></script>
 <!-- Bear avatars + custom time picker. -->
 <script src="cubby-extras.js"></script>
@@ -5631,8 +5975,6 @@ function normalizeLoadedState(saved){
 <script src="growth-data.js"></script>
 <!-- Week-by-week, antenatal schedules and danger signs (informational). -->
 <script src="pregnancy-data.js"></script>
-<!-- Signed-out marketing landing page. -->
-<script src="landing.js"></script>
 <script>
 /* PWA: register only on a real http(s) host. Skips file:// and the in-app artifact sandbox. */
 if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){

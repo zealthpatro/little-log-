@@ -55,6 +55,7 @@
     + '.ll-spin{width:30px;height:30px;border:3px solid #E0D7C7;border-top-color:#C97FA0;border-radius:50%;margin:6px auto 0;animation:llspin 0.9s linear infinite;}'
     + '@keyframes llspin{to{transform:rotate(360deg);}}'
     + '#llModalOv{position:fixed;inset:0;z-index:99998;background:rgba(20,15,12,.45);display:flex;align-items:flex-end;justify-content:center;font-family:"Nunito Sans",system-ui,sans-serif;}'
+    + '#llModalOv.ll-blur{background:rgba(40,30,22,.34);backdrop-filter:blur(9px) saturate(115%);-webkit-backdrop-filter:blur(9px) saturate(115%);}'
     + '.ll-modal{background:#fff;width:100%;max-width:440px;border-radius:22px 22px 0 0;padding:20px 20px 28px;max-height:85vh;overflow:auto;box-shadow:0 -8px 40px rgba(0,0,0,.2);}'
     + '@media(min-width:480px){#llModalOv{align-items:center;}.ll-modal{border-radius:22px;}}'
     + '.ll-modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}'
@@ -91,12 +92,64 @@
   }
   function hideOverlay() { var ov = document.getElementById('llAuthOv'); if (ov) ov.remove(); }
 
+  /* Email magic-link sign-in (alongside Google, never instead of it). */
+  function emailRowHtml() {
+    return '<div class="ll-email-row" style="margin:14px auto 0;max-width:340px;text-align:center">'
+      + '<button type="button" class="ll-email-toggle" style="border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;color:#6E635B;text-decoration:underline;padding:6px">Prefer email? Get a sign-in link</button>'
+      + '<form class="ll-email-form" style="display:none;gap:8px;margin-top:8px">'
+      + '<input type="email" required placeholder="you@example.com" autocomplete="email" style="flex:1;min-width:0;font-family:inherit;font-size:15px;padding:11px 13px;border:1.5px solid #E7DECF;border-radius:11px;background:#FBF7EF;color:#2C2521">'
+      + '<button type="submit" style="border:none;background:#9A8C6E;color:#fff;font-family:inherit;font-weight:800;font-size:14px;padding:11px 14px;border-radius:11px;cursor:pointer;white-space:nowrap">Send link</button>'
+      + '</form><div class="ll-email-note" style="font-size:12px;font-weight:600;color:#6E635B;margin-top:7px"></div></div>';
+  }
+  function wireEmailRow(scope) {
+    var row = scope.querySelector('.ll-email-row'); if (!row) return;
+    var toggle = row.querySelector('.ll-email-toggle'), form = row.querySelector('.ll-email-form'), note = row.querySelector('.ll-email-note');
+    toggle.onclick = function () { toggle.style.display = 'none'; form.style.display = 'flex'; form.querySelector('input').focus(); };
+    form.onsubmit = function (ev) {
+      ev.preventDefault();
+      var email = form.querySelector('input').value.trim(); if (!email) return;
+      var btn = form.querySelector('button'); btn.disabled = true; btn.textContent = 'Sending…';
+      auth.sendSignInLinkToEmail(email, { url: location.origin + '/app/', handleCodeInApp: true })
+        .then(function () {
+          try { localStorage.setItem('cubby-email-signin', email); } catch (e) {}
+          form.style.display = 'none';
+          note.textContent = 'Check your inbox: we sent a sign-in link to ' + email + '. Open it on this device.';
+        })
+        .catch(function (err) {
+          btn.disabled = false; btn.textContent = 'Send link';
+          note.textContent = 'Could not send the link: ' + ((err && err.message) || err);
+        });
+    };
+  }
+  function maybeFinishEmailLink() {
+    try {
+      if (!auth.isSignInWithEmailLink(window.location.href)) return;
+    } catch (e) { return; }
+    var email = null;
+    try { email = localStorage.getItem('cubby-email-signin'); } catch (e) {}
+    if (!email) email = window.prompt('Confirm your email to finish signing in');
+    if (!email) return;
+    auth.signInWithEmailLink(email.trim(), window.location.href)
+      .then(function (res) {
+        try { localStorage.removeItem('cubby-email-signin'); } catch (e) {}
+        try { history.replaceState(null, '', location.pathname); } catch (e) {}
+        if (res && res.user && !res.user.displayName) {
+          return res.user.updateProfile({ displayName: email.split('@')[0] });
+        }
+      })
+      .catch(function (err) {
+        showSignIn('Email sign-in failed: ' + ((err && err.message) || err));
+      });
+  }
+
   function showSignIn(msg) {
     var ov = overlay();
     if (typeof window.cubbyLanding === 'function') {
       ov.classList.add('landing');
       ov.innerHTML = window.cubbyLanding(msg);
       Array.prototype.forEach.call(ov.querySelectorAll('.ll-cta'), function (b) { b.onclick = signInGoogle; });
+      var firstCta = ov.querySelector('.ll-cta');
+      if (firstCta) { firstCta.insertAdjacentHTML('afterend', emailRowHtml()); wireEmailRow(ov); }
       return;
     }
     ov.classList.remove('landing');
@@ -105,8 +158,12 @@
       + '<h1>Cubby</h1><p>A warm, private baby log you can share with the people who care for them.</p>'
       + '<div class="ll-values"><div><span>⚡</span>Log feeds, sleep &amp; nappies in seconds</div><div><span>👨‍👩‍👧</span>Share with family &amp; caregivers, live</div><div><span>🔒</span>Private to your family</div></div>'
       + '<button id="llGoogleBtn" class="ll-auth-btn">Continue with Google</button>'
-      + (msg ? '<div class="ll-auth-msg">' + msg + '</div>' : '') + '</div>';
+      + emailRowHtml()
+      + (msg ? '<div class="ll-auth-msg">' + msg + '</div>' : '')
+      + '<div style="margin-top:16px;font-size:12px;font-weight:700"><a href="/" style="color:#6E635B">About Cubby · little-cubby.com</a></div>'
+      + '</div>';
     document.getElementById('llGoogleBtn').onclick = signInGoogle;
+    wireEmailRow(ov);
   }
   function showStatus(msg) {
     overlay().classList.remove('landing');
@@ -213,7 +270,17 @@
     m.events.forEach(function (ev) { writes.push(newRef.collection('events').doc(String(ev.id)).set(Object.assign({ authorId: user.uid }, ev))); });
     Object.keys(m.photos).forEach(function (pid) { writes.push(newRef.collection('photos').doc(pid).set({ data: m.photos[pid], authorId: user.uid })); });
     await Promise.all(writes);
-    await userRef.set({ householdId: newRef.id, name: user.displayName || '', email: user.email || '' }, { merge: true });
+    var userDoc = { householdId: newRef.id, name: user.displayName || '', email: user.email || '' };
+    // Referral attribution: brand-new family + a remembered ?ref= code -> record who referred them.
+    // (Invited caregivers above join an existing household; that's the care-circle loop, not a referral.)
+    try {
+      var refBy = localStorage.getItem('cubby-ref');
+      if (refBy && /^[a-z0-9]{4,12}$/.test(refBy) && !snap.exists) {
+        userDoc.referredBy = refBy;
+        localStorage.removeItem('cubby-ref');
+      }
+    } catch (e) {}
+    await userRef.set(userDoc, { merge: true });
     return newRef.id;
   }
 
@@ -368,8 +435,9 @@
       window.LL.members = d.members || {};
       window.LL.memberInfo = d.memberInfo || {};
       window.LL.formerMemberInfo = d.formerMemberInfo || {};
+      window.LL.pro = d.pro || null; // Pro entitlement: written only by the billing Worker
       window.LL.householdId = hid;
-      var sig = hhSig(d.app, d.members, d.memberInfo);
+      var sig = hhSig(d.app, d.members, d.memberInfo) + '|' + JSON.stringify(d.pro || null);
       if (booted && sig === lastHhSig) return; // our own write echo / duplicate emission, already on screen
       lastHhSig = sig;
       applyingRemote = true; applyAppBlob(d.app); applyingRemote = false;
@@ -512,13 +580,18 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
 
-  function modal(title, bodyHtml) {
+  function modal(title, bodyHtml, opts) {
+    opts = opts || {};
     closeModal();
     var ov = document.createElement('div'); ov.id = 'llModalOv';
-    ov.innerHTML = '<div class="ll-modal"><div class="ll-modal-head"><h2>' + esc(title) + '</h2><button id="llModalX">×</button></div>' + bodyHtml + '</div>';
+    if (opts.blur) ov.className = 'll-blur';
+    var closeBtn = opts.locked ? '' : '<button id="llModalX">×</button>';
+    ov.innerHTML = '<div class="ll-modal"><div class="ll-modal-head"><h2>' + esc(title) + '</h2>' + closeBtn + '</div>' + bodyHtml + '</div>';
     document.body.appendChild(ov);
-    ov.addEventListener('click', function (e) { if (e.target === ov) closeModal(); });
-    document.getElementById('llModalX').onclick = closeModal;
+    if (!opts.locked) {
+      ov.addEventListener('click', function (e) { if (e.target === ov) closeModal(); });
+      document.getElementById('llModalX').onclick = closeModal;
+    }
   }
   function closeModal() { var m = document.getElementById('llModalOv'); if (m) m.remove(); }
 
@@ -592,13 +665,21 @@
   function openFirstRun(user) {
     var uid = user.uid;
     var bear = (typeof window.memberAvatarSvg === 'function') ? window.memberAvatarSvg(uid, 84) : '';
+    // Self-graduating copy: drops the "early beta" framing after the cutoff (45 days from 2026-06-12),
+    // matching the marketing "early access" reframe. No manual edit / cron needed.
+    var betaIntro = (Date.now() < Date.UTC(2026, 6, 27))
+      ? 'An early beta, thanks for trying it! A few notes:'
+      : 'Thanks for trying Cubby! A few notes:';
     modal('Welcome to Cubby 🐻',
-      '<div class="ll-auth-msg" style="margin:0 0 10px;text-align:left;line-height:1.5">An early beta, thanks for trying it! A few notes:<br>• Your log is <b>private</b> to your family.<br>• On a phone: <b>Share → Add to Home Screen</b> to install it like an app.<br>• Bug or idea? <b>Settings → Family &amp; sharing → Send feedback</b>.</div>'
+      '<div class="ll-auth-msg" style="margin:0 0 10px;text-align:left;line-height:1.5">' + betaIntro + '<br>• Your log is <b>private</b> to your family.<br>• On a phone: <b>Share → Add to Home Screen</b> to install it like an app.<br>• Bug or idea? <b>Settings → Family &amp; sharing → Send feedback</b>.</div>'
       + '<div class="ll-auth-msg" style="margin:0 0 6px">First, how you appear to your family:</div>'
       + '<div class="ll-mem-av" id="llFrBear" style="width:84px;height:84px;margin:10px auto 4px;cursor:pointer">' + bear + '</div>'
       + '<div style="text-align:center;margin-bottom:6px"><button id="llFrBearBtn" class="ll-rm" style="color:#C97FA0">Customise my bear</button></div>'
       + '<div class="ll-invite" style="border-top:none;padding-top:8px"><label>Your relationship to baby</label><select id="llFrRel">' + relOptions('') + '</select></div>'
-      + '<button id="llFrSave" class="ll-modal-btn">Save</button>');
+      + '<button id="llFrSave" class="ll-modal-btn">Save</button>'
+      + '<button id="llFrOut" class="ll-modal-btn ll-ghost" style="margin-top:10px">Log out</button>',
+      { locked: true, blur: true });
+    document.getElementById('llFrOut').onclick = function () { closeModal(); window.LL.signOut(); };
     function pickBear() { if (window.openBearPicker) window.openBearPicker('member', uid); }
     document.getElementById('llFrBear').onclick = pickBear;
     document.getElementById('llFrBearBtn').onclick = pickBear;
@@ -707,8 +788,11 @@
   /* ---------- auth state machine ---------- */
   showStatus('Loading…'); // cover the app until we know whether you're signed in
   auth.getRedirectResult().catch(function () {});
+  maybeFinishEmailLink();
+
   auth.onAuthStateChanged(async function (user) {
     if (!user) { teardown(); showSignIn(''); return; }
+    try { localStorage.setItem('cubby-member', '1'); } catch (e) {}
     try {
       showStatus('Setting things up…');
       var hid = await resolveHousehold(user);

@@ -1,0 +1,13 @@
+name = "cubby-pro-billing"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+[vars]
+# Origins allowed to call /checkout and /portal (the webhook ignores CORS).
+ALLOWED_ORIGINS = "https://little-cubby.com,http://localhost:8080"
+
+# Secrets (set with `wrangler secret put <NAME>` from this directory, never commit them):
+#   STRIPE_SECRET_KEY      sk_live_... (or sk_test_... while testing)
+#   STRIPE_WEBHOOK_SECRET  whsec_...   (from the Stripe webhook endpoint)
+#   STRIPE_PRICE_ID        price_...   (the $90/year Cubby Pro price; monthly $9 optional)
+#   FIREBASE_SA_KEY        the service-account JSON as ONE line

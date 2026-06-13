@@ -4,17 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cubby Articles: Baby Care, Vaccines, Feeding &amp; Sleep</title>
-<meta name="description" content="Clear, calm guides for new parents and caregivers: country vaccine schedules, feeding and sleep basics, and how to share the day with everyone caring for your baby.">
+<meta name="description" content="Search 119+ clear, well-sourced guides for new parents and caregivers. Filter by topic and age: vaccines, feeding, sleep, milestones, health and more.">
 <link rel="canonical" href="https://little-cubby.com/articles/">
 <meta name="robots" content="index,follow">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Cubby">
 <meta property="og:title" content="Cubby Articles: Baby Care, Vaccines, Feeding &amp; Sleep">
-<meta property="og:description" content="Calm, well-sourced guides for new parents and caregivers.">
+<meta property="og:description" content="119+ calm, well-sourced guides for new parents and caregivers. Search and filter by topic and age.">
 <meta property="og:url" content="https://little-cubby.com/articles/">
-<meta property="og:image" content="https://little-cubby.com/og/cubby-home.png">
+<meta property="og:image" content="https://little-cubby.com/og/articles.png">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://little-cubby.com/og/cubby-home.png">
+<meta name="twitter:image" content="https://little-cubby.com/og/articles.png">
 <link rel="icon" type="image/png" href="/icons/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -22,8 +22,51 @@
 <link rel="stylesheet" href="/vax.css">
 <link rel="stylesheet" href="/site.css">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"CollectionPage","name":"Cubby Articles","url":"https://little-cubby.com/articles/","description":"Guides for new parents and caregivers on vaccines, feeding, sleep and sharing care.","publisher":{"@type":"Organization","name":"Cubby","url":"https://little-cubby.com/"}}
+{"@context":"https://schema.org","@type":"CollectionPage","name":"Cubby Articles","url":"https://little-cubby.com/articles/","description":"Searchable library of 119+ guides for new parents and caregivers on vaccines, feeding, sleep, health and development.","publisher":{"@type":"Organization","name":"Cubby","url":"https://little-cubby.com/"},"potentialAction":{"@type":"SearchAction","target":"https://little-cubby.com/articles/#q={search_term_string}","query-input":"required name=search_term_string"}}
 </script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://little-cubby.com/"},{"@type":"ListItem","position":2,"name":"Articles","item":"https://little-cubby.com/articles/"}]}
+</script>
+<style>
+@media(min-width:1100px){.wrap{max-width:1060px}}
+.findr{background:rgba(251,245,233,.94);margin:0 -20px 14px;padding:14px 20px;border-bottom:1px solid var(--line);border-top:1px solid var(--line)}
+.findr-bar{display:flex;gap:8px;margin-bottom:10px}
+.findr-bar input{flex:1;min-width:0;font-family:var(--sans);font-size:16px;font-weight:600;color:var(--ink);padding:11px 16px 11px 40px;background:var(--surface) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%236E635B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>') 13px center / 18px no-repeat;border:1.5px solid var(--line);border-radius:999px}
+.findr-bar input:focus{outline:none;border-color:var(--pink);box-shadow:0 0 0 3px rgba(201,127,160,.18)}
+.findr-bar button{font-family:var(--sans);font-size:13px;font-weight:800;color:var(--soft);background:transparent;border:1.5px solid var(--line);border-radius:999px;padding:0 16px;cursor:pointer;white-space:nowrap}
+.findr-bar button:hover{border-color:var(--pink);color:var(--pink-d)}
+.findr-row{display:flex;align-items:center;gap:10px;margin-top:6px}
+.findr-row .lbl{font-family:var(--sans);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);min-width:46px;flex-shrink:0}
+.findr-chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch;scrollbar-width:none;flex:1}
+.findr-chips::-webkit-scrollbar{display:none}
+/* Mouse/desktop: a hidden-scrollbar row is unreachable, wrap chips onto multiple lines instead */
+@media(min-width:768px){
+  .findr-chips{flex-wrap:wrap;overflow-x:visible;row-gap:6px}
+  .findr-row{align-items:flex-start}
+  .findr-row .lbl{margin-top:8px}
+}
+.chip{flex:0 0 auto;font-family:var(--sans);font-size:13px;font-weight:700;color:var(--soft);background:var(--surface);border:1.5px solid var(--line);border-radius:999px;padding:6px 13px;cursor:pointer;white-space:nowrap;transition:all .12s ease}
+.chip:hover{border-color:var(--pink);color:var(--pink-d)}
+.chip.on{background:var(--pink);border-color:var(--pink);color:#fff}
+.chip .n{font-weight:700;opacity:.7;margin-left:4px;font-size:12px}
+.chip.on .n{opacity:.85}
+.findr-count{font-family:var(--sans);font-size:14px;font-weight:700;color:var(--soft);margin:2px 0 14px}
+#findr-grid{display:grid;grid-template-columns:1fr;gap:12px;margin:0 0 18px}
+@media (min-width:640px){#findr-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:980px){#findr-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+#findr-grid .art-card{margin:0}
+#findr-grid .art-card[hidden],#findr-grid .sect-head[hidden]{display:none!important}
+.sect-head{grid-column:1/-1;display:flex;align-items:baseline;gap:10px;margin:14px 0 -2px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.sect-head h2{font-family:var(--serif);font-size:18px;font-weight:600;color:var(--ink);margin:0;line-height:1}
+.sect-head .n{font-family:var(--sans);font-size:12px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.04em}
+#findr-grid.is-filtered .sect-head{display:none}
+.findr-empty{display:none;text-align:center;padding:42px 20px;background:var(--surface2);border:1px dashed var(--line);border-radius:18px;margin:0 0 18px}
+.findr-empty.on{display:block}
+.findr-empty h3{font-family:var(--serif);font-size:20px;font-weight:600;color:var(--ink);margin:0 0 6px}
+.findr-empty p{color:var(--soft);font-weight:600;margin:0 0 14px}
+@media (min-width:980px){.findr{position:sticky;top:64px;z-index:40;backdrop-filter:saturate(140%) blur(10px)}}
+@media (max-width:520px){.findr{margin:-8px -14px 14px;padding:12px 14px}.findr-row .lbl{display:none}}
+</style>
 </head>
 <body>
 <nav class="nav"><div class="nav-in">
@@ -33,40 +76,168 @@
 </div></nav>
 <main class="wrap" style="padding-top:24px">
   <h1>Articles &amp; guides</h1>
-  <p class="lede">Calm, well-sourced guidance for everyone caring for a little one, every guide summarises official advice (NHS, CDC, WHO) with links, and is informational, not medical advice.</p>
+  <p class="lede">Search 119+ calm, well-sourced guides for everyone caring for a little one. Filter by topic and age. Every guide summarises official advice (NHS, CDC, AAP) with links, and is informational, not medical advice.</p>
 
-  <h2>Newborn &amp; 0-3 months</h2>
-  <div class="art-grid">
-    <a class="art-card" href="/articles/safe-baby-sleep/"><div class="k">Sleep &amp; safety · Newborn</div><div class="t">Safe baby sleep: reducing the risk of SIDS</div><div class="d">Back to sleep, a clear flat cot, room temperature and smoke-free, the NHS safer-sleep basics.</div></a>
-    <a class="art-card" href="/articles/soothing-a-crying-baby/"><div class="k">Newborn care · Newborn</div><div class="t">Soothing a crying baby &amp; coping with colic</div><div class="d">Why babies cry, gentle ways to settle them, what colic is, and looking after yourself too.</div></a>
-    <a class="art-card" href="/articles/bathing-washing-and-nappy-care/"><div class="k">Hygiene · Newborn</div><div class="t">Bathing, washing &amp; nappy care</div><div class="d">How often to bathe, topping and tailing, cord care and nappy basics for new skin.</div></a>
-    <a class="art-card" href="/articles/baby-milestones-smiles-coos-recognising/"><div class="k">Development · 0-3 months</div><div class="t">First smiles, coos &amp; recognising you</div><div class="d">The early milestones and the ages most babies reach them, from CDC and NHS.</div></a>
-    <a class="art-card" href="/articles/baby-teething-and-tooth-care/"><div class="k">Care &amp; dental · 3-6 months</div><div class="t">Teething and caring for first teeth</div><div class="d">When teeth come, the real signs, soothing a teething baby, and brushing first teeth.</div></a>
-    <a class="art-card" href="/articles/baby-sleep-by-age/"><div class="k">Sleep · 0-12 months</div><div class="t">Baby sleep by age and wakeful phases</div><div class="d">How much sleep babies need at each stage, why wakeful phases happen, and safe sleep basics.</div></a>
+  <section class="findr" role="search" aria-label="Find articles">
+    <div class="findr-bar">
+      <input id="findr-q" type="search" placeholder="Search articles, e.g. sleep regression, weaning, fever..." aria-label="Search articles" autocomplete="off">
+      <button id="findr-clear" type="button">Clear</button>
+    </div>
+    <div class="findr-row">
+      <span class="lbl">Topic</span>
+      <div class="findr-chips" id="cat-chips" role="tablist" aria-label="Filter by topic">
+        <button class="chip on" data-cat="all" type="button">All</button>
+        <button class="chip" data-cat="sleep" type="button">Sleep</button>
+        <button class="chip" data-cat="feeding" type="button">Feeding</button>
+        <button class="chip" data-cat="development" type="button">Development</button>
+        <button class="chip" data-cat="health" type="button">Health</button>
+        <button class="chip" data-cat="care" type="button">Care &amp; safety</button>
+        <button class="chip" data-cat="vaccines" type="button">Vaccines</button>
+        <button class="chip" data-cat="growth" type="button">Growth</button>
+        <button class="chip" data-cat="wellbeing" type="button">Wellbeing</button>
+        <button class="chip" data-cat="compare" type="button">Comparisons</button>
+      </div>
+    </div>
+    <div class="findr-row">
+      <span class="lbl">Age</span>
+      <div class="findr-chips" id="age-chips" role="tablist" aria-label="Filter by age">
+        <button class="chip on" data-age="all" type="button">All ages</button>
+        <button class="chip" data-age="newborn" type="button">Newborn</button>
+        <button class="chip" data-age="0-3" type="button">0-3 months</button>
+        <button class="chip" data-age="3-6" type="button">3-6 months</button>
+        <button class="chip" data-age="6-12" type="button">6-12 months</button>
+      </div>
+    </div>
+  </section>
+
+  <p class="findr-count" id="findr-count" aria-live="polite">Showing all 104 articles</p>
+
+  <div id="findr-grid">
+    <a class="art-card" data-cat="vaccines" data-age="all" href="/vaccination-schedule/uk/"><div class="k">Vaccines &middot; UK (NHS)</div><div class="t">UK baby vaccination schedule</div><div class="d">Every NHS jab from 8 weeks to 3 years 4 months, with the 2026 changes and a birthday calculator.</div></a>
+    <a class="art-card" data-cat="sleep" data-age="newborn" href="/articles/safe-baby-sleep/"><div class="k">Sleep &middot; Newborn</div><div class="t">Safe baby sleep: reducing the risk of SIDS</div><div class="d">Back to sleep, a clear flat cot, room temperature and smoke-free, the NHS safer-sleep basics.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="newborn" href="/articles/breastfeeding-latch-and-positioning/"><div class="k">Feeding &middot; Newborn</div><div class="t">Breastfeeding latch and positioning: getting it right</div><div class="d">Step-by-step NHS-sourced guidance on latch, positioning holds, feeding frequency, and when to seek help.</div></a>
+    <a class="art-card" data-cat="development" data-age="0-3" href="/articles/baby-milestones-smiles-coos-recognising/"><div class="k">Development &middot; 0-3 months</div><div class="t">First smiles, coos and recognising you</div><div class="d">The early milestones and the ages most babies reach them, from CDC and NHS.</div></a>
+    <a class="art-card" data-cat="health" data-age="all" href="/articles/when-to-call-111-or-ae/"><div class="k">Health &middot; 0-12 months</div><div class="t">When to call 111 or go to A&amp;E: danger signs in babies</div><div class="d">NHS-sourced guide on which symptoms in babies under 12 months mean call 111, go to A&amp;E, or call 999 immediately.</div></a>
+    <a class="art-card" data-cat="care" data-age="newborn" href="/articles/bathing-washing-and-nappy-care/"><div class="k">Care &middot; Newborn</div><div class="t">Bathing, washing and nappy care</div><div class="d">How often to bathe, topping and tailing, cord care and nappy basics for new skin.</div></a>
+    <a class="art-card" data-cat="growth" data-age="all" href="/articles/baby-weight-gain-first-year/"><div class="k">Growth &middot; 0-12 months</div><div class="t">Baby weight gain in the first year: what is normal</div><div class="d">Normal patterns of infant weight gain from birth to 12 months, NHS-sourced guidance on growth charts and centile lines.</div></a>
+    <a class="art-card" data-cat="wellbeing" data-age="newborn" href="/articles/postnatal-depression-signs-and-support/"><div class="k">Parent wellbeing &middot; Newborn</div><div class="t">Postnatal depression: signs, symptoms and where to get help</div><div class="d">Recognising postnatal depression, understanding the difference from baby blues, and knowing where to get help.</div></a>
+    <a class="art-card" data-cat="compare" data-age="all" href="/articles/best-baby-tracker-app/"><div class="k">Comparison &middot; All ages</div><div class="t">Best baby tracker apps 2026</div><div class="d">Cubby, Huckleberry, Nara Baby and BabyConnect compared: features, privacy, price and who each suits.</div></a>
+    <a class="art-card" data-cat="vaccines" data-age="all" href="/vaccination-schedule/us/"><div class="k">Vaccines &middot; US (CDC)</div><div class="t">US baby vaccine schedule</div><div class="d">The CDC recommended schedule from birth to 6 years, age by age.</div></a>
+    <a class="art-card" data-cat="sleep" data-age="all" href="/articles/baby-sleep-by-age/"><div class="k">Sleep &middot; 0-12 months</div><div class="t">Baby sleep by age and wakeful phases</div><div class="d">How much sleep babies need at each stage, why wakeful phases happen, and safe sleep basics.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="newborn" href="/articles/how-often-to-feed-newborn/"><div class="k">Feeding &middot; Newborn</div><div class="t">How often should a newborn feed?</div><div class="d">NHS-sourced guidance on demand feeding, hunger cues, cluster feeding and what to expect in the early weeks.</div></a>
+    <a class="art-card" data-cat="development" data-age="newborn" href="/articles/tummy-time-for-babies/"><div class="k">Development &middot; Newborn</div><div class="t">Tummy time: why it matters and how to practise safely</div><div class="d">When to start tummy time, how much your baby needs each day, and simple ways to make it enjoyable and safe.</div></a>
+    <a class="art-card" data-cat="health" data-age="all" href="/articles/baby-fever-when-to-worry/"><div class="k">Health &middot; 0-12 months</div><div class="t">Baby fever: when to worry and when to wait</div><div class="d">Clear guide to baby fever for 0-12 month olds: what temperature counts, when to call 111, when to go to A&amp;E, and home care.</div></a>
+    <a class="art-card" data-cat="care" data-age="newborn" href="/articles/soothing-a-crying-baby/"><div class="k">Care &middot; Newborn</div><div class="t">Soothing a crying baby and coping with colic</div><div class="d">Why babies cry, gentle ways to settle them, what colic is, and looking after yourself too.</div></a>
+    <a class="art-card" data-cat="growth" data-age="all" href="/articles/baby-growth-spurts/"><div class="k">Growth &middot; 0-12 months</div><div class="t">Baby growth spurts: signs, timing and how to cope</div><div class="d">What baby growth spurts look like, when they typically happen in the first year, and practical ways to cope.</div></a>
+    <a class="art-card" data-cat="wellbeing" data-age="newborn" href="/articles/recovering-from-birth-first-weeks/"><div class="k">Parent wellbeing &middot; Newborn</div><div class="t">Recovering from birth: what to expect in the first weeks</div><div class="d">NHS-sourced guide to postnatal recovery: physical changes, sleep, your 6-week check and when to ask for help.</div></a>
+    <a class="art-card" data-cat="compare" data-age="all" href="/articles/cubby-vs-huckleberry/"><div class="k">Comparison &middot; All ages</div><div class="t">Cubby vs Huckleberry</div><div class="d">A direct side-by-side: what each app does well, where they differ, and which fits your family in 2026.</div></a>
+    <a class="art-card" data-cat="vaccines" data-age="all" href="/vaccination-schedule/uae/"><div class="k">Vaccines &middot; UAE (MOHAP)</div><div class="t">UAE baby vaccination schedule</div><div class="d">The UAE national immunization program from birth to school age.</div></a>
+    <a class="art-card" data-cat="sleep" data-age="newborn" href="/articles/newborn-sleep-what-is-normal/"><div class="k">Sleep &middot; Newborn</div><div class="t">Newborn sleep: what is normal in the first weeks</div><div class="d">NHS-sourced guide to newborn sleep: total hours, night waking, feeding patterns, day/night routines, and when to seek help.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="newborn" href="/articles/bottle-feeding-basics/"><div class="k">Feeding &middot; Newborn</div><div class="t">Bottle feeding basics: how to feed your baby safely</div><div class="d">NHS-sourced guide to bottle feeding newborns safely: positions, sterilising, making up formula, responsive feeding and leftover milk.</div></a>
+    <a class="art-card" data-cat="development" data-age="all" href="/articles/baby-language-development/"><div class="k">Development &middot; 0-12 months</div><div class="t">Baby language development: from coos to first words</div><div class="d">How your baby's communication grows from birth to twelve months, with NHS-sourced guidance on milestones and how to help.</div></a>
+    <a class="art-card" data-cat="health" data-age="all" href="/articles/baby-cold-and-cough/"><div class="k">Health &middot; 0-12 months</div><div class="t">Baby cold and cough: caring for your baby at home</div><div class="d">NHS-sourced home care guide for baby colds: symptoms, safe relief, medicines to avoid, and when to see a doctor.</div></a>
+    <a class="art-card" data-cat="care" data-age="newborn" href="/articles/why-babies-cry/"><div class="k">Care &middot; Newborn</div><div class="t">Why babies cry: understanding what your newborn is telling you</div><div class="d">NHS-sourced guide to newborn crying: common causes, soothing techniques, colic, reflux, and when to call 999.</div></a>
+    <a class="art-card" data-cat="growth" data-age="all" href="/articles/reading-baby-growth-charts/"><div class="k">Growth &middot; 0-12 months</div><div class="t">Reading your baby's growth chart: a guide for parents</div><div class="d">What centile lines mean, how often your baby should be weighed, and when to talk to your health visitor.</div></a>
+    <a class="art-card" data-cat="wellbeing" data-age="newborn" href="/articles/baby-blues-explained/"><div class="k">Wellbeing · Newborn</div><div class="t">Baby blues: what they are and how they differ from postnatal depression</div><div class="d">What the baby blues are, when they happen, how long they last, and how to tell them apart from postnatal depression.</div></a>
+    <a class="art-card" data-cat="compare" data-age="all" href="/articles/cubby-vs-nara-baby/"><div class="k">Comparison &middot; All ages</div><div class="t">Cubby vs Nara Baby</div><div class="d">Side-by-side comparison of Cubby and Nara Baby tracker apps: features, privacy, price, and who each suits best.</div></a>
+    <a class="art-card" data-cat="vaccines" data-age="all" href="/de/impfkalender/"><div class="k">Vaccines &middot; Deutschland</div><div class="t">Impfkalender Baby (STIKO)</div><div class="d">Der STIKO-Impfplan für Säuglinge, von 6 Wochen bis 2 Jahre.</div></a>
+    <a class="art-card" data-cat="sleep" data-age="all" href="/articles/baby-bedtime-routine/"><div class="k">Sleep &middot; 0-12 months</div><div class="t">Building a bedtime routine for your baby</div><div class="d">Simple, calming steps to help your baby learn when it is time to sleep, from newborn to 12 months. Based on NHS guidance.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="newborn" href="/articles/combination-feeding-breast-and-bottle/"><div class="k">Feeding &middot; Newborn</div><div class="t">Combination feeding: mixing breast and bottle</div><div class="d">How to combine breastfeeding with bottle feeding using expressed milk: when to start, how to express, storage and warming.</div></a>
+    <a class="art-card" data-cat="development" data-age="all" href="/articles/baby-vision-development/"><div class="k">Development &middot; 0-12 months</div><div class="t">How newborn vision develops in the first year</div><div class="d">Plain-English guide to how babies develop sight from birth to 12 months, including NHS eye checks, squints and warning signs.</div></a>
+    <a class="art-card" data-cat="health" data-age="newborn" href="/articles/rsv-in-babies/"><div class="k">Health &middot; Newborn</div><div class="t">RSV and bronchiolitis in babies: what parents need to know</div><div class="d">Symptoms, warning signs, home care and prevention for RSV bronchiolitis in babies, sourced from NHS guidance.</div></a>
+    <a class="art-card" data-cat="care" data-age="0-3" href="/articles/the-witching-hour-babies/"><div class="k">Care &middot; 0-3 months</div><div class="t">The witching hour in babies: what it is and how to cope</div><div class="d">NHS-sourced guide to the witching hour and colic in newborns: what it is, when it happens, soothing strategies.</div></a>
+    <a class="art-card" data-cat="growth" data-age="all" href="/articles/baby-length-height-first-year/"><div class="k">Growth · 0-12 months</div><div class="t">Baby length and height in the first year: what is normal</div><div class="d">How baby length and height are measured, what the charts show, and what growth to expect from birth to 12 months.</div></a>
+    <a class="art-card" data-cat="wellbeing" data-age="newborn" href="/articles/postnatal-anxiety/"><div class="k">Wellbeing · Newborn</div><div class="t">Postnatal anxiety: signs, symptoms and where to get help</div><div class="d">What postnatal anxiety looks like, how it differs from normal new-parent worry, and where to get support.</div></a>
+    <a class="art-card" data-cat="compare" data-age="all" href="/articles/cubby-vs-babyconnect/"><div class="k">Comparison &middot; All ages</div><div class="t">Cubby vs BabyConnect: a direct comparison</div><div class="d">Side-by-side comparison of Cubby and BabyConnect covering tracking features, privacy, caregiver sharing and pricing.</div></a>
+    <a class="art-card" data-cat="vaccines" data-age="all" href="/articles/baby-vaccination-schedules-compared/"><div class="k">Vaccines &middot; Compare</div><div class="t">Baby vaccine schedules compared</div><div class="d">UK, US, UAE and Germany, how they line up and what changes if you move country.</div></a>
+    <a class="art-card" data-cat="sleep" data-age="newborn" href="/articles/swaddling-a-baby/"><div class="k">Sleep &amp; safety &middot; Newborn</div><div class="t">Swaddling a baby: technique, benefits and when to stop</div><div class="d">Safe swaddling technique, benefits, hip health, and when to stop. NHS and Lullaby Trust guidance explained plainly.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="all" href="/articles/signs-baby-is-hungry-or-full/"><div class="k">Feeding &middot; 0-12 months</div><div class="t">Signs your baby is hungry or full: feeding cues explained</div><div class="d">How to read early hunger cues, spot fullness signals, understand responsive feeding, and know your newborn is getting enough.</div></a>
+    <a class="art-card" data-cat="development" data-age="0-3" href="/articles/baby-development-1-month/"><div class="k">Development &middot; 0-3 months</div><div class="t">Baby development at 1 month: what to expect</div><div class="d">Movement, vision, hearing and social milestones for a 1-month-old, sourced from the American Academy of Pediatrics.</div></a>
+    <a class="art-card" data-cat="health" data-age="all" href="/articles/baby-ear-infection/"><div class="k">Health &middot; 0-12 months</div><div class="t">Ear infections in babies: signs, treatment and when to see a doctor</div><div class="d">How to spot an ear infection, ease discomfort at home, and know exactly when to call a doctor. Sourced from NHS guidance.</div></a>
+    <a class="art-card" data-cat="care" data-age="newborn" href="/articles/cutting-baby-nails/"><div class="k">Care &middot; Newborn</div><div class="t">Cutting baby nails safely: a step-by-step guide</div><div class="d">How to trim newborn nails safely using the right tools and timing, with what to do if you nick the skin.</div></a>
+    <a class="art-card" data-cat="wellbeing" data-age="newborn" href="/articles/sleep-deprivation-new-parents/"><div class="k">Wellbeing · Newborn</div><div class="t">Sleep deprivation as a new parent: effects and how to cope</div><div class="d">What severe sleep deprivation does to new parents, practical strategies to manage it, and when to ask for help.</div></a>
+    <a class="art-card" data-cat="compare" data-age="all" href="/articles/best-baby-monitor-2026/"><div class="k">Comparison &middot; 0-12 months</div><div class="t">Best baby monitors 2026: what to look for</div><div class="d">Practical guide to choosing the best baby monitor in 2026: video vs audio, range, battery life, privacy and key features.</div></a>
+    <a class="art-card" data-cat="vaccines" data-age="all" href="/articles/never-miss-a-baby-vaccine/"><div class="k">Vaccines &middot; How-to</div><div class="t">How to never miss a baby vaccine</div><div class="d">A simple system for tracking doses and due dates across every caregiver.</div></a>
+    <a class="art-card" data-cat="sleep" data-age="all" href="/articles/white-noise-for-babies/"><div class="k">Sleep &middot; 0-12 months</div><div class="t">White noise for babies: does it help and is it safe?</div><div class="d">What NHS guidance says about sound, sleep environment, and settling your baby in the first year.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="all" href="/articles/how-much-formula-by-age/"><div class="k">Feeding &middot; 0-12 months</div><div class="t">How much formula milk does your baby need?</div><div class="d">Formula feeding guidance from newborn to 12 months: amounts, frequency, safe preparation and signs your baby is getting enough.</div></a>
+    <a class="art-card" data-cat="development" data-age="0-3" href="/articles/baby-development-2-months/"><div class="k">Development &middot; 0-3 months</div><div class="t">Baby development at 2 months: milestones and what to try</div><div class="d">CDC-sourced 2-month milestones covering social smiles, first sounds, head control, and simple daily activities.</div></a>
+    <a class="art-card" data-cat="health" data-age="newborn" href="/articles/reflux-in-babies/"><div class="k">Health &middot; Newborn</div><div class="t">Reflux in babies: symptoms, causes and what helps</div><div class="d">What causes reflux, how to spot silent reflux, when to see a GP, and what actually helps. NHS-sourced guidance.</div></a>
+    <a class="art-card" data-cat="care" data-age="newborn" href="/articles/baby-skincare/"><div class="k">Care &middot; Newborn</div><div class="t">Baby skincare for newborns and sensitive skin</div><div class="d">How to care for your newborn's delicate skin: bathing frequency, topping and tailing, cord care, safe products.</div></a>
+    <a class="art-card" data-cat="growth" data-age="newborn" href="/articles/premature-baby-growth/"><div class="k">Growth · Newborn</div><div class="t">Premature baby growth: corrected age and what is different</div><div class="d">How growth works for babies born early: corrected age, adjusted milestones, and what to expect in the first year.</div></a>
+    <a class="art-card" data-cat="wellbeing" data-age="newborn" href="/articles/partner-postnatal-depression/"><div class="k">Wellbeing · Newborn</div><div class="t">Partner and paternal postnatal depression: what it looks like</div><div class="d">How postnatal depression affects partners and fathers, what the signs are, and where to get support.</div></a>
+    <a class="art-card" data-cat="compare" data-age="all" href="/articles/baby-tracking-app-vs-paper/"><div class="k">Comparison · All ages</div><div class="t">Baby tracking app vs pen and paper: why digital tracking helps</div><div class="d">How tracking feeds, sleep and nappies in an app compares to a notebook or paper chart, and where digital tracking makes the real difference.</div></a>
+    <a class="art-card" data-cat="vaccines" data-age="0-3" href="/articles/six-in-one-vaccine/"><div class="k">Vaccines &middot; 0-3 months</div><div class="t">The 6-in-1 vaccine: what it covers and what to expect</div><div class="d">Plain-English guide to the NHS 6-in-1 baby vaccine: six diseases covered, schedule, side effects, and when to seek help.</div></a>
+    <a class="art-card" data-cat="sleep" data-age="newborn 0-3" href="/articles/moving-baby-to-own-room/"><div class="k">Sleep &middot; 0-6 months</div><div class="t">When to move your baby to their own room</div><div class="d">NHS-sourced guide on room sharing for the first 6 months, safe sleep setup, and when to transition your baby to their own room.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="all" href="/articles/vitamin-d-for-babies/"><div class="k">Feeding &middot; 0-12 months</div><div class="t">Vitamin D for babies: who needs drops and when to start</div><div class="d">NHS-sourced guide on vitamin D drops for babies: who needs them, when to start, dosage, and breastfed vs formula-fed guidance.</div></a>
+    <a class="art-card" data-cat="development" data-age="0-3" href="/articles/baby-development-3-months/"><div class="k">Development &middot; 0-3 months</div><div class="t">Baby development at 3 months</div><div class="d">CDC-sourced milestones for the first 3 months: social smiles, cooing, head control, tummy time and cognitive leaps.</div></a>
+    <a class="art-card" data-cat="health" data-age="all" href="/articles/nappy-rash-causes-and-treatment/"><div class="k">Health &middot; 0-12 months</div><div class="t">Nappy rash: causes, prevention and treatment</div><div class="d">What causes nappy rash, how to prevent it and how to treat it at home. NHS-sourced guidance for parents.</div></a>
+    <a class="art-card" data-cat="care" data-age="3-6" href="/articles/baby-teething-and-tooth-care/"><div class="k">Care &middot; 3-6 months</div><div class="t">Teething and caring for first teeth</div><div class="d">When teeth come, the real signs, soothing a teething baby, and brushing first teeth.</div></a>
+    <a class="art-card" data-cat="growth" data-age="newborn" href="/articles/flat-head-syndrome-babies/"><div class="k">Growth · Newborn</div><div class="t">Flat head syndrome in babies: prevention and when to seek help</div><div class="d">What positional plagiocephaly is, how to prevent it with tummy time and repositioning, and when to talk to your health visitor.</div></a>
+    <a class="art-card" data-cat="wellbeing" data-age="all" href="/articles/returning-to-work-after-baby/"><div class="k">Wellbeing · All ages</div><div class="t">Returning to work after having a baby: what to expect</div><div class="d">The emotional and practical side of going back to work after maternity or paternity leave, and how to make the transition easier.</div></a>
+    <a class="art-card" data-cat="compare" data-age="newborn" href="/articles/types-of-infant-formula-uk/"><div class="k">Comparison · Newborn</div><div class="t">Types of infant formula in the UK: what parents need to know</div><div class="d">First infant formula, follow-on milk, growing-up milk and specialist formulas: what they are and what the NHS recommends.</div></a>
+    <a class="art-card" data-cat="vaccines" data-age="all" href="/articles/vaccine-side-effects-babies/"><div class="k">Vaccines &middot; 0-12 months</div><div class="t">Baby vaccination side effects: what is normal</div><div class="d">What to expect after your baby's vaccinations: common side effects, how long they last, when to call your doctor, and why the jabs are worth it.</div></a>
+    <a class="art-card" data-cat="sleep" data-age="3-6" href="/articles/four-month-sleep-regression/"><div class="k">Sleep &middot; 3-6 months</div><div class="t">4-month sleep regression: what it is and how to cope</div><div class="d">Why baby sleep changes around 4 months and practical NHS-sourced tips for helping everyone get more rest.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="all" href="/articles/water-for-babies/"><div class="k">Feeding &middot; 0-12 months</div><div class="t">Water for babies: when to introduce it and how much</div><div class="d">When can babies drink water, and how much do they need? NHS-sourced guidance on water and safe drinks for babies 0-12 months.</div></a>
+    <a class="art-card" data-cat="development" data-age="3-6" href="/articles/baby-development-4-months/"><div class="k">Development &middot; 3-6 months</div><div class="t">Baby development at 4 months: skills, milestones and play ideas</div><div class="d">CDC-sourced milestones across social, language, cognitive and movement development, plus play ideas.</div></a>
+    <a class="art-card" data-cat="health" data-age="all" href="/articles/baby-rashes-guide/"><div class="k">Health &middot; 0-12 months</div><div class="t">Baby rashes: a guide to the most common types</div><div class="d">Plain-English guide to the most common rashes in babies 0-12 months: what they look like, what to do, and when to get help fast.</div></a>
+    <a class="art-card" data-cat="care" data-age="all" href="/articles/babywearing-safety/"><div class="k">Safety &middot; 0-12 months</div><div class="t">Babywearing: benefits, types and how to use a carrier safely</div><div class="d">Safe babywearing from birth: TICKS checklist, carrier types, and key risks to avoid. Based on NHS and RoSPA guidance.</div></a>
+    <a class="art-card" data-cat="growth" data-age="all" href="/articles/centile-drops-baby-growth/"><div class="k">Growth · 0-12 months</div><div class="t">What a centile drop means for your baby's growth</div><div class="d">When a drop on the growth chart is normal and when it needs attention: NHS-sourced guidance for parents.</div></a>
+    <a class="art-card" data-cat="wellbeing" data-age="newborn" href="/articles/building-support-network-baby/"><div class="k">Wellbeing · Newborn</div><div class="t">Building your support network as a new parent</div><div class="d">How to find and ask for help as a new parent: family, friends, health visitors, local groups and NHS services.</div></a>
+    <a class="art-card" data-cat="compare" data-age="newborn" href="/articles/baby-carrier-types-compared/"><div class="k">Comparison · Newborn</div><div class="t">Baby carrier types compared: wrap, ring sling and structured carrier</div><div class="d">Stretchy wraps, woven wraps, ring slings and buckle carriers compared: what each suits, TICKS safety, and how to choose.</div></a>
+    <a class="art-card" data-cat="vaccines" data-age="all" href="/articles/catching-up-on-missed-vaccines/"><div class="k">Vaccines &middot; 0-12 months</div><div class="t">Catching up on missed baby vaccinations</div><div class="d">What to do if your baby misses a scheduled vaccine: catch-up rules, age limits, and when to call your GP. Based on NHS guidance.</div></a>
+    <a class="art-card" data-cat="sleep" data-age="6-12" href="/articles/eight-month-sleep-regression/"><div class="k">Sleep &middot; 6-12 months</div><div class="t">8-month sleep regression: what is happening and what helps</div><div class="d">Why baby sleep often disrupts in the 6-12 month window, what the NHS says about sleep at this age, and practical routine strategies that help.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="3-6" href="/articles/starting-solids-around-6-months/"><div class="k">Feeding &middot; 3-6 months</div><div class="t">When to start solids: weaning around 6 months</div><div class="d">Signs of readiness, safe first foods and textures, and going at your baby's pace.</div></a>
+    <a class="art-card" data-cat="development" data-age="3-6 6-12" href="/articles/baby-development-6-months/"><div class="k">Development &middot; 6 months</div><div class="t">Baby development at 6 months</div><div class="d">CDC-sourced guide to what most babies can do by 6 months: social milestones, babbling, rolling, sitting with support.</div></a>
+    <a class="art-card" data-cat="health" data-age="all" href="/articles/baby-eczema/"><div class="k">Health &middot; 0-12 months</div><div class="t">Baby eczema: recognising it and managing flares</div><div class="d">How to recognise atopic eczema in babies and manage flares: skincare routine, emollients, triggers and when to seek help.</div></a>
+    <a class="art-card" data-cat="care" data-age="all" href="/articles/baby-massage/"><div class="k">Care &middot; 0-12 months</div><div class="t">Baby massage: how to do it and what the benefits are</div><div class="d">Plain-English guide to baby massage: when to do it, how to do it step by step, and what the benefits are.</div></a>
+    <a class="art-card" data-cat="growth" data-age="newborn" href="/articles/breastfed-baby-weight-gain/"><div class="k">Growth · Newborn</div><div class="t">Weight gain in breastfed babies: what is normal</div><div class="d">How breastfed babies gain weight differently, how often they should be weighed, and what the NHS says.</div></a>
+    <a class="art-card" data-cat="wellbeing" data-age="newborn" href="/articles/self-care-for-new-parents/"><div class="k">Wellbeing · Newborn</div><div class="t">Self-care for new parents: why it matters and simple steps</div><div class="d">Why looking after yourself matters when you have a new baby, and practical NHS-grounded steps that fit into a sleep-deprived life.</div></a>
+    <a class="art-card" data-cat="compare" data-age="newborn" href="/articles/nhs-red-book-explained/"><div class="k">Comparison · Newborn</div><div class="t">The NHS red book explained: what it is and how to use it</div><div class="d">What the Personal Child Health Record (red book) is, what health visitors record in it, and how to use it alongside digital tracking.</div></a>
+    <a class="art-card" data-cat="vaccines" data-age="all" href="/articles/common-vaccine-questions/"><div class="k">Vaccines &middot; 0-12 months</div><div class="t">Common questions parents have about baby vaccines</div><div class="d">Answers to the questions parents ask most about childhood vaccines: how they work, ingredients, side effects, and why the schedule matters.</div></a>
+    <a class="art-card" data-cat="sleep" data-age="all" href="/articles/overtired-baby/"><div class="k">Sleep &middot; 0-12 months</div><div class="t">Overtired baby: signs and how to help them sleep</div><div class="d">Spot the signs of an overtired baby and learn calm, practical ways to help them settle, based on NHS guidance.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="3-6" href="/articles/introducing-allergen-foods-to-babies/"><div class="k">Feeding &middot; 3-6 months</div><div class="t">Introducing allergen foods to babies</div><div class="d">How to introduce egg, peanut, dairy and more, one at a time, and what to watch for.</div></a>
+    <a class="art-card" data-cat="development" data-age="6-12" href="/articles/baby-development-9-months/"><div class="k">Development &middot; 6-12 months</div><div class="t">Baby development at 9 months</div><div class="d">What most babies can do by 9 months: social, language, thinking, and movement milestones from CDC guidance.</div></a>
+    <a class="art-card" data-cat="health" data-age="newborn" href="/articles/cradle-cap/"><div class="k">Health &middot; Newborn</div><div class="t">Cradle cap: what it is, how long it lasts and how to treat it</div><div class="d">Cradle cap is harmless and very common in newborns. Find out what it looks like and the safe ways to treat it at home.</div></a>
+    <a class="art-card" data-cat="care" data-age="all" href="/articles/sun-protection-for-babies/"><div class="k">Safety &middot; 0-12 months</div><div class="t">Sun protection for babies under 12 months</div><div class="d">How to keep your baby safe in the sun: shade, clothing, SPF30+ sunscreen and UV index guidance for infants.</div></a>
+    <a class="art-card" data-cat="growth" data-age="0-3" href="/articles/when-babies-double-birth-weight/"><div class="k">Growth · 0-6 months</div><div class="t">When do babies double their birth weight?</div><div class="d">When most babies reach double their birth weight, what the range looks like, and what the NHS says about monitoring growth.</div></a>
+    <a class="art-card" data-cat="wellbeing" data-age="newborn" href="/articles/relationship-changes-after-baby/"><div class="k">Wellbeing · Newborn</div><div class="t">How a new baby changes your relationship and how to adapt</div><div class="d">What changes between partners after a new baby arrives and practical ways to keep the relationship healthy in the first year.</div></a>
+    <a class="art-card" data-cat="compare" data-age="newborn" href="/articles/free-resources-uk-new-parents/"><div class="k">Comparison · Newborn</div><div class="t">Free resources for UK new parents: NHS, apps and local support</div><div class="d">A practical guide to the free NHS, government and community services available to new parents in the UK.</div></a>
+    <a class="art-card" data-cat="sleep" data-age="newborn" href="/articles/dummy-pacifier-pros-and-cons/"><div class="k">Sleep &middot; Newborn</div><div class="t">Dummies and pacifiers: pros, cons and safe use</div><div class="d">Benefits, downsides and safe-use guidelines for dummies and pacifiers, based on NHS and Lullaby Trust guidance.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="3-6" href="/articles/baby-led-weaning-vs-purees/"><div class="k">Feeding &middot; 3-6 months</div><div class="t">Baby-led weaning vs purees: how to choose</div><div class="d">NHS-sourced guide to starting solids, signs of readiness, and how to choose between baby-led weaning and purees.</div></a>
+    <a class="art-card" data-cat="development" data-age="6-12" href="/articles/baby-development-12-months/"><div class="k">Development &middot; 9-12 months</div><div class="t">Baby development at 12 months: skills by the first birthday</div><div class="d">What most babies can do by their first birthday: social, language, cognitive and movement milestones from CDC.</div></a>
+    <a class="art-card" data-cat="health" data-age="all" href="/articles/constipation-in-babies/"><div class="k">Health &middot; 0-12 months</div><div class="t">Constipation in babies: causes, signs and what helps</div><div class="d">How to spot constipation in babies, what causes it, and simple steps that can help, sourced from NHS guidance.</div></a>
+    <a class="art-card" data-cat="care" data-age="newborn" href="/articles/car-seat-safety-for-newborns/"><div class="k">Safety &middot; Newborn</div><div class="t">Car seat safety for newborns and young babies</div><div class="d">How to choose and use a car seat safely for your newborn: rear-facing guidance, seat groups, second-hand warnings.</div></a>
+    <a class="art-card" data-cat="wellbeing" data-age="newborn" href="/articles/indian-postnatal-traditions/"><div class="k">Wellbeing · Newborn</div><div class="t">Postnatal traditions: what to keep, what to adapt</div><div class="d">The 40-day rest period, traditional postpartum diet and family support in Indian culture: what the evidence supports and how diaspora families adapt.</div></a>
+    <a class="art-card" data-cat="compare" data-age="all" href="/articles/cubby-vs-glow-baby/"><div class="k">Comparison · All ages</div><div class="t">Cubby vs Glow Baby (2026): which baby tracker is better?</div><div class="d">A direct comparison of Cubby and Glow Baby: features, privacy, vaccine schedules and price.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="6-12" href="/articles/foods-to-avoid-for-babies/"><div class="k">Feeding &middot; 6-12 months</div><div class="t">Foods to avoid giving babies</div><div class="d">Salt, sugar, honey, whole nuts and other choking hazards, and how to cut food safely.</div></a>
+    <a class="art-card" data-cat="development" data-age="6-12" href="/articles/separation-anxiety-babies/"><div class="k">Development &middot; 6-12 months</div><div class="t">Separation anxiety in babies: when it starts and what helps</div><div class="d">When separation anxiety starts in babies, what it looks like, and practical NHS-sourced strategies to help your baby cope.</div></a>
+    <a class="art-card" data-cat="health" data-age="newborn" href="/articles/newborn-jaundice/"><div class="k">Health &middot; Newborn</div><div class="t">Newborn jaundice: what is normal and when to get help</div><div class="d">NHS-sourced guide to newborn jaundice: causes, normal timeline, feeding tips, phototherapy, and emergency warning signs.</div></a>
+    <a class="art-card" data-cat="care" data-age="3-6 6-12" href="/articles/baby-proofing-your-home/"><div class="k">Safety &middot; 3-12 months</div><div class="t">Baby-proofing your home: a first steps guide</div><div class="d">Room-by-room safety checklist for babies 3-12 months: burns, falls, drowning, choking, strangulation, poisoning, fire.</div></a>
+    <a class="art-card" data-cat="wellbeing" data-age="newborn" href="/articles/zuo-yuezi-postnatal-confinement/"><div class="k">Wellbeing · Newborn</div><div class="t">Zuo yuezi: the postnatal confinement tradition</div><div class="d">What the Chinese 30-day postpartum rest tradition involves, what modern evidence supports, and how diaspora families adapt it for today.</div></a>
+    <a class="art-card" data-cat="compare" data-age="all" href="/articles/cubby-vs-tinybeans/"><div class="k">Comparison · All ages</div><div class="t">Cubby vs Tinybeans (2026): health tracker vs memory book</div><div class="d">How Cubby and Tinybeans compare: health tracking vs photo sharing, privacy, price and who each app suits.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="6-12" href="/articles/baby-finger-foods-at-6-months/"><div class="k">Feeding &middot; 6-12 months</div><div class="t">Baby finger foods: safe first options at 6 months</div><div class="d">When and how to introduce baby finger foods at 6 months: safe first textures, foods to avoid, choking safety, and NHS-sourced weaning guidance.</div></a>
+    <a class="art-card" data-cat="health" data-age="all" href="/articles/head-circumference-babies/"><div class="k">Health &middot; 0-12 months</div><div class="t">Head circumference in babies: why it is measured</div><div class="d">Why health visitors measure your baby's head circumference, what centile charts show, and when to talk to your health visitor.</div></a>
+    <a class="art-card" data-cat="care" data-age="newborn" href="/articles/indian-baby-massage-maalish/"><div class="k">Care · Newborn</div><div class="t">Maalish: traditional newborn oil massage</div><div class="d">Traditional Indian oil massage for newborns: which oils are safe, the technique, benefits the evidence supports, and safety guidelines.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="6-12" href="/articles/iron-rich-foods-for-babies/"><div class="k">Feeding &middot; 6-12 months</div><div class="t">Iron-rich foods for babies: why iron matters and what to serve</div><div class="d">NHS-sourced guide to iron-rich foods for babies 6-12 months: why iron is essential and the best foods during weaning.</div></a>
+    <a class="art-card" data-cat="health" data-age="newborn" href="/articles/jaundice-recognition-darker-skin/"><div class="k">Health · Newborn</div><div class="t">Newborn jaundice in darker skin: what to check</div><div class="d">Jaundice is harder to see on darker skin. How to check the whites of the eyes, palms and soles, when to ask for a bilirubin measurement, and what NHS guidance says.</div></a>
+    <a class="art-card" data-cat="care" data-age="all" href="/articles/sun-safety-australia/"><div class="k">Care · All ages</div><div class="t">Sun safety for babies: UV, shade and clothing</div><div class="d">Australia has some of the world's highest UV levels. SunSmart guidelines for protecting babies under 12 months: shade, clothing and when sunscreen is appropriate.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="6-12" href="/articles/fussy-eating-in-babies/"><div class="k">Feeding &middot; 6-12 months</div><div class="t">Fussy eating in babies: causes and gentle approaches</div><div class="d">Why babies refuse food during weaning and what gentle strategies actually help. NHS-sourced guidance for 6-12 month olds.</div></a>
+    <a class="art-card" data-cat="health" data-age="all" href="/articles/baby-care-hot-weather/"><div class="k">Health · All ages</div><div class="t">Keeping your baby safe in hot weather: signs of overheating and what to do</div><div class="d">How heat affects babies, signs of overheating, keeping babies cool in hot climates, safe sleep in summer, and when to get medical help.</div></a>
+    <a class="art-card" data-cat="care" data-age="newborn" href="/articles/chinese-baby-care-traditions/"><div class="k">Care · Newborn</div><div class="t">Chinese baby care traditions</div><div class="d">Traditional Chinese newborn practices including swaddling, herbal baths and outdoor exposure: what modern evidence supports and what to adapt.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="newborn" href="/articles/best-breast-pump-uk-2026/"><div class="k">Feeding &middot; Newborn</div><div class="t">Best breast pumps UK 2026: types and what to consider</div><div class="d">Plain-English guide to manual and electric breast pumps, how to express, and milk storage rules, sourced from NHS guidance.</div></a>
+    <a class="art-card" data-cat="health" data-age="newborn" href="/articles/sids-red-nose-australia/"><div class="k">Health · Newborn</div><div class="t">Safe sleep: the Red Nose guidelines</div><div class="d">Red Nose Australia safe sleeping guidelines: back to sleep, face uncovered, smoke free, safe environment, room sharing and breastfeeding.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="6-12" href="/articles/indian-first-foods-weaning/"><div class="k">Feeding · 6-12 months</div><div class="t">Khichdi, ragi and traditional weaning foods</div><div class="d">When and how to introduce traditional Indian weaning foods like khichdi, ragi porridge and dal: what is nutritious, what is safe, and what the WHO recommends.</div></a>
+    <a class="art-card" data-cat="health" data-age="all" href="/articles/heatwave-babies-australia/"><div class="k">Health · All ages</div><div class="t">Heatwave safety for babies</div><div class="d">What to do when temperatures exceed 35-40 degrees: keeping babies cool, signs of heat stress, when to call 000, and guidance from Australian state health authorities.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="6-12" href="/articles/starting-solids-australia/"><div class="k">Feeding · 6-12 months</div><div class="t">Starting solids: NHMRC guidance</div><div class="d">When and how to introduce solid foods per the Australian NHMRC infant feeding guidelines: first foods, allergens, textures and what to avoid.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="newborn" href="/articles/breastfeeding-support-australia/"><div class="k">Feeding · Newborn</div><div class="t">Breastfeeding support: where to get help</div><div class="d">Free breastfeeding help in Australia: the Australian Breastfeeding Association helpline 1800 686 268, lactation consultants, Child and Family Health Nurses and online resources.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="6-12" href="/articles/congee-baby-first-food/"><div class="k">Feeding · 6-12 months</div><div class="t">Congee as a baby first food</div><div class="d">How traditional Chinese rice congee works as a first weaning food, what to add for iron and protein, and how to make it by age.</div></a>
   </div>
 
-  <h2>3-6 months</h2>
-  <div class="art-grid">
-    <a class="art-card" href="/articles/starting-solids-around-6-months/"><div class="k">Feeding · 3-6 months</div><div class="t">When to start solids: weaning around 6 months</div><div class="d">Signs of readiness, safe first foods and textures, and going at your baby's pace.</div></a>
-    <a class="art-card" href="/articles/introducing-allergen-foods-to-babies/"><div class="k">Feeding · 3-6 months</div><div class="t">Introducing allergen foods to babies</div><div class="d">How to introduce egg, peanut, dairy and more, one at a time, and what to watch for.</div></a>
+  <div class="findr-empty" id="findr-empty" role="status">
+    <h3>No articles match those filters</h3>
+    <p>Try fewer filters, a different age range, or a broader search term.</p>
+    <button class="chip" id="findr-reset" type="button">Reset filters</button>
   </div>
-
-  <h2>6-12 months</h2>
-  <div class="art-grid">
-    <a class="art-card" href="/articles/foods-to-avoid-for-babies/"><div class="k">Feeding &amp; safety · 6-12 months</div><div class="t">Foods to avoid giving babies</div><div class="d">Salt, sugar, honey, whole nuts and other choking hazards, and how to cut food safely.</div></a>
-  </div>
-
-  <h2>Vaccines &amp; health (all ages)</h2>
-  <div class="art-grid">
-    <a class="art-card" href="/vaccination-schedule/uk/"><div class="k">Vaccines · UK (NHS)</div><div class="t">UK baby vaccination schedule</div><div class="d">Every NHS jab from 8 weeks to 3 years 4 months, with the 2026 changes and a birthday calculator.</div></a>
-    <a class="art-card" href="/vaccination-schedule/us/"><div class="k">Vaccines · US (CDC)</div><div class="t">US baby vaccine schedule</div><div class="d">The CDC recommended schedule from birth to 6 years, age by age.</div></a>
-    <a class="art-card" href="/vaccination-schedule/uae/"><div class="k">Vaccines · UAE (MOHAP)</div><div class="t">UAE baby vaccination schedule</div><div class="d">The UAE national immunization program from birth to school age.</div></a>
-    <a class="art-card" href="/de/impfkalender/"><div class="k">Vaccines · Deutschland</div><div class="t">Impfkalender Baby (STIKO)</div><div class="d">Der STIKO-Impfplan für Säuglinge, von 6 Wochen bis 2 Jahre.</div></a>
-    <a class="art-card" href="/articles/baby-vaccination-schedules-compared/"><div class="k">Vaccines · Compare</div><div class="t">Baby vaccine schedules compared</div><div class="d">UK, US, UAE &amp; Germany, how they line up and what changes if you move country.</div></a>
-    <a class="art-card" href="/articles/never-miss-a-baby-vaccine/"><div class="k">Vaccines · How-to</div><div class="t">How to never miss a baby vaccine</div><div class="d">A simple system for tracking doses and due dates across every caregiver.</div></a>
-  </div>
-
-  <p class="lead2" style="margin-top:24px">More guides are added regularly across teething, sleep by age, illnesses, growth, play and learning. Every one is sourced and dated.</p>
 
   <div class="cta">
     <h3>Keep it all in one calm place</h3>
@@ -74,7 +245,128 @@
     <a class="btn" href="https://little-cubby.com/app/">Start free</a>
   </div>
 
-  <footer class="src">Cubby, a warm private baby tracker. Articles are informational only and not medical advice; always follow your doctor and local health authority.</footer>
+  <footer class="src">Cubby, a warm private baby tracker. Articles are informational only and not medical advice; always follow your doctor and local health authority. See our <a href="/editorial/">editorial process</a>.</footer>
 </main>
+
+<script>
+(function(){
+  var q = document.getElementById('findr-q');
+  var grid = document.getElementById('findr-grid');
+  var count = document.getElementById('findr-count');
+  var empty = document.getElementById('findr-empty');
+  var cards = Array.prototype.slice.call(grid.querySelectorAll('.art-card'));
+  var heads = Array.prototype.slice.call(grid.querySelectorAll('.sect-head'));
+  var selectedCat = 'all';
+  var selectedAge = 'all';
+  var TOTAL = cards.length;
+
+  // Populate chip and section-head counts
+  var catTotals = {};
+  for (var i=0;i<cards.length;i++){
+    var c = cards[i].dataset.cat;
+    catTotals[c] = (catTotals[c]||0) + 1;
+  }
+  var catChips = document.querySelectorAll('#cat-chips .chip');
+  for (var k=0;k<catChips.length;k++){
+    var dc = catChips[k].dataset.cat;
+    var n = dc === 'all' ? TOTAL : (catTotals[dc] || 0);
+    catChips[k].innerHTML = catChips[k].textContent + ' <span class="n">' + n + '</span>';
+  }
+  for (var h=0;h<heads.length;h++){
+    var sect = heads[h].dataset.sect;
+    heads[h].querySelector('.n').textContent = (catTotals[sect] || 0) + ' guides';
+  }
+
+  function syncChips(){
+    var cs = document.querySelectorAll('#cat-chips .chip');
+    for (var i=0;i<cs.length;i++) cs[i].classList.toggle('on', cs[i].dataset.cat === selectedCat);
+    var as = document.querySelectorAll('#age-chips .chip');
+    for (var j=0;j<as.length;j++) as[j].classList.toggle('on', as[j].dataset.age === selectedAge);
+  }
+
+  function writeHash(){
+    var params = [];
+    if (selectedCat !== 'all') params.push('cat=' + selectedCat);
+    if (selectedAge !== 'all') params.push('age=' + selectedAge);
+    var term = q.value.trim();
+    if (term) params.push('q=' + encodeURIComponent(term));
+    var str = params.join('&');
+    history.replaceState(null, '', str ? '#' + str : location.pathname);
+  }
+
+  function readHash(){
+    var h = location.hash.replace(/^#/, '');
+    if (!h) return;
+    var parts = h.split('&');
+    for (var i=0;i<parts.length;i++){
+      var kv = parts[i].split('=');
+      if (kv[0] === 'cat') selectedCat = kv[1] || 'all';
+      else if (kv[0] === 'age') selectedAge = kv[1] || 'all';
+      else if (kv[0] === 'q') q.value = decodeURIComponent(kv[1] || '');
+    }
+    syncChips();
+  }
+
+  function ageMatch(cardAge, sel){
+    if (sel === 'all' || cardAge === 'all') return true;
+    var bands = cardAge.split(' ');
+    for (var i=0;i<bands.length;i++) if (bands[i] === sel) return true;
+    return false;
+  }
+
+  function filter(){
+    var term = q.value.trim().toLowerCase();
+    var shown = 0;
+    var isFiltered = !!term || selectedCat !== 'all' || selectedAge !== 'all';
+    for (var i=0;i<cards.length;i++){
+      var card = cards[i];
+      var catOk = selectedCat === 'all' || card.dataset.cat === selectedCat;
+      var ageOk = ageMatch(card.dataset.age, selectedAge);
+      var searchOk = !term || card.textContent.toLowerCase().indexOf(term) !== -1;
+      var ok = catOk && ageOk && searchOk;
+      card.hidden = !ok;
+      if (ok) shown++;
+    }
+    grid.classList.toggle('is-filtered', isFiltered);
+    if (!isFiltered){
+      count.textContent = 'Showing all ' + TOTAL + ' articles';
+    } else {
+      count.textContent = 'Showing ' + shown + ' of ' + TOTAL + ' articles';
+    }
+    empty.classList.toggle('on', shown === 0);
+    writeHash();
+  }
+
+  function bindChips(groupId){
+    var chips = document.querySelectorAll('#' + groupId + ' .chip');
+    for (var i=0;i<chips.length;i++){
+      chips[i].addEventListener('click', function(e){
+        if (groupId === 'cat-chips') selectedCat = e.currentTarget.dataset.cat;
+        else selectedAge = e.currentTarget.dataset.age;
+        syncChips();
+        filter();
+      });
+    }
+  }
+  bindChips('cat-chips');
+  bindChips('age-chips');
+
+  q.addEventListener('input', filter);
+
+  function reset(){
+    q.value = '';
+    selectedCat = 'all';
+    selectedAge = 'all';
+    syncChips();
+    filter();
+    q.focus();
+  }
+  document.getElementById('findr-clear').addEventListener('click', reset);
+  document.getElementById('findr-reset').addEventListener('click', reset);
+
+  readHash();
+  filter();
+})();
+</script>
 </body>
 </html>

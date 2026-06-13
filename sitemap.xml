@@ -3,11 +3,13 @@
         xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
     <loc>https://little-cubby.com/</loc>
+    <lastmod>2026-06-12</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://little-cubby.com/vaccination-schedule/uk/</loc>
+    <lastmod>2026-06-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
     <xhtml:link rel="alternate" hreflang="en-gb" href="https://little-cubby.com/vaccination-schedule/uk/"/>
@@ -18,16 +20,19 @@
   </url>
   <url>
     <loc>https://little-cubby.com/vaccination-schedule/us/</loc>
+    <lastmod>2026-06-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
     <loc>https://little-cubby.com/vaccination-schedule/uae/</loc>
+    <lastmod>2026-06-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
     <loc>https://little-cubby.com/de/impfkalender/</loc>
+    <lastmod>2026-06-08</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
@@ -38,21 +43,25 @@
   </url>
   <url>
     <loc>https://little-cubby.com/features/</loc>
+    <lastmod>2026-06-12</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://little-cubby.com/pricing/</loc>
+    <lastmod>2026-06-12</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://little-cubby.com/faq/</loc>
+    <lastmod>2026-06-12</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://little-cubby.com/articles/</loc>
+    <lastmod>2026-06-12</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -75,4 +84,108 @@
   <url><loc>https://little-cubby.com/articles/foods-to-avoid-for-babies/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://little-cubby.com/articles/baby-teething-and-tooth-care/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://little-cubby.com/articles/baby-sleep-by-age/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/editorial/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://little-cubby.com/articles/best-baby-tracker-app/</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://little-cubby.com/articles/cubby-vs-huckleberry/</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://little-cubby.com/articles/four-month-sleep-regression/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/eight-month-sleep-regression/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/newborn-sleep-what-is-normal/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-bedtime-routine/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/swaddling-a-baby/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/white-noise-for-babies/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/dummy-pacifier-pros-and-cons/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/moving-baby-to-own-room/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/breastfeeding-latch-and-positioning/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/how-often-to-feed-newborn/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/bottle-feeding-basics/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/combination-feeding-breast-and-bottle/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/how-much-formula-by-age/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/signs-baby-is-hungry-or-full/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-led-weaning-vs-purees/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/iron-rich-foods-for-babies/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/vitamin-d-for-babies/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/water-for-babies/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-finger-foods-at-6-months/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/fussy-eating-in-babies/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-development-1-month/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-development-2-months/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-development-3-months/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-development-4-months/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-development-6-months/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-development-9-months/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-development-12-months/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/tummy-time-for-babies/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-language-development/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-vision-development/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-cold-and-cough/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-fever-when-to-worry/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/nappy-rash-causes-and-treatment/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/reflux-in-babies/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/cradle-cap/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-eczema/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/constipation-in-babies/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-ear-infection/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/rsv-in-babies/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/newborn-jaundice/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-rashes-guide/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/when-to-call-111-or-ae/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/why-babies-cry/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/the-witching-hour-babies/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/separation-anxiety-babies/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/overtired-baby/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/cutting-baby-nails/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-skincare/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/sun-protection-for-babies/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/car-seat-safety-for-newborns/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/babywearing-safety/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-massage/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-proofing-your-home/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-weight-gain-first-year/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-growth-spurts/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/head-circumference-babies/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/reading-baby-growth-charts/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/vaccine-side-effects-babies/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/catching-up-on-missed-vaccines/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/common-vaccine-questions/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/six-in-one-vaccine/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/cubby-vs-nara-baby/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/cubby-vs-babyconnect/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/best-baby-monitor-2026/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/best-breast-pump-uk-2026/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/postnatal-depression-signs-and-support/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/recovering-from-birth-first-weeks/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-length-height-first-year/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/premature-baby-growth/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/flat-head-syndrome-babies/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/centile-drops-baby-growth/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/breastfed-baby-weight-gain/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/when-babies-double-birth-weight/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-blues-explained/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/postnatal-anxiety/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/sleep-deprivation-new-parents/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/partner-postnatal-depression/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/returning-to-work-after-baby/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/building-support-network-baby/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/self-care-for-new-parents/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/relationship-changes-after-baby/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-tracking-app-vs-paper/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/types-of-infant-formula-uk/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-carrier-types-compared/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/nhs-red-book-explained/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/free-resources-uk-new-parents/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/cubby-vs-glow-baby/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/cubby-vs-tinybeans/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/indian-baby-massage-maalish/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/indian-first-foods-weaning/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/indian-postnatal-traditions/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/jaundice-recognition-darker-skin/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby-care-hot-weather/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/sids-red-nose-australia/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/starting-solids-australia/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/sun-safety-australia/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/heatwave-babies-australia/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/breastfeeding-support-australia/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/zuo-yuezi-postnatal-confinement/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/congee-baby-first-food/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://little-cubby.com/articles/chinese-baby-care-traditions/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
 </urlset>

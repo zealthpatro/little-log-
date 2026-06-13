@@ -105,7 +105,35 @@ per-type send caps, retries/backoff in the Function.
 - New transactional triggers (fever, appointment) can call the same `sendEmail()` from the app
   (Phase 0/EmailJS) or be moved server-side to Firestore-event-driven Functions (Phase 1).
 
+## 9b. Auth emails (sign-in links) — current state + branded-email decision (11 June 2026)
+**What exists today (done):**
+- Email **magic-link sign-in** is live alongside Google (`store-firebase.js`: `sendSignInLinkToEmail`
+  / `isSignInWithEmailLink` / `signInWithEmailLink`; provider + passwordless toggle enabled in console).
+- **Custom sender domain configured for Firebase auth emails**: SPF (`v=spf1
+  include:_spf.firebasemail.com ~all`), `firebase=little-log-a9caa` TXT, and two DKIM CNAMEs
+  (`firebase1/2._domainkey`) live in Cloudflare DNS on the apex. Auth emails send from
+  `noreply@little-cubby.com` (sender name "Cubby", public-facing name "Cubby"). This was needed
+  because Gmail silently dropped mail from the shared `firebaseapp.com` sender.
+
+**Decision: no custom HTML for auth emails yet.** Firebase locks the auth-email body
+(anti-spam), so the only branding available is sender name + domain + %APP_NAME%, which we've
+done. Plain transactional emails also deliver better; that wins for now.
+
+**When the email phase is built, fold sign-in links into it:** a Cloudflare **Worker** (free,
+fits the no-Blaze constraint better than Cloud Functions) obtains the link via the Admin API
+(`accounts:sendOobCode` with `returnOobLink: true`, service-account OAuth) and sends a branded
+template through the transactional ESP (Resend default). One Worker + one ESP then covers
+branded invites, sign-in links, and digests. Note: MailChannels' free Workers tier was
+discontinued (2024), so an ESP key is required either way.
+
+**SPF caveat for the future split:** the apex SPF currently includes only `firebasemail.com`.
+When adding an ESP, send marketing/transactional from **subdomains** (`mail.`/`news.`, per §2)
+with their own SPF/DKIM, and leave the apex record for Firebase auth mail.
+
 ## 10. Decision log
 - 2026-06: For family scale, ship/keep free client email (EmailJS or mailto). Do **not** build
   Blaze/ESP yet. Revisit when approaching real users or adding promotional email.
+- 2026-06-11: Magic-link sign-in shipped; Firebase auth emails moved to noreply@little-cubby.com
+  (SPF/DKIM in Cloudflare) after Gmail dropped the default sender. Branded auth-email HTML
+  deferred to the ESP phase (see §9b), where a Worker + `returnOobLink` takes over sending.
 - Transactional ≠ marketing: always separate streams, domains, and consent.

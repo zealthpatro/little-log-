@@ -1,7 +1,9 @@
 # Cubby Pregnancy Tracker (build spec)
 
-> Building it in a fresh session? Start with **`PREGNANCY-HANDOFF.md`** — a self-contained,
-> step-by-step handoff with exact code anchors. This file is the higher-level spec/source list.
+> **SUPERSEDED for current status: see `PREGNANCY-HANDOFF-V2.md`.** The pregnancy product
+> ("Mommy To Be") is fully built on branch `pregnancy-tracker` (not merged yet); v2 owns the
+> track: state, rollout runbook and next steps. This file remains as the original spec +
+> source list (re-check sources yearly).
 
 Goal: make Cubby **one continuous lifecycle inside the same app** from **day 0 (pregnancy) → welcoming the baby (birth) → year 1 → toddler**, not a separate module. A pregnancy is created with a due date (or last-period date), tracked week by week, and at birth Cubby **welcomes the baby** by turning that pregnancy into a baby profile (the pregnancy is kept as history), flowing straight into the tracker that already exists. Birth is a warm transition within the app, not a new product.
 

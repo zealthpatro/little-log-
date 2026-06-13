@@ -8,43 +8,50 @@ marketing + SEO site (home, features, articles, pricing, FAQ, programmatic vacci
 - **Live:** https://little-cubby.com (custom domain) — also https://cubby.saurav-918.workers.dev
 - **App:** https://little-cubby.com/app/ · **Marketing/SEO:** everything at the root `/`
 - **Repo:** https://github.com/zealthpatro/little-log-
-- **Hosting:** Cloudflare (Workers static assets) — auto-deploys on push to `main`
-- **Backend:** Firebase (Google sign-in + Firestore) — project `little-log-a9caa`, free **Spark** plan
+- **Hosting:** Cloudflare (Workers static assets + a tiny edge worker for same-domain auth), auto-deploys on push to `main`
+- **Backend:** Firebase (Google + email magic-link sign-in, Firestore), project `little-log-a9caa`, free **Spark** plan
 
 > The app is fully cloud-hosted and always-on. No local machine is required to keep it
 > running — `localhost` is only for development.
-> Last refreshed: 2026-06-09.
+> Last refreshed: 2026-06-12.
 
 ---
 
 ## 1. Architecture at a glance
 
 Two halves, one Cloudflare deploy: a **static marketing/SEO site at `/`** (indexable, no
-service worker) and the **PWA at `/app/`** (Google sign-in, service-worker cached).
+service worker) and the **PWA at `/app/`** (Google or email sign-in, service-worker cached).
+A tiny **edge worker (`worker.js`)** sits in front of both: it reverse-proxies the reserved
+Firebase namespace (`/__/*`) to the project's `firebaseapp.com` origin so sign-in runs on
+`little-cubby.com` itself (`authDomain` = `little-cubby.com`) — everything else is served from
+static assets.
 
 ```
 Phone / browser
+   │
+   ├─ worker.js (edge) ......... proxies /__/* → little-log-a9caa.firebaseapp.com (same-domain auth);
+   │                             all other paths → static assets (binding ASSETS)
    │
    ├─ /  (marketing + SEO — static, indexable)
    │   ├─ index.html ............ marketing home (5-tab nav, hero carousel, proof, pricing)
    │   ├─ features/ pricing/ faq/ articles/ ... the other tabs
    │   ├─ vaccination-schedule/{uk,us,uae}/, de/impfkalender/ ... programmatic SEO pages
-   │   ├─ articles/<slug>/ ...... sourced content library (see §10, content engine)
+   │   ├─ articles/<slug>/ ...... sourced content library, 100+ articles (see §10, content engine)
    │   ├─ site.css (marketing) + vax.css (articles/vaccine) ... shared styles
    │   └─ sitemap.xml robots.txt og/*.png ... SEO plumbing
    │
-   └─ /app/  (the PWA — behind Google sign-in)
+   └─ /app/  (the PWA — behind Google or email sign-in)
        ├─ index.html ........... the whole app (single-file vanilla JS UI, ~4.3k lines)
-       ├─ firebase-init.js ..... Firebase config + init (auth, Firestore, offline cache)
-       ├─ store-firebase.js .... auth gate + real-time sync engine + sharing/family UI
+       ├─ firebase-init.js ..... Firebase config + init (auth domain little-cubby.com, Firestore, offline cache)
+       ├─ store-firebase.js .... auth gate + first-run onboarding + real-time sync engine + sharing/family UI
        ├─ cubby-extras.js ...... bear avatars (SVG), custom time/date pickers, "When" strip
        ├─ landing.js ........... signed-out landing + Pro/paywall copy
        ├─ growth-data.js ....... WHO + CDC growth percentile tables (generated)
-       ├─ pregnancy-data.js .... week-by-week + antenatal data (Phase 1 data; UI WIP)
+       ├─ pregnancy-data.js .... week-by-week + antenatal data (full UI built on branch pregnancy-tracker)
        └─ sw.js ................ service worker (CACHE little-log-vNN; network-first HTML)
             │
             ▼
-       Firebase Auth (Google)  +  Cloud Firestore (shared "household" doc + subcollections)
+       Firebase Auth (Google + email link)  +  Cloud Firestore (shared "household" doc + subcollections)
 
    Cloudflare serves the static files;  Firestore stores + syncs the app data.
 ```
@@ -67,12 +74,12 @@ and runs a diff-based sync engine. The app code still just mutates `state` and c
 |---|---|
 | `app/index.html` | Entire UI + logging logic. Inline `<script>` defines `state`, `render()`, all `open*/save*` sheet functions, growth charts, fever nudge, visit summary, photo studio, tips ticker. |
 | `app/firebase-init.js` | Public Firebase web config; initializes `auth`, `db`; enables auth persistence + Firestore offline cache. Exposes `window.LL`. |
-| `app/store-firebase.js` | Google sign-in screen; resolves/creates the household; one-time migration of old localStorage data; real-time listeners; diff-based `persist()`; photo storage in Firestore; Family & sharing UI (invite, relationship, remove member, copy/email link); first-run setup. |
+| `app/store-firebase.js` | Sign-in screen (Google popup/redirect + email magic-link); resolves/creates the household; one-time migration of old localStorage data; real-time listeners; diff-based `persist()`; photo storage in Firestore; Family & sharing UI (invite, relationship, remove member, copy/email link); first-run onboarding (`maybeFirstRun`/`openFirstRun`): non-dismissible locked modal over a blurred app preview, mandatory baby name + optional country/birthday/relationship, with a log-out option; self-graduating beta copy. |
 | `app/cubby-extras.js` | `cubbyBear()` parametric SVG avatars; per-member/per-baby variants + picker; the custom warm **time picker** and unified **"When?" (date+time)** picker. |
 | `app/landing.js` | Signed-out in-app landing screen + Pro/paywall copy (incl. Nutrition tracker). |
 | `app/growth-data.js` | `window.GROWTH_REF` = `{who,cdc}.{weight,height}.{M,F}` arrays of `[month,p5,p25,p50,p75,p95]`. Generated from official CDC/WHO data files (see §7). |
-| `app/pregnancy-data.js` | `window.PREG` week-by-week (weeks 4-41) + antenatal schedules (UK/US/DE/UAE/generic) + danger signs. Data only; in-app UI is WIP (see `PREGNANCY.md`). |
-| `app/sw.js` | App service worker; bump `CACHE` (`little-log-vN`, currently **v47**) on app asset change. |
+| `app/pregnancy-data.js` | `window.PREG` week-by-week (weeks 4-41) + antenatal schedules (UK/US/DE/UAE/generic) + danger signs + condition thresholds. The full pregnancy product ("Mommy To Be") — journey, health tracking, ultrasound Moments, birth→baby conversion — is built on branch `pregnancy-tracker`, unmerged: see `PREGNANCY-HANDOFF-V2.md`. |
+| `app/sw.js` | App service worker; bump `CACHE` (`little-log-vN`, currently **v57**) on app asset change. |
 | `app/manifest.webmanifest` | PWA manifest (name "Cubby", `start_url`/`scope` = `/app/`, icons). |
 
 ### Marketing + SEO (root `/`)
@@ -89,8 +96,10 @@ and runs a diff-based sync engine. The app code still just mutates `state` and c
 ### Shared / infra
 | File | Purpose |
 |---|---|
-| `firestore.rules` | Security rules — members-only access, owner vs caregiver, invite-by-email join. |
-| `wrangler.toml` | Cloudflare static-assets deploy config (`[assets] directory="./"`). |
+| `firestore.rules` | Security rules: members-only access, owner vs caregiver, invite-by-email join, and `households/{hid}.pro` writable only by the billing Worker. |
+| `worker.js` | Cloudflare edge worker (`wrangler.toml` `main`): reverse-proxies `/__/*` to `little-log-a9caa.firebaseapp.com` for same-domain sign-in (`authDomain` = `little-cubby.com`); all other paths fall through to static assets via the `ASSETS` binding. |
+| `workers/pro-billing/` | Standalone Stripe billing Worker (`worker.js` + `wrangler.toml` + `README.md`): `/checkout`, `/webhook`, `/portal`; verifies Stripe signatures and writes the `households/{hid}.pro` entitlement. Built; deploy + secrets pending (see §9 and its `README.md`). |
+| `wrangler.toml` | Cloudflare deploy config: `main = "worker.js"` (edge auth proxy) + `[assets] directory="./"` (static site). |
 | `.assetsignore` | Keeps `tools/`, docs, drafts, node_modules and the service-account key out of the deploy. |
 | `.gitignore` | Ignores `tools/serviceAccountKey.json`, node_modules, logs, `.DS_Store`. |
 | `_headers` | Cloudflare header hints (CSP/security; keeps sw/manifest uncached). |
@@ -108,6 +117,9 @@ households/{hid}
   ownerId: <uid>
   members:    { <uid>: 'owner' | 'caregiver' }      // fast rule checks
   memberInfo: { <uid>: { name, email, photoURL, role, relationship, avatar:{fur,acc}, setupDone } }
+              // relationship: the user's label to the baby (e.g. "Mama Bear")
+              // setupDone:    Boolean, set true once first-run onboarding completes (gates the modal)
+  pro:        { active, plan, status, until, customer, updatedAt }   // written ONLY by the billing Worker
   app:        { babies[], settings, milestones[], meds[], vaccines{}, illnesses[], photos[], timers{} }
   updatedAt
 
@@ -115,10 +127,13 @@ households/{hid}/events/{eventId}   // one doc per log entry, includes authorId
 households/{hid}/photos/{photoId}   // { data: <base64 thumbnail>, authorId }   (no Firebase Storage)
 
 invites/{emailLowercase}            // { householdId, role, relationship, name, invitedBy, status }
-users/{uid}                         // { householdId, name, email }  — private pointer
+users/{uid}                         // { householdId, name, email, referredBy? }  (private pointer)
 ```
 
-**Per-device (localStorage, not synced):** `little-log-prefs-v1` = `{ activeBabyId, theme }`.
+**Per-device (localStorage, not synced):** `little-log-prefs-v1` = `{ activeBabyId, theme }`;
+`cubby-member` = `'1'` once signed in (drives the marketing "Welcome back" / Open Cubby CTAs);
+`cubby-ref` holds an inbound `?ref=` referral code until the next sign-in, then it is written to
+`users/{uid}.referredBy` (new owners only) and cleared.
 Everything else (including live nap/feed **timers**) is shared via `households/{hid}.app`.
 
 **Events** are the high-frequency, multi-writer data → their own subcollection (one doc each),
@@ -149,8 +164,22 @@ Firebase Storage, which would force the paid Blaze plan). Keeps `photoSrc()` syn
 - **Logging** (all share one **time strip** → tap to set date+time): feed (nursing timer,
   bottle, solids, water), sleep (live timer + past nap with "still sleeping" toggle), diaper,
   pump, activity/notes, growth, medicine, temperature, symptoms, visits.
-- **Sharing:** Google sign-in, one shared household, invite by email (Copy link / Email button /
-  relationship + co-owner), members list, remove member, first-run bear+relationship setup.
+- **Sign-in:** Google (popup, with a redirect fallback when popups are blocked) **or** email
+  magic-link (`sendSignInLinkToEmail` → `isSignInWithEmailLink` → `signInWithEmailLink`). Both run
+  on `little-cubby.com` itself via the same-domain `worker.js` proxy.
+- **First-run onboarding:** the first time a user signs in, a non-dismissible **locked modal**
+  (no close button) appears over a blurred, non-interactive app preview. Baby name is required;
+  country (defaults to `detectCountry()`), birthday, bear color and relationship are optional. A
+  **log-out** option is the only way out without finishing. Completing it sets `setupDone = true`
+  so the modal never returns. The intro copy is **self-graduating**: it reads "early beta" until
+  27 Jul 2026, then switches to a standard welcome with no manual edit needed.
+- **Sharing:** one shared household, invite by email (Copy link / Email button / relationship +
+  co-owner), members list, remove member, first-run bear+relationship setup.
+- **Referral loop:** every signed-in user gets a short `?ref=` code (hashed UID, base36, 6 chars)
+  surfaced via Settings → "Share Cubby" (personalized share link, native share or clipboard
+  fallback). An inbound `?ref=` is captured on any page load into `cubby-ref` localStorage and, at
+  sign-in, written to `users/{uid}.referredBy` **only for a brand-new household owner** (invited
+  caregivers join existing households and are not attributed).
 - **Attribution:** every entry shows "logged by <relationship/name>" with the person's mini bear.
 - **Avatars:** unique bear per person and per baby (fur + accessory), changeable; baby photo can
   take over (with a "keep bear or use photo?" prompt).
@@ -197,7 +226,7 @@ git add -A && git commit -m "..." && git push
 
 ### Deploy (manual, if ever needed)
 ```bash
-npx wrangler deploy        # uses wrangler.toml ([assets] directory="./")
+npx wrangler deploy        # uses wrangler.toml (main = "worker.js" + [assets] directory="./")
 ```
 
 ### Required when the live domain changes
@@ -232,8 +261,10 @@ Icons: `python3 generate_icons.py`.
 | Cloudflare project | `cubby` → `cubby.saurav-918.workers.dev` + custom domain `little-cubby.com` |
 | Domain | `little-cubby.com` (registered in Cloudflare; added as a Worker Custom Domain) |
 | Firebase project | `little-log-a9caa` (Spark / free) |
-| Firebase services | Authentication (Google), Cloud Firestore. **No** Storage, **no** Functions. |
-| Firebase web config | in `app/firebase-init.js` (public by design; safe to commit) |
+| Firebase services | Authentication (Google + email magic-link), Cloud Firestore. **No** Storage, **no** Functions. |
+| Firebase web config | in `app/firebase-init.js` (public by design; safe to commit; `authDomain` = `little-cubby.com`) |
+| Edge worker | `worker.js` (`wrangler.toml` `main`) proxies `/__/*` to Firebase for same-domain auth |
+| Stripe billing | `workers/pro-billing/` (separate Worker; built, deploy + secrets pending; see its `README.md`) |
 
 Everything runs on **free tiers**. Nothing here requires a card on file.
 
@@ -243,19 +274,30 @@ Everything runs on **free tiers**. Nothing here requires a card on file.
 
 - **Push notifications** are **in-app only** (fire while the app is open/installed). True
   background push needs Web Push + Cloud Functions → the paid **Blaze** plan. Deliberately deferred.
-- **Automated email** (e.g. invites sent *by Cubby's servers*) isn't built. Current "Email the
-  invite" uses a `mailto:` from the sender's own mail app (free). Server-sent email needs either
-  the Firebase "Trigger Email" extension (Blaze + SMTP) or a client-side service (e.g. EmailJS).
+- **Automated email** (e.g. invites or digests sent *by Cubby's servers*) isn't built. Note that
+  sign-in **magic-links are sent by Firebase Auth**, so email sign-in already works without our own
+  mail infra. Current "Email the invite" still uses a `mailto:` from the sender's own mail app
+  (free). Server-sent transactional/marketing email needs either the Firebase "Trigger Email"
+  extension (Blaze + SMTP) or a client-side service (e.g. EmailJS).
   **Full design + scaling plan (5k users / 100k+ emails, transactional vs marketing): see [`EMAIL.md`](EMAIL.md).**
 - **IAP growth charts**: the IAP 2015 charts cover **5–18 years only**; for under-5, IAP/India use
   **WHO**, which is the app's default. IAP would only matter if Cubby later tracks older children.
 - **App-blob writes** are last-write-wins (fine for profile/settings; events are per-doc and safe).
 - Removed members keep a stale `users/{uid}.householdId` pointer until they next sign in (they
   lose data access immediately via rules; client just shows an error until re-resolved).
-- **Pregnancy module:** data exists (`app/pregnancy-data.js`); the in-app UI (mode/week view,
-  kick counter, contraction timer, birth plan, birth→baby conversion) is not built — see `PREGNANCY.md`.
-- **Pro / paywall:** localized pricing is live on the marketing site; the in-app Stripe paywall is
-  design-only until beta closes — see `PAYWALL.md` and `PRO.md`.
+- **Pregnancy product ("Mommy To Be"):** fully built (journey, week view, health trackers, tools,
+  ultrasound Moments, birth→baby conversion, /pregnancy/ page, consent governance) on branch
+  `pregnancy-tracker`, awaiting PR review/merge. The track is owned by `PREGNANCY-HANDOFF-V2.md`;
+  keep `main` sessions for core jobs.
+- **Pro / paywall:** localized pricing is live on the marketing site and the full payment loop is
+  **built**: `workers/pro-billing/worker.js` (Stripe `/checkout`, `/webhook`, `/portal`, 7-day
+  trial) plus client-side gating via `isPro()` and the rules-protected `households/{hid}.pro`
+  entitlement. It is **not live yet**: deployment, Stripe product/secrets, the webhook, publishing
+  `firestore.rules`, and wiring the checkout/portal URLs are pending (~20 min, see
+  `workers/pro-billing/README.md`, `PAYWALL.md` and `PRO.md`).
+- **Referral rewards:** the `?ref=` plumbing ships (capture + `referredBy` attribution), but the
+  reward itself (1 free month of Base per still-active referred family, capped at 6) is designed,
+  not yet redeemable, so it isn't announced anywhere — see `PAYWALL.md`.
 - **On-device only** for photo AI; generative (server/VM Qwen/Seedream) is post-beta — `AI-EDITING.md`.
 
 ---
@@ -263,10 +305,19 @@ Everything runs on **free tiers**. Nothing here requires a card on file.
 ## 10. Marketing site, SEO & content engine
 
 - **Marketing site** (root `/`): 5 tabs (home, features, articles, pricing, FAQ), built static and
-  indexable with SoftwareApplication/Organization/FAQPage JSON-LD, OG images, `sitemap.xml`,
-  `robots.txt` and `hreflang`. Pricing widget is localized (USD/GBP/EUR/AED/INR, monthly + discounted
-  annual). All visuals are original illustrations / initial avatars and all testimonials are real
-  (no stock photos, no fabricated proof). Full plan in `SEO.md`.
+  indexable with SoftwareApplication/Organization/FAQPage/CollectionPage JSON-LD, per-page OG
+  images (`og/*.png` + per-article `og/articles/<slug>.png`), `BreadcrumbList` on every page,
+  `sitemap.xml`, `robots.txt` and `hreflang`. Pricing widget is localized (USD/GBP/EUR/AED/INR,
+  monthly + discounted annual). All visuals are original illustrations / initial avatars and all
+  testimonials are real (no stock photos, no fabricated proof). Full plan in `SEO.md`.
+- **Articles hub** (`articles/`): 80+ sourced guides in a searchable hub with live text search plus
+  topic filters (Sleep, Feeding, Development, Health, Care & safety, Vaccines, Growth, Wellbeing,
+  Comparisons) and age filters (Newborn / 0-3 / 3-6 / 6-12 mo), with dynamic counts, an empty
+  state, and filters persisted to the URL hash. Each article carries `BlogPosting` + `BreadcrumbList`
+  JSON-LD and its own OG image.
+- **Returner & referral flow:** the home page checks `cubby-member` in localStorage and, for
+  returning members, swaps "Start free" → "Open Cubby" and shows a "Welcome back" strip (no forced
+  redirect). Inbound `?ref=` codes are captured to `cubby-ref` for sign-in attribution (see §3, §5).
 - **Programmatic vaccine pages**: `vaccination-schedule/{uk,us,uae}/` + `de/impfkalender/`, each
   sourced to the national authority, with a birthday calculator and links into the app at the right
   country (closes the SEO→app loop without IP geolocation).
@@ -289,10 +340,15 @@ Everything runs on **free tiers**. Nothing here requires a card on file.
 | `HANDOFF.md` | Fast resume notes / 30-second mental model. |
 | `CHANGELOG.md` | Notable changes over time. |
 | `SEO.md` | Marketing/SEO + CRO strategy. |
+| `SEO-BACKLINKS.md` | Backlink & launch playbook: GSC/Bing steps, Product Hunt kit, directories, listicle + community outreach templates, guardrails. |
+| `PRODUCTHUNT.md` | Full Product Hunt launch kit: listing fields, description, maker comment, FAQ, launch-day timeline. Gallery images in `og/producthunt/` (regen via `tools/gen_ph_gallery.py`). |
+| `DESIGN.md` | **Design anchor**: design system (tokens, type, spacing, iconography rules) + full design audit + prioritized fix list. New UI must follow Part A. |
 | `CONTENT.md` / `CONTENT-RUNBOOK.md` / `CONTENT-QUEUE.md` | Article rules / publish pipeline / backlog. |
-| `PRO.md` / `PAYWALL.md` | Pro feature list and paywall design (pre-beta). |
-| `PREGNANCY.md` | Phased pregnancy-module spec. |
-| `PREGNANCY-HANDOFF.md` | Build handoff for the pregnancy → birth → baby lifecycle (integrated into this app, not a separate module). |
+| `PRO.md` / `PAYWALL.md` | Pro feature list, paywall + referral-reward design, and launch checklist (payment loop built, not yet live). |
+| `workers/pro-billing/README.md` | Stripe billing Worker: endpoints, the four secrets, webhook setup, and the ~20-minute go-live checklist. |
+| `PREGNANCY.md` | Phased pregnancy-module spec (original; sources list still canonical). |
+| `PREGNANCY-HANDOFF.md` | v1 build handoff, superseded (build is done). |
+| `PREGNANCY-HANDOFF-V2.md` | **The pregnancy track:** what's built on branch `pregnancy-tracker`, brand state (Mommy To Be / Den), rollout runbook, next-work queue. Start here for any pregnancy work. |
 | `ROUTINES.md` | Routines / activity-planning notes. |
 | `ONBOARDING.md` | First-run / onboarding notes. |
 | `EMAIL.md` | Server-sent email design + scaling plan. |

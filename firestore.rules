@@ -48,18 +48,25 @@ service cloud.firestore {
           && exists(/databases/$(database)/documents/invites/$(request.auth.token.email.lower()))
           && get(/databases/$(database)/documents/invites/$(request.auth.token.email.lower())).data.householdId == hid;
       }
+      // Pro entitlement is set ONLY by the billing Worker (Admin credentials bypass rules).
+      // No client, owner included, may grant or change it.
+      function proUnchanged() {
+        return request.resource.data.get('pro', null) == resource.data.get('pro', null);
+      }
 
       allow read:   if isMember() || invitedHere();
       allow create: if request.auth != null
         && request.resource.data.ownerId == request.auth.uid
-        && request.resource.data.members[request.auth.uid] == 'owner';
-      // Owner can change anything. A caregiver may edit shared data but NOT membership/owner
-      // (no privilege escalation). An invitee may join (this adds themselves to members).
-      allow update: if isOwner()
+        && request.resource.data.members[request.auth.uid] == 'owner'
+        && request.resource.data.get('pro', null) == null;
+      // Owner can change anything (except pro). A caregiver may edit shared data but NOT
+      // membership/owner (no privilege escalation). An invitee may join (adds themselves).
+      allow update: if proUnchanged() && (
+           isOwner()
         || ( isMember()
              && request.resource.data.ownerId == resource.data.ownerId
              && request.resource.data.members == resource.data.members )
-        || invitedHere();
+        || invitedHere() );
       allow delete: if request.auth != null && resource.data.members[request.auth.uid] == 'owner';
 
       // Members of THIS household (resolved fresh each check).

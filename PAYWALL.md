@@ -1,5 +1,39 @@
 # Cubby Pro: paywall candidates (living list)
 
+> ## ⚑ CURRENT PRICING (authoritative, 2026-06-13)
+> Cubby Pro is **ONE tier: $9/month or $90/year** (save 17%, ~$7.50/mo effective), 7-day free trial.
+> Localized: USD 9/90 · GBP 7/70 · EUR 8/80 · AED 33/330 · INR 749/7490. This **supersedes** any
+> "Base"/"Pro-Plus"/$5/$15/$19/$59 wording below (historical). The gated feature set below still
+> applies; only the price/tier-name is unified. Numbers live in `pricing/index.html` `CUR`.
+
+> **June 2026: the v1 Base paywall is BUILT and wired** (see PRO.md status + the launch
+> checklist in `workers/pro-billing/README.md`). Live gates: portrait/story formats, premium
+> fonts (all but Fraunces), premium palettes (Sage/Sky/Ink), Big-milestone + Monthly-stats
+> templates, stickers beyond the first six, auto-enhance, background cutout, Then & Now,
+> the "made with Cubby" watermark (Pro removes it), and the new doctor PDF report. Free keeps
+> a generous taster: Original+Square, Fraunces, two palettes, Classic, six stickers, the text
+> visit summary, JSON export.
+>
+> **Pro tasters (June 2026): try-before-buy is live.** Premium styles apply freely on the
+> studio canvas (golden ✨ chips, no interrupt) and saving keepsakes in-app is unlimited;
+> the gate sits at *export*. Free quotas (`PRO_TASTE` in `app/index.html`, counts synced in
+> `state.settings.proTaste`): 3 premium-styled downloads/shares (one charge covers a whole
+> editing session), 3 auto-enhances, 3 background cutouts (refunded on failure), 1 Then & Now,
+> 1 doctor PDF. All free exports keep the watermark, now "made with Cubby 🐻 · little-cubby.com"
+> (the viral lever). When a quota runs out the Pro sheet opens with "You've enjoyed your free
+> tastes of X". Studio + memory cards have a "Share · Instagram-ready" button (native share
+> sheet with the image file → IG Stories/Feed); the Story format chip is labelled "Story · Insta".
+
+> **Pre-launch gate (2026-06-13): "Register for Pro", launching August 2026.** Payments are not
+> open yet (needs a UAE trade/freelancer license + Stripe-or-MoR setup, weeks out). So the Pro
+> sheet, with `PRO_CFG.checkoutUrl` empty, presents a **"Register for Pro"** button (writes the
+> `waitlist` collection + `localStorage.cubby-pro-waitlist`) and shows the **August 2026** launch
+> window. The free tasters stay live as the hook: users try a treat a few times, hit the wall,
+> and register. Single source of truth for the date is `const PRO_LAUNCH` in `app/index.html`;
+> the "soon" badges on `/`, `/pricing/` and the in-app landing now read "Aug 2026". To go live:
+> set `PRO_CFG.checkoutUrl`/`portalUrl` (Stripe worker) or swap in the MoR checkout, and the
+> sheet flips from register to sell automatically.
+
 A running list of what we *could* put behind Cubby Pro, updated as we build. This is a menu to choose from later, not a commitment. Pricing/flow is designed separately (see PRO.md when we get there). Competitor signal: Precious charges ~$4.99/mo for AI photo art and parents pay, so keepsakes/AI are proven willingness-to-pay.
 
 ## Guardrails (free forever, never paywall)
@@ -63,6 +97,15 @@ v1 Base plan gates only **zero-marginal-cost** features (on-device or client-gen
 - **NOT in Base (hold for a later higher tier):** HD photos & cloud backup (R2), push
   notifications (Blaze), smart routines, sleep/feed insights, nutrition analysis, video montage —
   i.e. anything with per-user infra cost.
+
+## Referral rewards (designed 12 June 2026, plumbing shipped, rewards NOT live)
+What exists in code: each member has a deterministic short code (djb2 of uid, base36, 6 chars,
+shown via Settings "Share Cubby"); `?ref=` on the marketing home or /app/ is stored in
+localStorage; on a brand-new family's first sign-in (fresh-household path only, never invited
+caregivers) the code is written to `users/{uid}.referredBy`. No reward is promised anywhere yet.
+At Base-plan launch: count `referredBy` per code (offline via tools/analytics.js, codes are
+recomputable from uids), grant retroactive credit, suggested: **1 free month of Base per referred
+family that's still active at launch, capped at 6**. Announce only when redeemable.
 
 ## Notes
 - Keep anything requiring paid cloud infra (push, HD storage, generative AI) clearly on the Pro side, since that's where the cost is, and it justifies the price.
