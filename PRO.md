@@ -1,5 +1,12 @@
 # Cubby Pro — monetization research & roadmap
 
+> ## ⚑ CURRENT PRICING (authoritative, 2026-06-13)
+> Cubby Pro is **ONE tier: $9/month or $90/year** (save 17%, about $7.50/mo effective), 7-day free
+> trial. Localized: USD 9/90 · GBP 7/70 · EUR 8/80 · AED 33/330 · INR 749/7490 (annual = 10× monthly).
+> This **supersedes** any "Base" vs "Pro/Plus" split or $5 / $15 / $19 / $59 framing anywhere below or
+> in other docs — those are historical. Free tier stays free forever. Source of truth for the numbers:
+> the `CUR` table in `pricing/index.html`.
+
 Status: **payment loop BUILT (June 2026), awaiting Stripe + Worker deploy to go live.**
 Everything client-side is in place: entitlement (`households/{hid}.pro`, written only by the
 billing Worker, rules-protected), `isPro()` gating, the upgrade sheet with 7-day-trial checkout

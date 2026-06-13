@@ -1904,7 +1904,7 @@ function babyIdentity(b,opts){
 }
 /* ---------- Cubby Pro waitlist ---------- */
 /* ============================================================
-   CUBBY PRO (Base plan): entitlement + payment loop
+   CUBBY PRO: entitlement + payment loop
    The entitlement lives at households/{hid}.pro and is written ONLY by the
    billing Worker (workers/pro-billing) after Stripe events; clients read it
    via window.LL.pro. Rules forbid any client write to that field.
@@ -1916,7 +1916,7 @@ const PRO_CFG = {
   // sheet sells; while empty, the sheet falls back to the waitlist.
   checkoutUrl: '',   // e.g. 'https://cubby-billing.<acct>.workers.dev/checkout'
   portalUrl:   '',   // e.g. 'https://cubby-billing.<acct>.workers.dev/portal'
-  priceLine:   'from $5/mo, billed annually (about $59/year)'
+  priceLine:   'Cubby Pro · $9/month, or $90/year (save 17%) · 7-day free trial'
 };
 function isPro(){
   try{ if(localStorage.getItem('cubby-pro-dev')==='1') return true; }catch(e){}

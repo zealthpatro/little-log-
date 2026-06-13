@@ -1,6 +1,6 @@
 # Cubby Pro billing Worker
 
-The payment loop for Cubby Pro (Base plan, $59/year with a 7-day trial). A single Cloudflare
+The payment loop for Cubby Pro ($9/month or $90/year, with a 7-day trial). A single Cloudflare
 Worker (free tier) that creates Stripe Checkout sessions, receives Stripe webhooks, and writes
 the entitlement to `households/{hid}.pro` in Firestore. No Blaze, no servers, ~$0/month.
 
@@ -14,7 +14,7 @@ app "Start 7-day free trial"          Stripe                      this Worker
 ## One-time setup (about 20 minutes)
 
 1. **Stripe** (test mode first):
-   - Create a product "Cubby Pro" with a recurring **yearly price of $59** -> copy the `price_...` id.
+   - Create a product "Cubby Pro" with two recurring prices: **$9/month** and **$90/year** -> copy each `price_...` id. Set `STRIPE_PRICE_ID` to the annual ($90) price; pass a monthly price id too if you offer the monthly toggle at checkout.
    - Developers > API keys -> copy the secret key (`sk_test_...` / later `sk_live_...`).
 2. **Firebase service account**: Firebase console > Project settings > Service accounts >
    Generate new private key. Keep the JSON private (same one as `tools/serviceAccountKey.json`,

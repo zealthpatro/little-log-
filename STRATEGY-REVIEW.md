@@ -39,11 +39,11 @@ competitors would have to move.
 ## 3. Business model
 - **Free forever** for the trust/safety core (logging, sharing, vaccines, growth, danger signs,
   basic keepsakes). This is the acquisition + word-of-mouth engine; gating it would kill growth.
-- **Base plan (built, not switched on):** "from $5/mo, billed annually ~$59/yr", 7-day free
+- **Cubby Pro (built, not switched on):** $9/mo or $90/yr (save 17%, ~$7.50/mo effective), 7-day free
   trial, one sub per household, localized (USD/GBP/EUR/AED/INR). Unlocks **zero-marginal-cost**
   delights: the full keepsake studio, watermark-free shares, premium fonts/palettes/formats/
   stickers, auto-enhance, background cutout, Then & Now, and a doctor PDF report.
-- **Pro/Plus tier (future, ~$15/mo annual / $19/mo):** the cost-heavy features, HD photo backup,
+- **Cost-heavy features (HD photo backup, push, routines)** stay inside the single Pro tier or a later add-on; not separately priced for now. They include HD photo backup,
   push notifications, smart adaptive routines, sleep/feed insights. Held back until demand + costs
   are proven.
 - **Ecosystem cross-sell:** Mommy To Be acquires users ~9 months earlier than a baby app and
@@ -68,7 +68,7 @@ Deliberately near-zero, by design:
   thumbnails stored *in Firestore* (no Firebase Storage, no Blaze). Free-tier ceilings: 1 GiB
   stored, 50k reads/day, 20k writes/day.
 - **Payments:** the billing Worker runs on Cloudflare's free tier. Stripe takes ~2.9% + $0.30
-  per charge (≈ $2 on a $59 annual sub -> ~$57 net).
+  per charge (≈ $2.50 on a $90 annual sub -> ~$87 net).
 - **Base Pro features cost us $0 per user** (all client-side / on-device).
 
 **Where real costs appear (and only then):**

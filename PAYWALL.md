@@ -1,5 +1,11 @@
 # Cubby Pro: paywall candidates (living list)
 
+> ## ⚑ CURRENT PRICING (authoritative, 2026-06-13)
+> Cubby Pro is **ONE tier: $9/month or $90/year** (save 17%, ~$7.50/mo effective), 7-day free trial.
+> Localized: USD 9/90 · GBP 7/70 · EUR 8/80 · AED 33/330 · INR 749/7490. This **supersedes** any
+> "Base"/"Pro-Plus"/$5/$15/$19/$59 wording below (historical). The gated feature set below still
+> applies; only the price/tier-name is unified. Numbers live in `pricing/index.html` `CUR`.
+
 > **June 2026: the v1 Base paywall is BUILT and wired** (see PRO.md status + the launch
 > checklist in `workers/pro-billing/README.md`). Live gates: portrait/story formats, premium
 > fonts (all but Fraunces), premium palettes (Sage/Sky/Ink), Big-milestone + Monthly-stats

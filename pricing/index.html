@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cubby Pricing: Free Forever + Pro from $5/mo</title>
-<meta name="description" content="Cubby is free for the essentials, always: logging, caregiver sharing, vaccine schedules and growth charts. Cubby Pro adds the full keepsake studio, watermark-free shares and doctor PDF reports, from ~$5/mo (billed annually at $59/yr), 7-day free trial.">
+<title>Cubby Pricing: Free Forever + Pro $9/mo</title>
+<meta name="description" content="Cubby is free for the essentials, always: logging, caregiver sharing, vaccine schedules and growth charts. Cubby Pro adds the full keepsake studio, watermark-free shares and doctor PDF reports, $9/month or $90/year (save 17%), with a 7-day free trial.">
 <link rel="canonical" href="https://little-cubby.com/pricing/">
 <meta name="robots" content="index,follow">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Cubby">
-<meta property="og:title" content="Cubby Pricing: Free Forever + Pro from $5/mo">
-<meta property="og:description" content="Free for the essentials, always. Pro from ~$5/mo (billed $59/yr) with a 7-day free trial, coming soon.">
+<meta property="og:title" content="Cubby Pricing: Free Forever + Pro $9/mo">
+<meta property="og:description" content="Free for the essentials, always. Cubby Pro is $9/month or $90/year (save 17%) with a 7-day free trial, coming soon.">
 <meta property="og:url" content="https://little-cubby.com/pricing/">
 <meta property="og:image" content="https://little-cubby.com/og/pricing.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -22,7 +22,7 @@
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[
 {"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://little-cubby.com/"},{"@type":"ListItem","position":2,"name":"Pricing","item":"https://little-cubby.com/pricing/"}]},
-{"@type":"SoftwareApplication","name":"Cubby Pro","applicationCategory":"HealthApplication","operatingSystem":"Web, iOS, Android","description":"The full keepsake studio (every template, font, palette and format), watermark-free shares, on-device auto-enhance and background cutout, Then and Now cards and doctor PDF reports for families who want more from Cubby.","url":"https://little-cubby.com/pricing/","offers":{"@type":"Offer","price":"59","priceCurrency":"USD","priceSpecification":{"@type":"UnitPriceSpecification","price":"59","priceCurrency":"USD","billingDuration":"P1Y","description":"Annual plan, approx $5/mo effective. 7-day free trial."}}}
+{"@type":"SoftwareApplication","name":"Cubby Pro","applicationCategory":"HealthApplication","operatingSystem":"Web, iOS, Android","description":"The full keepsake studio (every template, font, palette and format), watermark-free shares, on-device auto-enhance and background cutout, Then and Now cards and doctor PDF reports for families who want more from Cubby.","url":"https://little-cubby.com/pricing/","offers":{"@type":"Offer","price":"90","priceCurrency":"USD","priceSpecification":{"@type":"UnitPriceSpecification","price":"90","priceCurrency":"USD","billingDuration":"P1Y","description":"Annual plan, about $7.50/mo effective (save 17% vs $9/month). 7-day free trial."}}}
 ]}
 </script>
 </head>
@@ -52,7 +52,7 @@
       <li>Photos, moment cards, milestones &amp; birth poster</li>
       <li>Private, no ads, no third-party trackers</li>
     </ul></div>
-    <div class="col pro"><div class="ch">Pro <span class="soon">soon</span></div><div class="price">~$5/mo · billed $59/yr · 7-day free trial</div><ul>
+    <div class="col pro"><div class="ch">Pro <span class="soon">soon</span></div><div class="price">$9/mo · or $90/yr (save 17%) · 7-day free trial</div><ul>
       <li>The full keepsake studio: every template, font &amp; palette</li>
       <li>Instagram-ready Story &amp; Portrait formats, plus the whole sticker set</li>
       <li>Watermark-free shares, no "made with Cubby" mark</li>
@@ -71,7 +71,7 @@
   <div class="pricebox">
     <div class="pb-controls">
       <div class="bseg" id="bseg">
-        <button data-bill="annual" class="on" onclick="setBill('annual')">Annual <span class="save" id="saveBadge">save 29%</span></button>
+        <button data-bill="annual" class="on" onclick="setBill('annual')">Annual <span class="save" id="saveBadge">save 17%</span></button>
         <button data-bill="monthly" onclick="setBill('monthly')">Monthly</button>
       </div>
       <select id="curSel" onchange="setCur(this.value)" aria-label="Currency">
@@ -82,21 +82,21 @@
         <option value="INR">₹ INR</option>
       </select>
     </div>
-    <div class="pb-price"><span id="pbAmt">$5</span><span class="per" id="pbPer">/month</span></div>
-    <div class="pb-sub" id="pbSub">Billed annually · $59/year · save 29%</div>
+    <div class="pb-price"><span id="pbAmt">$90</span><span class="per" id="pbPer">/year</span></div>
+    <div class="pb-sub" id="pbSub">save 17% vs $9/month · 7-day free trial</div>
     <a class="hero-cta" href="/app/">Get early access</a>
     <div class="pb-note">Approximate local pricing, finalised at launch. Free plan stays free forever.</div>
   </div>
 </section>
 
 <script>
-/* Cubby Pro Base plan pricing. ~$5/mo effective on annual; monthly option at launch. */
+/* Cubby Pro pricing: $9/month or $90/year (about $7.50/mo effective, save 17%). */
 var CUR = {
-  USD: { sym: '$',    pre: true,  mo: 7,   yr: 59   },
-  GBP: { sym: '£',    pre: true,  mo: 6,   yr: 49   },
-  EUR: { sym: '€',    pre: true,  mo: 7,   yr: 55   },
-  AED: { sym: 'AED ', pre: true,  mo: 25,  yr: 219  },
-  INR: { sym: '₹',    pre: true,  mo: 599, yr: 4999 }
+  USD: { sym: '$',    pre: true,  mo: 9,   yr: 90   },
+  GBP: { sym: '£',    pre: true,  mo: 7,   yr: 70   },
+  EUR: { sym: '€',    pre: true,  mo: 8,   yr: 80   },
+  AED: { sym: 'AED ', pre: true,  mo: 33,  yr: 330  },
+  INR: { sym: '₹',    pre: true,  mo: 749, yr: 7490 }
 };
 var bill = 'annual', cur = 'USD';
 function fmt(c, n) { return c.sym + n.toLocaleString('en-US'); }
@@ -110,16 +110,16 @@ function guessCur() {
 }
 function renderPrice() {
   var c = CUR[cur];
-  document.getElementById('pbPer').textContent = '/month';
   if (bill === 'annual') {
-    var perMo = Math.round(c.yr / 12);
     var save = Math.round((1 - c.yr / (c.mo * 12)) * 100);
-    document.getElementById('pbAmt').textContent = fmt(c, perMo);
-    document.getElementById('pbSub').textContent = 'Billed annually · ' + fmt(c, c.yr) + '/year · save ' + save + '%';
+    document.getElementById('pbAmt').textContent = fmt(c, c.yr);
+    document.getElementById('pbPer').textContent = '/year';
+    document.getElementById('pbSub').textContent = 'save ' + save + '% vs ' + fmt(c, c.mo) + '/month · 7-day free trial';
     document.getElementById('saveBadge').textContent = 'save ' + save + '%';
   } else {
     document.getElementById('pbAmt').textContent = fmt(c, c.mo);
-    document.getElementById('pbSub').textContent = 'Billed monthly';
+    document.getElementById('pbPer').textContent = '/month';
+    document.getElementById('pbSub').textContent = 'Billed monthly · 7-day free trial';
   }
 }
 function setBill(b) { bill = b; document.querySelectorAll('#bseg button').forEach(function (x) { x.classList.toggle('on', x.dataset.bill === b); }); renderPrice(); }

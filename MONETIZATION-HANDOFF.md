@@ -68,10 +68,10 @@ smart routines/insights.** See `PAYWALL.md` / `PRO.md`.
   JWT, no SDKs), `wrangler.toml`, `README.md` (the deploy checklist). Excluded from the static
   deploy via `.assetsignore`.
 - `pricing/index.html`, `CUR` currency table (USD 7/59, GBP 6/49, EUR 7/55, AED 25/219,
-  INR 599/4999), annual/monthly toggle. Reuse for any in-app price display.
+  INR 749/7490), annual/monthly toggle. Reuse for any in-app price display.
 
 ## 5. Go-live checklist (~20 min, full version in `workers/pro-billing/README.md`)
-1. Stripe (test mode first): product "Cubby Pro", recurring **yearly $59** price -> `price_...`.
+1. Stripe (test mode first): product "Cubby Pro", two recurring prices **$9/month and $90/year** -> `price_...` each (set STRIPE_PRICE_ID to the $90 annual).
 2. `cd workers/pro-billing && npx wrangler deploy`.
 3. Secrets: `wrangler secret put` for `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `FIREBASE_SA_KEY`
    (service-account JSON one line, same key as the gitignored `tools/serviceAccountKey.json`).
@@ -94,10 +94,9 @@ smart routines/insights.** See `PAYWALL.md` / `PRO.md`.
 
 ## 7. Known limitations / next steps
 - **Beta is still free** per PRO.md. The waitlist fallback means YOU pick the switch-on moment.
-- Pricing page still shows only the higher ~$15/mo Pro tier. Launch task: surface Base
-  ("from $5/mo, 7-day trial") above it (reuse the `CUR` table + toggle already in `pricing/`).
+- Pricing is unified to one Cubby Pro tier ($9/mo or $90/yr, save 17%) on the pricing page `CUR` table + toggle. No separate Base tier.
 - No dunning UI beyond the 3-day grace; Stripe emails handle failed payments.
-- No proration/upgrade path to a future Pro/Plus tier yet (only Base exists).
+- One Cubby Pro tier ($9/mo or $90/yr); no multi-tier proration needed.
 - Refunds/disputes are handled in the Stripe dashboard (the webhook flips entitlement on
   `subscription.deleted`).
 - Analytics: no conversion tracking wired. Consider counting checkout starts vs completes

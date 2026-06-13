@@ -102,7 +102,7 @@ Articles are produced by a **dedicated Sonnet writer agent**, not the main build
   `/checkout` (Stripe session, 7-day trial), `/webhook` (signature-verified), `/portal`. It is the
   only writer of `households/{hid}.pro = {active, plan, status, until, customer, updatedAt}`
   (rules-protected). Client gates ~9 feature classes behind `isPro()` in `app/index.html`.
-- **Base plan:** $59/yr (annual-only for v1; "~$5/mo effective" is messaging). Localized via the
+- **Cubby Pro:** $9/month or $90/year (save 17%, ~$7.50/mo effective), 7-day trial. Localized via the
   `pricing/` currency table (USD/GBP/EUR/AED/INR).
 - **To go live (~20 min, see `workers/pro-billing/README.md`):** create Stripe product/price, deploy
   Worker, set the four secrets, add the Stripe webhook, **publish `firestore.rules` in the console**,
@@ -135,7 +135,7 @@ Articles are produced by a **dedicated Sonnet writer agent**, not the main build
   `users/{uid}.referredBy` only for new household owners; rewards designed, not yet live.
 - Growth: WHO default; CDC toggle; IAP n/a for under-5.
 - One shared household per family.
-- Pricing: Base $59/yr (annual, 7-day trial); future Pro from ~$15/mo effective (annual), $19/mo
+- Pricing: Cubby Pro $9/mo or $90/yr (save 17%, 7-day trial), one unified tier; localized
   monthly, localized (USD/GBP/EUR/AED/INR).
 - Generative-AI photo editing deferred to post-beta (on-device only for now) — see `AI-EDITING.md`.
 - No fabricated testimonials/reviews/user counts; visuals are original illustrations + initial avatars
