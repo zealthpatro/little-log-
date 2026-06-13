@@ -71,6 +71,7 @@
   --diaper:#56A08E;    --diaper-soft:#DDF0EA;
   --pump:#C97FA0;      --pump-soft:#F7E3EC;
   --note:#9A8C6E;      --note-soft:#EFE9DA;
+  --preg:#B06A9A;      --preg-soft:#F4E3EE;
   --danger:#D2654E;
 
   --radius:26px;
@@ -96,6 +97,7 @@
   --diaper:#6FBBA8;    --diaper-soft:#1E2F2A;
   --pump:#D793B0;      --pump-soft:#342029;
   --note:#B6A985;      --note-soft:#2C281D;
+  --preg:#C98BB5;      --preg-soft:#33202D;
 }
 
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -597,6 +599,71 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .nudge{display:flex;gap:11px;align-items:center;background:linear-gradient(120deg,var(--star-soft),var(--feed-soft));border-radius:16px;padding:13px 16px;margin:16px 0;}
 .nudge .nu-ico{font-size:20px;flex-shrink:0;line-height:1;}
 .nudge .nu-t{font-size:13px;font-weight:700;color:var(--ink);line-height:1.45;}
+
+/* ---------- Pregnancy mode ---------- */
+.preg-pill{display:flex;align-items:center;gap:11px;cursor:pointer;}
+.preg-pill .pp-orb{width:42px;height:42px;border-radius:14px;background:var(--preg-soft);color:var(--preg);display:grid;place-items:center;font-size:21px;flex-shrink:0;}
+.preg-pill h1{font-family:var(--font-display);font-size:19px;font-weight:600;letter-spacing:-.01em;line-height:1.1;}
+.preg-pill span{font-size:12px;color:var(--ink-soft);font-weight:700;}
+.week-hero{background:linear-gradient(140deg,var(--preg-soft),var(--surface));border-radius:var(--radius);padding:20px 20px 22px;margin-bottom:16px;box-shadow:0 4px 14px var(--shadow);}
+.week-hero .wh-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;}
+.week-hero .wh-week{font-family:var(--font-display);font-size:30px;font-weight:600;letter-spacing:-.02em;color:var(--ink);line-height:1;}
+.week-hero .wh-tri{font-size:12.5px;font-weight:800;color:var(--preg);text-transform:uppercase;letter-spacing:.04em;}
+.week-hero .wh-count{font-size:13px;color:var(--ink-soft);font-weight:700;margin-top:7px;}
+.preg-bar{height:9px;border-radius:6px;background:var(--surface-2);overflow:hidden;margin-top:14px;}
+.preg-bar i{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,var(--preg),var(--pump));}
+.preg-cards{display:grid;gap:11px;margin-bottom:6px;}
+.preg-card{display:flex;gap:13px;align-items:flex-start;background:var(--surface);border-radius:var(--radius-sm);padding:15px 16px;box-shadow:0 3px 9px var(--shadow);}
+.preg-card .pc-ico{width:40px;height:40px;border-radius:13px;display:grid;place-items:center;font-size:20px;flex-shrink:0;background:var(--preg-soft);}
+.preg-card .pc-t{font-weight:800;font-size:13.5px;color:var(--ink);}
+.preg-card .pc-b{font-size:13px;color:var(--ink-soft);font-weight:600;line-height:1.5;margin-top:3px;}
+.next-appt{display:flex;align-items:center;gap:12px;background:var(--surface);border-left:4px solid var(--preg);border-radius:14px;padding:13px 15px;margin:14px 0 6px;box-shadow:0 3px 9px var(--shadow);}
+.next-appt .na-body{flex:1;min-width:0;}
+.next-appt .na-t{font-weight:800;font-size:14px;}
+.next-appt .na-s{font-size:12.5px;color:var(--ink-soft);font-weight:600;margin-top:2px;}
+.preg-disclaim{font-size:11.5px;color:var(--ink-faint);font-weight:600;line-height:1.5;background:var(--surface-2);border-radius:13px;padding:11px 13px;margin:14px 0;}
+.danger-row{display:flex;gap:11px;align-items:flex-start;background:var(--surface);border-radius:13px;padding:12px 14px;margin-bottom:9px;box-shadow:0 2px 7px var(--shadow);}
+.danger-row .dr-dot{color:var(--danger);font-size:15px;line-height:1.4;flex-shrink:0;}
+.danger-row .dr-t{font-size:13.5px;font-weight:700;color:var(--ink);line-height:1.45;}
+.appt-row{display:flex;align-items:center;gap:12px;background:var(--surface);border-radius:14px;padding:12px 14px;margin-bottom:9px;box-shadow:0 3px 9px var(--shadow);}
+.appt-row .ar-tick{width:26px;height:26px;border-radius:9px;border:2px solid var(--line);display:grid;place-items:center;flex-shrink:0;cursor:pointer;color:#fff;}
+.appt-row.done .ar-tick{background:var(--preg);border-color:var(--preg);}
+.appt-row .ar-body{flex:1;min-width:0;cursor:pointer;}
+.appt-row .ar-wk{font-size:11px;font-weight:800;color:var(--preg);text-transform:uppercase;letter-spacing:.04em;}
+.appt-row .ar-t{font-weight:800;font-size:14px;margin-top:1px;}
+.appt-row.done .ar-t{text-decoration:line-through;color:var(--ink-soft);}
+.appt-row .ar-s{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:2px;line-height:1.45;}
+.kick-big{width:170px;height:170px;border-radius:50%;border:none;margin:6px auto 4px;display:block;background:radial-gradient(circle at 50% 38%,var(--preg-soft),var(--surface-2));color:var(--preg);box-shadow:0 8px 22px var(--shadow-strong);cursor:pointer;}
+.kick-big .kb-n{font-family:var(--font-display);font-size:54px;font-weight:600;line-height:1;}
+.kick-big .kb-c{font-size:12.5px;font-weight:800;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em;margin-top:6px;}
+.kick-big:active{transform:scale(.96);}
+.tool-stat{display:flex;gap:10px;margin:14px 0 4px;}
+.tool-stat .ts-cell{flex:1;background:var(--surface);border-radius:14px;padding:13px;text-align:center;box-shadow:0 3px 9px var(--shadow);}
+.tool-stat .ts-big{font-family:var(--font-display);font-size:24px;font-weight:600;color:var(--ink);}
+.tool-stat .ts-cap{font-size:11px;color:var(--ink-soft);font-weight:700;margin-top:3px;}
+.bag-row{display:flex;align-items:center;gap:11px;background:var(--surface);border-radius:13px;padding:11px 13px;margin-bottom:8px;box-shadow:0 2px 7px var(--shadow);}
+.bag-row .bg-tick{width:24px;height:24px;border-radius:8px;border:2px solid var(--line);display:grid;place-items:center;flex-shrink:0;cursor:pointer;color:#fff;}
+.bag-row.done .bg-tick{background:var(--preg);border-color:var(--preg);}
+.bag-row .bg-t{flex:1;font-weight:700;font-size:14px;}
+.bag-row.done .bg-t{text-decoration:line-through;color:var(--ink-soft);}
+.bag-row .bg-x{border:none;background:none;color:var(--ink-faint);cursor:pointer;padding:4px;flex-shrink:0;}
+.welcome-burst{text-align:center;font-size:48px;line-height:1;margin:6px 0 4px;animation:rise .5s cubic-bezier(.2,.9,.3,1);}
+.log-list-item{display:flex;align-items:center;gap:12px;background:var(--surface);border-radius:13px;padding:11px 14px;margin-bottom:8px;box-shadow:0 2px 7px var(--shadow);}
+.log-list-item .lli-ico{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;font-size:17px;flex-shrink:0;background:var(--preg-soft);}
+.log-list-item .lli-body{flex:1;min-width:0;}
+.log-list-item .lli-t{font-weight:800;font-size:13.5px;}
+.log-list-item .lli-s{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:1px;}
+.log-list-item .lli-x{border:none;background:none;color:var(--ink-faint);cursor:pointer;padding:4px;}
+.icon-btn.icon-on{background:var(--star-soft);}
+.moment-card{background:var(--surface);border-radius:var(--radius-sm);overflow:hidden;box-shadow:0 4px 12px var(--shadow);margin-bottom:14px;}
+.moment-card img{width:100%;display:block;max-height:340px;object-fit:cover;background:#1c1a18;}
+.moment-cap{padding:12px 15px 11px;}
+.moment-cap .mc-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.moment-cap .mc-week{font-family:var(--font-display);font-size:18px;font-weight:600;color:var(--ink);}
+.moment-cap .mc-size{font-size:12.5px;font-weight:700;color:var(--preg);}
+.moment-cap .mc-note{font-size:13px;color:var(--ink-soft);font-weight:600;margin-top:4px;line-height:1.45;}
+.moment-cap .mc-row{display:flex;align-items:center;justify-content:space-between;margin-top:6px;}
+.moment-cap .mc-date{font-size:11.5px;color:var(--ink-faint);font-weight:700;}
 /* Wide screens: present the app as a framed den, not a bare strip (DESIGN.md C-4) */
 @media(min-width:900px){
   body{padding:28px 0;}
@@ -679,11 +746,14 @@ const Store = {
 };
 
 /* ---------- State ---------- */
-let state = { babies:[], activeBabyId:null, events:[], settings:{ unit:'ml', wUnit:'kg', hUnit:'cm', tempUnit:'C', theme:'light', seen:{} }, timers:{}, milestones:[], meds:[], photos:[], vaccines:{}, illnesses:[] };
+let state = { babies:[], activeBabyId:null, events:[], settings:{ unit:'ml', wUnit:'kg', hUnit:'cm', tempUnit:'C', theme:'light', seen:{} }, timers:{}, milestones:[], meds:[], photos:[], vaccines:{}, illnesses:[], pregnancy:null, den:null, consents:[], guardians:null };
 let view = 'home';
 let tickInterval = null;
 const CUBBY_VERSION = '0.9.0';
 try{ window.CUBBY_VERSION = CUBBY_VERSION; }catch(e){}
+/* Rollout flags. Modules ship dark until their release: pregnancy rolls out first,
+   Our Den (home management) is built and tested but gated until its own launch. */
+const FEATURES = { den: false };
 
 const AVATAR_COLORS = ['#E29A3B','#5E6AA8','#56A08E','#C97FA0','#D2654E','#7B9E5B'];
 
@@ -871,13 +941,17 @@ window.getWhen=getWhen; window.setWhen=setWhen;
    ============================================================ */
 function render(){
   document.body.setAttribute('data-theme', state.settings.theme==='night'?'night':'light');
-  if(state.babies.length===0){ renderOnboard(); return; }
+  if(state.babies.length===0){
+    if(state.pregnancy && !state.pregnancy.bornBabyId){ renderPregShell(); return; }
+    renderOnboard(); return;
+  }
   const b = activeBaby();
   let main = '';
   if(view==='home') main = renderHome();
   else if(view==='log') main = renderLogTab();
   else if(view==='album') main = renderAlbum();
   else if(view==='health') main = renderHealth();
+  else if(view==='den') main = renderDenHub();
 
   app().innerHTML = `
     <div class="topbar">
@@ -888,6 +962,7 @@ function render(){
           <span>${ageString(b.birth)}</span>
         </div>
       </div>
+      ${FEATURES.den?`<button class="icon-btn ${view==='den'?'icon-on':''}" onclick="goDen()" aria-label="our den" style="font-size:17px">🧺</button>`:''}
       <button class="icon-btn" onclick="toggleTheme()" aria-label="theme">${state.settings.theme==='night'?I.sun:I.moon}</button>
       <button class="icon-btn" onclick="openSettings()" aria-label="settings">${I.settings}</button>
     </div>
@@ -966,7 +1041,7 @@ function renderGetStarted(){
 }
 
 /* ---------- working-parent: while-you-were-away recap, daily recap, handoff ---------- */
-function loggerName(uid){ const info=(window.LL&&window.LL.memberInfo)||{}; const m=info[uid]; return (m&&(m.relationship||((m.name||'').split(' ')[0])))||''; }
+function loggerName(uid){ const info=(window.LL&&window.LL.memberInfo)||{}; const former=(window.LL&&window.LL.formerMemberInfo)||{}; const m=info[uid]||former[uid]; return (m&&(m.relationship||((m.name||'').split(' ')[0])))||''; }
 function awayRecap(){
   const me = window.LL && window.LL.auth && window.LL.auth.currentUser && window.LL.auth.currentUser.uid;
   const todayK = dayKey(now());
@@ -1146,6 +1221,7 @@ function renderHome(){
     ${away}
     ${(shared||(state.handoff&&state.handoff.text))?handoffCard():''}
     ${gsCard ? '' : coachMark('home','Welcome to Cubby 👋','Your hub. A photo slideshow up top, one-tap logging below. The tabs hold your Log, Album and Health.')}
+    ${consentBanners()}
     ${renderHero()}
     ${timers}
     <div class="since-row stagger">
@@ -1357,7 +1433,8 @@ function illnessIcon(name){
 function authorTag(e){
   if(!e || !e.authorId) return '';
   var info = (window.LL && window.LL.memberInfo) || {};
-  var m = info[e.authorId];
+  var former = (window.LL && window.LL.formerMemberInfo) || {};
+  var m = info[e.authorId] || former[e.authorId];
   if(!m) return '';
   var label = m.relationship || (m.name ? String(m.name).split(' ')[0] : '') || 'Someone';
   var me = window.LL && window.LL.auth && window.LL.auth.currentUser && window.LL.auth.currentUser.uid;
@@ -1849,6 +1926,7 @@ function deleteEvent(id){
    BABIES & SETTINGS
    ============================================================ */
 function openBabySheet(){
+  if(!state.babies.length){ closeSheet(); openAddBaby(); return; }
   let list=state.babies.map(b=>`
     <div class="baby-item" onclick="switchBaby('${b.id}')">
       ${babyAvatarBox(b,'avatar','width:38px;height:38px;font-size:16px')}
@@ -2247,6 +2325,10 @@ function openSettings(){
         <button class="${s.theme==='night'?'on':''}" onclick="setTheme('night');openSettings()">Night</button>
       </div>
     </div>
+    ${FEATURES.den?`<div class="set-item" onclick="closeSheet();goDen()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🏡</div>
+      <div class="si-body"><div class="a">Our Den</div><div class="b">Chores, shopping, meals, staff, expenses</div></div>
+    </div>`:''}
     <div class="set-item" onclick="openBabySheet()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--diaper-soft);color:var(--diaper)">${I.home}</div>
       <div class="si-body"><div class="a">Manage babies</div><div class="b">${state.babies.length} added</div></div>
@@ -2281,15 +2363,26 @@ function openSettings(){
     <p style="font-size:12px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:14px">Cubby v${CUBBY_VERSION} · ${Date.now()<Date.UTC(2026,6,27)?'beta':'early access'}</p>`,'sleep');
 }
 function openDataSheet(){
-  openSheet(`<h2>Your data</h2><div class="sub">Keep a copy, or erase everything. Your logs live safely in your account either way.</div>
-    <div class="set-item" onclick="exportData()" style="cursor:pointer">
+  const recent=(state.consents||[]).slice(-3).reverse().map(c=>{
+    const badge=c.status==='pending'?'waiting':(c.status==='ready'?'ready':(c.status==='declined'?'declined':'done'));
+    return `<div class="log-list-item" onclick="openConsentReview('${c.id}')" style="cursor:pointer">
+      <div class="lli-ico" style="background:var(--note-soft)">🛡️</div>
+      <div class="lli-body"><div class="lli-t">${escapeHtml(c.label)}</div><div class="lli-s">by ${escapeHtml(c.requestedByName||'a family member')} · ${badge}</div></div></div>`;
+  }).join('');
+  openSheet(`<h2>Your data</h2><div class="sub">This is the household's shared story, so the big actions ask both guardians (usually mama and papa) to agree first.</div>
+    <div class="set-item" onclick="requestExport()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--note-soft);color:var(--note)">${I.note}</div>
-      <div class="si-body"><div class="a">Export data</div><div class="b">Download everything as a JSON file</div></div>
+      <div class="si-body"><div class="a">Export data</div><div class="b">Download everything as a JSON file, with consent</div></div>
     </div>
-    <div class="set-item" onclick="confirmReset()" style="cursor:pointer">
+    <div class="set-item" onclick="openDeleteRequest()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--danger);color:#fff">${I.trash}</div>
-      <div class="si-body"><div class="a" style="color:var(--danger)">Delete all data</div><div class="b">Erase every baby and log, can't be undone</div></div>
+      <div class="si-body"><div class="a" style="color:var(--danger)">Delete data...</div><div class="b">Choose what to erase, both guardians must agree</div></div>
     </div>
+    <div class="set-item" onclick="openGuardians()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:17px">🛡️</div>
+      <div class="si-body"><div class="a">Guardians</div><div class="b">${householdGuardians().map(u=>guardianName(u)).join(' + ')||'Who approves the big actions'}</div></div>
+    </div>
+    ${recent?`<div class="set-label">Recent decisions</div>${recent}`:''}
     <button class="btn-ghost" onclick="openSettings()">Back to settings</button>`,'sleep');
 }
 function exportData(){
@@ -2327,14 +2420,193 @@ function doLogout(){
   if(window.LL&&typeof window.LL.signOut==='function'){ window.LL.signOut(); }
   else { try{ location.reload(); }catch(e){} }
 }
-function confirmReset(){
-  openSheet(`<h2>Delete all data?</h2><div class="sub">This permanently erases every baby and log for your whole household, on every device. This can't be undone. Consider exporting first.</div>
-    <button class="btn-primary" style="background:var(--danger)" onclick="doReset()">Yes, delete everything</button>
-    <button class="btn-ghost" onclick="closeSheet()">Cancel</button>`,'feed');
+/* ============================================================
+   CONSENT: dual-guardian approval for the big, irreversible actions.
+   The data is the household's (the baby's story), not any one member's:
+   removing a member never removes what they logged, and deleting or
+   exporting the family's data needs every guardian (papa + mama) to agree.
+   Everyday single-entry corrections stay lightweight and are not gated.
+   ============================================================ */
+function myUid(){ try{ const u=window.LL&&window.LL.auth&&window.LL.auth.currentUser; return (u&&u.uid)||'local'; }catch(e){ return 'local'; } }
+function householdGuardians(){
+  const LL=window.LL;
+  if(!(LL&&LL.members&&Object.keys(LL.members).length)) return [myUid()];
+  if(state.guardians&&state.guardians.length){
+    const g=state.guardians.filter(u=>LL.members[u]);
+    if(g.length) return g;
+  }
+  const uids=Object.keys(LL.members);
+  const owner=uids.find(u=>LL.members[u]==='owner');
+  const rels=['mother','mom','mama','father','dad','papa','parent','guardian'];
+  const parents=uids.filter(u=>{ const r=(((LL.memberInfo||{})[u]||{}).relationship||'').toLowerCase(); return rels.indexOf(r)>=0; });
+  const set=[];
+  (owner?[owner]:[]).concat(parents).forEach(u=>{ if(set.indexOf(u)<0&&set.length<2) set.push(u); });
+  return set.length?set:[myUid()];
 }
-function doReset(){
-  state={babies:[],activeBabyId:null,events:[],settings:{unit:'ml',theme:state.settings.theme},timers:{}};
+function isGuardian(){ return householdGuardians().indexOf(myUid())>=0; }
+function guardianName(uid){ if(uid===myUid()) return 'you'; return loggerName(uid)||'a guardian'; }
+const DEL_SCOPES=[
+  ['babies','Babies & their logs','Every baby profile, feed/sleep/nappy history, milestones, vaccines, medicines and illnesses'],
+  ['photos','Photos & keepsakes','Every saved photo and moment'],
+  ['pregnancy','Pregnancy','The pregnancy record, appointments, health trackers and tools'],
+  ['den','Our Den','Chores, shopping, meals, staff, expenses and weights']
+];
+let delDraft={};
+function openDeleteRequest(){
+  delDraft={};
+  // The Our Den scope only shows once the module is rolled out (or if it holds data).
+  const rows=DEL_SCOPES.filter(([k])=>k!=='den'||FEATURES.den||!!state.den).map(([k,l,d])=>`
+    <div class="bag-row" id="dsc-${k}" onclick="toggleDelScope('${k}')" style="cursor:pointer">
+      <div class="bg-tick"></div>
+      <div style="flex:1"><div class="bg-t" style="text-decoration:none">${l}</div><div style="font-size:12px;color:var(--ink-soft);font-weight:600;line-height:1.4">${d}</div></div>
+    </div>`).join('');
+  const gs=householdGuardians();
+  const solo=gs.length<2;
+  openSheet(`<h2>Delete data</h2><div class="sub">Pick exactly what should go. ${solo?'You are the only guardian, so this happens straight away and can\'t be undone.':'Both guardians must agree before anything is erased. Nothing happens until then.'}</div>
+    ${rows}
+    <button class="btn-primary" style="background:var(--danger);margin-top:12px" onclick="submitDeleteRequest()">${solo?'Delete selected now':'Ask to delete selected'}</button>
+    <button class="btn-ghost" onclick="openDataSheet()">Back</button>
+    <div class="csub" style="margin-top:8px">Removing a family member never deletes what they logged: the story belongs to the household.</div>`,'feed');
+}
+function toggleDelScope(k){ delDraft[k]=!delDraft[k]; const el=$('#dsc-'+k); if(el){ el.classList.toggle('done',delDraft[k]); el.querySelector('.bg-tick').innerHTML=delDraft[k]?I.check:''; } }
+function submitDeleteRequest(){
+  const keys=DEL_SCOPES.map(s=>s[0]).filter(k=>delDraft[k]);
+  if(!keys.length){ toast('Pick what to delete first'); return; }
+  const label='Delete: '+keys.map(k=>DEL_SCOPES.find(s=>s[0]===k)[1]).join(', ');
+  requestConsent('delete', keys.reduce((o,k)=>(o[k]=true,o),{}), label);
+}
+function requestExport(){ requestConsent('export', null, 'Export the household\'s data'); }
+function requestConsent(type,scope,label){
+  if(!state.consents) state.consents=[];
+  const c={ id:uid(), type, scope:scope||null, label, requestedBy:myUid(), requestedByName:myName()||'A family member', at:now(), approvals:[myUid()], status:'pending' };
+  state.consents.push(c);
+  maybeCompleteConsent(c);
   persist(); closeSheet(); render();
+  if(c.status==='pending'){ const others=householdGuardians().filter(u=>c.approvals.indexOf(u)<0); toast('Asked '+others.map(guardianName).join(' and ')+' to agree'); }
+}
+function maybeCompleteConsent(c){
+  const gs=householdGuardians();
+  if(gs.every(g=>c.approvals.indexOf(g)>=0)){
+    if(c.type==='delete'){ executeScopedDelete(c.scope||{}); c.status='done'; c.doneAt=now(); toast('Deleted, as agreed'); }
+    else if(c.type==='export'){
+      if(c.requestedBy===myUid()){ exportData(); c.status='done'; c.doneAt=now(); }
+      else c.status='ready';
+    }
+  }
+}
+function approveConsent(id){
+  const c=(state.consents||[]).find(x=>x.id===id); if(!c||c.status!=='pending') return;
+  if(!isGuardian()){ toast('Only a guardian can agree to this'); return; }
+  if(c.approvals.indexOf(myUid())<0) c.approvals.push(myUid());
+  maybeCompleteConsent(c); persist(); closeSheet(); render();
+}
+function declineConsent(id){
+  const c=(state.consents||[]).find(x=>x.id===id); if(!c||c.status!=='pending') return;
+  if(!isGuardian()){ toast('Only a guardian can decide this'); return; }
+  c.status='declined'; c.declinedBy=myUid(); persist(); closeSheet(); render(); toast('Declined, nothing was changed');
+}
+function cancelConsent(id){
+  const c=(state.consents||[]).find(x=>x.id===id); if(!c) return;
+  if(c.status==='pending'&&c.requestedBy!==myUid()&&!isGuardian()) return;
+  state.consents=state.consents.filter(x=>x.id!==id); persist(); closeSheet(); render();
+}
+function downloadExport(id){
+  const c=(state.consents||[]).find(x=>x.id===id); if(!c||c.status!=='ready'||c.requestedBy!==myUid()) return;
+  exportData(); c.status='done'; c.doneAt=now(); persist(); render();
+}
+function executeScopedDelete(scope){
+  if(scope.babies){
+    state.babies=[]; state.activeBabyId=null; state.events=[]; state.timers={};
+    state.milestones=[]; state.vaccines={}; state.meds=[]; state.illnesses=[];
+  }
+  if(scope.photos){
+    try{ (state.photos||[]).forEach(p=>{ if(window.PhotoStore&&PhotoStore.del) PhotoStore.del(p.photoId); }); }catch(e){}
+    state.photos=[];
+    state.babies.forEach(b=>{ delete b.avatarPhotoId; });
+  }
+  if(scope.pregnancy) state.pregnancy=null;
+  if(scope.den) state.den=null;
+}
+function openConsentReview(id){
+  const c=(state.consents||[]).find(x=>x.id===id); if(!c) return;
+  const gs=householdGuardians();
+  const waiting=gs.filter(u=>c.approvals.indexOf(u)<0);
+  const scopeList=c.scope?DEL_SCOPES.filter(s=>c.scope[s[0]]).map(s=>`<div class="danger-row"><span class="dr-dot">●</span><div class="dr-t">${s[1]}<div style="font-weight:600;color:var(--ink-soft);font-size:12px">${s[2]}</div></div></div>`).join(''):'';
+  const mine=c.requestedBy===myUid();
+  const canDecide=c.status==='pending'&&isGuardian()&&c.approvals.indexOf(myUid())<0;
+  const statusLine=c.status==='pending'?(waiting.length?('Waiting for '+waiting.map(guardianName).join(' and ')):'Waiting'):(c.status==='ready'?'Agreed, ready to download':(c.status==='declined'?'Declined, nothing was changed':'Completed'));
+  openSheet(`<h2>${escapeHtml(c.label)}</h2><div class="sub">Asked by ${escapeHtml(mine?'you':(c.requestedByName||'a family member'))} · ${dayLabel(c.at)} · ${escapeHtml(statusLine)}</div>
+    ${scopeList}
+    ${c.type==='delete'&&c.status==='pending'?`<div class="preg-disclaim">If both guardians agree, this is erased for the whole family on every device and cannot be undone.</div>`:''}
+    ${canDecide?`<button class="btn-primary" style="background:${c.type==='delete'?'var(--danger)':'var(--diaper)'}" onclick="approveConsent('${c.id}')">I agree${c.type==='delete'?', delete it':''}</button>
+      <button class="btn-ghost" onclick="declineConsent('${c.id}')">Decline</button>`:''}
+    ${c.status==='ready'&&mine?`<button class="btn-primary" onclick="downloadExport('${c.id}')">Download export</button>`:''}
+    ${c.status==='pending'&&mine&&!canDecide?`<button class="btn-ghost" style="color:var(--danger)" onclick="cancelConsent('${c.id}')">Cancel my request</button>`:''}
+    ${(c.status==='declined'||c.status==='done')?`<button class="btn-ghost" onclick="cancelConsent('${c.id}')">Remove from history</button>`:''}
+    <button class="btn-ghost" onclick="closeSheet()">Close</button>`, c.type==='delete'?'feed':'sleep');
+}
+function consentBanners(){
+  const cs=state.consents||[]; if(!cs.length) return '';
+  let html='';
+  cs.forEach(c=>{
+    const mine=c.requestedBy===myUid();
+    if(c.status==='pending'&&isGuardian()&&c.approvals.indexOf(myUid())<0){
+      html+=`<div class="alert-pill" style="border-color:var(--star)">
+        <div class="ap-ico" style="background:var(--star-soft);font-size:17px">🛡️</div>
+        <div class="ap-body"><div class="ap-t">${escapeHtml(c.requestedByName||'A family member')} needs your OK</div><div class="ap-s">${escapeHtml(c.label)}</div></div>
+        <button onclick="openConsentReview('${c.id}')">Review</button></div>`;
+    } else if(c.status==='pending'&&mine){
+      const waiting=householdGuardians().filter(u=>c.approvals.indexOf(u)<0);
+      html+=`<div class="alert-pill" style="border-color:var(--note)">
+        <div class="ap-ico" style="background:var(--note-soft);font-size:17px">🛡️</div>
+        <div class="ap-body"><div class="ap-t">Waiting for ${escapeHtml(waiting.map(guardianName).join(' and ')||'agreement')}</div><div class="ap-s">${escapeHtml(c.label)}</div></div>
+        <button onclick="openConsentReview('${c.id}')">View</button></div>`;
+    } else if(c.status==='ready'&&mine){
+      html+=`<div class="alert-pill" style="border-color:var(--diaper)">
+        <div class="ap-ico" style="background:var(--diaper-soft);font-size:17px">🛡️</div>
+        <div class="ap-body"><div class="ap-t">Export agreed</div><div class="ap-s">Your download is ready</div></div>
+        <button onclick="downloadExport('${c.id}')">Download</button></div>`;
+    } else if(c.status==='declined'&&mine&&!c.seenDecline){
+      html+=`<div class="alert-pill" style="border-color:var(--danger)">
+        <div class="ap-ico" style="background:var(--med-soft);font-size:17px">🛡️</div>
+        <div class="ap-body"><div class="ap-t">Not this time</div><div class="ap-s">${escapeHtml(c.label)} was declined, nothing changed</div></div>
+        <button onclick="ackDecline('${c.id}')">OK</button></div>`;
+    }
+  });
+  return html;
+}
+function ackDecline(id){ const c=(state.consents||[]).find(x=>x.id===id); if(c) c.seenDecline=true; persist(); render(); }
+function openGuardians(){
+  const LL=window.LL;
+  const gs=householdGuardians();
+  if(!(LL&&LL.members&&Object.keys(LL.members).length>1)){
+    openSheet(`<h2>Guardians 🛡️</h2><div class="sub">Guardians are the people (usually mama and papa) who must both agree before the family's data is deleted or exported.</div>
+      <div class="csub">Right now it's just you. Invite your partner in Family &amp; sharing, then come back to make them a guardian.</div>
+      <button class="btn-primary" onclick="window.openFamily&&window.openFamily()">Open Family &amp; sharing</button>
+      <button class="btn-ghost" onclick="openDataSheet()">Back</button>`,'star');
+    return;
+  }
+  const canEdit=isGuardian();
+  const rows=Object.keys(LL.members).map(u=>{
+    const on=gs.indexOf(u)>=0;
+    const nm=loggerName(u)||'Family member';
+    return `<div class="set-item">
+      <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:16px">${on?'🛡️':'👤'}</div>
+      <div class="si-body"><div class="a">${escapeHtml(nm)}${u===myUid()?' (you)':''}</div><div class="b">${LL.members[u]==='owner'?'Owner':'Caregiver'}</div></div>
+      ${canEdit?`<div class="seg"><button class="${!on?'on':''}" onclick="setGuardian('${u}',false)">Off</button><button class="${on?'on':''}" onclick="setGuardian('${u}',true)">On</button></div>`:(on?'<div style="color:var(--star);font-weight:800;font-size:13px">Guardian</div>':'')}
+    </div>`;
+  }).join('');
+  openSheet(`<h2>Guardians 🛡️</h2><div class="sub">Guardians (usually mama and papa, up to two) must all agree before the family's data is deleted or exported.</div>
+    ${rows}
+    ${canEdit?'':'<div class="csub">Only a current guardian can change this.</div>'}
+    <button class="btn-ghost" onclick="openDataSheet()">Back</button>`,'star');
+}
+function setGuardian(uid,on){
+  if(!isGuardian()){ toast('Only a guardian can change this'); return; }
+  let gs=householdGuardians().slice();
+  if(on){ if(gs.indexOf(uid)<0){ if(gs.length>=2){ toast('Two guardians at most'); return; } gs.push(uid); } }
+  else { gs=gs.filter(u=>u!==uid); if(!gs.length){ toast('The family needs at least one guardian'); return; } }
+  state.guardians=gs; persist(); openGuardians();
 }
 
 /* ---------- ONBOARDING ---------- */
@@ -2365,10 +2637,1150 @@ function renderOnboard(){
       <div class="field"><label>Birthday (optional)</label><input type="date" id="bDate" value="${today}" max="${today}"></div>
       <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label><select id="bCountry">${VAX_COUNTRIES.map(([k,n])=>`<option value="${k}" ${k===detectCountry()?'selected':''}>${n}</option>`).join('')}</select></div>
       <button class="btn-primary" style="--accent:var(--feed)" onclick="saveBaby()">Start tracking</button>
+      <div style="text-align:center;font-size:12px;font-weight:800;color:var(--ink-faint);margin:14px 0 2px;letter-spacing:.04em">OR</div>
+      <button class="btn-ghost" onclick="openStartPregnancy()" style="color:var(--preg)">🌸 Expecting? Trying, pregnant or counting weeks</button>
       <button class="ob-logout" onclick="confirmLogout()">Log out</button>
     </div>
   </div>`;
 }
+
+/* ============================================================
+   PREGNANCY  (one continuous lifecycle: pregnancy -> birth -> baby)
+   Informational only, not medical advice. All medical/timing copy traces
+   to app/pregnancy-data.js (NHS / ACOG / G-BA / WHO / CDC).
+   ============================================================ */
+const PREG_MS_WEEK = 7*86400000, PREG_TERM = 280*86400000;
+const PREG_DISCLAIM = 'Informational only, not medical advice. Always follow your midwife, doctor or health visitor, and confirm your own appointment plan with your provider.';
+let pregView = 'week';
+const PREG_COUNTRY_OPTS = [['uk','United Kingdom (NHS)'],['us','United States (ACOG)'],['de','Deutschland'],['uae','United Arab Emirates'],['generic','Other / general (WHO)']];
+/* Pregnancy care picker: every country is selectable. uk/us/de/uae have verified national schedules;
+   everyone else falls back to a WHO-aligned baseline (editable) until a verified schedule is added.
+   Country names render via Intl.DisplayNames (localised, no hardcoded name table). */
+const PREG_ISO = { uk:'GB', uae:'AE' };
+/* Every country/territory over ~500k people (ISO alpha-2). uk/us/de/uae are the verified group above
+   and are intentionally excluded here. The long tail resolves to the WHO-aligned baseline (which is the
+   actual national model for most of these) until a verified national schedule is added to PREG.antenatal. */
+const PREG_MORE_COUNTRIES = [
+  // Asia
+  'in','id','cn','jp','kr','kp','ph','vn','th','mm','my','sg','kh','la','np','bd','pk','lk','bt','mn','tw','tl',
+  'af','ir','iq','sa','jo','lb','sy','ye','il','ps','tr','kz','uz','tm','tj','kg','az','am','ge','cy','kw','qa','bh','om','mv',
+  // Europe
+  'fr','it','es','nl','be','ch','at','se','no','dk','fi','pl','pt','gr','cz','sk','si','hr','ba','rs','me','mk','al','bg','ro','hu','md','ua','by','ru','lt','lv','ee','lu','mt','ie',
+  // Africa
+  'ng','et','eg','cd','tz','za','ke','sd','ug','dz','ma','ao','gh','mz','mg','ci','cm','ne','ml','bf','mw','zm','sn','td','so','zw','gn','rw','bj','bi','tn','ss','tg','sl','ly','lr','cf','mr','er','na','gm','bw','ga','ls','gw','gq','mu','sz','dj','km','cg','cv',
+  // Americas
+  'br','mx','co','ar','pe','ve','cl','ec','gt','cu','bo','ht','do','hn','py','ni','sv','cr','pa','uy','jm','tt','gy','sr','pr','ca',
+  // Oceania
+  'au','nz','pg','fj','sb'
+];
+var _pregDN=null;
+function pregCountryName(code){
+  if(!code||code==='custom') return 'Custom plan';
+  if(code==='generic') return 'General (WHO-aligned)';
+  try{ if(!_pregDN) _pregDN=new Intl.DisplayNames([navigator.language||'en'],{type:'region'});
+    var iso=PREG_ISO[code]||code.toUpperCase();
+    return _pregDN.of(iso)||code.toUpperCase();
+  }catch(e){ return code.toUpperCase(); }
+}
+function pregCareLabel(code){
+  var sk=pregCountryKey(code);
+  if(sk==='custom') return 'Your own plan';
+  if(sk!=='generic' && window.PREG && PREG.antenatal[sk]) return PREG.antenatal[sk].label;
+  return pregCountryName(code)+' · WHO-aligned';
+}
+function pregCountryOptions(sel){
+  sel = sel || 'generic';
+  var opt=function(c,l){ return '<option value="'+c+'"'+(c===sel?' selected':'')+'>'+escapeHtml(l)+'</option>'; };
+  var all=['uk','us','de','uae'].concat(PREG_MORE_COUNTRIES);
+  var labeled=all.map(function(c){
+    var sk=pregCountryKey(c);
+    var L=(sk!=='generic'&&sk!=='custom'&&window.PREG&&PREG.antenatal[sk])?PREG.antenatal[sk].label:pregCountryName(c);
+    return [c,L];
+  }).sort(function(a,b){ return a[1].localeCompare(b[1]); });
+  var html=labeled.map(function(p){ return opt(p[0],p[1]); }).join('');
+  html+=opt('generic','Other / not listed (WHO-aligned)');
+  html+=opt('custom','Custom — build your own');
+  return html;
+}
+
+/* ---- derived (compute, never store) ---- */
+function pregWeek(){
+  const p=state.pregnancy; if(!p) return 1;
+  let wk;
+  if(p.dueDate) wk = 40 - Math.round((p.dueDate-now())/PREG_MS_WEEK);
+  else if(p.lmp) wk = Math.floor((now()-p.lmp)/PREG_MS_WEEK);
+  else wk = 1;
+  return Math.max(1, Math.min(42, wk));
+}
+function pregTri(){ return (window.PREG?PREG.tri(pregWeek()):1); }
+function triName(t){ return t===1?'First trimester':(t===2?'Second trimester':'Third trimester'); }
+function pregWeekData(){ const wk=Math.max(4,Math.min(41,pregWeek())); return (window.PREG&&PREG.weeks[wk])||null; }
+function pregDueLabel(){ const p=state.pregnancy; if(!p||!p.dueDate) return ''; return new Date(p.dueDate).toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'}); }
+function pregDaysToGo(){ const p=state.pregnancy; if(!p||!p.dueDate) return null; return Math.round((p.dueDate-now())/86400000); }
+function pregCountryKey(c){ c=c||(state.pregnancy&&state.pregnancy.country)||detectCountry(); return (window.PREG&&PREG.antenatal[c])?c:'generic'; }
+function pregNextAppt(){ const p=state.pregnancy; if(!p) return null; const wk=pregWeek(); const open=(p.appts||[]).filter(a=>!a.done).sort((a,b)=>a.week-b.week); return open.find(a=>a.week>=wk)||open[0]||null; }
+
+/* ---- Pregnancy: the journey starts wherever you are ---- */
+let pregDraft = {mode:'due', date:'', country:'us'};
+function openStartPregnancy(){
+  pregDraft={mode:'due', date:'', country:detectCountry()};
+  openSheet(`<h2>Start your journey 🌸</h2><div class="sub">Wherever you are on the journey, start there. You can change anything later.</div>
+    <div class="prof-cards">
+      <div class="prof-card" onclick="openPlanningSetup()"><span class="lead" style="background:var(--diaper-soft);color:var(--diaper);font-size:18px">🌱</span><div class="cflex"><div class="a">We're trying</div><div class="b">Just starting out: get your body and home ready</div></div><span class="chev">${I.chev}</span></div>
+      <div class="prof-card" onclick="openExpectingSetup('lmp')"><span class="lead" style="background:var(--preg-soft);color:var(--preg);font-size:18px">🎉</span><div class="cflex"><div class="a">Just found out</div><div class="b">A positive test! We'll work out your weeks</div></div><span class="chev">${I.chev}</span></div>
+      <div class="prof-card" onclick="openExpectingSetup('due')"><span class="lead" style="background:var(--star-soft);color:var(--star);font-size:18px">🤰</span><div class="cflex"><div class="a">Already counting weeks</div><div class="b">You know your due date, pick up right where you are</div></div><span class="chev">${I.chev}</span></div>
+    </div>
+    ${(state.pregnancyArchive&&state.pregnancyArchive.length)?`<button class="btn-ghost" style="color:var(--ink-faint);margin-top:4px" onclick="openKeptMemories()">🤍 View kept memories</button>`:''}
+    <div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
+}
+function setPregMode(m){ pregDraft.mode=m; pregDraft.date=(($('#pgDate')||{}).value)||pregDraft.date; openExpectingSetup(m); }
+function openExpectingSetup(mode){
+  pregDraft.mode=mode||pregDraft.mode;
+  const isDue = pregDraft.mode==='due';
+  openSheet(`<h2>${isDue?'You\'re expecting 🤍':'Congratulations 🎉'}</h2><div class="sub">${isDue?'Let\'s set up your weeks. You can change any of this later.':'What a moment. Tell us your last period and we\'ll work out your weeks and due date.'}</div>
+    <div class="seg" style="margin-bottom:16px">
+      <button class="${isDue?'on':''}" onclick="setPregMode('due')">I know my due date</button>
+      <button class="${!isDue?'on':''}" onclick="setPregMode('lmp')">Use last period</button>
+    </div>
+    <div class="field"><label>${isDue?'Due date (EDD)':'First day of your last period'}</label><input type="date" id="pgDate" value="${pregDraft.date}"></div>
+    <div class="field"><label>Where you'll have your care</label><select id="pgCountry">${pregCountryOptions(pregDraft.country)}</select></div>
+    <button class="btn-primary" style="background:var(--preg)" onclick="savePregnancy()">Start tracking</button>
+    <button class="btn-ghost" onclick="openStartPregnancy()">Back</button>
+    <div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
+}
+/* ---- planning ("we're trying") stage ---- */
+function defaultPrecon(){
+  return ['Take folic acid, 400 micrograms daily','Check your vitamin D','Review any medicines with your GP or pharmacist','Book a preconception chat if you have a health condition','Ease off smoking and alcohol','Gentle movement most days']
+    .map(t=>({id:uid(),text:t,done:false}));
+}
+function openPlanningSetup(){
+  openSheet(`<h2>We're trying 🌱</h2><div class="sub">Lovely. We'll keep it gentle: a little preparation, an estimated fertile window if you want it, and zero pressure.</div>
+    <div class="field"><label>First day of your last period (optional)</label><input type="date" id="plLmp"></div>
+    <div class="field"><label>Usual cycle length (days)</label><input type="number" id="plCycle" value="28" min="21" max="40"></div>
+    <button class="btn-primary" style="background:var(--diaper)" onclick="savePlanning()">Start</button>
+    <button class="btn-ghost" onclick="openStartPregnancy()">Back</button>
+    <div class="preg-disclaim">Fertile-window estimates are rough guides, every body is different. This is informational only, not fertility advice.</div>`,'diaper');
+}
+function savePlanning(){
+  const dv=($('#plLmp')||{}).value;
+  const cyc=Math.max(21,Math.min(40,parseInt(($('#plCycle')||{}).value)||28));
+  state.pregnancy={ id:uid(), ownerUid:myUid(), stage:'planning', dueDate:null, lmp:dv?new Date(dv+'T08:00').getTime():null, cycleLen:cyc,
+    country:detectCountry(), precon:defaultPrecon(),
+    careTeam:[], appts:[], symptoms:[], weights:[], bp:[], kicks:[], contractions:[],
+    birthPlan:'', bag:[], moments:[],
+    conditions:{}, glucose:[], urine:[], supplements:[], supplementLog:[], nausea:[],
+    glucoseUnit:'mmol', bornBabyId:null, createdAt:now() };
+  persist(); closeSheet(); render(); toast('Rooting for you 🌱');
+}
+function fertileEstimate(){
+  const p=state.pregnancy; if(!p||!p.lmp) return null;
+  const cyc=p.cycleLen||28;
+  const nextPeriod=p.lmp+cyc*86400000;
+  const ovulation=nextPeriod-14*86400000;
+  const start=ovulation-5*86400000, end=ovulation+86400000;
+  if(now()>nextPeriod+10*86400000) return {stale:true};
+  const f=ms=>new Date(ms).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+  return {start:f(start), end:f(end), next:f(nextPeriod), inWindow: now()>=start&&now()<=end};
+}
+function openPeriodUpdate(){
+  openSheet(`<h2>Period started</h2><div class="sub">Updating it keeps the estimate honest. And if it's a hard day, be kind to yourself.</div>
+    <div class="field"><label>First day</label><input type="date" id="puDate" value="${new Date().toISOString().slice(0,10)}"></div>
+    <button class="btn-primary" style="background:var(--diaper)" onclick="savePeriodUpdate()">Save</button>`,'diaper');
+}
+function savePeriodUpdate(){ const dv=($('#puDate')||{}).value; if(!dv){toast('Pick the date');return;} state.pregnancy.lmp=new Date(dv+'T08:00').getTime(); persist(); closeSheet(); render(); }
+function togglePrecon(id){ const it=(state.pregnancy.precon||[]).find(x=>x.id===id); if(!it)return; it.done=!it.done; persist(); render(); }
+function removePrecon(id){ state.pregnancy.precon=(state.pregnancy.precon||[]).filter(x=>x.id!==id); persist(); render(); }
+function addPrecon(){ const el=$('#pcNew'); const v=(el&&el.value.trim())||''; if(!v)return; state.pregnancy.precon.push({id:uid(),text:v,done:false}); persist(); render(); }
+function openPositiveTest(){
+  const p=state.pregnancy;
+  const dv=p.lmp?new Date(p.lmp).toISOString().slice(0,10):'';
+  openSheet(`<div class="welcome-burst">🎉🌸</div>
+    <h2 style="text-align:center">A positive test!</h2>
+    <div class="sub" style="text-align:center">Wonderful news. Let's turn trying into tracking: confirm your last period and we'll set up your weeks.</div>
+    <div class="field"><label>First day of your last period</label><input type="date" id="ptLmp" value="${dv}"></div>
+    <div class="field"><label>Where you'll have your care</label><select id="ptCountry">${pregCountryOptions(p.country)}</select></div>
+    <button class="btn-primary" style="background:var(--preg)" onclick="confirmPositiveTest()">Start my pregnancy 🤍</button>
+    <div class="csub" style="text-align:center;margin-top:8px">A home test is a great sign. Your provider will confirm it properly.</div>`,'preg');
+}
+function confirmPositiveTest(){
+  const p=state.pregnancy;
+  const dv=($('#ptLmp')||{}).value; if(!dv){toast('We need your last period date');return;}
+  const sel=(($('#ptCountry')||{}).value)||detectCountry();
+  const cc=pregCountryKey(sel);
+  p.lmp=new Date(dv+'T08:00').getTime();
+  p.dueDate=p.lmp+PREG_TERM;
+  p.stage='expecting';
+  p.country=sel;
+  p.appts=(((window.PREG&&PREG.antenatal[cc]&&PREG.antenatal[cc].items))||[]).map(it=>({id:uid(),week:it.week,title:it.title,note:it.note,done:false,at:null}));
+  if(!(p.bag||[]).length) p.bag=defaultBag();
+  pregView='week'; persist(); closeSheet(); render(); toast("You're expecting 🤍");
+}
+function renderPlanningHome(){
+  const p=state.pregnancy;
+  const fe=fertileEstimate();
+  const feCard = !p.lmp ? `<div class="preg-card" onclick="openPeriodUpdate()" style="cursor:pointer"><div class="pc-ico">🗓️</div><div><div class="pc-t">Add your last period</div><div class="pc-b">We'll estimate your fertile window, only if you find it helpful.</div></div></div>`
+    : (fe&&fe.stale ? `<div class="preg-card" onclick="openPeriodUpdate()" style="cursor:pointer"><div class="pc-ico">🗓️</div><div><div class="pc-t">Update your period</div><div class="pc-b">It's been a while since the last one we know about. Tap to update, or if you think you might be pregnant, take a test 🤍</div></div></div>`
+    : `<div class="preg-card"><div class="pc-ico">${fe.inWindow?'✨':'🗓️'}</div><div><div class="pc-t">${fe.inWindow?'You may be in your fertile window':'Estimated fertile window'}</div><div class="pc-b">Around ${fe.start} to ${fe.end}. Next period around ${fe.next}. A rough guide only, every body is different.</div></div></div>`);
+  const items=(p.precon||[]).map(it=>`<div class="bag-row ${it.done?'done':''}"><div class="bg-tick" onclick="togglePrecon('${it.id}')">${it.done?I.check:''}</div><div class="bg-t" onclick="togglePrecon('${it.id}')">${escapeHtml(it.text)}</div><button class="bg-x" onclick="removePrecon('${it.id}')">${I.trash}</button></div>`).join('');
+  return `<div class="fade-in">
+    <div class="greeting">Getting ready 🌱</div>
+    <div class="greeting-sub">No pressure, no countdowns. Just gentle preparation for when your little one decides it's time.</div>
+    ${consentBanners()}
+    ${feCard}
+    <button class="btn-ghost" onclick="openPeriodUpdate()" style="margin-top:2px">🗓️ My period started</button>
+    <div class="sec-title">Getting your body ready</div>
+    ${items}
+    <div class="field" style="margin-top:10px"><label>Add your own</label><input id="pcNew" placeholder="e.g. Dentist check" onkeydown="if(event.key==='Enter')addPrecon()"></div>
+    <button class="btn-primary" style="background:var(--preg);margin-top:14px" onclick="openPositiveTest()">🎉 I got a positive test</button>
+    <button class="btn-ghost" style="color:var(--ink-faint)" onclick="confirmEndPregnancy()">Stop tracking</button>
+    <div class="preg-disclaim">Informational only, not medical or fertility advice. Folic acid before pregnancy is standard guidance (NHS); confirm what's right for you with your GP. If you've been trying for over a year (or six months if you're 35 or older), it's worth a kind chat with your doctor.</div>
+  </div>`;
+}
+
+/* ---- Moments: ultrasounds and bump photos, paired with the week's size ---- */
+let momentDraft={photoData:null, week:null, note:''};
+function momentSize(week){ const w=Math.max(4,Math.min(41,+week||4)); return (window.PREG&&PREG.weeks[w]&&PREG.weeks[w].size)||''; }
+function renderPregMoments(){
+  const p=state.pregnancy;
+  const list=(p.moments||[]).slice().sort((a,b)=>b.week-a.week||b.at-a.at);
+  const cards=list.map(m=>{
+    const src=photoSrc(m.photoId);
+    const size=momentSize(m.week);
+    return `<div class="moment-card">
+      ${src?`<img src="${src}" alt="Week ${m.week} scan">`:''}
+      <div class="moment-cap">
+        <div class="mc-top"><div class="mc-week">Week ${m.week}</div><div class="mc-size">${size?'🍐 about the size of a '+escapeHtml(size):''}</div></div>
+        ${m.note?`<div class="mc-note">${escapeHtml(m.note)}</div>`:''}
+        <div class="mc-row"><span class="mc-date">${dayLabel(m.at)}</span><button class="lli-x" onclick="deleteMoment('${m.id}')">${I.trash}</button></div>
+      </div>
+    </div>`;
+  }).join('');
+  return `<div class="fade-in">
+    <div class="greeting">Moments 📷</div>
+    <div class="greeting-sub">Your scans and bump pictures, paired with how big your baby was that week. The first photo album, before the album.</div>
+    <button class="btn-primary" style="background:var(--preg);margin:6px 0 14px" onclick="openAddMoment()">${I.camera} Add a moment</button>
+    ${cards||`<div class="preg-card"><div class="pc-ico">🖼️</div><div><div class="pc-t">Nothing here yet</div><div class="pc-b">Add your first ultrasound after a scan, or a bump photo any week. Each one is saved with the week and what size your baby was.</div></div></div>`}
+  </div>`;
+}
+function openAddMoment(){
+  momentDraft={photoData:null, week:pregWeek(), note:''};
+  renderAddMoment();
+}
+function renderAddMoment(){
+  const d=momentDraft;
+  const size=momentSize(d.week);
+  openSheet(`<h2>Add a moment</h2><div class="sub">An ultrasound, a bump photo, the test itself. Saved privately with the week it belongs to.</div>
+    <div class="field"><label>Photo</label>
+      ${d.photoData?`<div class="food-preview"><img src="${d.photoData}"><button class="rm" onclick="momentDraft.photoData=null;renderAddMoment()">×</button></div>`:`<button class="btn-ghost" style="margin:0" onclick="document.getElementById('momPhoto').click()">${I.camera} Choose a photo</button>`}
+      <input type="file" id="momPhoto" accept="image/*" style="display:none" onchange="loadMomentPhoto(this)">
+    </div>
+    <div class="field"><label>Week</label><input type="number" id="momWeek" min="1" max="42" value="${d.week}" oninput="momentDraft.week=this.value;var s=momentSize(this.value);var el=document.getElementById('momSize');if(el)el.textContent=s?('About the size of a '+s+' that week'):''"></div>
+    <div class="csub" id="momSize" style="margin:-6px 0 12px">${size?'About the size of a '+size+' that week':''}</div>
+    <div class="field"><label>Note (optional)</label><input id="momNote" placeholder="e.g. The 20 week scan, waving at us" value="${escapeHtml(d.note)}" oninput="momentDraft.note=this.value"></div>
+    <button class="btn-primary" style="background:var(--preg)" onclick="saveMoment()">Save moment</button>`,'preg');
+}
+function loadMomentPhoto(input){ const f=input.files[0]; if(!f)return; downscaleToData(f,1200,0.8,(data)=>{ momentDraft.photoData=data; renderAddMoment(); }); }
+function saveMoment(){
+  const d=momentDraft;
+  if(!d.photoData){ toast('Choose a photo first'); return; }
+  const week=Math.max(1,Math.min(42,parseInt(d.week)||pregWeek()));
+  const photoId=uid();
+  PhotoStore.set(photoId, d.photoData);
+  state.pregnancy.moments.push({id:uid(), photoId, week, note:(d.note||'').trim(), at:now()});
+  persist(); closeSheet(); pregGo('moments'); toast('Moment saved 🤍');
+}
+function deleteMoment(id){
+  const p=state.pregnancy;
+  const m=(p.moments||[]).find(x=>x.id===id); if(!m)return;
+  p.moments=p.moments.filter(x=>x.id!==id);
+  try{ PhotoStore.del(m.photoId); }catch(e){}
+  persist(); render();
+}
+function defaultBag(){
+  return ['Maternity notes or records','ID and any paperwork','Comfortable going-home clothes','Toiletries and lip balm','Phone and a long charger','Snacks and a water bottle','Nappies and baby vests','Baby blanket and a going-home outfit','Car seat fitted and ready']
+    .map(t=>({id:uid(),text:t,done:false}));
+}
+function savePregnancy(){
+  const dv=($('#pgDate')||{}).value;
+  if(!dv){ toast('Pick a date first'); return; }
+  const sel=(($('#pgCountry')||{}).value)||detectCountry();
+  const cc=pregCountryKey(sel);
+  const picked=new Date(dv+'T08:00').getTime();
+  let dueDate, lmp=null;
+  if(pregDraft.mode==='due'){ dueDate=picked; }
+  else { lmp=picked; dueDate=picked+PREG_TERM; }
+  const appts=(((window.PREG&&PREG.antenatal[cc]&&PREG.antenatal[cc].items))||[]).map(it=>({id:uid(),week:it.week,title:it.title,note:it.note,done:false,at:null}));
+  state.pregnancy={ id:uid(), ownerUid:myUid(), stage:'expecting', dueDate, lmp, country:sel,
+    careTeam:[], appts, symptoms:[], weights:[], bp:[], kicks:[], contractions:[],
+    birthPlan:'', bag:defaultBag(), moments:[],
+    conditions:{}, glucose:[], urine:[], supplements:[], supplementLog:[], nausea:[],
+    glucoseUnit:(cc==='us'||cc==='uae')?'mgdl':'mmol',
+    bornBabyId:null, createdAt:now() };
+  try{ localStorage.setItem('cubby-country', VAX_SCHEDULES[cc]?cc:detectCountry()); }catch(e){}
+  pregView='week'; persist(); closeSheet(); render(); toast('Your pregnancy is set up 🤍');
+}
+
+/* ---- shell (topbar + nav) ---- */
+function pregGo(v){ pregView=v; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
+function renderPregShell(){
+  ensurePregFields(state.pregnancy);
+  const planning = state.pregnancy.stage==='planning';
+  if(planning){
+    const main = pregView==='den' ? renderDenHub() : renderPlanningHome();
+    app().innerHTML=`
+      <div class="topbar">
+        <div class="preg-pill">
+          <div class="pp-orb">🌱</div>
+          <div><h1>Cubby</h1><span>Getting ready</span></div>
+        </div>
+        ${FEATURES.den?`<button class="icon-btn ${pregView==='den'?'icon-on':''}" onclick="goDen()" aria-label="our den" style="font-size:17px">🧺</button>`:''}
+        <button class="icon-btn" onclick="toggleTheme()" aria-label="theme">${state.settings.theme==='night'?I.sun:I.moon}</button>
+        <button class="icon-btn" onclick="openSettings()" aria-label="settings">${I.settings}</button>
+      </div>
+      <div class="scroll" id="scroll">${main}</div>`;
+    startTick();
+    return;
+  }
+  const wk=pregWeek(), tri=pregTri();
+  let main='';
+  if(pregView==='log') main=renderPregLog();
+  else if(pregView==='tools') main=renderPregTools();
+  else if(pregView==='moments') main=renderPregMoments();
+  else if(pregView==='care') main=renderPregCare();
+  else if(pregView==='den') main=renderDenHub();
+  else main=renderPregHome();
+  app().innerHTML=`
+    <div class="topbar">
+      <div class="preg-pill" onclick="pregGo('care')">
+        <div class="pp-orb">🤰</div>
+        <div><h1>Cubby</h1><span>Week ${wk} · ${triName(tri)}</span></div>
+      </div>
+      ${FEATURES.den?`<button class="icon-btn ${pregView==='den'?'icon-on':''}" onclick="goDen()" aria-label="our den" style="font-size:17px">🧺</button>`:''}
+      <button class="icon-btn" onclick="toggleTheme()" aria-label="theme">${state.settings.theme==='night'?I.sun:I.moon}</button>
+      <button class="icon-btn" onclick="openSettings()" aria-label="settings">${I.settings}</button>
+    </div>
+    <div class="scroll" id="scroll">${main}</div>
+    <div class="nav"><div class="nav-inner">
+      <button class="nav-btn ${pregView==='week'?'active':''}" onclick="pregGo('week')">${I.home}Week</button>
+      <button class="nav-btn ${pregView==='log'?'active':''}" onclick="pregGo('log')">${I.list}Log</button>
+      <button class="nav-btn ${pregView==='moments'?'active':''}" onclick="pregGo('moments')">${I.camera}Moments</button>
+      <button class="nav-btn ${pregView==='tools'?'active':''}" onclick="pregGo('tools')">${I.heart}Tools</button>
+      <button class="nav-btn ${pregView==='care'?'active':''}" onclick="pregGo('care')">${I.cross}Care</button>
+    </div></div>`;
+  startTick();
+}
+function pregGreeting(){ const name=myName(); const h=new Date().getHours(); const part=(h<5||h>=23)?'Resting up':(h<12?'Good morning':(h<17?'Good afternoon':'Good evening')); return name?`${part}, ${escapeHtml(name)} 🤍`:`${part} 🤍`; }
+
+/* ---- Phase 2: week view ---- */
+function renderPregHome(){
+  const wk=pregWeek(), tri=pregTri(), data=pregWeekData();
+  const pct=Math.max(3,Math.min(100,Math.round(wk/40*100)));
+  const dtg=pregDaysToGo(), due=pregDueLabel();
+  const countdown = dtg==null ? '' : (dtg>0?`${dtg} day${dtg===1?'':'s'} to go · due ${due}`:(dtg===0?`Due today · ${due}`:`${Math.abs(dtg)} day${dtg===-1?'':'s'} past your due date`));
+  const na=pregNextAppt();
+  return `<div class="fade-in">
+    <div class="greeting">${pregGreeting()}</div>
+    ${consentBanners()}
+    <div class="week-hero">
+      <div class="wh-top"><div class="wh-week">Week ${wk}</div><div class="wh-tri">${triName(tri)}</div></div>
+      <div class="wh-count">${escapeHtml(countdown)}</div>
+      <div class="preg-bar"><i style="width:${pct}%"></i></div>
+    </div>
+    ${data?`<div class="preg-cards">
+      <div class="preg-card"><div class="pc-ico">🍋</div><div><div class="pc-t">About the size of a ${escapeHtml(data.size)}</div><div class="pc-b">A gentle week-by-week guide. Every baby grows at their own pace.</div></div></div>
+      <div class="preg-card"><div class="pc-ico">👶</div><div><div class="pc-t">Baby this week</div><div class="pc-b">${escapeHtml(data.baby)}</div></div></div>
+      <div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">You this week</div><div class="pc-b">${escapeHtml(data.mum)}</div></div></div>
+    </div>`:`<div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">Early days</div><div class="pc-b">Week-by-week guidance appears from week 4. Be gentle with yourself.</div></div></div>`}
+    ${na?`<div class="next-appt" onclick="pregGo('log')">
+      <div class="pc-ico" style="background:var(--preg-soft)">📅</div>
+      <div class="na-body"><div class="na-t">Next: ${escapeHtml(na.title)}</div><div class="na-s">Around week ${na.week}${na.note?' · '+escapeHtml(na.note):''}</div></div>
+      <span class="chev">${I.chev}</span></div>`:''}
+    ${pregHealthQuick()}
+    <div class="sec-title">This week</div>
+    <div class="actions stagger">
+      <button class="action" onclick="openKickCounter()"><div class="ico" style="background:var(--preg-soft);color:var(--preg)">👣</div><div class="label">Kicks</div><div class="hint">Count baby's movements</div></button>
+      <button class="action" onclick="openContractions()"><div class="ico" style="background:var(--pump-soft);color:var(--pump)">⏱️</div><div class="label">Contractions</div><div class="hint">Time them, 5-1-1 guide</div></button>
+      ${pregIsOwner()?`<button class="action" onclick="openLogSymptom()"><div class="ico" style="background:var(--note-soft);color:var(--note)">📝</div><div class="label">Symptom</div><div class="hint">How you're feeling</div></button>
+      <button class="action" onclick="openLogWeight()"><div class="ico" style="background:var(--star-soft);color:var(--star)">⚖️</div><div class="label">Weight</div><div class="hint">Track your weight</div></button>`:''}
+    </div>
+    <button class="btn-ghost" onclick="openDangerSigns()" style="color:var(--danger);margin-top:14px">⚠️ Urgent warning signs, when to seek care</button>
+    <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="openWelcomeBaby()">🐻 Baby has arrived</button>
+    <div class="preg-disclaim">${PREG_DISCLAIM}</div>
+  </div>`;
+}
+
+/* ---- Phase 3: logging ---- */
+function renderPregLog(){
+  const p=state.pregnancy;
+  const appts=(p.appts||[]).slice().sort((a,b)=>a.week-b.week);
+  const _sk=pregCountryKey(p.country);
+  const _src=(window.PREG&&PREG.antenatal[_sk]&&PREG.antenatal[_sk].source)||'';
+  const apptIntro = _sk==='custom'
+    ? `<div class="csub" style="margin:-2px 0 12px">Your own plan. Add each appointment your provider gives you below.</div>`
+    : `<div class="csub" style="margin:-2px 0 12px">Based on ${escapeHtml(pregCareLabel(p.country))}${_src?` · <a href="${_src}" target="_blank" rel="noopener" style="color:var(--preg);font-weight:700">source</a>`:''}. A sourced, indicative starting point, every clinic and doctor runs their own flow, so tick off, reschedule, add or remove anything to match your plan.</div>`;
+  const apptRows=appts.length?appts.map(a=>`
+    <div class="appt-row ${a.done?'done':''}">
+      <div class="ar-tick" onclick="toggleAppt('${a.id}')">${a.done?I.check:''}</div>
+      <div class="ar-body" onclick="openApptEdit('${a.id}')">
+        <div class="ar-wk">Week ${a.week}${a.done&&a.at?' · done '+new Date(a.at).toLocaleDateString(undefined,{month:'short',day:'numeric'}):''}</div>
+        <div class="ar-t">${escapeHtml(a.title)}</div>
+        ${a.note?`<div class="ar-s">${escapeHtml(a.note)}</div>`:''}
+      </div>
+    </div>`).join(''):`<div class="csub">No appointments yet. Add your first below.</div>`;
+  const logs=pregRecentLogs();
+  return `<div class="fade-in">
+    <div class="sec-title">Appointments</div>
+    ${apptIntro}
+    ${apptRows}
+    <button class="btn-ghost" onclick="openAddAppt()">${I.plus} Add an appointment</button>
+    <div class="sec-title" style="margin-top:18px">Quick log</div>
+    <div class="actions stagger">
+      <button class="action" onclick="openLogSymptom()"><div class="ico" style="background:var(--note-soft);color:var(--note)">📝</div><div class="label">Symptom</div><div class="hint">Nausea, aches, mood</div></button>
+      <button class="action" onclick="openLogWeight()"><div class="ico" style="background:var(--star-soft);color:var(--star)">⚖️</div><div class="label">Weight</div><div class="hint">Your weight</div></button>
+      <button class="action" onclick="openLogBP()"><div class="ico" style="background:var(--pump-soft);color:var(--pump)">🩺</div><div class="label">Blood pressure</div><div class="hint">If asked to track</div></button>
+      <button class="action" onclick="pregGo('care')"><div class="ico" style="background:var(--diaper-soft);color:var(--diaper)">👩‍⚕️</div><div class="label">Care team</div><div class="hint">Midwife, OB, GP</div></button>
+    </div>
+    ${logs?`<div class="sec-title" style="margin-top:18px">Recent</div>${logs}`:''}
+    <div class="preg-disclaim">${PREG_DISCLAIM}</div>
+  </div>`;
+}
+function pregRecentLogs(){
+  const p=state.pregnancy; const items=[];
+  (p.symptoms||[]).forEach(s=>items.push({at:s.at,ico:'📝',t:s.kind||'Symptom',s:s.note||'',kind:'symptoms',id:s.id}));
+  (p.weights||[]).forEach(w=>items.push({at:w.at,ico:'⚖️',t:'Weight',s:w.kg+' '+(w.unit||'kg'),kind:'weights',id:w.id}));
+  (p.bp||[]).forEach(b=>items.push({at:b.at,ico:'🩺',t:'Blood pressure',s:b.sys+'/'+b.dia+' mmHg',kind:'bp',id:b.id}));
+  if(!items.length) return '';
+  items.sort((a,b)=>b.at-a.at);
+  return items.slice(0,14).map(it=>`<div class="log-list-item">
+    <div class="lli-ico">${it.ico}</div>
+    <div class="lli-body"><div class="lli-t">${escapeHtml(it.t)}</div><div class="lli-s">${escapeHtml(it.s)}${it.s?' · ':''}${dayLabel(it.at)} ${fmtClock(it.at)}</div></div>
+    <button class="lli-x" onclick="deletePregLog('${it.kind}','${it.id}')">${I.trash}</button>
+  </div>`).join('');
+}
+function deletePregLog(kind,id){ const p=state.pregnancy; if(!p||!p[kind])return; p[kind]=p[kind].filter(x=>x.id!==id); persist(); render(); }
+/* appointments */
+function toggleAppt(id){ const p=state.pregnancy; const a=(p.appts||[]).find(x=>x.id===id); if(!a)return; a.done=!a.done; a.at=a.done?now():null; persist(); render(); }
+function openApptEdit(id){
+  const a=(state.pregnancy.appts||[]).find(x=>x.id===id); if(!a)return;
+  openSheet(`<h2>Appointment</h2><div class="sub">Edit, reschedule or remove this appointment.</div>
+    <div class="field"><label>Title</label><input id="apT" value="${escapeHtml(a.title)}"></div>
+    <div class="field"><label>Around week</label><input type="number" id="apW" min="1" max="42" value="${a.week}"></div>
+    <div class="field"><label>Note</label><textarea id="apN">${escapeHtml(a.note||'')}</textarea></div>
+    <button class="btn-primary" style="background:var(--preg)" onclick="saveAppt('${a.id}')">Save</button>
+    <button class="btn-ghost" onclick="toggleAppt('${a.id}');closeSheet()">${a.done?'Mark not done':'Mark done'}</button>
+    <button class="btn-ghost" style="color:var(--danger)" onclick="deleteAppt('${a.id}')">Remove appointment</button>`,'preg');
+}
+function saveAppt(id){ const a=(state.pregnancy.appts||[]).find(x=>x.id===id); if(!a)return; a.title=$('#apT').value.trim()||a.title; a.week=Math.max(1,Math.min(42,parseInt($('#apW').value)||a.week)); a.note=$('#apN').value.trim(); persist(); closeSheet(); render(); toast('Saved'); }
+function deleteAppt(id){ state.pregnancy.appts=(state.pregnancy.appts||[]).filter(x=>x.id!==id); persist(); closeSheet(); render(); }
+function openAddAppt(){
+  openSheet(`<h2>Add appointment</h2><div class="sub">Add a custom check, scan or class.</div>
+    <div class="field"><label>Title</label><input id="apT" placeholder="e.g. Growth scan" autofocus></div>
+    <div class="field"><label>Around week</label><input type="number" id="apW" min="1" max="42" value="${pregWeek()}"></div>
+    <div class="field"><label>Note (optional)</label><textarea id="apN" placeholder="Anything to remember"></textarea></div>
+    <button class="btn-primary" style="background:var(--preg)" onclick="addAppt()">Add</button>`,'preg');
+}
+function addAppt(){ const t=$('#apT').value.trim(); if(!t){toast('Give it a title');return;} state.pregnancy.appts.push({id:uid(),week:Math.max(1,Math.min(42,parseInt($('#apW').value)||pregWeek())),title:t,note:$('#apN').value.trim(),done:false,at:null}); persist(); closeSheet(); render(); toast('Appointment added'); }
+/* symptom / weight / blood pressure */
+function openLogSymptom(){
+  initLogWhen();
+  const chips=['Nausea','Tired','Headache','Heartburn','Cramps','Back ache','Swelling','Baby kicking','Feeling good'].map(s=>`<button class="tgt" onclick="pickSym(this,'${s}')">${s}</button>`).join('');
+  openSheet(`<h2>How are you feeling?</h2><div class="sub">Log a symptom or a note for your records.</div>
+    <div class="field"><label>Common</label><div class="tgt-row" id="symChips">${chips}</div></div>
+    <div class="field"><label>Symptom or note</label><input id="symK" placeholder="e.g. mild nausea after lunch"></div>
+    ${timeStrip('when','When')}
+    <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="savePregSymptom()">Save</button>`,'preg');
+}
+function pickSym(el,s){ const inp=$('#symK'); if(inp)inp.value=s; document.querySelectorAll('#symChips .tgt').forEach(b=>b.classList.remove('on')); el.classList.add('on'); }
+function savePregSymptom(){ const k=$('#symK').value.trim(); if(!k){toast('Add a note first');return;} state.pregnancy.symptoms.push({id:uid(),at:getWhen('when'),kind:k,note:''}); persist(); closeSheet(); render(); toast('Logged'); }
+function openLogWeight(){
+  initLogWhen();
+  const unit=(state.settings.wUnit==='lb')?'lb':'kg';
+  openSheet(`<h2>Your weight</h2><div class="sub">Optional, only if it's useful to you.</div>
+    <div class="field"><label>Weight (${unit})</label><input type="number" inputmode="decimal" id="wKg" placeholder="e.g. 68" autofocus></div>
+    ${timeStrip('when','When')}
+    <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="saveWeightPreg('${unit}')">Save</button>`,'preg');
+}
+function saveWeightPreg(unit){ const v=parseFloat($('#wKg').value); if(!v){toast('Enter a number');return;} state.pregnancy.weights.push({id:uid(),at:getWhen('when'),kg:v,unit}); persist(); closeSheet(); render(); toast('Saved'); }
+function openLogBP(){
+  initLogWhen();
+  openSheet(`<h2>Blood pressure</h2><div class="sub">If your provider has asked you to track it at home.</div>
+    <div style="display:flex;gap:10px">
+      <div class="field" style="flex:1"><label>Systolic</label><input type="number" inputmode="numeric" id="bpS" placeholder="120" autofocus></div>
+      <div class="field" style="flex:1"><label>Diastolic</label><input type="number" inputmode="numeric" id="bpD" placeholder="80"></div>
+    </div>
+    ${timeStrip('when','When')}
+    <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="saveBP()">Save</button>
+    <div class="preg-disclaim">A high reading with a bad headache, vision changes or sudden swelling can be serious. Contact your midwife or doctor, and seek urgent care if you're worried.</div>`,'preg');
+}
+function saveBP(){ const s=parseInt($('#bpS').value), d=parseInt($('#bpD').value); if(!s||!d){toast('Enter both numbers');return;} state.pregnancy.bp.push({id:uid(),at:getWhen('when'),sys:s,dia:d}); persist(); closeSheet(); render(); toast('Saved'); }
+
+/* ---- Phase 4: tools ---- */
+function renderPregTools(){
+  const p=state.pregnancy;
+  const bagDone=(p.bag||[]).filter(b=>b.done).length, bagTot=(p.bag||[]).length;
+  return `<div class="fade-in">
+    <div class="sec-title">Tools</div>
+    <div class="set-item" onclick="openKickCounter()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:19px">👣</div>
+      <div class="si-body"><div class="a">Kick counter</div><div class="b">Count baby's movements to 10</div></div><span class="chev">${I.chev}</span></div>
+    <div class="set-item" onclick="openContractions()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--pump-soft);color:var(--pump);font-size:19px">⏱️</div>
+      <div class="si-body"><div class="a">Contraction timer</div><div class="b">Time them and see the 5-1-1 guide</div></div><span class="chev">${I.chev}</span></div>
+    <div class="set-item" onclick="openBirthPlan()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--note-soft);color:var(--note);font-size:19px">📋</div>
+      <div class="si-body"><div class="a">Birth plan</div><div class="b">${p.birthPlan?'Your preferences, saved':'Note your preferences'}</div></div><span class="chev">${I.chev}</span></div>
+    <div class="set-item" onclick="openBag()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:19px">🧳</div>
+      <div class="si-body"><div class="a">Hospital bag</div><div class="b">${bagDone}/${bagTot} packed</div></div><span class="chev">${I.chev}</span></div>
+    <div class="preg-disclaim">These tools are informational and never a substitute for your provider's advice. If something feels wrong, seek care.</div>
+  </div>`;
+}
+let kickSession=null;
+function openKickCounter(){
+  const sess=kickSession;
+  const recent=(state.pregnancy.kicks||[]).slice(-5).reverse();
+  const recentHtml=recent.length?`<div class="sec-title" style="margin-top:6px">Recent sessions</div>${recent.map(k=>`<div class="log-list-item"><div class="lli-ico">👣</div><div class="lli-body"><div class="lli-t">${k.count} movement${k.count===1?'':'s'}</div><div class="lli-s">${dayLabel(k.start)} ${fmtClock(k.start)}${k.end?' · '+fmtDur(k.end-k.start):''}</div></div></div>`).join('')}`:'';
+  openSheet(`<h2>Kick counter</h2><div class="sub">Get comfy and count your baby's movements. Many people aim for 10, your own normal pattern matters most.</div>
+    <button class="kick-big" onclick="tapKick()"><div class="kb-n">${sess?sess.count:0}</div><div class="kb-c">${sess?(sess.count>=10?'All done 🎉':'Tap for each kick'):'Tap to start'}</div></button>
+    ${sess?`<div class="csub" style="text-align:center">Started ${fmtClock(sess.start)} · ${fmtDur(now()-sess.start)} so far</div>
+      <button class="btn-primary" style="background:var(--preg);margin-top:10px" onclick="finishKicks()">${sess.count>=10?'Save session':'Stop and save'}</button>
+      <button class="btn-ghost" onclick="cancelKicks()">Cancel</button>`:''}
+    ${recentHtml}
+    <div class="preg-disclaim">If your baby's movements slow down or change, do not wait. Contact your midwife or maternity unit straight away, day or night.</div>`,'preg');
+}
+function tapKick(){ if(!kickSession) kickSession={start:now(),count:0}; kickSession.count++; openKickCounter(); }
+function finishKicks(){ if(!kickSession)return; state.pregnancy.kicks.push({id:uid(),start:kickSession.start,end:now(),count:kickSession.count}); kickSession=null; persist(); closeSheet(); render(); toast('Session saved'); }
+function cancelKicks(){ kickSession=null; openKickCounter(); }
+let contractionRunning=null;
+function contractionStats(){
+  const done=(state.pregnancy.contractions||[]).filter(c=>c.end).sort((a,b)=>a.start-b.start);
+  if(!done.length) return null;
+  const recent=done.filter(c=>c.start>=now()-3600000);
+  if(recent.length<2){ const last=done[done.length-1]; return {freq:'–',dur:fmtDur(last.end-last.start),count:recent.length,fiveoneone:false}; }
+  let gaps=[]; for(let i=1;i<recent.length;i++) gaps.push(recent[i].start-recent[i-1].start);
+  const avgGap=gaps.reduce((a,b)=>a+b,0)/gaps.length;
+  const avgDur=recent.reduce((a,c)=>a+(c.end-c.start),0)/recent.length;
+  const freqMin=avgGap/60000, durSec=avgDur/1000;
+  const fiveoneone = freqMin>=3 && freqMin<=6 && durSec>=45 && recent.length>=6;
+  return { freq:freqMin.toFixed(1), dur:fmtDur(avgDur), count:recent.length, fiveoneone };
+}
+function openContractions(){
+  const p=state.pregnancy; const running=contractionRunning; const stats=contractionStats();
+  const list=(p.contractions||[]).filter(c=>c.end).slice(-8).reverse();
+  const rows=list.length?list.map(c=>`<div class="log-list-item"><div class="lli-ico">⏱️</div><div class="lli-body"><div class="lli-t">Lasted ${fmtDur(c.end-c.start)}</div><div class="lli-s">${dayLabel(c.start)} ${fmtClock(c.start)}</div></div><button class="lli-x" onclick="deleteContraction('${c.id}')">${I.trash}</button></div>`).join(''):'';
+  openSheet(`<h2>Contraction timer</h2><div class="sub">Tap start when one begins and stop when it ends. We'll work out how often they come and how long they last.</div>
+    <button class="btn-primary" style="background:${running?'var(--danger)':'var(--preg)'}" onclick="toggleContraction()">${running?'Stop, contraction ending':'Start a contraction'}</button>
+    ${running?`<div class="csub" style="text-align:center;margin-top:8px">In progress · ${fmtDur(now()-running.start)}</div>`:''}
+    ${stats?`<div class="tool-stat"><div class="ts-cell"><div class="ts-big">${stats.freq}</div><div class="ts-cap">Apart (min)</div></div><div class="ts-cell"><div class="ts-big">${stats.dur}</div><div class="ts-cap">Lasting</div></div><div class="ts-cell"><div class="ts-big">${stats.count}</div><div class="ts-cap">Last hour</div></div></div>`:''}
+    ${stats&&stats.fiveoneone?`<div class="next-appt" style="border-color:var(--danger)"><div class="pc-ico" style="background:var(--med-soft)">📞</div><div class="na-body"><div class="na-t">Around the 5-1-1 mark</div><div class="na-s">Contractions about 5 minutes apart, lasting about a minute, for about an hour. Many providers suggest calling now. Follow your own plan.</div></div></div>`:''}
+    ${rows?`<div class="sec-title" style="margin-top:14px">Recent</div>${rows}`:''}
+    <div class="preg-disclaim">Informational only. Call your midwife or maternity unit if your waters break, you have any bleeding, the baby's movements change, or you're worried, whatever the timer says.</div>`,'preg');
+}
+function toggleContraction(){
+  const p=state.pregnancy;
+  if(contractionRunning){ p.contractions.push({id:uid(),start:contractionRunning.start,end:now()}); contractionRunning=null; persist(); }
+  else contractionRunning={start:now()};
+  openContractions();
+}
+function deleteContraction(id){ state.pregnancy.contractions=(state.pregnancy.contractions||[]).filter(c=>c.id!==id); persist(); openContractions(); }
+function openBirthPlan(){
+  openSheet(`<h2>Birth plan</h2><div class="sub">A place for your preferences. There's no right answer, and plans can change on the day.</div>
+    <div class="field"><label>Your notes</label><textarea id="bpTxt" style="min-height:170px" placeholder="Pain relief, who's with you, skin to skin, feeding, anything that matters to you...">${escapeHtml(state.pregnancy.birthPlan||'')}</textarea></div>
+    <button class="btn-primary" style="background:var(--preg)" onclick="saveBirthPlan()">Save</button>`,'preg');
+}
+function saveBirthPlan(){ state.pregnancy.birthPlan=$('#bpTxt').value; persist(); closeSheet(); render(); toast('Birth plan saved'); }
+function openBag(){
+  const p=state.pregnancy;
+  const rows=(p.bag||[]).map(it=>`<div class="bag-row ${it.done?'done':''}"><div class="bg-tick" onclick="toggleBag('${it.id}')">${it.done?I.check:''}</div><div class="bg-t" onclick="toggleBag('${it.id}')">${escapeHtml(it.text)}</div><button class="bg-x" onclick="removeBag('${it.id}')">${I.trash}</button></div>`).join('');
+  openSheet(`<h2>Hospital bag</h2><div class="sub">A starter list, tweak it to fit you. Tap to tick things off as you pack.</div>
+    ${rows||'<div class="csub">Your bag list is empty.</div>'}
+    <div class="field" style="margin-top:12px"><label>Add an item</label><input id="bagNew" placeholder="e.g. Birth ball" onkeydown="if(event.key==='Enter')addBag()"></div>
+    <button class="btn-primary" style="background:var(--preg)" onclick="addBag()">Add to bag</button>`,'preg');
+}
+function toggleBag(id){ const it=(state.pregnancy.bag||[]).find(x=>x.id===id); if(!it)return; it.done=!it.done; persist(); openBag(); }
+function removeBag(id){ state.pregnancy.bag=(state.pregnancy.bag||[]).filter(x=>x.id!==id); persist(); openBag(); }
+function addBag(){ const el=$('#bagNew'); const v=(el&&el.value.trim())||''; if(!v)return; state.pregnancy.bag.push({id:uid(),text:v,done:false}); persist(); openBag(); }
+
+/* ---- Care: team, danger signs, dates, end ---- */
+function renderPregCare(){
+  const p=state.pregnancy;
+  const amOwner=pregIsOwner();
+  const seeCare=pregCanSee('careteam'), seeHealth=pregCanSee('health')||pregCanSee('conditions');
+  const team=(p.careTeam||[]).map(m=>`<div class="log-list-item"><div class="lli-ico">👩‍⚕️</div><div class="lli-body"><div class="lli-t">${escapeHtml(m.name)}</div><div class="lli-s">${escapeHtml(m.role)}${m.phone?' · '+escapeHtml(m.phone):''}</div></div>${amOwner?`<button class="lli-x" onclick="removeCareTeam('${m.id}')">${I.trash}</button>`:''}</div>`).join('');
+  const cname=pregCareLabel(p.country);
+  const careBlock = seeCare ? `
+    <div class="sec-title">Your care team</div>
+    ${team||'<div class="csub">Add your midwife, doctor or clinic for quick reference.</div>'}
+    ${amOwner?`<button class="btn-ghost" onclick="openAddCareTeam()">${I.plus} Add to care team</button>`:''}` : '';
+  return `<div class="fade-in">
+    ${careBlock}
+    ${seeHealth?pregHealthSection():''}
+    ${!amOwner&&!seeCare&&!seeHealth?'<div class="csub" style="margin-top:6px">These health details are private to her. She can choose to share them with you.</div>':''}
+    ${amOwner?`<div class="set-item" onclick="openMaternalPrivacy()" style="cursor:pointer;margin-top:16px">
+      <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">🔒</div>
+      <div class="si-body"><div class="a">Your private health</div><div class="b">Choose who in your circle can see each part</div></div><span class="chev">${I.chev}</span></div>`:''}
+    <div class="sec-title" style="margin-top:18px">Pregnancy</div>
+    <div class="set-item" onclick="openDangerSigns()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--med-soft);color:var(--danger);font-size:18px">⚠️</div>
+      <div class="si-body"><div class="a">Urgent warning signs</div><div class="b">When to seek care, trust your instincts</div></div><span class="chev">${I.chev}</span></div>
+    <div class="set-item" onclick="openEditPregnancy()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">📅</div>
+      <div class="si-body"><div class="a">Due date &amp; schedule</div><div class="b">${pregDueLabel()||'Set your dates'} · ${escapeHtml(cname)}</div></div><span class="chev">${I.chev}</span></div>
+    <button class="btn-primary" style="background:var(--preg);margin-top:14px" onclick="openWelcomeBaby()">🐻 Baby has arrived</button>
+    <button class="btn-ghost" style="color:var(--ink-faint)" onclick="confirmEndPregnancy()">End this pregnancy</button>
+    <div class="preg-disclaim">${PREG_DISCLAIM}</div>
+  </div>`;
+}
+function openAddCareTeam(){
+  openSheet(`<h2>Care team</h2><div class="sub">Add someone who's looking after you.</div>
+    <div class="field"><label>Name</label><input id="ctName" placeholder="e.g. Dr Khan or City Midwives" autofocus></div>
+    <div class="field"><label>Role</label><select id="ctRole"><option>Midwife</option><option>OB / Obstetrician</option><option>GP / Family doctor</option><option>Doula</option><option>Clinic / Hospital</option><option>Other</option></select></div>
+    <div class="field"><label>Phone (optional)</label><input id="ctPhone" inputmode="tel" placeholder="Phone number"></div>
+    <button class="btn-primary" style="background:var(--preg)" onclick="addCareTeam()">Add</button>`,'preg');
+}
+function addCareTeam(){ const n=$('#ctName').value.trim(); if(!n){toast('Add a name');return;} state.pregnancy.careTeam.push({id:uid(),name:n,role:$('#ctRole').value,phone:$('#ctPhone').value.trim()}); persist(); closeSheet(); render(); toast('Added'); }
+function removeCareTeam(id){ state.pregnancy.careTeam=(state.pregnancy.careTeam||[]).filter(m=>m.id!==id); persist(); render(); }
+
+/* ---- Maternal privacy: your health is yours, shared only by your consent (gate G1) ---- */
+function pregIsOwner(){ try{ return !window.LL.matIsOwner || window.LL.matIsOwner(); }catch(e){ return true; } }
+function pregCanSee(cat){ if(pregIsOwner()) return true; try{ return !!(window.LL&&window.LL.matCanRead&&window.LL.matCanRead(cat)); }catch(e){ return false; } }
+const MAT_SHARE_CATS=[
+  {key:'health',     label:'Health logs',        desc:'Weight, blood pressure, glucose, urine, nausea, symptoms, supplements'},
+  {key:'careteam',   label:'Care team',          desc:'Your midwife, doctor and clinic contacts'},
+  {key:'conditions', label:'Health trackers',    desc:'Which trackers you have turned on'}
+];
+function openMaternalPrivacy(){
+  if(!pregIsOwner()){ toast('Only you can manage this'); return; }
+  const members=(window.LL&&window.LL.members)||{};
+  const info=(window.LL&&window.LL.memberInfo)||{};
+  const others=Object.keys(members).filter(u=>u!==myUid());
+  const memberName=(u)=>{ const m=info[u]; return (m&&(m.relationship||((m.name||'').split(' ')[0])))||'Member'; };
+  let body;
+  if(!others.length){
+    body=`<div class="csub">Your health stays private to you. When you invite someone to your circle, you'll be able to choose, item by item, what they can see. Nothing is shared until you say so.</div>`;
+  } else {
+    const cards=MAT_SHARE_CATS.map(c=>{
+      const shared=(window.LL&&window.LL.matShared&&window.LL.matShared(c.key))||[];
+      const rows=others.map(u=>{
+        const on=shared.indexOf(u)>=0;
+        return `<button class="set-item" style="width:100%;text-align:left;cursor:pointer" onclick="toggleMaternalShare('${c.key}','${u}')">
+          <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:16px">${on?'✓':'·'}</div>
+          <div class="si-body"><div class="a">${escapeHtml(memberName(u))}</div><div class="b">${on?'Can see this':'Hidden'}</div></div>
+        </button>`;
+      }).join('');
+      return `<div class="sec-title" style="margin-top:16px">${c.label}</div><div class="csub" style="margin-bottom:6px">${c.desc}</div>${rows}`;
+    }).join('');
+    body=`<div class="csub">Your health is private to you. Choose exactly who in your circle can see each part. You can change this anytime.</div>${cards}
+      <div class="sec-title" style="margin-top:16px">Mood &amp; wellbeing</div>
+      <div class="set-item"><div class="si-ico" style="background:var(--med-soft);color:var(--ink-faint);font-size:16px">🔒</div>
+        <div class="si-body"><div class="a">Only you</div><div class="b">Mental-health entries are always private and can never be shared</div></div></div>`;
+  }
+  openSheet(`<h2>Your private health 🔒</h2>${body}<div class="preg-disclaim" style="margin-top:14px">Sharing is off by default. Only you can change who sees your health, and only the things you choose.</div>`,'preg');
+}
+async function toggleMaternalShare(cat,uid){
+  if(!(window.LL&&window.LL.matSetShared)) return;
+  const cur=(window.LL.matShared&&window.LL.matShared(cat))||[];
+  const next=cur.indexOf(uid)>=0?cur.filter(u=>u!==uid):cur.concat([uid]);
+  const ok=await window.LL.matSetShared(cat,next);
+  if(ok){ openMaternalPrivacy(); } else { toast('Could not update'); }
+}
+function openDangerSigns(){
+  const ds=window.PREG&&PREG.dangerSigns;
+  const rows=ds?ds.items.map(s=>`<div class="danger-row"><span class="dr-dot">●</span><div class="dr-t">${escapeHtml(s)}</div></div>`).join(''):'';
+  openSheet(`<h2>Urgent warning signs</h2><div class="sub">${ds?escapeHtml(ds.note):''}</div>
+    ${rows}
+    <div class="preg-disclaim">Source: CDC Hear Her urgent maternal warning signs. This is informational, not a diagnosis. If you notice any of these, or anything that worries you, call your midwife, doctor or your local emergency number straight away.</div>
+    ${ds?`<a href="${ds.source}" target="_blank" rel="noopener" class="btn-ghost" style="display:flex;text-decoration:none">Open the source</a>`:''}`,'preg');
+}
+function openEditPregnancy(){
+  const p=state.pregnancy;
+  const dv=p.dueDate?new Date(p.dueDate).toISOString().slice(0,10):'';
+  openSheet(`<h2>Due date &amp; schedule</h2><div class="sub">Update your dates or the antenatal schedule we suggest.</div>
+    <div class="field"><label>Due date (EDD)</label><input type="date" id="epDue" value="${dv}"></div>
+    <div class="field"><label>Care schedule</label><select id="epC">${pregCountryOptions(p.country)}</select></div>
+    <button class="btn-primary" style="background:var(--preg)" onclick="saveEditPregnancy()">Save</button>
+    <div class="preg-disclaim">Changing the schedule adds any new suggested appointments. Anything you've added or ticked is kept.</div>`,'preg');
+}
+function saveEditPregnancy(){
+  const p=state.pregnancy; const dv=$('#epDue').value; const sel=$('#epC').value||p.country; const cc=pregCountryKey(sel); const prevKey=pregCountryKey(p.country);
+  if(dv){ p.dueDate=new Date(dv+'T08:00').getTime(); p.lmp=p.dueDate-PREG_TERM; }
+  if(sel!==p.country){
+    p.country=sel;
+    if(cc!==prevKey){
+      const have={}; (p.appts||[]).forEach(a=>{ have[a.title+'@'+a.week]=true; });
+      (((window.PREG&&PREG.antenatal[cc]&&PREG.antenatal[cc].items))||[]).forEach(it=>{ if(!have[it.title+'@'+it.week]) p.appts.push({id:uid(),week:it.week,title:it.title,note:it.note,done:false,at:null}); });
+    }
+    try{ localStorage.setItem('cubby-country', VAX_SCHEDULES[sel]?sel:detectCountry()); }catch(e){}
+  }
+  persist(); closeSheet(); render(); toast('Updated');
+}
+function confirmEndPregnancy(){
+  const p=state.pregnancy; if(!p){ closeSheet(); return; }
+  if(p.stage==='planning'){
+    openSheet(`<h2>Stop tracking?</h2><div class="sub">This clears your planning checklist and notes. You can start again any time, whenever you're ready.</div>
+      <button class="btn-primary" style="background:var(--preg)" onclick="endPregnancy(false)">Stop tracking</button>
+      <button class="btn-ghost" onclick="closeSheet()">Keep going</button>`,'preg');
+    return;
+  }
+  const moments=(p.moments&&p.moments.length)||0;
+  openSheet(`<h2>Closing this pregnancy</h2>
+    <div class="sub">Whatever brings you here, take it gently and in your own time. If you've experienced a loss, we're so sorry, and you don't have to do anything right now.</div>
+    ${moments?`<div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">Keep your ${moments===1?'memory':moments+' memories'}</div><div class="pc-b">Your scans and photos can stay saved privately on this device, for whenever you want them. Your health logs are cleared either way.</div></div></div>`:''}
+    ${moments?`<button class="btn-primary" style="background:var(--preg)" onclick="endPregnancy(true)">Keep my ${moments===1?'memory':'memories'}</button>`:''}
+    <button class="${moments?'btn-ghost':'btn-primary'}" style="${moments?'color:var(--ink-faint)':'background:var(--preg)'}" onclick="endPregnancy(false)">Close and clear everything</button>
+    <button class="btn-ghost" onclick="closeSheet()">Not now</button>
+    <div class="preg-disclaim">If you're struggling, you're not alone. Your midwife or doctor, or a pregnancy loss support line, can help, day or night. Informational only, not medical advice.</div>`,'preg');
+}
+function endPregnancy(keep){
+  const p=state.pregnancy; if(!p){ closeSheet(); return; }
+  if(keep){
+    state.pregnancyArchive=state.pregnancyArchive||[];
+    state.pregnancyArchive.unshift({ id:uid(), endedAt:now(), weeks:pregWeek(), moments:(p.moments||[]).slice() });
+    /* photos intentionally kept in PhotoStore */
+  } else {
+    (p.moments||[]).forEach(m=>{ try{ PhotoStore.del(m.photoId); }catch(e){} });
+  }
+  try{ if(window.LL&&window.LL.matClear) window.LL.matClear(); }catch(e){}
+  state.pregnancy=null; persist(); closeSheet(); render();
+  toast(keep?'Your memories are kept 🤍':'Done. Be gentle with yourself 🤍');
+}
+function openKeptMemories(){
+  const arr=state.pregnancyArchive||[];
+  const list=arr.flatMap(a=>(a.moments||[])).slice().sort((a,b)=>b.week-a.week||b.at-a.at);
+  const cards=list.map(m=>{
+    const src=photoSrc(m.photoId), size=momentSize(m.week);
+    return `<div class="moment-card">${src?`<img src="${src}" alt="Week ${m.week}">`:''}
+      <div class="moment-cap"><div class="mc-top"><div class="mc-week">Week ${m.week}</div><div class="mc-size">${size?'🍐 about the size of a '+escapeHtml(size):''}</div></div>
+      ${m.note?`<div class="mc-note">${escapeHtml(m.note)}</div>`:''}
+      <div class="mc-row"><span class="mc-date">${dayLabel(m.at)}</span></div></div></div>`;
+  }).join('');
+  openSheet(`<h2>Kept memories 🤍</h2><div class="sub">Yours to keep, privately, for as long as you like.</div>
+    ${cards||'<div class="sub">Nothing saved here.</div>'}
+    <button class="btn-ghost" style="color:var(--ink-faint);margin-top:10px" onclick="removeKeptMemories()">Remove these memories</button>`,'preg');
+}
+function removeKeptMemories(){
+  (state.pregnancyArchive||[]).forEach(a=>(a.moments||[]).forEach(m=>{ try{ PhotoStore.del(m.photoId); }catch(e){} }));
+  state.pregnancyArchive=[]; persist(); closeSheet(); render(); toast('Removed');
+}
+
+/* ---- Phase 5: welcoming the baby (the birth transition) ---- */
+let wbSex='';
+function pickWbSex(s){ wbSex=s; const map={'':'wbSexNone','female':'wbSexF','male':'wbSexM'}; ['wbSexNone','wbSexF','wbSexM'].forEach(id=>{const el=$('#'+id);if(el)el.classList.remove('on');}); const el=$('#'+map[s]); if(el)el.classList.add('on'); }
+function openWelcomeBaby(){
+  const p=state.pregnancy; if(!p)return;
+  wbSex=''; newBabyColor=AVATAR_COLORS[Math.floor(Math.random()*AVATAR_COLORS.length)];
+  initLogWhen();
+  const cc=VAX_SCHEDULES[p.country]?p.country:detectCountry();
+  openSheet(`<div class="welcome-burst">🐻💕</div>
+    <h2 style="text-align:center">Welcome to the world</h2>
+    <div class="sub" style="text-align:center">Congratulations. Let's bring your baby into Cubby. You can change anything later, there's no rush.</div>
+    <div class="field"><label>Baby's name</label><input id="wbName" placeholder="Your little one's name" autofocus></div>
+    ${timeStrip('when','Born')}
+    <div class="field" style="margin-top:14px"><label>Sex (optional, for growth charts)</label>
+      <div class="seg"><button id="wbSexNone" class="on" onclick="pickWbSex('')">Prefer not to say</button><button id="wbSexF" onclick="pickWbSex('female')">Girl</button><button id="wbSexM" onclick="pickWbSex('male')">Boy</button></div></div>
+    <div class="field"><label>Vaccine schedule</label><select id="wbCountry">${VAX_COUNTRIES.map(([k,n])=>`<option value="${k}" ${k===cc?'selected':''}>${n}</option>`).join('')}</select></div>
+    <button class="btn-primary" style="background:var(--preg);margin-top:6px" onclick="welcomeBaby()">🎉 Welcome our baby</button>
+    <div class="csub" style="text-align:center;margin-top:8px">Your pregnancy is saved as part of their story.</div>`,'preg');
+}
+function welcomeBaby(){
+  const p=state.pregnancy; if(!p)return;
+  const name=$('#wbName').value.trim(); if(!name){toast('Add their name first');return;}
+  const birth=getWhen('when');
+  const cc=$('#wbCountry').value;
+  const b={id:uid(),name,color:newBabyColor,birth,country:(VAX_SCHEDULES[cc]?cc:'us')};
+  if(wbSex) b.sex=wbSex;
+  state.babies.push(b); state.activeBabyId=b.id;
+  p.bornBabyId=b.id; p.birthAt=birth;
+  view='home';
+  persist(); closeSheet(); render();
+  toast('Welcome to the world, '+name+'! 🐻');
+}
+
+/* ============================================================
+   PREGNANCY HEALTH: opt-in condition trackers
+   (gestational diabetes, BP / pre-eclampsia, supplements, nausea)
+   Targets/thresholds trace to PREG.conditions (NICE / ACOG / NHS).
+   ============================================================ */
+const PREG_CONDS=[
+  {key:'gdm',         emoji:'🩸', label:'Gestational diabetes', short:'Glucose',     desc:'Log blood glucose and see it against your targets'},
+  {key:'bp',          emoji:'🩺', label:'Blood pressure watch', short:'BP',          desc:'Home BP and urine results with gentle flags'},
+  {key:'supplements', emoji:'💊', label:'Supplements & meds',   short:'Supplements', desc:'Daily folic acid, vitamin D, iron and more'},
+  {key:'nausea',      emoji:'🤢', label:'Nausea & hydration',   short:'Nausea',      desc:'Sickness, keeping fluids down and water'}
+];
+function ensurePregFields(p){
+  if(!p) return;
+  if(!p.stage) p.stage='expecting'; // pregnancies from before the journey stages
+  if(!p.moments) p.moments=[];
+  if(!p.precon) p.precon=[];
+  if(!p.cycleLen) p.cycleLen=28;
+  if(!p.conditions) p.conditions={};
+  if(!p.glucose) p.glucose=[];
+  if(!p.urine) p.urine=[];
+  if(!p.supplements) p.supplements=[];
+  if(!p.supplementLog) p.supplementLog=[];
+  if(!p.nausea) p.nausea=[];
+  if(!p.glucoseUnit) p.glucoseUnit=(p.country==='us'||p.country==='uae')?'mgdl':'mmol';
+}
+function condCfg(key){ return (window.PREG&&PREG.conditions&&PREG.conditions[key])||null; }
+function condOn(key){ const p=state.pregnancy; return !!(p&&p.conditions&&p.conditions[key]); }
+function anyCondOn(){ return PREG_CONDS.some(c=>condOn(c.key)); }
+function setCondition(key,on){ const p=state.pregnancy; ensurePregFields(p); p.conditions[key]=on; persist(); openManageConditions(); render(); }
+function openManageConditions(){
+  const rows=PREG_CONDS.map(c=>{ const on=condOn(c.key);
+    return `<div class="set-item">
+      <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">${c.emoji}</div>
+      <div class="si-body"><div class="a">${c.label}</div><div class="b">${c.desc}</div></div>
+      <div class="seg"><button class="${!on?'on':''}" onclick="setCondition('${c.key}',false)">Off</button><button class="${on?'on':''}" onclick="setCondition('${c.key}',true)">On</button></div>
+    </div>`; }).join('');
+  openSheet(`<h2>Health trackers</h2><div class="sub">Turn on only what's relevant to you, we'll keep the rest tucked away. You can change these anytime.</div>
+    ${rows}
+    <div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
+}
+function openCondition(key){ if(key==='gdm')openGlucoseTracker(); else if(key==='bp')openBPWatch(); else if(key==='supplements')openSupplements(); else if(key==='nausea')openNausea(); }
+function condSummary(key){
+  const p=state.pregnancy;
+  if(key==='gdm'){ const n=(p.glucose||[]).length; return n?`${n} reading${n===1?'':'s'} logged`:'Tap to log your first reading'; }
+  if(key==='bp'){ const n=(p.bp||[]).length; return n?`${n} BP reading${n===1?'':'s'} logged`:'Tap to log a reading'; }
+  if(key==='supplements'){ const n=(p.supplements||[]).length; return n?`${supplementsTakenToday().length}/${n} taken today`:'Add your supplements'; }
+  if(key==='nausea'){ const n=(p.nausea||[]).length; return n?`${n} check-in${n===1?'':'s'}`:'Tap for a quick check-in'; }
+  return '';
+}
+/* Care-tab section + Week-home quick actions */
+function pregHealthSection(){
+  const on=PREG_CONDS.filter(c=>condOn(c.key));
+  const rows=on.map(c=>`<div class="set-item" onclick="openCondition('${c.key}')" style="cursor:pointer">
+    <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">${c.emoji}</div>
+    <div class="si-body"><div class="a">${c.label}</div><div class="b">${condSummary(c.key)}</div></div><span class="chev">${I.chev}</span></div>`).join('');
+  return `<div class="sec-title" style="margin-top:18px">Your pregnancy health</div>
+    ${rows||'<div class="csub">Add trackers for things like gestational diabetes or blood pressure, only if they apply to you.</div>'}
+    <div class="set-item" onclick="openManageConditions()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--note-soft);color:var(--note);font-size:18px">⚙️</div>
+      <div class="si-body"><div class="a">Manage health trackers</div><div class="b">Turn trackers on or off</div></div><span class="chev">${I.chev}</span></div>`;
+}
+function pregHealthQuick(){
+  if(!(pregCanSee('health')||pregCanSee('conditions'))) return ''; // private to the mother unless shared
+  const on=PREG_CONDS.filter(c=>condOn(c.key));
+  if(!on.length) return '';
+  const btns=on.map(c=>`<button class="action" onclick="openCondition('${c.key}')"><div class="ico" style="background:var(--preg-soft);color:var(--preg)">${c.emoji}</div><div class="label">${c.short}</div><div class="hint">${condSummary(c.key)}</div></button>`).join('');
+  return `<div class="sec-title">Today's health</div><div class="actions stagger">${btns}</div>`;
+}
+
+/* ---- Gestational diabetes: glucose ---- */
+let glucoseDraft={context:'fasting'};
+function setGlucoseCtx(c){ glucoseDraft.context=c; renderGlucoseLog(); }
+function glucoseUnitLabel(u){ return u==='mmol'?'mmol/L':'mg/dL'; }
+function glucoseCtxLabel(c){ return c==='fasting'?'Fasting':(c==='other'?'Other':({'post1-breakfast':'After breakfast','post1-lunch':'After lunch','post1-dinner':'After dinner'}[c]||'After a meal')); }
+function glucoseTarget(context,unit){ const cfg=condCfg('gdm'); const t=cfg&&cfg.targets[unit]; if(!t)return null;
+  if(context==='fasting') return {label:'fasting',max:t.fasting};
+  if((''+context).indexOf('post1')===0) return {label:'1 hour after a meal',max:t.post1};
+  return null; }
+function glucoseOver(val,context,unit){ const t=glucoseTarget(context,unit); return t?(val>t.max):false; }
+function openGlucoseLog(){ ensurePregFields(state.pregnancy); glucoseDraft={context:'fasting'}; initLogWhen(); renderGlucoseLog(); }
+function renderGlucoseLog(){
+  const p=state.pregnancy; const unit=p.glucoseUnit, ul=glucoseUnitLabel(unit);
+  const ctxs=[['fasting','Fasting'],['post1-breakfast','After breakfast'],['post1-lunch','After lunch'],['post1-dinner','After dinner'],['other','Other']];
+  const chips=ctxs.map(([k,l])=>`<button class="tgt ${glucoseDraft.context===k?'on':''}" onclick="setGlucoseCtx('${k}')">${l}</button>`).join('');
+  openSheet(`<h2>Blood glucose</h2><div class="sub">Log a finger-prick reading. Tag when you took it so it lines up with your targets.</div>
+    <div class="field"><label>When in the day</label><div class="tgt-row">${chips}</div></div>
+    <div class="field"><label>Reading (${ul})</label><input type="number" inputmode="decimal" id="glVal" placeholder="${unit==='mmol'?'e.g. 5.1':'e.g. 92'}" autofocus></div>
+    ${timeStrip('when','When')}
+    <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="saveGlucose()">Save reading</button>
+    <button class="btn-ghost" onclick="toggleGlucoseUnit()">Using ${ul}, switch to ${glucoseUnitLabel(unit==='mmol'?'mgdl':'mmol')}</button>
+    <div class="preg-disclaim">${escapeHtml((condCfg('gdm')||{}).note||PREG_DISCLAIM)}</div>`,'preg');
+}
+function toggleGlucoseUnit(){ const p=state.pregnancy; p.glucoseUnit=(p.glucoseUnit==='mmol')?'mgdl':'mmol'; persist(); renderGlucoseLog(); }
+function saveGlucose(){ const p=state.pregnancy; const v=parseFloat($('#glVal').value); if(!v){toast('Enter a number');return;}
+  p.glucose.push({id:uid(),at:getWhen('when'),val:v,unit:p.glucoseUnit,context:glucoseDraft.context}); persist(); closeSheet(); render();
+  toast(glucoseOver(v,glucoseDraft.context,p.glucoseUnit)?'Saved. This looks above the common target, worth noting for your team.':'Saved'); }
+function deleteGlucose(id){ state.pregnancy.glucose=(state.pregnancy.glucose||[]).filter(g=>g.id!==id); persist(); openGlucoseTracker(); }
+function openGlucoseTracker(){
+  ensurePregFields(state.pregnancy);
+  const p=state.pregnancy; const unit=p.glucoseUnit, ul=glucoseUnitLabel(unit);
+  const all=(p.glucose||[]);
+  const list=all.slice().sort((a,b)=>b.at-a.at).slice(0,20);
+  const rated=all.filter(g=>glucoseTarget(g.context,g.unit));
+  const inRange=rated.filter(g=>!glucoseOver(g.val,g.context,g.unit)).length;
+  const pctIn=rated.length?Math.round(inRange/rated.length*100):null;
+  const rows=list.length?list.map(g=>{ const over=glucoseOver(g.val,g.context,g.unit);
+    return `<div class="log-list-item"><div class="lli-ico" style="${over?'background:var(--med-soft)':''}">🩸</div><div class="lli-body"><div class="lli-t">${g.val} ${glucoseUnitLabel(g.unit)}${over?' · above target':''}</div><div class="lli-s">${glucoseCtxLabel(g.context)} · ${dayLabel(g.at)} ${fmtClock(g.at)}</div></div><button class="lli-x" onclick="deleteGlucose('${g.id}')">${I.trash}</button></div>`; }).join(''):'<div class="csub">No readings yet.</div>';
+  const t=(condCfg('gdm')||{}).targets&&condCfg('gdm').targets[unit];
+  openSheet(`<h2>Gestational diabetes</h2><div class="sub">Your blood glucose readings, in ${ul}.</div>
+    ${pctIn!=null?`<div class="tool-stat"><div class="ts-cell"><div class="ts-big">${pctIn}%</div><div class="ts-cap">In target</div></div><div class="ts-cell"><div class="ts-big">${rated.length}</div><div class="ts-cap">Readings</div></div></div>`:''}
+    ${t?`<div class="preg-card"><div class="pc-ico">🎯</div><div><div class="pc-t">Common targets (${ul})</div><div class="pc-b">Fasting under ${t.fasting}, one hour after meals under ${t.post1}. Your own targets may differ, confirm with your team.</div></div></div>`:''}
+    <button class="btn-primary" style="background:var(--preg);margin-top:6px" onclick="openGlucoseLog()">🩸 Log a reading</button>
+    <div class="sec-title" style="margin-top:14px">Recent</div>${rows}
+    <div class="preg-disclaim">${escapeHtml((condCfg('gdm')||{}).note||PREG_DISCLAIM)}</div>`,'preg');
+}
+
+/* ---- Blood pressure / pre-eclampsia watch ---- */
+function bpFlag(b){ const cfg=condCfg('bp'); if(!cfg)return null; if(b.sys>=cfg.severe.sys||b.dia>=cfg.severe.dia) return {t:'very high',sev:true}; if(b.sys>=cfg.raised.sys||b.dia>=cfg.raised.dia) return {t:'raised',sev:false}; return null; }
+function openBPWatch(){
+  ensurePregFields(state.pregnancy);
+  const p=state.pregnancy; const cfg=condCfg('bp');
+  const bps=(p.bp||[]).slice().sort((a,b)=>b.at-a.at).slice(0,12);
+  const rows=bps.length?bps.map(b=>{ const f=bpFlag(b);
+    return `<div class="log-list-item"><div class="lli-ico" style="${f?'background:var(--med-soft)':''}">🩺</div><div class="lli-body"><div class="lli-t">${b.sys}/${b.dia} mmHg${f?' · '+f.t:''}</div><div class="lli-s">${dayLabel(b.at)} ${fmtClock(b.at)}</div></div><button class="lli-x" onclick="deletePregLog('bp','${b.id}')">${I.trash}</button></div>`; }).join(''):'<div class="csub">No BP readings yet.</div>';
+  const urines=(p.urine||[]).slice().sort((a,b)=>b.at-a.at).slice(0,5);
+  const urows=urines.map(u=>`<div class="log-list-item"><div class="lli-ico">🧪</div><div class="lli-body"><div class="lli-t">Urine protein: ${escapeHtml(u.result)}</div><div class="lli-s">${dayLabel(u.at)} ${fmtClock(u.at)}</div></div><button class="lli-x" onclick="deleteUrine('${u.id}')">${I.trash}</button></div>`).join('');
+  const sym=cfg?cfg.symptoms.map(s=>`<div class="danger-row"><span class="dr-dot">●</span><div class="dr-t">${escapeHtml(s)}</div></div>`).join(''):'';
+  openSheet(`<h2>Blood pressure watch</h2><div class="sub">Keep an eye on your blood pressure and any pre-eclampsia signs. This never replaces your provider's checks.</div>
+    <div style="display:flex;gap:8px"><button class="btn-primary" style="background:var(--preg);flex:1" onclick="openLogBP()">🩺 Log BP</button><button class="btn-primary" style="background:var(--note);flex:1" onclick="openUrineLog()">🧪 Urine result</button></div>
+    <div class="sec-title" style="margin-top:14px">Recent blood pressure</div>${rows}
+    ${urows?`<div class="sec-title" style="margin-top:12px">Urine protein</div>${urows}`:''}
+    <div class="sec-title" style="margin-top:14px">Tell your team straight away if you notice</div>${sym}
+    <div class="preg-disclaim">${escapeHtml((cfg||{}).note||'')} About ${(cfg||{}).raised?cfg.raised.sys:140}/${(cfg||{}).raised?cfg.raised.dia:90} or higher, or any sign above, means contact your midwife or doctor. ${(cfg||{}).severe?cfg.severe.sys:160}/${(cfg||{}).severe?cfg.severe.dia:110} or above, or feeling very unwell, seek urgent care.</div>`,'preg');
+}
+function openUrineLog(){
+  initLogWhen();
+  const opts=['Negative','Trace','+1','+2','+3'];
+  openSheet(`<h2>Urine protein</h2><div class="sub">From a home or clinic dip test, if you do them.</div>
+    <div class="field"><label>Result</label><div class="tgt-row" id="urChips">${opts.map(o=>`<button class="tgt" onclick="pickUrine(this,'${o}')">${o}</button>`).join('')}</div></div>
+    <input type="hidden" id="urResult" value="">
+    ${timeStrip('when','When')}
+    <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="saveUrine()">Save</button>`,'preg');
+}
+function pickUrine(el,v){ $('#urResult').value=v; document.querySelectorAll('#urChips .tgt').forEach(b=>b.classList.remove('on')); el.classList.add('on'); }
+function saveUrine(){ const v=$('#urResult').value; if(!v){toast('Pick a result');return;} ensurePregFields(state.pregnancy); state.pregnancy.urine.push({id:uid(),at:getWhen('when'),result:v}); persist(); closeSheet(); openBPWatch(); toast('Saved'); }
+function deleteUrine(id){ state.pregnancy.urine=(state.pregnancy.urine||[]).filter(u=>u.id!==id); persist(); openBPWatch(); }
+
+/* ---- Supplements & meds (daily adherence) ---- */
+function supplementsTakenToday(){ const p=state.pregnancy; const dk=dayKey(now()); return (p.supplementLog||[]).filter(l=>dayKey(l.at)===dk).map(l=>l.supplementId); }
+function isSupplementTakenToday(id){ return supplementsTakenToday().indexOf(id)>=0; }
+function openSupplements(){
+  ensurePregFields(state.pregnancy);
+  const p=state.pregnancy;
+  const rows=(p.supplements||[]).map(s=>{ const on=isSupplementTakenToday(s.id);
+    return `<div class="bag-row ${on?'done':''}"><div class="bg-tick" onclick="toggleSupplementToday('${s.id}')">${on?I.check:''}</div><div class="bg-t" onclick="toggleSupplementToday('${s.id}')">${escapeHtml(s.name)}</div><button class="bg-x" onclick="removeSupplement('${s.id}')">${I.trash}</button></div>`; }).join('');
+  const sugg=((condCfg('supplements')||{}).suggestions)||[];
+  const existing=(p.supplements||[]).map(s=>s.name.toLowerCase());
+  const chips=sugg.filter(s=>existing.indexOf(s.toLowerCase())<0).map(s=>`<button class="tgt" onclick="addSupplement('${s.replace(/'/g,"\\'")}')">+ ${s}</button>`).join('');
+  openSheet(`<h2>Supplements & meds</h2><div class="sub">Tick what you've taken today. Only take what your provider recommends for you.</div>
+    ${rows||'<div class="csub">Add your supplements below.</div>'}
+    ${chips?`<div class="field" style="margin-top:12px"><label>Add common ones</label><div class="tgt-row">${chips}</div></div>`:''}
+    <div class="field"><label>Add your own</label><input id="supNew" placeholder="e.g. Pregnacare" onkeydown="if(event.key==='Enter')addSupplementInput()"></div>
+    <button class="btn-primary" style="background:var(--preg)" onclick="addSupplementInput()">Add</button>
+    <div class="preg-disclaim">${escapeHtml((condCfg('supplements')||{}).note||PREG_DISCLAIM)}</div>`,'preg');
+}
+function addSupplement(name){ ensurePregFields(state.pregnancy); state.pregnancy.supplements.push({id:uid(),name:name}); persist(); openSupplements(); }
+function addSupplementInput(){ const el=$('#supNew'); const v=(el&&el.value.trim())||''; if(!v)return; addSupplement(v); }
+function removeSupplement(id){ const p=state.pregnancy; p.supplements=(p.supplements||[]).filter(s=>s.id!==id); p.supplementLog=(p.supplementLog||[]).filter(l=>l.supplementId!==id); persist(); openSupplements(); }
+function toggleSupplementToday(id){ const p=state.pregnancy; const dk=dayKey(now()); const idx=(p.supplementLog||[]).findIndex(l=>l.supplementId===id&&dayKey(l.at)===dk); if(idx>=0) p.supplementLog.splice(idx,1); else p.supplementLog.push({id:uid(),at:now(),supplementId:id}); persist(); openSupplements(); }
+
+/* ---- Nausea & hydration ---- */
+let nzFluids=true;
+function setNzFluids(v){ nzFluids=v; const y=$('#nzFy'),n=$('#nzFn'); if(y)y.classList.toggle('on',v); if(n)n.classList.toggle('on',!v); }
+function openNausea(){
+  ensurePregFields(state.pregnancy); nzFluids=true;
+  const p=state.pregnancy;
+  const list=(p.nausea||[]).slice().sort((a,b)=>b.at-a.at).slice(0,10);
+  const rows=list.map(n=>`<div class="log-list-item"><div class="lli-ico">🤢</div><div class="lli-body"><div class="lli-t">Sick ${n.vomits}×${n.keptFluids?', kept fluids down':', could not keep fluids down'}</div><div class="lli-s">${n.water?n.water+' glasses · ':''}${dayLabel(n.at)} ${fmtClock(n.at)}</div></div><button class="lli-x" onclick="deleteNausea('${n.id}')">${I.trash}</button></div>`).join('');
+  openSheet(`<h2>Nausea & hydration</h2><div class="sub">A quick check-in. Handy for spotting if things are getting worse.</div>
+    <div class="field"><label>Times you were sick today</label><input type="number" inputmode="numeric" id="nzV" placeholder="0" value="0"></div>
+    <div class="field"><label>Could you keep fluids down?</label><div class="seg"><button id="nzFy" class="on" onclick="setNzFluids(true)">Yes</button><button id="nzFn" onclick="setNzFluids(false)">No</button></div></div>
+    <div class="field"><label>Glasses of water (roughly)</label><input type="number" inputmode="numeric" id="nzW" placeholder="e.g. 6"></div>
+    <button class="btn-primary" style="background:var(--preg)" onclick="saveNausea()">Save check-in</button>
+    ${rows?`<div class="sec-title" style="margin-top:14px">Recent</div>${rows}`:''}
+    <div class="preg-disclaim">${escapeHtml((condCfg('nausea')||{}).note||PREG_DISCLAIM)}</div>`,'preg');
+}
+function saveNausea(){ ensurePregFields(state.pregnancy); const v=parseInt($('#nzV').value)||0, w=parseInt($('#nzW').value)||0;
+  state.pregnancy.nausea.push({id:uid(),at:now(),vomits:v,keptFluids:nzFluids,water:w}); persist(); closeSheet(); render();
+  toast(!nzFluids?'Saved. If you cannot keep fluids down, contact your midwife or doctor.':'Saved'); }
+function deleteNausea(id){ state.pregnancy.nausea=(state.pregnancy.nausea||[]).filter(n=>n.id!==id); persist(); openNausea(); }
+
+/* ============================================================
+   OUR DEN: the household hub (home management for the whole family)
+   Chores, things to buy, meal plan, home staff, expenses, adult weights.
+   Lives in state.den, synced via the household blob like everything else.
+   ============================================================ */
+const DEN_DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const DEN_EXP_CATS=['Groceries','Baby','Home','Staff','Health','Eating out','Other'];
+function ensureDenFields(){
+  if(!state.den) state.den={};
+  const d=state.den;
+  if(!d.chores) d.chores=[];
+  if(!d.shopping) d.shopping=[];
+  if(!d.meals) d.meals=[];
+  if(!d.staff) d.staff=[];
+  if(!d.expenses) d.expenses=[];
+  if(!d.weights) d.weights=[];
+  return d;
+}
+function goDen(){
+  ensureDenFields();
+  if(state.babies.length){ view='den'; } else { pregView='den'; }
+  render(); $('#scroll')&&$('#scroll').scrollTo(0,0);
+}
+function denMonthSpend(){
+  const d=ensureDenFields(); const n=new Date();
+  return d.expenses.filter(e=>{ const t=new Date(e.at); return t.getMonth()===n.getMonth()&&t.getFullYear()===n.getFullYear(); })
+    .reduce((a,e)=>a+(+e.amount||0),0);
+}
+function denFmtAmt(v){ v=+v||0; return (Math.round(v*100)/100).toLocaleString(); }
+function renderDenHub(){
+  const d=ensureDenFields();
+  const openChores=d.chores.filter(c=>!c.done).length;
+  const toBuy=d.shopping.filter(s=>!s.done).length;
+  const spend=denMonthSpend();
+  const rows=[
+    ['🧹','Chores', openChores?openChores+' open':'All done, nice', 'openDenChores()','diaper'],
+    ['🛒','Things to buy', toBuy?toBuy+' on the list':'List is clear', 'openDenShopping()','feed'],
+    ['🍲','Meal plan', d.meals.length?d.meals.length+' meal'+(d.meals.length===1?'':'s')+' planned':'Plan the week', 'openDenMeals()','note'],
+    ['🧑‍🍳','Home staff', d.staff.length?d.staff.length+' added':'Nanny, cleaner, cook', 'openDenStaff()','sleep'],
+    ['💸','Expenses', spend?denFmtAmt(spend)+' this month':'Track what the home spends', 'openDenExpenses()','star'],
+    ['⚖️','Weights', d.weights.length?d.weights.length+' entr'+(d.weights.length===1?'y':'ies'):'Mom, dad, gentle trends', 'openDenWeights()','pump']
+  ].map(r=>`<div class="set-item" onclick="${r[3]}" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--${r[4]}-soft);color:var(--${r[4]});font-size:18px">${r[0]}</div>
+      <div class="si-body"><div class="a">${r[1]}</div><div class="b">${r[2]}</div></div><span class="chev">${I.chev}</span></div>`).join('');
+  return `<div class="fade-in">
+    <div class="greeting">Our Den 🏡</div>
+    <div class="greeting-sub">The whole household, in one calm place. Everyone in your family sees the same Den.</div>
+    ${consentBanners()}
+    <div class="today-strip" style="margin-top:14px">
+      <div class="cell"><div class="big">${openChores}</div><div class="cap">Chores open</div></div>
+      <div class="cell"><div class="big">${toBuy}</div><div class="cap">To buy</div></div>
+      <div class="cell"><div class="big">${denFmtAmt(spend)}</div><div class="cap">Spent this month</div></div>
+    </div>
+    <div class="sec-title">Home</div>
+    ${rows}
+    <div class="csub" style="margin-top:10px">No guilt here: chores roll over, lists forgive, and nobody is graded. It all syncs live to everyone in the family.</div>
+  </div>`;
+}
+
+/* ---- chores ---- */
+function openDenChores(){
+  const d=ensureDenFields();
+  const rows=d.chores.map(c=>`<div class="bag-row ${c.done?'done':''}">
+      <div class="bg-tick" onclick="toggleDenChore('${c.id}')">${c.done?I.check:''}</div>
+      <div class="bg-t" onclick="toggleDenChore('${c.id}')">${escapeHtml(c.text)}${c.who?` <span style="color:var(--ink-faint);font-weight:600">· ${escapeHtml(c.who)}</span>`:''}</div>
+      <button class="bg-x" onclick="deleteDenChore('${c.id}')">${I.trash}</button></div>`).join('');
+  openSheet(`<h2>Chores</h2><div class="sub">The day-to-day, shared. Add who's on it if you like, tick when done.</div>
+    ${rows||'<div class="csub">Nothing on the list. Enjoy it.</div>'}
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <div class="field" style="flex:2;margin-bottom:0"><label>Chore</label><input id="dcText" placeholder="e.g. Laundry" onkeydown="if(event.key==='Enter')addDenChore()"></div>
+      <div class="field" style="flex:1;margin-bottom:0"><label>Who</label><input id="dcWho" placeholder="optional"></div>
+    </div>
+    <button class="btn-primary" style="background:var(--diaper);margin-top:12px" onclick="addDenChore()">Add chore</button>
+    ${d.chores.some(c=>c.done)?`<button class="btn-ghost" onclick="clearDenChoresDone()">Clear completed</button>`:''}`,'diaper');
+}
+function addDenChore(){ const t=($('#dcText').value||'').trim(); if(!t){toast('What needs doing?');return;} ensureDenFields().chores.push({id:uid(),text:t,who:($('#dcWho').value||'').trim(),done:false}); persist(); openDenChores(); }
+function toggleDenChore(id){ const c=ensureDenFields().chores.find(x=>x.id===id); if(!c)return; c.done=!c.done; c.at=c.done?now():null; persist(); openDenChores(); }
+function deleteDenChore(id){ const d=ensureDenFields(); d.chores=d.chores.filter(x=>x.id!==id); persist(); openDenChores(); }
+function clearDenChoresDone(){ const d=ensureDenFields(); d.chores=d.chores.filter(c=>!c.done); persist(); openDenChores(); }
+
+/* ---- things to buy ---- */
+function openDenShopping(){
+  const d=ensureDenFields();
+  const rows=d.shopping.map(s=>`<div class="bag-row ${s.done?'done':''}">
+      <div class="bg-tick" onclick="toggleDenShop('${s.id}')">${s.done?I.check:''}</div>
+      <div class="bg-t" onclick="toggleDenShop('${s.id}')">${escapeHtml(s.text)}</div>
+      <button class="bg-x" onclick="deleteDenShop('${s.id}')">${I.trash}</button></div>`).join('');
+  openSheet(`<h2>Things to buy</h2><div class="sub">One shared list. Whoever's at the shop sees it live.</div>
+    ${rows||'<div class="csub">The list is clear.</div>'}
+    <div class="field" style="margin-top:12px"><label>Add an item</label><input id="dsText" placeholder="e.g. Nappies size 3" onkeydown="if(event.key==='Enter')addDenShop()"></div>
+    <button class="btn-primary" style="background:var(--feed)" onclick="addDenShop()">Add to list</button>
+    ${d.shopping.some(s=>s.done)?`<button class="btn-ghost" onclick="clearDenShopDone()">Clear bought</button>`:''}`,'feed');
+}
+function addDenShop(){ const t=($('#dsText').value||'').trim(); if(!t)return; ensureDenFields().shopping.push({id:uid(),text:t,done:false}); persist(); openDenShopping(); }
+function toggleDenShop(id){ const s=ensureDenFields().shopping.find(x=>x.id===id); if(!s)return; s.done=!s.done; persist(); openDenShopping(); }
+function deleteDenShop(id){ const d=ensureDenFields(); d.shopping=d.shopping.filter(x=>x.id!==id); persist(); openDenShopping(); }
+function clearDenShopDone(){ const d=ensureDenFields(); d.shopping=d.shopping.filter(s=>!s.done); persist(); openDenShopping(); }
+
+/* ---- meal plan ---- */
+let denMealDay=0;
+function setDenMealDay(i){ denMealDay=i; openDenMeals(); }
+function openDenMeals(){
+  const d=ensureDenFields();
+  const chips=DEN_DAYS.map((dy,i)=>`<button class="tgt ${denMealDay===i?'on':''}" onclick="setDenMealDay(${i})">${dy}</button>`).join('');
+  const list=d.meals.slice().sort((a,b)=>a.day-b.day).map(m=>`<div class="log-list-item">
+      <div class="lli-ico" style="background:var(--note-soft)">🍲</div>
+      <div class="lli-body"><div class="lli-t">${escapeHtml(m.text)}</div><div class="lli-s">${DEN_DAYS[m.day]||''}</div></div>
+      <button class="lli-x" onclick="deleteDenMeal('${m.id}')">${I.trash}</button></div>`).join('');
+  openSheet(`<h2>Meal plan</h2><div class="sub">Sketch the week's meals so 5pm never has to be a surprise.</div>
+    <div class="field"><label>Day</label><div class="tgt-row">${chips}</div></div>
+    <div class="field"><label>Meal</label><input id="dmText" placeholder="e.g. Dal and rice, veg curry" onkeydown="if(event.key==='Enter')addDenMeal()"></div>
+    <button class="btn-primary" style="background:var(--note)" onclick="addDenMeal()">Add to plan</button>
+    ${list?`<div class="sec-title" style="margin-top:14px">This week</div>${list}`:''}`,'note');
+}
+function addDenMeal(){ const t=($('#dmText').value||'').trim(); if(!t){toast('What are we eating?');return;} ensureDenFields().meals.push({id:uid(),day:denMealDay,text:t}); persist(); openDenMeals(); }
+function deleteDenMeal(id){ const d=ensureDenFields(); d.meals=d.meals.filter(x=>x.id!==id); persist(); openDenMeals(); }
+
+/* ---- home staff ---- */
+function openDenStaff(){
+  const d=ensureDenFields();
+  const rows=d.staff.map(s=>`<div class="log-list-item">
+      <div class="lli-ico" style="background:var(--sleep-soft)">🧑‍🍳</div>
+      <div class="lli-body"><div class="lli-t">${escapeHtml(s.name)}</div><div class="lli-s">${escapeHtml(s.role)}${s.phone?' · '+escapeHtml(s.phone):''}${s.note?' · '+escapeHtml(s.note):''}</div></div>
+      <button class="lli-x" onclick="deleteDenStaff('${s.id}')">${I.trash}</button></div>`).join('');
+  openSheet(`<h2>Home staff</h2><div class="sub">The people who help your home run: contacts and the little details in one place.</div>
+    ${rows||'<div class="csub">No one added yet.</div>'}
+    <div class="field" style="margin-top:12px"><label>Name</label><input id="dfName" placeholder="e.g. Maria"></div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1"><label>Role</label><select id="dfRole"><option>Nanny</option><option>Cleaner</option><option>Cook</option><option>Driver</option><option>Gardener</option><option>Other</option></select></div>
+      <div class="field" style="flex:1"><label>Phone (optional)</label><input id="dfPhone" inputmode="tel" placeholder="Phone"></div>
+    </div>
+    <div class="field"><label>Note (optional)</label><input id="dfNote" placeholder="e.g. Comes Mon and Thu, paid monthly"></div>
+    <button class="btn-primary" style="background:var(--sleep)" onclick="addDenStaff()">Add</button>`,'sleep');
+}
+function addDenStaff(){ const n=($('#dfName').value||'').trim(); if(!n){toast('Add a name');return;} ensureDenFields().staff.push({id:uid(),name:n,role:$('#dfRole').value,phone:($('#dfPhone').value||'').trim(),note:($('#dfNote').value||'').trim()}); persist(); openDenStaff(); }
+function deleteDenStaff(id){ const d=ensureDenFields(); d.staff=d.staff.filter(x=>x.id!==id); persist(); openDenStaff(); }
+
+/* ---- expenses ---- */
+let denExpCat='Groceries';
+function setDenExpCat(c){ denExpCat=c; openDenExpenses(); }
+function openDenExpenses(){
+  const d=ensureDenFields();
+  const chips=DEN_EXP_CATS.map(c=>`<button class="tgt ${denExpCat===c?'on':''}" onclick="setDenExpCat('${c}')">${c}</button>`).join('');
+  const recent=d.expenses.slice().sort((a,b)=>b.at-a.at).slice(0,12);
+  const rows=recent.map(e=>`<div class="log-list-item">
+      <div class="lli-ico" style="background:var(--star-soft)">💸</div>
+      <div class="lli-body"><div class="lli-t">${denFmtAmt(e.amount)} · ${escapeHtml(e.cat)}</div><div class="lli-s">${e.note?escapeHtml(e.note)+' · ':''}${dayLabel(e.at)}</div></div>
+      <button class="lli-x" onclick="deleteDenExpense('${e.id}')">${I.trash}</button></div>`).join('');
+  openSheet(`<h2>Expenses</h2><div class="sub">What the home spends, at a glance. Numbers are in your own currency.</div>
+    <div class="tool-stat"><div class="ts-cell"><div class="ts-big">${denFmtAmt(denMonthSpend())}</div><div class="ts-cap">This month</div></div><div class="ts-cell"><div class="ts-big">${d.expenses.length}</div><div class="ts-cap">Entries</div></div></div>
+    <div class="field"><label>Category</label><div class="tgt-row">${chips}</div></div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1"><label>Amount</label><input type="number" inputmode="decimal" id="dxAmt" placeholder="e.g. 250"></div>
+      <div class="field" style="flex:2"><label>Note (optional)</label><input id="dxNote" placeholder="e.g. Weekly groceries"></div>
+    </div>
+    <button class="btn-primary" style="background:var(--star)" onclick="addDenExpense()">Add expense</button>
+    ${rows?`<div class="sec-title" style="margin-top:14px">Recent</div>${rows}`:''}`,'star');
+}
+function addDenExpense(){ const v=parseFloat($('#dxAmt').value); if(!v){toast('Enter an amount');return;} ensureDenFields().expenses.push({id:uid(),at:now(),amount:v,cat:denExpCat,note:($('#dxNote').value||'').trim()}); persist(); openDenExpenses(); }
+function deleteDenExpense(id){ const d=ensureDenFields(); d.expenses=d.expenses.filter(x=>x.id!==id); persist(); openDenExpenses(); }
+
+/* ---- adult weights (mom & dad), gentle and no-guilt ---- */
+function denWeightWhos(){ const d=ensureDenFields(); const set=[]; d.weights.forEach(w=>{ if(set.indexOf(w.who)<0) set.push(w.who); }); ['Mom','Dad'].forEach(n=>{ if(set.indexOf(n)<0) set.push(n); }); return set; }
+function pickDenWho(el,n){ const inp=$('#dwWho'); if(inp)inp.value=n; document.querySelectorAll('#dwChips .tgt').forEach(b=>b.classList.remove('on')); el.classList.add('on'); }
+function openDenWeights(){
+  const d=ensureDenFields();
+  const unit=(state.settings.wUnit==='lb')?'lb':'kg';
+  const chips=denWeightWhos().map(n=>`<button class="tgt" onclick="pickDenWho(this,'${escapeHtml(n.replace(/'/g,"\\'"))}')">${escapeHtml(n)}</button>`).join('');
+  const byWho={};
+  d.weights.slice().sort((a,b)=>a.at-b.at).forEach(w=>{ (byWho[w.who]=byWho[w.who]||[]).push(w); });
+  const summary=Object.keys(byWho).map(n=>{ const arr=byWho[n]; const last=arr[arr.length-1]; const prev=arr.length>1?arr[arr.length-2]:null;
+    const delta=prev?(last.kg-prev.kg):null;
+    const dtxt=delta==null?'first entry':(Math.abs(delta)<0.05?'steady':(delta>0?'+':'')+(Math.round(delta*10)/10)+' '+(last.unit||unit)+' since last');
+    return `<div class="log-list-item"><div class="lli-ico" style="background:var(--pump-soft)">⚖️</div>
+      <div class="lli-body"><div class="lli-t">${escapeHtml(n)} · ${last.kg} ${last.unit||unit}</div><div class="lli-s">${dtxt} · ${dayLabel(last.at)}</div></div></div>`; }).join('');
+  const recent=d.weights.slice().sort((a,b)=>b.at-a.at).slice(0,8).map(w=>`<div class="log-list-item">
+      <div class="lli-ico" style="background:var(--pump-soft)">⚖️</div>
+      <div class="lli-body"><div class="lli-t">${escapeHtml(w.who)} · ${w.kg} ${w.unit||unit}</div><div class="lli-s">${dayLabel(w.at)} ${fmtClock(w.at)}</div></div>
+      <button class="lli-x" onclick="deleteDenWeight('${w.id}')">${I.trash}</button></div>`).join('');
+  openSheet(`<h2>Weights</h2><div class="sub">A gentle trend for the grown-ups, only if it's useful to you. No targets, no judgement.</div>
+    ${summary?`<div class="sec-title" style="margin-top:2px">Latest</div>${summary}`:''}
+    <div class="field" style="margin-top:10px"><label>Who</label><div class="tgt-row" id="dwChips">${chips}</div></div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1"><label>Name</label><input id="dwWho" placeholder="Mom, Dad, a name"></div>
+      <div class="field" style="flex:1"><label>Weight (${unit})</label><input type="number" inputmode="decimal" id="dwKg" placeholder="e.g. 70"></div>
+    </div>
+    <button class="btn-primary" style="background:var(--pump)" onclick="addDenWeight('${unit}')">Save</button>
+    ${recent?`<div class="sec-title" style="margin-top:14px">Recent</div>${recent}`:''}
+    <div class="csub" style="margin-top:10px">Informational only. For weight, diet or postpartum recovery advice, talk to your doctor.</div>`,'pump');
+}
+function addDenWeight(unit){ const n=($('#dwWho').value||'').trim(); const v=parseFloat($('#dwKg').value);
+  if(!n){toast('Whose weight is this?');return;} if(!v){toast('Enter a number');return;}
+  ensureDenFields().weights.push({id:uid(),at:now(),who:n,kg:v,unit}); persist(); openDenWeights(); }
+function deleteDenWeight(id){ const d=ensureDenFields(); d.weights=d.weights.filter(x=>x.id!==id); persist(); openDenWeights(); }
 
 /* ============================================================
    MEDICINE
@@ -4663,6 +6075,8 @@ function normalizeLoadedState(saved){
 <script src="cubby-extras.js"></script>
 <!-- WHO/CDC growth reference percentiles. -->
 <script src="growth-data.js"></script>
+<!-- Week-by-week, antenatal schedules and danger signs (informational). -->
+<script src="pregnancy-data.js"></script>
 <script>
 /* PWA: register only on a real http(s) host. Skips file:// and the in-app artifact sandbox. */
 if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){

@@ -28,8 +28,10 @@ starts a pregnancy from a due date (or last-period date), tracks it week by week
 appointments / symptoms / tools, and at birth Cubby **welcomes the baby** by turning that pregnancy
 into a baby profile that flows straight into the tracker that already exists.
 
-**Status:** Phase 1 (data) is DONE. Phases 2-5 (the in-app UI + the birth transition) are NOT built.
-That is this job.
+**Status:** Phases 1-5 are DONE and verified in preview (branch `pregnancy-tracker`). Phase 1 (data) in
+`app/pregnancy-data.js`; Phases 2-5 (pregnancy mode + week view + danger signs, logging, tools, and the
+birth transition) live in `app/index.html` (see the `PREGNANCY` section) with sync wired in
+`app/store-firebase.js` and `pregnancy-data.js` added to `app/index.html` + `app/sw.js` (cache v49).
 
 ---
 

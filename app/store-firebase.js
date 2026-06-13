@@ -19,6 +19,24 @@
   var firstRunShown = false;
   var lastHhSig = null; // signature of the last-applied household doc (dedupes our own write echoes)
 
+  /* ---------- maternal-private health (Privacy Max, gate G1) ----------
+     The mother's clinical data NEVER enters the shared `app` blob. It lives in
+     households/{hid}/mhealth/{ownerUid}/cat/{category}, written only by the owner,
+     readable by the owner + any guardian uid she lists in sharedWith. `mood` (EPDS)
+     is reserved and owner-only forever (no client feature yet). The 79 in-memory
+     call sites are untouched; the privacy boundary is here, at sync time. */
+  var MAT_CATS = {
+    health:     ['weights', 'bp', 'glucose', 'glucoseUnit', 'urine', 'nausea', 'symptoms', 'supplements', 'supplementLog'],
+    careteam:   ['careTeam'],
+    conditions: ['conditions']
+    // 'mood' reserved (EPDS) — owner-only forever; never serialized, never shareable.
+  };
+  var MAT_PRIVATE_KEYS = Object.keys(MAT_CATS).reduce(function (a, c) { return a.concat(MAT_CATS[c]); }, []);
+  var matUnsub = [];      // mhealth doc listeners
+  var matOwner = null;    // uid we are currently listening to
+  var matShared = {};     // category -> sharedWith[] (last seen, so a data write keeps consent)
+  var knownMat = {};      // category -> sig of last-synced {data, sharedWith} (diffing)
+
   /* ---------- styles for the sign-in overlay ---------- */
   var st = document.createElement('style');
   st.textContent =
@@ -91,15 +109,28 @@
       ev.preventDefault();
       var email = form.querySelector('input').value.trim(); if (!email) return;
       var btn = form.querySelector('button'); btn.disabled = true; btn.textContent = 'Sending…';
-      auth.sendSignInLinkToEmail(email, { url: location.origin + '/app/', handleCodeInApp: true })
+      // Send via our own Worker + Resend (Firebase's built-in sender has poor Gmail delivery).
+      // Completion is unchanged: the link is a standard Firebase email-sign-in link, finished
+      // below by signInWithEmailLink(). Falls back to Firebase's sender if the endpoint is down.
+      fetch('/api/send-signin-link', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: email }) })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) throw new Error(d.error || 'send_failed'); return d; }); })
         .then(function () {
           try { localStorage.setItem('cubby-email-signin', email); } catch (e) {}
           form.style.display = 'none';
           note.textContent = 'Check your inbox: we sent a sign-in link to ' + email + '. Open it on this device.';
         })
-        .catch(function (err) {
-          btn.disabled = false; btn.textContent = 'Send link';
-          note.textContent = 'Could not send the link: ' + ((err && err.message) || err);
+        .catch(function () {
+          // Endpoint unavailable (e.g. not deployed yet): fall back to Firebase's own sender.
+          auth.sendSignInLinkToEmail(email, { url: location.origin + '/app/', handleCodeInApp: true })
+            .then(function () {
+              try { localStorage.setItem('cubby-email-signin', email); } catch (e) {}
+              form.style.display = 'none';
+              note.textContent = 'Check your inbox: we sent a sign-in link to ' + email + '. Open it on this device.';
+            })
+            .catch(function (err) {
+              btn.disabled = false; btn.textContent = 'Send link';
+              note.textContent = 'Could not send the link: ' + ((err && err.message) || err);
+            });
         });
     };
   }
@@ -267,6 +298,22 @@
   }
 
   /* ---------- state <-> cloud blob ---------- */
+  // Copy of state.pregnancy with all maternal-private fields removed — what's safe for the shared blob.
+  function sharedPregnancy(p) {
+    if (!p) return null;
+    var out = {};
+    Object.keys(p).forEach(function (k) { if (MAT_PRIVATE_KEYS.indexOf(k) < 0) out[k] = p[k]; });
+    return out;
+  }
+  // Merge the shared (non-private) pregnancy fields from the blob, preserving private fields
+  // already loaded from the mhealth listener (the blob never carries them).
+  function mergeSharedPreg(shared) {
+    if (!shared) { state.pregnancy = null; matOwner = null; return; }
+    var p = state.pregnancy || {};
+    if (p.id && shared.id && p.id !== shared.id) p = {}; // different pregnancy → drop stale private fields
+    Object.keys(shared).forEach(function (k) { p[k] = shared[k]; });
+    state.pregnancy = p;
+  }
   function appBlobFromState() {
     return {
       babies: state.babies || [], settings: state.settings || {},
@@ -274,6 +321,10 @@
       vaccines: state.vaccines || {}, illnesses: state.illnesses || [],
       photos: state.photos || [],
       handoff: state.handoff || null,  // shared parent<->caregiver note
+      pregnancy: sharedPregnancy(state.pregnancy),  // shared journey only; maternal-private fields stripped out (G1)
+      den: state.den || null,  // household hub: chores, shopping, meals, staff, expenses, weights
+      consents: state.consents || [],  // dual-guardian approvals for big actions (delete/export)
+      guardians: state.guardians || null,  // explicit guardian uids (papa + mama); derived if null
       timers: state.timers || {}   // shared so an ongoing nap/feed shows on every phone
     };
   }
@@ -289,6 +340,10 @@
     state.illnesses = app.illnesses || [];
     state.photos = app.photos || [];
     state.handoff = app.handoff || null;
+    mergeSharedPreg(app.pregnancy);  // private fields stay; only the shared journey comes from the blob (G1)
+    state.den = app.den || null;
+    state.consents = app.consents || [];
+    state.guardians = app.guardians || null;
     // Don't stomp a timer the local user just started but hasn't pushed yet.
     if (!pushTimer) state.timers = app.timers || {};
     normalizeLoadedState(state); // defensive legacy migrations
@@ -300,6 +355,64 @@
     return '{' + Object.keys(o).sort().map(function (k) { return JSON.stringify(k) + ':' + stableStringify(o[k]); }).join(',') + '}';
   }
   function hhSig(app, members, memberInfo) { return stableStringify([app || null, members || null, memberInfo || null]); }
+
+  /* ---------- maternal-private sync (mhealth subcollection) ---------- */
+  // Fold a category doc's data back into state.pregnancy (private fields live in memory only).
+  function applyMatDoc(cat, d) {
+    if (!d) return;
+    matShared[cat] = d.sharedWith || [];
+    knownMat[cat] = stableStringify([d.data || {}, matShared[cat]]); // don't immediately re-write what we just received
+    if (!state.pregnancy) state.pregnancy = {};
+    var data = d.data || {};
+    Object.keys(data).forEach(function (k) { state.pregnancy[k] = data[k]; });
+  }
+  // Listen to the owner's category docs we're permitted to read (own collection, or specific shared docs).
+  function ensureMaternalListeners(uidNow) {
+    var p = state.pregnancy;
+    var owner = p && p.ownerUid;
+    if (!owner || owner === 'local') return;     // no real owner yet
+    if (owner === matOwner) return;              // already listening for this owner
+    matUnsub.forEach(function (u) { try { u(); } catch (e) {} });
+    matUnsub = []; matShared = {}; knownMat = {};
+    matOwner = owner;
+    var base = hhRef.collection('mhealth').doc(owner).collection('cat');
+    if (owner === uidNow) {
+      // The owner reads her whole category collection.
+      matUnsub.push(base.onSnapshot(function (snap) {
+        applyingRemote = true;
+        snap.forEach(function (doc) { applyMatDoc(doc.id, doc.data()); });
+        applyingRemote = false;
+        if (booted) render();
+      }, function (e) { console.warn('mhealth own listen', e); }));
+    } else {
+      // A non-owner: try each shareable category; ones not shared with us fail permission and are ignored.
+      Object.keys(MAT_CATS).forEach(function (cat) {
+        if (cat === 'mood') return; // never shared
+        matUnsub.push(base.doc(cat).onSnapshot(function (doc) {
+          if (!doc.exists) return;
+          applyingRemote = true; applyMatDoc(cat, doc.data()); applyingRemote = false;
+          if (booted) render();
+        }, function (e) { /* permission-denied = not shared with me; ignore */ }));
+      });
+    }
+  }
+  // The owner writes her changed category docs (data + current sharedWith). No-op for non-owners.
+  async function syncMaternal(uidNow) {
+    var p = state.pregnancy;
+    if (!hhRef || !p || !p.ownerUid || p.ownerUid !== uidNow) return; // only the owner writes her own health
+    var base = hhRef.collection('mhealth').doc(uidNow).collection('cat');
+    var writes = [];
+    Object.keys(MAT_CATS).forEach(function (cat) {
+      var data = {};
+      MAT_CATS[cat].forEach(function (k) { if (p[k] !== undefined) data[k] = p[k]; });
+      var shared = matShared[cat] || [];
+      var sig = stableStringify([data, shared]);
+      if (knownMat[cat] === sig) return;
+      knownMat[cat] = sig;
+      writes.push(base.doc(cat).set({ ownerUid: uidNow, category: cat, data: data, sharedWith: shared, updatedAt: window.LL.serverTimestamp() }));
+    });
+    if (writes.length) { try { await Promise.all(writes); } catch (e) { console.warn('mhealth push', e); } }
+  }
 
   /* ---------- start real-time sync ---------- */
   function startSync(hid, user) {
@@ -318,6 +431,11 @@
       if (state.activeBabyId && !state.babies.some(function (b) { return b.id === state.activeBabyId; }))
         state.activeBabyId = (state.babies[0] && state.babies[0].id) || null;
       booted = true;
+      // One-time relocation: if a legacy blob carried maternal-private fields, the owner moves
+      // them into the protected mhealth docs and strips them from the shared blob on next push.
+      if (state.pregnancy && window.LL.role === 'owner' && MAT_PRIVATE_KEYS.some(function (k) { return state.pregnancy[k] !== undefined; })) {
+        scheduledPush();
+      }
       hideOverlay();
       render();
       maybeFirstRun(user);
@@ -329,12 +447,14 @@
       window.LL.role = (d.members && d.members[user.uid]) || 'caregiver';
       window.LL.members = d.members || {};
       window.LL.memberInfo = d.memberInfo || {};
+      window.LL.formerMemberInfo = d.formerMemberInfo || {};
       window.LL.pro = d.pro || null; // Pro entitlement: written only by the billing Worker
       window.LL.householdId = hid;
       var sig = hhSig(d.app, d.members, d.memberInfo) + '|' + JSON.stringify(d.pro || null);
       if (booted && sig === lastHhSig) return; // our own write echo / duplicate emission, already on screen
       lastHhSig = sig;
       applyingRemote = true; applyAppBlob(d.app); applyingRemote = false;
+      ensureMaternalListeners(user.uid); // (re)subscribe once we know whose pregnancy it is
       gotApp = true;
       if (booted) render(); else maybeBoot();
     }, function (e) { console.warn('household listen', e); }));
@@ -378,6 +498,12 @@
     pushTimer = null;
     if (!hhRef) return;
     var uidNow = auth.currentUser && auth.currentUser.uid;
+    // Assign/repair ownership: the household owner on this device owns the pregnancy she holds.
+    // (Maternal data is only ever written by its owner; this claims a new or legacy/offline one.)
+    if (state.pregnancy && (!state.pregnancy.ownerUid || state.pregnancy.ownerUid === 'local') && uidNow && window.LL.role === 'owner') {
+      state.pregnancy.ownerUid = uidNow;
+      ensureMaternalListeners(uidNow);
+    }
     var cur = {}; (state.events || []).forEach(function (e) { cur[e.id] = e; });
     var writes = [];
     Object.keys(cur).forEach(function (id) {
@@ -394,10 +520,63 @@
     lastHhSig = hhSig(appBlob, window.LL.members, window.LL.memberInfo); // mark our own write so its echo doesn't re-render
     writes.push(hhRef.update({ app: appBlob, updatedAt: window.LL.serverTimestamp() }));
     try { await Promise.all(writes); } catch (e) { console.warn('push', e); }
+    syncMaternal(uidNow); // owner-only; writes her private categories to the protected mhealth docs
   }
 
   // Swap the app's persistence + photo storage for the cloud versions.
   persist = async function () { scheduledPush(); };
+
+  /* ---------- maternal sharing API (consumed by the consent UI in index.html) ---------- */
+  // Owner = the subject of the pregnancy. Once an ownerUid is assigned, only that uid is owner.
+  // While it is still unassigned/legacy, ONLY the household owner is the de-facto owner — a caregiver
+  // is never treated as owner (so they can't see, claim, or write the mother's health). Solo mothers
+  // are the household owner, so they always control their own data.
+  window.LL.matIsOwner = function () {
+    var u = auth.currentUser; if (!u) return true;
+    var p = state.pregnancy; if (!p) return true;
+    if (p.ownerUid && p.ownerUid !== 'local') return p.ownerUid === u.uid;
+    return window.LL.role === 'owner';
+  };
+  window.LL.matCanRead = function (cat) {
+    var u = auth.currentUser, p = state.pregnancy;
+    if (!u || !p) return true;
+    if (p.ownerUid && p.ownerUid !== 'local') {
+      if (p.ownerUid === u.uid) return true;
+      if (cat === 'mood') return false;
+      return (matShared[cat] || []).indexOf(u.uid) >= 0;
+    }
+    return window.LL.role === 'owner'; // unassigned/legacy: only the household owner may see it
+  };
+  window.LL.matShared = function (cat) { return (matShared[cat] || []).slice(); };
+  // Owner sets who may see a category. `mood` can never be shared (also enforced in rules).
+  // Claiming an unassigned pregnancy is role-gated (household owner only), mirroring pushNow — a
+  // caregiver toggling a share can never become the owner as a side-effect.
+  window.LL.matSetShared = async function (cat, uids) {
+    var u = auth.currentUser, p = state.pregnancy;
+    if (!hhRef || !u || !p) return false;
+    if (cat === 'mood' || !MAT_CATS[cat]) return false;
+    var owned = p.ownerUid && p.ownerUid !== 'local';
+    if (owned && p.ownerUid !== u.uid) return false;        // someone else owns it
+    if (!owned && window.LL.role !== 'owner') return false; // unassigned: only the household owner may claim
+    if (!owned) p.ownerUid = u.uid;                          // claim (household owner only)
+    matShared[cat] = (uids || []).slice();
+    var data = {}; MAT_CATS[cat].forEach(function (k) { if (p[k] !== undefined) data[k] = p[k]; });
+    knownMat[cat] = stableStringify([data, matShared[cat]]);
+    try {
+      await hhRef.collection('mhealth').doc(u.uid).collection('cat').doc(cat)
+        .set({ ownerUid: u.uid, category: cat, data: data, sharedWith: matShared[cat], updatedAt: window.LL.serverTimestamp() });
+      return true;
+    } catch (e) { console.warn('matSetShared', e); return false; }
+  };
+  // Owner removes all her private category docs (called when a pregnancy is removed entirely).
+  window.LL.matClear = async function () {
+    var u = auth.currentUser; if (!hhRef || !u) return;
+    var owner = matOwner || (state.pregnancy && state.pregnancy.ownerUid) || u.uid;
+    if (owner !== u.uid) return; // only the owner clears her own
+    var base = hhRef.collection('mhealth').doc(u.uid).collection('cat');
+    try { await Promise.all(Object.keys(MAT_CATS).map(function (c) { return base.doc(c).delete(); })); } catch (e) {}
+    knownMat = {}; matShared = {};
+  };
 
   PhotoStore.set = async function (id, dataUrl) {
     PhotoStore.map[id] = dataUrl;
@@ -527,10 +706,13 @@
 
   async function removeMember(uid, email, name) {
     if (!hhRef) return;
-    if (!window.confirm('Remove ' + (name || 'this person') + ' from your family? They\'ll lose access to the baby\'s log.')) return;
+    if (!window.confirm('Remove ' + (name || 'this person') + ' from your family? They\'ll lose access, but everything they logged stays part of the baby\'s story.')) return;
     try {
       var del = firebase.firestore.FieldValue.delete();
       var u = {}; u['members.' + uid] = del; u['memberInfo.' + uid] = del;
+      // Keep a tombstone so their past entries stay attributed by name forever.
+      var mi = (window.LL.memberInfo || {})[uid] || {};
+      u['formerMemberInfo.' + uid] = { name: mi.name || name || '', relationship: mi.relationship || '', avatar: mi.avatar || null };
       await hhRef.update(u);
       if (email) { try { await db.collection('invites').doc(email).delete(); } catch (e) {} }
       openFamily();

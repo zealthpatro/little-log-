@@ -7,3 +7,8 @@ compatibility_date = "2025-06-01"
 [assets]
 directory = "./"
 binding = "ASSETS"
+
+# Non-secret config. Secrets (RESEND_API_KEY, FIREBASE_SERVICE_ACCOUNT) are set with
+# `wrangler secret put` and never live in this file or the repo.
+[vars]
+MAIL_FROM = "Cubby <noreply@mail.little-cubby.com>"

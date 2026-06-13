@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>/* lifecycle stage (Expecting/Baby): set root class pre-paint, no flash */(function(){try{var K='cubby-stage',p=document.documentElement.getAttribute('data-page-stage'),u=new URLSearchParams(location.search).get('stage'),s=(u==='expecting'||u==='baby')?u:((p==='expecting'||p==='baby')?p:(localStorage.getItem(K)||'baby'));if(u||p)localStorage.setItem(K,s);document.documentElement.classList.add('stage-'+s);}catch(e){document.documentElement.classList.add('stage-baby');}})();</script>
 <title>Cubby Articles: Baby Care, Vaccines, Feeding &amp; Sleep</title>
 <meta name="description" content="Search 178+ clear, well-sourced guides for new parents and caregivers. Filter by topic and age: vaccines, feeding, sleep, milestones, health and more.">
 <link rel="canonical" href="https://little-cubby.com/articles/">
@@ -71,12 +72,22 @@
 <body>
 <nav class="nav"><div class="nav-in">
   <a class="nav-brand" href="/"><img src="/icons/logo-512.png" alt="Cubby"><b>Cubby</b></a>
-  <div class="nav-tabs"><a href="/">Home</a><a href="/features/">Features</a><a href="/articles/" class="on">Articles</a><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a></div>
+  <div class="nav-tabs"><a href="/">Home</a><a href="/pregnancy/">Pregnancy</a><a href="/features/">Features</a><a href="/articles/" class="on">Articles</a><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a></div>
   <a class="nav-cta" href="/app/">Start free</a>
 </div></nav>
 <main class="wrap" style="padding-top:24px">
   <h1>Articles &amp; guides</h1>
   <p class="lede">Search 178+ calm, well-sourced guides for everyone caring for a little one. Filter by topic and age. Every guide summarises official advice (NHS, CDC, AAP) with links, and is informational, not medical advice.</p>
+
+  <div class="exp-strip" style="margin:0 0 18px">
+    <div class="es-emoji">🌸</div>
+    <div class="es-body">
+      <div class="es-k">Still expecting?</div>
+      <div class="es-t">The pregnancy guide, week by week</div>
+      <div class="es-d">These guides are for once your baby has arrived. If you're pregnant or trying, start with Cubby's pregnancy journey: weeks, antenatal schedule, health and the home stretch.</div>
+    </div>
+    <a class="es-cta" href="/pregnancy/">Open the pregnancy guide</a>
+  </div>
 
   <section class="findr" role="search" aria-label="Find articles">
     <div class="findr-bar">
