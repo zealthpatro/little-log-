@@ -1,6 +1,12 @@
 # Secrets and local tooling, never commit
 tools/serviceAccountKey.json
 serviceAccountKey.json
+# Firebase Admin SDK keys + any service-account JSON (broad safety net)
+*serviceAccount*.json
+*service-account*.json
+*-firebase-adminsdk-*.json
+.dev.vars
+.env
 node_modules/
 tools/node_modules/
 tools/package.json
