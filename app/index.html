@@ -2478,7 +2478,7 @@ function renderOnboard(){
     <div class="field"><label>Country (sets the vaccine schedule)</label><select id="bCountry">${VAX_COUNTRIES.map(([k,n])=>`<option value="${k}" ${k===detectCountry()?'selected':''}>${n}</option>`).join('')}</select></div>
     <button class="btn-primary" style="--accent:var(--feed)" onclick="saveBaby()">Start tracking</button>
     <div style="text-align:center;font-size:12px;font-weight:800;color:var(--ink-faint);margin:14px 0 2px;letter-spacing:.04em">OR</div>
-    <button class="btn-ghost" onclick="openStartPregnancy()" style="color:var(--preg)">🌸 Mommy To Be: trying, expecting or counting weeks</button>
+    <button class="btn-ghost" onclick="openStartPregnancy()" style="color:var(--preg)">🌸 Expecting? Trying, pregnant or counting weeks</button>
   </div>`;
 }
 
@@ -2509,11 +2509,11 @@ function pregDaysToGo(){ const p=state.pregnancy; if(!p||!p.dueDate) return null
 function pregCountryKey(c){ c=c||(state.pregnancy&&state.pregnancy.country)||detectCountry(); return (window.PREG&&PREG.antenatal[c])?c:'generic'; }
 function pregNextAppt(){ const p=state.pregnancy; if(!p) return null; const wk=pregWeek(); const open=(p.appts||[]).filter(a=>!a.done).sort((a,b)=>a.week-b.week); return open.find(a=>a.week>=wk)||open[0]||null; }
 
-/* ---- Mommy To Be: the journey starts wherever you are ---- */
+/* ---- Pregnancy: the journey starts wherever you are ---- */
 let pregDraft = {mode:'due', date:'', country:'us'};
 function openStartPregnancy(){
   pregDraft={mode:'due', date:'', country:detectCountry()};
-  openSheet(`<h2>Mommy To Be 🌸</h2><div class="sub">Wherever you are on the journey, start there. You can change anything later.</div>
+  openSheet(`<h2>Start your journey 🌸</h2><div class="sub">Wherever you are on the journey, start there. You can change anything later.</div>
     <div class="prof-cards">
       <div class="prof-card" onclick="openPlanningSetup()"><span class="lead" style="background:var(--diaper-soft);color:var(--diaper);font-size:18px">🌱</span><div class="cflex"><div class="a">We're trying</div><div class="b">Just starting out: get your body and home ready</div></div><span class="chev">${I.chev}</span></div>
       <div class="prof-card" onclick="openExpectingSetup('lmp')"><span class="lead" style="background:var(--preg-soft);color:var(--preg);font-size:18px">🎉</span><div class="cflex"><div class="a">Just found out</div><div class="b">A positive test! We'll work out your weeks</div></div><span class="chev">${I.chev}</span></div>
@@ -2552,7 +2552,7 @@ function openPlanningSetup(){
 function savePlanning(){
   const dv=($('#plLmp')||{}).value;
   const cyc=Math.max(21,Math.min(40,parseInt(($('#plCycle')||{}).value)||28));
-  state.pregnancy={ id:uid(), stage:'planning', dueDate:null, lmp:dv?new Date(dv+'T08:00').getTime():null, cycleLen:cyc,
+  state.pregnancy={ id:uid(), ownerUid:myUid(), stage:'planning', dueDate:null, lmp:dv?new Date(dv+'T08:00').getTime():null, cycleLen:cyc,
     country:pregCountryKey(detectCountry()), precon:defaultPrecon(),
     careTeam:[], appts:[], symptoms:[], weights:[], bp:[], kicks:[], contractions:[],
     birthPlan:'', bag:[], moments:[],
@@ -2600,7 +2600,7 @@ function confirmPositiveTest(){
   p.country=cc;
   p.appts=(((window.PREG&&PREG.antenatal[cc]&&PREG.antenatal[cc].items))||[]).map(it=>({id:uid(),week:it.week,title:it.title,note:it.note,done:false,at:null}));
   if(!(p.bag||[]).length) p.bag=defaultBag();
-  pregView='week'; persist(); closeSheet(); render(); toast('Congratulations, mommy to be 🤍');
+  pregView='week'; persist(); closeSheet(); render(); toast("You're expecting 🤍");
 }
 function renderPlanningHome(){
   const p=state.pregnancy;
@@ -2696,7 +2696,7 @@ function savePregnancy(){
   if(pregDraft.mode==='due'){ dueDate=picked; }
   else { lmp=picked; dueDate=picked+PREG_TERM; }
   const appts=(((window.PREG&&PREG.antenatal[cc]&&PREG.antenatal[cc].items))||[]).map(it=>({id:uid(),week:it.week,title:it.title,note:it.note,done:false,at:null}));
-  state.pregnancy={ id:uid(), stage:'expecting', dueDate, lmp, country:cc,
+  state.pregnancy={ id:uid(), ownerUid:myUid(), stage:'expecting', dueDate, lmp, country:cc,
     careTeam:[], appts, symptoms:[], weights:[], bp:[], kicks:[], contractions:[],
     birthPlan:'', bag:defaultBag(), moments:[],
     conditions:{}, glucose:[], urine:[], supplements:[], supplementLog:[], nausea:[],
@@ -2717,7 +2717,7 @@ function renderPregShell(){
       <div class="topbar">
         <div class="preg-pill">
           <div class="pp-orb">🌱</div>
-          <div><h1>Mommy To Be</h1><span>Getting ready</span></div>
+          <div><h1>Cubby</h1><span>Getting ready</span></div>
         </div>
         ${FEATURES.den?`<button class="icon-btn ${pregView==='den'?'icon-on':''}" onclick="goDen()" aria-label="our den" style="font-size:17px">🧺</button>`:''}
         <button class="icon-btn" onclick="toggleTheme()" aria-label="theme">${state.settings.theme==='night'?I.sun:I.moon}</button>
@@ -2739,7 +2739,7 @@ function renderPregShell(){
     <div class="topbar">
       <div class="preg-pill" onclick="pregGo('care')">
         <div class="pp-orb">🤰</div>
-        <div><h1>Mommy To Be</h1><span>Week ${wk} · ${triName(tri)}</span></div>
+        <div><h1>Cubby</h1><span>Week ${wk} · ${triName(tri)}</span></div>
       </div>
       ${FEATURES.den?`<button class="icon-btn ${pregView==='den'?'icon-on':''}" onclick="goDen()" aria-label="our den" style="font-size:17px">🧺</button>`:''}
       <button class="icon-btn" onclick="toggleTheme()" aria-label="theme">${state.settings.theme==='night'?I.sun:I.moon}</button>
@@ -2786,8 +2786,8 @@ function renderPregHome(){
     <div class="actions stagger">
       <button class="action" onclick="openKickCounter()"><div class="ico" style="background:var(--preg-soft);color:var(--preg)">👣</div><div class="label">Kicks</div><div class="hint">Count baby's movements</div></button>
       <button class="action" onclick="openContractions()"><div class="ico" style="background:var(--pump-soft);color:var(--pump)">⏱️</div><div class="label">Contractions</div><div class="hint">Time them, 5-1-1 guide</div></button>
-      <button class="action" onclick="openLogSymptom()"><div class="ico" style="background:var(--note-soft);color:var(--note)">📝</div><div class="label">Symptom</div><div class="hint">How you're feeling</div></button>
-      <button class="action" onclick="openLogWeight()"><div class="ico" style="background:var(--star-soft);color:var(--star)">⚖️</div><div class="label">Weight</div><div class="hint">Track your weight</div></button>
+      ${pregIsOwner()?`<button class="action" onclick="openLogSymptom()"><div class="ico" style="background:var(--note-soft);color:var(--note)">📝</div><div class="label">Symptom</div><div class="hint">How you're feeling</div></button>
+      <button class="action" onclick="openLogWeight()"><div class="ico" style="background:var(--star-soft);color:var(--star)">⚖️</div><div class="label">Weight</div><div class="hint">Track your weight</div></button>`:''}
     </div>
     <button class="btn-ghost" onclick="openDangerSigns()" style="color:var(--danger);margin-top:14px">⚠️ Urgent warning signs, when to seek care</button>
     <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="openWelcomeBaby()">🐻 Baby has arrived</button>
@@ -2984,13 +2984,21 @@ function addBag(){ const el=$('#bagNew'); const v=(el&&el.value.trim())||''; if(
 /* ---- Care: team, danger signs, dates, end ---- */
 function renderPregCare(){
   const p=state.pregnancy;
-  const team=(p.careTeam||[]).map(m=>`<div class="log-list-item"><div class="lli-ico">👩‍⚕️</div><div class="lli-body"><div class="lli-t">${escapeHtml(m.name)}</div><div class="lli-s">${escapeHtml(m.role)}${m.phone?' · '+escapeHtml(m.phone):''}</div></div><button class="lli-x" onclick="removeCareTeam('${m.id}')">${I.trash}</button></div>`).join('');
+  const amOwner=pregIsOwner();
+  const seeCare=pregCanSee('careteam'), seeHealth=pregCanSee('health')||pregCanSee('conditions');
+  const team=(p.careTeam||[]).map(m=>`<div class="log-list-item"><div class="lli-ico">👩‍⚕️</div><div class="lli-body"><div class="lli-t">${escapeHtml(m.name)}</div><div class="lli-s">${escapeHtml(m.role)}${m.phone?' · '+escapeHtml(m.phone):''}</div></div>${amOwner?`<button class="lli-x" onclick="removeCareTeam('${m.id}')">${I.trash}</button>`:''}</div>`).join('');
   const cname=(window.PREG&&PREG.antenatal[p.country]&&PREG.antenatal[p.country].label)||'General (WHO-aligned)';
-  return `<div class="fade-in">
+  const careBlock = seeCare ? `
     <div class="sec-title">Your care team</div>
     ${team||'<div class="csub">Add your midwife, doctor or clinic for quick reference.</div>'}
-    <button class="btn-ghost" onclick="openAddCareTeam()">${I.plus} Add to care team</button>
-    ${pregHealthSection()}
+    ${amOwner?`<button class="btn-ghost" onclick="openAddCareTeam()">${I.plus} Add to care team</button>`:''}` : '';
+  return `<div class="fade-in">
+    ${careBlock}
+    ${seeHealth?pregHealthSection():''}
+    ${!amOwner&&!seeCare&&!seeHealth?'<div class="csub" style="margin-top:6px">These health details are private to her. She can choose to share them with you.</div>':''}
+    ${amOwner?`<div class="set-item" onclick="openMaternalPrivacy()" style="cursor:pointer;margin-top:16px">
+      <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">🔒</div>
+      <div class="si-body"><div class="a">Your private health</div><div class="b">Choose who in your circle can see each part</div></div><span class="chev">${I.chev}</span></div>`:''}
     <div class="sec-title" style="margin-top:18px">Pregnancy</div>
     <div class="set-item" onclick="openDangerSigns()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--med-soft);color:var(--danger);font-size:18px">⚠️</div>
@@ -3012,6 +3020,50 @@ function openAddCareTeam(){
 }
 function addCareTeam(){ const n=$('#ctName').value.trim(); if(!n){toast('Add a name');return;} state.pregnancy.careTeam.push({id:uid(),name:n,role:$('#ctRole').value,phone:$('#ctPhone').value.trim()}); persist(); closeSheet(); render(); toast('Added'); }
 function removeCareTeam(id){ state.pregnancy.careTeam=(state.pregnancy.careTeam||[]).filter(m=>m.id!==id); persist(); render(); }
+
+/* ---- Maternal privacy: your health is yours, shared only by your consent (gate G1) ---- */
+function pregIsOwner(){ try{ return !window.LL.matIsOwner || window.LL.matIsOwner(); }catch(e){ return true; } }
+function pregCanSee(cat){ if(pregIsOwner()) return true; try{ return !!(window.LL&&window.LL.matCanRead&&window.LL.matCanRead(cat)); }catch(e){ return false; } }
+const MAT_SHARE_CATS=[
+  {key:'health',     label:'Health logs',        desc:'Weight, blood pressure, glucose, urine, nausea, symptoms, supplements'},
+  {key:'careteam',   label:'Care team',          desc:'Your midwife, doctor and clinic contacts'},
+  {key:'conditions', label:'Health trackers',    desc:'Which trackers you have turned on'}
+];
+function openMaternalPrivacy(){
+  if(!pregIsOwner()){ toast('Only you can manage this'); return; }
+  const members=(window.LL&&window.LL.members)||{};
+  const info=(window.LL&&window.LL.memberInfo)||{};
+  const others=Object.keys(members).filter(u=>u!==myUid());
+  const memberName=(u)=>{ const m=info[u]; return (m&&(m.relationship||((m.name||'').split(' ')[0])))||'Member'; };
+  let body;
+  if(!others.length){
+    body=`<div class="csub">Your health stays private to you. When you invite someone to your circle, you'll be able to choose, item by item, what they can see. Nothing is shared until you say so.</div>`;
+  } else {
+    const cards=MAT_SHARE_CATS.map(c=>{
+      const shared=(window.LL&&window.LL.matShared&&window.LL.matShared(c.key))||[];
+      const rows=others.map(u=>{
+        const on=shared.indexOf(u)>=0;
+        return `<button class="set-item" style="width:100%;text-align:left;cursor:pointer" onclick="toggleMaternalShare('${c.key}','${u}')">
+          <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:16px">${on?'✓':'·'}</div>
+          <div class="si-body"><div class="a">${escapeHtml(memberName(u))}</div><div class="b">${on?'Can see this':'Hidden'}</div></div>
+        </button>`;
+      }).join('');
+      return `<div class="sec-title" style="margin-top:16px">${c.label}</div><div class="csub" style="margin-bottom:6px">${c.desc}</div>${rows}`;
+    }).join('');
+    body=`<div class="csub">Your health is private to you. Choose exactly who in your circle can see each part. You can change this anytime.</div>${cards}
+      <div class="sec-title" style="margin-top:16px">Mood &amp; wellbeing</div>
+      <div class="set-item"><div class="si-ico" style="background:var(--med-soft);color:var(--ink-faint);font-size:16px">🔒</div>
+        <div class="si-body"><div class="a">Only you</div><div class="b">Mental-health entries are always private and can never be shared</div></div></div>`;
+  }
+  openSheet(`<h2>Your private health 🔒</h2>${body}<div class="preg-disclaim" style="margin-top:14px">Sharing is off by default. Only you can change who sees your health, and only the things you choose.</div>`,'preg');
+}
+async function toggleMaternalShare(cat,uid){
+  if(!(window.LL&&window.LL.matSetShared)) return;
+  const cur=(window.LL.matShared&&window.LL.matShared(cat))||[];
+  const next=cur.indexOf(uid)>=0?cur.filter(u=>u!==uid):cur.concat([uid]);
+  const ok=await window.LL.matSetShared(cat,next);
+  if(ok){ openMaternalPrivacy(); } else { toast('Could not update'); }
+}
 function openDangerSigns(){
   const ds=window.PREG&&PREG.dangerSigns;
   const rows=ds?ds.items.map(s=>`<div class="danger-row"><span class="dr-dot">●</span><div class="dr-t">${escapeHtml(s)}</div></div>`).join(''):'';
@@ -3045,7 +3097,7 @@ function confirmEndPregnancy(){
     <button class="btn-primary" style="background:var(--danger)" onclick="doEndPregnancy()">Remove pregnancy</button>
     <button class="btn-ghost" onclick="closeSheet()">Keep tracking</button>`,'preg');
 }
-function doEndPregnancy(){ state.pregnancy=null; persist(); closeSheet(); render(); }
+function doEndPregnancy(){ if(window.LL&&window.LL.matClear)window.LL.matClear(); state.pregnancy=null; persist(); closeSheet(); render(); }
 
 /* ---- Phase 5: welcoming the baby (the birth transition) ---- */
 let wbSex='';
@@ -3142,6 +3194,7 @@ function pregHealthSection(){
       <div class="si-body"><div class="a">Manage health trackers</div><div class="b">Turn trackers on or off</div></div><span class="chev">${I.chev}</span></div>`;
 }
 function pregHealthQuick(){
+  if(!(pregCanSee('health')||pregCanSee('conditions'))) return ''; // private to the mother unless shared
   const on=PREG_CONDS.filter(c=>condOn(c.key));
   if(!on.length) return '';
   const btns=on.map(c=>`<button class="action" onclick="openCondition('${c.key}')"><div class="ico" style="background:var(--preg-soft);color:var(--preg)">${c.emoji}</div><div class="label">${c.short}</div><div class="hint">${condSummary(c.key)}</div></button>`).join('');

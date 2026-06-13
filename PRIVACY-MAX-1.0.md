@@ -45,26 +45,49 @@ Added `match /households/{hid}/mhealth/{owner}/cat/{category}`:
 This is the literal G1 enforcement. It is additive (new path) — it does not change any existing rule,
 so current flows are untouched. **It enforces nothing until the client writes data there (next chunk).**
 
-## Client rewire — the remaining work (sizable; do with the Firestore emulator)
-`state.pregnancy` is read in ~79 places in `app/index.html`, not centralized. Plan:
-1. **Centralize first.** Add accessors `matGet(cat, key)` / `matSet(cat, key, val)` and route all
-   maternal reads/writes through them. Keep cub-to-be journey fields on `state.pregnancy` (shared).
-2. **New sync path** in `store-firebase.js`: write the owner's `mhealth/{uid}/cat/*` docs on her edits;
-   subscribe (onSnapshot) to the cat docs the current user is permitted to read (own + shared-to-me).
-   Never put maternal-private categories into `appBlobFromState()` again.
-3. **Consent UI** ("Your private health · who can see it"): per category, pick guardian(s) to share
-   with from the circle; `mood` shows "Only you", locked. Writes `sharedWith`.
-4. **Subject switcher** hides the mum subject's health from non-permitted viewers (honor the rules client-side too, for UX; the rules are the real guarantee).
-5. **Migration:** branch is unmerged → assume no production maternal data. Add a one-time guard: if a
-   legacy `app.pregnancy` carries maternal categories, move them to the protected docs on first load,
-   then strip them from the blob. Verify nothing maternal remains in any `app` blob.
+## Client rewire — DONE (2026-06-13). Approach changed: enforce at the boundary, not 79 accessors.
+The original plan was to centralize ~79 `state.pregnancy` call sites behind `matGet`/`matSet`. We did
+**not** do that — it was the riskiest possible change for "don't break flows". Instead the privacy
+boundary is enforced at the **two serialization functions plus a new sync path**, leaving all 79
+in-memory call sites byte-for-byte untouched. `state.pregnancy` stays the unified in-memory working
+object; private fields simply never cross into the shared blob, and travel via the protected docs.
 
-## Acceptance (G1)
-A non-permitted circle member **cannot** read another member's `mhealth/*` via the API/rules —
-proven with the Firestore emulator test suite. `mood` is unreadable by anyone but the owner even if
-mis-added to a share list. No maternal category appears in `appBlobFromState()`. Do not market
-"private to you" until this passes below the client.
+Implemented in `app/store-firebase.js`:
+- `MAT_CATS` / `MAT_PRIVATE_KEYS` — the category→field map (single source of truth for what is private).
+- `sharedPregnancy(p)` — strips every private field; called by `appBlobFromState()` so the blob can
+  never carry maternal data. `mergeSharedPreg(shared)` — on hydrate, copies only shared journey fields,
+  **preserving** private fields already loaded from the mhealth listener (and drops stale ones if the
+  pregnancy id changed).
+- `syncMaternal(uid)` — **owner-only** write of changed category docs (data + current `sharedWith`),
+  diffed via `knownMat`. Called at the end of `pushNow`.
+- `ensureMaternalListeners(uid)` — owner uses a **collection** listen on her own `cat/` (all docs match
+  the rule); a non-owner uses **per-doc** listens (a collection query can't be satisfied when only some
+  docs match). `applyMatDoc` folds permitted category data back into `state.pregnancy`.
+- Ownership: set at creation (`ownerUid: myUid()` in `index.html`), and repaired for legacy/offline
+  pregnancies in `pushNow` (household-owner only). **One-time migration** in `maybeBoot`: if a legacy
+  blob still carries private fields and the user is the household owner, it force-pushes once to relocate
+  them out of the blob and into the protected docs.
+- Consent API on `window.LL`: `matIsOwner` / `matCanRead(cat)` / `matShared(cat)` / `matSetShared(cat,uids)`
+  / `matClear()`. While a pregnancy is unassigned, **only the household owner** is treated as owner — a
+  caregiver can never see, claim, or write the mother's health (closes the ownership-claim defect found
+  in review; `matSetShared`'s claim is role-gated to mirror `pushNow`). `mood` is rejected client-side.
 
-## To publish the rules (console is the runtime source of truth)
-Firebase Console → Firestore → Rules → paste `firestore.rules` → Publish. Then run the emulator
-suite (or a manual cross-account read test) to confirm a second member is denied.
+In `app/index.html`: consent sheet `openMaternalPrivacy()` (owner-only, per-category member toggles,
+mood shown locked "Only you"); non-owner gating on the care tab, week-home health cards, and the
+Symptom/Weight quick-actions (Kicks/Contractions stay shared); `doEndPregnancy` calls `matClear`.
+
+**Reviewed** by an adversarial 4-dimension workflow (leak / data-loss / consent / brand): the leak and
+data-loss dimensions found nothing real; two issues were confirmed and fixed (the role-gated ownership
+claim above; a leftover brand toast).
+
+## Acceptance (G1) — STILL PENDING the emulator (cannot run in the build env)
+A non-permitted circle member **cannot** read another member's `mhealth/*` via the API/rules — must be
+proven with the Firestore emulator test suite (or a manual two-account cross-read). `mood` unreadable by
+anyone but the owner even if mis-added to a share list. ✔ verified by code: no maternal category appears
+in `appBlobFromState()` output (`sharedPregnancy` strips them). Do **not** market "private to you" until
+the emulator cross-account denial passes.
+
+## To publish the rules (console is the runtime source of truth) — PENDING founder action
+Firebase Console → Firestore → Rules → paste `firestore.rules` → Publish. The new `mhealth` block is
+additive (no existing rule changed), so publishing it does not affect current flows. Then run the
+emulator suite (or a manual cross-account read test) to confirm a second member is denied.
