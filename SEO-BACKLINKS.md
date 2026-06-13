@@ -17,6 +17,60 @@ counts or invent praise.
 
 ---
 
+## 0b. Article cross-referencing — how to earn links to the 114 guides
+The app and the articles need *different* link tactics. Apps get Product Hunt/directories; **articles
+get links by being a citable reference.** On-page is already maxed (BlogPosting + breadcrumb schema,
+canonical, OG, ~3 internal links + a Related module each, deep-linked official sources). Now the
+off-site work, highest-leverage first:
+
+**1. Lead with the 3 "linkable assets" (content others cite without it feeling promotional):**
+   - `/articles/baby-vaccination-schedules-compared/` — UK/US/UAE/Germany compared (genuine data; rare).
+   - `/vaccination-schedule/{uk,us,uae}/` + `/de/impfkalender/` — dated, official-sourced, with a
+     birthday calculator.
+   - `/articles/baby-growth-charts-centiles/` (and the growth explainers) — reference data.
+   Pitch *these*, not the app. They read as a free public resource, so editors/bloggers link to them.
+
+**2. Resource-page link building (fastest wins).** Find pages that already link out to baby resources
+   and ask to be added. Google these:
+   - `"baby resources" inurl:links`  ·  `parenting "useful links"`  ·  `intitle:"new parent resources"`
+   - `"vaccine schedule" inurl:resources`  ·  `NCT OR antenatal "helpful links" baby`
+   - country-specific: `mumsnet OR netmums useful links baby`, `UAE mums resources baby`, `india parenting resources`
+   Email template:
+   > Subject: A free resource for your [page topic] links page
+   > Hi [name], your [page] is a great roundup. I run little-cubby.com and made a free, NHS/CDC-sourced
+   > guide that might fit: [the most relevant article URL] (no sign-up, dated, with sources). Full
+   > disclosure, it's mine; share only if useful to your readers. Thanks for the helpful page.
+
+**3. HARO / journalist sourcing (highest authority).** Sign up to **Featured.com, Qwoted,
+   SourceBottle** (the HARO successors). Answer parenting/health/new-parent-tech queries with a
+   concise expert answer + a link to the relevant sourced article. Sign as "maker of Cubby." One good
+   placement = a high-DA backlink.
+
+**4. Q&A + community answers (link the *article*, not the app).** On Quora, Reddit (r/NewParents,
+   r/beyondthebump, r/Mommit, India/UAE parenting subs), Mumsnet, BabyCentre — answer a real question
+   genuinely and link the *specific* guide that helps (e.g. someone asking "when are the jabs?" → the
+   comparison page). Always disclose you made it; one link per relevant thread; follow each sub's rules.
+
+**5. Broken-link building.** Find dead links on parenting resource pages (use a link checker) and email
+   suggesting your live equivalent as a replacement. High accept rate because you're fixing their page.
+
+**6. Guest posts / contributor pieces.** Offer parenting blogs a genuinely useful original piece
+   (not spun) with one contextual link back to a deep guide. Pitch the editor; lead with the value.
+
+**7. Digital-PR data angle.** Pitch "How baby vaccine schedules differ across 12 countries" (you now
+   have 12 in-app + comparison content) to parenting/expat editors as a story — the data is the hook,
+   the link is the citation.
+
+**8. Wikipedia/Wikidata (careful, no self-promo).** Only where genuinely the best source; never add
+   your own link as the author. The comparison/data pages are the only candidates.
+
+**Find opportunities fast (search operators):** `intitle:"baby" (resources OR links)`,
+`"recommended websites" baby parenting`, `inurl:resources (newborn OR weaning OR vaccine)`,
+`[competitor like huckleberry] -site:huckleberry.com` (pages that mention competitors may take you too).
+
+**Track:** tag outreach links with `?utm_source=<site>`; watch GSC → Links for new referring domains.
+Re-pitch annually-updated roundups each January. Never buy links or swap reviews.
+
 ## 1. Product Hunt (highest single hit; you launch, I prepped it)
 PH requires your account + a real launch. Best day Tue–Thu, post 00:01 PT. Have 5–10 friends ready to
 genuinely comment (not just upvote). Don't ask for upvotes in text (against PH rules).
