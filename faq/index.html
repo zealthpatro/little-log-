@@ -77,6 +77,9 @@
   <h1>Frequently asked questions</h1>
   <p class="lede" style="margin-top:6px">Everything about features, sharing, privacy, pregnancy and pricing. New here? See <a href="/why/">what Cubby stands for</a>. Still stuck? In the app, Settings &gt; Family &amp; sharing &gt; Send feedback, we read every note.</p>
 
+  <div class="faq-search"><span class="faq-search-i" aria-hidden="true">🔍</span><input type="search" id="faqQ" placeholder="Search questions, e.g. privacy, export, pregnancy" aria-label="Search the FAQ" autocomplete="off"></div>
+  <p class="faq-none" id="faqNone" hidden>No questions match that yet. Try another word, or <a href="/app/">just start free</a>.</p>
+
   <h2>Getting started</h2>
   <dl class="faq">
     <dt>Is Cubby free?</dt>
@@ -193,5 +196,37 @@
   Cubby, a warm private baby tracker 🐻
   <div class="tiny">Cubby is informational and not a substitute for medical advice. Always follow your doctor and your country's official guidance.</div>
 </footer>
+<script>
+/* FAQ live filter: match the typed words against each question + its answer, hide the rest,
+   collapse empty sections, and show a gentle "no results" line. Plain DOM, no deps. */
+(function(){
+  var q=document.getElementById('faqQ'); if(!q) return;
+  var none=document.getElementById('faqNone');
+  var dls=[].slice.call(document.querySelectorAll('main .faq'));
+  var heads=[].slice.call(document.querySelectorAll('main h2'));
+  function n(s){return (s||'').toLowerCase();}
+  q.addEventListener('input',function(){
+    var v=n(q.value.trim()), any=false;
+    dls.forEach(function(dl){
+      var head=dl.previousElementSibling; var ht=(head&&head.tagName==='H2')?head.textContent:'';
+      var k=[].slice.call(dl.children);
+      for(var i=0;i<k.length;i++){
+        if(k[i].tagName!=='DT') continue;
+        var dt=k[i], dd=(k[i+1]&&k[i+1].tagName==='DD')?k[i+1]:null;
+        var show=!v || n(ht+' '+dt.textContent+' '+(dd?dd.textContent:'')).indexOf(v)!==-1;
+        dt.style.display=show?'':'none'; if(dd) dd.style.display=show?'':'none';
+        if(show) any=true;
+      }
+    });
+    heads.forEach(function(h){
+      var dl=h.nextElementSibling; while(dl&&dl.tagName!=='DL') dl=dl.nextElementSibling;
+      if(!dl) return;
+      var vis=[].slice.call(dl.querySelectorAll('dt')).some(function(d){return d.style.display!=='none';});
+      h.style.display=vis?'':'none'; dl.style.display=vis?'':'none';
+    });
+    if(none) none.hidden = any || !v;
+  });
+})();
+</script>
 </body>
 </html>
