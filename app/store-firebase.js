@@ -10,7 +10,7 @@
   var auth = window.LL.auth, db = window.LL.db;
   var LOCAL_PREFS_KEY = 'little-log-prefs-v1'; // per-device: activeBabyId, timers, theme
 
-  var hhRef = null, eventsRef = null, photosRef = null;
+  var hhRef = null, eventsRef = null, photosRef = null, notesRef = null;
   var booted = false;
   var unsub = [];
   var knownEvents = {};      // id -> JSON of last-synced event (for diffing)
@@ -206,7 +206,9 @@
   function teardown() {
     unsub.forEach(function (u) { try { u(); } catch (e) {} });
     unsub = []; booted = false; knownEvents = {};
-    hhRef = eventsRef = photosRef = null;
+    hhRef = eventsRef = photosRef = notesRef = null;
+    state.notes = [];
+    handoffMigrated = false;
   }
 
   /* ---------- per-device prefs ---------- */
@@ -419,6 +421,7 @@
     hhRef = db.collection('households').doc(hid);
     eventsRef = hhRef.collection('events');
     photosRef = hhRef.collection('photos');
+    notesRef = hhRef.collection('notes');
 
     var prefs = loadPrefs();
     var gotApp = false, gotEvents = false;
@@ -455,6 +458,7 @@
       lastHhSig = sig;
       applyingRemote = true; applyAppBlob(d.app); applyingRemote = false;
       ensureMaternalListeners(user.uid); // (re)subscribe once we know whose pregnancy it is
+      migrateHandoffToNote(); // role + handoff are now known; fold any legacy shared note in once
       gotApp = true;
       if (booted) render(); else maybeBoot();
     }, function (e) { console.warn('household listen', e); }));
@@ -485,7 +489,125 @@
       });
       if (booted && !(snap.metadata && snap.metadata.hasPendingWrites)) render();
     }, function (e) { console.warn('photos listen', e); }));
+
+    startNotesSync(user);
   }
+
+  /* ---------- home day-surface notes (private by rules, never in the app blob) ----------
+     Notes live in households/{hid}/notes/{noteId}. A private note (audience == a member uid) is
+     readable ONLY by that member or its author; a 'circle' note is readable by everyone. We run
+     three scoped queries that each satisfy the read rule, so a member never even attempts to read a
+     note addressed to someone else (no permission-denied churn). We still filter client-side as a
+     belt-and-braces guard: a note must never render for the wrong member. */
+  function noteVisibleTo(n, uid) {
+    if (!n) return false;
+    return n.audience === 'circle' || n.audience === uid || n.createdBy === uid;
+  }
+  function mergeNote(d) {
+    var uidNow = auth.currentUser && auth.currentUser.uid;
+    if (!noteVisibleTo(d, uidNow)) return; // never hold a note this viewer may not see
+    state.notes = state.notes || [];
+    var i = state.notes.findIndex(function (n) { return String(n.id) === String(d.id); });
+    if (i >= 0) state.notes[i] = d; else state.notes.push(d);
+  }
+  function dropNote(id) {
+    state.notes = (state.notes || []).filter(function (n) { return String(n.id) !== String(id); });
+  }
+  function startNotesSync(user) {
+    state.notes = [];
+    function handle(snap) {
+      snap.docChanges().forEach(function (ch) {
+        var d = ch.doc.data(); d.id = ch.doc.id;
+        if (ch.type === 'removed') dropNote(d.id); else mergeNote(d);
+      });
+      migrateHandoffToNote(); // one-time: fold any legacy shared handoff into a circle note
+      if (booted && !(snap.metadata && snap.metadata.hasPendingWrites)) render();
+    }
+    function warn(e) { /* a scoped query a viewer can't run is ignored, never thrown */ }
+    // 1) circle notes (everyone). 2) my own notes. 3) notes addressed privately to me.
+    unsub.push(notesRef.where('audience', '==', 'circle').onSnapshot(handle, warn));
+    unsub.push(notesRef.where('createdBy', '==', user.uid).onSnapshot(handle, warn));
+    unsub.push(notesRef.where('audience', '==', user.uid).onSnapshot(handle, warn));
+  }
+
+  // MIGRATION: the app used to keep a single shared note in state.handoff (inside the app blob).
+  // On first load, the household owner copies it into one 'circle' note on its own day, then clears
+  // state.handoff so the blob no longer carries it. Owner-only so it runs once, not once per member.
+  var handoffMigrated = false;
+  function migrateHandoffToNote() {
+    if (handoffMigrated || !notesRef) return;
+    var h = state.handoff;
+    if (!h || !h.text) { handoffMigrated = true; return; }
+    if (window.LL.role !== 'owner') return; // only the owner migrates the shared blob
+    handoffMigrated = true;
+    var uidNow = (auth.currentUser && auth.currentUser.uid) || null;
+    var at = h.at || Date.now();
+    var note = {
+      createdBy: h.by || uidNow,
+      createdByName: (h.by && nameForUid(h.by)) || nameForUid(uidNow) || '',
+      at: at, day: dayKeyOf(at), text: String(h.text), audience: 'circle', pinned: false
+    };
+    notesRef.add(note).then(function () {
+      state.handoff = null; // clear the legacy field; next push drops it from the blob
+      scheduledPush();
+    }).catch(function (e) { handoffMigrated = false; console.warn('handoff migrate', e); });
+  }
+  function dayKeyOf(ts) { var d = new Date(ts); return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); }
+  function nameForUid(uid) {
+    var info = (window.LL && window.LL.memberInfo) || {};
+    var m = info[uid]; if (!m) return '';
+    return m.relationship || (m.name ? String(m.name).split(' ')[0] : '') || '';
+  }
+
+  /* Notes API consumed by the home day-surface UI in index.html. */
+  // Create a note. audience is set here and is immutable afterward (no update path changes it).
+  window.LL.addNote = async function (text, audience, day, at) {
+    if (!notesRef) return false;
+    var u = auth.currentUser; if (!u) return false;
+    text = String(text == null ? '' : text).trim(); if (!text) return false;
+    audience = (audience === 'circle' || audience == null) ? 'circle' : String(audience);
+    at = at || Date.now();
+    var note = {
+      createdBy: u.uid, createdByName: nameForUid(u.uid),
+      at: at, day: day || dayKeyOf(at), text: text, audience: audience, pinned: false
+    };
+    try {
+      var ref = await notesRef.add(note);
+      note.id = ref.id; mergeNote(note); // optimistic; the listener will reconcile
+      return true;
+    } catch (e) { console.warn('addNote', e); return false; }
+  };
+  // Delete a note (author-only, also enforced by rules).
+  window.LL.deleteNote = async function (id) {
+    if (!notesRef || !id) return false;
+    var u = auth.currentUser; if (!u) return false;
+    var n = (state.notes || []).find(function (x) { return String(x.id) === String(id); });
+    if (n && n.createdBy && n.createdBy !== u.uid) return false; // not mine
+    try { await notesRef.doc(String(id)).delete(); dropNote(id); return true; }
+    catch (e) { console.warn('deleteNote', e); return false; }
+  };
+  // Pin/unpin: at most ONE pinned note per circle. Setting a pin clears any other the author can edit.
+  // (We only ever clear pins on notes the caller authored, so the rules permit the write.)
+  window.LL.setNotePinned = async function (id, pinned) {
+    if (!notesRef || !id) return false;
+    var u = auth.currentUser; if (!u) return false;
+    var target = (state.notes || []).find(function (x) { return String(x.id) === String(id); });
+    if (!target || target.createdBy !== u.uid) return false; // pin only your own (audience stays put)
+    try {
+      var writes = [];
+      if (pinned) {
+        (state.notes || []).forEach(function (n) {
+          if (n.pinned && n.createdBy === u.uid && String(n.id) !== String(id)) {
+            n.pinned = false; writes.push(notesRef.doc(String(n.id)).update({ pinned: false }));
+          }
+        });
+      }
+      target.pinned = !!pinned;
+      writes.push(notesRef.doc(String(id)).update({ pinned: !!pinned }));
+      await Promise.all(writes);
+      return true;
+    } catch (e) { console.warn('setNotePinned', e); return false; }
+  };
 
   /* ---------- push local changes to the cloud (override persist) ---------- */
   function scheduledPush() {

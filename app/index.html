@@ -716,6 +716,66 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .moment-cap .mc-note{font-size:13px;color:var(--ink-soft);font-weight:600;margin-top:4px;line-height:1.45;}
 .moment-cap .mc-row{display:flex;align-items:center;justify-content:space-between;margin-top:6px;}
 .moment-cap .mc-date{font-size:11.5px;color:var(--ink-faint);font-weight:700;}
+/* ---- Home day surface (Item 5): warm paper, polaroids, a handwritten accent ---- */
+.day-surface{
+  background:
+    radial-gradient(120% 80% at 0% 0%, rgba(255,255,255,.5), transparent 60%),
+    linear-gradient(180deg, var(--surface), var(--surface-2));
+  border:1px solid var(--line);border-radius:var(--radius);
+  padding:14px 16px 16px;margin-bottom:18px;
+  box-shadow:0 8px 22px var(--shadow), inset 0 1px 0 rgba(255,255,255,.4);
+}
+.ds-nav{display:flex;align-items:center;justify-content:space-between;margin:0 0 12px;}
+.ds-day{font-family:var(--font-display);font-size:17px;font-weight:600;color:var(--ink);}
+.ds-arrow{border:none;background:var(--surface);color:var(--ink-soft);width:32px;height:32px;border-radius:11px;font-size:20px;line-height:1;cursor:pointer;box-shadow:0 2px 7px var(--shadow);font-family:var(--font-body);transition:transform .15s;}
+.ds-arrow:active{transform:scale(.9);}
+.ds-arrow.off{opacity:.3;cursor:default;box-shadow:none;}
+.ds-lane{margin-top:12px;}
+.ds-lane:first-of-type{margin-top:0;}
+.ds-lh{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.ds-lt{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint);}
+.ds-add{display:inline-flex;align-items:center;gap:5px;border:none;background:var(--note-soft);color:var(--note);font-family:var(--font-body);font-weight:800;font-size:12.5px;padding:7px 11px;border-radius:11px;cursor:pointer;transition:transform .15s;}
+.ds-add:active{transform:scale(.94);}
+.ds-add svg{width:14px;height:14px;}
+.ds-add.pulse{animation:dsPulse 2.2s ease-out infinite;}
+@keyframes dsPulse{0%{box-shadow:0 0 0 0 rgba(154,140,110,.45);}70%{box-shadow:0 0 0 10px rgba(154,140,110,0);}100%{box-shadow:0 0 0 0 rgba(154,140,110,0);}}
+.note-card{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:8px;cursor:pointer;box-shadow:0 3px 9px var(--shadow);transition:transform .15s;}
+.note-card:active{transform:scale(.99);}
+.note-card.priv{border-left:3px solid var(--preg);}
+.note-card.pinned{background:linear-gradient(180deg,var(--note-soft),var(--surface));}
+.note-card .nt-pin{position:absolute;top:9px;right:11px;font-size:14px;line-height:1;}
+.note-card .nt-text{font-family:var(--font-display);font-size:15.5px;font-weight:500;color:var(--ink);line-height:1.45;white-space:pre-wrap;word-break:break-word;}
+.note-card .nt-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:7px;}
+.note-card .nt-by{font-family:'Caveat',cursive;font-size:16px;font-weight:700;color:var(--ink-soft);}
+.note-card .nt-aud{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-faint);}
+.note-empty{text-align:center;padding:16px 10px 8px;}
+.note-empty .qod{font-family:var(--font-display);font-size:17px;font-weight:500;font-style:italic;color:var(--ink);line-height:1.5;max-width:320px;margin:0 auto;}
+.note-empty .qod-by{font-family:'Caveat',cursive;font-size:16px;font-weight:700;color:var(--ink-faint);margin-top:8px;}
+.ds-recap{cursor:pointer;}
+.ds-more{display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:800;color:var(--ink-faint);}
+.ds-more svg{width:13px;height:13px;}
+.ds-recap-s{font-size:13.5px;font-weight:600;color:var(--ink-soft);line-height:1.45;}
+.ds-polas{display:flex;gap:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 2px 6px;}
+.ds-polas::-webkit-scrollbar{display:none;}
+.pola{flex:0 0 auto;background:#fff;padding:6px 6px 16px;border-radius:4px;box-shadow:0 4px 11px var(--shadow);transform:rotate(-1.5deg);cursor:pointer;transition:transform .15s;}
+.pola:nth-child(even){transform:rotate(1.5deg);}
+.pola:active{transform:scale(.96) rotate(0deg);}
+.pola-img{width:76px;height:76px;border-radius:2px;background-size:cover;background-position:center;background-color:#e9e2d6;}
+/* note compose: audience picker + pin toggle */
+.aud-row{display:flex;flex-wrap:wrap;gap:8px;}
+.aud{display:inline-flex;align-items:center;gap:6px;border:2px solid var(--line);background:var(--surface-2);color:var(--ink);font-family:var(--font-body);font-weight:800;font-size:13px;padding:9px 13px;border-radius:13px;cursor:pointer;transition:transform .15s,border-color .15s;}
+.aud:active{transform:scale(.95);}
+.aud .aud-i{font-size:14px;line-height:1;}
+.aud.on{border-color:var(--accent,var(--note));background:var(--accent-soft,var(--note-soft));color:var(--accent,var(--note));}
+.aud-sub{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:8px;line-height:1.4;}
+.ds-pinrow{display:flex;align-items:center;gap:10px;margin:4px 0 16px;cursor:pointer;}
+.ds-pinrow input{position:absolute;opacity:0;width:0;height:0;}
+.ds-pinsw{width:44px;height:25px;border-radius:999px;background:#D9CDBB;position:relative;transition:.2s;flex:0 0 auto;}
+.ds-pinsw::after{content:"";position:absolute;top:2px;left:2px;width:21px;height:21px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2);}
+.ds-pinrow input:checked + .ds-pinsw{background:var(--note);}
+.ds-pinrow input:checked + .ds-pinsw::after{transform:translateX(19px);}
+.ds-pinlbl{font-size:13.5px;font-weight:700;color:var(--ink);}
+.note-read{font-family:var(--font-display);font-size:17px;font-weight:500;color:var(--ink);line-height:1.55;white-space:pre-wrap;word-break:break-word;margin-bottom:18px;}
 /* Wide screens: present the app as a framed den, not a bare strip (DESIGN.md C-4) */
 @media(min-width:900px){
   body{padding:28px 0;}
@@ -798,7 +858,7 @@ const Store = {
 };
 
 /* ---------- State ---------- */
-let state = { babies:[], activeBabyId:null, events:[], settings:{ unit:'ml', wUnit:'kg', hUnit:'cm', tempUnit:'C', theme:'light', seen:{} }, timers:{}, milestones:[], meds:[], photos:[], vaccines:{}, illnesses:[], pregnancy:null, den:null, consents:[], guardians:null };
+let state = { babies:[], activeBabyId:null, events:[], settings:{ unit:'ml', wUnit:'kg', hUnit:'cm', tempUnit:'C', theme:'light', seen:{} }, timers:{}, milestones:[], meds:[], photos:[], vaccines:{}, illnesses:[], pregnancy:null, den:null, consents:[], guardians:null, notes:[] };
 let view = 'home';
 let tickInterval = null;
 const CUBBY_VERSION = '0.9.0';
@@ -1206,32 +1266,251 @@ function copyDayRecap(){
   else if(navigator.clipboard){ navigator.clipboard.writeText(t).then(done).catch(()=>{}); }
   else done();
 }
-function handoffCard(){
-  const h=state.handoff;
-  if(h&&h.text){
-    const by=h.by?loggerName(h.by):'';
-    return `<div class="handoff-card" onclick="openHandoff()"><div class="ho-h">🤝 Handoff note</div><div class="ho-s">${escapeHtml(h.text)}</div>${by?`<div class="ho-by">— ${escapeHtml(by)}</div>`:''}</div>`;
+/* ============================================================
+   HOME DAY SURFACE (Item 5): a per-day family card with three lanes.
+   - NOTES: authored, per-recipient privacy (private by Firestore rules, never the app blob).
+   - RECAP: the day's logged activity, who-did-what, circle-wide (reuses dayRecap logic).
+   - PHOTOS: the day's photos as small polaroids, circle-wide.
+   Default day = today; arrows or swipe step to earlier days. Recap & photos are identical for
+   everyone; only the notes lane differs per viewer.
+   ============================================================ */
+let surfaceDayTs = now();              // the day currently shown on the surface
+function surfaceReset(){ surfaceDayTs = now(); }
+function surfaceShift(deltaDays){
+  const next = surfaceDayTs + deltaDays*86400000;
+  if(next - now() > 86400000) return;  // never step into the future
+  surfaceDayTs = next; render(); $('#scroll')&&$('#scroll').scrollTo(0,0);
+}
+window.surfaceShift = surfaceShift;
+function surfaceIsToday(){ return dayKey(surfaceDayTs)===dayKey(now()); }
+
+/* ---- deterministic quote-of-the-day (same line for the whole circle that day) ----
+   Warm, no-guilt, non-medical. Picked by a stable hash of the date so it does not flicker. */
+const DAY_QUOTES = [
+  'You are exactly the parent your baby needs today.',
+  'Slow mornings count too.',
+  'Whatever today looked like, you showed up. That is the whole job.',
+  'A fed, held, loved baby is a thriving baby.',
+  'There is no behind. There is only your own pace.',
+  'The laundry can wait. This little face cannot.',
+  'Tiny moments are the ones they will feel for a lifetime.',
+  'You are allowed to find it hard and love it completely.',
+  'Rest when you can. You are carrying a lot.',
+  'Today you grew a person a little more. Quietly. Beautifully.',
+  'Good enough, done with love, is more than enough.',
+  'Every cuddle is building something you cannot see yet.',
+  'Some days you hold them. Some days they hold you together.',
+  'You know your baby better than any chart ever will.',
+  'Take the photo. Take the breath. Then put the phone down.',
+  'The hard parts are temporary. The bond is not.',
+  'A calm parent is a gift, and you can give it to yourself first.',
+  'Messy house, happy baby. You chose the right thing.',
+  'It is okay to ask for help. That is strength, not lack.',
+  'Look how far you have both come.',
+  'They will not remember the mess. They will remember the warmth.',
+  'One feed, one nap, one nappy at a time. That is the day.',
+  'Your love is the safest place they will ever know.',
+  'You are doing the unseen work that makes everything possible.',
+  'Be as gentle with yourself as you are with them.',
+  'A note left here is a small act of teamwork. Thank you for caring.',
+  'The days are long, but you are doing them well.',
+  'Whoever is with baby today: you matter to this little life.',
+  'Small hands, big love. Soak it in.',
+  'Today does not have to be perfect to be precious.'
+];
+function dayHash(ts){ const k=dayKey(ts); let h=0; for(let i=0;i<k.length;i++){ h=(h*31 + k.charCodeAt(i))>>>0; } return h; }
+function quoteOfDay(ts){ return DAY_QUOTES[dayHash(ts)%DAY_QUOTES.length]; }
+
+/* ---- notes for the selected day, filtered to what THIS viewer may see ----
+   state.notes only ever holds notes the rules let us read (own + addressed-to-me + circle),
+   but we re-check audience here so a private note can never render for the wrong member. */
+function visibleNotes(){
+  const me=myUid();
+  return (state.notes||[]).filter(n=>n && (n.audience==='circle' || n.audience===me || n.createdBy===me));
+}
+function notesForDay(ts){
+  const k=dayKey(ts);
+  return visibleNotes().filter(n=>n.day===k).sort((a,b)=>(b.at||0)-(a.at||0));
+}
+function pinnedNote(){
+  // At most one pinned note; it always shows on today regardless of the selected day.
+  const me=myUid();
+  return visibleNotes().filter(n=>n.pinned).sort((a,b)=>(b.at||0)-(a.at||0))[0]||null;
+}
+function noteAudienceLabel(n){
+  if(!n) return '';
+  if(n.audience==='circle') return 'Everyone';
+  const me=myUid();
+  if(n.audience===me) return n.createdBy===me ? 'Private note' : 'Private to you';
+  // author viewing a note they sent privately to one member
+  return 'Private to '+(loggerName(n.audience)||'one person');
+}
+function noteCard(n){
+  const me=myUid();
+  const mine=n.createdBy===me;
+  const by=n.createdByName || loggerName(n.createdBy) || 'Someone';
+  const priv=n.audience!=='circle';
+  const pin=n.pinned?'<span class="nt-pin" title="Pinned">📌</span>':'';
+  return `<div class="note-card${priv?' priv':''}${n.pinned?' pinned':''}" onclick="openNoteView('${n.id}')">
+    ${pin}
+    <div class="nt-text">${escapeHtml(n.text)}</div>
+    <div class="nt-meta"><span class="nt-by">${escapeHtml(by)}${mine?' (you)':''}</span><span class="nt-aud">${escapeHtml(noteAudienceLabel(n))}</span></div>
+  </div>`;
+}
+
+/* ---- the day surface card (replaces the old single shared handoff card) ---- */
+function daySurface(){
+  const ts=surfaceDayTs;
+  const isToday=surfaceIsToday();
+  const dayNotes=notesForDay(ts);
+  const pin=pinnedNote();
+  // The pinned note always shows on today; avoid showing it twice if it also belongs to this day.
+  const showPin = pin && isToday && !dayNotes.some(n=>n.id===pin.id);
+  const photos=(state.photos||[]).filter(p=>p.babyId===state.activeBabyId && p.photoId && dayKey(p.createdAt)===dayKey(ts)).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+  const recap=daySurfaceRecap(ts);
+
+  const notesEmpty = !dayNotes.length && !showPin;
+  // First-time soft pulse on the compose button (until the member has left a note).
+  const pulse = (!state.settings.seen || !state.settings.seen['tip_leftnote']) ? ' pulse' : '';
+
+  let notesLane='';
+  if(notesEmpty){
+    notesLane = `<div class="note-empty">
+      <div class="qod">${escapeHtml(quoteOfDay(ts))}</div>
+      <div class="qod-by">Cubby · ${escapeHtml(dayLabel(ts))}</div>
+    </div>`;
+  } else {
+    notesLane = (showPin?noteCard(pin):'') + dayNotes.map(noteCard).join('');
   }
-  return `<div class="handoff-card empty" onclick="openHandoff()"><div class="ho-h">🤝 Add a handoff note</div><div class="ho-s">A quick update for whoever's with baby today.</div></div>`;
+
+  const nav = `<div class="ds-nav">
+    <button class="ds-arrow" aria-label="Previous day" onclick="surfaceShift(-1)">‹</button>
+    <div class="ds-day">${escapeHtml(dayLabel(ts))}</div>
+    <button class="ds-arrow${isToday?' off':''}" aria-label="Next day" ${isToday?'disabled':''} onclick="surfaceShift(1)">›</button>
+  </div>`;
+
+  return `<div class="day-surface" id="daySurface">
+    ${nav}
+    <div class="ds-lane ds-notes">
+      <div class="ds-lh"><span class="ds-lt">Notes</span><button class="ds-add${pulse}" onclick="openNoteCompose()">${I.plus}<span>Leave a note</span></button></div>
+      ${notesLane}
+    </div>
+    ${recap?`<div class="ds-lane ds-recap" onclick="openDayLog(${ts})">
+      <div class="ds-lh"><span class="ds-lt">The day</span><span class="ds-more">Full log ${I.chev}</span></div>
+      <div class="ds-recap-s">${escapeHtml(recap)}</div>
+    </div>`:''}
+    ${photos.length?`<div class="ds-lane ds-photos">
+      <div class="ds-lh"><span class="ds-lt">Photos</span></div>
+      <div class="ds-polas">${photos.map(p=>`<div class="pola" onclick="viewPhoto('${p.id}')"><div class="pola-img" style="background-image:url('${photoSrc(p.photoId)}')"></div></div>`).join('')}</div>
+    </div>`:''}
+  </div>`;
 }
-function openHandoff(){
-  const h=state.handoff||{};
-  openSheet(`<h2>Handoff note 🤝</h2><div class="sub">A shared note for whoever's caring for baby (parent, nanny, grandparent).</div>
-    <div class="field"><label>Note</label><textarea id="hoText" placeholder="e.g. Slight cold today, extra cuddles. Last fed 8am.">${escapeHtml(h.text||'')}</textarea></div>
-    <button class="btn-primary" onclick="saveHandoff()">Save note</button>
-    ${h.text?`<button class="btn-ghost btn-danger" onclick="clearHandoff()">Clear note</button>`:''}`,'feed');
+
+/* Circle-wide recap for any day (reuses the daily-recap fields; one calm sentence + who). */
+function daySurfaceRecap(ts){
+  const k=dayKey(ts);
+  const evs=babyEvents().filter(e=>dayKey(e.time)===k);
+  if(!evs.length) return '';
+  const feeds=evs.filter(e=>e.type==='feed').length;
+  const napMs=evs.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+(e.end-e.time),0);
+  const dia=evs.filter(e=>e.type==='diaper').length;
+  const parts=[];
+  if(feeds) parts.push(feeds+' feed'+(feeds>1?'s':''));
+  if(napMs>=360000) parts.push((napMs/3600000).toFixed(napMs/3600000>=10?0:1)+'h sleep');
+  if(dia) parts.push(dia+' nappy'+(dia>1?' changes':' change'));
+  const summary=parts.join(' · ')||'activity logged';
+  const names=[...new Set(evs.map(e=>loggerName(e.authorId)).filter(Boolean))];
+  return summary+(names.length?(' · logged by '+names.join(', ')):'');
 }
-function saveHandoff(){
-  const t=($('#hoText')?$('#hoText').value:'').trim();
-  const uid=window.LL&&window.LL.auth&&window.LL.auth.currentUser&&window.LL.auth.currentUser.uid;
-  state.handoff = t ? {text:t, by:uid||null, at:now()} : null;
-  persist(); closeSheet(); render(); toast(t?'Handoff note saved':'Note cleared');
+function openDayLog(ts){
+  // Tap-through to the full log. Today opens the daily recap sheet (copy/share); an earlier day
+  // jumps to the Log tab timeline, which shows every entry grouped by day.
+  if(dayKey(ts)===dayKey(now())){ openDayRecap(); }
+  else { view='log'; logTab='log'; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
 }
-function clearHandoff(){ state.handoff=null; persist(); closeSheet(); render(); toast('Note cleared'); }
+
+/* ---- compose a note (audience chosen here, LOCKED after create) ---- */
+let noteDraft={ audience:'circle' };
+function openNoteCompose(){
+  noteDraft={ audience:'circle' };
+  renderNoteCompose();
+}
+function setNoteAudience(a){ noteDraft.audience=a; renderNoteCompose(); }
+function renderNoteCompose(){
+  const me=myUid();
+  const info=(window.LL&&window.LL.memberInfo)||{};
+  const others=Object.keys(info).filter(u=>u!==me);
+  // Audience options: Everyone (circle) + one chip per other member (private to that person).
+  const chips=`<button class="aud ${noteDraft.audience==='circle'?'on':''}" onclick="setNoteAudience('circle')"><span class="aud-i">👨‍👩‍👧</span>Everyone</button>`
+    + others.map(u=>{
+        const nm=loggerName(u)||((info[u]&&info[u].name)?info[u].name.split(' ')[0]:'')||'Member';
+        return `<button class="aud ${noteDraft.audience===u?'on':''}" onclick="setNoteAudience('${u}')"><span class="aud-i">🔒</span>${escapeHtml(nm)}</button>`;
+      }).join('');
+  const audSub = noteDraft.audience==='circle'
+    ? 'Everyone in your circle will see this.'
+    : 'Only '+escapeHtml(loggerName(noteDraft.audience)||((info[noteDraft.audience]&&info[noteDraft.audience].name)?info[noteDraft.audience].name.split(' ')[0]:'')||'this person')+' will see this. It stays private.';
+  openSheet(`<h2>Leave a note ✍️</h2><div class="sub">A warm word for whoever is with baby ${surfaceIsToday()?'today':'on '+escapeHtml(dayLabel(surfaceDayTs))}.</div>
+    <div class="field"><label>Note</label><textarea id="ntText" placeholder="e.g. Slight cold today, extra cuddles. Last fed 8am."></textarea></div>
+    <div class="field"><label>Who can see it</label><div class="aud-row">${chips}</div><div class="aud-sub">${audSub}</div></div>
+    <label class="ds-pinrow"><input type="checkbox" id="ntPin"><span class="ds-pinsw"></span><span class="ds-pinlbl">Pin to today (always shows up top)</span></label>
+    <button class="btn-primary" onclick="saveNote()">Leave note</button>`,'note');
+}
+async function saveNote(){
+  const t=($('#ntText')?$('#ntText').value:'').trim();
+  if(!t){ toast('Type a little something first'); return; }
+  const pin = !!($('#ntPin')&&$('#ntPin').checked);
+  const aud = noteDraft.audience||'circle';
+  // Audience is bound at create time and never changes afterward.
+  const ts = surfaceIsToday() ? now() : surfaceDayTs;
+  const ok = window.LL&&window.LL.addNote ? await window.LL.addNote(t, aud, dayKey(ts), ts) : false;
+  if(!ok){ toast('Could not save the note'); return; }
+  if(pin){
+    // find the note we just created (most recent by us, this day) and pin it
+    const me=myUid();
+    const mine=(state.notes||[]).filter(n=>n.createdBy===me&&n.day===dayKey(ts)).sort((a,b)=>(b.at||0)-(a.at||0))[0];
+    if(mine&&window.LL.setNotePinned) await window.LL.setNotePinned(mine.id, true);
+  }
+  if(!state.settings.seen)state.settings.seen={}; state.settings.seen['tip_leftnote']=true; persist();
+  closeSheet(); render(); toast('Note left 🐻');
+}
+function openNoteView(id){
+  const n=(state.notes||[]).find(x=>x.id===id); if(!n)return;
+  const me=myUid();
+  const mine=n.createdBy===me;
+  const by=n.createdByName||loggerName(n.createdBy)||'Someone';
+  const when=new Date(n.at||now()).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})+' · '+fmtClock(n.at||now());
+  openSheet(`<h2>Note</h2><div class="sub">${escapeHtml(by)}${mine?' (you)':''} · ${escapeHtml(when)} · ${escapeHtml(noteAudienceLabel(n))}</div>
+    <div class="note-read">${escapeHtml(n.text)}</div>
+    ${mine?`<button class="btn-ghost" onclick="toggleNotePin('${n.id}')">${n.pinned?'Unpin from top':'Pin to top'}</button>
+    <button class="btn-ghost btn-danger" onclick="deleteNote('${n.id}')">${I.trash} Delete note</button>`:''}`,'note');
+}
+async function toggleNotePin(id){
+  const n=(state.notes||[]).find(x=>x.id===id); if(!n)return;
+  if(window.LL.setNotePinned) await window.LL.setNotePinned(id, !n.pinned);
+  closeSheet(); render(); toast(n.pinned?'Unpinned':'Pinned to top');
+}
+async function deleteNote(id){
+  if(window.LL.deleteNote){ const ok=await window.LL.deleteNote(id); if(!ok){ toast('Could not delete'); return; } }
+  closeSheet(); render(); toast('Note deleted');
+}
+/* swipe between days on the surface (left = next day, right = previous day) */
+(function(){
+  var x0=null,y0=null,active=false;
+  document.addEventListener('touchstart',function(e){
+    var ds=e.target.closest&&e.target.closest('#daySurface'); if(!ds)return;
+    if(e.target.closest('button,a,textarea,input,.pola,.note-card')) { active=false; return; }
+    var t=e.touches[0]; x0=t.clientX; y0=t.clientY; active=true;
+  },{passive:true});
+  document.addEventListener('touchend',function(e){
+    if(!active||x0==null)return; active=false;
+    var t=e.changedTouches[0], dx=t.clientX-x0, dy=t.clientY-y0;
+    if(Math.abs(dx)>56 && Math.abs(dx)>Math.abs(dy)*1.6){ surfaceShift(dx<0?1:-1); }
+    x0=y0=null;
+  },{passive:true});
+})();
 function renderHome(){
   const evs = babyEvents();
   const gsCard = renderGetStarted();
-  const shared = !!(window.LL&&window.LL.members&&Object.keys(window.LL.members).length>1);
   const away = awayRecap();
   const lastFeed = evs.find(e=>e.type==='feed');
   const lastSleep = evs.find(e=>e.type==='sleep' && e.end);
@@ -1309,7 +1588,7 @@ function renderHome(){
     ${away ? '' : `<div class="greeting-sub">${homeNudgeLine()}</div>`}
     ${away ? '' : tipsTicker()}
     ${away}
-    ${(shared||(state.handoff&&state.handoff.text))?handoffCard():''}
+    ${daySurface()}
     ${gsCard ? '' : coachMark('home','Welcome to Cubby 👋','Your hub. A photo slideshow up top, one-tap logging below. The tabs hold your Log, Album and Health.')}
     ${consentBanners()}
     ${renderHero()}
@@ -1616,7 +1895,7 @@ function startTick(){
 /* ============================================================
    NAV / THEME
    ============================================================ */
-function go(v){ view=v; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
+function go(v){ if(v==='home') surfaceReset(); view=v; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
 function toggleTheme(){ state.settings.theme = state.settings.theme==='night'?'light':'night'; persist(); render(); }
 function setTheme(t){ state.settings.theme=t; persist(); render(); }
 
