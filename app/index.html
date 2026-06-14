@@ -286,6 +286,8 @@ body{
 .grab:active{cursor:grabbing;}
 .sheet-x{position:absolute;top:12px;right:14px;width:30px;height:30px;border:none;background:none;color:var(--ink-faint);font-size:24px;line-height:1;cursor:pointer;opacity:.5;z-index:2;font-family:inherit;padding:0;}
 .sheet-x:hover{opacity:1;}
+.sheet-back{position:absolute;top:10px;left:12px;width:32px;height:32px;border:none;background:none;color:var(--ink-faint);font-size:28px;line-height:1;cursor:pointer;opacity:.6;z-index:2;font-family:inherit;padding:0;}
+.sheet-back:hover{opacity:1;}
 .sheet h2{font-family:var(--font-display);font-size:22px;font-weight:600;margin-bottom:4px;}
 .sheet .sub{font-size:13px;color:var(--ink-soft);font-weight:600;margin-bottom:20px;}
 .opt-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:14px;}
@@ -1595,14 +1597,20 @@ function setTheme(t){ state.settings.theme=t; persist(); render(); }
 /* ============================================================
    SHEETS
    ============================================================ */
+var _sheetStack=[];
+function _sheetAccent(s,accent){ s.style.setProperty('--accent', accent?`var(--${accent})`:'var(--feed)'); s.style.setProperty('--accent-soft', accent?`var(--${accent}-soft)`:'var(--feed-soft)'); }
 function openSheet(html,accent){
   const s=$('#sheet');
-  s.style.setProperty('--accent', accent?`var(--${accent})`:'var(--feed)');
-  s.style.setProperty('--accent-soft', accent?`var(--${accent}-soft)`:'var(--feed-soft)');
-  s.innerHTML='<div class="grab"></div><button class="sheet-x" type="button" onclick="closeSheet()" aria-label="Close">×</button>'+html;
+  // Step navigation: if a sheet is already open, remember it so this one can go back to it.
+  if(s.classList.contains('show')) _sheetStack.push({html:s.innerHTML, accent:s.dataset.accent||''});
+  s.dataset.accent=accent||'';
+  _sheetAccent(s,accent);
+  var back=_sheetStack.length?'<button class="sheet-back" type="button" onclick="sheetBack()" aria-label="Back">‹</button>':'';
+  s.innerHTML='<div class="grab"></div>'+back+'<button class="sheet-x" type="button" onclick="closeSheet()" aria-label="Close">×</button>'+html;
   $('#scrim').classList.add('show'); s.classList.add('show');
 }
-function closeSheet(){ var s=document.getElementById('sheet'); if(s){ s.style.transition=''; s.style.transform=''; } var sc=document.getElementById('scrim'); if(sc)sc.classList.remove('show'); if(s)s.classList.remove('show'); }
+function sheetBack(){ var prev=_sheetStack.pop(); var s=$('#sheet'); if(!prev){ closeSheet(); return; } s.dataset.accent=prev.accent; _sheetAccent(s,prev.accent); s.innerHTML=prev.html; }
+function closeSheet(){ _sheetStack=[]; var s=document.getElementById('sheet'); if(s){ s.style.transition=''; s.style.transform=''; } var sc=document.getElementById('scrim'); if(sc)sc.classList.remove('show'); if(s)s.classList.remove('show'); }
 /* Drag-to-dismiss: grab the handle (or the top strip of the sheet) and pull down to close. */
 (function(){
   var dragging=false, startY=0, curY=0;
@@ -2057,8 +2065,8 @@ function openAddEntry(){
   var hasPreg=!!(state.pregnancy && !state.pregnancy.bornBabyId);
   openSheet(`<h2>Add to Cubby</h2><div class="sub">Wherever you are on the journey.</div>
     <div class="prof-cards">
-      <div class="prof-card" onclick="closeSheet();openAddBaby()"><span class="lead" style="background:var(--feed-soft);color:var(--feed);font-size:20px">🐻</span><div class="cflex"><div class="a">Our baby is here</div><div class="b">Track feeds, sleep, growth, vaccines and more</div></div><span class="chev">${I.chev}</span></div>
-      <div class="prof-card" onclick="${hasPreg?'viewingPreg=true;closeSheet();render()':'viewingPreg=true;closeSheet();openStartPregnancy()'}"><span class="lead" style="background:var(--preg-soft);color:var(--preg);font-size:20px">🌸</span><div class="cflex"><div class="a">${hasPreg?'Open your pregnancy':"We're expecting"}</div><div class="b">${hasPreg?'Resume where you left off':'Trying, newly pregnant or counting weeks'}</div></div><span class="chev">${I.chev}</span></div>
+      <div class="prof-card" onclick="openAddBaby()"><span class="lead" style="background:var(--feed-soft);color:var(--feed);font-size:20px">🐻</span><div class="cflex"><div class="a">Our baby is here</div><div class="b">Track feeds, sleep, growth, vaccines and more</div></div><span class="chev">${I.chev}</span></div>
+      <div class="prof-card" onclick="${hasPreg?'viewingPreg=true;closeSheet();render()':'viewingPreg=true;openStartPregnancy()'}"><span class="lead" style="background:var(--preg-soft);color:var(--preg);font-size:20px">🌸</span><div class="cflex"><div class="a">${hasPreg?'Open your pregnancy':"We're expecting"}</div><div class="b">${hasPreg?'Resume where you left off':'Trying, newly pregnant or counting weeks'}</div></div><span class="chev">${I.chev}</span></div>
     </div>`,'diaper');
 }
 function openAddBaby(){
