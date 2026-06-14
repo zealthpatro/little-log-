@@ -2663,7 +2663,11 @@ function executeScopedDelete(scope){
     state.photos=[];
     state.babies.forEach(b=>{ delete b.avatarPhotoId; });
   }
-  if(scope.pregnancy) state.pregnancy=null;
+  if(scope.pregnancy){
+    // Also remove the owner-owned journey + maternal health docs (Item 7); they live outside the blob.
+    try{ if(window.LL&&window.LL.pregClear) window.LL.pregClear(); else if(window.LL&&window.LL.matClear) window.LL.matClear(); }catch(e){}
+    state.pregnancy=null;
+  }
   if(scope.den) state.den=null;
 }
 function openConsentReview(id){
@@ -2955,7 +2959,8 @@ function savePlanning(){
     birthPlan:'', bag:[], moments:[],
     conditions:{}, glucose:[], urine:[], supplements:[], supplementLog:[], nausea:[],
     glucoseUnit:'mmol', bornBabyId:null, createdAt:now() };
-  persist(); closeSheet(); render(); toast('Rooting for you 🌱');
+  persist();
+  startPregnancyAudit(function(){ closeSheet(); render(); toast('Rooting for you 🌱'); });
 }
 function fertileEstimate(){
   const p=state.pregnancy; if(!p||!p.lmp) return null;
@@ -3111,7 +3116,8 @@ function savePregnancy(){
     glucoseUnit:(cc==='us'||cc==='uae')?'mgdl':'mmol',
     bornBabyId:null, createdAt:now() };
   try{ localStorage.setItem('cubby-country', VAX_SCHEDULES[cc]?cc:detectCountry()); }catch(e){}
-  pregView='week'; persist(); closeSheet(); render(); toast('Your pregnancy is set up 🤍');
+  pregView='week'; persist();
+  startPregnancyAudit(function(){ closeSheet(); render(); toast('Your pregnancy is set up 🤍'); });
 }
 
 /* ---- shell (topbar + nav) ---- */
@@ -3423,7 +3429,10 @@ function renderPregCare(){
     ${careBlock}
     ${seeHealth?pregHealthSection():''}
     ${!amOwner&&!seeCare&&!seeHealth?'<div class="csub" style="margin-top:6px">These health details are private to her. She can choose to share them with you.</div>':''}
-    ${amOwner?`<div class="set-item" onclick="openMaternalPrivacy()" style="cursor:pointer;margin-top:16px">
+    ${amOwner?`<div class="set-item" onclick="openPregnancyVisibility()" style="cursor:pointer;margin-top:16px">
+      <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">🤍</div>
+      <div class="si-body"><div class="a">Your private pregnancy</div><div class="b">${(()=>{const n=pregJourneyShared().length;return n?('Shared with '+n+' '+(n===1?'person':'people')):'Private to you';})()} · choose who can see it</div></div><span class="chev">${I.chev}</span></div>
+    <div class="set-item" onclick="openMaternalPrivacy()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">🔒</div>
       <div class="si-body"><div class="a">Your private health</div><div class="b">Choose who in your circle can see each part</div></div><span class="chev">${I.chev}</span></div>`:''}
     <div class="sec-title" style="margin-top:18px">Pregnancy</div>
@@ -3451,6 +3460,13 @@ function removeCareTeam(id){ state.pregnancy.careTeam=(state.pregnancy.careTeam|
 /* ---- Maternal privacy: your health is yours, shared only by your consent (gate G1) ---- */
 function pregIsOwner(){ try{ return !window.LL.matIsOwner || window.LL.matIsOwner(); }catch(e){ return true; } }
 function pregCanSee(cat){ if(pregIsOwner()) return true; try{ return !!(window.LL&&window.LL.matCanRead&&window.LL.matCanRead(cat)); }catch(e){ return false; } }
+/* ---- Pregnancy journey privacy (Item 7): the bare fact of expecting is owner-owned and reaches
+   the circle only by explicit consent. The owner reviews the circle once when starting, and can
+   edit who can see it later. Members not on the list never even learn a pregnancy exists. ---- */
+function pregJourneyIsOwner(){ try{ return !window.LL.pregIsOwner || window.LL.pregIsOwner(); }catch(e){ return true; } }
+function pregJourneyShared(){ try{ return (window.LL&&window.LL.pregJourneyShared&&window.LL.pregJourneyShared())||[]; }catch(e){ return []; } }
+function circleMemberName(u){ const info=(window.LL&&window.LL.memberInfo)||{}; const m=info[u]; return (m&&(m.relationship||((m.name||'').split(' ')[0])||m.email))||'Member'; }
+function otherCircleMembers(){ const members=(window.LL&&window.LL.members)||{}; return Object.keys(members).filter(u=>u!==myUid()); }
 const MAT_SHARE_CATS=[
   {key:'health',     label:'Health logs',        desc:'Weight, blood pressure, glucose, urine, nausea, symptoms, supplements'},
   {key:'careteam',   label:'Care team',          desc:'Your midwife, doctor and clinic contacts'},
@@ -3490,6 +3506,82 @@ async function toggleMaternalShare(cat,uid){
   const next=cur.indexOf(uid)>=0?cur.filter(u=>u!==uid):cur.concat([uid]);
   const ok=await window.LL.matSetShared(cat,next);
   if(ok){ openMaternalPrivacy(); } else { toast('Could not update'); }
+}
+
+/* ---- Pregnancy journey: one-time stakeholder review when a pregnancy starts (Item 7) ----
+   The person starting reviews the circle once. Everyone is listed and pre-checked; she accepts or
+   removes anyone before it is shared. The accepted set becomes the journey's sharedWith. A solo
+   household (only the creator) auto-accepts and skips the step. Nothing is ever shared silently. */
+let pregAuditSel=null; // uids currently checked in the review
+async function startPregnancyAudit(onDone){
+  const others=otherCircleMembers();
+  if(!others.length){
+    // Solo: nobody else to review. The journey is owner-only by default; persist already wrote it.
+    if(typeof onDone==='function') onDone();
+    return;
+  }
+  pregAuditSel=others.slice(); // default is the whole circle, pre-checked
+  renderPregnancyAudit(onDone);
+}
+function renderPregnancyAudit(onDone){
+  const others=otherCircleMembers();
+  const rows=others.map(u=>{
+    const on=pregAuditSel.indexOf(u)>=0;
+    return `<button class="set-item" style="width:100%;text-align:left;cursor:pointer" onclick="togglePregAudit('${u}')">
+      <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:16px">${on?'✓':'·'}</div>
+      <div class="si-body"><div class="a">${escapeHtml(circleMemberName(u))}</div><div class="b">${on?'Will see your pregnancy':'Kept private from them'}</div></div>
+    </button>`;
+  }).join('');
+  window._pregAuditDone=onDone; // stash for the button handler
+  openSheet(`<h2>Who can see this? 🤍</h2>
+    <div class="sub">Being pregnant is yours to share. Choose who in your circle sees your pregnancy. Nobody is told until you say so, and you can change this anytime.</div>
+    ${rows}
+    <button class="btn-primary" style="background:var(--preg);margin-top:14px" onclick="confirmPregnancyAudit()">Share with the chosen ${pregAuditSel.length===1?'person':'people'}</button>
+    <button class="btn-ghost" onclick="confirmPregnancyAuditNone()">Keep it just to me for now</button>
+    <div class="preg-disclaim" style="margin-top:12px">Only you can change who sees your pregnancy. You can open this again from Care, under Your private pregnancy.</div>`,'preg');
+}
+function togglePregAudit(u){
+  if(!pregAuditSel) return;
+  pregAuditSel = pregAuditSel.indexOf(u)>=0 ? pregAuditSel.filter(x=>x!==u) : pregAuditSel.concat([u]);
+  renderPregnancyAudit(window._pregAuditDone);
+}
+async function confirmPregnancyAudit(){
+  const onDone=window._pregAuditDone;
+  const sel=(pregAuditSel||[]).slice();
+  if(window.LL&&window.LL.pregSetShared){ try{ await window.LL.pregSetShared(sel); }catch(e){} }
+  pregAuditSel=null; window._pregAuditDone=null;
+  if(typeof onDone==='function') onDone();
+}
+async function confirmPregnancyAuditNone(){
+  pregAuditSel=[]; await confirmPregnancyAudit();
+}
+
+/* Edit later: an owner can revisit who can see the journey at any time. */
+function openPregnancyVisibility(){
+  if(!pregJourneyIsOwner()){ toast('Only you can manage this'); return; }
+  const others=otherCircleMembers();
+  let body;
+  if(!others.length){
+    body=`<div class="csub">Your pregnancy is private to you. When you invite someone to your circle, you'll be able to choose whether they can see it. Nothing is shared until you say so.</div>`;
+  } else {
+    const shared=pregJourneyShared();
+    const rows=others.map(u=>{
+      const on=shared.indexOf(u)>=0;
+      return `<button class="set-item" style="width:100%;text-align:left;cursor:pointer" onclick="togglePregVisibility('${u}')">
+        <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:16px">${on?'✓':'·'}</div>
+        <div class="si-body"><div class="a">${escapeHtml(circleMemberName(u))}</div><div class="b">${on?'Can see your pregnancy':'Hidden from them'}</div></div>
+      </button>`;
+    }).join('');
+    body=`<div class="csub">Choose exactly who in your circle can see that you're expecting, and your whole journey. You can change this anytime.</div>${rows}`;
+  }
+  openSheet(`<h2>Your private pregnancy 🔒</h2>${body}<div class="preg-disclaim" style="margin-top:14px">Sharing is off by default. Only you can change who sees your pregnancy.</div>`,'preg');
+}
+async function togglePregVisibility(u){
+  if(!(window.LL&&window.LL.pregSetShared)) return;
+  const cur=pregJourneyShared();
+  const next=cur.indexOf(u)>=0?cur.filter(x=>x!==u):cur.concat([u]);
+  const ok=await window.LL.pregSetShared(next);
+  if(ok){ openPregnancyVisibility(); } else { toast('Could not update'); }
 }
 function openDangerSigns(){
   const ds=window.PREG&&PREG.dangerSigns;
@@ -3547,7 +3639,8 @@ function endPregnancy(keep){
   } else {
     (p.moments||[]).forEach(m=>{ try{ PhotoStore.del(m.photoId); }catch(e){} });
   }
-  try{ if(window.LL&&window.LL.matClear) window.LL.matClear(); }catch(e){}
+  // Remove the owner-owned journey doc and the maternal health docs (Item 7). pregClear covers both.
+  try{ if(window.LL&&window.LL.pregClear) window.LL.pregClear(); else if(window.LL&&window.LL.matClear) window.LL.matClear(); }catch(e){}
   state.pregnancy=null; persist(); closeSheet(); render();
   toast(keep?'Your memories are kept 🤍':'Done. Be gentle with yourself 🤍');
 }

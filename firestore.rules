@@ -103,6 +103,24 @@ service cloud.firestore {
                  || request.resource.data.sharedWith.size() == 0 );  // mood is never shareable
         allow delete: if request.auth != null && request.auth.uid == owner && request.auth.uid in pm();
       }
+
+      // Pregnancy JOURNEY (Privacy Max, Item 7). The bare fact of expecting is the most sensitive
+      // event a family has, so it is NOT in the circle-shared app blob. The owner OWNS her journey
+      // (stage, due date, weeks, appointments, kicks, contractions, birth plan, bag, moments, etc.).
+      // It is readable by the owner plus any uid she lists in sharedWith (the one-time stakeholder
+      // review at creation, editable later). Only the owner writes it. ownerUid is the subject's uid.
+      match /pregnancy/{owner} {
+        allow read: if request.auth != null && request.auth.uid in pm() && (
+            request.auth.uid == owner
+            || ( resource.data.sharedWith is list
+                 && request.auth.uid in resource.data.sharedWith )
+        );
+        // Only the owner writes her own journey, and only as a member of this household.
+        allow create, update: if request.auth != null && request.auth.uid == owner
+            && request.auth.uid in pm()
+            && request.resource.data.ownerUid == owner;
+        allow delete: if request.auth != null && request.auth.uid == owner && request.auth.uid in pm();
+      }
     }
   }
 }
