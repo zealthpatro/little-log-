@@ -97,6 +97,7 @@
   }
   function cuClose() { var m = document.getElementById('cuModalOv'); if (m) m.remove(); }
   window.cuCloseModal = cuClose;
+  window.cuModal = cuModal; // reused by the app's date picker so all pickers share one modal
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
