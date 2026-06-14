@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script>/* lifecycle stage (Expecting/Baby): set root class pre-paint, no flash */(function(){try{var K='cubby-stage',p=document.documentElement.getAttribute('data-page-stage'),u=new URLSearchParams(location.search).get('stage'),s=(u==='expecting'||u==='baby')?u:((p==='expecting'||p==='baby')?p:(localStorage.getItem(K)||'baby'));if(u||p)localStorage.setItem(K,s);document.documentElement.classList.add('stage-'+s);}catch(e){document.documentElement.classList.add('stage-baby');}})();</script>
 <title>Cubby Articles: Baby Care, Vaccines, Feeding &amp; Sleep</title>
-<meta name="description" content="Search 178+ clear, well-sourced guides for new parents and caregivers. Filter by topic and age: vaccines, feeding, sleep, milestones, health and more.">
+<meta name="description" content="Search 188+ clear, well-sourced guides for new parents and caregivers. Filter by topic and age: vaccines, feeding, sleep, milestones, health and more.">
 <link rel="canonical" href="https://little-cubby.com/articles/">
 <meta name="robots" content="index,follow">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Cubby">
 <meta property="og:title" content="Cubby Articles: Baby Care, Vaccines, Feeding &amp; Sleep">
-<meta property="og:description" content="178+ calm, well-sourced guides for new parents and caregivers. Search and filter by topic and age.">
+<meta property="og:description" content="188+ calm, well-sourced guides for new parents and caregivers. Search and filter by topic and age.">
 <meta property="og:url" content="https://little-cubby.com/articles/">
 <meta property="og:image" content="https://little-cubby.com/og/articles.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -23,7 +23,7 @@
 <link rel="stylesheet" href="/vax.css">
 <link rel="stylesheet" href="/site.css">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"CollectionPage","name":"Cubby Articles","url":"https://little-cubby.com/articles/","description":"Searchable library of 178+ guides for new parents and caregivers on vaccines, feeding, sleep, health and development.","publisher":{"@type":"Organization","name":"Cubby","url":"https://little-cubby.com/"},"potentialAction":{"@type":"SearchAction","target":"https://little-cubby.com/articles/#q={search_term_string}","query-input":"required name=search_term_string"}}
+{"@context":"https://schema.org","@type":"CollectionPage","name":"Cubby Articles","url":"https://little-cubby.com/articles/","description":"Searchable library of 188+ guides for new parents and caregivers on vaccines, feeding, sleep, health and development.","publisher":{"@type":"Organization","name":"Cubby","url":"https://little-cubby.com/"},"potentialAction":{"@type":"SearchAction","target":"https://little-cubby.com/articles/#q={search_term_string}","query-input":"required name=search_term_string"}}
 </script>
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://little-cubby.com/"},{"@type":"ListItem","position":2,"name":"Articles","item":"https://little-cubby.com/articles/"}]}
@@ -37,6 +37,7 @@
 .findr-bar button{font-family:var(--sans);font-size:13px;font-weight:800;color:var(--soft);background:transparent;border:1.5px solid var(--line);border-radius:999px;padding:0 16px;cursor:pointer;white-space:nowrap}
 .findr-bar button:hover{border-color:var(--pink);color:var(--pink-d)}
 .findr-row{display:flex;align-items:center;gap:10px;margin-top:6px}
+.findr-row[hidden]{display:none}
 .findr-row .lbl{font-family:var(--sans);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);min-width:46px;flex-shrink:0}
 .findr-chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch;scrollbar-width:none;flex:1}
 .findr-chips::-webkit-scrollbar{display:none}
@@ -78,7 +79,7 @@
 <main class="wrap" style="padding-top:24px">
   <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span class="sep" aria-hidden="true">›</span><span class="cur">Articles</span></nav>
   <h1>Articles &amp; guides</h1>
-  <p class="lede">Search 178+ calm, well-sourced guides for everyone caring for a little one. Filter by topic and age. Every guide summarises official advice (NHS, CDC, AAP) with links, and is informational, not medical advice.</p>
+  <p class="lede">Search 188+ calm, well-sourced guides for everyone caring for a little one. Filter by topic and age. Every guide summarises official advice (NHS, CDC, AAP) with links, and is informational, not medical advice.</p>
 
   <div class="exp-strip" style="margin:0 0 18px">
     <div class="es-emoji">🌸</div>
@@ -111,18 +112,24 @@
         <button class="chip" data-cat="compare" type="button">Comparisons</button>
       </div>
     </div>
-    <div class="findr-row">
+    <div class="findr-row" id="age-row">
       <span class="lbl">Age</span>
-      <div class="findr-chips" id="age-chips" role="tablist" aria-label="Filter by age">
+      <div class="findr-chips" id="age-chips" role="tablist" aria-label="Filter by baby age">
         <button class="chip on" data-age="all" type="button">All ages</button>
-        <button class="chip" data-age="pre-conception" type="button">Pre-conception</button>
-        <button class="chip" data-age="1st-trimester" type="button">1st trimester</button>
-        <button class="chip" data-age="2nd-trimester" type="button">2nd trimester</button>
-        <button class="chip" data-age="3rd-trimester" type="button">3rd trimester</button>
         <button class="chip" data-age="newborn" type="button">Newborn</button>
         <button class="chip" data-age="0-3" type="button">0-3 months</button>
         <button class="chip" data-age="3-6" type="button">3-6 months</button>
         <button class="chip" data-age="6-12" type="button">6-12 months</button>
+      </div>
+    </div>
+    <div class="findr-row" id="stage-row" hidden>
+      <span class="lbl">Stage</span>
+      <div class="findr-chips" id="stage-chips" role="tablist" aria-label="Filter by pregnancy stage">
+        <button class="chip on" data-age="all" type="button">All stages</button>
+        <button class="chip" data-age="pre-conception" type="button">Pre-conception</button>
+        <button class="chip" data-age="1st-trimester" type="button">1st trimester</button>
+        <button class="chip" data-age="2nd-trimester" type="button">2nd trimester</button>
+        <button class="chip" data-age="3rd-trimester" type="button">3rd trimester</button>
       </div>
     </div>
   </section>
@@ -265,19 +272,29 @@
     <a class="art-card" data-cat="health" data-age="all" href="/articles/heatwave-babies-australia/"><div class="k">Health · All ages</div><div class="t">Heatwave safety for babies</div><div class="d">What to do when temperatures exceed 35-40 degrees: keeping babies cool, signs of heat stress, when to call 000, and guidance from Australian state health authorities.</div></a>
     <a class="art-card" data-cat="pregnancy" data-age="3rd-trimester" href="/articles/hospital-bag-checklist/"><div class="k">Pregnancy · 3rd trimester</div><div class="t">Hospital bag checklist: what to pack for birth</div><div class="d">A complete NHS-informed checklist of what to pack for labour, birth and the days that follow.</div></a>
     <a class="art-card" data-cat="feeding" data-age="6-12" href="/articles/starting-solids-australia/"><div class="k">Feeding · 6-12 months</div><div class="t">Starting solids: NHMRC guidance</div><div class="d">When and how to introduce solid foods per the Australian NHMRC infant feeding guidelines: first foods, allergens, textures and what to avoid.</div></a>
+    <a class="art-card" data-cat="health" data-age="6-12" href="/articles/food-allergy-signs-babies/"><div class="k">Health · 6-12 months</div><div class="t">Food allergy signs in babies: how to recognise a reaction</div><div class="d">How to spot the signs of a food allergy in babies after introducing new foods, what reactions look like, and when to call 999. NHS and NICE-sourced.</div></a>
     <a class="art-card" data-cat="pregnancy" data-age="3rd-trimester" href="/articles/pain-relief-in-labour/"><div class="k">Pregnancy · 3rd trimester</div><div class="t">Pain relief in labour: the options explained</div><div class="d">A guide to every pain relief option available in NHS labour wards, from TENS to epidural, with honest pros and cons.</div></a>
     <a class="art-card" data-cat="feeding" data-age="newborn" href="/articles/breastfeeding-support-australia/"><div class="k">Feeding · Newborn</div><div class="t">Breastfeeding support: where to get help</div><div class="d">Free breastfeeding help in Australia: the Australian Breastfeeding Association helpline 1800 686 268, lactation consultants, Child and Family Health Nurses and online resources.</div></a>
     <a class="art-card" data-cat="pregnancy" data-age="3rd-trimester" href="/articles/group-b-strep/"><div class="k">Pregnancy · 3rd trimester</div><div class="t">Group B strep in pregnancy: testing, risks and decisions</div><div class="d">What group B strep is, how it is managed in UK pregnancies and what the options are for testing and treatment.</div></a>
     <a class="art-card" data-cat="feeding" data-age="6-12" href="/articles/congee-baby-first-food/"><div class="k">Feeding · 6-12 months</div><div class="t">Congee as a baby first food</div><div class="d">How traditional Chinese rice congee works as a first weaning food, what to add for iron and protein, and how to make it by age.</div></a>
     <a class="art-card" data-cat="pregnancy" data-age="2nd-trimester" href="/articles/anaemia-in-pregnancy/"><div class="k">Pregnancy · 2nd trimester</div><div class="t">Anaemia in pregnancy: symptoms, causes and treatment</div><div class="d">Why anaemia is so common in pregnancy, how it is diagnosed, and how iron deficiency is treated. NHS and NICE-sourced.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="6-12" href="/articles/baby-gagging-vs-choking/"><div class="k">Feeding · 6-12 months</div><div class="t">Baby gagging vs choking: what is normal and what is an emergency</div><div class="d">What the gag reflex is, why gagging on solid food is normal and protective, and how to tell the difference between gagging and choking. NHS and St John Ambulance-sourced.</div></a>
     <a class="art-card" data-cat="pregnancy" data-age="2nd-trimester" href="/articles/pelvic-girdle-pain/"><div class="k">Pregnancy · 2nd trimester</div><div class="t">Pelvic girdle pain (PGP) in pregnancy: symptoms and management</div><div class="d">What pelvic girdle pain (PGP or SPD) is, why it happens in pregnancy, and how physiotherapy and lifestyle changes help.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="6-12" href="/articles/first-foods-for-babies/"><div class="k">Feeding · 6-12 months</div><div class="t">First foods for babies: what to give at the start of weaning</div><div class="d">What the NHS recommends as the best first foods for babies, how much to give, and how to prepare them safely. Start4Life and NHS-sourced.</div></a>
     <a class="art-card" data-cat="pregnancy" data-age="2nd-trimester" href="/articles/pregnancy-heartburn-reflux/"><div class="k">Pregnancy · 2nd trimester</div><div class="t">Heartburn and reflux in pregnancy: what helps</div><div class="d">Why heartburn is so common in pregnancy, what makes it worse, and what the NHS recommends for relief.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="6-12" href="/articles/how-much-solids-by-age/"><div class="k">Feeding · 6-12 months</div><div class="t">How much solid food by age: a guide from 6 to 12 months</div><div class="d">How much solid food babies need at 6, 7, 8, 9 and 12 months, and how meal portions grow alongside milk feeds. NHS and BDA-sourced.</div></a>
     <a class="art-card" data-cat="pregnancy" data-age="3rd-trimester" href="/articles/overdue-pregnancy/"><div class="k">Pregnancy · 3rd trimester</div><div class="t">Overdue pregnancy: what to expect and your options</div><div class="d">What it means to go past your due date, when induction is offered, and what your options are. NHS-sourced.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="6-12" href="/articles/cows-milk-for-babies/"><div class="k">Feeding · 6-12 months</div><div class="t">Cow's milk for babies: when it is safe and how to use it</div><div class="d">When babies can drink cow's milk, how to use it in cooking from 6 months, and why it should not replace breast or formula milk before 12 months. NHS-sourced.</div></a>
     <a class="art-card" data-cat="pregnancy" data-age="3rd-trimester" href="/articles/breech-presentation/"><div class="k">Pregnancy · 3rd trimester</div><div class="t">Breech presentation: what it means and your options near term</div><div class="d">Why some babies are breech at term, what the NHS offers including ECV and planned caesarean, and how to decide.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="6-12" href="/articles/eggs-for-babies/"><div class="k">Feeding · 6-12 months</div><div class="t">Eggs for babies: when they are safe and how to serve them</div><div class="d">When babies can eat eggs, which eggs are safe at different stages, how to cook and serve them, and what to watch for. NHS-sourced.</div></a>
     <a class="art-card" data-cat="pregnancy" data-age="1st-trimester" href="/articles/pregnancy-after-loss/"><div class="k">Pregnancy · 1st trimester</div><div class="t">Pregnancy after miscarriage or loss: what to expect</div><div class="d">The emotional and practical realities of pregnancy after miscarriage or pregnancy loss, and where to find support.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="6-12" href="/articles/salt-sugar-baby-food/"><div class="k">Feeding · 6-12 months</div><div class="t">Salt and sugar in baby food: NHS limits and what to watch for</div><div class="d">Why babies need very little salt and sugar, what NHS limits apply, how to read food labels, and how to cook for babies without adding either.</div></a>
     <a class="art-card" data-cat="pregnancy" data-age="1st-trimester" href="/articles/twin-pregnancy/"><div class="k">Pregnancy · 1st trimester</div><div class="t">Twin pregnancy: what to expect from diagnosis to birth</div><div class="d">What makes twin pregnancy different, the antenatal care you will receive, and how birth decisions are made.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="6-12" href="/articles/dairy-for-babies/"><div class="k">Feeding · 6-12 months</div><div class="t">Dairy for babies: cheese, yogurt and fromage frais explained</div><div class="d">When babies can have dairy foods, which dairy products are safe at which stage, and what to look for on labels. NHS-sourced.</div></a>
     <a class="art-card" data-cat="pregnancy" data-age="1st-trimester" href="/articles/nhs-antenatal-schedule/"><div class="k">Pregnancy · 1st trimester</div><div class="t">NHS antenatal appointments: your schedule from booking to birth</div><div class="d">A week-by-week guide to the NHS antenatal appointment schedule for first-time and subsequent pregnancies.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="6-12" href="/articles/food-textures-for-babies/"><div class="k">Feeding · 6-12 months</div><div class="t">Baby food textures: the progression from purees to finger foods</div><div class="d">How baby food textures should progress from smooth purees to lumpy, mashed and then soft pieces and finger foods. NHS and BDA-sourced.</div></a>
     <a class="art-card" data-cat="pregnancy" data-age="3rd-trimester" href="/articles/maternity-leave-pay-uk/"><div class="k">Pregnancy · 3rd trimester</div><div class="t">Maternity leave and pay: what you are entitled to in the UK</div><div class="d">How UK maternity leave and Statutory Maternity Pay work, when to notify your employer, and what to do if self-employed.</div></a>
+    <a class="art-card" data-cat="feeding" data-age="6-12" href="/articles/reducing-milk-on-solids/"><div class="k">Feeding · 6-12 months</div><div class="t">Milk feeds when starting solids: how much formula or breast milk to give</div><div class="d">How milk feeds change when a baby starts solid food, how much formula or breast milk to give at 6, 9 and 12 months, and when to drop feeds. NHS-sourced.</div></a>
     <a class="art-card" data-cat="pregnancy" data-age="3rd-trimester" href="/articles/paternity-leave-pay-uk/"><div class="k">Pregnancy · 3rd trimester</div><div class="t">Paternity leave and pay: what partners are entitled to in the UK</div><div class="d">How UK paternity leave and Statutory Paternity Pay work, qualifying rules and Shared Parental Leave options.</div></a>
     <a class="art-card" data-cat="pregnancy" data-age="3rd-trimester" href="/articles/godh-bharai/"><div class="k">Pregnancy · 3rd trimester</div><div class="t">Godh bharai: the Indian pregnancy ceremony</div><div class="d">What the godh bharai ceremony is, when it takes place, what happens, and how it is celebrated across Indian families today.</div></a>
     <a class="art-card" data-cat="pregnancy" data-age="1st-trimester" href="/articles/pregnancy-traditions-india/"><div class="k">Pregnancy · 1st trimester</div><div class="t">Pregnancy traditions and beliefs in Indian culture</div><div class="d">An overview of Indian pregnancy traditions, dietary beliefs, activity customs and what medical evidence says about them.</div></a>
@@ -354,10 +371,20 @@
     heads[h].querySelector('.n').textContent = (catTotals[sect] || 0) + ' guides';
   }
 
+  var ageRow   = document.getElementById('age-row');
+  var stageRow = document.getElementById('stage-row');
+
+  function isPregnancy(){ return selectedCat === 'pregnancy'; }
+
+  function swapAgeRow(toPreg){
+    ageRow.hidden   = toPreg;
+    stageRow.hidden = !toPreg;
+  }
+
   function syncChips(){
     var cs = document.querySelectorAll('#cat-chips .chip');
     for (var i=0;i<cs.length;i++) cs[i].classList.toggle('on', cs[i].dataset.cat === selectedCat);
-    var as = document.querySelectorAll('#age-chips .chip');
+    var as = document.querySelectorAll('#age-chips .chip, #stage-chips .chip');
     for (var j=0;j<as.length;j++) as[j].classList.toggle('on', as[j].dataset.age === selectedAge);
   }
 
@@ -381,6 +408,7 @@
       else if (kv[0] === 'age') selectedAge = kv[1] || 'all';
       else if (kv[0] === 'q') q.value = decodeURIComponent(kv[1] || '');
     }
+    swapAgeRow(isPregnancy());
     syncChips();
   }
 
@@ -418,8 +446,18 @@
     var chips = document.querySelectorAll('#' + groupId + ' .chip');
     for (var i=0;i<chips.length;i++){
       chips[i].addEventListener('click', function(e){
-        if (groupId === 'cat-chips') selectedCat = e.currentTarget.dataset.cat;
-        else selectedAge = e.currentTarget.dataset.age;
+        if (groupId === 'cat-chips'){
+          var next = e.currentTarget.dataset.cat;
+          var wasPreg = isPregnancy();
+          selectedCat = next;
+          var nowPreg = isPregnancy();
+          if (wasPreg !== nowPreg){
+            selectedAge = 'all';
+            swapAgeRow(nowPreg);
+          }
+        } else {
+          selectedAge = e.currentTarget.dataset.age;
+        }
         syncChips();
         filter();
       });
@@ -427,6 +465,7 @@
   }
   bindChips('cat-chips');
   bindChips('age-chips');
+  bindChips('stage-chips');
 
   q.addEventListener('input', filter);
 
@@ -434,6 +473,7 @@
     q.value = '';
     selectedCat = 'all';
     selectedAge = 'all';
+    swapAgeRow(false);
     syncChips();
     filter();
     q.focus();
