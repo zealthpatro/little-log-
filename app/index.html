@@ -3038,7 +3038,7 @@ function renderPregLog(){
       <button class="action" onclick="openLogSymptom()"><div class="ico" style="background:var(--note-soft);color:var(--note)">📝</div><div class="label">Symptom</div><div class="hint">Nausea, aches, mood</div></button>
       <button class="action" onclick="openLogWeight()"><div class="ico" style="background:var(--star-soft);color:var(--star)">⚖️</div><div class="label">Weight</div><div class="hint">Your weight</div></button>
       <button class="action" onclick="openLogBP()"><div class="ico" style="background:var(--pump-soft);color:var(--pump)">🩺</div><div class="label">Blood pressure</div><div class="hint">If asked to track</div></button>
-      <button class="action" onclick="pregGo('care')"><div class="ico" style="background:var(--diaper-soft);color:var(--diaper)">👩‍⚕️</div><div class="label">Care team</div><div class="hint">Midwife, OB, GP</div></button>
+      <button class="action" onclick="pregGo('care')"><div class="ico" style="background:var(--diaper-soft);color:var(--diaper)">👩‍⚕️</div><div class="label">Care team</div><div class="hint">Gynaecologist, OB, midwife</div></button>
     </div>
     ${logs?`<div class="sec-title" style="margin-top:18px">Recent</div>${logs}`:''}
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>
@@ -3210,7 +3210,7 @@ function renderPregCare(){
   const cname=pregCareLabel(p.country);
   const careBlock = seeCare ? `
     <div class="sec-title">Your care team</div>
-    ${team||'<div class="csub">Add your midwife, doctor or clinic for quick reference.</div>'}
+    ${team||'<div class="csub">Add your gynaecologist, midwife or clinic for quick reference.</div>'}
     ${amOwner?`<button class="btn-ghost" onclick="openAddCareTeam()">${I.plus} Add to care team</button>`:''}` : '';
   return `<div class="fade-in">
     ${careBlock}
@@ -3234,7 +3234,7 @@ function renderPregCare(){
 function openAddCareTeam(){
   openSheet(`<h2>Care team</h2><div class="sub">Add someone who's looking after you.</div>
     <div class="field"><label>Name</label><input id="ctName" placeholder="e.g. Dr Khan or City Midwives" autofocus></div>
-    <div class="field"><label>Role</label><select id="ctRole"><option>Midwife</option><option>OB / Obstetrician</option><option>GP / Family doctor</option><option>Doula</option><option>Clinic / Hospital</option><option>Other</option></select></div>
+    <div class="field"><label>Role</label><select id="ctRole"><option>Gynaecologist (OB-GYN)</option><option>Obstetrician</option><option>Midwife</option><option>GP / Family doctor</option><option>Doula</option><option>Clinic / Hospital</option><option>Other</option></select></div>
     <div class="field"><label>Phone (optional)</label><input id="ctPhone" inputmode="tel" placeholder="Phone number"></div>
     <button class="btn-primary" style="background:var(--preg)" onclick="addCareTeam()">Add</button>`,'preg');
 }
