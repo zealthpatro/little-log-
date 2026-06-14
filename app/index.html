@@ -644,6 +644,12 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .bag-row{display:flex;align-items:center;gap:11px;background:var(--surface);border-radius:13px;padding:11px 13px;margin-bottom:8px;box-shadow:0 2px 7px var(--shadow);}
 .bag-row .bg-tick{width:24px;height:24px;border-radius:8px;border:2px solid var(--line);display:grid;place-items:center;flex-shrink:0;cursor:pointer;color:#fff;}
 .bag-row.done .bg-tick{background:var(--preg);border-color:var(--preg);}
+.country-search{width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;font-size:16px;background:var(--surface);color:var(--ink);box-sizing:border-box;}
+.country-list{margin-top:6px;max-height:240px;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:12px;background:var(--surface);}
+.country-opt{padding:11px 14px;cursor:pointer;font-size:15px;border-bottom:1px solid var(--line);}
+.country-opt:last-child{border-bottom:none;}
+.country-opt:hover{background:var(--preg-soft);}
+.country-opt.sel{background:var(--preg-soft);font-weight:800;color:var(--preg);}
 .bag-row .bg-t{flex:1;font-weight:700;font-size:14px;}
 .bag-row.done .bg-t{text-decoration:line-through;color:var(--ink-soft);}
 .bag-row .bg-x{border:none;background:none;color:var(--ink-faint);cursor:pointer;padding:4px;flex-shrink:0;}
@@ -2702,6 +2708,47 @@ function pregCountryOptions(sel){
   html+=opt('custom','Custom — build your own');
   return html;
 }
+/* Searchable country picker (replaces the long native select). The hidden input keeps the same
+   id the save code reads; the search box filters a tappable, alphabetised list live. */
+function pregCountryList(){
+  var all=['uk','us','de','uae'].concat(PREG_MORE_COUNTRIES);
+  var labeled=all.map(function(c){
+    var sk=pregCountryKey(c);
+    var L=(sk!=='generic'&&sk!=='custom'&&window.PREG&&PREG.antenatal[sk])?PREG.antenatal[sk].label:pregCountryName(c);
+    return [c,L];
+  }).sort(function(a,b){ return a[1].localeCompare(b[1]); });
+  labeled.push(['generic','Other / not listed (WHO-aligned)']);
+  labeled.push(['custom','Custom — build your own']);
+  return labeled;
+}
+function pregLabelFor(code){
+  if(code==='generic') return 'Other / not listed (WHO-aligned)';
+  if(code==='custom') return 'Custom — build your own';
+  var sk=pregCountryKey(code);
+  return (sk!=='generic'&&sk!=='custom'&&window.PREG&&PREG.antenatal[sk])?PREG.antenatal[sk].label:pregCountryName(code);
+}
+function countryPickerHtml(id, sel){
+  sel = sel || 'generic';
+  var rows = pregCountryList().map(function(p){
+    return '<div class="country-opt'+(p[0]===sel?' sel':'')+'" data-code="'+p[0]+'" data-l="'+escapeHtml(p[1].toLowerCase())+'" onclick="pickCountry(\''+id+'\',\''+p[0]+'\')">'+escapeHtml(p[1])+'</div>';
+  }).join('');
+  return '<input type="hidden" id="'+id+'" value="'+escapeHtml(sel)+'">'
+    + '<input id="'+id+'_s" class="country-search" autocomplete="off" placeholder="Search your country…" value="'+escapeHtml(pregLabelFor(sel))+'" onfocus="this.select();showCountryList(\''+id+'\')" oninput="filterCountryList(\''+id+'\')" onblur="blurCountry(\''+id+'\')">'
+    + '<div id="'+id+'_l" class="country-list" style="display:none">'+rows+'</div>';
+}
+function showCountryList(id){ var l=document.getElementById(id+'_l'); if(l) l.style.display='block'; }
+function filterCountryList(id){
+  var s=document.getElementById(id+'_s'), l=document.getElementById(id+'_l'); if(!s||!l) return;
+  var q=(s.value||'').trim().toLowerCase(); l.style.display='block';
+  [].forEach.call(l.children,function(el){ el.style.display=(!q||el.getAttribute('data-l').indexOf(q)>=0)?'block':'none'; });
+}
+function pickCountry(id, code){
+  var h=document.getElementById(id), s=document.getElementById(id+'_s'), l=document.getElementById(id+'_l');
+  if(h) h.value=code;
+  if(s) s.value=pregLabelFor(code);
+  if(l){ l.style.display='none'; [].forEach.call(l.children,function(el){ el.classList.toggle('sel', el.getAttribute('data-code')===code); }); }
+}
+function blurCountry(id){ setTimeout(function(){ var s=document.getElementById(id+'_s'), h=document.getElementById(id), l=document.getElementById(id+'_l'); if(s&&h) s.value=pregLabelFor(h.value); if(l) l.style.display='none'; },200); }
 
 /* ---- derived (compute, never store) ---- */
 function pregWeek(){
@@ -2743,7 +2790,7 @@ function openExpectingSetup(mode){
       <button class="${!isDue?'on':''}" onclick="setPregMode('lmp')">Use last period</button>
     </div>
     <div class="field"><label>${isDue?'Due date (EDD)':'First day of your last period'}</label><input type="date" id="pgDate" value="${pregDraft.date}"></div>
-    <div class="field"><label>Where you'll have your care</label><select id="pgCountry">${pregCountryOptions(pregDraft.country)}</select></div>
+    <div class="field"><label>Where you'll have your care</label>${countryPickerHtml('pgCountry', pregDraft.country)}</div>
     <button class="btn-primary" style="background:var(--preg)" onclick="savePregnancy()">Start tracking</button>
     <button class="btn-ghost" onclick="openStartPregnancy()">Back</button>
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
@@ -2798,7 +2845,7 @@ function openPositiveTest(){
     <h2 style="text-align:center">A positive test!</h2>
     <div class="sub" style="text-align:center">Wonderful news. Let's turn trying into tracking: confirm your last period and we'll set up your weeks.</div>
     <div class="field"><label>First day of your last period</label><input type="date" id="ptLmp" value="${dv}"></div>
-    <div class="field"><label>Where you'll have your care</label><select id="ptCountry">${pregCountryOptions(p.country)}</select></div>
+    <div class="field"><label>Where you'll have your care</label>${countryPickerHtml('ptCountry', p.country)}</div>
     <button class="btn-primary" style="background:var(--preg)" onclick="confirmPositiveTest()">Start my pregnancy 🤍</button>
     <div class="csub" style="text-align:center;margin-top:8px">A home test is a great sign. Your provider will confirm it properly.</div>`,'preg');
 }
@@ -3297,7 +3344,7 @@ function openEditPregnancy(){
   const dv=p.dueDate?new Date(p.dueDate).toISOString().slice(0,10):'';
   openSheet(`<h2>Due date &amp; schedule</h2><div class="sub">Update your dates or the antenatal schedule we suggest.</div>
     <div class="field"><label>Due date (EDD)</label><input type="date" id="epDue" value="${dv}"></div>
-    <div class="field"><label>Care schedule</label><select id="epC">${pregCountryOptions(p.country)}</select></div>
+    <div class="field"><label>Care schedule</label>${countryPickerHtml('epC', p.country)}</div>
     <button class="btn-primary" style="background:var(--preg)" onclick="saveEditPregnancy()">Save</button>
     <div class="preg-disclaim">Changing the schedule adds any new suggested appointments. Anything you've added or ticked is kept.</div>`,'preg');
 }
