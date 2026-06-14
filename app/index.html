@@ -2043,10 +2043,10 @@ function refundTaste(k){ if(isPro())return; try{ const t=state.settings.proTaste
 function proTag(k){ return isPro()?'':(tasteLeft(k)>0?` · ${tasteLeft(k)} free`:' · Pro ✨'); }
 function openPro(lockedFeature, tastedOut){
   const feats=[
-    ['🎨','The full keepsake studio','Every template, font and palette, portrait and story formats, the whole sticker set.'],
-    ['✨','Auto-enhance & background cutout','One-tap polish and sticker-style cutouts, all on your device.'],
+    ['📄','Doctor visit report (PDF)','A clean summary to bring to every appointment: recent days, growth, vaccines, medicines, and your pregnancy health log.'],
     ['🖼️','Then & Now + watermark-free','Side-by-side keepsakes, and your shares without the "made with Cubby" mark.'],
-    ['📄','Doctor PDF report','A clean, printable visit report: recent days, growth, vaccines and medicines.']
+    ['🎨','The full keepsake studio','Every template, font and palette, portrait and story formats, the whole sticker set.'],
+    ['✨','Auto-enhance & background cutout','One-tap polish and sticker-style cutouts, all on your device.']
   ].map(f=>`<div class="pro-feat"><span class="pf-ico">${f[0]}</span><div><div class="pf-t">${f[1]}</div><div class="pf-s">${f[2]}</div></div></div>`).join('');
   const canBuy = !!PRO_CFG.checkoutUrl;
   const joined = (()=>{ try{ return localStorage.getItem('cubby-pro-waitlist')==='1'; }catch(e){ return false; } })();
@@ -2059,7 +2059,7 @@ function openPro(lockedFeature, tastedOut){
     return;
   }
   openSheet(`<h2>Cubby Pro ✨</h2>
-    <div class="sub">${lockedFeature?(tastedOut?`You've enjoyed your free tastes of <b>${escapeHtml(lockedFeature)}</b>. `:`<b>${escapeHtml(lockedFeature)}</b> is a Pro treat. `):''}Cubby is free for the essentials, always. Pro adds the delights.</div>
+    <div class="sub">${lockedFeature?(tastedOut?`You've enjoyed your free tastes of <b>${escapeHtml(lockedFeature)}</b>. `:`<b>${escapeHtml(lockedFeature)}</b> is a Pro treat. `):''}The essentials, your data and your privacy stay free, always. Pro brings a doctor-ready summary for every visit, plus the keepsake studio.</div>
     <div class="pro-list">${feats}</div>
     <div class="csub" style="text-align:center;margin:2px 0 10px">Every treat comes with a free taste or two, so try before you decide 🐻</div>
     ${canBuy
@@ -2349,7 +2349,7 @@ function openSettings(){
     </div>
     <div class="set-item" onclick="openPro()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">✨</div>
-      <div class="si-body"><div class="a">Cubby Pro</div><div class="b">${isPro()?'Active · thank you 🐻':`Keepsake studio, doctor reports & more · launching ${PRO_LAUNCH}`}</div></div>
+      <div class="si-body"><div class="a">Cubby Pro</div><div class="b">${isPro()?'Active · thank you 🐻':`Doctor reports, keepsake studio & more · launching ${PRO_LAUNCH}`}</div></div>
     </div>
     <div class="set-item" onclick="shareCubby()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--pump-soft);color:var(--pump)">${I.heart}</div>
@@ -2952,6 +2952,15 @@ function defaultBag(){
   return ['Maternity notes or records','ID and any paperwork','Comfortable going-home clothes','Toiletries and lip balm','Phone and a long charger','Snacks and a water bottle','Nappies and baby vests','Baby blanket and a going-home outfit','Car seat fitted and ready']
     .map(t=>({id:uid(),text:t,done:false}));
 }
+/* Doctor-visit questions: a reusable checklist so nothing's forgotten in the room. Suggestive, fully editable. */
+function defaultVisitQs(){
+  return ['Is my baby growing on track?','Are my blood pressure and urine results okay?','Which symptoms should I call about before the next visit?','Any foods, activities or medicines to avoid right now?','When and where is my next scan or test?','How do I reach you out of hours if I am worried?']
+    .map(t=>({id:uid(),text:t,done:false}));
+}
+function toggleVisitQ(id){ const p=state.pregnancy; const q=(p.visitQs||[]).find(x=>x.id===id); if(q){ q.done=!q.done; persist(); render(); } }
+function removeVisitQ(id){ const p=state.pregnancy; p.visitQs=(p.visitQs||[]).filter(x=>x.id!==id); persist(); render(); }
+function addVisitQ(){ const el=$('#vqNew'); const v=(el&&el.value.trim())||''; if(!v)return; state.pregnancy.visitQs=state.pregnancy.visitQs||[]; state.pregnancy.visitQs.push({id:uid(),text:v,done:false}); persist(); render(); }
+function resetVisitQsDone(){ const p=state.pregnancy; (p.visitQs||[]).forEach(q=>q.done=false); persist(); render(); }
 function savePregnancy(){
   const dv=($('#pgDate')||{}).value;
   if(!dv){ toast('Pick a date first'); return; }
@@ -3080,11 +3089,22 @@ function renderPregLog(){
       </div>
     </div>`).join(''):`<div class="csub">No appointments yet. Add your first below.</div>`;
   const logs=pregRecentLogs();
+  if(!p.visitQs){ p.visitQs=defaultVisitQs(); persist(); }
+  const qRows=(p.visitQs||[]).map(q=>`<div class="bag-row ${q.done?'done':''}"><div class="bg-tick" onclick="toggleVisitQ('${q.id}')">${q.done?I.check:''}</div><div class="bg-t" onclick="toggleVisitQ('${q.id}')">${escapeHtml(q.text)}</div><button class="bg-x" onclick="removeVisitQ('${q.id}')">${I.trash}</button></div>`).join('');
   return `<div class="fade-in">
     <div class="sec-title">Appointments</div>
     ${apptIntro}
     ${apptRows}
     <button class="btn-ghost" onclick="openAddAppt()">${I.plus} Add an appointment</button>
+    <div class="sec-title" style="margin-top:18px">Questions for your visit</div>
+    <div class="csub" style="margin:-2px 0 10px">Jot down what you want to ask, so it doesn't slip your mind in the room. Tick them off as you go; they stay for next time.</div>
+    ${qRows}
+    <div class="field" style="margin-top:8px"><input id="vqNew" placeholder="Add a question to ask…" onkeydown="if(event.key==='Enter')addVisitQ()"></div>
+    ${(p.visitQs||[]).some(q=>q.done)?`<button class="btn-ghost" style="color:var(--ink-faint)" onclick="resetVisitQsDone()">Uncheck all for next visit</button>`:''}
+    <div class="hero-invite" onclick="window.openFamily&&window.openFamily()" style="margin-top:10px;cursor:pointer">
+      <div class="hi" style="font-size:22px">👪</div>
+      <div><div class="ht">Who's coming with you?</div><div class="hs">Invite your partner so they have the questions and your appointments too</div></div>
+    </div>
     <div class="sec-title" style="margin-top:18px">Quick log</div>
     <div class="actions stagger">
       <button class="action" onclick="openLogSymptom()"><div class="ico" style="background:var(--note-soft);color:var(--note)">📝</div><div class="label">Symptom</div><div class="hint">Nausea, aches, mood</div></button>
