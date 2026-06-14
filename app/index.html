@@ -1604,9 +1604,14 @@ function openSheet(html,accent){
   // Step navigation: if a DIFFERENT sheet is open, remember it so this one can go back to it.
   // Same-title re-renders (toggling a unit, adding a row) replace in place, no phantom back step.
   if(s.classList.contains('show')){
-    var curH=(s.querySelector('h2')||{}).textContent||'';
-    var nm=html.match(/<h2[^>]*>([\s\S]*?)<\/h2>/); var newH=nm?nm[1].replace(/<[^>]*>/g,''):'';
-    if(!(curH && newH && curH===newH)) _sheetStack.push({html:s.innerHTML, accent:s.dataset.accent||''});
+    var curH=((s.querySelector('h2')||{}).textContent||'').trim();
+    var nm=html.match(/<h2[^>]*>([\s\S]*?)<\/h2>/); var newH=nm?nm[1].replace(/<[^>]*>/g,'').trim():'';
+    if(curH && newH && curH===newH){ /* same sheet re-render (toggle/add/delete a row): replace in place */ }
+    else {
+      var anc=newH?_sheetStack.map(function(e){return e.title;}).lastIndexOf(newH):-1;
+      if(anc>=0) _sheetStack.length=anc;   // re-opening an ancestor (save -> return to parent): pop to it, render fresh
+      else _sheetStack.push({html:s.innerHTML, accent:s.dataset.accent||'', title:curH});  // forward step
+    }
   }
   s.dataset.accent=accent||'';
   _sheetAccent(s,accent);
@@ -2433,7 +2438,7 @@ function saveVisit(){
   }
   const t=d.date?timeOnDate(d.date,'12:00'):now();
   commitEvent({type:'visit',reason,notes:(d.notes||'').trim(),doctorId:doctorId||null,doctorName:doctorName||null,time:t});
-  closeSheet(); openDoctor(); toast('Visit logged');
+  openDoctor(); toast('Visit logged');
 }
 function saveBabyDetails(id){
   const b=state.babies.find(x=>x.id===id); if(!b)return;
@@ -3742,7 +3747,7 @@ function openUrineLog(){
     <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="saveUrine()">Save</button>`,'preg');
 }
 function pickUrine(el,v){ $('#urResult').value=v; document.querySelectorAll('#urChips .tgt').forEach(b=>b.classList.remove('on')); el.classList.add('on'); }
-function saveUrine(){ const v=$('#urResult').value; if(!v){toast('Pick a result');return;} ensurePregFields(state.pregnancy); state.pregnancy.urine.push({id:uid(),at:getWhen('when'),result:v}); persist(); closeSheet(); openBPWatch(); toast('Saved'); }
+function saveUrine(){ const v=$('#urResult').value; if(!v){toast('Pick a result');return;} ensurePregFields(state.pregnancy); state.pregnancy.urine.push({id:uid(),at:getWhen('when'),result:v}); persist(); openBPWatch(); toast('Saved'); }
 function deleteUrine(id){ state.pregnancy.urine=(state.pregnancy.urine||[]).filter(u=>u.id!==id); persist(); openBPWatch(); }
 
 /* ---- Supplements & meds (daily adherence) ---- */
@@ -4270,8 +4275,8 @@ function feverGuidance(){
 function openFeverNudge(v,unit){
   openSheet(`<h2>That's a fever</h2><div class="sub">${v}°${unit} is at or above the fever line (38°C / 100.4°F).</div>
     <div class="csub" style="margin:-4px 0 16px">${feverGuidance()} This isn't medical advice, trust your instincts and your pediatrician.</div>
-    <button class="btn-primary" style="background:var(--sleep)" onclick="closeSheet();openVisitSummary()">${I.stetho} Prepare a summary for the doctor</button>
-    <button class="btn-ghost" onclick="closeSheet();openSymptom()">Log a symptom</button>
+    <button class="btn-primary" style="background:var(--sleep)" onclick="openVisitSummary()">${I.stetho} Prepare a summary for the doctor</button>
+    <button class="btn-ghost" onclick="openSymptom()">Log a symptom</button>
     <button class="btn-ghost" onclick="closeSheet()">Got it</button>`,'med');
 }
 /* ---------- doctor visit summary ---------- */
