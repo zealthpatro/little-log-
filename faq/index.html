@@ -4,14 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script>/* lifecycle stage (Expecting/Baby): set root class pre-paint, no flash */(function(){try{var K='cubby-stage',p=document.documentElement.getAttribute('data-page-stage'),u=new URLSearchParams(location.search).get('stage'),s=(u==='expecting'||u==='baby')?u:((p==='expecting'||p==='baby')?p:(localStorage.getItem(K)||'baby'));if(u||p)localStorage.setItem(K,s);document.documentElement.classList.add('stage-'+s);}catch(e){document.documentElement.classList.add('stage-baby');}})();</script>
-<title>Cubby FAQ: Features, Sharing, Health, Privacy &amp; Pricing</title>
-<meta name="description" content="Everything about Cubby, the warm private baby tracker: what you can log, sharing with caregivers, vaccine schedules and health, photos and keepsakes, privacy and data, pricing, and how to install it.">
+<title>Cubby FAQ: Features, Sharing, Privacy, Pregnancy &amp; Pricing</title>
+<meta name="description" content="Everything about Cubby, the warm private baby tracker: what you can log, sharing with your care circle, who owns your data, the private pregnancy journey, health and vaccines, photos and keepsakes, and pricing.">
 <link rel="canonical" href="https://little-cubby.com/faq/">
 <meta name="robots" content="index,follow">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Cubby">
 <meta property="og:title" content="Cubby FAQ">
-<meta property="og:description" content="Common questions about Cubby: features, sharing, health, privacy and pricing.">
+<meta property="og:description" content="Common questions about Cubby: features, sharing, who owns your data, the private pregnancy journey, health and pricing.">
 <meta property="og:url" content="https://little-cubby.com/faq/">
 <meta property="og:image" content="https://little-cubby.com/og/faq.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -22,20 +22,44 @@
 <link rel="stylesheet" href="/vax.css"><link rel="stylesheet" href="/site.css">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
-{"@type":"Question","name":"Is Cubby free?","acceptedAnswer":{"@type":"Answer","text":"Yes. Logging, caregiver sharing, your country's vaccine schedule, growth charts, the health hub and keepsakes are free, and always will be. Cubby Pro (launching August 2026) adds extras like the full keepsake studio, watermark-free shares and doctor PDF reports. We never paywall logging or sharing."}},
-{"@type":"Question","name":"How do I sign up for Cubby?","acceptedAnswer":{"@type":"Answer","text":"Open the app and continue with Google, or ask for an email sign-in link. It takes about ten seconds either way, with no password and no app store."}},
-{"@type":"Question","name":"Is Cubby an app I download?","acceptedAnswer":{"@type":"Answer","text":"Cubby runs in any modern browser. On a phone, tap Share then Add to Home Screen to install it like an app, with offline support."}},
-{"@type":"Question","name":"Does Cubby work offline?","acceptedAnswer":{"@type":"Answer","text":"Yes. You can log while offline and everything syncs automatically once you are back online."}},
-{"@type":"Question","name":"What can I track in Cubby?","acceptedAnswer":{"@type":"Answer","text":"Feeds (breast, bottle and solids), sleep with an ongoing-nap timer, nappies, pumping, activities like tummy time and sun time, medicines, temperature and illnesses, growth, vaccines, milestones and photos."}},
-{"@type":"Question","name":"Can both parents and a nanny use the same baby?","acceptedAnswer":{"@type":"Answer","text":"Yes. Everything syncs in real time across every caregiver, with who-did-what on each entry and a shared handoff note. You can invite or remove people any time."}},
-{"@type":"Question","name":"Can I track more than one baby or twins?","acceptedAnswer":{"@type":"Answer","text":"Yes. Add as many babies as you like and switch between them, or log for more than one at once."}},
-{"@type":"Question","name":"Which countries' vaccine schedules does Cubby support?","acceptedAnswer":{"@type":"Answer","text":"The UK (NHS), US (CDC), UAE (MOHAP) and Germany (STIKO) today, with more to come. Pick your country at setup; every item is editable, and if you move country your logged doses carry over."}},
-{"@type":"Question","name":"Can I keep allergies, symptoms and doctor contacts?","acceptedAnswer":{"@type":"Answer","text":"Yes. The health section keeps medicines with reminders, fever guidance, illnesses, allergies and your care team, plus a one-tap doctor-visit summary you can share."}},
-{"@type":"Question","name":"Does Cubby replace my doctor?","acceptedAnswer":{"@type":"Answer","text":"No. Cubby is informational and helps you keep track. Always follow your doctor, midwife or health visitor and your country's official guidance."}},
-{"@type":"Question","name":"Are my photos and keepsakes private?","acceptedAnswer":{"@type":"Answer","text":"Yes. Photos are private to your family and stored in Cubby's own secure backend. Auto-enhance and background cutout run on your device, so those photos never leave your phone."}},
-{"@type":"Question","name":"Is my baby's data private?","acceptedAnswer":{"@type":"Answer","text":"Yes. No ads, no third-party trackers, and we never sell your data. Your log is locked to the people you invite and talks only to Cubby's own secure backend."}},
-{"@type":"Question","name":"Can I export or delete my data?","acceptedAnswer":{"@type":"Answer","text":"Yes. In Settings, Data lets you export everything as a JSON file, or delete all data permanently. You can also log out any time, your data stays safely synced."}},
-{"@type":"Question","name":"What does Cubby Pro cost?","acceptedAnswer":{"@type":"Answer","text":"Cubby Pro is 9 USD per month, or 90 USD per year (save 17%, about 7.50 per month), with a 7-day free trial and localized pricing. The free plan stays free forever."}}
+{"@type":"Question","name":"Is Cubby free?","acceptedAnswer":{"@type":"Answer","text":"Yes. Logging, caregiver sharing, your country's vaccine schedule, growth charts, the health hub, routine ideas and keepsakes are free, and always will be. Cubby Pro (launching August 2026) adds extras like the full keepsake studio, watermark-free shares, push reminders and doctor PDF reports. We never paywall logging or sharing."}},
+{"@type":"Question","name":"How do I sign up?","acceptedAnswer":{"@type":"Answer","text":"Open the app and continue with Google, or ask for an email sign-in link: we send a link, you tap it, you are in. About ten seconds either way, no password, no app store."}},
+{"@type":"Question","name":"Is Cubby an app I download?","acceptedAnswer":{"@type":"Answer","text":"It runs in any modern browser. On a phone, install it like an app in two taps so it opens full-screen from its own icon."}},
+{"@type":"Question","name":"How do I install it on my iPhone or Android?","acceptedAnswer":{"@type":"Answer","text":"iPhone: open little-cubby.com/app in Safari, tap the Share button, scroll down and tap Add to Home Screen, then Add. Android: open it in Chrome, tap the menu, then Add to Home screen or Install app. The bear icon appears on your home screen and Cubby opens like a normal app."}},
+{"@type":"Question","name":"Does it work offline?","acceptedAnswer":{"@type":"Answer","text":"Yes. Log while offline and it syncs automatically once you are back online."}},
+{"@type":"Question","name":"Which devices work?","acceptedAnswer":{"@type":"Answer","text":"Any modern phone, tablet or computer browser. Your log syncs across all of them."}},
+{"@type":"Question","name":"What can I track?","acceptedAnswer":{"@type":"Answer","text":"Feeds (breast, bottle, solids), sleep with an ongoing-nap timer, nappies, pumping, activities, medicines, temperature, illnesses, growth, vaccines, milestones and photos."}},
+{"@type":"Question","name":"What are the notes on my home screen?","acceptedAnswer":{"@type":"Answer","text":"Your home screen shows a gentle day surface: a place for short notes about today, a recent photo or two, and a calm recap. Leave a note for everyone (a handoff like slept well, last bottle 2:10) or keep one private to yourself or to one person. Notes are their own private records, not buried in a feed."}},
+{"@type":"Question","name":"What are routines, and are they free?","acceptedAnswer":{"@type":"Answer","text":"Cubby suggests gentle, age-appropriate routine ideas for each baby in the Log tab, like tummy time, a wind-down, or vitamin D. Tap one to log it as a real entry. The routine ideas are free. Smart adaptive routines and push reminders are part of Pro."}},
+{"@type":"Question","name":"Can I log activities like tummy time, sun time or skin-to-skin?","acceptedAnswer":{"@type":"Answer","text":"Yes. Tag and time the good-for-baby moments, walks, tummy time, sun time, skin-to-skin and more, and add a photo to any of them."}},
+{"@type":"Question","name":"Can I backdate or edit an entry?","acceptedAnswer":{"@type":"Answer","text":"Yes. Anything can be logged for an earlier time and edited or removed afterwards."}},
+{"@type":"Question","name":"Can I track twins or more than one baby?","acceptedAnswer":{"@type":"Answer","text":"Yes. Add as many babies as you like, switch between them, or log for more than one at once."}},
+{"@type":"Question","name":"Are there growth charts?","acceptedAnswer":{"@type":"Answer","text":"Yes. Plot weight and height on WHO and CDC percentile curves and watch the trend over time."}},
+{"@type":"Question","name":"Can both parents and a nanny use the same baby?","acceptedAnswer":{"@type":"Answer","text":"Yes. Everything syncs in real time across every caregiver, with who-did-what on each entry. Invite or remove people any time."}},
+{"@type":"Question","name":"How do I invite someone?","acceptedAnswer":{"@type":"Answer","text":"In the app, Settings, Family and sharing, invite by email and pick their relationship (mother, father, grandparent, nanny, and so on)."}},
+{"@type":"Question","name":"Can I see who logged what?","acceptedAnswer":{"@type":"Answer","text":"Yes. Every entry shows who added it, so you always know whether it was you, your partner or the nanny."}},
+{"@type":"Question","name":"Does everyone see everything, or can I share by parts?","acceptedAnswer":{"@type":"Answer","text":"Your baby's day-to-day log is shared with the caregivers you invite, so the whole circle stays in sync. The sensitive things are different: a mother's own health and her pregnancy journey are private by default and shared only with the specific people she chooses, item by item."}},
+{"@type":"Question","name":"Can I remove a caregiver?","acceptedAnswer":{"@type":"Answer","text":"Yes, any time, from Settings, Family and sharing."}},
+{"@type":"Question","name":"Does Cubby track pregnancy?","acceptedAnswer":{"@type":"Answer","text":"Yes. Cubby walks the whole journey with you, from trying and a positive test through week-by-week development, your antenatal schedule, gentle health trackers, a kick counter and contraction timer, and a Moments album for your scans. On the big day it becomes your baby tracker, same app, same story."}},
+{"@type":"Question","name":"Is my pregnancy private?","acceptedAnswer":{"@type":"Answer","text":"Yes, private by default. Your pregnancy journey lives in your own space, not the shared family log, and it is shared only with the people you explicitly choose. Your health details like weight, blood pressure and glucose stay mother-owned, and your mood notes can never be shared with anyone."}},
+{"@type":"Question","name":"Does Cubby handle pregnancy loss gently?","acceptedAnswer":{"@type":"Answer","text":"Yes, as gently as we can. You are always in control of your own journey and what you keep or remove. Cubby is informational and never a substitute for your midwife or doctor; if something does not feel right, contact them straight away."}},
+{"@type":"Question","name":"Who owns my data?","acceptedAnswer":{"@type":"Answer","text":"You do. You are the source of truth for your family's record. You decide who is invited, what the sensitive parts share, and you can export or delete everything yourself, anytime."}},
+{"@type":"Question","name":"Is my data private and secure?","acceptedAnswer":{"@type":"Answer","text":"Yes. No ads, no third-party trackers, never sold. Your log is locked to the people you invite, enforced by server-side security rules, and your data is encrypted in transit and at rest (it lives in Google Cloud Firestore). The site also ships strict browser security headers (HSTS, content-security policy, no framing). You can export or delete everything yourself in Settings, anytime."}},
+{"@type":"Question","name":"Who can see my baby's data?","acceptedAnswer":{"@type":"Answer","text":"Only the people you invite. Your log is locked to your family, nobody else can see it, and the most sensitive parts, a mother's health and the pregnancy journey, are shared only with whom she chooses."}},
+{"@type":"Question","name":"Is the email sign-in link secure?","acceptedAnswer":{"@type":"Answer","text":"Yes. The link is single-use and expires soon after we send it, and the request is rate-limited to stop abuse. If a link expires or you do not see it, just ask for a new one."}},
+{"@type":"Question","name":"Can I export my data?","acceptedAnswer":{"@type":"Answer","text":"Yes. Settings, Data, Export downloads everything as a JSON file."}},
+{"@type":"Question","name":"Can I delete everything?","acceptedAnswer":{"@type":"Answer","text":"Yes. Settings, Data, Delete all data permanently erases your household's logs. Only an owner can do this, and it is worth exporting first."}},
+{"@type":"Question","name":"How do I log out?","acceptedAnswer":{"@type":"Answer","text":"Settings, Log out (also on your profile). Your data stays safely synced, just sign back in."}},
+{"@type":"Question","name":"Can I edit the vaccine schedule or change country?","acceptedAnswer":{"@type":"Answer","text":"Yes. Every item is editable to match your clinic, and switching country keeps the doses you have already logged."}},
+{"@type":"Question","name":"Does Cubby remind me about vaccines and medicine?","acceptedAnswer":{"@type":"Answer","text":"Yes, with gentle in-app reminders and due dates. Push notifications when the app is closed are coming with Pro."}},
+{"@type":"Question","name":"Can I track medicines and doses?","acceptedAnswer":{"@type":"Answer","text":"Yes. Set an every-few-hours or daily schedule and Cubby counts down to the next dose, so did we already give it never happens."}},
+{"@type":"Question","name":"Does Cubby replace my doctor?","acceptedAnswer":{"@type":"Answer","text":"No. It is informational and helps you keep track. Always follow your doctor, midwife or health visitor and your country's official guidance."}},
+{"@type":"Question","name":"What keepsakes can I make?","acceptedAnswer":{"@type":"Answer","text":"Turn any photo into an Instagram-ready card (square, portrait or story), plus monthly memory cards, milestones and a birth poster."}},
+{"@type":"Question","name":"Do the photo tools send my pictures anywhere?","acceptedAnswer":{"@type":"Answer","text":"No. Auto-enhance and background cutout run entirely on your device, nothing is uploaded for those."}},
+{"@type":"Question","name":"Where are my photos stored?","acceptedAnswer":{"@type":"Answer","text":"Privately, in Cubby's own secure backend, visible only to your family."}},
+{"@type":"Question","name":"What is free versus Pro?","acceptedAnswer":{"@type":"Answer","text":"All the essentials are free forever: logging, sharing, the vaccine schedule, growth, the health hub, routine ideas and keepsakes. Pro adds adaptive routines, push reminders, premium keepsakes, HD backup, PDF reports and insights."}},
+{"@type":"Question","name":"What will Pro cost?","acceptedAnswer":{"@type":"Answer","text":"Cubby Pro is 9 USD per month, or 90 USD per year (save 17 percent, about 7.50 per month), with a 7-day free trial and localized pricing. The free plan stays free forever."}},
+{"@type":"Question","name":"Will you ever charge for logging or sharing?","acceptedAnswer":{"@type":"Answer","text":"No. The core, logging and caregiver sharing, stays free."}}
 ]}
 </script>
 <script type="application/ld+json">
@@ -45,20 +69,20 @@
 <body>
 <nav class="nav"><div class="nav-in">
   <a class="nav-brand" href="/"><img src="/icons/logo-512.png" alt="Cubby"><b>Cubby</b></a>
-  <div class="nav-tabs"><a href="/">Home</a><a href="/pregnancy/">Pregnancy</a><a href="/features/">Features</a><a href="/articles/">Articles</a><a href="/pricing/">Pricing</a><a href="/faq/" class="on">FAQ</a></div>
+  <div class="nav-tabs"><a href="/">Home</a><a href="/why/">Why Cubby</a><a href="/pregnancy/">Pregnancy</a><a href="/features/">Features</a><a href="/articles/">Articles</a><a href="/pricing/">Pricing</a><a href="/faq/" class="on">FAQ</a></div>
   <a class="nav-cta" href="/app/">Start free</a>
 </div></nav>
 
 <main class="wrap" style="padding-top:30px">
   <h1>Frequently asked questions</h1>
-  <p class="lede" style="margin-top:6px">Everything about features, sharing, health, privacy and pricing. Still stuck? In the app, Settings &gt; Family &amp; sharing &gt; Send feedback, we read every note.</p>
+  <p class="lede" style="margin-top:6px">Everything about features, sharing, privacy, pregnancy and pricing. New here? See <a href="/why/">what Cubby stands for</a>. Still stuck? In the app, Settings &gt; Family &amp; sharing &gt; Send feedback, we read every note.</p>
 
   <h2>Getting started</h2>
   <dl class="faq">
     <dt>Is Cubby free?</dt>
-    <dd>Yes. Logging, caregiver sharing, your country's vaccine schedule, growth charts, the health hub and keepsakes are free, and always will be. Cubby Pro (launching August 2026) adds extras like the full keepsake studio, watermark-free shares and doctor PDF reports. We never paywall logging or sharing.</dd>
+    <dd>Yes. Logging, caregiver sharing, your country's vaccine schedule, growth charts, the health hub, routine ideas and keepsakes are free, and always will be. Cubby Pro (launching August 2026) adds extras like the full keepsake studio, watermark-free shares, push reminders and doctor PDF reports. We never paywall logging or sharing.</dd>
     <dt>How do I sign up?</dt>
-    <dd>Open the app and continue with Google, or ask for an email sign-in link: we send a link, you tap it, you're in. About ten seconds either way, no password, no app store.</dd>
+    <dd>Open the app and continue with Google, or ask for an email sign-in link: we send a link, you tap it, you're in. About ten seconds either way, no password, no app store. <a href="/app/">Start free.</a></dd>
     <dt>Is Cubby an app I download?</dt>
     <dd>It runs in any modern browser. On a phone, install it like an app in two taps so it opens full-screen from its own icon (see the next answer).</dd>
     <dt>How do I install it on my iPhone or Android?</dt>
@@ -69,10 +93,14 @@
     <dd>Any modern phone, tablet or computer browser. Your log syncs across all of them.</dd>
   </dl>
 
-  <h2>Logging &amp; features</h2>
+  <h2>Logging &amp; your day</h2>
   <dl class="faq">
     <dt>What can I track?</dt>
-    <dd>Feeds (breast, bottle, solids), sleep with an ongoing-nap timer, nappies, pumping, activities, medicines, temperature, illnesses, growth, vaccines, milestones and photos.</dd>
+    <dd>Feeds (breast, bottle, solids), sleep with an ongoing-nap timer, nappies, pumping, activities, medicines, temperature, illnesses, growth, vaccines, milestones and photos. <a href="/features/">See all the features.</a></dd>
+    <dt>What are the notes on my home screen?</dt>
+    <dd>Your home screen shows a gentle day surface: a place for short notes about today, a recent photo or two, and a calm recap. Leave a note for everyone (a handoff like "slept well, last bottle 2:10") or keep one private to yourself or to one person. Notes are their own private records, not buried in a feed.</dd>
+    <dt>What are routines, and are they free?</dt>
+    <dd>Cubby suggests gentle, age-appropriate routine ideas for each baby in the Log tab, like tummy time, a wind-down, or vitamin D. Tap one to log it as a real entry. The routine ideas are free. Smart adaptive routines and push reminders are part of Pro.</dd>
     <dt>Can I log activities like tummy time, sun time or skin-to-skin?</dt>
     <dd>Yes. Tag and time the good-for-baby moments, walks, tummy time, sun time, skin-to-skin and more, and add a photo to any of them.</dd>
     <dt>Can I backdate or edit an entry?</dt>
@@ -83,18 +111,46 @@
     <dd>Yes. Plot weight and height on WHO and CDC percentile curves and watch the trend over time.</dd>
   </dl>
 
-  <h2>Sharing &amp; caregivers</h2>
+  <h2>Sharing &amp; your care circle</h2>
   <dl class="faq">
     <dt>Can both parents and a nanny use the same baby?</dt>
-    <dd>Yes. Everything syncs in real time across every caregiver, with who-did-what on each entry and a shared handoff note.</dd>
+    <dd>Yes. Everything syncs in real time across every caregiver, with who-did-what on each entry. Invite or remove people any time.</dd>
     <dt>How do I invite someone?</dt>
     <dd>In the app, Settings &gt; Family &amp; sharing, invite by email and pick their relationship (mother, father, grandparent, nanny, and so on).</dd>
     <dt>Can I see who logged what?</dt>
     <dd>Yes. Every entry shows who added it, so you always know whether it was you, your partner or the nanny.</dd>
+    <dt>Does everyone see everything, or can I share by parts?</dt>
+    <dd>Your baby's day-to-day log is shared with the caregivers you invite, so the whole circle stays in sync. The sensitive things are different: a mother's own health and her pregnancy journey are private by default and shared only with the specific people she chooses, item by item. <a href="/why/">More on what we stand for.</a></dd>
     <dt>Can I remove a caregiver?</dt>
     <dd>Yes, any time, from Settings &gt; Family &amp; sharing.</dd>
+  </dl>
+
+  <h2>Pregnancy</h2>
+  <dl class="faq">
+    <dt>Does Cubby track pregnancy?</dt>
+    <dd>Yes. Cubby walks the whole journey with you, from trying and a positive test through week-by-week development, your antenatal schedule, gentle health trackers, a kick counter and contraction timer, and a Moments album for your scans. On the big day it becomes your baby tracker, same app, same story. <a href="/pregnancy/">See the pregnancy guide.</a></dd>
+    <dt>Is my pregnancy private?</dt>
+    <dd>Yes, private by default. Your pregnancy journey lives in your own space, not the shared family log, and it's shared only with the people you explicitly choose. Your health details like weight, blood pressure and glucose stay mother-owned, and your mood notes can never be shared with anyone. <a href="/why/">Why privacy is the point.</a></dd>
+    <dt>Does Cubby handle pregnancy loss gently?</dt>
+    <dd>Yes, as gently as we can. You're always in control of your own journey and what you keep or remove. Cubby is informational and never a substitute for your midwife or doctor; if something doesn't feel right, contact them straight away.</dd>
+  </dl>
+
+  <h2 id="privacy">Privacy &amp; who owns your data</h2>
+  <dl class="faq">
+    <dt>Who owns my data?</dt>
+    <dd>You do. You're the source of truth for your family's record. You decide who is invited, what the sensitive parts share, and you can export or delete everything yourself, anytime. <a href="/why/">What we stand for.</a></dd>
+    <dt>Is my data private and secure?</dt>
+    <dd>Yes. No ads, no third-party trackers, never sold. Your log is locked to the people you invite, enforced by server-side security rules, and your data is encrypted in transit and at rest (it lives in Google Cloud Firestore). The site also ships strict browser security headers (HSTS, content-security policy, no framing). You can export or delete everything yourself in Settings, anytime.</dd>
     <dt>Who can see my baby's data?</dt>
-    <dd>Only the people you invite. Your log is locked to your family, nobody else can see it.</dd>
+    <dd>Only the people you invite. Your log is locked to your family, nobody else can see it, and the most sensitive parts, a mother's health and the pregnancy journey, are shared only with whom she chooses.</dd>
+    <dt>Is the email sign-in link secure?</dt>
+    <dd>Yes. The link is single-use and expires soon after we send it, and the request is rate-limited to stop abuse. If a link expires or you don't see it, just ask for a new one.</dd>
+    <dt>Can I export my data?</dt>
+    <dd>Yes. Settings &gt; Data &gt; Export downloads everything as a JSON file.</dd>
+    <dt>Can I delete everything?</dt>
+    <dd>Yes. Settings &gt; Data &gt; Delete all data permanently erases your household's logs. Only an owner can do this, and it's worth exporting first.</dd>
+    <dt>How do I log out?</dt>
+    <dd>Settings &gt; Log out (also on your profile). Your data stays safely synced, just sign back in.</dd>
   </dl>
 
   <h2>Health &amp; vaccines</h2>
@@ -106,9 +162,7 @@
     <dt>Can I track medicines and doses?</dt>
     <dd>Yes. Set an every-few-hours or daily schedule and Cubby counts down to the next dose, so "did we already give it?" never happens.</dd>
     <dt>Does Cubby replace my doctor?</dt>
-    <dd>No. It's informational and helps you keep track. Always follow your doctor, midwife or health visitor.</dd>
-    <dt>Will Cubby track pregnancy?</dt>
-    <dd>Yes, a week-by-week pregnancy tracker (development, appointments, symptoms and danger-sign guidance) is on the way, so Cubby covers day zero through the first year and beyond.</dd>
+    <dd>No. It's informational and helps you keep track. Always follow your doctor, midwife or health visitor and your country's official guidance.</dd>
   </dl>
 
   <h2>Photos &amp; keepsakes</h2>
@@ -121,22 +175,10 @@
     <dd>Privately, in Cubby's own secure backend, visible only to your family.</dd>
   </dl>
 
-  <h2>Privacy, data &amp; account</h2>
-  <dl class="faq">
-    <dt>Is my data private and secure?</dt>
-    <dd>Yes. No ads, no third-party trackers, never sold. Your log is locked to the people you invite, enforced by server-side security rules, and your data is encrypted in transit and at rest (it lives in Google Cloud Firestore). The site also ships strict browser security headers (HSTS, content-security policy, no framing). You can export or delete everything yourself in Settings, anytime.</dd>
-    <dt>Can I export my data?</dt>
-    <dd>Yes. Settings &gt; Data &gt; Export downloads everything as a JSON file.</dd>
-    <dt>Can I delete everything?</dt>
-    <dd>Yes. Settings &gt; Data &gt; Delete all data permanently erases your household's logs. Consider exporting first.</dd>
-    <dt>How do I log out?</dt>
-    <dd>Settings &gt; Log out (also on your profile). Your data stays safely synced, just sign back in with Google.</dd>
-  </dl>
-
   <h2>Pricing</h2>
   <dl class="faq">
     <dt>What's free versus Pro?</dt>
-    <dd>All the essentials are free forever: logging, sharing, vaccine schedule, growth, health hub and keepsakes. Pro adds routines, push reminders, premium keepsakes, HD backup, PDF reports and insights. See the <a href="/pricing/">pricing page</a>.</dd>
+    <dd>All the essentials are free forever: logging, sharing, the vaccine schedule, growth, the health hub, routine ideas and keepsakes. Pro adds adaptive routines, push reminders, premium keepsakes, HD backup, PDF reports and insights. See the <a href="/pricing/">pricing page</a>.</dd>
     <dt>What will Pro cost?</dt>
     <dd>Cubby Pro is $9/month, or $90/year (save 17%, about $7.50/month), with a 7-day free trial and localized pricing. The free plan stays free forever. See the <a href="/pricing/">pricing page</a>.</dd>
     <dt>Will you ever charge for logging or sharing?</dt>
@@ -147,7 +189,7 @@
 </main>
 
 <footer class="foot">
-  <div class="fl"><a href="/">Home</a><a href="/pregnancy/">Pregnancy</a><a href="/features/">Features</a><a href="/articles/">Articles</a><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a><a href="/app/">Open app</a></div>
+  <div class="fl"><a href="/">Home</a><a href="/why/">Why Cubby</a><a href="/pregnancy/">Pregnancy</a><a href="/features/">Features</a><a href="/articles/">Articles</a><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a><a href="/app/">Open app</a></div>
   Cubby, a warm private baby tracker 🐻
   <div class="tiny">Cubby is informational and not a substitute for medical advice. Always follow your doctor and your country's official guidance.</div>
 </footer>
