@@ -833,7 +833,11 @@ const app = () => $('#app');
 const now = () => Date.now();
 const uid = () => Math.random().toString(36).slice(2,10)+now().toString(36);
 
-function babyEvents(){ return state.events.filter(e=>e.babyId===state.activeBabyId).sort((a,b)=>b.time-a.time); }
+function babyEvents(){ return state.events.filter(e=>e.babyId===state.activeBabyId && !e.deleted).sort((a,b)=>b.time-a.time); }
+/* Log integrity: you can always edit/delete your own entries; editing or deleting someone
+   else's is owner-only (mirrors the Firestore events rule). authorId is never reassigned. */
+function canEditEvent(e){ try{ return (window.LL&&window.LL.role==='owner') || !e.authorId || e.authorId===myUid(); }catch(_){ return true; } }
+function babyDeletedEvents(){ return state.events.filter(e=>e.babyId===state.activeBabyId && e.deleted).sort((a,b)=>(b.deletedAt||b.time)-(a.deletedAt||a.time)); }
 function activeBaby(){ return state.babies.find(b=>b.id===state.activeBabyId); }
 
 function fmtClock(ts){
@@ -1454,7 +1458,7 @@ function tlItem(e){
   const by = authorTag(e);
   return `<div class="tl-item" onclick="openEdit('${e.id}')">
     <div class="tl-ico" style="background:var(--${m.c}-soft);color:var(--${m.c})">${icon}</div>
-    <div class="tl-body"><div class="t1">${escapeHtml(eventTitle(e))}</div>${det?`<div class="t2">${escapeHtml(det)}</div>`:''}${by?`<div class="tl-by">${(e.authorId&&typeof window.memberAvatarSvg==='function')?`<span class="tl-byav">${window.memberAvatarSvg(e.authorId,16)}</span>`:''}logged by ${escapeHtml(by)}</div>`:''}</div>
+    <div class="tl-body"><div class="t1">${escapeHtml(eventTitle(e))}</div>${det?`<div class="t2">${escapeHtml(det)}</div>`:''}${(by||e.editedBy)?`<div class="tl-by">${(e.authorId&&typeof window.memberAvatarSvg==='function')?`<span class="tl-byav">${window.memberAvatarSvg(e.authorId,16)}</span>`:''}${by?'logged by '+escapeHtml(by):''}${e.editedBy?(by?' · ':'')+'edited by '+escapeHtml(loggerName(e.editedBy)||'someone'):''}</div>`:''}</div>
     ${e.photoId&&photoSrc(e.photoId)?`<img class="tl-thumb" src="${photoSrc(e.photoId)}">`:''}
     <div class="tl-time"><div class="clock">${fmtClock(e.time)}</div><div class="ago" data-since="${e.time}">${fmtSince(e.time)}</div></div>
   </div>`;
@@ -1906,26 +1910,52 @@ function openEdit(id){
   if(e.type==='note') extra=`<div class="field"><label>Note</label><textarea id="eNote">${escapeHtml(e.notes||'')}</textarea></div>`;
   if(e.type==='activity') extra=`<div class="field"><label>Minutes</label><input type="number" id="eMins" value="${e.mins||''}"></div><div class="field"><label>Note</label><textarea id="eNote">${escapeHtml(e.notes||'')}</textarea></div>`;
   if(e.photoId&&photoSrc(e.photoId)) extra+=`<div class="field"><label>Photo</label><div class="food-preview"><img src="${photoSrc(e.photoId)}"><button class="rm" onclick="removeEventPhoto('${id}')">×</button></div></div>`;
-  openSheet(`<h2>${escapeHtml(eventTitle(e))}</h2><div class="sub">${dayLabel(e.time)} at ${fmtClock(e.time)}</div>
-    <div class="field"><label>Time</label><input type="time" id="eTime" value="${tval(d)}"></div>
+  const canEd=canEditEvent(e);
+  const edNote=e.editedBy?`<div class="csub" style="margin:-4px 0 8px">edited by ${escapeHtml(loggerName(e.editedBy)||'someone')} · ${dayLabel(e.editedAt||e.time)}</div>`:'';
+  openSheet(`<h2>${escapeHtml(eventTitle(e))}</h2><div class="sub">${dayLabel(e.time)} at ${fmtClock(e.time)}${(e.authorId&&loggerName(e.authorId))?' · logged by '+escapeHtml(loggerName(e.authorId)):''}</div>${edNote}
+    <div class="field"><label>Time</label><input type="time" id="eTime" value="${tval(d)}"${canEd?'':' disabled'}></div>
     ${extra}
-    <button class="btn-primary" style="background:var(--${m.c})" onclick="saveEdit('${id}')">Save changes</button>
-    <button class="btn-ghost btn-danger" onclick="deleteEvent('${id}')">${I.trash} Delete entry</button>`,m.c);
+    ${canEd?`<button class="btn-primary" style="background:var(--${m.c})" onclick="saveEdit('${id}')">Save changes</button>
+    <button class="btn-ghost btn-danger" onclick="deleteEvent('${id}')">${I.trash} Delete entry</button>`:`<div class="preg-disclaim">Only ${escapeHtml(loggerName(e.authorId)||'the person who logged this')} or an owner can change this entry. It stays on the record either way.</div>`}`,m.c);
 }
 function saveEdit(id){
   const e=state.events.find(x=>x.id===id); if(!e)return;
+  if(!canEditEvent(e)){ toast('Only the logger or an owner can edit this'); return; }
+  const u=myUid(), t=now(), hist=[];
+  function chg(field,from,to){ hist.push({field,from:(from===undefined?null:from),to:(to===undefined?null:to),by:u,at:t}); }
   const nt=$('#eTime').value;
-  if(nt){ const old=new Date(e.time); const[h,m]=nt.split(':').map(Number); old.setHours(h,m); 
-    const delta=old.getTime()-e.time; e.time=old.getTime(); if(e.end)e.end+=delta; }
-  if($('#eAmt')) e.amount=+$('#eAmt').value;
-  if($('#eMins')) e.mins=parseInt($('#eMins').value,10)||null;
-  if($('#eNote')) e.notes=$('#eNote').value;
-  persist(); closeSheet(); render(); toast('Updated');
+  if(nt){ const old=new Date(e.time); const[h,m]=nt.split(':').map(Number); old.setHours(h,m);
+    const delta=old.getTime()-e.time; if(delta){ chg('time',e.time,old.getTime()); e.time=old.getTime(); if(e.end)e.end+=delta; } }
+  if($('#eAmt')){ const v=+$('#eAmt').value; if(v!==e.amount){ chg('amount',e.amount,v); e.amount=v; } }
+  if($('#eMins')){ const v=parseInt($('#eMins').value,10)||null; if(v!==(e.mins||null)){ chg('mins',e.mins,v); e.mins=v; } }
+  if($('#eNote')){ const v=$('#eNote').value; if(v!==(e.notes||'')){ chg('note',e.notes||'',v); e.notes=v; } }
+  if(hist.length){ e.editedBy=u; e.editedAt=t; e.history=(e.history||[]).concat(hist); }
+  persist(); closeSheet(); render(); toast(hist.length?'Updated':'No changes');
 }
 function deleteEvent(id){
-  const e=state.events.find(x=>x.id===id); const pid=e&&e.photoId;
-  state.events=state.events.filter(x=>x.id!==id);
-  persist(); if(pid) maybeDelPhoto(pid); closeSheet(); render(); toast('Deleted');
+  const e=state.events.find(x=>x.id===id); if(!e)return;
+  if(!canEditEvent(e)){ toast('Only the logger or an owner can delete this'); return; }
+  openSheet(`<h2>Delete this entry?</h2><div class="sub">It moves to recently deleted and can be recovered. The original logger and time stay on the record.</div>
+    <button class="btn-primary btn-danger" onclick="confirmDeleteEvent('${id}')">Delete entry</button>
+    <button class="btn-ghost" onclick="closeSheet()">Keep it</button>`,'note');
+}
+function confirmDeleteEvent(id){
+  const e=state.events.find(x=>x.id===id); if(!e)return;
+  if(!canEditEvent(e)){ toast('Only the logger or an owner can delete this'); return; }
+  e.deleted=true; e.deletedBy=myUid(); e.deletedAt=now();   // soft-delete: keep the doc + photo, recoverable
+  persist(); closeSheet(); render(); toast('Moved to recently deleted');
+}
+function recoverEvent(id){
+  const e=state.events.find(x=>x.id===id); if(!e)return;
+  delete e.deleted; delete e.deletedBy; delete e.deletedAt;
+  persist(); render(); toast('Recovered'); openTrash();
+}
+function openTrash(){
+  const del=babyDeletedEvents();
+  const rows=del.length?del.map(e=>`<div class="log-list-item"><div class="lli-ico">${(TYPE_META[e.type]&&TYPE_META[e.type].icon)||'🗒️'}</div>
+    <div class="lli-body"><div class="lli-t">${escapeHtml(eventTitle(e))}</div><div class="lli-s">${dayLabel(e.time)} at ${fmtClock(e.time)}${e.deletedBy?' · deleted by '+escapeHtml(loggerName(e.deletedBy)||'someone'):''}</div></div>
+    ${canEditEvent(e)?`<button class="btn-ghost" style="width:auto;padding:7px 12px" onclick="recoverEvent('${e.id}')">Recover</button>`:''}</div>`).join(''):'<div class="csub">Nothing here. Deleted entries land here and can be recovered.</div>';
+  openSheet(`<h2>Recently deleted</h2><div class="sub">${escapeHtml(activeBaby()?activeBaby().name:'This baby')}'s removed entries. Recover any that should not have gone.</div>${rows}`,'note');
 }
 
 /* ============================================================
@@ -1941,7 +1971,8 @@ function openBabySheet(){
     </div>`).join('');
   openSheet(`<h2>Babies</h2><div class="sub">Switch between little ones.</div>${list}
     <button class="btn-primary" style="background:var(--star)" onclick="openBabyProfile()">${I.note} ${escapeHtml(activeBaby().name)}'s profile</button>
-    <button class="btn-primary" onclick="openAddBaby()">${I.plus} Add a baby</button>`,'diaper');
+    <button class="btn-primary" onclick="openAddBaby()">${I.plus} Add a baby</button>
+    ${babyDeletedEvents().length?`<button class="btn-ghost" onclick="openTrash()">${I.trash} Recently deleted (${babyDeletedEvents().length})</button>`:''}`,'diaper');
 }
 function switchBaby(id){ state.activeBabyId=id; persist(); closeSheet(); go('home'); }
 
@@ -4373,10 +4404,15 @@ function saveGrowth(){
 }
 
 /* ---------- growth percentile charts (WHO / CDC) ---------- */
-let growthSource='who';
-function setGrowthSource(s){ growthSource=s; render(); }
+/* Growth standard derives from the baby's country (US -> CDC, everyone else -> WHO),
+   with a per-baby override stored on the baby. Country is already set at add-baby; never asked twice. */
+function defaultGrowthSource(c){ return c==='us'?'cdc':'who'; }
+function effGrowthSource(b){ b=b||activeBaby(); return (b&&b.growthSource)||defaultGrowthSource(b&&b.country)||'who'; }
+function setGrowthSource(s){ const b=activeBaby(); if(b){ b.growthSource=s; persist(); } render(); }
+function toggleGrowthSource(){ const b=activeBaby(); if(!b)return; b.growthSource=(effGrowthSource(b)==='who')?'cdc':'who'; persist(); render(); }
+function growthChangeBtn(){ return '<button onclick="toggleGrowthSource()" style="background:none;border:none;color:var(--pink-d,#B06A9A);font-weight:700;cursor:pointer;font:inherit;padding:0;text-decoration:underline">change</button>'; }
 function setBabySex(s){ const b=activeBaby(); if(!b)return; b.sex=s; persist(); render(); }
-function growthRef(meas){ const b=activeBaby(); const sex=b&&b.sex; if(!sex||!window.GROWTH_REF)return null; const src=window.GROWTH_REF[growthSource]; return (src&&src[meas]&&src[meas][sex])||null; }
+function growthRef(meas){ const b=activeBaby(); const sex=b&&b.sex; if(!sex||!window.GROWTH_REF)return null; const src=window.GROWTH_REF[effGrowthSource(b)]; return (src&&src[meas]&&src[meas][sex])||null; }
 function refConv(meas,v,unit){ return meas==='weight'?convW(v,'kg',unit):convH(v,'cm',unit); }
 function babyAgeMonths(t){ const b=activeBaby(); return (b&&b.birth)?((t-b.birth)/2629800000):null; }
 function interpBands(ref,mo){
@@ -4399,7 +4435,6 @@ function estPercentile(meas,unit){
 function pctLabel(meas,unit){ const p=estPercentile(meas,unit); return p?` · latest ~${p}`:''; }
 function growthControls(b){
   return `<div class="gx-ctrl">
-    <div class="gx-seg">${['who','cdc'].map(s=>`<button class="${growthSource===s?'on':''}" onclick="setGrowthSource('${s}')">${s.toUpperCase()}</button>`).join('')}</div>
     <div class="gx-seg">${[['M','Boy'],['F','Girl']].map(o=>`<button class="${b&&b.sex===o[0]?'on':''}" onclick="setBabySex('${o[0]}')">${o[1]}</button>`).join('')}</div>
   </div>`;
 }
@@ -4446,10 +4481,10 @@ function renderGrowthSection(){
     ${tipLine('growth','Set Boy/Girl to overlay WHO/CDC percentile curves behind the dots.')}
     ${growthControls(b)}
     ${(b&&b.sex)?'':`<div class="stat-card"><div class="csub" style="margin:0">Choose your baby's sex above to see WHO/CDC percentile curves behind their measurements.</div></div>`}
-    ${wPts.length?`<div class="stat-card"><h3>Weight</h3><div class="csub">${(b&&b.sex)?growthSource.toUpperCase()+' percentiles'+pctLabel('weight',wU):wPts.length+' measurement'+(wPts.length>1?'s':'')} · ${wU}</div>${(b&&b.sex&&growthRef('weight'))?svgPercentile('weight',wU):svgLine(wPts,'feed',wU)}</div>`:''}
-    ${hPts.length?`<div class="stat-card"><h3>Height</h3><div class="csub">${(b&&b.sex)?growthSource.toUpperCase()+' percentiles'+pctLabel('height',hU):hPts.length+' measurement'+(hPts.length>1?'s':'')} · ${hU}</div>${(b&&b.sex&&growthRef('height'))?svgPercentile('height',hU):svgLine(hPts,'sleep',hU)}</div>`:''}
+    ${wPts.length?`<div class="stat-card"><h3>Weight</h3><div class="csub">${(b&&b.sex)?'Showing '+effGrowthSource().toUpperCase()+' curves · '+growthChangeBtn()+pctLabel('weight',wU):wPts.length+' measurement'+(wPts.length>1?'s':'')} · ${wU}</div>${(b&&b.sex&&growthRef('weight'))?svgPercentile('weight',wU):svgLine(wPts,'feed',wU)}</div>`:''}
+    ${hPts.length?`<div class="stat-card"><h3>Height</h3><div class="csub">${(b&&b.sex)?'Showing '+effGrowthSource().toUpperCase()+' curves · '+growthChangeBtn()+pctLabel('height',hU):hPts.length+' measurement'+(hPts.length>1?'s':'')} · ${hU}</div>${(b&&b.sex&&growthRef('height'))?svgPercentile('height',hU):svgLine(hPts,'sleep',hU)}</div>`:''}
     <div class="add-row" onclick="openGrowth()">${I.plus} Add a measurement</div>
-    <p style="font-size:12px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:12px">${(b&&b.sex)?'Bands: '+(growthSource==='who'?'WHO Child Growth Standards (0–24 mo)':'CDC growth charts (0–36 mo)')+'. ':''}A guide, not a diagnosis, your pediatrician is the best judge.</p>`;
+    <p style="font-size:12px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:12px">${(b&&b.sex)?'Bands: '+(effGrowthSource()==='who'?'WHO Child Growth Standards (0–24 mo)':'CDC growth charts (0–36 mo)')+'. ':''}A guide, not a diagnosis, your pediatrician is the best judge.</p>`;
 }
 function growthDelta(pts){ if(pts.length<2)return null; const d=pts[pts.length-1].v-pts[pts.length-2].v; return +d.toFixed(2); }
 function svgLine(pts,color,unit){
