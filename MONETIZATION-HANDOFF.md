@@ -6,17 +6,19 @@
 you can take the payment loop from "built" to "charging real money".
 
 > **Scope:** this doc owns the **monetization track** (entitlement, gates, billing). It is on
-> `main`. The pregnancy product is now **merged into `main` and live** (`PREGNANCY-HANDOFF-V2.md`;
-> the `pregnancy-tracker` branch is redundant, kept until retired). Business-strategy review lives
-> in `STRATEGY-REVIEW.md`.
+> `main`, which is the production branch (push = live via Cloudflare Workers Builds). The pregnancy
+> product is now **merged into `main` and live** (`PREGNANCY-HANDOFF-V2.md`; the old
+> `pregnancy-tracker` branch is redundant, kept until retired, and is NOT a deploy branch).
+> Business-strategy review lives in `STRATEGY-REVIEW.md`.
 
 ---
 
 ## 1. Status in one line
 The Pro payment loop is **built and committed to `main`** (commit `6aae432`, plus the gated
-features), but is **NOT live**: no Stripe account is wired, `PRO_CFG` URLs are empty, and the
-tamper-proof Firestore rule is not yet published in the Firebase console. Until those are done,
-the Pro sheet safely falls back to the existing waitlist, so nothing changed for current users.
+features), but is **NOT live**: no Stripe account is wired and `PRO_CFG` URLs are empty. (The
+tamper-proof Firestore rule that locks the `pro` entitlement is now **published** in the Firebase
+console, as of 2026-06-14, as part of the full ruleset.) Until Stripe is wired, the Pro sheet
+safely falls back to the existing waitlist, so nothing changed for current users.
 
 ## 2. The model (how a dollar flows)
 ```
@@ -82,10 +84,12 @@ smart routines/insights.** See `PAYWALL.md` / `PRO.md`.
    `customer.subscription.updated`, `customer.subscription.deleted`; then
    `wrangler secret put STRIPE_WEBHOOK_SECRET`.
 5. Activate the Stripe customer billing portal (for "Manage subscription").
-6. **Publish the updated `firestore.rules` in the Firebase console.** The console copy is the
-   runtime source of truth; the entitlement is NOT tamper-proof until this is done.
+6. **Publish the updated `firestore.rules` in the Firebase console.** DONE 2026-06-14: the full
+   ruleset (including the `pro` entitlement lock) is published. The console copy is the runtime
+   source of truth, so re-publish whenever the rules change.
 7. In `app/index.html` set `PRO_CFG.checkoutUrl` and `PRO_CFG.portalUrl` to the Worker URLs,
-   bump `app/sw.js` CACHE, push (Cloudflare auto-deploys ~1 min).
+   bump `app/sw.js` CACHE, push to `main` (Cloudflare Workers Builds deploys on push, ~1 min;
+   `main` is the production branch, push = live).
 8. Test with Stripe test card `4242 4242 4242 4242` -> confirm `households/{hid}.pro` flips and
    a second device unlocks live -> cancel from portal -> confirm it flips back.
 

@@ -80,8 +80,15 @@ for picking the pregnancy track back up. Read it cold and you know everything.
   Flags: `const FEATURES = { den:false }` near `CUBBY_VERSION`.
 - `app/pregnancy-data.js`: `window.PREG` = weeks 4-41, antenatal schedules, dangerSigns,
   `conditions` (GDM/BP/supplements/nausea thresholds + sources). Re-verify sources yearly.
-- `app/store-firebase.js`: household blob carries `pregnancy`, `den`, `consents`, `guardians`;
-  household doc carries `formerMemberInfo`; loggerName/authorTag fall back to it.
+- `app/store-firebase.js`: household blob carries `den`, `consents`, `guardians`;
+  household doc carries `formerMemberInfo`; loggerName/authorTag fall back to it. As of 2026-06-14
+  the **pregnancy journey is private by default** and no longer rides in the circle-shared blob: it
+  lives owner-owned in `households/{hid}/pregnancy/{ownerUid}` with a `sharedWith[]` list (mirrors
+  the maternal-health `mhealth` pattern), readable by the owner plus the uids she lists and writable
+  only by the owner, server-enforced in `firestore.rules` (`match /pregnancy/{owner}`). A legacy
+  in-blob journey self-heals: the owner's client relocates it to the owner doc, then strips it from
+  the blob on the next owner login. (The old in-blob journey was already visible to the whole circle,
+  so this is retroactive privatization, not a fresh secret leak.)
 - `app/sw.js`: `CACHE = little-log-v65` on `main` (bump it on any app-asset change).
 - `pregnancy/index.html`: the sales page.
 - State shape: `state.pregnancy` includes `stage` ('planning'|'expecting'), `moments[]`,

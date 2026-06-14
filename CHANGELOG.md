@@ -1,5 +1,35 @@
 # Cubby — Changelog
 
+## v0.12.0 — 2026-06-14 — home day-surface, pregnancy privacy, routines, hardened sign-in
+
+A warmer home screen, two more things moved off the circle-shared blob into owner-owned storage, gentle daily routines, and a tougher sign-in endpoint. All live on little-cubby.com (deploys from `main` via Cloudflare Workers Builds).
+
+**Home day-surface (item 5)**
+- The home screen now shows a per-day surface: today's notes, a gentle quote, and recent photos as polaroids. The old single shared "handoff" note was replaced by **per-day notes**.
+- Notes are stored one-per-doc in `households/{hid}/notes/{noteId}` (no longer in the circle-shared app blob), each with an `audience`: `circle` (everyone in the household), a specific member uid (private to that one person), or the author. `firestore.rules` enforce read by audience/author; only the author can edit or delete. A one-time migration folds any legacy handoff note into a single `circle` note.
+
+**Pregnancy journey privacy (item 7)**
+- The pregnancy **journey** (stage, due date, weeks, appointments, kicks, contractions, birth plan, hospital bag, moments) moved out of the circle-shared app blob into an owner-owned doc `households/{hid}/pregnancy/{ownerUid}`, mirroring the maternal-health (mhealth) pattern. Readable by the owner plus the uids she lists in `sharedWith[]`, writable only by the owner; server-enforced in `firestore.rules` (`match /pregnancy/{owner}`).
+- Maternal-private health stays separately owner-only in mhealth and is never swept into the journey. A legacy in-blob journey self-heals: the owner's client relocates it to the owner doc, then strips the blob on the next owner login. (The legacy blob journey was already circle-visible under the old design, so this is retroactive privatization, not a fresh leak.)
+
+**Routines (item 8)**
+- A gentle, per-baby, age-appropriate **routine list in the Log tab**. Tapping "done" writes a real log event (so it appears in the timeline/recap), authored by the person who taps it. No notifications, no server cron, no Blaze/Storage/Functions dependency: stays on the free tier.
+
+**Sign-in & secrets**
+- **Magic-link rate limiting in the Worker**: `POST /api/send-signin-link` is now rate-limited per IP (5 requests / 60s) via a Cloudflare Workers rate-limiting binding (`SIGNIN_RATE_LIMITER`), enforced right after the same-origin check, before any body or token work. Returns 429 + `Retry-After` when over budget, fails open if the binding is missing. Verified live. This replaces the previously-pending Cloudflare dashboard rate-limit TODO (now done in code, deploys on push) and complements the same-origin gate and per-email cooldown.
+- **Resend API key rotated**; the new key lives only as the `RESEND_API_KEY` Worker secret, never in the repo.
+
+**Rules & platform**
+- `firestore.rules` published in the Firebase console, including the new notes + pregnancy blocks (mhealth + pro-lock rules unchanged).
+- Service worker cache bumped to `little-log-v73`.
+
+**Hardening**
+- An adversarial review caught and fixed 4 defects before ship: (a) sign-out/teardown clears in-memory pregnancy + maternal-private health so it can't survive into the next account on an in-tab switch; (b) routine events are authored by the tapper and the un-tick is permission-guarded (no server-rejected "zombie" events); (c) the handoff->note migration is idempotent and authored by the writing owner.
+
+**Still to do:** the founder's two-account cross-account privacy test; the deferred `app.pregnancy` rules guard (waiting ~a week for old v72 clients to drain); the deferred notes audience-immutability rule tweak.
+
+---
+
 ## v0.11.0 — 2026-06-14 — one Cubby: pregnancy merged, mother-owned privacy, working email sign-in
 
 The pregnancy track shipped into `main`, the brand consolidated to one lifecycle app, maternal health went private-by-design, and email sign-in actually delivers now. All live on little-cubby.com (deploys from `main` via Cloudflare Workers Builds).

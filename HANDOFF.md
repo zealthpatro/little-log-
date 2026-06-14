@@ -6,8 +6,11 @@ Last refreshed: 2026-06-14.
 ## Current status (June 2026): what's live + how we go live
 
 **Everything below is LIVE on https://little-cubby.com** (one repo, one branch `main`, Cloudflare
-Workers Builds auto-deploys on every push to `main`). The pregnancy track is no longer a side branch —
-it has been **merged into `main` and shipped**. `pregnancy-tracker` is now redundant (kept until retired).
+Workers Builds auto-deploys on every push to `main`, re-verified 2026-06-14: **push = live**). The
+app entry point is `/app/` (the manifest `start_url` + scope), not `/app/index.html`. The pregnancy
+track is no longer a side branch, it has been **merged into `main` and shipped**. `pregnancy-tracker`
+is now redundant (kept until retired). Any older doc that says we deploy from `pregnancy-tracker` is
+stale; the deploy branch is `main`.
 
 ### Accomplished this cycle
 - **One Cubby, four lifecycle stages** — Trying → Expecting → Baby → Child. The old "Mommy To Be" name
@@ -21,6 +24,26 @@ it has been **merged into `main` and shipped**. `pregnancy-tracker` is now redun
   owner-only and never shareable. Rules **published in the Firebase console** (the runtime source of
   truth). Containment verified; cross-account *sharing* path still wants an emulator test. See
   `PRIVACY-MAX-1.0.md`.
+- **Home day-surface + per-day notes (item 5), live:** the home screen now shows a per-day surface:
+  today's notes, a gentle quote, and recent photos as polaroids. The old single shared "handoff" note
+  was **replaced by per-day notes**, stored one-per-doc in `households/{hid}/notes/{noteId}` (no longer
+  in the circle-shared `app` blob). Each note has an `audience`: `'circle'` (everyone in the household),
+  a specific member uid (private to that one person), or the author. `firestore.rules` enforce read by
+  audience/author; only the author edits or deletes. A one-time, idempotent migration moves any legacy
+  handoff note into a single `'circle'` note, authored by the writing owner.
+- **Pregnancy journey privacy (item 7), live:** the pregnancy "journey" (stage, due date, weeks,
+  appointments, kicks, contractions, birth plan, hospital bag, moments) was **moved out of the
+  circle-shared `app` blob** into an owner-owned doc `households/{hid}/pregnancy/{ownerUid}`, mirroring
+  the `mhealth` pattern. Readable by the owner plus the uids she lists in `sharedWith[]`, writable only
+  by the owner; server-enforced in `firestore.rules` (`match /pregnancy/{owner}`). Maternal-private
+  HEALTH stays separately owner-only in `mhealth` and is never swept into the journey. A legacy in-blob
+  journey self-heals: the owner's client relocates it to the owner doc then strips the blob on the next
+  owner login. (The old blob journey was already visible to the whole circle under the prior design, so
+  this is retroactive privatization, not a fresh leak.)
+- **Routines (item 8), live:** a gentle, per-baby, age-appropriate routine list in the Log tab.
+  Tapping "done" writes a real log event (so it shows in the timeline/recap), authored by the person
+  who taps it; the un-tick is permission-guarded. **No** notifications, **no** server cron, **no**
+  Blaze/Storage/Functions dependency, so it stays on the free tier. See `ROUTINES.md`.
 - **Expecting/Baby audience framework across the marketing site** — a pre-paint lifecycle-stage engine
   (URL `?stage=` > page `data-page-stage` > localStorage > default baby), two-tab Features, a Home
   "Expecting" section, an Articles strip, and a Pregnancy nav link. Arriving from `/pregnancy/` marks
@@ -30,8 +53,13 @@ it has been **merged into `main` and shipped**. `pregnancy-tracker` is now redun
   mints the Firebase sign-in link (service-account JWT → OAuth → Identity Toolkit `returnOobLink`) and
   sends a branded email via **Resend** from `mail.little-cubby.com`. Confirmed delivering to the **Gmail
   inbox** (Firebase's built-in sender was being silently dropped). Endpoint hardened (same-origin via
-  Origin/Referer, normalized cooldown). Sign-in **deeplinks rebranded to `little-cubby.com`** (no more
-  `little-log-a9caa.firebaseapp.com`). See `EMAIL.md`.
+  Origin/Referer, normalized cooldown). **Rate limiting is now DONE in-Worker:** per-IP limit of
+  **5 requests / 60s** via a Cloudflare Workers rate-limiting binding (`wrangler.toml`
+  `[[unsafe.bindings]]` `SIGNIN_RATE_LIMITER`), enforced in `worker.js` right after the same-origin
+  check, before any body/token work; returns 429 + `Retry-After` over budget and fails open if the
+  binding is missing. Verified live 2026-06-14. The previously-leaked **Resend API key was rotated**
+  (2026-06-14); the new key lives only as the `RESEND_API_KEY` Worker secret, never in the repo. Sign-in
+  **deeplinks rebranded to `little-cubby.com`** (no more `little-log-a9caa.firebaseapp.com`). See `EMAIL.md`.
 - **Vaccine catch-up (Phase 0.3)** — calm 5-state badges, no red "OVERDUE wall"; estimated catch-up
   dates tagged.
 - **Pricing unified** — Cubby Pro **$9/mo or $90/yr** (save 17%, 7-day trial), gated to an Aug 2026 launch.
@@ -39,14 +67,24 @@ it has been **merged into `main` and shipped**. `pregnancy-tracker` is now redun
   page and reinforced in the sign-in email footer.
 
 ### How it goes live (mechanism)
-`git push origin main` → **Cloudflare Workers Builds** rebuilds + deploys `little-cubby.com`. No wrangler
-needed locally; secrets/vars live in the Cloudflare dashboard (Workers&Pages → `cubby` → Settings →
-Variables and Secrets: `RESEND_API_KEY`, `FIREBASE_SERVICE_ACCOUNT` secrets; `MAIL_FROM` var). Firestore
-rules must be **published in the Firebase console** to take effect.
+`git push origin main` → **Cloudflare Workers Builds** rebuilds + deploys `little-cubby.com` (push =
+live). No wrangler needed locally; secrets/vars live in the Cloudflare dashboard (Workers&Pages →
+`cubby` → Settings → Variables and Secrets: `RESEND_API_KEY` (rotated 2026-06-14),
+`FIREBASE_SERVICE_ACCOUNT` secrets; `MAIL_FROM` var). The magic-link rate limiter is a Workers binding
+(`SIGNIN_RATE_LIMITER` in `wrangler.toml`), so it deploys on push too. Firestore rules must be
+**published in the Firebase console** to take effect (done 2026-06-14, including the new notes +
+pregnancy blocks).
 
 ### Remaining to fully harden / launch
-- **Rate-limit rule** on `POST /api/send-signin-link` (Cloudflare → `little-cubby.com` zone → Security →
-  WAF → Rate limiting; ~5–10/IP/min). The in-Worker cooldown is not the volume defense. **Pending.**
+- **Magic-link rate limiting:** **DONE** (in-Worker, 5/60s/IP via the `SIGNIN_RATE_LIMITER` binding,
+  verified live 2026-06-14). This replaces the previously-pending "add a Cloudflare dashboard rate-limit
+  rule" TODO: it is now in code and deploys on push. Complements the same-origin gate + per-email cooldown.
+- **Two-account cross-account privacy test:** the founder still needs to run the two-account check
+  (notes/pregnancy/mhealth containment + sharing) against the published rules. **Pending.**
+- **Deferred `app.pregnancy` rules guard:** held ~a week to let old v72 clients drain before the blob
+  guard lands. **Pending.**
+- **Deferred notes audience-immutability rule tweak:** the audience-immutability tightening on
+  `households/{hid}/notes/{noteId}` is still queued. **Pending.**
 - **Pro billing go-live** — Worker is built (`workers/pro-billing/`); needs Stripe product/secrets/webhook
   + checkout URLs in the app; targeted Aug 2026. See `MONETIZATION-HANDOFF.md`.
 - **Maternal-surface gates** — emulator cross-account denial test for the consent *sharing* path; a
@@ -94,7 +132,7 @@ Don't break production. Make a change → verify → push (auto-deploys).
 - `app/pregnancy-data.js` = `window.PREG` week-by-week + antenatal schedule data (170-country
   coverage). The full pregnancy product is **merged into `main` and live** (one Cubby; the old
   "Mommy To Be" name is retired). History/spec: `PREGNANCY-HANDOFF-V2.md`.
-- `app/sw.js` = service worker (`CACHE = little-log-vNN`, currently **v65**; bump on app asset change).
+- `app/sw.js` = service worker (`CACHE = little-log-vNN`, currently **v73**; bump on app asset change).
 - Data lives in `households/{hid}` (see README §3). Events are a subcollection; rest is the `app` blob.
 - Edge worker: root `worker.js` (`wrangler.toml` → `main = "worker.js"`) reverse-proxies `/__/*`
   to the Firebase auth backend so sign-in stays on `little-cubby.com`.
@@ -170,12 +208,15 @@ Articles are produced by a **dedicated Sonnet writer agent**, not the main build
 - Bump `app/sw.js` `CACHE` or app clients keep old assets (marketing pages don't need it).
 - New live domain → add it to Firebase Authorized domains or sign-in fails.
 - Firestore rules live in `firestore.rules` **and** must be published in the Firebase console
-  (the console copy is the source of truth at runtime) — required before Pro billing goes live.
+  (the console copy is the source of truth at runtime). Published 2026-06-14 with the new notes +
+  pregnancy blocks; mhealth + pro-lock rules unchanged. Re-publish before Pro billing goes live.
 - `tools/serviceAccountKey.json` (for `tools/analytics.js`) is **gitignored and never deployed** —
   never commit it. `.assetsignore` keeps `tools/`, docs, drafts and node_modules out of the deploy.
 - No em-dashes anywhere in user-facing copy; no GA4/third-party trackers (keep the privacy promise).
-- Pregnancy work lives on `pregnancy-tracker`; on merge, watch conflicts in shared marketing files
-  (root `index.html`, `sitemap.xml`, nav) and take the highest `app/sw.js` CACHE + 1.
+- Pregnancy work is **merged into `main` and live** (the `pregnancy-tracker` branch is redundant,
+  kept until retired); deploys are from `main`. When merging any feature branch, watch conflicts in
+  shared marketing files (root `index.html`, `sitemap.xml`, nav) and take the highest `app/sw.js`
+  CACHE + 1.
 
 ## Decisions on record
 - Free tiers only for core infra: in-app notifications (no Blaze/card); photos as base64 in Firestore
@@ -210,6 +251,6 @@ Articles are produced by a **dedicated Sonnet writer agent**, not the main build
 Part A for any UI) · `CHANGELOG.md` · `SEO.md` · `CONTENT.md` /
 `CONTENT-RUNBOOK.md` / `CONTENT-QUEUE.md` · `PRO.md` / `PAYWALL.md` (Stripe billing built,
 launch checklist in `workers/pro-billing/README.md`) · `PREGNANCY.md` /
-`PREGNANCY-HANDOFF.md` (v1, superseded) / **`PREGNANCY-HANDOFF-V2.md` (the pregnancy track:
-built on branch `pregnancy-tracker`, rollout + next steps)** · `ROUTINES.md` · `ONBOARDING.md` ·
+`PREGNANCY-HANDOFF.md` (v1, superseded) / **`PREGNANCY-HANDOFF-V2.md` (the pregnancy track,
+now merged into `main` and live; rollout + next steps)** · `ROUTINES.md` · `ONBOARDING.md` ·
 `EMAIL.md` · `ANALYTICS.md` · `AI-EDITING.md`

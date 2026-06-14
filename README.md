@@ -50,11 +50,11 @@ Phone / browser
        ├─ cubby-extras.js ...... bear avatars (SVG), custom time/date pickers, "When" strip
        ├─ landing.js ........... signed-out landing + Pro/paywall copy
        ├─ growth-data.js ....... WHO + CDC growth percentile tables (generated)
-       ├─ pregnancy-data.js .... week-by-week + antenatal data (full UI built on branch pregnancy-tracker)
+       ├─ pregnancy-data.js .... week-by-week + antenatal data (full UI merged into main, live)
        └─ sw.js ................ service worker (CACHE little-log-vNN; network-first HTML)
             │
             ▼
-       Firebase Auth (Google + email link)  +  Cloud Firestore (shared "household" doc + subcollections)
+       Firebase Auth (Google + email link)  +  Cloud Firestore (household doc, events, photos, notes, owner-owned pregnancy + mhealth)
 
    Cloudflare serves the static files;  Firestore stores + syncs the app data.
 ```
@@ -81,8 +81,8 @@ and runs a diff-based sync engine. The app code still just mutates `state` and c
 | `app/cubby-extras.js` | `cubbyBear()` parametric SVG avatars; per-member/per-baby variants + picker; the custom warm **time picker** and unified **"When?" (date+time)** picker. |
 | `app/landing.js` | Signed-out in-app landing screen + Pro/paywall copy (incl. Nutrition tracker). |
 | `app/growth-data.js` | `window.GROWTH_REF` = `{who,cdc}.{weight,height}.{M,F}` arrays of `[month,p5,p25,p50,p75,p95]`. Generated from official CDC/WHO data files (see §7). |
-| `app/pregnancy-data.js` | `window.PREG` week-by-week (weeks 4-41) + antenatal schedules (UK/US/DE/UAE/generic) + danger signs + condition thresholds. The full pregnancy product ("Mommy To Be") — journey, health tracking, ultrasound Moments, birth→baby conversion — is built on branch `pregnancy-tracker`, unmerged: see `PREGNANCY-HANDOFF-V2.md`. |
-| `app/sw.js` | App service worker; bump `CACHE` (`little-log-vN`, currently **v57**) on app asset change. |
+| `app/pregnancy-data.js` | `window.PREG` week-by-week (weeks 4-41) + antenatal schedules (UK/US/DE/UAE/generic) + danger signs + condition thresholds. The full pregnancy product (journey, health tracking, ultrasound Moments, birth→baby conversion) is merged into `main` and live as the Expecting stage of the one Cubby app; the journey is private by default (owner-owned doc + sharedWith). See `PREGNANCY-HANDOFF-V2.md`. |
+| `app/sw.js` | App service worker; bump `CACHE` (`little-log-vN`, currently **v73**) on app asset change. |
 | `app/manifest.webmanifest` | PWA manifest (name "Cubby", `start_url`/`scope` = `/app/`, icons). |
 
 ### Marketing + SEO (root `/`)
@@ -99,10 +99,10 @@ and runs a diff-based sync engine. The app code still just mutates `state` and c
 ### Shared / infra
 | File | Purpose |
 |---|---|
-| `firestore.rules` | Security rules: members-only access, owner vs caregiver, invite-by-email join, and `households/{hid}.pro` writable only by the billing Worker. |
-| `worker.js` | Cloudflare edge worker (`wrangler.toml` `main`): reverse-proxies `/__/*` to `little-log-a9caa.firebaseapp.com` for same-domain sign-in (`authDomain` = `little-cubby.com`); all other paths fall through to static assets via the `ASSETS` binding. |
+| `firestore.rules` | Security rules: members-only access, owner vs caregiver, invite-by-email join, `households/{hid}.pro` writable only by the billing Worker, per-`notes` read-by-audience/author-only-edit, and owner-owned `pregnancy`/`mhealth` (read by owner + `sharedWith`, write owner-only). Published in the Firebase console (2026-06-14). |
+| `worker.js` | Cloudflare edge worker (`wrangler.toml` `main`): reverse-proxies `/__/*` to `little-log-a9caa.firebaseapp.com` for same-domain sign-in (`authDomain` = `little-cubby.com`); all other paths fall through to static assets via the `ASSETS` binding. Also serves `POST /api/send-signin-link`, rate-limited per IP (5 requests per 60s via the `SIGNIN_RATE_LIMITER` binding) right after the same-origin check, returning 429 + `Retry-After` over budget and failing open if the binding is missing. |
 | `workers/pro-billing/` | Standalone Stripe billing Worker (`worker.js` + `wrangler.toml` + `README.md`): `/checkout`, `/webhook`, `/portal`; verifies Stripe signatures and writes the `households/{hid}.pro` entitlement. Built; deploy + secrets pending (see §9 and its `README.md`). |
-| `wrangler.toml` | Cloudflare deploy config: `main = "worker.js"` (edge auth proxy) + `[assets] directory="./"` (static site). |
+| `wrangler.toml` | Cloudflare deploy config: `main = "worker.js"` (edge auth proxy) + `[assets] directory="./"` (static site) + `[[unsafe.bindings]] SIGNIN_RATE_LIMITER` (per-IP magic-link rate limit). |
 | `.assetsignore` | Keeps `tools/`, docs, drafts, node_modules and the service-account key out of the deploy. |
 | `.gitignore` | Ignores `tools/serviceAccountKey.json`, node_modules, logs, `.DS_Store`. |
 | `_headers` | Cloudflare header hints (CSP/security; keeps sw/manifest uncached). |
@@ -128,6 +128,13 @@ households/{hid}
 
 households/{hid}/events/{eventId}   // one doc per log entry, includes authorId
 households/{hid}/photos/{photoId}   // { data: <base64 thumbnail>, authorId }   (no Firebase Storage)
+households/{hid}/notes/{noteId}     // one note per doc: { text, authorId, audience, createdAt }
+                                    //   audience: 'circle' (everyone), a member uid (private to them), or the author
+                                    //   read by audience/author; only the author edits/deletes (enforced in rules)
+households/{hid}/pregnancy/{owner}  // owner-owned pregnancy journey (stage, due date, weeks, appts,
+                                    //   kicks, contractions, birth plan, hospital bag, moments)
+                                    //   { ..., sharedWith: [<uid>] }; readable by owner + sharedWith, writable only by owner
+households/{hid}/mhealth/{owner}    // owner-only maternal-private health (never swept into the journey)
 
 invites/{emailLowercase}            // { householdId, role, relationship, name, invitedBy, status }
 users/{uid}                         // { householdId, name, email, referredBy? }  (private pointer)
@@ -145,6 +152,19 @@ so two caregivers logging at once never clobber each other. The rest of `state` 
 
 **Photos** are stored as base64 thumbnails in a Firestore subcollection (deliberately **not**
 Firebase Storage, which would force the paid Blaze plan). Keeps `photoSrc()` synchronous.
+
+**Notes** are one-per-doc in `households/{hid}/notes` (the old single shared "handoff" note was
+replaced by per-day notes). Each note carries an `audience`: `'circle'` (everyone in the household),
+a specific member uid (private to that one person), or the author. `firestore.rules` enforce read by
+audience/author; only the author edits or deletes. A one-time migration folds any legacy handoff note
+into a single `'circle'` note (idempotent, authored by the writing owner).
+
+**Pregnancy journey** lives in an owner-owned doc `households/{hid}/pregnancy/{ownerUid}` (mirroring
+the maternal-health `mhealth` pattern), moved out of the shared `app` blob. It is readable by the
+owner plus the uids she lists in `sharedWith[]`, and writable only by the owner, enforced in
+`firestore.rules` (`match /pregnancy/{owner}`). A legacy in-blob journey self-heals: the owner's
+client relocates it to the owner doc, then strips the blob on the next owner login. Maternal-private
+health stays separately owner-only in `mhealth` and is never swept into the journey.
 
 ---
 
@@ -169,7 +189,9 @@ Firebase Storage, which would force the paid Blaze plan). Keeps `photoSrc()` syn
   pump, activity/notes, growth, medicine, temperature, symptoms, visits.
 - **Sign-in:** Google (popup, with a redirect fallback when popups are blocked) **or** email
   magic-link (`sendSignInLinkToEmail` → `isSignInWithEmailLink` → `signInWithEmailLink`). Both run
-  on `little-cubby.com` itself via the same-domain `worker.js` proxy.
+  on `little-cubby.com` itself via the same-domain `worker.js` proxy. The magic-link send endpoint
+  (`POST /api/send-signin-link`) is rate-limited per IP (5 requests per 60s) in the edge worker, on
+  top of the same-origin gate and per-email cooldown.
 - **First-run onboarding:** the first time a user signs in, a non-dismissible **locked modal**
   (no close button) appears over a blurred, non-interactive app preview. Baby name is required;
   country (defaults to `detectCountry()`), birthday, bear color and relationship are optional. A
@@ -198,6 +220,14 @@ Firebase Storage, which would force the paid Blaze plan). Keeps `photoSrc()` syn
 - **On-device photo polish (no servers):** one-tap **Auto-enhance** (histogram) and **background
   cutout / sticker-me** via MediaPipe selfie segmentation (lazy-loaded from CDN). Generative AI is
   deferred to post-beta — see `AI-EDITING.md`.
+- **Routines (Log tab):** a gentle, per-baby, age-appropriate routine list. Tapping "done" writes a
+  real log event (so it shows in the timeline/recap), authored by the person who taps it. No
+  notifications, no server cron, no Blaze/Storage/Functions dependency (stays on the free tier).
+- **Home day-surface:** the app home shows a per-day surface (today's notes, a gentle quote, recent
+  photos as polaroids). Notes are per-day, per-doc with audience-based privacy (see §3).
+- **Pregnancy journey (owner-owned):** stage, due date, weeks, appointments, kicks, contractions,
+  birth plan, hospital bag and ultrasound Moments live in an owner-owned doc shared only with the
+  uids the owner picks (`sharedWith`), not in the shared `app` blob (see §3).
 - **Home extras:** rotating **tips ticker** and country-aware vaccine schedule on the app home.
 - **Country awareness:** per-baby country + `detectCountry()` (no IP geolocation) drives the
   in-app vaccine schedule (US/UK/UAE/DE) and ties back to the SEO vaccine pages.
@@ -219,8 +249,9 @@ After editing, hard-reload (the app SW is network-first for HTML); to fully rese
 the SW + clear caches in DevTools, or bump `CACHE` in `app/sw.js`.
 
 ### Deploy (automatic)
-Cloudflare Pages/Workers is connected to the GitHub repo. **Every push to `main` auto-deploys.**
-Just:
+Production deploys from the **`main`** branch via Cloudflare Workers Builds (connected to the GitHub
+repo): **push = live** (re-verified 2026-06-14). The app entry point is `/app/` (manifest `start_url`
++ `scope`), not `/app/index.html`. Just:
 ```bash
 git add -A && git commit -m "..." && git push
 ```
@@ -288,16 +319,16 @@ Everything runs on **free tiers**. Nothing here requires a card on file.
 - **App-blob writes** are last-write-wins (fine for profile/settings; events are per-doc and safe).
 - Removed members keep a stale `users/{uid}.householdId` pointer until they next sign in (they
   lose data access immediately via rules; client just shows an error until re-resolved).
-- **Pregnancy product ("Mommy To Be"):** fully built (journey, week view, health trackers, tools,
-  ultrasound Moments, birth→baby conversion, /pregnancy/ page, consent governance) on branch
-  `pregnancy-tracker`, awaiting PR review/merge. The track is owned by `PREGNANCY-HANDOFF-V2.md`;
-  keep `main` sessions for core jobs.
+- **Pregnancy product (the Expecting stage):** fully built and merged into `main`, live (journey,
+  week view, health trackers, tools, ultrasound Moments, birth→baby conversion, /pregnancy/ page,
+  consent governance). The journey is private by default (owner-owned doc + sharedWith). The track
+  is owned by `PREGNANCY-HANDOFF-V2.md`.
 - **Pro / paywall:** localized pricing is live on the marketing site and the full payment loop is
   **built**: `workers/pro-billing/worker.js` (Stripe `/checkout`, `/webhook`, `/portal`, 7-day
   trial) plus client-side gating via `isPro()` and the rules-protected `households/{hid}.pro`
-  entitlement. It is **not live yet**: deployment, Stripe product/secrets, the webhook, publishing
-  `firestore.rules`, and wiring the checkout/portal URLs are pending (~20 min, see
-  `workers/pro-billing/README.md`, `PAYWALL.md` and `PRO.md`).
+  entitlement. It is **not live yet**: deployment, Stripe product/secrets, the webhook, and wiring
+  the checkout/portal URLs are pending (~20 min, see `workers/pro-billing/README.md`, `PAYWALL.md`
+  and `PRO.md`). (`firestore.rules` are already published in the console as of 2026-06-14.)
 - **Referral rewards:** the `?ref=` plumbing ships (capture + `referredBy` attribution), but the
   reward itself (1 free month of Base per still-active referred family, capped at 6) is designed,
   not yet redeemable, so it isn't announced anywhere — see `PAYWALL.md`.
@@ -351,7 +382,7 @@ Everything runs on **free tiers**. Nothing here requires a card on file.
 | `workers/pro-billing/README.md` | Stripe billing Worker: endpoints, the four secrets, webhook setup, and the ~20-minute go-live checklist. |
 | `PREGNANCY.md` | Phased pregnancy-module spec (original; sources list still canonical). |
 | `PREGNANCY-HANDOFF.md` | v1 build handoff, superseded (build is done). |
-| `PREGNANCY-HANDOFF-V2.md` | **The pregnancy track:** what's built on branch `pregnancy-tracker`, brand state (Mommy To Be / Den), rollout runbook, next-work queue. Start here for any pregnancy work. |
+| `PREGNANCY-HANDOFF-V2.md` | **The pregnancy track:** what's built (now merged into `main` and live), brand state, rollout runbook, next-work queue. Start here for any pregnancy work. |
 | `ROUTINES.md` | Routines / activity-planning notes. |
 | `ONBOARDING.md` | First-run / onboarding notes. |
 | `EMAIL.md` | Server-sent email design + scaling plan. |
