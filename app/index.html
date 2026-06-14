@@ -282,7 +282,10 @@ body{
   z-index:51;transition:transform .36s cubic-bezier(.2,.9,.3,1);max-height:90dvh;overflow-y:auto;
 }
 .sheet.show{transform:translate(-50%,0);}
-.grab{width:42px;height:5px;border-radius:3px;background:var(--line);margin:6px auto 18px;}
+.grab{width:42px;height:5px;border-radius:3px;background:var(--line);margin:6px auto 18px;cursor:grab;touch-action:none;}
+.grab:active{cursor:grabbing;}
+.sheet-x{position:absolute;top:12px;right:14px;width:30px;height:30px;border:none;background:none;color:var(--ink-faint);font-size:24px;line-height:1;cursor:pointer;opacity:.5;z-index:2;font-family:inherit;padding:0;}
+.sheet-x:hover{opacity:1;}
 .sheet h2{font-family:var(--font-display);font-size:22px;font-weight:600;margin-bottom:4px;}
 .sheet .sub{font-size:13px;color:var(--ink-soft);font-weight:600;margin-bottom:20px;}
 .opt-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:14px;}
@@ -1597,10 +1600,30 @@ function openSheet(html,accent){
   const s=$('#sheet');
   s.style.setProperty('--accent', accent?`var(--${accent})`:'var(--feed)');
   s.style.setProperty('--accent-soft', accent?`var(--${accent}-soft)`:'var(--feed-soft)');
-  s.innerHTML='<div class="grab"></div>'+html;
+  s.innerHTML='<div class="grab"></div><button class="sheet-x" type="button" onclick="closeSheet()" aria-label="Close">×</button>'+html;
   $('#scrim').classList.add('show'); s.classList.add('show');
 }
-function closeSheet(){ $('#scrim').classList.remove('show'); $('#sheet').classList.remove('show'); }
+function closeSheet(){ var s=document.getElementById('sheet'); if(s){ s.style.transition=''; s.style.transform=''; } var sc=document.getElementById('scrim'); if(sc)sc.classList.remove('show'); if(s)s.classList.remove('show'); }
+/* Drag-to-dismiss: grab the handle (or the top strip of the sheet) and pull down to close. */
+(function(){
+  var dragging=false, startY=0, curY=0;
+  function sheet(){ return document.getElementById('sheet'); }
+  document.addEventListener('pointerdown', function(e){
+    var s=sheet(); if(!s||!s.classList.contains('show')) return;
+    var r=s.getBoundingClientRect(), dy=e.clientY-r.top;
+    if(!((e.target.closest&&e.target.closest('.grab'))||(dy>=0&&dy<40))) return;
+    dragging=true; startY=e.clientY; curY=0; s.style.transition='none';
+  });
+  document.addEventListener('pointermove', function(e){
+    if(!dragging) return; var s=sheet(); if(!s) return;
+    curY=Math.max(0,e.clientY-startY); if(curY>0) e.preventDefault();
+    s.style.transform='translate(-50%,'+curY+'px)';
+  }, {passive:false});
+  document.addEventListener('pointerup', function(){
+    if(!dragging) return; dragging=false; var s=sheet(); if(!s) return;
+    if(curY>90){ closeSheet(); } else { s.style.transition=''; s.style.transform=''; }
+  });
+})();
 
 /* ---------- FEED ---------- */
 let feedDraft={method:'breast',side:'left',amount:120,unit:null,content:'breastmilk',wAmount:30};
