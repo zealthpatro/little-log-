@@ -388,8 +388,8 @@ body.night .ob-card{background:rgba(38,32,28,.86);}
 .onboard .logo{font-family:var(--font-display);font-size:40px;font-weight:600;letter-spacing:-.02em;margin-bottom:6px;}
 .onboard .tag{color:var(--ink-soft);font-weight:600;margin-bottom:38px;font-size:15px;}
 .onboard .field{width:100%;text-align:left;}
-.onboard .avatar-pick{display:flex;gap:10px;justify-content:center;margin-bottom:22px;flex-wrap:wrap;}
-.avatar-pick .ap{width:40px;height:40px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:transform .15s;}
+#apick{display:flex;gap:10px;justify-content:center;margin-bottom:22px;flex-wrap:wrap;}
+.avatar-pick .ap{width:40px;height:40px;flex:0 0 40px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:transform .15s;}
 .avatar-pick .ap:active{transform:scale(.9);}
 .avatar-pick .ap.sel{border-color:var(--ink);}
 
@@ -3210,7 +3210,12 @@ function searchPickerHtml(id, pairs, sel, ph){
     + '<div id="'+id+'_l" class="country-list" style="display:none">'+rows+'</div>';
 }
 function countryPickerHtml(id, sel){ return searchPickerHtml(id, pregCountryList(), sel||'generic', 'Search your country…'); }
-function showCountryList(id){ var l=document.getElementById(id+'_l'); if(l) l.style.display='block'; }
+function showCountryList(id){ var l=document.getElementById(id+'_l'); if(l) l.style.display='block';
+  // Scroll the field (label + search + the now-open list) into view so the list isn't stuck
+  // below the fold of the sheet when the picker sits low in a long form.
+  var s=document.getElementById(id+'_s');
+  if(s){ setTimeout(function(){ var t=s.closest('.field')||s; try{ t.scrollIntoView({block:'start',behavior:'smooth'}); }catch(e){ try{t.scrollIntoView();}catch(_){} } }, 40); }
+}
 function filterCountryList(id){
   var s=document.getElementById(id+'_s'), l=document.getElementById(id+'_l'); if(!s||!l) return;
   var q=(s.value||'').trim().toLowerCase(); l.style.display='block';
