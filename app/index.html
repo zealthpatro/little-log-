@@ -1002,12 +1002,11 @@ function _dpToday(id){ var s=_dp[id]; if(!s)return; var t=new Date(); s.y=t.getF
 /* ============================================================
    RENDER
    ============================================================ */
+let viewingPreg=false;  // show the pregnancy shell even when born babies also exist (subject switch)
 function render(){
   document.body.setAttribute('data-theme', state.settings.theme==='night'?'night':'light');
-  if(state.babies.length===0){
-    if(state.pregnancy && !state.pregnancy.bornBabyId){ renderPregShell(); return; }
-    renderOnboard(); return;
-  }
+  if(state.pregnancy && !state.pregnancy.bornBabyId && (state.babies.length===0 || viewingPreg)){ renderPregShell(); return; }
+  if(state.babies.length===0){ renderOnboard(); return; }
   const b = activeBaby();
   let main = '';
   if(view==='home') main = renderHome();
@@ -2020,6 +2019,7 @@ function confirmDeleteEvent(id){
 }
 function recoverEvent(id){
   const e=state.events.find(x=>x.id===id); if(!e)return;
+  if(!canEditEvent(e)){ toast('Only the logger or an owner can recover this'); return; }
   delete e.deleted; delete e.deletedBy; delete e.deletedAt;
   persist(); render(); toast('Recovered'); openTrash();
 }
@@ -2042,12 +2042,13 @@ function openBabySheet(){
       <div style="flex:1"><div style="font-weight:800">${escapeHtml(b.name)}</div><div style="font-size:12px;color:var(--ink-soft);font-weight:600">${ageString(b.birth)}</div></div>
       ${b.id===state.activeBabyId?'<div style="color:var(--diaper);font-weight:800;font-size:13px">Active</div>':''}
     </div>`).join('');
-  openSheet(`<h2>Babies</h2><div class="sub">Switch between little ones.</div>${list}
+  const pregRow=(state.pregnancy && !state.pregnancy.bornBabyId)?`<div class="baby-item" onclick="viewingPreg=true;closeSheet();render()"><div style="width:38px;height:38px;display:grid;place-items:center;background:var(--preg-soft);border-radius:50%;font-size:18px">🤰</div><div style="flex:1"><div style="font-weight:800">Your pregnancy</div><div style="font-size:12px;color:var(--ink-soft);font-weight:600">${state.pregnancy.stage==='planning'?'Getting ready':'Week '+pregWeek()}</div></div>${viewingPreg?'<div style="color:var(--preg);font-weight:800;font-size:13px">Active</div>':''}</div>`:'';
+  openSheet(`<h2>Switch</h2><div class="sub">Switch between your little ones.</div>${pregRow}${list}
     <button class="btn-primary" style="background:var(--star)" onclick="openBabyProfile()">${I.note} ${escapeHtml(activeBaby().name)}'s profile</button>
     <button class="btn-primary" onclick="openAddEntry()">${I.plus} Add to Cubby</button>
     ${babyDeletedEvents().length?`<button class="btn-ghost" onclick="openTrash()">${I.trash} Recently deleted (${babyDeletedEvents().length})</button>`:''}`,'diaper');
 }
-function switchBaby(id){ state.activeBabyId=id; persist(); closeSheet(); go('home'); }
+function switchBaby(id){ viewingPreg=false; state.activeBabyId=id; persist(); closeSheet(); go('home'); }
 
 let newBabyColor=AVATAR_COLORS[0];
 /* Unified "+" chooser: born baby or expecting, reachable from the switcher and empty states
@@ -2057,7 +2058,7 @@ function openAddEntry(){
   openSheet(`<h2>Add to Cubby</h2><div class="sub">Wherever you are on the journey.</div>
     <div class="prof-cards">
       <div class="prof-card" onclick="closeSheet();openAddBaby()"><span class="lead" style="background:var(--feed-soft);color:var(--feed);font-size:20px">🐻</span><div class="cflex"><div class="a">Our baby is here</div><div class="b">Track feeds, sleep, growth, vaccines and more</div></div><span class="chev">${I.chev}</span></div>
-      <div class="prof-card" onclick="${hasPreg?'closeSheet();render()':'closeSheet();openStartPregnancy()'}"><span class="lead" style="background:var(--preg-soft);color:var(--preg);font-size:20px">🌸</span><div class="cflex"><div class="a">${hasPreg?'Open your pregnancy':"We're expecting"}</div><div class="b">${hasPreg?'Resume where you left off':'Trying, newly pregnant or counting weeks'}</div></div><span class="chev">${I.chev}</span></div>
+      <div class="prof-card" onclick="${hasPreg?'viewingPreg=true;closeSheet();render()':'viewingPreg=true;closeSheet();openStartPregnancy()'}"><span class="lead" style="background:var(--preg-soft);color:var(--preg);font-size:20px">🌸</span><div class="cflex"><div class="a">${hasPreg?'Open your pregnancy':"We're expecting"}</div><div class="b">${hasPreg?'Resume where you left off':'Trying, newly pregnant or counting weeks'}</div></div><span class="chev">${I.chev}</span></div>
     </div>`,'diaper');
 }
 function openAddBaby(){
@@ -3108,6 +3109,7 @@ function renderPregShell(){
           <div class="pp-orb">🌱</div>
           <div><h1>Cubby</h1><span>Getting ready</span></div>
         </div>
+        ${state.babies.length?`<button class="icon-btn" onclick="openBabySheet()" aria-label="switch to baby" style="font-size:17px">👶</button>`:''}
         ${FEATURES.den?`<button class="icon-btn ${pregView==='den'?'icon-on':''}" onclick="goDen()" aria-label="our den" style="font-size:17px">🧺</button>`:''}
         <button class="icon-btn" onclick="toggleTheme()" aria-label="theme">${state.settings.theme==='night'?I.sun:I.moon}</button>
         <button class="icon-btn" onclick="openSettings()" aria-label="settings">${I.settings}</button>
@@ -3130,6 +3132,7 @@ function renderPregShell(){
         <div class="pp-orb">🤰</div>
         <div><h1>Cubby</h1><span>Week ${wk} · ${triName(tri)}</span></div>
       </div>
+      ${state.babies.length?`<button class="icon-btn" onclick="openBabySheet()" aria-label="switch to baby" style="font-size:17px">👶</button>`:''}
       ${FEATURES.den?`<button class="icon-btn ${pregView==='den'?'icon-on':''}" onclick="goDen()" aria-label="our den" style="font-size:17px">🧺</button>`:''}
       <button class="icon-btn" onclick="toggleTheme()" aria-label="theme">${state.settings.theme==='night'?I.sun:I.moon}</button>
       <button class="icon-btn" onclick="openSettings()" aria-label="settings">${I.settings}</button>
