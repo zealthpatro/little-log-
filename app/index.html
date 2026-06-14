@@ -1953,7 +1953,7 @@ function openAddBaby(){
     <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
     <div class="field"><label>Name</label><input id="bName" placeholder="Baby's name" autofocus></div>
     <div class="field"><label>Birthday (optional)</label><input type="date" id="bDate" value="${today}" max="${today}"></div>
-    <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', VAX_COUNTRIES, detectCountry(), 'Search your country…')}</div>
+    <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', vaxCountryList(), detectCountry(), 'Search your country…')}</div>
     <button class="btn-primary" onclick="saveBaby()">Add baby</button>`,'diaper');
 }
 function pickColor(c){
@@ -1965,8 +1965,8 @@ function pickColor(c){
 function saveBaby(){
   const name=$('#bName').value.trim(); if(!name){toast('Give them a name first');return;}
   const bd=$('#bDate').value;
-  const cc=$('#bCountry')?$('#bCountry').value:detectCountry();
-  const b={id:uid(),name,color:newBabyColor,birth:bd?new Date(bd+'T08:00').getTime():null,country:(VAX_SCHEDULES[cc]?cc:'us')};
+  const cc=($('#bCountry')&&$('#bCountry').value)||detectCountry();
+  const b={id:uid(),name,color:newBabyColor,birth:bd?new Date(bd+'T08:00').getTime():null,country:(cc||'who')};
   state.babies.push(b); state.activeBabyId=b.id; persist(); closeSheet(); go('home'); toast('Welcome, '+name+'!');
 }
 
@@ -2641,7 +2641,7 @@ function renderOnboard(){
       <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
       <div class="field"><label>Baby's name</label><input id="bName" placeholder="e.g. Mira" autofocus></div>
       <div class="field"><label>Birthday (optional)</label><input type="date" id="bDate" value="${today}" max="${today}"></div>
-      <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', VAX_COUNTRIES, detectCountry(), 'Search your country…')}</div>
+      <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', vaxCountryList(), detectCountry(), 'Search your country…')}</div>
       <button class="btn-primary" style="--accent:var(--feed)" onclick="saveBaby()">Start tracking</button>
       <div style="text-align:center;font-size:12px;font-weight:800;color:var(--ink-faint);margin:14px 0 2px;letter-spacing:.04em">OR</div>
       <button class="btn-ghost" onclick="openStartPregnancy()" style="color:var(--preg)">🌸 Expecting? Trying, pregnant or counting weeks</button>
@@ -3422,7 +3422,7 @@ function openWelcomeBaby(){
   const p=state.pregnancy; if(!p)return;
   wbSex=''; newBabyColor=AVATAR_COLORS[Math.floor(Math.random()*AVATAR_COLORS.length)];
   initLogWhen();
-  const cc=VAX_SCHEDULES[p.country]?p.country:detectCountry();
+  const cc=(p.country&&p.country!=='generic'&&p.country!=='custom')?p.country:detectCountry();
   openSheet(`<div class="welcome-burst">🐻💕</div>
     <h2 style="text-align:center">Welcome to the world</h2>
     <div class="sub" style="text-align:center">Congratulations. Let's bring your baby into Cubby. You can change anything later, there's no rush.</div>
@@ -3430,7 +3430,7 @@ function openWelcomeBaby(){
     ${timeStrip('when','Born')}
     <div class="field" style="margin-top:14px"><label>Sex (optional, for growth charts)</label>
       <div class="seg"><button id="wbSexNone" class="on" onclick="pickWbSex('')">Prefer not to say</button><button id="wbSexF" onclick="pickWbSex('female')">Girl</button><button id="wbSexM" onclick="pickWbSex('male')">Boy</button></div></div>
-    <div class="field"><label>Vaccine schedule</label>${searchPickerHtml('wbCountry', VAX_COUNTRIES, cc, 'Search your country…')}</div>
+    <div class="field"><label>Vaccine schedule</label>${searchPickerHtml('wbCountry', vaxCountryList(), cc, 'Search your country…')}</div>
     <button class="btn-primary" style="background:var(--preg);margin-top:6px" onclick="welcomeBaby()">🎉 Welcome our baby</button>
     <div class="csub" style="text-align:center;margin-top:8px">Your pregnancy is saved as part of their story.</div>`,'preg');
 }
@@ -3438,8 +3438,8 @@ function welcomeBaby(){
   const p=state.pregnancy; if(!p)return;
   const name=$('#wbName').value.trim(); if(!name){toast('Add their name first');return;}
   const birth=getWhen('when');
-  const cc=$('#wbCountry').value;
-  const b={id:uid(),name,color:newBabyColor,birth,country:(VAX_SCHEDULES[cc]?cc:'us')};
+  const cc=($('#wbCountry')&&$('#wbCountry').value)||p.country||detectCountry();
+  const b={id:uid(),name,color:newBabyColor,birth,country:(cc||'who')};
   if(wbSex) b.sex=wbSex;
   state.babies.push(b); state.activeBabyId=b.id;
   p.bornBabyId=b.id; p.birthAt=birth;
@@ -4578,8 +4578,17 @@ function detectCountry(){
   }catch(e){}
   return 'us';
 }
-function scheduleFor(b){ const c=(b&&b.country)||'us'; return (VAX_SCHEDULES[c]||VAX_SCHEDULES.us).list; }
-function vaxCountryName(c){ return (VAX_SCHEDULES[c]||VAX_SCHEDULES.us).label; }
+/* Vaccines cover the same 170 countries as the pregnancy flow: verified national schedules where we
+   have them, the WHO general schedule otherwise (never a US fallback). */
+function vaxCountryKey(c){ c=c||detectCountry(); return VAX_SCHEDULES[c]?c:'who'; }
+function scheduleFor(b){ return (VAX_SCHEDULES[vaxCountryKey(b&&b.country)]||VAX_SCHEDULES.who).list; }
+function vaxCountryName(c){ var k=vaxCountryKey(c); if(k!=='who'&&VAX_SCHEDULES[k]) return VAX_SCHEDULES[k].label; return (c&&c!=='who')?(pregCountryName(c)+' · WHO-aligned'):'Other / General (WHO)'; }
+function vaxCountryList(){
+  var all=['uk','us','de','uae'].concat(PREG_MORE_COUNTRIES);
+  var labeled=all.map(function(c){ var L=(VAX_SCHEDULES[c]&&VAX_SCHEDULES[c].label)?VAX_SCHEDULES[c].label:(pregCountryName(c)+' · WHO-aligned'); return [c,L]; }).sort(function(a,b){return a[1].localeCompare(b[1]);});
+  labeled.push(['who','Other / not listed (WHO-aligned)']);
+  return labeled;
+}
 
 function vaccinePlan(){
   const id=state.activeBabyId;
@@ -4592,7 +4601,7 @@ function vaccinePlan(){
 }
 /* Switch a baby's schedule country, regenerating the plan but carrying over anything already marked given. */
 function applyScheduleCountry(id,country){
-  const b=state.babies.find(x=>x.id===id); if(!b||!VAX_SCHEDULES[country]) return;
+  const b=state.babies.find(x=>x.id===id); if(!b||!country) return;
   b.country=country;
   if(!state.vaccines) state.vaccines={};
   const byName={}; (state.vaccines[id]||[]).forEach(v=>{ if(v.given||v.missed) byName[v.name]={given:v.given,givenAt:v.givenAt,note:v.note,estimated:v.estimated,missed:v.missed}; });
@@ -4604,10 +4613,9 @@ function applyScheduleCountry(id,country){
 }
 function openVaccineCountry(){
   const b=activeBaby(); if(!b)return;
-  const cur=b.country||'us';
-  const rows=VAX_COUNTRIES.map(([k,n])=>`<div class="prof-card" onclick="chooseVaccineCountry('${k}')"><div class="cflex"><div class="a">${n}</div></div>${k===cur?'<div style="color:var(--diaper);font-weight:800;font-size:13px">Current</div>':`<span class="chev">${I.chev}</span>`}</div>`).join('');
-  openSheet(`<h2>Vaccine schedule</h2><div class="sub">Choose the country schedule for ${escapeHtml(b.name)}. Anything you have already marked as given is kept. You can still edit any item.</div>
-    <div class="prof-cards">${rows}</div>`,'diaper');
+  openSheet(`<h2>Vaccine schedule</h2><div class="sub">Choose the country schedule for ${escapeHtml(b.name)}. Anything already marked given is kept, and you can still edit any item.</div>
+    ${searchPickerHtml('vxCountry', vaxCountryList(), b.country||detectCountry(), 'Search your country…')}
+    <button class="btn-primary" style="background:var(--diaper);margin-top:12px" onclick="chooseVaccineCountry((document.getElementById('vxCountry')||{}).value)">Update schedule</button>`,'diaper');
 }
 function chooseVaccineCountry(k){
   const b=activeBaby(); if(!b)return;
