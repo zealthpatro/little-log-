@@ -259,14 +259,29 @@
     };
   };
 
-  // Intercept native time inputs everywhere (capture phase, before native UI).
+  // Native datetime-local -> the custom date+time "When?" picker (openWhenPicker), so the born
+  // date and any datetime-local field match the diaper/nap picker instead of the OS widget.
+  function openDateTimePicker(input) {
+    var ms = input.value ? new Date(input.value).getTime() : Date.now();
+    if (isNaN(ms)) ms = Date.now();
+    window.openWhenPicker(ms, function (out) {
+      var d = new Date(out);
+      input.value = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }, 'When?');
+  }
+  window.openDateTimePicker = openDateTimePicker;
+
+  // Intercept native time AND datetime-local inputs everywhere (capture phase, before native UI),
+  // so every time / date-time field uses the same custom picker as the diaper and nap flows.
   function intercept(e) {
     var t = e.target;
-    if (t && t.tagName === 'INPUT' && t.type === 'time') {
+    if (t && t.tagName === 'INPUT' && (t.type === 'time' || t.type === 'datetime-local')) {
       e.preventDefault();
       if (!t.readOnly) t.setAttribute('readonly', 'readonly'); // stop native popup/keyboard
       t.blur();
-      openTimePicker(t);
+      if (t.type === 'datetime-local') openDateTimePicker(t); else openTimePicker(t);
     }
   }
   document.addEventListener('mousedown', intercept, true);
