@@ -1953,7 +1953,7 @@ function openAddBaby(){
     <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
     <div class="field"><label>Name</label><input id="bName" placeholder="Baby's name" autofocus></div>
     <div class="field"><label>Birthday (optional)</label><input type="date" id="bDate" value="${today}" max="${today}"></div>
-    <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label><select id="bCountry">${VAX_COUNTRIES.map(([k,n])=>`<option value="${k}" ${k===detectCountry()?'selected':''}>${n}</option>`).join('')}</select></div>
+    <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', VAX_COUNTRIES, detectCountry(), 'Search your country…')}</div>
     <button class="btn-primary" onclick="saveBaby()">Add baby</button>`,'diaper');
 }
 function pickColor(c){
@@ -2641,7 +2641,7 @@ function renderOnboard(){
       <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
       <div class="field"><label>Baby's name</label><input id="bName" placeholder="e.g. Mira" autofocus></div>
       <div class="field"><label>Birthday (optional)</label><input type="date" id="bDate" value="${today}" max="${today}"></div>
-      <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label><select id="bCountry">${VAX_COUNTRIES.map(([k,n])=>`<option value="${k}" ${k===detectCountry()?'selected':''}>${n}</option>`).join('')}</select></div>
+      <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', VAX_COUNTRIES, detectCountry(), 'Search your country…')}</div>
       <button class="btn-primary" style="--accent:var(--feed)" onclick="saveBaby()">Start tracking</button>
       <div style="text-align:center;font-size:12px;font-weight:800;color:var(--ink-faint);margin:14px 0 2px;letter-spacing:.04em">OR</div>
       <button class="btn-ghost" onclick="openStartPregnancy()" style="color:var(--preg)">🌸 Expecting? Trying, pregnant or counting weeks</button>
@@ -2727,28 +2727,33 @@ function pregLabelFor(code){
   var sk=pregCountryKey(code);
   return (sk!=='generic'&&sk!=='custom'&&window.PREG&&PREG.antenatal[sk])?PREG.antenatal[sk].label:pregCountryName(code);
 }
-function countryPickerHtml(id, sel){
-  sel = sel || 'generic';
-  var rows = pregCountryList().map(function(p){
-    return '<div class="country-opt'+(p[0]===sel?' sel':'')+'" data-code="'+p[0]+'" data-l="'+escapeHtml(p[1].toLowerCase())+'" onclick="pickCountry(\''+id+'\',\''+p[0]+'\')">'+escapeHtml(p[1])+'</div>';
+/* Generic searchable picker for ANY list with more than ~7 items. pairs = [[code,label],...].
+   The hidden input keeps `id` so existing save code (which reads $('#id').value) is unchanged. */
+function searchPickerHtml(id, pairs, sel, ph){
+  if((sel===undefined||sel==='') && pairs[0]) sel = pairs[0][0];
+  var selRow = pairs.filter(function(p){return p[0]===sel;})[0];
+  var selLabel = selRow ? selRow[1] : (sel||'');
+  var rows = pairs.map(function(p){
+    return '<div class="country-opt'+(p[0]===sel?' sel':'')+'" data-code="'+escapeHtml(String(p[0]))+'" data-l="'+escapeHtml(String(p[1]||'').toLowerCase())+'" onclick="pickPick(\''+id+'\',this)">'+escapeHtml(String(p[1]))+'</div>';
   }).join('');
-  return '<input type="hidden" id="'+id+'" value="'+escapeHtml(sel)+'">'
-    + '<input id="'+id+'_s" class="country-search" autocomplete="off" placeholder="Search your country…" value="'+escapeHtml(pregLabelFor(sel))+'" onfocus="this.select();showCountryList(\''+id+'\')" oninput="filterCountryList(\''+id+'\')" onblur="blurCountry(\''+id+'\')">'
+  return '<input type="hidden" id="'+id+'" value="'+escapeHtml(String(sel))+'">'
+    + '<input id="'+id+'_s" class="country-search" autocomplete="off" placeholder="'+escapeHtml(ph||'Search…')+'" value="'+escapeHtml(String(selLabel))+'" onfocus="this.select();showCountryList(\''+id+'\')" oninput="filterCountryList(\''+id+'\')" onblur="blurCountry(\''+id+'\')">'
     + '<div id="'+id+'_l" class="country-list" style="display:none">'+rows+'</div>';
 }
+function countryPickerHtml(id, sel){ return searchPickerHtml(id, pregCountryList(), sel||'generic', 'Search your country…'); }
 function showCountryList(id){ var l=document.getElementById(id+'_l'); if(l) l.style.display='block'; }
 function filterCountryList(id){
   var s=document.getElementById(id+'_s'), l=document.getElementById(id+'_l'); if(!s||!l) return;
   var q=(s.value||'').trim().toLowerCase(); l.style.display='block';
   [].forEach.call(l.children,function(el){ el.style.display=(!q||el.getAttribute('data-l').indexOf(q)>=0)?'block':'none'; });
 }
-function pickCountry(id, code){
+function pickPick(id, el){
   var h=document.getElementById(id), s=document.getElementById(id+'_s'), l=document.getElementById(id+'_l');
-  if(h) h.value=code;
-  if(s) s.value=pregLabelFor(code);
-  if(l){ l.style.display='none'; [].forEach.call(l.children,function(el){ el.classList.toggle('sel', el.getAttribute('data-code')===code); }); }
+  if(h) h.value=el.getAttribute('data-code');
+  if(s) s.value=el.textContent;
+  if(l){ l.style.display='none'; [].forEach.call(l.children,function(x){ x.classList.toggle('sel', x===el); }); }
 }
-function blurCountry(id){ setTimeout(function(){ var s=document.getElementById(id+'_s'), h=document.getElementById(id), l=document.getElementById(id+'_l'); if(s&&h) s.value=pregLabelFor(h.value); if(l) l.style.display='none'; },200); }
+function blurCountry(id){ setTimeout(function(){ var s=document.getElementById(id+'_s'), h=document.getElementById(id), l=document.getElementById(id+'_l'); if(s&&h&&l){ var sel=[].filter.call(l.children,function(x){return x.getAttribute('data-code')===h.value;})[0]; if(sel) s.value=sel.textContent; } if(l) l.style.display='none'; },200); }
 
 /* ---- derived (compute, never store) ---- */
 function pregWeek(){
@@ -3425,7 +3430,7 @@ function openWelcomeBaby(){
     ${timeStrip('when','Born')}
     <div class="field" style="margin-top:14px"><label>Sex (optional, for growth charts)</label>
       <div class="seg"><button id="wbSexNone" class="on" onclick="pickWbSex('')">Prefer not to say</button><button id="wbSexF" onclick="pickWbSex('female')">Girl</button><button id="wbSexM" onclick="pickWbSex('male')">Boy</button></div></div>
-    <div class="field"><label>Vaccine schedule</label><select id="wbCountry">${VAX_COUNTRIES.map(([k,n])=>`<option value="${k}" ${k===cc?'selected':''}>${n}</option>`).join('')}</select></div>
+    <div class="field"><label>Vaccine schedule</label>${searchPickerHtml('wbCountry', VAX_COUNTRIES, cc, 'Search your country…')}</div>
     <button class="btn-primary" style="background:var(--preg);margin-top:6px" onclick="welcomeBaby()">🎉 Welcome our baby</button>
     <div class="csub" style="text-align:center;margin-top:8px">Your pregnancy is saved as part of their story.</div>`,'preg');
 }
