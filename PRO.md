@@ -1,5 +1,7 @@
 # Cubby Pro — monetization research & roadmap
 
+> **Status (June 2026):** Cubby Pro is one tier ($9/mo or $90/yr, 7-day trial); the client-side payment loop is built and the gate is live, with Stripe go-live targeted ~Aug 2026. Full current state + go-live plan: HANDOFF.md.
+
 > ## ⚑ CURRENT PRICING (authoritative, 2026-06-13)
 > Cubby Pro is **ONE tier: $9/month or $90/year** (save 17%, about $7.50/mo effective), 7-day free
 > trial. Localized: USD 9/90 · GBP 7/70 · EUR 8/80 · AED 33/330 · INR 749/7490 (annual = 10× monthly).
@@ -15,7 +17,7 @@ watermark-free shares, doctor PDF report), and the Cloudflare Worker for Stripe 
 webhook / portal.
 
 **Launch checklist (the only remaining steps, ~20 min):** follow `workers/pro-billing/README.md`:
-create the Stripe product/price ($59/yr), deploy the Worker, set its four secrets, add the
+create the Stripe product/price ($9/mo, $90/yr), deploy the Worker, set its four secrets, add the
 Stripe webhook, **publish the updated `firestore.rules` in the Firebase console**, then set
 `PRO_CFG.checkoutUrl/portalUrl` in `app/index.html` and bump the SW cache. Test with Stripe
 test mode (card 4242...) before flipping live keys. Dev preview of Pro:

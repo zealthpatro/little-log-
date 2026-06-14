@@ -1,5 +1,7 @@
 # Cubby Pro — Routine Manager (spec)
 
+> **Status (June 2026):** Still a planned Cubby Pro feature, not yet built; it lands once Pro billing goes live (targeted Aug 2026) within the one Cubby that spans Trying, Expecting, Baby and Child. Full current state + go-live plan: HANDOFF.md.
+
 Status: **planned Pro feature, on the waitlist.** Not built. This is the design + content spec
 so it's ready to build once Pro demand is validated.
 

@@ -1,5 +1,7 @@
 # Cubby content queue
 
+> **Status (June 2026):** This queue is live and actively worked; ~180 articles (baby + pregnancy) are already published, and the items below are the remaining backlog to write. Full current state + go-live plan: HANDOFF.md.
+
 The agent takes the first `[ ]` item (top = highest priority), publishes it per CONTENT-RUNBOOK.md, then marks it `[x]`. Sources are starting points, always fetch and confirm the current official page (200) before citing; find the live equivalent if a link moved.
 
 ## Pregnancy section (60 articles, 3 batches — 14 June 2026)

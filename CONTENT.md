@@ -1,5 +1,7 @@
 # Cubby content plan (articles)
 
+> **Status (June 2026):** ~180 articles are live (baby + pregnancy clusters) on little-cubby.com; the inventory and roadmap below predate that, so treat the counts as historical and the expansion clusters as still-useful plans. Full current state + go-live plan: HANDOFF.md.
+
 Goal: a comprehensive, **verifiable** article library tagged by age bracket and theme, that pulls high-intent search traffic and helps users, without any legal/medical risk.
 
 ## Non-negotiable rules (this is how we avoid legal trouble)
@@ -19,10 +21,10 @@ Newborn (0-1m) · 0-3 months · 3-6 months · 6-9 months · 9-12 months · 12 mo
 ## Themes (target 20+)
 food/weaning · foods to avoid · allergens · sleep (safe sleep) · sleep by age / wakeful phases · teething · crying/colic · hygiene/bathing · nappy care/rash · development & milestones · play & learning · tummy time · cooing/babbling/language · social smile & recognising · separation anxiety · vaccines · fever · colds/flu/RSV · common rashes · growth & percentiles · vitamins (e.g. vitamin D) · dental care · safety/first aid basics · screen time.
 
-## Current inventory (119 articles, June 2026)
+## Current inventory (~180 articles live, June 2026)
 
-Hub: `articles/index.html` — 119 cards, round-robin interleaved across 9 categories.
-Sitemap: 125 URLs.
+Hub: `articles/index.html` — round-robin interleaved across the category set (baby + pregnancy clusters).
+(The 119-card / 125-URL snapshot below is the earlier milestone; the live library is now ~180.)
 Categories and approximate counts: vaccines 10, sleep 11, feeding 20, development 12, health 17, care 15, growth 10, wellbeing 12, compare 12.
 
 ### Core UK/global library (published, sourced)

@@ -1,11 +1,14 @@
 # Monetization handoff: Cubby Pro payment loop
 
+> **Status (June 2026):** The Cubby Pro payment loop (Stripe + Worker + tamper-proof entitlement) is built on `main` but NOT yet charging; Pro is $9/mo or $90/yr, gated to an Aug 2026 launch. Full current state + go-live plan: HANDOFF.md.
+
 **Version 1 · 2026-06-13.** Operational handoff for the Pro / payments work. Read this cold and
 you can take the payment loop from "built" to "charging real money".
 
 > **Scope:** this doc owns the **monetization track** (entitlement, gates, billing). It is on
-> `main`. The pregnancy product is a separate track (`PREGNANCY-HANDOFF-V2.md`, branch
-> `pregnancy-tracker`). Business-strategy review lives in `STRATEGY-REVIEW.md`.
+> `main`. The pregnancy product is now **merged into `main` and live** (`PREGNANCY-HANDOFF-V2.md`;
+> the `pregnancy-tracker` branch is redundant, kept until retired). Business-strategy review lives
+> in `STRATEGY-REVIEW.md`.
 
 ---
 
@@ -67,8 +70,8 @@ smart routines/insights.** See `PAYWALL.md` / `PRO.md`.
 - `workers/pro-billing/`, `worker.js` (/checkout, /webhook, /portal; Stripe REST + Google SA
   JWT, no SDKs), `wrangler.toml`, `README.md` (the deploy checklist). Excluded from the static
   deploy via `.assetsignore`.
-- `pricing/index.html`, `CUR` currency table (USD 7/59, GBP 6/49, EUR 7/55, AED 25/219,
-  INR 749/7490), annual/monthly toggle. Reuse for any in-app price display.
+- `pricing/index.html`, `CUR` currency table (USD 9/90, plus localized GBP/EUR/AED/INR rows),
+  annual/monthly toggle. Reuse for any in-app price display.
 
 ## 5. Go-live checklist (~20 min, full version in `workers/pro-billing/README.md`)
 1. Stripe (test mode first): product "Cubby Pro", two recurring prices **$9/month and $90/year** -> `price_...` each (set STRIPE_PRICE_ID to the $90 annual).
@@ -105,4 +108,5 @@ smart routines/insights.** See `PAYWALL.md` / `PRO.md`.
 ## 8. Cross-references
 `PRO.md` (positioning, tier ladder, status) · `PAYWALL.md` (gate-by-gate list) ·
 `workers/pro-billing/README.md` (deploy) · `STRATEGY-REVIEW.md` (is the direction sound /
-do we need capital) · `ECOSYSTEM.md` (the broader Den vision, on branch `pregnancy-tracker`).
+do we need capital) · `ECOSYSTEM.md` (the one-Cubby lifecycle vision; the "Den" household-OS is
+parked, `FEATURES.den=false`).

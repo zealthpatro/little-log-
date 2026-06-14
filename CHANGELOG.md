@@ -1,5 +1,31 @@
 # Cubby — Changelog
 
+## v0.11.0 — 2026-06-14 — one Cubby: pregnancy merged, mother-owned privacy, working email sign-in
+
+The pregnancy track shipped into `main`, the brand consolidated to one lifecycle app, maternal health went private-by-design, and email sign-in actually delivers now. All live on little-cubby.com (deploys from `main` via Cloudflare Workers Builds).
+
+**Lifecycle & brand**
+- One Cubby across four stages (Trying -> Expecting -> Baby -> Child). "Mommy To Be" retired; the "Den" household hub parked (`FEATURES.den=false`).
+- **Pregnancy tracker merged into `main` and live**: week-by-week, antenatal schedules (170-country coverage, verified UK/US/DE/UAE/CA/AU/NZ/IE + WHO-aligned fallback + a custom plan), opt-in health trackers (GDM/BP/supplements/nausea), kick counter, contraction timer, birth plan, hospital bag, Moments album, the birth transition, and a compassionate pregnancy-loss flow.
+- Marketing: **Expecting/Baby audience framework** (pre-paint lifecycle-stage engine with entry-context routing, two-tab Features, Home "Expecting" section, Articles strip, Pregnancy nav). Lifecycle close "the only app you'll ever need, from two lines to big kid" on the home page and in the sign-in email.
+
+**Privacy (Privacy Max 1.0, gate G1)**
+- Maternal health moved **off the circle-shared blob** into `households/{hid}/mhealth/{ownerUid}/cat/{category}`: mother-owned, per-category consent, mood owner-only and never shareable. `firestore.rules` published in the Firebase console.
+
+**Email sign-in (fixed)**
+- Own Cloudflare Worker `POST /api/send-signin-link` mints the Firebase sign-in link (service-account JWT -> OAuth -> Identity Toolkit `returnOobLink`) and sends a branded email via **Resend** from `mail.little-cubby.com`. **Verified delivering to the Gmail inbox** (Firebase's built-in sender was being silently dropped). Hardened (same-origin Origin/Referer guard, normalized cooldown set after send); sign-in deeplinks rebranded to `little-cubby.com`.
+
+**Vaccines & content**
+- Vaccine catch-up (Phase 0.3): calm 5-state badges, no red "OVERDUE wall"; estimated catch-up dates tagged.
+- ~180 articles live (baby + pregnancy clusters).
+
+**Docs**
+- `HANDOFF.md` now leads with a current-status + go-live section; `EMAIL.md`, `PRIVACY-MAX-1.0.md` updated.
+
+**Still to do for full launch:** Cloudflare rate-limit rule on the sign-in endpoint; Pro billing go-live (Stripe, targeted Aug 2026); emulator cross-account test for the consent-sharing path; retire the merged `pregnancy-tracker` branch.
+
+---
+
 ## v0.10.1 — 2026-06-12 — global content expansion + article naming policy
 
 **Content**

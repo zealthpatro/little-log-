@@ -1,20 +1,24 @@
-# Pregnancy tracker (Mommy To Be) — handoff v2
+# Pregnancy tracker (Cubby Expecting) — handoff v2
+
+> **Status (June 2026):** The pregnancy track is merged into `main` and live on little-cubby.com as the "Expecting" stage of one Cubby; the "Mommy To Be" name is retired and "Den" is parked (`FEATURES.den=false`). Full current state + go-live plan: HANDOFF.md.
 
 **Version 2 · 2026-06-10 · supersedes `PREGNANCY-HANDOFF.md` (v1, the original build spec).**
 v1 said "build Phases 2-5"; that is DONE, and much more. This doc is the single source of truth
 for picking the pregnancy track back up. Read it cold and you know everything.
 
-> **Scope rule:** pregnancy work happens on the `pregnancy-tracker` branch using THIS doc.
-> Sessions on `main` are for little-cubby core jobs (marketing/SEO/content/baby app) only.
+> **Scope rule (superseded):** this doc was written when pregnancy work lived on the
+> `pregnancy-tracker` branch. That branch is now merged into `main` and live; pregnancy work
+> happens on `main` alongside the rest of Cubby.
 
 ---
 
-## 1. Where the work lives (nothing is on main yet)
+## 1. Where the work lives (merged + live on main)
 
-- **Branch:** `pregnancy-tracker`, pushed to `origin/pregnancy-tracker`. **NOT merged to main.**
-- **PR:** not yet opened; one-click create (title/body prefilled) via the compare link:
-  `https://github.com/zealthpatro/little-log-/compare/main...pregnancy-tracker?quick_pull=1`
-- **The 7 commits** (oldest first):
+- **Branch:** the `pregnancy-tracker` work is **merged into `main` and live** on little-cubby.com.
+  The `pregnancy-tracker` branch is now redundant (kept until retired). Pregnancy work continues
+  on `main`.
+- **PR:** historical; the work shipped via `main` (Cloudflare Workers Builds auto-deploys on push).
+- **The 7 original branch commits** (oldest first, for history):
   1. `1dd3d39` Pregnancy tracker: pregnancy mode, logging, tools, birth transition (Phases 2-5)
   2. `e3577d5` Pregnancy health: opt-in condition trackers (GDM, BP/pre-eclampsia, supplements, nausea)
   3. `c3aea2d` Cubby Den: service brand + public /pregnancy/ sales page + ECOSYSTEM.md
@@ -25,7 +29,8 @@ for picking the pregnancy track back up. Read it cold and you know everything.
 
 ## 2. What's built (inventory)
 
-**Mommy To Be = the pregnancy flow, an independent brand.** Full journey:
+**Cubby Expecting = the pregnancy flow** (the "Expecting" lifecycle stage of one Cubby; the old
+"Mommy To Be" name is retired). Full journey:
 - **Entry ("start wherever you are"):** We're trying (planning stage) · Just found out (weeks from
   LMP) · Already counting weeks (due date). Entry button on app onboarding.
 - **Planning stage:** preconception checklist (NHS-based, editable), optional fertile-window
@@ -47,7 +52,7 @@ for picking the pregnancy track back up. Read it cold and you know everything.
 - **Birth transition:** "Baby has arrived" -> warm sheet -> creates a real baby via the existing
   add-baby path (country + optional sex carry over), sets `bornBabyId`, pregnancy kept as history,
   app becomes the normal baby tracker.
-- **Marketing:** `/pregnancy/` sales page (Mommy To Be brand, journey + Moments sections,
+- **Marketing:** `/pregnancy/` sales page (Cubby Expecting, journey + Moments sections,
   JSON-LD), nav + footer links on home/features/pricing/faq, sitemap entry (0.9).
 
 **Riding along on the branch:**
@@ -60,15 +65,15 @@ for picking the pregnancy track back up. Read it cold and you know everything.
   weights. Fully built + verified, hidden behind **`FEATURES.den = false`** in `app/index.html`.
   Its later launch = flip the flag + bump SW cache. Do NOT enable it in the pregnancy release.
 
-## 3. Brand state (decisions on record; detail in ECOSYSTEM.md on the branch)
-- **Mommy To Be** = pregnancy service brand (independent identity). Generic phrase: available
-  (no app collision; nearest Mommy+/HiMommy/Mommy Womb) but weakly protectable as a mark.
-- **Den** = master household-OS brand (checked clean). **Cubby** = the baby flow.
-- REJECTED names (verified collisions): Ember (Ember Baby app), Cub/Cubs (Cubtale, Cub Baby
-  Sleep). Avoid: Glow, Bump, Sprout, Coconut, Nest, Hatch, Willow, Halo, Flutter, Luna, Acorn,
-  Snug, Hearth. Best standalone fallback if ever needed: **Patter**.
+## 3. Brand state (current; detail in ECOSYSTEM.md)
+- **Cubby** = the one brand across four lifecycle stages (Trying → Expecting → Baby → Child).
+  Pregnancy is the **Expecting** stage. The old **Mommy To Be** pregnancy brand is **retired**.
+- **Den** = the household-OS concept, now **parked** (`FEATURES.den=false`), not a master brand.
+- REJECTED names (verified collisions, kept for naming history): Ember (Ember Baby app), Cub/Cubs
+  (Cubtale, Cub Baby Sleep). Avoid: Glow, Bump, Sprout, Coconut, Nest, Hatch, Willow, Halo,
+  Flutter, Luna, Acorn, Snug, Hearth. Best standalone fallback if ever needed: **Patter**.
 
-## 4. Key code anchors (all on the branch)
+## 4. Key code anchors (all on `main`)
 - `app/index.html` sections (grep the banner comments):
   `PREGNANCY` (journey, week view, logging, tools, Moments, birth transition) ·
   `PREGNANCY HEALTH` (condition trackers) · `OUR DEN` (dark hub) · `CONSENT` (governance).
@@ -77,21 +82,24 @@ for picking the pregnancy track back up. Read it cold and you know everything.
   `conditions` (GDM/BP/supplements/nausea thresholds + sources). Re-verify sources yearly.
 - `app/store-firebase.js`: household blob carries `pregnancy`, `den`, `consents`, `guardians`;
   household doc carries `formerMemberInfo`; loggerName/authorTag fall back to it.
-- `app/sw.js`: `CACHE = little-log-v55` on the branch (main is at v48; resolve to the higher
-  number + 1 on merge if main moved).
+- `app/sw.js`: `CACHE = little-log-v65` on `main` (bump it on any app-asset change).
 - `pregnancy/index.html`: the sales page.
 - State shape: `state.pregnancy` includes `stage` ('planning'|'expecting'), `moments[]`,
   `precon[]`, `cycleLen`, plus everything from v1 (§3 of PREGNANCY-HANDOFF.md).
   `ensurePregFields()` migrates older pregnancies safely.
 
-## 5. Rollout runbook (pregnancy release)
+## 5. Rollout runbook (pregnancy release — DONE; kept for reference)
+
+This release has shipped: the pregnancy track is merged into `main` and live. The steps below are
+the procedure that was followed and are retained for history.
+
 1. Review the PR (or `git diff main..pregnancy-tracker`).
 2. Watch for merge conflicts in shared marketing files (`index.html` root, `sitemap.xml`,
    `faq/ pricing/ features/` navs) if main's SEO work touched them; and in `app/sw.js`
    (take highest CACHE + 1).
 3. Merge -> push -> Cloudflare auto-deploys ~1 min.
-4. Verify live in incognito: little-cubby.com/pregnancy/ renders; /app/ onboarding shows
-   "Mommy To Be" entry; create a test pregnancy via each of the 3 journey paths; add a Moment;
+4. Verify live in incognito: little-cubby.com/pregnancy/ renders; /app/ onboarding shows the
+   "Expecting" entry; create a test pregnancy via each of the 3 journey paths; add a Moment;
    check a second signed-in device syncs.
 5. Leave `FEATURES.den=false`. The Home/Den launch is a separate, later release.
 
@@ -115,9 +123,9 @@ for picking the pregnancy track back up. Read it cold and you know everything.
 
 ## 8. How to resume work on this track
 ```bash
-git checkout pregnancy-tracker
+git checkout main            # pregnancy is merged + live on main
 node tools/serve.js          # http://localhost:8080/app/ and /pregnancy/
-# build, verify in preview, bump sw.js CACHE, commit to the branch
+# build, verify in preview, bump sw.js CACHE, commit to main (auto-deploys on push)
 ```
 Everything verified as of v2: all journeys, trackers, tools, Moments, consent flows (simulated
 two-guardian household), the FEATURES.den flag flip, and the birth transition. No console errors.

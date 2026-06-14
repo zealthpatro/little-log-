@@ -1,9 +1,11 @@
 # Cubby 🐻
 
-A warm, private, shareable baby-tracker PWA. Feeds, sleep, nappies, pumping, growth,
-milestones, medicine, vaccines, illness, photos and keepsakes — with real multi-caregiver
-sharing, per-person bear avatars, and WHO/CDC growth-percentile charts. Fronted by a public
-marketing + SEO site (home, features, articles, pricing, FAQ, programmatic vaccine schedules).
+A warm, private, shareable PWA for the whole little-one journey — **trying, expecting, baby and
+child, in one app**. Pregnancy week-by-week, antenatal schedules and mother-owned health; then
+feeds, sleep, nappies, pumping, growth, milestones, medicine, vaccines, illness, photos and
+keepsakes — with real multi-caregiver sharing, per-person bear avatars, and WHO/CDC
+growth-percentile charts. Fronted by a public marketing + SEO site (home, pregnancy, features,
+articles, pricing, FAQ, programmatic vaccine schedules).
 
 - **Live:** https://little-cubby.com (custom domain) — also https://cubby.saurav-918.workers.dev
 - **App:** https://little-cubby.com/app/ · **Marketing/SEO:** everything at the root `/`
@@ -13,7 +15,8 @@ marketing + SEO site (home, features, articles, pricing, FAQ, programmatic vacci
 
 > The app is fully cloud-hosted and always-on. No local machine is required to keep it
 > running — `localhost` is only for development.
-> Last refreshed: 2026-06-12.
+> **What's live now + how we take it to full launch: see the current-status section at the top of `HANDOFF.md`.**
+> Last refreshed: 2026-06-14.
 
 ---
 
@@ -36,7 +39,7 @@ Phone / browser
    │   ├─ index.html ............ marketing home (5-tab nav, hero carousel, proof, pricing)
    │   ├─ features/ pricing/ faq/ articles/ ... the other tabs
    │   ├─ vaccination-schedule/{uk,us,uae}/, de/impfkalender/ ... programmatic SEO pages
-   │   ├─ articles/<slug>/ ...... sourced content library, 100+ articles (see §10, content engine)
+   │   ├─ articles/<slug>/ ...... sourced content library, 180+ articles (baby + pregnancy; see §10)
    │   ├─ site.css (marketing) + vax.css (articles/vaccine) ... shared styles
    │   └─ sitemap.xml robots.txt og/*.png ... SEO plumbing
    │

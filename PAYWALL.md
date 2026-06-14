@@ -1,5 +1,7 @@
 # Cubby Pro: paywall candidates (living list)
 
+> **Status (June 2026):** Cubby Pro is ONE tier ($9/mo or $90/yr); the v1 paywall is built and wired with try-before-buy tasters, currently behind a "Register for Pro" gate until the Aug 2026 billing go-live. Full current state + go-live plan: HANDOFF.md.
+
 > ## ⚑ CURRENT PRICING (authoritative, 2026-06-13)
 > Cubby Pro is **ONE tier: $9/month or $90/year** (save 17%, ~$7.50/mo effective), 7-day free trial.
 > Localized: USD 9/90 · GBP 7/70 · EUR 8/80 · AED 33/330 · INR 749/7490. This **supersedes** any
@@ -88,9 +90,10 @@ These are the trust + word-of-mouth core. Gating them would kill adoption.
 4. **Quality/format gate** — free gets standard; Pro gets HD / extra formats.
 
 ## v1 "Base" plan mapping (next venture)
-The first paid tier is a single cheap entry plan: **from $5/mo (billed annually ~$59/yr) with a
-7-day free trial** (full pricing rationale + tier ladder in PRO.md). To protect margin at $5, the
-v1 Base plan gates only **zero-marginal-cost** features (on-device or client-generated):
+The first paid tier is a single cheap entry plan with a 7-day free trial (pricing now unified to
+**Cubby Pro $9/mo or $90/yr** per the banner above; the "$5/$59" figures below are the historical
+rationale, kept for the tier ladder in PRO.md). To protect margin, the
+v1 plan gates only **zero-marginal-cost** features (on-device or client-generated):
 - **In Base v1:** premium share-card templates, premium fonts & palettes, Instagram Story/Portrait
   formats, "made with Cubby" watermark removal, full sticker pack, Then & Now, Auto-enhance,
   background cutout, plus doctor **PDF report + data export**.

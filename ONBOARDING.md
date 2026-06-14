@@ -1,5 +1,7 @@
 # Cubby — Onboarding & education plan
 
+> **Status (June 2026):** This in-app onboarding plan still stands; it now spans the full Cubby lifecycle (Trying → Expecting → Baby → Child) with the pregnancy track merged + live, so first-run education should cover whichever stage a caregiver starts in. Full current state + go-live plan: HANDOFF.md.
+
 How we teach Cubby's value without a tour, a wall of tips, or added complexity.
 
 ## Principles

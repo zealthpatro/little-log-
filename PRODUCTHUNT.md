@@ -1,5 +1,7 @@
 # Cubby — Product Hunt launch kit
 
+> **Status (June 2026):** This launch kit is ready to run; Cubby is live on little-cubby.com as one app across four stages (Trying, Expecting, Baby, Child) with ~180 articles and Privacy Max 1.0, so keep the framing honest as free, private, early access. Full current state + go-live plan: HANDOFF.md.
+
 Everything to launch Cubby on Product Hunt as a copy-paste-and-click. You run the submission (it's
 your PH account); all copy + the 5 gallery images are ready in `og/producthunt/`.
 

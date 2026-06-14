@@ -1,5 +1,7 @@
 # Cubby — backlink & launch playbook
 
+> **Status (June 2026):** This outreach playbook is current; the linkable wedge is now ~180 live articles plus the vaccine-schedule reference pages, all live on little-cubby.com. Full current state + go-live plan: HANDOFF.md.
+
 Goal: go from domain authority ~0 to a real link profile. Honest, rules-respecting outreach only:
 no fake reviews, no review swaps, no spam, always disclose you're the maker. Ready-to-paste assets
 below. Tick each as done.
@@ -17,7 +19,7 @@ counts or invent praise.
 
 ---
 
-## 0b. Article cross-referencing — how to earn links to the 114 guides
+## 0b. Article cross-referencing — how to earn links to the ~180 guides
 The app and the articles need *different* link tactics. Apps get Product Hunt/directories; **articles
 get links by being a citable reference.** On-page is already maxed (BlogPosting + breadcrumb schema,
 canonical, OG, ~3 internal links + a Related module each, deep-linked official sources). Now the

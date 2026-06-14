@@ -1,5 +1,7 @@
 # Cubby content runbook (for a scheduled agent or /loop)
 
+> **Status (June 2026):** This workflow is current and live; it publishes baby and pregnancy articles to little-cubby.com (~180 articles live so far) by pushing to `main`, which auto-deploys via Cloudflare Workers Builds. Full current state + go-live plan: HANDOFF.md.
+
 This is the full, self-contained workflow to research, write, self-review and **publish** one sourced baby-care article per run. It is YMYL (health) content: accuracy and sourcing are mandatory, fabrication is forbidden.
 
 Point a schedule or loop at the **Master prompt** below. Everything it needs is here and in `CONTENT-QUEUE.md`.

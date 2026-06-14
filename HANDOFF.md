@@ -1,7 +1,59 @@
 # Cubby — handoff / resume notes
 
 Quick orientation for picking this project back up (read `README.md` for the full picture).
-Last refreshed: 2026-06-12.
+Last refreshed: 2026-06-14.
+
+## Current status (June 2026): what's live + how we go live
+
+**Everything below is LIVE on https://little-cubby.com** (one repo, one branch `main`, Cloudflare
+Workers Builds auto-deploys on every push to `main`). The pregnancy track is no longer a side branch —
+it has been **merged into `main` and shipped**. `pregnancy-tracker` is now redundant (kept until retired).
+
+### Accomplished this cycle
+- **One Cubby, four lifecycle stages** — Trying → Expecting → Baby → Child. The old "Mommy To Be" name
+  is **retired**; the household-OS "Den" is **parked** (`FEATURES.den=false`). See `ECOSYSTEM.md`.
+- **Pregnancy tracker merged + live** — week-by-week, antenatal schedules (**170-country coverage**:
+  verified UK/US/DE/UAE/CA/AU/NZ/IE, WHO-aligned fallback elsewhere + a custom plan), opt-in health
+  trackers (GDM/BP/supplements/nausea), kick counter, contraction timer, birth plan, hospital bag,
+  Moments album, the birth transition, and a compassionate pregnancy-loss flow.
+- **Privacy Max 1.0 (gate G1) live** — maternal health is **off the circle-shared blob**, now in
+  `households/{hid}/mhealth/{ownerUid}/cat/{category}`: mother-owned, **per-category consent**, mood
+  owner-only and never shareable. Rules **published in the Firebase console** (the runtime source of
+  truth). Containment verified; cross-account *sharing* path still wants an emulator test. See
+  `PRIVACY-MAX-1.0.md`.
+- **Expecting/Baby audience framework across the marketing site** — a pre-paint lifecycle-stage engine
+  (URL `?stage=` > page `data-page-stage` > localStorage > default baby), two-tab Features, a Home
+  "Expecting" section, an Articles strip, and a Pregnancy nav link. Arriving from `/pregnancy/` marks
+  the visitor "expecting" everywhere.
+- **~180 articles live** (baby + pregnancy clusters), searchable hub.
+- **Magic-link email FIXED + verified** — own Cloudflare Worker endpoint `POST /api/send-signin-link`
+  mints the Firebase sign-in link (service-account JWT → OAuth → Identity Toolkit `returnOobLink`) and
+  sends a branded email via **Resend** from `mail.little-cubby.com`. Confirmed delivering to the **Gmail
+  inbox** (Firebase's built-in sender was being silently dropped). Endpoint hardened (same-origin via
+  Origin/Referer, normalized cooldown). Sign-in **deeplinks rebranded to `little-cubby.com`** (no more
+  `little-log-a9caa.firebaseapp.com`). See `EMAIL.md`.
+- **Vaccine catch-up (Phase 0.3)** — calm 5-state badges, no red "OVERDUE wall"; estimated catch-up
+  dates tagged.
+- **Pricing unified** — Cubby Pro **$9/mo or $90/yr** (save 17%, 7-day trial), gated to an Aug 2026 launch.
+- **Lifecycle marketing close** — "the only app you'll ever need, from two lines to big kid" on the home
+  page and reinforced in the sign-in email footer.
+
+### How it goes live (mechanism)
+`git push origin main` → **Cloudflare Workers Builds** rebuilds + deploys `little-cubby.com`. No wrangler
+needed locally; secrets/vars live in the Cloudflare dashboard (Workers&Pages → `cubby` → Settings →
+Variables and Secrets: `RESEND_API_KEY`, `FIREBASE_SERVICE_ACCOUNT` secrets; `MAIL_FROM` var). Firestore
+rules must be **published in the Firebase console** to take effect.
+
+### Remaining to fully harden / launch
+- **Rate-limit rule** on `POST /api/send-signin-link` (Cloudflare → `little-cubby.com` zone → Security →
+  WAF → Rate limiting; ~5–10/IP/min). The in-Worker cooldown is not the volume defense. **Pending.**
+- **Pro billing go-live** — Worker is built (`workers/pro-billing/`); needs Stripe product/secrets/webhook
+  + checkout URLs in the app; targeted Aug 2026. See `MONETIZATION-HANDOFF.md`.
+- **Maternal-surface gates** — emulator cross-account denial test for the consent *sharing* path; a
+  source-accuracy pass on the GDM/BP thresholds (no credentialed reviewer required, per founder ruling —
+  cited summaries + passive logging; keep copy non-diagnostic).
+- **Branch cleanup** — retire the fully-merged `pregnancy-tracker` branch.
+- Apple Sign-In (deferred, $99/yr).
 
 ## What this is
 **Cubby** 🐻 — a shared baby-tracker PWA, **live and in real use** by the owner + family,
@@ -20,7 +72,7 @@ Don't break production. Make a change → verify → push (auto-deploys).
   "Open Cubby" + a welcome-back strip (no forced redirect).
 - `features/`, `pricing/`, `faq/`, `articles/` = the other marketing tabs.
 - `vaccination-schedule/{uk,us,uae}/` + `de/impfkalender/` = programmatic SEO vaccine pages.
-- `articles/<slug>/` = the sourced content library — **100+ articles** live, each with its own
+- `articles/<slug>/` = the sourced content library — **180+ articles** live (baby + pregnancy), each with its own
   folder, per-page OG image (`og/articles/<slug>.png`), BlogPosting + BreadcrumbList JSON-LD.
   The hub at `articles/` has **live search + topic/age filters** (URL-hash persistence,
   scroll-on-mobile / wrap-on-desktop chips). See content engine below.
@@ -39,11 +91,10 @@ Don't break production. Make a change → verify → push (auto-deploys).
 - `app/cubby-extras.js` = bear avatars + custom time/date pickers + the unified "When" time strip.
 - `app/landing.js` = signed-out landing inside the app + Pro/paywall copy.
 - `app/growth-data.js` = WHO/CDC percentile tables.
-- `app/pregnancy-data.js` = `window.PREG` week-by-week + antenatal schedule data. The full
-  pregnancy product ("Mommy To Be", all phases 2–5 built) lives on branch `pregnancy-tracker`,
-  not merged yet: see `PREGNANCY-HANDOFF-V2.md` (that doc owns the pregnancy track + rollout
-  runbook; this session stays core).
-- `app/sw.js` = service worker (`CACHE = little-log-vNN`, currently **v57**; bump on app asset change).
+- `app/pregnancy-data.js` = `window.PREG` week-by-week + antenatal schedule data (170-country
+  coverage). The full pregnancy product is **merged into `main` and live** (one Cubby; the old
+  "Mommy To Be" name is retired). History/spec: `PREGNANCY-HANDOFF-V2.md`.
+- `app/sw.js` = service worker (`CACHE = little-log-vNN`, currently **v65**; bump on app asset change).
 - Data lives in `households/{hid}` (see README §3). Events are a subcollection; rest is the `app` blob.
 - Edge worker: root `worker.js` (`wrangler.toml` → `main = "worker.js"`) reverse-proxies `/__/*`
   to the Firebase auth backend so sign-in stays on `little-cubby.com`.
@@ -53,8 +104,10 @@ Don't break production. Make a change → verify → push (auto-deploys).
 
 ## Auth, onboarding & referral
 - **Sign-in (two paths):** Google OAuth (`signInGoogle()` → popup, redirect fallback) **and** email
-  magic-link (`sendSignInLinkToEmail` → `isSignInWithEmailLink` → `signInWithEmailLink`). Both in
-  `app/store-firebase.js`.
+  magic-link. The magic-link **send** goes through our **own Worker + Resend** (`POST /api/send-signin-link`
+  in `worker.js`), not Firebase's built-in sender (which Gmail silently dropped); the client posts there
+  and completes with `signInWithEmailLink`. Falls back to Firebase's sender if the endpoint is down.
+  Sign-in links are rewritten onto `little-cubby.com`. Both paths in `app/store-firebase.js`.
 - **Same-domain auth:** `worker.js` proxies `/__/*` to `little-log-a9caa.firebaseapp.com`, and
   `authDomain` is set to `little-cubby.com`, so the Google popup shows our domain, not Firebase's.
   A new live domain still needs adding to Firebase Authorized domains.
@@ -142,11 +195,9 @@ Articles are produced by a **dedicated Sonnet writer agent**, not the main build
   (no copyrighted stock photos).
 
 ## Next planned (see the docs for detail)
-- **Pregnancy tracker (Mommy To Be)**: BUILT on branch `pregnancy-tracker` (all phases 2–5, +
-  consent governance riding along), awaiting PR review + merge. State, rollout runbook and next
-  steps: `PREGNANCY-HANDOFF-V2.md`. Do pregnancy work on that branch with that doc; keep `main`
-  sessions for core little-cubby jobs. (Our Den household hub is built but dark behind
-  `FEATURES.den = false` — keep it off for the pregnancy release.)
+- **Pregnancy tracker**: MERGED into `main` and live (one Cubby; "Mommy To Be" retired; 170-country
+  schedules; Privacy Max 1.0). History + spec: `PREGNANCY-HANDOFF-V2.md`. (Our Den household hub
+  remains dark behind `FEATURES.den = false`.)
 - **Stripe Pro billing**: Worker BUILT and launch-ready — just needs Stripe secrets + webhook + rules
   publish (`workers/pro-billing/README.md`). Referral rewards announce once redeemable. `PAYWALL.md`,
   `PRO.md` for design.

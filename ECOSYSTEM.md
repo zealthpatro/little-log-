@@ -1,5 +1,7 @@
 # Den: the family ecosystem (master plan)
 
+> **Status (June 2026):** The shipped master brand is ONE Cubby across four lifecycle stages (Trying -> Expecting -> Baby -> Child); the "Den" household-OS in this doc is PARKED (`FEATURES.den=false`) and "Mommy To Be" is RETIRED in favour of the "Expecting" stage. Full current state + go-live plan: HANDOFF.md.
+
 **Den is the master brand: a warm household OS.** One family account ("the den") that runs the
 whole home: the people in it, the life events moving through it, and the day-to-day machinery
 that keeps it going. Individual experiences (pregnancy, baby, home management, weight, health)
@@ -46,10 +48,11 @@ lives in their Den, the more their story (and switching cost) grows.
 
 ## The flows
 
-### Shipped (branch `pregnancy-tracker`)
-1. **Pregnancy ("Mommy To Be")** : the full journey. A "we're trying" planning stage
+### Shipped (merged into `main` + live)
+1. **Pregnancy (the "Expecting" stage of Cubby)** : the full journey. A "we're trying" planning stage
    (preconception checklist per NHS, optional fertile-window estimate, "I got a positive test"
-   celebration that converts to tracking), week view, antenatal schedules (NHS/ACOG/G-BA/WHO),
+   celebration that converts to tracking), week view, antenatal schedules (170-country coverage:
+   verified NHS/ACOG/G-BA/WHO and others, WHO-aligned fallback elsewhere),
    danger signs (CDC), appointments, symptoms/weight/BP, opt-in condition trackers (GDM glucose
    with NICE/ACOG targets, pre-eclampsia watch, supplements, nausea), kick counter, contraction
    timer (5-1-1), birth plan, hospital bag, a **Moments** album (ultrasounds and bump photos
@@ -60,9 +63,9 @@ lives in their Den, the more their story (and switching cost) grows.
    (shared shopping list), home staff (nanny/cleaner/cook contacts and notes), meal plan for the
    week, expenses with a monthly view, and adult weight tracking for mom and dad. Lives in the
    same household blob; every member sees the same Den.
-   **Rollout status: built and tested, DARK-LAUNCHED behind `FEATURES.den=false` in
-   `app/index.html`. The pregnancy tracker rolls out first; flipping that flag (plus an SW cache
-   bump) is the whole Home launch.**
+   **Rollout status: built and tested, PARKED behind `FEATURES.den=false` in
+   `app/index.html`. The pregnancy tracker is now merged into `main` and live; the Home flow stays
+   parked, and flipping that flag (plus an SW cache bump) is the whole Home launch.**
 
 ### Next (rough order)
 4. **Weight & wellness, deeper** : goals and trends per adult, postpartum-aware (links from the
@@ -102,7 +105,7 @@ stores as Den when the shell is ready.
   Aura, Bloom/Blossom, Acorn, Snug (rides SNOO/Snuz), Hearth (Hearth Display family organizer).
 
 ## Data governance: the household owns the story (June 2026)
-Principles, implemented in-app on branch `pregnancy-tracker`:
+Principles, implemented in-app and merged into `main` (live):
 - **The data belongs to the household (the baby's story), not to any one member.** Removing a
   caregiver or partner revokes their ACCESS only; everything they ever logged stays, and a
   `formerMemberInfo` tombstone keeps their entries attributed by name forever.

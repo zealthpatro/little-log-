@@ -1,7 +1,9 @@
 # Cubby Pregnancy Tracker (build spec)
 
+> **Status (June 2026):** The pregnancy tracker is built, merged into `main` and LIVE on little-cubby.com as the "Expecting" stage of one Cubby (170-country antenatal coverage, opt-in health trackers, kicks, contractions, birth plan, hospital bag, Moments, birth transition, compassionate loss flow); this file remains the original spec + source list. Full current state + go-live plan: HANDOFF.md.
+
 > **SUPERSEDED for current status: see `PREGNANCY-HANDOFF-V2.md`.** The pregnancy product
-> ("Mommy To Be") is fully built on branch `pregnancy-tracker` (not merged yet); v2 owns the
+> (now the "Expecting" stage of Cubby) is fully built and **merged into `main` + live**; v2 owns the
 > track: state, rollout runbook and next steps. This file remains as the original spec +
 > source list (re-check sources yearly).
 
@@ -19,7 +21,7 @@ YMYL stance (same as vaccines): official-source summaries, visible "informationa
 - **Phase 4 (done): tools** — kick counter (count to 10, session history), contraction timer (frequency + duration, 5-1-1 guidance), birth plan notes + hospital-bag checklist.
 - **Phase 5 (done): birth → baby conversion** — "Baby has arrived" turns the pregnancy into a baby (carries birth date, country, optional sex), keeping the pregnancy as history (`bornBabyId`); everything syncs.
 
-All phases built and verified in preview on branch `pregnancy-tracker` (Jun 2026). Code lives in the `PREGNANCY` section of `app/index.html`; data in `app/pregnancy-data.js`.
+All phases built, verified, and **merged into `main` + live** (Jun 2026). Code lives in the `PREGNANCY` section of `app/index.html`; data in `app/pregnancy-data.js`.
 
 ## Data model (planned)
 `state.pregnancy` (per household, like babies): `{id, dueDate, lmp?, country, careTeam:[], appts:[{id,week,title,note,done,at}], symptoms:[], kicks:[{start,count,...}], contractions:[{start,end}], birthPlan, bag:[], createdAt}`. Add to `appBlobFromState`/`applyAppBlob` so it syncs. A pregnancy with `bornBabyId` set is "completed".
