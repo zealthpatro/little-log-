@@ -644,6 +644,12 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .bag-row{display:flex;align-items:center;gap:11px;background:var(--surface);border-radius:13px;padding:11px 13px;margin-bottom:8px;box-shadow:0 2px 7px var(--shadow);}
 .bag-row .bg-tick{width:24px;height:24px;border-radius:8px;border:2px solid var(--line);display:grid;place-items:center;flex-shrink:0;cursor:pointer;color:#fff;}
 .bag-row.done .bg-tick{background:var(--preg);border-color:var(--preg);}
+.country-search{width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;font-size:16px;background:var(--surface);color:var(--ink);box-sizing:border-box;}
+.country-list{margin-top:6px;max-height:240px;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:12px;background:var(--surface);}
+.country-opt{padding:11px 14px;cursor:pointer;font-size:15px;border-bottom:1px solid var(--line);}
+.country-opt:last-child{border-bottom:none;}
+.country-opt:hover{background:var(--preg-soft);}
+.country-opt.sel{background:var(--preg-soft);font-weight:800;color:var(--preg);}
 .bag-row .bg-t{flex:1;font-weight:700;font-size:14px;}
 .bag-row.done .bg-t{text-decoration:line-through;color:var(--ink-soft);}
 .bag-row .bg-x{border:none;background:none;color:var(--ink-faint);cursor:pointer;padding:4px;flex-shrink:0;}
@@ -1947,7 +1953,7 @@ function openAddBaby(){
     <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
     <div class="field"><label>Name</label><input id="bName" placeholder="Baby's name" autofocus></div>
     <div class="field"><label>Birthday (optional)</label><input type="date" id="bDate" value="${today}" max="${today}"></div>
-    <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label><select id="bCountry">${VAX_COUNTRIES.map(([k,n])=>`<option value="${k}" ${k===detectCountry()?'selected':''}>${n}</option>`).join('')}</select></div>
+    <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', VAX_COUNTRIES, detectCountry(), 'Search your country…')}</div>
     <button class="btn-primary" onclick="saveBaby()">Add baby</button>`,'diaper');
 }
 function pickColor(c){
@@ -2635,7 +2641,7 @@ function renderOnboard(){
       <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
       <div class="field"><label>Baby's name</label><input id="bName" placeholder="e.g. Mira" autofocus></div>
       <div class="field"><label>Birthday (optional)</label><input type="date" id="bDate" value="${today}" max="${today}"></div>
-      <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label><select id="bCountry">${VAX_COUNTRIES.map(([k,n])=>`<option value="${k}" ${k===detectCountry()?'selected':''}>${n}</option>`).join('')}</select></div>
+      <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', VAX_COUNTRIES, detectCountry(), 'Search your country…')}</div>
       <button class="btn-primary" style="--accent:var(--feed)" onclick="saveBaby()">Start tracking</button>
       <div style="text-align:center;font-size:12px;font-weight:800;color:var(--ink-faint);margin:14px 0 2px;letter-spacing:.04em">OR</div>
       <button class="btn-ghost" onclick="openStartPregnancy()" style="color:var(--preg)">🌸 Expecting? Trying, pregnant or counting weeks</button>
@@ -2702,6 +2708,52 @@ function pregCountryOptions(sel){
   html+=opt('custom','Custom — build your own');
   return html;
 }
+/* Searchable country picker (replaces the long native select). The hidden input keeps the same
+   id the save code reads; the search box filters a tappable, alphabetised list live. */
+function pregCountryList(){
+  var all=['uk','us','de','uae'].concat(PREG_MORE_COUNTRIES);
+  var labeled=all.map(function(c){
+    var sk=pregCountryKey(c);
+    var L=(sk!=='generic'&&sk!=='custom'&&window.PREG&&PREG.antenatal[sk])?PREG.antenatal[sk].label:pregCountryName(c);
+    return [c,L];
+  }).sort(function(a,b){ return a[1].localeCompare(b[1]); });
+  labeled.push(['generic','Other / not listed (WHO-aligned)']);
+  labeled.push(['custom','Custom — build your own']);
+  return labeled;
+}
+function pregLabelFor(code){
+  if(code==='generic') return 'Other / not listed (WHO-aligned)';
+  if(code==='custom') return 'Custom — build your own';
+  var sk=pregCountryKey(code);
+  return (sk!=='generic'&&sk!=='custom'&&window.PREG&&PREG.antenatal[sk])?PREG.antenatal[sk].label:pregCountryName(code);
+}
+/* Generic searchable picker for ANY list with more than ~7 items. pairs = [[code,label],...].
+   The hidden input keeps `id` so existing save code (which reads $('#id').value) is unchanged. */
+function searchPickerHtml(id, pairs, sel, ph){
+  if((sel===undefined||sel==='') && pairs[0]) sel = pairs[0][0];
+  var selRow = pairs.filter(function(p){return p[0]===sel;})[0];
+  var selLabel = selRow ? selRow[1] : (sel||'');
+  var rows = pairs.map(function(p){
+    return '<div class="country-opt'+(p[0]===sel?' sel':'')+'" data-code="'+escapeHtml(String(p[0]))+'" data-l="'+escapeHtml(String(p[1]||'').toLowerCase())+'" onclick="pickPick(\''+id+'\',this)">'+escapeHtml(String(p[1]))+'</div>';
+  }).join('');
+  return '<input type="hidden" id="'+id+'" value="'+escapeHtml(String(sel))+'">'
+    + '<input id="'+id+'_s" class="country-search" autocomplete="off" placeholder="'+escapeHtml(ph||'Search…')+'" value="'+escapeHtml(String(selLabel))+'" onfocus="this.select();showCountryList(\''+id+'\')" oninput="filterCountryList(\''+id+'\')" onblur="blurCountry(\''+id+'\')">'
+    + '<div id="'+id+'_l" class="country-list" style="display:none">'+rows+'</div>';
+}
+function countryPickerHtml(id, sel){ return searchPickerHtml(id, pregCountryList(), sel||'generic', 'Search your country…'); }
+function showCountryList(id){ var l=document.getElementById(id+'_l'); if(l) l.style.display='block'; }
+function filterCountryList(id){
+  var s=document.getElementById(id+'_s'), l=document.getElementById(id+'_l'); if(!s||!l) return;
+  var q=(s.value||'').trim().toLowerCase(); l.style.display='block';
+  [].forEach.call(l.children,function(el){ el.style.display=(!q||el.getAttribute('data-l').indexOf(q)>=0)?'block':'none'; });
+}
+function pickPick(id, el){
+  var h=document.getElementById(id), s=document.getElementById(id+'_s'), l=document.getElementById(id+'_l');
+  if(h) h.value=el.getAttribute('data-code');
+  if(s) s.value=el.textContent;
+  if(l){ l.style.display='none'; [].forEach.call(l.children,function(x){ x.classList.toggle('sel', x===el); }); }
+}
+function blurCountry(id){ setTimeout(function(){ var s=document.getElementById(id+'_s'), h=document.getElementById(id), l=document.getElementById(id+'_l'); if(s&&h&&l){ var sel=[].filter.call(l.children,function(x){return x.getAttribute('data-code')===h.value;})[0]; if(sel) s.value=sel.textContent; } if(l) l.style.display='none'; },200); }
 
 /* ---- derived (compute, never store) ---- */
 function pregWeek(){
@@ -2743,7 +2795,7 @@ function openExpectingSetup(mode){
       <button class="${!isDue?'on':''}" onclick="setPregMode('lmp')">Use last period</button>
     </div>
     <div class="field"><label>${isDue?'Due date (EDD)':'First day of your last period'}</label><input type="date" id="pgDate" value="${pregDraft.date}"></div>
-    <div class="field"><label>Where you'll have your care</label><select id="pgCountry">${pregCountryOptions(pregDraft.country)}</select></div>
+    <div class="field"><label>Where you'll have your care</label>${countryPickerHtml('pgCountry', pregDraft.country)}</div>
     <button class="btn-primary" style="background:var(--preg)" onclick="savePregnancy()">Start tracking</button>
     <button class="btn-ghost" onclick="openStartPregnancy()">Back</button>
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
@@ -2798,7 +2850,7 @@ function openPositiveTest(){
     <h2 style="text-align:center">A positive test!</h2>
     <div class="sub" style="text-align:center">Wonderful news. Let's turn trying into tracking: confirm your last period and we'll set up your weeks.</div>
     <div class="field"><label>First day of your last period</label><input type="date" id="ptLmp" value="${dv}"></div>
-    <div class="field"><label>Where you'll have your care</label><select id="ptCountry">${pregCountryOptions(p.country)}</select></div>
+    <div class="field"><label>Where you'll have your care</label>${countryPickerHtml('ptCountry', p.country)}</div>
     <button class="btn-primary" style="background:var(--preg)" onclick="confirmPositiveTest()">Start my pregnancy 🤍</button>
     <div class="csub" style="text-align:center;margin-top:8px">A home test is a great sign. Your provider will confirm it properly.</div>`,'preg');
 }
@@ -3038,7 +3090,7 @@ function renderPregLog(){
       <button class="action" onclick="openLogSymptom()"><div class="ico" style="background:var(--note-soft);color:var(--note)">📝</div><div class="label">Symptom</div><div class="hint">Nausea, aches, mood</div></button>
       <button class="action" onclick="openLogWeight()"><div class="ico" style="background:var(--star-soft);color:var(--star)">⚖️</div><div class="label">Weight</div><div class="hint">Your weight</div></button>
       <button class="action" onclick="openLogBP()"><div class="ico" style="background:var(--pump-soft);color:var(--pump)">🩺</div><div class="label">Blood pressure</div><div class="hint">If asked to track</div></button>
-      <button class="action" onclick="pregGo('care')"><div class="ico" style="background:var(--diaper-soft);color:var(--diaper)">👩‍⚕️</div><div class="label">Care team</div><div class="hint">Midwife, OB, GP</div></button>
+      <button class="action" onclick="pregGo('care')"><div class="ico" style="background:var(--diaper-soft);color:var(--diaper)">👩‍⚕️</div><div class="label">Care team</div><div class="hint">Gynaecologist, OB, midwife</div></button>
     </div>
     ${logs?`<div class="sec-title" style="margin-top:18px">Recent</div>${logs}`:''}
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>
@@ -3210,7 +3262,7 @@ function renderPregCare(){
   const cname=pregCareLabel(p.country);
   const careBlock = seeCare ? `
     <div class="sec-title">Your care team</div>
-    ${team||'<div class="csub">Add your midwife, doctor or clinic for quick reference.</div>'}
+    ${team||'<div class="csub">Add your gynaecologist, midwife or clinic for quick reference.</div>'}
     ${amOwner?`<button class="btn-ghost" onclick="openAddCareTeam()">${I.plus} Add to care team</button>`:''}` : '';
   return `<div class="fade-in">
     ${careBlock}
@@ -3234,7 +3286,7 @@ function renderPregCare(){
 function openAddCareTeam(){
   openSheet(`<h2>Care team</h2><div class="sub">Add someone who's looking after you.</div>
     <div class="field"><label>Name</label><input id="ctName" placeholder="e.g. Dr Khan or City Midwives" autofocus></div>
-    <div class="field"><label>Role</label><select id="ctRole"><option>Midwife</option><option>OB / Obstetrician</option><option>GP / Family doctor</option><option>Doula</option><option>Clinic / Hospital</option><option>Other</option></select></div>
+    <div class="field"><label>Role</label><select id="ctRole"><option>Gynaecologist (OB-GYN)</option><option>Obstetrician</option><option>Midwife</option><option>GP / Family doctor</option><option>Doula</option><option>Clinic / Hospital</option><option>Other</option></select></div>
     <div class="field"><label>Phone (optional)</label><input id="ctPhone" inputmode="tel" placeholder="Phone number"></div>
     <button class="btn-primary" style="background:var(--preg)" onclick="addCareTeam()">Add</button>`,'preg');
 }
@@ -3297,7 +3349,7 @@ function openEditPregnancy(){
   const dv=p.dueDate?new Date(p.dueDate).toISOString().slice(0,10):'';
   openSheet(`<h2>Due date &amp; schedule</h2><div class="sub">Update your dates or the antenatal schedule we suggest.</div>
     <div class="field"><label>Due date (EDD)</label><input type="date" id="epDue" value="${dv}"></div>
-    <div class="field"><label>Care schedule</label><select id="epC">${pregCountryOptions(p.country)}</select></div>
+    <div class="field"><label>Care schedule</label>${countryPickerHtml('epC', p.country)}</div>
     <button class="btn-primary" style="background:var(--preg)" onclick="saveEditPregnancy()">Save</button>
     <div class="preg-disclaim">Changing the schedule adds any new suggested appointments. Anything you've added or ticked is kept.</div>`,'preg');
 }
@@ -3378,7 +3430,7 @@ function openWelcomeBaby(){
     ${timeStrip('when','Born')}
     <div class="field" style="margin-top:14px"><label>Sex (optional, for growth charts)</label>
       <div class="seg"><button id="wbSexNone" class="on" onclick="pickWbSex('')">Prefer not to say</button><button id="wbSexF" onclick="pickWbSex('female')">Girl</button><button id="wbSexM" onclick="pickWbSex('male')">Boy</button></div></div>
-    <div class="field"><label>Vaccine schedule</label><select id="wbCountry">${VAX_COUNTRIES.map(([k,n])=>`<option value="${k}" ${k===cc?'selected':''}>${n}</option>`).join('')}</select></div>
+    <div class="field"><label>Vaccine schedule</label>${searchPickerHtml('wbCountry', VAX_COUNTRIES, cc, 'Search your country…')}</div>
     <button class="btn-primary" style="background:var(--preg);margin-top:6px" onclick="welcomeBaby()">🎉 Welcome our baby</button>
     <div class="csub" style="text-align:center;margin-top:8px">Your pregnancy is saved as part of their story.</div>`,'preg');
 }

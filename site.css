@@ -150,6 +150,10 @@ svg.mi{width:1em;height:1em;vertical-align:-0.13em}
 .pb-note{font-size:12px;color:var(--faint);font-weight:600;margin-top:14px;line-height:1.5}
 /* Features page: Apple-style alternating feature folds */
 .band.tint{background:var(--surface2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+/* Strict alternating fold backgrounds, computed per stage group so manual class drift can't break the
+   rhythm. Two clearly distinct tones (clean white vs warm cream) so every fold reads as its own band. */
+[data-stage] > section:nth-of-type(odd){background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+[data-stage] > section:nth-of-type(even){background:#F3EAD8;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 .fold{max-width:960px;margin:0 auto;display:grid;grid-template-columns:1fr 290px;gap:44px;align-items:center;padding:58px 20px}
 .fold.rev{grid-template-columns:290px 1fr}
 .fold.rev .phone{order:1}
