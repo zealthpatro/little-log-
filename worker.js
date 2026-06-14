@@ -118,7 +118,10 @@ async function sendSigninLink(request, env) {
 
   try {
     const token = await getAccessToken(sa);
-    const link = await generateSignInLink(token, email, url.origin + '/app/');
+    let link = await generateSignInLink(token, email, url.origin + '/app/');
+    // Rebrand the link onto our own domain (the worker proxies /__/* to Firebase) so the sign-in
+    // email never exposes the legacy little-log-a9caa.firebaseapp.com host.
+    link = link.replace(/^https:\/\/[^/]+\/__\//, 'https://' + url.host + '/__/');
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'authorization': 'Bearer ' + env.RESEND_API_KEY, 'content-type': 'application/json' },
