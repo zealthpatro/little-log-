@@ -12,3 +12,13 @@ binding = "ASSETS"
 # `wrangler secret put` and never live in this file or the repo.
 [vars]
 MAIL_FROM = "Cubby <noreply@mail.little-cubby.com>"
+
+# Per-IP rate limiter for the magic-link endpoint (worker.js sendSigninLink). Caps one IP to
+# 5 POST /api/send-signin-link calls per 60s (per Cloudflare location), so the endpoint can't be
+# abused to blast sign-in emails or burn the Resend quota. Available on all plans. period must be
+# 10 or 60; namespace_id is any unique id for this account's limiter.
+[[unsafe.bindings]]
+name = "SIGNIN_RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 5, period = 60 }

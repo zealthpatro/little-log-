@@ -90,8 +90,9 @@ function cooldownKeyFor(email) {
 
 async function sendSigninLink(request, env) {
   // Same-origin only. Require an Origin OR Referer matching our host, else reject — this closes
-  // the no-Origin bypass (scripted clients that omit the header). The real per-IP volume defense
-  // is a Cloudflare Rate Limiting rule on this path (REQUIRED before relying on it, see EMAIL.md).
+  // the no-Origin bypass (scripted clients that omit the header). Per-IP volume is then capped by
+  // the SIGNIN_RATE_LIMITER binding (wrangler.toml: 5 / 60s / IP / colo); the per-email cooldown
+  // below stops same-address repeats.
   const url = new URL(request.url);
   const origin = request.headers.get('origin');
   const referer = request.headers.get('referer');
@@ -101,6 +102,17 @@ async function sendSigninLink(request, env) {
     else if (referer) sameOrigin = new URL(referer).host === url.host;
   } catch (e) { sameOrigin = false; }
   if (!sameOrigin) return json({ error: 'forbidden' }, 403);
+
+  // Per-IP rate limit (volume defense). Counts every request to this endpoint regardless of body,
+  // so garbage floods consume the budget too. Fail open if the binding is missing so a config gap
+  // can never block real sign-ins; same-origin + the per-email cooldown still apply.
+  if (env.SIGNIN_RATE_LIMITER) {
+    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    try {
+      const { success } = await env.SIGNIN_RATE_LIMITER.limit({ key: ip });
+      if (!success) return new Response(JSON.stringify({ error: 'rate_limited' }), { status: 429, headers: { 'content-type': 'application/json', 'retry-after': '60' } });
+    } catch (e) { /* limiter unavailable: fail open */ }
+  }
 
   let body;
   try { body = await request.json(); } catch (e) { return json({ error: 'bad_request' }, 400); }
