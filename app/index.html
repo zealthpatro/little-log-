@@ -273,7 +273,7 @@ body{
 .nav-btn.active{color:var(--ink);background:var(--surface-2);}
 
 /* ============ SHEET / MODAL ============ */
-.scrim{position:fixed;inset:0;background:rgba(20,14,10,.42);opacity:0;pointer-events:none;transition:opacity .3s;z-index:50;backdrop-filter:blur(2px);}
+.scrim{position:fixed;inset:0;background:rgba(38,26,18,.5);opacity:0;pointer-events:none;transition:opacity .3s;z-index:50;backdrop-filter:blur(4px) saturate(115%);}
 .scrim.show{opacity:1;pointer-events:auto;}
 .sheet{
   position:fixed;left:50%;bottom:0;transform:translate(-50%,100%);
@@ -298,6 +298,21 @@ body{
 .opt .osub{font-size:11px;color:var(--ink-soft);font-weight:600;}
 .field{margin-bottom:16px;}
 .field label{display:block;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-faint);margin-bottom:8px;}
+/* Crafted in-sheet date picker */
+.dp{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 12px;}
+.dp-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+.dp-t{font-weight:800;font-size:15px;color:var(--ink);}
+.dp-nav{border:none;background:var(--surface-2);width:32px;height:32px;border-radius:9px;font-size:18px;line-height:1;cursor:pointer;color:var(--ink);font-family:inherit;}
+.dp-w{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:2px;}
+.dp-w span{text-align:center;font-size:11px;font-weight:800;color:var(--ink-faint);}
+.dp-g{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;}
+.dp-c{border:none;background:none;aspect-ratio:1;border-radius:9px;font-size:14px;font-weight:700;color:var(--ink);cursor:pointer;font-family:inherit;padding:0;}
+.dp-c:hover:not(.dp-x){background:var(--surface-2);}
+.dp-bl{visibility:hidden;}
+.dp-td{box-shadow:inset 0 0 0 1.5px var(--line);}
+.dp-on,.dp-on:hover{background:var(--diaper);color:#fff;}
+.dp-x{color:var(--ink-faint);opacity:.35;cursor:default;}
+.dp-now{margin-top:8px;border:none;background:var(--surface-2);color:var(--ink);font-weight:800;font-size:13px;padding:8px 14px;border-radius:10px;cursor:pointer;font-family:inherit;width:100%;}
 .field input,.field textarea,.field select{
   width:100%;border:2px solid var(--line);background:var(--surface-2);border-radius:14px;
   padding:13px 15px;font-family:var(--font-body);font-size:16px;font-weight:600;color:var(--ink);
@@ -945,6 +960,41 @@ function timeStrip(slot,label){ slot=slot||'when'; label=label||'When'; if(logTi
     <span class="ts-edit">Change</span></div>`;
 }
 window.getWhen=getWhen; window.setWhen=setWhen;
+
+/* ---- Crafted in-sheet date picker. Local-correct default (no UTC drift, fixes the
+   toISOString bug), month grid, Today shortcut, future-disable via opts.max. Drop-in:
+   writes YYYY-MM-DD to a hidden #id and fires 'input', so callers reading .value or using
+   oninput keep working. value may be a timestamp, a YYYY-MM-DD string, or empty. ---- */
+function _dpYMD(ts){ var d=(ts==null)?new Date():new Date(ts); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function _dpNorm(v){ if(v==null||v==='')return ''; if(typeof v==='number')return _dpYMD(v); var m=String(v).slice(0,10); return /^\d{4}-\d{2}-\d{2}$/.test(m)?m:''; }
+var _dp={};
+function datePicker(id, value, opts){
+  opts=opts||{};
+  var sel=_dpNorm(value); if(!sel && !opts.empty) sel=_dpYMD();
+  var base=sel?new Date(sel+'T08:00'):new Date();
+  _dp[id]={y:base.getFullYear(), m:base.getMonth(), sel:sel, max:_dpNorm(opts.max), min:_dpNorm(opts.min)};
+  return '<input type="hidden" id="'+id+'" value="'+sel+'"'+(opts.oninput?' oninput="'+opts.oninput+'"':'')+'><div class="dp" id="dp_'+id+'">'+_dpGrid(id)+'</div>';
+}
+function _dpGrid(id){
+  var s=_dp[id]; if(!s)return '';
+  var dow=new Date(s.y,s.m,1).getDay(), days=new Date(s.y,s.m+1,0).getDate(), today=_dpYMD();
+  var MN=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var cells=''; var i,d;
+  for(i=0;i<dow;i++) cells+='<span class="dp-c dp-bl"></span>';
+  for(d=1;d<=days;d++){
+    var ymd=s.y+'-'+String(s.m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    var dis=(s.max&&ymd>s.max)||(s.min&&ymd<s.min);
+    cells+='<button type="button" class="dp-c'+(ymd===s.sel?' dp-on':'')+(ymd===today?' dp-td':'')+(dis?' dp-x':'')+'"'+(dis?' disabled':'')+' onclick="_dpPick(\''+id+'\',\''+ymd+'\')">'+d+'</button>';
+  }
+  return '<div class="dp-h"><button type="button" class="dp-nav" onclick="_dpMove(\''+id+'\',-1)">‹</button><span class="dp-t">'+MN[s.m]+' '+s.y+'</span><button type="button" class="dp-nav" onclick="_dpMove(\''+id+'\',1)">›</button></div>'
+       +'<div class="dp-w">'+['S','M','T','W','T','F','S'].map(function(x){return '<span>'+x+'</span>';}).join('')+'</div>'
+       +'<div class="dp-g">'+cells+'</div>'
+       +'<button type="button" class="dp-now" onclick="_dpToday(\''+id+'\')">Today</button>';
+}
+function _dpRefresh(id){ var el=document.getElementById('dp_'+id); if(el)el.innerHTML=_dpGrid(id); }
+function _dpMove(id,delta){ var s=_dp[id]; if(!s)return; s.m+=delta; if(s.m<0){s.m=11;s.y--;} else if(s.m>11){s.m=0;s.y++;} _dpRefresh(id); }
+function _dpPick(id,ymd){ var s=_dp[id]; if(!s)return; s.sel=ymd; var inp=document.getElementById(id); if(inp){ inp.value=ymd; try{inp.dispatchEvent(new Event('input',{bubbles:true}));}catch(_){ } } _dpRefresh(id); }
+function _dpToday(id){ var s=_dp[id]; if(!s)return; var t=new Date(); s.y=t.getFullYear(); s.m=t.getMonth(); _dpPick(id,_dpYMD()); }
 
 /* ============================================================
    RENDER
@@ -1962,7 +2012,7 @@ function openTrash(){
    BABIES & SETTINGS
    ============================================================ */
 function openBabySheet(){
-  if(!state.babies.length){ closeSheet(); openAddBaby(); return; }
+  if(!state.babies.length){ closeSheet(); openAddEntry(); return; }
   let list=state.babies.map(b=>`
     <div class="baby-item" onclick="switchBaby('${b.id}')">
       ${babyAvatarBox(b,'avatar','width:38px;height:38px;font-size:16px')}
@@ -1971,19 +2021,29 @@ function openBabySheet(){
     </div>`).join('');
   openSheet(`<h2>Babies</h2><div class="sub">Switch between little ones.</div>${list}
     <button class="btn-primary" style="background:var(--star)" onclick="openBabyProfile()">${I.note} ${escapeHtml(activeBaby().name)}'s profile</button>
-    <button class="btn-primary" onclick="openAddBaby()">${I.plus} Add a baby</button>
+    <button class="btn-primary" onclick="openAddEntry()">${I.plus} Add to Cubby</button>
     ${babyDeletedEvents().length?`<button class="btn-ghost" onclick="openTrash()">${I.trash} Recently deleted (${babyDeletedEvents().length})</button>`:''}`,'diaper');
 }
 function switchBaby(id){ state.activeBabyId=id; persist(); closeSheet(); go('home'); }
 
 let newBabyColor=AVATAR_COLORS[0];
+/* Unified "+" chooser: born baby or expecting, reachable from the switcher and empty states
+   (not just first-run). Keeps one active pregnancy slot; expecting resumes it if already started. */
+function openAddEntry(){
+  var hasPreg=!!(state.pregnancy && !state.pregnancy.bornBabyId);
+  openSheet(`<h2>Add to Cubby</h2><div class="sub">Wherever you are on the journey.</div>
+    <div class="prof-cards">
+      <div class="prof-card" onclick="closeSheet();openAddBaby()"><span class="lead" style="background:var(--feed-soft);color:var(--feed);font-size:20px">🐻</span><div class="cflex"><div class="a">Our baby is here</div><div class="b">Track feeds, sleep, growth, vaccines and more</div></div><span class="chev">${I.chev}</span></div>
+      <div class="prof-card" onclick="${hasPreg?'closeSheet();render()':'closeSheet();openStartPregnancy()'}"><span class="lead" style="background:var(--preg-soft);color:var(--preg);font-size:20px">🌸</span><div class="cflex"><div class="a">${hasPreg?'Open your pregnancy':"We're expecting"}</div><div class="b">${hasPreg?'Resume where you left off':'Trying, newly pregnant or counting weeks'}</div></div><span class="chev">${I.chev}</span></div>
+    </div>`,'diaper');
+}
 function openAddBaby(){
   newBabyColor=AVATAR_COLORS[Math.floor(Math.random()*AVATAR_COLORS.length)];
   const today=new Date().toISOString().slice(0,10);
   openSheet(`<h2>Add a baby</h2><div class="sub">Just a name to get started.</div>
     <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
     <div class="field"><label>Name</label><input id="bName" placeholder="Baby's name" autofocus></div>
-    <div class="field"><label>Birthday (optional)</label><input type="date" id="bDate" value="${today}" max="${today}"></div>
+    <div class="field"><label>Birthday (optional)</label>${datePicker('bDate','',{max:now()})}</div>
     <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', vaxCountryList(), detectCountry(), 'Search your country…')}</div>
     <button class="btn-primary" onclick="saveBaby()">Add baby</button>`,'diaper');
 }
@@ -2276,7 +2336,7 @@ function renderDoctorEdit(){
     <div class="field"><label>Clinic or hospital</label><input id="docClinic" value="${escapeHtml(d.clinic||'')}" placeholder="Clinic name"></div>
     <div class="row2">
       <div class="field"><label>Phone</label><input id="docPhone" value="${escapeHtml(d.phone||'')}" placeholder="Contact" inputmode="tel"></div>
-      <div class="field"><label>Next appointment</label><input type="date" id="docNext" value="${d.nextVisit||''}"></div>
+      <div class="field"><label>Next appointment</label>${datePicker('docNext', d.nextVisit||'', {empty:true})}</div>
     </div>
     <button class="btn-primary" style="background:var(--sleep)" onclick="saveDoctorEntry()">${d.id?'Save changes':'Add doctor'}</button>
     ${d.id?`<button class="btn-ghost btn-danger" onclick="deleteDoctor('${d.id}')">${I.trash} Remove doctor</button>`:''}`,'sleep');
@@ -2319,7 +2379,7 @@ function renderVisitSheet(){
     <div class="field"><label>Reason</label><div class="chip-row" style="flex-wrap:wrap;gap:8px">${chips}</div></div>
     <div class="field"><label>Or name it</label><input id="visReason" value="${custom?escapeHtml(d.reason):''}" placeholder="e.g. Eye check" oninput="visitDraft.reason=this.value"></div>
     <div class="field"><label>Doctor (optional)</label><div class="chip-row" style="flex-wrap:wrap;gap:8px">${docChips}${addChip}</div>${newForm}</div>
-    <div class="field"><label>Date</label><input type="date" id="visDate" value="${d.date}" max="${dval(new Date())}" oninput="visitDraft.date=this.value"></div>
+    <div class="field"><label>Date</label>${datePicker('visDate', d.date, {max:now(), oninput:'visitDraft.date=this.value'})}</div>
     <div class="field"><label>Notes (optional)</label><textarea id="visNote" rows="3" placeholder="What was discussed, advice, measurements" oninput="visitDraft.notes=this.value">${escapeHtml(d.notes||'')}</textarea></div>
     <button class="btn-primary" style="background:var(--sleep)" onclick="saveVisit()">Log visit</button>`,'sleep');
 }
@@ -2671,7 +2731,7 @@ function renderOnboard(){
       <div class="tag">Feeds, sleep, nappies and every little milestone. One thumb, half asleep. Let's start with who we're tracking.</div>
       <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
       <div class="field"><label>Baby's name</label><input id="bName" placeholder="e.g. Mira" autofocus></div>
-      <div class="field"><label>Birthday (optional)</label><input type="date" id="bDate" value="${today}" max="${today}"></div>
+      <div class="field"><label>Birthday (optional)</label>${datePicker('bDate','',{max:now()})}</div>
       <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', vaxCountryList(), detectCountry(), 'Search your country…')}</div>
       <button class="btn-primary" style="--accent:var(--feed)" onclick="saveBaby()">Start tracking</button>
       <div style="text-align:center;font-size:12px;font-weight:800;color:var(--ink-faint);margin:14px 0 2px;letter-spacing:.04em">OR</div>
@@ -2825,7 +2885,7 @@ function openExpectingSetup(mode){
       <button class="${isDue?'on':''}" onclick="setPregMode('due')">I know my due date</button>
       <button class="${!isDue?'on':''}" onclick="setPregMode('lmp')">Use last period</button>
     </div>
-    <div class="field"><label>${isDue?'Due date (EDD)':'First day of your last period'}</label><input type="date" id="pgDate" value="${pregDraft.date}"></div>
+    <div class="field"><label>${isDue?'Due date (EDD)':'First day of your last period'}</label>${datePicker('pgDate', pregDraft.date, {max:isDue?null:now(), empty:true})}</div>
     <div class="field"><label>Where you'll have your care</label>${countryPickerHtml('pgCountry', pregDraft.country)}</div>
     <button class="btn-primary" style="background:var(--preg)" onclick="savePregnancy()">Start tracking</button>
     <button class="btn-ghost" onclick="openStartPregnancy()">Back</button>
@@ -2838,7 +2898,7 @@ function defaultPrecon(){
 }
 function openPlanningSetup(){
   openSheet(`<h2>We're trying 🌱</h2><div class="sub">Lovely. We'll keep it gentle: a little preparation, an estimated fertile window if you want it, and zero pressure.</div>
-    <div class="field"><label>First day of your last period (optional)</label><input type="date" id="plLmp"></div>
+    <div class="field"><label>First day of your last period (optional)</label>${datePicker('plLmp','',{max:now(),empty:true})}</div>
     <div class="field"><label>Usual cycle length (days)</label><input type="number" id="plCycle" value="28" min="21" max="40"></div>
     <button class="btn-primary" style="background:var(--diaper)" onclick="savePlanning()">Start</button>
     <button class="btn-ghost" onclick="openStartPregnancy()">Back</button>
@@ -2867,7 +2927,7 @@ function fertileEstimate(){
 }
 function openPeriodUpdate(){
   openSheet(`<h2>Period started</h2><div class="sub">Updating it keeps the estimate honest. And if it's a hard day, be kind to yourself.</div>
-    <div class="field"><label>First day</label><input type="date" id="puDate" value="${new Date().toISOString().slice(0,10)}"></div>
+    <div class="field"><label>First day</label>${datePicker('puDate','',{max:now()})}</div>
     <button class="btn-primary" style="background:var(--diaper)" onclick="savePeriodUpdate()">Save</button>`,'diaper');
 }
 function savePeriodUpdate(){ const dv=($('#puDate')||{}).value; if(!dv){toast('Pick the date');return;} state.pregnancy.lmp=new Date(dv+'T08:00').getTime(); persist(); closeSheet(); render(); }
@@ -2880,7 +2940,7 @@ function openPositiveTest(){
   openSheet(`<div class="welcome-burst">🎉🌸</div>
     <h2 style="text-align:center">A positive test!</h2>
     <div class="sub" style="text-align:center">Wonderful news. Let's turn trying into tracking: confirm your last period and we'll set up your weeks.</div>
-    <div class="field"><label>First day of your last period</label><input type="date" id="ptLmp" value="${dv}"></div>
+    <div class="field"><label>First day of your last period</label>${datePicker('ptLmp', dv, {max:now()})}</div>
     <div class="field"><label>Where you'll have your care</label>${countryPickerHtml('ptCountry', p.country)}</div>
     <button class="btn-primary" style="background:var(--preg)" onclick="confirmPositiveTest()">Start my pregnancy 🤍</button>
     <div class="csub" style="text-align:center;margin-top:8px">A home test is a great sign. Your provider will confirm it properly.</div>`,'preg');
@@ -3399,7 +3459,7 @@ function openEditPregnancy(){
   const p=state.pregnancy;
   const dv=p.dueDate?new Date(p.dueDate).toISOString().slice(0,10):'';
   openSheet(`<h2>Due date &amp; schedule</h2><div class="sub">Update your dates or the antenatal schedule we suggest.</div>
-    <div class="field"><label>Due date (EDD)</label><input type="date" id="epDue" value="${dv}"></div>
+    <div class="field"><label>Due date (EDD)</label>${datePicker('epDue', dv, {empty:true})}</div>
     <div class="field"><label>Care schedule</label>${countryPickerHtml('epC', p.country)}</div>
     <button class="btn-primary" style="background:var(--preg)" onclick="saveEditPregnancy()">Save</button>
     <div class="preg-disclaim">Changing the schedule adds any new suggested appointments. Anything you've added or ticked is kept.</div>`,'preg');
@@ -4771,11 +4831,11 @@ function openVaccine(id){
   const estNote=(v.given&&v.estimated)?`<div class="sub" style="margin-top:-6px;color:var(--ink-faint)">Date is estimated from the schedule. Set the real date to confirm it.</div>`:'';
   const past=!v.given && vxDueDate(v)<now();
   openSheet(`<h2>${escapeHtml(v.name)}</h2><div class="sub">${v.group} · due ~${v.dueMonths===0?'birth':v.dueMonths+' months'}</div>
-    ${v.given?`<div class="field"><label>Date given</label><input type="date" id="vxDate" value="${dv}" max="${today}"></div>${estNote}
+    ${v.given?`<div class="field"><label>Date given</label>${datePicker('vxDate', dv, {max:now()})}</div>${estNote}
       <div class="field"><label>Note (optional)</label><input id="vxNote" value="${escapeHtml(v.note||'')}" placeholder="Batch no, reaction, clinic"></div>
       <button class="btn-primary" style="background:var(--diaper)" onclick="saveVaccine('${id}')">Save</button>
       <button class="btn-ghost" onclick="unmarkVaccine('${id}')">Mark as not given</button>`
-    :`<div class="field"><label>Date given</label><input type="date" id="vxDate" value="${today}" max="${today}"></div>
+    :`<div class="field"><label>Date given</label>${datePicker('vxDate','',{max:now()})}</div>
       <div class="field"><label>Note (optional)</label><input id="vxNote" placeholder="Batch no, reaction, clinic"></div>
       <button class="btn-primary" style="background:var(--diaper)" onclick="markVaccine('${id}')">${I.check} Mark as given</button>
       ${past?(v.missed?`<button class="btn-ghost" onclick="vaxSetMissed('${id}',false)">Not missed (back to to-confirm)</button>`:`<button class="btn-ghost" onclick="vaxSetMissed('${id}',true)">This dose was missed</button>`):''}`}
@@ -4879,7 +4939,7 @@ function openMilestone(key){
   const dateVal=a?new Date(a.achievedAt).toISOString().slice(0,10):today;
   msDraft={key,photoId:a?a.photoId:null};
   openSheet(`<h2>${escapeHtml(title)}</h2><div class="sub">${a?'Captured. Edit or remove below.':'Mark this moment when it happens.'}</div>
-    <div class="field"><label>Date reached</label><input type="date" id="msDate" value="${dateVal}" max="${today}"></div>
+    <div class="field"><label>Date reached</label>${datePicker('msDate', dateVal, {max:now()})}</div>
     <div class="field"><label>Note (optional)</label><textarea id="msNote" placeholder="A few words to remember">${a?escapeHtml(a.note||''):''}</textarea></div>
     <div id="msPhotoSlot">${msDraft.photoId?`<img src="${photoSrc(msDraft.photoId)}" style="width:100%;border-radius:14px;margin-bottom:14px">`:''}</div>
     <button class="btn-ghost" onclick="document.getElementById('msPhotoInput').click()">${I.camera} ${msDraft.photoId?'Change photo':'Add a photo'}</button>
@@ -4918,7 +4978,7 @@ function openCustomMilestone(){
   msDraft={key:'custom-'+uid(),photoId:null};
   openSheet(`<h2>New moment</h2><div class="sub">Capture anything special.</div>
     <div class="field"><label>What happened?</label><input id="cmTitle" placeholder="e.g. First time at the beach"></div>
-    <div class="field"><label>Date</label><input type="date" id="msDate" value="${today}" max="${today}"></div>
+    <div class="field"><label>Date</label>${datePicker('msDate','',{max:now()})}</div>
     <div class="field"><label>Note (optional)</label><textarea id="msNote" placeholder="Details to remember"></textarea></div>
     <div id="msPhotoSlot"></div>
     <button class="btn-ghost" onclick="document.getElementById('msPhotoInput').click()">${I.camera} Add a photo</button>
