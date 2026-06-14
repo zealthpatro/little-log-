@@ -1601,8 +1601,13 @@ var _sheetStack=[];
 function _sheetAccent(s,accent){ s.style.setProperty('--accent', accent?`var(--${accent})`:'var(--feed)'); s.style.setProperty('--accent-soft', accent?`var(--${accent}-soft)`:'var(--feed-soft)'); }
 function openSheet(html,accent){
   const s=$('#sheet');
-  // Step navigation: if a sheet is already open, remember it so this one can go back to it.
-  if(s.classList.contains('show')) _sheetStack.push({html:s.innerHTML, accent:s.dataset.accent||''});
+  // Step navigation: if a DIFFERENT sheet is open, remember it so this one can go back to it.
+  // Same-title re-renders (toggling a unit, adding a row) replace in place, no phantom back step.
+  if(s.classList.contains('show')){
+    var curH=(s.querySelector('h2')||{}).textContent||'';
+    var nm=html.match(/<h2[^>]*>([\s\S]*?)<\/h2>/); var newH=nm?nm[1].replace(/<[^>]*>/g,''):'';
+    if(!(curH && newH && curH===newH)) _sheetStack.push({html:s.innerHTML, accent:s.dataset.accent||''});
+  }
   s.dataset.accent=accent||'';
   _sheetAccent(s,accent);
   var back=_sheetStack.length?'<button class="sheet-back" type="button" onclick="sheetBack()" aria-label="Back">‹</button>':'';
