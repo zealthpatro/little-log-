@@ -37,6 +37,24 @@
   var matShared = {};     // category -> sharedWith[] (last seen, so a data write keeps consent)
   var knownMat = {};      // category -> sig of last-synced {data, sharedWith} (diffing)
 
+  /* ---------- pregnancy JOURNEY (owner-owned, Privacy Max, Item 7) ----------
+     The journey (stage, dueDate, lmp, week, appts, kicks, contractions, birthPlan, bag,
+     moments, etc.) is the most sensitive event a family has: the bare fact that someone
+     is expecting. It must NEVER sit in the circle-shared `app` blob, where every member
+     (in-laws, nanny) would see it the moment a pregnancy starts. Instead it lives in
+     households/{hid}/pregnancy/{ownerUid}, written only by the owner, readable by the owner
+     plus any uid she lists in sharedWith[] (the one-time stakeholder review at creation).
+     Same shape and plumbing as mhealth. Maternal-private HEALTH stays separately owner-only
+     in mhealth and is NEVER swept into the journey. ownerUid + id are routing metadata, not
+     journey payload, so they are not duplicated into `data`. */
+  var PREG_META_KEYS = ['ownerUid', 'id']; // routing, not journey payload
+  var pregUnsub = [];     // pregnancy-journey doc listeners
+  var pregOwner = null;   // uid whose journey we are currently listening to
+  var pregShared = [];    // sharedWith[] for the journey (last seen, so a data write keeps consent)
+  var knownPregJourney = null; // sig of last-synced {data, sharedWith} (diffing)
+  var legacyBlobPreg = null;   // a journey found in a legacy `app` blob, awaiting one-time relocation
+  var pregMigrated = false;    // owner has already relocated the legacy journey this session
+
   /* ---------- styles for the sign-in overlay ---------- */
   var st = document.createElement('style');
   st.textContent =
@@ -205,7 +223,11 @@
 
   function teardown() {
     unsub.forEach(function (u) { try { u(); } catch (e) {} });
-    unsub = []; booted = false; knownEvents = {};
+    matUnsub.forEach(function (u) { try { u(); } catch (e) {} });
+    pregUnsub.forEach(function (u) { try { u(); } catch (e) {} });
+    unsub = []; matUnsub = []; pregUnsub = []; booted = false; knownEvents = {};
+    matOwner = null; matShared = {}; knownMat = {};
+    pregOwner = null; pregShared = []; knownPregJourney = null; legacyBlobPreg = null; pregMigrated = false;
     hhRef = eventsRef = photosRef = notesRef = null;
     state.notes = [];
     handoffMigrated = false;
@@ -300,21 +322,18 @@
   }
 
   /* ---------- state <-> cloud blob ---------- */
-  // Copy of state.pregnancy with all maternal-private fields removed — what's safe for the shared blob.
-  function sharedPregnancy(p) {
-    if (!p) return null;
+  // The journey payload that goes into the owner-owned pregnancy doc: everything in
+  // state.pregnancy EXCEPT maternal-private HEALTH (kept in mhealth) and routing meta
+  // (ownerUid, id, carried on the doc, not duplicated inside `data`).
+  function pregJourneyData(p) {
+    if (!p) return {};
     var out = {};
-    Object.keys(p).forEach(function (k) { if (MAT_PRIVATE_KEYS.indexOf(k) < 0) out[k] = p[k]; });
+    Object.keys(p).forEach(function (k) {
+      if (MAT_PRIVATE_KEYS.indexOf(k) >= 0) return; // health -> mhealth
+      if (PREG_META_KEYS.indexOf(k) >= 0) return;   // routing -> doc id / fields
+      out[k] = p[k];
+    });
     return out;
-  }
-  // Merge the shared (non-private) pregnancy fields from the blob, preserving private fields
-  // already loaded from the mhealth listener (the blob never carries them).
-  function mergeSharedPreg(shared) {
-    if (!shared) { state.pregnancy = null; matOwner = null; return; }
-    var p = state.pregnancy || {};
-    if (p.id && shared.id && p.id !== shared.id) p = {}; // different pregnancy → drop stale private fields
-    Object.keys(shared).forEach(function (k) { p[k] = shared[k]; });
-    state.pregnancy = p;
   }
   function appBlobFromState() {
     return {
@@ -323,7 +342,8 @@
       vaccines: state.vaccines || {}, illnesses: state.illnesses || [],
       photos: state.photos || [],
       handoff: state.handoff || null,  // shared parent<->caregiver note
-      pregnancy: sharedPregnancy(state.pregnancy),  // shared journey only; maternal-private fields stripped out (G1)
+      // pregnancy is NO LONGER in the shared blob (Item 7): the journey is owner-owned in
+      // households/{hid}/pregnancy/{ownerUid} and reaches members only by explicit consent.
       den: state.den || null,  // household hub: chores, shopping, meals, staff, expenses, weights
       consents: state.consents || [],  // dual-guardian approvals for big actions (delete/export)
       guardians: state.guardians || null,  // explicit guardian uids (papa + mama); derived if null
@@ -342,7 +362,9 @@
     state.illnesses = app.illnesses || [];
     state.photos = app.photos || [];
     state.handoff = app.handoff || null;
-    mergeSharedPreg(app.pregnancy);  // private fields stay; only the shared journey comes from the blob (G1)
+    // The journey no longer comes from the blob (Item 7). A legacy blob may still carry one;
+    // stash it so the owner can relocate it into the owner-owned doc, then never read it again.
+    if (app.pregnancy && !legacyBlobPreg) legacyBlobPreg = app.pregnancy;
     state.den = app.den || null;
     state.consents = app.consents || [];
     state.guardians = app.guardians || null;
@@ -416,6 +438,94 @@
     if (writes.length) { try { await Promise.all(writes); } catch (e) { console.warn('mhealth push', e); } }
   }
 
+  /* ---------- pregnancy-journey sync (owner-owned pregnancy doc, Item 7) ---------- */
+  // Fold an owner's journey doc into state.pregnancy. Maternal-private HEALTH already loaded
+  // from the mhealth listener is preserved (the journey doc never carries it).
+  function applyPregJourney(owner, d) {
+    if (!d) return;
+    pregShared = d.sharedWith || [];
+    knownPregJourney = stableStringify([d.data || {}, pregShared]); // don't immediately re-write what we just received
+    var data = d.data || {};
+    var p = state.pregnancy || {};
+    if (p.id && data.id && p.id !== data.id) p = {}; // a different pregnancy -> drop stale fields
+    Object.keys(data).forEach(function (k) { p[k] = data[k]; });
+    p.ownerUid = owner; // routing meta lives on the doc, not in data
+    state.pregnancy = p;
+  }
+  // Clear the in-memory journey when the doc is gone / never readable (so a non-permitted
+  // member never even learns a pregnancy exists, and an owner who ended it sees it cleared).
+  function clearPregJourneyState() {
+    state.pregnancy = null;
+    matOwner = null; matShared = {}; knownMat = {};
+    matUnsub.forEach(function (u) { try { u(); } catch (e) {} }); matUnsub = [];
+  }
+  // Listen to the journey doc we're permitted to read: the owner reads her own;
+  // a non-owner tries each member's doc (ones not shared with us fail permission and are ignored).
+  function ensurePregListeners(uidNow) {
+    pregUnsub.forEach(function (u) { try { u(); } catch (e) {} });
+    pregUnsub = []; pregOwner = null; pregShared = []; knownPregJourney = null;
+    if (!hhRef || !uidNow) return;
+    var base = hhRef.collection('pregnancy');
+    // The owner (or whoever holds her own doc) reads her own journey.
+    pregUnsub.push(base.doc(uidNow).onSnapshot(function (doc) {
+      applyingRemote = true;
+      if (doc.exists) { pregOwner = uidNow; applyPregJourney(uidNow, doc.data()); ensureMaternalListeners(uidNow); }
+      else if (pregOwner === uidNow) { pregOwner = null; clearPregJourneyState(); }
+      applyingRemote = false;
+      if (booted) render();
+    }, function (e) { /* own doc not readable yet; ignore */ }));
+    // A non-owner: try every other member's journey doc. Not shared with us -> permission-denied, ignored.
+    var members = (window.LL.members && Object.keys(window.LL.members)) || [];
+    members.forEach(function (m) {
+      if (m === uidNow) return;
+      pregUnsub.push(base.doc(m).onSnapshot(function (doc) {
+        if (!doc.exists) { if (pregOwner === m) { pregOwner = null; clearPregJourneyState(); if (booted) render(); } return; }
+        applyingRemote = true; pregOwner = m; applyPregJourney(m, doc.data()); applyingRemote = false;
+        ensureMaternalListeners(uidNow);
+        if (booted) render();
+      }, function (e) { /* permission-denied = not shared with me; ignore */ }));
+    });
+  }
+  // The owner writes her changed journey doc (data + current sharedWith). No-op for non-owners.
+  async function syncPregJourney(uidNow) {
+    var p = state.pregnancy;
+    if (!hhRef || !p || !p.ownerUid || p.ownerUid !== uidNow) return; // only the owner writes her own journey
+    var data = pregJourneyData(p);
+    var shared = pregShared || [];
+    var sig = stableStringify([data, shared]);
+    if (knownPregJourney === sig) return;
+    knownPregJourney = sig;
+    try {
+      await hhRef.collection('pregnancy').doc(uidNow)
+        .set({ ownerUid: uidNow, data: data, sharedWith: shared, updatedAt: window.LL.serverTimestamp() });
+    } catch (e) { console.warn('pregnancy journey push', e); }
+  }
+  // One-time migration: relocate a legacy in-blob journey to the owner-owned doc, then strip the
+  // blob. Owner-only, once per session. The legacy journey was already visible to the whole circle
+  // (it lived in the shared blob), so the migrated sharedWith defaults to the current members, so
+  // nobody silently loses access they already had. The new-pregnancy audit governs fresh starts.
+  function maybeMigrateLegacyJourney() {
+    if (pregMigrated) return;
+    if (window.LL.role !== 'owner') return;          // only the household owner relocates
+    var uidNow = auth.currentUser && auth.currentUser.uid; if (!uidNow) return;
+    var legacy = legacyBlobPreg; if (!legacy) return;
+    if (pregOwner) { pregMigrated = true; legacyBlobPreg = null; return; } // an owner-owned doc already exists; nothing to relocate
+    pregMigrated = true;
+    // Seed in-memory state from the legacy blob and claim ownership.
+    var p = state.pregnancy || {};
+    Object.keys(legacy).forEach(function (k) { if (p[k] === undefined) p[k] = legacy[k]; });
+    p.ownerUid = uidNow;
+    state.pregnancy = p;
+    pregOwner = uidNow;
+    // Preserve existing visibility: share the journey with the current circle (everyone who could
+    // already see it via the blob). The owner can trim this later in the privacy sheet.
+    pregShared = ((window.LL.members && Object.keys(window.LL.members)) || []).filter(function (m) { return m !== uidNow; });
+    knownPregJourney = null; // force the journey + blob-strip to be written
+    legacyBlobPreg = null;
+    ensureMaternalListeners(uidNow);
+    scheduledPush(); // writes the journey doc + mhealth + the blob without pregnancy
+  }
+
   /* ---------- start real-time sync ---------- */
   function startSync(hid, user) {
     hhRef = db.collection('households').doc(hid);
@@ -425,6 +535,7 @@
 
     var prefs = loadPrefs();
     var gotApp = false, gotEvents = false;
+    var lastMembersSig = null; // resubscribe journey listeners only when membership changes
 
     function maybeBoot() {
       if (booted || !(gotApp && gotEvents)) return;
@@ -434,11 +545,10 @@
       if (state.activeBabyId && !state.babies.some(function (b) { return b.id === state.activeBabyId; }))
         state.activeBabyId = (state.babies[0] && state.babies[0].id) || null;
       booted = true;
-      // One-time relocation: if a legacy blob carried maternal-private fields, the owner moves
-      // them into the protected mhealth docs and strips them from the shared blob on next push.
-      if (state.pregnancy && window.LL.role === 'owner' && MAT_PRIVATE_KEYS.some(function (k) { return state.pregnancy[k] !== undefined; })) {
-        scheduledPush();
-      }
+      // One-time relocation (Item 7): if a legacy blob carried the pregnancy journey (and any
+      // maternal-private fields), the owner moves it into the owner-owned pregnancy doc (plus
+      // mhealth), then strips it from the shared blob. Done only by the household owner, once.
+      maybeMigrateLegacyJourney();
       hideOverlay();
       render();
       maybeFirstRun(user);
@@ -453,6 +563,10 @@
       window.LL.formerMemberInfo = d.formerMemberInfo || {};
       window.LL.pro = d.pro || null; // Pro entitlement: written only by the billing Worker
       window.LL.householdId = hid;
+      // Pregnancy-journey listeners depend on the member set (a non-owner tries each member's
+      // doc). (Re)subscribe whenever membership changes, including the very first snapshot.
+      var membersSig = stableStringify(d.members || {});
+      if (membersSig !== lastMembersSig) { lastMembersSig = membersSig; ensurePregListeners(user.uid); }
       var sig = hhSig(d.app, d.members, d.memberInfo) + '|' + JSON.stringify(d.pro || null);
       if (booted && sig === lastHhSig) return; // our own write echo / duplicate emission, already on screen
       lastHhSig = sig;
@@ -624,6 +738,7 @@
     // (Maternal data is only ever written by its owner; this claims a new or legacy/offline one.)
     if (state.pregnancy && (!state.pregnancy.ownerUid || state.pregnancy.ownerUid === 'local') && uidNow && window.LL.role === 'owner') {
       state.pregnancy.ownerUid = uidNow;
+      pregOwner = uidNow;
       ensureMaternalListeners(uidNow);
     }
     var cur = {}; (state.events || []).forEach(function (e) { cur[e.id] = e; });
@@ -642,6 +757,7 @@
     lastHhSig = hhSig(appBlob, window.LL.members, window.LL.memberInfo); // mark our own write so its echo doesn't re-render
     writes.push(hhRef.update({ app: appBlob, updatedAt: window.LL.serverTimestamp() }));
     try { await Promise.all(writes); } catch (e) { console.warn('push', e); }
+    syncPregJourney(uidNow); // owner-only; writes the journey to the owner-owned pregnancy doc (Item 7)
     syncMaternal(uidNow); // owner-only; writes her private categories to the protected mhealth docs
   }
 
@@ -698,6 +814,45 @@
     var base = hhRef.collection('mhealth').doc(u.uid).collection('cat');
     try { await Promise.all(Object.keys(MAT_CATS).map(function (c) { return base.doc(c).delete(); })); } catch (e) {}
     knownMat = {}; matShared = {};
+  };
+
+  /* ---------- pregnancy-journey sharing API (Item 7; consumed by index.html) ---------- */
+  // The bare fact of a pregnancy is the most sensitive thing here. The owner alone controls
+  // who in the circle can see the journey, via the sharedWith[] on her owner-owned doc.
+  window.LL.pregIsOwner = function () {
+    var u = auth.currentUser; if (!u) return true;
+    var p = state.pregnancy; if (!p) return true;
+    if (p.ownerUid && p.ownerUid !== 'local') return p.ownerUid === u.uid;
+    return window.LL.role === 'owner';
+  };
+  window.LL.pregJourneyShared = function () { return (pregShared || []).slice(); };
+  // Owner sets who in the circle may see the journey. Claiming an unassigned/legacy pregnancy is
+  // role-gated to the household owner (mirrors pushNow + matSetShared) so a caregiver can never
+  // become owner as a side-effect of toggling a share.
+  window.LL.pregSetShared = async function (uids) {
+    var u = auth.currentUser, p = state.pregnancy;
+    if (!hhRef || !u || !p) return false;
+    var owned = p.ownerUid && p.ownerUid !== 'local';
+    if (owned && p.ownerUid !== u.uid) return false;        // someone else owns it
+    if (!owned && window.LL.role !== 'owner') return false; // unassigned: only the household owner may claim
+    if (!owned) { p.ownerUid = u.uid; pregOwner = u.uid; }   // claim (household owner only)
+    pregShared = (uids || []).slice();
+    var data = pregJourneyData(p);
+    knownPregJourney = stableStringify([data, pregShared]);
+    try {
+      await hhRef.collection('pregnancy').doc(u.uid)
+        .set({ ownerUid: u.uid, data: data, sharedWith: pregShared, updatedAt: window.LL.serverTimestamp() });
+      return true;
+    } catch (e) { console.warn('pregSetShared', e); return false; }
+  };
+  // Owner removes her journey doc (called when a pregnancy is closed). Also clears mhealth.
+  window.LL.pregClear = async function () {
+    var u = auth.currentUser; if (!hhRef || !u) return;
+    var owner = pregOwner || (state.pregnancy && state.pregnancy.ownerUid) || u.uid;
+    if (owner !== u.uid) return; // only the owner clears her own
+    try { await window.LL.matClear(); } catch (e) {}
+    try { await hhRef.collection('pregnancy').doc(u.uid).delete(); } catch (e) {}
+    pregShared = []; knownPregJourney = null; pregOwner = null;
   };
 
   PhotoStore.set = async function (id, dataUrl) {
