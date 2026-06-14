@@ -83,6 +83,22 @@ service cloud.firestore {
         allow read, create, update, delete: if request.auth != null && request.auth.uid in pm();
       }
 
+      // Home day-surface notes. NOT in the circle-shared app blob: each note is its own doc so
+      // privacy is enforced by rules, not client hiding. A note is readable only by the author,
+      // by the single member it is addressed to, or by everyone when its audience is 'circle'.
+      // Audience is fixed at create (no client may flip it later); only the author edits/deletes.
+      match /notes/{noteId} {
+        allow read: if request.auth != null && request.auth.uid in pm() && (
+            resource.data.audience == 'circle'
+            || resource.data.audience == request.auth.uid
+            || resource.data.createdBy == request.auth.uid
+        );
+        allow create: if request.auth != null && request.auth.uid in pm()
+            && request.resource.data.createdBy == request.auth.uid;
+        allow update, delete: if request.auth != null && request.auth.uid in pm()
+            && resource.data.createdBy == request.auth.uid;
+      }
+
       // Maternal private health (Privacy Max, gate G1). The mother OWNS her health data.
       // It is NOT in the circle-shared app blob. Each category is shared, by her explicit
       // consent, only with the guardian uid(s) she lists in sharedWith. Mental health
