@@ -502,6 +502,32 @@ body.night .ob-card{background:rgba(38,32,28,.86);}
 .food-preview img{width:90px;height:90px;border-radius:14px;object-fit:cover;display:block;}
 .food-preview .rm{position:absolute;top:-8px;right:-8px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--surface);border:2px solid var(--surface);font-weight:800;font-size:15px;cursor:pointer;display:grid;place-items:center;line-height:1;}
 .chip.sel{border-color:var(--feed);background:var(--feed-soft);color:var(--ink);}
+/* ---- Routine list (gentle, editable suggestions; LOG tab) ---- */
+.rt-card{background:var(--surface);border-radius:var(--radius);padding:14px 14px 8px;margin:0 0 18px;box-shadow:0 4px 12px var(--shadow);}
+.rt-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 2px 4px;}
+.rt-head .rt-t{font-family:var(--font-display);font-size:16px;font-weight:600;color:var(--ink);}
+.rt-head .rt-edit{border:none;background:none;font-family:var(--font-body);font-weight:800;font-size:13px;color:var(--diaper);cursor:pointer;padding:4px 2px;}
+.rt-sub{font-size:12px;color:var(--ink-faint);font-weight:600;line-height:1.5;margin:0 2px 12px;}
+.rt-item{display:flex;align-items:center;gap:12px;padding:10px 2px;border-top:1px solid var(--line);}
+.rt-item:first-of-type{border-top:none;}
+.rt-check{width:30px;height:30px;border-radius:50%;border:2px solid var(--line);background:var(--surface-2);flex-shrink:0;cursor:pointer;display:grid;place-items:center;color:transparent;transition:all .15s;padding:0;}
+.rt-check svg{width:16px;height:16px;}
+.rt-check.on{border-color:var(--diaper);background:var(--diaper);color:#fff;}
+.rt-body{flex:1;min-width:0;}
+.rt-body .a{font-weight:800;font-size:14px;color:var(--ink);}
+.rt-body.done .a{color:var(--ink-faint);text-decoration:line-through;}
+.rt-body .b{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:1px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+.rt-time{font-variant-numeric:tabular-nums;font-weight:800;color:var(--ink-soft);font-size:13px;white-space:nowrap;flex-shrink:0;}
+.rt-empty{font-size:13px;color:var(--ink-soft);font-weight:600;line-height:1.5;padding:10px 2px 14px;}
+.rt-add{width:100%;border:none;background:none;padding:11px;font-family:var(--font-body);font-weight:800;font-size:13px;color:var(--diaper);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;border-top:1px solid var(--line);}
+.rt-add svg{width:15px;height:15px;}
+.rt-edit-row{display:flex;align-items:center;gap:10px;padding:10px 2px;border-top:1px solid var(--line);}
+.rt-edit-row:first-of-type{border-top:none;}
+.rt-edit-row .a{font-weight:800;font-size:14px;color:var(--ink);}
+.rt-edit-row .b{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:1px;}
+.rt-edit-row .rt-go{flex:1;min-width:0;cursor:pointer;}
+.rt-rm{border:none;background:var(--surface-2);color:var(--ink-faint);width:30px;height:30px;border-radius:50%;cursor:pointer;display:grid;place-items:center;flex-shrink:0;}
+.rt-rm svg{width:15px;height:15px;}
 .slider{margin-bottom:13px;}
 .slider .sl-head{display:flex;justify-content:space-between;font-size:12px;font-weight:800;margin-bottom:6px;color:var(--ink-soft);}
 .slider .sl-head .val{color:var(--feed);font-variant-numeric:tabular-nums;}
@@ -5246,11 +5272,264 @@ function renderHeatmap(){
   const seg=`<div class="hm-seg"><button class="${logRange==='week'?'on':''}" onclick="setLogRange('week')">Week</button><button class="${logRange==='month'?'on':''}" onclick="setLogRange('month')">Month</button></div>`;
   return `<div class="hm"><div class="hm-top"><div class="sec-title" style="margin:0">At a glance</div>${seg}</div>${grid}${dayRow}</div>`;
 }
+/* ============================================================
+   ROUTINE LIST  (gentle, editable suggestions, per baby)
+   These are ideas for the day, never medical mandates and never
+   prescriptive. Every item is editable and the whole list can be
+   turned off. There are NO reminders or notifications of any kind:
+   tapping "done" simply writes a real log event (so it shows in the
+   timeline and recap, with who-did-what) and ticks the item for that
+   day. Routines live on the baby in the shared app blob (not sensitive).
+   ============================================================ */
+/* Age-appropriate starter templates. Suggestions only. Each maps to a real
+   event type so a tap lands a genuine entry in the log. No fixed medical
+   schedule is implied; times are gentle defaults the parent can change. */
+function routineTemplate(birthTs){
+  const days = birthTs ? Math.floor((now()-birthTs)/86400000) : 0;
+  // Newborn (under ~4 months): tiny, low-pressure rhythm
+  if(days < 120){
+    return [
+      {title:'Morning feed', time:'07:00', evType:'feed'},
+      {title:'Tummy time', time:'10:00', evType:'activity', activity:'Tummy time'},
+      {title:'Midday nap', time:'12:30', evType:'sleep'},
+      {title:'Bath', time:'18:30', evType:'activity', activity:'Bath'},
+      {title:'Bedtime feed', time:'19:30', evType:'feed'}
+    ];
+  }
+  // Older baby (~4 months and up): a bit more shape to the day
+  return [
+    {title:'Morning feed', time:'07:00', evType:'feed'},
+    {title:'Tummy time / play', time:'09:30', evType:'activity', activity:'Tummy time'},
+    {title:'Vitamin D drops', time:'10:00', evType:'medicine', medName:'Vitamin D'},
+    {title:'Midday nap', time:'12:30', evType:'sleep'},
+    {title:'Afternoon play', time:'15:30', evType:'activity', activity:'Play'},
+    {title:'Bath', time:'18:30', evType:'activity', activity:'Bath'},
+    {title:'Bedtime', time:'19:30', evType:'sleep'}
+  ];
+}
+/* Seed the starter list once, the first time routines are opened for a baby.
+   The seeded flag means clearing every item won't silently re-seed. */
+function ensureRoutines(b){
+  if(!b) return [];
+  if(!Array.isArray(b.routines)){
+    b.routines = routineTemplate(b.birth).map(function(t){
+      return {id:uid(), title:t.title, time:t.time, assignee:null,
+        evType:t.evType, activity:t.activity||null, medName:t.medName||null, done:{}};
+    });
+    b.routinesSeeded = true;
+  }
+  // Keep the synced blob tiny: done state only matters for today, so drop
+  // older day keys (the real log events already hold the lasting record).
+  var today=dayKey(now());
+  b.routines.forEach(function(r){
+    if(r&&r.done&&typeof r.done==='object'){
+      Object.keys(r.done).forEach(function(k){ if(k!==today) delete r.done[k]; });
+    }
+  });
+  return b.routines;
+}
+function routineEvType(r){ return (r&&r.evType) || 'activity'; }
+/* "When" for the logged event: today's date at the routine's HH:MM. */
+function routineEventTime(r){
+  var d=new Date(); var t=String(r.time||'').split(':');
+  var h=parseInt(t[0],10), m=parseInt(t[1],10);
+  if(!isNaN(h)) d.setHours(h); if(!isNaN(m)) d.setMinutes(m);
+  d.setSeconds(0,0); return d.getTime();
+}
+function routineSubtitle(r){
+  var parts=[];
+  var who = r.assignee ? (loggerName(r.assignee)||'someone') : '';
+  if(who) parts.push(who);
+  return parts.join(' · ');
+}
+function renderRoutines(){
+  const b=activeBaby(); if(!b) return '';
+  const list=ensureRoutines(b);
+  const today=dayKey(now());
+  let rows;
+  if(!list.length){
+    rows=`<div class="rt-empty">No routine ideas right now. Add one whenever you like, or leave this off, it's entirely up to you.</div>`;
+  } else {
+    rows=list.slice().sort((a,c)=>String(a.time).localeCompare(String(c.time))).map(r=>{
+      const done = !!(r.done && r.done[today]);
+      const sub = routineSubtitle(r);
+      return `<div class="rt-item">
+        <button class="rt-check ${done?'on':''}" onclick="toggleRoutine('${r.id}')" aria-label="${done?'Done':'Mark done'}">${I.check}</button>
+        <div class="rt-body ${done?'done':''}" onclick="toggleRoutine('${r.id}')" style="cursor:pointer">
+          <div class="a">${escapeHtml(r.title)}</div>
+          ${sub?`<div class="b">${escapeHtml(sub)}</div>`:''}
+        </div>
+        <span class="rt-time">${escapeHtml(routineFmtTime(r.time))}</span>
+      </div>`;
+    }).join('');
+  }
+  return `<div class="rt-card">
+    <div class="rt-head"><span class="rt-t">Ideas for the day 🌿</span>
+      <button class="rt-edit" onclick="openRoutinesEdit()">Edit</button></div>
+    <div class="rt-sub">Gentle, optional suggestions, not a schedule to keep up with. Tap one when it happens and it lands in the log. Edit anytime.</div>
+    ${rows}
+    <button class="rt-add" onclick="openRoutineItem()">${I.plus} Add an idea</button>
+  </div>`;
+}
+function routineFmtTime(hhmm){
+  var t=String(hhmm||'').split(':'); var h=parseInt(t[0],10), m=parseInt(t[1],10);
+  if(isNaN(h)) return '';
+  var ap=h>=12?'PM':'AM'; var h12=h%12||12;
+  return h12+':'+String(isNaN(m)?0:m).padStart(2,'0')+' '+ap;
+}
+/* A tap toggles done for today AND writes/removes the real log event, so the
+   day's recap and timeline reflect who actually did what. */
+function toggleRoutine(id){
+  const b=activeBaby(); if(!b) return;
+  const list=ensureRoutines(b);
+  const r=list.find(x=>x.id===id); if(!r) return;
+  const today=dayKey(now());
+  if(!r.done) r.done={};
+  if(r.done[today]){
+    // un-tick: also remove the event we created for it, if it's still there
+    const evId=r.done[today];
+    if(typeof evId==='string'){ const ev=state.events.find(e=>e.id===evId); if(ev){ ev.deleted=true; ev.deletedBy=myUid(); ev.deletedAt=now(); } }
+    delete r.done[today];
+    persist(); render(); toast('Unticked');
+    return;
+  }
+  // tick: write a genuine event into the log for this baby only.
+  const payload=routinePayload(r);
+  const evId=uid();
+  payload.id=evId; payload.babyId=b.id;
+  state.events.push(payload);
+  r.done[today]=evId;   // remember the event so un-ticking can undo it
+  persist(); render();
+  toast(r.title+' done');
+}
+/* Build the event payload for a routine. authorId is stamped to the assignee
+   (if set) else the current user, so the timeline shows who-did-what. The
+   cloud layer keeps an existing authorId (it only fills a blank one). */
+function routinePayload(r){
+  const t=routineEventTime(r);
+  const who=r.assignee||myUid();
+  const base={time:t, authorId:who, fromRoutine:true};
+  const ty=routineEvType(r);
+  if(ty==='feed') return Object.assign(base,{type:'feed',method:'breast'});
+  // A routine nap is a completed entry, not a live timer, so give it an end.
+  // ~1h is a gentle default the parent can adjust by tapping the entry.
+  if(ty==='sleep') return Object.assign(base,{type:'sleep',end:t+3600000});
+  if(ty==='diaper') return Object.assign(base,{type:'diaper',kind:'wet'});
+  if(ty==='medicine') return Object.assign(base,{type:'medicine',medName:r.medName||r.title});
+  // default: an activity tagged with the routine title (or named activity)
+  return Object.assign(base,{type:'activity',activity:r.activity||r.title});
+}
+/* ---- Edit / manage the list ---- */
+function openRoutinesEdit(){
+  const b=activeBaby(); if(!b) return;
+  const list=ensureRoutines(b).slice().sort((a,c)=>String(a.time).localeCompare(String(c.time)));
+  let rows;
+  if(!list.length){
+    rows=`<div class="rt-empty">No ideas yet. Add the little moments you want to remember, a morning feed, tummy time, a bath.</div>`;
+  } else {
+    rows=list.map(r=>{
+      const sub=[routineFmtTime(r.time), r.assignee?(loggerName(r.assignee)||'someone'):''].filter(Boolean).join(' · ');
+      return `<div class="rt-edit-row">
+        <div class="rt-go" onclick="openRoutineItem('${r.id}')">
+          <div class="a">${escapeHtml(r.title)}</div>
+          <div class="b">${escapeHtml(sub)}</div>
+        </div>
+        <button class="rt-rm" onclick="removeRoutine('${r.id}')" aria-label="Remove">${I.trash}</button>
+      </div>`;
+    }).join('');
+  }
+  openSheet(`<h2>Routine ideas 🌿</h2><div class="sub">Gentle suggestions for the day, never a must-do. Add, change or remove anything, anytime.</div>
+    ${rows}
+    <button class="rt-add" style="border-top:1px solid var(--line);margin-top:4px" onclick="openRoutineItem()">${I.plus} Add an idea</button>
+    <div class="preg-disclaim" style="margin-top:14px">These are ideas, not medical advice, and there's no pressure to follow them. Reminders are coming later, for now nothing will notify you.</div>`,'diaper');
+}
+function routineMemberPairs(){
+  var info=(window.LL&&window.LL.memberInfo)||{};
+  var members=(window.LL&&window.LL.members)||{};
+  var ids=Object.keys(members);
+  if(!ids.length){ var me=myUid(); if(me&&me!=='local') ids=[me]; }
+  var pairs=[['','Anyone']];
+  ids.forEach(function(u){
+    var nm=loggerName(u)|| (info[u]&&info[u].name) || 'Member';
+    if(u===myUid()) nm=nm+' (you)';
+    pairs.push([u, nm]);
+  });
+  return pairs;
+}
+let routineDraft=null;
+function openRoutineItem(id){
+  const b=activeBaby(); if(!b) return;
+  const list=ensureRoutines(b);
+  const existing = id ? list.find(x=>x.id===id) : null;
+  routineDraft = existing
+    ? {id:existing.id, title:existing.title, time:existing.time, assignee:existing.assignee||'', evType:routineEvType(existing), activity:existing.activity||null, medName:existing.medName||null}
+    : {id:null, title:'', time:'09:00', assignee:'', evType:'activity', activity:null, medName:null};
+  reopenRoutineItem();
+}
+function routineSetType(t){
+  if(!routineDraft) return;
+  // keep whatever the user has typed so far before re-rendering the sheet
+  var ti=$('#rtTitle'); if(ti) routineDraft.title=ti.value;
+  var tm=$('#rtTime'); if(tm) routineDraft.time=tm.value;
+  var wh=$('#rtWho'); if(wh) routineDraft.assignee=wh.value;
+  routineDraft.evType=t;
+  reopenRoutineItem();
+}
+/* Re-render the add/edit sheet from the live draft (used when toggling type). */
+function reopenRoutineItem(){
+  const d=routineDraft; if(!d) return;
+  const existing=!!d.id;
+  const TYPES=[['activity','Moment'],['feed','Feed'],['sleep','Nap'],['diaper','Nappy'],['medicine','Vitamins / meds']];
+  const typeChips=TYPES.map(t=>`<div class="chip ${d.evType===t[0]?'sel':''}" onclick="routineSetType('${t[0]}')">${t[1]}</div>`).join('');
+  const pairs=routineMemberPairs();
+  const showPicker=pairs.length>1;
+  openSheet(`<h2>${existing?'Edit idea':'Add an idea'}</h2><div class="sub">A gentle suggestion for the day. Change or remove it whenever you like.</div>
+    <div class="field"><label>What is it</label><input id="rtTitle" value="${escapeHtml(d.title)}" placeholder="e.g. Morning feed, tummy time, bath" oninput="routineDraft.title=this.value"></div>
+    <div class="field"><label>Around when</label><input type="time" id="rtTime" value="${escapeHtml(d.time||'09:00')}" onchange="routineDraft.time=this.value"></div>
+    <div class="field"><label>Logs as</label><div class="chip-row" style="flex-wrap:wrap;white-space:normal">${typeChips}</div>
+      <div class="csub" style="margin-top:6px">When you tap it done, it adds this kind of entry to the log.</div></div>
+    ${showPicker?`<div class="field"><label>Who usually does it</label>${searchPickerHtml('rtWho',pairs,d.assignee||'','Anyone in your circle')}
+      <div class="csub" style="margin-top:6px">Optional. We'll credit them in the log when it's done.</div></div>`:''}
+    <button class="btn-primary" style="background:var(--diaper)" onclick="saveRoutineItem()">${existing?'Save':'Add idea'}</button>
+    ${existing?`<button class="btn-ghost btn-danger" onclick="removeRoutine('${d.id}')">${I.trash} Remove idea</button>`:''}`,'diaper');
+}
+function saveRoutineItem(){
+  const b=activeBaby(); if(!b||!routineDraft) return;
+  const list=ensureRoutines(b);
+  const title=($('#rtTitle')?$('#rtTitle').value:'').trim();
+  if(!title){ toast('Give it a name'); return; }
+  const time=($('#rtTime')?$('#rtTime').value:'')||routineDraft.time||'09:00';
+  const whoEl=$('#rtWho'); const assignee=whoEl?whoEl.value:(routineDraft.assignee||'');
+  if(routineDraft.id){
+    const r=list.find(x=>x.id===routineDraft.id);
+    if(r){ r.title=title; r.time=time; r.assignee=assignee||null; r.evType=routineDraft.evType;
+      r.activity=(routineDraft.evType==='activity')?title:null;
+      r.medName=(routineDraft.evType==='medicine')?title:null; }
+  } else {
+    list.push({id:uid(), title:title, time:time, assignee:assignee||null,
+      evType:routineDraft.evType,
+      activity:(routineDraft.evType==='activity')?title:null,
+      medName:(routineDraft.evType==='medicine')?title:null, done:{}});
+  }
+  routineDraft=null;
+  persist(); render();
+  closeSheet(); openRoutinesEdit(); toast('Saved');   // fresh stack, back goes to the list
+}
+function removeRoutine(id){
+  const b=activeBaby(); if(!b) return;
+  const list=ensureRoutines(b);
+  const i=list.findIndex(x=>x.id===id);
+  if(i>=0) list.splice(i,1);
+  routineDraft=null;
+  persist(); render();
+  closeSheet(); openRoutinesEdit(); toast('Removed');
+}
+
 function renderLogTab(){
   const seg=`<div class="seg seg-full">
     <button class="${logTab==='log'?'on':''}" onclick="setLogTab('log')">Log</button>
     <button class="${logTab==='stats'?'on':''}" onclick="setLogTab('stats')">Stats</button></div>`;
-  const body = logTab==='stats' ? renderStats() : (`<button class="btn-ghost" style="margin-bottom:14px" onclick="openDayRecap()">🐻 Today's recap</button>`+tipLine('heat','These strips show your week at a glance, tap Week or Month to switch.')+renderHeatmap()+renderTimeline());
+  const body = logTab==='stats' ? renderStats() : (`<button class="btn-ghost" style="margin-bottom:14px" onclick="openDayRecap()">🐻 Today's recap</button>`+renderRoutines()+tipLine('heat','These strips show your week at a glance, tap Week or Month to switch.')+renderHeatmap()+renderTimeline());
   return `<div class="fade-in">${coachMark('log','Log & Stats','Everything you log lands in this timeline. The strips up top show your week at a glance. Flip to Stats for charts and growth curves.')}${seg}${body}</div>`;
 }
 
