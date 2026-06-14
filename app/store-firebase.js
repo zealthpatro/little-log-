@@ -230,6 +230,11 @@
     pregOwner = null; pregShared = []; knownPregJourney = null; legacyBlobPreg = null; pregMigrated = false;
     hhRef = eventsRef = photosRef = notesRef = null;
     state.notes = [];
+    // Clear in-memory subject data so one account's journey + maternal-private health (applyMatDoc
+    // folds mhealth fields into state.pregnancy) can never survive into the next account's session
+    // after an in-tab sign-out/sign-in. Privacy-Max: no leftover.
+    state.pregnancy = null;
+    state.handoff = null;
     handoffMigrated = false;
   }
 
@@ -657,11 +662,16 @@
     var uidNow = (auth.currentUser && auth.currentUser.uid) || null;
     var at = h.at || Date.now();
     var note = {
-      createdBy: h.by || uidNow,
+      // The owner performs the write, so createdBy MUST be the owner or the notes create
+      // rule (createdBy == request.auth.uid) rejects it. The original author is preserved
+      // by name for the circle to see.
+      createdBy: uidNow,
       createdByName: (h.by && nameForUid(h.by)) || nameForUid(uidNow) || '',
       at: at, day: dayKeyOf(at), text: String(h.text), audience: 'circle', pinned: false
     };
-    notesRef.add(note).then(function () {
+    // Deterministic doc id so a retry (owner reloads before the clear-push lands, or the
+    // push fails) overwrites the same doc instead of adding a duplicate circle note.
+    notesRef.doc('legacy-handoff').set(note).then(function () {
       state.handoff = null; // clear the legacy field; next push drops it from the blob
       scheduledPush();
     }).catch(function (e) { handoffMigrated = false; console.warn('handoff migrate', e); });

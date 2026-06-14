@@ -5758,9 +5758,14 @@ function toggleRoutine(id){
   const today=dayKey(now());
   if(!r.done) r.done={};
   if(r.done[today]){
-    // un-tick: also remove the event we created for it, if it's still there
+    // un-tick: also soft-remove the event we created for it, if it's still there.
+    // Only the entry's author or an owner may change it (mirrors the events rule). If
+    // someone else logged it, leave it on the record rather than writing a delete the
+    // server rejects (which used to leave a zombie event that reappeared on next sync).
     const evId=r.done[today];
-    if(typeof evId==='string'){ const ev=state.events.find(e=>e.id===evId); if(ev){ ev.deleted=true; ev.deletedBy=myUid(); ev.deletedAt=now(); } }
+    const ev=(typeof evId==='string')?state.events.find(e=>e.id===evId):null;
+    if(ev && !canEditEvent(ev)){ toast('Only '+(loggerName(ev.authorId)||'whoever logged it')+' or an owner can undo this'); return; }
+    if(ev){ ev.deleted=true; ev.deletedBy=myUid(); ev.deletedAt=now(); }
     delete r.done[today];
     persist(); render(); toast('Unticked');
     return;
@@ -5774,13 +5779,14 @@ function toggleRoutine(id){
   persist(); render();
   toast(r.title+' done');
 }
-/* Build the event payload for a routine. authorId is stamped to the assignee
-   (if set) else the current user, so the timeline shows who-did-what. The
-   cloud layer keeps an existing authorId (it only fills a blank one). */
+/* Build the event payload for a routine. authorId is the current user, the person
+   tapping done and so the real logger: only the author or an owner may later edit or
+   undo an entry (mirrors the events rule), so stamping the routine's "who usually does
+   it" hint here produced an un-tick the server rejected (a zombie event that reappeared
+   on sync). The assignee stays a planning hint on the list, not the log author. */
 function routinePayload(r){
   const t=routineEventTime(r);
-  const who=r.assignee||myUid();
-  const base={time:t, authorId:who, fromRoutine:true};
+  const base={time:t, authorId:myUid(), fromRoutine:true};
   const ty=routineEvType(r);
   if(ty==='feed') return Object.assign(base,{type:'feed',method:'breast'});
   // A routine nap is a completed entry, not a live timer, so give it an end.
