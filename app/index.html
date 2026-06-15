@@ -2508,6 +2508,7 @@ function refundTaste(k){ if(isPro())return; try{ const t=state.settings.proTaste
 function proTag(k){ return isPro()?'':(tasteLeft(k)>0?` · ${tasteLeft(k)} free`:' · Pro ✨'); }
 function openPro(lockedFeature, tastedOut){
   const feats=[
+    ['🎙️','Voice logging & notes','Just say it, "fed her 120ml" or a quick note for the circle, and Cubby writes the entry for you. Hands-free for the arms-full, 3am moments.'],
     ['📄','Doctor visit report (PDF)','A clean summary to bring to every appointment: recent days, growth, vaccines, medicines, and your pregnancy health log.'],
     ['🖼️','Then & Now + watermark-free','Side-by-side keepsakes, and your shares without the "made with Cubby" mark.'],
     ['🎨','The full keepsake studio','Every template, font and palette, portrait and story formats, the whole sticker set.'],
@@ -2524,7 +2525,7 @@ function openPro(lockedFeature, tastedOut){
     return;
   }
   openSheet(`<h2>Cubby Pro ✨</h2>
-    <div class="sub">${lockedFeature?(tastedOut?`You've enjoyed your free tastes of <b>${escapeHtml(lockedFeature)}</b>. `:`<b>${escapeHtml(lockedFeature)}</b> is a Pro treat. `):''}The essentials, your data and your privacy stay free, always. Pro brings a doctor-ready summary for every visit, plus the keepsake studio.</div>
+    <div class="sub">${lockedFeature?(tastedOut?`You've enjoyed your free tastes of <b>${escapeHtml(lockedFeature)}</b>. `:`<b>${escapeHtml(lockedFeature)}</b> is a Pro treat. `):''}The essentials, your data and your privacy stay free, always. Pro brings hands-free voice logging, a doctor-ready summary for every visit, and the keepsake studio.</div>
     <div class="pro-list">${feats}</div>
     <div class="csub" style="text-align:center;margin:2px 0 10px">Every treat comes with a free taste or two, so try before you decide 🐻</div>
     ${canBuy
