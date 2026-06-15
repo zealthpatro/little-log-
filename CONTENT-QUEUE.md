@@ -32,92 +32,92 @@ Source of truth for all articles: NHS (https://www.nhs.uk/pregnancy/). Additiona
 - [x] Group B strep in pregnancy: testing, risks and decisions — `group-b-strep` — 3rd trimester
 
 ### Batch 2 — complications + cultural (20 articles, target: 15 June 2026 morning)
-- [ ] Anaemia in pregnancy: symptoms, treatment and iron needs — `anaemia-in-pregnancy` — 2nd trimester
+- [x] Anaemia in pregnancy: symptoms, treatment and iron needs — `anaemia-in-pregnancy` — 2nd trimester (published 15 June 2026)
   Source: NHS anaemia in pregnancy (https://www.nhs.uk/conditions/iron-deficiency-anaemia/), NICE guideline NG25
-- [ ] Pelvic girdle pain (PGP): causes, management and recovery — `pelvic-girdle-pain` — 2nd/3rd trimester
+- [x] Pelvic girdle pain (PGP): causes, management and recovery — `pelvic-girdle-pain` — 2nd/3rd trimester (published 15 June 2026)
   Source: NHS pelvic girdle pain (https://www.nhs.uk/pregnancy/related-conditions/common-symptoms/pelvic-pain/), Pelvic Partnership
-- [ ] Heartburn and reflux in pregnancy: what helps and what to avoid — `pregnancy-heartburn-reflux` — 2nd/3rd trimester
+- [x] Heartburn and reflux in pregnancy: what helps and what to avoid — `pregnancy-heartburn-reflux` — 2nd/3rd trimester (published 15 June 2026)
   Source: NHS heartburn in pregnancy (https://www.nhs.uk/pregnancy/related-conditions/common-symptoms/heartburn-and-acid-reflux/)
-- [ ] Overdue pregnancy: what to expect and your options — `overdue-pregnancy` — 3rd trimester
+- [x] Overdue pregnancy: what to expect and your options — `overdue-pregnancy` — 3rd trimester (published 15 June 2026)
   Source: NHS overdue pregnancy (https://www.nhs.uk/pregnancy/labour-and-birth/signs-of-labour/overdue-baby/)
-- [ ] Breech presentation: what it means and your options near term — `breech-presentation` — 3rd trimester
+- [x] Breech presentation: what it means and your options near term — `breech-presentation` — 3rd trimester (published 15 June 2026)
   Source: NHS breech baby (https://www.nhs.uk/pregnancy/labour-and-birth/what-happens/if-your-baby-is-breech/), ECV procedure
-- [ ] Pregnancy after miscarriage or loss — `pregnancy-after-loss` — 1st trimester
+- [x] Pregnancy after miscarriage or loss — `pregnancy-after-loss` — 1st trimester (published 15 June 2026)
   Source: NHS, Tommy's, Miscarriage Association support resources
-- [ ] Twin pregnancy: what to expect from diagnosis to birth — `twin-pregnancy` — all trimesters
+- [x] Twin pregnancy: what to expect from diagnosis to birth — `twin-pregnancy` — all trimesters (published 15 June 2026)
   Source: NHS multiple pregnancies (https://www.nhs.uk/pregnancy/finding-out/multiple-pregnancy/), NICE twin guidance
-- [ ] NHS antenatal appointments: your schedule from booking to birth — `nhs-antenatal-schedule` — all trimesters
+- [x] NHS antenatal appointments: your schedule from booking to birth — `nhs-antenatal-schedule` — all trimesters (published 15 June 2026)
   Source: NHS antenatal care schedule (https://www.nhs.uk/pregnancy/your-pregnancy-care/your-antenatal-appointments/)
-- [ ] Maternity leave and pay: what you are entitled to in the UK — `maternity-leave-pay-uk` — 3rd trimester
+- [x] Maternity leave and pay: what you are entitled to in the UK — `maternity-leave-pay-uk` — 3rd trimester (published 15 June 2026)
   Source: GOV.UK maternity leave (https://www.gov.uk/maternity-pay-leave), ACAS
-- [ ] Paternity leave and pay: what partners are entitled to in the UK — `paternity-leave-pay-uk` — 3rd trimester
+- [x] Paternity leave and pay: what partners are entitled to in the UK — `paternity-leave-pay-uk` — 3rd trimester (published 15 June 2026)
   Source: GOV.UK paternity leave (https://www.gov.uk/paternity-pay-leave)
-- [ ] Godh bharai: the Indian pregnancy ceremony — `godh-bharai` — 3rd trimester
+- [x] Godh bharai: the Indian pregnancy ceremony — `godh-bharai` — 3rd trimester (published 15 June 2026)
   Cultural article. No medical claims. Cover ceremony purpose, timing, regional variations, modern adaptations.
-- [ ] Pregnancy traditions and beliefs in Indian culture — `pregnancy-traditions-india` — all trimesters
+- [x] Pregnancy traditions and beliefs in Indian culture — `pregnancy-traditions-india` — all trimesters (published 15 June 2026)
   Cover dietary restrictions, activity beliefs, family customs. Evidence-check each claim. No fabricated health claims.
-- [ ] Chinese pregnancy traditions: what the evidence says — `chinese-pregnancy-traditions` — all trimesters
+- [x] Chinese pregnancy traditions: what the evidence says — `chinese-pregnancy-traditions` — all trimesters (published 15 June 2026)
   Cover pregnancy taboos, dietary customs, family involvement. Evidence-check traditional health claims.
 - [ ] Preparing for zuo yuezi: planning your postnatal confinement — `chinese-yuezi-preparation` — 3rd trimester
   Cross-links to existing zuo-yuezi-postnatal-confinement article. Focuses on preparation during pregnancy.
-- [ ] Iwata obi: the Japanese pregnancy belly band tradition — `iwata-obi` — 2nd/3rd trimester
+- [x] Iwata obi: the Japanese pregnancy belly band tradition — `iwata-obi` — 2nd/3rd trimester (published 15 June 2026)
   Source: note cultural tradition; cite Japanese Ministry of Health guidance on Inu no Hi. No fabricated medical claims.
-- [ ] Boshi techo: Japan's mother and child health handbook — `boshi-techo` — 1st trimester
+- [x] Boshi techo: Japan's mother and child health handbook — `boshi-techo` — 1st trimester (published 15 June 2026)
   Source: Japanese MHLW (Ministry of Health, Labour and Welfare), explain purpose and contents.
-- [ ] Antenatal care in Australia: your options and what is covered — `antenatal-care-australia` — all trimesters
+- [x] Antenatal care in Australia: your options and what is covered — `antenatal-care-australia` — all trimesters (published 15 June 2026)
   Source: Australian Department of Health, Medicare, RANZCOG antenatal care guidelines
-- [ ] Birth choices in Australia: public, private and birth centres — `birth-choices-australia` — 3rd trimester
+- [x] Birth choices in Australia: public, private and birth centres — `birth-choices-australia` — 3rd trimester (published 15 June 2026)
   Source: RANZCOG, Australian Institute of Health and Welfare (AIHW), Medicare coverage overview
-- [ ] Genetic testing in pregnancy: NIPT, CVS and amniocentesis — `genetic-testing-pregnancy` — 1st/2nd trimester
+- [x] Genetic testing in pregnancy: NIPT, CVS and amniocentesis — `genetic-testing-pregnancy` — 1st/2nd trimester (published 15 June 2026)
   Source: NHS NIPT guidance, NICE diagnostics guidance, NHS CVS and amniocentesis (https://www.nhs.uk/pregnancy/your-pregnancy-care/your-antenatal-appointments/amniocentesis/)
-- [ ] Vaginal birth after caesarean (VBAC): what the evidence says — `vaginal-birth-after-caesarean` — 3rd trimester
+- [x] Vaginal birth after caesarean (VBAC): what the evidence says — `vaginal-birth-after-caesarean` — 3rd trimester (published 15 June 2026)
   Source: NHS VBAC (https://www.nhs.uk/pregnancy/labour-and-birth/what-happens/birth-after-a-previous-caesarean-section/), RCOG guideline
 
 ### Batch 3 — USA, Germany, Italy + advanced (20 articles, target: 15 June 2026 midday)
-- [ ] Prenatal care in the US: OB-GYN vs midwife and what to expect — `prenatal-care-usa` — all trimesters
+- [x] Prenatal care in the US: OB-GYN vs midwife and what to expect — `prenatal-care-usa` — all trimesters (published 15 June 2026)
   Source: ACOG prenatal care guidelines, March of Dimes, CDC
-- [ ] US prenatal visit schedule: what happens at each appointment — `us-prenatal-visit-schedule` — all trimesters
+- [x] US prenatal visit schedule: what happens at each appointment — `us-prenatal-visit-schedule` — all trimesters (published 15 June 2026)
   Source: ACOG, HealthyChildren.org (AAP), March of Dimes
-- [ ] Maternity leave in the US: federal law, state provisions and planning — `us-maternity-leave` — 3rd trimester
+- [x] Maternity leave in the US: federal law, state provisions and planning — `us-maternity-leave` — 3rd trimester (published 15 June 2026)
   Source: DOL FMLA fact sheet, state law overview (CA, NY), DOL.gov
-- [ ] Mutterpass: Germany's pregnancy health record explained — `mutterpass` — 1st trimester
+- [x] Mutterpass: Germany's pregnancy health record explained — `mutterpass` — 1st trimester (published 15 June 2026)
   Source: Gemeinsamer Bundesausschuss (G-BA) Mutterschafts-Richtlinien, BZGA
-- [ ] Hebamme: the role of a German midwife before and after birth — `hebamme-germany` — all trimesters
+- [x] Hebamme: the role of a German midwife before and after birth — `hebamme-germany` — all trimesters (published 15 June 2026)
   Source: Deutscher Hebammenverband, GKV (statutory health insurance) midwife entitlements
-- [ ] Elterngeld: German parental leave and pay explained — `elterngeld` — 3rd trimester
+- [x] Elterngeld: German parental leave and pay explained — `elterngeld` — 3rd trimester (published 15 June 2026)
   Source: BMFSFJ Elterngeld guide (https://www.elterngeld-digital.de/), Bundesministerium
-- [ ] Pregnancy care in Italy: what the public health system offers — `gravidanza-italy` — all trimesters
+- [x] Pregnancy care in Italy: what the public health system offers — `gravidanza-italy` — all trimesters (published 15 June 2026)
   Source: Italian Ministry of Health (Ministero della Salute) linee guida gravidanza fisiologica
-- [ ] Congedo di maternita: Italian maternity leave explained — `congedo-maternita` — 3rd trimester
+- [x] Congedo di maternita: Italian maternity leave explained — `congedo-maternita` — 3rd trimester (published 15 June 2026)
   Source: INPS (Istituto Nazionale Previdenza Sociale), Italian Labour Code
-- [ ] Quarantina: the Italian postnatal rest tradition — `quarantina-italy` — 3rd trimester (cross-links to postnatal traditions article)
+- [x] Quarantina: the Italian postnatal rest tradition — `quarantina-italy` — 3rd trimester (cross-links to postnatal traditions article) (published 15 June 2026)
   Cultural article. Cover tradition, modern interpretations, evidence on postnatal rest.
-- [ ] Caesarean section recovery: what to expect at home — `caesarean-section-recovery` — 3rd trimester/postnatal
+- [x] Caesarean section recovery: what to expect at home — `caesarean-section-recovery` — 3rd trimester/postnatal (published 15 June 2026)
   Source: NHS caesarean (https://www.nhs.uk/conditions/caesarean-section/recovery/), RCOG
-- [ ] Skin-to-skin contact after birth: what it is and why it matters — `skin-to-skin-after-birth` — postnatal
+- [x] Skin-to-skin contact after birth: what it is and why it matters — `skin-to-skin-after-birth` — postnatal (published 15 June 2026)
   Source: NHS, WHO evidence on kangaroo care, UNICEF Baby Friendly Initiative
-- [ ] The first week after birth: what to expect from postnatal care — `postnatal-first-week` — postnatal
+- [x] The first week after birth: what to expect from postnatal care — `postnatal-first-week` — postnatal (published 15 June 2026)
   Source: NHS postnatal care (https://www.nhs.uk/pregnancy/labour-and-birth/after-the-birth/), NICE postnatal care NG194
-- [ ] Perineal tears and stitches: recovery after birth — `perineal-tears-recovery` — postnatal
+- [x] Perineal tears and stitches: recovery after birth — `perineal-tears-recovery` — postnatal (published 15 June 2026)
   Source: NHS perineal tears (https://www.nhs.uk/pregnancy/labour-and-birth/after-the-birth/perineal-tears/), RCOG greentop guideline
-- [ ] Vitamin D in pregnancy: why it matters and how much to take — `vitamin-d-pregnancy` — all trimesters
+- [x] Vitamin D in pregnancy: why it matters and how much to take — `vitamin-d-pregnancy` — all trimesters (published 15 June 2026)
   Source: NHS vitamin D pregnancy (https://www.nhs.uk/pregnancy/keeping-well/vitamins-supplements-and-nutrition/), SACN 2016
-- [ ] Iron in pregnancy: sources, needs and avoiding anaemia — `iron-pregnancy` — all trimesters
+- [x] Iron in pregnancy: sources, needs and avoiding anaemia — `iron-pregnancy` — all trimesters (published 15 June 2026)
   Source: NHS iron in pregnancy, NICE NG25 on iron deficiency
-- [ ] Alcohol and caffeine in pregnancy: what the evidence says — `alcohol-caffeine-pregnancy` — all trimesters
+- [x] Alcohol and caffeine in pregnancy: what the evidence says — `alcohol-caffeine-pregnancy` — all trimesters (published 15 June 2026)
   Source: NHS alcohol in pregnancy, NHS caffeine guidance (200mg/day limit)
-- [ ] Birth positions: what options you have and what the evidence shows — `birth-positions` — 3rd trimester
+- [x] Birth positions: what options you have and what the evidence shows — `birth-positions` — 3rd trimester (published 15 June 2026)
   Source: NHS labour positions, NICE intrapartum care guideline NG235
-- [ ] Induction of labour: why it happens and what to expect — `induction-of-labour` — 3rd trimester
+- [x] Induction of labour: why it happens and what to expect — `induction-of-labour` — 3rd trimester (published 15 June 2026)
   Source: NHS induction (https://www.nhs.uk/pregnancy/labour-and-birth/signs-of-labour/inducing-labour/), NICE NG207
-- [ ] Preparing for a newborn: the practical home checklist — `preparing-for-a-newborn` — 3rd trimester
+- [x] Preparing for a newborn: the practical home checklist — `preparing-for-a-newborn` — 3rd trimester (published 15 June 2026)
   Source: NHS getting ready for your baby, Red Cross first aid recommendations
-- [ ] Pregnancy after 35: what changes and what to know — `pregnancy-after-35` — all trimesters
+- [x] Pregnancy after 35: what changes and what to know — `pregnancy-after-35` — all trimesters (published 15 June 2026)
   Source: NHS older mothers (https://www.nhs.uk/pregnancy/finding-out/pregnant-at-an-older-age/), RCOG
 
 ## Backlog (priority order)
 
-- [ ] **Newborn weight loss and regain** — slug: `newborn-weight-loss-and-regain` — Newborn — Growth
+- [x] **Newborn weight loss and regain** — slug: `newborn-weight-loss-and-regain` — Newborn — Growth (published 15 June 2026)
   REGENERATE: the prior file was a broken verification-report (no HTML), removed from the live site 13 Jun 2026. Write it properly. Sources: NHS newborn weight (https://www.nhs.uk/baby/babys-development/height-weight-and-reviews/), WHO/UK-WHO charts, AAP HealthyChildren on newborn weight loss (~7-10% loss, regained by ~2 weeks).
 
 - [x] **Teething and first teeth** — slug: `baby-teething-and-tooth-care` — Newborn / 3-6 months — Care & dental
@@ -126,33 +126,33 @@ Source of truth for all articles: NHS (https://www.nhs.uk/pregnancy/). Additiona
 - [x] **Baby sleep by age and wakeful phases** — slug: `baby-sleep-by-age` — 0-3 / 3-6 / 6-12 months — Sleep
   Sources: https://www.nhs.uk/baby/caring-for-a-newborn/helping-your-baby-to-sleep/ , NHS baby sleep hub (published 9 June 2026)
 
-- [ ] **Fever and high temperature in babies: when to worry** — slug: `fever-in-babies-when-to-worry` — all — Health
+- [x] **Fever and high temperature in babies: when to worry** — slug: `fever-in-babies-when-to-worry` — all — Health (published as baby-fever-when-to-worry, 15 June 2026)
   Sources: NHS high temperature in children (https://www.nhs.uk/conditions/fever-in-children/), NHS baby health (https://www.nhs.uk/baby/health/). Emphasise "seek help / call 111 or emergency" thresholds.
 
-- [ ] **Colds, coughs, RSV and bronchiolitis in babies** — slug: `baby-colds-coughs-rsv` — all — Health
+- [x] **Colds, coughs, RSV and bronchiolitis in babies** — slug: `baby-colds-coughs-rsv` — all — Health (published as baby-cold-and-cough + rsv-in-babies, 15 June 2026)
   Sources: NHS colds, NHS bronchiolitis (https://www.nhs.uk/conditions/bronchiolitis/)
 
-- [ ] **Understanding growth charts and centiles** — slug: `baby-growth-charts-centiles` — all — Growth
+- [x] **Understanding growth charts and centiles** — slug: `baby-growth-charts-centiles` — all — Growth (published as reading-baby-growth-charts, 15 June 2026)
   Sources: WHO child growth standards (https://www.who.int/tools/child-growth-standards), CDC growth charts (https://www.cdc.gov/growthcharts/), NHS. Tie to Cubby's in-app charts.
 
 - [ ] **Milestones 6 to 12 months** — slug: `baby-milestones-6-to-12-months` — 6-12 months — Development
   Sources: CDC 6 (https://www.cdc.gov/act-early/milestones/6-months.html), 9 (.../9-months.html), 1 year (.../1-year.html)
 
-- [ ] **Tummy time: why and how** — slug: `tummy-time-for-babies` — Newborn / 0-3 months — Development
+- [x] **Tummy time: why and how** — slug: `tummy-time-for-babies` — Newborn / 0-3 months — Development (published 15 June 2026)
   Sources: AAP HealthyChildren tummy time, CDC. Confirm current URLs.
 
-- [ ] **Iron-rich first foods for babies** — slug: `iron-rich-first-foods` — 6-12 months — Nutrition
+- [x] **Iron-rich first foods for babies** — slug: `iron-rich-first-foods` — 6-12 months — Nutrition (published as iron-rich-foods-for-babies, 15 June 2026)
   Sources: CDC infant-toddler-nutrition (https://www.cdc.gov/infant-toddler-nutrition/foods-and-drinks/), NHS first foods
 
 - [x] **Khichdi, ragi and traditional weaning foods** — slug: `indian-first-foods-weaning` — 6-12 months — Feeding (published 12 June 2026)
 
-- [ ] **Vitamin D and vitamins for babies** — slug: `vitamin-d-for-babies` — all — Nutrition
+- [x] **Vitamin D and vitamins for babies** — slug: `vitamin-d-for-babies` — all — Nutrition (published 15 June 2026)
   Sources: https://www.nhs.uk/baby/weaning-and-feeding/vitamins-for-children/
 
 - [ ] **Drinks and cups: water and moving off bottles** — slug: `drinks-and-cups-for-babies` — 6-12 months — Feeding
   Sources: https://www.nhs.uk/baby/weaning-and-feeding/drinks-and-cups-for-babies-and-young-children/
 
-- [ ] **Nappy rash: prevent and soothe** — slug: `nappy-rash` — Newborn / all — Care
+- [x] **Nappy rash: prevent and soothe** — slug: `nappy-rash` — Newborn / all — Care (published as nappy-rash-causes-and-treatment, 15 June 2026)
   Sources: NHS nappy rash (https://www.nhs.uk/conditions/nappy-rash/)
 
 - [ ] **Reflux and spit-up in babies** — slug: `baby-reflux-and-spit-up` — 0-6 months — Health
@@ -253,7 +253,7 @@ Each article covers the same practice across multiple regions. Write once, link 
 - [ ] Postnatal depression: Beyond Blue resources — `postnatal-depression-beyond-blue`
 
 **Japan (all new):**
-- [ ] Boshi techo: Japan's maternal and child health handbook — `boshi-techo`
+- [x] Boshi techo: Japan's maternal and child health handbook — `boshi-techo` (published 15 June 2026)
 - [ ] Ofuro: Japanese baby bathing traditions — `ofuro-baby-bathing`
 - [ ] Dakko himo: Japanese babywearing — `dakko-himo-babywearing`
 - [ ] BCG vaccination: why Japan uses the stamp method — `bcg-vaccination-stamp-method`

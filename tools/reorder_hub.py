@@ -350,6 +350,17 @@ NEW_CARDS = [
     ('health',    '6-12',   '/articles/food-allergy-signs-babies/',
      'Health · 6-12 months', 'Food allergy signs in babies: how to recognise a reaction',
      'How to spot the signs of a food allergy in babies after introducing new foods, what reactions look like, and when to call 999. NHS and NICE-sourced.'),
+
+    # BATCH 4 — 3 new articles (15 June 2026)
+    ('pregnancy',  '3rd-trimester', '/articles/chinese-yuezi-preparation/',
+     'Pregnancy · 3rd trimester', 'Preparing for zuo yuezi: planning your postnatal confinement',
+     'How to plan during pregnancy for zuo yuezi: centre vs home care, setting up your space, food preparation, and family conversations before the birth.'),
+    ('development', '6-12', '/articles/baby-milestones-6-to-12-months/',
+     'Development · 6-12 months', 'Baby milestones: 6 to 12 months',
+     'What most babies can do at 6, 9 and 12 months: sitting, crawling, babbling, waving and first steps. CDC-sourced with red flags and when to speak to your health visitor.'),
+    ('feeding',    '6-12', '/articles/drinks-and-cups-for-babies/',
+     'Feeding · 6-12 months', 'Drinks for babies: water, milk and cups',
+     "When to introduce water, what drinks to avoid, when cow's milk becomes the main drink, and how to move from bottle to cup. NHS-sourced."),
 ]
 
 # ── Order in which categories cycle (determines first-fold order) ──
