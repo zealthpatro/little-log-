@@ -5678,8 +5678,8 @@ function renderHeatmap(){
 }
 /* ============================================================
    ROUTINE LIST  (gentle, editable suggestions, per baby)
-   These are ideas for the day, never medical mandates and never
-   prescriptive. Every item is editable and the whole list can be
+   These are gentle routines for the day, never medical mandates and
+   never prescriptive. Every item is editable and the whole list can be
    turned off. There are NO reminders or notifications of any kind:
    tapping "done" simply writes a real log event (so it shows in the
    timeline and recap, with who-did-what) and ticks the item for that
@@ -5752,7 +5752,7 @@ function renderRoutines(){
   const today=dayKey(now());
   let rows;
   if(!list.length){
-    rows=`<div class="rt-empty">No routine ideas right now. Add one whenever you like, or leave this off, it's entirely up to you.</div>`;
+    rows=`<div class="rt-empty">No routines yet. Add one whenever you like, or leave this off, it's entirely up to you.</div>`;
   } else {
     rows=list.slice().sort((a,c)=>String(a.time).localeCompare(String(c.time))).map(r=>{
       const done = !!(r.done && r.done[today]);
@@ -5768,11 +5768,11 @@ function renderRoutines(){
     }).join('');
   }
   return `<div class="rt-card">
-    <div class="rt-head"><span class="rt-t">Ideas for the day 🌿</span>
+    <div class="rt-head"><span class="rt-t">Routines for the day 🌿</span>
       <button class="rt-edit" onclick="openRoutinesEdit()">Edit</button></div>
     <div class="rt-sub">Gentle, optional suggestions, not a schedule to keep up with. Tap one when it happens and it lands in the log. Edit anytime.</div>
     ${rows}
-    <button class="rt-add" onclick="openRoutineItem()">${I.plus} Add an idea</button>
+    <button class="rt-add" onclick="openRoutineItem()">${I.plus} Add a routine</button>
   </div>`;
 }
 function routineFmtTime(hhmm){
@@ -5835,7 +5835,7 @@ function openRoutinesEdit(){
   const list=ensureRoutines(b).slice().sort((a,c)=>String(a.time).localeCompare(String(c.time)));
   let rows;
   if(!list.length){
-    rows=`<div class="rt-empty">No ideas yet. Add the little moments you want to remember, a morning feed, tummy time, a bath.</div>`;
+    rows=`<div class="rt-empty">No routines yet. Add the little moments you want to remember, a morning feed, tummy time, a bath.</div>`;
   } else {
     rows=list.map(r=>{
       const sub=[routineFmtTime(r.time), r.assignee?(loggerName(r.assignee)||'someone'):''].filter(Boolean).join(' · ');
@@ -5848,10 +5848,10 @@ function openRoutinesEdit(){
       </div>`;
     }).join('');
   }
-  openSheet(`<h2>Routine ideas 🌿</h2><div class="sub">Gentle suggestions for the day, never a must-do. Add, change or remove anything, anytime.</div>
+  openSheet(`<h2>Routines 🌿</h2><div class="sub">Gentle suggestions for the day, never a must-do. Add, change or remove anything, anytime.</div>
     ${rows}
-    <button class="rt-add" style="border-top:1px solid var(--line);margin-top:4px" onclick="openRoutineItem()">${I.plus} Add an idea</button>
-    <div class="preg-disclaim" style="margin-top:14px">These are ideas, not medical advice, and there's no pressure to follow them. Reminders are coming later, for now nothing will notify you.</div>`,'diaper');
+    <button class="rt-add" style="border-top:1px solid var(--line);margin-top:4px" onclick="openRoutineItem()">${I.plus} Add a routine</button>
+    <div class="preg-disclaim" style="margin-top:14px">These are gentle routines, not medical advice, and there's no pressure to follow them. Reminders are coming later, for now nothing will notify you.</div>`,'diaper');
 }
 function routineMemberPairs(){
   var info=(window.LL&&window.LL.memberInfo)||{};
@@ -5893,15 +5893,15 @@ function reopenRoutineItem(){
   const typeChips=TYPES.map(t=>`<div class="chip ${d.evType===t[0]?'sel':''}" onclick="routineSetType('${t[0]}')">${t[1]}</div>`).join('');
   const pairs=routineMemberPairs();
   const showPicker=pairs.length>1;
-  openSheet(`<h2>${existing?'Edit idea':'Add an idea'}</h2><div class="sub">A gentle suggestion for the day. Change or remove it whenever you like.</div>
+  openSheet(`<h2>${existing?'Edit routine':'Add a routine'}</h2><div class="sub">A gentle suggestion for the day. Change or remove it whenever you like.</div>
     <div class="field"><label>What is it</label><input id="rtTitle" value="${escapeHtml(d.title)}" placeholder="e.g. Morning feed, tummy time, bath" oninput="routineDraft.title=this.value"></div>
     <div class="field"><label>Around when</label><input type="time" id="rtTime" value="${escapeHtml(d.time||'09:00')}" onchange="routineDraft.time=this.value"></div>
     <div class="field"><label>Logs as</label><div class="chip-row" style="flex-wrap:wrap;white-space:normal">${typeChips}</div>
       <div class="csub" style="margin-top:6px">When you tap it done, it adds this kind of entry to the log.</div></div>
     ${showPicker?`<div class="field"><label>Who usually does it</label>${searchPickerHtml('rtWho',pairs,d.assignee||'','Anyone in your circle')}
       <div class="csub" style="margin-top:6px">Optional. We'll credit them in the log when it's done.</div></div>`:''}
-    <button class="btn-primary" style="background:var(--diaper)" onclick="saveRoutineItem()">${existing?'Save':'Add idea'}</button>
-    ${existing?`<button class="btn-ghost btn-danger" onclick="removeRoutine('${d.id}')">${I.trash} Remove idea</button>`:''}`,'diaper');
+    <button class="btn-primary" style="background:var(--diaper)" onclick="saveRoutineItem()">${existing?'Save':'Add routine'}</button>
+    ${existing?`<button class="btn-ghost btn-danger" onclick="removeRoutine('${d.id}')">${I.trash} Remove routine</button>`:''}`,'diaper');
 }
 function saveRoutineItem(){
   const b=activeBaby(); if(!b||!routineDraft) return;
