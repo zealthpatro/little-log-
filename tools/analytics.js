@@ -5,6 +5,7 @@
 
 const admin = require('firebase-admin');
 const path = require('path');
+const { leakyBucket } = require('./funnel');
 let sa;
 try { sa = require(path.join(__dirname, 'serviceAccountKey.json')); }
 catch (e) { console.error('\nMissing tools/serviceAccountKey.json. See ANALYTICS.md (Firebase console > Project settings > Service accounts > Generate new private key).\n'); process.exit(1); }
@@ -20,12 +21,13 @@ const pct = (n, d) => d ? Math.round((n / d) * 100) + '%' : '0%';
 const bar = (n, max, w = 24) => '█'.repeat(Math.round((n / (max || 1)) * w)).padEnd(w, ' ');
 
 (async () => {
-  const [usersSnap, hhSnap, fbSnap, wlSnap, evSnap] = await Promise.all([
+  const [usersSnap, hhSnap, fbSnap, wlSnap, evSnap, invSnap] = await Promise.all([
     db.collection('users').get(),
     db.collection('households').get(),
     db.collection('feedback').get().catch(() => ({ docs: [] })),
     db.collection('waitlist').get().catch(() => ({ docs: [] })),
     db.collectionGroup('events').get(),
+    db.collection('invites').get().catch(() => ({ docs: [] })),
   ]);
 
   // group events by household
@@ -50,7 +52,8 @@ const bar = (n, max, w = 24) => '█'.repeat(Math.round((n / (max || 1)) * w)).p
     let vxGiven = 0; const vx = (h.app && h.app.vaccines) || {};
     Object.values(vx).forEach(list => (list || []).forEach(v => { if (v.given) vxGiven++; }));
     return {
-      id: doc.id, created: ms(h.createdAt), last, activeDays: days.size,
+      id: doc.id, ownerId: h.ownerId || '', created: ms(h.createdAt), last,
+      firstLog: times.length ? Math.min(...times) : 0, activeDays: days.size,
       members: members.length, babies, events: evs.length, byType, photos, vxGiven,
       milestones: ((h.app && h.app.milestones) || []).length,
       countries: babies.map(b => b.country || '?'),
@@ -76,6 +79,26 @@ const bar = (n, max, w = 24) => '█'.repeat(Math.round((n / (max || 1)) * w)).p
   line(`Returned (2+ days):     ${returned.length}  (${pct(returned.length, hhSnap.size)})`);
   line(`Sticky (7+ days):       ${sticky.length}`);
   line(`Pro waitlist:           ${wlSnap.size}`);
+
+  // ── Activation funnel (the leaky bucket) — from data we already collect, no new tracking ──
+  const proOwnerUids = new Set(wlSnap.docs.map(d => d.id));
+  const invitedHhIds = new Set(invSnap.docs.map(d => (d.data() || {}).householdId).filter(Boolean));
+  const lb = leakyBucket(households, proOwnerUids, invitedHhIds);
+  const maxDrop = Math.max(0, ...lb.funnel.slice(1).map(r => r.drop));
+  line('\n── Activation funnel (the leaky bucket) ──');
+  lb.funnel.forEach((r, i) => {
+    const leak = (i > 0 && r.drop === maxDrop && maxDrop > 0) ? '  <- biggest leak' : '';
+    const drop = i === 0 ? '     ' : ('-' + r.drop + '%').padStart(5);
+    line(`  ${r.label.padEnd(30)} ${String(r.count).padStart(4)}  ${bar(r.count, lb.n, 18)} ${String(r.pctTop + '%').padStart(4)}  ${drop}${leak}`);
+  });
+  if (lb.activation.n) {
+    const med = lb.activation.medianMins, medStr = med >= 60 ? (Math.round(med / 6) / 10) + 'h' : med + 'm';
+    line(`  Time to first log:      median ${medStr}  ·  within 1h: ${lb.activation.within1h}/${lb.activation.n}  ·  within 24h: ${lb.activation.within24h}/${lb.activation.n}`);
+  }
+  line('\n── Key conversions (share of signed-in) ──');
+  line(`  Invited a caregiver:    ${lb.conversions.invited}  (${pct(lb.conversions.invited, lb.n)})`);
+  line(`  Caregiver joined:       ${lb.conversions.joined}  (${pct(lb.conversions.joined, lb.n)})  <- the wedge  ·  invite->join: ${lb.conversions.inviteToJoin}%`);
+  line(`  Registered for Pro:     ${lb.conversions.pro}  (${pct(lb.conversions.pro, lb.n)})`);
 
   // ── Acquisition (first-party UTM attribution; the paid-test scorecard) ──
   const acqOf = (snap) => snap.docs.map(d => d.data().acq).filter(a => a && (a.content || a.campaign || a.source));
