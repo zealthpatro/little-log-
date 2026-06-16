@@ -12,6 +12,13 @@
 (function () {
   if (window.__cubbyNews) return; window.__cubbyNews = true;
 
+  // GATE: keep the form hidden until /api/newsletter can actually persist. The Worker's service
+  // account currently returns PERMISSION_DENIED on the Firestore write — it needs the "Cloud
+  // Datastore User" (roles/datastore.user) IAM role. Flip to true the moment that grant is done;
+  // we never show a signup form that can't save. (One-file redeploy, no article changes needed.)
+  var ENABLED = false;
+  if (!ENABLED) return;
+
   // Journey-matched copy: a pregnant visitor wants pregnancy notes; a baby-stage visitor wants baby
   // notes. We read the stage the site already tracks (set on / and /app/); default to a warm blend.
   function stage() {
