@@ -33,5 +33,15 @@
   window.LL.auth = auth;
   window.LL.db = db;
   window.LL.googleProvider = new firebase.auth.GoogleAuthProvider();
+  // Sign in with Apple (required by App Store guideline 4.8 once Google sign-in
+  // ships in the wrapped app). Configured in the Firebase console: Authentication
+  // -> Sign-in method -> Apple, using an Apple Services ID + key. The OAuth redirect
+  // lands on /__/auth/handler, which worker.js already proxies to Firebase.
+  window.LL.appleProvider = (function () {
+    var p = new firebase.auth.OAuthProvider('apple.com');
+    p.addScope('email');
+    p.addScope('name');
+    return p;
+  })();
   window.LL.serverTimestamp = firebase.firestore.FieldValue.serverTimestamp;
 })();

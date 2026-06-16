@@ -66,6 +66,10 @@
     + '.ll-auth-card p{color:#6E635B;font-size:15px;margin:0 0 24px;line-height:1.4;}'
     + '.ll-auth-btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;border:1px solid #E0D7C7;background:#fff;color:#2C2521;font-size:16px;font-weight:700;padding:14px 18px;border-radius:14px;cursor:pointer;font-family:inherit;}'
     + '.ll-auth-btn:hover{background:#FBF7EF;}.ll-auth-btn:disabled{opacity:.6;cursor:default;}'
+    + '.ll-auth-btn-apple{background:#000;color:#fff;border-color:#000;margin-top:10px;}'
+    + '.ll-auth-btn-apple:hover{background:#1a1a1a;}.ll-auth-btn-apple svg{width:17px;height:17px;}'
+    + '.lp-apple{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;max-width:340px;margin:10px auto 0;border:none;background:#000;color:#fff;font-size:17px;font-weight:800;padding:16px 22px;border-radius:15px;cursor:pointer;font-family:inherit;}'
+    + '.lp-apple:hover{filter:brightness(1.2);}.lp-apple:disabled{opacity:.6;cursor:default;}.lp-apple svg{width:18px;height:18px;}'
     + '.ll-auth-msg{margin-top:16px;color:#9a8d80;font-size:13px;line-height:1.4;}'
     + '.ll-values{text-align:left;margin:4px 0 20px;display:flex;flex-direction:column;gap:9px;}'
     + '.ll-values div{display:flex;align-items:center;gap:10px;font-size:13.5px;color:#6E635B;font-weight:600;}'
@@ -109,6 +113,17 @@
     return ov;
   }
   function hideOverlay() { var ov = document.getElementById('llAuthOv'); if (ov) ov.remove(); }
+
+  /* Sign in with Apple button. variant 'lp' = big landing button; otherwise the
+     bordered auth-card style. Uses Apple's official logo + "Continue with Apple". */
+  function appleBtnHtml(variant) {
+    var logo = '<svg viewBox="0 0 384 512" aria-hidden="true" fill="currentColor">'
+      + '<path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>';
+    if (variant === 'lp') {
+      return '<button type="button" class="lp-apple ll-apple-cta">' + logo + 'Continue with Apple</button>';
+    }
+    return '<button type="button" id="llAppleBtn" class="ll-auth-btn ll-auth-btn-apple">' + logo + 'Continue with Apple</button>';
+  }
 
   /* Email magic-link sign-in (alongside Google, never instead of it). */
   function emailRowHtml() {
@@ -178,9 +193,13 @@
     if (typeof window.cubbyLanding === 'function') {
       ov.classList.add('landing');
       ov.innerHTML = window.cubbyLanding(msg);
-      Array.prototype.forEach.call(ov.querySelectorAll('.ll-cta'), function (b) { b.onclick = signInGoogle; });
-      var firstCta = ov.querySelector('.ll-cta');
-      if (firstCta) { firstCta.insertAdjacentHTML('afterend', emailRowHtml()); wireEmailRow(ov); }
+      Array.prototype.forEach.call(ov.querySelectorAll('.ll-cta'), function (b) {
+        b.onclick = signInGoogle;
+        b.insertAdjacentHTML('afterend', appleBtnHtml('lp'));
+      });
+      Array.prototype.forEach.call(ov.querySelectorAll('.ll-apple-cta'), function (b) { b.onclick = signInApple; });
+      var firstApple = ov.querySelector('.ll-apple-cta');
+      if (firstApple) { firstApple.insertAdjacentHTML('afterend', emailRowHtml()); wireEmailRow(ov); }
       return;
     }
     ov.classList.remove('landing');
@@ -189,11 +208,14 @@
       + '<h1>Cubby</h1><p>A warm, private baby log you can share with the people who care for them.</p>'
       + '<div class="ll-values"><div><span>⚡</span>Log feeds, sleep &amp; nappies in seconds</div><div><span>👨‍👩‍👧</span>Share with family &amp; caregivers, live</div><div><span>🔒</span>Private to your family</div></div>'
       + '<button id="llGoogleBtn" class="ll-auth-btn">Continue with Google</button>'
+      + appleBtnHtml('card')
       + emailRowHtml()
       + (msg ? '<div class="ll-auth-msg">' + msg + '</div>' : '')
       + '<div style="margin-top:16px;font-size:12px;font-weight:700"><a href="/" style="color:#6E635B">About Cubby · little-cubby.com</a></div>'
       + '</div>';
     document.getElementById('llGoogleBtn').onclick = signInGoogle;
+    var llAppleBtn = document.getElementById('llAppleBtn');
+    if (llAppleBtn) llAppleBtn.onclick = signInApple;
     wireEmailRow(ov);
   }
   function showStatus(msg) {
@@ -211,6 +233,18 @@
       if (err && (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request'
         || err.code === 'auth/operation-not-supported-in-this-environment')) {
         auth.signInWithRedirect(window.LL.googleProvider); return;
+      }
+      showSignIn('Sign-in failed: ' + ((err && err.message) || err));
+    });
+  }
+
+  function signInApple() {
+    // Disable whichever Apple button was clicked (landing or auth-card) for feedback.
+    Array.prototype.forEach.call(document.querySelectorAll('.ll-apple-cta, #llAppleBtn'), function (b) { b.disabled = true; });
+    auth.signInWithPopup(window.LL.appleProvider).catch(function (err) {
+      if (err && (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request'
+        || err.code === 'auth/operation-not-supported-in-this-environment')) {
+        auth.signInWithRedirect(window.LL.appleProvider); return;
       }
       showSignIn('Sign-in failed: ' + ((err && err.message) || err));
     });
