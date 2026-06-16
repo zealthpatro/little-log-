@@ -14,6 +14,7 @@
 */
 
 const OAUTH_SCOPE = 'https://www.googleapis.com/auth/identitytoolkit';
+const FIRESTORE_SCOPE = 'https://www.googleapis.com/auth/datastore';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const OOB_URL = 'https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode';
 
@@ -36,10 +37,11 @@ function pemToDer(pem) {
 }
 
 // Service account -> short-lived OAuth access token (RS256 JWT signed via WebCrypto).
-async function getAccessToken(sa) {
+// scope defaults to Identity Toolkit (sign-in links); pass FIRESTORE_SCOPE for Firestore REST.
+async function getAccessToken(sa, scope) {
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: 'RS256', typ: 'JWT' };
-  const claim = { iss: sa.client_email, scope: OAUTH_SCOPE, aud: TOKEN_URL, iat: now, exp: now + 3600 };
+  const claim = { iss: sa.client_email, scope: scope || OAUTH_SCOPE, aud: TOKEN_URL, iat: now, exp: now + 3600 };
   const unsigned = b64urlStr(JSON.stringify(header)) + '.' + b64urlStr(JSON.stringify(claim));
   const key = await crypto.subtle.importKey('pkcs8', pemToDer(sa.private_key), { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
   const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(unsigned));
@@ -152,12 +154,85 @@ async function sendSigninLink(request, env) {
   }
 }
 
+function sha256hex(s) {
+  return crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)).then(function (buf) {
+    return [].map.call(new Uint8Array(buf), function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+  });
+}
+
+// Newsletter opt-in capture. Stores the email first-party in Firestore `newsletter/{sha256(email)}`
+// (email hashed for the doc id so it never appears in a path/log; plaintext kept in a field so we
+// can actually send later). Writes via the service-account OAuth token (bypasses security rules),
+// so the `newsletter` collection stays client-unreadable. Capture only — no email is sent here;
+// the send stream (news. subdomain) is Phase 2 (EMAIL.md §2/§8).
+async function newsletterSignup(request, env) {
+  // Same-origin only (closes scripted no-Origin abuse), then per-IP volume cap (fail open).
+  const url = new URL(request.url);
+  const origin = request.headers.get('origin'), referer = request.headers.get('referer');
+  let sameOrigin = false;
+  try {
+    if (origin) sameOrigin = new URL(origin).host === url.host;
+    else if (referer) sameOrigin = new URL(referer).host === url.host;
+  } catch (e) { sameOrigin = false; }
+  if (!sameOrigin) return json({ error: 'forbidden' }, 403);
+
+  const limiter = env.NEWSLETTER_RATE_LIMITER || env.SIGNIN_RATE_LIMITER;
+  if (limiter) {
+    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    try { const { success } = await limiter.limit({ key: 'news:' + ip }); if (!success) return json({ error: 'rate_limited' }, 429); }
+    catch (e) { /* limiter unavailable: fail open */ }
+  }
+
+  let body;
+  try { body = await request.json(); } catch (e) { return json({ error: 'bad_request' }, 400); }
+  const email = ((body && body.email) || '').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254) return json({ error: 'invalid_email' }, 400);
+  const cap = function (v, n) { return (typeof v === 'string' ? v : '').slice(0, n); };
+  const stage = cap(body.stage, 32), source = cap(body.source, 200);
+  const utmSource = cap(body.utmSource, 64), utmCampaign = cap(body.utmCampaign, 64);
+
+  let sa;
+  try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return json({ error: 'server_config' }, 500); }
+
+  try {
+    const token = await getAccessToken(sa, FIRESTORE_SCOPE);
+    const docId = await sha256hex(email);
+    const nowIso = new Date().toISOString();
+    const docUrl = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id
+      + '/databases/(default)/documents/newsletter/' + docId;
+    const r = await fetch(docUrl, {
+      method: 'PATCH',
+      headers: { 'authorization': 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ fields: {
+        email: { stringValue: email },
+        stage: { stringValue: stage || 'unknown' },
+        source: { stringValue: source },
+        utmSource: { stringValue: utmSource },
+        utmCampaign: { stringValue: utmCampaign },
+        status: { stringValue: 'subscribed' },
+        consent: { booleanValue: true },
+        consentAt: { timestampValue: nowIso },
+        unsubToken: { stringValue: crypto.randomUUID() },
+        createdAt: { timestampValue: nowIso }
+      } })
+    });
+    if (!r.ok) return json({ error: 'store_failed' }, 502);
+    return json({ ok: true });
+  } catch (e) {
+    return json({ error: 'failed' }, 500);
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/api/send-signin-link') {
       if (request.method !== 'POST') return new Response('method not allowed', { status: 405 });
       return sendSigninLink(request, env);
+    }
+    if (url.pathname === '/api/newsletter') {
+      if (request.method !== 'POST') return new Response('method not allowed', { status: 405 });
+      return newsletterSignup(request, env);
     }
     if (url.pathname.startsWith('/__/')) {
       const upstream = new URL(url.pathname + url.search, 'https://little-log-a9caa.firebaseapp.com');

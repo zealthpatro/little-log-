@@ -23,6 +23,12 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
 
+    // Newsletter opt-in list: written ONLY by the edge Worker via the service account (which
+    // bypasses these rules). Emails are private — no browser client may read or write it.
+    match /newsletter/{id} {
+      allow read, write: if false;
+    }
+
     // Invites are keyed by the invitee's lowercased email.
     match /invites/{email} {
       allow read: if request.auth != null && request.auth.token.email.lower() == email;
