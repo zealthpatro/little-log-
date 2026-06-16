@@ -279,6 +279,11 @@ body{
   background:linear-gradient(to top,var(--bg) 55%,transparent);
 }
 .nav-inner{display:flex;justify-content:space-around;background:var(--surface);border-radius:24px;padding:8px;flex:1;box-shadow:0 8px 24px var(--shadow-strong);}
+/* Persistent quick-add: the 3am core action stays one tap, no scrolling past photos. Sits inside
+   the app frame (absolute, like .nav) so it lands correctly in the desktop frame too. */
+.qadd{position:absolute;right:16px;bottom:calc(86px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:50%;border:none;background:var(--feed);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:40;box-shadow:0 10px 26px var(--shadow-strong);transition:transform .15s;}
+.qadd:active{transform:scale(.92);}
+.qadd svg{width:26px;height:26px;}
 .nav-btn{flex:1;border:none;background:none;cursor:pointer;padding:9px 0;border-radius:18px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--ink-faint);font-family:var(--font-body);font-weight:700;font-size:11px;transition:color .2s,background .2s;}
 .nav-btn svg{width:22px;height:22px;}
 .nav-btn.active{color:var(--ink);background:var(--surface-2);}
@@ -1164,6 +1169,7 @@ function render(){
       <button class="icon-btn" onclick="openSettings()" aria-label="settings">${I.settings}</button>
     </div>
     <div class="scroll" id="scroll">${main}</div>
+    ${view==='home'?`<button class="qadd" onclick="openQuickLog()" aria-label="Quick log">${I.plus}</button>`:''}
     <div class="nav"><div class="nav-inner">
       <button class="nav-btn ${view==='home'?'active':''}" onclick="go('home')">${I.home}Home</button>
       <button class="nav-btn ${view==='log'?'active':''}" onclick="go('log')">${I.list}Log</button>
@@ -1188,13 +1194,15 @@ function meGreeting(){
   return name ? `${part}, ${escapeHtml(name)} 🐻` : `${part} 🐻`;
 }
 function tipsTicker(){
+  const b=activeBaby();
   const tips=[
     ['😴','Tap <b>Sleep</b> to start a live nap timer, it shows on every phone.'],
-    ['🤝','Invite your partner or the nanny, the day gets logged for you.'],
-    ['💉','Set the country in <b>Health</b> so vaccine dates are spot on.'],
-    ['🌞','Log the little things, sun time, tummy time, a walk, in <b>Activity</b>.'],
-    ['📸','Turn any photo into a shareable keepsake from the <b>Album</b>.']
+    ['🤝','Invite your partner or the nanny, the day gets logged for you.']
   ];
+  // Only nudge about country when this baby has none set (otherwise the schedule is already right).
+  if(!b || !b.country){ tips.push(['💉','Set the country in <b>Health</b> so vaccine dates are spot on.']); }
+  tips.push(['🌞','Log the little things, sun time, tummy time, a walk, in <b>Activity</b>.']);
+  tips.push(['📸','Turn any photo into a shareable keepsake from the <b>Album</b>.']);
   const items=tips.concat([tips[0]]); // duplicate first for a seamless loop
   return `<div class="ticker" aria-label="Tips"><div class="roll">${items.map(t=>`<div><span class="tk-ic">${t[0]}</span><span>${t[1]}</span></div>`).join('')}</div></div>`;
 }
@@ -2017,6 +2025,17 @@ function closeSheet(){ _sheetStack=[]; var s=document.getElementById('sheet'); i
 
 /* ---------- FEED ---------- */
 let feedDraft={method:'breast',side:'left',amount:120,unit:null,content:'breastmilk',wAmount:30};
+function openQuickLog(){
+  openSheet(`<h2>Quick log</h2><div class="sub">What happened?</div>
+    <div class="actions">
+      <button class="action" onclick="openFeed()"><div class="ico" style="background:var(--feed-soft);color:var(--feed)">${I.feed}</div><div class="label">Feed</div><div class="hint">Breast, bottle, solids</div></button>
+      <button class="action" onclick="openSleep()"><div class="ico" style="background:var(--sleep-soft);color:var(--sleep)">${I.sleep}</div><div class="label">Sleep</div><div class="hint">Start or stop a nap</div></button>
+      <button class="action" onclick="openDiaper()"><div class="ico" style="background:var(--diaper-soft);color:var(--diaper)">${I.diaper}</div><div class="label">Diaper</div><div class="hint">Wet, dirty, both</div></button>
+      <button class="action" onclick="openPump()"><div class="ico" style="background:var(--pump-soft);color:var(--pump)">${I.pump}</div><div class="label">Pump</div><div class="hint">Expressed milk</div></button>
+      <button class="action" onclick="openGrowth()"><div class="ico" style="background:var(--star-soft);color:var(--star)">${I.scale}</div><div class="label">Measure</div><div class="hint">Weight &amp; height</div></button>
+      <button class="action" onclick="openActivity()"><div class="ico" style="background:var(--note-soft);color:var(--note)">${I.note}</div><div class="label">Activity</div><div class="hint">Bath, play, notes</div></button>
+    </div>`,'feed');
+}
 function openFeed(){
   const b=activeBaby();
   const ft=b.feedType||'combo';
@@ -2170,8 +2189,19 @@ const SOLID_FOODS=[
   {n:'Chicken',meat:1},{n:'Fish',meat:1,a:'fish'}
 ];
 const ALLERGENS=['Dairy','Egg','Peanut','Tree nuts','Soy','Gluten','Fish','Shellfish','Sesame'];
+/* Region-aware first foods: prepend locally-familiar foods (by the baby's country) so the
+   wedge markets feel seen. Everywhere else falls back to the universal list. */
+const REGION_FOODS={
+  in:[{n:'Ragi'},{n:'Moong dal'},{n:'Khichdi'},{n:'Suji',a:'gluten'},{n:'Curd',dairy:1,a:'dairy'},{n:'Idli'},{n:'Dosa'},{n:'Poha'},{n:'Ghee',dairy:1,a:'dairy'}],
+  uae:[{n:'Dates'},{n:'Hummus'},{n:'Labneh',dairy:1,a:'dairy'},{n:'Lentil soup'},{n:'Tahini',a:'sesame'}]
+};
+REGION_FOODS.sa=REGION_FOODS.uae;
 function dietFoods(diet){
-  return SOLID_FOODS.filter(f=>{
+  var b=(typeof activeBaby==='function')?activeBaby():null;
+  var cc=(b&&b.country)||(typeof detectCountry==='function'?detectCountry():'us');
+  var seen={}, merged=[];
+  (REGION_FOODS[cc]||[]).concat(SOLID_FOODS).forEach(function(f){ var k=f.n.toLowerCase(); if(!seen[k]){ seen[k]=1; merged.push(f); } });
+  return merged.filter(function(f){
     if(diet==='vegan') return !f.meat && !f.dairy && !f.egg;
     if(diet==='veg') return !f.meat;
     return true;
@@ -5310,7 +5340,7 @@ function renderVaccines(){
       <div class="mh-body"><div class="a">${heroTitle}</div><div class="b">${done} of ${plan.length} recorded · ${heroSub}</div></div>
     </div>
     ${vaxSetupCard(bb,plan,toConfirm)}
-    <div class="disclaimer">⚕️ Showing the ${vaxCountryName((bb&&bb.country)||'us')} schedule as a starting template. <span class="link-inline" onclick="openVaccineCountry()">Change country</span>. Always follow your doctor and local health authority, and edit any item to match your child's actual plan.</div>
+    <div class="disclaimer">⚕️ Showing the ${vaxCountryName((bb&&bb.country)||detectCountry())} schedule as a starting template. <span class="link-inline" onclick="openVaccineCountry()">Change country</span>. Always follow your doctor and local health authority, and edit any item to match your child's actual plan.</div>
     ${list}
     <div class="add-row" onclick="openAddVaccine()">${I.plus} Add a vaccine</div>`;
 }
@@ -6438,11 +6468,23 @@ function viewPhoto(id){
   openSheet(`<h2>Photo</h2><div class="sub">${p.caption?escapeHtml(p.caption)+' · ':''}${new Date(p.createdAt).toLocaleDateString()}</div>
     <img src="${photoSrc(p.photoId)}" style="width:100%;border-radius:16px;margin-bottom:16px">
     <button class="btn-primary" style="background:var(--star)" onclick="setAvatarFromView('${id}')">${I.star} Set as profile photo</button>
+    <button class="btn-ghost" onclick="editPhotoCaption('${id}')">${I.note} Edit caption</button>
     ${navigator.share?`<button class="btn-ghost" onclick="sharePhoto('${id}')">Share</button>`:''}
     <button class="btn-ghost" onclick="downloadSaved('${id}')">${I.download} Download</button>
     <button class="btn-ghost btn-danger" onclick="deletePhoto('${id}')">${I.trash} Delete photo</button>`,'feed');
 }
 function setAvatarFromView(id){ const p=(state.photos||[]).find(x=>x.id===id); const b=activeBaby(); if(!p||!b)return; b.avatarPhotoId=p.photoId; persist(); closeSheet(); render(); toast('Profile photo set'); }
+function editPhotoCaption(id){
+  const p=(state.photos||[]).find(x=>x.id===id); if(!p)return;
+  openSheet(`<h2>Edit caption</h2><div class="sub">A little note to remember this moment by.</div>
+    <div class="field"><label>Caption</label><input id="pcap" value="${escapeHtml(p.caption||'')}" placeholder="e.g. First proper giggle" maxlength="120" autofocus></div>
+    <button class="btn-primary" style="background:var(--star)" onclick="savePhotoCaption('${id}')">Save caption</button>`,'star');
+}
+function savePhotoCaption(id){
+  const p=(state.photos||[]).find(x=>x.id===id); if(!p)return;
+  p.caption=(($('#pcap')&&$('#pcap').value)||'').trim();
+  persist(); render(); viewPhoto(id); toast('Caption saved');
+}
 /* ---- Activity photos -> shareable moments ---- */
 function openActivityPhoto(id){
   const e=babyEvents().find(x=>x.id===id); if(!e||!e.photoId)return;

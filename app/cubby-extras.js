@@ -236,23 +236,57 @@
     var d = ms ? new Date(ms) : new Date();
     var t12 = to12(d.getHours());
     var sel = { y: d.getFullYear(), mo: d.getMonth(), da: d.getDate(), h: t12.h, m: d.getMinutes(), ap: t12.ap };
+    var view = { y: sel.y, mo: sel.mo }; // month shown in the inline calendar
+    var MN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     function curLabel() { return dayWord(sel.y, sel.mo, sel.da) + ' · ' + sel.h + ':' + pad(sel.m) + ' ' + sel.ap; }
+    // Inline calendar (reuses the app's .dp styles) instead of a native date input, so the date is
+    // as crafted as the time wheels and handles any date (e.g. a born date months back).
+    function calHTML() {
+      var first = new Date(view.y, view.mo, 1).getDay();
+      var days = new Date(view.y, view.mo + 1, 0).getDate();
+      var tymd = ymd(new Date());
+      var cells = '', i, dd;
+      for (i = 0; i < first; i++) cells += '<span class="dp-c dp-bl"></span>';
+      for (dd = 1; dd <= days; dd++) {
+        var cymd = view.y + '-' + pad(view.mo + 1) + '-' + pad(dd);
+        var isSel = (view.y === sel.y && view.mo === sel.mo && dd === sel.da);
+        cells += '<button type="button" class="dp-c' + (isSel ? ' dp-on' : '') + (cymd === tymd ? ' dp-td' : '') + (cymd > tymd ? ' dp-x' : '') + '"' + (cymd > tymd ? ' disabled' : '') + ' data-d="' + dd + '">' + dd + '</button>';
+      }
+      return '<div class="dp dp-in-modal" id="cuCal">'
+        + '<div class="dp-h"><button type="button" class="dp-nav" id="cuCalPrev">‹</button><span class="dp-t">' + MN[view.mo] + ' ' + view.y + '</span><button type="button" class="dp-nav" id="cuCalNext">›</button></div>'
+        + '<div class="dp-w">' + ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(function (x) { return '<span>' + x + '</span>'; }).join('') + '</div>'
+        + '<div class="dp-g">' + cells + '</div></div>';
+    }
     cuModal(
       '<div class="cu-head"><h2>' + esc(title || 'When?') + '</h2><button id="cuX" class="cu-x">×</button></div>'
       + '<div class="cu-tdisp" id="cuWDisp">' + curLabel() + '</div>'
-      + '<div class="cu-daterow"><button class="cu-chip" data-day="0">Today</button><button class="cu-chip" data-day="-1">Yesterday</button>'
-      + '<input type="date" id="cuDate" value="' + ymd(d) + '" max="' + ymd(new Date()) + '"></div>'
+      + '<div class="cu-daterow"><button class="cu-chip" data-day="0">Today</button><button class="cu-chip" data-day="-1">Yesterday</button></div>'
+      + '<div id="cuCalWrap">' + calHTML() + '</div>'
       + timeColsHTML(sel) + '<button id="cuWDone" class="cu-btn">Done</button>'
     );
     function disp() { document.getElementById('cuWDisp').textContent = curLabel(); }
-    function setDate(dt) { sel.y = dt.getFullYear(); sel.mo = dt.getMonth(); sel.da = dt.getDate(); document.getElementById('cuDate').value = ymd(dt); disp(); }
+    function wireCal() {
+      var prev = document.getElementById('cuCalPrev'), next = document.getElementById('cuCalNext');
+      if (prev) prev.onclick = function () { view.mo--; if (view.mo < 0) { view.mo = 11; view.y--; } redrawCal(); };
+      if (next) next.onclick = function () { view.mo++; if (view.mo > 11) { view.mo = 0; view.y++; } redrawCal(); };
+      Array.prototype.forEach.call(document.querySelectorAll('#cuCal .dp-c'), function (b) {
+        if (b.classList.contains('dp-bl') || b.disabled) return;
+        b.onclick = function () {
+          sel.y = view.y; sel.mo = view.mo; sel.da = +b.getAttribute('data-d');
+          Array.prototype.forEach.call(document.querySelectorAll('#cuCal .dp-c'), function (x) { x.classList.remove('dp-on'); });
+          b.classList.add('dp-on'); disp();
+        };
+      });
+    }
+    function redrawCal() { document.getElementById('cuCalWrap').innerHTML = calHTML(); wireCal(); }
     wireTimeCols(sel, disp);
     Array.prototype.forEach.call(document.querySelectorAll('.cu-chip'), function (b) {
-      b.onclick = function () { var off = +b.getAttribute('data-day'); var dt = new Date(); dt.setDate(dt.getDate() + off); setDate(dt); };
+      b.onclick = function () {
+        var off = +b.getAttribute('data-day'); var dt = new Date(); dt.setDate(dt.getDate() + off);
+        sel.y = dt.getFullYear(); sel.mo = dt.getMonth(); sel.da = dt.getDate(); view.y = sel.y; view.mo = sel.mo; disp(); redrawCal();
+      };
     });
-    document.getElementById('cuDate').onchange = function () {
-      var p = this.value.split('-'); if (p.length === 3) { sel.y = +p[0]; sel.mo = +p[1] - 1; sel.da = +p[2]; disp(); }
-    };
+    wireCal();
     document.getElementById('cuX').onclick = cuClose;
     document.getElementById('cuWDone').onclick = function () {
       var out = new Date(sel.y, sel.mo, sel.da, to24(sel), sel.m, 0, 0).getTime();
@@ -315,8 +349,6 @@
     + '.cu-tcell.on{color:#2C2521;font-weight:800;background:rgba(201,127,160,.16);}'
     + '.cu-daterow{display:flex;gap:8px;align-items:center;margin:0 0 14px;flex-wrap:wrap;}'
     + '.cu-chip{border:1px solid #E0D7C7;background:#FBF7EF;border-radius:999px;padding:9px 14px;font-size:13px;font-weight:700;color:#6E635B;cursor:pointer;font-family:inherit;}'
-    + '#cuDate{flex:1;min-width:120px;border:1px solid #E0D7C7;border-radius:10px;padding:10px 12px;font-size:14px;font-weight:600;font-family:"Nunito Sans",system-ui,sans-serif;background:#fff;color:#2C2521;}'
-    + '#cuDate::-webkit-datetime-edit,#cuDate::-webkit-datetime-edit-fields-wrapper{font-family:"Nunito Sans",system-ui,sans-serif;font-weight:600;color:#2C2521;}'
     + '.time-strip{display:flex;align-items:center;gap:11px;background:var(--surface-2,#FBF7EF);border:1.5px solid var(--line,#E0D7C7);border-radius:14px;padding:12px 14px;margin:0 0 14px;cursor:pointer;}'
     + '.time-strip .ts-ico{color:var(--ink-soft,#9a8d80);display:flex;}.time-strip .ts-ico svg{width:20px;height:20px;}'
     + '.time-strip .ts-text{flex:1;display:flex;flex-direction:column;line-height:1.25;}'
