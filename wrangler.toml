@@ -37,7 +37,7 @@ simple = { limit = 5, period = 60 }
 #   1) npx wrangler d1 create cubby-newsletter            (or CF dashboard > Workers & Pages > D1)
 #   2) npx wrangler d1 execute cubby-newsletter --remote --file=./schema/newsletter.sql
 #   3) paste the database_id below, uncomment this block, then deploy (git push).
-# [[d1_databases]]
-# binding = "NEWSLETTER_DB"
-# database_name = "cubby-newsletter"
-# database_id = "PASTE_DATABASE_ID_HERE"
+[[d1_databases]]
+binding = "NEWSLETTER_DB"
+database_name = "cubby-newsletter"
+database_id = "d0ee7337-8acf-4028-80bb-2e99a48db694"
