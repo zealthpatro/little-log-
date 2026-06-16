@@ -216,7 +216,7 @@ async function newsletterSignup(request, env) {
         createdAt: { timestampValue: nowIso }
       } })
     });
-    if (!r.ok) return json({ error: 'store_failed' }, 502);
+    if (!r.ok) { let reason = ''; try { reason = ((await r.json()).error || {}).status || ''; } catch (e) {} return json({ error: 'store_failed', upstream: r.status, reason: reason }, 502); }
     return json({ ok: true });
   } catch (e) {
     return json({ error: 'failed' }, 500);
