@@ -347,6 +347,15 @@ body{
 }
 .field input:focus,.field textarea:focus,.field select:focus{outline:none;border-color:var(--accent,var(--feed));}
 .field textarea{resize:none;min-height:74px;}
+/* Contextual "why we ask" inline help: a calm one-tap expander placed under a field. Reused
+   everywhere clarity is sought (identity, health, dating, privacy). It never navigates or opens
+   a sheet, so she never loses her place. Copy lives in the WWA map and is privacy-verified. */
+.wwa{margin-top:8px;}
+.wwa-t{display:inline-flex;align-items:center;gap:4px;border:none;background:none;padding:2px 0;cursor:pointer;font-family:var(--font-body);font-weight:700;font-size:12px;color:var(--ink-soft);}
+.wwa-t svg{width:13px;height:13px;transition:transform .2s;opacity:.8;}
+.wwa-t[aria-expanded="true"] svg{transform:rotate(180deg);}
+.wwa-n{margin-top:7px;background:var(--surface-2);border-radius:12px;padding:10px 12px;font-size:13px;font-weight:600;color:var(--ink-soft);line-height:1.55;}
+.wwa-n .lock{margin-right:5px;opacity:.85;}
 .stepper{display:flex;align-items:center;gap:0;border:2px solid var(--line);border-radius:14px;overflow:hidden;background:var(--surface-2);}
 .stepper button{width:54px;height:50px;border:none;background:none;font-size:24px;font-weight:700;color:var(--accent,var(--feed));cursor:pointer;}
 .stepper button:active{background:var(--line);}
@@ -1942,6 +1951,27 @@ function setTheme(t){ state.settings.theme=t; persist(); render(); }
    ============================================================ */
 var _sheetStack=[];
 function _sheetAccent(s,accent){ s.style.setProperty('--accent', accent?`var(--${accent})`:'var(--feed)'); s.style.setProperty('--accent-soft', accent?`var(--${accent}-soft)`:'var(--feed-soft)'); }
+/* Contextual "why we ask": one-tap expander dropped under a field via ${wwa('key')}. Copy is in
+   the WWA map (privacy-verified). Returns '' for unknown keys so calls are always safe. */
+function wwa(key){ var t=WWA[key]; if(!t) return ''; return '<div class="wwa"><button type="button" class="wwa-t" aria-expanded="false" onclick="wwaToggle(this)">Why we ask<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></button><div class="wwa-n" hidden>'+t+'</div></div>'; }
+function wwaToggle(btn){ var exp=btn.getAttribute('aria-expanded')==='true'; btn.setAttribute('aria-expanded',exp?'false':'true'); var n=btn.nextElementSibling; if(n) n.hidden=exp; }
+var WWA={
+  "baby.name.onboarding":"Your baby's name lets your circle see who each log is for. Everyone in your circle can see it, and you can change it anytime.",
+  "baby.birthday":"Your baby's birthday lets Cubby track age, milestones and vaccine timing. It's optional, everyone in your circle can see it, and you can change it anytime.",
+  "baby.birth":"These are just for the birth keepsake poster and your own records. Everything here is optional, add as much or as little as you like, and everyone in your circle can see it.",
+  "baby.blood":"Handy to keep on file for your own records. It's optional, everyone in your circle can see it, and you can update it anytime.",
+  "baby.doctors":"These contacts live with your baby's profile so anyone in your circle can reach the right doctor. A name or a clinic is enough, and you can edit or clear them anytime.",
+  "baby.sex":"Adding this overlays the WHO or CDC percentile curves on the growth charts. It's optional, you can skip it, and it's shared with your household.",
+  "growth.measure":"Logging weight and height over time shows a gentle trend you can compare to growth charts. It's shared with everyone in your household. The charts are a guide, not a diagnosis.",
+  "preg.edd":"We use this to count your weeks and lay out your care schedule. Only you, and anyone you choose, can see it. You can change it anytime.",
+  "preg.lmp":"We use your last period date to work out your weeks and dating. It's private to you, and you can change it anytime.",
+  "preg.cycle":"Your cycle length helps estimate your fertile window if you're tracking. It's optional and private to you, and you can change it anytime.",
+  "preg.country":"Your care location lets us show the antenatal appointment schedule that fits your country. It's private to you, and you can change it anytime.",
+  "preg.careteam":"Keep your doctor, midwife and clinic details in one place. They stay private to you unless you choose to share them, and you can change who anytime.",
+  "mat.weight":"Your weight is yours to track, for you and your care team. It lives in your private health logs, and only the people you choose for that category can see it.",
+  "mat.glucose":"Logging glucose keeps your readings in one place for you and your care team. They're part of your private health logs, and only the people you choose can see them.",
+  "mat.bp":"Logging blood pressure keeps your home and clinic readings together for your care team. It's part of your private health logs, and you choose who can see that category."
+};
 function openSheet(html,accent){
   const s=$('#sheet');
   // Step navigation: if a DIFFERENT sheet is open, remember it so this one can go back to it.
@@ -2428,7 +2458,7 @@ function openAddBaby(){
   openSheet(`<h2>Add a baby</h2><div class="sub">Just a name to get started.</div>
     <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
     <div class="field"><label>Name</label><input id="bName" placeholder="Baby's name" autofocus></div>
-    <div class="field"><label>Birthday (optional)</label>${datePicker('bDate','',{max:now()})}</div>
+    <div class="field"><label>Birthday (optional)</label>${datePicker('bDate','',{max:now()})}${wwa('baby.birthday')}</div>
     <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', vaxCountryList(), detectCountry(), 'Search your country…')}</div>
     <button class="btn-primary" onclick="saveBaby()">Add baby</button>`,'diaper');
 }
@@ -2621,14 +2651,14 @@ function openBirthDetails(){
   const dt=b.birth?new Date(b.birth):new Date(); dt.setSeconds(0,0);
   const dtVal=new Date(dt.getTime()-dt.getTimezoneOffset()*60000).toISOString().slice(0,16);
   openSheet(`${babyIdentity(b)}<div class="sub" style="margin:-8px 0 14px">Birth details for the keepsake poster. All optional.</div>
-    <div class="field"><label>Full name</label><input id="dName" value="${escapeHtml(b.fullName||b.name)}" placeholder="First Middle Last"></div>
+    <div class="field"><label>Full name</label><input id="dName" value="${escapeHtml(b.fullName||b.name)}" placeholder="First Middle Last">${wwa('baby.birth')}</div>
     <div class="field"><label>Born on (date & time)</label><input type="datetime-local" id="dWhen" value="${dtVal}"></div>
     <div class="row2">
       <div class="field"><label>Birth weight</label><input id="dWt" value="${escapeHtml(b.birthWeight||'')}" placeholder="e.g. 3.4 kg or 7 lb 8 oz"></div>
       <div class="field"><label>Birth length</label><input id="dLen" value="${escapeHtml(b.birthLength||'')}" placeholder="e.g. 50 cm or 20 in"></div>
     </div>
     <div class="row2">
-      <div class="field"><label>Blood group</label><input id="dBlood" value="${escapeHtml(b.blood||'')}" placeholder="e.g. O+"></div>
+      <div class="field"><label>Blood group</label><input id="dBlood" value="${escapeHtml(b.blood||'')}" placeholder="e.g. O+">${wwa('baby.blood')}</div>
       <div class="field"><label>Star sign</label><input id="dSign" value="${escapeHtml(b.sign||zodiac(b.birth))}" placeholder="auto"></div>
     </div>
     <div class="field"><label>Place of birth</label><input id="dPlace" value="${escapeHtml(b.place||'')}" placeholder="Hospital, city"></div>
@@ -2663,7 +2693,7 @@ function openFoodPrefs(){
         <input id="customAllergy" placeholder="Add another allergy" style="flex:1;border:2px solid var(--line);background:var(--surface-2);border-radius:14px;padding:12px 14px;font-weight:600;font-size:14px;font-family:var(--font-body);color:var(--ink)">
         <button class="btn-ghost" style="width:auto;padding:0 18px" onclick="addCustomAllergy('${b.id}')">Add</button>
       </div>
-      <div class="csub" style="margin-top:6px">For your reference. Always follow your pediatrician's guidance on introducing allergens.</div>
+      <div class="csub" style="margin-top:6px">So everyone caring for your baby can see what to watch for. Always follow your pediatrician's guidance on introducing allergens.</div>
     </div>
     <button class="btn-primary" style="background:var(--feed)" onclick="closeSheet();render()">Done</button>`,'feed');
 }
@@ -2719,7 +2749,7 @@ function renderDoctorEdit(){
   openSheet(`<h2>${d.id?'Edit doctor':'Add a doctor'}</h2><div class="sub">A pediatrician, specialist or clinic.</div>
     <div class="field"><label>Type</label><div class="chip-row" style="flex-wrap:wrap;white-space:normal;gap:8px">${chips}</div></div>
     <div class="field"><label>Or name the type</label><input id="docRole" value="${custom?escapeHtml(d.role):''}" placeholder="e.g. Cardiologist" oninput="docDraft.role=this.value"></div>
-    <div class="field"><label>Doctor name</label><input id="docName" value="${escapeHtml(d.name||'')}" placeholder="Dr. name"></div>
+    <div class="field"><label>Doctor name</label><input id="docName" value="${escapeHtml(d.name||'')}" placeholder="Dr. name">${wwa('baby.doctors')}</div>
     <div class="field"><label>Clinic or hospital</label><input id="docClinic" value="${escapeHtml(d.clinic||'')}" placeholder="Clinic name"></div>
     <div class="row2">
       <div class="field"><label>Phone</label><input id="docPhone" value="${escapeHtml(d.phone||'')}" placeholder="Contact" inputmode="tel"></div>
@@ -3121,8 +3151,8 @@ function renderOnboard(){
       <div class="logo">Cubby</div>
       <div class="tag">Feeds, sleep, nappies and every little milestone. One thumb, half asleep. Let's start with who we're tracking.</div>
       <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
-      <div class="field"><label>Baby's name</label><input id="bName" placeholder="e.g. Mira" autofocus></div>
-      <div class="field"><label>Birthday (optional)</label>${datePicker('bDate','',{max:now()})}</div>
+      <div class="field"><label>Baby's name</label><input id="bName" placeholder="e.g. Mira" autofocus>${wwa('baby.name.onboarding')}</div>
+      <div class="field"><label>Birthday (optional)</label>${datePicker('bDate','',{max:now()})}${wwa('baby.birthday')}</div>
       <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', vaxCountryList(), detectCountry(), 'Search your country…')}</div>
       <button class="btn-primary" style="--accent:var(--feed)" onclick="saveBaby()">Start tracking</button>
       <div style="text-align:center;font-size:12px;font-weight:800;color:var(--ink-faint);margin:14px 0 2px;letter-spacing:.04em">OR</div>
@@ -3281,8 +3311,8 @@ function openExpectingSetup(mode){
       <button class="${isDue?'on':''}" onclick="setPregMode('due')">I know my due date</button>
       <button class="${!isDue?'on':''}" onclick="setPregMode('lmp')">Use last period</button>
     </div>
-    <div class="field"><label>${isDue?'Due date (EDD)':'First day of your last period'}</label>${datePicker('pgDate', pregDraft.date, {max:isDue?null:now(), empty:true})}</div>
-    <div class="field"><label>Where you'll have your care</label>${countryPickerHtml('pgCountry', pregDraft.country)}</div>
+    <div class="field"><label>${isDue?'Due date (EDD)':'First day of your last period'}</label>${datePicker('pgDate', pregDraft.date, {max:isDue?null:now(), empty:true})}${wwa('preg.edd')}</div>
+    <div class="field"><label>Where you'll have your care</label>${countryPickerHtml('pgCountry', pregDraft.country)}${wwa('preg.country')}</div>
     <button class="btn-primary" style="background:var(--preg)" onclick="savePregnancy()">Start tracking</button>
     <button class="btn-ghost" onclick="openStartPregnancy()">Back</button>
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
@@ -3294,8 +3324,8 @@ function defaultPrecon(){
 }
 function openPlanningSetup(){
   openSheet(`<h2>We're trying 🌱</h2><div class="sub">Lovely. We'll keep it gentle: a little preparation, an estimated fertile window if you want it, and zero pressure.</div>
-    <div class="field"><label>First day of your last period (optional)</label>${datePicker('plLmp','',{max:now(),empty:true})}</div>
-    <div class="field"><label>Usual cycle length (days)</label><input type="number" id="plCycle" value="28" min="21" max="40"></div>
+    <div class="field"><label>First day of your last period (optional)</label>${datePicker('plLmp','',{max:now(),empty:true})}${wwa('preg.lmp')}</div>
+    <div class="field"><label>Usual cycle length (days)</label><input type="number" id="plCycle" value="28" min="21" max="40">${wwa('preg.cycle')}</div>
     <button class="btn-primary" style="background:var(--diaper)" onclick="savePlanning()">Start</button>
     <button class="btn-ghost" onclick="openStartPregnancy()">Back</button>
     <div class="preg-disclaim">Fertile-window estimates are rough guides, every body is different. This is informational only, not fertility advice.</div>`,'diaper');
@@ -3324,7 +3354,7 @@ function fertileEstimate(){
 }
 function openPeriodUpdate(){
   openSheet(`<h2>Period started</h2><div class="sub">Updating it keeps the estimate honest. And if it's a hard day, be kind to yourself.</div>
-    <div class="field"><label>First day</label>${datePicker('puDate','',{max:now()})}</div>
+    <div class="field"><label>First day</label>${datePicker('puDate','',{max:now()})}${wwa('preg.lmp')}</div>
     <button class="btn-primary" style="background:var(--diaper)" onclick="savePeriodUpdate()">Save</button>`,'diaper');
 }
 function savePeriodUpdate(){ const dv=($('#puDate')||{}).value; if(!dv){toast('Pick the date');return;} state.pregnancy.lmp=new Date(dv+'T08:00').getTime(); persist(); closeSheet(); render(); }
@@ -3337,8 +3367,8 @@ function openPositiveTest(){
   openSheet(`<div class="welcome-burst">🎉🌸</div>
     <h2 style="text-align:center">A positive test!</h2>
     <div class="sub" style="text-align:center">Wonderful news. Let's turn trying into tracking: confirm your last period and we'll set up your weeks.</div>
-    <div class="field"><label>First day of your last period</label>${datePicker('ptLmp', dv, {max:now()})}</div>
-    <div class="field"><label>Where you'll have your care</label>${countryPickerHtml('ptCountry', p.country)}</div>
+    <div class="field"><label>First day of your last period</label>${datePicker('ptLmp', dv, {max:now()})}${wwa('preg.lmp')}</div>
+    <div class="field"><label>Where you'll have your care</label>${countryPickerHtml('ptCountry', p.country)}${wwa('preg.country')}</div>
     <button class="btn-primary" style="background:var(--preg)" onclick="confirmPositiveTest()">Start my pregnancy 🤍</button>
     <div class="csub" style="text-align:center;margin-top:8px">A home test is a great sign. Your provider will confirm it properly.</div>`,'preg');
 }
@@ -3659,7 +3689,7 @@ function openLogWeight(){
   initLogWhen();
   const unit=(state.settings.wUnit==='lb')?'lb':'kg';
   openSheet(`<h2>Your weight</h2><div class="sub">Optional, only if it's useful to you.</div>
-    <div class="field"><label>Weight (${unit})</label><input type="number" inputmode="decimal" id="wKg" placeholder="e.g. 68" autofocus></div>
+    <div class="field"><label>Weight (${unit})</label><input type="number" inputmode="decimal" id="wKg" placeholder="e.g. 68" autofocus>${wwa('mat.weight')}</div>
     ${timeStrip('when','When')}
     <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="saveWeightPreg('${unit}')">Save</button>`,'preg');
 }
@@ -3671,6 +3701,7 @@ function openLogBP(){
       <div class="field" style="flex:1"><label>Systolic</label><input type="number" inputmode="numeric" id="bpS" placeholder="120" autofocus></div>
       <div class="field" style="flex:1"><label>Diastolic</label><input type="number" inputmode="numeric" id="bpD" placeholder="80"></div>
     </div>
+    ${wwa('mat.bp')}
     ${timeStrip('when','When')}
     <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="saveBP()">Save</button>
     <div class="preg-disclaim">A high reading with a bad headache, vision changes or sudden swelling can be serious. Contact your midwife or doctor, and seek urgent care if you're worried.</div>`,'preg');
@@ -3801,7 +3832,7 @@ function openAddCareTeam(){
   openSheet(`<h2>Care team</h2><div class="sub">Add someone who's looking after you.</div>
     <div class="field"><label>Name</label><input id="ctName" placeholder="e.g. Dr Khan or City Midwives" autofocus></div>
     <div class="field"><label>Role</label><select id="ctRole"><option>Gynaecologist (OB-GYN)</option><option>Obstetrician</option><option>Midwife</option><option>GP / Family doctor</option><option>Doula</option><option>Clinic / Hospital</option><option>Other</option></select></div>
-    <div class="field"><label>Phone (optional)</label><input id="ctPhone" inputmode="tel" placeholder="Phone number"></div>
+    <div class="field"><label>Phone (optional)</label><input id="ctPhone" inputmode="tel" placeholder="Phone number">${wwa('preg.careteam')}</div>
     <button class="btn-primary" style="background:var(--preg)" onclick="addCareTeam()">Add</button>`,'preg');
 }
 function addCareTeam(){ const n=$('#ctName').value.trim(); if(!n){toast('Add a name');return;} state.pregnancy.careTeam.push({id:uid(),name:n,role:$('#ctRole').value,phone:$('#ctPhone').value.trim()}); persist(); closeSheet(); render(); toast('Added'); }
@@ -3945,8 +3976,8 @@ function openEditPregnancy(){
   const p=state.pregnancy;
   const dv=p.dueDate?new Date(p.dueDate).toISOString().slice(0,10):'';
   openSheet(`<h2>Due date &amp; schedule</h2><div class="sub">Update your dates or the antenatal schedule we suggest.</div>
-    <div class="field"><label>Due date (EDD)</label>${datePicker('epDue', dv, {empty:true})}</div>
-    <div class="field"><label>Care schedule</label>${countryPickerHtml('epC', p.country)}</div>
+    <div class="field"><label>Due date (EDD)</label>${datePicker('epDue', dv, {empty:true})}${wwa('preg.edd')}</div>
+    <div class="field"><label>Care schedule</label>${countryPickerHtml('epC', p.country)}${wwa('preg.country')}</div>
     <button class="btn-primary" style="background:var(--preg)" onclick="saveEditPregnancy()">Save</button>
     <div class="preg-disclaim">Changing the schedule adds any new suggested appointments. Anything you've added or ticked is kept.</div>`,'preg');
 }
@@ -4132,7 +4163,7 @@ function renderGlucoseLog(){
   const chips=ctxs.map(([k,l])=>`<button class="tgt ${glucoseDraft.context===k?'on':''}" onclick="setGlucoseCtx('${k}')">${l}</button>`).join('');
   openSheet(`<h2>Blood glucose</h2><div class="sub">Log a finger-prick reading. Tag when you took it so it lines up with your targets.</div>
     <div class="field"><label>When in the day</label><div class="tgt-row">${chips}</div></div>
-    <div class="field"><label>Reading (${ul})</label><input type="number" inputmode="decimal" id="glVal" placeholder="${unit==='mmol'?'e.g. 5.1':'e.g. 92'}" autofocus></div>
+    <div class="field"><label>Reading (${ul})</label><input type="number" inputmode="decimal" id="glVal" placeholder="${unit==='mmol'?'e.g. 5.1':'e.g. 92'}" autofocus>${wwa('mat.glucose')}</div>
     ${timeStrip('when','When')}
     <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="saveGlucose()">Save reading</button>
     <button class="btn-ghost" onclick="toggleGlucoseUnit()">Using ${ul}, switch to ${glucoseUnitLabel(unit==='mmol'?'mgdl':'mmol')}</button>
@@ -4936,6 +4967,7 @@ function renderGrowthSheet(){
         </div>
       </div>
     </div>
+    ${wwa('growth.measure')}
     ${timeStrip('when','When')}
     <button class="btn-primary" style="background:var(--diaper)" onclick="saveGrowth()">Save measurement</button>`,'diaper');
 }
@@ -4983,6 +5015,7 @@ function pctLabel(meas,unit){ const p=estPercentile(meas,unit); return p?` · la
 function growthControls(b){
   return `<div class="gx-ctrl">
     <div class="gx-seg">${[['M','Boy'],['F','Girl']].map(o=>`<button class="${b&&b.sex===o[0]?'on':''}" onclick="setBabySex('${o[0]}')">${o[1]}</button>`).join('')}</div>
+    ${wwa('baby.sex')}
   </div>`;
 }
 function svgPercentile(meas,unit){
