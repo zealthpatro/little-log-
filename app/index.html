@@ -3,6 +3,17 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<!-- Campaign attribution: remember utm_* (FIRST touch) for the funnel report. First-party only,
+     stored on the user's own record, never sent to any third party. Same snippet as the marketing site. -->
+<script>(function(){try{
+  var q=new URLSearchParams(location.search), get=function(k){return (q.get(k)||'').slice(0,64);};
+  if((q.get('utm_source')||q.get('utm_campaign')||q.get('utm_content')) && !localStorage.getItem('cubby-acq')){
+    localStorage.setItem('cubby-acq', JSON.stringify({
+      source:get('utm_source'), medium:get('utm_medium'), campaign:get('utm_campaign'),
+      content:get('utm_content'), term:get('utm_term'), ts:Date.now()
+    }));
+  }
+}catch(e){}})();</script>
 <title>Cubby: Baby Tracker, Vaccine Schedule &amp; Keepsakes</title>
 <meta name="description" content="Cubby logs feeds, sleep and nappies, follows your baby's vaccine schedule with reminders, and keeps every memory, shared with everyone who cares for your little one. Free to start, no ads, private to your family.">
 <link rel="canonical" href="https://little-cubby.com/app/">
@@ -2570,9 +2581,10 @@ async function joinProWaitlist(){
   try{
     const LL=window.LL, u=LL&&LL.auth&&LL.auth.currentUser;
     if(LL&&LL.db&&u){
+      let acq=null; try{ acq=JSON.parse(localStorage.getItem('cubby-acq')||'null'); }catch(e){}
       await LL.db.collection('waitlist').doc(u.uid).set({
         uid:u.uid, email:u.email||'', name:u.displayName||'', product:'pro',
-        version:(window.CUBBY_VERSION||''), at: LL.serverTimestamp()
+        version:(window.CUBBY_VERSION||''), acq:acq, at: LL.serverTimestamp()
       },{merge:true});
     }
     try{ localStorage.setItem('cubby-pro-waitlist','1'); }catch(e){}

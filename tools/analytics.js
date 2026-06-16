@@ -77,6 +77,26 @@ const bar = (n, max, w = 24) => '█'.repeat(Math.round((n / (max || 1)) * w)).p
   line(`Sticky (7+ days):       ${sticky.length}`);
   line(`Pro waitlist:           ${wlSnap.size}`);
 
+  // ── Acquisition (first-party UTM attribution; the paid-test scorecard) ──
+  const acqOf = (snap) => snap.docs.map(d => d.data().acq).filter(a => a && (a.content || a.campaign || a.source));
+  const acqUsers = acqOf(usersSnap);     // signups that arrived with a utm_* tag
+  const acqWl = acqOf(wlSnap);           // Pro registrations that arrived with a utm_* tag
+  const tally = (arr, key) => arr.reduce((m, a) => { const v = a[key] || '(none)'; m[v] = (m[v] || 0) + 1; return m; }, {});
+  if (acqUsers.length || acqWl.length) {
+    const signByAngle = tally(acqUsers, 'content');
+    const proByAngle = tally(acqWl, 'content');
+    line('\n── Acquisition (UTM, first-party) ──');
+    line(`Signups w/ campaign:    ${acqUsers.length}   ·   Pro-registered w/ campaign: ${acqWl.length}`);
+    line('  angle (utm_content)         signups   pro-reg');
+    Array.from(new Set([...Object.keys(signByAngle), ...Object.keys(proByAngle)]))
+      .sort((a, b) => (signByAngle[b] || 0) - (signByAngle[a] || 0))
+      .forEach(a => line(`  ${String(a).padEnd(27)} ${String(signByAngle[a] || 0).padStart(5)}   ${String(proByAngle[a] || 0).padStart(5)}`));
+    const fmt = (o) => Object.entries(o).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}:${v}`).join('  ');
+    line('  by campaign:  ' + fmt(tally(acqUsers, 'campaign')));
+    line('  by source:    ' + fmt(tally(acqUsers, 'source')));
+    line('  (cost/signup per angle = Meta spend on that ad ÷ its signups — pull spend from Ads Manager)');
+  }
+
   line('\n── Logging volume ──');
   line(`Total events logged:    ${totalEvents}`);
   line(`Avg / active(7d) hh:    ${active7.length ? Math.round(totalEvents / active7.length) : 0}`);

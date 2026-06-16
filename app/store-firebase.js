@@ -322,6 +322,12 @@
         localStorage.removeItem('cubby-ref');
       }
     } catch (e) {}
+    // Campaign attribution: stamp the first-touch utm_* onto the brand-new family's own user doc.
+    // First-party (the user owns this record); kept in localStorage so the Pro waitlist write can reuse it.
+    try {
+      var acqRaw = localStorage.getItem('cubby-acq');
+      if (acqRaw && !snap.exists) userDoc.acq = JSON.parse(acqRaw);
+    } catch (e) {}
     await userRef.set(userDoc, { merge: true });
     return newRef.id;
   }

@@ -271,6 +271,21 @@
     if(r&&/^[a-z0-9]{4,12}$/i.test(r)) localStorage.setItem('cubby-ref',r.toLowerCase());
   }catch(e){}
 })();
+/* Campaign attribution: remember utm_* (FIRST touch) until sign-in, stamped onto the
+   new family + Pro waitlist in /app/. First-party only — stored on the user's own record,
+   never sent to any third party. Keeps the "no third-party trackers" promise intact. */
+(function(){
+  try{
+    var q=new URLSearchParams(location.search);
+    var get=function(k){ return (q.get(k)||'').slice(0,64); };
+    if((q.get('utm_source')||q.get('utm_campaign')||q.get('utm_content')) && !localStorage.getItem('cubby-acq')){
+      localStorage.setItem('cubby-acq', JSON.stringify({
+        source:get('utm_source'), medium:get('utm_medium'), campaign:get('utm_campaign'),
+        content:get('utm_content'), term:get('utm_term'), ts:Date.now()
+      }));
+    }
+  }catch(e){}
+})();
 /* Returning members: swap CTAs to "Open Cubby" and show a welcome-back strip (no redirect). */
 (function(){
   try{
