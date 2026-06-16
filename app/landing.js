@@ -22,7 +22,7 @@
       return '<div class="lp-step"><div class="lp-sn">' + s[0] + '</div><div class="lp-st">' + s[1] + '</div><div class="lp-ss">' + s[2] + '</div></div>';
     }).join('');
     return '<div class="lp">'
-      + '<nav class="lp-nav"><a href="/" class="lp-nav-brand"><img src="/icons/logo-512.png" alt="">little-cubby.com</a>'
+      + '<nav class="lp-nav"><a href="/" class="lp-nav-brand"><img src="/icons/logo-512.png" alt="Cubby">Cubby</a>'
       + '<span class="lp-nav-links"><a href="/features/">Features</a><a href="/articles/">Articles</a><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a></span></nav>'
       + '<header class="lp-hero">'
       + '<div class="lp-logo"><img src="/icons/logo-512.png" alt="Cubby"></div>'
