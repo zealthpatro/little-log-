@@ -1,7 +1,7 @@
 # Cubby — handoff / resume notes
 
 Quick orientation for picking this project back up (read `README.md` for the full picture).
-Last refreshed: 2026-06-14.
+Last refreshed: 2026-06-17.
 
 ## Current status (June 2026): what's live + how we go live
 
@@ -65,6 +65,27 @@ stale; the deploy branch is `main`.
 - **Pricing unified** — Cubby Pro **$9/mo or $90/yr** (save 17%, 7-day trial), gated to an Aug 2026 launch.
 - **Lifecycle marketing close** — "the only app you'll ever need, from two lines to big kid" on the home
   page and reinforced in the sign-in email footer.
+- **Sign in with Apple live (2026-06-16)** — `OAuthProvider('apple.com')` (`window.LL.appleProvider`,
+  email + name scopes) in `app/firebase-init.js`; `appleBtnHtml()` + `signInApple()` (popup with a
+  `signInWithRedirect` fallback for webviews / blocked popups) in `app/store-firebase.js`. "Continue
+  with Apple" shows on both the landing and auth-card sign-in screens. Sign-in methods are now
+  **Google + Apple + email magic-link** (satisfies App Store guideline 4.8). The edge worker already
+  forwards Apple's POST callback on `/__/auth/*`; no `.well-known` domain-association file is needed
+  (Firebase does the server-side token exchange). Config: App ID `com.littlecubby.app`, Services ID
+  `com.littlecubby.web`, Team ID F5NVQV7NVB, Key ID 78HP3BF2S5 (the `.p8` lives only in the Firebase
+  console). Service worker bumped to v81.
+- **Contextual "Why we ask" help (2026-06-16)** — a reusable calm one-tap inline expander (`wwa(key)`
+  helper + WWA copy map + `.wwa`/`.wwa-t`/`.wwa-n` CSS in `app/index.html`) placed under a field; it
+  never navigates or opens a sheet. Wired into 22 data-entry fields where parents seek clarity (baby
+  birthday, name, birth details, blood group, doctor contacts, pregnancy dating, maternal weight,
+  glucose, blood pressure, growth weight+height, the boy/girl chart toggle, and more). Allergies and
+  the family-list email use an always-visible note instead, since those facts should not be tucked
+  away. Every privacy line was adversarially verified against `firestore.rules` so claims are true; the
+  family list now states plainly that everyone in the circle can see each other's name and email.
+  Service worker bumped to v80.
+- **App landing brand mark fixed (2026-06-17)** — `app/landing.js` top-left nav now shows the "Cubby"
+  wordmark instead of the bare domain "little-cubby.com", matching the marketing site (the footer link
+  to little-cubby.com is kept on purpose). Service worker bumped to v82.
 
 ### How it goes live (mechanism)
 `git push origin main` → **Cloudflare Workers Builds** rebuilds + deploys `little-cubby.com` (push =
@@ -91,7 +112,15 @@ pregnancy blocks).
   source-accuracy pass on the GDM/BP thresholds (no credentialed reviewer required, per founder ruling —
   cited summaries + passive logging; keep copy non-diagnostic).
 - **Branch cleanup** — retire the fully-merged `pregnancy-tracker` branch.
-- Apple Sign-In (deferred, $99/yr).
+- **Known privacy-enforcement gaps (from the 2026-06-17 audit):**
+  - **Guardian gate is client-only.** The dual-guardian consent gate for export/delete is enforced
+    only in client code (`index.html`), **not** in `firestore.rules`. Any household member can write
+    the shared `app` blob and an owner can delete without a second approval, so "both guardians must
+    agree" is a UI convention, not a security guarantee. Help copy was softened to "Cubby asks both
+    guardians to agree". To make it a real guarantee it must move into `firestore.rules`. **Open.**
+  - **Email is circle-visible.** A member's email is written to `households/{hid}.memberInfo`, is
+    readable by every member, and is shown on the family list, so it is not private. Copy was
+    corrected accordingly. **Open.**
 
 ## What this is
 **Cubby** 🐻 — a shared baby-tracker PWA, **live and in real use** by the owner + family,
@@ -125,14 +154,15 @@ Don't break production. Make a change → verify → push (auto-deploys).
 - `app/store-firebase.js` = auth + cloud sync (overrides `persist()`/`PhotoStore`; real-time
   listeners; family/sharing + first-run UI). App code never calls Firestore directly.
 - `app/firebase-init.js` = Firebase web config. `authDomain: "little-cubby.com"` — auth runs on
-  our **own domain** (see same-domain auth below), not the Firebase domain.
+  our **own domain** (see same-domain auth below), not the Firebase domain. Also exposes
+  `window.LL.appleProvider` (`OAuthProvider('apple.com')`, email + name scopes) for Sign in with Apple.
 - `app/cubby-extras.js` = bear avatars + custom time/date pickers + the unified "When" time strip.
 - `app/landing.js` = signed-out landing inside the app + Pro/paywall copy.
 - `app/growth-data.js` = WHO/CDC percentile tables.
 - `app/pregnancy-data.js` = `window.PREG` week-by-week + antenatal schedule data (170-country
   coverage). The full pregnancy product is **merged into `main` and live** (one Cubby; the old
   "Mommy To Be" name is retired). History/spec: `PREGNANCY-HANDOFF-V2.md`.
-- `app/sw.js` = service worker (`CACHE = little-log-vNN`, currently **v73**; bump on app asset change).
+- `app/sw.js` = service worker (`CACHE = little-log-vNN`, currently **v82**; bump on app asset change).
 - Data lives in `households/{hid}` (see README §3). Events are a subcollection; rest is the `app` blob.
 - Edge worker: root `worker.js` (`wrangler.toml` → `main = "worker.js"`) reverse-proxies `/__/*`
   to the Firebase auth backend so sign-in stays on `little-cubby.com`.
@@ -141,11 +171,12 @@ Don't break production. Make a change → verify → push (auto-deploys).
 > `index.html` redirects installed/standalone clients to `/app/`, so existing testers move over cleanly.
 
 ## Auth, onboarding & referral
-- **Sign-in (two paths):** Google OAuth (`signInGoogle()` → popup, redirect fallback) **and** email
-  magic-link. The magic-link **send** goes through our **own Worker + Resend** (`POST /api/send-signin-link`
+- **Sign-in (three paths):** Google OAuth (`signInGoogle()` → popup, redirect fallback), Apple OAuth
+  (`signInApple()` → popup, redirect fallback for webviews / blocked popups), **and** email magic-link.
+  The magic-link **send** goes through our **own Worker + Resend** (`POST /api/send-signin-link`
   in `worker.js`), not Firebase's built-in sender (which Gmail silently dropped); the client posts there
   and completes with `signInWithEmailLink`. Falls back to Firebase's sender if the endpoint is down.
-  Sign-in links are rewritten onto `little-cubby.com`. Both paths in `app/store-firebase.js`.
+  Sign-in links are rewritten onto `little-cubby.com`. All paths in `app/store-firebase.js`.
 - **Same-domain auth:** `worker.js` proxies `/__/*` to `little-log-a9caa.firebaseapp.com`, and
   `authDomain` is set to `little-cubby.com`, so the Google popup shows our domain, not Firebase's.
   A new live domain still needs adding to Firebase Authorized domains.
@@ -221,8 +252,8 @@ Articles are produced by a **dedicated Sonnet writer agent**, not the main build
 ## Decisions on record
 - Free tiers only for core infra: in-app notifications (no Blaze/card); photos as base64 in Firestore
   (no Storage); no Cloud Functions; analytics via Firestore export + Cloudflare RUM (no GA4).
-- Auth: Google sign-in + email magic-link, both on our own domain (`authDomain = little-cubby.com`,
-  `/__/*` proxied through `worker.js`).
+- Auth: Google sign-in + Apple sign-in + email magic-link, all on our own domain
+  (`authDomain = little-cubby.com`, `/__/*` proxied through `worker.js`).
 - Onboarding: mandatory locked first-run modal (blurred backdrop, baby name required), guarded by a
   `setupDone` flag; beta framing auto-graduates 2026-07-27 (no manual edit).
 - Referral: `?ref=` codes (hashed uid, base36) captured to `localStorage.cubby-ref`, written to

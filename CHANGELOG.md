@@ -1,5 +1,38 @@
 # Cubby — Changelog
 
+## v0.13.0 — 2026-06-16 — contextual "why we ask" help, Sign in with Apple, brand-mark fix
+
+A calmer data-entry experience with inline reasons for every sensitive field, Apple sign-in for the App Store, and a corrected brand wordmark on the sign-in surfaces. All live on little-cubby.com (deploys from `main` via Cloudflare Workers Builds).
+
+**Contextual "Why we ask" help**
+- New reusable inline expander in `app/index.html`: a `wwa(key)` helper, a WWA copy map, and `.wwa`/`.wwa-t`/`.wwa-n` styles. One calm tap reveals the reason under a field; it never navigates or opens a sheet.
+- Wired into 22 fields where parents seek clarity: baby birthday (add + onboarding), baby name (onboarding), birth details (one consolidated note), blood group, doctor contacts (one note), pregnancy dating (due date / last period / cycle length / care country, across setup, positive-test, period-update and edit flows), maternal weight, glucose, blood pressure, growth weight + height (one note), and the boy/girl chart toggle.
+- Allergies and the family-list email use an always-visible note instead of a hidden expander, because those facts should not be tucked away.
+- Every privacy line was adversarially verified against `firestore.rules` so the claims are true. The family list now states plainly that everyone in the circle can see each other's name and email.
+- Shipped commit `3365e4d`, service worker `little-log-v80`.
+
+**Sign in with Apple (live)**
+- Apple sign-in is live (App Store guideline 4.8). `app/firebase-init.js` adds `window.LL.appleProvider` (`OAuthProvider('apple.com')` with email + name scopes); `app/store-firebase.js` adds `appleBtnHtml()` + `signInApple()` using `signInWithPopup` with a `signInWithRedirect` fallback for webviews and blocked popups. A "Continue with Apple" button now appears on both the landing and auth-card sign-in screens.
+- Apple config: App ID `com.littlecubby.app`, Services ID `com.littlecubby.web`, Team ID `F5NVQV7NVB`, Key ID `78HP3BF2S5` (the `.p8` lives only in the Firebase console, never in the repo). Firebase project `little-log-a9caa`; the edge worker already forwards Apple's POST callback on `/__/auth/*`, and no `.well-known` domain-association file was needed (Firebase does the server-side token exchange).
+- Sign-in methods are now Google + Apple + email magic-link.
+- Shipped commit `04ec7a7`, service worker `little-log-v81`.
+
+**Brand-mark fix**
+- The app sign-in/landing top-left nav now shows the "Cubby" wordmark instead of the bare domain "little-cubby.com", matching the marketing site (`app/landing.js`). The footer link to little-cubby.com is kept on purpose.
+- Shipped commit `862df25`, service worker `little-log-v82`.
+
+**Privacy-enforcement findings (known gaps)**
+- The dual-guardian consent gate for export/delete is enforced only in client code (`index.html`), not in `firestore.rules`: any household member can write the shared app blob, and an owner can delete without a second approval. "Both guardians must agree" is a UI convention, not a security guarantee; help copy was softened to "Cubby asks both guardians to agree". To make it a real guarantee it must move into `firestore.rules`.
+- Email is not private: it is written to `households/{hid}.memberInfo`, readable by every member and shown on the family list. Copy was corrected accordingly.
+
+**Parked for later (not built)**
+- A merchandise revenue stream: physical keepsakes printed from a baby's "moments" via print-on-demand (Printful/Gelato/Prodigi). Shipping address would come from checkout (Apple Pay payment sheet, or Stripe/Shopify), never from sign-in (Apple/Google return only name + email). Physical goods do not owe Apple's 15-30% cut, so it is a cleaner iOS revenue stream than the Pro subscription. Gating constraint: baby photos leaving to a third-party printer must be per-order explicit opt-in and disclosed.
+
+**Platform**
+- Service worker cache progressed `little-log-v78` -> `little-log-v82` over the session.
+
+---
+
 ## v0.12.0 — 2026-06-14 — home day-surface, pregnancy privacy, routines, hardened sign-in
 
 A warmer home screen, two more things moved off the circle-shared blob into owner-owned storage, gentle daily routines, and a tougher sign-in endpoint. All live on little-cubby.com (deploys from `main` via Cloudflare Workers Builds).

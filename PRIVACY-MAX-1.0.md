@@ -138,6 +138,32 @@ anyone but the owner even if mis-added to a share list. ✔ verified by code: no
 in `appBlobFromState()` output (`sharedPregnancy` strips them). Do **not** market "private to you" until
 the emulator cross-account denial passes.
 
+## "Why we ask" transparency (2026-06-16): make every privacy claim truthful to the user
+Contextual one-tap "Why we ask" help was wired across the data-entry flows so a parent can see, at the
+point of entry, what a field is for and who can see it. Two privacy-load-bearing surfaces were verified
+against `firestore.rules` so the in-app copy does not over-promise:
+- **Privacy-verified field help.** Each "Why we ask" line that touches privacy was adversarially checked
+  against the published rules before shipping, so the on-screen claim matches what the server actually
+  enforces (no "private" wording where the rules allow the read).
+- **Family list discloses email visibility.** The family/circle list now states plainly that everyone
+  in the circle can see each other's name and email. This is an always-visible note (not a hidden
+  expander) because that fact should not be tucked away. It is the truthful counterpart to the
+  memberInfo gap below.
+
+Shipped on `main` (commit 3365e4d, service worker v80).
+
+## Known enforcement gaps (2026-06-17 audit): client-only guards that are NOT yet rules-enforced
+Per the Core tenet above (hiding in the client is NOT privacy), two findings are documented here as
+gaps, not guarantees:
+- **Dual-guardian consent gate is client-only.** The "both guardians must agree" gate for export/delete
+  is enforced ONLY in `index.html`, NOT in `firestore.rules`. Any household member can write the shared
+  `app` blob, and an owner can delete without a second approval. So it is a UI convention, not a security
+  guarantee. Help copy was softened to "Cubby asks both guardians to agree". **To make the guardian gate
+  a real guarantee it must move into `firestore.rules`.**
+- **Email is circle-visible via memberInfo.** Email is NOT private: it is written to
+  `households/{hid}.memberInfo` and is readable by every member, and shown on the family list. Copy was
+  corrected accordingly (see the family-list disclosure above).
+
 ## Rules publication (console is the runtime source of truth): DONE 2026-06-14
 The founder pasted `firestore.rules` into Firebase Console → Firestore → Rules → Publish on 2026-06-14,
 including the new `mhealth`, pregnancy journey, and per-day notes blocks. These blocks are additive (no

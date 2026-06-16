@@ -109,6 +109,22 @@ smart routines/insights.** See `PAYWALL.md` / `PRO.md`.
 - Analytics: no conversion tracking wired. Consider counting checkout starts vs completes
   (Stripe dashboard covers this initially).
 
+## 7b. Parked: merchandise revenue stream (future, not built)
+
+**Status: PARKED. Not built, no code, no commit.** A second revenue stream considered on
+2026-06-16 and recorded here so it is not lost.
+
+- **What:** physical keepsakes printed on demand from a baby's "moments" (the same content the
+  studio already composes), via a print-on-demand vendor (Printful / Gelato / Prodigi).
+- **Why it is a cleaner iOS stream than Pro:** physical goods do NOT owe Apple's 15-30% in-app
+  cut (that applies to digital goods only), so margins are better than the Pro subscription on iOS.
+- **Shipping address comes from checkout, never from sign-in.** Apple/Google sign-in return only
+  name and email, so the address is collected at the payment step (Apple Pay payment sheet, or
+  Stripe / Shopify checkout), not from the account.
+- **Hard gating constraint:** any baby photo leaving Cubby to a third-party printer must be a
+  per-order explicit opt-in and clearly disclosed (whose photos, which vendor, this order only).
+  Run this against the Anxiety Test and the privacy promise before any build.
+
 ## 8. Cross-references
 `PRO.md` (positioning, tier ladder, status) · `PAYWALL.md` (gate-by-gate list) ·
 `workers/pro-billing/README.md` (deploy) · `STRATEGY-REVIEW.md` (is the direction sound /

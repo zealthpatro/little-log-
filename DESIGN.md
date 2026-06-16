@@ -190,6 +190,28 @@ commit + sw bump), C-4, then the system passes C-5→C-7 as one normalization br
   proof 1080px, quotes 960px; articles hub `.wrap` widened to 1060px (3-col card grid fills it).
   Side margins are now proportionate instead of half the screen.
 
+## Shipped 16 June 2026 ("Why we ask" inline-expander pattern)
+- **New reusable component: `wwa` ("why we ask").** A calm, one-tap inline help expander placed
+  directly UNDER a field. It expands in place and never navigates, never opens a sheet. Built once
+  in `app/index.html` as the `wwa(key)` helper plus a `WWA` copy map and `.wwa`/`.wwa-t`/`.wwa-n`
+  CSS, then reused everywhere a parent might pause and wonder why a fact is being asked for.
+- **When to use it:** sensitive, identity, health or privacy fields where a short, honest reason
+  reduces anxiety. Wired into 22 such fields including baby birthday (add + onboarding), baby name
+  (onboarding), birth details, blood group, doctor contacts, pregnancy dating (due date / last
+  period / cycle length / care country across setup, positive-test, period-update and edit flows),
+  maternal weight, glucose, blood pressure, growth weight+height, and the boy/girl chart toggle.
+- **Always-visible variant:** allergies and the family-list email use an always-visible note
+  instead of a hidden expander, because those facts should not be tucked away.
+- **Truthful copy rule:** every privacy line was checked against `firestore.rules` so no claim
+  over-promises. The family list now states plainly that everyone in the circle can see each
+  other's name and email. (Open gap: the dual-guardian consent gate is a client-only UI
+  convention, not enforced in `firestore.rules`; copy says Cubby "asks" both guardians to agree.)
+
+## Shipped 17 June 2026 (brand mark)
+- **App landing/sign-in brand mark is the "Cubby" wordmark.** The top-left nav on the app landing
+  shows "Cubby" (the brand wordmark), matching the marketing site, not the bare domain. The footer
+  link to little-cubby.com is kept on purpose.
+
 ## Feature promotion hierarchy (what gets the spotlight, in order)
 1. **One-thumb logging** — the core daily action; product truth first.
 2. **Care-circle sync (who-did-what, live)** — the differentiator vs Huckleberry/Glow; unlimited

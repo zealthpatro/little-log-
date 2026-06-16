@@ -11,7 +11,7 @@ articles, pricing, FAQ, programmatic vaccine schedules).
 - **App:** https://little-cubby.com/app/ · **Marketing/SEO:** everything at the root `/`
 - **Repo:** https://github.com/zealthpatro/little-log-
 - **Hosting:** Cloudflare (Workers static assets + a tiny edge worker for same-domain auth), auto-deploys on push to `main`
-- **Backend:** Firebase (Google + email magic-link sign-in, Firestore), project `little-log-a9caa`, free **Spark** plan
+- **Backend:** Firebase (Google + Apple + email magic-link sign-in, Firestore), project `little-log-a9caa`, free **Spark** plan
 
 > The app is fully cloud-hosted and always-on. No local machine is required to keep it
 > running — `localhost` is only for development.
@@ -187,8 +187,10 @@ health stays separately owner-only in `mhealth` and is never swept into the jour
 - **Logging** (all share one **time strip** → tap to set date+time): feed (nursing timer,
   bottle, solids, water), sleep (live timer + past nap with "still sleeping" toggle), diaper,
   pump, activity/notes, growth, medicine, temperature, symptoms, visits.
-- **Sign-in:** Google (popup, with a redirect fallback when popups are blocked) **or** email
-  magic-link (`sendSignInLinkToEmail` → `isSignInWithEmailLink` → `signInWithEmailLink`). Both run
+- **Sign-in:** Google or Apple (popup, with a redirect fallback when popups are blocked or in
+  webviews) **or** email magic-link (`sendSignInLinkToEmail` → `isSignInWithEmailLink` →
+  `signInWithEmailLink`). Apple uses an `OAuthProvider('apple.com')` (App Store guideline 4.8) with
+  "Continue with Apple" on the landing and auth-card screens. All run
   on `little-cubby.com` itself via the same-domain `worker.js` proxy. The magic-link send endpoint
   (`POST /api/send-signin-link`) is rate-limited per IP (5 requests per 60s) in the edge worker, on
   top of the same-origin gate and per-email cooldown.
@@ -295,7 +297,7 @@ Icons: `python3 generate_icons.py`.
 | Cloudflare project | `cubby` → `cubby.saurav-918.workers.dev` + custom domain `little-cubby.com` |
 | Domain | `little-cubby.com` (registered in Cloudflare; added as a Worker Custom Domain) |
 | Firebase project | `little-log-a9caa` (Spark / free) |
-| Firebase services | Authentication (Google + email magic-link), Cloud Firestore. **No** Storage, **no** Functions. |
+| Firebase services | Authentication (Google + Apple + email magic-link), Cloud Firestore. **No** Storage, **no** Functions. |
 | Firebase web config | in `app/firebase-init.js` (public by design; safe to commit; `authDomain` = `little-cubby.com`) |
 | Edge worker | `worker.js` (`wrangler.toml` `main`) proxies `/__/*` to Firebase for same-domain auth |
 | Stripe billing | `workers/pro-billing/` (separate Worker; built, deploy + secrets pending; see its `README.md`) |
