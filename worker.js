@@ -14,7 +14,6 @@
 */
 
 const OAUTH_SCOPE = 'https://www.googleapis.com/auth/identitytoolkit';
-const FIRESTORE_SCOPE = 'https://www.googleapis.com/auth/datastore';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const OOB_URL = 'https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode';
 
@@ -37,11 +36,10 @@ function pemToDer(pem) {
 }
 
 // Service account -> short-lived OAuth access token (RS256 JWT signed via WebCrypto).
-// scope defaults to Identity Toolkit (sign-in links); pass FIRESTORE_SCOPE for Firestore REST.
-async function getAccessToken(sa, scope) {
+async function getAccessToken(sa) {
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: 'RS256', typ: 'JWT' };
-  const claim = { iss: sa.client_email, scope: scope || OAUTH_SCOPE, aud: TOKEN_URL, iat: now, exp: now + 3600 };
+  const claim = { iss: sa.client_email, scope: OAUTH_SCOPE, aud: TOKEN_URL, iat: now, exp: now + 3600 };
   const unsigned = b64urlStr(JSON.stringify(header)) + '.' + b64urlStr(JSON.stringify(claim));
   const key = await crypto.subtle.importKey('pkcs8', pemToDer(sa.private_key), { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
   const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(unsigned));
@@ -160,11 +158,11 @@ function sha256hex(s) {
   });
 }
 
-// Newsletter opt-in capture. Stores the email first-party in Firestore `newsletter/{sha256(email)}`
-// (email hashed for the doc id so it never appears in a path/log; plaintext kept in a field so we
-// can actually send later). Writes via the service-account OAuth token (bypasses security rules),
-// so the `newsletter` collection stays client-unreadable. Capture only — no email is sent here;
-// the send stream (news. subdomain) is Phase 2 (EMAIL.md §2/§8).
+// Newsletter opt-in capture. Stores the subscriber in a Cloudflare D1 database (NEWSLETTER_DB),
+// deliberately ISOLATED from Firestore family-health data — a Worker-secret leak can't reach baby
+// logs, only this email list. The email is also hashed (email_hash) as the primary key so a
+// re-subscribe de-dupes. Capture only — no email is sent here; the send stream (news. subdomain)
+// is Phase 2 (EMAIL.md §2/§8).
 async function newsletterSignup(request, env) {
   // Same-origin only (closes scripted no-Origin abuse), then per-IP volume cap (fail open).
   const url = new URL(request.url);
@@ -191,35 +189,22 @@ async function newsletterSignup(request, env) {
   const stage = cap(body.stage, 32), source = cap(body.source, 200);
   const utmSource = cap(body.utmSource, 64), utmCampaign = cap(body.utmCampaign, 64);
 
-  let sa;
-  try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return json({ error: 'server_config' }, 500); }
+  if (!env.NEWSLETTER_DB) return json({ error: 'server_config' }, 500);
 
   try {
-    const token = await getAccessToken(sa, FIRESTORE_SCOPE);
-    const docId = await sha256hex(email);
+    const emailHash = await sha256hex(email);
     const nowIso = new Date().toISOString();
-    const docUrl = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id
-      + '/databases/(default)/documents/newsletter/' + docId;
-    const r = await fetch(docUrl, {
-      method: 'PATCH',
-      headers: { 'authorization': 'Bearer ' + token, 'content-type': 'application/json' },
-      body: JSON.stringify({ fields: {
-        email: { stringValue: email },
-        stage: { stringValue: stage || 'unknown' },
-        source: { stringValue: source },
-        utmSource: { stringValue: utmSource },
-        utmCampaign: { stringValue: utmCampaign },
-        status: { stringValue: 'subscribed' },
-        consent: { booleanValue: true },
-        consentAt: { timestampValue: nowIso },
-        unsubToken: { stringValue: crypto.randomUUID() },
-        createdAt: { timestampValue: nowIso }
-      } })
-    });
-    if (!r.ok) { let reason = ''; try { reason = ((await r.json()).error || {}).status || ''; } catch (e) {} return json({ error: 'store_failed', upstream: r.status, reason: reason }, 502); }
+    // Upsert: a new subscriber inserts; a re-subscribe refreshes the mutable fields but KEEPS the
+    // original created_at + unsub_token, so any unsubscribe link already in someone's inbox stays valid.
+    await env.NEWSLETTER_DB.prepare(
+      'INSERT INTO subscribers (email_hash,email,stage,source,utm_source,utm_campaign,status,unsub_token,consent_at,created_at) '
+      + "VALUES (?,?,?,?,?,?,'subscribed',?,?,?) "
+      + 'ON CONFLICT(email_hash) DO UPDATE SET stage=excluded.stage, source=excluded.source, '
+      + "utm_source=excluded.utm_source, utm_campaign=excluded.utm_campaign, status='subscribed', consent_at=excluded.consent_at"
+    ).bind(emailHash, email, stage || 'unknown', source, utmSource, utmCampaign, crypto.randomUUID(), nowIso, nowIso).run();
     return json({ ok: true });
   } catch (e) {
-    return json({ error: 'failed' }, 500);
+    return json({ error: 'store_failed' }, 502);
   }
 }
 
