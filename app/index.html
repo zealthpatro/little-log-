@@ -5653,7 +5653,7 @@ const PRESETS={
 /* ---- Shareable moment cards: Instagram-native formats, fonts, palettes ---- */
 const MOMENT_FORMATS=[['orig','Original'],['square','Square'],['portrait','Portrait'],['story','Story · Insta']];
 const MOMENT_FONTS=[['Fraunces','Fraunces'],['Playfair Display','Playfair'],['Poppins','Poppins'],['Caveat','Handwritten']];
-const MOMENT_TEMPLATES=[['classic','Classic'],['big','Big milestone'],['stats','Monthly stats']];
+const MOMENT_TEMPLATES=[['classic','Classic'],['big','Big milestone'],['birthday','🎂 Birthday'],['stats','Monthly stats']];
 /* What Base/Pro unlocks in the studio (see PAYWALL.md). Free keeps a real, generous
    taster: Original+Square, the Fraunces font, two palettes, the Classic template and
    six stickers. Premium styles render as golden ✨ chips, apply freely on the canvas,
@@ -5709,7 +5709,7 @@ function composeShareCard(canvas,maxW){
   const innerW=W-margin*2;
   const tpl=ed.template||'classic';
   let capFrac = ed.format==='story'?0.24 : ed.format==='portrait'?0.20 : 0.17;
-  if(tpl==='big') capFrac += 0.12;
+  if(tpl==='big'||tpl==='birthday') capFrac += 0.12;
   if(tpl==='stats') capFrac += 0.09;
   const capH=Math.round(H*capFrac);
   const photoX=margin, photoY=margin, photoW=innerW, photoH=H-margin*2-capH;
@@ -5733,12 +5733,13 @@ function composeShareCard(canvas,maxW){
   const NUN='"Nunito Sans",sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='alphabetic';
 
-  if(tpl==='big'){
+  if(tpl==='big'||tpl==='birthday'){
     const cb=capH;
-    const hero = ed.captionText || (age.big||'');
-    const heroUnit = ed.captionText ? '' : (age.unit||'');
+    const bday = tpl==='birthday';
+    const hero = ed.captionText || (bday ? 'Happy Birthday' : (age.big||''));
+    const heroUnit = ed.captionText ? '' : (bday ? b.name.toUpperCase() : (age.unit||''));
     ctx.fillStyle=pal.sub; ctx.font=`800 ${Math.round(cb*0.12)}px ${NUN}`;
-    ctx.fillText(b.name.toUpperCase(), cx, cTop+cb*0.18);
+    ctx.fillText(bday?'🎂':b.name.toUpperCase(), cx, cTop+cb*0.18);
     ctx.fillStyle=pal.ink;
     const hs = ed.captionText ? cb*0.32 : cb*0.50;
     ctx.font=`700 ${Math.round(hs)}px ${fam}`;
@@ -5786,6 +5787,7 @@ function composeShareCard(canvas,maxW){
   ctx.textAlign='left';
   drawStickers(ctx, W, H);
   drawDecor(ctx, W, H, (photoEditor&&photoEditor._t)||0);
+  drawCharacter(ctx, W, H, photoX, photoY, photoW, photoH);
 }
 function composeAny(canvas,maxW){ if(photoEditor&&photoEditor.format&&photoEditor.format!=='orig') composeShareCard(canvas,maxW); else composePhoto(canvas,maxW); }
 let photoEditor=null, noiseTile=null, albumTab='photos';
@@ -6148,7 +6150,8 @@ function renderPhotos(){
     <div class="sec-title">Font</div><div class="chip-row">${fontChips}</div>
     <div class="sec-title">Colour</div><div class="chip-row">${palChips}</div>
     <div class="sec-title">Decorations</div><div class="chip-row">${decorChips}</div>
-    ${(photoEditor.decor&&photoEditor.decor!=='none')?`<div class="chip-row" style="margin-top:6px">${densChips}<div class="chip ${photoEditor.anim?'sel':''}" onclick="toggleAnim()">${photoEditor.anim?'❚❚ Stop':'▶ Animate'}</div></div>`:''}`
+    ${(photoEditor.decor&&photoEditor.decor!=='none')?`<div class="chip-row" style="margin-top:6px">${densChips}<div class="chip ${photoEditor.anim?'sel':''}" onclick="toggleAnim()">${photoEditor.anim?'❚❚ Stop':'▶ Animate'}</div></div>`:''}
+    <div class="sec-title">Character</div><div class="chip-row"><div class="chip ${photoEditor.character?'sel':''}" onclick="setChar()">🐻 ${escapeHtml((activeBaby()||{}).name||'Baby')}&rsquo;s bear</div></div>`
     :`<div class="sec-title">Keepsake stamp</div><div class="chip-row">${stampChips}</div>
     ${photoEditor.stamp!=='none'?`<div class="sec-title">Stamp tone</div><div class="chip-row">${toneChips}</div>`:''}
     ${posMatters?`<div class="sec-title">Position</div><div class="chip-row">${posChips}</div>`:''}
@@ -6272,7 +6275,7 @@ function setStampTone(t){ photoEditor.stampTone=t; render(); drawPhoto(); }
 function setFormat(f){ photoEditor.format=f; render(); if(document.fonts&&document.fonts.ready){ document.fonts.ready.then(drawPhoto); } drawPhoto(); }
 function setMomentFont(f){ photoEditor.font=f; render(); if(document.fonts&&document.fonts.ready){ document.fonts.ready.then(drawPhoto); } else { drawPhoto(); } }
 function setPalette(p){ photoEditor.palette=p; render(); drawPhoto(); }
-function setTemplate(t){ photoEditor.template=t; render(); drawPhoto(); }
+function setTemplate(t){ photoEditor.template=t; if(t==='birthday'){ if(!photoEditor.decor||photoEditor.decor==='none') photoEditor.decor='balloons'; if(!photoEditor.character){ photoEditor.character=true; photoEditor._charImg=null; ensureCharImg(); } } render(); drawPhoto(); }
 /* ---- Sticker pack (tap a sticker, tap the photo to drop it) ---- */
 const STICKERS=['❤️','⭐','🐻','🌙','🌞','🍼','👑','🌈','✨','👣','🎀','☁️','🐣','🦋','🥹','🎈'];
 function selectSticker(e){ photoEditor.activeSticker=(photoEditor.activeSticker===e?null:e); render(); }
@@ -6544,6 +6547,25 @@ function startAnim(){
 function setDecor(k){ if(!photoEditor)return; photoEditor.decor=k; if(k==='none'&&photoEditor.anim){ photoEditor.anim=false; stopAnim(); } render(); drawPhoto(); }
 function setDecorDensity(d){ if(!photoEditor)return; photoEditor.decorDensity=d; render(); drawPhoto(); }
 function toggleAnim(){ if(!photoEditor)return; photoEditor.anim=!photoEditor.anim; render(); if(photoEditor.anim) startAnim(); else { stopAnim(); drawPhoto(); } }
+/* ---- Character on the card: the baby's own Cubby bear (cubbyBear SVG), rasterized once and
+   cached so it draws cheaply every animation frame. ---- */
+function ensureCharImg(){
+  var ed=photoEditor; if(!ed||ed._charImg||ed._charLoading) return;
+  var b=activeBaby(); if(!b||typeof window.babyBearSvg!=='function') return;
+  var svg; try{ svg=window.babyBearSvg(b,240); }catch(e){ return; } if(!svg) return;
+  ed._charLoading=true;
+  var im=new Image();
+  im.onload=function(){ if(photoEditor){ photoEditor._charImg=im; photoEditor._charLoading=false; if(!photoEditor.anim) drawPhoto(); } };
+  im.onerror=function(){ if(photoEditor) photoEditor._charLoading=false; };
+  im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+}
+function drawCharacter(ctx,W,H,px,py,pw,ph){
+  var ed=photoEditor; if(!ed||!ed.character) return;
+  if(!ed._charImg){ ensureCharImg(); return; }
+  var s=pw*0.3, x=px+pw-s*0.92, y=py+ph-s*0.92;
+  ctx.drawImage(ed._charImg,x,y,s,s);
+}
+function setChar(){ if(!photoEditor)return; photoEditor.character=!photoEditor.character; if(photoEditor.character){ photoEditor._charImg=null; photoEditor._charLoading=false; ensureCharImg(); } render(); drawPhoto(); }
 function drawPhoto(){ const c=$('#photoCanvas'); if(c&&photoEditor) composeAny(c,1080); }
 /* The taster gate lives at export: premium styles are free to explore on the canvas
    and to Save in-app; Download/Share of a premium-styled card costs one taste.
