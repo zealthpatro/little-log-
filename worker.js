@@ -238,31 +238,27 @@ async function sendPushReminders(env){
       if (!tokens.length) continue;
       const dueArr = (push.due && push.due.arrayValue && push.due.arrayValue.values) || [];
       const sentUpTo = _fsNum(push.sentUpTo) || 0;
-      const qs = _fsNum(push.quietStart), qe = _fsNum(push.quietEnd);
-      let maxAt = sentUpTo; const toSend = [];
+      const todayKey = new Date(now).toISOString().slice(0, 10);
+      if (_fsStr(push.lastPushDay) === todayKey) continue;   // HARD CAP: at most one push per user per day
+      let maxAt = sentUpTo, pick = null;
       for (const v of dueArr) {
         const f = v.mapValue && v.mapValue.fields; if (!f) continue;
         const at = _fsNum(f.at); if (at == null || at <= sentUpTo || at > now) continue;
-        // Quiet hours are applied client-side (it knows the user timezone), so the index already
-        // excludes them; the Worker just sends what is due.
-        toSend.push({ title: _fsStr(f.title) || 'Cubby', body: _fsStr(f.body), tag: _fsStr(f.tag) || 'cubby' });
         if (at > maxAt) maxAt = at;
+        if (!pick) pick = { title: _fsStr(f.title) || 'Cubby', body: _fsStr(f.body), tag: _fsStr(f.tag) || 'cubby' };
       }
-      for (const msg of toSend) {
-        for (const tk of tokens) {
-          await fetch('https://fcm.googleapis.com/v1/projects/' + FS_PROJECT + '/messages:send', {
-            method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-            body: JSON.stringify({ message: { token: tk, notification: { title: msg.title, body: msg.body }, data: { tag: msg.tag }, webpush: { fcmOptions: { link: 'https://little-cubby.com/app/' } } } })
-          }).catch(() => {});
-        }
-      }
-      if (maxAt > sentUpTo) {
-        const id = d.name.split('/documents/users/')[1];
-        if (id) await fetch(base + '/users/' + encodeURIComponent(id) + '?updateMask.fieldPaths=push.sentUpTo', {
-          method: 'PATCH', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-          body: JSON.stringify({ fields: { push: { mapValue: { fields: { sentUpTo: { integerValue: String(maxAt) } } } } } })
+      if (!pick) continue;                                   // nothing due -> no push at all
+      for (const tk of tokens) {                             // ONE notification, to this user's devices
+        await fetch('https://fcm.googleapis.com/v1/projects/' + FS_PROJECT + '/messages:send', {
+          method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+          body: JSON.stringify({ message: { token: tk, notification: { title: pick.title, body: pick.body }, data: { tag: pick.tag }, webpush: { fcmOptions: { link: 'https://little-cubby.com/app/' } } } })
         }).catch(() => {});
       }
+      const id = d.name.split('/documents/users/')[1];
+      if (id) await fetch(base + '/users/' + encodeURIComponent(id) + '?updateMask.fieldPaths=push.sentUpTo&updateMask.fieldPaths=push.lastPushDay', {
+        method: 'PATCH', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+        body: JSON.stringify({ fields: { push: { mapValue: { fields: { sentUpTo: { integerValue: String(maxAt) }, lastPushDay: { stringValue: todayKey } } } } } })
+      }).catch(() => {});
     } catch (e) { /* skip this user, keep going */ }
   }
 }

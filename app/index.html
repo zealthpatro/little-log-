@@ -2945,16 +2945,21 @@ async function syncReminderIndex(){
   try{
     if(!(window.LL&&LL.db&&myUid())) return;
     var cfg=state.settings.push; if(!cfg||!cfg.enabled) return;
-    var fromTs=Date.now(), toTs=fromTs+36*3600000, due=[];
-    (state.meds||[]).filter(function(m){return m.remind&&m.active!==false;}).forEach(function(m){
-      medFireTimes(m,fromTs,toTs).forEach(function(at){ due.push({at:at,title:'Medicine due',body:(m.name||'Medicine')+(m.dose?(' · '+m.dose+(m.unit||'')):''),tag:'med-'+m.id}); });
-    });
-    // Apply quiet hours HERE (the client knows the local timezone; the Worker only sees UTC).
-    var qs=cfg.quietStart, qe=cfg.quietEnd;
-    function _q(at){ if(qs==null||qe==null||qs===qe) return false; var h=new Date(at).getHours(); return qs<qe?(h>=qs&&h<qe):(h>=qs||h<qe); }
-    due=due.filter(function(e){ return !_q(e.at); });
-    due.sort(function(a,b){return a.at-b.at;});
-    await LL.db.collection('users').doc(myUid()).set({push:{due:due.slice(0,50)}},{merge:true});
+    // HARD RULE: at most ONE push per day, and only something that matters. We write a single
+    // gentle morning digest (9am local) on a day that actually has a medicine due, never a push
+    // per dose, never anything routine or non-critical.
+    var meds=(state.meds||[]).filter(function(m){return m.remind&&m.active!==false;});
+    var now=Date.now(), due=[];
+    for(var day=0; day<3; day++){
+      var d0=new Date(); d0.setHours(0,0,0,0); var ds=d0.getTime()+day*86400000, de=ds+86400000;
+      var names=[]; meds.forEach(function(m){ var nm=m.name||'Medicine'; if(medFireTimes(m,ds,de).length && names.indexOf(nm)<0) names.push(nm); });
+      if(!names.length) continue;                 // nothing that day -> no push that day
+      var fireAt=ds+9*3600000;                     // 9am local, well outside quiet hours
+      if(fireAt<=now) continue;                    // never fire a digest for a time already gone
+      var body=names.length<=3?('A medicine to give today: '+names.join(', ')):(names.length+' medicines to give today');
+      due.push({at:fireAt, title:'Today with '+(((activeBaby()||{}).name)||'your little one'), body:body, tag:'digest-'+ds});
+    }
+    await LL.db.collection('users').doc(myUid()).set({push:{due:due.slice(0,3)}},{merge:true});
   }catch(e){}
 }
 function openSettings(){
