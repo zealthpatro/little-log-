@@ -2546,15 +2546,21 @@ function openAddEntry(){
       <div class="prof-card" onclick="${hasPreg?'viewingPreg=true;closeSheet();render()':'viewingPreg=true;openStartPregnancy()'}"><span class="lead" style="background:var(--preg-soft);color:var(--preg);font-size:20px">🌸</span><div class="cflex"><div class="a">${hasPreg?'Open your pregnancy':"We're expecting"}</div><div class="b">${hasPreg?'Resume where you left off':'Trying, newly pregnant or counting weeks'}</div></div><span class="chev">${I.chev}</span></div>
     </div>`,'diaper');
 }
-function openAddBaby(){
+let addBabyCtx={onboarding:false,twins:false,count:0,birth:''};
+function openAddBaby(opts){
+  opts=opts||{};
+  addBabyCtx={onboarding:!!opts.onboarding, twins:!!opts.twins, count:opts.count||0, birth:opts.birth||''};
   newBabyColor=AVATAR_COLORS[Math.floor(Math.random()*AVATAR_COLORS.length)];
-  const today=new Date().toISOString().slice(0,10);
-  openSheet(`<h2>Add a baby</h2><div class="sub">Just a name to get started.</div>
+  const tw=addBabyCtx.twins, n=addBabyCtx.count;
+  const title=tw?'Add your little ones':'Add a baby';
+  const sub=tw?(n?`${n} added so far. Add the next, or you're all done.`:`Add your first, then we'll help you add the next.`):'Just a name to get started.';
+  openSheet(`<h2>${title}</h2><div class="sub">${sub}</div>
     <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
     <div class="field"><label>Name</label><input id="bName" placeholder="Baby's name" autofocus></div>
-    <div class="field"><label>Birthday (optional)</label>${datePicker('bDate','',{max:now()})}${wwa('baby.birthday')}</div>
+    <div class="field"><label>Birthday (optional)</label>${datePicker('bDate',addBabyCtx.birth,{max:now()})}${wwa('baby.birthday')}</div>
     <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', vaxCountryList(), (state.pregnancy&&state.pregnancy.country)||detectCountry(), 'Search your country…')}</div>
-    <button class="btn-primary" onclick="saveBaby()">Add baby</button>`,'diaper');
+    <button class="btn-primary" onclick="saveBaby()">${tw?'Add this baby':'Add baby'}</button>
+    ${tw&&n?`<button class="btn-ghost" onclick="finishAddBabies()">Done, that's everyone</button>`:''}`,'diaper');
 }
 function pickColor(c){
   newBabyColor=c;
@@ -2567,7 +2573,25 @@ function saveBaby(){
   const bd=$('#bDate').value;
   const cc=($('#bCountry')&&$('#bCountry').value)||(state.pregnancy&&state.pregnancy.country)||detectCountry();
   const b={id:uid(),name,color:newBabyColor,birth:bd?new Date(bd+'T08:00').getTime():null,country:(cc||'who')};
-  state.babies.push(b); state.activeBabyId=b.id; persist(); closeSheet(); go('home'); toast('Welcome, '+name+'!');
+  state.babies.push(b); state.activeBabyId=b.id; persist();
+  if(addBabyCtx.twins){ toast(name+' added 🐻'); openAddBaby({onboarding:addBabyCtx.onboarding, twins:true, count:addBabyCtx.count+1, birth:bd}); return; }
+  const onb=addBabyCtx.onboarding; addBabyCtx={onboarding:false,twins:false,count:0,birth:''};
+  closeSheet(); go('home');
+  if(onb){ openOnboardInvite(); } else { toast('Welcome, '+name+'!'); }
+}
+function finishAddBabies(){ const onb=addBabyCtx.onboarding; addBabyCtx={onboarding:false,twins:false,count:0,birth:''}; closeSheet(); go('home'); if(onb) openOnboardInvite(); }
+/* Step 4 of onboarding: the activation moment. Invite the circle, or land home calmly. */
+function openOnboardInvite(){
+  openSheet(`<h2>Caring is a team sport 🤍</h2><div class="sub">Cubby is for everyone who loves your little one. Invite a partner, grandparent or nanny so you're never the only one who knows.</div>
+    <div class="preg-card"><div class="pc-ico" style="background:var(--feed-soft)">👨‍👩‍👧</div><div><div class="pc-t">They see everything, live</div><div class="pc-b">The last feed, the nap, the next dose, all in sync and private to your family.</div></div></div>
+    <button class="btn-primary" style="background:var(--feed);margin-top:14px" onclick="window.openFamily&&window.openFamily()">Invite someone</button>
+    <button class="btn-ghost" onclick="closeSheet()">Maybe later</button>`,'feed');
+}
+/* Onboarding stage router (explicit tiles): expecting / baby / twins / quiet planning. */
+function obStage(kind){
+  if(kind==='expecting'){ pregDraft={mode:'due', date:'', country:detectCountry()}; openExpectingSetup('due'); }
+  else if(kind==='planning'){ openPlanningSetup(); }
+  else { openAddBaby({onboarding:true, twins:kind==='twins'}); }
 }
 
 /* ---- birth details + zodiac ---- */
@@ -3342,20 +3366,17 @@ function obPreview(){
   </div>`;
 }
 function renderOnboard(){
-  newBabyColor=AVATAR_COLORS[0];
-  const today=new Date().toISOString().slice(0,10);
   app().innerHTML=`<div class="ob-wrap">
     <div class="ob-bg">${obPreview()}</div>
     <div class="onboard ob-card fade-in">
       <div class="logo">Cubby</div>
-      <div class="tag">Feeds, sleep, nappies and every little milestone. One thumb, half asleep. Let's start with who we're tracking.</div>
-      <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
-      <div class="field"><label>Baby's name</label><input id="bName" placeholder="e.g. Mira" autofocus>${wwa('baby.name.onboarding')}</div>
-      <div class="field"><label>Birthday (optional)</label>${datePicker('bDate','',{max:now()})}${wwa('baby.birthday')}</div>
-      <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', vaxCountryList(), (state.pregnancy&&state.pregnancy.country)||detectCountry(), 'Search your country…')}</div>
-      <button class="btn-primary" style="--accent:var(--feed)" onclick="saveBaby()">Start tracking</button>
-      <div style="text-align:center;font-size:12px;font-weight:800;color:var(--ink-faint);margin:14px 0 2px;letter-spacing:.04em">OR</div>
-      <button class="btn-ghost" onclick="openStartPregnancy()" style="color:var(--preg)">🌸 Expecting? Trying, pregnant or counting weeks</button>
+      <div class="tag">Where are you on the journey? Pick what fits today. You can change anything later.</div>
+      <div class="prof-cards" style="width:100%;text-align:left">
+        <div class="prof-card" onclick="obStage('expecting')"><span class="lead" style="background:var(--preg-soft);font-size:20px">🌸</span><div class="cflex"><div class="a">We're expecting</div><div class="b">A baby on the way</div></div><span class="chev">${I.chev}</span></div>
+        <div class="prof-card" onclick="obStage('baby')"><span class="lead" style="background:var(--feed-soft);font-size:20px">🐻</span><div class="cflex"><div class="a">Our baby's here</div><div class="b">Track feeds, sleep, growth and more</div></div><span class="chev">${I.chev}</span></div>
+        <div class="prof-card" onclick="obStage('twins')"><span class="lead" style="background:var(--star-soft);font-size:17px">👶👶</span><div class="cflex"><div class="a">Twins or more</div><div class="b">Two or more little ones</div></div><span class="chev">${I.chev}</span></div>
+      </div>
+      <button class="btn-ghost" onclick="obStage('planning')" style="color:var(--ink-faint);margin-top:6px">Just getting ready? 🌱</button>
       <button class="ob-logout" onclick="confirmLogout()">Log out</button>
     </div>
   </div>`;
