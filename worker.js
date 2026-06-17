@@ -243,10 +243,14 @@ async function sendPushReminders(env){
         const f = v.mapValue && v.mapValue.fields; if (!f) continue;
         const at = _fsNum(f.at); if (at == null || at <= sentUpTo || at > now) continue;
         if (at > maxAt) maxAt = at;
-        // Only fire FRESH reminders (within the last 45 min) so a long-closed app never produces a
-        // burst of stale ones; older due entries are skipped but still advance sentUpTo so they
-        // never resend. Quiet hours and the medicine-only / digest rules were applied client-side.
-        if (at >= now - 45 * 60000) toSend.push({ title: _fsStr(f.title) || 'Cubby', body: _fsStr(f.body), tag: _fsStr(f.tag) || 'cubby' });
+        // NEVER after: a dose reminder carries the dose time (due). If the dose has already passed,
+        // skip it (better no reminder than a late one) -> it only ever fires before or at the dose.
+        // The digest (no due) fires only if fresh, so a long-closed app never bursts stale ones.
+        // Either way sentUpTo still advances, so nothing ever resends.
+        const due = _fsNum(f.due);
+        if (due != null) { if (now > due) continue; }
+        else { if (at < now - 20 * 60000) continue; }
+        toSend.push({ title: _fsStr(f.title) || 'Cubby', body: _fsStr(f.body), tag: _fsStr(f.tag) || 'cubby' });
       }
       for (const msg of toSend) {
         for (const tk of tokens) {
