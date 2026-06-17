@@ -195,7 +195,7 @@ body{
 .ticker b{color:var(--ink);font-weight:800;}
 @keyframes tkroll{0%,13%{transform:translateY(0)}16.6%,30%{transform:translateY(-16.667%)}33.3%,47%{transform:translateY(-33.333%)}50%,63%{transform:translateY(-50%)}66.6%,80%{transform:translateY(-66.667%)}83.3%,100%{transform:translateY(-83.333%)}}
 @media(prefers-reduced-motion:reduce){.ticker .roll{animation:none}}
-.tip-static{display:flex;align-items:center;gap:9px;padding:11px 15px;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 3px 9px var(--shadow);margin-bottom:14px;font-size:13px;font-weight:700;color:var(--ink-soft);line-height:1.4;}
+.tip-static{display:flex;align-items:center;gap:9px;padding:11px 15px;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 3px 9px var(--shadow);margin-bottom:14px;font-size:13px;font-weight:700;color:var(--ink-soft);line-height:1.4;transition:opacity .35s;min-height:24px;}
 .tip-static .tk-ic{font-size:16px;flex:0 0 auto;}
 .tip-static b{color:var(--ink);font-weight:800;}
 .since-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;}
@@ -1227,10 +1227,24 @@ function tipsTicker(){
   if(!b || !b.country){ tips.push(['💉','Set the country in <b>Health</b> so vaccine dates are spot on.']); }
   tips.push(['🌞','Log the little things, sun time, tummy time, a walk, in <b>Activity</b>.']);
   tips.push(['📸','Turn any photo into a shareable keepsake from the <b>Album</b>.']);
-  // One calm tip, rotating by day. (A constantly-scrolling ticker clipped long tips and fell out of
-  // step once the tip count became conditional; a single static tip is calmer and never misaligns.)
-  const t=tips[Math.floor(now()/86400000)%tips.length];
-  return `<div class="tip-static"><span class="tk-ic">${t[0]}</span><span>${t[1]}</span></div>`;
+  // Gentle cross-fade through the tips (JS-driven, not a fixed-step CSS scroll) so it stays lively
+  // but never clips a long tip or falls out of step with a changing tip count. The card auto-sizes.
+  _tipList=tips;
+  if(_tipIdx>=tips.length) _tipIdx=0;
+  const t=tips[_tipIdx];
+  startTipCycle();
+  return `<div class="tip-static" id="tipStatic"><span class="tk-ic" id="tipIc">${t[0]}</span><span id="tipTxt">${t[1]}</span></div>`;
+}
+var _tipList=[], _tipIdx=0, _tipTimer=null;
+function startTipCycle(){
+  if(_tipTimer) return;
+  try{ if(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return; }catch(e){}
+  _tipTimer=setInterval(function(){
+    var el=document.getElementById('tipStatic'); if(!el || _tipList.length<2) return;
+    _tipIdx=(_tipIdx+1)%_tipList.length; var t=_tipList[_tipIdx];
+    el.style.opacity='0';
+    setTimeout(function(){ var ic=document.getElementById('tipIc'), tx=document.getElementById('tipTxt'); if(ic)ic.textContent=t[0]; if(tx)tx.innerHTML=t[1]; el.style.opacity='1'; },320);
+  },5500);
 }
 function homeNudgeLine(){
   const b=activeBaby(); if(!b) return '';
