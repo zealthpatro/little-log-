@@ -984,7 +984,7 @@
       + '<div class="ll-auth-msg" style="text-align:left;margin:-2px 0 12px">When you invite people, everyone in your circle can see each other\'s name and email here, so you know who is who. Only you can change your own.</div>'
       + youRow + invite + share
       + '<button id="llSignOut" class="ll-modal-btn ll-ghost">Sign out</button>'
-      + '<div class="ll-auth-msg" style="margin-top:10px">Cubby v' + (window.CUBBY_VERSION || '') + ' · beta</div>');
+      + '<div class="ll-auth-msg" style="margin-top:10px">Cubby v' + (window.CUBBY_VERSION || '') + ' · made with families like you 🐻</div>');
 
     document.getElementById('llSignOut').onclick = function () { closeModal(); window.LL.signOut(); };
     document.getElementById('llMyRelBtn').onclick = saveMyRelationship;
@@ -1007,11 +1007,7 @@
   function openFirstRun(user) {
     var uid = user.uid;
     var bear = (typeof window.memberAvatarSvg === 'function') ? window.memberAvatarSvg(uid, 84) : '';
-    // Self-graduating copy: drops the "early beta" framing after the cutoff (45 days from 2026-06-12),
-    // matching the marketing "early access" reframe. No manual edit / cron needed.
-    var betaIntro = (Date.now() < Date.UTC(2026, 6, 27))
-      ? 'An early beta, thanks for trying it! A few notes:'
-      : 'Thanks for trying Cubby! A few notes:';
+    // Warm, community welcome (calm, made-with-families feeling, never a "beta/tester" vibe).
     // OS-aware install: Android/Chrome fires beforeinstallprompt (window._bip) so we can trigger the
     // real prompt; iOS Safari blocks programmatic install, so the button reveals the Share steps.
     var isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone;
@@ -1020,8 +1016,8 @@
       ? '<button id="llFrInstall" class="ll-modal-btn" style="margin-top:4px">📲 Add Cubby to your home screen</button><div id="llFrInstallMsg" class="ll-auth-msg" style="display:none"></div>'
       : '';
     modal('Welcome to Cubby 🐻',
-      '<div class="ll-auth-msg" style="margin:0 0 10px;text-align:left;line-height:1.5">' + betaIntro + '<br>• Your log is <b>private</b> to your family.<br>• Bug or idea? <b>Settings → Family &amp; sharing → Send feedback</b>.</div>'
-      + '<div class="ll-auth-msg" style="margin:0 0 6px">First, how you appear to your family:</div>'
+      '<div class="ll-auth-msg" style="margin:0 0 10px;text-align:left;line-height:1.55">We\'re so glad you\'re here. 🤍 Cubby is a calm, private place for everyone who loves your little one, and it\'s shaped by families like yours.<br><br>• Your log stays <b>private</b> to your family, always.<br>• An idea, or something to make better? We read every note: <b>Settings → Family &amp; sharing → Send feedback</b>.</div>'
+      + '<div class="ll-auth-msg" style="margin:0 0 6px">First, how should your family see you?</div>'
       + '<div class="ll-mem-av" id="llFrBear" style="width:84px;height:84px;margin:10px auto 4px;cursor:pointer">' + bear + '</div>'
       + '<div style="text-align:center;margin-bottom:6px"><button id="llFrBearBtn" class="ll-rm" style="color:#C97FA0">Customise my bear</button></div>'
       + '<div class="ll-invite" style="border-top:none;padding-top:8px"><label>Your relationship to baby</label><select id="llFrRel">' + relOptions('') + '</select></div>'
