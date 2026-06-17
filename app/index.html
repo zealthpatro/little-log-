@@ -7074,10 +7074,12 @@ function composeMemoryCard(canvas,month,img){
     ctx.fillStyle='#a89c90'; ctx.font=`600 italic 26px "Nunito Sans", sans-serif`;
     ctx.fillText('Every quiet day counts too.', pad, y+10);
   }
-  // footer
-  ctx.textAlign='center'; ctx.fillStyle='#C9BBA6'; ctx.font=`800 22px "Nunito Sans", sans-serif`;
-  ctx.fillText('LITTLE LOG', W/2, H-50);
-  ctx.textAlign='left';
+  // footer: free shares carry the small Cubby mark, Pro shares are clean
+  if(!isPro()){
+    ctx.textAlign='center'; ctx.fillStyle='#C9BBA6'; ctx.font=`800 24px "Nunito Sans", sans-serif`;
+    ctx.fillText('made with Cubby 🐻 · little-cubby.com', W/2, H-50);
+    ctx.textAlign='left';
+  }
 }
 async function genCard(){
   showLoader(['Gathering this month\'s moments','Mixing in the real numbers','Adding a little sparkle']);
@@ -7336,8 +7338,8 @@ function composePoster(canvas,scale){
     ctx.fillStyle=t.accent; ctx.font=`800 ${20*S}px "Nunito Sans", sans-serif`; ctx.fillText('PROUD PARENTS', W/2, y); y+=34*S;
     ctx.fillStyle=t.ink; ctx.font=`500 italic ${34*S}px Fraunces, serif`; ctx.fillText(b.parents, W/2, y);
   }
-  // brand
-  ctx.fillStyle=t.motif; ctx.font=`800 ${18*S}px "Nunito Sans", sans-serif`; ctx.fillText('LITTLE LOG', W/2, H-56*S);
+  // brand: free posters carry the small Cubby mark, Pro is clean
+  if(!isPro()){ ctx.fillStyle=t.motif; ctx.font=`800 ${18*S}px "Nunito Sans", sans-serif`; ctx.fillText('made with Cubby 🐻 · little-cubby.com', W/2, H-56*S); }
   ctx.textAlign='left';
 }
 async function genPoster(){
