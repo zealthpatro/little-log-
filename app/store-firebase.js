@@ -1010,9 +1010,11 @@
     // Warm, community welcome (calm, made-with-families feeling, never a "beta/tester" vibe).
     // OS-aware install: Android/Chrome fires beforeinstallprompt (window._bip) so we can trigger the
     // real prompt; iOS Safari blocks programmatic install, so the button reveals the Share steps.
-    var isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone;
-    var isIOS = /ipad|iphone|ipod/.test((navigator.userAgent || '').toLowerCase());
-    var installBtn = (!isStandalone && (window._bip || isIOS))
+    // Reuse the shared add-to-home helpers (defined in index.html) so first-run and Settings behave identically.
+    var canInstall = (typeof window.canShowInstall === 'function')
+      ? window.canShowInstall()
+      : (function () { var ua = navigator.userAgent || ''; var standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone; var ios = /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1); return !standalone && (window._bip || ios); })();
+    var installBtn = canInstall
       ? '<button id="llFrInstall" class="ll-modal-btn" style="margin-top:4px">📲 Add Cubby to your home screen</button><div id="llFrInstallMsg" class="ll-auth-msg" style="display:none"></div>'
       : '';
     modal('Welcome to Cubby 🐻',
@@ -1031,8 +1033,9 @@
     document.getElementById('llFrBearBtn').onclick = pickBear;
     var instBtn = document.getElementById('llFrInstall');
     if (instBtn) instBtn.onclick = function () {
+      if (typeof window.addToHomeScreen === 'function') { window.addToHomeScreen('llFrInstallMsg'); return; }
       if (window._bip) { window._bip.prompt(); if (window._bip.userChoice) window._bip.userChoice.then(function () { window._bip = null; }); }
-      else { var m = document.getElementById('llFrInstallMsg'); if (m) { m.style.display = 'block'; m.innerHTML = 'Tap the <b>Share</b> icon at the bottom of your browser, then <b>Add to Home Screen</b>.'; } }
+      else { var m = document.getElementById('llFrInstallMsg'); if (m) { m.style.display = 'block'; m.innerHTML = (typeof window.installSteps === 'function') ? window.installSteps() : 'Tap the <b>Share</b> icon in Safari, then <b>Add to Home Screen</b>.'; } }
     };
     document.getElementById('llFrSave').onclick = async function () {
       var rel = document.getElementById('llFrRel').value;

@@ -3007,6 +3007,12 @@ function openSettings(){
         <button class="${s.theme==='night'?'on':''}" onclick="setTheme('night');openSettings()">Night</button>
       </div>
     </div>
+    ${canShowInstall()?`<div class="set-item" onclick="addToHomeScreen('llSetInstallMsg')" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--feed-soft);color:var(--feed);font-size:18px">📲</div>
+      <div class="si-body"><div class="a">Add Cubby to your home screen</div><div class="b">Open it like an app: full screen, one tap, works offline</div></div>
+      <span class="chev">${I.chev}</span>
+    </div>
+    <div id="llSetInstallMsg" style="display:none;font-size:13px;color:var(--ink-soft);font-weight:600;background:var(--surface-2);border-radius:12px;padding:11px 13px;margin:-4px 0 2px"></div>`:''}
     ${FEATURES.den?`<div class="set-item" onclick="closeSheet();goDen()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🏡</div>
       <div class="si-body"><div class="a">Our Den</div><div class="b">Chores, shopping, meals, staff, expenses</div></div>
@@ -7420,6 +7426,26 @@ function normalizeLoadedState(saved){
 if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){
   window.addEventListener('beforeinstallprompt',function(e){ e.preventDefault(); window._bip=e; }); // Android/Chrome: stash for an in-app install button
   window.addEventListener('load',function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
+}
+/* Add-to-home-screen, shared by the first-run welcome sheet and Settings (build once, reuse).
+   Android/Chrome give us a real install prompt (window._bip); iOS Safari blocks it, so we
+   reveal the Share -> Add to Home Screen steps instead. */
+function isStandaloneApp(){ return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone===true; }
+function isIOSDevice(){ var ua=navigator.userAgent||''; return /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints>1); } // modern iPadOS reports as Mac
+function isWebView(){ // in-app browsers (Instagram, Facebook, etc.) can't add to the home screen, so don't offer it
+  var ua=navigator.userAgent||'';
+  if(/FBAN|FBAV|FB_IAB|Instagram|Line\/|KAKAOTALK|WhatsApp|Twitter|TikTok|Snapchat|Pinterest|MicroMessenger/i.test(ua)) return true;
+  return isIOSDevice() && /AppleWebKit/.test(ua) && !/Safari/.test(ua); // generic iOS WKWebView lacks the Safari token
+}
+function canShowInstall(){ return !isStandaloneApp() && !isWebView() && (!!window._bip || isIOSDevice()); }
+function installSteps(){
+  if(isIOSDevice()) return 'Tap the <b>Share</b> icon in Safari, then <b>Add to Home Screen</b>.';
+  if(/android/i.test(navigator.userAgent||'')) return 'Open your browser menu (⋮), then <b>Add to Home screen</b> or <b>Install app</b>.';
+  return 'In your browser menu, choose <b>Install Cubby</b> or <b>Add to Home screen</b>.';
+}
+function addToHomeScreen(msgElId){
+  if(window._bip){ try{ window._bip.prompt(); if(window._bip.userChoice){ window._bip.userChoice.then(function(){ window._bip=null; }); } }catch(e){ var mm=msgElId&&document.getElementById(msgElId); if(mm){ mm.style.display='block'; mm.innerHTML=installSteps(); } } return; }
+  var m=msgElId&&document.getElementById(msgElId); if(m){ m.style.display='block'; m.innerHTML=installSteps(); }
 }
 </script>
 </body>
