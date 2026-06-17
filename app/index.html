@@ -61,6 +61,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
 <script src="firebase-init.js"></script>
 <style>
 /* ============ THEME ============ */
@@ -2891,6 +2892,34 @@ function saveBabyDetails(id){
   persist(); closeSheet(); render(); toast('Details saved');
 }
 
+/* ---- Push reminders (opt-in; dormant until a VAPID key + Cloud Messaging are set in Firebase).
+   Scope: medicine due, confirmed-missed vaccine, your-turn-on-a-routine. Never feeds. ---- */
+const CUBBY_VAPID=''; // paste the Web Push certificate (public key) from Firebase console > Cloud Messaging > Web Push certificates to activate
+function pushSupported(){ try{ return !!(window.firebase && firebase.messaging && firebase.messaging.isSupported && firebase.messaging.isSupported() && ('Notification' in window) && ('serviceWorker' in navigator)); }catch(e){ return false; } }
+function pushCfg(){ if(!state.settings.push) state.settings.push={enabled:false,quietStart:21,quietEnd:7}; return state.settings.push; }
+function openReminders(){
+  const sup=pushSupported(), cfg=pushCfg(), ready=sup&&!!CUBBY_VAPID;
+  openSheet(`<h2>Reminders 🔔</h2><div class="sub">Gentle nudges for a due medicine, a confirmed missed vaccine, or your turn on a routine. Off by default, snoozeable, and never for feeds.</div>
+    ${!ready?`<div class="preg-disclaim">Reminders are coming soon.${sup?'':' Add Cubby to your home screen first, then background notifications can work.'}</div>`:`
+    <div class="set-item"><div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🔔</div><div class="si-body"><div class="a">Gentle reminders</div><div class="b">${cfg.enabled?'On for this device':'Off'}</div></div>
+      <div class="seg"><button class="${cfg.enabled?'on':''}" onclick="enablePush()">On</button><button class="${!cfg.enabled?'on':''}" onclick="disablePush()">Off</button></div></div>
+    <div class="csub" style="margin-top:8px">Quiet hours: nothing between ${cfg.quietStart}:00 and ${cfg.quietEnd}:00.</div>`}
+    <div class="preg-disclaim" style="margin-top:12px">Cubby never sends feed reminders. Delivery uses Firebase, our own sign-in and database provider, not a third-party ad tracker.</div>`,'star');
+}
+async function enablePush(){
+  if(!CUBBY_VAPID){ toast('Reminders coming soon'); return; }
+  try{
+    const perm=await Notification.requestPermission();
+    if(perm!=='granted'){ toast('Notifications are turned off in your browser'); return; }
+    const reg=await navigator.serviceWorker.register('firebase-messaging-sw.js');
+    const tok=await firebase.messaging().getToken({vapidKey:CUBBY_VAPID, serviceWorkerRegistration:reg});
+    if(!tok){ toast('Could not enable reminders'); return; }
+    const cfg=pushCfg(); cfg.enabled=true;
+    if(window.LL&&LL.db&&myUid()){ const t={}; t[tok]={ua:(navigator.userAgent||'').slice(0,120),at:Date.now()}; await LL.db.collection('users').doc(myUid()).set({push:{enabled:true,quietStart:cfg.quietStart,quietEnd:cfg.quietEnd,tokens:t}},{merge:true}); }
+    persist(); openReminders(); toast('Reminders on 🔔');
+  }catch(e){ toast('Could not enable reminders'); }
+}
+function disablePush(){ const cfg=pushCfg(); cfg.enabled=false; if(window.LL&&LL.db&&myUid()){ try{ LL.db.collection('users').doc(myUid()).set({push:{enabled:false}},{merge:true}); }catch(e){} } persist(); openReminders(); toast('Reminders off'); }
 function openSettings(){
   const s=state.settings;
   openSheet(`<h2>Settings</h2><div class="sub">Cubby preferences.</div>
@@ -2927,6 +2956,10 @@ function openSettings(){
       <div class="si-body"><div class="a">Share Cubby with a friend</div><div class="b">Know another tired parent? Send them your link</div></div>
       <span class="chev">${I.chev}</span>
     </div>
+    <div class="set-item" onclick="openReminders()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🔔</div>
+      <div class="si-body"><div class="a">Reminders</div><div class="b">Gentle nudges for medicine, vaccines &amp; routines</div></div>
+      <span class="chev">${I.chev}</span></div>
     <div class="set-label">Your data &amp; account</div>
     <div class="set-item" onclick="openDataSheet()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--note-soft);color:var(--note)">${I.note}</div>
