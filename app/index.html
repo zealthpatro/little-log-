@@ -195,6 +195,9 @@ body{
 .ticker b{color:var(--ink);font-weight:800;}
 @keyframes tkroll{0%,13%{transform:translateY(0)}16.6%,30%{transform:translateY(-16.667%)}33.3%,47%{transform:translateY(-33.333%)}50%,63%{transform:translateY(-50%)}66.6%,80%{transform:translateY(-66.667%)}83.3%,100%{transform:translateY(-83.333%)}}
 @media(prefers-reduced-motion:reduce){.ticker .roll{animation:none}}
+.tip-static{display:flex;align-items:center;gap:9px;padding:11px 15px;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 3px 9px var(--shadow);margin-bottom:14px;font-size:13px;font-weight:700;color:var(--ink-soft);line-height:1.4;}
+.tip-static .tk-ic{font-size:16px;flex:0 0 auto;}
+.tip-static b{color:var(--ink);font-weight:800;}
 .since-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;}
 .since-card{
   background:var(--surface);border-radius:var(--radius-sm);padding:13px 12px;
@@ -1224,8 +1227,10 @@ function tipsTicker(){
   if(!b || !b.country){ tips.push(['💉','Set the country in <b>Health</b> so vaccine dates are spot on.']); }
   tips.push(['🌞','Log the little things, sun time, tummy time, a walk, in <b>Activity</b>.']);
   tips.push(['📸','Turn any photo into a shareable keepsake from the <b>Album</b>.']);
-  const items=tips.concat([tips[0]]); // duplicate first for a seamless loop
-  return `<div class="ticker" aria-label="Tips"><div class="roll">${items.map(t=>`<div><span class="tk-ic">${t[0]}</span><span>${t[1]}</span></div>`).join('')}</div></div>`;
+  // One calm tip, rotating by day. (A constantly-scrolling ticker clipped long tips and fell out of
+  // step once the tip count became conditional; a single static tip is calmer and never misaligns.)
+  const t=tips[Math.floor(now()/86400000)%tips.length];
+  return `<div class="tip-static"><span class="tk-ic">${t[0]}</span><span>${t[1]}</span></div>`;
 }
 function homeNudgeLine(){
   const b=activeBaby(); if(!b) return '';
@@ -1253,14 +1258,17 @@ function renderGetStarted(){
   const haveLog=(state.events||[]).length>0;
   const members=(window.LL&&window.LL.members)||{};
   const shared=Object.keys(members).length>1;
-  if(haveBaby && haveLog && shared) return ''; // all done → auto-hide
+  const ab=activeBaby();
+  const hasPhoto=!!(ab && (ab.avatarPhotoId || (state.photos||[]).some(p=>p.babyId===ab.id && p.photoId)));
+  if(haveBaby && haveLog && shared && hasPhoto) return ''; // all done → auto-hide
   const row=(done,label,sub,action)=>`<div class="gs-row${done?' done':''}"${(action&&!done)?` onclick="${action}"`:''}>
     <span class="gs-check">${done?'✓':''}</span>
     <div class="gs-body"><div class="gs-t">${label}</div><div class="gs-s">${sub}</div></div>
     ${(action&&!done)?`<span class="gs-go">${I.chev}</span>`:''}</div>`;
   return `<div class="gs-card">
     <div class="gs-head"><div class="gs-title">Get started 🐻</div><button class="gs-x" onclick="dismissTip('getstarted')">×</button></div>
-    ${row(haveBaby,'Add your baby','Name, birthday, photo','')}
+    ${row(haveBaby,'Add your baby','Name and birthday','')}
+    ${row(hasPhoto,'Add a photo','A face for the feed and keepsakes',"go('album')")}
     ${row(haveLog,'Log your first entry','One tap below, feed, sleep or nappy','openFeed()')}
     ${row(shared,'Invite a co-parent','Share the log live with family',"window.openFamily&&window.openFamily()")}
   </div>`;
@@ -7393,6 +7401,7 @@ function normalizeLoadedState(saved){
 <script>
 /* PWA: register only on a real http(s) host. Skips file:// and the in-app artifact sandbox. */
 if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){
+  window.addEventListener('beforeinstallprompt',function(e){ e.preventDefault(); window._bip=e; }); // Android/Chrome: stash for an in-app install button
   window.addEventListener('load',function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
 }
 </script>

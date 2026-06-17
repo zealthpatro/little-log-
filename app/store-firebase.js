@@ -1012,12 +1012,20 @@
     var betaIntro = (Date.now() < Date.UTC(2026, 6, 27))
       ? 'An early beta, thanks for trying it! A few notes:'
       : 'Thanks for trying Cubby! A few notes:';
+    // OS-aware install: Android/Chrome fires beforeinstallprompt (window._bip) so we can trigger the
+    // real prompt; iOS Safari blocks programmatic install, so the button reveals the Share steps.
+    var isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone;
+    var isIOS = /ipad|iphone|ipod/.test((navigator.userAgent || '').toLowerCase());
+    var installBtn = (!isStandalone && (window._bip || isIOS))
+      ? '<button id="llFrInstall" class="ll-modal-btn" style="margin-top:4px">📲 Add Cubby to your home screen</button><div id="llFrInstallMsg" class="ll-auth-msg" style="display:none"></div>'
+      : '';
     modal('Welcome to Cubby 🐻',
-      '<div class="ll-auth-msg" style="margin:0 0 10px;text-align:left;line-height:1.5">' + betaIntro + '<br>• Your log is <b>private</b> to your family.<br>• On a phone: <b>Share → Add to Home Screen</b> to install it like an app.<br>• Bug or idea? <b>Settings → Family &amp; sharing → Send feedback</b>.</div>'
+      '<div class="ll-auth-msg" style="margin:0 0 10px;text-align:left;line-height:1.5">' + betaIntro + '<br>• Your log is <b>private</b> to your family.<br>• Bug or idea? <b>Settings → Family &amp; sharing → Send feedback</b>.</div>'
       + '<div class="ll-auth-msg" style="margin:0 0 6px">First, how you appear to your family:</div>'
       + '<div class="ll-mem-av" id="llFrBear" style="width:84px;height:84px;margin:10px auto 4px;cursor:pointer">' + bear + '</div>'
       + '<div style="text-align:center;margin-bottom:6px"><button id="llFrBearBtn" class="ll-rm" style="color:#C97FA0">Customise my bear</button></div>'
       + '<div class="ll-invite" style="border-top:none;padding-top:8px"><label>Your relationship to baby</label><select id="llFrRel">' + relOptions('') + '</select></div>'
+      + installBtn
       + '<button id="llFrSave" class="ll-modal-btn">Save</button>'
       + '<button id="llFrOut" class="ll-modal-btn ll-ghost" style="margin-top:10px">Log out</button>',
       { locked: true, blur: true });
@@ -1025,6 +1033,11 @@
     function pickBear() { if (window.openBearPicker) window.openBearPicker('member', uid); }
     document.getElementById('llFrBear').onclick = pickBear;
     document.getElementById('llFrBearBtn').onclick = pickBear;
+    var instBtn = document.getElementById('llFrInstall');
+    if (instBtn) instBtn.onclick = function () {
+      if (window._bip) { window._bip.prompt(); if (window._bip.userChoice) window._bip.userChoice.then(function () { window._bip = null; }); }
+      else { var m = document.getElementById('llFrInstallMsg'); if (m) { m.style.display = 'block'; m.innerHTML = 'Tap the <b>Share</b> icon at the bottom of your browser, then <b>Add to Home Screen</b>.'; } }
+    };
     document.getElementById('llFrSave').onclick = async function () {
       var rel = document.getElementById('llFrRel').value;
       var u = {}; u['memberInfo.' + uid + '.setupDone'] = true; if (rel) u['memberInfo.' + uid + '.relationship'] = rel;
