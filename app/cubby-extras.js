@@ -273,8 +273,7 @@
         if (b.classList.contains('dp-bl') || b.disabled) return;
         b.onclick = function () {
           sel.y = view.y; sel.mo = view.mo; sel.da = +b.getAttribute('data-d');
-          Array.prototype.forEach.call(document.querySelectorAll('#cuCal .dp-c'), function (x) { x.classList.remove('dp-on'); });
-          b.classList.add('dp-on'); disp();
+          disp(); redrawCal(); // re-render so the selected-day highlight is always correct (no stale dp-on)
         };
       });
     }

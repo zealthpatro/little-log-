@@ -155,7 +155,7 @@ body{
 .icon-btn{
   width:42px;height:42px;border:none;border-radius:50%;
   background:var(--surface);color:var(--ink-soft);
-  display:grid;place-items:center;cursor:pointer;flex-shrink:0;
+  display:grid;place-items:center;cursor:pointer;flex-shrink:0;line-height:1;
   box-shadow:0 3px 9px var(--shadow);transition:transform .15s,color .2s;
 }
 .icon-btn:active{transform:scale(.92);}
@@ -2535,7 +2535,7 @@ function openAddBaby(){
     <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
     <div class="field"><label>Name</label><input id="bName" placeholder="Baby's name" autofocus></div>
     <div class="field"><label>Birthday (optional)</label>${datePicker('bDate','',{max:now()})}${wwa('baby.birthday')}</div>
-    <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', vaxCountryList(), detectCountry(), 'Search your country…')}</div>
+    <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', vaxCountryList(), (state.pregnancy&&state.pregnancy.country)||detectCountry(), 'Search your country…')}</div>
     <button class="btn-primary" onclick="saveBaby()">Add baby</button>`,'diaper');
 }
 function pickColor(c){
@@ -2547,7 +2547,7 @@ function pickColor(c){
 function saveBaby(){
   const name=$('#bName').value.trim(); if(!name){toast('Give them a name first');return;}
   const bd=$('#bDate').value;
-  const cc=($('#bCountry')&&$('#bCountry').value)||detectCountry();
+  const cc=($('#bCountry')&&$('#bCountry').value)||(state.pregnancy&&state.pregnancy.country)||detectCountry();
   const b={id:uid(),name,color:newBabyColor,birth:bd?new Date(bd+'T08:00').getTime():null,country:(cc||'who')};
   state.babies.push(b); state.activeBabyId=b.id; persist(); closeSheet(); go('home'); toast('Welcome, '+name+'!');
 }
@@ -2706,8 +2706,7 @@ function openBabyProfile(){
       <div class="prof-card" onclick="openStageSheet()"><span class="lead" style="background:var(--diaper-soft);color:var(--diaper);font-size:18px">${stageOf(b)==='child'?'🧒':'🍼'}</span><div class="cflex"><div class="a">Stage · ${stageOf(b)==='child'?'Child':'Baby'}</div><div class="b">How Cubby shapes the home screen</div></div><span class="chev">${I.chev}</span></div>
       <div class="prof-card" onclick="openFoodPrefs()"><span class="lead" style="background:var(--feed-soft);color:var(--feed)">${I.bottle}</span><div class="cflex"><div class="a">Food & allergies</div><div class="b">Milk, solids, diet, allergies</div></div><span class="chev">${I.chev}</span></div>
       <div class="prof-card" onclick="openDoctor()"><span class="lead" style="background:var(--sleep-soft);color:var(--sleep)">${I.stetho}</span><div class="cflex"><div class="a">Doctor &amp; visits</div><div class="b">Care team and visit log</div></div><span class="chev">${I.chev}</span></div>
-      <div class="prof-card" onclick="openSettings()"><span class="lead" style="background:var(--note-soft);color:var(--note)">${I.gear||I.note}</span><div class="cflex"><div class="a">Settings</div><div class="b">Theme, data, account</div></div><span class="chev">${I.chev}</span></div>
-      <div class="prof-card" onclick="confirmLogout()"><span class="lead" style="background:var(--feed-soft);color:var(--feed);font-size:18px">👋</span><div class="cflex"><div class="a">Log out</div><div class="b">Sign out, your data stays synced</div></div><span class="chev">${I.chev}</span></div>
+      <div class="prof-card" onclick="openSettings()"><span class="lead" style="background:var(--note-soft);color:var(--note)">${I.gear||I.note}</span><div class="cflex"><div class="a">Settings</div><div class="b">Theme, data, account, log out</div></div><span class="chev">${I.chev}</span></div>
     </div>`,'star');
 }
 function openStageSheet(){
@@ -2735,11 +2734,14 @@ function setAvatar(photoId){ const b=activeBaby(); if(!b)return; b.avatarPhotoId
 function clearAvatar(){ const b=activeBaby(); if(!b)return; if(b.avatarPhotoId){ delete b.avatarPhotoId; persist(); } openBabyProfile(); toast('Using bear avatar'); }
 function openBirthDetails(){
   const b=activeBaby(); if(!b)return;
-  const dt=b.birth?new Date(b.birth):new Date(); dt.setSeconds(0,0);
-  const dtVal=new Date(dt.getTime()-dt.getTimezoneOffset()*60000).toISOString().slice(0,16);
   openSheet(`${babyIdentity(b)}<div class="sub" style="margin:-8px 0 14px">Birth details for the keepsake poster. All optional.</div>
     <div class="field"><label>Full name</label><input id="dName" value="${escapeHtml(b.fullName||b.name)}" placeholder="First Middle Last">${wwa('baby.birth')}</div>
-    <div class="field"><label>Born on (date & time)</label><input type="datetime-local" id="dWhen" value="${dtVal}"></div>
+    <div class="field"><label>Born on (date & time)</label>
+      <input type="hidden" id="dWhen" value="${b.birth||''}">
+      <div class="time-strip" id="dWhenStrip" onclick="openWhenPicker(+($('#dWhen').value)||now(), function(m){ $('#dWhen').value=m; var l=document.querySelector('#dWhenStrip .ts-label'); if(l) l.textContent=whenLabel(m); }, 'Born on')">
+        <span class="ts-ico">${CAL_SVG}</span>
+        <span class="ts-text"><span class="ts-cap">Born on</span><span class="ts-label">${b.birth?whenLabel(b.birth):'Choose date &amp; time'}</span></span>
+        <span class="ts-edit">Change</span></div></div>
     <div class="row2">
       <div class="field"><label>Birth weight</label><input id="dWt" value="${escapeHtml(b.birthWeight||'')}" placeholder="e.g. 3.4 kg or 7 lb 8 oz"></div>
       <div class="field"><label>Birth length</label><input id="dLen" value="${escapeHtml(b.birthLength||'')}" placeholder="e.g. 50 cm or 20 in"></div>
@@ -2905,7 +2907,7 @@ function saveVisit(){
 function saveBabyDetails(id){
   const b=state.babies.find(x=>x.id===id); if(!b)return;
   b.fullName=$('#dName').value.trim()||b.name;
-  const w=$('#dWhen').value; if(w) b.birth=new Date(w).getTime();
+  const w=$('#dWhen').value; if(w) b.birth=parseInt(w,10);
   b.birthWeight=$('#dWt').value.trim();
   b.birthLength=$('#dLen').value.trim();
   b.blood=$('#dBlood').value.trim();
@@ -3331,7 +3333,7 @@ function renderOnboard(){
       <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
       <div class="field"><label>Baby's name</label><input id="bName" placeholder="e.g. Mira" autofocus>${wwa('baby.name.onboarding')}</div>
       <div class="field"><label>Birthday (optional)</label>${datePicker('bDate','',{max:now()})}${wwa('baby.birthday')}</div>
-      <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', vaxCountryList(), detectCountry(), 'Search your country…')}</div>
+      <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', vaxCountryList(), (state.pregnancy&&state.pregnancy.country)||detectCountry(), 'Search your country…')}</div>
       <button class="btn-primary" style="--accent:var(--feed)" onclick="saveBaby()">Start tracking</button>
       <div style="text-align:center;font-size:12px;font-weight:800;color:var(--ink-faint);margin:14px 0 2px;letter-spacing:.04em">OR</div>
       <button class="btn-ghost" onclick="openStartPregnancy()" style="color:var(--preg)">🌸 Expecting? Trying, pregnant or counting weeks</button>
@@ -3465,7 +3467,7 @@ function pregWeekData(){ const wk=Math.max(4,Math.min(41,pregWeek())); return (w
 function pregDueLabel(){ const p=state.pregnancy; if(!p||!p.dueDate) return ''; return new Date(p.dueDate).toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'}); }
 function pregDaysToGo(){ const p=state.pregnancy; if(!p||!p.dueDate) return null; return Math.round((p.dueDate-now())/86400000); }
 function pregCountryKey(c){ c=c||(state.pregnancy&&state.pregnancy.country)||detectCountry(); return (window.PREG&&PREG.antenatal[c])?c:'generic'; }
-function pregNextAppt(){ const p=state.pregnancy; if(!p) return null; const wk=pregWeek(); const open=(p.appts||[]).filter(a=>!a.done).sort((a,b)=>a.week-b.week); return open.find(a=>a.week>=wk)||open[0]||null; }
+function pregNextAppt(){ const p=state.pregnancy; if(!p) return null; const wk=pregWeek(); if(wk>40) return null; const open=(p.appts||[]).filter(a=>!a.done).sort((a,b)=>a.week-b.week); return open.find(a=>a.week>=wk)||null; }
 
 /* ---- Pregnancy: the journey starts wherever you are ---- */
 let pregDraft = {mode:'due', date:'', country:'us'};
@@ -3500,10 +3502,17 @@ function defaultPrecon(){
   return ['Take folic acid, 400 micrograms daily','Check your vitamin D','Review any medicines with your GP or pharmacist','Book a preconception chat if you have a health condition','Ease off smoking and alcohol','Gentle movement most days']
     .map(t=>({id:uid(),text:t,done:false}));
 }
+/* A non-carrier (e.g. Papa/Grandpa/Uncle Bear) should never be asked about periods or fertility.
+   Default to showing; only hide for clearly non-carrier relationship roles. */
+function viewerIsCarrier(){
+  try{ var info=(window.LL&&window.LL.memberInfo)||{}; var rel=((info[myUid()]&&info[myUid()].relationship)||'').toLowerCase();
+    return ['papa bear','grandpa bear','uncle bear'].indexOf(rel)<0; }
+  catch(_){ return true; }
+}
 function openPlanningSetup(){
-  openSheet(`<h2>We're trying 🌱</h2><div class="sub">Lovely. We'll keep it gentle: a little preparation, an estimated fertile window if you want it, and zero pressure.</div>
-    <div class="field"><label>First day of your last period (optional)</label>${datePicker('plLmp','',{max:now(),empty:true})}${wwa('preg.lmp')}</div>
-    <div class="field"><label>Usual cycle length (days)</label><input type="number" id="plCycle" value="28" min="21" max="40">${wwa('preg.cycle')}</div>
+  openSheet(`<h2>We're trying 🌱</h2><div class="sub">Lovely. We'll keep it gentle: a little preparation${viewerIsCarrier()?', an estimated fertile window if you want it,':''} and zero pressure.</div>
+    ${viewerIsCarrier()?`<div class="field"><label>First day of your last period (optional)</label>${datePicker('plLmp','',{max:now(),empty:true})}${wwa('preg.lmp')}</div>
+    <div class="field"><label>Usual cycle length (days)</label><input type="number" id="plCycle" value="28" min="21" max="40">${wwa('preg.cycle')}</div>`:''}
     <button class="btn-primary" style="background:var(--diaper)" onclick="savePlanning()">Start</button>
     <button class="btn-ghost" onclick="openStartPregnancy()">Back</button>
     <div class="preg-disclaim">Fertile-window estimates are rough guides, every body is different. This is informational only, not fertility advice.</div>`,'diaper');
@@ -3574,8 +3583,8 @@ function renderPlanningHome(){
     <div class="greeting">Getting ready 🌱</div>
     <div class="greeting-sub">No pressure, no countdowns. Just gentle preparation for when your little one decides it's time.</div>
     ${consentBanners()}
-    ${feCard}
-    <button class="btn-ghost" onclick="openPeriodUpdate()" style="margin-top:2px">🗓️ My period started</button>
+    ${viewerIsCarrier()?feCard:''}
+    ${viewerIsCarrier()?`<button class="btn-ghost" onclick="openPeriodUpdate()" style="margin-top:2px">🗓️ My period started</button>`:''}
     <div class="sec-title">Getting your body ready</div>
     ${items}
     <div class="field" style="margin-top:10px"><label>Add your own</label><input id="pcNew" placeholder="e.g. Dentist check" onkeydown="if(event.key==='Enter')addPrecon()"></div>
@@ -3747,14 +3756,16 @@ function renderPregHome(){
       <div class="preg-bar"><i style="width:${pct}%"></i></div>
     </div>
     ${data?`<div class="preg-cards">
-      <div class="preg-card"><div class="pc-ico">🍋</div><div><div class="pc-t">About the size of a ${escapeHtml(data.size)}</div><div class="pc-b">A gentle week-by-week guide. Every baby grows at their own pace.</div></div></div>
+      <div class="preg-card"><div class="pc-ico">${(window.PREG&&PREG.sizeEmoji)?PREG.sizeEmoji(data.size):'🌱'}</div><div><div class="pc-t">About the size of a ${escapeHtml(data.size)}</div><div class="pc-b">A gentle week-by-week guide. Every baby grows at their own pace.</div></div></div>
       <div class="preg-card"><div class="pc-ico">👶</div><div><div class="pc-t">Baby this week</div><div class="pc-b">${escapeHtml(data.baby)}</div></div></div>
       <div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">You this week</div><div class="pc-b">${escapeHtml(data.mum)}</div></div></div>
     </div>`:`<div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">Early days</div><div class="pc-b">Week-by-week guidance appears from week 4. Be gentle with yourself.</div></div></div>`}
     ${na?`<div class="next-appt" onclick="pregGo('log')">
       <div class="pc-ico" style="background:var(--preg-soft)">📅</div>
       <div class="na-body"><div class="na-t">Next: ${escapeHtml(na.title)}</div><div class="na-s">Around week ${na.week}${na.note?' · '+escapeHtml(na.note):''}</div></div>
-      <span class="chev">${I.chev}</span></div>`:''}
+      <span class="chev">${I.chev}</span></div>`:(pregWeek()>40?`<div class="next-appt">
+      <div class="pc-ico" style="background:var(--preg-soft)">🌼</div>
+      <div class="na-body"><div class="na-t">Any day now</div><div class="na-s">Your due date is here. Babies keep their own schedule, so rest when you can and follow your midwife or doctor's guidance on monitoring.</div></div></div>`:'')}
     ${pregHealthQuick()}
     <div class="sec-title">This week</div>
     <div class="actions stagger">
@@ -3915,12 +3926,14 @@ function openKickCounter(){
   openSheet(`<h2>Kick counter</h2><div class="sub">Get comfy and count your baby's movements. Many people aim for 10, your own normal pattern matters most.</div>
     <button class="kick-big" onclick="tapKick()"><div class="kb-n">${sess?sess.count:0}</div><div class="kb-c">${sess?(sess.count>=10?'All done 🎉':'Tap for each kick'):'Tap to start'}</div></button>
     ${sess?`<div class="csub" style="text-align:center">Started ${fmtClock(sess.start)} · ${fmtDur(now()-sess.start)} so far</div>
+      ${sess.count>0?`<button class="btn-ghost" style="margin-top:10px" onclick="undoKick()">− Undo last tap</button>`:''}
       <button class="btn-primary" style="background:var(--preg);margin-top:10px" onclick="finishKicks()">${sess.count>=10?'Save session':'Stop and save'}</button>
       <button class="btn-ghost" onclick="cancelKicks()">Cancel</button>`:''}
     ${recentHtml}
     <div class="preg-disclaim">If your baby's movements slow down or change, do not wait. Contact your midwife or maternity unit straight away, day or night.</div>`,'preg');
 }
 function tapKick(){ if(!kickSession) kickSession={start:now(),count:0}; kickSession.count++; openKickCounter(); }
+function undoKick(){ if(kickSession&&kickSession.count>0){ kickSession.count--; openKickCounter(); } }
 function finishKicks(){ if(!kickSession)return; state.pregnancy.kicks.push({id:uid(),start:kickSession.start,end:now(),count:kickSession.count}); kickSession=null; persist(); closeSheet(); render(); toast('Session saved'); }
 function cancelKicks(){ kickSession=null; openKickCounter(); }
 let contractionRunning=null;
