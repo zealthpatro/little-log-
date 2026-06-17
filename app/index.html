@@ -3487,6 +3487,29 @@ function pregDueLabel(){ const p=state.pregnancy; if(!p||!p.dueDate) return ''; 
 function pregDaysToGo(){ const p=state.pregnancy; if(!p||!p.dueDate) return null; return Math.round((p.dueDate-now())/86400000); }
 function pregCountryKey(c){ c=c||(state.pregnancy&&state.pregnancy.country)||detectCountry(); return (window.PREG&&PREG.antenatal[c])?c:'generic'; }
 function pregNextAppt(){ const p=state.pregnancy; if(!p) return null; const wk=pregWeek(); if(wk>40) return null; const open=(p.appts||[]).filter(a=>!a.done).sort((a,b)=>a.week-b.week); return open.find(a=>a.week>=wk)||null; }
+/* Tap a week pill (size / baby / you) to open a fuller, focused detail sheet with a relevant action. */
+function openWeekDetail(kind){
+  const wk=pregWeek(), tri=pregTri(), data=pregWeekData(); if(!data) return;
+  const emoji=(window.PREG&&PREG.sizeEmoji)?PREG.sizeEmoji(data.size):'🌱';
+  const na=pregNextAppt();
+  let title, body;
+  if(kind==='baby'){
+    title='Baby this week';
+    body=`<div class="preg-card"><div class="pc-ico">${emoji}</div><div><div class="pc-t">Week ${wk} · about the size of a ${escapeHtml(data.size)}</div><div class="pc-b">${escapeHtml(data.baby)}</div></div></div>`
+      +(na?`<div class="next-appt" onclick="closeSheet();pregGo('care')"><div class="pc-ico" style="background:var(--preg-soft)">📅</div><div class="na-body"><div class="na-t">Next: ${escapeHtml(na.title)}</div><div class="na-s">Around week ${na.week}</div></div><span class="chev">${I.chev}</span></div>`:'');
+  } else if(kind==='you'){
+    title='You this week';
+    body=`<div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">Week ${wk} · ${triName(tri)}</div><div class="pc-b">${escapeHtml(data.mum)}</div></div></div>`
+      +`<div class="preg-card"><div class="pc-ico">💛</div><div><div class="pc-t">Be gentle with yourself</div><div class="pc-b">Every pregnancy feels different. Rest when you can, and trust what your body is telling you.</div></div></div>`
+      +`<button class="btn-ghost" onclick="openDangerSigns()" style="color:var(--danger);margin-top:8px">⚠️ Urgent warning signs, when to seek care</button>`;
+  } else {
+    title='About the size of a '+data.size;
+    body=`<div style="text-align:center;font-size:60px;line-height:1;margin:4px 0 12px">${emoji}</div>`
+      +`<div class="preg-card"><div class="pc-ico">📏</div><div><div class="pc-t">Week ${wk} of about 40 · ${triName(tri)}</div><div class="pc-b">These "size of a..." comparisons are a friendly way to picture how your baby is growing. They are gentle guides, not measurements, and every baby grows at their own pace.</div></div></div>`
+      +`<div class="preg-card"><div class="pc-ico">👶</div><div><div class="pc-t">What's developing</div><div class="pc-b">${escapeHtml(data.baby)}</div></div></div>`;
+  }
+  openSheet(`<h2>${escapeHtml(title)}</h2><div class="sub">A little more for week ${wk}.</div>${body}<div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
+}
 
 /* ---- Pregnancy: the journey starts wherever you are ---- */
 let pregDraft = {mode:'due', date:'', country:'us'};
@@ -3775,9 +3798,9 @@ function renderPregHome(){
       <div class="preg-bar"><i style="width:${pct}%"></i></div>
     </div>
     ${data?`<div class="preg-cards">
-      <div class="preg-card"><div class="pc-ico">${(window.PREG&&PREG.sizeEmoji)?PREG.sizeEmoji(data.size):'🌱'}</div><div><div class="pc-t">About the size of a ${escapeHtml(data.size)}</div><div class="pc-b">A gentle week-by-week guide. Every baby grows at their own pace.</div></div></div>
-      <div class="preg-card"><div class="pc-ico">👶</div><div><div class="pc-t">Baby this week</div><div class="pc-b">${escapeHtml(data.baby)}</div></div></div>
-      <div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">You this week</div><div class="pc-b">${escapeHtml(data.mum)}</div></div></div>
+      <div class="preg-card" onclick="openWeekDetail('size')" style="cursor:pointer"><div class="pc-ico">${(window.PREG&&PREG.sizeEmoji)?PREG.sizeEmoji(data.size):'🌱'}</div><div style="flex:1;min-width:0"><div class="pc-t">About the size of a ${escapeHtml(data.size)}</div><div class="pc-b">A gentle week-by-week guide. Tap for more.</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>
+      <div class="preg-card" onclick="openWeekDetail('baby')" style="cursor:pointer"><div class="pc-ico">👶</div><div style="flex:1;min-width:0"><div class="pc-t">Baby this week</div><div class="pc-b">${escapeHtml(data.baby)}</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>
+      <div class="preg-card" onclick="openWeekDetail('you')" style="cursor:pointer"><div class="pc-ico">🤍</div><div style="flex:1;min-width:0"><div class="pc-t">You this week</div><div class="pc-b">${escapeHtml(data.mum)}</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>
     </div>`:`<div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">Early days</div><div class="pc-b">Week-by-week guidance appears from week 4. Be gentle with yourself.</div></div></div>`}
     ${na?`<div class="next-appt" onclick="pregGo('log')">
       <div class="pc-ico" style="background:var(--preg-soft)">📅</div>
