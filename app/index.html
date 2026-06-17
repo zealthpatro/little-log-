@@ -54,9 +54,10 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Cubby">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Nunito+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700&family=Poppins:wght@600;700;800&family=Caveat:wght@600;700&display=swap" rel="stylesheet">
+<!-- Self-hosted fonts: no request leaves for a third-party CDN (privacy promise). -->
+<link rel="preload" as="font" type="font/woff2" href="fonts/nunitosans-400-latin.woff2" crossorigin>
+<link rel="preload" as="font" type="font/woff2" href="fonts/fraunces-600-latin.woff2" crossorigin>
+<link rel="stylesheet" href="fonts/fonts.css">
 <!-- Firebase (cloud sync + sharing). Compat SDK keeps it usable from the inline app script. -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
