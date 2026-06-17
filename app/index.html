@@ -2894,7 +2894,7 @@ function saveBabyDetails(id){
 
 /* ---- Push reminders (opt-in; dormant until a VAPID key + Cloud Messaging are set in Firebase).
    Scope: medicine due, confirmed-missed vaccine, your-turn-on-a-routine. Never feeds. ---- */
-const CUBBY_VAPID=''; // paste the Web Push certificate (public key) from Firebase console > Cloud Messaging > Web Push certificates to activate
+const CUBBY_VAPID='BJsMLPFLN5hLbJsdAs2ovSVaRii-sxjaz3bLha7ffXB7Iq4N6vUHKwlH6g9zBuyNUkgAGRKk-ii5VDMq-9tto-k'; // Web Push certificate (public key) from Firebase Cloud Messaging. Public by design.
 function pushSupported(){ try{ return !!(window.firebase && firebase.messaging && firebase.messaging.isSupported && firebase.messaging.isSupported() && ('Notification' in window) && ('serviceWorker' in navigator)); }catch(e){ return false; } }
 function pushCfg(){ if(!state.settings.push) state.settings.push={enabled:false,quietStart:21,quietEnd:7}; return state.settings.push; }
 function openReminders(){
