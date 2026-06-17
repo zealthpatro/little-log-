@@ -477,6 +477,17 @@ body.night .ob-card{background:rgba(38,32,28,.86);}
 .ms-row.done .ms-body .a{color:var(--ink-soft);}
 .ms-body .b{font-size:12px;color:var(--ink-faint);font-weight:700;margin-top:2px;}
 .ms-chip{font-size:10px;font-weight:800;padding:4px 9px;border-radius:20px;background:var(--surface-2);color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;flex-shrink:0;}
+/* Milestones browse-by-age (collapsible bands) + pet pack toggle */
+.ms-band{border:1px solid var(--line);border-radius:14px;margin-bottom:10px;overflow:hidden;background:var(--surface);box-shadow:0 3px 9px var(--shadow);}
+.ms-band>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:13px 15px;font-weight:800;font-size:14px;color:var(--ink);}
+.ms-band>summary::-webkit-details-marker{display:none;}
+.ms-band[open]>summary{border-bottom:1px solid var(--line);}
+.ms-band .ms-row{box-shadow:none;border-radius:0;margin:0;border-bottom:1px solid var(--line);}
+.ms-band .ms-row:last-child{border-bottom:none;}
+.ms-bcount{font-size:12px;color:var(--ink-soft);font-weight:700;}
+.ms-petadd{width:100%;border:1.5px dashed var(--line);background:var(--surface-2);border-radius:14px;padding:12px;font-weight:800;font-size:14px;color:var(--ink-soft);cursor:pointer;font-family:var(--font-body);margin-bottom:12px;}
+.ms-petbar{display:flex;align-items:center;gap:6px;background:var(--star-soft);border-radius:12px;padding:9px 13px;font-size:13px;font-weight:700;color:var(--ink);margin-bottom:12px;}
+.ms-petedit{margin-left:auto;border:none;background:none;color:var(--star);font-weight:800;font-size:13px;cursor:pointer;font-family:var(--font-body);text-decoration:underline;}
 .ms-thumb{width:40px;height:40px;border-radius:10px;object-fit:cover;flex-shrink:0;}
 
 /* ---- photo studio ---- */
@@ -860,6 +871,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 <div class="sheet" id="sheet"></div>
 <div class="toast" id="toast"></div>
 
+<script src="milestone-data.js"></script>
 <script>
 /* ============================================================
    LITTLE LOG: baby activity tracker
@@ -1749,7 +1761,7 @@ function renderNudge(){
   if(recent) return nudge('🎉', `${escapeHtml(b.name)} just reached "${escapeHtml(recent.title)}". One for the baby book.`);
   if(!heroPhotos().length) return nudge('📸', 'Add a photo in Album and it becomes your home slideshow.');
   const months=babyMonths();
-  const up=MILESTONES.filter(m=>!achievedOf(m.key)).sort((a,b)=>Math.abs(a.mo-months)-Math.abs(b.mo-months))[0];
+  const up=MILESTONES.filter(m=>!achievedOf(m.key)&&msVisible(m,activeBaby())).sort((a,b)=>Math.abs(a.mo-months)-Math.abs(b.mo-months))[0];
   if(up) return nudge('✨', `Around now, lots of babies are working on "${escapeHtml(up.title)}". Every baby in their own time.`);
   const todayN=babyEvents().filter(e=>dayKey(e.time)===dayKey(now())).length;
   if(todayN>0) return nudge('🌿', `${todayN} thing${todayN>1?'s':''} logged today. You've got this.`);
@@ -4922,7 +4934,9 @@ function saveSymptom(){
 /* ============================================================
    MILESTONES  (typical ages are guides, every baby is different)
    ============================================================ */
-const MILESTONES=[
+/* Library loaded from milestone-data.js (window.MILESTONES, ~225 entries with type/domain/band/
+   source/context). The inline list below is a graceful fallback if that file fails to load. */
+const MILESTONES = window.MILESTONES || [
   {key:'smile',title:'First social smile',cat:'Social',mo:2},
   {key:'coo',title:'Coos and gurgles',cat:'Language',mo:2},
   {key:'headup',title:'Holds head steady',cat:'Movement',mo:3},
@@ -5437,27 +5451,47 @@ function saveNewVaccine(){
   persist(); closeSheet(); render(); toast('Added');
 }
 
+function msVisible(m,b){
+  if(m.context==='pet' && !(b&&b.hasPet)) return false;            // pet firsts only when they have a pet
+  if(m.region && m.region.length){ var cc=(b&&b.country)||detectCountry(); if(m.region.indexOf(cc)<0) return false; } // cultural firsts by country
+  return true;
+}
+const MS_BANDS=[
+  {hi:3,label:'0 to 3 months'},{hi:6,label:'4 to 6 months'},{hi:9,label:'7 to 9 months'},
+  {hi:12,label:'10 to 12 months'},{hi:18,label:'13 to 18 months'},{hi:24,label:'19 to 24 months'},
+  {hi:36,label:'2 to 3 years'},{hi:48,label:'3 to 4 years'},{hi:9999,label:'4 years and up'}
+];
+function msBandIndex(mo){ for(var i=0;i<MS_BANDS.length;i++){ if(mo<=MS_BANDS[i].hi) return i; } return MS_BANDS.length-1; }
 function renderMilestones(){
-  const done=babyMilestones();
-  const customs=done.filter(m=>m.key.startsWith('custom-'));
-  const total=MILESTONES.length;
-  const doneCount=MILESTONES.filter(m=>achievedOf(m.key)).length + customs.length;
-  const pct=Math.min(100,Math.round((doneCount/(total+customs.length||1))*100));
-  const R=30,C=2*Math.PI*R, off=C-(pct/100)*C;
+  const b=activeBaby();
   const months=babyMonths();
+  const vis=MILESTONES.filter(m=>msVisible(m,b));
+  const done=babyMilestones();
+  const customs=done.filter(m=>(m.key||'').startsWith('custom-'));
+  const doneCount=vis.filter(m=>achievedOf(m.key)).length + customs.length;
+  // Age-relative ring: progress through what is typical by now, so 200+ far-future milestones
+  // never crush the wheel into looking empty. The big number stays "moments captured".
+  const rel=vis.filter(m=>m.mo<=months+3);
+  const relDone=rel.filter(m=>achievedOf(m.key)).length;
+  const pct=rel.length?Math.min(100,Math.round(relDone/rel.length*100)):0;
+  const R=30,C=2*Math.PI*R, off=C-(pct/100)*C;
 
-  // upcoming: nearest unachieved by typical age
-  const upcoming=MILESTONES.filter(m=>!achievedOf(m.key)).sort((a,b)=>Math.abs(a.mo-months)-Math.abs(b.mo-months)).slice(0,3);
+  const upcoming=vis.filter(m=>!achievedOf(m.key)).sort((x,y)=>Math.abs(x.mo-months)-Math.abs(y.mo-months)).slice(0,3);
 
-  const list=MILESTONES.map(m=>{
-    const a=achievedOf(m.key);
-    return `<div class="ms-row ${a?'done':''}" onclick="openMilestone('${m.key}')">
+  const row=(m)=>{ const a=achievedOf(m.key); return `<div class="ms-row ${a?'done':''}" data-q="${escapeHtml((m.title+' '+(m.cat||'')).toLowerCase())}" onclick="openMilestone('${m.key}')">
       <div class="ms-check">${I.check}</div>
       ${a&&a.photoId?`<img class="ms-thumb" src="${photoSrc(a.photoId)}">`:''}
       <div class="ms-body"><div class="a">${escapeHtml(m.title)}</div>
         <div class="b">${a?('Reached '+new Date(a.achievedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})):('typically ~'+m.mo+' mo')}</div></div>
-      <div class="ms-chip">${escapeHtml(m.cat)}</div>
-    </div>`;
+      <div class="ms-chip">${escapeHtml(m.cat)}</div></div>`; };
+
+  const curBand=msBandIndex(months);
+  const groups=MS_BANDS.map(()=>[]);
+  vis.forEach(m=>{ groups[msBandIndex(m.mo)].push(m); });
+  const bands=MS_BANDS.map((bd,i)=>{
+    if(!groups[i].length) return '';
+    const gd=groups[i].filter(m=>achievedOf(m.key)).length;
+    return `<details class="ms-band" ${i===curBand?'open':''}><summary><span>${bd.label}</span><span class="ms-bcount">${gd}/${groups[i].length}</span></summary>${groups[i].map(row).join('')}</details>`;
   }).join('');
 
   const customList=customs.map(m=>`<div class="ms-row done" onclick="openMilestone('${m.key}')">
@@ -5466,20 +5500,48 @@ function renderMilestones(){
     <div class="ms-body"><div class="a">${escapeHtml(m.title)}</div><div class="b">Reached ${new Date(m.achievedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</div></div>
     <div class="ms-chip">${escapeHtml(m.cat||'Custom')}</div></div>`).join('');
 
+  const petRow = (b&&b.hasPet)
+    ? `<div class="ms-petbar">🐾 <b>${escapeHtml(b.petName||'Your pet')}</b>&rsquo;s firsts are on<button class="ms-petedit" onclick="openPetSetup()">edit</button></div>`
+    : `<button class="ms-petadd" onclick="openPetSetup()">🐾 Have a pet? Add their firsts together</button>`;
+
   return `<div class="fade-in">
     <div class="ms-hero">
       <div class="ring"><svg width="74" height="74"><circle cx="37" cy="37" r="${R}" fill="none" stroke="var(--line)" stroke-width="7"/>
         <circle cx="37" cy="37" r="${R}" fill="none" stroke="var(--star)" stroke-width="7" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${off}"/></svg>
         <div class="rt">${doneCount}</div></div>
-      <div class="mh-body"><div class="a">${doneCount} moments captured</div><div class="b">${activeBaby().name} is ${months<24?Math.floor(months)+' months':Math.floor(months/12)+' years'} · every baby grows at their own pace</div></div>
+      <div class="mh-body"><div class="a">${doneCount} moments captured</div><div class="b">${escapeHtml(b?b.name:'Baby')} is ${months<24?Math.floor(months)+' months':Math.floor(months/12)+' years'} · every baby grows at their own pace</div></div>
     </div>
+    ${petRow}
+    <div class="field" style="margin-bottom:12px"><input id="msSearch" placeholder="Search milestones and firsts…" autocomplete="off" oninput="filterMs(this.value)"></div>
     ${upcoming.length?`<div class="sec-title">Coming up</div>${upcoming.map(m=>`<div class="ms-row" onclick="openMilestone('${m.key}')"><div class="ms-check">${I.check}</div><div class="ms-body"><div class="a">${escapeHtml(m.title)}</div><div class="b">typically around ${m.mo} months</div></div><div class="ms-chip">${escapeHtml(m.cat)}</div></div>`).join('')}`:''}
     ${customList?`<div class="sec-title">Your moments</div>${customList}`:''}
-    <div class="sec-title">All milestones</div>
-    ${list}
+    <div class="sec-title">By age</div>
+    <div id="msBands">${bands}</div>
     <div class="add-row" style="margin-top:4px" onclick="openCustomMilestone()">${I.plus} Add your own moment</div>
   </div>`;
 }
+function filterMs(q){
+  q=(q||'').trim().toLowerCase();
+  document.querySelectorAll('#msBands .ms-band').forEach(function(bd){
+    var any=false;
+    bd.querySelectorAll('.ms-row').forEach(function(r){
+      var hit=!q||(r.getAttribute('data-q')||'').indexOf(q)>=0;
+      r.style.display=hit?'':'none'; if(hit) any=true;
+    });
+    bd.style.display=any?'':'none';
+    if(q) bd.open=true;        // reveal matches across all bands while searching
+  });
+}
+function openPetSetup(){
+  const b=activeBaby(); if(!b)return;
+  openSheet(`<h2>Your pet 🐾</h2><div class="sub">Add your pet so Cubby can celebrate their firsts with ${escapeHtml(b.name)}. Skip anytime.</div>
+    <div class="field"><label>Pet's name</label><input id="petName" value="${escapeHtml(b.petName||'')}" placeholder="e.g. Rocky" autofocus></div>
+    <div class="field"><label>What kind? (optional)</label><input id="petType" value="${escapeHtml(b.petType||'')}" placeholder="e.g. dog, cat"></div>
+    <button class="btn-primary" style="background:var(--star)" onclick="savePet()">Add their firsts</button>
+    ${b.hasPet?`<button class="btn-ghost btn-danger" onclick="removePet()">Remove pet firsts</button>`:''}`,'star');
+}
+function savePet(){ const b=activeBaby(); if(!b)return; b.petName=(($('#petName')&&$('#petName').value)||'').trim(); b.petType=(($('#petType')&&$('#petType').value)||'').trim(); b.hasPet=true; persist(); closeSheet(); render(); toast('Pet firsts added 🐾'); }
+function removePet(){ const b=activeBaby(); if(!b)return; b.hasPet=false; persist(); closeSheet(); render(); toast('Pet firsts removed'); }
 let msDraft=null;
 function openMilestone(key){
   const def=MILESTONES.find(m=>m.key===key);
@@ -5520,7 +5582,7 @@ function saveMilestone(){
   persist(); closeSheet(); render(); toast('🎉 '+(def?def.title:'Moment')+'! What a star ⭐');
 }
 function unMilestone(key){
-  state.milestones=state.milestones.filter(m=>m.key!==key);
+  state.milestones=state.milestones.filter(m=>!(m.key===key && m.babyId===state.activeBabyId));
   persist(); closeSheet(); render(); toast('Removed');
 }
 function openCustomMilestone(){
