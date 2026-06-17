@@ -36,10 +36,10 @@ function pemToDer(pem) {
 }
 
 // Service account -> short-lived OAuth access token (RS256 JWT signed via WebCrypto).
-async function getAccessToken(sa) {
+async function getAccessToken(sa, scope) {
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: 'RS256', typ: 'JWT' };
-  const claim = { iss: sa.client_email, scope: OAUTH_SCOPE, aud: TOKEN_URL, iat: now, exp: now + 3600 };
+  const claim = { iss: sa.client_email, scope: scope || OAUTH_SCOPE, aud: TOKEN_URL, iat: now, exp: now + 3600 };
   const unsigned = b64urlStr(JSON.stringify(header)) + '.' + b64urlStr(JSON.stringify(claim));
   const key = await crypto.subtle.importKey('pkcs8', pemToDer(sa.private_key), { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
   const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(unsigned));
@@ -208,7 +208,67 @@ async function newsletterSignup(request, env) {
   }
 }
 
+/* ---- Push reminders sender (Wave 5 Phase 2). The hourly cron reads each user's precomputed
+   reminder index (users/{uid}.push.due, written by the client which owns the medicine logic) and
+   sends due ones via FCM HTTP v1, reusing the same service-account OAuth (datastore + messaging
+   scopes). Isolated from fetch(): a failure here only means a reminder did not fire, never a site
+   or sign-in problem. ---- */
+const FS_PROJECT = 'little-log-a9caa';
+function _fsNum(v){ if(!v) return null; if(v.integerValue!=null) return +v.integerValue; if(v.doubleValue!=null) return +v.doubleValue; return null; }
+function _fsStr(v){ return (v && v.stringValue!=null) ? v.stringValue : ''; }
+function _inQuiet(hr, qs, qe){ if(qs==null||qe==null||qs===qe) return false; return qs<qe ? (hr>=qs&&hr<qe) : (hr>=qs||hr<qe); }
+async function sendPushReminders(env){
+  if(!env.FIREBASE_SERVICE_ACCOUNT) return;
+  let sa; try{ sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); }catch(e){ return; }
+  const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/firebase.messaging');
+  const base = 'https://firestore.googleapis.com/v1/projects/' + FS_PROJECT + '/databases/(default)/documents';
+  const now = Date.now();
+  let docs = [], pageToken = '';
+  do {
+    const r = await fetch(base + '/users?pageSize=300' + (pageToken ? ('&pageToken=' + encodeURIComponent(pageToken)) : ''), { headers: { authorization: 'Bearer ' + token } });
+    if (!r.ok) break;
+    const j = await r.json(); (j.documents || []).forEach(d => docs.push(d)); pageToken = j.nextPageToken || '';
+  } while (pageToken);
+  for (const d of docs) {
+    try {
+      const push = d.fields && d.fields.push && d.fields.push.mapValue && d.fields.push.mapValue.fields;
+      if (!push || !(push.enabled && push.enabled.booleanValue)) continue;
+      const tokensMap = push.tokens && push.tokens.mapValue && push.tokens.mapValue.fields;
+      const tokens = tokensMap ? Object.keys(tokensMap) : [];
+      if (!tokens.length) continue;
+      const dueArr = (push.due && push.due.arrayValue && push.due.arrayValue.values) || [];
+      const sentUpTo = _fsNum(push.sentUpTo) || 0;
+      const qs = _fsNum(push.quietStart), qe = _fsNum(push.quietEnd);
+      let maxAt = sentUpTo; const toSend = [];
+      for (const v of dueArr) {
+        const f = v.mapValue && v.mapValue.fields; if (!f) continue;
+        const at = _fsNum(f.at); if (at == null || at <= sentUpTo || at > now) continue;
+        // Quiet hours are applied client-side (it knows the user timezone), so the index already
+        // excludes them; the Worker just sends what is due.
+        toSend.push({ title: _fsStr(f.title) || 'Cubby', body: _fsStr(f.body), tag: _fsStr(f.tag) || 'cubby' });
+        if (at > maxAt) maxAt = at;
+      }
+      for (const msg of toSend) {
+        for (const tk of tokens) {
+          await fetch('https://fcm.googleapis.com/v1/projects/' + FS_PROJECT + '/messages:send', {
+            method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+            body: JSON.stringify({ message: { token: tk, notification: { title: msg.title, body: msg.body }, data: { tag: msg.tag }, webpush: { fcmOptions: { link: 'https://little-cubby.com/app/' } } } })
+          }).catch(() => {});
+        }
+      }
+      if (maxAt > sentUpTo) {
+        const id = d.name.split('/documents/users/')[1];
+        if (id) await fetch(base + '/users/' + encodeURIComponent(id) + '?updateMask.fieldPaths=push.sentUpTo', {
+          method: 'PATCH', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+          body: JSON.stringify({ fields: { push: { mapValue: { fields: { sentUpTo: { integerValue: String(maxAt) } } } } } })
+        }).catch(() => {});
+      }
+    } catch (e) { /* skip this user, keep going */ }
+  }
+}
+
 export default {
+  async scheduled(event, env) { try { await sendPushReminders(env); } catch (e) {} },
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/api/send-signin-link') {

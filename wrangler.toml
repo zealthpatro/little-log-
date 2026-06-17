@@ -4,6 +4,11 @@ name = "cubby"
 main = "worker.js"
 compatibility_date = "2025-06-01"
 
+# Hourly cron: send due push reminders (worker.js scheduled -> sendPushReminders). Reads each
+# user's precomputed reminder index from Firestore and sends via FCM. Isolated from fetch().
+[triggers]
+crons = ["0 * * * *"]
+
 [assets]
 directory = "./"
 binding = "ASSETS"

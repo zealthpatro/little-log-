@@ -1063,7 +1063,7 @@ function hideLoader(){ if(_loaderTimer){clearInterval(_loaderTimer);_loaderTimer
 function paintYield(){ return new Promise(r=>requestAnimationFrame(()=>setTimeout(r,0))); }
 
 /* ---------- Persistence ---------- */
-async function persist(){ await Store.save(state); }
+async function persist(){ await Store.save(state); try{ maybeSyncReminders(); }catch(e){} }
 
 /* ---------- Event creation ---------- */
 function addEvent(ev){
@@ -2916,10 +2916,47 @@ async function enablePush(){
     if(!tok){ toast('Could not enable reminders'); return; }
     const cfg=pushCfg(); cfg.enabled=true;
     if(window.LL&&LL.db&&myUid()){ const t={}; t[tok]={ua:(navigator.userAgent||'').slice(0,120),at:Date.now()}; await LL.db.collection('users').doc(myUid()).set({push:{enabled:true,quietStart:cfg.quietStart,quietEnd:cfg.quietEnd,tokens:t}},{merge:true}); }
-    persist(); openReminders(); toast('Reminders on 🔔');
+    persist(); syncReminderIndex(); openReminders(); toast('Reminders on 🔔');
   }catch(e){ toast('Could not enable reminders'); }
 }
-function disablePush(){ const cfg=pushCfg(); cfg.enabled=false; if(window.LL&&LL.db&&myUid()){ try{ LL.db.collection('users').doc(myUid()).set({push:{enabled:false}},{merge:true}); }catch(e){} } persist(); openReminders(); toast('Reminders off'); }
+function disablePush(){ const cfg=pushCfg(); cfg.enabled=false; if(window.LL&&LL.db&&myUid()){ try{ LL.db.collection('users').doc(myUid()).set({push:{enabled:false,due:[]}},{merge:true}); }catch(e){} } persist(); openReminders(); toast('Reminders off'); }
+/* Reminder index: the client (which has the medicine logic) precomputes the next ~36h of fire-times
+   into users/{uid}.push.due; the Worker cron only reads + sends, so it needs no domain logic.
+   Refreshed on app use (throttled), on enabling push, and on any medicine change. */
+var _remSync=0;
+function maybeSyncReminders(){ try{ if(state.settings&&state.settings.push&&state.settings.push.enabled && Date.now()-_remSync>600000){ _remSync=Date.now(); syncReminderIndex(); } }catch(e){} }
+function medFireTimes(m,fromTs,toTs){
+  var out=[]; if(!m||!m.pattern) return out;
+  if(m.pattern.type==='everyX'){
+    var step=(m.pattern.hours||6)*3600000; if(step<=0) return out;
+    var t=medNextDue(m); if(!t) return out;
+    while(t<fromTs) t+=step;
+    for(; t<=toTs && out.length<24; t+=step) out.push(t);
+  } else {
+    var times=(m.pattern.times||[]);
+    for(var day=0; day<2; day++){
+      var base=new Date(fromTs); base.setHours(0,0,0,0); var b0=base.getTime()+day*86400000;
+      times.forEach(function(ts){ var p=String(ts).split(':'); var at=b0+(+p[0])*3600000+(+p[1])*60000; if(at>=fromTs&&at<=toTs) out.push(at); });
+    }
+  }
+  return out;
+}
+async function syncReminderIndex(){
+  try{
+    if(!(window.LL&&LL.db&&myUid())) return;
+    var cfg=state.settings.push; if(!cfg||!cfg.enabled) return;
+    var fromTs=Date.now(), toTs=fromTs+36*3600000, due=[];
+    (state.meds||[]).filter(function(m){return m.remind&&m.active!==false;}).forEach(function(m){
+      medFireTimes(m,fromTs,toTs).forEach(function(at){ due.push({at:at,title:'Medicine due',body:(m.name||'Medicine')+(m.dose?(' · '+m.dose+(m.unit||'')):''),tag:'med-'+m.id}); });
+    });
+    // Apply quiet hours HERE (the client knows the local timezone; the Worker only sees UTC).
+    var qs=cfg.quietStart, qe=cfg.quietEnd;
+    function _q(at){ if(qs==null||qe==null||qs===qe) return false; var h=new Date(at).getHours(); return qs<qe?(h>=qs&&h<qe):(h>=qs||h<qe); }
+    due=due.filter(function(e){ return !_q(e.at); });
+    due.sort(function(a,b){return a.at-b.at;});
+    await LL.db.collection('users').doc(myUid()).set({push:{due:due.slice(0,50)}},{merge:true});
+  }catch(e){}
+}
 function openSettings(){
   const s=state.settings;
   openSheet(`<h2>Settings</h2><div class="sub">Cubby preferences.</div>
@@ -4679,11 +4716,11 @@ function saveMed(id){
     state.meds.push(medDraft);
   }
   if(medDraft.remind) requestNotif();
-  persist(); closeSheet(); render(); toast('Medicine saved');
+  persist(); syncReminderIndex(); closeSheet(); render(); toast('Medicine saved');
 }
 function deleteMed(id){
   state.meds=state.meds.filter(m=>m.id!==id);
-  persist(); closeSheet(); render(); toast('Removed');
+  persist(); syncReminderIndex(); closeSheet(); render(); toast('Removed');
 }
 function logDose(id){
   const m=babyMeds().find(x=>x.id===id); if(!m)return;
