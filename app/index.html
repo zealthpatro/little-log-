@@ -2945,21 +2945,32 @@ async function syncReminderIndex(){
   try{
     if(!(window.LL&&LL.db&&myUid())) return;
     var cfg=state.settings.push; if(!cfg||!cfg.enabled) return;
-    // HARD RULE: at most ONE push per day, and only something that matters. We write a single
-    // gentle morning digest (9am local) on a day that actually has a medicine due, never a push
-    // per dose, never anything routine or non-critical.
+    // ONLY medicine is critical enough to push. Two kinds, nothing else ever:
+    //  (1) a per-medicine reminder ~30 min before each due dose, and
+    //  (2) one gentle morning digest of the day's medicines.
     var meds=(state.meds||[]).filter(function(m){return m.remind&&m.active!==false;});
-    var now=Date.now(), due=[];
+    var now=Date.now(), windowEnd=now+48*3600000, due=[], baby=(((activeBaby()||{}).name)||'your little one');
+    function clock(at){ var t=new Date(at), h=t.getHours(), mm=t.getMinutes(), ap=h>=12?'pm':'am', h12=(h%12)||12; return h12+':'+(mm<10?'0':'')+mm+ap; }
+    // (1) pre-dose reminders, fired ~30 min ahead (the 15-min cron delivers them 30-15 min before)
+    meds.forEach(function(m){
+      medFireTimes(m,now,windowEnd).forEach(function(at){
+        var fireAt=at-30*60000; if(fireAt<=now) return;
+        due.push({at:fireAt, title:(m.name||'Medicine')+' soon', body:'Time for '+(m.name||'medicine')+(m.dose?(' '+m.dose+(m.unit||'')):'')+' at '+clock(at), tag:'med-'+m.id+'-'+at});
+      });
+    });
+    // (2) one morning digest (9am local) per day that has a medicine due
     for(var day=0; day<3; day++){
       var d0=new Date(); d0.setHours(0,0,0,0); var ds=d0.getTime()+day*86400000, de=ds+86400000;
       var names=[]; meds.forEach(function(m){ var nm=m.name||'Medicine'; if(medFireTimes(m,ds,de).length && names.indexOf(nm)<0) names.push(nm); });
-      if(!names.length) continue;                 // nothing that day -> no push that day
-      var fireAt=ds+9*3600000;                     // 9am local, well outside quiet hours
-      if(fireAt<=now) continue;                    // never fire a digest for a time already gone
-      var body=names.length<=3?('A medicine to give today: '+names.join(', ')):(names.length+' medicines to give today');
-      due.push({at:fireAt, title:'Today with '+(((activeBaby()||{}).name)||'your little one'), body:body, tag:'digest-'+ds});
+      if(!names.length) continue; var fireAt=ds+9*3600000; if(fireAt<=now) continue;
+      due.push({at:fireAt, title:'Today with '+baby, body:names.length<=3?('Medicines today: '+names.join(', ')):(names.length+' medicines to give today'), tag:'digest-'+ds});
     }
-    await LL.db.collection('users').doc(myUid()).set({push:{due:due.slice(0,3)}},{merge:true});
+    // Quiet hours applied client-side (the client knows the timezone) so overnight doses never ping.
+    var qs=cfg.quietStart, qe=cfg.quietEnd;
+    function _q(at){ if(qs==null||qe==null||qs===qe) return false; var h=new Date(at).getHours(); return qs<qe?(h>=qs&&h<qe):(h>=qs||h<qe); }
+    due=due.filter(function(e){ return !_q(e.at); });
+    due.sort(function(a,b){return a.at-b.at;});
+    await LL.db.collection('users').doc(myUid()).set({push:{due:due.slice(0,60)}},{merge:true});
   }catch(e){}
 }
 function openSettings(){

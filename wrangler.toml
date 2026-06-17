@@ -4,10 +4,11 @@ name = "cubby"
 main = "worker.js"
 compatibility_date = "2025-06-01"
 
-# Hourly cron: send due push reminders (worker.js scheduled -> sendPushReminders). Reads each
-# user's precomputed reminder index from Firestore and sends via FCM. Isolated from fetch().
+# Every 15 minutes: send due push reminders (worker.js scheduled -> sendPushReminders). 15-min
+# granularity so a medicine reminder lands ~30 to 15 min before the dose. Reads each user's
+# precomputed reminder index from Firestore and sends via FCM. Isolated from fetch().
 [triggers]
-crons = ["0 * * * *"]
+crons = ["*/15 * * * *"]
 
 [assets]
 directory = "./"

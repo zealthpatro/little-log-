@@ -238,27 +238,31 @@ async function sendPushReminders(env){
       if (!tokens.length) continue;
       const dueArr = (push.due && push.due.arrayValue && push.due.arrayValue.values) || [];
       const sentUpTo = _fsNum(push.sentUpTo) || 0;
-      const todayKey = new Date(now).toISOString().slice(0, 10);
-      if (_fsStr(push.lastPushDay) === todayKey) continue;   // HARD CAP: at most one push per user per day
-      let maxAt = sentUpTo, pick = null;
+      let maxAt = sentUpTo; const toSend = [];
       for (const v of dueArr) {
         const f = v.mapValue && v.mapValue.fields; if (!f) continue;
         const at = _fsNum(f.at); if (at == null || at <= sentUpTo || at > now) continue;
         if (at > maxAt) maxAt = at;
-        if (!pick) pick = { title: _fsStr(f.title) || 'Cubby', body: _fsStr(f.body), tag: _fsStr(f.tag) || 'cubby' };
+        // Only fire FRESH reminders (within the last 45 min) so a long-closed app never produces a
+        // burst of stale ones; older due entries are skipped but still advance sentUpTo so they
+        // never resend. Quiet hours and the medicine-only / digest rules were applied client-side.
+        if (at >= now - 45 * 60000) toSend.push({ title: _fsStr(f.title) || 'Cubby', body: _fsStr(f.body), tag: _fsStr(f.tag) || 'cubby' });
       }
-      if (!pick) continue;                                   // nothing due -> no push at all
-      for (const tk of tokens) {                             // ONE notification, to this user's devices
-        await fetch('https://fcm.googleapis.com/v1/projects/' + FS_PROJECT + '/messages:send', {
-          method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-          body: JSON.stringify({ message: { token: tk, notification: { title: pick.title, body: pick.body }, data: { tag: pick.tag }, webpush: { fcmOptions: { link: 'https://little-cubby.com/app/' } } } })
+      for (const msg of toSend) {
+        for (const tk of tokens) {
+          await fetch('https://fcm.googleapis.com/v1/projects/' + FS_PROJECT + '/messages:send', {
+            method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+            body: JSON.stringify({ message: { token: tk, notification: { title: msg.title, body: msg.body }, data: { tag: msg.tag }, webpush: { fcmOptions: { link: 'https://little-cubby.com/app/' } } } })
+          }).catch(() => {});
+        }
+      }
+      if (maxAt > sentUpTo) {
+        const id = d.name.split('/documents/users/')[1];
+        if (id) await fetch(base + '/users/' + encodeURIComponent(id) + '?updateMask.fieldPaths=push.sentUpTo', {
+          method: 'PATCH', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+          body: JSON.stringify({ fields: { push: { mapValue: { fields: { sentUpTo: { integerValue: String(maxAt) } } } } } })
         }).catch(() => {});
       }
-      const id = d.name.split('/documents/users/')[1];
-      if (id) await fetch(base + '/users/' + encodeURIComponent(id) + '?updateMask.fieldPaths=push.sentUpTo&updateMask.fieldPaths=push.lastPushDay', {
-        method: 'PATCH', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-        body: JSON.stringify({ fields: { push: { mapValue: { fields: { sentUpTo: { integerValue: String(maxAt) }, lastPushDay: { stringValue: todayKey } } } } } })
-      }).catch(() => {});
     } catch (e) { /* skip this user, keep going */ }
   }
 }
