@@ -6170,6 +6170,7 @@ function renderPhotos(){
       <button class="btn-primary" style="background:var(--sleep)" onclick="downloadPhoto()">${I.download} Download</button>
     </div>
     ${navigator.share?`<button class="btn-primary" style="background:var(--pump)" onclick="shareComposed()">📤 Share · Instagram-ready</button>`:''}
+    ${(isCard&&canRecordVideo())?`<button class="btn-primary" style="background:var(--preg)" onclick="recordVideo()">🎬 Save as video ✨</button>`:''}
     ${(!isPro()&&isCard)?`<div class="csub" style="text-align:center;margin:6px 0 10px">Free shares carry a small "made with Cubby" mark · Pro shares are clean ✨</div>`:''}
     <button class="btn-ghost" onclick="discardPhoto()">Discard & start over</button>
     ${galleryHtml}
@@ -6539,7 +6540,7 @@ function startAnim(){
   var loop=function(ts){
     var c=document.getElementById('photoCanvas');
     if(!photoEditor||!photoEditor.anim||!c){ stopAnim(); return; }
-    photoEditor._t=ts-_animStart; composeAny(c,560);   // lower res so the loop stays smooth
+    photoEditor._t=ts-_animStart; composeAny(c, photoEditor._recRes||560);   // low res for smooth preview; higher while recording
     _animRAF=requestAnimationFrame(loop);
   };
   _animRAF=requestAnimationFrame(loop);
@@ -6566,6 +6567,38 @@ function drawCharacter(ctx,W,H,px,py,pw,ph){
   ctx.drawImage(ed._charImg,x,y,s,s);
 }
 function setChar(){ if(!photoEditor)return; photoEditor.character=!photoEditor.character; if(photoEditor.character){ photoEditor._charImg=null; photoEditor._charLoading=false; ensureCharImg(); } render(); drawPhoto(); }
+/* ---- Shareable animated card: record the live canvas to a short video (the Pro headline).
+   Feature-detected; falls back to a still everywhere it is unsupported. iOS Safari support is
+   recent and MP4-vs-WebM varies, so this needs real-device QA. ---- */
+function canRecordVideo(){
+  try{ return !!(window.MediaRecorder && HTMLCanvasElement.prototype.captureStream && (MediaRecorder.isTypeSupported('video/mp4')||MediaRecorder.isTypeSupported('video/webm'))); }catch(e){ return false; }
+}
+var _recording=false;
+function recordVideo(){
+  if(_recording||!photoEditor) return;
+  var c=document.getElementById('photoCanvas'); if(!c) return;
+  if(!canRecordVideo()){ toast('Video export needs a newer browser. Your still card still works.'); return; }
+  _recording=true;
+  if(!photoEditor.decor||photoEditor.decor==='none') photoEditor.decor='confetti';   // give it some motion
+  var mime=MediaRecorder.isTypeSupported('video/mp4')?'video/mp4':'video/webm';
+  photoEditor._recRes=720; var wasAnim=photoEditor.anim; photoEditor.anim=true; startAnim();
+  var stream=c.captureStream(30), chunks=[], rec;
+  try{ rec=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:6000000}); }
+  catch(e){ try{ rec=new MediaRecorder(stream); mime=rec.mimeType||'video/webm'; }catch(e2){ _recording=false; photoEditor._recRes=0; toast('Could not record on this device'); return; } }
+  rec.ondataavailable=function(e){ if(e.data&&e.data.size) chunks.push(e.data); };
+  rec.onstop=function(){
+    _recording=false; photoEditor._recRes=0;
+    if(!wasAnim){ photoEditor.anim=false; stopAnim(); drawPhoto(); }
+    var ext=(mime.indexOf('mp4')>=0)?'mp4':'webm';
+    var blob=new Blob(chunks,{type:mime});
+    var fname='cubby-'+(((activeBaby()||{}).name||'moment').toLowerCase().replace(/[^a-z0-9]/g,''))+'.'+ext;
+    try{ var file=new File([blob],fname,{type:mime}); if(navigator.canShare&&navigator.canShare({files:[file]})){ navigator.share({files:[file]}).catch(function(){}); toast('Video ready'); return; } }catch(e){}
+    var url=URL.createObjectURL(blob); var a=document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){URL.revokeObjectURL(url);},6000); toast('Video saved');
+  };
+  toast('Recording a few seconds…');
+  try{ rec.start(); }catch(e){ _recording=false; photoEditor._recRes=0; if(!wasAnim){photoEditor.anim=false;stopAnim();} toast('Could not record on this device'); return; }
+  setTimeout(function(){ try{ rec.stop(); }catch(e){} }, 5000);
+}
 function drawPhoto(){ const c=$('#photoCanvas'); if(c&&photoEditor) composeAny(c,1080); }
 /* The taster gate lives at export: premium styles are free to explore on the canvas
    and to Save in-app; Download/Share of a premium-styled card costs one taste.
