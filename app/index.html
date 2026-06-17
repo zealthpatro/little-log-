@@ -121,7 +121,7 @@ body{
     radial-gradient(120% 80% at 50% 0%, var(--bg-grad-1) 0%, var(--bg-grad-2) 60%, var(--bg) 100%);
   color:var(--ink);
   -webkit-font-smoothing:antialiased;
-  overflow:hidden;
+  overflow:hidden;touch-action:manipulation;
   transition:background .4s ease,color .4s ease;
 }
 #app{
@@ -301,6 +301,7 @@ body{
   width:100%;max-width:480px;background:var(--surface);
   border-radius:30px 30px 0 0;padding:10px 22px calc(26px + env(safe-area-inset-bottom));
   z-index:51;transition:transform .36s cubic-bezier(.2,.9,.3,1);max-height:90dvh;overflow-y:auto;
+  overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
 }
 .sheet.show{transform:translate(-50%,0);}
 .grab{width:42px;height:5px;border-radius:3px;background:var(--line);margin:6px auto 18px;cursor:grab;touch-action:none;}
@@ -324,6 +325,8 @@ body{
 .opt .osub{font-size:11px;color:var(--ink-soft);font-weight:600;}
 .field{margin-bottom:16px;}
 .field label{display:block;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-faint);margin-bottom:8px;}
+/* Form controls never render below 16px, otherwise iOS Safari auto-zooms the page on focus. */
+input,select,textarea{font-size:16px;}
 /* Crafted in-sheet date picker */
 .dp{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 12px;}
 .dp-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
@@ -587,7 +590,7 @@ body.night .ob-card{background:rgba(38,32,28,.86);}
 input[type=range]{-webkit-appearance:none;width:100%;height:6px;border-radius:6px;background:var(--line);outline:none;}
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--feed);cursor:pointer;box-shadow:0 2px 6px var(--shadow-strong);}
 input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-radius:50%;background:var(--feed);cursor:pointer;}
-.cap-input{width:100%;border:2px solid var(--line);background:var(--surface-2);border-radius:14px;padding:12px 15px;font-family:var(--font-body);font-size:15px;font-weight:600;color:var(--ink);margin-bottom:14px;}
+.cap-input{width:100%;border:2px solid var(--line);background:var(--surface-2);border-radius:14px;padding:12px 15px;font-family:var(--font-body);font-size:16px;font-weight:600;color:var(--ink);margin-bottom:14px;}
 .cap-input:focus{outline:none;border-color:var(--feed);}
 .toggle-row{display:flex;align-items:center;justify-content:space-between;background:var(--surface);border-radius:var(--radius-sm);padding:13px 16px;margin-bottom:14px;box-shadow:0 3px 9px var(--shadow);}
 .toggle-row .tr-a{font-weight:800;font-size:14px;}
@@ -1169,6 +1172,14 @@ function _dpToday(id){ var s=_dp[id]; if(!s)return; var t=new Date(); s.y=t.getF
    ============================================================ */
 let viewingPreg=false;  // show the pregnancy shell even when born babies also exist (subject switch)
 function render(){
+  // Preserve the scroll position across the full-shell rebuild, so ticking a checkbox or
+  // toggling state doesn't jump the page to the top (which read as a jarring full refresh).
+  // View/tab changes still scroll to top because they call $('#scroll').scrollTo(0,0) after render().
+  var _ss=document.getElementById('scroll'); var _sy=_ss?_ss.scrollTop:0;
+  _renderView();
+  if(_sy){ var _ns=document.getElementById('scroll'); if(_ns) _ns.scrollTop=_sy; }
+}
+function _renderView(){
   document.body.setAttribute('data-theme', state.settings.theme==='night'?'night':'light');
   if(state.pregnancy && !state.pregnancy.bornBabyId && (state.babies.length===0 || viewingPreg)){ renderPregShell(); return; }
   if(state.babies.length===0){ renderOnboard(); return; }
@@ -2050,23 +2061,30 @@ function sheetBack(){ var prev=_sheetStack.pop(); var s=$('#sheet'); if(!prev){ 
 function closeSheet(){ _sheetStack=[]; var s=document.getElementById('sheet'); if(s){ s.style.transition=''; s.style.transform=''; } var sc=document.getElementById('scrim'); if(sc)sc.classList.remove('show'); if(s)s.classList.remove('show'); }
 /* Drag-to-dismiss: grab the handle (or the top strip of the sheet) and pull down to close. */
 (function(){
-  var dragging=false, startY=0, curY=0;
+  // Native bottom-sheet feel: pull down to dismiss from the grab handle, or from anywhere ONLY
+  // when the sheet's own content is already scrolled to the very top. Mid-content scrolling never
+  // drags the sheet (so it can't close by accident), and overscroll-behavior keeps the scroll
+  // contained inside the sheet rather than leaking to the page behind it.
+  var armed=false, dragging=false, startY=0, curY=0;
   function sheet(){ return document.getElementById('sheet'); }
+  function reset(s){ if(s){ s.style.transition=''; s.style.transform=''; } dragging=false; }
   document.addEventListener('pointerdown', function(e){
-    var s=sheet(); if(!s||!s.classList.contains('show')) return;
-    var r=s.getBoundingClientRect(), dy=e.clientY-r.top;
-    if(!((e.target.closest&&e.target.closest('.grab'))||(dy>=0&&dy<40))) return;
-    dragging=true; startY=e.clientY; curY=0; s.style.transition='none';
+    var s=sheet(); if(!s||!s.classList.contains('show')){ armed=false; return; }
+    var onGrab=e.target.closest && e.target.closest('.grab');
+    armed = !!onGrab || s.scrollTop<=0;     // handle always; content only when at the top
+    startY=e.clientY; curY=0; dragging=false;
   });
   document.addEventListener('pointermove', function(e){
-    if(!dragging) return; var s=sheet(); if(!s) return;
-    curY=Math.max(0,e.clientY-startY); if(curY>0) e.preventDefault();
-    s.style.transform='translate(-50%,'+curY+'px)';
+    if(!armed) return; var s=sheet(); if(!s) return;
+    var dy=e.clientY-startY;
+    if(dy<=0){ if(dragging) reset(s); return; }        // moving up: let the content scroll
+    if(s.scrollTop>0){ armed=false; if(dragging) reset(s); return; } // user scrolled into content: never drag
+    dragging=true; curY=dy; s.style.transition='none'; s.style.transform='translate(-50%,'+curY+'px)'; e.preventDefault();
   }, {passive:false});
-  document.addEventListener('pointerup', function(){
-    if(!dragging) return; dragging=false; var s=sheet(); if(!s) return;
-    if(curY>90){ closeSheet(); } else { s.style.transition=''; s.style.transform=''; }
-  });
+  function end(){ if(!armed) return; armed=false; if(!dragging) return; var s=sheet(); if(!s) return;
+    if(curY>90){ closeSheet(); } else { reset(s); } }
+  document.addEventListener('pointerup', end);
+  document.addEventListener('pointercancel', end);
 })();
 
 /* ---------- FEED ---------- */
@@ -2171,7 +2189,7 @@ function renderFeedSheet(){
       <div class="field"><label>How much? (optional)</label>
         <div style="display:flex;gap:10px">
           <input type="number" id="solidAmt" value="${d.solidAmount}" placeholder="amount" oninput="feedDraft.solidAmount=this.value" style="flex:1;border:2px solid var(--line);background:var(--surface-2);border-radius:14px;padding:13px 15px;font-weight:700;font-size:16px;font-family:var(--font-body);color:var(--ink)">
-          <select id="solidUnit" onchange="feedDraft.solidUnit=this.value" style="width:120px;border:2px solid var(--line);background:var(--surface-2);border-radius:14px;padding:13px 12px;font-weight:700;font-size:15px;font-family:var(--font-body);color:var(--ink)">
+          <select id="solidUnit" onchange="feedDraft.solidUnit=this.value" style="width:120px;border:2px solid var(--line);background:var(--surface-2);border-radius:14px;padding:13px 12px;font-weight:700;font-size:16px;font-family:var(--font-body);color:var(--ink)">
             ${SOLID_UNITS.map(u=>`<option value="${u}" ${d.solidUnit===u?'selected':''}>${u}</option>`).join('')}
           </select>
         </div></div>
@@ -2754,6 +2772,7 @@ function openBirthDetails(){
     <div class="field"><label>Proud parents</label><input id="dParents" value="${escapeHtml(b.parents||'')}" placeholder="e.g. Aaron & Olivia"></div>
     <button class="btn-primary" style="background:var(--star)" onclick="saveBabyDetails('${b.id}')">Save details</button>`,'star');
 }
+let customAllergyDraft='';
 function openFoodPrefs(){
   const b=activeBaby(); if(!b)return;
   openSheet(`${babyIdentity(b)}<div class="sub" style="margin:-8px 0 14px">How ${escapeHtml(b.name)} feeds, and anything to watch for.</div>
@@ -2779,7 +2798,7 @@ function openFoodPrefs(){
       <div class="chip-row" style="flex-wrap:wrap;gap:8px">${ALLERGENS.map(a=>{const t=a.toLowerCase();const on=(b.allergies||[]).includes(t);return `<div class="chip ${on?'sel':''}" onclick="toggleAllergy('${b.id}','${t}')">${a}</div>`;}).join('')}</div>
       ${(b.allergies||[]).filter(t=>!ALLERGENS.map(x=>x.toLowerCase()).includes(t)).map(t=>`<div class="chip sel" style="margin-top:8px" onclick="toggleAllergy('${b.id}','${t}')">${capWord(t)} ✕</div>`).join('')}
       <div style="display:flex;gap:10px;margin-top:8px">
-        <input id="customAllergy" placeholder="Add another allergy" style="flex:1;border:2px solid var(--line);background:var(--surface-2);border-radius:14px;padding:12px 14px;font-weight:600;font-size:14px;font-family:var(--font-body);color:var(--ink)">
+        <input id="customAllergy" placeholder="Add another allergy" value="${escapeHtml(customAllergyDraft||'')}" oninput="customAllergyDraft=this.value" style="flex:1;border:2px solid var(--line);background:var(--surface-2);border-radius:14px;padding:12px 14px;font-weight:600;font-size:16px;font-family:var(--font-body);color:var(--ink)">
         <button class="btn-ghost" style="width:auto;padding:0 18px" onclick="addCustomAllergy('${b.id}')">Add</button>
       </div>
       <div class="csub" style="margin-top:6px">So everyone caring for your baby can see what to watch for. Always follow your pediatrician's guidance on introducing allergens.</div>
@@ -2791,7 +2810,7 @@ function setFeedType(id,ft){ const b=state.babies.find(x=>x.id===id); if(b){ b.f
 function setSolids(id,on){ const b=state.babies.find(x=>x.id===id); if(b){ b.solidsStarted=!!on; persist(); } openFoodPrefs(); }
 function setDiet(id,d){ const b=state.babies.find(x=>x.id===id); if(b){ b.diet=d; persist(); } openFoodPrefs(); }
 function toggleAllergy(id,t){ const b=state.babies.find(x=>x.id===id); if(b){ if(!b.allergies)b.allergies=[]; const i=b.allergies.indexOf(t); if(i>=0)b.allergies.splice(i,1); else b.allergies.push(t); persist(); } openFoodPrefs(); }
-function addCustomAllergy(id){ const b=state.babies.find(x=>x.id===id); const v=$('#customAllergy')?$('#customAllergy').value.trim().toLowerCase():''; if(b&&v){ if(!b.allergies)b.allergies=[]; if(!b.allergies.includes(v))b.allergies.push(v); persist(); } openFoodPrefs(); }
+function addCustomAllergy(id){ const b=state.babies.find(x=>x.id===id); const v=$('#customAllergy')?$('#customAllergy').value.trim().toLowerCase():''; if(b&&v){ if(!b.allergies)b.allergies=[]; if(!b.allergies.includes(v))b.allergies.push(v); persist(); } customAllergyDraft=''; openFoodPrefs(); }
 
 /* ---- doctor & visits ---- */
 const VISIT_REASONS=['Checkup','Vaccination','Sick visit','Follow-up','Dentist'];
@@ -3482,7 +3501,7 @@ function openStartPregnancy(){
     ${(state.pregnancyArchive&&state.pregnancyArchive.length)?`<button class="btn-ghost" style="color:var(--ink-faint);margin-top:4px" onclick="openKeptMemories()">🤍 View kept memories</button>`:''}
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
 }
-function setPregMode(m){ pregDraft.mode=m; pregDraft.date=(($('#pgDate')||{}).value)||pregDraft.date; openExpectingSetup(m); }
+function setPregMode(m){ pregDraft.mode=m; pregDraft.date=(($('#pgDate')||{}).value)||pregDraft.date; pregDraft.country=(($('#pgCountry')||{}).value)||pregDraft.country; openExpectingSetup(m); }
 function openExpectingSetup(mode){
   pregDraft.mode=mode||pregDraft.mode;
   const isDue = pregDraft.mode==='due';
@@ -4354,7 +4373,7 @@ function renderGlucoseLog(){
   const chips=ctxs.map(([k,l])=>`<button class="tgt ${glucoseDraft.context===k?'on':''}" onclick="setGlucoseCtx('${k}')">${l}</button>`).join('');
   openSheet(`<h2>Blood glucose</h2><div class="sub">Log a finger-prick reading. Tag when you took it so it lines up with your targets.</div>
     <div class="field"><label>When in the day</label><div class="tgt-row">${chips}</div></div>
-    <div class="field"><label>Reading (${ul})</label><input type="number" inputmode="decimal" id="glVal" placeholder="${unit==='mmol'?'e.g. 5.1':'e.g. 92'}" autofocus>${wwa('mat.glucose')}</div>
+    <div class="field"><label>Reading (${ul})</label><input type="number" inputmode="decimal" id="glVal" value="${glucoseDraft.value||''}" oninput="glucoseDraft.value=this.value" placeholder="${unit==='mmol'?'e.g. 5.1':'e.g. 92'}" autofocus>${wwa('mat.glucose')}</div>
     ${timeStrip('when','When')}
     <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="saveGlucose()">Save reading</button>
     <button class="btn-ghost" onclick="toggleGlucoseUnit()">Using ${ul}, switch to ${glucoseUnitLabel(unit==='mmol'?'mgdl':'mmol')}</button>
@@ -4733,7 +4752,7 @@ function renderMedSheet(editing){
       <button onclick="medDraft.pattern.hours+=1;renderMedSheet(${editing})">+</button></div></div>`;
   } else if(p.type==='daily'){
     schedUI=`<div class="field"><label>Times of day</label>
-      ${p.times.map((t,i)=>`<div style="display:flex;gap:8px;margin-bottom:8px"><input type="time" value="${t}" onchange="medDraft.pattern.times[${i}]=this.value" style="flex:1;border:2px solid var(--line);background:var(--surface-2);border-radius:12px;padding:11px;font-weight:700;font-family:var(--font-body);font-size:15px;color:var(--ink)">
+      ${p.times.map((t,i)=>`<div style="display:flex;gap:8px;margin-bottom:8px"><input type="time" value="${t}" onchange="medDraft.pattern.times[${i}]=this.value" style="flex:1;border:2px solid var(--line);background:var(--surface-2);border-radius:12px;padding:11px;font-weight:700;font-family:var(--font-body);font-size:16px;color:var(--ink)">
       <button onclick="medDraft.pattern.times.splice(${i},1);renderMedSheet(${editing})" style="border:none;background:var(--med-soft);color:var(--med);border-radius:12px;width:48px;font-size:20px;cursor:pointer">×</button></div>`).join('')}
       <button class="btn-ghost" style="padding:8px" onclick="medDraft.pattern.times.push('12:00');renderMedSheet(${editing})">+ Add a time</button></div>`;
   }
