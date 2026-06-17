@@ -1650,6 +1650,13 @@ function renderHome(){
       <div class="ap-body"><div class="ap-t">${escapeHtml((activeBaby()||{}).name||'Baby')} is ${mv} month${mv>1?'s':''} today!</div><div class="ap-s">Their ${mv}-month card is ready 🐻</div></div>
       <button onclick="openMemoryCard(${mv},'${memCandPhoto(mv)}');dismissTip('bday${mv}')">See it</button></div>`;
   }
+  const _cab=activeBaby();
+  if(_cab && stageOf(_cab)==='child' && !_cab.childAck){
+    alerts += `<div class="alert-pill" style="border-color:var(--star)">
+      <div class="ap-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🌱</div>
+      <div class="ap-body"><div class="ap-t">${escapeHtml(_cab.name)} is growing up</div><div class="ap-s">Cubby is growing with them. Quick log now leads with the toddler years; the early logs are under More.</div></div>
+      <button onclick="ackChild()">Lovely</button></div>`;
+  }
 
   // today summary
   const today = dayKey(now());
@@ -1675,32 +1682,7 @@ function renderHome(){
     </div>
     ${gsCard}
     <div class="sec-title">Quick log</div>
-    <div class="actions stagger">
-      <button class="action" onclick="openFeed()">
-        <div class="ico" style="background:var(--feed-soft);color:var(--feed)">${I.feed}</div>
-        <div class="label">Feed</div><div class="hint">Breast, bottle, solids, water</div>
-      </button>
-      <button class="action" onclick="${ts?`stopSleep('${state.activeBabyId}')`:'openSleep()'}">
-        <div class="ico" style="background:var(--sleep-soft);color:var(--sleep)">${I.sleep}</div>
-        <div class="label">${ts?'Wake up':'Sleep'}</div><div class="hint">${ts?'Stop the timer':'Start a nap timer'}</div>
-      </button>
-      <button class="action" onclick="openDiaper()">
-        <div class="ico" style="background:var(--diaper-soft);color:var(--diaper)">${I.diaper}</div>
-        <div class="label">Diaper</div><div class="hint">Wet, dirty, dry or both</div>
-      </button>
-      <button class="action" onclick="openPump()">
-        <div class="ico" style="background:var(--pump-soft);color:var(--pump)">${I.pump}</div>
-        <div class="label">Pump</div><div class="hint">Log expressed milk</div>
-      </button>
-      <button class="action" onclick="openGrowth()">
-        <div class="ico" style="background:var(--star-soft);color:var(--star)">${I.scale}</div>
-        <div class="label">Measure</div><div class="hint">Weight & height</div>
-      </button>
-      <button class="action" onclick="openActivity()">
-        <div class="ico" style="background:var(--note-soft);color:var(--note)">${I.note}</div>
-        <div class="label">Activity</div><div class="hint">Bath, play, tummy time, notes</div>
-      </button>
-    </div>
+    <div class="actions stagger">${quickLogActions(ts)}</div>
     ${renderNudge()}
     ${alerts}
     <div class="today-strip">
@@ -1762,6 +1744,26 @@ function tipLine(key,text){
   return `<div class="tip-line"><span>💡 ${text}</span><button onclick="dismissTip('${key}')">Got it</button></div>`;
 }
 function dismissTip(key){ if(!state.settings.seen)state.settings.seen={}; state.settings.seen['tip_'+key]=true; persist(); render(); }
+/* ---- Child stage: the home grows up with the baby. Quick log reshapes by age (feed/nappy/pump
+   recede behind "More" once they are a toddler); reversible per baby. ---- */
+function actBtn(onclick,bg,c,ico,label,hint){ return `<button class="action" onclick="${onclick}"><div class="ico" style="background:${bg};color:${c}">${ico}</div><div class="label">${label}</div><div class="hint">${hint}</div></button>`; }
+function quickLogActions(ts){
+  var sleep=actBtn(ts?("stopSleep('"+state.activeBabyId+"')"):'openSleep()','var(--sleep-soft)','var(--sleep)',I.sleep,ts?'Wake up':'Sleep',ts?'Stop the timer':'Start a nap timer');
+  var measure=actBtn('openGrowth()','var(--star-soft)','var(--star)',I.scale,'Measure','Weight & height');
+  var activity=actBtn('openActivity()','var(--note-soft)','var(--note)',I.note,'Activity','Bath, play, notes');
+  if(stageOf()==='child'){
+    var milestone=actBtn('openCustomMilestone()','var(--diaper-soft)','var(--diaper)',(I.star||'🌟'),'Milestone','A first to remember');
+    var more=actBtn('openMoreLogs()','var(--feed-soft)','var(--feed)',(I.plus||'+'),'More','Feeds, nappies, pump');
+    return sleep+measure+milestone+activity+more;
+  }
+  var feed=actBtn('openFeed()','var(--feed-soft)','var(--feed)',I.feed,'Feed','Breast, bottle, solids, water');
+  var diaper=actBtn('openDiaper()','var(--diaper-soft)','var(--diaper)',I.diaper,'Diaper','Wet, dirty, dry or both');
+  var pump=actBtn('openPump()','var(--pump-soft)','var(--pump)',I.pump,'Pump','Log expressed milk');
+  return feed+sleep+diaper+pump+measure+activity;
+}
+function openMoreLogs(){
+  openSheet(`<h2>More logs</h2><div class="sub">The early-days logs, whenever you need them.</div><div class="actions">${actBtn('openFeed()','var(--feed-soft)','var(--feed)',I.feed,'Feed','Breast, bottle, solids')}${actBtn('openDiaper()','var(--diaper-soft)','var(--diaper)',I.diaper,'Diaper','Wet, dirty, both')}${actBtn('openPump()','var(--pump-soft)','var(--pump)',I.pump,'Pump','Expressed milk')}</div>`,'feed');
+}
 function nudge(ico,text){ return `<div class="nudge"><div class="nu-ico">${ico}</div><div class="nu-t">${text}</div></div>`; }
 function renderNudge(){
   const b=activeBaby(); if(!b)return '';
@@ -2677,11 +2679,22 @@ function openBabyProfile(){
     <div class="prof-cards">
       <div class="prof-card" onclick="window.openFamily&&window.openFamily()"><span class="lead" style="background:var(--diaper-soft);color:var(--diaper);font-size:18px">👨‍👩‍👧</span><div class="cflex"><div class="a">Family &amp; sharing</div><div class="b">Invite people, your bear, feedback</div></div><span class="chev">${I.chev}</span></div>
       <div class="prof-card" onclick="openBirthDetails()"><span class="lead" style="background:var(--star-soft);color:var(--star)">${I.star}</span><div class="cflex"><div class="a">Birth details</div><div class="b">Name, birthday, keepsake info</div></div><span class="chev">${I.chev}</span></div>
+      <div class="prof-card" onclick="openStageSheet()"><span class="lead" style="background:var(--diaper-soft);color:var(--diaper);font-size:18px">${stageOf(b)==='child'?'🧒':'🍼'}</span><div class="cflex"><div class="a">Stage · ${stageOf(b)==='child'?'Child':'Baby'}</div><div class="b">How Cubby shapes the home screen</div></div><span class="chev">${I.chev}</span></div>
       <div class="prof-card" onclick="openFoodPrefs()"><span class="lead" style="background:var(--feed-soft);color:var(--feed)">${I.bottle}</span><div class="cflex"><div class="a">Food & allergies</div><div class="b">Milk, solids, diet, allergies</div></div><span class="chev">${I.chev}</span></div>
       <div class="prof-card" onclick="openDoctor()"><span class="lead" style="background:var(--sleep-soft);color:var(--sleep)">${I.stetho}</span><div class="cflex"><div class="a">Doctor &amp; visits</div><div class="b">Care team and visit log</div></div><span class="chev">${I.chev}</span></div>
       <div class="prof-card" onclick="openSettings()"><span class="lead" style="background:var(--note-soft);color:var(--note)">${I.gear||I.note}</span><div class="cflex"><div class="a">Settings</div><div class="b">Theme, data, account</div></div><span class="chev">${I.chev}</span></div>
       <div class="prof-card" onclick="confirmLogout()"><span class="lead" style="background:var(--feed-soft);color:var(--feed);font-size:18px">👋</span><div class="cflex"><div class="a">Log out</div><div class="b">Sign out, your data stays synced</div></div><span class="chev">${I.chev}</span></div>
     </div>`,'star');
+}
+function openStageSheet(){
+  const b=activeBaby(); if(!b)return; const cur=stageOf(b);
+  openSheet(`<h2>${escapeHtml(b.name)}'s stage</h2><div class="sub">Cubby shapes the home screen to where ${escapeHtml(b.name)} is. It switches by age on its own; you can set it here too.</div>
+    <div class="seg" style="margin-bottom:14px">
+      <button class="${b.stageOverride==='baby'?'on':''}" onclick="setStageOverride('baby');openStageSheet()">Baby</button>
+      <button class="${b.stageOverride==='child'?'on':''}" onclick="setStageOverride('child');openStageSheet()">Child</button>
+      <button class="${!b.stageOverride?'on':''}" onclick="setStageOverride('auto');openStageSheet()">Auto</button>
+    </div>
+    <div class="csub">Right now: <b>${cur==='child'?'Child':'Baby'}</b>. Baby leads with feeds, sleep and nappies. Child leads with growth, milestones and activities, with the early logs a tap away under More. Switch back anytime.</div>`,'star');
 }
 function openAvatarPicker(){
   const b=activeBaby(); if(!b)return;
@@ -4983,6 +4996,9 @@ const MILESTONES = window.MILESTONES || [
 function babyMilestones(){ return (state.milestones||[]).filter(m=>m.babyId===state.activeBabyId); }
 function achievedOf(key){ return babyMilestones().find(m=>m.key===key); }
 function babyMonths(){ const b=activeBaby(); if(!b||!b.birth)return 0; return (now()-b.birth)/(86400000*30.44); }
+function stageOf(b){ b=b||activeBaby(); if(!b) return 'baby'; if(b.stageOverride==='baby'||b.stageOverride==='child') return b.stageOverride; var mo=b.birth?(now()-b.birth)/(86400000*30.44):0; return mo>=18?'child':'baby'; }
+function ackChild(){ const b=activeBaby(); if(b){ b.childAck=true; persist(); render(); } }
+function setStageOverride(s){ const b=activeBaby(); if(!b)return; if(s==='auto') delete b.stageOverride; else b.stageOverride=s; b.childAck=true; persist(); render(); }
 
 /* ============================================================
    GROWTH  (weight & height)
