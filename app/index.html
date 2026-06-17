@@ -5785,6 +5785,7 @@ function composeShareCard(canvas,maxW){
   }
   ctx.textAlign='left';
   drawStickers(ctx, W, H);
+  drawDecor(ctx, W, H, (photoEditor&&photoEditor._t)||0);
 }
 function composeAny(canvas,maxW){ if(photoEditor&&photoEditor.format&&photoEditor.format!=='orig') composeShareCard(canvas,maxW); else composePhoto(canvas,maxW); }
 let photoEditor=null, noiseTile=null, albumTab='photos';
@@ -6126,6 +6127,9 @@ function renderPhotos(){
   const stickerChips=STICKERS.map(e=>{const lk=proLocked('stickers',e);return `<div class="chip ${photoEditor.activeSticker===e?'sel':''}${lk?' lk':''}" onclick="selectSticker('${e}')" style="font-size:18px;padding:6px 11px">${e}</div>`;}).join('');
   const ssz=photoEditor.stickerSize||0.13;
   const sizeChips=[['S',0.09],['M',0.13],['L',0.2]].map(([l,v])=>`<div class="chip ${Math.abs(ssz-v)<0.001?'sel':''}" onclick="setStickerSize(${v})">${l}</div>`).join('');
+  const DECORS=[['none','None'],['balloons','🎈 Balloons'],['confetti','🎉 Confetti'],['stars','✨ Stars']];
+  const decorChips=DECORS.map(([k,l])=>`<div class="chip ${(photoEditor.decor||'none')===k?'sel':''}" onclick="setDecor('${k}')">${l}</div>`).join('');
+  const densChips=[['low','Calm'],['med','More']].map(([k,l])=>`<div class="chip ${(photoEditor.decorDensity||'low')===k?'sel':''}" onclick="setDecorDensity('${k}')">${l}</div>`).join('');
   const nSt=(photoEditor.stickers||[]).length;
   return `<div class="fade-in">
     <div class="canvas-wrap"><canvas id="photoCanvas" onclick="placeSticker(event)" style="${photoEditor.activeSticker?'cursor:crosshair':''}"></canvas></div>
@@ -6142,7 +6146,9 @@ function renderPhotos(){
     ${timeStrip('when','Photo date')}
     ${isCard?`<div class="sec-title">Style</div><div class="chip-row">${tplChips}</div>
     <div class="sec-title">Font</div><div class="chip-row">${fontChips}</div>
-    <div class="sec-title">Colour</div><div class="chip-row">${palChips}</div>`
+    <div class="sec-title">Colour</div><div class="chip-row">${palChips}</div>
+    <div class="sec-title">Decorations</div><div class="chip-row">${decorChips}</div>
+    ${(photoEditor.decor&&photoEditor.decor!=='none')?`<div class="chip-row" style="margin-top:6px">${densChips}<div class="chip ${photoEditor.anim?'sel':''}" onclick="toggleAnim()">${photoEditor.anim?'❚❚ Stop':'▶ Animate'}</div></div>`:''}`
     :`<div class="sec-title">Keepsake stamp</div><div class="chip-row">${stampChips}</div>
     ${photoEditor.stamp!=='none'?`<div class="sec-title">Stamp tone</div><div class="chip-row">${toneChips}</div>`:''}
     ${posMatters?`<div class="sec-title">Position</div><div class="chip-row">${posChips}</div>`:''}
@@ -6177,7 +6183,7 @@ function loadPhoto(input){
     photoEditor={img,adj:{...PRESETS.Soft},preset:'Soft',frame:'Cream',
       stamp:'corner',stampPos:'bl',stampTone:'light',captionText:'',
       format:'orig',font:'Fraunces',palette:'Cream',template:'classic',
-      stickers:[],activeSticker:null,stickerSize:0.13};
+      stickers:[],activeSticker:null,stickerSize:0.13,decor:'none',decorDensity:'low',decorSeed:7,anim:false};
     initLogWhen();
     render(); drawPhoto();
     if(document.fonts&&document.fonts.ready) document.fonts.ready.then(drawPhoto);
@@ -6484,6 +6490,60 @@ function drawStamp(ctx, ix, iy, iw, ih, b, age, dateStr){
     setShadow(false); ctx.textAlign='left'; return;
   }
 }
+/* ---- Animated keepsake decorations: a composable balloons/confetti/stars layer over the card.
+   Deterministic from a seed so the live preview, an export, and a printed still all match. t is
+   animation time in ms (0 = static hero frame). ---- */
+function drawDecor(ctx,W,H,t){
+  var ed=photoEditor; if(!ed) return; var kind=ed.decor||'none'; if(kind==='none') return;
+  var pal=MOMENT_PALETTES[ed.palette||'Cream']; t=t||0;
+  var seed=ed.decorSeed||7, n=(ed.decorDensity==='med')?16:9;
+  function rnd(i){ var x=Math.sin((seed*73.13)+(i*129.17))*43758.5453; return x-Math.floor(x); }
+  var cols=[pal.accent,pal.sub,pal.bg1,pal.ink];
+  ctx.save();
+  if(kind==='balloons'){
+    for(var i=0;i<Math.min(n,8);i++){
+      var bx=W*(0.08+0.84*rnd(i)), sp=0.4+0.8*rnd(i+40);
+      var cyc=((t*sp*0.00012)+rnd(i+7))%1, by=H*(1.08-1.16*cyc);
+      var r=W*(0.03+0.018*rnd(i+3)), col=cols[i%3];
+      ctx.strokeStyle='rgba(110,99,91,0.32)'; ctx.lineWidth=Math.max(1,W*0.0032);
+      ctx.beginPath(); ctx.moveTo(bx,by+r*1.15); ctx.quadraticCurveTo(bx+Math.sin(t*0.001+i)*W*0.012,by+r+H*0.05,bx,by+r+H*0.09); ctx.stroke();
+      ctx.fillStyle=col; ctx.globalAlpha=0.92; ctx.beginPath(); ctx.ellipse(bx,by,r*0.82,r,0,0,Math.PI*2); ctx.fill();
+      ctx.globalAlpha=0.22; ctx.fillStyle='#fff'; ctx.beginPath(); ctx.ellipse(bx-r*0.28,by-r*0.32,r*0.16,r*0.24,-0.5,0,Math.PI*2); ctx.fill();
+      ctx.globalAlpha=1;
+    }
+  } else if(kind==='confetti'){
+    for(var j=0;j<n*2;j++){
+      var fx=W*((rnd(j)+t*0.00004*(0.5+rnd(j+11)))%1), fy=H*((rnd(j+5)+t*0.00008*(0.6+rnd(j+13)))%1), s=W*0.011;
+      ctx.save(); ctx.translate(fx,fy); ctx.rotate(t*0.0008+j); ctx.fillStyle=cols[j%4]; ctx.globalAlpha=0.85;
+      ctx.fillRect(-s*0.5,-s*0.7,s,s*1.5); ctx.restore();
+    }
+    ctx.globalAlpha=1;
+  } else if(kind==='stars'){
+    for(var k=0;k<n;k++){
+      var sx=W*rnd(k), sy=H*rnd(k+3), tw=0.35+0.65*Math.abs(Math.sin(t*0.0016+k*1.7));
+      ctx.fillStyle=pal.accent; ctx.globalAlpha=0.5*tw; var ss=W*0.018*(0.6+tw*0.6);
+      ctx.beginPath(); ctx.arc(sx,sy,ss,0,Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }
+  ctx.restore();
+}
+var _animRAF=null,_animStart=0;
+function stopAnim(){ if(_animRAF){ cancelAnimationFrame(_animRAF); _animRAF=null; } }
+function startAnim(){
+  if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){ if(photoEditor){ photoEditor._t=20; photoEditor.anim=false; } drawPhoto(); return; }
+  stopAnim(); _animStart=(window.performance&&performance.now)?performance.now():0;
+  var loop=function(ts){
+    var c=document.getElementById('photoCanvas');
+    if(!photoEditor||!photoEditor.anim||!c){ stopAnim(); return; }
+    photoEditor._t=ts-_animStart; composeAny(c,560);   // lower res so the loop stays smooth
+    _animRAF=requestAnimationFrame(loop);
+  };
+  _animRAF=requestAnimationFrame(loop);
+}
+function setDecor(k){ if(!photoEditor)return; photoEditor.decor=k; if(k==='none'&&photoEditor.anim){ photoEditor.anim=false; stopAnim(); } render(); drawPhoto(); }
+function setDecorDensity(d){ if(!photoEditor)return; photoEditor.decorDensity=d; render(); drawPhoto(); }
+function toggleAnim(){ if(!photoEditor)return; photoEditor.anim=!photoEditor.anim; render(); if(photoEditor.anim) startAnim(); else { stopAnim(); drawPhoto(); } }
 function drawPhoto(){ const c=$('#photoCanvas'); if(c&&photoEditor) composeAny(c,1080); }
 /* The taster gate lives at export: premium styles are free to explore on the canvas
    and to Save in-app; Download/Share of a premium-styled card costs one taste.
