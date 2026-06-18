@@ -2556,7 +2556,7 @@ function openAddBaby(opts){
   openSheet(`<h2>Add a baby</h2><div class="sub">Just a name to get started. You can add another any time.</div>
     <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
     <div class="field"><label>Name</label><input id="bName" placeholder="Baby's name" autofocus></div>
-    <div class="field"><label>Birthday (optional)</label>${datePicker('bDate',addBabyCtx.birth,{max:now()})}${wwa('baby.birthday')}</div>
+    <div class="field"><label>Birthday</label>${datePicker('bDate',addBabyCtx.birth,{max:now(),empty:true})}${wwa('baby.birthday')}</div>
     <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', vaxCountryList(), (state.pregnancy&&state.pregnancy.country)||detectCountry(), 'Search your country…')}</div>
     <button class="btn-primary" onclick="saveBaby()">Add baby</button>`,'diaper');
 }
@@ -2568,7 +2568,7 @@ function pickColor(c){
 }
 function saveBaby(){
   const name=$('#bName').value.trim(); if(!name){toast('Give them a name first');return;}
-  const bd=$('#bDate').value;
+  const bd=$('#bDate').value; if(!bd){toast('Add their birthday');return;}
   const cc=($('#bCountry')&&$('#bCountry').value)||(state.pregnancy&&state.pregnancy.country)||detectCountry();
   const b={id:uid(),name,color:newBabyColor,birth:bd?new Date(bd+'T08:00').getTime():null,country:(cc||'who')};
   state.babies.push(b); state.activeBabyId=b.id; lastBabyBirth=bd; persist();
