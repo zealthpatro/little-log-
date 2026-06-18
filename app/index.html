@@ -3438,7 +3438,7 @@ function pregCountryOptions(sel){
   }).sort(function(a,b){ return a[1].localeCompare(b[1]); });
   var html=labeled.map(function(p){ return opt(p[0],p[1]); }).join('');
   html+=opt('generic','Other / not listed (WHO-aligned)');
-  html+=opt('custom','Custom — build your own');
+  html+=opt('custom','Custom · build your own');
   return html;
 }
 /* Searchable country picker (replaces the long native select). The hidden input keeps the same
@@ -3451,12 +3451,12 @@ function pregCountryList(){
     return [c,L];
   }).sort(function(a,b){ return a[1].localeCompare(b[1]); });
   labeled.push(['generic','Other / not listed (WHO-aligned)']);
-  labeled.push(['custom','Custom — build your own']);
+  labeled.push(['custom','Custom · build your own']);
   return labeled;
 }
 function pregLabelFor(code){
   if(code==='generic') return 'Other / not listed (WHO-aligned)';
-  if(code==='custom') return 'Custom — build your own';
+  if(code==='custom') return 'Custom · build your own';
   var sk=pregCountryKey(code);
   return (sk!=='generic'&&sk!=='custom'&&window.PREG&&PREG.antenatal[sk])?PREG.antenatal[sk].label:pregCountryName(code);
 }
@@ -3511,7 +3511,15 @@ function pregCountryKey(c){ c=c||(state.pregnancy&&state.pregnancy.country)||det
 function pregNextAppt(){ const p=state.pregnancy; if(!p) return null; const wk=pregWeek(); if(wk>40) return null; const open=(p.appts||[]).filter(a=>!a.done).sort((a,b)=>a.week-b.week); return open.find(a=>a.week>=wk)||null; }
 /* Tap a week pill (size / baby / you) to open a fuller, focused detail sheet with a relevant action. */
 function openWeekDetail(kind){
-  const wk=pregWeek(), tri=pregTri(), data=pregWeekData(); if(!data) return;
+  const wk=pregWeek(), tri=pregTri(), data=pregWeekData();
+  if(!data || kind==='early'){
+    openSheet(`<h2>Early days</h2><div class="sub">A little more for these early weeks.</div>`
+      +`<div class="preg-card"><div class="pc-ico">🌱</div><div><div class="pc-t">Week ${wk} · the very beginning</div><div class="pc-b">Right now the embryo is implanting and the placenta is starting to form. You might notice a missed period, tender breasts or tiredness, or nothing yet. Either way is normal.</div></div></div>`
+      +`<div class="preg-card"><div class="pc-ico">💛</div><div><div class="pc-t">Be gentle with yourself</div><div class="pc-b">Week-by-week size guides begin at week 4. For now, rest when you can and trust what your body is telling you.</div></div></div>`
+      +`<button class="btn-ghost" onclick="openDangerSigns()" style="color:var(--danger);margin-top:8px">⚠️ Urgent warning signs, when to seek care</button>`
+      +`<div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
+    return;
+  }
   const emoji=(window.PREG&&PREG.sizeEmoji)?PREG.sizeEmoji(data.size):'🌱';
   const na=pregNextAppt();
   let title, body;
@@ -3823,7 +3831,7 @@ function renderPregHome(){
       <div class="preg-card" onclick="openWeekDetail('size')" style="cursor:pointer"><div class="pc-ico">${(window.PREG&&PREG.sizeEmoji)?PREG.sizeEmoji(data.size):'🌱'}</div><div style="flex:1;min-width:0"><div class="pc-t">About the size of a ${escapeHtml(data.size)}</div><div class="pc-b">A gentle week-by-week guide. Tap for more.</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>
       <div class="preg-card" onclick="openWeekDetail('baby')" style="cursor:pointer"><div class="pc-ico">👶</div><div style="flex:1;min-width:0"><div class="pc-t">Baby this week</div><div class="pc-b">${escapeHtml(data.baby)}</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>
       <div class="preg-card" onclick="openWeekDetail('you')" style="cursor:pointer"><div class="pc-ico">🤍</div><div style="flex:1;min-width:0"><div class="pc-t">You this week</div><div class="pc-b">${escapeHtml(data.mum)}</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>
-    </div>`:`<div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">Early days</div><div class="pc-b">Week-by-week guidance appears from week 4. Be gentle with yourself.</div></div></div>`}
+    </div>`:`<div class="preg-card" onclick="openWeekDetail('early')" style="cursor:pointer"><div class="pc-ico">🤍</div><div style="flex:1;min-width:0"><div class="pc-t">Early days</div><div class="pc-b">Week-by-week guidance appears from week 4. Tap for more.</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>`}
     ${na?`<div class="next-appt" onclick="pregGo('log')">
       <div class="pc-ico" style="background:var(--preg-soft)">📅</div>
       <div class="na-body"><div class="na-t">Next: ${escapeHtml(na.title)}</div><div class="na-s">Around week ${na.week}${na.note?' · '+escapeHtml(na.note):''}</div></div>
