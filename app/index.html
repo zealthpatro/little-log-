@@ -2558,6 +2558,7 @@ function openAddBaby(opts){
     <div class="field"><label>Name</label><input id="bName" placeholder="Baby's name" autofocus></div>
     <div class="field"><label>Birthday</label>${datePicker('bDate',addBabyCtx.birth,{max:now(),empty:true})}${wwa('baby.birthday')}</div>
     <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', vaxCountryList(), (state.pregnancy&&state.pregnancy.country)||detectCountry(), 'Search your country…')}</div>
+    <div class="field"><label>Sex (optional, for growth charts)</label>${sexSegHtml('bSex','')}</div>
     <button class="btn-primary" onclick="saveBaby()">Add baby</button>`,'diaper');
 }
 function pickColor(c){
@@ -2566,11 +2567,22 @@ function pickColor(c){
     el.classList.toggle('sel', el.getAttribute('data-c')===c);
   });
 }
+/* One reusable optional-sex control (for the growth charts), used everywhere a baby is added or
+   edited. Writes 'M' / 'F' / '' to a hidden #id; read that value on save. Keeps Prefer-not-to-say. */
+function sexSegHtml(id, current){ current=current||'';
+  return '<input type="hidden" id="'+id+'" value="'+current+'">'
+    +'<div class="seg">'+[['','Prefer not to say'],['F','Girl'],['M','Boy']].map(function(o){
+      return '<button type="button" class="'+(current===o[0]?'on':'')+'" onclick="pickSex(\''+id+'\',\''+o[0]+'\',this)">'+o[1]+'</button>';
+    }).join('')+'</div>';
+}
+function pickSex(id,val,btn){ var h=document.getElementById(id); if(h)h.value=val; if(btn&&btn.parentElement){ Array.prototype.forEach.call(btn.parentElement.children,function(b){b.classList.remove('on');}); btn.classList.add('on'); } }
+function sexWord(s){ return s==='M'?'Boy':(s==='F'?'Girl':(s==='male'?'Boy':(s==='female'?'Girl':''))); }
 function saveBaby(){
   const name=$('#bName').value.trim(); if(!name){toast('Give them a name first');return;}
   const bd=$('#bDate').value; if(!bd){toast('Add their birthday');return;}
   const cc=($('#bCountry')&&$('#bCountry').value)||(state.pregnancy&&state.pregnancy.country)||detectCountry();
   const b={id:uid(),name,color:newBabyColor,birth:bd?new Date(bd+'T08:00').getTime():null,country:(cc||'who')};
+  const sx=($('#bSex')&&$('#bSex').value)||''; if(sx) b.sex=sx;
   state.babies.push(b); state.activeBabyId=b.id; lastBabyBirth=bd; persist();
   const onb=addBabyCtx.onboarding; addBabyCtx={onboarding:false,birth:''};
   closeSheet(); go('home');
@@ -2784,6 +2796,7 @@ function openBirthDetails(){
         <span class="ts-ico">${CAL_SVG}</span>
         <span class="ts-text"><span class="ts-cap">Born on</span><span class="ts-label">${b.birth?whenLabel(b.birth):'Choose date &amp; time'}</span></span>
         <span class="ts-edit">Change</span></div></div>
+    <div class="field"><label>Sex (for growth charts)</label>${sexSegHtml('dSex', b.sex||'')}</div>
     <div class="row2">
       <div class="field"><label>Birth weight</label><input id="dWt" value="${escapeHtml(b.birthWeight||'')}" placeholder="e.g. 3.4 kg or 7 lb 8 oz"></div>
       <div class="field"><label>Birth length</label><input id="dLen" value="${escapeHtml(b.birthLength||'')}" placeholder="e.g. 50 cm or 20 in"></div>
@@ -2957,6 +2970,7 @@ function saveBabyDetails(id){
   b.sign=$('#dSign').value.trim()||zodiac(b.birth);
   b.place=$('#dPlace').value.trim();
   b.parents=$('#dParents').value.trim();
+  if($('#dSex')) b.sex=$('#dSex').value;
   persist(); closeSheet(); render(); toast('Details saved');
 }
 
@@ -4306,11 +4320,9 @@ function removeKeptMemories(){
 }
 
 /* ---- Phase 5: welcoming the baby (the birth transition) ---- */
-let wbSex='';
-function pickWbSex(s){ wbSex=s; const map={'':'wbSexNone','F':'wbSexF','M':'wbSexM'}; ['wbSexNone','wbSexF','wbSexM'].forEach(id=>{const el=$('#'+id);if(el)el.classList.remove('on');}); const el=$('#'+map[s]); if(el)el.classList.add('on'); }
 function openWelcomeBaby(){
   const p=state.pregnancy; if(!p)return;
-  wbSex=''; newBabyColor=AVATAR_COLORS[Math.floor(Math.random()*AVATAR_COLORS.length)];
+  newBabyColor=AVATAR_COLORS[Math.floor(Math.random()*AVATAR_COLORS.length)];
   initLogWhen();
   const cc=(p.country&&p.country!=='generic'&&p.country!=='custom')?p.country:detectCountry();
   openSheet(`<div class="welcome-burst">🐻💕</div>
@@ -4318,8 +4330,7 @@ function openWelcomeBaby(){
     <div class="sub" style="text-align:center">Congratulations. Let's bring your baby into Cubby. You can change anything later, there's no rush.</div>
     <div class="field"><label>Baby's name</label><input id="wbName" placeholder="Your little one's name" autofocus></div>
     ${timeStrip('when','Born')}
-    <div class="field" style="margin-top:14px"><label>Sex (optional, for growth charts)</label>
-      <div class="seg"><button id="wbSexNone" class="on" onclick="pickWbSex('')">Prefer not to say</button><button id="wbSexF" onclick="pickWbSex('F')">Girl</button><button id="wbSexM" onclick="pickWbSex('M')">Boy</button></div></div>
+    <div class="field" style="margin-top:14px"><label>Sex (optional, for growth charts)</label>${sexSegHtml('wbSex','')}</div>
     <div class="field"><label>Vaccine schedule</label>${searchPickerHtml('wbCountry', vaxCountryList(), cc, 'Search your country…')}</div>
     <button class="btn-primary" style="background:var(--preg);margin-top:6px" onclick="welcomeBaby()">🎉 Welcome our baby</button>
     <div class="csub" style="text-align:center;margin-top:8px">Your pregnancy is saved as part of their story.</div>`,'preg');
@@ -4330,7 +4341,7 @@ function welcomeBaby(){
   const birth=getWhen('when');
   const cc=($('#wbCountry')&&$('#wbCountry').value)||p.country||detectCountry();
   const b={id:uid(),name,color:newBabyColor,birth,country:(cc||'who')};
-  if(wbSex) b.sex=wbSex;
+  const sx=($('#wbSex')&&$('#wbSex').value)||''; if(sx) b.sex=sx;
   state.babies.push(b); state.activeBabyId=b.id;
   p.bornBabyId=b.id; p.birthAt=birth;
   view='home';
@@ -5046,6 +5057,8 @@ function visitSummary(days){
   const meds=babyMeds().filter(m=>m.active);
   const L=[];
   L.push(`Cubby summary, ${b.name} (${ageString(b.birth)})`);
+  const sexW=sexWord(b.sex);
+  if(b.birth||sexW) L.push(`${b.birth?'Date of birth: '+new Date(b.birth).toLocaleDateString():''}${(b.birth&&sexW)?' · ':''}${sexW?'Sex: '+sexW:''}`);
   L.push(`Last ${days} days (through ${new Date().toLocaleDateString()})`);
   L.push('');
   L.push(`Feeds: ${feeds.length} total (~${perDay(feeds.length).toFixed(1)}/day)`);
