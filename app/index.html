@@ -4307,7 +4307,7 @@ function removeKeptMemories(){
 
 /* ---- Phase 5: welcoming the baby (the birth transition) ---- */
 let wbSex='';
-function pickWbSex(s){ wbSex=s; const map={'':'wbSexNone','female':'wbSexF','male':'wbSexM'}; ['wbSexNone','wbSexF','wbSexM'].forEach(id=>{const el=$('#'+id);if(el)el.classList.remove('on');}); const el=$('#'+map[s]); if(el)el.classList.add('on'); }
+function pickWbSex(s){ wbSex=s; const map={'':'wbSexNone','F':'wbSexF','M':'wbSexM'}; ['wbSexNone','wbSexF','wbSexM'].forEach(id=>{const el=$('#'+id);if(el)el.classList.remove('on');}); const el=$('#'+map[s]); if(el)el.classList.add('on'); }
 function openWelcomeBaby(){
   const p=state.pregnancy; if(!p)return;
   wbSex=''; newBabyColor=AVATAR_COLORS[Math.floor(Math.random()*AVATAR_COLORS.length)];
@@ -4319,7 +4319,7 @@ function openWelcomeBaby(){
     <div class="field"><label>Baby's name</label><input id="wbName" placeholder="Your little one's name" autofocus></div>
     ${timeStrip('when','Born')}
     <div class="field" style="margin-top:14px"><label>Sex (optional, for growth charts)</label>
-      <div class="seg"><button id="wbSexNone" class="on" onclick="pickWbSex('')">Prefer not to say</button><button id="wbSexF" onclick="pickWbSex('female')">Girl</button><button id="wbSexM" onclick="pickWbSex('male')">Boy</button></div></div>
+      <div class="seg"><button id="wbSexNone" class="on" onclick="pickWbSex('')">Prefer not to say</button><button id="wbSexF" onclick="pickWbSex('F')">Girl</button><button id="wbSexM" onclick="pickWbSex('M')">Boy</button></div></div>
     <div class="field"><label>Vaccine schedule</label>${searchPickerHtml('wbCountry', vaxCountryList(), cc, 'Search your country…')}</div>
     <button class="btn-primary" style="background:var(--preg);margin-top:6px" onclick="welcomeBaby()">🎉 Welcome our baby</button>
     <div class="csub" style="text-align:center;margin-top:8px">Your pregnancy is saved as part of their story.</div>`,'preg');
@@ -5257,7 +5257,7 @@ function setGrowthSource(s){ const b=activeBaby(); if(b){ b.growthSource=s; pers
 function toggleGrowthSource(){ const b=activeBaby(); if(!b)return; b.growthSource=(effGrowthSource(b)==='who')?'cdc':'who'; persist(); render(); }
 function growthChangeBtn(){ return '<button onclick="toggleGrowthSource()" style="background:none;border:none;color:var(--pink-d,#B06A9A);font-weight:700;cursor:pointer;font:inherit;padding:0;text-decoration:underline">change</button>'; }
 function setBabySex(s){ const b=activeBaby(); if(!b)return; b.sex=s; persist(); render(); }
-function growthRef(meas){ const b=activeBaby(); const sex=b&&b.sex; if(!sex||!window.GROWTH_REF)return null; const src=window.GROWTH_REF[effGrowthSource(b)]; return (src&&src[meas]&&src[meas][sex])||null; }
+function growthRef(meas){ const b=activeBaby(); let sex=b&&b.sex; if(sex==='male')sex='M'; else if(sex==='female')sex='F'; if(!sex||!window.GROWTH_REF)return null; const src=window.GROWTH_REF[effGrowthSource(b)]; return (src&&src[meas]&&src[meas][sex])||null; }
 function refConv(meas,v,unit){ return meas==='weight'?convW(v,'kg',unit):convH(v,'cm',unit); }
 function babyAgeMonths(t){ const b=activeBaby(); return (b&&b.birth)?((t-b.birth)/2629800000):null; }
 function interpBands(ref,mo){
