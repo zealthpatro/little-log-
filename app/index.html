@@ -2543,26 +2543,22 @@ function openAddEntry(){
   var hasPreg=!!(state.pregnancy && !state.pregnancy.bornBabyId);
   openSheet(`<h2>Add to Cubby</h2><div class="sub">Wherever you are on the journey.</div>
     <div class="prof-cards">
-      <div class="prof-card" onclick="openAddBaby()"><span class="lead" style="background:var(--feed-soft);color:var(--feed);font-size:20px">🐻</span><div class="cflex"><div class="a">Our baby is here</div><div class="b">Track feeds, sleep, growth, vaccines and more</div></div><span class="chev">${I.chev}</span></div>
+      <div class="prof-card" onclick="openAddBaby()"><span class="lead" style="background:var(--feed-soft);color:var(--feed);font-size:20px">🐻</span><div class="cflex"><div class="a">${state.babies.length?'Add another little one':'Our baby is here'}</div><div class="b">${state.babies.length?'A twin, or an older sibling':'Track feeds, sleep, growth, vaccines and more'}</div></div><span class="chev">${I.chev}</span></div>
       <div class="prof-card" onclick="${hasPreg?'viewingPreg=true;closeSheet();render()':'viewingPreg=true;openStartPregnancy()'}"><span class="lead" style="background:var(--preg-soft);color:var(--preg);font-size:20px">🌸</span><div class="cflex"><div class="a">${hasPreg?'Open your pregnancy':"We're expecting"}</div><div class="b">${hasPreg?'Resume where you left off':'Trying, newly pregnant or counting weeks'}</div></div><span class="chev">${I.chev}</span></div>
     </div>`,'diaper');
 }
-let addBabyCtx={onboarding:false,twins:false,count:0,birth:''};
+let addBabyCtx={onboarding:false,birth:''};
 let lastBabyBirth='';
 function openAddBaby(opts){
   opts=opts||{};
-  addBabyCtx={onboarding:!!opts.onboarding, twins:!!opts.twins, count:opts.count||0, birth:opts.birth||''};
+  addBabyCtx={onboarding:!!opts.onboarding, birth:opts.birth||''};
   newBabyColor=AVATAR_COLORS[Math.floor(Math.random()*AVATAR_COLORS.length)];
-  const tw=addBabyCtx.twins, n=addBabyCtx.count;
-  const title=tw?'Add your little ones':'Add a baby';
-  const sub=tw?(n?`${n} added so far. Add the next, or you're all done.`:`Add your first, then we'll help you add the next.`):'Just a name to get started.';
-  openSheet(`<h2>${title}</h2><div class="sub">${sub}</div>
+  openSheet(`<h2>Add a baby</h2><div class="sub">Just a name to get started. You can add another any time.</div>
     <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
     <div class="field"><label>Name</label><input id="bName" placeholder="Baby's name" autofocus></div>
     <div class="field"><label>Birthday (optional)</label>${datePicker('bDate',addBabyCtx.birth,{max:now()})}${wwa('baby.birthday')}</div>
     <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', vaxCountryList(), (state.pregnancy&&state.pregnancy.country)||detectCountry(), 'Search your country…')}</div>
-    <button class="btn-primary" onclick="saveBaby()">${tw?'Add this baby':'Add baby'}</button>
-    ${tw&&n?`<button class="btn-ghost" onclick="finishAddBabies()">Done, that's everyone</button>`:''}`,'diaper');
+    <button class="btn-primary" onclick="saveBaby()">Add baby</button>`,'diaper');
 }
 function pickColor(c){
   newBabyColor=c;
@@ -2575,25 +2571,20 @@ function saveBaby(){
   const bd=$('#bDate').value;
   const cc=($('#bCountry')&&$('#bCountry').value)||(state.pregnancy&&state.pregnancy.country)||detectCountry();
   const b={id:uid(),name,color:newBabyColor,birth:bd?new Date(bd+'T08:00').getTime():null,country:(cc||'who')};
-  state.babies.push(b); state.activeBabyId=b.id; persist();
-  if(addBabyCtx.twins){ toast(name+' added 🐻'); openAddBaby({onboarding:addBabyCtx.onboarding, twins:true, count:addBabyCtx.count+1, birth:bd}); return; }
-  const onb=addBabyCtx.onboarding; addBabyCtx={onboarding:false,twins:false,count:0,birth:''};
+  state.babies.push(b); state.activeBabyId=b.id; lastBabyBirth=bd; persist();
+  const onb=addBabyCtx.onboarding; addBabyCtx={onboarding:false,birth:''};
   closeSheet(); go('home');
-  if(onb){ lastBabyBirth=bd; openAddMore(); } else { toast('Welcome, '+name+'!'); }
+  if(onb){ openOnboardInvite(); } else { toast('Welcome, '+name+'!'); }
 }
-function finishAddBabies(){ const onb=addBabyCtx.onboarding; addBabyCtx={onboarding:false,twins:false,count:0,birth:''}; closeSheet(); go('home'); if(onb) openOnboardInvite(); }
-/* Step 4 of onboarding: the activation moment. Invite the circle, or land home calmly. */
+/* The post-setup hub: affirm they're set up, offer the activation (invite), and quietly make it
+   clear they can add another little one. We never ASK "are there more?" (loss-safe); we offer. */
 function openOnboardInvite(){
-  openSheet(`<h2>Caring is a team sport 🤍</h2><div class="sub">Cubby is for everyone who loves your little one. Invite a partner, grandparent or nanny so you're never the only one who knows.</div>
+  const n=(state.babies||[]).length;
+  openSheet(`<h2>${n>1?'Your little ones are in 🐻':"You're all set 🐻"}</h2><div class="sub">Cubby is for everyone who loves ${n>1?'them':'your little one'}. Invite a partner, grandparent or nanny so you're never the only one who knows.</div>
     <div class="preg-card"><div class="pc-ico" style="background:var(--feed-soft)">👨‍👩‍👧</div><div><div class="pc-t">They see everything, live</div><div class="pc-b">The last feed, the nap, the next dose, all in sync and private to your family.</div></div></div>
     <button class="btn-primary" style="background:var(--feed);margin-top:14px" onclick="window.openFamily&&window.openFamily()">Invite someone</button>
+    <button class="btn-ghost" onclick="openAddBaby({onboarding:true,birth:lastBabyBirth})">＋ Add another little one</button>
     <button class="btn-ghost" onclick="closeSheet()">Maybe later</button>`,'feed');
-}
-/* "More than one" is handled as a gentle beat after the first baby (twins or an older sibling). */
-function openAddMore(){
-  openSheet(`<h2>Any other little ones? 🐻</h2><div class="sub">Twins, or an older sibling? Add them now, or anytime from Settings.</div>
-    <button class="btn-primary" style="background:var(--feed)" onclick="openAddBaby({onboarding:true,twins:true,count:1,birth:lastBabyBirth})">Add another</button>
-    <button class="btn-ghost" onclick="closeSheet();openOnboardInvite()">No, we're all set</button>`,'feed');
 }
 /* Onboarding stage router: two states (expecting / baby) + a quiet planning link.
    "More than one" is a count, not a stage, so twins/siblings are offered after the first baby. */
