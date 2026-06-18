@@ -3873,8 +3873,27 @@ function sexCelebration(k){ return k==='F'?{burst:'🎀✨',head:"It's a girl!"}
 function guessersRightLine(k){ const gs=pregGuesses(); if(!gs.length) return ''; if(k==='MF') return "A bit of both, so everyone called it! 🎉"; const target=k==='FF'?'F':(k==='MM'?'M':k); const right=gs.filter(g=>g.guess===target).length; return `${right} of ${gs.length} guessed right.`; }
 function guessSummaryLine(){ const p=state.pregnancy; if(p&&p.knownSex){ const c=sexCelebration(p.knownSex); return c?c.head:''; } const t=guessTally(); if(!(t.F+t.M)) return 'A guessing game for your circle. Just for fun.'; return `${t.F} for a girl, ${t.M} for a boy so far`; }
 function setMyGuess(g){ const p=state.pregnancy; ensurePregFields(p); const u=myUid(); const note=((($('#guessNote')||{}).value)||'').trim(); const mine=p.guesses.find(x=>x.uid===u); if(mine){ mine.guess=g; if(note) mine.note=note; } else { p.guesses.push({id:uid(),uid:u,name:(loggerName(u)||'You'),guess:g,note:note,at:now()}); } persist(); openGuessGame(); }
-function revealSex(s){ const p=state.pregnancy; if(!pregIsOwner())return; p.knownSex=s; persist(); openGuessGame(); }
-function hideReveal(){ const p=state.pregnancy; if(!pregIsOwner())return; p.knownSex=''; persist(); openGuessGame(); }
+function pushGameReveal(p,result){ if(p&&p.gameCode&&p.gameHostKey){ try{ fetch('/api/game/'+p.gameCode+'/reveal',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({result:result,hostKey:p.gameHostKey})}).catch(function(){}); }catch(e){} } }
+function revealSex(s){ const p=state.pregnancy; if(!pregIsOwner())return; p.knownSex=s; persist(); pushGameReveal(p,s); openGuessGame(); }
+function hideReveal(){ const p=state.pregnancy; if(!pregIsOwner())return; p.knownSex=''; persist(); pushGameReveal(p,''); openGuessGame(); }
+/* Hosted guest game (Kahoot-style link, no guest account). Dormant until the cubby-games D1 is provisioned. */
+function gameLink(code){ return location.origin+'/g/'+code; }
+function copyGameLink(code){ const url=gameLink(code); if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(url).then(function(){toast('Link copied 🔗');}).catch(function(){toast(url);}); } else { toast(url); } }
+function shareGuessGame(){ const p=state.pregnancy; if(!p) return;
+  if(p.gameCode){ copyGameLink(p.gameCode); return; }
+  fetch('/api/game/create',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({title:'Our baby'})})
+    .then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});})
+    .then(function(x){ if(!x.ok||!x.d||!x.d.code){ toast('Online sharing is coming soon 🤍'); return; } p.gameCode=x.d.code; p.gameHostKey=x.d.hostKey; persist(); copyGameLink(p.gameCode); })
+    .catch(function(){ toast('Could not reach the game, try again'); });
+}
+function loadGuestGuesses(){ const p=state.pregnancy; if(!p||!p.gameCode) return;
+  fetch('/api/game/'+p.gameCode).then(function(r){return r.ok?r.json():null;}).then(function(d){
+    const el=document.getElementById('guestExtra'); if(!el||!d||!d.guesses||!d.guesses.length) return;
+    const known=p.knownSex||'', tgt=known==='FF'?'F':(known==='MM'?'M':known);
+    el.innerHTML='<div class="sec-title" style="margin-top:10px">🔗 From your link · '+(d.tally.F||0)+' girl, '+(d.tally.M||0)+' boy</div>'+
+      d.guesses.map(function(g){ const right=known&&(known==='MF'||g.guess===tgt); return '<div class="log-list-item"><div class="lli-ico" style="background:'+(g.guess==='F'?'var(--preg-soft)':'var(--sleep-soft)')+'">'+(g.guess==='F'?'🎀':'💙')+'</div><div class="lli-body"><div class="lli-t">'+escapeHtml(g.nickname||'Guest')+(right?' ✓':'')+'</div><div class="lli-s">'+(g.guess==='F'?'Girl':'Boy')+(g.note?' · '+escapeHtml(g.note):'')+'</div></div></div>'; }).join('');
+  }).catch(function(){});
+}
 function openGuessGame(){
   const p=state.pregnancy; if(!p) return; ensurePregFields(p);
   const gs=p.guesses, t=guessTally(), mine=myGuess(), known=p.knownSex||'', owner=pregIsOwner();
@@ -3901,9 +3920,12 @@ function openGuessGame(){
     ${known?'':myBlock}
     <div class="sec-title">Guesses${(t.F+t.M)?` · ${t.F} girl, ${t.M} boy`:''}</div>
     ${list}
+    <div id="guestExtra"></div>
+    ${known?'':`<button class="btn-ghost" onclick="shareGuessGame()" style="margin-top:8px">🔗 ${state.pregnancy.gameCode?'Copy the guessing-game link':'Invite family to guess (share a link)'}</button>`}
     ${ownerBlock}
     <details style="margin-top:14px"><summary style="cursor:pointer;font-weight:800;font-size:13px;color:var(--ink-soft)">Need inspiration? (old wives' tales, just for fun)</summary>
       <div class="csub" style="margin-top:8px;line-height:1.6">Carrying high, some say girl; low, boy.<br>Craving sweet, they say girl; salty or sour, boy.<br>A faster heartbeat, old tales say girl.<br><b>None of it is science 🤍</b> the only sure way is a scan with your provider.</div></details>`,'preg');
+  loadGuestGuesses();
 }
 
 /* ---- Phase 3: logging ---- */

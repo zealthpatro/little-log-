@@ -47,3 +47,23 @@ simple = { limit = 5, period = 60 }
 binding = "NEWSLETTER_DB"
 database_name = "cubby-newsletter"
 database_id = "d0ee7337-8acf-4028-80bb-2e99a48db694"
+
+# Per-IP rate limiter for the guessing-game guest writes (worker.js gameRoute). 20/60s/IP so a whole
+# family on one wifi can all guess, but a script can't flood. Falls back to SIGNIN_RATE_LIMITER if absent.
+[[unsafe.bindings]]
+name = "GAMES_RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1003"
+simple = { limit = 20, period = 60 }
+
+# Guessing-game store — ISOLATED in its own D1 (cubby-games), never the family Firestore. Holds only
+# the host's public title + {nickname, guess, note}. COMMENTED until the DB exists (an uncommented
+# missing id fails the deploy). The in-circle game works without it; the public /g/<code> link
+# activates once this is provisioned. To activate:
+#   1) npx wrangler d1 create cubby-games
+#   2) npx wrangler d1 execute cubby-games --remote --file=./schema/games.sql
+#   3) paste the database_id below, uncomment this block, then deploy (git push).
+# [[d1_databases]]
+# binding = "GAMES_DB"
+# database_name = "cubby-games"
+# database_id = "PASTE_AFTER_CREATE"

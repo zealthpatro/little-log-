@@ -271,6 +271,63 @@ async function sendPushReminders(env){
   }
 }
 
+// ---- Boy-or-girl guessing game (hosted, guests need no account). ISOLATED in cubby-games D1. ----
+function gameCode(n) {
+  const a = 'abcdefghijkmnpqrstuvwxyz23456789'; const arr = new Uint8Array(n); crypto.getRandomValues(arr);
+  let s = ''; for (let i = 0; i < n; i++) s += a[arr[i] % a.length]; return s;
+}
+async function gameState(code, env) {
+  const g = await env.GAMES_DB.prepare('SELECT title,result,status FROM games WHERE code=?').bind(code).first();
+  if (!g) return json({ error: 'not_found' }, 404);
+  const rows = ((await env.GAMES_DB.prepare('SELECT nickname,guess,note FROM guesses WHERE code=? ORDER BY created_at').bind(code).all()).results) || [];
+  const tally = { F: rows.filter(r => r.guess === 'F').length, M: rows.filter(r => r.guess === 'M').length };
+  return json({ title: g.title, status: g.status, result: g.result || '', tally, guesses: rows });
+}
+async function gameRoute(request, env, url) {
+  if (!env.GAMES_DB) return json({ error: 'server_config' }, 500);   // dormant until the D1 is provisioned
+  const parts = url.pathname.split('/').filter(Boolean); // ['api','game',code?,action?]
+  const method = request.method;
+  if (parts.length === 3 && parts[2] === 'create' && method === 'POST') {
+    const b = await request.json().catch(() => ({}));
+    const title = (b.title || 'Our baby').toString().trim().slice(0, 40) || 'Our baby';
+    const code = gameCode(8), hostKey = gameCode(20), at = Date.now();
+    await env.GAMES_DB.prepare('INSERT INTO games(code,title,host_key,result,status,created_at) VALUES(?,?,?,?,?,?)').bind(code, title, hostKey, '', 'open', at).run();
+    return json({ code, hostKey, title });
+  }
+  const code = parts[2];
+  if (!code || !/^[a-z0-9]{4,16}$/.test(code)) return json({ error: 'bad_code' }, 400);
+  const action = parts[3];
+  if (action === 'guess' && method === 'POST') {
+    const ip = request.headers.get('cf-connecting-ip') || '?';
+    const limiter = env.GAMES_RATE_LIMITER || env.SIGNIN_RATE_LIMITER;
+    if (limiter) { try { const { success } = await limiter.limit({ key: 'game:' + ip }); if (!success) return json({ error: 'rate_limited' }, 429); } catch (e) {} }
+    const g = await env.GAMES_DB.prepare('SELECT status FROM games WHERE code=?').bind(code).first();
+    if (!g) return json({ error: 'not_found' }, 404);
+    if (g.status !== 'open') return json({ error: 'closed' }, 409);
+    const b = await request.json().catch(() => ({}));
+    const nickname = (b.nickname || '').toString().trim().slice(0, 30);
+    const guess = (b.guess || '').toString();
+    const note = (b.note || '').toString().trim().slice(0, 80);
+    if (!nickname || (guess !== 'F' && guess !== 'M')) return json({ error: 'bad_input' }, 400);
+    const c = await env.GAMES_DB.prepare('SELECT COUNT(*) n FROM guesses WHERE code=?').bind(code).first();
+    if (c && c.n >= 300) return json({ error: 'full' }, 409);
+    await env.GAMES_DB.prepare('INSERT INTO guesses(id,code,nickname,guess,note,created_at) VALUES(?,?,?,?,?,?)').bind(gameCode(12), code, nickname, guess, note, Date.now()).run();
+    return gameState(code, env);
+  }
+  if (action === 'reveal' && method === 'POST') {
+    const b = await request.json().catch(() => ({}));
+    const g = await env.GAMES_DB.prepare('SELECT host_key FROM games WHERE code=?').bind(code).first();
+    if (!g) return json({ error: 'not_found' }, 404);
+    if (!b.hostKey || b.hostKey !== g.host_key) return json({ error: 'forbidden' }, 403);
+    const result = (b.result || '').toString();
+    if (['F', 'M', 'MF', 'FF', 'MM', ''].indexOf(result) < 0) return json({ error: 'bad_result' }, 400);
+    await env.GAMES_DB.prepare('UPDATE games SET result=?, status=? WHERE code=?').bind(result, result ? 'revealed' : 'open', code).run();
+    return gameState(code, env);
+  }
+  if (!action && method === 'GET') return gameState(code, env);
+  return json({ error: 'not_found' }, 404);
+}
+
 export default {
   async scheduled(event, env) { try { await sendPushReminders(env); } catch (e) {} },
   async fetch(request, env) {
@@ -282,6 +339,13 @@ export default {
     if (url.pathname === '/api/newsletter') {
       if (request.method !== 'POST') return new Response('method not allowed', { status: 405 });
       return newsletterSignup(request, env);
+    }
+    if (url.pathname.startsWith('/api/game/')) {
+      return gameRoute(request, env, url);
+    }
+    if (url.pathname === '/g' || url.pathname.startsWith('/g/')) {
+      // Standalone guest page for any /g/<code>; the page reads the code from its own path.
+      return env.ASSETS.fetch(new Request(new URL('/g/index.html', url), { headers: request.headers }));
     }
     if (url.pathname.startsWith('/__/')) {
       const upstream = new URL(url.pathname + url.search, 'https://little-log-a9caa.firebaseapp.com');
