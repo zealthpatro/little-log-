@@ -2548,6 +2548,7 @@ function openAddEntry(){
     </div>`,'diaper');
 }
 let addBabyCtx={onboarding:false,twins:false,count:0,birth:''};
+let lastBabyBirth='';
 function openAddBaby(opts){
   opts=opts||{};
   addBabyCtx={onboarding:!!opts.onboarding, twins:!!opts.twins, count:opts.count||0, birth:opts.birth||''};
@@ -2578,7 +2579,7 @@ function saveBaby(){
   if(addBabyCtx.twins){ toast(name+' added 🐻'); openAddBaby({onboarding:addBabyCtx.onboarding, twins:true, count:addBabyCtx.count+1, birth:bd}); return; }
   const onb=addBabyCtx.onboarding; addBabyCtx={onboarding:false,twins:false,count:0,birth:''};
   closeSheet(); go('home');
-  if(onb){ openOnboardInvite(); } else { toast('Welcome, '+name+'!'); }
+  if(onb){ lastBabyBirth=bd; openAddMore(); } else { toast('Welcome, '+name+'!'); }
 }
 function finishAddBabies(){ const onb=addBabyCtx.onboarding; addBabyCtx={onboarding:false,twins:false,count:0,birth:''}; closeSheet(); go('home'); if(onb) openOnboardInvite(); }
 /* Step 4 of onboarding: the activation moment. Invite the circle, or land home calmly. */
@@ -2588,11 +2589,18 @@ function openOnboardInvite(){
     <button class="btn-primary" style="background:var(--feed);margin-top:14px" onclick="window.openFamily&&window.openFamily()">Invite someone</button>
     <button class="btn-ghost" onclick="closeSheet()">Maybe later</button>`,'feed');
 }
-/* Onboarding stage router (explicit tiles): expecting / baby / twins / quiet planning. */
+/* "More than one" is handled as a gentle beat after the first baby (twins or an older sibling). */
+function openAddMore(){
+  openSheet(`<h2>Any other little ones? 🐻</h2><div class="sub">Twins, or an older sibling? Add them now, or anytime from Settings.</div>
+    <button class="btn-primary" style="background:var(--feed)" onclick="openAddBaby({onboarding:true,twins:true,count:1,birth:lastBabyBirth})">Add another</button>
+    <button class="btn-ghost" onclick="closeSheet();openOnboardInvite()">No, we're all set</button>`,'feed');
+}
+/* Onboarding stage router: two states (expecting / baby) + a quiet planning link.
+   "More than one" is a count, not a stage, so twins/siblings are offered after the first baby. */
 function obStage(kind){
   if(kind==='expecting'){ pregDraft={mode:'due', date:'', country:detectCountry()}; openExpectingSetup('due'); }
   else if(kind==='planning'){ openPlanningSetup(); }
-  else { openAddBaby({onboarding:true, twins:kind==='twins'}); }
+  else { openAddBaby({onboarding:true}); }
 }
 
 /* ---- birth details + zodiac ---- */
@@ -3373,9 +3381,8 @@ function renderOnboard(){
       <div class="logo">Cubby</div>
       <div class="tag">Where are you on the journey? Pick what fits today. You can change anything later.</div>
       <div class="prof-cards" style="width:100%;text-align:left">
-        <div class="prof-card" onclick="obStage('expecting')"><span class="lead" style="background:var(--preg-soft);font-size:20px">🌸</span><div class="cflex"><div class="a">We're expecting</div><div class="b">A baby on the way</div></div><span class="chev">${I.chev}</span></div>
-        <div class="prof-card" onclick="obStage('baby')"><span class="lead" style="background:var(--feed-soft);font-size:20px">🐻</span><div class="cflex"><div class="a">Our baby's here</div><div class="b">Track feeds, sleep, growth and more</div></div><span class="chev">${I.chev}</span></div>
-        <div class="prof-card" onclick="obStage('twins')"><span class="lead" style="background:var(--star-soft);font-size:17px">👶👶</span><div class="cflex"><div class="a">Twins or more</div><div class="b">Two or more little ones</div></div><span class="chev">${I.chev}</span></div>
+        <div class="prof-card" onclick="obStage('expecting')"><span class="lead" style="background:var(--preg-soft);font-size:20px">🌸</span><div class="cflex"><div class="a">We're expecting</div><div class="b">A baby (or two) on the way</div></div><span class="chev">${I.chev}</span></div>
+        <div class="prof-card" onclick="obStage('baby')"><span class="lead" style="background:var(--feed-soft);font-size:20px">🐻</span><div class="cflex"><div class="a">Our baby's here</div><div class="b">One or more, track feeds, sleep and growth</div></div><span class="chev">${I.chev}</span></div>
       </div>
       <button class="btn-ghost" onclick="obStage('planning')" style="color:var(--ink-faint);margin-top:6px">Just getting ready? 🌱</button>
       <button class="ob-logout" onclick="confirmLogout()">Log out</button>
