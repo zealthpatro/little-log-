@@ -3850,6 +3850,7 @@ function renderPregHome(){
       <span class="chev">${I.chev}</span></div>`:(pregWeek()>40?`<div class="next-appt">
       <div class="pc-ico" style="background:var(--preg-soft)">🌼</div>
       <div class="na-body"><div class="na-t">Any day now</div><div class="na-s">Your due date is here. Babies keep their own schedule, so rest when you can and follow your midwife or doctor's guidance on monitoring.</div></div></div>`:'')}
+    <div class="preg-card" onclick="openGuessGame()" style="cursor:pointer"><div class="pc-ico">🔮</div><div style="flex:1;min-width:0"><div class="pc-t">Boy or girl?</div><div class="pc-b">${guessSummaryLine()}</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>
     ${pregHealthQuick()}
     <div class="sec-title">This week</div>
     <div class="actions stagger">
@@ -3862,6 +3863,41 @@ function renderPregHome(){
     <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="openWelcomeBaby()">🐻 Baby has arrived</button>
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>
   </div>`;
+}
+
+/* ---- Boy or girl? a calm, optional family guessing game (see GENDER-GAME-SPEC.md) ---- */
+function pregGuesses(){ const p=state.pregnancy; ensurePregFields(p); return p.guesses; }
+function myGuess(){ const u=myUid(); return pregGuesses().find(g=>g.uid===u); }
+function guessTally(){ const gs=pregGuesses(); return {F:gs.filter(g=>g.guess==='F').length, M:gs.filter(g=>g.guess==='M').length}; }
+function guessSummaryLine(){ const p=state.pregnancy; if(p&&p.knownSex) return `It's a ${p.knownSex==='F'?'girl 🎀':'boy 💙'}!`; const t=guessTally(); if(!(t.F+t.M)) return 'A guessing game for your circle. Just for fun.'; return `${t.F} for a girl, ${t.M} for a boy so far`; }
+function setMyGuess(g){ const p=state.pregnancy; ensurePregFields(p); const u=myUid(); const note=((($('#guessNote')||{}).value)||'').trim(); const mine=p.guesses.find(x=>x.uid===u); if(mine){ mine.guess=g; if(note) mine.note=note; } else { p.guesses.push({id:uid(),uid:u,name:(loggerName(u)||'You'),guess:g,note:note,at:now()}); } persist(); openGuessGame(); }
+function revealSex(s){ const p=state.pregnancy; if(!pregIsOwner())return; p.knownSex=s; persist(); openGuessGame(); }
+function hideReveal(){ const p=state.pregnancy; if(!pregIsOwner())return; p.knownSex=''; persist(); openGuessGame(); }
+function openGuessGame(){
+  const p=state.pregnancy; if(!p) return; ensurePregFields(p);
+  const gs=p.guesses, t=guessTally(), mine=myGuess(), known=p.knownSex||'', owner=pregIsOwner();
+  const reveal = known? `<div class="preg-card" style="background:${known==='F'?'var(--preg-soft)':'var(--sleep-soft)'}"><div class="pc-ico">${known==='F'?'🎀':'💙'}</div><div><div class="pc-t">It's a ${known==='F'?'girl':'boy'}!</div><div class="pc-b">${gs.filter(g=>g.guess===known).length} of ${gs.length} guessed right.</div></div></div>` : '';
+  const myBlock = mine
+    ? `<div class="csub" style="margin:8px 0">You guessed <b>${mine.guess==='F'?'a girl 🎀':'a boy 💙'}</b>. <span class="link-inline" onclick="setMyGuess('${mine.guess==='F'?'M':'F'}')">Change</span></div>`
+    : `<div class="field"><label>Your guess</label><div class="seg"><button type="button" onclick="setMyGuess('F')">🎀 Girl</button><button type="button" onclick="setMyGuess('M')">💙 Boy</button></div></div>
+       <div class="field"><label>Why? (optional, just for fun)</label><input id="guessNote" placeholder="A hunch, a craving, a dream..."></div>`;
+  const list = gs.length ? gs.slice().sort((a,b)=>a.at-b.at).map(g=>{
+      const right = known && g.guess===known;
+      return `<div class="log-list-item"><div class="lli-ico" style="background:${g.guess==='F'?'var(--preg-soft)':'var(--sleep-soft)'}">${g.guess==='F'?'🎀':'💙'}</div><div class="lli-body"><div class="lli-t">${escapeHtml(g.name||loggerName(g.uid)||'Someone')}${right?' ✓':''}</div><div class="lli-s">${g.guess==='F'?'Girl':'Boy'}${g.note?' · '+escapeHtml(g.note):''}</div></div></div>`;
+    }).join('') : `<div class="csub" style="margin:6px 0">No guesses yet. Be the first 🤍</div>`;
+  const ownerBlock = owner ? (known
+    ? `<button class="btn-ghost" onclick="hideReveal()">Keep it a surprise again</button>`
+    : `<div class="csub" style="margin:12px 0 6px">Found out at your scan? Only you can reveal it:</div>
+       <div class="seg"><button type="button" onclick="revealSex('F')">Reveal: girl</button><button type="button" onclick="revealSex('M')">Reveal: boy</button></div>
+       <div class="csub" style="margin-top:6px">Or keep it a surprise, the guesses stay either way.</div>`) : '';
+  openSheet(`<h2>Boy or girl?</h2><div class="sub">A bit of fun for everyone who loves your bump. No pressure, and you never have to find out.</div>
+    ${reveal}
+    ${known?'':myBlock}
+    <div class="sec-title">Guesses${(t.F+t.M)?` · ${t.F} girl, ${t.M} boy`:''}</div>
+    ${list}
+    ${ownerBlock}
+    <details style="margin-top:14px"><summary style="cursor:pointer;font-weight:800;font-size:13px;color:var(--ink-soft)">Need inspiration? (old wives' tales, just for fun)</summary>
+      <div class="csub" style="margin-top:8px;line-height:1.6">Carrying high, some say girl; low, boy.<br>Craving sweet, they say girl; salty or sour, boy.<br>A faster heartbeat, old tales say girl.<br><b>None of it is science 🤍</b> the only sure way is a scan with your provider.</div></details>`,'preg');
 }
 
 /* ---- Phase 3: logging ---- */
@@ -4330,7 +4366,7 @@ function openWelcomeBaby(){
     <div class="sub" style="text-align:center">Congratulations. Let's bring your baby into Cubby. You can change anything later, there's no rush.</div>
     <div class="field"><label>Baby's name</label><input id="wbName" placeholder="Your little one's name" autofocus></div>
     ${timeStrip('when','Born')}
-    <div class="field" style="margin-top:14px"><label>Sex (optional, for growth charts)</label>${sexSegHtml('wbSex','')}</div>
+    <div class="field" style="margin-top:14px"><label>Sex (optional, for growth charts)</label>${sexSegHtml('wbSex', p.knownSex||'')}</div>
     <div class="field"><label>Vaccine schedule</label>${searchPickerHtml('wbCountry', vaxCountryList(), cc, 'Search your country…')}</div>
     <button class="btn-primary" style="background:var(--preg);margin-top:6px" onclick="welcomeBaby()">🎉 Welcome our baby</button>
     <div class="csub" style="text-align:center;margin-top:8px">Your pregnancy is saved as part of their story.</div>`,'preg');
@@ -4372,6 +4408,7 @@ function ensurePregFields(p){
   if(!p.supplements) p.supplements=[];
   if(!p.supplementLog) p.supplementLog=[];
   if(!p.nausea) p.nausea=[];
+  if(!p.guesses) p.guesses=[];
   if(!p.glucoseUnit) p.glucoseUnit=(p.country==='us'||p.country==='uae')?'mgdl':'mmol';
 }
 function condCfg(key){ return (window.PREG&&PREG.conditions&&PREG.conditions[key])||null; }
