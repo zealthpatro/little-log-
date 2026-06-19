@@ -63,7 +63,7 @@ simple = { limit = 20, period = 60 }
 #   1) npx wrangler d1 create cubby-games
 #   2) npx wrangler d1 execute cubby-games --remote --file=./schema/games.sql
 #   3) paste the database_id below, uncomment this block, then deploy (git push).
-# [[d1_databases]]
-# binding = "GAMES_DB"
-# database_name = "cubby-games"
-# database_id = "PASTE_AFTER_CREATE"
+[[d1_databases]]
+binding = "GAMES_DB"
+database_name = "cubby-games"
+database_id = "c2e576e9-ad79-416a-a1b9-4598be4f3c82"
