@@ -1,0 +1,14 @@
+{
+  "name": "cubby-firestore-rules-test",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cross-account emulator test for firestore.rules. Run green before publishing tightened rules.",
+  "scripts": {
+    "test:rules": "firebase emulators:exec --only firestore --project demo-cubby \"node rules-test.js\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.4",
+    "firebase": "^10.12.2",
+    "firebase-tools": "^13.11.2"
+  }
+}
