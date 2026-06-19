@@ -223,10 +223,11 @@ async function sendPushReminders(env){
   const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/firebase.messaging');
   const base = 'https://firestore.googleapis.com/v1/projects/' + FS_PROJECT + '/databases/(default)/documents';
   const now = Date.now();
+  let sent = 0, userErrors = 0;
   let docs = [], pageToken = '';
   do {
     const r = await fetch(base + '/users?pageSize=300' + (pageToken ? ('&pageToken=' + encodeURIComponent(pageToken)) : ''), { headers: { authorization: 'Bearer ' + token } });
-    if (!r.ok) break;
+    if (!r.ok) { console.error('push_users_fetch_fail', r.status); break; }
     const j = await r.json(); (j.documents || []).forEach(d => docs.push(d)); pageToken = j.nextPageToken || '';
   } while (pageToken);
   for (const d of docs) {
@@ -254,10 +255,11 @@ async function sendPushReminders(env){
       }
       for (const msg of toSend) {
         for (const tk of tokens) {
-          await fetch('https://fcm.googleapis.com/v1/projects/' + FS_PROJECT + '/messages:send', {
+          const fcmOk = await fetch('https://fcm.googleapis.com/v1/projects/' + FS_PROJECT + '/messages:send', {
             method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
             body: JSON.stringify({ message: { token: tk, notification: { title: msg.title, body: msg.body }, data: { tag: msg.tag }, webpush: { fcmOptions: { link: 'https://little-cubby.com/app/' } } } })
-          }).catch(() => {});
+          }).then(r => r.ok).catch(e => { console.error('push_fcm_fail', (e && e.message) || String(e)); return false; });
+          if (fcmOk) sent++;
         }
       }
       if (maxAt > sentUpTo) {
@@ -265,10 +267,23 @@ async function sendPushReminders(env){
         if (id) await fetch(base + '/users/' + encodeURIComponent(id) + '?updateMask.fieldPaths=push.sentUpTo', {
           method: 'PATCH', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
           body: JSON.stringify({ fields: { push: { mapValue: { fields: { sentUpTo: { integerValue: String(maxAt) } } } } } })
-        }).catch(() => {});
+        }).catch(e => console.error('push_sentupto_fail', (e && e.message) || String(e)));
       }
-    } catch (e) { /* skip this user, keep going */ }
+    } catch (e) { userErrors++; console.error('push_user_fail', (e && e.message) || String(e)); }
   }
+  console.log('push_run', JSON.stringify({ users: docs.length, sent, userErrors }));
+  await recordCronRun(env, { users: docs.length, sent, userErrors });
+}
+// Operational heartbeat for the push cron: persist last-run summary in the Worker's own D1 (cubby-games),
+// read by GET /api/health so a silently-dead cron is detectable. Holds counts + a timestamp only, never
+// any family / Firestore data.
+async function recordCronRun(env, summary) {
+  if (!env.GAMES_DB) return;
+  try {
+    await env.GAMES_DB.prepare("CREATE TABLE IF NOT EXISTS ops_state (key TEXT PRIMARY KEY, value TEXT, updated_at INTEGER)").run();
+    await env.GAMES_DB.prepare("INSERT INTO ops_state(key,value,updated_at) VALUES('push_last_run',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at")
+      .bind(JSON.stringify(summary || {}), Date.now()).run();
+  } catch (e) { console.error('ops_state_write_fail', (e && e.message) || String(e)); }
 }
 
 // ---- Boy-or-girl guessing game (hosted, guests need no account). ISOLATED in cubby-games D1. ----
@@ -289,12 +304,20 @@ async function ensureGamesSchema(env) {
   await env.GAMES_DB.prepare("CREATE TABLE IF NOT EXISTS guesses (id TEXT PRIMARY KEY, code TEXT, nickname TEXT, guess TEXT, note TEXT, created_at INTEGER)").run();
   await env.GAMES_DB.prepare("CREATE INDEX IF NOT EXISTS idx_guesses_code ON guesses(code)").run();
 }
+async function gameRateLimited(request, env, bucket) {
+  const limiter = env.GAMES_RATE_LIMITER || env.SIGNIN_RATE_LIMITER;
+  if (!limiter) return false;
+  const ip = request.headers.get('cf-connecting-ip') || '?';
+  try { const { success } = await limiter.limit({ key: bucket + ':' + ip }); return !success; }
+  catch (e) { return false; }
+}
 async function gameRoute(request, env, url) {
   if (!env.GAMES_DB) return json({ error: 'server_config' }, 500);   // dormant until the D1 is provisioned
   try {
   const parts = url.pathname.split('/').filter(Boolean); // ['api','game',code?,action?]
   const method = request.method;
   if (parts.length === 3 && parts[2] === 'create' && method === 'POST') {
+    if (await gameRateLimited(request, env, 'gcreate')) return json({ error: 'rate_limited' }, 429);
     await ensureGamesSchema(env);
     const b = await request.json().catch(() => ({}));
     const title = (b.title || 'Our baby').toString().trim().slice(0, 40) || 'Our baby';
@@ -332,7 +355,10 @@ async function gameRoute(request, env, url) {
     await env.GAMES_DB.prepare('UPDATE games SET result=?, status=? WHERE code=?').bind(result, result ? 'revealed' : 'open', code).run();
     return gameState(code, env);
   }
-  if (!action && method === 'GET') return gameState(code, env);
+  if (!action && method === 'GET') {
+    if (await gameRateLimited(request, env, 'gget')) return json({ error: 'rate_limited' }, 429);
+    return gameState(code, env);
+  }
   return json({ error: 'not_found' }, 404);
   } catch (e) {
     return json({ error: 'db_error', detail: (e && e.message) || String(e) }, 500);
@@ -340,7 +366,7 @@ async function gameRoute(request, env, url) {
 }
 
 export default {
-  async scheduled(event, env) { try { await sendPushReminders(env); } catch (e) {} },
+  async scheduled(event, env) { try { await sendPushReminders(env); } catch (e) { console.error('push_cron_fail', (e && e.message) || String(e)); } },
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/api/send-signin-link') {
@@ -350,6 +376,19 @@ export default {
     if (url.pathname === '/api/newsletter') {
       if (request.method !== 'POST') return new Response('method not allowed', { status: 405 });
       return newsletterSignup(request, env);
+    }
+    if (url.pathname === '/api/health') {
+      const now = Date.now();
+      let cron = null;
+      if (env.GAMES_DB) {
+        try {
+          const r = await env.GAMES_DB.prepare("SELECT value,updated_at FROM ops_state WHERE key='push_last_run'").first();
+          if (r) { let s = {}; try { s = JSON.parse(r.value || '{}'); } catch (e) {} cron = { at: r.updated_at, ageMin: Math.round((now - r.updated_at) / 60000), ...s }; }
+        } catch (e) {}
+      }
+      // Cron fires every 15 min; flag unhealthy if the last success is older than an hour.
+      const cronHealthy = cron ? (now - cron.at) < 60 * 60000 : null;
+      return json({ ok: true, time: now, cron, cronHealthy });
     }
     if (url.pathname.startsWith('/api/game/')) {
       return gameRoute(request, env, url);

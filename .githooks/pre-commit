@@ -1,0 +1,28 @@
+#!/bin/sh
+# Block a commit that changes cacheable app/ assets without bumping the service-worker
+# CACHE version. The SW is network-first for HTML/JS but cache-first for everything else,
+# so a missed bump can strand returning users on stale assets (this bit us once: the games
+# feature shipped while sw.js stayed a version behind).
+#
+# Bypass when you really mean it:  git commit --no-verify
+
+staged=$(git diff --cached --name-only)
+
+# Cacheable app assets, excluding sw.js itself.
+cacheable=$(printf '%s\n' "$staged" | grep -E '^app/.*\.(js|html|css)$' | grep -v '^app/sw\.js$')
+[ -z "$cacheable" ] && exit 0
+
+# An app asset changed -> require the staged sw.js CACHE line to differ from HEAD's.
+old=$(git show HEAD:app/sw.js 2>/dev/null | grep -m1 -E "CACHE *= *'little-log-v")
+new=$(git show :app/sw.js   2>/dev/null | grep -m1 -E "CACHE *= *'little-log-v")
+
+if [ -z "$new" ] || [ "$old" = "$new" ]; then
+  echo "✋ Service-worker cache not bumped."
+  echo "   You staged app assets:"
+  printf '%s\n' "$cacheable" | sed 's/^/      /'
+  echo "   → bump the CACHE version in app/sw.js and stage it,"
+  echo "     or re-run with  git commit --no-verify  if this is intentional."
+  exit 1
+fi
+
+exit 0
