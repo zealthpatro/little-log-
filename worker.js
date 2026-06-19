@@ -283,11 +283,19 @@ async function gameState(code, env) {
   const tally = { F: rows.filter(r => r.guess === 'F').length, M: rows.filter(r => r.guess === 'M').length };
   return json({ title: g.title, status: g.status, result: g.result || '', tally, guesses: rows });
 }
+async function ensureGamesSchema(env) {
+  // Idempotent: lets a freshly-created (empty) cubby-games D1 work without a manual schema step.
+  await env.GAMES_DB.prepare("CREATE TABLE IF NOT EXISTS games (code TEXT PRIMARY KEY, title TEXT, host_key TEXT, result TEXT DEFAULT '', status TEXT DEFAULT 'open', created_at INTEGER)").run();
+  await env.GAMES_DB.prepare("CREATE TABLE IF NOT EXISTS guesses (id TEXT PRIMARY KEY, code TEXT, nickname TEXT, guess TEXT, note TEXT, created_at INTEGER)").run();
+  await env.GAMES_DB.prepare("CREATE INDEX IF NOT EXISTS idx_guesses_code ON guesses(code)").run();
+}
 async function gameRoute(request, env, url) {
   if (!env.GAMES_DB) return json({ error: 'server_config' }, 500);   // dormant until the D1 is provisioned
+  try {
   const parts = url.pathname.split('/').filter(Boolean); // ['api','game',code?,action?]
   const method = request.method;
   if (parts.length === 3 && parts[2] === 'create' && method === 'POST') {
+    await ensureGamesSchema(env);
     const b = await request.json().catch(() => ({}));
     const title = (b.title || 'Our baby').toString().trim().slice(0, 40) || 'Our baby';
     const code = gameCode(8), hostKey = gameCode(20), at = Date.now();
@@ -326,6 +334,9 @@ async function gameRoute(request, env, url) {
   }
   if (!action && method === 'GET') return gameState(code, env);
   return json({ error: 'not_found' }, 404);
+  } catch (e) {
+    return json({ error: 'db_error', detail: (e && e.message) || String(e) }, 500);
+  }
 }
 
 export default {
