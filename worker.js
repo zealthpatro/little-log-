@@ -430,7 +430,8 @@ async function verifyFirebaseToken(idToken) {
 async function ensureHubSchema(env) {
   await env.GAMES_DB.prepare("CREATE TABLE IF NOT EXISTS hubs (code TEXT PRIMARY KEY, owner_uid TEXT, title TEXT, created_at INTEGER)").run();
   await env.GAMES_DB.prepare("CREATE TABLE IF NOT EXISTS hub_games (id TEXT PRIMARY KEY, hub_code TEXT, type TEXT, prompt TEXT, status TEXT DEFAULT 'open', result TEXT DEFAULT '', created_at INTEGER)").run();
-  await env.GAMES_DB.prepare("CREATE TABLE IF NOT EXISTS hub_guesses (id TEXT PRIMARY KEY, game_id TEXT, hub_code TEXT, nickname TEXT, guess TEXT, note TEXT, created_at INTEGER)").run();
+  await env.GAMES_DB.prepare("CREATE TABLE IF NOT EXISTS hub_guesses (id TEXT PRIMARY KEY, game_id TEXT, hub_code TEXT, nickname TEXT, guess TEXT, note TEXT, relation TEXT, created_at INTEGER)").run();
+  try { await env.GAMES_DB.prepare("ALTER TABLE hub_guesses ADD COLUMN relation TEXT").run(); } catch (e) {} // add 'relation' to tables created before it existed
   await env.GAMES_DB.prepare("CREATE INDEX IF NOT EXISTS idx_hubgames_hub ON hub_games(hub_code)").run();
   await env.GAMES_DB.prepare("CREATE INDEX IF NOT EXISTS idx_hubguesses_game ON hub_guesses(game_id)").run();
 }
@@ -467,7 +468,7 @@ async function hubState(code, env) {
   const games = ((await env.GAMES_DB.prepare('SELECT id,type,prompt,status,result FROM hub_games WHERE hub_code=? ORDER BY created_at').bind(code).all()).results) || [];
   const out = [];
   for (const g of games) {
-    const rows = ((await env.GAMES_DB.prepare('SELECT nickname,guess,note FROM hub_guesses WHERE game_id=? ORDER BY created_at').bind(g.id).all()).results) || [];
+    const rows = ((await env.GAMES_DB.prepare('SELECT nickname,guess,note,relation FROM hub_guesses WHERE game_id=? ORDER BY created_at').bind(g.id).all()).results) || [];
     out.push({ id: g.id, type: g.type, prompt: g.prompt || '', status: g.status, result: g.result || '', count: rows.length, guesses: rows });
   }
   // owner_uid is intentionally NOT returned: guests must never see who owns the hub.
@@ -523,9 +524,10 @@ async function hubRoute(request, env, url) {
       const guess = normalizeGuess(g.type, b.guess);
       if (guess == null) return json({ error: 'bad_input' }, 400);
       const note = (b.note || '').toString().trim().slice(0, 80);
+      const relation = (b.relation || '').toString().trim().slice(0, 24);
       const c = await env.GAMES_DB.prepare('SELECT COUNT(*) n FROM hub_guesses WHERE game_id=?').bind(gameId).first();
       if (c && c.n >= 300) return json({ error: 'full' }, 409);
-      await env.GAMES_DB.prepare('INSERT INTO hub_guesses(id,game_id,hub_code,nickname,guess,note,created_at) VALUES(?,?,?,?,?,?,?)').bind(gameCode(12), gameId, code, nickname, guess, note, Date.now()).run();
+      await env.GAMES_DB.prepare('INSERT INTO hub_guesses(id,game_id,hub_code,nickname,guess,note,relation,created_at) VALUES(?,?,?,?,?,?,?,?)').bind(gameCode(12), gameId, code, nickname, guess, note, relation, Date.now()).run();
       return hubState(code, env);
     }
 

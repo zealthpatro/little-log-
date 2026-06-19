@@ -37,6 +37,9 @@
   .ghd{font-size:16px;font-weight:800;margin-bottom:12px;}
   .ddrow{display:flex;gap:10px;}
   .ddrow .ddsmall{flex:1;}
+  .relrow{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px;justify-content:center;}
+  .relchip{border:1.5px solid var(--line);background:#FBF7EF;border-radius:14px;padding:6px 12px;font-size:13px;font-weight:700;color:var(--soft);font-family:inherit;cursor:pointer;}
+  .relchip.on{border-color:var(--girl);color:var(--ink);}
   .small{font-size:12px;color:var(--faint);font-weight:700;margin-top:8px;}
   .note{font-size:12px;color:var(--faint);font-weight:600;margin-top:14px;line-height:1.5;}
   .foot{margin-top:16px;font-size:12px;font-weight:700;}
@@ -108,11 +111,15 @@
     var mine=hubMine(), nick=mine.nickname||'';
     var h='<h1 style="margin-bottom:4px">'+esc(st.title||'Our baby')+'</h1>';
     if(!nick){
+      var RELS=['Nana','Grandpa','Auntie','Uncle','Cousin','Friend'];
       h+='<div class="sub">Join the family games. Add your name to play.</div>'
         +'<input id="hnick" placeholder="Your name" maxlength="30" autocomplete="off">'
+        +'<div class="relrow">'+RELS.map(function(r){return '<button type="button" class="relchip" data-r="'+r+'">'+r+'</button>';}).join('')+'</div>'
+        +'<input id="hrel" placeholder="How are you related? (optional)" maxlength="24" autocomplete="off">'
         +'<button class="pick" id="hjoin" style="width:100%">Let’s play</button>';
       body.innerHTML=h;
-      document.getElementById('hjoin').onclick=function(){ var v=(document.getElementById('hnick').value||'').trim(); if(!v){ document.getElementById('hnick').focus(); return; } var m=hubMine(); m.nickname=v; setHubMine(m); renderHub(st); };
+      [].forEach.call(document.querySelectorAll('.relchip'),function(b){ b.onclick=function(){ document.getElementById('hrel').value=b.getAttribute('data-r'); [].forEach.call(document.querySelectorAll('.relchip'),function(x){x.classList.remove('on');}); b.classList.add('on'); }; });
+      document.getElementById('hjoin').onclick=function(){ var v=(document.getElementById('hnick').value||'').trim(); if(!v){ document.getElementById('hnick').focus(); return; } var rel=(document.getElementById('hrel').value||'').trim(); var m=hubMine(); m.nickname=v; if(rel) m.relation=rel; setHubMine(m); renderHub(st); };
       return;
     }
     h+='<div class="sub" style="margin-bottom:16px">Hi '+esc(nick)+' 👋 add your guesses below.</div>';
@@ -140,7 +147,7 @@
     var mine=hubMine(), nick=mine.nickname||'';
     if(!nick){ if(lastHub) renderHub(lastHub); return; }
     [].forEach.call(document.querySelectorAll('button.pick'),function(b){b.disabled=true;});
-    fetch('/api/hub/'+enc(code)+'/guess',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({gameId:gameId,nickname:nick,guess:guess})})
+    fetch('/api/hub/'+enc(code)+'/guess',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({gameId:gameId,nickname:nick,guess:guess,relation:mine.relation||''})})
       .then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});})
       .then(function(x){
         if(!x.ok){

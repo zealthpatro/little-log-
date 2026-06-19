@@ -936,12 +936,27 @@
   function closeModal() { var m = document.getElementById('llModalOv'); if (m) m.remove(); }
 
   var RELATIONSHIPS = ['Mama Bear', 'Papa Bear', 'Nana Bear', 'Grandpa Bear', 'Auntie Bear', 'Uncle Bear', 'Nanny', 'Caregiver', 'Other'];
-  function relOptions(sel) {
+  function relOptions(sel, withCustom) {
     var list = RELATIONSHIPS.slice();
-    if (sel && list.indexOf(sel) < 0) list.unshift(sel); // keep any previously-saved label
-    return '<option value="">Relationship…</option>' + list.map(function (r) {
-      return '<option value="' + r + '"' + (r === sel ? ' selected' : '') + '>' + r + '</option>';
+    if (sel && list.indexOf(sel) < 0) list.unshift(sel); // keep any previously-saved label (incl. a custom one)
+    var html = '<option value="">Relationship…</option>' + list.map(function (r) {
+      return '<option value="' + esc(r) + '"' + (r === sel ? ' selected' : '') + '>' + esc(r) + '</option>';
     }).join('');
+    if (withCustom) html += '<option value="__custom__">✏️ Add your own…</option>';
+    return html;
+  }
+  // Free-text role for circles beyond the presets (driver, cook, ayah, godmother…). Plain label, as typed.
+  function relCustomInput(id) { return '<input id="' + id + '" class="ll-rel-custom" placeholder="e.g. Driver, Cook, Godmother" maxlength="24" autocomplete="off" style="display:none;margin-top:6px">'; }
+  function wireRelCustom(selId, inpId) {
+    var s = document.getElementById(selId), i = document.getElementById(inpId);
+    if (!s || !i) return;
+    var sync = function () { var c = (s.value === '__custom__'); i.style.display = c ? 'block' : 'none'; if (c) i.focus(); };
+    s.addEventListener('change', sync); sync();
+  }
+  function relValue(selId, inpId) {
+    var s = document.getElementById(selId); if (!s) return '';
+    if (s.value === '__custom__') { var i = document.getElementById(inpId); return ((i && i.value) || '').trim().slice(0, 24); }
+    return s.value;
   }
 
   function openFamily() {
@@ -960,7 +975,7 @@
     }).join('') || '<div class="ll-auth-msg">Just you so far.</div>';
 
     var youRow = '<div class="ll-invite" style="border-top:none;padding-top:4px"><label>Your relationship to baby</label>'
-      + '<select id="llMyRel">' + relOptions(myRel) + '</select>'
+      + '<select id="llMyRel">' + relOptions(myRel, true) + '</select>' + relCustomInput('llMyRelCustom')
       + '<button id="llMyRelBtn" class="ll-modal-btn ll-ghost" style="margin-top:8px">Save relationship</button>'
       + '<button id="llMyBearBtn" class="ll-modal-btn ll-ghost" style="margin-top:8px">Change my bear avatar</button>'
       + '<button id="llMyFeedbackBtn" class="ll-modal-btn ll-ghost" style="margin-top:8px">💬 Send feedback</button>'
@@ -988,6 +1003,7 @@
 
     document.getElementById('llSignOut').onclick = function () { closeModal(); window.LL.signOut(); };
     document.getElementById('llMyRelBtn').onclick = saveMyRelationship;
+    wireRelCustom('llMyRel', 'llMyRelCustom');
     document.getElementById('llMyBearBtn').onclick = function () { if (window.openBearPicker) window.openBearPicker('member', me.uid); };
     document.getElementById('llMyFeedbackBtn').onclick = openFeedback;
     document.getElementById('llCopyLink').onclick = copyAppLink;
@@ -1022,7 +1038,9 @@
       + '<div class="ll-auth-msg" style="margin:0 0 6px">First, how should your family see you?</div>'
       + '<div class="ll-mem-av" id="llFrBear" style="width:84px;height:84px;margin:10px auto 4px;cursor:pointer">' + bear + '</div>'
       + '<div style="text-align:center;margin-bottom:6px"><button id="llFrBearBtn" class="ll-rm" style="color:#C97FA0">Customise my bear</button></div>'
-      + '<div class="ll-invite" style="border-top:none;padding-top:8px"><label>Your relationship to baby</label><select id="llFrRel">' + relOptions('') + '</select></div>'
+      + '<div class="ll-invite" style="border-top:none;padding-top:8px"><label>Your name</label><input id="llFrName" maxlength="40" autocomplete="name" placeholder="Your name" value="' + esc(user.displayName || '') + '">'
+      + '<label style="margin-top:10px;display:block">Your relationship to baby</label><select id="llFrRel">' + relOptions('', true) + '</select>' + relCustomInput('llFrRelCustom')
+      + '<div id="llFrErr" class="ll-auth-msg" style="color:#C0392B"></div></div>'
       + installBtn
       + '<button id="llFrSave" class="ll-modal-btn">Save</button>'
       + '<button id="llFrOut" class="ll-modal-btn ll-ghost" style="margin-top:10px">Log out</button>',
@@ -1037,9 +1055,12 @@
       if (window._bip) { window._bip.prompt(); if (window._bip.userChoice) window._bip.userChoice.then(function () { window._bip = null; }); }
       else { var m = document.getElementById('llFrInstallMsg'); if (m) { m.style.display = 'block'; m.innerHTML = (typeof window.installSteps === 'function') ? window.installSteps() : 'Tap the <b>Share</b> icon in Safari, then <b>Add to Home Screen</b>.'; } }
     };
+    wireRelCustom('llFrRel', 'llFrRelCustom');
     document.getElementById('llFrSave').onclick = async function () {
-      var rel = document.getElementById('llFrRel').value;
-      var u = {}; u['memberInfo.' + uid + '.setupDone'] = true; if (rel) u['memberInfo.' + uid + '.relationship'] = rel;
+      var name = (document.getElementById('llFrName').value || '').trim();
+      if (!name) { var er = document.getElementById('llFrErr'); if (er) er.textContent = 'Please add your name so your family knows who is who.'; document.getElementById('llFrName').focus(); return; }
+      var rel = relValue('llFrRel', 'llFrRelCustom');
+      var u = {}; u['memberInfo.' + uid + '.setupDone'] = true; u['memberInfo.' + uid + '.name'] = name; if (rel) u['memberInfo.' + uid + '.relationship'] = rel;
       try { await hhRef.update(u); } catch (e) {}
       closeModal();
     };
@@ -1062,7 +1083,7 @@
 
   async function saveMyRelationship() {
     if (!hhRef) return;
-    var v = document.getElementById('llMyRel').value;
+    var v = relValue('llMyRel', 'llMyRelCustom');
     var msg = document.getElementById('llMyRelMsg');
     var u = {}; u['memberInfo.' + auth.currentUser.uid + '.relationship'] = v;
     try { await hhRef.update(u); msg.textContent = '✅ Saved.'; }

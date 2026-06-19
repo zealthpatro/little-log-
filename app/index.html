@@ -3882,6 +3882,7 @@ function pushGameReveal(p,result){ // sex reveal -> the hub + any legacy single-
   if(p&&p.gameCode&&p.gameHostKey){ try{ fetch('/api/game/'+p.gameCode+'/reveal',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({result:result,hostKey:p.gameHostKey})}).catch(function(){}); }catch(e){} }
 }
 function closeHubIfAny(p){ if(!p||!p.hubCode) return; idToken().then(function(tok){ if(!tok) return; fetch('/api/hub/'+p.hubCode+'/close',{method:'POST',headers:{'authorization':'Bearer '+tok}}).catch(function(){}); }); } // retire the shared games link (loss-safe / on delete)
+function closeGames(){ const p=state.pregnancy; if(!p||!p.hubCode||!pregIsOwner()) return; if(!confirm('Close the family games link? Guests can no longer see it or add guesses, and this cannot be undone.')) return; closeHubIfAny(p); p.hubCode=null; p.hubGames=null; persist(); openGuessGame(); toast('Games link closed 🤍'); }
 function revealSex(s){ const p=state.pregnancy; if(!pregIsOwner())return; p.knownSex=s; persist(); pushGameReveal(p,s); openGuessGame(); }
 function hideReveal(){ const p=state.pregnancy; if(!pregIsOwner())return; p.knownSex=''; persist(); pushGameReveal(p,''); openGuessGame(); }
 /* Hosted guest game (Kahoot-style link, no guest account). Dormant until the cubby-games D1 is provisioned. */
@@ -3921,17 +3922,17 @@ function loadHubState(){ const p=state.pregnancy; if(!p||!p.hubCode) return;
       const known=p.knownSex||'', tgt=known==='FF'?'F':(known==='MM'?'M':known); let F=0,M=0;
       sex.guesses.forEach(function(g){ if(g.guess==='F')F++; else if(g.guess==='M')M++; });
       el.innerHTML='<div class="sec-title" style="margin-top:10px">🔗 From your link · '+F+' girl, '+M+' boy</div>'+
-        sex.guesses.map(function(g){ const right=known&&(known==='MF'||g.guess===tgt); return '<div class="log-list-item"><div class="lli-ico" style="background:'+(g.guess==='F'?'var(--preg-soft)':'var(--sleep-soft)')+'">'+(g.guess==='F'?'🎀':'💙')+'</div><div class="lli-body"><div class="lli-t">'+escapeHtml(g.nickname||'Guest')+(right?' ✓':'')+'</div><div class="lli-s">'+(g.guess==='F'?'Girl':'Boy')+(g.note?' · '+escapeHtml(g.note):'')+'</div></div></div>'; }).join('');
+        sex.guesses.map(function(g){ const right=known&&(known==='MF'||g.guess===tgt); return '<div class="log-list-item"><div class="lli-ico" style="background:'+(g.guess==='F'?'var(--preg-soft)':'var(--sleep-soft)')+'">'+(g.guess==='F'?'🎀':'💙')+'</div><div class="lli-body"><div class="lli-t">'+escapeHtml(g.nickname||'Guest')+(right?' ✓':'')+'</div><div class="lli-s">'+(g.guess==='F'?'Girl':'Boy')+(g.relation?' · '+escapeHtml(g.relation):'')+(g.note?' · '+escapeHtml(g.note):'')+'</div></div></div>'; }).join('');
     }
     if(dd){
       const res=p.dueResult||null;
-      const items=(dd.guesses||[]).map(function(g){ let o=null; try{o=JSON.parse(g.guess);}catch(e){} return {nick:g.nickname,o:o}; }).filter(function(x){return x.o&&x.o.date;});
+      const items=(dd.guesses||[]).map(function(g){ let o=null; try{o=JSON.parse(g.guess);}catch(e){} return {nick:g.nickname,rel:g.relation,o:o}; }).filter(function(x){return x.o&&x.o.date;});
       if(res&&res.date){
         const wl=document.getElementById('ddWinnerLine');
         if(wl){ if(!items.length){ wl.textContent='No guesses came in this time 🤍'; } else { let best=1e9,winners=[]; items.forEach(function(it){ const diff=Math.round(Math.abs((Date.parse(it.o.date+'T00:00:00')-Date.parse(res.date+'T00:00:00'))/86400000)); if(diff<best){best=diff;winners=[it.nick];} else if(diff===best){winners.push(it.nick);} }); wl.innerHTML='Closest: <b>'+winners.map(escapeHtml).join(', ')+'</b>'+(best===0?' nailed the day! 🎯':' ('+best+' day'+(best===1?'':'s')+' off)'); } }
       } else {
         const de=document.getElementById('ddGuests');
-        if(de){ de.innerHTML = items.length? items.sort(function(a,b){return a.o.date<b.o.date?-1:1;}).map(function(it){ return '<div class="log-list-item"><div class="lli-ico" style="background:var(--preg-soft)">🗓️</div><div class="lli-body"><div class="lli-t">'+escapeHtml(it.nick||'Guest')+'</div><div class="lli-s">'+ddFmt(it.o)+'</div></div></div>'; }).join('') : '<div class="csub" style="margin:6px 0">No date guesses yet. Share the link 🤍</div>'; }
+        if(de){ de.innerHTML = items.length? items.sort(function(a,b){return a.o.date<b.o.date?-1:1;}).map(function(it){ return '<div class="log-list-item"><div class="lli-ico" style="background:var(--preg-soft)">🗓️</div><div class="lli-body"><div class="lli-t">'+escapeHtml(it.nick||'Guest')+'</div><div class="lli-s">'+ddFmt(it.o)+(it.rel?' · '+escapeHtml(it.rel):'')+'</div></div></div>'; }).join('') : '<div class="csub" style="margin:6px 0">No date guesses yet. Share the link 🤍</div>'; }
       }
     }
   }).catch(function(){});
@@ -3979,6 +3980,7 @@ function openGuessGame(){
     ${ownerBlock}
     ${ddSection}
     <button class="btn-ghost" onclick="shareGuessGame()" style="margin-top:14px">🔗 ${p.hubCode?'Copy the family-games link':'Invite family to play (share a link)'}</button>
+    ${(owner&&p.hubCode)?`<button class="btn-ghost" onclick="closeGames()" style="color:var(--ink-faint)">Close the games link</button>`:''}
     <details style="margin-top:14px"><summary style="cursor:pointer;font-weight:800;font-size:13px;color:var(--ink-soft)">Need inspiration? (old wives' tales, just for fun)</summary>
       <div class="csub" style="margin-top:8px;line-height:1.6">Carrying high, some say girl; low, boy.<br>Craving sweet, they say girl; salty or sour, boy.<br>A faster heartbeat, old tales say girl.<br><b>None of it is science 🤍</b> the only sure way is a scan with your provider.</div></details>`,'preg');
   if(p.hubCode) loadHubState(); else if(p.gameCode) loadGuestGuesses();
