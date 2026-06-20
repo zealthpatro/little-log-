@@ -339,9 +339,9 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .dp-c{border:none;background:none;aspect-ratio:1;border-radius:9px;font-size:14px;font-weight:700;color:var(--ink);cursor:pointer;font-family:inherit;padding:0;}
 .dp-c:hover:not(.dp-x){background:var(--surface-2);}
 .dp-bl{visibility:hidden;}
-.dp-td{box-shadow:inset 0 0 0 1.5px var(--line);}
+.dp-td{box-shadow:inset 0 0 0 2px var(--diaper);}
 .dp-on,.dp-on:hover{background:var(--diaper);color:#fff;}
-.dp-x{color:var(--ink-faint);opacity:.35;cursor:default;}
+.dp-x{color:var(--ink-faint);opacity:.6;cursor:default;}
 .dp-now{margin-top:8px;border:none;background:var(--surface-2);color:var(--ink);font-weight:800;font-size:13px;padding:8px 14px;border-radius:10px;cursor:pointer;font-family:inherit;width:100%;}
 /* Calendar inside the shared cuModal (card is always white). Hardcode colours so it reads
    correctly in dark mode too, and use the pink accent to match the time / when wheel. */
@@ -351,9 +351,9 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .dp-in-modal .dp-c:hover:not(.dp-x){background:#FBF7EF;}
 .dp-in-modal .dp-nav{background:#FBF7EF;color:#2C2521;}
 .dp-in-modal .dp-w span{color:#9a8d80;}
-.dp-in-modal .dp-td{box-shadow:inset 0 0 0 1.5px #E0D7C7;}
+.dp-in-modal .dp-td{box-shadow:inset 0 0 0 2px #C97FA0;}
 .dp-in-modal .dp-on,.dp-in-modal .dp-on:hover{background:#C97FA0;color:#fff;}
-.dp-in-modal .dp-x{color:#b3a99d;}
+.dp-in-modal .dp-x{color:#a9988a;opacity:1;}
 .dp-in-modal .dp-now{background:#FBF7EF;color:#2C2521;}
 .field input,.field textarea,.field select{
   width:100%;border:2px solid var(--line);background:var(--surface-2);border-radius:14px;
@@ -3086,7 +3086,7 @@ function openSettings(){
     </div>
     <div class="set-item" onclick="window.openFamily&&window.openFamily()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--feed-soft);color:var(--feed);font-size:18px">👨‍👩‍👧</div>
-      <div class="si-body"><div class="a">Family &amp; sharing</div><div class="b">Invite people, your bear, feedback</div></div>
+      <div class="si-body"><div class="a">Your profile &amp; family</div><div class="b">Your name &amp; relationship, invite people, your bear</div></div>
     </div>
     <div class="set-item" onclick="openPro()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">✨</div>
@@ -3599,6 +3599,7 @@ function openPlanningSetup(){
     ${viewerIsCarrier()?`<div class="field"><label>First day of your last period (optional)</label>${datePicker('plLmp','',{max:now(),empty:true})}${wwa('preg.lmp')}</div>
     <div class="field"><label>Usual cycle length (days)</label><input type="number" id="plCycle" value="28" min="21" max="40">${wwa('preg.cycle')}</div>`:''}
     <button class="btn-primary" style="background:var(--diaper)" onclick="savePlanning()">Start</button>
+    <button class="btn-ghost" onclick="openExpectingSetup('due')">Already expecting? Set your due date →</button>
     <button class="btn-ghost" onclick="openStartPregnancy()">Back</button>
     <div class="preg-disclaim">Fertile-window estimates are rough guides, every body is different. This is informational only, not fertility advice.</div>`,'diaper');
 }

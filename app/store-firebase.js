@@ -974,9 +974,12 @@
         + '</div><div class="ll-mem-email">' + esc(m.email || '') + '</div></div></div><div style="display:flex;align-items:center;gap:8px"><span class="ll-mem-role">' + esc(who) + '</span>' + rm + '</div></div>';
     }).join('') || '<div class="ll-auth-msg">Just you so far.</div>';
 
-    var youRow = '<div class="ll-invite" style="border-top:none;padding-top:4px"><label>Your relationship to baby</label>'
+    var myName = (info[me.uid] && info[me.uid].name) || me.displayName || '';
+    var youRow = '<div class="ll-invite" style="border-top:none;padding-top:4px"><label style="font-weight:800;font-size:15px">Your profile</label>'
+      + '<label>Your name</label><input id="llMyName" maxlength="40" autocomplete="name" placeholder="Your name" value="' + esc(myName) + '">'
+      + '<label style="margin-top:10px;display:block">Your relationship to baby</label>'
       + '<select id="llMyRel">' + relOptions(myRel, true) + '</select>' + relCustomInput('llMyRelCustom')
-      + '<button id="llMyRelBtn" class="ll-modal-btn ll-ghost" style="margin-top:8px">Save relationship</button>'
+      + '<button id="llMyRelBtn" class="ll-modal-btn ll-ghost" style="margin-top:8px">Save my profile</button>'
       + '<button id="llMyBearBtn" class="ll-modal-btn ll-ghost" style="margin-top:8px">Change my bear avatar</button>'
       + '<button id="llMyFeedbackBtn" class="ll-modal-btn ll-ghost" style="margin-top:8px">💬 Send feedback</button>'
       + '<div id="llMyRelMsg" class="ll-auth-msg"></div></div>';
@@ -1084,9 +1087,19 @@
   async function saveMyRelationship() {
     if (!hhRef) return;
     var v = relValue('llMyRel', 'llMyRelCustom');
+    var nameEl = document.getElementById('llMyName');
+    var name = (nameEl ? (nameEl.value || '').trim().slice(0, 40) : '');
     var msg = document.getElementById('llMyRelMsg');
-    var u = {}; u['memberInfo.' + auth.currentUser.uid + '.relationship'] = v;
-    try { await hhRef.update(u); msg.textContent = '✅ Saved.'; }
+    if (nameEl && !name) { msg.textContent = 'Please add your name so your family knows who is who.'; nameEl.focus(); return; }
+    var uid = auth.currentUser.uid;
+    var u = {}; u['memberInfo.' + uid + '.relationship'] = v;
+    if (nameEl) u['memberInfo.' + uid + '.name'] = name;
+    try {
+      await hhRef.update(u);
+      if (nameEl && name && name !== (auth.currentUser.displayName || '')) { try { await auth.currentUser.updateProfile({ displayName: name }); } catch (_) {} }
+      msg.textContent = '✅ Saved.';
+      if (typeof window.render === 'function') { try { window.render(); } catch (_) {} }
+    }
     catch (e) { msg.textContent = 'Could not save: ' + ((e && e.message) || e); }
   }
 
