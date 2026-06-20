@@ -52,30 +52,12 @@
   <a class="nav-cta" href="/app/">Start free</a>
 </div></nav>
 
-<style>
-.hero .stage-toggle{display:inline-flex;gap:4px;background:#F4EBD9;border:1px solid var(--line,#EADFC8);border-radius:999px;padding:4px;margin:0 0 18px;}
-.hero .stage-toggle button{border:0;background:transparent;font:inherit;font-weight:800;font-size:14px;color:var(--soft,#5C544A);padding:8px 16px;border-radius:999px;cursor:pointer;-webkit-tap-highlight-color:transparent;}
-html.stage-baby .hero .st-baby,html.stage-expecting .hero .st-exp{background:var(--pink,#C97FA0);color:#fff;}
-html.stage-baby .hero .hero-exp,html.stage-expecting .hero .hero-baby{display:none;}
-</style>
 <header class="hero">
-  <div class="stage-toggle" role="tablist" aria-label="Choose where you are">
-    <button type="button" class="st-baby" onclick="cubbyStage('baby')">Our baby's here</button>
-    <button type="button" class="st-exp" onclick="cubbyStage('expecting')">We're expecting</button>
-  </div>
-  <div class="hero-baby">
-    <h1>The calm home for your baby's days.</h1>
-    <p class="sub">Feeds, sleep, nappies, vaccines and keepsakes in one private place, shared in real time with everyone who cares for your little one.</p>
-    <a class="hero-cta" href="/app/">Start free</a>
-  </div>
-  <div class="hero-exp">
-    <h1>The calm home for your whole pregnancy.</h1>
-    <p class="sub">Week by week, every scan and appointment, and the tools for the home stretch. When your baby arrives, the same Cubby becomes your baby tracker.</p>
-    <a class="hero-cta" href="/app/">Start free, wherever you are</a>
-  </div>
-  <div class="trust">No app store · no ads · we never sell your data</div>
+  <h1>Every feed, nap and vaccine, in one calm place.</h1>
+  <p class="sub">Cubby logs feeds, sleep and nappies, follows your country's baby vaccine schedule, and turns it all into keepsakes, shared in real time with everyone who cares for your little one. It starts in pregnancy and grows with them.</p>
+  <a class="hero-cta" href="/app/">Start free</a>
+  <div class="trust">Free to start · no ads · we never sell your data</div>
 </header>
-<script>function cubbyStage(s){try{localStorage.setItem('cubby-stage',s);}catch(e){}var c=document.documentElement.classList;c.remove('stage-baby','stage-expecting');c.add('stage-'+s);}</script>
 <div class="carousel" id="carousel">
   <div class="cwin"><div class="slides">
 
