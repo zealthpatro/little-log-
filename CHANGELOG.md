@@ -1,5 +1,52 @@
 # Cubby — Changelog
 
+## v0.14.0 — 2026-06-21 — pregnancy + family games, the four audit fixes, retention features, marketing rebuild
+
+A large span since v0.13.0 (service worker `little-log-v82` → `little-log-v118`, 81 commits). The pregnancy/expecting journey and a loss-safe family game shipped, all four architecture-audit fixes landed, several retention features went live, and the marketing site was rebuilt. All live on little-cubby.com (deploys from `main` via Cloudflare).
+
+**Pregnancy & onboarding**
+- Simpler 2-state onboarding (expecting / baby) with explicit stage tiles, a "We're trying" planning stage, and twins support. Affirm-then-offer for additional babies (loss-safe, no anxious prompt). Birthday is now mandatory (no silent default to today).
+- A crafted in-sheet date picker (`datePicker()` in `app/index.html`): month grid, Today shortcut, local-correct (no UTC drift), future-disable via `opts.max`. Contrast fixed (v118): disabled dates are readable and "today" is a clear pink ring.
+- The "We're trying" date is the last-period date (past-only, for the fertile-window estimate); a new "Already expecting? Set your due date →" CTA routes into the expecting setup, where the due date allows future dates.
+- Tappable week pills; sheets no longer full-page-jump or zoom, fields persist, native pull-to-dismiss.
+- Your own profile is now editable after first-run: name + relationship in Settings → "Your profile & family" (`openFamily`), writing `memberInfo.<uid>.name`/`.relationship` + the auth displayName (v118).
+
+**Family games — "Boy or girl?" + due-date pool**
+- A calm, loss-safe pre-birth guessing game: in-circle guesses plus a hosted Kahoot-style guest link (friends join with a nickname, no account). Real celebration on reveal, including twins ("one of each"). Owner-only reveal; never implies an expectation.
+- Games hub (Phase 1): Firebase-auth ownership, an isolated `cubby-games` D1, `/api/hub/*` worker routes, guest relation + custom roles, a close-games teardown. The guest store holds only the host's public title + {nickname, guess, note}. See `GENDER-GAME-SPEC.md` / `GAMES-HUB-SPEC.md`.
+
+**The four architecture-audit fixes** (see `HANDOFF.md`)
+1. Ops wins: a pre-commit SW-bump hook (`.githooks/pre-commit` via `core.hooksPath`), cron observability (structured logs + a `GET /api/health` heartbeat in the games-D1 `ops_state` table), per-IP game rate-limits.
+2. Games auth hardened + the hub (above).
+3. Firestore rules hardened and **published live**: `onlyOwnMemberInfo()` (members edit only their own memberInfo) + `appBlobClean()` (no pregnancy/mhealth in the circle-shared blob) + the invitee-branch lock; an emulator cross-account test harness lives in `test/`.
+4. Consent server-enforcement: closed — dual-guardian export/delete stays the in-app gate (no Cloud Functions on Spark); copy is truthful ("Cubby asks both guardians to agree").
+
+**Retention & delight**
+- Push reminders: opt-in, Worker 15-min cron + FCM. Medicine-dose only (per-dose ~30 min before + one daily digest), never feeds/milestones; quiet hours client-side.
+- Auto-magic memories "Ready for you" rail + a month-iversary card CTA.
+- Animated keepsake studio: decorations (balloons, confetti, stars), cubbyBear characters, a Birthday template, MediaRecorder video export (animated card → shareable clip).
+- 225-entry milestone library (data file), browse-by-age + search + a pet pack.
+- Child stage: the home grows up with the baby.
+
+**Privacy**
+- All app fonts self-hosted (dropped the Google Fonts CDN), completing the no-third-party-trackers promise for the app.
+
+**Marketing site rebuild**
+- FAQ rebuilt to 16 categories / 119 Q&As with FAQPage JSON-LD kept in lockstep with the visible copy; customer-first trust voice.
+- Homepage: concrete proof (a privacy UI snippet showing item-by-item health sharing + the mood lock; a "Your country's schedule, built in" trust row of the real authorities).
+- `/why/`: a rich narrative rewrite (the 3am story, two proof cards, the four vows, an unsigned founder note), then restructured with pull-quotes + air so it does not read as a wall of text.
+- New `/how-it-works/` journey page (HowTo + Breadcrumb schema); `/pregnancy` + `/features` gained "live but unshown" feature blocks.
+- Nav decluttered from 8 tabs to 4 (Pregnancy / Baby / Articles / Pricing) + a no-JS `<details>` "About" dropdown (Why Cubby / How it works / FAQ), across 395 pages.
+- ~141 new articles (now ~398) + a hub with contextual sub-filters. No em-dashes in any customer copy.
+
+**Monetization**
+- Pro billing via Lemon Squeezy (merchant-of-record) worker, built-not-live, gated behind "Register for Pro" until Aug 2026. See `PRO.md` / `workers/pro-billing/LEMONSQUEEZY.md`.
+
+**Platform**
+- Service worker cache progressed `little-log-v82` → `little-log-v118` over the span.
+
+---
+
 ## v0.13.0 — 2026-06-16 — contextual "why we ask" help, Sign in with Apple, brand-mark fix
 
 A calmer data-entry experience with inline reasons for every sensitive field, Apple sign-in for the App Store, and a corrected brand wordmark on the sign-in surfaces. All live on little-cubby.com (deploys from `main` via Cloudflare Workers Builds).

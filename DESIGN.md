@@ -101,6 +101,7 @@ At ≤ ~620px the 5 tabs wrap into a vertical stack; `.nav-in` grows to **216px 
 and because the nav is sticky it permanently covers the top third of the screen, including the
 hero headline. Root cause: `.nav-tabs{flex-wrap:wrap}` + a 640px media query that only shrinks
 padding. This is the single worst defect on the site and it's on every marketing page.
+_Resolved (C-1, then v0.14.0): the marketing nav is now 4 tabs (Pregnancy / Baby / Articles / Pricing) + a no-JS `<details>` "About" dropdown (Why Cubby / How it works / FAQ); on mobile it's a clean wrapped row with a full-width dropdown panel, not a scroll strip. See CHANGELOG v0.14.0._
 
 **B-2 (P1) The Feed icon reads as a tuning fork.**
 `I.feed` is a U-shape on a stem with a base bar — it scans as a tuning fork (or a sad whisk).
