@@ -42,7 +42,7 @@
   <a class="nav-brand" href="/"><img src="/icons/logo-512.png" alt="Cubby"><b>Cubby</b></a>
   <div class="nav-tabs">
     <a href="/" class="on">Home</a>
-    <a href="/why/">Why Cubby</a>
+    <a href="/why/">Why Cubby</a><a href="/how-it-works/">How it works</a>
     <a href="/pregnancy/">Pregnancy</a>
     <a href="/features/">Baby</a>
     <a href="/articles/">Articles</a>
@@ -52,12 +52,30 @@
   <a class="nav-cta" href="/app/">Start free</a>
 </div></nav>
 
+<style>
+.hero .stage-toggle{display:inline-flex;gap:4px;background:#F4EBD9;border:1px solid var(--line,#EADFC8);border-radius:999px;padding:4px;margin:0 0 18px;}
+.hero .stage-toggle button{border:0;background:transparent;font:inherit;font-weight:800;font-size:14px;color:var(--soft,#5C544A);padding:8px 16px;border-radius:999px;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+html.stage-baby .hero .st-baby,html.stage-expecting .hero .st-exp{background:var(--pink,#C97FA0);color:#fff;}
+html.stage-baby .hero .hero-exp,html.stage-expecting .hero .hero-baby{display:none;}
+</style>
 <header class="hero">
-  <h1>Every feed, nap and vaccine, in one calm place.</h1>
-  <p class="sub">Cubby logs feeds, sleep and nappies, follows your country's baby vaccine schedule with reminders, and turns it all into keepsakes, shared in real time with everyone who cares for your little one.</p>
-  <a class="hero-cta" href="/app/">Start free</a>
-  <div class="trust">Free to start · No ads · We never sell your data</div>
+  <div class="stage-toggle" role="tablist" aria-label="Choose where you are">
+    <button type="button" class="st-baby" onclick="cubbyStage('baby')">Our baby's here</button>
+    <button type="button" class="st-exp" onclick="cubbyStage('expecting')">We're expecting</button>
+  </div>
+  <div class="hero-baby">
+    <h1>The calm home for your baby's days.</h1>
+    <p class="sub">Feeds, sleep, nappies, vaccines and keepsakes in one private place, shared in real time with everyone who cares for your little one.</p>
+    <a class="hero-cta" href="/app/">Start free</a>
+  </div>
+  <div class="hero-exp">
+    <h1>The calm home for your whole pregnancy.</h1>
+    <p class="sub">Week by week, every scan and appointment, and the tools for the home stretch. When your baby arrives, the same Cubby becomes your baby tracker.</p>
+    <a class="hero-cta" href="/app/">Start free, wherever you are</a>
+  </div>
+  <div class="trust">No app store · no ads · we never sell your data</div>
 </header>
+<script>function cubbyStage(s){try{localStorage.setItem('cubby-stage',s);}catch(e){}var c=document.documentElement.classList;c.remove('stage-baby','stage-expecting');c.add('stage-'+s);}</script>
 <div class="carousel" id="carousel">
   <div class="cwin"><div class="slides">
 
@@ -141,6 +159,39 @@
   <div class="dots" id="cdots"></div>
 </div>
 
+<!-- Care-circle wedge (promoted): the sharpest, best-proven hook -->
+<section class="section">
+  <div class="es-k" style="text-align:center;color:var(--pink,#C97FA0)">For the whole care circle</div>
+  <h2 style="text-align:center">Stop being the only one who knows</h2>
+  <p class="lead2">The last feed, the nap, the medicine: usually they live in one parent's head or on one phone. Cubby puts them where everyone caring for your baby can see, in real time, with who did what. Away during the day? You see it the moment the nanny logs it, plus a tidy while-you-were-away recap.</p>
+  <div class="phone" aria-hidden="true" style="margin:20px auto 0;max-width:300px"><div class="pscr">
+    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>While you were away</b></div>
+    <div class="pcard"><div class="a">3 feeds</div><div class="b">last at 2:10 PM</div></div>
+    <div class="pcard"><div class="a">2 naps · 2h 10m</div><div class="b">11:05 AM and 1:40 PM</div></div>
+    <div class="pcard"><div class="a">4 nappies</div><div class="b">all changed on time</div></div>
+    <div class="pnote">logged by Nanny while you were at work 🐻</div>
+  </div></div>
+</section>
+
+<!-- One account, the whole journey: the Switch -->
+<section class="section alt">
+  <h2 style="text-align:center">One account, your whole family. No restarts.</h2>
+  <p class="lead2">Cubby is there the day the test turns positive and keeps going through every stage that follows: pregnancy, newborn nights, first foods, first steps. Add a second baby without starting over. One private account, one care circle, one story. And when you want a little joy, share a Boy-or-girl guess or a due-date pool with everyone who loves your bump, no account needed for them to play.</p>
+  <div class="phone" aria-hidden="true" style="margin:20px auto 0;max-width:300px"><div class="pscr">
+    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Switch</b></div>
+    <div class="prow"><div class="pav" style="background:#C97FA0">🌸</div><div><div class="a">Your pregnancy</div><div class="b">Week 28</div></div></div>
+    <div class="prow"><div class="pav" style="background:#56A08E">A</div><div><div class="a">Agastya</div><div class="b">10 months</div></div></div>
+    <div class="prow"><div class="pav" style="background:#5E6AA8">K</div><div><div class="a">King</div><div class="b">6 days</div></div></div>
+    <div class="pnote">a pregnancy and every child, in one place 🐻</div>
+  </div></div>
+</section>
+
+<!-- Privacy as a pillar -->
+<section class="section">
+  <h2 style="text-align:center">Private by design, and the mother owns her own health</h2>
+  <p class="lead2">No ads, no third-party trackers, never sold. Your family's log is locked to the people you invite, enforced server-side. A mother's health and pregnancy live in her own space, shared only with whom she chooses, item by item, and mood notes can never be shared with anyone. You can export or delete everything, and the big actions ask both guardians to agree. <a href="/why/">Why privacy is the point.</a></p>
+</section>
+
 <!-- Expecting? Route the pregnancy audience to the pregnancy journey -->
 <section class="section" style="padding-top:30px;padding-bottom:6px">
   <div class="exp-strip">
@@ -158,7 +209,7 @@
 <section class="section">
   <div class="proof">
     <div class="it"><div class="ic" style="background:var(--diaper-soft);color:var(--diaper)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/><path d="M12 15v2"/></svg></div><div class="t">Private by design</div><div class="d">No ads, no third-party trackers. Encrypted in transit and at rest; export or delete anytime.</div></div>
-    <div class="it"><div class="ic" style="background:var(--med-soft);color:var(--med)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v5a4 4 0 0 0 8 0V3"/><path d="M5 3H3.5M13 3h1.5"/><path d="M9 16v1a5 5 0 0 0 5 5 5 5 0 0 0 5-5v-3"/><circle cx="19" cy="11" r="2.2"/></svg></div><div class="t">Built on official guidance</div><div class="d">Schedules from NHS, CDC, STIKO &amp; MOHAP.</div></div>
+    <div class="it"><div class="ic" style="background:var(--med-soft);color:var(--med)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v5a4 4 0 0 0 8 0V3"/><path d="M5 3H3.5M13 3h1.5"/><path d="M9 16v1a5 5 0 0 0 5 5 5 5 0 0 0 5-5v-3"/><circle cx="19" cy="11" r="2.2"/></svg></div><div class="t">Built on official guidance</div><div class="d">Schedules from the NHS, CDC, STIKO, India (IAP/ACVIP &amp; MoHFW) and WHO. Sources cited and linked.</div></div>
     <div class="it"><div class="ic" style="background:var(--sleep-soft);color:var(--sleep)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.8 20a6.2 6.2 0 0 1 12.4 0"/><circle cx="17.2" cy="9.4" r="2.6"/><path d="M16 20a5.4 5.4 0 0 1 5.2-4.4"/></svg></div><div class="t">Made for the care circle</div><div class="d">Parents, grandparents, the nanny, daycare.</div></div>
     <div class="it"><div class="ic" style="background:var(--feed-soft);color:var(--feed)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="7"/><circle cx="5.8" cy="5.8" r="2.3"/><circle cx="18.2" cy="5.8" r="2.3"/><path d="M9.6 12.4h.01M14.4 12.4h.01M12 15.4h.01"/></svg></div><div class="t">Made by parents</div><div class="d">Early access, shaped by real families.</div></div>
   </div>
@@ -248,7 +299,7 @@
 
 <footer class="foot">
   <div class="fl">
-    <a href="/">Home</a><a href="/why/">Why Cubby</a><a href="/pregnancy/">Pregnancy</a><a href="/features/">Baby</a><a href="/articles/">Articles</a><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a><a href="/app/">Open app</a>
+    <a href="/">Home</a><a href="/why/">Why Cubby</a><a href="/how-it-works/">How it works</a><a href="/pregnancy/">Pregnancy</a><a href="/features/">Baby</a><a href="/articles/">Articles</a><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a><a href="/app/">Open app</a>
   </div>
   Cubby, a warm private baby tracker 🐻
   <div class="tiny">Cubby is informational and not a substitute for medical advice. Always follow your doctor and your country's official guidance.</div>
@@ -274,7 +325,7 @@
   }catch(e){}
 })();
 /* Campaign attribution: remember utm_* (FIRST touch) until sign-in, stamped onto the
-   new family + Pro waitlist in /app/. First-party only — stored on the user's own record,
+   new family + Pro waitlist in /app/. First-party only, stored on the user's own record,
    never sent to any third party. Keeps the "no third-party trackers" promise intact. */
 (function(){
   try{
