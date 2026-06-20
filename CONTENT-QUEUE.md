@@ -58,7 +58,7 @@ Source of truth for all articles: NHS (https://www.nhs.uk/pregnancy/). Additiona
   Cover dietary restrictions, activity beliefs, family customs. Evidence-check each claim. No fabricated health claims.
 - [x] Chinese pregnancy traditions: what the evidence says — `chinese-pregnancy-traditions` — all trimesters (published 15 June 2026)
   Cover pregnancy taboos, dietary customs, family involvement. Evidence-check traditional health claims.
-- [ ] Preparing for zuo yuezi: planning your postnatal confinement — `chinese-yuezi-preparation` — 3rd trimester
+- [x] Preparing for zuo yuezi: planning your postnatal confinement — `chinese-yuezi-preparation` — 3rd trimester
   Cross-links to existing zuo-yuezi-postnatal-confinement article. Focuses on preparation during pregnancy.
 - [x] Iwata obi: the Japanese pregnancy belly band tradition — `iwata-obi` — 2nd/3rd trimester (published 15 June 2026)
   Source: note cultural tradition; cite Japanese Ministry of Health guidance on Inu no Hi. No fabricated medical claims.
@@ -135,7 +135,7 @@ Source of truth for all articles: NHS (https://www.nhs.uk/pregnancy/). Additiona
 - [x] **Understanding growth charts and centiles** — slug: `baby-growth-charts-centiles` — all — Growth (published as reading-baby-growth-charts, 15 June 2026)
   Sources: WHO child growth standards (https://www.who.int/tools/child-growth-standards), CDC growth charts (https://www.cdc.gov/growthcharts/), NHS. Tie to Cubby's in-app charts.
 
-- [ ] **Milestones 6 to 12 months** — slug: `baby-milestones-6-to-12-months` — 6-12 months — Development
+- [x] **Milestones 6 to 12 months** — slug: `baby-milestones-6-to-12-months` — 6-12 months — Development
   Sources: CDC 6 (https://www.cdc.gov/act-early/milestones/6-months.html), 9 (.../9-months.html), 1 year (.../1-year.html)
 
 - [x] **Tummy time: why and how** — slug: `tummy-time-for-babies` — Newborn / 0-3 months — Development (published 15 June 2026)
@@ -149,7 +149,7 @@ Source of truth for all articles: NHS (https://www.nhs.uk/pregnancy/). Additiona
 - [x] **Vitamin D and vitamins for babies** — slug: `vitamin-d-for-babies` — all — Nutrition (published 15 June 2026)
   Sources: https://www.nhs.uk/baby/weaning-and-feeding/vitamins-for-children/
 
-- [ ] **Drinks and cups: water and moving off bottles** — slug: `drinks-and-cups-for-babies` — 6-12 months — Feeding
+- [x] **Drinks and cups: water and moving off bottles** — slug: `drinks-and-cups-for-babies` — 6-12 months — Feeding
   Sources: https://www.nhs.uk/baby/weaning-and-feeding/drinks-and-cups-for-babies-and-young-children/
 
 - [x] **Nappy rash: prevent and soothe** — slug: `nappy-rash` — Newborn / all — Care (published as nappy-rash-causes-and-treatment, 15 June 2026)
@@ -161,7 +161,7 @@ Source of truth for all articles: NHS (https://www.nhs.uk/pregnancy/). Additiona
 - [x] **Constipation in babies** — slug: `baby-constipation` — 6-12 months — Health
   Sources: NHS baby constipation
 
-- [ ] **Baby-led weaning vs purees** — slug: `baby-led-weaning-vs-purees` — 6-9 months — Feeding
+- [x] **Baby-led weaning vs purees** — slug: `baby-led-weaning-vs-purees` — 6-9 months — Feeding
   Sources: NHS first foods + finger foods, CDC textures/how to introduce
 
 - [x] **Fussy eating in toddlers** — slug: `fussy-eating-toddlers` — 12 months+ — Feeding
@@ -186,15 +186,15 @@ Each article covers the same practice across multiple regions. Write once, link 
   Covers family bed traditions across Japan, India, Italy vs UK/US cot guidance. Sources: UNICEF bedsharing evidence, NHS, AAP, Red Nose AU, Lullaby Trust.
 - [x] **Babywearing: carriers, wraps and safety** — slug: `babywearing-carriers-wraps-safety` — newborn — Care
   Covers dakko himo (Japan), cloth sling (India), fascia (Italy), modern structured carriers. Sources: TICKS safety guidelines, AAP hip dysplasia, International Hip Dysplasia Institute.
-- [ ] **Extended family in baby care: benefits and boundaries** — slug: `extended-family-baby-care` — all — Wellbeing
+- [x] **Extended family in baby care: benefits and boundaries** — slug: `extended-family-baby-care` — all — Wellbeing
   Sources: WHO social support evidence, NHS postnatal support, research on multigenerational caregiving.
 - [x] **Baby naming ceremonies worldwide** — slug: `baby-naming-ceremonies-worldwide` — newborn — Wellbeing
   Covers namkaran (India), bai ri (China), Shichigosan context (Japan), baptism/christening. Cultural overview, no medical angle.
 - [x] **Outdoor time for babies: fresh air and naps outside** — slug: `outdoor-time-babies` — all — Development
   Covers Nordic pram-outside sleep, Japanese nature naps, Indian sun time for vitamin D. Sources: NHS fresh air guidance, vitamin D evidence.
-- [ ] **Traditional herbal baths for newborns** — slug: `herbal-baths-newborns` — newborn — Care
+- [x] **Traditional herbal baths for newborns** — slug: `herbal-baths-newborns` — newborn — Care
   Covers ai ye mugwort (China), neem/turmeric (India), Japanese yuzu baths. Sources: evidence for/against; NHS plain water recommendation.
-- [ ] **Postpartum support: what new parents actually need** — slug: `postpartum-support-what-parents-need` — newborn — Wellbeing
+- [x] **Postpartum support: what new parents actually need** — slug: `postpartum-support-what-parents-need` — newborn — Wellbeing
   Universal article. Sources: WHO postnatal care, NICE PND guidance, social support research.
 
 ## Global expansion: Cluster B — India (15 remaining) + China (17 remaining)
@@ -205,141 +205,141 @@ Each article covers the same practice across multiple regions. Write once, link 
 - [x] Iron deficiency in infancy — `iron-deficiency-infancy`
 - [x] Air quality and babies: indoor precautions — `air-quality-babies-indoor-precautions`
 - [x] Breastfeeding support and galactagogues — `breastfeeding-galactagogues`
-- [ ] Namkaran: baby naming ceremony — `namkaran-baby-naming-ceremony`
-- [ ] Ayurvedic colic remedies: what the evidence says — `ayurvedic-colic-remedies`
-- [ ] The joint family and baby care — `joint-family-baby-care`
-- [ ] India's NIS immunisation schedule — `india-nis-immunisation-schedule` (NOTE: Cubby does not track India schedule; frame as information only)
-- [ ] Baby massage: which oils are safe for sensitive skin — `baby-massage-sensitive-skin-oils`
-- [ ] Co-sleeping in Indian families — `co-sleeping-indian-families`
-- [ ] Baby first foods: when and how to introduce spices — `baby-first-foods-introducing-spices`
-- [ ] Traditional postpartum foods — `traditional-postpartum-foods`
-- [ ] Baby growth monitoring: what Indian parents need to know — `baby-growth-monitoring`
+- [x] Namkaran: baby naming ceremony — `namkaran-baby-naming-ceremony`
+- [x] Ayurvedic colic remedies: what the evidence says — `ayurvedic-colic-remedies`
+- [x] The joint family and baby care — `joint-family-baby-care`
+- [x] India's NIS immunisation schedule — `india-nis-immunisation-schedule` (NOTE: Cubby does not track India schedule; frame as information only)
+- [x] Baby massage: which oils are safe for sensitive skin — `baby-massage-sensitive-skin-oils`
+- [x] Co-sleeping in Indian families — `co-sleeping-indian-families`
+- [x] Baby first foods: when and how to introduce spices — `baby-first-foods-introducing-spices`
+- [x] Traditional postpartum foods — `traditional-postpartum-foods`
+- [x] Baby growth monitoring: what Indian parents need to know — `baby-growth-monitoring`
 
 **China remaining:**
 - [x] Tui na for babies: what it is and when to use it — `tui-na-babies`
 - [x] Bai ri man yue: Chinese baby naming celebrations — `bai-ri-man-yue-baby-naming`
-- [ ] TCM approaches to colic — `tcm-colic-babies`
-- [ ] Confinement centre (yuezi zhongxin): what to expect — `yuezi-zhongxin-confinement-centre`
-- [ ] Zuo yuezi diet: what to eat and what to avoid — `zuo-yuezi-diet`
+- [x] TCM approaches to colic — `tcm-colic-babies`
+- [x] Confinement centre (yuezi zhongxin): what to expect — `yuezi-zhongxin-confinement-centre`
+- [x] Zuo yuezi diet: what to eat and what to avoid — `zuo-yuezi-diet`
 - [x] Chinese family co-sleeping practices — `chinese-family-co-sleeping`
-- [ ] Grandparents and baby care in Chinese families — `grandparents-baby-care-chinese-families`
-- [ ] Chinese vaccine schedule overview — `chinese-vaccine-schedule` (information only, Cubby does not track)
-- [ ] Red egg ceremony and first month celebrations — `red-egg-ceremony`
-- [ ] Baby skin care in traditional Chinese practice — `baby-skin-care-traditional-chinese`
-- [ ] Gua sha and traditional remedies: what the evidence says — `gua-sha-traditional-remedies`
-- [ ] Postpartum hair loss: what causes it and what helps — `postpartum-hair-loss`
-- [ ] Feeding schedule vs demand feeding — `feeding-schedule-vs-demand-feeding`
-- [ ] Iron-enriched congee recipes by age — `iron-enriched-congee-by-age`
-- [ ] Transitioning from breast to bottle or cup — `breast-to-bottle-cup-transition`
+- [x] Grandparents and baby care in Chinese families — `grandparents-baby-care-chinese-families`
+- [x] Chinese vaccine schedule overview — `chinese-vaccine-schedule` (information only, Cubby does not track)
+- [x] Red egg ceremony and first month celebrations — `red-egg-ceremony`
+- [x] Baby skin care in traditional Chinese practice — `baby-skin-care-traditional-chinese`
+- [x] Gua sha and traditional remedies: what the evidence says — `gua-sha-traditional-remedies`
+- [x] Postpartum hair loss: what causes it and what helps — `postpartum-hair-loss`
+- [x] Feeding schedule vs demand feeding — `feeding-schedule-vs-demand-feeding`
+- [x] Iron-enriched congee recipes by age — `iron-enriched-congee-by-age`
+- [x] Transitioning from breast to bottle or cup — `breast-to-bottle-cup-transition`
 - [x] Formula feeding in China: what parents need to know — `formula-feeding-china`
-- [ ] Sleep training: what different cultures do — `sleep-training-cultural-approaches`
+- [x] Sleep training: what different cultures do — `sleep-training-cultural-approaches`
 
 ## Global expansion: Cluster C — Australia (15 remaining) + Japan (20)
 **Australia remaining:**
-- [ ] Maternal and Child Health nurse visits — `maternal-child-health-nurse-visits`
-- [ ] Australian parental leave guide — `australian-parental-leave`
-- [ ] NDIS early childhood support — `ndis-early-childhood-support`
+- [x] Maternal and Child Health nurse visits — `maternal-child-health-nurse-visits`
+- [x] Australian parental leave guide — `australian-parental-leave`
+- [x] NDIS early childhood support — `ndis-early-childhood-support`
 - [x] Tongue tie: access to assessment in Australia — `tongue-tie-assessment-australia`
-- [ ] PANDA: postnatal depression support — `panda-postnatal-depression`
-- [ ] Immunisation schedule overview (Australian NIP) — `australian-nip-immunisation` (information only)
-- [ ] Baby-led weaning in an Australian context — `baby-led-weaning-australia`
-- [ ] Swimming lessons for babies in Australia — `swimming-lessons-babies`
-- [ ] Flying with a baby on long-haul flights — `flying-with-baby-long-haul`
-- [ ] Childcare options in Australia — `childcare-options-australia`
-- [ ] Baby sleep: Red Nose guidelines for safe bedding — `safe-bedding-babies`
-- [ ] Introducing allergens early: the ASCIA approach — `introducing-allergens-ascia`
-- [ ] Baby formula in Australia: what the TGA says — `baby-formula-australia-tga`
+- [x] PANDA: postnatal depression support — `panda-postnatal-depression`
+- [x] Immunisation schedule overview (Australian NIP) — `australian-nip-immunisation` (information only)
+- [x] Baby-led weaning in an Australian context — `baby-led-weaning-australia`
+- [x] Swimming lessons for babies in Australia — `swimming-lessons-babies`
+- [x] Flying with a baby on long-haul flights — `flying-with-baby-long-haul`
+- [x] Childcare options in Australia — `childcare-options-australia`
+- [x] Baby sleep: Red Nose guidelines for safe bedding — `safe-bedding-babies`
+- [x] Introducing allergens early: the ASCIA approach — `introducing-allergens-ascia`
+- [x] Baby formula in Australia: what the TGA says — `baby-formula-australia-tga`
 - [x] Reflux in babies: Australian guidelines — `reflux-babies-australian-guidelines`
 - [x] Postnatal depression: Beyond Blue resources — `postnatal-depression-beyond-blue`
 
 **Japan (all new):**
 - [x] Boshi techo: Japan's maternal and child health handbook — `boshi-techo` (published 15 June 2026)
-- [ ] Ofuro: Japanese baby bathing traditions — `ofuro-baby-bathing`
-- [ ] Dakko himo: Japanese babywearing — `dakko-himo-babywearing`
-- [ ] BCG vaccination: why Japan uses the stamp method — `bcg-vaccination-stamp-method`
+- [x] Ofuro: Japanese baby bathing traditions — `ofuro-baby-bathing`
+- [x] Dakko himo: Japanese babywearing — `dakko-himo-babywearing`
+- [x] BCG vaccination: why Japan uses the stamp method — `bcg-vaccination-stamp-method`
 - [x] Okayu and dashi: Japanese baby first foods — `okayu-dashi-baby-first-foods`
-- [ ] Oshichi-ya: the seventh night naming ceremony — `oshichi-ya-naming-ceremony`
-- [ ] Omiyamairi: the first shrine visit at one month — `omiyamairi-first-shrine-visit`
-- [ ] Hatsu-zekku: first festival celebrations — `hatsu-zekku-first-festival`
-- [ ] Japanese approach to sleep: the family bed — `japanese-family-bed-sleep`
-- [ ] Ikuji kyugyou: Japanese paternity leave — `ikuji-kyugyou-paternity-leave`
-- [ ] Japanese infant formula regulation — `japanese-infant-formula`
-- [ ] Baby weaning in Japan: what parents introduce first — `baby-weaning-japan-first-foods`
-- [ ] Postpartum care in Japan: ansei and rest — `postpartum-ansei-rest-japan`
-- [ ] Japanese baby massage: relaxation and bonding — `japanese-baby-massage`
+- [x] Oshichi-ya: the seventh night naming ceremony — `oshichi-ya-naming-ceremony`
+- [x] Omiyamairi: the first shrine visit at one month — `omiyamairi-first-shrine-visit`
+- [x] Hatsu-zekku: first festival celebrations — `hatsu-zekku-first-festival`
+- [x] Japanese approach to sleep: the family bed — `japanese-family-bed-sleep`
+- [x] Ikuji kyugyou: Japanese paternity leave — `ikuji-kyugyou-paternity-leave`
+- [x] Japanese infant formula regulation — `japanese-infant-formula`
+- [x] Baby weaning in Japan: what parents introduce first — `baby-weaning-japan-first-foods`
+- [x] Postpartum care in Japan: ansei and rest — `postpartum-ansei-rest-japan`
+- [x] Japanese baby massage: relaxation and bonding — `japanese-baby-massage`
 - [x] Baby milestones: what Japanese health checks look for — `baby-milestones-japan-health-checks`
-- [ ] Swimming and water safety for babies in Japan — `swimming-water-safety-babies-japan`
-- [ ] Baby clothing and layering in Japan's seasons — `baby-clothing-layering-japan`
-- [ ] Japanese approach to outdoor time and sunscreen — `outdoor-time-sunscreen-japan`
-- [ ] Early childhood education in Japan: what Cubby can support — `early-childhood-education-japan`
-- [ ] Postpartum depression in Japan: cultural context and resources — `postpartum-depression-japan`
+- [x] Swimming and water safety for babies in Japan — `swimming-water-safety-babies-japan`
+- [x] Baby clothing and layering in Japan's seasons — `baby-clothing-layering-japan`
+- [x] Japanese approach to outdoor time and sunscreen — `outdoor-time-sunscreen-japan`
+- [x] Early childhood education in Japan: what Cubby can support — `early-childhood-education-japan`
+- [x] Postpartum depression in Japan: cultural context and resources — `postpartum-depression-japan`
 
 ## Global expansion: Cluster D — USA (20) + Germany (20) + Italy (20)
 **USA:**
-- [ ] AAP safe sleep guidelines — `aap-safe-sleep-guidelines`
-- [ ] CDC immunisation schedule: birth to 18 months — `cdc-immunisation-schedule`
-- [ ] WIC program: free nutrition support for families — `wic-program-families`
-- [ ] FMLA parental leave: what it covers and what it does not — `fmla-parental-leave`
-- [ ] Pediatrician well-child visits: what to expect — `pediatrician-well-child-visits`
-- [ ] Fourth trimester: the first 12 weeks at home — `fourth-trimester`
-- [ ] Breastfeeding in the US: support and legal rights — `breastfeeding-us-support-rights`
-- [ ] Formula shortage: what to do if formula is unavailable — `formula-shortage-what-to-do`
-- [ ] Car seat safety: rear-facing and installation — `car-seat-safety-rear-facing`
+- [x] AAP safe sleep guidelines — `aap-safe-sleep-guidelines`
+- [x] CDC immunisation schedule: birth to 18 months — `cdc-immunisation-schedule`
+- [x] WIC program: free nutrition support for families — `wic-program-families`
+- [x] FMLA parental leave: what it covers and what it does not — `fmla-parental-leave`
+- [x] Pediatrician well-child visits: what to expect — `pediatrician-well-child-visits`
+- [x] Fourth trimester: the first 12 weeks at home — `fourth-trimester`
+- [x] Breastfeeding in the US: support and legal rights — `breastfeeding-us-support-rights`
+- [x] Formula shortage: what to do if formula is unavailable — `formula-shortage-what-to-do`
+- [x] Car seat safety: rear-facing and installation — `car-seat-safety-rear-facing`
 - [x] AAP screen time guidelines — `screen-time-guidelines-babies`
-- [ ] Food allergies: LEAP study and early introduction — `food-allergies-early-introduction`
-- [ ] Circumcision: what US parents need to know — `circumcision-what-parents-need-to-know`
-- [ ] Head shape and positional plagiocephaly: AAP guidance — `positional-plagiocephaly-aap`
-- [ ] Infant CPR: when to learn and where — `infant-cpr-where-to-learn`
+- [x] Food allergies: LEAP study and early introduction — `food-allergies-early-introduction`
+- [x] Circumcision: what US parents need to know — `circumcision-what-parents-need-to-know`
+- [x] Head shape and positional plagiocephaly: AAP guidance — `positional-plagiocephaly-aap`
+- [x] Infant CPR: when to learn and where — `infant-cpr-where-to-learn`
 - [x] NICU follow-up care — `nicu-follow-up-care`
-- [ ] Postpartum depression: PPD screening in the US — `postpartum-depression-ppd-screening`
-- [ ] Newborn metabolic screening (heel prick) in the US — `newborn-metabolic-screening-us`
-- [ ] Baby-led weaning: US dietitian perspective — `baby-led-weaning-us`
-- [ ] Vitamin D and iron supplements: AAP recommendations — `vitamin-d-iron-supplements-aap`
-- [ ] Daycare and sick-day policies for babies — `daycare-sick-day-policies`
+- [x] Postpartum depression: PPD screening in the US — `postpartum-depression-ppd-screening`
+- [x] Newborn metabolic screening (heel prick) in the US — `newborn-metabolic-screening-us`
+- [x] Baby-led weaning: US dietitian perspective — `baby-led-weaning-us`
+- [x] Vitamin D and iron supplements: AAP recommendations — `vitamin-d-iron-supplements-aap`
+- [x] Daycare and sick-day policies for babies — `daycare-sick-day-policies`
 
 **Germany:**
-- [ ] STIKO vaccine schedule: birth to 14 months — `stiko-vaccine-schedule`
-- [ ] U-Untersuchungen: Germany's preventive baby health checks — `u-untersuchungen-baby-health-checks`
-- [ ] Hebamme: what a German midwife does after birth — `hebamme-postnatal-midwife`
-- [ ] Elterngeld: Germany's parental leave payment — `elterngeld-parental-leave`
+- [x] STIKO vaccine schedule: birth to 14 months — `stiko-vaccine-schedule`
+- [x] U-Untersuchungen: Germany's preventive baby health checks — `u-untersuchungen-baby-health-checks`
+- [x] Hebamme: what a German midwife does after birth — `hebamme-postnatal-midwife`
+- [x] Elterngeld: Germany's parental leave payment — `elterngeld-parental-leave`
 - [x] Kita and Krippe: childcare in Germany — `kita-krippe-childcare-germany`
-- [ ] Kinderkrankengeld: paid sick leave to care for your baby — `kinderkrankengeld-sick-leave`
-- [ ] Breastfeeding in Germany: support and the Stillberaterin — `breastfeeding-germany-stillberaterin`
-- [ ] German approach to Brei and starting solids — `brei-starting-solids-germany`
-- [ ] Fresh air and outdoor sleep: German baby care tradition — `outdoor-sleep-germany-fresh-air`
-- [ ] Vitamin D supplementation: German recommendations — `vitamin-d-supplementation-germany`
-- [ ] Nabelschnurstumpf: umbilical cord care in Germany — `umbilical-cord-care-germany`
-- [ ] Tagesmutter vs Krippe: choosing childcare — `tagesmutter-vs-krippe`
-- [ ] Postpartum depression: German support resources — `postpartum-depression-germany`
-- [ ] Baby swimming (Babyschwimmen) in Germany — `babyschwimmen-baby-swimming`
-- [ ] German Kinderarzt visits: what happens at each check — `kinderarzt-check-ups`
-- [ ] Schlaftrennung: separate sleep spaces in German families — `separate-sleep-spaces-germany`
-- [ ] Introducing allergenic foods: German ESPGHAN guidance — `introducing-allergens-espghan`
-- [ ] Elternzeit: both parents taking leave — `elternzeit-both-parents`
-- [ ] German approach to skin care for newborns — `newborn-skin-care-germany`
-- [ ] Mutterschaftsgeld: maternity pay before birth — `mutterschaftsgeld-maternity-pay`
+- [x] Kinderkrankengeld: paid sick leave to care for your baby — `kinderkrankengeld-sick-leave`
+- [x] Breastfeeding in Germany: support and the Stillberaterin — `breastfeeding-germany-stillberaterin`
+- [x] German approach to Brei and starting solids — `brei-starting-solids-germany`
+- [x] Fresh air and outdoor sleep: German baby care tradition — `outdoor-sleep-germany-fresh-air`
+- [x] Vitamin D supplementation: German recommendations — `vitamin-d-supplementation-germany`
+- [x] Nabelschnurstumpf: umbilical cord care in Germany — `umbilical-cord-care-germany`
+- [x] Tagesmutter vs Krippe: choosing childcare — `tagesmutter-vs-krippe`
+- [x] Postpartum depression: German support resources — `postpartum-depression-germany`
+- [x] Baby swimming (Babyschwimmen) in Germany — `babyschwimmen-baby-swimming`
+- [x] German Kinderarzt visits: what happens at each check — `kinderarzt-check-ups`
+- [x] Schlaftrennung: separate sleep spaces in German families — `separate-sleep-spaces-germany`
+- [x] Introducing allergenic foods: German ESPGHAN guidance — `introducing-allergens-espghan`
+- [x] Elternzeit: both parents taking leave — `elternzeit-both-parents`
+- [x] German approach to skin care for newborns — `newborn-skin-care-germany`
+- [x] Mutterschaftsgeld: maternity pay before birth — `mutterschaftsgeld-maternity-pay`
 
 **Italy:**
-- [ ] Mediterranean weaning: pastina, purees and family food — `mediterranean-weaning-pastina`
-- [ ] Quarantina: Italian postnatal rest tradition — `quarantina-postnatal-rest`
-- [ ] The nonna's role in Italian baby care — `nonna-role-italian-baby-care`
-- [ ] Italian pediatra system: how well-child visits work — `italian-pediatra-well-child-visits`
+- [x] Mediterranean weaning: pastina, purees and family food — `mediterranean-weaning-pastina`
+- [x] Quarantina: Italian postnatal rest tradition — `quarantina-postnatal-rest`
+- [x] The nonna's role in Italian baby care — `nonna-role-italian-baby-care`
+- [x] Italian pediatra system: how well-child visits work — `italian-pediatra-well-child-visits`
 - [x] Piano Nazionale Vaccini: Italy's vaccine schedule — `piano-nazionale-vaccini` (information only)
-- [ ] Fascia: Italian babywearing traditions — `fascia-italian-babywearing`
-- [ ] Italian breastfeeding support: UPPA and resources — `breastfeeding-support-italy`
-- [ ] Parental leave in Italy: maternita and paternita — `parental-leave-italy`
-- [ ] Safe sleep in Italy: ISS guidance — `safe-sleep-italy-iss`
-- [ ] Italian approach to introducing olive oil and seasonings — `olive-oil-seasonings-baby-food`
-- [ ] Baby massage in Italian tradition — `baby-massage-italy`
-- [ ] Neonatal jaundice: Italian hospital protocols — `neonatal-jaundice-italy`
-- [ ] Swaddling in Italian tradition — `swaddling-italy`
-- [ ] Italian maternity system: what happens at birth — `italian-maternity-system`
-- [ ] Baptism and first religious ceremonies — `baptism-first-religious-ceremonies`
-- [ ] Baby naming in Italy: civil registration — `baby-naming-italy`
-- [ ] Co-sleeping in Italian families: what the evidence says — `co-sleeping-italy`
-- [ ] Sun safety for babies in the Mediterranean — `sun-safety-mediterranean`
-- [ ] Italian summer heat: keeping babies cool — `italian-summer-heat-babies`
-- [ ] Postpartum depression in Italy: resources and stigma — `postpartum-depression-italy`
+- [x] Fascia: Italian babywearing traditions — `fascia-italian-babywearing`
+- [x] Italian breastfeeding support: UPPA and resources — `breastfeeding-support-italy`
+- [x] Parental leave in Italy: maternita and paternita — `parental-leave-italy`
+- [x] Safe sleep in Italy: ISS guidance — `safe-sleep-italy-iss`
+- [x] Italian approach to introducing olive oil and seasonings — `olive-oil-seasonings-baby-food`
+- [x] Baby massage in Italian tradition — `baby-massage-italy`
+- [x] Neonatal jaundice: Italian hospital protocols — `neonatal-jaundice-italy`
+- [x] Swaddling in Italian tradition — `swaddling-italy`
+- [x] Italian maternity system: what happens at birth — `italian-maternity-system`
+- [x] Baptism and first religious ceremonies — `baptism-first-religious-ceremonies`
+- [x] Baby naming in Italy: civil registration — `baby-naming-italy`
+- [x] Co-sleeping in Italian families: what the evidence says — `co-sleeping-italy`
+- [x] Sun safety for babies in the Mediterranean — `sun-safety-mediterranean`
+- [x] Italian summer heat: keeping babies cool — `italian-summer-heat-babies`
+- [x] Postpartum depression in Italy: resources and stigma — `postpartum-depression-italy`
 
 ## Already published (do not redo)
 - [x] Safe baby sleep / SIDS · [x] Soothing a crying baby & colic · [x] Bathing, washing & nappy care
