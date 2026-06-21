@@ -31,6 +31,9 @@
 <style>
 @media(min-width:1100px){.wrap{max-width:1060px}}
 .findr{background:rgba(251,245,233,.94);margin:0 -20px 14px;padding:14px 20px;border-bottom:1px solid var(--line);border-top:1px solid var(--line)}
+.topic-hubs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+.topic-hub{font-family:var(--sans);font-size:12px;font-weight:800;padding:5px 14px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:var(--soft);text-decoration:none;white-space:nowrap}
+.topic-hub:hover{border-color:var(--pink);color:var(--pink-d)}
 .view-tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
 .view-tab{font-family:var(--sans);font-size:13px;font-weight:800;padding:7px 16px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:var(--soft);cursor:pointer;white-space:nowrap;transition:all .12s ease}
 .view-tab:hover{border-color:var(--pink);color:var(--pink-d)}
@@ -99,6 +102,14 @@
   </div>
 
   <section class="findr" role="search" aria-label="Find articles">
+    <nav class="topic-hubs" aria-label="Browse topic guides">
+      <a class="topic-hub" href="/articles/baby/">Baby care</a>
+      <a class="topic-hub" href="/articles/feeding/">Feeding</a>
+      <a class="topic-hub" href="/articles/sleep/">Sleep</a>
+      <a class="topic-hub" href="/articles/health/">Health</a>
+      <a class="topic-hub" href="/articles/pregnancy/">Pregnancy</a>
+      <a class="topic-hub" href="/articles/you/">You</a>
+    </nav>
     <div class="view-tabs" id="view-tabs" role="tablist" aria-label="Filter by journey stage">
       <button class="view-tab on" data-view="all" type="button">All articles</button>
       <button class="view-tab" data-view="baby" type="button">🍼 Baby</button>
