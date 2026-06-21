@@ -18,19 +18,71 @@
 <meta name="twitter:image" content="https://little-cubby.com/og/cubby-home.png">
 <link rel="icon" type="image/png" href="/icons/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Nunito+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,ital,wght@9..144,0,400;9..144,0,500;9..144,0,600;9..144,1,400;9..144,1,500&family=Nunito+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/vax.css"><link rel="stylesheet" href="/site.css">
 <style>
-/* Why-page editorial rhythm: pull-quotes + air so it never reads as a wall of text */
-.story{max-width:600px;margin:0 auto}
-.story .lead2{margin:0 0 16px;text-align:left}
-.pull{font-family:var(--serif,Fraunces,serif);font-size:clamp(21px,3.6vw,29px);line-height:1.34;font-weight:500;color:var(--ink,#3f3a34);text-align:center;max-width:600px;margin:30px auto;padding:0 6px}
-.pull.sm{font-size:clamp(18px,3vw,22px)}
-.chips-soft{display:flex;flex-wrap:wrap;gap:9px;justify-content:center;margin:6px auto 0;max-width:560px}
-.chips-soft span{background:#fff;border:1px solid var(--line,#EADFC8);border-radius:999px;padding:8px 15px;font-size:14px;font-weight:600;color:var(--ink-soft,#6E635B)}
-.vow{background:#fff;border:1px solid var(--line,#EADFC8);border-radius:14px;padding:15px 17px}
-.vow b{display:block;margin-bottom:3px}
-.vow span{color:var(--ink-soft,#6E635B);font-size:15px}
+/* Why page: editorial hierarchy (drop-cap, dark manifesto, proof affordances, gradient letter)
+   ported into the Cubby brand (pink/honey + Fraunces/Nunito). Scoped under .whyx so it never
+   clashes with site.css; chrome (nav/footer) keeps the shared classes. */
+.whyx{--w-accent:#C97FA0;--w-ink:#2C2521;--w-soft:#5C544A;--w-faint:#8A8073;--w-line:#EADFC8;--w-cream:#FBF7EF;--w-card:#fff;--w-rose:#9C5B6B;--w-rose-bg:#F3E6EA;--w-green:#3E7D5A;--w-green-bg:#E4F0E8;--w-blue-bg:#DCEAF2;font-size:17px;line-height:1.6;color:var(--w-ink)}
+.whyx .wrap{max-width:760px;margin:0 auto;padding:0 26px}
+.whyx .wide{max-width:1040px;margin:0 auto;padding:0 26px}
+.whyx h1,.whyx h2,.whyx h3{font-family:var(--serif,Fraunces,Georgia,serif);font-weight:600;line-height:1.12;letter-spacing:-.4px;color:var(--w-ink)}
+.w-hero{padding:64px 0 46px;text-align:center}
+.w-eyebrow{font-size:12.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--w-accent);font-weight:800;margin-bottom:18px}
+.w-hero h1{font-size:clamp(34px,6vw,56px);line-height:1.05;margin:0 0 20px}
+.w-hero h1 em{font-style:italic;font-weight:600;color:var(--w-accent)}
+.w-hero p{font-size:20px;color:var(--w-soft);max-width:600px;margin:0 auto;font-family:var(--serif,Fraunces,serif);font-weight:400;line-height:1.5}
+.w-story{padding:24px 0 6px;max-width:680px;margin:0 auto}
+.w-story p{font-size:19px;line-height:1.62;margin:0 0 22px}
+.w-dropcap::first-letter{font-family:var(--serif,Fraunces,serif);font-size:60px;font-weight:600;float:left;line-height:.82;padding:8px 12px 0 0;color:var(--w-accent)}
+.w-pull{font-family:var(--serif,Fraunces,serif);font-size:clamp(24px,4vw,32px);line-height:1.28;text-align:center;margin:42px auto;max-width:640px;font-weight:500;color:var(--w-ink)}
+.w-pull em{font-style:italic;color:var(--w-accent)}
+.w-proof{background:var(--w-card);border:1px solid var(--w-line);border-radius:20px;padding:22px;margin:30px auto;max-width:540px;box-shadow:0 18px 40px -28px rgba(43,38,32,.4)}
+.w-proof .hd{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--w-faint);font-weight:800;margin-bottom:13px}
+.w-prow{display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:13px;background:var(--w-cream);margin-bottom:9px}
+.w-prow:last-child{margin-bottom:0}
+.w-prow .ic{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font-size:16px;flex-shrink:0}
+.w-prow .t{flex:1}
+.w-prow .t b{display:block;font-size:15px;font-weight:700}
+.w-prow .t span{font-size:13px;color:var(--w-soft)}
+.w-lock{font-size:12px;font-weight:800;color:var(--w-rose);background:var(--w-rose-bg);padding:3px 9px;border-radius:999px;white-space:nowrap}
+.w-toggle{width:38px;height:22px;border-radius:999px;background:var(--w-green);position:relative;flex-shrink:0}
+.w-toggle::after{content:"";position:absolute;width:17px;height:17px;border-radius:50%;background:#fff;top:2.5px;right:2.5px}
+.w-toggle.off{background:#D8CDBA}
+.w-toggle.off::after{right:auto;left:2.5px}
+.w-hr{border:none;border-top:1px solid var(--w-line);max-width:120px;margin:36px auto}
+.w-manifesto{background:var(--w-ink);color:#F4EBD9;border-radius:26px;padding:50px 42px;margin:58px auto;max-width:880px}
+.w-manifesto .w-eyebrow{color:#D9B382}
+.w-manifesto h2{color:#FBF7EF;font-size:clamp(27px,4.4vw,38px);margin:0 0 8px}
+.w-manifesto .sub{color:#D9CFBE;font-size:17px;margin:0 0 26px;max-width:560px;line-height:1.5}
+.w-vow{display:flex;gap:16px;align-items:flex-start;padding:19px 0;border-top:1px solid rgba(217,179,130,.22)}
+.w-vow:first-of-type{border-top:none}
+.w-vow .x{font-family:var(--serif,Fraunces,serif);font-size:21px;color:#D9B382;line-height:1;margin-top:2px}
+.w-vow .b{font-family:var(--serif,Fraunces,serif);font-size:20px;font-weight:500;color:#FBF7EF;margin-bottom:3px;line-height:1.3}
+.w-vow .s{font-size:14.5px;color:#C9BFAE;line-height:1.5}
+.w-promises{padding:26px 0}
+.w-promises h2{font-size:clamp(25px,4vw,34px);text-align:center;margin:0 0 6px}
+.w-promises .ph{text-align:center;color:var(--w-soft);font-family:var(--serif,Fraunces,serif);font-style:italic;font-size:18px;margin-bottom:32px}
+.w-pgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.w-pcard{background:var(--w-card);border:1px solid var(--w-line);border-radius:18px;padding:22px}
+.w-pcard .k{font-family:var(--serif,Fraunces,serif);font-size:19px;font-weight:600;margin:0 0 7px}
+.w-pcard p{font-size:14.5px;color:var(--w-soft);margin:0 0 12px}
+.w-pcard .pf{font-size:12.5px;color:var(--w-accent);font-weight:800;text-decoration:none}
+.w-pcard .pf:hover{text-decoration:underline}
+.w-pcard.full{grid-column:1/-1}
+.w-letter{background:linear-gradient(180deg,#FFFDF8,#FBF3E4);border:1px solid var(--w-line);border-radius:24px;padding:44px 42px;margin:58px auto;max-width:760px}
+.w-letter .w-eyebrow{margin-bottom:13px}
+.w-letter p{font-size:18px;line-height:1.66;margin:0 0 18px;color:var(--w-ink)}
+.w-letter .sig{font-family:var(--serif,Fraunces,serif);font-style:italic;font-size:22px;color:var(--w-ink);margin-top:24px}
+.w-letter .sig small{display:block;font-family:var(--sans,'Nunito Sans',sans-serif);font-style:normal;font-size:13.5px;color:var(--w-faint);margin-top:5px;letter-spacing:.02em}
+.w-close{text-align:center;padding:26px 0 78px}
+.w-close h2{font-size:clamp(27px,4.6vw,40px);margin:0 0 14px}
+.w-close p{font-size:18px;color:var(--w-soft);margin:0 0 24px}
+.w-bigcta{display:inline-block;background:var(--w-accent);color:#fff;padding:15px 34px;border-radius:999px;font-size:17px;font-weight:800;text-decoration:none}
+.w-bigcta:hover{filter:brightness(1.04)}
+@media(max-width:720px){.w-pgrid{grid-template-columns:1fr}}
+@media(max-width:640px){.w-manifesto{padding:36px 24px;border-radius:20px}.w-letter{padding:34px 24px}.w-story p{font-size:18px}}
 </style>
 <script type="application/ld+json">
 {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Home", "item": "https://little-cubby.com/"}, {"@type": "ListItem", "position": 2, "name": "Why Cubby", "item": "https://little-cubby.com/why/"}]}
@@ -43,85 +95,88 @@
   <a class="nav-cta" href="/app/">Start free</a>
 </div></nav>
 
-<header class="hero">
-  <span class="eyebrow">🐻 Why we made Cubby</span>
-  <h1>For the person quietly carrying everything</h1>
-  <p class="sub">The feeds, the naps, the next appointment, the 3am worry. It usually lives in one parent's head. Cubby is where you can finally set it down.</p>
-  <a class="hero-cta" href="/app/">Start free</a>
+<main class="whyx">
+
+<header class="w-hero wrap">
+  <div class="w-eyebrow">🐻 Why we made Cubby</div>
+  <h1>For the person who is<br><em>quietly carrying everything.</em></h1>
+  <p>The feeds, the naps, the next appointment, the worry at 3am. It usually lives in one parent's head, or on one phone. Cubby is where you can finally set it down.</p>
 </header>
 
-<section class="band"><div class="story" style="padding:44px 20px">
-  <p class="lead2">It starts the way it always starts. Two lines on a test, or a tiny person home from the hospital. And underneath all that love, a quieter thing nobody warns you about.</p>
-  <p class="pull">You become the keeper of a thousand small details, and most of them live nowhere but in your tired memory.</p>
-  <p class="lead2">When was the last feed? Which side? Did the medicine get given, or did we just talk about it? You are the database for a whole new human, running it at 3am on no sleep, while everyone asks "how are they sleeping?" as if you were not the one awake.</p>
-</div></section>
+<section class="w-story wrap">
+  <p class="w-dropcap">It starts the way it always starts. A test with two lines, or a tiny person home from the hospital, and a love so big it doesn't fit in your chest. And then, underneath it, a quieter thing nobody warns you about: you are now the keeper of a thousand small details, and most of them live nowhere but in your tired memory.</p>
+  <p>When was the last feed. Which side. Did the medicine get given, or did we just talk about giving it. Is this rash the normal kind. When is the 16-week jab. You become the database for a whole new human, and you are running it at 3am, on no sleep, alone, while everyone keeps asking <em>how are they sleeping?</em> as if you'd know, as if you weren't the one awake.</p>
+  <p class="w-pull">We didn't want a tracker that adds one more thing to manage.<br>We wanted <em>somewhere to set the weight down.</em></p>
+  <p>So the rule for Cubby became simple: the moment you open it, the noise should get <strong>quieter</strong>, not louder. No guilt streaks. No red badges shouting at a parent who is already doing their best. A quiet day is allowed. A gap is a chapter, not a failure. And you are never the only one who knows, because caring for a child was never meant to be carried by one person.</p>
+</section>
 
-<section class="band tint"><div style="padding:46px 20px;text-align:center">
-  <p class="pull" style="margin-top:0">We did not want a tracker that adds one more thing to manage.<br>We wanted somewhere to set the weight down.</p>
-  <div class="chips-soft" style="margin-top:20px">
-    <span>No guilt streaks</span><span>A quiet day is allowed</span><span>A gap is a chapter, not a failure</span><span>Never carried by one person</span>
+<div class="wrap">
+  <div class="w-proof">
+    <div class="hd">The same day, on everyone's phone, live</div>
+    <div class="w-prow"><div class="ic" style="background:var(--w-blue-bg)">🍼</div><div class="t"><b>Bottle · 120 ml</b><span>2:10 PM · by Nanny</span></div></div>
+    <div class="w-prow"><div class="ic" style="background:var(--w-green-bg)">😴</div><div class="t"><b>Nap · 1h 12m</b><span>started 1:40 PM · by Mama Bear</span></div></div>
+    <div class="w-prow"><div class="ic" style="background:#EFE3CC">🤝</div><div class="t"><b>Handoff note</b><span>"Slept well, last bottle 2:10. Loves the blue giraffe today."</span></div></div>
   </div>
-</div></section>
+</div>
 
-<section class="band"><div style="max-width:640px;margin:0 auto;padding:44px 20px;text-align:center">
-  <h2 style="font-family:var(--serif);font-size:24px;font-weight:600;margin:0 0 6px;line-height:1.25">The same day, on everyone's phone</h2>
-  <p class="lead2" style="max-width:460px;margin:0 auto">Caring for a child is a team sport. The baby's day belongs to the whole circle, live, with who did what on every entry.</p>
-  <div class="phone" aria-hidden="true" style="margin:18px auto 0;max-width:300px"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Today, together</b></div>
-    <div class="pcard"><div class="a">🍼 Bottle · 120 ml</div><div class="b">2:10 PM · by Nanny</div></div>
-    <div class="pcard"><div class="a">😴 Nap · 1h 12m</div><div class="b">started 1:40 PM · by Mama Bear</div></div>
-    <div class="pcard"><div class="a">🤝 Handoff note</div><div class="b">"Slept well, last bottle 2:10. Loves the blue giraffe today."</div></div>
-    <div class="pnote">shared with your circle 🐻</div>
-  </div></div>
-</div></section>
+<hr class="w-hr">
 
-<section class="band tint"><div style="max-width:640px;margin:0 auto;padding:44px 20px;text-align:center">
-  <h2 style="font-family:var(--serif);font-size:24px;font-weight:600;margin:0 0 8px;line-height:1.25">And yet, where it matters, yours alone</h2>
-  <p class="lead2" style="max-width:480px;margin:0 auto">A mother's own body is not a family feed. Your weight, blood pressure, glucose and pregnancy stay in your space, shared item by item with only the people you choose.</p>
-  <p class="pull sm" style="margin:16px auto">And your mood notes can never be shared with anyone. Not by us, not by a setting we could quietly change later. It is built into the lock.</p>
-  <div class="phone" aria-hidden="true" style="margin:6px auto 0;max-width:300px"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Your health, who sees each part</b></div>
-    <div class="pcard"><div class="a">🩸 Blood pressure</div><div class="b">shared with your partner</div></div>
-    <div class="pcard"><div class="a">🤍 Mood &amp; mental-health notes</div><div class="b">🔒 only you, never shareable</div></div>
-    <div class="pcard"><div class="a">📊 Glucose log</div><div class="b">private to you</div></div>
-  </div></div>
-</div></section>
+<section class="w-story wrap">
+  <p class="w-pull">Shared with your circle.<br>And yet, where it matters, <em>yours alone.</em></p>
+  <p>Here's the line we refuse to blur. The baby's day belongs to the whole care circle, partner, grandparents, the nanny, so no one is left guessing. But <strong>a mother's own body is not a family feed.</strong> Your weight, your blood pressure, your glucose, your pregnancy, those live in your space, shared item by item with only the people you choose. And your mood notes can never be shared with anyone, ever. Not by us, not by a setting we could quietly change later. It's built into the lock.</p>
+</section>
 
-<section class="band"><div style="max-width:620px;margin:0 auto;padding:48px 20px;text-align:center">
-  <span class="eyebrow">🤍 Our promises, enforced in the product</span>
-  <h2 style="font-family:var(--serif);font-size:27px;font-weight:600;margin:8px 0 6px;line-height:1.25">What Cubby will never do</h2>
-  <p class="lead2" style="margin:0 auto 18px;max-width:480px">Not preferences. Vows, written into how the app is built.</p>
-  <div style="text-align:left;display:grid;gap:11px">
-    <div class="vow"><b>Never sell or rent your family's data.</b><span>Not to advertisers, not to data brokers, not ever. Cubby earns from Cubby Pro, never from you.</span></div>
-    <div class="vow"><b>Never show you ads or load third-party trackers.</b><span>No pixels watching a new parent. Your log is encrypted and locked to the people you invite, by server-side rules.</span></div>
-    <div class="vow"><b>Never paywall logging or caregiver sharing.</b><span>Tracking your baby's day and sharing it with your circle stays free, forever. Pro is a little extra, never a wall.</span></div>
-    <div class="vow"><b>Never fabricate health information, or take paid placement.</b><span>Every schedule and article traces to an official source, fetched fresh and cited. If we cannot source it, it does not appear.</span></div>
+<div class="wrap">
+  <div class="w-proof">
+    <div class="hd">Your health · choose who sees each part</div>
+    <div class="w-prow"><div class="ic" style="background:var(--w-blue-bg)">🩸</div><div class="t"><b>Blood pressure</b><span>Shared with: your partner</span></div><div class="w-toggle"></div></div>
+    <div class="w-prow"><div class="ic" style="background:var(--w-rose-bg)">🤍</div><div class="t"><b>Mood &amp; mental-health notes</b><span>Only you, never shareable</span></div><span class="w-lock">🔒 locked</span></div>
+    <div class="w-prow"><div class="ic" style="background:#EFE3CC">📊</div><div class="t"><b>Glucose log</b><span>Private to you</span></div><div class="w-toggle off"></div></div>
   </div>
-</div></section>
+</div>
 
-<section class="band tint"><div style="max-width:1000px;margin:0 auto;padding:46px 20px">
-  <div style="text-align:center"><span class="eyebrow">🛠️ Where each promise actually lives</span>
-  <h2 style="font-family:var(--serif);font-size:27px;font-weight:600;margin:8px 0 0;line-height:1.25">Built into the product, not just the page</h2></div>
-  <div class="feats" style="margin-top:22px">
-    <div class="feat"><div class="fi" style="background:#e7eef0;color:#4d7d86">🔒</div><div><div class="ft">Private by design</div><div class="fs">Locked to the people you invite, enforced by server-side rules, encrypted in transit and at rest. <a href="/faq/#privacy">See how.</a></div></div></div>
-    <div class="feat"><div class="fi" style="background:#f3e3ee;color:#b06a9a">🤍</div><div><div class="ft">Yours, never sold</div><div class="fs">No ads, no trackers, never sold. Export everything, or delete it permanently, yourself, anytime.</div></div></div>
-    <div class="feat"><div class="fi" style="background:#eee7f3;color:#7a63a8">🤝</div><div><div class="ft">Shared by consent</div><div class="fs">Nothing is shared until you say so, item by item. Mood notes can never be shared. <a href="/pregnancy/">The pregnancy space.</a></div></div></div>
-    <div class="feat"><div class="fi" style="background:#f3ece0;color:#a9803f">🐻</div><div><div class="ft">Free for what matters</div><div class="fs">Logging, sharing, your country's vaccine schedule, growth and health, free, always. <a href="/pricing/">See pricing.</a></div></div></div>
-    <div class="feat"><div class="fi" style="background:#e7eef0;color:#4d7d86">📚</div><div><div class="ft">Built on official guidance</div><div class="fs">From official sources, fetched fresh and verified at the URL. We say plainly what we do not yet have. <a href="/editorial/">Our process.</a></div></div></div>
-    <div class="feat"><div class="fi" style="background:#e7f0ea;color:#4f8a6e">👨‍👩‍👧</div><div><div class="ft">For the whole care circle</div><div class="fs">Parents, grandparents, the nanny, daycare, everyone sees the same log the moment it happens. <a href="/features/">The features.</a></div></div></div>
+<section class="wide">
+  <div class="w-manifesto">
+    <div class="w-eyebrow">Our promises, enforced in the product, not just on this page</div>
+    <h2>What Cubby will never do</h2>
+    <p class="sub">A safe place is only safe if some doors are bolted shut. These aren't preferences. They're vows, written into how the app is built.</p>
+    <div class="w-vow"><div class="x">✕</div><div><div class="b">Never sell or rent your family's data.</div><div class="s">Not to advertisers, not to data brokers, not "anonymised", not ever. Cubby earns from Cubby Pro, from you choosing it, never from you being the product.</div></div></div>
+    <div class="w-vow"><div class="x">✕</div><div><div class="b">Never show you ads or load third-party trackers.</div><div class="s">No pixels watching a new parent at their most vulnerable. Your log is encrypted in transit and at rest, and locked to the people you invite by server-side rules, privacy you can verify, not just trust.</div></div></div>
+    <div class="w-vow"><div class="x">✕</div><div><div class="b">Never paywall logging or caregiver sharing.</div><div class="s">The core, tracking your baby's day and sharing it with the people who help, stays free, forever. Pro is a little extra delight, never a wall around the basics.</div></div></div>
+    <div class="w-vow"><div class="x">✕</div><div><div class="b">Never fabricate health information, or take paid placement.</div><div class="s">Every schedule and article traces to an official source, the NHS, CDC, WHO, STIKO or MoHFW, cited and linked. No sponsored content. If we can't source a claim, it doesn't appear.</div></div></div>
   </div>
-</div></section>
+</section>
 
-<section class="band"><div style="max-width:600px;margin:0 auto;padding:48px 20px">
-  <div style="text-align:center"><span class="eyebrow">🐻 A note from us</span>
-  <h2 style="font-family:var(--serif);font-size:25px;font-weight:600;margin:8px 0 16px;line-height:1.3">We did not set out to build an app.<br>We set out to stop drowning.</h2></div>
-  <p class="lead2" style="margin:0 0 16px">We were two parents with a new baby, a nanny by day, grandparents who wanted to help, and no shared idea of what had happened in the last six hours. The feeds lived in one head. The worry in another. The photos across four phones.</p>
-  <p class="lead2" style="margin:0">So we built the thing we needed. One calm place, shared with everyone who loved her, private where it counted. The day she arrived there was no new app to download, the pregnancy simply became her first chapter. One story, from two lines to a big kid, that never restarts.</p>
-  <p class="pull sm" style="margin:24px auto 0">If Cubby makes one 3am feel a little less lonely, it has done its job.</p>
-  <p style="text-align:center;margin:18px 0 0"><strong>The Cubby family</strong><br><span style="color:var(--ink-soft,#6E635B);font-size:14px">Made by parents, shaped by the families using it</span></p>
-</div></section>
+<section class="w-promises wrap">
+  <h2>The things we build into the product</h2>
+  <p class="ph">Promises are easy. Here's where each one actually lives.</p>
+  <div class="w-pgrid">
+    <div class="w-pcard"><div class="k">🔒 Private by design</div><p>Your log is locked to the people you invite, enforced by server-side rules, encrypted in transit and at rest.</p><a class="pf" href="/faq/#privacy">See how privacy works →</a></div>
+    <div class="w-pcard"><div class="k">🤍 Yours, never sold</div><p>No ads, no trackers, never sold. Export everything as a file, or delete it permanently, yourself, anytime.</p><a class="pf" href="/faq/">Your data, your control →</a></div>
+    <div class="w-pcard"><div class="k">🤝 Shared by consent</div><p>Nothing is shared until you say so, item by item. Mood notes can never be shared with anyone.</p><a class="pf" href="/pregnancy/">See the pregnancy space →</a></div>
+    <div class="w-pcard"><div class="k">🐻 Free for what matters</div><p>Logging, sharing, your country's vaccine schedule, growth and health, free, always.</p><a class="pf" href="/pricing/">See pricing →</a></div>
+    <div class="w-pcard full"><div class="k">📚 Built on official guidance, and honest about our limits</div><p>Our schedules and articles come from official sources, fetched fresh and verified at the URL. We tell you plainly what we don't yet have, including that we're still appointing a named clinical reviewer.</p><a class="pf" href="/editorial/">Read our editorial process →</a></div>
+  </div>
+</section>
 
-<div class="cta" style="max-width:760px;margin:8px auto 40px"><h3>Come in. Set the weight down.</h3><p>Free to start, private to your family, ready in seconds, no app store and no password.</p><a class="btn" href="/app/">Start free 🐻</a></div>
+<section class="wide">
+  <div class="w-letter">
+    <div class="w-eyebrow">🐻 A note from us</div>
+    <p>We didn't set out to build an app. We set out to stop drowning.</p>
+    <p>We were two parents with a new baby, a nanny during the day, grandparents who wanted to help, and absolutely no shared idea of what had happened in the last six hours. The feeds lived in one person's head. The worry lived in another's. The photos were scattered across four phones. We tried the existing trackers and they felt like spreadsheets built by people who'd never been awake at 3am: loud, lonely, and a little judgmental.</p>
+    <p>So we built the thing we needed: one calm place, shared with everyone who loved her, private where it counted, ours to keep. The day she arrived, there was no new app to download, the pregnancy simply became her first chapter. That's the whole idea. One story, from two lines to a big kid, that never restarts.</p>
+    <p>It's still early, and it's still shaped by real families. Every note you send in the app is read by a person, and it changes what we build next. If Cubby makes one 3am feel a little less lonely, it has done its job.</p>
+    <div class="sig">The Cubby family<small>Made by parents · shaped by the families using it</small></div>
+  </div>
+</section>
+
+<section class="w-close wrap">
+  <h2>Come in. Set the weight down.</h2>
+  <p>Free to start, private to your family, ready in seconds, no app store and no password.</p>
+  <a href="/app/" class="w-bigcta">Start free 🐻</a>
+</section>
+
+</main>
 
 <footer class="foot">
   <div class="fl"><a href="/">Home</a><a href="/why/">Why Cubby</a><a href="/how-it-works/">How it works</a><a href="/pregnancy/">Pregnancy</a><a href="/features/">Baby</a><a href="/articles/">Articles</a><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a><a href="/app/">Open app</a></div>
