@@ -31,16 +31,18 @@
 <style>
 @media(min-width:1100px){.wrap{max-width:1060px}}
 .findr{background:rgba(251,245,233,.94);margin:0 -20px 14px;padding:14px 20px;border-bottom:1px solid var(--line);border-top:1px solid var(--line)}
-.topic-hubs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
-.topic-hub{font-family:var(--sans);font-size:12px;font-weight:800;padding:5px 14px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:var(--soft);text-decoration:none;white-space:nowrap}
-.topic-hub:hover{border-color:var(--pink);color:var(--pink-d)}
-.view-tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
-.view-tab{font-family:var(--sans);font-size:13px;font-weight:800;padding:7px 16px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:var(--soft);cursor:pointer;white-space:nowrap;transition:all .12s ease}
-.view-tab:hover{border-color:var(--pink);color:var(--pink-d)}
-.view-tab.on{background:var(--ink,#2c2520);border-color:var(--ink,#2c2520);color:#fff}
-.view-tab[data-view="baby"].on{background:#b05a20;border-color:#b05a20}
-.view-tab[data-view="pregnancy"].on{background:#3a7a3a;border-color:#3a7a3a}
-.view-tab[data-view="you"].on{background:#5050a0;border-color:#5050a0}
+.topic-hubs{font-family:var(--sans);font-size:11px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px;display:flex;align-items:center;gap:0;flex-wrap:wrap}
+.topic-hubs .th-label{margin-right:8px;flex-shrink:0}
+.topic-hub{color:var(--soft);text-decoration:none;font-weight:700;font-size:12px;text-transform:none;letter-spacing:0;white-space:nowrap}
+.topic-hub:hover{color:var(--pink-d);text-decoration:underline}
+.topic-hubs .sep{color:var(--faint);margin:0 6px}
+.view-tabs{display:flex;gap:0;margin-bottom:14px;border-bottom:2px solid var(--line)}
+.view-tab{font-family:var(--sans);font-size:13px;font-weight:800;padding:8px 18px 9px;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;background:transparent;color:var(--soft);cursor:pointer;white-space:nowrap;transition:color .1s,border-color .1s}
+.view-tab:hover{color:var(--ink)}
+.view-tab.on{color:var(--ink);border-bottom-color:var(--ink)}
+.view-tab[data-view="baby"].on{color:#8a3e10;border-bottom-color:#b05a20}
+.view-tab[data-view="pregnancy"].on{color:#2a5a2a;border-bottom-color:#3a7a3a}
+.view-tab[data-view="you"].on{color:#38388a;border-bottom-color:#5050a0}
 .findr-bar{display:flex;gap:8px;margin-bottom:10px}
 .findr-bar input{flex:1;min-width:0;font-family:var(--sans);font-size:16px;font-weight:600;color:var(--ink);padding:11px 16px 11px 40px;background:var(--surface) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%236E635B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3-3"/></svg>') 13px center / 18px no-repeat;border:1.5px solid var(--line);border-radius:999px}
 .findr-bar input:focus{outline:none;border-color:var(--pink);box-shadow:0 0 0 3px rgba(201,127,160,.18)}
@@ -103,11 +105,12 @@
 
   <section class="findr" role="search" aria-label="Find articles">
     <nav class="topic-hubs" aria-label="Browse topic guides">
-      <a class="topic-hub" href="/articles/baby/">Baby care</a>
-      <a class="topic-hub" href="/articles/feeding/">Feeding</a>
-      <a class="topic-hub" href="/articles/sleep/">Sleep</a>
-      <a class="topic-hub" href="/articles/health/">Health</a>
-      <a class="topic-hub" href="/articles/pregnancy/">Pregnancy</a>
+      <span class="th-label">Guides</span>
+      <a class="topic-hub" href="/articles/baby/">Baby care</a><span class="sep" aria-hidden="true">·</span>
+      <a class="topic-hub" href="/articles/feeding/">Feeding</a><span class="sep" aria-hidden="true">·</span>
+      <a class="topic-hub" href="/articles/sleep/">Sleep</a><span class="sep" aria-hidden="true">·</span>
+      <a class="topic-hub" href="/articles/health/">Health</a><span class="sep" aria-hidden="true">·</span>
+      <a class="topic-hub" href="/articles/pregnancy/">Pregnancy</a><span class="sep" aria-hidden="true">·</span>
       <a class="topic-hub" href="/articles/you/">You</a>
     </nav>
     <div class="view-tabs" id="view-tabs" role="tablist" aria-label="Filter by journey stage">
