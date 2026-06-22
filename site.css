@@ -340,3 +340,9 @@ svg.mi{width:1em;height:1em;vertical-align:-0.13em}
 .homex .hx-close{text-align:center;}
 .homex .hx-close h2{font-size:clamp(30px,4.6vw,46px);margin:0 0 14px;}
 .homex .hx-close p{font-size:18px;color:var(--h-soft);margin:0 0 24px;}
+
+/* "And there's more" swipe rail (no-JS, calm carousel of extra cards) */
+.hx-rail{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;padding:2px 4px 16px;-webkit-overflow-scrolling:touch;scrollbar-width:none;max-width:1040px;margin:0 auto}
+.hx-rail::-webkit-scrollbar{display:none}
+.homex .hx-rail>.hx-cap{flex:0 0 248px;scroll-snap-align:start;margin:0}
+@media(max-width:540px){.homex .hx-rail>.hx-cap{flex-basis:78vw}}
