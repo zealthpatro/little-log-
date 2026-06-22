@@ -57,7 +57,7 @@
       + '<li>A few free tastes of every treat</li>'
       + '</ul></div>'
       + '</div>'
-      + '<p class="lp-pro-note">Cubby Pro launches August 2026. Free shares carry a small "made with Cubby · little-cubby.com" mark; Pro shares are clean. Routines, push reminders &amp; insights are on the Pro roadmap for later. Sign in, then register for Pro from Settings, Cubby Pro, to claim your free trial at launch.</p></section>'
+      + '<p class="lp-pro-note">Cubby Pro launches August 2026. Free shares carry a small "made with Cubby · little-cubby.com" mark; Pro shares are clean. Rituals, push reminders &amp; insights are on the Pro roadmap for later. Sign in, then register for Pro from Settings, Cubby Pro, to claim your free trial at launch.</p></section>'
       + '<section class="lp-final"><h2>Everyone caring for your baby, in sync.</h2>' + cta + '<div class="lp-trust">Free · Private · made with 🐻</div>'
       + '<div class="lp-pwa">No download, no app store. Add Cubby to your home screen for an app-like, offline-ready experience in any browser.</div></section>'
       + '<footer class="lp-foot">Cubby · a warm, private baby tracker 🐻<br><a href="/" style="color:#b05a7a;font-weight:700">little-cubby.com</a> · <a href="/articles/" style="color:#b05a7a;font-weight:700">Articles</a> · <a href="/faq/" style="color:#b05a7a;font-weight:700">FAQ</a></footer>'

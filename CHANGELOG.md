@@ -1,5 +1,14 @@
 # Cubby — Changelog
 
+## v0.15.0 — 2026-06-22 — routines become "rituals" + a Rituals tab in the Log
+
+- **Renamed "routines" to "rituals"** across all user-facing copy in the app (the day card, the manage/add/edit sheets, the Reminders copy) and the app landing Pro note. The warmer frame fits the calm brand. The persisted data key stays `b.routines` for data-compatibility (existing users keep their lists); internal function/class names are unchanged, with a note in `ROUTINES.md`.
+- **New "Rituals" tab in the Log area** (Log | Rituals | Stats). The day's ritual checklist moved out of the cramped Log view into its own clean space.
+- **Gentle weekly rhythm (view + measure):** under the checklist, each ritual shows the last 7 days as soft dots (filled = kept) with a calm "X of 7 🌿". Deliberately non-judgmental per the charter: no streaks to break, no red, "a quiet day is always allowed, and a gap is a chapter, not a failure." Tick history is now kept ~14 days (was today-only) to power the measure; the lasting record still lives in the log events.
+- Service worker `little-log-v118` -> `little-log-v119`.
+
+---
+
 ## v0.14.0 — 2026-06-21 — pregnancy + family games, the four audit fixes, retention features, marketing rebuild
 
 A large span since v0.13.0 (service worker `little-log-v82` → `little-log-v118`, 81 commits). The pregnancy/expecting journey and a loss-safe family game shipped, all four architecture-audit fixes landed, several retention features went live, and the marketing site was rebuilt. All live on little-cubby.com (deploys from `main` via Cloudflare).

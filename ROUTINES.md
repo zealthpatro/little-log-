@@ -1,4 +1,6 @@
-# Cubby Pro — Routine Manager (spec)
+# Cubby Pro — Ritual Manager (spec)
+
+> **Naming (June 2026):** the product term is now **"ritual"** (warmer than "routine"; see CHANGELOG v0.15.0). The shipped free daily checklist is the **Rituals** tab in the Log area; this spec is the deeper Pro **Ritual Manager**. The persisted data key stays `b.routines` for data-compatibility, so code/comments still say `routine*` even though the UI says "ritual".
 
 > **Status (June 2026):** Still a planned Cubby Pro feature, not yet built; it lands once Pro billing goes live (targeted Aug 2026) within the one Cubby that spans Trying, Expecting, Baby and Child. Full current state + go-live plan: HANDOFF.md.
 

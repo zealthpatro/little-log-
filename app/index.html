@@ -578,6 +578,16 @@ body.night .ob-card{background:rgba(38,32,28,.86);}
 .rt-empty{font-size:13px;color:var(--ink-soft);font-weight:600;line-height:1.5;padding:10px 2px 14px;}
 .rt-add{width:100%;border:none;background:none;padding:11px;font-family:var(--font-body);font-weight:800;font-size:13px;color:var(--diaper);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;border-top:1px solid var(--line);}
 .rt-add svg{width:15px;height:15px;}
+/* Ritual weekly rhythm (gentle, non-judgmental: soft dots, no red, a quiet day is allowed) */
+.rhy-row{padding:11px 2px;border-top:1px solid var(--line);}
+.rhy-row:first-of-type{border-top:none;}
+.rhy-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:7px;}
+.rhy-name{font-weight:700;font-size:14.5px;color:var(--ink);}
+.rhy-count{font-size:12.5px;color:var(--ink-soft);font-weight:700;white-space:nowrap;}
+.rhy-dots{display:flex;gap:6px;}
+.rhy-d{flex:1;max-width:32px;aspect-ratio:1;border-radius:50%;display:grid;place-items:center;font-size:10px;font-weight:800;background:var(--surface-2);color:var(--ink-faint);}
+.rhy-d.on{background:var(--diaper);color:#fff;}
+.rhy-d.today{box-shadow:0 0 0 2px var(--diaper);}
 .rt-edit-row{display:flex;align-items:center;gap:10px;padding:10px 2px;border-top:1px solid var(--line);}
 .rt-edit-row:first-of-type{border-top:none;}
 .rt-edit-row .a{font-weight:800;font-size:14px;color:var(--ink);}
@@ -2981,7 +2991,7 @@ function pushSupported(){ try{ return !!(window.firebase && firebase.messaging &
 function pushCfg(){ if(!state.settings.push) state.settings.push={enabled:false,quietStart:21,quietEnd:7}; return state.settings.push; }
 function openReminders(){
   const sup=pushSupported(), cfg=pushCfg(), ready=sup&&!!CUBBY_VAPID;
-  openSheet(`<h2>Reminders 🔔</h2><div class="sub">Gentle nudges for a due medicine, a confirmed missed vaccine, or your turn on a routine. Off by default, snoozeable, and never for feeds.</div>
+  openSheet(`<h2>Reminders 🔔</h2><div class="sub">Gentle nudges for a due medicine, a confirmed missed vaccine, or your turn on a ritual. Off by default, snoozeable, and never for feeds.</div>
     ${!ready?`<div class="preg-disclaim">Reminders are coming soon.${sup?'':' Add Cubby to your home screen first, then background notifications can work.'}</div>`:`
     <div class="set-item"><div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🔔</div><div class="si-body"><div class="a">Gentle reminders</div><div class="b">${cfg.enabled?'On for this device':'Off'}</div></div>
       <div class="seg"><button class="${cfg.enabled?'on':''}" onclick="enablePush()">On</button><button class="${!cfg.enabled?'on':''}" onclick="disablePush()">Off</button></div></div>
@@ -3099,7 +3109,7 @@ function openSettings(){
     </div>
     <div class="set-item" onclick="openReminders()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🔔</div>
-      <div class="si-body"><div class="a">Reminders</div><div class="b">Gentle nudges for medicine, vaccines &amp; routines</div></div>
+      <div class="si-body"><div class="a">Reminders</div><div class="b">Gentle nudges for medicine, vaccines &amp; rituals</div></div>
       <span class="chev">${I.chev}</span></div>
     <div class="set-label">Your data &amp; account</div>
     <div class="set-item" onclick="openDataSheet()" style="cursor:pointer">
@@ -6248,12 +6258,12 @@ function ensureRoutines(b){
     });
     b.routinesSeeded = true;
   }
-  // Keep the synced blob tiny: done state only matters for today, so drop
-  // older day keys (the real log events already hold the lasting record).
-  var today=dayKey(now());
+  // Keep ~2 weeks of tick history so the Rituals tab can show a gentle weekly rhythm.
+  // (The lasting record still lives in the log events; this is just the at-a-glance measure.)
+  var keep={}; for(var i=0;i<14;i++){ keep[dayKey(now()-i*86400000)]=1; }
   b.routines.forEach(function(r){
     if(r&&r.done&&typeof r.done==='object'){
-      Object.keys(r.done).forEach(function(k){ if(k!==today) delete r.done[k]; });
+      Object.keys(r.done).forEach(function(k){ if(!keep[k]) delete r.done[k]; });
     }
   });
   return b.routines;
@@ -6278,7 +6288,7 @@ function renderRoutines(){
   const today=dayKey(now());
   let rows;
   if(!list.length){
-    rows=`<div class="rt-empty">No routines yet. Add one whenever you like, or leave this off, it's entirely up to you.</div>`;
+    rows=`<div class="rt-empty">No rituals yet. Add one whenever you like, or leave this off, it's entirely up to you.</div>`;
   } else {
     rows=list.slice().sort((a,c)=>String(a.time).localeCompare(String(c.time))).map(r=>{
       const done = !!(r.done && r.done[today]);
@@ -6294,12 +6304,35 @@ function renderRoutines(){
     }).join('');
   }
   return `<div class="rt-card">
-    <div class="rt-head"><span class="rt-t">Routines for the day 🌿</span>
+    <div class="rt-head"><span class="rt-t">Today's rituals 🌿</span>
       <button class="rt-edit" onclick="openRoutinesEdit()">Edit</button></div>
-    <div class="rt-sub">Gentle, optional suggestions, not a schedule to keep up with. Tap one when it happens and it lands in the log. Edit anytime.</div>
+    <div class="rt-sub">Gentle, optional moments, not a schedule to keep up with. Tap one when it happens and it lands in the log. Edit anytime.</div>
     ${rows}
-    <button class="rt-add" onclick="openRoutineItem()">${I.plus} Add a routine</button>
+    <button class="rt-add" onclick="openRoutineItem()">${I.plus} Add a ritual</button>
   </div>`;
+}
+/* The Rituals tab in the Log area: today's checklist (view) + a gentle weekly rhythm (measure). */
+function renderRitualsView(){
+  const b=activeBaby(); if(!b) return '';
+  const list=ensureRoutines(b);
+  return renderRoutines() + (list.length?renderRitualRhythm(list):'');
+}
+/* Per ritual, the last 7 days as soft dots (filled = kept). Deliberately non-judgmental:
+   no streaks, no red, a quiet day is allowed (Cubby charter). */
+function renderRitualRhythm(list){
+  var days=[];
+  for(var i=6;i>=0;i--){ var ts=now()-i*86400000; days.push({key:dayKey(ts), init:new Date(ts).toLocaleDateString(undefined,{weekday:'narrow'}), today:i===0}); }
+  var rows=list.slice().sort(function(a,c){return String(a.time).localeCompare(String(c.time));}).map(function(r){
+    var done=(r&&r.done&&typeof r.done==='object')?r.done:{};
+    var kept=days.reduce(function(n,d){return n+(done[d.key]?1:0);},0);
+    var dots=days.map(function(d){
+      return '<span class="rhy-d '+(done[d.key]?'on':'')+(d.today?' today':'')+'">'+escapeHtml(d.init)+'</span>';
+    }).join('');
+    return '<div class="rhy-row"><div class="rhy-top"><span class="rhy-name">'+escapeHtml(r.title)+'</span><span class="rhy-count">'+kept+' of 7 🌿</span></div><div class="rhy-dots">'+dots+'</div></div>';
+  }).join('');
+  return '<div class="rt-card"><div class="rt-head"><span class="rt-t">Your rhythm this week 🌿</span></div>'
+    +'<div class="rt-sub">A gentle look back, never a streak to keep. A quiet day is always allowed, and a gap is a chapter, not a failure.</div>'
+    +rows+'</div>';
 }
 function routineFmtTime(hhmm){
   var t=String(hhmm||'').split(':'); var h=parseInt(t[0],10), m=parseInt(t[1],10);
@@ -6361,7 +6394,7 @@ function openRoutinesEdit(){
   const list=ensureRoutines(b).slice().sort((a,c)=>String(a.time).localeCompare(String(c.time)));
   let rows;
   if(!list.length){
-    rows=`<div class="rt-empty">No routines yet. Add the little moments you want to remember, a morning feed, tummy time, a bath.</div>`;
+    rows=`<div class="rt-empty">No rituals yet. Add the little moments you want to remember, a morning feed, tummy time, a bath.</div>`;
   } else {
     rows=list.map(r=>{
       const sub=[routineFmtTime(r.time), r.assignee?(loggerName(r.assignee)||'someone'):''].filter(Boolean).join(' · ');
@@ -6374,10 +6407,10 @@ function openRoutinesEdit(){
       </div>`;
     }).join('');
   }
-  openSheet(`<h2>Routines 🌿</h2><div class="sub">Gentle suggestions for the day, never a must-do. Add, change or remove anything, anytime.</div>
+  openSheet(`<h2>Rituals 🌿</h2><div class="sub">Gentle moments for the day, never a must-do. Add, change or remove anything, anytime.</div>
     ${rows}
-    <button class="rt-add" style="border-top:1px solid var(--line);margin-top:4px" onclick="openRoutineItem()">${I.plus} Add a routine</button>
-    <div class="preg-disclaim" style="margin-top:14px">These are gentle routines, not medical advice, and there's no pressure to follow them. Reminders are coming later, for now nothing will notify you.</div>`,'diaper');
+    <button class="rt-add" style="border-top:1px solid var(--line);margin-top:4px" onclick="openRoutineItem()">${I.plus} Add a ritual</button>
+    <div class="preg-disclaim" style="margin-top:14px">These are gentle rituals, not medical advice, and there's no pressure to follow them. Reminders are coming later, for now nothing will notify you.</div>`,'diaper');
 }
 function routineMemberPairs(){
   var info=(window.LL&&window.LL.memberInfo)||{};
@@ -6419,15 +6452,15 @@ function reopenRoutineItem(){
   const typeChips=TYPES.map(t=>`<div class="chip ${d.evType===t[0]?'sel':''}" onclick="routineSetType('${t[0]}')">${t[1]}</div>`).join('');
   const pairs=routineMemberPairs();
   const showPicker=pairs.length>1;
-  openSheet(`<h2>${existing?'Edit routine':'Add a routine'}</h2><div class="sub">A gentle suggestion for the day. Change or remove it whenever you like.</div>
+  openSheet(`<h2>${existing?'Edit ritual':'Add a ritual'}</h2><div class="sub">A gentle moment for the day. Change or remove it whenever you like.</div>
     <div class="field"><label>What is it</label><input id="rtTitle" value="${escapeHtml(d.title)}" placeholder="e.g. Morning feed, tummy time, bath" oninput="routineDraft.title=this.value"></div>
     <div class="field"><label>Around when</label><input type="time" id="rtTime" value="${escapeHtml(d.time||'09:00')}" onchange="routineDraft.time=this.value"></div>
     <div class="field"><label>Logs as</label><div class="chip-row" style="flex-wrap:wrap;white-space:normal">${typeChips}</div>
       <div class="csub" style="margin-top:6px">When you tap it done, it adds this kind of entry to the log.</div></div>
     ${showPicker?`<div class="field"><label>Who usually does it</label>${searchPickerHtml('rtWho',pairs,d.assignee||'','Anyone in your circle')}
       <div class="csub" style="margin-top:6px">Optional. We'll credit them in the log when it's done.</div></div>`:''}
-    <button class="btn-primary" style="background:var(--diaper)" onclick="saveRoutineItem()">${existing?'Save':'Add routine'}</button>
-    ${existing?`<button class="btn-ghost btn-danger" onclick="removeRoutine('${d.id}')">${I.trash} Remove routine</button>`:''}`,'diaper');
+    <button class="btn-primary" style="background:var(--diaper)" onclick="saveRoutineItem()">${existing?'Save':'Add ritual'}</button>
+    ${existing?`<button class="btn-ghost btn-danger" onclick="removeRoutine('${d.id}')">${I.trash} Remove ritual</button>`:''}`,'diaper');
 }
 function saveRoutineItem(){
   const b=activeBaby(); if(!b||!routineDraft) return;
@@ -6464,9 +6497,13 @@ function removeRoutine(id){
 function renderLogTab(){
   const seg=`<div class="seg seg-full">
     <button class="${logTab==='log'?'on':''}" onclick="setLogTab('log')">Log</button>
+    <button class="${logTab==='rituals'?'on':''}" onclick="setLogTab('rituals')">Rituals</button>
     <button class="${logTab==='stats'?'on':''}" onclick="setLogTab('stats')">Stats</button></div>`;
-  const body = logTab==='stats' ? renderStats() : (`<button class="btn-ghost" style="margin-bottom:14px" onclick="openDayRecap()">🐻 Today's recap</button>`+renderRoutines()+tipLine('heat','These strips show your week at a glance, tap Week or Month to switch.')+renderHeatmap()+renderTimeline());
-  return `<div class="fade-in">${coachMark('log','Log & Stats','Everything you log lands in this timeline. The strips up top show your week at a glance. Flip to Stats for charts and growth curves.')}${seg}${body}</div>`;
+  let body;
+  if(logTab==='stats') body=renderStats();
+  else if(logTab==='rituals') body=renderRitualsView();
+  else body=`<button class="btn-ghost" style="margin-bottom:14px" onclick="openDayRecap()">🐻 Today's recap</button>`+tipLine('heat','These strips show your week at a glance, tap Week or Month to switch.')+renderHeatmap()+renderTimeline();
+  return `<div class="fade-in">${coachMark('log','Log, Rituals & Stats','Everything you log lands in this timeline. Flip to Rituals for your gentle daily rhythm, or Stats for charts and growth curves.')}${seg}${body}</div>`;
 }
 
 function renderPhotos(){
