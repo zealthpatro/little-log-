@@ -2762,7 +2762,7 @@ async function joinProWaitlist(){
   }catch(e){ toast('Could not register: '+((e&&e.message)||e)); }
 }
 function openBabyProfile(){
-  const b=activeBaby(); if(!b)return;
+  const b=activeBaby(); if(!b){ if(typeof toast==='function')toast('Add a baby first to set up their profile'); return; }
   openSheet(`${babyIdentity(b,{pickable:true})}
     <div class="prof-cards">
       <div class="prof-card" onclick="window.openFamily&&window.openFamily()"><span class="lead" style="background:var(--diaper-soft);color:var(--diaper);font-size:18px">👨‍👩‍👧</span><div class="cflex"><div class="a">Family &amp; sharing</div><div class="b">Invite people, your bear, feedback</div></div><span class="chev">${I.chev}</span></div>
@@ -3090,10 +3090,10 @@ function openSettings(){
       <div class="si-ico" style="background:var(--diaper-soft);color:var(--diaper)">${I.home}</div>
       <div class="si-body"><div class="a">Manage babies</div><div class="b">${state.babies.length} added</div></div>
     </div>
-    <div class="set-item" onclick="openBabyProfile()" style="cursor:pointer">
+    ${activeBaby()?`<div class="set-item" onclick="openBabyProfile()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--star-soft);color:var(--star)">${I.star}</div>
-      <div class="si-body"><div class="a">Profile</div><div class="b">Birth details, food &amp; allergies</div></div>
-    </div>
+      <div class="si-body"><div class="a">${escapeHtml(activeBaby().name)}'s profile</div><div class="b">Birth details, food &amp; allergies</div></div>
+    </div>`:''}
     <div class="set-item" onclick="window.openFamily&&window.openFamily()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--feed-soft);color:var(--feed);font-size:18px">👨‍👩‍👧</div>
       <div class="si-body"><div class="a">Your profile &amp; family</div><div class="b">Your name &amp; relationship, invite people, your bear</div></div>

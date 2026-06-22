@@ -8,6 +8,22 @@
 
 staged=$(git diff --cached --name-only)
 
+# Syntax gate: every staged standalone app/*.js must parse. Catches a broken push
+# (syntax error) before it ships. index.html's inline JS isn't checkable this way —
+# run  node tools/smoke.js  (loads /app/ headless) before an app push to cover that.
+jschanged=$(printf '%s\n' "$staged" | grep -E '^app/.*\.js$')
+if [ -n "$jschanged" ] && command -v node >/dev/null 2>&1; then
+  for f in $jschanged; do
+    [ -f "$f" ] || continue
+    if ! node --check "$f" 2>/tmp/cubby-jscheck.err; then
+      echo "✋ JS syntax error in $f:"
+      sed 's/^/      /' /tmp/cubby-jscheck.err
+      echo "   → fix it, or re-run with  git commit --no-verify"
+      exit 1
+    fi
+  done
+fi
+
 # Cacheable app assets, excluding sw.js itself.
 cacheable=$(printf '%s\n' "$staged" | grep -E '^app/.*\.(js|html|css)$' | grep -v '^app/sw\.js$')
 [ -z "$cacheable" ] && exit 0
