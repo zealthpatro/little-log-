@@ -1,27 +1,28 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-page-stage="baby">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<script>/* lifecycle stage (Expecting/Baby): set root class pre-paint, no flash */(function(){try{var K='cubby-stage',p=document.documentElement.getAttribute('data-page-stage'),u=new URLSearchParams(location.search).get('stage'),s=(u==='expecting'||u==='baby')?u:((p==='expecting'||p==='baby')?p:(localStorage.getItem(K)||'baby'));if(u||p)localStorage.setItem(K,s);document.documentElement.classList.add('stage-'+s);}catch(e){document.documentElement.classList.add('stage-baby');}})();</script>
-<title>Cubby Baby: Logging, Routines, Medicine, Vaccines &amp; Keepsakes</title>
-<meta name="description" content="Everything Cubby does: one-thumb logging, real-time multi-caregiver sync, activities and routines (tummy time, sun time, skin-to-skin), medicine reminders, your country's vaccine schedule, growth charts and shareworthy keepsakes. Private and free to start.">
+<script>/* lifecycle stage: set root class pre-paint, no flash */(function(){try{var K='cubby-stage',p=document.documentElement.getAttribute('data-page-stage'),u=new URLSearchParams(location.search).get('stage'),s=(u==='expecting'||u==='baby')?u:((p==='expecting'||p==='baby')?p:(localStorage.getItem(K)||'baby'));if(u||p)localStorage.setItem(K,s);document.documentElement.classList.add('stage-'+s);}catch(e){document.documentElement.classList.add('stage-baby');}})();</script>
+<title>Cubby for Baby: Logging, Vaccines, Growth &amp; Keepsakes</title>
+<meta name="description" content="Log feeds, sleep, nappies and pumping in a thumb, follow your country's vaccine schedule, plot growth on WHO and CDC curves, and keep a health hub with a one-tap doctor summary, all shared in real time with your whole care circle. Free, private, no ads.">
 <link rel="canonical" href="https://little-cubby.com/features/">
 <meta name="robots" content="index,follow">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Cubby">
-<meta property="og:title" content="Cubby Baby">
-<meta property="og:description" content="Logging, routines, medicine, vaccines, growth and keepsakes, private and free to start.">
+<meta property="og:title" content="Cubby for Baby: everything the day needs">
+<meta property="og:description" content="Feeds, sleep, nappies, medicines, vaccines and growth, logged in a thumb and shared in real time with everyone who cares for your little one.">
 <meta property="og:url" content="https://little-cubby.com/features/">
-<meta property="og:image" content="https://little-cubby.com/og/features.png">
+<meta property="og:image" content="https://little-cubby.com/og/cubby-home.png">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://little-cubby.com/og/features.png">
+<meta name="twitter:image" content="https://little-cubby.com/og/cubby-home.png">
 <link rel="icon" type="image/png" href="/icons/favicon.png">
+<meta name="theme-color" content="#FBF5E9">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Nunito+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Nunito+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/vax.css"><link rel="stylesheet" href="/site.css">
 <script type="application/ld+json">
-{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Home", "item": "https://little-cubby.com/"}, {"@type": "ListItem", "position": 2, "name": "Baby", "item": "https://little-cubby.com/features/"}]}
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://little-cubby.com/"},{"@type":"ListItem","position":2,"name":"Baby","item":"https://little-cubby.com/features/"}]}
 </script>
 </head>
 <body>
@@ -31,292 +32,124 @@
   <a class="nav-cta" href="/app/">Start free</a>
 </div></nav>
 
-<header class="hero">
-  <h1>Everything you need, from day zero</h1>
-  <p class="sub">One calm place for logging, routines, health, growth and memories, shared with everyone who cares for your little one.</p>
-  <a class="hero-cta" href="/app/">Start free</a>
-</header>
+<main class="homex">
 
-<!-- 0. The Fridge: time-aware home -->
-<section class="band tint"><div class="fold rev">
-  <div class="phone" aria-hidden="true"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>still up? the 3am club</b></div>
-    <div style="height:96px;border-radius:10px;overflow:hidden;margin-bottom:8px">
-      <svg viewBox="0 0 240 96" width="100%" height="96" preserveAspectRatio="xMidYMid slice" role="img" aria-label="A sleepy baby photo">
-        <rect width="240" height="96" fill="#cdb4e0"/>
-        <rect width="240" height="96" fill="url(#fg)"/>
-        <defs><linearGradient id="fg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b79ad6"/><stop offset="1" stop-color="#f6c9a8"/></linearGradient></defs>
-        <circle cx="120" cy="58" r="30" fill="#f7d9b8"/>
-        <path d="M96 50a8 8 0 0 1 16 0M128 50a8 8 0 0 1 16 0" stroke="#7a5c44" stroke-width="2.4" fill="none" stroke-linecap="round"/>
-        <path d="M112 70q8 6 16 0" stroke="#7a5c44" stroke-width="2.4" fill="none" stroke-linecap="round"/>
-      </svg>
-    </div>
-    <div class="pcard"><div class="a">🍼 Last feed · 2:48 AM</div><div class="b">120 ml · by Papa Bear</div></div>
-    <div class="pcard"><div class="a">🤝 Handoff note</div><div class="b">Down at 3:10. Try the swaddle, not the sack.</div></div>
-  </div></div>
-  <div class="fold-txt">
-    <span class="eyebrow">🏡 Your daily home</span>
-    <h2>Open Cubby to a home, not a spreadsheet</h2>
-    <p>The first thing you see knows the hour. A warm hello in the morning, a softer one at 3am when you're up again. Today's photo, the last feed, sleep and nappy, and a note for whoever takes over next.</p>
-    <ul><li>A hello that fits the time of day, "good morning, Papa Bear" or "still up, the 3am club"</li><li>A photo or two, plus last feed, sleep and nappy at a glance</li><li>Private handoff notes and a tidy recap of the day</li></ul>
+<!-- HERO -->
+<section class="hx-band hx-hero">
+  <div class="hx-wrap">
+    <div class="hx-eyebrow">👶 Cubby for baby</div>
+    <h1>Everything the day needs,<br><em>in one calm place.</em></h1>
+    <p class="hx-lede">Feeds, sleep, nappies, medicines, vaccines and growth, logged in a thumb and shared in real time with everyone who cares for your little one. Calm, private, and never one more thing to manage.</p>
+    <div><a href="/app/" class="hx-bigcta hero-cta">Start free 🐻</a></div>
+    <p class="hx-fineprint">Free to start · no ads · we never sell your data</p>
   </div>
-</div></section>
-
-<!-- 1. Logging -->
-<section class="band"><div class="fold">
-  <div class="fold-txt">
-    <span class="eyebrow"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H13z"/></svg> One-thumb logging</span>
-    <h2>Log the whole day in a single thumb</h2>
-    <p>Newborn life is a blur. Cubby makes a feed, nap or nappy a two-tap job, even half-asleep at 3am, and an ongoing nap or feed shows live on every phone.</p>
-    <ul><li>Bottle, breast and solids with food tags</li><li>Ongoing nap &amp; feed timers</li><li>Forgot one? Backdate it in seconds</li></ul>
-  </div>
-  <div class="phone" aria-hidden="true"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Good evening, Papa Bear</b></div>
-    <div class="pgrid">
-      <div class="pact"><span><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2h6"/><path d="M10 2v3.5a4 4 0 0 1-1 2.6L8 9.5A4 4 0 0 0 7 12v7a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3v-7a4 4 0 0 0-1-2.5l-1-1.4A4 4 0 0 1 14 5.5V2"/><path d="M7 13h10"/></svg></span>Feed</div><div class="pact"><span><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6.4 6.4 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></span>Sleep</div>
-      <div class="pact"><span><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18v4a9 9 0 0 1-9 9 9 9 0 0 1-9-9V6Z"/><path d="M3 9c4 1 14 1 18 0"/></svg></span>Nappy</div><div class="pact"><span><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.6-9.5-9C1 9 2.5 5.5 6 5.5c2 0 3.2 1.2 4 2.3.8-1.1 2-2.3 4-2.3 3.5 0 5 3.5 3.5 6.5C19 16.4 12 21 12 21z"/></svg></span>Pump</div>
-    </div>
-    <div class="pcard"><div class="a"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6.4 6.4 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg> Nap in progress · 1h 12m</div><div class="b">started 7:48 PM · by Mama Bear</div></div>
-  </div></div>
-</div></section>
-
-<!-- 2. Care circle -->
-<section class="band tint"><div class="fold rev">
-  <div class="phone" aria-hidden="true"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Family &amp; sharing</b></div>
-    <div class="prow"><div class="pav" style="background:#C97FA0">M</div><div><div class="a">Mama Bear</div><div class="b">Mother</div></div></div>
-    <div class="prow"><div class="pav" style="background:#5E6AA8">P</div><div><div class="a">Papa Bear</div><div class="b">Father · you</div></div></div>
-    <div class="prow"><div class="pav" style="background:#56A08E">N</div><div><div class="a">Nanny</div><div class="b">Nanny</div></div></div>
-    <div class="pcard" style="margin-top:6px"><div class="a">🤝 Handoff note</div><div class="b">Slept well, last bottle 2:10. Loves the blue giraffe today.</div></div>
-  </div></div>
-  <div class="fold-txt">
-    <span class="eyebrow"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.8 20a6.2 6.2 0 0 1 12.4 0"/><circle cx="17.2" cy="9.4" r="2.6"/><path d="M16 20a5.4 5.4 0 0 1 5.2-4.4"/></svg> Your whole care circle</span>
-    <h2>Stop being the only one who knows</h2>
-    <p>The last feed, the nap, the medicine, usually live in one parent's head or on one phone. Cubby puts them where everyone caring for your baby can see, in real time.</p>
-    <ul><li>Invite your partner, grandparents, the nanny or daycare</li><li>See who logged what, on every entry</li><li>A shared handoff note for whoever's on duty</li></ul>
-  </div>
-</div></section>
-
-<!-- 3. Activities & routines -->
-<section class="band"><div class="fold">
-  <div class="fold-txt">
-    <span class="eyebrow">🌿 Activities &amp; routines</span>
-    <h2>The little things that help them thrive</h2>
-    <p>Tummy time, sun time, skin-to-skin, a walk: the good-for-baby moments that are easy to forget on a hard day. Plan them and log them, so they actually happen.</p>
-    <ul><li>Tummy time, sun time, skin-to-skin, walks and more</li><li>Add a photo to any moment</li><li>Pro: gentle adaptive routines from day 0 to 365</li></ul>
-  </div>
-  <div class="phone" aria-hidden="true"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Today's care</b></div>
-    <div class="pcard"><div class="a"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg> Sun time · 15 min</div><div class="b">10:20 AM · by Nanny</div></div>
-    <div class="pcard"><div class="a"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.6-9.5-9C1 9 2.5 5.5 6 5.5c2 0 3.2 1.2 4 2.3.8-1.1 2-2.3 4-2.3 3.5 0 5 3.5 3.5 6.5C19 16.4 12 21 12 21z"/></svg> Skin-to-skin · 20 min</div><div class="b">8:05 AM · by Mama Bear</div></div>
-    <div class="pcard"><div class="a">🤸 Tummy time · 10 min</div><div class="b">2:30 PM</div></div>
-    <div class="pcard"><div class="a">🚶 Walk · 30 min</div><div class="b">4:00 PM</div></div>
-  </div></div>
-</div></section>
-
-<!-- 3b. Meal photos -->
-<section class="band tint"><div class="fold rev">
-  <div class="phone" aria-hidden="true"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Lunch</b></div>
-    <div style="height:118px;border-radius:10px;overflow:hidden;margin-bottom:8px">
-      <svg viewBox="0 0 240 120" width="100%" height="118" preserveAspectRatio="xMidYMid slice" role="img" aria-label="A bowl of baby food">
-        <rect width="240" height="120" fill="#efe0c8"/>
-        <ellipse cx="120" cy="76" rx="98" ry="33" fill="#e4c99f"/>
-        <ellipse cx="120" cy="82" rx="64" ry="19" fill="rgba(60,46,34,0.10)"/>
-        <ellipse cx="120" cy="66" rx="66" ry="25" fill="#ffffff"/>
-        <ellipse cx="120" cy="62" rx="57" ry="19" fill="#f6efe2"/>
-        <ellipse cx="120" cy="61" rx="50" ry="16" fill="#ecd6a8"/>
-        <circle cx="104" cy="58" r="6.5" fill="#d6536a"/>
-        <circle cx="126" cy="64" r="6.5" fill="#c8455e"/>
-        <circle cx="139" cy="56" r="5.5" fill="#d6536a"/>
-        <circle cx="113" cy="66" r="4.5" fill="#8bb26a"/>
-        <circle cx="133" cy="68" r="4" fill="#9cc07a"/>
-        <rect x="176" y="38" width="44" height="7" rx="3.5" transform="rotate(20 176 38)" fill="#cba874"/>
-        <ellipse cx="187" cy="52" rx="12" ry="8.5" fill="#e7cda0"/>
-      </svg>
-    </div>
-    <div class="pcard"><div class="a"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 0 16 0"/><path d="M3 12h18"/><path d="M16 3l-3.5 9"/></svg> Solids · 12:30 PM</div><div class="b" style="margin-top:6px"><span class="pchip">Avocado</span><span class="pchip">Rice</span><span class="pchip">Peas</span></div></div>
-    <div class="pcard"><div class="a">Ate most of it 😋</div><div class="b">photo &amp; note by Nanny</div></div>
-  </div></div>
-  <div class="fold-txt">
-    <span class="eyebrow"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 0 16 0"/><path d="M3 12h18"/><path d="M16 3l-3.5 9"/></svg> Mealtime, captured</span>
-    <h2>See what they actually ate</h2>
-    <p>Snap the plate before and the bowl after, and log it with the meal. You, and the nanny, can see at a glance what was offered and what really went down, so "how's the eating going?" finally has a real answer.</p>
-    <ul><li>Add a photo to any feed or solids entry</li><li>Tag the foods and note how much went down</li><li>Pro: turn your meal logs into a nutrition view over time</li></ul>
-  </div>
-</div></section>
-
-<!-- 4. Medicine & health -->
-<section class="band"><div class="fold">
-  <div class="fold-txt">
-    <span class="eyebrow"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v5a4 4 0 0 0 8 0V3"/><path d="M5 3H3.5M13 3h1.5"/><path d="M9 16v1a5 5 0 0 0 5 5 5 5 0 0 0 5-5v-3"/><circle cx="19" cy="11" r="2.2"/></svg> Medicine &amp; health</span>
-    <h2>Never lose track of a dose</h2>
-    <p>Set a medicine and Cubby counts down to the next dose, so "did we already give it?" never happens, across both parents and the nanny. Plus gentle fever guidance when a temperature climbs.</p>
-    <ul><li>Every-few-hours or daily schedules</li><li>A live countdown to the next dose, shared with your circle</li><li>Fever guidance and illness notes</li></ul>
-  </div>
-  <div class="phone" aria-hidden="true"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Medicine</b></div>
-    <div class="pcard"><div class="a"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="8" rx="4" transform="rotate(45 12 12)"/><path d="M8.5 8.5l7 7"/></svg> Paracetamol</div><div class="pbig" style="color:#56A08E;font-size:24px">Next in 1h 20m</div><div class="b">every 6 hours · last 12:30 PM</div></div>
-    <div class="pbtn" style="background:#56A08E">Mark as given</div>
-    <div class="pcard" style="margin-top:9px"><div class="a"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 14.76V5a2 2 0 0 0-4 0v9.76a4 4 0 1 0 4 0Z"/><path d="M12 9v6"/></svg> Temperature · 37.9°C</div><div class="b">keep an eye, gentle guidance shown</div></div>
-  </div></div>
-</div></section>
-
-<!-- 5. Vaccines -->
-<section class="band tint"><div class="fold rev">
-  <div class="fold-txt">
-    <span class="eyebrow"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2l4 4M17 3l4 4-9 9H8v-4z"/><path d="M14 6l4 4M5 13l6 6M3 21l3-3"/></svg> Vaccine schedule</span>
-    <h2>Never miss a jab, in any country</h2>
-    <p>Pick your country and Cubby loads the right schedule with due dates worked out from your baby's birthday, and gentle reminders so a dose never slips.</p>
-    <ul><li>India (IAP/ACVIP), UK (NHS), US (CDC), UAE (MOHAP), Germany (STIKO) and more</li><li>Editable to match your clinic</li><li>Moving country? Switch the schedule, logged doses carry over</li></ul>
-  </div>
-  <div class="phone" aria-hidden="true"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Vaccines · UK</b></div>
-    <div class="pcard"><div class="a">8 weeks · done ✓</div><div class="b">6-in-1, MenB, Rotavirus · given 12 Mar</div></div>
-    <div class="pcard"><div class="a">12 weeks · due soon</div><div class="b">6-in-1, MenB, Rotavirus · 9 Apr</div></div>
-    <div class="pcard"><div class="a">16 weeks · upcoming</div><div class="b">6-in-1, Pneumococcal · 7 May</div></div>
-  </div></div>
-</div></section>
-
-<!-- 5b. Real reminders -->
-<section class="band"><div class="fold">
-  <div class="fold-txt">
-    <span class="eyebrow"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg> Gentle reminders</span>
-    <h2>A nudge only when it really matters</h2>
-    <p>Reminders are off until you turn them on, and even then they stay quiet. Cubby's push is only for a dose that's due, never for feeds, never for nappies, never to "keep your streak". Your vaccine due dates live in the app, with gentle reminders there.</p>
-    <ul><li>Off by default, you choose what's worth a buzz</li><li>Push is just for a due medicine dose</li><li>Vaccine due dates and gentle reminders, in the app</li><li>Quiet hours overnight, so 9pm to 7am stays calm</li></ul>
-  </div>
-  <div class="phone" aria-hidden="true"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Reminders</b></div>
-    <div class="pcard"><div class="a"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="8" rx="4" transform="rotate(45 12 12)"/><path d="M8.5 8.5l7 7"/></svg> Paracetamol due</div><div class="b">in about 30 minutes</div></div>
-    <div class="prow" style="justify-content:space-between"><div class="a" style="font-weight:800;font-size:12px;color:var(--ink)">Quiet hours</div><div class="b" style="font-weight:700">9:00 PM to 7:00 AM</div></div>
-    <div class="prow" style="justify-content:space-between"><div class="a" style="font-weight:800;font-size:12px;color:var(--ink)">Feed reminders</div><div class="b" style="font-weight:700">off, always</div></div>
-  </div></div>
-</div></section>
-
-<!-- 5c. Recently deleted / soft-delete -->
-<section class="band tint"><div class="fold rev">
-  <div class="phone" aria-hidden="true"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Recently deleted</b></div>
-    <div class="pcard"><div class="a">🍼 Bottle · 90 ml</div><div class="b">2:10 PM · by Nanny · deleted today</div><div class="pbtn" style="background:#56A08E;margin-top:8px">Restore</div></div>
-    <div class="pcard"><div class="a"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6.4 6.4 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg> Nap · 40 min</div><div class="b">11:20 AM · by Mama Bear · deleted today</div><div class="pbtn" style="background:#56A08E;margin-top:8px">Restore</div></div>
-    <div class="pnote">kept for a while, then quietly cleared</div>
-  </div></div>
-  <div class="fold-txt">
-    <span class="eyebrow"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/><path d="M9.5 16.5l5-5"/><path d="M9.5 11.5l5 5"/></svg> Nothing lost by accident</span>
-    <h2>Deleted something? It's still there</h2>
-    <p>A mis-tap at 3am won't cost you the day. Anything you remove drops into Recently deleted, where you can bring it back with one tap. And it comes back exactly as it was, with the original logger and time still on the record.</p>
-    <ul><li>Restore a feed, nap or nappy you removed by mistake</li><li>Who logged it and when stays on the entry</li><li>Cleared quietly after a while, so nothing piles up</li></ul>
-  </div>
-</div></section>
-
-<!-- 5d. Multi-baby + Switch -->
-<section class="band"><div class="fold">
-  <div class="fold-txt">
-    <span class="eyebrow"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3.2"/><circle cx="16.5" cy="9" r="2.6"/><path d="M2.5 19a5.5 5.5 0 0 1 11 0"/><path d="M14.5 19a4 4 0 0 1 7-2.6"/></svg> One account, every child</span>
-    <h2>Two little ones, or a bump and a toddler</h2>
-    <p>A toddler, a newborn and a baby on the way can all live in one Cubby. Switch between them in a tap, and on a busy morning you can log a feed for one while the other naps, no juggling accounts, no logging out.</p>
-    <ul><li>Add each child, plus a pregnancy, to the same account</li><li>Switch in a tap, log for either without losing your place</li><li>Your whole care circle follows you across them</li></ul>
-  </div>
-  <div class="phone" aria-hidden="true"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Switch</b></div>
-    <div class="prow"><div class="pav" style="background:#E29A3B">L</div><div><div class="a">Leo</div><div class="b">2 years · toddler</div></div></div>
-    <div class="prow"><div class="pav" style="background:#5E6AA8">M</div><div><div class="a">Mira</div><div class="b">5 months · baby</div></div></div>
-    <div class="prow"><div class="pav" style="background:#C97FA0">🤰</div><div><div class="a">Baby on the way</div><div class="b">28 weeks · expecting</div></div></div>
-    <div class="pcard" style="margin-top:6px"><div class="a">Logging for · Mira</div><div class="b">tap a name above to switch</div></div>
-  </div></div>
-</div></section>
-
-<!-- 5e. Doctor summary (live) vs Doctor PDF (Pro) -->
-<section class="band tint"><div class="fold rev">
-  <div class="phone" aria-hidden="true"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>For the doctor</b></div>
-    <div class="pcard"><div class="a">Visit summary</div><div class="b">last 14 days · feeds, sleep, nappies, meds, temps</div><div class="pbtn" style="background:#56A08E;margin-top:8px">Show at the visit</div></div>
-    <div class="pcard"><div class="a">PDF report <span class="soon">Aug 2026</span></div><div class="b">a printable, shareable report with growth curves</div><div class="pbtn" style="background:#C97FA0;margin-top:8px">Coming with Pro</div></div>
-  </div></div>
-  <div class="fold-txt">
-    <span class="eyebrow"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h4"/></svg> Ready for the doctor</span>
-    <h2>Walk in with the answers, not a foggy memory</h2>
-    <p>"How's the feeding? Sleeping? Any fevers?" Cubby has the real picture, so you don't have to guess across a haze of nights.</p>
-    <ul><li>Free, today: a one-tap visit summary to show on your phone</li><li>Pro, from August 2026: a polished doctor PDF report with growth curves, to print or share</li></ul>
-  </div>
-</div></section>
-
-<!-- 6. Growth -->
-<section class="band"><div class="fold">
-  <div class="fold-txt">
-    <span class="eyebrow"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="13" y="7" width="3" height="10"/></svg> Growth charts</span>
-    <h2>See that they're on track</h2>
-    <p>Plot weight and height on WHO and CDC percentile curves and watch the trend, no more wondering between checkups.</p>
-    <ul><li>WHO and CDC reference curves</li><li>Trend over time, not just a single number</li><li>Share the picture with your doctor</li></ul>
-  </div>
-  <div class="phone" aria-hidden="true"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Growth</b></div>
-    <div class="pcard"><div class="a" style="margin-bottom:6px">Weight · WHO</div>
-      <svg viewBox="0 0 240 118" width="100%" height="116" preserveAspectRatio="none" role="img" aria-label="Growth percentile chart">
-        <path d="M0,86 C70,74 150,48 240,26" fill="none" stroke="#E7DECF" stroke-width="2"/>
-        <path d="M0,98 C70,88 150,66 240,46" fill="none" stroke="#E7DECF" stroke-width="2"/>
-        <path d="M0,108 C70,102 150,86 240,68" fill="none" stroke="#E7DECF" stroke-width="2"/>
-        <path d="M0,104 C70,94 150,72 214,52" fill="none" stroke="#C97FA0" stroke-width="3" stroke-linecap="round"/>
-        <circle cx="214" cy="52" r="5" fill="#C97FA0"/>
-      </svg></div>
-    <div class="pcard"><div class="a">6.2 kg · around the 50th centile</div><div class="b">right on track</div></div>
-  </div></div>
-</div></section>
-
-<!-- 7. Keepsakes -->
-<section class="band tint"><div class="fold rev">
-  <div class="fold-txt">
-    <span class="eyebrow"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h3l2-3h8l2 3h3v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/><circle cx="12" cy="13" r="4"/></svg> Keepsakes</span>
-    <h2>Turn the everyday into something to share</h2>
-    <p>Make a card from a photo, plus monthly memories, milestones and a birth poster, all from your real moments and kept private to your family.</p>
-    <ul><li>Square keepsake cards, monthly memories, milestones and a birth poster</li><li>Made from your real moments, kept private to your family</li><li>Pro: the full keepsake studio, story and portrait formats, watermark-free shares, on-device auto-enhance and background cutout</li></ul>
-  </div>
-  <div class="phone" aria-hidden="true"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Moments</b></div>
-    <div class="pphoto">🧸</div>
-    <div class="pcard"><div class="a">First smile</div><div class="b">4 months · made with Cubby 🐻</div></div>
-  </div></div>
-</div></section>
-<section class="band"><div style="max-width:1000px;margin:0 auto;padding:54px 20px;text-align:center">
-  <h2 style="font-family:var(--serif);font-size:30px;font-weight:600;margin:0 0 8px;line-height:1.2">Works on every device, for everyone</h2>
-  <p class="lead2">Phones, tablets and computers, anywhere with internet. No app store, just open Cubby and you're in. The whole family stays on the same page, in real time.</p>
-  <div class="devices" aria-hidden="true">
-    <div class="dev">
-      <div class="d-phone"><div class="scr">
-        <div class="st"><img src="/icons/logo-512.png" alt=""><b>Mira</b></div>
-        <div class="c"><div class="a"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6.4 6.4 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg> Nap · 1h 12m</div><div class="b">by Mama Bear</div></div>
-        <div class="c"><div class="a"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2h6"/><path d="M10 2v3.5a4 4 0 0 1-1 2.6L8 9.5A4 4 0 0 0 7 12v7a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3v-7a4 4 0 0 0-1-2.5l-1-1.4A4 4 0 0 1 14 5.5V2"/><path d="M7 13h10"/></svg> Bottle · 120 ml</div><div class="b">2:10 PM</div></div>
-      </div></div>
-      <div class="cap">On a phone<em>Mum, on the go</em></div>
-    </div>
-    <div class="dev">
-      <div class="d-tab"><div class="scr">
-        <div class="st"><img src="/icons/logo-512.png" alt=""><b>Mira · today</b></div>
-        <div class="c"><div class="a"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg> Sun time · 15 min</div><div class="b">by Nanny</div></div>
-        <div class="c"><div class="a"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 0 16 0"/><path d="M3 12h18"/><path d="M16 3l-3.5 9"/></svg> Lunch · banana, oats</div><div class="b">12:30 PM</div></div>
-      </div></div>
-      <div class="cap">On a tablet<em>Nanny during the day</em></div>
-    </div>
-    <div class="dev">
-      <div class="d-laptop">
-        <div class="lid"><div class="scr">
-          <div class="st"><img src="/icons/logo-512.png" alt=""><b>While you were away</b></div>
-          <div class="c"><div class="a"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2h6"/><path d="M10 2v3.5a4 4 0 0 1-1 2.6L8 9.5A4 4 0 0 0 7 12v7a3 3 0 0 0 3 3h4a3 3 0 0 0 3-3v-7a4 4 0 0 0-1-2.5l-1-1.4A4 4 0 0 1 14 5.5V2"/><path d="M7 13h10"/></svg> 3 feeds · <svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6.4 6.4 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg> 2 naps</div><div class="b">all logged by Nanny</div></div>
-          <div class="c"><div class="a"><svg class="mi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18v4a9 9 0 0 1-9 9 9 9 0 0 1-9-9V6Z"/><path d="M3 9c4 1 14 1 18 0"/></svg> 4 nappies</div><div class="b">a tidy recap of the day</div></div>
-        </div></div>
-        <div class="base"></div>
-      </div>
-      <div class="cap">On a computer<em>Dad, checking in from work</em></div>
-    </div>
-  </div>
-</div></section>
-
-<section class="section alt" style="text-align:center">
-  <h2>One calm place, day 0 to year 1 and beyond</h2>
-  <p class="lead2">Free to start, private to your family, shared with everyone who cares for your baby.</p>
-  <a class="hero-cta" href="/app/">Start free</a>
 </section>
+
+<!-- STORY -->
+<section class="hx-band" style="padding-top:0">
+  <div class="hx-wrap hx-story">
+    <p class="hx-lead-first">The newborn days are a beautiful blur. Feeds at all hours, naps that defy logic, a hundred tiny decisions a day, and a memory stretched thin by love and no sleep. When did she last eat? Which side? Did the medicine get given, or did we just talk about it?</p>
+    <p>Cubby remembers, so you don't have to. Two taps, even at 3am, and it's logged for everyone. No streaks, no guilt, no red badges, just a calm record of your little one's day, and your hands free for the cuddles.</p>
+    <p class="hx-pull">It logs the day in a thumb,<br>so you can be <em>present for the rest.</em></p>
+  </div>
+</section>
+
+<!-- THE DAY (phone) -->
+<section class="hx-band hx-tint">
+  <div class="hx-wide hx-split">
+    <div class="hx-copy">
+      <div class="hx-eyebrow">Log the whole day in a single thumb</div>
+      <h2>Two taps, even half-asleep.</h2>
+      <p>Feeds, sleep, nappies and pumping, logged in seconds with live timers on every phone. Away during the day? You see it the moment the nanny logs it, with who did what on every entry. The details stop living in one exhausted head.</p>
+    </div>
+    <div class="hx-phone-col">
+      <div class="hx-phone"><div class="hx-island"></div><div class="hx-screen">
+        <div class="hx-statusbar"><span class="time">9:41</span><span class="sys"><span class="hx-sig"><i></i><i></i><i></i><i></i></span><span class="hx-net">5G</span><span class="hx-bat"><i></i></span></span></div>
+        <div class="hx-scr">
+          <div class="hx-apphead"><span class="b">🐻</span> Today, together</div>
+          <div class="hx-erow"><div class="ic" style="background:var(--h-green-bg)">😴</div><div class="t"><b>Nap in progress · 1h 12m</b><span>started 1:40 PM · by Mama Bear</span></div></div>
+          <div class="hx-erow"><div class="ic" style="background:var(--h-blue-bg)">🍼</div><div class="t"><b>Bottle · 120 ml</b><span>2:10 PM · by Nanny</span></div></div>
+          <div class="hx-erow"><div class="ic" style="background:var(--h-cream3)">🧷</div><div class="t"><b>Nappy · wet</b><span>2:15 PM · by Nanny</span></div></div>
+          <p class="hx-scrnote">live on every phone, with who did what 🐻</p>
+        </div>
+        <div class="hx-tabbar"><div class="on"><span class="gl">🏠</span>Home</div><div><span class="gl">📋</span>Log</div><div><span class="gl">🖼️</span>Album</div><div><span class="gl">💗</span>Health</div></div>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- CAPABILITY GRID -->
+<section class="hx-band">
+  <div class="hx-wide">
+    <div class="hx-section-head"><h2>Everything you need, from day zero.</h2><p>Calm, not cluttered. Turn on only what's relevant to you.</p></div>
+    <div class="hx-cap-grid">
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-blue-bg)">👆</div><b>One-thumb logging</b><span>Feeds, sleep, nappies and pumping in two taps, with live timers on every phone, even at 3am.</span></div>
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-green-bg)">👨‍👩‍👧</div><b>Your care circle</b><span>Partner, grandparents, the nanny, daycare, all in sync, with who did what on every entry.</span></div>
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-rose-bg)">💉</div><b>Vaccine schedule</b><span>Your country's official schedule with every due date marked, so a dose never slips by.</span></div>
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-cream3)">📈</div><b>Growth charts</b><span>Weight and height on WHO &amp; CDC curves, with the trend over time and a plain-language read.</span></div>
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-blue-bg)">🩺</div><b>Health hub</b><span>Medicine countdowns, illness notes, allergies, and a one-tap summary for the doctor.</span></div>
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-rose-bg)">📷</div><b>Keepsakes</b><span>Turn the day's photos into shareable cards, monthly memories and milestones.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- VACCINES & THE DOCTOR (phone) -->
+<section class="hx-band hx-tint">
+  <div class="hx-wide hx-split rev">
+    <div class="hx-phone-col">
+      <div class="hx-phone"><div class="hx-island"></div><div class="hx-screen">
+        <div class="hx-statusbar"><span class="time">9:41</span><span class="sys"><span class="hx-sig"><i></i><i></i><i></i><i></i></span><span class="hx-net">5G</span><span class="hx-bat"><i></i></span></span></div>
+        <div class="hx-scr">
+          <div class="hx-apphead"><span class="b">💉</span> Vaccines · UK</div>
+          <div class="hx-erow"><div class="ic" style="background:var(--h-green-bg)">✅</div><div class="t"><b>8 weeks · done</b><span>6-in-1 · Rotavirus · MenB</span></div></div>
+          <div class="hx-erow"><div class="ic" style="background:var(--h-blue-bg)">📅</div><div class="t"><b>12 weeks · due 14 Jun</b><span>6-in-1 · Pneumococcal · Rotavirus</span></div></div>
+          <div class="hx-erow"><div class="ic" style="background:var(--h-cream3)">🩺</div><div class="t"><b>Doctor summary</b><span>one tap, ready to show</span></div></div>
+          <p class="hx-scrnote">your country's official schedule, cited and linked 💉</p>
+        </div>
+        <div class="hx-tabbar"><div><span class="gl">🏠</span>Home</div><div><span class="gl">📋</span>Log</div><div><span class="gl">🖼️</span>Album</div><div class="on"><span class="gl">💗</span>Health</div></div>
+      </div></div>
+    </div>
+    <div class="hx-copy">
+      <div class="hx-eyebrow">Never miss a jab, in any country</div>
+      <h2>The right schedule, the right dates, no scrambling.</h2>
+      <p>Cubby loads your country's official vaccine schedule (NHS, CDC, STIKO, India's IAP/ACVIP, WHO-aligned and more), with every due date marked so none slips by, each source cited and linked. And when you see the doctor, walk in with a one-tap summary of feeds, growth and symptoms, not a foggy memory.</p>
+    </div>
+  </div>
+</section>
+
+<!-- TRUST / RESTRAINT (DARK) -->
+<section class="hx-band hx-dark">
+  <div class="hx-wide">
+    <div class="hx-head">
+      <div class="hx-eyebrow">Calm by design</div>
+      <h2>Private, quiet, and yours to keep.</h2>
+      <p>The calm isn't an accident. It's built into how Cubby works.</p>
+    </div>
+    <div class="hx-vow"><div class="x">✕</div><div><div class="b">Never sold, never an ad.</div><div class="s">Your log is locked to the people you invite, encrypted in transit and at rest, with no third-party trackers. Cubby earns from Cubby Pro, never from you.</div></div></div>
+    <div class="hx-vow"><div class="x">✕</div><div><div class="b">Never a noisy nudge.</div><div class="s">The only notification Cubby ever pushes is a medicine dose, around the time it's due. Never a feed, never a "streak", never guilt.</div></div></div>
+    <div class="hx-vow"><div class="x">✕</div><div><div class="b">Never really gone.</div><div class="s">Delete something by mistake? It waits safely in Recently deleted. And everything is yours to export or remove for good, anytime.</div></div></div>
+  </div>
+</section>
+
+<!-- CONTINUITY -->
+<section class="hx-band">
+  <div class="hx-wrap" style="text-align:center">
+    <div class="hx-eyebrow">No restarts</div>
+    <h2>One calm place, day zero to big kid.</h2>
+    <p style="font-size:18px;color:var(--h-soft);max-width:600px;margin:0 auto">Two little ones, or a bump and a toddler? Switch between them in a tap. Cubby grows from newborn nights to first foods to big-school mornings, one private account, one care circle, one story that never restarts.</p>
+  </div>
+</section>
+
+<!-- CLOSE -->
+<section class="hx-band hx-tint-rose hx-close">
+  <div class="hx-wrap">
+    <h2>Come in. Set the weight down.</h2>
+    <p>Free to start, private to your family, ready in seconds. No app store, no password.</p>
+    <a href="/app/" class="hx-bigcta hero-cta">Start free 🐻</a>
+  </div>
+</section>
+
+</main>
 
 <footer class="foot">
   <div class="fl"><a href="/">Home</a><a href="/why/">Why Cubby</a><a href="/how-it-works/">How it works</a><a href="/pregnancy/">Pregnancy</a><a href="/features/">Baby</a><a href="/articles/">Articles</a><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a><a href="/app/">Open app</a></div>
