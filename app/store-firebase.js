@@ -1178,6 +1178,18 @@
   auth.getRedirectResult().catch(function () {});
   maybeFinishEmailLink();
 
+  // Local E2E boot — localhost + ?e2e=1 ONLY. The hostname guard means this can NEVER run in
+  // prod (little-cubby.com). It skips Firebase + the sign-in gate so tools/uitest.js can drive
+  // the logged-in UI from seeded localStorage. No credentials, no network.
+  if ((location.hostname === 'localhost' || location.hostname === '127.0.0.1') && new URLSearchParams(location.search).get('e2e') === '1') {
+    try {
+      window.LL.role = 'owner';
+      window.LL.members = { local: { role: 'owner' } };
+      window.LL.memberInfo = { local: { name: 'Test Parent', relationship: 'Mama Bear', role: 'owner' } };
+      Store.load().then(function (d) { if (d && typeof state !== 'undefined') { try { Object.assign(state, d); } catch (e) {} } if (typeof render === 'function') render(); ['llAuthOv', 'llModalOv'].forEach(function (id) { var el = document.getElementById(id); if (el) el.remove(); }); });
+    } catch (e) { console.error('e2e boot failed', e); }
+    return;
+  }
   auth.onAuthStateChanged(async function (user) {
     if (!user) { teardown(); showSignIn(''); return; }
     try { localStorage.setItem('cubby-member', '1'); } catch (e) {}
