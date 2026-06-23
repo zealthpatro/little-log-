@@ -306,10 +306,10 @@ body{
 .sheet.show{transform:translate(-50%,0);}
 .grab{width:42px;height:5px;border-radius:3px;background:var(--line);margin:6px auto 18px;cursor:grab;touch-action:none;}
 .grab:active{cursor:grabbing;}
-.sheet-x{position:absolute;top:12px;right:14px;width:30px;height:30px;border:none;background:none;color:var(--ink-faint);font-size:24px;line-height:1;cursor:pointer;opacity:.5;z-index:2;font-family:inherit;padding:0;}
-.sheet-x:hover{opacity:1;}
-.sheet-back{position:absolute;top:10px;left:12px;width:32px;height:32px;border:none;background:none;color:var(--ink-faint);font-size:28px;line-height:1;cursor:pointer;opacity:.6;z-index:2;font-family:inherit;padding:0;}
-.sheet-back:hover{opacity:1;}
+.sheet-x{position:absolute;top:8px;right:10px;width:40px;height:40px;border:none;background:none;color:var(--ink-faint);font-size:24px;line-height:1;cursor:pointer;opacity:.85;z-index:2;font-family:inherit;padding:0;display:grid;place-items:center;border-radius:50%;}
+.sheet-x:hover{opacity:1;background:var(--surface-2);}
+.sheet-back{position:absolute;top:6px;left:8px;width:44px;height:44px;border:none;background:none;color:var(--ink-faint);font-size:28px;line-height:1;cursor:pointer;opacity:.85;z-index:2;font-family:inherit;padding:0;display:grid;place-items:center;border-radius:50%;}
+.sheet-back:hover{opacity:1;background:var(--surface-2);}
 .sheet h2{font-family:var(--font-display);font-size:22px;font-weight:600;margin-bottom:4px;}
 .sheet .sub{font-size:13px;color:var(--ink-soft);font-weight:600;margin-bottom:20px;}
 .opt-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:14px;}
@@ -341,7 +341,7 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .dp-bl{visibility:hidden;}
 .dp-td{box-shadow:inset 0 0 0 2px var(--diaper);}
 .dp-on,.dp-on:hover{background:var(--diaper);color:#fff;}
-.dp-x{color:var(--ink-faint);opacity:.6;cursor:default;}
+.dp-x{color:#8c8175;opacity:.9;cursor:default;}
 .dp-now{margin-top:8px;border:none;background:var(--surface-2);color:var(--ink);font-weight:800;font-size:13px;padding:8px 14px;border-radius:10px;cursor:pointer;font-family:inherit;width:100%;}
 /* Calendar inside the shared cuModal (card is always white). Hardcode colours so it reads
    correctly in dark mode too, and use the pink accent to match the time / when wheel. */
@@ -353,13 +353,16 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .dp-in-modal .dp-w span{color:#9a8d80;}
 .dp-in-modal .dp-td{box-shadow:inset 0 0 0 2px #C97FA0;}
 .dp-in-modal .dp-on,.dp-in-modal .dp-on:hover{background:#C97FA0;color:#fff;}
-.dp-in-modal .dp-x{color:#a9988a;opacity:1;}
+.dp-in-modal .dp-x{color:#8c8175;opacity:1;}
 .dp-in-modal .dp-now{background:#FBF7EF;color:#2C2521;}
 .field input,.field textarea,.field select{
   width:100%;border:2px solid var(--line);background:var(--surface-2);border-radius:14px;
   padding:13px 15px;font-family:var(--font-body);font-size:16px;font-weight:600;color:var(--ink);
 }
-.field input:focus,.field textarea:focus,.field select:focus{outline:none;border-color:var(--accent,var(--feed));}
+.field input:focus,.field textarea:focus,.field select:focus{border-color:var(--accent,var(--feed));}
+/* A11y (WCAG 2.4.7): visible keyboard focus everywhere; mouse clicks stay clean via :focus-visible. */
+:focus-visible{outline:2px solid var(--accent,var(--feed));outline-offset:2px;border-radius:4px;}
+:focus:not(:focus-visible){outline:none;}
 .field textarea{resize:none;min-height:74px;}
 /* Contextual "why we ask" inline help: a calm one-tap expander placed under a field. Reused
    everywhere clarity is sought (identity, health, dating, privacy). It never navigates or opens
@@ -2018,7 +2021,7 @@ function startTick(){
 /* ============================================================
    NAV / THEME
    ============================================================ */
-function go(v){ if(v==='home') surfaceReset(); view=v; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
+function go(v){ if(typeof closeSheet==='function') closeSheet(); if(v==='home') surfaceReset(); view=v; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
 function toggleTheme(){ state.settings.theme = state.settings.theme==='night'?'light':'night'; persist(); render(); }
 function setTheme(t){ state.settings.theme=t; persist(); render(); }
 
@@ -3862,7 +3865,6 @@ function renderPregHome(){
       <span class="chev">${I.chev}</span></div>`:(pregWeek()>40?`<div class="next-appt">
       <div class="pc-ico" style="background:var(--preg-soft)">🌼</div>
       <div class="na-body"><div class="na-t">Any day now</div><div class="na-s">Your due date is here. Babies keep their own schedule, so rest when you can and follow your midwife or doctor's guidance on monitoring.</div></div></div>`:'')}
-    <div class="preg-card" onclick="openGuessGame()" style="cursor:pointer"><div class="pc-ico">🎉</div><div style="flex:1;min-width:0"><div class="pc-t">Family games</div><div class="pc-b">${guessSummaryLine()}</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>
     ${pregHealthQuick()}
     <div class="sec-title">This week</div>
     <div class="actions stagger">
@@ -3898,7 +3900,9 @@ function revealSex(s){ const p=state.pregnancy; if(!pregIsOwner())return; p.know
 function hideReveal(){ const p=state.pregnancy; if(!pregIsOwner())return; p.knownSex=''; persist(); pushGameReveal(p,''); openGuessGame(); }
 /* Hosted guest game (Kahoot-style link, no guest account). Dormant until the cubby-games D1 is provisioned. */
 function gameLink(code){ return location.origin+'/g/'+code; }
-function copyGameLink(code){ const url=gameLink(code); if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(url).then(function(){toast('Link copied 🔗');}).catch(function(){toast(url);}); } else { toast(url); } }
+function copyGameLink(code){ const url=gameLink(code);
+  if(navigator.share){ navigator.share({title:'Cubby family games',text:'Guess boy or girl, and the day baby arrives 🐻',url:url}).catch(function(){}); return; }
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(url).then(function(){toast('Link copied 🔗');}).catch(function(){toast(url);}); } else { toast(url); } }
 function shareGuessGame(){ const p=state.pregnancy; if(!p) return;
   if(p.hubCode){ copyGameLink(p.hubCode); return; }
   if(!pregIsOwner()){ toast('Only the parent can start the games 🤍'); return; }
@@ -4132,6 +4136,9 @@ function renderPregTools(){
     <div class="set-item" onclick="openBag()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:19px">🧳</div>
       <div class="si-body"><div class="a">Hospital bag</div><div class="b">${bagDone}/${bagTot} packed</div></div><span class="chev">${I.chev}</span></div>
+    <div class="set-item" onclick="openGuessGame()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--feed-soft);color:var(--feed);font-size:19px">🎉</div>
+      <div class="si-body"><div class="a">Family games</div><div class="b">${guessSummaryLine()}</div></div><span class="chev">${I.chev}</span></div>
     <div class="preg-disclaim">These tools are informational and never a substitute for your provider's advice. If something feels wrong, seek care.</div>
   </div>`;
 }

@@ -50,6 +50,7 @@
 <div class="card" id="card">
   <div class="brand">🐻 <span>Cubby</span></div>
   <div id="body"><h1>Loading…</h1></div>
+  <button id="gshare" class="pick" style="width:100%;margin:4px 0 10px">🔗 Share this game</button>
   <div class="note">A bit of fun, just guesses. The only sure way is a scan. No account needed, nothing tracked.</div>
   <div class="foot">Made with <a href="/">Cubby</a> · a calm, private baby log</div>
 </div>
@@ -57,6 +58,10 @@
 (function(){
   var code=(location.pathname.replace(/^\/g\/?/,'').split(/[\/?#]/)[0]||'').toLowerCase();
   var body=document.getElementById('body');
+  var gshare=document.getElementById('gshare');
+  if(gshare) gshare.onclick=function(){ var url=location.href;
+    if(navigator.share){ navigator.share({title:'Cubby family games',text:'Guess boy or girl, and the day baby arrives 🐻',url:url}).catch(function(){}); }
+    else if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(url).then(function(){ gshare.textContent='Link copied 🔗'; setTimeout(function(){ gshare.textContent='🔗 Share this game'; },1600); }).catch(function(){}); } };
   var hkey='cubby-h-'+code, gkey='cubby-g-'+code;
   var refresh=null, lastHub=null;
   function enc(s){return encodeURIComponent(s);}
