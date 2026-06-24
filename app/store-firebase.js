@@ -134,6 +134,14 @@
       + '<button type="submit" style="border:none;background:#9A8C6E;color:#fff;font-family:inherit;font-weight:800;font-size:14px;padding:11px 14px;border-radius:11px;cursor:pointer;white-space:nowrap">Send link</button>'
       + '</form><div class="ll-email-note" style="font-size:12px;font-weight:600;color:#6E635B;margin-top:7px"></div></div>';
   }
+  /* Privacy reassurance + consent, shown right at the sign-in buttons. Links /privacy/ (live); no Terms
+     link until /terms/ ships. */
+  function consentHtml() {
+    return '<div class="ll-consent" style="margin:13px auto 0;max-width:340px;text-align:center;font-size:12px;line-height:1.55;font-weight:600;color:#8a7d70">'
+      + '🔒 Private to your family. No ads, we never sell your data.<br>'
+      + 'By continuing you agree to our <a href="/privacy/" target="_blank" rel="noopener" style="color:#6E635B;text-decoration:underline">privacy promise</a>.'
+      + '</div>';
+  }
   function wireEmailRow(scope) {
     var row = scope.querySelector('.ll-email-row'); if (!row) return;
     var toggle = row.querySelector('.ll-email-toggle'), form = row.querySelector('.ll-email-form'), note = row.querySelector('.ll-email-note');
@@ -193,13 +201,15 @@
     if (typeof window.cubbyLanding === 'function') {
       ov.classList.add('landing');
       ov.innerHTML = window.cubbyLanding(msg);
-      Array.prototype.forEach.call(ov.querySelectorAll('.ll-cta'), function (b) {
+      // Only the primary (hero) CTA carries the full method set + consent, so the three methods are
+      // consistent and not duplicated. (Was: an Apple button after EVERY .ll-cta but the email row only
+      // after the first, so the hero had Google+Apple+email while the footer CTA had Google+Apple+no email.)
+      Array.prototype.forEach.call(ov.querySelectorAll('.ll-cta'), function (b, i) {
         b.onclick = signInGoogle;
-        b.insertAdjacentHTML('afterend', appleBtnHtml('lp'));
+        if (i === 0) b.insertAdjacentHTML('afterend', appleBtnHtml('lp') + emailRowHtml() + consentHtml());
       });
       Array.prototype.forEach.call(ov.querySelectorAll('.ll-apple-cta'), function (b) { b.onclick = signInApple; });
-      var firstApple = ov.querySelector('.ll-apple-cta');
-      if (firstApple) { firstApple.insertAdjacentHTML('afterend', emailRowHtml()); wireEmailRow(ov); }
+      wireEmailRow(ov);
       return;
     }
     ov.classList.remove('landing');
@@ -210,6 +220,7 @@
       + '<button id="llGoogleBtn" class="ll-auth-btn">Continue with Google</button>'
       + appleBtnHtml('card')
       + emailRowHtml()
+      + consentHtml()
       + (msg ? '<div class="ll-auth-msg">' + msg + '</div>' : '')
       + '<div style="margin-top:16px;font-size:12px;font-weight:700"><a href="/" style="color:#6E635B">About Cubby · little-cubby.com</a></div>'
       + '</div>';
