@@ -1707,6 +1707,14 @@ function renderHome(){
       <div class="ap-body"><div class="ap-t">${escapeHtml(_cab.name)} is growing up</div><div class="ap-s">Cubby is growing with them. Quick log now leads with the toddler years; the early logs are under More.</div></div>
       <button onclick="ackChild()">Lovely</button></div>`;
   }
+  // One-time gentle nudge: many web users never realise Cubby installs to the home screen.
+  if(typeof canShowInstall==='function' && canShowInstall() && !(state.settings.seen && state.settings.seen['tip_install'])){
+    alerts += `<div class="coach"><div class="cm-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M8 11l4 4 4-4"/><path d="M5 20h14"/></svg></div>
+      <div class="cm-body"><div class="cm-t">Use Cubby like an app</div><div class="cm-s">Add it to your home screen for one-tap, full-screen, offline access. No app store.</div>
+      <button class="btn-primary" style="margin-top:9px;padding:8px 14px;font-size:13px" onclick="addToHomeScreen('homeInstallMsg')">Add to home screen</button>
+      <div id="homeInstallMsg" class="cm-s" style="display:none;margin-top:6px"></div></div>
+      <button class="cm-x" onclick="dismissTip('install')">Not now</button></div>`;
+  }
 
   // today summary
   const today = dayKey(now());

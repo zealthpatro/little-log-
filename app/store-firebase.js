@@ -142,6 +142,16 @@
       + 'By continuing you agree to our <a href="/privacy/" target="_blank" rel="noopener" style="color:#6E635B;text-decoration:underline">privacy promise</a>.'
       + '</div>';
   }
+  // Subtle install affordance at the sign-in gate (the marketing /install.js does not run on /app/).
+  // Reuses the app's own canShowInstall/addToHomeScreen helpers (defined in index.html, loaded first).
+  function installRowHtml() {
+    try { if (!(window.canShowInstall && window.canShowInstall())) return ''; } catch (e) { return ''; }
+    return '<div class="ll-install-row" style="margin:10px auto 0;max-width:340px;text-align:center"><button type="button" id="llInstallBtn" style="border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;color:#6E635B;text-decoration:underline;padding:6px">Or add Cubby to your home screen</button><div id="llInstallMsg" class="ll-auth-msg" style="display:none"></div></div>';
+  }
+  function wireInstall(scope) {
+    var ib = scope.querySelector('#llInstallBtn'); if (!ib || ib.__w) return; ib.__w = 1;
+    ib.onclick = function () { if (window.addToHomeScreen) window.addToHomeScreen('llInstallMsg'); };
+  }
   function wireEmailRow(scope) {
     var row = scope.querySelector('.ll-email-row'); if (!row) return;
     var toggle = row.querySelector('.ll-email-toggle'), form = row.querySelector('.ll-email-form'), note = row.querySelector('.ll-email-note');
@@ -206,10 +216,10 @@
       // after the first, so the hero had Google+Apple+email while the footer CTA had Google+Apple+no email.)
       Array.prototype.forEach.call(ov.querySelectorAll('.ll-cta'), function (b, i) {
         b.onclick = signInGoogle;
-        if (i === 0) b.insertAdjacentHTML('afterend', appleBtnHtml('lp') + emailRowHtml() + consentHtml());
+        if (i === 0) b.insertAdjacentHTML('afterend', appleBtnHtml('lp') + emailRowHtml() + consentHtml() + installRowHtml());
       });
       Array.prototype.forEach.call(ov.querySelectorAll('.ll-apple-cta'), function (b) { b.onclick = signInApple; });
-      wireEmailRow(ov);
+      wireEmailRow(ov); wireInstall(ov);
       return;
     }
     ov.classList.remove('landing');
@@ -221,13 +231,14 @@
       + appleBtnHtml('card')
       + emailRowHtml()
       + consentHtml()
+      + installRowHtml()
       + (msg ? '<div class="ll-auth-msg">' + msg + '</div>' : '')
       + '<div style="margin-top:16px;font-size:12px;font-weight:700"><a href="/" style="color:#6E635B">About Cubby · little-cubby.com</a></div>'
       + '</div>';
     document.getElementById('llGoogleBtn').onclick = signInGoogle;
     var llAppleBtn = document.getElementById('llAppleBtn');
     if (llAppleBtn) llAppleBtn.onclick = signInApple;
-    wireEmailRow(ov);
+    wireEmailRow(ov); wireInstall(ov);
   }
   function showStatus(msg) {
     overlay().classList.remove('landing');
