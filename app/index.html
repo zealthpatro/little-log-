@@ -3825,6 +3825,7 @@ let momentDraft={photoData:null, week:null, note:''};
 function momentSize(week){ const w=Math.max(4,Math.min(41,+week||4)); return (window.PREG&&PREG.weeks[w]&&PREG.weeks[w].size)||''; }
 function renderPregMoments(){
   const p=state.pregnancy;
+  const pj=journeyPromptsPreg();
   const list=(p.moments||[]).slice().sort((a,b)=>b.week-a.week||b.at-a.at);
   const cards=list.map(m=>{
     const src=photoSrc(m.photoId);
@@ -3842,8 +3843,8 @@ function renderPregMoments(){
     <div class="greeting">Moments 📷</div>
     <div class="greeting-sub">Your scans and bump pictures, paired with how big your baby was that week. The first photo album, before the album.</div>
     <button class="btn-primary" style="background:var(--preg);margin:6px 0 14px" onclick="openAddMoment()">${I.camera} Add a moment</button>
-    ${renderJourneySection(journeyPromptsPreg(),'pregnancy','Your pregnancy journey')}
-    ${cards||`<div class="preg-card"><div class="pc-ico">🖼️</div><div><div class="pc-t">Nothing here yet</div><div class="pc-b">Add your first ultrasound after a scan, or a bump photo any week. Each one is saved with the week and what size your baby was.</div></div></div>`}
+    ${renderJourneySection(pj,'pregnancy','Your pregnancy journey')}
+    ${cards||(pj.length?'':`<div class="preg-card"><div class="pc-ico">🖼️</div><div><div class="pc-t">Nothing here yet</div><div class="pc-b">Add your first ultrasound after a scan, or a bump photo any week. Each one is saved with the week and what size your baby was.</div></div></div>`)}
   </div>`;
 }
 function openAddMoment(){
