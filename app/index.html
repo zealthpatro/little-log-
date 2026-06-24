@@ -636,6 +636,13 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .jr-t{font-weight:800;font-size:13.5px;color:var(--ink);line-height:1.25}
 .jr-s{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:2px;line-height:1.3}
 .jr-x{position:absolute;top:6px;right:6px;border:none;background:var(--surface-2);color:var(--ink-soft);width:22px;height:22px;border-radius:50%;font-size:14px;line-height:1;cursor:pointer}
+.rel-chips{display:flex;flex-wrap:wrap;gap:8px}
+.rel-chip{border:1px solid var(--line);background:var(--surface-2);color:var(--ink);border-radius:999px;padding:8px 14px;font-weight:700;font-size:13px;cursor:pointer;font-family:var(--font-body)}
+.rel-chip:active{transform:scale(.97)}
+.rel-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.rel-done{background:var(--surface);border-radius:14px;overflow:hidden;box-shadow:0 3px 9px var(--shadow)}
+.rel-done img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
+.rel-cap{padding:8px 10px;font-weight:700;font-size:13px;color:var(--ink)}
 .mem-ready:active{transform:scale(.97);}
 .mem-ready .mr-ic{font-size:24px;margin-bottom:6px;}
 .mem-ready .mr-t{font-weight:800;font-size:14px;color:var(--ink);}
@@ -2744,6 +2751,39 @@ function journeyPromptsBaby(){
   }
   return out.filter(x=>!x.done && !jDismissed(x.key,'baby'));
 }
+/* ---------- Journey P1: a photo with someone ---------- */
+var relDraft=null;
+// relation: 'uid:<uid>' for a circle member, else a RELATION_BEAR key ('nana','grandpa',...). label: display text. pendingId: id of a pending journeyRel entry being fulfilled (or null).
+function openRelCapture(relation, label, pendingId){
+  relDraft={relation:relation, label:label, pendingId:pendingId||null, photoData:null};
+  renderRelCapture();
+}
+function renderRelCapture(){
+  const d=relDraft; if(!d) return;
+  openSheet(`<h2>A photo with ${escapeHtml(d.label)}</h2><div class="sub">A moment together, for the journey</div>
+    <input type="file" id="relPhoto" accept="image/*" style="display:none" onchange="loadRelPhoto(this)">
+    ${d.photoData?`<div class="food-preview"><img src="${d.photoData}"><button class="rm" onclick="relDraft.photoData=null;renderRelCapture()">×</button></div>`:`<button class="btn-ghost" style="margin:0" onclick="document.getElementById('relPhoto').click()">${I.camera} Choose a photo</button>`}
+    <button class="btn-primary" style="background:var(--star)" onclick="saveRelMoment()">Save</button>`,'star');
+}
+function loadRelPhoto(input){ const f=input.files[0]; if(!f)return; downscaleToData(f,1200,0.8,(data)=>{ relDraft.photoData=data; renderRelCapture(); }); }
+async function saveRelMoment(){
+  const b=activeBaby(); if(!b||!relDraft) return;
+  const d=relDraft; let photoId=null;
+  if(d.photoData){ photoId=uid(); await PhotoStore.set(photoId,d.photoData); }
+  const arr=journeyRel(b.id);
+  if(d.pendingId){ const e=arr.find(r=>r.id===d.pendingId); if(e){ e.photoId=photoId; e.at=now(); } }
+  else { arr.push({id:uid(), relation:d.relation, label:d.label, photoId:photoId, at:now()}); }
+  relDraft=null; persist(); closeSheet(); render();
+}
+const REL_SUGGEST=[['nana','Grandma'],['grandpa','Grandpa'],['auntie','Auntie'],['uncle','Uncle'],['sibling','Big sibling'],['friend','Friend']];
+function openAddSomeone(){
+  openSheet(`<h2>Add someone special</h2><div class="sub">Someone you'd love a photo with</div>
+    <div class="rel-chips">${REL_SUGGEST.map(([k,l])=>`<button class="rel-chip" onclick="addSomeone('${k}','${l}')">${escapeHtml(l)}</button>`).join('')}</div>
+    <div class="field" style="margin-top:12px"><label>Or someone else</label><input id="relCustom" placeholder="e.g. Godmother, Ayah" maxlength="24"></div>
+    <button class="btn-primary" style="background:var(--star)" onclick="addSomeoneCustom()">Add</button>`,'star');
+}
+function addSomeone(relation,label){ const b=activeBaby(); if(!b) return; journeyRel(b.id).push({id:uid(), relation:relation, label:label, photoId:null, at:now()}); persist(); closeSheet(); render(); }
+function addSomeoneCustom(){ let v=((document.getElementById('relCustom')||{}).value||'').trim(); if(!v) return; addSomeone('other', v.slice(0,24)); }
 function babyIdentity(b,opts){
   opts=opts||{};
   const inner = babyAvatarBox(b,'avatar-lg');
@@ -6027,6 +6067,9 @@ function renderMilestones(){
     ? `<div class="ms-petbar">🐾 <b>${escapeHtml(b.petName||'Your pet')}</b>&rsquo;s firsts are on<button class="ms-petedit" onclick="openPetSetup()">edit</button></div>`
     : `<button class="ms-petadd" onclick="openPetSetup()">🐾 Have a pet? Add their firsts together</button>`;
 
+  const relWith=b?journeyRel(b.id).filter(r=>r.photoId):[];
+  const relGrid=relWith.length?`<div class="sec-title">Together</div><div class="rel-grid">${relWith.map(r=>`<div class="rel-done"><img src="${photoSrc(r.photoId)}" alt="${escapeHtml(r.label)}"><div class="rel-cap">${escapeHtml(r.label)}</div></div>`).join('')}</div>`:'';
+
   return `<div class="fade-in">
     <div class="ms-hero">
       <div class="ring"><svg width="74" height="74"><circle cx="37" cy="37" r="${R}" fill="none" stroke="var(--line)" stroke-width="7"/>
@@ -6035,6 +6078,8 @@ function renderMilestones(){
       <div class="mh-body"><div class="a">${doneCount} moments captured</div><div class="b">${escapeHtml(b?b.name:'Baby')} is ${months<24?Math.floor(months)+' months':Math.floor(months/12)+' years'} · every baby grows at their own pace</div></div>
     </div>
     ${renderJourneySection(journeyPromptsBaby(),'baby',((activeBaby()&&activeBaby().name)||'Baby')+'’s journey')}
+    ${state.lossHolding?'':`<div class="add-row" onclick="openAddSomeone()">${I.plus} Add someone special</div>`}
+    ${relGrid}
     ${petRow}
     <div class="field" style="margin-bottom:12px"><input id="msSearch" placeholder="Search milestones and firsts…" autocomplete="off" oninput="filterMs(this.value)"></div>
     ${upcoming.length?`<div class="sec-title">Coming up</div>${upcoming.map(m=>`<div class="ms-row" onclick="openMilestone('${m.key}')"><div class="ms-check">${I.check}</div><div class="ms-body"><div class="a">${escapeHtml(m.title)}</div><div class="b">typically around ${m.mo} months</div></div><div class="ms-chip">${escapeHtml(m.cat)}</div></div>`).join('')}`:''}
