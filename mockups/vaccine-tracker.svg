@@ -1,0 +1,50 @@
+<svg viewBox="0 0 320 500" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer card -->
+  <rect x="4" y="4" width="312" height="492" rx="22" fill="#ffffff" stroke="#e8e8f0" stroke-width="1.5"/>
+  <!-- Header bar bg -->
+  <rect x="4" y="4" width="312" height="56" rx="22" fill="#fdf0f5"/>
+  <rect x="4" y="36" width="312" height="24" fill="#fdf0f5"/>
+  <!-- Header divider -->
+  <line x1="4" y1="60" x2="316" y2="60" stroke="#f0c0d8" stroke-width="1"/>
+
+  <!-- Header title -->
+  <text x="20" y="38" font-family="Georgia,serif" font-size="17" font-weight="700" fill="#1a1a2e">Vaccines</text>
+
+  <!-- Baby label -->
+  <text x="16" y="78" font-family="Nunito Sans,system-ui,sans-serif" font-size="12" fill="#9a9aac">Baby Zara · 8 weeks old</text>
+
+  <!-- Row 1: BCG + Hep B (done) -->
+  <rect x="12" y="90" width="296" height="58" rx="12" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1"/>
+  <circle cx="36" cy="119" r="14" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="36" y="124" text-anchor="middle" font-family="Nunito Sans,system-ui,sans-serif" font-size="14" font-weight="700" fill="#22c55e">✓</text>
+  <text x="60" y="111" font-family="Nunito Sans,system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a1a2e">BCG + Hepatitis B</text>
+  <text x="60" y="127" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#6b6b80">Birth · Given 14 Mar 2026</text>
+
+  <!-- Row 2: Hep B 2nd (done) -->
+  <rect x="12" y="156" width="296" height="58" rx="12" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1"/>
+  <circle cx="36" cy="185" r="14" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="36" y="190" text-anchor="middle" font-family="Nunito Sans,system-ui,sans-serif" font-size="14" font-weight="700" fill="#22c55e">✓</text>
+  <text x="60" y="177" font-family="Nunito Sans,system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a1a2e">Hepatitis B (2nd dose)</text>
+  <text x="60" y="193" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#6b6b80">6 weeks · Given 28 Apr 2026</text>
+
+  <!-- Row 3: DTwP etc (due soon, orange) -->
+  <rect x="12" y="222" width="296" height="58" rx="12" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.5"/>
+  <circle cx="36" cy="251" r="14" fill="#fff7ed" stroke="#f97316" stroke-width="1.5"/>
+  <text x="36" y="256" text-anchor="middle" font-family="Nunito Sans,system-ui,sans-serif" font-size="14" font-weight="700" fill="#f97316">!</text>
+  <text x="60" y="243" font-family="Nunito Sans,system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a1a2e">DTwP + Hib + IPV · Rotavirus</text>
+  <text x="60" y="259" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#f97316">10 weeks · Due 28 Jun 2026 (in 4 days)</text>
+
+  <!-- Row 4: PCV (future) -->
+  <rect x="12" y="288" width="296" height="58" rx="12" fill="#f5f5fa" stroke="#e8e8f0" stroke-width="1"/>
+  <circle cx="36" cy="317" r="14" fill="#f5f5fa" stroke="#e8e8f0" stroke-width="1.5"/>
+  <text x="36" y="322" text-anchor="middle" font-family="Nunito Sans,system-ui,sans-serif" font-size="14" fill="#9a9aac">○</text>
+  <text x="60" y="309" font-family="Nunito Sans,system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a1a2e">PCV + Rotavirus (2nd)</text>
+  <text x="60" y="325" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">14 weeks · Jul 2026</text>
+
+  <!-- Row 5: DTP 3rd (future) -->
+  <rect x="12" y="354" width="296" height="58" rx="12" fill="#f5f5fa" stroke="#e8e8f0" stroke-width="1"/>
+  <circle cx="36" cy="383" r="14" fill="#f5f5fa" stroke="#e8e8f0" stroke-width="1.5"/>
+  <text x="36" y="388" text-anchor="middle" font-family="Nunito Sans,system-ui,sans-serif" font-size="14" fill="#9a9aac">○</text>
+  <text x="60" y="375" font-family="Nunito Sans,system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a1a2e">DTP + Hib + IPV (3rd)</text>
+  <text x="60" y="391" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">16 weeks · Aug 2026</text>
+</svg>

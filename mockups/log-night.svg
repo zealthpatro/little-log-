@@ -1,0 +1,48 @@
+<svg viewBox="0 0 320 420" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer card -->
+  <rect x="4" y="4" width="312" height="412" rx="22" fill="#ffffff" stroke="#e8e8f0" stroke-width="1.5"/>
+  <!-- Header bar bg -->
+  <rect x="4" y="4" width="312" height="56" rx="22" fill="#fdf0f5"/>
+  <rect x="4" y="36" width="312" height="24" fill="#fdf0f5"/>
+  <!-- Header divider -->
+  <line x1="4" y1="60" x2="316" y2="60" stroke="#f0c0d8" stroke-width="1"/>
+
+  <!-- Header title -->
+  <text x="20" y="38" font-family="Georgia,serif" font-size="17" font-weight="700" fill="#1a1a2e">Log</text>
+  <!-- Time top-right -->
+  <text x="300" y="38" text-anchor="end" font-family="Nunito Sans,system-ui,sans-serif" font-size="12" fill="#6b6b80">3:17am</text>
+
+  <!-- Blue info banner -->
+  <rect x="12" y="68" width="296" height="44" rx="12" fill="#eff6ff"/>
+  <text x="24" y="86" font-family="Nunito Sans,system-ui,sans-serif" font-size="14" font-weight="700" fill="#1d4ed8">Last fed 2 h 13 min ago</text>
+  <text x="24" y="102" font-family="Nunito Sans,system-ui,sans-serif" font-size="12" fill="#6b6b80">Papa Bear logged at 1:04am</text>
+
+  <!-- Entry 1: Feed -->
+  <rect x="12" y="124" width="296" height="60" rx="12" fill="#f5f5fa"/>
+  <circle cx="40" cy="154" r="17" fill="#fdf0f5"/>
+  <text x="40" y="160" text-anchor="middle" font-size="18">🍼</text>
+  <text x="66" y="146" font-family="Nunito Sans,system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a1a2e">Feed · Left breast · 14 min</text>
+  <text x="66" y="164" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">by Papa Bear</text>
+  <text x="304" y="146" text-anchor="end" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#6b6b80">1:04am</text>
+
+  <!-- Entry 2: Nappy -->
+  <rect x="12" y="196" width="296" height="60" rx="12" fill="#f5f5fa"/>
+  <circle cx="40" cy="226" r="17" fill="#fdf0f5"/>
+  <text x="40" y="232" text-anchor="middle" font-size="18">🚿</text>
+  <text x="66" y="218" font-family="Nunito Sans,system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a1a2e">Nappy · Wet</text>
+  <text x="66" y="236" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">by Papa Bear</text>
+  <text x="304" y="218" text-anchor="end" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#6b6b80">12:48am</text>
+
+  <!-- Earlier section divider -->
+  <line x1="12" y1="276" x2="140" y2="276" stroke="#e8e8f0" stroke-width="1"/>
+  <text x="160" y="280" text-anchor="middle" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">12 Jun</text>
+  <line x1="180" y1="276" x2="308" y2="276" stroke="#e8e8f0" stroke-width="1"/>
+
+  <!-- Entry 3: Earlier feed -->
+  <rect x="12" y="290" width="296" height="60" rx="12" fill="#f5f5fa"/>
+  <circle cx="40" cy="320" r="17" fill="#fdf0f5"/>
+  <text x="40" y="326" text-anchor="middle" font-size="18">🍼</text>
+  <text x="66" y="312" font-family="Nunito Sans,system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a1a2e">Feed · Left breast · 18 min</text>
+  <text x="66" y="330" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">by Mama Bear</text>
+  <text x="304" y="312" text-anchor="end" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#6b6b80">11:30pm</text>
+</svg>

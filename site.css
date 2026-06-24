@@ -404,3 +404,7 @@ svg.mi{width:1em;height:1em;vertical-align:-0.13em}
 .install-cta{display:inline-block;margin-top:6px;background:var(--pink);color:#fff;font-weight:800;font-size:15px;padding:11px 20px;border-radius:12px;text-decoration:none;border:none;cursor:pointer;font-family:inherit}
 .install-cta:hover{filter:brightness(1.03)}
 @media(max-width:640px){.install-in{flex-direction:column;gap:10px}.install-band{padding:26px 18px}}
+/* App screen mockups embedded in About Cubby articles */
+.app-shot{margin:32px auto;max-width:340px;text-align:center}
+.app-shot img{width:100%;height:auto}
+.app-shot figcaption{font-family:var(--sans);font-size:12px;color:var(--soft);margin-top:8px;line-height:1.4}

@@ -13,3 +13,6 @@ tools/package.json
 tools/package-lock.json
 *.log
 .DS_Store
+
+# local theme mocks (never deploy)
+_mock-*.html

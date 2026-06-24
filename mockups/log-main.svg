@@ -1,0 +1,57 @@
+<svg viewBox="0 0 320 500" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer card -->
+  <rect x="4" y="4" width="312" height="492" rx="22" fill="#ffffff" stroke="#e8e8f0" stroke-width="1.5"/>
+  <!-- Header bar bg -->
+  <rect x="4" y="4" width="312" height="56" rx="22" fill="#fdf0f5"/>
+  <rect x="4" y="36" width="312" height="24" fill="#fdf0f5"/>
+  <!-- Header divider -->
+  <line x1="4" y1="60" x2="316" y2="60" stroke="#f0c0d8" stroke-width="1"/>
+
+  <!-- Header title -->
+  <text x="20" y="38" font-family="Georgia,serif" font-size="17" font-weight="700" fill="#1a1a2e">Log</text>
+
+  <!-- Today pill -->
+  <rect x="200" y="24" width="44" height="20" rx="10" fill="#c97fa0"/>
+  <text x="222" y="38" text-anchor="middle" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" font-weight="700" fill="#ffffff">Today</text>
+
+  <!-- Section label -->
+  <text x="16" y="78" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac" letter-spacing="0.5">EARLIER TODAY</text>
+
+  <!-- Entry 1: Feed -->
+  <rect x="12" y="90" width="296" height="60" rx="12" fill="#f5f5fa"/>
+  <circle cx="40" cy="120" r="17" fill="#fdf0f5"/>
+  <text x="40" y="126" text-anchor="middle" font-size="18">🍼</text>
+  <text x="66" y="112" font-family="Nunito Sans,system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a1a2e">Feed · Left breast · 14 min</text>
+  <text x="66" y="130" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">by Mama Bear</text>
+  <text x="304" y="112" text-anchor="end" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#6b6b80">1:04am</text>
+
+  <!-- Entry 2: Nap -->
+  <rect x="12" y="162" width="296" height="60" rx="12" fill="#f5f5fa"/>
+  <circle cx="40" cy="192" r="17" fill="#fdf0f5"/>
+  <text x="40" y="198" text-anchor="middle" font-size="18">💤</text>
+  <text x="66" y="184" font-family="Nunito Sans,system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a1a2e">Nap · 2h 8m · ended 11:42am</text>
+  <text x="66" y="202" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">by Nana Bear</text>
+  <text x="304" y="184" text-anchor="end" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#6b6b80">9:30am</text>
+
+  <!-- Entry 3: Nappy -->
+  <rect x="12" y="234" width="296" height="60" rx="12" fill="#f5f5fa"/>
+  <circle cx="40" cy="264" r="17" fill="#fdf0f5"/>
+  <text x="40" y="270" text-anchor="middle" font-size="18">🚿</text>
+  <text x="66" y="256" font-family="Nunito Sans,system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a1a2e">Nappy · Wet</text>
+  <text x="66" y="274" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">by Papa Bear</text>
+  <text x="304" y="256" text-anchor="end" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#6b6b80">12:48pm</text>
+
+  <!-- Entry 4: Note (taller) -->
+  <rect x="12" y="306" width="296" height="80" rx="12" fill="#f5f5fa"/>
+  <circle cx="40" cy="336" r="17" fill="#fdf0f5"/>
+  <text x="40" y="342" text-anchor="middle" font-size="18">📝</text>
+  <text x="66" y="324" font-family="Nunito Sans,system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a1a2e">Note</text>
+  <text x="66" y="340" font-family="Nunito Sans,system-ui,sans-serif" font-size="12" fill="#6b6b80">Running warm — 37.8°C at 14:00,</text>
+  <text x="66" y="355" font-family="Nunito Sans,system-ui,sans-serif" font-size="12" fill="#6b6b80">ear thermometer</text>
+  <text x="66" y="374" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">by Mama Bear</text>
+  <text x="304" y="324" text-anchor="end" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#6b6b80">2:01pm</text>
+
+  <!-- Bottom button -->
+  <rect x="80" y="446" width="160" height="40" rx="999" fill="#c97fa0"/>
+  <text x="160" y="471" text-anchor="middle" font-family="Nunito Sans,system-ui,sans-serif" font-size="14" font-weight="700" fill="#ffffff">Log something</text>
+</svg>
