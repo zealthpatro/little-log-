@@ -403,7 +403,8 @@
       den: state.den || null,  // household hub: chores, shopping, meals, staff, expenses, weights
       consents: state.consents || [],  // dual-guardian approvals for big actions (delete/export)
       guardians: state.guardians || null,  // explicit guardian uids (papa + mama); derived if null
-      timers: state.timers || {}   // shared so an ongoing nap/feed shows on every phone
+      timers: state.timers || {},   // shared so an ongoing nap/feed shows on every phone
+      lossHolding: state.lossHolding || null   // calm holding state after a loss, so a reload (and a following co-parent) gets the gentle screen, never the upbeat journey chooser
     };
   }
   function applyAppBlob(app) {
@@ -426,6 +427,7 @@
     state.guardians = app.guardians || null;
     // Don't stomp a timer the local user just started but hasn't pushed yet.
     if (!pushTimer) state.timers = app.timers || {};
+    state.lossHolding = app.lossHolding || null;
     normalizeLoadedState(state); // defensive legacy migrations
   }
   function stripMeta(ev) { var c = Object.assign({}, ev); delete c.authorId; return c; }

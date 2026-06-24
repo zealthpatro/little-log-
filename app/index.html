@@ -1196,6 +1196,7 @@ function render(){
 function _renderView(){
   document.body.setAttribute('data-theme', state.settings.theme==='night'?'night':'light');
   if(state.pregnancy && !state.pregnancy.bornBabyId && (state.babies.length===0 || viewingPreg)){ renderPregShell(); return; }
+  if(state.babies.length===0 && state.lossHolding){ renderLossHolding(); return; }
   if(state.babies.length===0){ renderOnboard(); return; }
   const b = activeBaby();
   let main = '';
@@ -3423,6 +3424,26 @@ function renderOnboard(){
     </div>
   </div>`;
 }
+/* Loss-safe holding state (L1). After a pregnancy ends with no baby to return to, this shows INSTEAD of
+   the upbeat "Where are you on the journey?" chooser, until the parent chooses to move on. No cheerful
+   cards, no countdown, no "start again" pressure; quiet links to kept memories + real support. */
+function renderLossHolding(){
+  const hasMem=(state.pregnancyArchive||[]).some(a=>(a.moments||[]).length);
+  app().innerHTML=`<div class="ob-wrap">
+    <div class="onboard ob-card fade-in">
+      <div class="logo">Cubby</div>
+      <div class="tag" style="font-size:21px;color:var(--ink);font-weight:600;margin:2px 0 6px">Take all the time you need 🤍</div>
+      <div class="tag">Cubby is here whenever you're ready. There's nothing you need to do right now.</div>
+      <div class="prof-cards" style="width:100%;text-align:left;margin-top:10px">
+        ${hasMem?`<div class="prof-card" onclick="openKeptMemories()"><span class="lead" style="background:var(--preg-soft);font-size:20px">🤍</span><div class="cflex"><div class="a">Your kept memories</div><div class="b">Yours to revisit, privately, whenever you like</div></div><span class="chev">${I.chev}</span></div>`:''}
+        <a class="prof-card" href="/articles/miscarriage-early-pregnancy-loss/" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><span class="lead" style="background:var(--feed-soft);font-size:20px">🫂</span><div class="cflex"><div class="a">If you need support</div><div class="b">Gentle reading, and helplines that are there day or night</div></div><span class="chev">${I.chev}</span></a>
+      </div>
+      <button class="btn-ghost" onclick="endLossHolding()" style="color:var(--ink-faint);margin-top:10px">When you're ready</button>
+      <button class="ob-logout" onclick="confirmLogout()">Log out</button>
+    </div>
+  </div>`;
+}
+function endLossHolding(){ state.lossHolding=null; persist(); render(); }
 
 /* ============================================================
    PREGNANCY  (one continuous lifecycle: pregnancy -> birth -> baby)
@@ -4433,7 +4454,7 @@ function saveEditPregnancy(){
 function confirmEndPregnancy(){
   const p=state.pregnancy; if(!p){ closeSheet(); return; }
   if(p.stage==='planning'){
-    openSheet(`<h2>Stop tracking?</h2><div class="sub">This clears your planning checklist and notes. You can start again any time, whenever you're ready.</div>
+    openSheet(`<h2>Stop tracking?</h2><div class="sub">This clears your planning checklist and notes. Whenever you're ready, there's no rush.</div>
       <button class="btn-primary" style="background:var(--preg)" onclick="endPregnancy(false)">Stop tracking</button>
       <button class="btn-ghost" onclick="closeSheet()">Keep going</button>`,'preg');
     return;
@@ -4443,24 +4464,33 @@ function confirmEndPregnancy(){
     <div class="sub">Whatever brings you here, take it gently and in your own time. If you've experienced a loss, we're so sorry, and you don't have to do anything right now.</div>
     ${moments?`<div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">Keep your ${moments===1?'memory':moments+' memories'}</div><div class="pc-b">Your scans and photos can stay saved privately on this device, for whenever you want them. Your health logs are cleared either way.</div></div></div>`:''}
     ${moments?`<button class="btn-primary" style="background:var(--preg)" onclick="endPregnancy(true)">Keep my ${moments===1?'memory':'memories'}</button>`:''}
+    ${moments?`<div class="sub" style="font-size:12px;color:var(--ink-faint);margin:2px 2px 6px">Clearing also deletes those photos for good. This can't be undone.</div>`:''}
     <button class="${moments?'btn-ghost':'btn-primary'}" style="${moments?'color:var(--ink-faint)':'background:var(--preg)'}" onclick="endPregnancy(false)">Close and clear everything</button>
     <button class="btn-ghost" onclick="closeSheet()">Not now</button>
     <div class="preg-disclaim">If you're struggling, you're not alone. Your midwife or doctor, or a pregnancy loss support line, can help, day or night. Informational only, not medical advice.</div>`,'preg');
 }
 function endPregnancy(keep){
   const p=state.pregnancy; if(!p){ closeSheet(); return; }
+  // Owner-only: this was a cosmetic gap (any member viewing the pregnancy could trigger it and wipe
+  // their local state while the cloud delete silently no-op'd, leaving them confused).
+  if(typeof pregIsOwner==='function' && !pregIsOwner()){ closeSheet(); toast('Only the person whose journey this is can close it'); return; }
   closeHubIfAny(p); // a pregnancy that ends without a birth also retires the shared games link
   if(keep){
     state.pregnancyArchive=state.pregnancyArchive||[];
-    state.pregnancyArchive.unshift({ id:uid(), endedAt:now(), weeks:pregWeek(), moments:(p.moments||[]).slice() });
+    state.pregnancyArchive.unshift({ id:uid(), endedAt:now(), weeks:pregWeek(), moments:(p.moments||[]).slice(), loss:true });
     /* photos intentionally kept in PhotoStore */
   } else {
     (p.moments||[]).forEach(m=>{ try{ PhotoStore.del(m.photoId); }catch(e){} });
   }
   // Remove the owner-owned journey doc and the maternal health docs (Item 7). pregClear covers both.
   try{ if(window.LL&&window.LL.pregClear) window.LL.pregClear(); else if(window.LL&&window.LL.matClear) window.LL.matClear(); }catch(e){}
-  state.pregnancy=null; persist(); closeSheet(); render();
-  toast(keep?'Your memories are kept 🤍':'Done. Be gentle with yourself 🤍');
+  state.pregnancy=null;
+  // A calm holding state instead of dropping the parent onto the upbeat "Where are you on the journey?"
+  // chooser seconds after a loss. Only when there's no baby to return to; persists across reload + to a
+  // following co-parent via the synced blob.
+  if(!state.babies.length) state.lossHolding={ at:now() };
+  persist(); closeSheet(); render();
+  if(state.babies.length) toast(keep?'Your memories are kept 🤍':'Be gentle with yourself 🤍');
 }
 function openKeptMemories(){
   const arr=state.pregnancyArchive||[];
@@ -7209,7 +7239,7 @@ function memoryCandidates(){
   if(months>=1 && !memDismissed('m'+months)){
     out.push({key:'m'+months, icon:'🗓️', title:slotLabel(months)+' recap', sub:'This month’s moments, ready to share', onclick:"openMemoryCard("+months+",'"+memCandPhoto(months)+"')"});
   }
-  var hasBump=(state.pregnancy&&(state.pregnancy.moments||[]).some(function(m){return m.photoId;})) || ((state.pregnancyArchive||[]).some(function(a){return (a.moments||[]).some(function(m){return m.photoId;});}));
+  var hasBump=(state.pregnancy&&(state.pregnancy.moments||[]).some(function(m){return m.photoId;})) || ((state.pregnancyArchive||[]).some(function(a){return !a.loss && (a.moments||[]).some(function(m){return m.photoId;});}));
   var hasBabyPhoto=(state.photos||[]).some(function(p){return p.babyId===b.id&&p.photoId;});
   if(hasBump && hasBabyPhoto && !memDismissed('thennow')){
     out.push({key:'thennow', icon:'🤍', title:'Bump to baby', sub:'A then & now from your journey', onclick:'openThenNow()'});
