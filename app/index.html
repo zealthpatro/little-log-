@@ -1196,6 +1196,7 @@ function render(){
 function _renderView(){
   document.body.setAttribute('data-theme', state.settings.theme==='night'?'night':'light');
   if(state.pregnancy && !state.pregnancy.bornBabyId && (state.babies.length===0 || viewingPreg)){ renderPregShell(); return; }
+  if(state.lossHolding && state.babies.length){ state.lossHolding=null; } // a baby exists now (e.g. added/synced) -> stop holding
   if(state.babies.length===0 && state.lossHolding){ renderLossHolding(); return; }
   if(state.babies.length===0){ renderOnboard(); return; }
   const b = activeBaby();
@@ -4498,9 +4499,10 @@ function endPregnancy(keep){
   try{ if(window.LL&&window.LL.pregClear) window.LL.pregClear(); else if(window.LL&&window.LL.matClear) window.LL.matClear(); }catch(e){}
   state.pregnancy=null;
   // A calm holding state instead of dropping the parent onto the upbeat "Where are you on the journey?"
-  // chooser seconds after a loss. Only when there's no baby to return to; persists across reload + to a
-  // following co-parent via the synced blob.
-  if(!state.babies.length) state.lossHolding={ at:now() };
+  // chooser seconds after a loss. Only for an actual pregnancy (stage 'expecting'); a planning
+  // "stop tracking" is a neutral pause, not a loss, so it must NOT show the bereavement screen.
+  // Only when there's no baby to return to; persists across reload + to a following co-parent via the blob.
+  if(!state.babies.length && p.stage!=='planning') state.lossHolding={ at:now() };
   persist(); closeSheet(); render();
   if(state.babies.length) toast(keep?'Your memories are kept 🤍':'Be gentle with yourself 🤍');
 }
