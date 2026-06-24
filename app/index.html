@@ -1024,6 +1024,18 @@ function babyEvents(){ return state.events.filter(e=>e.babyId===state.activeBaby
 function canEditEvent(e){ try{ return (window.LL&&window.LL.role==='owner') || !e.authorId || e.authorId===myUid(); }catch(_){ return true; } }
 function babyDeletedEvents(){ return state.events.filter(e=>e.babyId===state.activeBabyId && e.deleted).sort((a,b)=>(b.deletedAt||b.time)-(a.deletedAt||a.time)); }
 function activeBaby(){ return state.babies.find(b=>b.id===state.activeBabyId); }
+function journeyState(){ if(!state.journey) state.journey={}; return state.journey; }
+function journeyRel(bid){ const j=journeyState(); if(!j.rel) j.rel={}; if(!j.rel[bid]) j.rel[bid]=[]; return j.rel[bid]; }
+// scope: 'pregnancy' routes to the owner-owned pregnancy doc; else the shared baby blob.
+function jDismissed(key, scope){
+  if(scope==='pregnancy'){ const p=state.pregnancy; return !!(p&&p.journey&&p.journey.dismissed&&p.journey.dismissed[key]); }
+  const j=journeyState(); return !!(j.dismissed&&j.dismissed[key]);
+}
+function jDismiss(key, scope){
+  if(scope==='pregnancy'){ if(!state.pregnancy) return; if(!state.pregnancy.journey) state.pregnancy.journey={}; if(!state.pregnancy.journey.dismissed) state.pregnancy.journey.dismissed={}; state.pregnancy.journey.dismissed[key]=1; }
+  else { const j=journeyState(); if(!j.dismissed) j.dismissed={}; j.dismissed[key]=1; }
+  persist(); render();
+}
 
 function fmtClock(ts){
   const d = new Date(ts);
@@ -2665,6 +2677,43 @@ function babyAvatarBox(b, cls, extraStyle){
   if(src) return `<div class="${cls}" style="background-image:url('${src}');background-size:cover;background-position:center;${extraStyle||''}"></div>`;
   if(typeof window.babyBearSvg==='function') return `<div class="${cls} bear-av" style="${extraStyle||''}">${window.babyBearSvg(b)}</div>`;
   return `<div class="${cls}" style="background:${b.color};${extraStyle||''}">${b.name.charAt(0).toUpperCase()}</div>`;
+}
+// A warm placeholder bear per relationship, shown until the real photo exists.
+const RELATION_BEAR = {
+  nana:{fur:'#D7B27E',acc:'flower'}, grandma:{fur:'#D7B27E',acc:'flower'},
+  grandpa:{fur:'#8C8C8C',acc:'glasses'}, papa:{fur:'#9C6B3D',acc:'none'}, mama:{fur:'#C4863F',acc:'bow'},
+  auntie:{fur:'#E0A96D',acc:'bow'}, uncle:{fur:'#6E4E36',acc:'bowtie'},
+  sibling:{fur:'#E0A96D',acc:'cap'}, friend:{fur:'#B8843A',acc:'headphones'}, other:{fur:'#C4863F',acc:'none'}
+};
+function relKeyFromLabel(label){ const s=(label||'').toLowerCase(); for(const k in RELATION_BEAR){ if(s.indexOf(k)>=0) return k; } if(s.indexOf('nan')>=0) return 'nana'; return 'other'; }
+// uid present + a real circle member -> their own avatar bear; else a relationship bear.
+function journeyBearArt(relation, uid, size){
+  if(uid && typeof window.memberAvatarSvg==='function'){ const info=(window.LL&&window.LL.memberInfo)||{}; if(info[uid]) return window.memberAvatarSvg(uid, size||64); }
+  const v = RELATION_BEAR[relation] || RELATION_BEAR.other;
+  return (typeof window.cubbyBear==='function') ? window.cubbyBear({fur:v.fur, acc:v.acc, size:size||64}) : '🐻';
+}
+function journeyPromptsPreg(){
+  const p=state.pregnancy; if(!p) return [];
+  const wk=pregWeek();
+  const moments=p.moments||[];
+  const haveWeek=(w)=>moments.some(m=>+m.week===+w);
+  const out=[];
+  out.push({key:'pbump', scope:'pregnancy', icon:'🤰', title:'Capture the bump', sub:'A photo this week, week '+wk, done:moments.some(m=>m.at>now()-7*86400000), onclick:"openAddMoment()"});
+  [12,20].forEach(w=>{ if(wk>=w-1) out.push({key:'pscan:'+w, scope:'pregnancy', icon:'🩻', title:'Your '+w+'-week scan', sub:'Save the scan photo', done:haveWeek(w), onclick:"openAddMomentAt("+w+")"}); });
+  return out.filter(x=>!jDismissed(x.key,'pregnancy'));
+}
+function journeyPromptsBaby(){
+  const b=activeBaby(); if(!b) return [];
+  const mo=Math.floor(babyMonths());
+  const map=monthlyMap();
+  const out=[];
+  MONTH_SLOTS.filter(s=>s<=mo).forEach(s=>{ if(!map[s]) out.push({key:'bmonth:'+s, scope:'baby', icon:'🗓️', title:slotLabel(s)+' photo', sub:'One photo for '+slotLabel(s).toLowerCase(), done:false, onclick:"go('album')"}); });
+  MILESTONES.filter(m=>msVisible(m,b)&&!achievedOf(m.key)).sort((x,y)=>Math.abs(x.mo-mo)-Math.abs(y.mo-mo)).slice(0,3)
+    .forEach(m=>out.push({key:'bms:'+m.key, scope:'baby', icon:m.emoji||'⭐', title:m.title, sub:'Mark it when it happens', done:false, onclick:"openMilestone('"+m.key+"')"}));
+  const info=(window.LL&&window.LL.memberInfo)||{}; const rel=journeyRel(b.id);
+  Object.keys(info).forEach(uid=>{ const m=info[uid]||{}; const label=m.relationship||''; if(!label) return; const key='brel:'+uid; const have=rel.some(r=>r.relation==='uid:'+uid&&r.photoId); if(have) return; out.push({key:key, scope:'baby', art:journeyBearArt(relKeyFromLabel(label),uid,56), title:'A photo with '+label, sub:'Together', done:false, onclick:"openRelCapture('uid:"+uid+"',"+JSON.stringify(label)+")"}); });
+  rel.filter(r=>!r.photoId&&r.relation.indexOf('uid:')!==0).forEach(r=>out.push({key:'brel:add:'+r.id, scope:'baby', art:journeyBearArt(r.relation,null,56), title:'A photo with '+r.label, sub:'Together', done:false, onclick:"openRelCapture("+JSON.stringify(r.relation)+","+JSON.stringify(r.label)+",'"+r.id+"')"}));
+  return out.filter(x=>!jDismissed(x.key,'baby'));
 }
 function babyIdentity(b,opts){
   opts=opts||{};
