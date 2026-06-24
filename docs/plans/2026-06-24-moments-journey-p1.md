@@ -133,6 +133,8 @@ function journeyPromptsPreg(){
 }
 ```
 
+> **Security (applies to every onclick built from user text):** relationship labels are user free text. Never interpolate them raw into an `onclick` (XSS). Use the file convention via a helper `jArg(s)=escapeHtml(String(s).replace(/'/g,"\\'"))` and single-quoted JS args: `onclick:"openRelCapture('uid:"+uid+"','"+jArg(label)+"')"`. (Shipped in the engine commit `fc00e23`.)
+
 **Step 2 — Baby prompts.** Reuse `babyMonths()`, `MONTH_SLOTS`, `monthlyMap()`, `MILESTONES`, `achievedOf()`, `memberInfo`, `journeyRel()`.
 ```js
 function journeyPromptsBaby(){
