@@ -383,3 +383,9 @@ svg.mi{width:1em;height:1em;vertical-align:-0.13em}
 .homex .hx-rhythm .rh-dots i{width:14px;height:14px;border-radius:50%;background:var(--h-line)}
 .homex .hx-rhythm .rh-dots i.on{background:var(--h-green)}
 .homex .hx-rhythm .rh-dots i.today{box-shadow:0 0 0 2px var(--h-cream2),0 0 0 3.5px var(--h-accent)}
+
+/* Story as two coherent parts (product pages), instead of one prose wall */
+.homex .hx-twocol{display:grid;grid-template-columns:1fr 1fr;gap:44px;max-width:1000px;margin:0 auto;padding:6px 0}
+.homex .hx-twocol .hx-tcol h2{font-size:clamp(20px,2.3vw,27px);line-height:1.22;margin:0 0 10px;color:var(--h-ink);font-family:var(--serif,Fraunces,serif);font-weight:600}
+.homex .hx-twocol .hx-tcol p{font-size:16px;line-height:1.62;color:var(--h-soft);margin:0}
+@media(max-width:760px){.homex .hx-twocol{grid-template-columns:1fr;gap:24px}}
