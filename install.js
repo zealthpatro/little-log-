@@ -7,6 +7,9 @@
   "use strict";
   if (window.__cubbyInstall) return; window.__cubbyInstall = 1;
 
+  // Clean line glyph (download-to-device), 1em so it scales to whatever it sits in (nav button + band).
+  var ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width:1em;height:1em;vertical-align:-0.14em"><path d="M12 3v11"/><path d="M8 11l4 4 4-4"/><path d="M5 20h14"/></svg>';
+
   var bip = null; // the captured beforeinstallprompt (Android/Chrome)
   window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); bip = e; refreshLabels(); });
   window.addEventListener("appinstalled", function () { bip = null; });
@@ -49,7 +52,7 @@
       var btn = document.createElement("button");
       btn.type = "button"; btn.className = "nav-install js-install";
       btn.setAttribute("aria-label", "Install Cubby on your device");
-      btn.textContent = "📲 Install";
+      btn.innerHTML = ICON + " Install";
       var cta = navIn.querySelector(".nav-cta");
       if (cta) navIn.insertBefore(btn, cta); else navIn.appendChild(btn);
     }
@@ -59,7 +62,7 @@
       var band = document.createElement("section");
       band.className = "install-band"; band.id = "cubby-install";
       band.innerHTML =
-        '<div class="install-in"><div class="install-ico">📲</div><div class="install-tx">'
+        '<div class="install-in"><div class="install-ico">' + ICON + '</div><div class="install-tx">'
         + "<h3>Use Cubby anywhere, like an app</h3>"
         + "<p>Cubby is a free web app, so there is nothing to download from a store. Add it to your home screen for one-tap, full-screen, offline access. No password, no waiting.</p>"
         + '<p class="install-how">' + steps() + "</p>"

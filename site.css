@@ -397,7 +397,7 @@ svg.mi{width:1em;height:1em;vertical-align:-0.13em}
 .install-band{background:var(--surface2);border-top:1px solid var(--line);padding:34px 20px;transition:background .5s ease}
 .install-band.flash{background:#FBEAD0}
 .install-in{max-width:760px;margin:0 auto;display:flex;gap:18px;align-items:flex-start}
-.install-ico{font-size:30px;flex:0 0 auto;line-height:1.1}
+.install-ico{font-size:30px;flex:0 0 auto;line-height:1.1;color:var(--pink)}
 .install-tx h3{font-family:var(--serif);font-size:22px;font-weight:600;margin:0 0 6px;color:var(--ink);line-height:1.2}
 .install-tx p{font-size:15px;line-height:1.55;color:var(--soft);font-weight:600;margin:0 0 8px}
 .install-how{font-size:13px!important;color:var(--ink)!important;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 12px}

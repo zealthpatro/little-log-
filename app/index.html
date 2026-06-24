@@ -2618,6 +2618,8 @@ function openOnboardInvite(){
     openSheet(`<h2>You're all set ${planning?'🌱':'🌸'}</h2><div class="sub">Cubby is for everyone on this journey with you. Invite your partner or a grandparent so they can follow along, privately.</div>
       <div class="preg-card"><div class="pc-ico" style="background:var(--preg-soft)">👨‍👩‍👧</div><div><div class="pc-t">They follow along, live</div><div class="pc-b">Your week, scans and visits, in sync and private to your family.</div></div></div>
       <button class="btn-primary" style="background:var(--preg);margin-top:14px" onclick="window.openFamily&&window.openFamily()">Invite someone</button>
+      <div class="sub" style="margin-top:14px;font-size:13px">Use Cubby right here, or add it to your home screen to open it like an app, one tap away.</div>
+      ${(typeof canShowInstall==='function'&&canShowInstall())?`<button class="btn-ghost" onclick="addToHomeScreen('obInstallMsg')">Add Cubby to your home screen</button><div id="obInstallMsg" class="sub" style="display:none;text-align:left"></div>`:''}
       <button class="btn-ghost" onclick="closeSheet()">Maybe later</button>`,'feed');
     return;
   }
@@ -2625,6 +2627,8 @@ function openOnboardInvite(){
     <div class="preg-card"><div class="pc-ico" style="background:var(--feed-soft)">👨‍👩‍👧</div><div><div class="pc-t">They see everything, live</div><div class="pc-b">The last feed, the nap, the next dose, all in sync and private to your family.</div></div></div>
     <button class="btn-primary" style="background:var(--feed);margin-top:14px" onclick="window.openFamily&&window.openFamily()">Invite someone</button>
     <button class="btn-ghost" onclick="openAddBaby({onboarding:true,birth:lastBabyBirth})">＋ Add another little one</button>
+    <div class="sub" style="margin-top:14px;font-size:13px">Use Cubby right here, or add it to your home screen to open it like an app, one tap away.</div>
+    ${(typeof canShowInstall==='function'&&canShowInstall())?`<button class="btn-ghost" onclick="addToHomeScreen('obInstallMsg')">Add Cubby to your home screen</button><div id="obInstallMsg" class="sub" style="display:none;text-align:left"></div>`:''}
     <button class="btn-ghost" onclick="closeSheet()">Maybe later</button>`,'feed');
 }
 /* Onboarding stage router: two states (expecting / baby) + a quiet planning link.
