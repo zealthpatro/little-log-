@@ -2685,6 +2685,7 @@ const RELATION_BEAR = {
   auntie:{fur:'#E0A96D',acc:'bow'}, uncle:{fur:'#6E4E36',acc:'bowtie'},
   sibling:{fur:'#E0A96D',acc:'cap'}, friend:{fur:'#B8843A',acc:'headphones'}, other:{fur:'#C4863F',acc:'none'}
 };
+// substring match against the map keys (order = insertion order); keep most-specific keys first if the map grows.
 function relKeyFromLabel(label){ const s=(label||'').toLowerCase(); for(const k in RELATION_BEAR){ if(s.indexOf(k)>=0) return k; } if(s.indexOf('nan')>=0) return 'nana'; return 'other'; }
 // uid present + a real circle member -> their own avatar bear; else a relationship bear.
 function journeyBearArt(relation, uid, size){
@@ -2692,6 +2693,10 @@ function journeyBearArt(relation, uid, size){
   const v = RELATION_BEAR[relation] || RELATION_BEAR.other;
   return (typeof window.cubbyBear==='function') ? window.cubbyBear({fur:v.fur, acc:v.acc, size:size||64}) : '🐻';
 }
+// Prompt objects carry RAW title/sub (renderers MUST escapeHtml them). onclick is pre-escaped
+// here: jArg makes a user string safe for both the single-quoted JS arg and the double-quoted
+// HTML attribute it lives in (relationship labels are user free text -> XSS surface otherwise).
+function jArg(s){ return escapeHtml(String(s==null?'':s).replace(/'/g,"\\'")); }
 function journeyPromptsPreg(){
   const p=state.pregnancy; if(!p) return [];
   const wk=pregWeek();
@@ -2711,8 +2716,8 @@ function journeyPromptsBaby(){
   MILESTONES.filter(m=>msVisible(m,b)&&!achievedOf(m.key)).sort((x,y)=>Math.abs(x.mo-mo)-Math.abs(y.mo-mo)).slice(0,3)
     .forEach(m=>out.push({key:'bms:'+m.key, scope:'baby', icon:m.emoji||'⭐', title:m.title, sub:'Mark it when it happens', done:false, onclick:"openMilestone('"+m.key+"')"}));
   const info=(window.LL&&window.LL.memberInfo)||{}; const rel=journeyRel(b.id);
-  Object.keys(info).forEach(uid=>{ const m=info[uid]||{}; const label=m.relationship||''; if(!label) return; const key='brel:'+uid; const have=rel.some(r=>r.relation==='uid:'+uid&&r.photoId); if(have) return; out.push({key:key, scope:'baby', art:journeyBearArt(relKeyFromLabel(label),uid,56), title:'A photo with '+label, sub:'Together', done:false, onclick:"openRelCapture('uid:"+uid+"',"+JSON.stringify(label)+")"}); });
-  rel.filter(r=>!r.photoId&&r.relation.indexOf('uid:')!==0).forEach(r=>out.push({key:'brel:add:'+r.id, scope:'baby', art:journeyBearArt(r.relation,null,56), title:'A photo with '+r.label, sub:'Together', done:false, onclick:"openRelCapture("+JSON.stringify(r.relation)+","+JSON.stringify(r.label)+",'"+r.id+"')"}));
+  Object.keys(info).forEach(uid=>{ const m=info[uid]||{}; const label=m.relationship||''; if(!label) return; const key='brel:'+uid; const have=rel.some(r=>r.relation==='uid:'+uid&&r.photoId); if(have) return; out.push({key:key, scope:'baby', art:journeyBearArt(relKeyFromLabel(label),uid,56), title:'A photo with '+label, sub:'Together', done:false, onclick:"openRelCapture('uid:"+uid+"','"+jArg(label)+"')"}); });
+  rel.filter(r=>!r.photoId&&r.relation.indexOf('uid:')!==0).forEach(r=>out.push({key:'brel:add:'+r.id, scope:'baby', art:journeyBearArt(r.relation,null,56), title:'A photo with '+r.label, sub:'Together', done:false, onclick:"openRelCapture('"+jArg(r.relation)+"','"+jArg(r.label)+"','"+r.id+"')"}));
   return out.filter(x=>!jDismissed(x.key,'baby'));
 }
 function babyIdentity(b,opts){
