@@ -626,6 +626,16 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 /* Auto-magic memories: a "ready for you" rail of finished cards */
 .mem-rail{display:flex;gap:10px;overflow-x:auto;padding:2px 0 8px;margin-bottom:6px;-webkit-overflow-scrolling:touch;}
 .mem-ready{position:relative;flex:0 0 150px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:0 3px 9px var(--shadow);cursor:pointer;transition:transform .14s;}
+.jr-wrap{margin:6px 0 16px}
+.jr-rail{display:flex;gap:11px;overflow-x:auto;padding:2px 2px 8px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.jr-rail::-webkit-scrollbar{display:none}
+.jr-tile{position:relative;flex:0 0 132px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:13px;box-shadow:0 3px 9px var(--shadow);cursor:pointer;transition:transform .14s}
+.jr-tile:active{transform:scale(.97)}
+.jr-art{width:56px;height:56px;border-radius:14px;overflow:hidden;margin-bottom:8px;display:grid;place-items:center;background:var(--surface-2)}
+.jr-art svg{width:100%;height:100%} .jr-emoji{font-size:26px}
+.jr-t{font-weight:800;font-size:13.5px;color:var(--ink);line-height:1.25}
+.jr-s{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:2px;line-height:1.3}
+.jr-x{position:absolute;top:6px;right:6px;border:none;background:var(--surface-2);color:var(--ink-soft);width:22px;height:22px;border-radius:50%;font-size:14px;line-height:1;cursor:pointer}
 .mem-ready:active{transform:scale(.97);}
 .mem-ready .mr-ic{font-size:24px;margin-bottom:6px;}
 .mem-ready .mr-t{font-weight:800;font-size:14px;color:var(--ink);}
@@ -2697,6 +2707,17 @@ function journeyBearArt(relation, uid, size){
 // here: jArg makes a user string safe for both the single-quoted JS arg and the double-quoted
 // HTML attribute it lives in (relationship labels are user free text -> XSS surface otherwise).
 function jArg(s){ return escapeHtml(String(s==null?'':s).replace(/'/g,"\\'")); }
+function renderJourneySection(prompts, scope, titleText){
+  if(state.lossHolding) return '';                 // loss-safe: nothing guided
+  if(!prompts || !prompts.length) return '';
+  const tiles = prompts.map(p=>`<div class="jr-tile" onclick="${p.onclick}">
+      <button class="jr-x" onclick="event.stopPropagation();jDismiss('${p.key}','${scope}')" aria-label="Not now">×</button>
+      <div class="jr-art">${p.art||('<span class="jr-emoji">'+(p.icon||'📷')+'</span>')}</div>
+      <div class="jr-t">${escapeHtml(p.title)}</div><div class="jr-s">${escapeHtml(p.sub||'')}</div>
+    </div>`).join('');
+  return `<div class="jr-wrap"><div class="jr-head"><div class="sec-title" style="margin:0">${escapeHtml(titleText)}</div></div>
+    <div class="jr-rail">${tiles}</div></div>`;
+}
 function journeyPromptsPreg(){
   const p=state.pregnancy; if(!p) return [];
   const wk=pregWeek();
@@ -3821,6 +3842,7 @@ function renderPregMoments(){
     <div class="greeting">Moments 📷</div>
     <div class="greeting-sub">Your scans and bump pictures, paired with how big your baby was that week. The first photo album, before the album.</div>
     <button class="btn-primary" style="background:var(--preg);margin:6px 0 14px" onclick="openAddMoment()">${I.camera} Add a moment</button>
+    ${renderJourneySection(journeyPromptsPreg(),'pregnancy','Your pregnancy journey')}
     ${cards||`<div class="preg-card"><div class="pc-ico">🖼️</div><div><div class="pc-t">Nothing here yet</div><div class="pc-b">Add your first ultrasound after a scan, or a bump photo any week. Each one is saved with the week and what size your baby was.</div></div></div>`}
   </div>`;
 }
@@ -3828,6 +3850,7 @@ function openAddMoment(){
   momentDraft={photoData:null, week:pregWeek(), note:''};
   renderAddMoment();
 }
+function openAddMomentAt(week){ momentDraft={photoData:null, week:+week||pregWeek(), note:''}; renderAddMoment(); }
 function renderAddMoment(){
   const d=momentDraft;
   const size=momentSize(d.week);
@@ -6007,6 +6030,7 @@ function renderMilestones(){
         <div class="rt">${doneCount}</div></div>
       <div class="mh-body"><div class="a">${doneCount} moments captured</div><div class="b">${escapeHtml(b?b.name:'Baby')} is ${months<24?Math.floor(months)+' months':Math.floor(months/12)+' years'} · every baby grows at their own pace</div></div>
     </div>
+    ${renderJourneySection(journeyPromptsBaby(),'baby',((activeBaby()&&activeBaby().name)||'Baby')+'’s journey')}
     ${petRow}
     <div class="field" style="margin-bottom:12px"><input id="msSearch" placeholder="Search milestones and firsts…" autocomplete="off" oninput="filterMs(this.value)"></div>
     ${upcoming.length?`<div class="sec-title">Coming up</div>${upcoming.map(m=>`<div class="ms-row" onclick="openMilestone('${m.key}')"><div class="ms-check">${I.check}</div><div class="ms-body"><div class="a">${escapeHtml(m.title)}</div><div class="b">typically around ${m.mo} months</div></div><div class="ms-chip">${escapeHtml(m.cat)}</div></div>`).join('')}`:''}
