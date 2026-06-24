@@ -2726,7 +2726,7 @@ function journeyPromptsPreg(){
   const out=[];
   out.push({key:'pbump', scope:'pregnancy', icon:'🤰', title:'Capture the bump', sub:'A photo this week, week '+wk, done:moments.some(m=>m.at>now()-7*86400000), onclick:"openAddMoment()"});
   [12,20].forEach(w=>{ if(wk>=w-1) out.push({key:'pscan:'+w, scope:'pregnancy', icon:'🩻', title:'Your '+w+'-week scan', sub:'Save the scan photo', done:haveWeek(w), onclick:"openAddMomentAt("+w+")"}); });
-  return out.filter(x=>!jDismissed(x.key,'pregnancy'));
+  return out.filter(x=>!x.done && !jDismissed(x.key,'pregnancy'));  // a done prompt never nags
 }
 function journeyPromptsBaby(){
   const b=activeBaby(); if(!b) return [];
@@ -2737,9 +2737,12 @@ function journeyPromptsBaby(){
   MILESTONES.filter(m=>msVisible(m,b)&&!achievedOf(m.key)).sort((x,y)=>Math.abs(x.mo-mo)-Math.abs(y.mo-mo)).slice(0,3)
     .forEach(m=>out.push({key:'bms:'+m.key, scope:'baby', icon:m.emoji||'⭐', title:m.title, sub:'Mark it when it happens', done:false, onclick:"openMilestone('"+m.key+"')"}));
   const info=(window.LL&&window.LL.memberInfo)||{}; const rel=journeyRel(b.id);
-  Object.keys(info).forEach(uid=>{ const m=info[uid]||{}; const label=m.relationship||''; if(!label) return; const key='brel:'+uid; const have=rel.some(r=>r.relation==='uid:'+uid&&r.photoId); if(have) return; out.push({key:key, scope:'baby', art:journeyBearArt(relKeyFromLabel(label),uid,56), title:'A photo with '+label, sub:'Together', done:false, onclick:"openRelCapture('uid:"+uid+"','"+jArg(label)+"')"}); });
-  rel.filter(r=>!r.photoId&&r.relation.indexOf('uid:')!==0).forEach(r=>out.push({key:'brel:add:'+r.id, scope:'baby', art:journeyBearArt(r.relation,null,56), title:'A photo with '+r.label, sub:'Together', done:false, onclick:"openRelCapture('"+jArg(r.relation)+"','"+jArg(r.label)+"','"+r.id+"')"}));
-  return out.filter(x=>!jDismissed(x.key,'baby'));
+  // Relationship prompts only once their capture handler exists (Task 6) -> never a dead tap.
+  if(typeof openRelCapture==='function'){
+    Object.keys(info).forEach(uid=>{ const m=info[uid]||{}; const label=m.relationship||''; if(!label) return; const key='brel:'+uid; const have=rel.some(r=>r.relation==='uid:'+uid&&r.photoId); if(have) return; out.push({key:key, scope:'baby', art:journeyBearArt(relKeyFromLabel(label),uid,56), title:'A photo with '+label, sub:'Together', done:false, onclick:"openRelCapture('uid:"+uid+"','"+jArg(label)+"')"}); });
+    rel.filter(r=>!r.photoId&&r.relation.indexOf('uid:')!==0).forEach(r=>out.push({key:'brel:add:'+r.id, scope:'baby', art:journeyBearArt(r.relation,null,56), title:'A photo with '+r.label, sub:'Together', done:false, onclick:"openRelCapture('"+jArg(r.relation)+"','"+jArg(r.label)+"','"+r.id+"')"}));
+  }
+  return out.filter(x=>!x.done && !jDismissed(x.key,'baby'));
 }
 function babyIdentity(b,opts){
   opts=opts||{};
