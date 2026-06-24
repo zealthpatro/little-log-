@@ -389,3 +389,18 @@ svg.mi{width:1em;height:1em;vertical-align:-0.13em}
 .homex .hx-twocol .hx-tcol h2{font-size:clamp(20px,2.3vw,27px);line-height:1.22;margin:0 0 10px;color:var(--h-ink);font-family:var(--serif,Fraunces,serif);font-weight:600}
 .homex .hx-twocol .hx-tcol p{font-size:16px;line-height:1.62;color:var(--h-soft);margin:0}
 @media(max-width:760px){.homex .hx-twocol{grid-template-columns:1fr;gap:24px}}
+
+/* Install / "use anywhere" PWA awareness (injected by /install.js on every marketing page) */
+.nav-install{font-size:14px;font-weight:800;color:var(--pink-d);background:var(--surface2);border:1px solid var(--line);border-radius:11px;padding:8px 13px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.nav-install:hover{background:var(--surface)}
+@media(max-width:640px){.nav-install{font-size:12px;padding:7px 10px}}
+.install-band{background:var(--surface2);border-top:1px solid var(--line);padding:34px 20px;transition:background .5s ease}
+.install-band.flash{background:#FBEAD0}
+.install-in{max-width:760px;margin:0 auto;display:flex;gap:18px;align-items:flex-start}
+.install-ico{font-size:30px;flex:0 0 auto;line-height:1.1}
+.install-tx h3{font-family:var(--serif);font-size:22px;font-weight:600;margin:0 0 6px;color:var(--ink);line-height:1.2}
+.install-tx p{font-size:15px;line-height:1.55;color:var(--soft);font-weight:600;margin:0 0 8px}
+.install-how{font-size:13px!important;color:var(--ink)!important;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+.install-cta{display:inline-block;margin-top:6px;background:var(--pink);color:#fff;font-weight:800;font-size:15px;padding:11px 20px;border-radius:12px;text-decoration:none;border:none;cursor:pointer;font-family:inherit}
+.install-cta:hover{filter:brightness(1.03)}
+@media(max-width:640px){.install-in{flex-direction:column;gap:10px}.install-band{padding:26px 18px}}
