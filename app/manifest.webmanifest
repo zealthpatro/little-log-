@@ -1,7 +1,11 @@
 {
+  "id": "/app/",
   "name": "Cubby",
   "short_name": "Cubby",
-  "description": "A warm, private baby activity tracker.",
+  "description": "Cubby is a warm, private baby and pregnancy tracker. Log feeds, naps, nappies, pumping and growth, follow your country's vaccine schedule with gentle reminders, and share in real time with the people who care for your little one. No ads, no third-party trackers.",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["health", "lifestyle", "medical"],
   "start_url": "/app/",
   "scope": "/app/",
   "display": "standalone",
@@ -12,5 +16,10 @@
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
     { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
+    { "src": "/icons/screenshots/track.png", "sizes": "1080x1920", "type": "image/png", "form_factor": "narrow", "label": "Log feeds, naps, nappies and growth in one calm place" },
+    { "src": "/icons/screenshots/vaccines.png", "sizes": "1080x1920", "type": "image/png", "form_factor": "narrow", "label": "Your country's vaccine schedule with gentle reminders" },
+    { "src": "/icons/screenshots/circle.png", "sizes": "1080x1920", "type": "image/png", "form_factor": "narrow", "label": "Share with your whole care circle in real time" }
   ]
 }
