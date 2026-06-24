@@ -1030,45 +1030,46 @@
   function maybeFirstRun(user) {
     if (firstRunShown) return;
     var mi = (window.LL.memberInfo || {})[user.uid] || {};
-    if (mi.setupDone || mi.relationship) return;
+    // Require a real, completed setup. (Was `setupDone || relationship`, so an invited caregiver whose
+    // relationship was pre-filled on the invite never got the name prompt.)
+    if (mi.setupDone) return;
     firstRunShown = true;
+    // Brand-new owner with no baby and no pregnancy lands on the onboarding wizard (renderOnboard).
+    // Collect identity as a STEP inside that wizard (after stage + details), not as a locked modal
+    // popped over the stage picker. Caregivers / anyone with existing data get the identity sheet now.
+    var hasData = (state.babies && state.babies.length) || state.pregnancy;
+    if (!hasData) { window.LL.needsIdentity = true; return; }
     openFirstRun(user);
   }
-  function openFirstRun(user) {
+  function openFirstRun(user, opts) {
+    opts = opts || {};
     var uid = user.uid;
     var bear = (typeof window.memberAvatarSvg === 'function') ? window.memberAvatarSvg(uid, 84) : '';
-    // Warm, community welcome (calm, made-with-families feeling, never a "beta/tester" vibe).
-    // OS-aware install: Android/Chrome fires beforeinstallprompt (window._bip) so we can trigger the
-    // real prompt; iOS Safari blocks programmatic install, so the button reveals the Share steps.
-    // Reuse the shared add-to-home helpers (defined in index.html) so first-run and Settings behave identically.
-    var canInstall = (typeof window.canShowInstall === 'function')
-      ? window.canShowInstall()
-      : (function () { var ua = navigator.userAgent || ''; var standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone; var ios = /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1); return !standalone && (window._bip || ios); })();
-    var installBtn = canInstall
-      ? '<button id="llFrInstall" class="ll-modal-btn" style="margin-top:4px">📲 Add Cubby to your home screen</button><div id="llFrInstallMsg" class="ll-auth-msg" style="display:none"></div>'
-      : '';
+    // Relationship label adapts to where the family is, so it never asks "relationship to baby"
+    // before there is a baby (the old confusing case for expecting/trying users).
+    var relLabel = opts.stage === 'expecting' ? 'Your relationship to your little one on the way'
+      : (opts.stage === 'planning' ? 'Your role' : 'Your relationship to your baby');
+    // As a wizard step (after stage + details), it's the warm last beat; as the standalone caregiver
+    // sheet it's the welcome. Either way name is required. (Install moved out of here; it's offered later.)
+    var intro = opts.asStep
+      ? 'Last thing: how should your family see you? You can change this anytime.'
+      : 'We\'re so glad you\'re here. 🤍 Cubby is a calm, private place for everyone who loves your little one, and it\'s shaped by families like yours.';
     modal('Welcome to Cubby 🐻',
-      '<div class="ll-auth-msg" style="margin:0 0 10px;text-align:left;line-height:1.55">We\'re so glad you\'re here. 🤍 Cubby is a calm, private place for everyone who loves your little one, and it\'s shaped by families like yours.<br><br>• Your log stays <b>private</b> to your family, always.<br>• An idea, or something to make better? We read every note: <b>Settings → Family &amp; sharing → Send feedback</b>.</div>'
-      + '<div class="ll-auth-msg" style="margin:0 0 6px">First, how should your family see you?</div>'
+      '<div class="ll-auth-msg" style="margin:0 0 10px;text-align:left;line-height:1.55">' + intro + '<br><br>• Your log stays <b>private</b> to your family, always.<br>• An idea, or something to make better? We read every note: <b>Settings → Family &amp; sharing → Send feedback</b>.</div>'
+      + '<div class="ll-auth-msg" style="margin:0 0 6px">How should your family see you?</div>'
       + '<div class="ll-mem-av" id="llFrBear" style="width:84px;height:84px;margin:10px auto 4px;cursor:pointer">' + bear + '</div>'
       + '<div style="text-align:center;margin-bottom:6px"><button id="llFrBearBtn" class="ll-rm" style="color:#C97FA0">Customise my bear</button></div>'
       + '<div class="ll-invite" style="border-top:none;padding-top:8px"><label>Your name</label><input id="llFrName" maxlength="40" autocomplete="name" placeholder="Your name" value="' + esc(user.displayName || '') + '">'
-      + '<label style="margin-top:10px;display:block">Your relationship to baby</label><select id="llFrRel">' + relOptions('', true) + '</select>' + relCustomInput('llFrRelCustom')
+      + '<label style="margin-top:10px;display:block">' + relLabel + '</label><select id="llFrRel">' + relOptions('', true) + '</select>' + relCustomInput('llFrRelCustom')
       + '<div id="llFrErr" class="ll-auth-msg" style="color:#C0392B"></div></div>'
-      + installBtn
-      + '<button id="llFrSave" class="ll-modal-btn">Save</button>'
-      + '<button id="llFrOut" class="ll-modal-btn ll-ghost" style="margin-top:10px">Log out</button>',
+      + '<button id="llFrSave" class="ll-modal-btn">' + (opts.asStep ? 'Continue' : 'Save') + '</button>'
+      + (opts.asStep ? '' : '<button id="llFrOut" class="ll-modal-btn ll-ghost" style="margin-top:10px">Log out</button>'),
       { locked: true, blur: true });
-    document.getElementById('llFrOut').onclick = function () { closeModal(); window.LL.signOut(); };
+    var outBtn = document.getElementById('llFrOut');
+    if (outBtn) outBtn.onclick = function () { closeModal(); window.LL.signOut(); };
     function pickBear() { if (window.openBearPicker) window.openBearPicker('member', uid); }
     document.getElementById('llFrBear').onclick = pickBear;
     document.getElementById('llFrBearBtn').onclick = pickBear;
-    var instBtn = document.getElementById('llFrInstall');
-    if (instBtn) instBtn.onclick = function () {
-      if (typeof window.addToHomeScreen === 'function') { window.addToHomeScreen('llFrInstallMsg'); return; }
-      if (window._bip) { window._bip.prompt(); if (window._bip.userChoice) window._bip.userChoice.then(function () { window._bip = null; }); }
-      else { var m = document.getElementById('llFrInstallMsg'); if (m) { m.style.display = 'block'; m.innerHTML = (typeof window.installSteps === 'function') ? window.installSteps() : 'Tap the <b>Share</b> icon in Safari, then <b>Add to Home Screen</b>.'; } }
-    };
     wireRelCustom('llFrRel', 'llFrRelCustom');
     document.getElementById('llFrSave').onclick = async function () {
       var name = (document.getElementById('llFrName').value || '').trim();
@@ -1076,9 +1077,18 @@
       var rel = relValue('llFrRel', 'llFrRelCustom');
       var u = {}; u['memberInfo.' + uid + '.setupDone'] = true; u['memberInfo.' + uid + '.name'] = name; if (rel) u['memberInfo.' + uid + '.relationship'] = rel;
       try { await hhRef.update(u); } catch (e) {}
+      window.LL.needsIdentity = false;
       closeModal();
+      if (typeof opts.onDone === 'function') opts.onDone();
     };
   }
+  // Identity collection as a forward wizard step (used by the onboarding flow AFTER stage + details).
+  window.LL.collectIdentity = function (stage, onDone) {
+    // In prod currentUser is always set (this only runs post-auth); the fallback is for local e2e.
+    var u = auth.currentUser || { uid: 'local', displayName: '' };
+    firstRunShown = true;
+    openFirstRun(u, { asStep: true, stage: stage, onDone: onDone });
+  };
 
   async function removeMember(uid, email, name) {
     if (!hhRef) return;
@@ -1192,12 +1202,22 @@
   // Local E2E boot — localhost + ?e2e=1 ONLY. The hostname guard means this can NEVER run in
   // prod (little-cubby.com). It skips Firebase + the sign-in gate so tools/uitest.js can drive
   // the logged-in UI from seeded localStorage. No credentials, no network.
-  if ((location.hostname === 'localhost' || location.hostname === '127.0.0.1') && new URLSearchParams(location.search).get('e2e') === '1') {
+  var e2eMode = new URLSearchParams(location.search).get('e2e');
+  if ((location.hostname === 'localhost' || location.hostname === '127.0.0.1') && (e2eMode === '1' || e2eMode === 'onboard')) {
     try {
       window.LL.role = 'owner';
       window.LL.members = { local: { role: 'owner' } };
-      window.LL.memberInfo = { local: { name: 'Test Parent', relationship: 'Mama Bear', role: 'owner' } };
-      Store.load().then(function (d) { if (d && typeof state !== 'undefined') { try { Object.assign(state, d); } catch (e) {} } if (typeof render === 'function') render(); ['llAuthOv', 'llModalOv'].forEach(function (id) { var el = document.getElementById(id); if (el) el.remove(); }); });
+      if (e2eMode === 'onboard') {
+        // Brand-new owner: no name/setup, no baby, no pregnancy -> the first-run wizard renders.
+        window.LL.memberInfo = { local: { role: 'owner' } };
+        window.LL.needsIdentity = true;
+        try { state.babies = []; state.pregnancy = null; state.activeBabyId = null; } catch (e) {}
+        if (typeof render === 'function') render();
+        ['llAuthOv', 'llModalOv'].forEach(function (id) { var el = document.getElementById(id); if (el) el.remove(); });
+      } else {
+        window.LL.memberInfo = { local: { name: 'Test Parent', relationship: 'Mama Bear', role: 'owner' } };
+        Store.load().then(function (d) { if (d && typeof state !== 'undefined') { try { Object.assign(state, d); } catch (e) {} } if (typeof render === 'function') render(); ['llAuthOv', 'llModalOv'].forEach(function (id) { var el = document.getElementById(id); if (el) el.remove(); }); });
+      }
     } catch (e) { console.error('e2e boot failed', e); }
     return;
   }

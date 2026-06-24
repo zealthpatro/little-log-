@@ -2599,12 +2599,27 @@ function saveBaby(){
   state.babies.push(b); state.activeBabyId=b.id; lastBabyBirth=bd; persist();
   const onb=addBabyCtx.onboarding; addBabyCtx={onboarding:false,birth:''};
   closeSheet(); go('home');
-  if(onb){ openOnboardInvite(); } else { toast('Welcome, '+name+'!'); }
+  if(onb){
+    // New-owner wizard: now that the baby exists, collect identity (so "relationship to baby" makes
+    // sense), then offer the invite. Returning/secondary adds skip straight to the invite.
+    if(window.LL && window.LL.needsIdentity && typeof window.LL.collectIdentity==='function'){ window.LL.collectIdentity('baby', openOnboardInvite); }
+    else { openOnboardInvite(); }
+  } else { toast('Welcome, '+name+'!'); }
 }
 /* The post-setup hub: affirm they're set up, offer the activation (invite), and quietly make it
    clear they can add another little one. We never ASK "are there more?" (loss-safe); we offer. */
 function openOnboardInvite(){
   const n=(state.babies||[]).length;
+  // Pregnancy finish: same warm "invite your circle" beat as the baby path (was a silent toast), but
+  // circle-only, no "add another little one".
+  if(n===0 && state.pregnancy){
+    const planning=state.pregnancy.stage==='planning';
+    openSheet(`<h2>You're all set ${planning?'🌱':'🌸'}</h2><div class="sub">Cubby is for everyone on this journey with you. Invite your partner or a grandparent so they can follow along, privately.</div>
+      <div class="preg-card"><div class="pc-ico" style="background:var(--preg-soft)">👨‍👩‍👧</div><div><div class="pc-t">They follow along, live</div><div class="pc-b">Your week, scans and visits, in sync and private to your family.</div></div></div>
+      <button class="btn-primary" style="background:var(--preg);margin-top:14px" onclick="window.openFamily&&window.openFamily()">Invite someone</button>
+      <button class="btn-ghost" onclick="closeSheet()">Maybe later</button>`,'feed');
+    return;
+  }
   openSheet(`<h2>${n>1?'Your little ones are in 🐻':"You're all set 🐻"}</h2><div class="sub">Cubby is for everyone who loves ${n>1?'them':'your little one'}. Invite a partner, grandparent or nanny so you're never the only one who knows.</div>
     <div class="preg-card"><div class="pc-ico" style="background:var(--feed-soft)">👨‍👩‍👧</div><div><div class="pc-t">They see everything, live</div><div class="pc-b">The last feed, the nap, the next dose, all in sync and private to your family.</div></div></div>
     <button class="btn-primary" style="background:var(--feed);margin-top:14px" onclick="window.openFamily&&window.openFamily()">Invite someone</button>
@@ -3402,8 +3417,8 @@ function renderOnboard(){
       <div class="prof-cards" style="width:100%;text-align:left">
         <div class="prof-card" onclick="obStage('expecting')"><span class="lead" style="background:var(--preg-soft);font-size:20px">🌸</span><div class="cflex"><div class="a">We're expecting</div><div class="b">A baby (or two) on the way</div></div><span class="chev">${I.chev}</span></div>
         <div class="prof-card" onclick="obStage('baby')"><span class="lead" style="background:var(--feed-soft);font-size:20px">🐻</span><div class="cflex"><div class="a">Our baby's here</div><div class="b">One or more, track feeds, sleep and growth</div></div><span class="chev">${I.chev}</span></div>
+        <div class="prof-card" onclick="obStage('planning')"><span class="lead" style="background:#e9f0e7;font-size:20px">🌱</span><div class="cflex"><div class="a">We're trying</div><div class="b">Getting ready, with a gentle hand if you want it</div></div><span class="chev">${I.chev}</span></div>
       </div>
-      <button class="btn-ghost" onclick="obStage('planning')" style="color:var(--ink-faint);margin-top:6px">Just getting ready? 🌱</button>
       <button class="ob-logout" onclick="confirmLogout()">Log out</button>
     </div>
   </div>`;
@@ -3626,7 +3641,10 @@ function savePlanning(){
     conditions:{}, glucose:[], urine:[], supplements:[], supplementLog:[], nausea:[],
     glucoseUnit:'mmol', bornBabyId:null, createdAt:now() };
   persist();
-  startPregnancyAudit(function(){ closeSheet(); render(); toast('Rooting for you 🌱'); });
+  startPregnancyAudit(function(){ closeSheet(); render();
+    if(window.LL && window.LL.needsIdentity && typeof window.LL.collectIdentity==='function'){ window.LL.collectIdentity('planning', openOnboardInvite); }
+    else { toast('Rooting for you 🌱'); }
+  });
 }
 function fertileEstimate(){
   const p=state.pregnancy; if(!p||!p.lmp) return null;
@@ -3783,7 +3801,10 @@ function savePregnancy(){
     bornBabyId:null, createdAt:now() };
   try{ localStorage.setItem('cubby-country', VAX_SCHEDULES[cc]?cc:detectCountry()); }catch(e){}
   pregView='week'; persist();
-  startPregnancyAudit(function(){ closeSheet(); render(); toast('Your pregnancy is set up 🤍'); });
+  startPregnancyAudit(function(){ closeSheet(); render();
+    if(window.LL && window.LL.needsIdentity && typeof window.LL.collectIdentity==='function'){ window.LL.collectIdentity('expecting', openOnboardInvite); }
+    else { toast('Your pregnancy is set up 🤍'); }
+  });
 }
 
 /* ---- shell (topbar + nav) ---- */
