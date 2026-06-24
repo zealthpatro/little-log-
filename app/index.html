@@ -627,6 +627,9 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .mem-rail{display:flex;gap:10px;overflow-x:auto;padding:2px 0 8px;margin-bottom:6px;-webkit-overflow-scrolling:touch;}
 .mem-ready{position:relative;flex:0 0 150px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:0 3px 9px var(--shadow);cursor:pointer;transition:transform .14s;}
 .jr-wrap{margin:6px 0 16px}
+.jr-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.jr-edit{border:none;background:none;color:var(--ink-faint);cursor:pointer;padding:4px;font-size:14px;line-height:1;flex-shrink:0}
+.jr-edit svg{width:16px;height:16px}
 .jr-rail{display:flex;gap:11px;overflow-x:auto;padding:2px 2px 8px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 .jr-rail::-webkit-scrollbar{display:none}
 .jr-tile{position:relative;flex:0 0 132px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:13px;box-shadow:0 3px 9px var(--shadow);cursor:pointer;transition:transform .14s}
@@ -1043,6 +1046,18 @@ function babyDeletedEvents(){ return state.events.filter(e=>e.babyId===state.act
 function activeBaby(){ return state.babies.find(b=>b.id===state.activeBabyId); }
 function journeyState(){ if(!state.journey) state.journey={}; return state.journey; }
 function journeyRel(bid){ const j=journeyState(); if(!j.rel) j.rel={}; if(!j.rel[bid]) j.rel[bid]=[]; return j.rel[bid]; }
+// Journey titles: baby -> shared blob (state.journey.titles[id]); pregnancy -> owner-owned pregnancy doc (state.pregnancy.journey.title). Privacy split is mandatory.
+function babyJourneyTitle(){ const b=activeBaby(); if(!b) return 'Journey'; const j=journeyState(); const t=j.titles&&j.titles[b.id]; return t||((b.name||'Baby')+'’s journey'); }
+function setBabyJourneyTitle(v){ const b=activeBaby(); if(!b) return; const j=journeyState(); if(!j.titles)j.titles={}; j.titles[b.id]=(v||'').trim().slice(0,40); persist(); render(); }
+function pregJourneyTitle(){ const p=state.pregnancy; return (p&&p.journey&&p.journey.title)||'Your pregnancy journey'; }
+function setPregJourneyTitle(v){ if(!state.pregnancy) return; if(!state.pregnancy.journey)state.pregnancy.journey={}; state.pregnancy.journey.title=(v||'').trim().slice(0,40); persist(); render(); }
+function openJourneyRename(scope){
+  const cur = scope==='pregnancy'?pregJourneyTitle():babyJourneyTitle();
+  openSheet(`<h2>Name this journey</h2><div class="sub">The title on your shareable journey</div>
+    <div class="field"><input id="jTitle" maxlength="40" value="${escapeHtml(cur)}"></div>
+    <button class="btn-primary" onclick="saveJourneyRename('${scope}')">Save</button>`, scope==='pregnancy'?'preg':'star');
+}
+function saveJourneyRename(scope){ const v=(document.getElementById('jTitle')||{}).value||''; if(!v.trim()) return closeSheet(); if(scope==='pregnancy') setPregJourneyTitle(v); else setBabyJourneyTitle(v); closeSheet(); }
 // scope: 'pregnancy' routes to the owner-owned pregnancy doc; else the shared baby blob.
 function jDismissed(key, scope){
   if(scope==='pregnancy'){ const p=state.pregnancy; return !!(p&&p.journey&&p.journey.dismissed&&p.journey.dismissed[key]); }
@@ -2722,7 +2737,7 @@ function renderJourneySection(prompts, scope, titleText){
       <div class="jr-art">${p.art||('<span class="jr-emoji">'+(p.icon||'📷')+'</span>')}</div>
       <div class="jr-t">${escapeHtml(p.title)}</div><div class="jr-s">${escapeHtml(p.sub||'')}</div>
     </div>`).join('');
-  return `<div class="jr-wrap"><div class="jr-head"><div class="sec-title" style="margin:0">${escapeHtml(titleText)}</div></div>
+  return `<div class="jr-wrap"><div class="jr-head"><div class="sec-title" style="margin:0">${escapeHtml(titleText)}</div><button class="jr-edit" onclick="openJourneyRename('${scope}')" aria-label="Rename journey">${(I&&I.pencil)||(I&&I.edit)||'✏️'}</button></div>
     <div class="jr-rail">${tiles}</div></div>`;
 }
 function journeyPromptsPreg(){
@@ -3886,7 +3901,7 @@ function renderPregMoments(){
     <div class="greeting">Moments 📷</div>
     <div class="greeting-sub">Your scans and bump pictures, paired with how big your baby was that week. The first photo album, before the album.</div>
     <button class="btn-primary" style="background:var(--preg);margin:6px 0 14px" onclick="openAddMoment()">${I.camera} Add a moment</button>
-    ${renderJourneySection(pj,'pregnancy','Your pregnancy journey')}
+    ${renderJourneySection(pj,'pregnancy',pregJourneyTitle())}
     ${cards||(pj.length?'':`<div class="preg-card"><div class="pc-ico">🖼️</div><div><div class="pc-t">Nothing here yet</div><div class="pc-b">Add your first ultrasound after a scan, or a bump photo any week. Each one is saved with the week and what size your baby was.</div></div></div>`)}
   </div>`;
 }
@@ -6077,7 +6092,7 @@ function renderMilestones(){
         <div class="rt">${doneCount}</div></div>
       <div class="mh-body"><div class="a">${doneCount} moments captured</div><div class="b">${escapeHtml(b?b.name:'Baby')} is ${months<24?Math.floor(months)+' months':Math.floor(months/12)+' years'} · every baby grows at their own pace</div></div>
     </div>
-    ${renderJourneySection(journeyPromptsBaby(),'baby',((activeBaby()&&activeBaby().name)||'Baby')+'’s journey')}
+    ${renderJourneySection(journeyPromptsBaby(),'baby',babyJourneyTitle())}
     ${state.lossHolding?'':`<div class="add-row" onclick="openAddSomeone()">${I.plus} Add someone special</div>`}
     ${relGrid}
     ${petRow}
