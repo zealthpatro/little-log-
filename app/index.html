@@ -2768,8 +2768,8 @@ function renderRelCapture(){
 function loadRelPhoto(input){ const f=input.files[0]; if(!f)return; downscaleToData(f,1200,0.8,(data)=>{ relDraft.photoData=data; renderRelCapture(); }); }
 async function saveRelMoment(){
   const b=activeBaby(); if(!b||!relDraft) return;
-  const d=relDraft; let photoId=null;
-  if(d.photoData){ photoId=uid(); await PhotoStore.set(photoId,d.photoData); }
+  const d=relDraft; if(!d.photoData){ toast('Choose a photo first'); return; }
+  let photoId=uid(); await PhotoStore.set(photoId,d.photoData);
   const arr=journeyRel(b.id);
   if(d.pendingId){ const e=arr.find(r=>r.id===d.pendingId); if(e){ e.photoId=photoId; e.at=now(); } }
   else { arr.push({id:uid(), relation:d.relation, label:d.label, photoId:photoId, at:now()}); }
