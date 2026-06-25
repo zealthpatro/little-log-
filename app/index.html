@@ -58,12 +58,16 @@
 <link rel="preload" as="font" type="font/woff2" href="fonts/nunitosans-400-latin.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="fonts/fraunces-600-latin.woff2" crossorigin>
 <link rel="stylesheet" href="fonts/fonts.css">
-<!-- Firebase (cloud sync + sharing). Compat SDK keeps it usable from the inline app script. -->
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
-<script src="firebase-init.js"></script>
+<!-- Firebase (cloud sync + sharing). DEFERRED so ~537KB of SDK no longer blocks first paint:
+     the shell renders, then these run in document order before DOMContentLoaded. Safe because the
+     inline app script only touches `firebase` inside functions (push), never at parse time. The
+     preconnect warms the gstatic connection while the page parses. -->
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
+<script defer src="firebase-init.js"></script>
 <style>
 /* ============ THEME ============ */
 :root{
@@ -8011,7 +8015,7 @@ function normalizeLoadedState(saved){
 <!-- Cloud auth + sharing. Loads after the app so it can wire into state/persist/PhotoStore. -->
 <!-- Signed-out landing must load before store-firebase.js: showSignIn() falls back to a bare card if window.cubbyLanding isn't defined yet. -->
 <script src="landing.js"></script>
-<script src="store-firebase.js"></script>
+<script defer src="store-firebase.js"></script>
 <!-- Bear avatars + custom time picker. -->
 <script src="cubby-extras.js"></script>
 <!-- WHO/CDC growth reference percentiles. -->
