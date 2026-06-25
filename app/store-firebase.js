@@ -263,23 +263,24 @@
   var _statusRot = null;
   function showStatus(msg) {
     overlay().classList.remove('landing');
-    var rotate = (!msg || msg === 'Loading…' || msg === 'Loading...');
-    var idx = rotate ? Math.floor(Math.random() * LOADER_LINES.length) : 0;
+    // Always rotate the gentle lines so the delight covers the whole wait, including the data
+    // load. A meaningful message (e.g. "Setting things up…") leads, then drifts into LOADER_LINES;
+    // the generic "Loading…" just starts on a random gentle line.
+    var meaningful = msg && msg !== 'Loading…' && msg !== 'Loading...';
+    var lines = meaningful ? [msg].concat(LOADER_LINES) : LOADER_LINES;
+    var i = meaningful ? 0 : Math.floor(Math.random() * lines.length);
     overlay().innerHTML =
       '<div class="ll-auth-card"><img src="/icons/logo-512.png" alt="Cubby" class="ll-auth-logo-img">'
       + '<h1>Cubby</h1><div class="ll-spin"></div>'
       + '<div class="ll-auth-msg" id="llAuthMsg"></div></div>';
-    var mEl = document.getElementById('llAuthMsg'); if (mEl) mEl.textContent = rotate ? LOADER_LINES[idx] : msg;
+    var mEl = document.getElementById('llAuthMsg'); if (mEl) mEl.textContent = lines[i];
     if (_statusRot) { clearInterval(_statusRot); _statusRot = null; }
-    if (rotate) {
-      var i = idx;
-      _statusRot = setInterval(function () {
-        var el = document.getElementById('llAuthMsg');
-        if (!el) { clearInterval(_statusRot); _statusRot = null; return; }
-        i = (i + 1) % LOADER_LINES.length;
-        el.textContent = LOADER_LINES[i];
-      }, 2200);
-    }
+    _statusRot = setInterval(function () {
+      var el = document.getElementById('llAuthMsg');
+      if (!el) { clearInterval(_statusRot); _statusRot = null; return; }
+      i = (i + 1) % lines.length;
+      el.textContent = lines[i];
+    }, 2200);
   }
 
   function signInGoogle() {
