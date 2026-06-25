@@ -112,7 +112,7 @@
     if (!ov) { ov = document.createElement('div'); ov.id = 'llAuthOv'; document.body.appendChild(ov); }
     return ov;
   }
-  function hideOverlay() { var ov = document.getElementById('llAuthOv'); if (ov) ov.remove(); }
+  function hideOverlay() { if (_statusRot) { clearInterval(_statusRot); _statusRot = null; } var ov = document.getElementById('llAuthOv'); if (ov) ov.remove(); }
 
   /* Sign in with Apple button. variant 'lp' = big landing button; otherwise the
      bordered auth-card style. Uses Apple's official logo + "Continue with Apple". */
@@ -240,12 +240,46 @@
     if (llAppleBtn) llAppleBtn.onclick = signInApple;
     wireEmailRow(ov); wireInstall(ov);
   }
+  // Gentle loader lines, rotated while the app wakes. Deliberately loss-safe: about the home, the
+  // parent and the relatable chaos (the kettle, the missing sock) — never the baby's body, which
+  // could sting before we know whether a parent is grieving. Warm, brief, British, no guilt.
+  var LOADER_LINES = [
+    'Putting the kettle on…',
+    'Finding the other sock…',
+    'Folding the tiny washing…',
+    'Brewing you a fresh coffee…',
+    'Smoothing out the day…',
+    'Gathering your little moments…',
+    'Plumping the cushions…',
+    'Tidying the nook…',
+    'Letting the quiet settle…',
+    'Dusting off the memories…',
+    'Untangling the muslins…',
+    'Keeping it all private and yours…',
+    'Lining up the good bits…',
+    'Taking a deep breath…',
+    'Almost there…'
+  ];
+  var _statusRot = null;
   function showStatus(msg) {
     overlay().classList.remove('landing');
+    var rotate = (!msg || msg === 'Loading…' || msg === 'Loading...');
+    var idx = rotate ? Math.floor(Math.random() * LOADER_LINES.length) : 0;
     overlay().innerHTML =
       '<div class="ll-auth-card"><img src="/icons/logo-512.png" alt="Cubby" class="ll-auth-logo-img">'
       + '<h1>Cubby</h1><div class="ll-spin"></div>'
-      + '<div class="ll-auth-msg">' + (msg || 'Loading…') + '</div></div>';
+      + '<div class="ll-auth-msg" id="llAuthMsg"></div></div>';
+    var mEl = document.getElementById('llAuthMsg'); if (mEl) mEl.textContent = rotate ? LOADER_LINES[idx] : msg;
+    if (_statusRot) { clearInterval(_statusRot); _statusRot = null; }
+    if (rotate) {
+      var i = idx;
+      _statusRot = setInterval(function () {
+        var el = document.getElementById('llAuthMsg');
+        if (!el) { clearInterval(_statusRot); _statusRot = null; return; }
+        i = (i + 1) % LOADER_LINES.length;
+        el.textContent = LOADER_LINES[i];
+      }, 2200);
+    }
   }
 
   function signInGoogle() {
