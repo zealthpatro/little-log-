@@ -648,24 +648,54 @@
       if (booted) render(); else maybeBoot();
     }, function (e) { console.warn('household listen', e); }));
 
-    unsub.push(eventsRef.onSnapshot(function (snap) {
-      applyingRemote = true;
-      snap.docChanges().forEach(function (ch) {
-        var data = ch.doc.data(); data.id = ch.doc.id;
-        if (ch.type === 'removed') {
-          state.events = (state.events || []).filter(function (e) { return String(e.id) !== String(data.id); });
-          delete knownEvents[data.id];
-        } else {
-          var i = (state.events || []).findIndex(function (e) { return String(e.id) === String(data.id); });
-          if (i >= 0) state.events[i] = data; else (state.events = state.events || []).push(data);
-          knownEvents[data.id] = JSON.stringify(stripMeta(data));
-        }
+    // ---- Two-stage events load (fast signed-in boot) ----
+    // The old listener loaded the ENTIRE event history before the first render (behind the SDK
+    // download) — slow boot that got worse the more you logged. Now we boot on a RECENT window so
+    // the app renders fast, then hydrate the full history in the background so stats/charts/old
+    // months stay correct. where(time>=) keeps a 'removed' change meaning a real delete (no limit()
+    // eviction ambiguity). Anything older than the window, or missing `time`, is caught by the
+    // one-time hydrate. If the windowed query ever errors (e.g. an index issue), we fall back to
+    // the original unbounded listener so boot can never hang.
+    var bootCutoff = Date.now() - 120 * 86400000; // ~4 months
+    var hydratedHistory = false;
+    function hydrateFullHistory() {
+      if (hydratedHistory) return; hydratedHistory = true;
+      eventsRef.get().then(function (snap) {
+        applyingRemote = true; var added = 0;
+        snap.forEach(function (doc) {
+          if ((state.events || []).some(function (e) { return String(e.id) === String(doc.id); })) return; // recent: owned by the live listener
+          var data = doc.data(); data.id = doc.id;
+          (state.events = state.events || []).push(data);
+          knownEvents[doc.id] = JSON.stringify(stripMeta(data)); added++;
+        });
+        applyingRemote = false;
+        if (added && booted) render();
+      }).catch(function (e) { console.warn('events hydrate', e); });
+    }
+    function subscribeEvents(query, isFallback) {
+      return query.onSnapshot(function (snap) {
+        applyingRemote = true;
+        snap.docChanges().forEach(function (ch) {
+          var data = ch.doc.data(); data.id = ch.doc.id;
+          if (ch.type === 'removed') {
+            state.events = (state.events || []).filter(function (e) { return String(e.id) !== String(data.id); });
+            delete knownEvents[data.id];
+          } else {
+            var i = (state.events || []).findIndex(function (e) { return String(e.id) === String(data.id); });
+            if (i >= 0) state.events[i] = data; else (state.events = state.events || []).push(data);
+            knownEvents[data.id] = JSON.stringify(stripMeta(data));
+          }
+        });
+        applyingRemote = false;
+        gotEvents = true;
+        if (!booted) { maybeBoot(); if (!isFallback) hydrateFullHistory(); }
+        else if (!(snap.metadata && snap.metadata.hasPendingWrites)) render();
+      }, function (e) {
+        console.warn('events listen', e);
+        if (!isFallback) { try { unsub.push(subscribeEvents(eventsRef, true)); } catch (x) {} } // windowed query failed -> full listener, so boot never hangs
       });
-      applyingRemote = false;
-      gotEvents = true;
-      if (!booted) maybeBoot();
-      else if (!(snap.metadata && snap.metadata.hasPendingWrites)) render();
-    }, function (e) { console.warn('events listen', e); }));
+    }
+    unsub.push(subscribeEvents(eventsRef.where('time', '>=', bootCutoff), false));
 
     unsub.push(photosRef.onSnapshot(function (snap) {
       snap.docChanges().forEach(function (ch) {
