@@ -16,3 +16,6 @@ tools/package-lock.json
 
 # local theme mocks (never deploy)
 _mock-*.html
+
+# Layer-1 source illustrations (large; composed outputs in app/journey-art/ are what ship)
+art-src/

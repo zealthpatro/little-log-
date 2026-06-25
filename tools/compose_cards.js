@@ -1,0 +1,54 @@
+// Composes finished journey cards = Layer 1 (your illustration, text-free) + Layer 2 (the caption,
+// rendered here from the catalogue). Reads docs/journey-cards.json; for each card it looks for the
+// Layer-1 file in the source dir (default ./art-src/<file>) and, if missing, falls back to the card's
+// pastel ground so it still produces a card. Outputs app/journey-art/<slug>.webp + manifest.json.
+//
+//   Drop your Layer-1 PNGs into  art-src/  named exactly as the catalogue `file` (e.g. 001_pregnancy_we_found_out.png)
+//   Run:  node tools/compose_cards.js            (or: node tools/compose_cards.js /path/to/art-src)
+const puppeteer = require('puppeteer-core');
+const fs = require('fs');
+const path = require('path');
+const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const ROOT = path.join(__dirname, '..');
+const SRC = process.argv[2] || path.join(ROOT, 'art-src');
+const OUT = path.join(ROOT, 'app', 'journey-art');
+const TEMPLATE = 'file://' + path.join(__dirname, 'journey-compose.html');
+
+// catalogue palette name -> muted hex ground (used when a Layer-1 file isn't present yet)
+const PALETTE = {
+  'muted sage': '#DDE3D5', 'pale beige': '#EFE7DA', 'dusty cream': '#F1E8D6', 'warm oat': '#ECE2CF',
+  'soft blush': '#F4E2DE', 'cream beige': '#F2EADD', 'pale sage': '#E4E9DA', 'warm cream': '#F4EDDE',
+  'muted pastel': '#ECE5DB', 'muted cream': '#F1E9DB', 'pale blush': '#F5E7E3', 'warm oatmeal': '#EDE4D3',
+  'pastel seasonal': '#EEE7DE', 'cream blank': '#F7F1E7'
+};
+
+(async () => {
+  const cat = require(path.join(ROOT, 'docs', 'journey-cards.json'));
+  fs.mkdirSync(OUT, { recursive: true });
+  const haveSrc = fs.existsSync(SRC);
+  const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu', '--hide-scrollbars'] });
+  const page = await browser.newPage();
+  await page.setViewport({ width: 480, height: 600, deviceScaleFactor: 2 });
+  await page.goto(TEMPLATE, { waitUntil: 'networkidle2', timeout: 30000 });
+  await page.evaluate(async () => { try { await document.fonts.ready; } catch (e) {} });
+
+  const manifest = {};
+  let withArt = 0, fallback = 0;
+  for (const c of cat.cards) {
+    const raw = path.join(SRC, c.file);
+    let img = null;
+    if (haveSrc && fs.existsSync(raw)) { img = 'data:image/png;base64,' + fs.readFileSync(raw).toString('base64'); withArt++; }
+    else fallback++;
+    await page.evaluate((o) => window.renderCard(o), { img: img, caption: c.caption, bg: PALETTE[c.bg] || '#EFE7DA' });
+    await page.evaluate(() => { const l = document.getElementById('layer1'); if (l.style.display === 'none' || l.complete) return true; return new Promise(r => { l.onload = () => r(true); l.onerror = () => r(true); }); });
+    await new Promise(r => setTimeout(r, 60));
+    const el = await page.$('#card');
+    const outFile = c.slug + '.webp';
+    await el.screenshot({ path: path.join(OUT, outFile), type: 'webp', quality: 86 });
+    manifest[c.id] = { file: outFile, caption: c.caption, section: c.section };
+  }
+  fs.writeFileSync(path.join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+  await browser.close();
+  console.log('composed ' + cat.cards.length + ' cards -> app/journey-art/  (' + withArt + ' with Layer-1 art, ' + fallback + ' on pastel fallback)');
+  if (!haveSrc) console.log('note: no art-src/ dir yet — drop Layer-1 PNGs there (named by catalogue `file`) and re-run to bake them in.');
+})().catch(e => { console.error(e); process.exit(1); });
