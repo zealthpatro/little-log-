@@ -1,0 +1,55 @@
+// Parses the founder's card matrix (docs/journey-cards.tsv) into the structured catalog the app
+// reads (docs/journey-cards.json). Source of truth = the TSV (export it from the sheet, re-run this).
+// Validates: 13 columns/row, unique ids, unique files, and prints section/template/palette/who tallies.
+// Run: node tools/build_cards.js
+const fs = require('fs');
+const path = require('path');
+
+const COLS = ['id', 'stage', 'section', 'subsection', 'caption', 'timing', 'who', 'illo', 'mood', 'bg', 'template', 'pack', 'file'];
+const WHO_CODE = {
+  'Mama + Papa': 'mamapapa', 'Baby cub': 'cub', 'Family bears': 'family',
+  'Mama bear + baby cub': 'mama_cub', 'Papa bear + baby cub': 'papa_cub'
+};
+
+const tsv = fs.readFileSync(path.join(__dirname, '..', 'docs', 'journey-cards.tsv'), 'utf8');
+const lines = tsv.split('\n').filter(l => l.trim().length);
+const header = lines.shift().split('\t');
+if (header.join(',') !== COLS.join(',')) { console.error('Header mismatch.\n got: ' + header.join('|') + '\n want:' + COLS.join('|')); process.exit(1); }
+
+const cards = [];
+const ids = new Set(), files = new Set();
+const tally = (o, k) => { o[k] = (o[k] || 0) + 1; };
+const bySection = {}, byTemplate = {}, byWho = {}, byBg = {};
+let bad = 0;
+
+lines.forEach((line, i) => {
+  const f = line.split('\t');
+  if (f.length !== COLS.length) { console.error('Row ' + (i + 2) + ' has ' + f.length + ' cols (want ' + COLS.length + '): ' + line.slice(0, 60)); bad++; return; }
+  const c = {};
+  COLS.forEach((col, j) => { c[col] = f[j]; });
+  if (ids.has(c.id)) { console.error('Duplicate id: ' + c.id); bad++; }
+  if (files.has(c.file)) { console.error('Duplicate file: ' + c.file); bad++; }
+  ids.add(c.id); files.add(c.file);
+  c.who_code = WHO_CODE[c.who] || 'cub';
+  c.slug = c.file.replace(/\.[a-z0-9]+$/i, '');
+  if (!WHO_CODE[c.who]) console.error('Row ' + c.id + ': unmapped who "' + c.who + '"');
+  tally(bySection, c.stage + ' / ' + c.section); tally(byTemplate, c.template); tally(byWho, c.who); tally(byBg, c.bg);
+  cards.push(c);
+});
+
+if (bad) { console.error('\n' + bad + ' problem(s) found — not writing.'); process.exit(1); }
+
+const out = {
+  _README: 'App card catalog, generated from docs/journey-cards.tsv by tools/build_cards.js. id = stable card id; file = art asset (app/journey-art/<file>); captions overlaid in app. Do not hand-edit — edit the TSV and re-run.',
+  version: 2,
+  count: cards.length,
+  sections: bySection,
+  cards: cards
+};
+fs.writeFileSync(path.join(__dirname, '..', 'docs', 'journey-cards.json'), JSON.stringify(out, null, 2) + '\n');
+
+console.log('OK: ' + cards.length + ' cards -> docs/journey-cards.json');
+console.log('\nby stage/section:'); Object.keys(bySection).forEach(k => console.log('  ' + bySection[k] + '  ' + k));
+console.log('\ntemplates:', Object.keys(byTemplate).sort().join(', '));
+console.log('who:', JSON.stringify(byWho));
+console.log('palettes:', Object.keys(byBg).sort().join(', '));
