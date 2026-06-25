@@ -66,7 +66,11 @@ const fileFor = (k) => k.replace(/[:]/g, '-').replace(/_/g, 'default') + '.webp'
   await new Promise(r => setTimeout(r, 400));
 
   const manifest = {};
+  const EXPS = ['calm', 'giggly', 'sleepy', 'surprised'];
+  const EXP_OVERRIDE = { 'bmonth:0': 'sleepy', 'bms:smile': 'giggly', 'bms:sit': 'surprised', 'bms:steps': 'surprised', 'bms:words': 'giggly', 'bms:rollover': 'surprised', 'bday': 'giggly', 'rel:nana': 'giggly', 'rel:sibling': 'giggly' };
+  let i = 0;
   for (const c of CARDS) {
+    c.exp = EXP_OVERRIDE[c.key] || EXPS[i % EXPS.length]; i++;
     await page.evaluate((o) => window.renderCard(o), c);
     await new Promise(r => setTimeout(r, 120));
     const el = await page.$('#card');
