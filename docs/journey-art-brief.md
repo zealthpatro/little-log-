@@ -1,86 +1,135 @@
-# Cubby journey cards — illustration brief (for an image model / illustrator)
+# Cubby journey cards — illustration brief (~100 cards, for an image model / illustrator)
 
-**Goal:** a consistent set of soft, hand-illustrated "baby milestone card" artworks for Cubby's Moments journey, in the spirit of the reference koala milestone cards (soft character, muted pastels, eucalyptus + sparkle accents).
+**Goal:** a large, consistent set of soft, hand-illustrated "milestone card" artworks for Cubby's Moments journey — covering the **whole story: pregnancy → baby → toddler**, in the spirit of the reference koala milestone cards (soft character, muted pastels, eucalyptus + sparkle accents).
 
-**Critical rule — NO TEXT in the image.** Do not render any words, letters, numbers, or watermark. Captions are added later in code with a crisp script font. **Leave the lower third of the card empty** (just background) so the caption has a clean home.
+**Two characters, one style:**
+- **Baby cub** — a cuddly baby bear, for the baby/toddler cards.
+- **Mama Bear** — a soft, gentle, *expecting* mama bear with a round baby bump, for the pregnancy cards. Same fur, palette, linework and softness as the cub; warm, calm, glowing; often with a hand resting on the bump.
 
-**Format:** vertical portrait card, **4:5** aspect, ≥1024px on the short side. The pastel background colour fills the whole card (it *is* the card) — no border, no rounded corners (the app rounds them). Flat 2D illustration.
+**Critical rules:**
+1. **NO TEXT in the image** — no words, letters, numbers, or watermark. Captions are added later in code with a crisp script font. **Leave the lower third of the card empty** (just background) for the caption.
+2. **Consistency** — generate one hero of each character first, then anchor every other card to it.
+3. **Inclusive & gentle** — pregnancy art never assumes the baby's sex (except the explicit reveal cards, which also include a "team green" option). Calm, tender, never anxious.
+
+**Format:** vertical portrait card, **4:5**, ≥1024px short side. The muted pastel background fills the whole card (no border/rounded corners — the app handles those). Flat 2D illustration.
 
 ---
 
-## Master style prompt (use as the anchor for every card)
+## Style anchor A — the baby cub (use for all baby/toddler + relationship cards)
 
-> Soft hand-drawn nursery illustration of a cuddly baby **bear cub**, in the style of a premium baby "milestone card". Rounded fluffy ears with soft fuzzy edges and dusty-rose inner ears, a large soft rounded muzzle and nose, small calm eyes, tiny rosy blush cheeks — a sweet, gentle, minimal face. Cream-white fur with delicate warm-grey soft airbrushed shading for gentle volume, fine soft warm-grey linework, subtle paper-grain texture. The cub is centred in the upper two-thirds; the **lower third is empty background** for a caption. Flat single-colour **muted pastel background**. A small delicate hand-painted eucalyptus sprig and two or three thin four-point sparkle twinkles as light accents. Calm, tender, wholesome, desaturated palette. Flat 2D children's-book illustration — not 3D, not photoreal, no harsh black outlines, no gloss. **No text, letters, numbers, or watermark.** Vertical 4:5.
+> Soft hand-drawn nursery illustration of a cuddly baby **bear cub**, in the style of a premium baby "milestone card". Rounded fluffy ears with soft fuzzy edges and dusty-rose inner ears, a large soft rounded muzzle and nose, small calm eyes, tiny rosy blush cheeks — a sweet, gentle, minimal face. Cream-white fur with delicate warm-grey soft airbrushed shading for gentle volume, fine soft warm-grey linework, subtle paper-grain texture. The cub is centred in the upper two-thirds; the **lower third is empty background** for a caption. Flat single-colour muted pastel background. A small delicate hand-painted eucalyptus sprig and two or three thin four-point sparkle twinkles as light accents. Calm, tender, wholesome, desaturated palette. Flat 2D children's-book illustration — not 3D, not photoreal, no harsh black outlines, no gloss. **No text, letters, numbers, or watermark.** Vertical 4:5.
 
-*(Swap "bear cub" for "koala" if you'd rather match the reference exactly — Cubby's mascot is a bear, so bear keeps brand, but the soft style is the same either way.)*
+## Style anchor B — Mama Bear (use for all pregnancy cards)
+
+> Soft hand-drawn nursery illustration of a gentle **expecting mama bear** with a round pregnant belly, in the same premium "milestone card" style as the baby cub: cream-white fur, soft warm-grey airbrushed shading, fine warm-grey linework, subtle paper-grain, rosy blush cheeks, calm tender face. She is warm and glowing, often with one paw resting softly on her bump. Centred in the upper two-thirds; **lower third empty** for a caption. Flat single-colour muted pastel background, a small eucalyptus sprig and a few delicate four-point sparkles. Desaturated, wholesome, peaceful. Flat 2D children's-book illustration — not 3D, not photoreal, no harsh outlines, no gloss. **No text, letters, numbers, or watermark.** Vertical 4:5.
 
 **Negative prompt (Midjourney):** `--no text letters numbers words watermark 3d photoreal "harsh outline" neon clutter glossy busy`
 
 **Consistency (do this or the set won't match):**
-- **Midjourney:** generate one hero card you love, then append `--ar 4:5 --sref <URL of that hero image> --sw 90` to every other prompt. Keep the same `--style` and the same wording; only change the variation tokens below.
-- **ChatGPT / 4o images:** generate the hero, then for each new card paste the hero and say *"Same exact character, line weight, shading and palette family as this image. Change only: <pose / expression / accessory / background colour>. Keep the lower third empty. No text."*
-- **Firefly/Ideogram:** use the hero as a style reference / structure reference at high strength.
+- **Midjourney:** make one hero cub + one hero mama you love, then append `--ar 4:5 --sref <hero URL> --sw 90` to every card of that character. Only change the variation tokens.
+- **ChatGPT / 4o:** paste the relevant hero, say *"Same exact character, line weight, shading and palette family. Change only: <pose / expression / accessory / background>. Keep the lower third empty. No text."*
+- **Firefly / Ideogram:** use the hero as a high-strength style reference.
 
 ---
 
-## Variation tokens (swap these per card)
+## Variation tokens
 
-- **Pose:** peeking over a ledge (just head + two little paws) · sitting upright · lying down sleeping · reaching up
-- **Expression:** calm · giggling (closed upturned eyes, small smile) · sleeping (closed eyes) · surprised (wide eyes, small round open mouth)
-- **Accessory:** none · small party hat · tiny flower behind one ear
-- **Background colour (muted):** sage green · dusty blush pink · warm cream · soft terracotta-coral · dusty rose · soft slate blue · pale butter yellow
-- **Accent motif:** eucalyptus sprig in two corners · a scatter of sparkle twinkles · both
+**Baby cub** — pose: peeking over a ledge (head + two paws) · sitting upright · lying sleeping · reaching/standing · crawling. expression: calm · giggling (closed upturned eyes, small smile) · sleeping · surprised (wide eyes, small round mouth). accessory: none · party hat · tiny flower behind ear.
 
-**Relationship cards = two cubs together:** the baby cub beside a second cub that reads as the relative — *grandmother bear (round glasses + soft grey bun)*, *grandfather bear (round glasses)*, *auntie bear (flower)*, *uncle bear*, *older sibling cub*. Affectionate, same style, lower third empty.
+**Mama Bear** — bump size: small (early) · medium (mid) · large (late). pose: hands cradling bump · side profile showing bump · resting/cosy · holding tiny baby shoes · looking at an ultrasound card · packing a little bag · knitting. expression: calm · happy · serene.
 
----
-
-## The set to generate (filename → recipe)
-
-Name each export by its key so it drops straight into the app (`app/journey-art/<name>.png`; I convert to WebP). Palettes are suggestions — keep them muted and varied.
-
-| filename | what it's for | pose / expression | accessory | bg |
-|---|---|---|---|---|
-| `bmonth-0`  | Newborn        | lying, sleeping        | none   | cream |
-| `bmonth-1`  | 1 month        | peeking, calm          | none   | sage |
-| `bmonth-2`  | 2 months       | sitting, calm          | none   | blush |
-| `bmonth-3`  | 3 months       | peeking, giggling      | none   | butter |
-| `bmonth-4`  | 4 months       | sitting, surprised     | none   | rose |
-| `bmonth-5`  | 5 months       | peeking, calm          | none   | slate |
-| `bmonth-6`  | 6 months       | sitting, giggling      | none   | sage |
-| `bmonth-7`  | 7 months       | peeking, calm          | none   | blush |
-| `bmonth-8`  | 8 months       | sitting, surprised     | none   | cream |
-| `bmonth-9`  | 9 months       | peeking, giggling      | none   | butter |
-| `bmonth-10` | 10 months      | sitting, calm          | none   | rose |
-| `bmonth-11` | 11 months      | peeking, calm          | none   | slate |
-| `bmonth-12` | 1 year         | sitting, giggling      | party hat | coral |
-| `bmonth-15` | 15 months      | reaching, calm         | none   | sage |
-| `bmonth-18` | 18 months      | sitting, giggling      | none   | blush |
-| `bmonth-24` | 2 years        | sitting, giggling      | party hat | butter |
-| `bms-smile`    | first smile    | peeking, giggling      | none   | butter |
-| `bms-tooth`    | first tooth    | giggling (show one tooth) | none | blush |
-| `bms-sit`      | sat up         | sitting, surprised     | none   | sage |
-| `bms-steps`    | first steps    | reaching/standing, surprised | none | coral |
-| `bms-words`    | first words    | giggling               | none   | slate |
-| `bms-rollover` | rolled over    | lying, giggling        | none   | rose |
-| `bms-default`  | any first      | sitting, giggling      | none   | butter |
-| `bmonth-default` | any month    | peeking, calm          | none   | cream |
-| `rel-nana`     | with grandma   | baby + grandma bear    | flower | rose |
-| `rel-grandma`  | with grandma   | baby + grandma bear    | flower | rose |
-| `rel-papa`     | with papa      | baby + adult bear      | none   | slate |
-| `rel-grandpa`  | with grandpa   | baby + grandpa bear (glasses) | none | sage |
-| `rel-auntie`   | with auntie    | baby + auntie bear     | flower | blush |
-| `rel-uncle`    | with uncle     | baby + uncle bear      | none   | butter |
-| `rel-sibling`  | with sibling   | baby + older sibling cub | none | cream |
-| `rel-other`    | with someone   | two cubs hugging       | none   | sage |
-| `bday`         | birthday       | sitting, giggling      | party hat + confetti | coral |
-
-That's 33 cards (the full current journey set). If you only want to start with a few, do the hero + `bmonth-0/1/6/12`, `bms-smile`, `rel-nana`, `bday` — enough to see the set hang together.
+**Background (muted, rotate):** sage green · dusty blush pink · warm cream · soft terracotta-coral · dusty rose · soft slate blue · pale butter yellow · soft lilac.
+**Accents:** eucalyptus sprig in two corners · scatter of sparkle twinkles · both.
+**Relationship cards = two cubs together:** baby cub beside a second bear that reads as the relative (grandmother bear: round glasses + grey bun; grandfather bear: round glasses; auntie: flower; uncle; older sibling cub; cousin cub).
 
 ---
 
-## What I do once you send art / specs back
-- Drop the files into `app/journey-art/` (I convert PNG→WebP, ~16KB each).
-- Overlay the caption in-app with the self-hosted script font, positioned in the empty lower third (so text is crisp and every card can carry any caption).
-- Wire the manifest + map each journey prompt to its card, photo replaces the card once added, SVG bear as last-resort fallback.
-- Tell me your final specs (exact bg hex palette, caption font + size + colour, card aspect, whether captions go on a soft band) and I'll match them precisely.
+## The set (filename → recipe). Name exports by key → drops straight into `app/journey-art/<name>.png`.
+
+### Pregnancy — Mama Bear (~29)
+| file | for | pose / bump | bg |
+|---|---|---|---|
+| `preg-bfp` | we're expecting | holding a tiny pair of shoes, small bump | butter |
+| `preg-tri1` | first trimester | cosy resting, small bump | sage |
+| `preg-tri2` | second trimester | hands on medium bump, happy | blush |
+| `preg-tri3` | third trimester | side profile, large bump | rose |
+| `preg-m1` | month 1 | cradling, tiny bump | cream |
+| `preg-m2` | month 2 | cradling, tiny bump | sage |
+| `preg-m3` | month 3 | hands on small bump | blush |
+| `preg-m4` | month 4 | hands on small bump | butter |
+| `preg-m5` | month 5 | side profile, medium bump | slate |
+| `preg-m6` | month 6 | hands on medium bump | rose |
+| `preg-m7` | month 7 | side profile, large bump | sage |
+| `preg-m8` | month 8 | cosy resting, large bump | lilac |
+| `preg-m9` | month 9 | side profile, very large bump | blush |
+| `preg-scan-8` | dating scan | looking at an ultrasound card | slate |
+| `preg-scan-12` | 12-week scan | looking at an ultrasound card | sage |
+| `preg-scan-20` | 20-week scan | looking at an ultrasound card | blush |
+| `preg-heartbeat` | heard the heartbeat | hand on bump, small heart sparkle | rose |
+| `preg-kick` | first kick | surprised-happy, hand on bump | butter |
+| `preg-bump` | the bump | proud side profile, medium bump | sage |
+| `preg-shower` | baby shower | bump + a little bunting/balloon | coral |
+| `preg-nursery` | nursery ready | beside a tiny crib | cream |
+| `preg-bag` | hospital bag packed | packing a small bag | slate |
+| `preg-maternity` | maternity shoot | serene, flowers around bump | rose |
+| `preg-names` | choosing a name | thoughtful, holding a little tag (blank) | lilac |
+| `preg-reveal-blue` | reveal (boy) | bump + soft blue accents | slate |
+| `preg-reveal-pink` | reveal (girl) | bump + soft pink accents | blush |
+| `preg-greenteam` | team green | bump + green/yellow accents | sage |
+| `preg-countdown` | almost here | cosy, very large bump, calendar-free | butter |
+| `preg-overdue` | any day now | resting, very large bump | cream |
+
+### Baby months (~16) — baby cub
+`bmonth-0` Newborn (lying, sleeping, cream) · `bmonth-1`..`bmonth-12` (rotate pose/expr/bg; `bmonth-12` sitting giggling + party hat, coral) · `bmonth-15` · `bmonth-18` · `bmonth-24` (party hat). Keep palettes varied and muted.
+
+### Baby firsts / milestones (~32) — baby cub
+| file | first | pose / expression |
+|---|---|---|
+| `bms-smile` | first smile | peeking, giggling |
+| `bms-laugh` | first laugh | giggling |
+| `bms-babble` | first babbles | calm, open mouth |
+| `bms-rollover` | rolled over | lying, giggling |
+| `bms-sit` | sat up | sitting, surprised |
+| `bms-crawl` | crawling | crawling pose |
+| `bms-standhold` | pulled to stand | standing holding a ledge |
+| `bms-cruise` | cruising | standing, reaching |
+| `bms-steps` | first steps | standing, surprised |
+| `bms-words` | first words | giggling |
+| `bms-wave` | first wave | one paw up |
+| `bms-clap` | first clap | paws together, giggling |
+| `bms-peekaboo` | peekaboo | paws at face |
+| `bms-tooth` | first tooth | giggling, one tooth |
+| `bms-foods` | first foods | sitting, little bowl/spoon |
+| `bms-selffeed` | self-feeding | holding a spoon |
+| `bms-cup` | first cup | holding a sippy cup |
+| `bms-bath` | first bath | in a little tub with bubbles |
+| `bms-haircut` | first haircut | calm, tiny scissors motif |
+| `bms-swim` | first swim | in a float ring |
+| `bms-shoes` | first shoes | looking at little shoes |
+| `bms-point` | first point | one paw pointing |
+| `bms-blowkiss` | blows a kiss | paw to mouth |
+| `bms-dance` | first dance | arms up, joyful |
+| `bms-climb` | first climb | climbing pose |
+| `bms-run` | first run | mid-stride |
+| `bms-scribble` | first scribble | holding a crayon |
+| `bms-blocks` | stacks blocks | with little blocks |
+| `bms-hug` | first hug | hugging a soft toy |
+| `bms-sleepthrough` | slept through | sleeping peacefully |
+| `bms-potty` | potty | proud, calm |
+| `bms-default` | any first | sitting, giggling |
+
+### Relationships (~11) — two bears together
+`rel-mama`, `rel-papa`, `rel-nana`, `rel-grandma`, `rel-grandpa`, `rel-auntie`, `rel-uncle`, `rel-sibling`, `rel-cousin`, `rel-friend`, `rel-other` (baby cub beside the relative bear; affectionate; lower third empty).
+
+### Special / seasons / holidays (~12)
+`bday` (party hat + confetti, coral) · `bday-half` (half birthday) · `first-festival` (warm lanterns/lights, generic) · `first-holiday` (little suitcase) · `first-winter` (cosy scarf, snow dots) · `first-summer` (sun hat) · `first-rains` (tiny umbrella) · `welcome-home` (cub in a basket) · `family` (mama + papa + cub) · `firsttooth-fairy`? skip · `bmonth-default` (peeking, calm, cream) · `journey-cover` (cub + mama together, for the journey cover).
+
+**Total ≈ 100 cards.** Start, if you like, with the heroes (one cub, one mama) + `preg-tri2`, `preg-bump`, `bmonth-0`, `bmonth-6`, `bmonth-12`, `bms-smile`, `rel-nana`, `bday` to confirm the set hangs together before doing the rest.
+
+---
+
+## What I do when you send art / specs back
+- Drop files into `app/journey-art/` (PNG→WebP, ~16KB each).
+- Overlay captions in-app in the empty lower third with the self-hosted script font (crisp; any caption on any card).
+- Wire the manifest; map every journey prompt → its card (pregnancy prompts get expanded to use the monthly/bump/scan set; baby prompts map to month/milestone/relationship cards); a real photo replaces the card once added; SVG bear is the last-resort fallback.
+- Send me your final specs (exact bg hex palette, caption font + size + colour, aspect, band vs no-band) and I'll match them precisely.
