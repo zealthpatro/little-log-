@@ -502,6 +502,43 @@ body.night .ob-card{background:rgba(38,32,28,.86);}
 .ms-petedit{margin-left:auto;border:none;background:none;color:var(--star);font-weight:800;font-size:13px;cursor:pointer;font-family:var(--font-body);text-decoration:underline;}
 .ms-thumb{width:40px;height:40px;border-radius:10px;object-fit:cover;flex-shrink:0;}
 
+/* ---- moments: the gentle library ---- */
+.gl-head{margin:2px 0 14px;}
+.gl-head .a{font-family:var(--font-display);font-size:23px;font-weight:600;line-height:1.12;}
+.gl-head .b{font-size:13px;color:var(--ink-soft);font-weight:600;margin-top:4px;}
+.gl-search{margin-bottom:16px;}
+.gl-suggest{margin:0 0 18px;}
+.gl-suggest .gl-st{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:9px;}
+.gl-suggest .gl-st .t{font-weight:800;font-size:14px;color:var(--ink);}
+.gl-suggest .gl-st .m{font-size:11px;font-weight:800;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.04em;}
+.gl-rail{display:flex;gap:11px;overflow-x:auto;padding:2px 2px 8px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.gl-rail::-webkit-scrollbar{display:none;}
+.gl-rail .gl-card{flex:0 0 148px;}
+.gl-create{display:flex;align-items:center;gap:10px;width:100%;border:1.5px dashed var(--line);background:var(--surface-2);border-radius:16px;padding:13px 15px;font-weight:800;font-size:14px;color:var(--ink-soft);cursor:pointer;font-family:var(--font-body);margin:0 0 18px;}
+.gl-create .ic{display:grid;place-items:center;}.gl-create .ic svg{width:18px;height:18px;}
+.gl-card{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 3px 9px var(--shadow);cursor:pointer;transition:transform .14s;}
+.gl-card:active{transform:scale(.97);}
+.gl-card.empty{opacity:.94;}
+.gl-art{position:relative;aspect-ratio:4/5;background:var(--surface-2);overflow:hidden;display:grid;place-items:center;}
+.gl-art img{width:100%;height:100%;object-fit:cover;display:block;}
+.gl-ph{padding:14px;text-align:center;font-family:var(--font-display);font-size:15px;font-weight:600;color:var(--ink-soft);line-height:1.2;}
+.gl-tag{position:absolute;top:7px;left:7px;background:var(--star-soft);color:var(--ink);font-size:10px;font-weight:800;padding:3px 8px;border-radius:20px;letter-spacing:.02em;}
+.gl-check{position:absolute;top:7px;right:7px;width:26px;height:26px;border-radius:50%;background:var(--star);color:#fff;display:grid;place-items:center;box-shadow:0 2px 6px var(--shadow);}
+.gl-check svg{width:14px;height:14px;}
+.gl-cap{padding:9px 11px 10px;}
+.gl-cap .t{font-weight:800;font-size:13px;color:var(--ink);line-height:1.25;}
+.gl-cap .s{font-size:11.5px;color:var(--ink-soft);font-weight:700;margin-top:2px;}
+.gl-card.empty .gl-cap .s{color:var(--ink-faint);}
+.gl-group{border:1px solid var(--line);border-radius:16px;margin-bottom:12px;overflow:hidden;background:var(--surface);box-shadow:0 3px 9px var(--shadow);}
+.gl-group>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 15px;}
+.gl-group>summary::-webkit-details-marker{display:none;}
+.gl-group>summary .gt{font-weight:800;font-size:15px;color:var(--ink);}
+.gl-group>summary .gc{font-size:12px;color:var(--ink-soft);font-weight:700;white-space:nowrap;}
+.gl-group[open]>summary{border-bottom:1px solid var(--line);}
+.gl-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;padding:13px;}
+.gl-empty{padding:26px 16px;text-align:center;color:var(--ink-soft);font-weight:700;font-size:14px;}
+.rel-chip.on{border-color:var(--star);background:var(--star-soft);color:var(--ink);}
+
 /* ---- photo studio ---- */
 .ph-drop{border:2.5px dashed var(--line);border-radius:var(--radius);padding:40px 24px;text-align:center;background:var(--surface);cursor:pointer;margin-bottom:20px;transition:border-color .2s;}
 .ph-drop:active{border-color:var(--feed);}
@@ -922,6 +959,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 <div class="toast" id="toast"></div>
 
 <script src="milestone-data.js"></script>
+<script src="journey-catalogue.js"></script>
 <script>
 /* ============================================================
    LITTLE LOG: baby activity tracker
@@ -2750,23 +2788,9 @@ function journeyPromptsPreg(){
   [12,20].forEach(w=>{ if(wk>=w-1) out.push({key:'pscan:'+w, scope:'pregnancy', icon:'🩻', title:'Your '+w+'-week scan', sub:'Save the scan photo', done:haveWeek(w), onclick:"openAddMomentAt("+w+")"}); });
   return out.filter(x=>!x.done && !jDismissed(x.key,'pregnancy'));  // a done prompt never nags
 }
-function journeyPromptsBaby(){
-  const b=activeBaby(); if(!b) return [];
-  const mo=Math.floor(babyMonths());
-  const map=monthlyMap();
-  const out=[];
-  MONTH_SLOTS.filter(s=>s<=mo).forEach(s=>{ if(!map[s]) out.push({key:'bmonth:'+s, scope:'baby', icon:'🗓️', title:slotLabel(s)+' photo', sub:'One photo for '+slotLabel(s).toLowerCase(), done:false, onclick:"go('album')"}); });
-  MILESTONES.filter(m=>msVisible(m,b)&&!achievedOf(m.key)).sort((x,y)=>Math.abs(x.mo-mo)-Math.abs(y.mo-mo)).slice(0,3)
-    .forEach(m=>out.push({key:'bms:'+m.key, scope:'baby', icon:m.emoji||'⭐', title:m.title, sub:'Mark it when it happens', done:false, onclick:"openMilestone('"+m.key+"')"}));
-  const info=(window.LL&&window.LL.memberInfo)||{}; const rel=journeyRel(b.id);
-  // Relationship prompts only once their capture handler exists (Task 6) -> never a dead tap.
-  if(typeof openRelCapture==='function'){
-    Object.keys(info).forEach(uid=>{ const m=info[uid]||{}; const label=m.relationship||''; if(!label) return; const key='brel:'+uid; const have=rel.some(r=>r.relation==='uid:'+uid&&r.photoId); if(have) return; out.push({key:key, scope:'baby', art:journeyBearArt(relKeyFromLabel(label),uid,56), title:'A photo with '+label, sub:'Together', done:false, onclick:"openRelCapture('uid:"+uid+"','"+jArg(label)+"')"}); });
-    rel.filter(r=>!r.photoId&&r.relation.indexOf('uid:')!==0).forEach(r=>out.push({key:'brel:add:'+r.id, scope:'baby', art:journeyBearArt(r.relation,null,56), title:'A photo with '+r.label, sub:'Together', done:false, onclick:"openRelCapture('"+jArg(r.relation)+"','"+jArg(r.label)+"','"+r.id+"')"}));
-  }
-  return out.filter(x=>!x.done && !jDismissed(x.key,'baby'));
-}
-/* ---------- Journey P1: a photo with someone ---------- */
+// (The old baby prompt-rail generator was retired with the cutover to the gentle
+//  library; age-aware suggestions now come from glSuggested() over the catalogue.)
+/* ---------- Journey: a photo with someone (relationship captures) ---------- */
 var relDraft=null;
 // relation: 'uid:<uid>' for a circle member, else a RELATION_BEAR key ('nana','grandpa',...). label: display text. pendingId: id of a pending journeyRel entry being fulfilled (or null).
 function openRelCapture(relation, label, pendingId){
@@ -6040,82 +6064,160 @@ const MS_BANDS=[
   {hi:36,label:'2 to 3 years'},{hi:48,label:'3 to 4 years'},{hi:9999,label:'4 years and up'}
 ];
 function msBandIndex(mo){ for(var i=0;i<MS_BANDS.length;i++){ if(mo<=MS_BANDS[i].hi) return i; } return MS_BANDS.length-1; }
-function renderMilestones(){
+/* ============================================================
+   MOMENTS — the gentle memory library (289-card catalogue)
+   "Here are gentle ideas for memories you may want to save." Never a checklist:
+   counts read "N saved / N ideas", never "N of M"; no progress ring; loss-safe.
+   Baby-stage saved moments live in state.journey.saved[babyId] -> shared app blob.
+   ("Before you arrived" pregnancy cards are deferred: their captures are owner-owned
+   and belong in the pregnancy doc, never the shared blob — see MOMENTS-HANDOFF.)
+   ============================================================ */
+function glCat(){ return (window.JOURNEY_CAT&&window.JOURNEY_CAT.cards)||[]; }
+function journeySaved(){ const b=activeBaby(); if(!b) return {}; const j=journeyState(); if(!j.saved) j.saved={}; if(!j.saved[b.id]) j.saved[b.id]={}; return j.saved[b.id]; }
+function glGetSaved(id){ return journeySaved()[id]||null; }
+function glCard(id){ let c=glCat().find(x=>x.id===id); if(c) return c; const s=glGetSaved(id); if(s&&s.custom) return {id:id, stage:'Baby', section:'Custom moments', cap:s.title||'My moment', timing:'Anytime', who:'cub', art:null, custom:true}; return null; }
+var GL_WORDNUM={one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19,twenty:20,'twenty-one':21,'twenty-two':22,'twenty-three':23};
+// timing string -> [loMonths, hiMonths] for a baby card, or null (= "anytime", not age-bound).
+function cardAgeBand(t){
+  t=(t||'').trim(); const low=t.toLowerCase();
+  if(!t||low==='anytime'||low==='any month'||low==='festival'||low.indexOf('birth/anytime')>=0) return null;
+  if(/week|trimester|due date|final (week|month|day)|approx week/i.test(low)) return null;   // pregnancy timings
+  if(/newborn|birth day|hospital discharge|^day \d|^week [1-9]$/i.test(low)) return [0,1.5];
+  let m=low.match(/^month (\d+)$/); if(m){ const n=+m[1]; return [n-1,n+1]; }
+  m=low.match(/^(\d+)\s*-\s*(\d+)\s*months?$/); if(m) return [+m[1]-1,+m[2]];
+  m=low.match(/^(\d+)\s*months?$/); if(m){ const n=+m[1]; return [n-1,n+2]; }
+  m=low.match(/^([a-z-]+)\s+months? old$/); if(m&&GL_WORDNUM[m[1]]!=null){ const n=GL_WORDNUM[m[1]]; return [n-0.5,n+1.5]; }
+  m=low.match(/^([a-z-]+)\s+years? old$/); if(m&&GL_WORDNUM[m[1]]!=null){ const n=GL_WORDNUM[m[1]]*12; return [n-1,n+3]; }
+  return null;
+}
+function glSuggested(b){
+  const mo=babyMonths(); const saved=journeySaved();
+  const cards=glCat().filter(c=>c.stage==='Baby' && !saved[c.id]);
+  const scored=[];
+  cards.forEach(c=>{ const band=cardAgeBand(c.timing); if(band && mo>=band[0]-0.5 && mo<=band[1]+0.5) scored.push({c:c, w:band[1]-band[0]}); });
+  scored.sort((a,b)=>a.w-b.w);                       // narrower band = more specific to right now
+  let pick=scored.slice(0,5).map(x=>x.c);
+  if(pick.length<3){ const extra=cards.filter(c=>(c.section==='Firsts'||c.section==='About me') && !cardAgeBand(c.timing) && pick.indexOf(c)<0).slice(0,3-pick.length); pick=pick.concat(extra); }
+  return pick;
+}
+function glDateLabel(d){ if(!d) return 'Saved'; var dt=(typeof d==='number')?new Date(d):new Date(String(d)+'T08:00'); if(isNaN(dt.getTime())) dt=new Date(); return dt.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}); }
+function glCardHtml(card, opts){
+  opts=opts||{}; const saved=glGetSaved(card.id);
+  const cls=saved?'saved':(opts.suggested?'suggested':'empty');
+  const img=(saved&&saved.photoId)?photoSrc(saved.photoId):(card.art?('journey-art/'+card.art):'');
+  const art=img?`<img src="${img}" loading="lazy" alt="${escapeHtml(card.cap||'')}">`:`<div class="gl-ph">${escapeHtml(card.cap||(saved&&saved.title)||'A moment')}</div>`;
+  const cap=saved
+    ? `<div class="t">${escapeHtml(card.cap||saved.title||'A moment')}</div><div class="s">${escapeHtml(saved.date?glDateLabel(saved.date):'Saved')}</div>`
+    : `<div class="s">Add when ready</div>`;
+  const q=escapeHtml(((card.cap||'')+' '+(card.section||'')+' '+(card.sub||'')).toLowerCase());
+  return `<div class="gl-card ${cls}" data-q="${q}" onclick="openMomentDetail('${card.id}')">
+    <div class="gl-art">${art}${(opts.suggested&&!saved)?'<span class="gl-tag">optional</span>':''}${saved?'<span class="gl-check">'+I.check+'</span>':''}</div>
+    <div class="gl-cap">${cap}</div></div>`;
+}
+function glGroupHtml(section, open){
+  const saved=journeySaved();
+  let cards=glCat().filter(c=>c.stage==='Baby' && c.section===section);
+  if(section==='Custom moments'){ const cust=Object.keys(saved).filter(id=>saved[id]&&saved[id].custom).map(id=>glCard(id)).filter(Boolean); cards=cust.concat(cards); }
+  if(!cards.length) return '';
+  const savedN=cards.filter(c=>saved[c.id]).length, ideasN=cards.length;
+  const count=savedN?`${savedN} saved · ${ideasN} ideas`:`${ideasN} ideas`;
+  return `<details class="gl-group" ${open?'open':''} data-sec="${escapeHtml(section)}"><summary><span class="gt">${escapeHtml(section)}</span><span class="gc">${count}</span></summary><div class="gl-grid">${cards.map(c=>glCardHtml(c)).join('')}</div></details>`;
+}
+function glOpenSection(suggested, order){ for(var i=0;i<suggested.length;i++){ if(order.indexOf(suggested[i].section)>=0) return suggested[i].section; } return order.indexOf('Firsts')>=0?'Firsts':order[0]; }
+// Existing logged milestones stay viewable here (gentle, no ring / no "N of M") so the
+// full cutover from the old milestones surface loses no data.
+function glMarkedList(b){
+  const done=(typeof babyMilestones==='function')?babyMilestones():[];
+  if(!done.length) return '';
+  const rows=done.slice().sort((a,b)=>b.achievedAt-a.achievedAt).map(m=>`<div class="ms-row done" onclick="openMilestone('${m.key}')"><div class="ms-check">${I.check}</div>${m.photoId?`<img class="ms-thumb" src="${photoSrc(m.photoId)}">`:''}<div class="ms-body"><div class="a">${escapeHtml(m.title)}</div><div class="b">${new Date(m.achievedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</div></div></div>`).join('');
+  return `<details class="gl-group" style="margin-top:14px"><summary><span class="gt">Milestones you’ve marked</span><span class="gc">${done.length} saved</span></summary><div style="padding:11px 13px">${rows}</div></details>`;
+}
+function renderJourneyLibrary(){
   const b=activeBaby();
-  const months=babyMonths();
-  const vis=MILESTONES.filter(m=>msVisible(m,b));
-  const done=babyMilestones();
-  const customs=done.filter(m=>(m.key||'').startsWith('custom-'));
-  const doneCount=vis.filter(m=>achievedOf(m.key)).length + customs.length;
-  // Age-relative ring: progress through what is typical by now, so 200+ far-future milestones
-  // never crush the wheel into looking empty. The big number stays "moments captured".
-  const rel=vis.filter(m=>m.mo<=months+3);
-  const relDone=rel.filter(m=>achievedOf(m.key)).length;
-  const pct=rel.length?Math.min(100,Math.round(relDone/rel.length*100)):0;
-  const R=30,C=2*Math.PI*R, off=C-(pct/100)*C;
-
-  const upcoming=vis.filter(m=>!achievedOf(m.key)).sort((x,y)=>Math.abs(x.mo-months)-Math.abs(y.mo-months)).slice(0,3);
-
-  const row=(m)=>{ const a=achievedOf(m.key); return `<div class="ms-row ${a?'done':''}" data-q="${escapeHtml((m.title+' '+(m.cat||'')).toLowerCase())}" onclick="openMilestone('${m.key}')">
-      <div class="ms-check">${I.check}</div>
-      ${a&&a.photoId?`<img class="ms-thumb" src="${photoSrc(a.photoId)}">`:''}
-      <div class="ms-body"><div class="a">${escapeHtml(m.title)}</div>
-        <div class="b">${a?('Reached '+new Date(a.achievedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})):('typically ~'+m.mo+' mo')}</div></div>
-      <div class="ms-chip">${escapeHtml(m.cat)}</div></div>`; };
-
-  const curBand=msBandIndex(months);
-  const groups=MS_BANDS.map(()=>[]);
-  vis.forEach(m=>{ groups[msBandIndex(m.mo)].push(m); });
-  const bands=MS_BANDS.map((bd,i)=>{
-    if(!groups[i].length) return '';
-    const gd=groups[i].filter(m=>achievedOf(m.key)).length;
-    return `<details class="ms-band" ${i===curBand?'open':''}><summary><span>${bd.label}</span><span class="ms-bcount">${gd}/${groups[i].length}</span></summary>${groups[i].map(row).join('')}</details>`;
-  }).join('');
-
-  const customList=customs.map(m=>`<div class="ms-row done" onclick="openMilestone('${m.key}')">
-    <div class="ms-check">${I.check}</div>
-    ${m.photoId?`<img class="ms-thumb" src="${photoSrc(m.photoId)}">`:''}
-    <div class="ms-body"><div class="a">${escapeHtml(m.title)}</div><div class="b">Reached ${new Date(m.achievedAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</div></div>
-    <div class="ms-chip">${escapeHtml(m.cat||'Custom')}</div></div>`).join('');
-
-  const petRow = (b&&b.hasPet)
+  if(!b) return `<div class="gl-empty">Add your baby to start saving moments.</div>`;
+  const name=escapeHtml(b.name||'Baby');
+  const loss=!!state.lossHolding;                    // loss-safe: no guided prompts while holding
+  const order=(window.JOURNEY_CAT?window.JOURNEY_CAT.order:[]).filter(s=>s!=='Before you arrived');
+  const suggested=loss?[]:glSuggested(b);
+  const openSec=glOpenSection(suggested, order);
+  const groups=order.map(s=>glGroupHtml(s, s===openSec)).join('');
+  const relWith=journeyRel(b.id).filter(r=>r.photoId);
+  const relGrid=relWith.length?`<div class="sec-title" style="margin-top:8px">Together</div><div class="rel-grid">${relWith.map(r=>`<div class="rel-done"><img src="${photoSrc(r.photoId)}" alt="${escapeHtml(r.label)}"><div class="rel-cap">${escapeHtml(r.label)}</div></div>`).join('')}</div>`:'';
+  const addSomeone=loss?'':`<div class="add-row" onclick="openAddSomeone()">${I.plus} Add someone special</div>`;
+  const petRow=(b.hasPet)
     ? `<div class="ms-petbar">🐾 <b>${escapeHtml(b.petName||'Your pet')}</b>&rsquo;s firsts are on<button class="ms-petedit" onclick="openPetSetup()">edit</button></div>`
-    : `<button class="ms-petadd" onclick="openPetSetup()">🐾 Have a pet? Add their firsts together</button>`;
-
-  const relWith=b?journeyRel(b.id).filter(r=>r.photoId):[];
-  const relGrid=relWith.length?`<div class="sec-title">Together</div><div class="rel-grid">${relWith.map(r=>`<div class="rel-done"><img src="${photoSrc(r.photoId)}" alt="${escapeHtml(r.label)}"><div class="rel-cap">${escapeHtml(r.label)}</div></div>`).join('')}</div>`:'';
-
-  return `<div class="fade-in">
-    <div class="ms-hero">
-      <div class="ring"><svg width="74" height="74"><circle cx="37" cy="37" r="${R}" fill="none" stroke="var(--line)" stroke-width="7"/>
-        <circle cx="37" cy="37" r="${R}" fill="none" stroke="var(--star)" stroke-width="7" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${off}"/></svg>
-        <div class="rt">${doneCount}</div></div>
-      <div class="mh-body"><div class="a">${doneCount} moments captured</div><div class="b">${escapeHtml(b?b.name:'Baby')} is ${months<24?Math.floor(months)+' months':Math.floor(months/12)+' years'} · every baby grows at their own pace</div></div>
-    </div>
-    ${renderJourneySection(journeyPromptsBaby(),'baby',babyJourneyTitle())}
-    ${state.lossHolding?'':`<div class="add-row" onclick="openAddSomeone()">${I.plus} Add someone special</div>`}
+    : (loss?'':`<button class="ms-petadd" onclick="openPetSetup()">🐾 Have a pet? Add their firsts together</button>`);
+  return `<div class="fade-in" id="glRoot">
+    <div class="gl-head"><div class="a">${name}’s moments</div><div class="b">Capture the little things, in your own time.</div></div>
+    <div class="field gl-search"><input id="glSearch" placeholder="Search moments, firsts, family…" autocomplete="off" oninput="glFilter(this.value)"></div>
+    ${suggested.length?`<div class="gl-suggest"><div class="gl-st"><span class="t">Suggested for ${name} right now</span><span class="m">optional</span></div><div class="gl-rail">${suggested.map(c=>glCardHtml(c,{suggested:true})).join('')}</div></div>`:''}
+    ${loss?'':`<button class="gl-create" onclick="openCreateMoment()"><span class="ic">${I.plus}</span>Create your own moment</button>`}
+    <div id="glGroups">${groups}</div>
     ${relGrid}
+    ${addSomeone}
     ${petRow}
-    <div class="field" style="margin-bottom:12px"><input id="msSearch" placeholder="Search milestones and firsts…" autocomplete="off" oninput="filterMs(this.value)"></div>
-    ${upcoming.length?`<div class="sec-title">Coming up</div>${upcoming.map(m=>`<div class="ms-row" onclick="openMilestone('${m.key}')"><div class="ms-check">${I.check}</div><div class="ms-body"><div class="a">${escapeHtml(m.title)}</div><div class="b">typically around ${m.mo} months</div></div><div class="ms-chip">${escapeHtml(m.cat)}</div></div>`).join('')}`:''}
-    ${customList?`<div class="sec-title">Your moments</div>${customList}`:''}
-    <div class="sec-title">By age</div>
-    <div id="msBands">${bands}</div>
-    <div class="add-row" style="margin-top:4px" onclick="openCustomMilestone()">${I.plus} Add your own moment</div>
+    ${glMarkedList(b)}
   </div>`;
 }
-function filterMs(q){
+function glFilter(q){
   q=(q||'').trim().toLowerCase();
-  document.querySelectorAll('#msBands .ms-band').forEach(function(bd){
+  document.querySelectorAll('#glGroups .gl-group').forEach(function(g){
     var any=false;
-    bd.querySelectorAll('.ms-row').forEach(function(r){
-      var hit=!q||(r.getAttribute('data-q')||'').indexOf(q)>=0;
-      r.style.display=hit?'':'none'; if(hit) any=true;
-    });
-    bd.style.display=any?'':'none';
-    if(q) bd.open=true;        // reveal matches across all bands while searching
+    g.querySelectorAll('.gl-card').forEach(function(c){ var hit=!q||(c.getAttribute('data-q')||'').indexOf(q)>=0; c.style.display=hit?'':'none'; if(hit) any=true; });
+    g.style.display=any?'':'none'; if(q) g.open=true;
   });
 }
+/* ---------- Moments: capture / detail sheet ---------- */
+var glDraft=null;
+function openMomentDetail(id){ const card=glCard(id); if(!card) return; const s=glGetSaved(id); glDraft={cardId:id, card:card, photoData:null, removePhoto:false, who:(s&&s.who)||'', title:(s&&s.title)||''}; renderMomentDetail(); }
+function openCreateMoment(){ glDraft={cardId:'cust-'+uid(), card:{id:'',stage:'Baby',section:'Custom moments',cap:'',timing:'Anytime',who:'cub',art:null,custom:true}, photoData:null, removePhoto:false, who:'', title:''}; renderMomentDetail(); }
+function glNotePlaceholder(card){ return (card&&card.section==='With family')?'Who was there, what you did…':'What made this one special…'; }
+function glWhoChips(sel){
+  const info=(window.LL&&window.LL.memberInfo)||{}; const labels=[];
+  Object.keys(info).forEach(function(u){ const l=(info[u]||{}).relationship; if(l&&labels.indexOf(l)<0) labels.push(l); });
+  ['Mama','Papa','Grandma','Grandpa'].forEach(function(l){ if(labels.indexOf(l)<0) labels.push(l); });
+  return labels.map(function(l){ return `<button type="button" class="rel-chip${sel===l?' on':''}" onclick="glPickWho('${jArg(l)}',this)">${escapeHtml(l)}</button>`; }).join('');
+}
+function glPickWho(l,el){ if(!glDraft) return; glDraft.who=(glDraft.who===l)?'':l; document.querySelectorAll('#glWho .rel-chip').forEach(function(x){x.classList.remove('on');}); if(glDraft.who&&el) el.classList.add('on'); }
+function glLoadPhoto(input){ const f=input.files[0]; if(!f)return; downscaleToData(f,1200,0.8,function(data){ glDraft.photoData=data; glDraft.removePhoto=false; renderMomentDetail(); }); }
+function glClearPhoto(){ if(!glDraft) return; glDraft.photoData=null; glDraft.removePhoto=true; renderMomentDetail(); }
+function renderMomentDetail(){
+  const d=glDraft; if(!d) return; const card=d.card; const saved=glGetSaved(d.cardId); const isCustom=!!card.custom;
+  const bn=escapeHtml((activeBaby()||{}).name||'your baby');
+  const title=isCustom?(d.title||'Your own moment'):(card.cap||'A moment');
+  const preview=card.art?`<img class="card-prev" src="journey-art/${card.art}" alt="${escapeHtml(card.cap||'')}">`:'';
+  const existing=(!d.removePhoto&&saved&&saved.photoId)?photoSrc(saved.photoId):'';
+  const photoBlock=d.photoData
+    ? `<div class="food-preview"><img src="${d.photoData}"><button class="rm" onclick="glClearPhoto()">×</button></div>`
+    : existing
+      ? `<div class="food-preview"><img src="${existing}"><button class="rm" onclick="glClearPhoto()">×</button></div>`
+      : `<button class="btn-ghost" style="margin:0" onclick="document.getElementById('glPhoto').click()">${I.camera} Add a photo</button>`;
+  openSheet(`<h2>${escapeHtml(title)}</h2><div class="sub">${escapeHtml(card.section||'Moments')} · saved privately to ${bn}’s scrapbook</div>
+    ${preview}
+    ${isCustom?`<div class="field"><label>What happened?</label><input id="glTitle" maxlength="60" placeholder="e.g. First trip to the sea" value="${escapeHtml(d.title||'')}" oninput="glDraft.title=this.value"></div>`:''}
+    <input type="file" id="glPhoto" accept="image/*" style="display:none" onchange="glLoadPhoto(this)">
+    ${photoBlock}
+    <div class="field" style="margin-top:12px"><label>A little note (optional)</label><input id="glNote" placeholder="${escapeHtml(glNotePlaceholder(card))}" value="${escapeHtml((saved&&saved.note)||'')}"></div>
+    <div class="field"><label>When</label>${datePicker('glDate',(saved&&saved.date)||now(),{max:_dpYMD()})}</div>
+    <div class="field"><label>Who’s in it (optional)</label><div class="rel-chips" id="glWho">${glWhoChips(d.who)}</div></div>
+    <button class="btn-primary" style="background:var(--star)" onclick="saveJourneyMoment()">Save moment</button>
+    ${saved?`<button class="btn-ghost" style="margin-top:8px;color:var(--ink-soft)" onclick="removeJourneyMoment('${d.cardId}')">Remove this moment</button>`:''}`,'star');
+}
+async function saveJourneyMoment(){
+  const b=activeBaby(); const d=glDraft; if(!b||!d) return;
+  const note=((document.getElementById('glNote')||{}).value||'').trim();
+  const date=((document.getElementById('glDate')||{}).value||'');
+  const title=d.card.custom?((((document.getElementById('glTitle')||{}).value)||'').trim()):'';
+  const saved=glGetSaved(d.cardId)||{};
+  let photoId=saved.photoId||null; if(d.removePhoto) photoId=null;
+  if(d.photoData){ photoId=uid(); await PhotoStore.set(photoId,d.photoData); }
+  if(!photoId && !note && !(d.card.custom&&title)){ toast('Add a photo or a note'); return; }
+  const rec={ photoId:photoId, note:note, date:date, who:d.who||'', at:saved.at||now(), updated:now() };
+  if(d.card.custom){ rec.custom=true; rec.title=title||'A moment'; rec.section='Custom moments'; }
+  journeySaved()[d.cardId]=rec;
+  glDraft=null; persist(); closeSheet(); render(); toast('Saved to '+(b.name||'your baby')+'’s scrapbook 🤍');
+}
+function removeJourneyMoment(id){ const m=journeySaved(); delete m[id]; glDraft=null; persist(); closeSheet(); render(); toast('Removed'); }
 function openPetSetup(){
   const b=activeBaby(); if(!b)return;
   openSheet(`<h2>Your pet 🐾</h2><div class="sub">Add your pet so Cubby can celebrate their firsts with ${escapeHtml(b.name)}. Skip anytime.</div>
@@ -6398,8 +6500,8 @@ function renderAlbum(){
   const seg=`<div class="seg seg-full">
     <button class="${albumTab==='photos'?'on':''}" onclick="setAlbumTab('photos')">Photos</button>
     <button class="${albumTab==='memories'?'on':''}" onclick="setAlbumTab('memories')">Memories</button>
-    <button class="${albumTab==='milestones'?'on':''}" onclick="setAlbumTab('milestones')">Milestones</button></div>`;
-  const body = albumTab==='memories'?renderMemories() : albumTab==='milestones'?renderMilestones() : renderPhotos();
+    <button class="${albumTab==='milestones'?'on':''}" onclick="setAlbumTab('milestones')">Moments</button></div>`;
+  const body = albumTab==='memories'?renderMemories() : albumTab==='milestones'?renderJourneyLibrary() : renderPhotos();
   return `<div class="fade-in">${coachMark('album','This is your Album','Photos, keepsake cards (birth poster, monthly cards) and milestones, all here. Tap a milestone to mark it: teeth, first steps, the fun stuff.')}${seg}${body}</div>`;
 }
 let logTab='log';

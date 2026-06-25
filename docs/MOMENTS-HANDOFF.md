@@ -67,12 +67,19 @@ In `app/index.html` + `app/store-firebase.js` (do not rebuild; the simple rail w
 ---
 
 ## 7. Next steps
-1. **Art:** founder generates Layer 1 (hero first) → drops in `art-src/` → run `compose_cards.js`.
-2. **Build the gentle-library section** in `app/index.html`, bound to `docs/journey-cards.json` + `app/journey-art/manifest.json` (replace the P1 rail): header/search/suggested/collapsible sections/card states/create-your-own/moment-detail; copy rules; loss-safe.
-3. **Wire capture** to catalogue cards (photo/note/date/who; saved state shows photo).
-4. **"Suggested now"** = age/stage-aware selection from the catalogue.
-5. **Verify + ship:** `node tools/smoke.js http://localhost:8080/app/`, puppeteer probes via `?e2e=1`, 390px screenshots (`tools/shot.js`); then SW bump (HEAD+1) → commit → merge to `main` → push → confirm live on `/app/`.
-6. **Later (P2/P3):** scrapbook/book + slideshow export (Pro), packs.
+**Gentle-library section — BUILT (2026-06-25, on this branch, SW v138). Verified, not yet merged to `main`.**
+- New runtime catalogue `app/journey-catalogue.js` (`window.JOURNEY_CAT`), emitted by `tools/build_cards.js`, script-tagged + SW-precached.
+- The **Album → "Moments"** tab (was "Milestones") now renders `renderJourneyLibrary()`: header, search, "Suggested for X right now" (age-aware via `glSuggested`/`cardAgeBand`), 7 collapsible baby-stage sections with **"N saved · N ideas"** counts (never "N of M"), card states (saved photo+check / empty "Add when ready" / suggested tag), "Create your own moment", and a moment-detail capture sheet (photo/note/date via the crafted in-sheet `datePicker`/who-chips).
+- **Full cutover done:** the old progress ring + "N of M" milestone bands are retired (they broke "no completion bars"). Existing logged milestones are preserved in a gentle "Milestones you've marked" list (no ring); rel "Together" captures + "Add someone special" + pet-firsts toggle kept.
+- **Store:** baby moments → `state.journey.saved[babyId][cardId]` → shared app blob (same privacy path as existing baby photos). Loss-safe guard in place.
+
+Remaining:
+1. **Art (founder, human task):** generate Layer 1 (hero first) → drop in `art-src/` → run `compose_cards.js`. Until then the 289 cards show pastel placeholders (caption baked in). **The library is live-shaped but should probably wait for real art before a prod merge** (high art bar).
+2. **"Before you arrived" (pregnancy, 54 cards) — DEFERRED on purpose.** Its captures are owner-owned and must live in the pregnancy doc, NEVER the shared blob; pregnancy memories already have a home (the pregnancy Moments tab). Wiring it needs the cross-stage owner-owned storage worked out (active-preg `state.pregnancy.journey.saved` vs born-baby archive). Don't fold it into the baby blob.
+3. **Prod merge decision (pending founder OK):** branch is committed + pushed but NOT merged to `main`. Don't push pastel placeholders live without a yes.
+4. **Later (P2/P3):** scrapbook/book + slideshow export (Pro), packs.
+
+Verify loop used: `node tools/serve.js` + `node tools/probe_moments.js` (seeds a baby, screenshots Moments at 390px) + `node tools/smoke.js`.
 
 ---
 
@@ -91,7 +98,9 @@ In `app/index.html` + `app/store-firebase.js` (do not rebuild; the simple rail w
 ## 9. Key files
 - `docs/MOMENTS-HANDOFF.md` — this file.
 - `docs/journey-cards.tsv` — the 289-card matrix (source of truth).
-- `tools/build_cards.js` → `docs/journey-cards.json` — parser + catalogue.
+- `tools/build_cards.js` → `docs/journey-cards.json` **+ `app/journey-catalogue.js`** — parser + catalogue (re-run after editing the TSV).
+- `app/journey-catalogue.js` — runtime catalogue (`window.JOURNEY_CAT`) the gentle library reads.
+- `tools/probe_moments.js` — local visual/functional probe for the Moments tab (seed + screenshot).
 - `tools/journey-compose.html` + `tools/compose_cards.js` — Layer1+Layer2 → `app/journey-art/*.webp` + `manifest.json`.
 - `art-src/` — drop Layer-1 PNGs here (gitignored).
 - `docs/journey-art-brief.md` — illustration brief / prompts.
