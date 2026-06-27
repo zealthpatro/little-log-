@@ -15,6 +15,14 @@
   - **Local dashboard** (`tools/ops.js --serve` → `http://localhost:PORT`) — an interactive, auto-refreshing HTML view (search, drill-down, action buttons). Bound to localhost only.
 - **No new prod surface, no Cloud Functions** (Spark plan) — all admin logic runs locally against Firestore via the Admin SDK.
 
+## 2b. Data store — do we need a separate DB? (No, not now)
+- **Firestore is already the database.** Cubby Ops reads it directly via the Admin SDK. No new DB, no warehouse, no server. Setup = the key + `firebase-admin`.
+- **Fine at beta scale.** Direct reads work while data is small.
+- **The one cost/speed gotcha:** a *live* dashboard that re-reads `collectionGroup('events')` on every refresh bills a Firestore read per event doc and slows as history grows (same "unbounded read" issue we just fixed in app boot).
+- **When that bites → cheap rollups, not a new DB:** a small scheduled job writes daily metric snapshots to one `ops/metrics` doc; the dashboard reads that tiny aggregate instead of all raw events. Near-free, instant.
+- **A real warehouse** (Firestore→BigQuery export, or Postgres/DuckDB the tool syncs into) is only worth it at real scale + heavy SQL — and BigQuery export needs the **Blaze plan** (you're on Spark). Defer until volume demands it.
+- **v1 plan:** read Firestore directly + a small local cache so the live view isn't re-reading everything each refresh; add rollups when event volume grows; warehouse much later (if ever).
+
 ## 3. What it reads (existing collections)
 `users` · `households` (members, memberInfo, formerMemberInfo, app blob, pro) · `collectionGroup('events')` · `photos` · `pregnancy` (owner-owned) · `mhealth` (owner-owned, maternal-private) · `invites` · `feedback` · `waitlist` · `notes`. Acquisition (`utm`/`ref`) lives on `users`/`waitlist`.
 
