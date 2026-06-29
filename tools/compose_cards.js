@@ -32,9 +32,15 @@ const PALETTE = {
   await page.goto(TEMPLATE, { waitUntil: 'networkidle2', timeout: 30000 });
   await page.evaluate(async () => { try { await document.fonts.ready; } catch (e) {} });
 
-  const manifest = {};
+  // JOURNEY_ONLY=<id|slug>[,<id|slug>...] bakes just those cards (fast iteration); merges into
+  // the existing manifest so the other cards' entries are preserved.
+  const ONLY = process.env.JOURNEY_ONLY || '';
+  const ONLYSET = ONLY ? new Set(ONLY.split(',').map(s => s.trim()).filter(Boolean)) : null;
+  const manifest = ONLYSET && fs.existsSync(path.join(OUT, 'manifest.json'))
+    ? JSON.parse(fs.readFileSync(path.join(OUT, 'manifest.json'), 'utf8')) : {};
   let withArt = 0, fallback = 0;
   for (const c of cat.cards) {
+    if (ONLYSET && !ONLYSET.has(c.id) && !ONLYSET.has(c.slug)) continue;
     const raw = path.join(SRC, c.file);
     let img = null;
     if (haveSrc && fs.existsSync(raw)) { img = 'data:image/png;base64,' + fs.readFileSync(raw).toString('base64'); withArt++; }
