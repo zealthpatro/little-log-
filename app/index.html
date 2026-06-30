@@ -3925,12 +3925,16 @@ function renderPregMoments(){
       </div>
     </div>`;
   }).join('');
+  const days=pregDaysToGo();
+  const togo=(days!=null&&days>=0)?(days<=7?'almost here':Math.round(days/7)+' weeks to go'):'';
   return `<div class="fade-in">
-    <div class="greeting">Moments 📷</div>
-    <div class="greeting-sub">Your scans and bump pictures, paired with how big your baby was that week. The first photo album, before the album.</div>
-    <button class="btn-primary" style="background:var(--preg);margin:6px 0 14px" onclick="openAddMoment()">${I.camera} Add a moment</button>
-    ${renderJourneySection(pj,'pregnancy',pregJourneyTitle())}
-    ${cards||(pj.length?'':`<div class="preg-card"><div class="pc-ico">🖼️</div><div><div class="pc-t">Nothing here yet</div><div class="pc-b">Add your first ultrasound after a scan, or a bump photo any week. Each one is saved with the week and what size your baby was.</div></div></div>`)}
+    <div class="greeting">${escapeHtml(pregJourneyTitle())}</div>
+    <div class="greeting-sub">Your story before they arrive${togo?', '+escapeHtml(togo):''} — the little moments on the way to meeting them.</div>
+    ${renderPregLibrary()}
+    <div class="sec-title" style="margin-top:18px">Bump &amp; scan album</div>
+    <div class="greeting-sub" style="margin-bottom:10px">Week-tagged scans and bump photos, with how big your baby was that week.</div>
+    ${cards||''}
+    <div class="add-row" onclick="openAddMoment()">${I.plus} Add a bump or scan photo</div>
   </div>`;
 }
 function openAddMoment(){
@@ -6186,8 +6190,10 @@ function glPickWho(l,el){ if(!glDraft) return; glDraft.who=(glDraft.who===l)?'':
 function glLoadPhoto(input){ const f=input.files[0]; if(!f)return; downscaleToData(f,1200,0.8,function(data){ glDraft.photoData=data; glDraft.removePhoto=false; renderMomentDetail(); }); }
 function glClearPhoto(){ if(!glDraft) return; glDraft.photoData=null; glDraft.removePhoto=true; renderMomentDetail(); }
 function renderMomentDetail(){
-  const d=glDraft; if(!d) return; const card=d.card; const saved=glGetSaved(d.cardId); const isCustom=!!card.custom;
+  const d=glDraft; if(!d) return; const card=d.card; const isPreg=d.scope==='preg';
+  const saved=isPreg?pregJGet(d.cardId):glGetSaved(d.cardId); const isCustom=!!card.custom;
   const bn=escapeHtml((activeBaby()||{}).name||'your baby');
+  const sub=isPreg?'Saved privately to your pregnancy journey 🤍':(escapeHtml(card.section||'Moments')+' · saved privately to '+bn+'’s scrapbook');
   const title=isCustom?(d.title||'Your own moment'):(card.cap||'A moment');
   const preview=card.art?`<img class="card-prev" src="journey-art/${card.art}" alt="${escapeHtml(card.cap||'')}">`:'';
   const existing=(!d.removePhoto&&saved&&saved.photoId)?photoSrc(saved.photoId):'';
@@ -6196,7 +6202,7 @@ function renderMomentDetail(){
     : existing
       ? `<div class="food-preview"><img src="${existing}"><button class="rm" onclick="glClearPhoto()">×</button></div>`
       : `<button class="btn-ghost" style="margin:0" onclick="document.getElementById('glPhoto').click()">${I.camera} Add a photo</button>`;
-  openSheet(`<h2>${escapeHtml(title)}</h2><div class="sub">${escapeHtml(card.section||'Moments')} · saved privately to ${bn}’s scrapbook</div>
+  openSheet(`<h2>${escapeHtml(title)}</h2><div class="sub">${sub}</div>
     ${preview}
     ${isCustom?`<div class="field"><label>What happened?</label><input id="glTitle" maxlength="60" placeholder="e.g. First trip to the sea" value="${escapeHtml(d.title||'')}" oninput="glDraft.title=this.value"></div>`:''}
     <input type="file" id="glPhoto" accept="image/*" style="display:none" onchange="glLoadPhoto(this)">
@@ -6208,20 +6214,88 @@ function renderMomentDetail(){
     ${saved?`<button class="btn-ghost" style="margin-top:8px;color:var(--ink-soft)" onclick="removeJourneyMoment('${d.cardId}')">Remove this moment</button>`:''}`,'star');
 }
 async function saveJourneyMoment(){
-  const b=activeBaby(); const d=glDraft; if(!b||!d) return;
+  const d=glDraft; if(!d) return; const isPreg=d.scope==='preg'; const b=activeBaby();
+  if(!isPreg && !b) return; if(isPreg && !state.pregnancy) return;
   const note=((document.getElementById('glNote')||{}).value||'').trim();
   const date=((document.getElementById('glDate')||{}).value||'');
   const title=d.card.custom?((((document.getElementById('glTitle')||{}).value)||'').trim()):'';
-  const saved=glGetSaved(d.cardId)||{};
+  const saved=(isPreg?pregJGet(d.cardId):glGetSaved(d.cardId))||{};
   let photoId=saved.photoId||null; if(d.removePhoto) photoId=null;
   if(d.photoData){ photoId=uid(); await PhotoStore.set(photoId,d.photoData); }
   if(!photoId && !note && !(d.card.custom&&title)){ toast('Add a photo or a note'); return; }
   const rec={ photoId:photoId, note:note, date:date, who:d.who||'', at:saved.at||now(), updated:now() };
-  if(d.card.custom){ rec.custom=true; rec.title=title||'A moment'; rec.section='Custom moments'; }
-  journeySaved()[d.cardId]=rec;
-  glDraft=null; persist(); closeSheet(); render(); toast('Saved to '+(b.name||'your baby')+'’s scrapbook 🤍');
+  if(d.card.custom){ rec.custom=true; rec.title=title||'A moment'; rec.section=isPreg?'Before you arrived':'Custom moments'; }
+  if(isPreg) pregJSaved()[d.cardId]=rec; else journeySaved()[d.cardId]=rec;
+  glDraft=null; persist(); closeSheet(); render(); toast(isPreg?'Saved to your pregnancy journey 🤍':'Saved to '+(b.name||'your baby')+'’s scrapbook 🤍');
 }
-function removeJourneyMoment(id){ const m=journeySaved(); delete m[id]; glDraft=null; persist(); closeSheet(); render(); toast('Removed'); }
+function removeJourneyMoment(id){ const isPreg=glDraft&&glDraft.scope==='preg'; const m=isPreg?pregJSaved():journeySaved(); delete m[id]; glDraft=null; persist(); closeSheet(); render(); toast('Removed'); }
+
+/* ===== Pregnancy gentle library — owner-owned (state.pregnancy.journey.saved), anchored to the
+   due date so the story reads as a COUNTDOWN. Never the shared baby blob (privacy split). ===== */
+function pregJSaved(){ const p=state.pregnancy; if(!p) return {}; if(!p.journey) p.journey={}; if(!p.journey.saved) p.journey.saved={}; return p.journey.saved; }
+function pregJGet(id){ return pregJSaved()[id]||null; }
+function pregCat(){ return ((window.JOURNEY_CAT&&window.JOURNEY_CAT.cards)||[]).filter(function(c){return c.stage==='Pregnancy';}); }
+var PREG_MONTHS={one:4,two:8,three:12,four:16,five:20,six:24,seven:28,eight:32,nine:36};
+// timing/caption -> approx gestational week, so the journey reads as a countdown to the due date.
+function pregCardWeek(c){
+  const t=(c.timing||'').toLowerCase(), cap=(c.cap||'').toLowerCase(); var m;
+  if(/months? pregnant/.test(cap)){ m=cap.match(/(one|two|three|four|five|six|seven|eight|nine)/); if(m&&PREG_MONTHS[m[1]]) return PREG_MONTHS[m[1]]; }
+  if(/found out|two little lines|happy tears/.test(cap)) return 5;
+  if(/reveal|it.s a (boy|girl)/.test(cap)) return 20;
+  if(/announce/.test(cap)) return 14;
+  if(/chose your name/.test(cap)) return 28;
+  if(/blessed/.test(cap)) return 30;
+  if(/told (mama|papa)|our (little )?secret/.test(cap)) return 12;
+  if((m=t.match(/weeks? (\d+)\s*-\s*(\d+)/))) return Math.round((+m[1]+ +m[2])/2);
+  if((m=t.match(/approx week (\d+)|week (\d+)/))) return +(m[1]||m[2]);
+  if(/first trimester/.test(t)) return 9;
+  if(/second trimester/.test(t)) return 20;
+  if(/third trimester/.test(t)) return 32;
+  if((m=t.match(/(\d+)\s*days? to go/))) return Math.round(40-(+m[1])/7);
+  if(/final (week|day|month)|almost/.test(t)) return 38;
+  if(/due date|ready to meet|waiting/.test(t)) return 40;
+  if(/any day|overdue/.test(t)) return 40;
+  return 25;
+}
+function pregPhase(w){ return w<=13?0:w<=27?1:2; }
+var PREG_PHASES=[{t:'The secret'},{t:'Telling & feeling'},{t:'The countdown'}];
+function pregJSuggested(){
+  const wk=pregWeek(); const saved=pregJSaved();
+  return pregCat().filter(function(c){return !saved[c.id];}).map(function(c){return {c:c,w:pregCardWeek(c)};})
+    .filter(function(x){return x.w>=wk-2 && x.w<=wk+4;}).sort(function(a,b){return Math.abs(a.w-wk)-Math.abs(b.w-wk);}).slice(0,5).map(function(x){return x.c;});
+}
+function pregJCardHtml(card){
+  const saved=pregJGet(card.id);
+  const cls=saved?'saved':'empty';
+  const img=(saved&&saved.photoId)?photoSrc(saved.photoId):(card.art?('journey-art/'+card.art):'');
+  const art=img?`<img src="${img}" loading="lazy" alt="${escapeHtml(card.cap||'')}">`:`<div class="gl-ph">${escapeHtml(card.cap||(saved&&saved.title)||'A moment')}</div>`;
+  const cap=saved?`<div class="t">${escapeHtml(card.cap||saved.title||'')}</div><div class="s">${escapeHtml(saved.date?glDateLabel(saved.date):'Saved')}</div>`:`<div class="s">Add when ready</div>`;
+  const q=escapeHtml(((card.cap||'')+' '+(card.sub||'')).toLowerCase());
+  return `<div class="gl-card ${cls}" data-q="${q}" onclick="openPregMoment('${card.id}')"><div class="gl-art">${art}${saved?'<span class="gl-check">'+I.check+'</span>':''}</div><div class="gl-cap">${cap}</div></div>`;
+}
+function renderPregLibrary(){
+  const p=state.pregnancy; if(!p||state.lossHolding) return '';
+  const wk=pregWeek(), days=pregDaysToGo();
+  const togo=(days!=null&&days>=0)?(days<=7?'almost here':Math.round(days/7)+' weeks to go'):(days!=null?'any day now':'');
+  const cards=pregCat();
+  const sug=pregJSuggested();
+  const groups=[0,1,2].map(function(ph){
+    const cs=cards.filter(function(c){return pregPhase(pregCardWeek(c))===ph;}).sort(function(a,b){return pregCardWeek(a)-pregCardWeek(b);});
+    if(!cs.length) return '';
+    const saved=pregJSaved(); const sv=cs.filter(function(c){return saved[c.id];}).length;
+    const open=pregPhase(wk)===ph;
+    return `<details class="gl-group" ${open?'open':''} data-sec="${ph}"><summary><span class="gt">${PREG_PHASES[ph].t}</span><span class="gc">${sv?sv+' saved · ':''}${cs.length} moments</span></summary><div class="gl-grid">${cs.map(pregJCardHtml).join('')}</div></details>`;
+  }).join('');
+  return `<div id="pglRoot">
+    <div class="field gl-search"><input id="pglSearch" placeholder="Search your pregnancy moments…" autocomplete="off" oninput="pglFilter(this.value)"></div>
+    ${sug.length?`<div class="gl-suggest"><div class="gl-st"><span class="t">For you right now${togo?' · '+escapeHtml(togo):''}</span><span class="m">optional</span></div><div class="gl-rail">${sug.map(pregJCardHtml).join('')}</div></div>`:''}
+    <button class="gl-create" onclick="openPregMoment('cust-'+uid())"><span class="ic">${I.plus}</span>Add your own moment</button>
+    <div id="pglGroups">${groups}</div>
+  </div>`;
+}
+function pglFilter(q){ q=(q||'').trim().toLowerCase(); document.querySelectorAll('#pglGroups .gl-group').forEach(function(g){var any=false;g.querySelectorAll('.gl-card').forEach(function(c){var hit=!q||(c.getAttribute('data-q')||'').indexOf(q)>=0;c.style.display=hit?'':'none';if(hit)any=true;});g.style.display=any?'':'none';if(q)g.open=true;}); }
+function pregJCard(id){ var c=pregCat().find(function(x){return x.id===id;}); if(c) return c; var s=pregJGet(id); return {id:id, stage:'Pregnancy', section:'Before you arrived', cap:(s&&s.title)||'A moment', art:null, custom:true}; }
+function openPregMoment(id){ var card=pregJCard(id); if(id.indexOf('cust-')===0) card.custom=true; var s=pregJGet(id); glDraft={cardId:id, card:card, scope:'preg', photoData:null, removePhoto:false, who:(s&&s.who)||'', title:(s&&s.title)||''}; renderMomentDetail(); }
 function openPetSetup(){
   const b=activeBaby(); if(!b)return;
   openSheet(`<h2>Your pet 🐾</h2><div class="sub">Add your pet so Cubby can celebrate their firsts with ${escapeHtml(b.name)}. Skip anytime.</div>
