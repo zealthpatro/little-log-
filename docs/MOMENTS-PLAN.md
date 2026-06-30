@@ -119,3 +119,55 @@ multi-capture build; placeholder singles for now).
 **Status:** library live + due-date countdown wired; **20 couple illustrations baked** (discovery →
 shower → nursery → countdown); ~25 remaining to generate (kicks, scans, telling family, the final
 countdown), in week order.
+
+---
+
+## 8. The keepsake OUTPUT — frameable collection boards (the payoff)
+
+The journey doesn't end at captured cards — it **assembles into frameable, name-personalised
+boards**, in the spirit of the physical "My First Year" milestone frames (the wooden/acrylic
+month-grid boards, "One Year of Anaya"). This is the emotional payoff + the Pro/merch hook.
+
+**Themed frameable collections** (each = a collection that auto-renders into a poster in the
+watercolour-bear style, with the baby's name in script + soft motifs):
+- **My First Year** — Newborn + the 1–12 month photos in a grid + name (the canonical board).
+- **My First Expressions** — first smile, laugh, surprised, giggle, sleepy.
+- **My First Actions** — first steps, crawl, wave, clap, peekaboo.
+- **My Firsts** — the milestone firsts.
+- **Before You Arrived** — the pregnancy countdown rendered as a board.
+
+**Engine already exists:** the canvas composers (`composePoster` / `composeMemoryCard`, portrait
+`FMT_DIMS`, `MOMENT_PALETTES`, `drawDecor`) + the monthly cards render these from pieces we have.
+
+**Flow + gating (existing model):** capture moments → they assemble into the board → **view free**
+(watermarked preview) → **download + share = Pro** → **physical print = the delighter** (print-on-
+demand the board as a real frame, shipped — the parked merch stream; build the artifact print-ready
+now, ship later; address from checkout, photos-to-printer per-order opt-in for privacy).
+
+**Dependency order (locked):** collections → frameable boards → physical print. A board IS a
+collection rendered — you can't frame what you can't collect.
+
+### 8a. Pages → Scrapbook (the full model)
+
+Each keepsake is a **page**; the pages assemble into a **growing scrapbook** (the digital book —
+the artifact that doesn't exist yet). Page types:
+
+- **Birth collage / birth stats** — hero baby photo + parents photo + name (script) + the stats
+  (date, time, weight, length, blood group, hospital, place). **Auto-assembles** from data Cubby
+  already holds (birth date, weight/length from growth, the newborn photo); the parent just confirms
+  + adds a couple of fields. This is the strongest page because it's *almost no work* — the Charter.
+  (Engine: `composePoster` already exists for the birth poster.)
+- **My First Year** — Newborn + 1–12 month grid + name.
+- **My First [X]** — open-ended themed pages: First trip · First friend · First activity · First
+  foods · First holiday · expressions · actions · etc. Each = a collection rendered as a page.
+
+So the scrapbook = a book of these pages, each auto/assembled from moments + logged data, in the
+watercolour-bear style. **Build order:** collections → page templates (Birth collage first — it
+auto-fills) → the scrapbook container → share/download (Pro) → physical print (delighter).
+
+### 8b. Caption type (fixed)
+
+Card captions are baked in **Caveat** (warm handwriting), self-hosted + injected as base64 by
+`compose_cards.js` and awaited before screenshot — the old CDN `@import` raced the render and baked
+a plain fallback (it "killed the vibe"). Handwriting matches the keepsake references (names always
+hand-lettered). #5F534A, top-centre, size scales down for long captions.

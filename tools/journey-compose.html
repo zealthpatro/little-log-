@@ -4,14 +4,16 @@
      Caption type spec is fixed here so all 289 cards are identical: EB Garamond Medium, #5F534A,
      sentence case (caption comes pre-cased from the catalogue), top-centre, balanced wrapping. -->
 <style>
-@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@500&display=swap');
+/* Caption font (Caveat, warm handwriting) is self-hosted and injected by compose_cards.js as a
+   base64 @font-face before rendering, so it ALWAYS loads in headless (the old CDN @import raced the
+   screenshot and baked the plain fallback). 'Fraunces',cursive is the standalone-preview fallback. */
 *{margin:0;box-sizing:border-box}
 html,body{background:#fff}
 #card{width:480px;height:600px;position:relative;overflow:hidden;background:#EFE7DA}
 #layer1{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none}
-#cap{position:absolute;top:7.5%;left:10%;right:10%;text-align:center;
-  font-family:'EB Garamond',Georgia,serif;font-weight:500;color:#5F534A;
-  font-size:33px;line-height:1.14;letter-spacing:.2px;text-wrap:balance;-webkit-hyphens:none;hyphens:none}
+#cap{position:absolute;top:6.5%;left:8%;right:8%;text-align:center;
+  font-family:'Caveat','Fraunces',cursive;font-weight:600;color:#5F534A;
+  font-size:52px;line-height:1.08;letter-spacing:.3px;text-wrap:balance;-webkit-hyphens:none;hyphens:none}
 </style></head><body>
 <div id="card"><img id="layer1" alt=""><div id="cap"></div></div>
 <script>
@@ -23,9 +25,9 @@ window.renderCard = function (o) {
   if (o.img) { l1.style.display = 'block'; l1.src = o.img; } else { l1.style.display = 'none'; }
   var cap = document.getElementById('cap');
   cap.textContent = o.caption || '';
-  // shrink a touch for long captions so they never crowd the illustration
+  // shrink a touch for long captions so they never crowd the illustration (Caveat reads large)
   var n = (o.caption || '').length;
-  cap.style.fontSize = (n > 26 ? 28 : n > 16 ? 31 : 34) + 'px';
+  cap.style.fontSize = (n > 26 ? 40 : n > 16 ? 46 : 54) + 'px';
 };
 window.__ready = true;
 window.renderCard({ caption: 'Six months old', bg: '#DDE3D5' });

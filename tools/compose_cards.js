@@ -30,7 +30,14 @@ const PALETTE = {
   const page = await browser.newPage();
   await page.setViewport({ width: 480, height: 600, deviceScaleFactor: 2 });
   await page.goto(TEMPLATE, { waitUntil: 'networkidle2', timeout: 30000 });
-  await page.evaluate(async () => { try { await document.fonts.ready; } catch (e) {} });
+  // Inject the self-hosted caption font (Caveat) as base64 and AWAIT it, so headless never bakes a
+  // plain fallback (the old CDN @import raced the screenshot). FontFace API guarantees it's ready.
+  const capFontB64 = fs.readFileSync(path.join(ROOT, 'app', 'fonts', 'caveat-600-latin.woff2')).toString('base64');
+  await page.evaluate(async (b64) => {
+    var ff = new FontFace('Caveat', 'url(data:font/woff2;base64,' + b64 + ') format("woff2")', { weight: '600' });
+    document.fonts.add(ff); await ff.load();
+    try { await document.fonts.ready; } catch (e) {}
+  }, capFontB64);
 
   // JOURNEY_ONLY=<id|slug>[,<id|slug>...] bakes just those cards (fast iteration); merges into
   // the existing manifest so the other cards' entries are preserved.
