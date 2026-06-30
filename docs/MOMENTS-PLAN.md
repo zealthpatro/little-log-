@@ -4,7 +4,8 @@ The single source of truth for the Moments content + structure. Sprint-agnostic:
 from here, not batch-to-batch. (Build context lives in `MOMENTS-HANDOFF.md`; tiers in
 `journey-tiers.json`.)
 
-_Last organized: 2026-06-30. Live: gentle library + 71 real watercolour cub cards, SW v145._
+_Last organized: 2026-07-01. Live: gentle library + 91 real watercolour cards, bolder Caveat
+captions + arch (keepsake-frame) card shape, SW v149._
 
 ---
 
@@ -169,9 +170,15 @@ So the scrapbook = a book of these pages, each auto/assembled from moments + log
 watercolour-bear style. **Build order:** collections → page templates (Birth collage first — it
 auto-fills) → the scrapbook container → share/download (Pro) → physical print (delighter).
 
-### 8b. Caption type (fixed)
+### 8b. Caption type + card shape (fixed)
 
-Card captions are baked in **Caveat** (warm handwriting), self-hosted + injected as base64 by
-`compose_cards.js` and awaited before screenshot — the old CDN `@import` raced the render and baked
-a plain fallback (it "killed the vibe"). Handwriting matches the keepsake references (names always
-hand-lettered). #5F534A, top-centre, size scales down for long captions.
+Card captions are baked in **Caveat 700** (warm handwriting, **bolder + bigger** — base ~66–70px,
+scales down for long captions), self-hosted + injected as base64 by `compose_cards.js` and awaited
+before screenshot — the old CDN `@import` raced the render and baked a plain fallback (it "killed
+the vibe"). Handwriting matches the keepsake references (names always hand-lettered). #5F534A,
+top-centre. The thinner 600/52 was "off character, just plain text" — 700/bigger reads present.
+
+**Card shape = arch top** (the keepsake-frame look, like the "My First Year" boards). Applied in
+app CSS on `.gl-card` (`border-radius:50% 50% 16px 16px / 16% 16% 5px 5px`) — the illustration domes,
+the caption footer stays flat. Badges (saved-tick, "optional" tag) live at the **bottom** corners so
+the dome never clips them. This shape carries into the keepsake boards / scrapbook pages.
