@@ -643,8 +643,11 @@
     var gotApp = false, gotEvents = false;
     var lastMembersSig = null; // resubscribe journey listeners only when membership changes
 
-    function maybeBoot() {
-      if (booted || !(gotApp && gotEvents)) return;
+    function maybeBoot(force) {
+      // Always need the app blob (babies/settings) to render a meaningful home. Normally also wait
+      // for the first events snapshot so the activity is complete on first paint — but `force` (the
+      // boot failsafe below) skips that wait so a slow/hanging events query can never pin the loader.
+      if (booted || !gotApp || (!gotEvents && !force)) return;
       if (!state.timers) state.timers = {}; // timers come from the cloud app blob
       if (prefs.theme) state.settings.theme = prefs.theme;
       state.activeBabyId = prefs.activeBabyId || (state.babies[0] && state.babies[0].id) || null;
@@ -731,6 +734,12 @@
       });
     }
     unsub.push(subscribeEvents(eventsRef.where('time', '>=', bootCutoff), false));
+
+    // Boot failsafe: never let the launch loader hang on a slow Firebase read. Offline persistence
+    // usually serves the first snapshots from disk instantly, but a cold connection or token refresh
+    // can stall the events query for many seconds. So once the app blob is in (babies/settings),
+    // show the app within ~3.5s regardless; events then stream in via the listener's render().
+    setTimeout(function () { if (!booted && gotApp) maybeBoot(true); }, 3500);
 
     unsub.push(photosRef.onSnapshot(function (snap) {
       snap.docChanges().forEach(function (ch) {
