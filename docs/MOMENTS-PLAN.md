@@ -158,8 +158,12 @@ the artifact that doesn't exist yet). Page types:
   + adds a couple of fields. This is the strongest page because it's *almost no work* — the Charter.
   (Engine: `composePoster` already exists for the birth poster.)
 - **My First Year** — Newborn + 1–12 month grid + name.
-- **My First [X]** — open-ended themed pages: First trip · First friend · First activity · First
-  foods · First holiday · expressions · actions · etc. Each = a collection rendered as a page.
+- **My First [X]** — open-ended themed pages: First trip · First activity · First foods · First
+  holiday · First costumes · expressions · actions · etc. Each = a collection rendered as a page.
+- **People / "Meet…" collections** (the baby's *village* — who loves me): Meet the family · Meet
+  Mama's friends · Meet Papa's friends · Meet my friends. Each = a growing album of the people in
+  the baby's world. Seeds from the existing relationship-photo feature ("a photo with Nana Bear")
+  and the circle members; multi-capture is essential here (many faces over time).
 
 So the scrapbook = a book of these pages, each auto/assembled from moments + logged data, in the
 watercolour-bear style. **Build order:** collections → page templates (Birth collage first — it
