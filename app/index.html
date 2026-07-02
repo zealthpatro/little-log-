@@ -2415,10 +2415,14 @@ async function saveSolids(){
   commitEvent(payload);
   closeSheet(); render(); toast('Solids logged');
 }
+// A photoId can be referenced from events, the gallery, milestones, journey moments (baby AND
+// owner-private pregnancy), relationship photos… A serialized-state scan catches every reference
+// site, current and future, so a delete can never orphan a live pointer. Conservative: keeps the
+// photo on any doubt.
+function photoInUse(pid){ if(!pid) return true; try{ return JSON.stringify(state).indexOf(JSON.stringify(String(pid)))>=0; }catch(e){ return true; } }
 async function maybeDelPhoto(pid){
   if(!pid)return;
-  const used = state.events.some(e=>e.photoId===pid) || (state.photos||[]).some(p=>p.photoId===pid);
-  if(!used) await PhotoStore.del(pid);
+  if(!photoInUse(pid)) await PhotoStore.del(pid);
 }
 async function removeEventPhoto(id){
   const e=state.events.find(x=>x.id===id); if(!e)return;
@@ -6237,6 +6241,7 @@ async function saveJourneyMoment(){
   const date=((document.getElementById('glDate')||{}).value||'');
   const title=d.card.custom?((((document.getElementById('glTitle')||{}).value)||'').trim()):'';
   const saved=(isPreg?pregJGet(d.cardId):glGetSaved(d.cardId))||{};
+  const oldPid=saved.photoId||null;
   let photoId=saved.photoId||null; if(d.removePhoto) photoId=null;
   if(d.photoData){ photoId=uid(); await PhotoStore.set(photoId,d.photoData); }
   if(!photoId && !note && !(d.card.custom&&title)){ toast('Add a photo or a note'); return; }
@@ -6244,8 +6249,9 @@ async function saveJourneyMoment(){
   if(d.card.custom){ rec.custom=true; rec.title=title||'A moment'; rec.section=isPreg?'Before you arrived':'Custom moments'; }
   if(isPreg) pregJSaved()[d.cardId]=rec; else journeySaved()[d.cardId]=rec;
   glDraft=null; persist(); closeSheet(); render(); toast(isPreg?'Saved to your pregnancy journey 🤍':'Saved to '+(b.name||'your baby')+'’s scrapbook 🤍');
+  if(oldPid&&oldPid!==photoId) maybeDelPhoto(oldPid);
 }
-function removeJourneyMoment(id){ const isPreg=glDraft&&glDraft.scope==='preg'; const m=isPreg?pregJSaved():journeySaved(); delete m[id]; glDraft=null; persist(); closeSheet(); render(); toast('Removed'); }
+function removeJourneyMoment(id){ const isPreg=glDraft&&glDraft.scope==='preg'; const m=isPreg?pregJSaved():journeySaved(); const pid=(m[id]||{}).photoId; delete m[id]; glDraft=null; persist(); closeSheet(); render(); toast('Removed'); if(pid) maybeDelPhoto(pid); }
 
 /* ===== Pregnancy gentle library — owner-owned (state.pregnancy.journey.saved), anchored to the
    due date so the story reads as a COUNTDOWN. Never the shared baby blob (privacy split). ===== */
@@ -6343,29 +6349,36 @@ function openMilestone(key){
 }
 function attachMsPhoto(input){
   const f=input.files[0]; if(!f)return;
-  downscaleToData(f,640,0.7,async(data)=>{
-    const pid=uid(); await PhotoStore.set(pid,data); msDraft.photoId=pid;
+  // hold the bytes in the draft; upload happens at save so closing the sheet can't orphan a photo
+  downscaleToData(f,640,0.7,(data)=>{
+    msDraft.photoData=data;
     $('#msPhotoSlot').innerHTML=`<img src="${data}" style="width:100%;border-radius:14px;margin-bottom:14px">`;
     toast('Photo added');
   });
 }
-function saveMilestone(){
+async function saveMilestone(){
   const key=msDraft.key, def=MILESTONES.find(m=>m.key===key);
   const date=$('#msDate').value, note=$('#msNote').value;
   const at=date?new Date(date+'T12:00').getTime():now();
+  let photoId=msDraft.photoId||null;
+  if(msDraft.photoData){ photoId=uid(); await PhotoStore.set(photoId,msDraft.photoData); }
   let a=achievedOf(key);
-  if(a){ a.achievedAt=at; a.note=note; a.photoId=msDraft.photoId; }
+  const oldPid=a?a.photoId:null;
+  if(a){ a.achievedAt=at; a.note=note; a.photoId=photoId; }
   else {
-    a={id:uid(),babyId:state.activeBabyId,key,title:def?def.title:key,cat:def?def.cat:'Custom',achievedAt:at,note,photoId:msDraft.photoId};
+    a={id:uid(),babyId:state.activeBabyId,key,title:def?def.title:key,cat:def?def.cat:'Custom',achievedAt:at,note,photoId:photoId};
     state.milestones.push(a);
   }
   // mirror into timeline
   addEvent({type:'milestone',title:a.title,time:at,notes:note});
   persist(); closeSheet(); render(); toast('🎉 '+(def?def.title:'Moment')+'! What a star ⭐');
+  if(oldPid&&oldPid!==photoId) maybeDelPhoto(oldPid);
 }
 function unMilestone(key){
+  const gone=state.milestones.find(m=>m.key===key && m.babyId===state.activeBabyId);
   state.milestones=state.milestones.filter(m=>!(m.key===key && m.babyId===state.activeBabyId));
   persist(); closeSheet(); render(); toast('Removed');
+  if(gone&&gone.photoId) maybeDelPhoto(gone.photoId);
 }
 function openCustomMilestone(){
   const today=new Date().toISOString().slice(0,10);
@@ -7087,15 +7100,16 @@ function imageStats(img){
   return {mean:sum/n, r:sr/n, g:sg/n, b:sb/n, min:mn, max:mx};
 }
 /* Background cutout: on-device person segmentation (MediaPipe, Apache-2.0).
-   The model + WASM are lazy-loaded from CDN only when the user taps the button. Nothing uploaded. */
+   Model + WASM are SELF-HOSTED under app/vendor/mediapipe/ (same-origin — keeps the
+   no-third-party promise) and lazy-loaded only when the user taps the button. Nothing uploaded. */
 let _segmenter=null;
 async function getSegmenter(){
   if(_segmenter) return _segmenter;
-  const V='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18';
-  const vision = await import(V);
+  const V='vendor/mediapipe';
+  const vision = await import('./vendor/mediapipe/vision_bundle.mjs');
   const fileset = await vision.FilesetResolver.forVisionTasks(V+'/wasm');
   _segmenter = await vision.ImageSegmenter.createFromOptions(fileset,{
-    baseOptions:{ modelAssetPath:'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite' },
+    baseOptions:{ modelAssetPath:V+'/selfie_segmenter.tflite' },
     runningMode:'IMAGE', outputCategoryMask:false, outputConfidenceMasks:true
   });
   return _segmenter;
@@ -7457,6 +7471,7 @@ function recordVideo(){
   if(_recording||!photoEditor) return;
   var c=document.getElementById('photoCanvas'); if(!c) return;
   if(!canRecordVideo()){ toast('Video export needs a newer browser. Your still card still works.'); return; }
+  if(!exportGate()) return;   // video is an export too — same premium-styles taste as download/share
   _recording=true;
   if(!photoEditor.decor||photoEditor.decor==='none') photoEditor.decor='confetti';   // give it some motion
   var mime=MediaRecorder.isTypeSupported('video/mp4')?'video/mp4':'video/webm';
@@ -7964,6 +7979,7 @@ function drawCollage(objs){
     ctx.drawImage(o.img,x+(cell-w)/2,y+(cell-h)/2,w,h); ctx.restore();
   });
   ctx.textAlign='left';
+  if(!isPro()) drawCubbyFooter(ctx, W/2, H-14, 20, '#C9BBA6', 1);   // same free-tier rule as then/now & poster
   const data=c.toDataURL('image/jpeg',0.9); window._lastCard=data;
   openSheet(`<h2>Growth collage</h2><div class="sub">${objs.length} months of ${escapeHtml(b.name)}.</div>
     <img src="${data}" class="card-prev">

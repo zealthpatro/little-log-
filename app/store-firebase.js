@@ -1007,7 +1007,19 @@
 
   PhotoStore.set = async function (id, dataUrl) {
     PhotoStore.map[id] = dataUrl;
-    if (photosRef) { try { await photosRef.doc(String(id)).set({ data: dataUrl, authorId: (auth.currentUser && auth.currentUser.uid) || null }); } catch (e) { console.warn('photo set', e); } }
+    if (!photosRef) return;
+    // Firestore rejects docs over 1 MiB; that write used to fail with only a console.warn while
+    // the UI showed success. Pre-check and say so — the photo still works on this device.
+    if (dataUrl && dataUrl.length > 990000) {
+      console.warn('photo too large to sync', id, dataUrl.length);
+      try { window.toast && window.toast('That photo is too big to sync — it stays on this device.'); } catch (e) {}
+      return;
+    }
+    try { await photosRef.doc(String(id)).set({ data: dataUrl, authorId: (auth.currentUser && auth.currentUser.uid) || null }); }
+    catch (e) {
+      console.warn('photo set', e);
+      try { window.toast && window.toast('That photo didn’t sync just now — it’s safe on this device.'); } catch (e2) {}
+    }
   };
   PhotoStore.del = async function (id) {
     delete PhotoStore.map[id];
