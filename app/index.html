@@ -7178,7 +7178,7 @@ function renderPhotos(){
     <div class="sec-title">Colour</div><div class="chip-row">${palChips}</div>
     <div class="sec-title">Decorations</div><div class="chip-row">${decorChips}</div>
     ${(photoEditor.decor&&photoEditor.decor!=='none')?`<div class="chip-row" style="margin-top:6px">${densChips}<div class="chip ${photoEditor.anim?'sel':''}" onclick="toggleAnim()">${photoEditor.anim?'❚❚ Stop':'▶ Animate'}</div></div>`:''}
-    <div class="sec-title">Character</div><div class="chip-row"><div class="chip ${photoEditor.character?'sel':''}" onclick="setChar()">🐻 ${escapeHtml((activeBaby()||{}).name||'Baby')}&rsquo;s bear</div></div>`
+    <div class="sec-title">Bear art</div><div class="chip-row"><div class="chip ${photoEditor.character?'sel':''}" onclick="setChar()">🐻 ${escapeHtml((activeBaby()||{}).name||'Baby')}&rsquo;s bear</div>${CHAR_ART.map(a=>`<div class="chip ${photoEditor.charArt===a[0]?'sel':''}" onclick="setCharArt('${a[0]}')">${a[1]}</div>`).join('')}</div>`
     :`<div class="sec-title">Keepsake stamp</div><div class="chip-row">${stampChips}</div>
     ${photoEditor.stamp!=='none'?`<div class="sec-title">Stamp tone</div><div class="chip-row">${toneChips}</div>`:''}
     ${posMatters?`<div class="sec-title">Position</div><div class="chip-row">${posChips}</div>`:''}
@@ -7586,13 +7586,49 @@ function ensureCharImg(){
   im.onerror=function(){ if(photoEditor) photoEditor._charLoading=false; };
   im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
 }
+// Watercolour bear-art tiles (text-free ov_*.webp, baked by tools/bake_overlays.js) — the brand
+// art finally travels on exported keepsakes. Free tier: our art on shares is marketing, not a lock.
+const CHAR_ART=[
+  ['hero-cub','Little cub'],
+  ['124_baby_i_smiled','Smiles'],
+  ['125_baby_i_laughed','Giggles'],
+  ['178_baby_i_love_cuddles','Cuddles'],
+  ['132_baby_first_steps','First steps'],
+  ['115_baby_my_first_birthday','Birthday'],
+  ['056_baby_hello_world','Hello world'],
+  ['009_pregnancy_and_then_there_were_three','Our family']
+];
 function drawCharacter(ctx,W,H,px,py,pw,ph){
-  var ed=photoEditor; if(!ed||!ed.character) return;
+  var ed=photoEditor; if(!ed) return;
+  if(ed.charArt){
+    if(!ed._artImg) return;                    // onload triggers the redraw that paints it
+    var s=pw*0.30, h=s*1.25, x=px+pw-s-pw*0.035, y=py+ph-h-pw*0.035, r=s*0.10;
+    ctx.save();
+    ctx.shadowColor='rgba(40,30,20,.28)'; ctx.shadowBlur=s*0.12; ctx.shadowOffsetY=s*0.05;
+    roundRect(ctx,x,y,s,h,r); ctx.fillStyle='#FFFDF8'; ctx.fill();
+    ctx.shadowColor='transparent';
+    roundRect(ctx,x,y,s,h,r); ctx.clip(); ctx.drawImage(ed._artImg,x,y,s,h);
+    ctx.restore();
+    return;
+  }
+  if(!ed.character) return;
   if(!ed._charImg){ ensureCharImg(); return; }
-  var s=pw*0.3, x=px+pw-s*0.92, y=py+ph-s*0.92;
-  ctx.drawImage(ed._charImg,x,y,s,s);
+  var s2=pw*0.3, x2=px+pw-s2*0.92, y2=py+ph-s2*0.92;
+  ctx.drawImage(ed._charImg,x2,y2,s2,s2);
 }
-function setChar(){ if(!photoEditor)return; photoEditor.character=!photoEditor.character; if(photoEditor.character){ photoEditor._charImg=null; photoEditor._charLoading=false; ensureCharImg(); } render(); drawPhoto(); }
+function setChar(){ if(!photoEditor)return; photoEditor.character=!photoEditor.character; photoEditor.charArt=null; if(photoEditor.character){ photoEditor._charImg=null; photoEditor._charLoading=false; ensureCharImg(); } render(); drawPhoto(); }
+function setCharArt(slug){
+  if(!photoEditor) return;
+  photoEditor.charArt=(photoEditor.charArt===slug)?null:slug;
+  photoEditor.character=false;
+  photoEditor._artImg=null;
+  if(photoEditor.charArt){
+    var im=new Image();
+    im.onload=function(){ if(photoEditor&&photoEditor.charArt===slug){ photoEditor._artImg=im; if(!photoEditor.anim) drawPhoto(); } };
+    im.src='journey-art/ov_'+slug+'.webp';
+  }
+  render(); drawPhoto();
+}
 /* ---- Shareable animated card: record the live canvas to a short video (the Pro headline).
    Feature-detected; falls back to a still everywhere it is unsupported. iOS Safari support is
    recent and MP4-vs-WebM varies, so this needs real-device QA. ---- */
