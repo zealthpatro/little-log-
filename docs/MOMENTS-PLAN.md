@@ -4,8 +4,22 @@ The single source of truth for the Moments content + structure. Sprint-agnostic:
 from here, not batch-to-batch. (Build context lives in `MOMENTS-HANDOFF.md`; tiers in
 `journey-tiers.json`.)
 
-_Last organized: 2026-07-01. Live: gentle library + 91 real watercolour cards, bolder Caveat
-captions + arch (keepsake-frame) card shape, SW v149._
+_Last organized: 2026-07-02. Live: gentle library + 91 real watercolour cards, Caveat-700 captions
++ arch card shape, and the **best-in-class utility ladder v150–v155**: iOS filter bake fixed
+(colour-matrix; presets/B&W were dead on iPhone), 43 filler cards hidden + custom prompts
+collapsed + art-alias variants, saved moments bridge into the keepsake studio ("Make a keepsake"),
+photo-prep step (crop/pan/pinch + Warm film / Soft matte / Gentle B&W presets) at the moments /
+bump / relationship uploads, watercolour bear-art overlay tiles in the studio, photo-orphan GC +
+1MiB sync guard + video export gate + collage watermark + fully self-hosted background cutout._
+
+**Designed follow-ups (not yet built):**
+- **Pregnancy keepsakes**: pregnancy moments deliberately have NO "Make a keepsake" — the studio's
+  save-to-gallery writes the SHARED household gallery and would leak an owner-private photo. Needs
+  an owner-private save path first.
+- **Pregnancy photo bytes**: the pregnancy journey RECORD is owner-owned, but its photo BYTES live
+  in the shared `photos` collection (circle-readable via rules; no UI shows them). Real fix needs a
+  `priv` flag + rules + a query-side split (rules aren't filters — the unbounded photos listener
+  would error). Do together with the rules pass.
 
 ---
 
