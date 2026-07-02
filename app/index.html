@@ -6215,7 +6215,20 @@ function renderMomentDetail(){
     <div class="field"><label>When</label>${datePicker('glDate',(saved&&saved.date)||now(),{max:_dpYMD()})}</div>
     <div class="field"><label>Who’s in it (optional)</label><div class="rel-chips" id="glWho">${glWhoChips(d.who)}</div></div>
     <button class="btn-primary" style="background:var(--star)" onclick="saveJourneyMoment()">Save moment</button>
+    ${(!isPreg&&saved&&saved.photoId&&!d.removePhoto)?`<button class="btn-ghost" style="margin-top:8px" onclick="makeKeepsakeFromMoment()">✨ Make a keepsake</button>`:''}
     ${saved?`<button class="btn-ghost" style="margin-top:8px;color:var(--ink-soft)" onclick="removeJourneyMoment('${d.cardId}')">Remove this moment</button>`:''}`,'star');
+}
+// Bridge a saved journey moment into the keepsake studio (photo + caption + date prefilled).
+// Baby scope only for now: the studio's save-to-gallery writes the SHARED household gallery, so
+// routing an owner-private pregnancy moment there would leak it — pregnancy gets a keepsake path
+// once an owner-private save exists.
+function makeKeepsakeFromMoment(){
+  const d=glDraft; if(!d||d.scope==='preg') return;
+  const saved=glGetSaved(d.cardId); if(!saved||!saved.photoId) return;
+  const cap=(d.card&&d.card.cap)||saved.title||'';
+  const when=saved.date?new Date(String(saved.date)+'T08:00').getTime():null;
+  closeSheet();
+  makeMomentFromPhoto(photoSrc(saved.photoId), cap, when&&!isNaN(when)?when:undefined);
 }
 async function saveJourneyMoment(){
   const d=glDraft; if(!d) return; const isPreg=d.scope==='preg'; const b=activeBaby();
@@ -7740,7 +7753,11 @@ function renderMemoryCardSheet(){
   drawCardPreview();
 }
 function albumStrip(selId,pickFn,uploadOnclick){
-  const gal=(state.photos||[]).filter(p=>p.babyId===state.activeBabyId && p.photoId).slice().reverse().slice(0,16);
+  let gal=(state.photos||[]).filter(p=>p.babyId===state.activeBabyId && p.photoId).slice().reverse();
+  // journey-moment photos (baby scope) are keepsake ingredients too — surface them in every picker
+  const seen=new Set(gal.map(p=>p.photoId));
+  const jm=journeySaved(); Object.keys(jm).forEach(id=>{ const s=jm[id]; if(s&&s.photoId&&!seen.has(s.photoId)){ gal.push({photoId:s.photoId,babyId:state.activeBabyId}); seen.add(s.photoId); } });
+  gal=gal.slice(0,16);
   const up=`<div class="ps-up" onclick="${uploadOnclick}">${I.camera}<span>Upload</span></div>`;
   const thumbs=gal.map(p=>`<div class="ps-opt ${selId&&selId===p.photoId?'sel':''}" onclick="${pickFn}('${p.photoId}')"><img src="${photoSrc(p.photoId)}"></div>`).join('');
   return `<div class="ps-strip">${up}${thumbs}</div>${gal.length?'':'<div class="csub" style="margin-top:2px">No saved photos yet. Upload one, or add photos in the Album.</div>'}`;
