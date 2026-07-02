@@ -6102,7 +6102,7 @@ function cardAgeBand(t){
 }
 function glSuggested(b){
   const mo=babyMonths(); const saved=journeySaved();
-  const cards=glCat().filter(c=>c.stage==='Baby' && !saved[c.id]);
+  const cards=glCat().filter(c=>c.stage==='Baby' && !saved[c.id] && c.t!==3 && c.section!=='Custom moments');
   const scored=[];
   cards.forEach(c=>{ const band=cardAgeBand(c.timing); if(band && mo>=band[0]-0.5 && mo<=band[1]+0.5) scored.push({c:c, w:band[1]-band[0]}); });
   scored.sort((a,b)=>a.w-b.w);                       // narrower band = more specific to right now
@@ -6126,8 +6126,10 @@ function glCardHtml(card, opts){
 }
 function glGroupHtml(section, open){
   const saved=journeySaved();
-  let cards=glCat().filter(c=>c.stage==='Baby' && c.section===section);
-  if(section==='Custom moments'){ const cust=Object.keys(saved).filter(id=>saved[id]&&saved[id].custom).map(id=>glCard(id)).filter(Boolean); cards=cust.concat(cards); }
+  // filler (tier 3) stays hidden unless already saved; the catalogue "Custom moments" prompt
+  // cards are collapsed into the Create-your-own button (less-is-more), saved ones still show.
+  let cards=glCat().filter(c=>c.stage==='Baby' && c.section===section && (saved[c.id]||c.t!==3));
+  if(section==='Custom moments'){ const cust=Object.keys(saved).filter(id=>saved[id]&&saved[id].custom).map(id=>glCard(id)).filter(Boolean); cards=cust.concat(cards.filter(c=>saved[c.id])); }
   if(!cards.length) return '';
   const savedN=cards.filter(c=>saved[c.id]).length, ideasN=cards.length;
   const count=savedN?`${savedN} saved · ${ideasN} ideas`:`${ideasN} ideas`;
@@ -6263,7 +6265,7 @@ function pregPhase(w){ return w<=13?0:w<=27?1:2; }
 var PREG_PHASES=[{t:'The secret'},{t:'Telling & feeling'},{t:'The countdown'}];
 function pregJSuggested(){
   const wk=pregWeek(); const saved=pregJSaved();
-  return pregCat().filter(function(c){return !saved[c.id];}).map(function(c){return {c:c,w:pregCardWeek(c)};})
+  return pregCat().filter(function(c){return !saved[c.id]&&c.t!==3;}).map(function(c){return {c:c,w:pregCardWeek(c)};})
     .filter(function(x){return x.w>=wk-2 && x.w<=wk+4;}).sort(function(a,b){return Math.abs(a.w-wk)-Math.abs(b.w-wk);}).slice(0,5).map(function(x){return x.c;});
 }
 function pregJCardHtml(card){
@@ -6279,7 +6281,8 @@ function renderPregLibrary(){
   const p=state.pregnancy; if(!p||state.lossHolding) return '';
   const wk=pregWeek(), days=pregDaysToGo();
   const togo=(days!=null&&days>=0)?(days<=7?'almost here':Math.round(days/7)+' weeks to go'):(days!=null?'any day now':'');
-  const cards=pregCat();
+  const pjs=pregJSaved();
+  const cards=pregCat().filter(function(c){return c.t!==3||pjs[c.id];});   // filler hidden unless saved
   const sug=pregJSuggested();
   const groups=[0,1,2].map(function(ph){
     const cs=cards.filter(function(c){return pregPhase(pregCardWeek(c))===ph;}).sort(function(a,b){return pregCardWeek(a)-pregCardWeek(b);});

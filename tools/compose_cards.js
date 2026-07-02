@@ -22,8 +22,20 @@ const PALETTE = {
   'pastel seasonal': '#EEE7DE', 'cream blank': '#F7F1E7'
 };
 
+// Variant cards intentionally share their base card's illustration (less-is-more: one painted
+// scene deepens across many related moments; never generate these separately). A variant without
+// its own art-src file bakes with the base card's file — so it inherits the art automatically the
+// day the base illustration lands.
+const ART_ALIAS = {
+  'LC-031': 'LC-019',                                                        // nine months pregnant -> the bump is growing
+  'LC-218': 'LC-210', 'LC-220': 'LC-210', 'LC-222': 'LC-210', 'LC-224': 'LC-210',   // Mama variants -> Mama and me
+  'LC-221': 'LC-211', 'LC-223': 'LC-211', 'LC-225': 'LC-211',                       // Papa variants -> Papa and me
+  'LC-219': 'LC-214', 'LC-226': 'LC-214', 'LC-227': 'LC-214', 'LC-228': 'LC-214', 'LC-229': 'LC-214' // family variants -> My family
+};
+
 (async () => {
   const cat = require(path.join(ROOT, 'docs', 'journey-cards.json'));
+  const fileById = {}; cat.cards.forEach(c => { fileById[c.id] = c.file; });
   fs.mkdirSync(OUT, { recursive: true });
   const haveSrc = fs.existsSync(SRC);
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu', '--hide-scrollbars'] });
@@ -48,7 +60,8 @@ const PALETTE = {
   let withArt = 0, fallback = 0;
   for (const c of cat.cards) {
     if (ONLYSET && !ONLYSET.has(c.id) && !ONLYSET.has(c.slug)) continue;
-    const raw = path.join(SRC, c.file);
+    let raw = path.join(SRC, c.file);
+    if (!(haveSrc && fs.existsSync(raw)) && ART_ALIAS[c.id]) raw = path.join(SRC, fileById[ART_ALIAS[c.id]] || c.file);
     let img = null;
     if (haveSrc && fs.existsSync(raw)) { img = 'data:image/png;base64,' + fs.readFileSync(raw).toString('base64'); withArt++; }
     else fallback++;
