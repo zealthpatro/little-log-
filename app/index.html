@@ -6435,14 +6435,69 @@ const MOMENT_PALETTES={
   Ink:{bg1:'#2b2622',bg2:'#181412',ink:'#F4ECE0',sub:'#bdae9d',accent:'#E5BD55'}
 };
 const FMT_DIMS={square:[1080,1080],portrait:[1080,1350],story:[1080,1920]};
+/* iOS Safari has never shipped ctx.filter (WebKit 198416; still default-off in Safari 26), and the
+   property exists while inert — so feature-detect by rendering a test pixel, not by presence. On
+   browsers where it works we keep the native path; elsewhere fDrawImage bakes the same four filter
+   functions with the spec-exact sRGB colour-matrix (Filter Effects §ShorthandEquivalents), so the
+   presets and B&W actually export on iPhone. */
+const CTX_FILTER_OK=(function(){ try{ const c=document.createElement('canvas'); c.width=c.height=1;
+  const x=c.getContext('2d',{willReadFrequently:true}); x.filter='grayscale(1)';
+  x.fillStyle='rgb(255,0,0)'; x.fillRect(0,0,1,1); const d=x.getImageData(0,0,1,1).data;
+  return d[0]===d[1]; }catch(e){ return false; } })();
+// brightness(b)→contrast(c)→saturate(s)→sepia(a) composed into one 3x3 matrix + offset, sRGB bytes.
+function filterMatrix(bright,contrast,sat,sepia){
+  const b=bright/100, c=contrast/100, o=255*(0.5-c/2), s=sat/100, a=sepia;
+  const S=[.213+.787*s,.715-.715*s,.072-.072*s, .213-.213*s,.715+.285*s,.072-.072*s, .213-.213*s,.715-.715*s,.072+.928*s];
+  const P=[1-a+a*.393,a*.769,a*.189, a*.349,1-a+a*.686,a*.168, a*.272,a*.534,1-a+a*.131];
+  const R=new Array(9);
+  for(let i=0;i<3;i++)for(let j=0;j<3;j++) R[i*3+j]=P[i*3]*S[j]+P[i*3+1]*S[3+j]+P[i*3+2]*S[6+j];
+  const off=[0,0,0];
+  for(let i=0;i<3;i++) off[i]=(R[i*3]+R[i*3+1]+R[i*3+2])*o;
+  const k=b*c; for(let i=0;i<9;i++) R[i]*=k;
+  return {m:R,off:off};
+}
+function applyFilterPass(canvas,bright,contrast,sat,sepia){
+  if(bright===100&&contrast===100&&sat===100&&!sepia) return;
+  const f=filterMatrix(bright,contrast,sat,sepia), m=f.m, off=f.off;
+  const x=canvas.getContext('2d',{willReadFrequently:true});
+  const id=x.getImageData(0,0,canvas.width,canvas.height), d=id.data;
+  for(let i=0;i<d.length;i+=4){
+    const r=d[i],g=d[i+1],b=d[i+2];
+    d[i]=m[0]*r+m[1]*g+m[2]*b+off[0];
+    d[i+1]=m[3]*r+m[4]*g+m[5]*b+off[1];
+    d[i+2]=m[6]*r+m[7]*g+m[8]*b+off[2];
+  }
+  x.putImageData(id,0,0);
+}
+// Filtered copy of img at (capped) destination resolution, cached per img so the preview anim
+// loop and slider drags only pay the pixel pass when the adjustments actually change.
+const _fSrcCache=new WeakMap();
+function fSrc(img,bright,contrast,sat,sepia,dw,dh){
+  const iw=img.naturalWidth||img.width, ih=img.naturalHeight||img.height;
+  const scale=Math.min(1,Math.max(dw/iw,dh/ih));
+  const w=Math.max(1,Math.round(iw*scale)), h=Math.max(1,Math.round(ih*scale));
+  const sig=[bright,contrast,sat,sepia,w].join('|');
+  let e=_fSrcCache.get(img);
+  if(e&&e.sig===sig) return e.canvas;
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const x=c.getContext('2d',{willReadFrequently:true});
+  x.drawImage(img,0,0,w,h);
+  applyFilterPass(c,bright,contrast,sat,sepia);
+  _fSrcCache.set(img,{sig:sig,canvas:c});
+  return c;
+}
+function fDrawImage(ctx,img,bright,contrast,sat,sepia,dx,dy,dw,dh){
+  if(CTX_FILTER_OK){
+    ctx.filter=`brightness(${bright}%) contrast(${contrast}%) saturate(${sat}%) sepia(${sepia})`;
+    ctx.drawImage(img,dx,dy,dw,dh); ctx.filter='none';
+  } else ctx.drawImage(fSrc(img,bright,contrast,sat,sepia,dw,dh),dx,dy,dw,dh);
+}
 // paint the photo (with current adjustments) into a rect; caller sets any clip first
 function paintImage(ctx,img,x,y,w,h,a,cover){
   ctx.save();
   const warmSepia=(a.warm/100)*0.45;
-  ctx.filter=`brightness(${a.bright}%) contrast(${a.contrast}%) saturate(${a.sat}%) sepia(${warmSepia})`;
-  if(cover){ const r=Math.max(w/img.naturalWidth,h/img.naturalHeight); const dw=img.naturalWidth*r,dh=img.naturalHeight*r; ctx.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh); }
-  else { const r=Math.min(w/img.naturalWidth,h/img.naturalHeight); const dw=img.naturalWidth*r,dh=img.naturalHeight*r; ctx.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh); }
-  ctx.filter='none';
+  if(cover){ const r=Math.max(w/img.naturalWidth,h/img.naturalHeight); const dw=img.naturalWidth*r,dh=img.naturalHeight*r; fDrawImage(ctx,img,a.bright,a.contrast,a.sat,warmSepia,x+(w-dw)/2,y+(h-dh)/2,dw,dh); }
+  else { const r=Math.min(w/img.naturalWidth,h/img.naturalHeight); const dw=img.naturalWidth*r,dh=img.naturalHeight*r; fDrawImage(ctx,img,a.bright,a.contrast,a.sat,warmSepia,x+(w-dw)/2,y+(h-dh)/2,dw,dh); }
   if(a.warm>0){ ctx.globalCompositeOperation='overlay'; ctx.fillStyle=`rgba(255,170,80,${(a.warm/100)*0.18})`; ctx.fillRect(x,y,w,h); ctx.globalCompositeOperation='source-over'; }
   if(a.grain>0){ const nt=makeNoise(); ctx.globalAlpha=a.grain/100*0.5; ctx.globalCompositeOperation='overlay'; for(let xx=x;xx<x+w;xx+=140)for(let yy=y;yy<y+h;yy+=140) ctx.drawImage(nt,xx,yy); ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over'; }
   if(a.vignette>0){ const g=ctx.createRadialGradient(x+w/2,y+h/2,Math.min(w,h)*0.3,x+w/2,y+h/2,Math.max(w,h)*0.72); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,`rgba(0,0,0,${a.vignette/100*0.7})`); ctx.fillStyle=g; ctx.fillRect(x,y,w,h); }
@@ -7151,9 +7206,7 @@ function composePhoto(canvas,maxW){
   if(radius){ roundRect(ctx,ix,iy,iw,ih,radius); ctx.clip(); }
   // base image with filters
   const warmSepia=(a.warm/100)*0.45;
-  ctx.filter=`brightness(${a.bright}%) contrast(${a.contrast}%) saturate(${a.sat}%) sepia(${warmSepia})`;
-  ctx.drawImage(img,ix,iy,iw,ih);
-  ctx.filter='none';
+  fDrawImage(ctx,img,a.bright,a.contrast,a.sat,warmSepia,ix,iy,iw,ih);
   // warmth tint overlay
   if(a.warm>0){ ctx.globalCompositeOperation='overlay'; ctx.fillStyle=`rgba(255,170,80,${(a.warm/100)*0.18})`; ctx.fillRect(ix,iy,iw,ih); ctx.globalCompositeOperation='source-over'; }
   // grain
@@ -7639,7 +7692,7 @@ function composeMonthly(canvas,img,i){
   const ctx=canvas.getContext('2d');
   // cover-fit square
   const r=Math.max(S/img.naturalWidth,S/img.naturalHeight), w=img.naturalWidth*r, h=img.naturalHeight*r;
-  ctx.filter='brightness(103%) saturate(104%) sepia(0.08)'; ctx.drawImage(img,(S-w)/2,(S-h)/2,w,h); ctx.filter='none';
+  fDrawImage(ctx,img,103,100,104,0.08,(S-w)/2,(S-h)/2,w,h);
   // soft vignette
   const g=ctx.createRadialGradient(S/2,S/2,S*0.3,S/2,S/2,S*0.72); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.28)'); ctx.fillStyle=g; ctx.fillRect(0,0,S,S);
   // month badge
@@ -7713,8 +7766,7 @@ function composeMemoryCard(canvas,month,img){
     const r=Math.max((W-pad*2)/img.naturalWidth,(photoH-pad)/img.naturalHeight);
     const w=img.naturalWidth*r, h=img.naturalHeight*r;
     ctx.save(); roundRect(ctx,pad,pad,W-pad*2,photoH-pad,28); ctx.clip();
-    ctx.filter='brightness(103%) saturate(105%) sepia(0.06)';
-    ctx.drawImage(img, pad+((W-pad*2)-w)/2, pad+((photoH-pad)-h)/2, w, h); ctx.filter='none';
+    fDrawImage(ctx,img,103,100,105,0.06, pad+((W-pad*2)-w)/2, pad+((photoH-pad)-h)/2, w, h);
     ctx.restore();
   } else {
     ctx.fillStyle='#F1E7D3'; roundRect(ctx,pad,pad,W-pad*2,photoH-pad,28); ctx.fill();
