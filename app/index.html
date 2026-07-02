@@ -535,6 +535,16 @@ body.night .ob-card{background:rgba(38,32,28,.86);}
 .gl-cap .t{font-weight:800;font-size:13px;color:var(--ink);line-height:1.25;}
 .gl-cap .s{font-size:11.5px;color:var(--ink-soft);font-weight:700;margin-top:2px;}
 .gl-card.empty .gl-cap .s{color:var(--ink-faint);}
+/* Photo prep — the shared crop + gentle-preset step every upload passes through */
+.pp-stage{position:relative;width:100%;overflow:hidden;border-radius:16px;background:var(--surface-2);touch-action:none;cursor:grab;}
+.pp-stage img{position:absolute;left:0;top:0;transform-origin:0 0;max-width:none;pointer-events:none;user-select:none;-webkit-user-select:none;}
+.pp-hint{text-align:center;font-size:11.5px;color:var(--ink-faint);font-weight:700;margin:8px 0 10px;}
+.pp-presets{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 6px;margin-bottom:12px;scrollbar-width:none;}
+.pp-presets::-webkit-scrollbar{display:none;}
+.pp-chip{flex:0 0 auto;border:1.5px solid var(--line);background:var(--surface);border-radius:12px;padding:6px 6px 4px;cursor:pointer;text-align:center;}
+.pp-chip.on{border-color:var(--star);box-shadow:0 0 0 2px var(--star-soft);}
+.pp-chip img{width:52px;height:52px;object-fit:cover;border-radius:8px;display:block;}
+.pp-chip .n{font-size:10px;font-weight:800;color:var(--ink-soft);margin-top:3px;white-space:nowrap;}
 .gl-group{border:1px solid var(--line);border-radius:16px;margin-bottom:12px;overflow:hidden;background:var(--surface);box-shadow:0 3px 9px var(--shadow);}
 .gl-group>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 15px;}
 .gl-group>summary::-webkit-details-marker{display:none;}
@@ -2814,7 +2824,7 @@ function renderRelCapture(){
     ${d.photoData?`<div class="food-preview"><img src="${d.photoData}"><button class="rm" onclick="relDraft.photoData=null;renderRelCapture()">×</button></div>`:`<button class="btn-ghost" style="margin:0" onclick="document.getElementById('relPhoto').click()">${I.camera} Choose a photo</button>`}
     <button class="btn-primary" style="background:var(--star)" onclick="saveRelMoment()">Save</button>`,'star');
 }
-function loadRelPhoto(input){ const f=input.files[0]; if(!f)return; downscaleToData(f,1200,0.8,(data)=>{ relDraft.photoData=data; renderRelCapture(); }); }
+function loadRelPhoto(input){ const f=input.files[0]; if(!f)return; input.value=''; openPhotoPrep(f,{aspect:0.8,maxDim:1200,q:0.8},(data)=>{ relDraft.photoData=data; renderRelCapture(); },()=>{ renderRelCapture(); }); }
 async function saveRelMoment(){
   const b=activeBaby(); if(!b||!relDraft) return;
   const d=relDraft; if(!d.photoData){ toast('Choose a photo first'); return; }
@@ -3961,7 +3971,7 @@ function renderAddMoment(){
     <div class="field"><label>Note (optional)</label><input id="momNote" placeholder="e.g. The 20 week scan, waving at us" value="${escapeHtml(d.note)}" oninput="momentDraft.note=this.value"></div>
     <button class="btn-primary" style="background:var(--preg)" onclick="saveMoment()">Save moment</button>`,'preg');
 }
-function loadMomentPhoto(input){ const f=input.files[0]; if(!f)return; downscaleToData(f,1200,0.8,(data)=>{ momentDraft.photoData=data; renderAddMoment(); }); }
+function loadMomentPhoto(input){ const f=input.files[0]; if(!f)return; input.value=''; openPhotoPrep(f,{aspect:0.8,maxDim:1200,q:0.8},(data)=>{ momentDraft.photoData=data; renderAddMoment(); },()=>{ renderAddMoment(); }); }
 function saveMoment(){
   const d=momentDraft;
   if(!d.photoData){ toast('Choose a photo first'); return; }
@@ -6183,6 +6193,121 @@ function glFilter(q){
     g.style.display=any?'':'none'; if(q) g.open=true;
   });
 }
+/* ---------- Photo prep: ONE shared crop + gentle-preset step for uploads ----------
+   Every capture flow used to save the raw pick with a blind center-crop downstream; now the
+   parent frames it (pan + pinch/wheel zoom in the display aspect) and can add a soft preset.
+   Preview = CSS filter (GPU, works everywhere incl. iOS); save = the same colour-matrix bake
+   as the studio (applyFilterPass), so preview and saved pixels always match. */
+const PREP_PRESETS=[
+  {k:'orig', n:'Original',   b:100,c:100,s:100,sep:0},
+  {k:'warm', n:'Warm film',  b:106,c:105,s:115,sep:0.18},
+  {k:'matte',n:'Soft matte', b:105,c:90, s:85, sep:0.08},
+  {k:'mono', n:'Gentle B&W', b:106,c:108,s:0,  sep:0.15}
+];
+function prepCss(p){ return p.k==='orig'?'none':`brightness(${p.b/100}) contrast(${p.c/100}) saturate(${p.s/100}) sepia(${p.sep})`; }
+var prepState=null;
+// openPhotoPrep(file, {aspect:w/h, maxDim, q}, onDone(dataUrl), onCancel()) — callbacks re-render
+// the calling sheet; the sheet stack's ancestor-pop returns cleanly with no phantom back steps.
+function openPhotoPrep(file, opts, onDone, onCancel){
+  opts=opts||{};
+  const url=URL.createObjectURL(file);
+  const img=new Image();
+  img.onerror=function(){ try{URL.revokeObjectURL(url);}catch(e){} toast('That photo didn’t open — try a different one.'); if(onCancel)onCancel(); };
+  img.onload=function(){
+    prepState={img:img,url:url,aspect:opts.aspect||0.8,maxDim:opts.maxDim||1200,q:opts.q||0.8,preset:0,x:0,y:0,k:1,minK:1,done:onDone,cancel:onCancel};
+    renderPhotoPrep();
+  };
+  img.src=url;
+}
+function renderPhotoPrep(){
+  const st=prepState; if(!st) return;
+  const chips=PREP_PRESETS.map((p,i)=>`<div class="pp-chip${st.preset===i?' on':''}" onclick="prepPreset(${i})"><img src="${st.url}" style="filter:${prepCss(p)}"><div class="n">${p.n}</div></div>`).join('');
+  openSheet(`<h2>Make it just right</h2><div class="sub">Drag and pinch to frame it. Press and hold to compare.</div>
+    <div class="pp-stage" id="ppStage" style="aspect-ratio:${st.aspect}"><img id="ppImg" src="${st.url}" alt=""></div>
+    <div class="pp-hint">A soft touch is plenty — the original is lovely too.</div>
+    <div class="pp-presets">${chips}</div>
+    <button class="btn-primary" style="background:var(--star)" onclick="prepConfirm()">Use this photo</button>
+    <button class="btn-ghost" style="margin-top:8px;color:var(--ink-soft)" onclick="prepCancel()">Cancel</button>`,'star');
+  requestAnimationFrame(prepInit);
+}
+function prepApply(){ const st=prepState, im=document.getElementById('ppImg'); if(!st||!im) return; im.style.transform=`translate(${st.x}px,${st.y}px) scale(${st.k})`; }
+function prepClamp(){
+  const st=prepState; if(!st) return;
+  st.k=Math.min(Math.max(st.k, st.minK), st.minK*6);
+  const w=st.img.naturalWidth*st.k, h=st.img.naturalHeight*st.k;
+  st.x=Math.min(0, Math.max(st.W-w, st.x));
+  st.y=Math.min(0, Math.max(st.H-h, st.y));
+}
+function prepInit(){
+  const st=prepState; if(!st) return;
+  const stage=document.getElementById('ppStage'), im=document.getElementById('ppImg'); if(!stage||!im) return;
+  st.W=stage.clientWidth; st.H=stage.clientHeight;
+  st.minK=Math.max(st.W/st.img.naturalWidth, st.H/st.img.naturalHeight);
+  st.k=st.minK;
+  st.x=(st.W-st.img.naturalWidth*st.k)/2; st.y=(st.H-st.img.naturalHeight*st.k)/2;
+  prepApply(); im.style.filter=prepCss(PREP_PRESETS[st.preset]);
+  const pts=new Map(); let holdT=null, comparing=false, moved=0;
+  const endCompare=()=>{ if(comparing){ comparing=false; im.style.filter=prepCss(PREP_PRESETS[st.preset]); } };
+  stage.onpointerdown=(e)=>{
+    stage.setPointerCapture(e.pointerId);
+    pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    moved=0;
+    if(pts.size===1){ holdT=setTimeout(()=>{ if(pts.size===1&&moved<6){ comparing=true; im.style.filter='none'; } },350); }
+    else { clearTimeout(holdT); endCompare(); }
+  };
+  stage.onpointermove=(e)=>{
+    const pt=pts.get(e.pointerId); if(!pt) return;
+    moved+=Math.abs(e.clientX-pt.x)+Math.abs(e.clientY-pt.y);
+    if(moved>=6) clearTimeout(holdT);
+    if(comparing){ pt.x=e.clientX; pt.y=e.clientY; return; }
+    if(pts.size===1){
+      st.x+=e.clientX-pt.x; st.y+=e.clientY-pt.y;
+    } else if(pts.size===2){
+      const arr=[...pts.entries()];
+      const o=arr[0][1], o2=arr[1][1];
+      const n={x: arr[0][0]===e.pointerId?e.clientX:o.x, y: arr[0][0]===e.pointerId?e.clientY:o.y};
+      const n2={x: arr[1][0]===e.pointerId?e.clientX:o2.x, y: arr[1][0]===e.pointerId?e.clientY:o2.y};
+      const d0=Math.hypot(o.x-o2.x,o.y-o2.y), d1=Math.hypot(n.x-n2.x,n.y-n2.y);
+      if(d0>0&&d1>0){
+        const f=d1/d0, r=stage.getBoundingClientRect();
+        const mx=(n.x+n2.x)/2-r.left, my=(n.y+n2.y)/2-r.top;
+        const k2=Math.min(Math.max(st.k*f, st.minK), st.minK*6), rf=k2/st.k;
+        st.x=mx-(mx-st.x)*rf; st.y=my-(my-st.y)*rf; st.k=k2;
+      }
+    }
+    pt.x=e.clientX; pt.y=e.clientY;
+    prepClamp(); prepApply();
+  };
+  const up=(e)=>{ pts.delete(e.pointerId); clearTimeout(holdT); if(!pts.size) endCompare(); };
+  stage.onpointerup=up; stage.onpointercancel=up;
+  stage.onwheel=(e)=>{ e.preventDefault();
+    const r=stage.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
+    const k2=Math.min(Math.max(st.k*(e.deltaY<0?1.08:0.93), st.minK), st.minK*6), rf=k2/st.k;
+    st.x=mx-(mx-st.x)*rf; st.y=my-(my-st.y)*rf; st.k=k2; prepClamp(); prepApply(); };
+}
+function prepPreset(i){
+  const st=prepState; if(!st) return; st.preset=i;
+  document.querySelectorAll('.pp-chip').forEach((c,j)=>c.classList.toggle('on',j===i));
+  const im=document.getElementById('ppImg'); if(im) im.style.filter=prepCss(PREP_PRESETS[i]);
+}
+function prepConfirm(){
+  const st=prepState; if(!st) return;
+  const p=PREP_PRESETS[st.preset];
+  const sx=-st.x/st.k, sy=-st.y/st.k, sw=st.W/st.k, sh=st.H/st.k;
+  let outW,outH;
+  if(st.aspect<=1){ outH=Math.min(st.maxDim,Math.round(sh)); outW=Math.round(outH*st.aspect); }
+  else { outW=Math.min(st.maxDim,Math.round(sw)); outH=Math.round(outW/st.aspect); }
+  const c=document.createElement('canvas'); c.width=Math.max(1,outW); c.height=Math.max(1,outH);
+  const x=c.getContext('2d',{willReadFrequently:true});
+  x.drawImage(st.img, sx,sy,sw,sh, 0,0,c.width,c.height);
+  if(p.k!=='orig') applyFilterPass(c, p.b, p.c, p.s, p.sep);
+  const data=c.toDataURL('image/jpeg', st.q);
+  const done=st.done; prepTeardown();
+  if(done) done(data);
+}
+function prepCancel(){ const st=prepState; const cb=st&&st.cancel; prepTeardown(); if(cb) cb(); else closeSheet(); }
+function prepTeardown(){ const st=prepState; if(st&&st.url){ try{URL.revokeObjectURL(st.url);}catch(e){} } prepState=null; }
+
 /* ---------- Moments: capture / detail sheet ---------- */
 var glDraft=null;
 function openMomentDetail(id){ const card=glCard(id); if(!card) return; const s=glGetSaved(id); glDraft={cardId:id, card:card, photoData:null, removePhoto:false, who:(s&&s.who)||'', title:(s&&s.title)||''}; renderMomentDetail(); }
@@ -6195,7 +6320,15 @@ function glWhoChips(sel){
   return labels.map(function(l){ return `<button type="button" class="rel-chip${sel===l?' on':''}" onclick="glPickWho('${jArg(l)}',this)">${escapeHtml(l)}</button>`; }).join('');
 }
 function glPickWho(l,el){ if(!glDraft) return; glDraft.who=(glDraft.who===l)?'':l; document.querySelectorAll('#glWho .rel-chip').forEach(function(x){x.classList.remove('on');}); if(glDraft.who&&el) el.classList.add('on'); }
-function glLoadPhoto(input){ const f=input.files[0]; if(!f)return; downscaleToData(f,1200,0.8,function(data){ glDraft.photoData=data; glDraft.removePhoto=false; renderMomentDetail(); }); }
+function glLoadPhoto(input){
+  const f=input.files[0]; if(!f)return; input.value='';
+  // carry unsaved edits through the prep round-trip (the sheet re-renders after it)
+  const n=document.getElementById('glNote'); if(n) glDraft.note=n.value;
+  const dt=document.getElementById('glDate'); if(dt&&dt.value) glDraft.date=dt.value;
+  openPhotoPrep(f,{aspect:0.8,maxDim:1200,q:0.8},
+    function(data){ glDraft.photoData=data; glDraft.removePhoto=false; renderMomentDetail(); },
+    function(){ renderMomentDetail(); });
+}
 function glClearPhoto(){ if(!glDraft) return; glDraft.photoData=null; glDraft.removePhoto=true; renderMomentDetail(); }
 function renderMomentDetail(){
   const d=glDraft; if(!d) return; const card=d.card; const isPreg=d.scope==='preg';
@@ -6215,8 +6348,8 @@ function renderMomentDetail(){
     ${isCustom?`<div class="field"><label>What happened?</label><input id="glTitle" maxlength="60" placeholder="e.g. First trip to the sea" value="${escapeHtml(d.title||'')}" oninput="glDraft.title=this.value"></div>`:''}
     <input type="file" id="glPhoto" accept="image/*" style="display:none" onchange="glLoadPhoto(this)">
     ${photoBlock}
-    <div class="field" style="margin-top:12px"><label>A little note (optional)</label><input id="glNote" placeholder="${escapeHtml(glNotePlaceholder(card))}" value="${escapeHtml((saved&&saved.note)||'')}"></div>
-    <div class="field"><label>When</label>${datePicker('glDate',(saved&&saved.date)||now(),{max:_dpYMD()})}</div>
+    <div class="field" style="margin-top:12px"><label>A little note (optional)</label><input id="glNote" placeholder="${escapeHtml(glNotePlaceholder(card))}" value="${escapeHtml((d.note!=null?d.note:(saved&&saved.note))||'')}"></div>
+    <div class="field"><label>When</label>${datePicker('glDate',d.date||(saved&&saved.date)||now(),{max:_dpYMD()})}</div>
     <div class="field"><label>Who’s in it (optional)</label><div class="rel-chips" id="glWho">${glWhoChips(d.who)}</div></div>
     <button class="btn-primary" style="background:var(--star)" onclick="saveJourneyMoment()">Save moment</button>
     ${(!isPreg&&saved&&saved.photoId&&!d.removePhoto)?`<button class="btn-ghost" style="margin-top:8px" onclick="makeKeepsakeFromMoment()">✨ Make a keepsake</button>`:''}
