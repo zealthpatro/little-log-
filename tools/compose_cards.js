@@ -28,6 +28,8 @@ const PALETTE = {
 // day the base illustration lands.
 const ART_ALIAS = {
   'LC-031': 'LC-019',                                                        // nine months pregnant -> the bump is growing
+  'LC-183': 'LC-150',                                                        // I love dancing -> I danced today
+  'LC-179': 'LC-067',                                                        // I love bath time -> My first bath
   'LC-218': 'LC-210', 'LC-220': 'LC-210', 'LC-222': 'LC-210', 'LC-224': 'LC-210',   // Mama variants -> Mama and me
   'LC-221': 'LC-211', 'LC-223': 'LC-211', 'LC-225': 'LC-211',                       // Papa variants -> Papa and me
   'LC-219': 'LC-214', 'LC-226': 'LC-214', 'LC-227': 'LC-214', 'LC-228': 'LC-214', 'LC-229': 'LC-214' // family variants -> My family
