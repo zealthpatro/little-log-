@@ -6705,11 +6705,15 @@ function fDrawImage(ctx,img,bright,contrast,sat,sepia,dx,dy,dw,dh){
     ctx.drawImage(img,dx,dy,dw,dh); ctx.filter='none';
   } else ctx.drawImage(fSrc(img,bright,contrast,sat,sepia,dw,dh),dx,dy,dw,dh);
 }
+// Cover-crop vertical anchor: portrait photos hold the face in the UPPER third, so when a tall
+// source fills a shorter box we keep more of the top (30% anchor) instead of blind-centering —
+// center-cropping portraits was chopping heads on every composer.
+function coverY(boxY,boxH,drawH){ return drawH>boxH ? boxY+(boxH-drawH)*0.30 : boxY+(boxH-drawH)/2; }
 // paint the photo (with current adjustments) into a rect; caller sets any clip first
 function paintImage(ctx,img,x,y,w,h,a,cover){
   ctx.save();
   const warmSepia=(a.warm/100)*0.45;
-  if(cover){ const r=Math.max(w/img.naturalWidth,h/img.naturalHeight); const dw=img.naturalWidth*r,dh=img.naturalHeight*r; fDrawImage(ctx,img,a.bright,a.contrast,a.sat,warmSepia,x+(w-dw)/2,y+(h-dh)/2,dw,dh); }
+  if(cover){ const r=Math.max(w/img.naturalWidth,h/img.naturalHeight); const dw=img.naturalWidth*r,dh=img.naturalHeight*r; fDrawImage(ctx,img,a.bright,a.contrast,a.sat,warmSepia,x+(w-dw)/2,coverY(y,h,dh),dw,dh); }
   else { const r=Math.min(w/img.naturalWidth,h/img.naturalHeight); const dw=img.naturalWidth*r,dh=img.naturalHeight*r; fDrawImage(ctx,img,a.bright,a.contrast,a.sat,warmSepia,x+(w-dw)/2,y+(h-dh)/2,dw,dh); }
   if(a.warm>0){ ctx.globalCompositeOperation='overlay'; ctx.fillStyle=`rgba(255,170,80,${(a.warm/100)*0.18})`; ctx.fillRect(x,y,w,h); ctx.globalCompositeOperation='source-over'; }
   if(a.grain>0){ const nt=makeNoise(); ctx.globalAlpha=a.grain/100*0.5; ctx.globalCompositeOperation='overlay'; for(let xx=x;xx<x+w;xx+=140)for(let yy=y;yy<y+h;yy+=140) ctx.drawImage(nt,xx,yy); ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over'; }
@@ -7943,7 +7947,7 @@ function composeMonthly(canvas,img,i){
   const ctx=canvas.getContext('2d');
   // cover-fit square
   const r=Math.max(S/img.naturalWidth,S/img.naturalHeight), w=img.naturalWidth*r, h=img.naturalHeight*r;
-  fDrawImage(ctx,img,103,100,104,0.08,(S-w)/2,(S-h)/2,w,h);
+  fDrawImage(ctx,img,103,100,104,0.08,(S-w)/2,coverY(0,S,h),w,h);
   // soft vignette
   const g=ctx.createRadialGradient(S/2,S/2,S*0.3,S/2,S/2,S*0.72); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.28)'); ctx.fillStyle=g; ctx.fillRect(0,0,S,S);
   // month badge
@@ -8021,7 +8025,7 @@ function composeMemoryCard(canvas,month,img){
     const r=Math.max((W-pad*2)/img.naturalWidth,(photoH-pad)/img.naturalHeight);
     const w=img.naturalWidth*r, h=img.naturalHeight*r;
     ctx.save(); roundRect(ctx,pad,pad,W-pad*2,photoH-pad,28); ctx.clip();
-    fDrawImage(ctx,img,103,100,105,0.06, pad+((W-pad*2)-w)/2, pad+((photoH-pad)-h)/2, w, h);
+    fDrawImage(ctx,img,103,100,105,0.06, pad+((W-pad*2)-w)/2, coverY(pad,photoH-pad,h), w, h);
     ctx.restore();
   } else {
     ctx.fillStyle='#F1E7D3'; roundRect(ctx,pad,pad,W-pad*2,photoH-pad,28); ctx.fill();
@@ -8142,7 +8146,7 @@ function drawThenNow(objs){
     ctx.fillStyle='#fff'; roundRect(ctx,x,y,cw,ph,20); ctx.fill(); ctx.restore();
     ctx.save(); roundRect(ctx,x,y,cw,ph,20); ctx.clip();
     const r=Math.max(cw/o.img.naturalWidth,ph/o.img.naturalHeight), w=o.img.naturalWidth*r, h=o.img.naturalHeight*r;
-    ctx.drawImage(o.img, x+(cw-w)/2, y+(ph-h)/2, w, h); ctx.restore();
+    ctx.drawImage(o.img, x+(cw-w)/2, coverY(y,ph,h), w, h); ctx.restore();
     ctx.textAlign='center';
     ctx.fillStyle='#C97FA0'; ctx.font=`800 28px "Nunito Sans", sans-serif`;
     ctx.fillText(i===0?'THEN':'NOW', x+cw/2, y+ph+40);
@@ -8196,7 +8200,7 @@ function drawCollage(objs){
     const x=pad+cidx*(cell+gap), y=pad+headH+r*(cell+gap);
     ctx.save(); roundRect(ctx,x,y,cell,cell,18); ctx.clip();
     const rr=Math.max(cell/o.img.naturalWidth,cell/o.img.naturalHeight), w=o.img.naturalWidth*rr, h=o.img.naturalHeight*rr;
-    ctx.drawImage(o.img,x+(cell-w)/2,y+(cell-h)/2,w,h); ctx.restore();
+    ctx.drawImage(o.img,x+(cell-w)/2,coverY(y,cell,h),w,h); ctx.restore();
   });
   ctx.textAlign='left';
   if(!isPro()) drawCubbyFooter(ctx, W/2, H-14, 20, '#C9BBA6', 1);   // same free-tier rule as then/now & poster
@@ -8290,7 +8294,7 @@ function composePoster(canvas,scale){
     ctx.save(); roundRect(ctx,px,y,pw,ph,18*S); ctx.fillStyle='#fff'; ctx.shadowColor='rgba(0,0,0,0.15)'; ctx.shadowBlur=20*S; ctx.shadowOffsetY=8*S; ctx.fill(); ctx.restore();
     const ipad=10*S; ctx.save(); roundRect(ctx,px+ipad,y+ipad,pw-ipad*2,ph-ipad*2,12*S); ctx.clip();
     const im=posterDraft.img, r=Math.max((pw-ipad*2)/im.naturalWidth,(ph-ipad*2)/im.naturalHeight), iw=im.naturalWidth*r, ih=im.naturalHeight*r;
-    ctx.drawImage(im, px+ipad+((pw-ipad*2)-iw)/2, y+ipad+((ph-ipad*2)-ih)/2, iw, ih); ctx.restore();
+    ctx.drawImage(im, px+ipad+((pw-ipad*2)-iw)/2, coverY(y+ipad,ph-ipad*2,ih), iw, ih); ctx.restore();
     y+=ph+50*S;
   } else { y+=40*S; }
   // name
