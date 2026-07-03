@@ -152,37 +152,52 @@
     var ib = scope.querySelector('#llInstallBtn'); if (!ib || ib.__w) return; ib.__w = 1;
     ib.onclick = function () { if (window.addToHomeScreen) window.addToHomeScreen('llInstallMsg'); };
   }
+  function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function wireEmailRow(scope) {
     var row = scope.querySelector('.ll-email-row'); if (!row) return;
     var toggle = row.querySelector('.ll-email-toggle'), form = row.querySelector('.ll-email-form'), note = row.querySelector('.ll-email-note');
+    var cdTimer = null;
     toggle.onclick = function () { toggle.style.display = 'none'; form.style.display = 'flex'; form.querySelector('input').focus(); };
+
+    // Send (or resend) the sign-in link: our own Worker + Resend first (Firebase's built-in sender
+    // has poor Gmail delivery), falling back to Firebase's sender if the endpoint is down. The link
+    // itself is a standard Firebase email-sign-in link, finished below by signInWithEmailLink().
+    function sendLink(email) {
+      return fetch('/api/send-signin-link', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: email }) })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) throw new Error(d.error || 'send_failed'); return d; }); })
+        .catch(function () { return auth.sendSignInLinkToEmail(email, { url: location.origin + '/app/', handleCodeInApp: true }); })
+        .then(function () { try { localStorage.setItem('cubby-email-signin', email); } catch (e) {} });
+    }
+
+    // "Check your inbox" + a Resend control with a 30s cooldown (links get lost/delayed; the cooldown
+    // avoids spamming the sender). Reused after both the first send and each resend.
+    function showSent(email) {
+      form.style.display = 'none';
+      note.innerHTML = 'Check your inbox: we sent a sign-in link to <b>' + escHtml(email) + '</b>. Open it on this device.'
+        + '<div class="ll-resend-row" style="margin-top:8px">Not arrived yet? <button type="button" class="ll-resend" style="border:none;background:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:800;color:#6E635B;text-decoration:underline;padding:2px">Resend link</button></div>';
+      var rb = note.querySelector('.ll-resend');
+      if (cdTimer) { clearInterval(cdTimer); cdTimer = null; }
+      var left = 30; rb.disabled = true; rb.style.opacity = '.55'; rb.textContent = 'Resend in ' + left + 's';
+      cdTimer = setInterval(function () {
+        left--;
+        if (left <= 0) { clearInterval(cdTimer); cdTimer = null; rb.disabled = false; rb.style.opacity = '1'; rb.textContent = 'Resend link'; }
+        else rb.textContent = 'Resend in ' + left + 's';
+      }, 1000);
+      rb.onclick = function () {
+        rb.disabled = true; rb.style.opacity = '.55'; rb.textContent = 'Sending…';
+        sendLink(email).then(function () { showSent(email); }).catch(function (err) {
+          var rr = note.querySelector('.ll-resend-row'); if (rr) rr.textContent = 'Could not resend: ' + ((err && err.message) || err);
+        });
+      };
+    }
+
     form.onsubmit = function (ev) {
       ev.preventDefault();
       var email = form.querySelector('input').value.trim(); if (!email) return;
       var btn = form.querySelector('button'); btn.disabled = true; btn.textContent = 'Sending…';
-      // Send via our own Worker + Resend (Firebase's built-in sender has poor Gmail delivery).
-      // Completion is unchanged: the link is a standard Firebase email-sign-in link, finished
-      // below by signInWithEmailLink(). Falls back to Firebase's sender if the endpoint is down.
-      fetch('/api/send-signin-link', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: email }) })
-        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) throw new Error(d.error || 'send_failed'); return d; }); })
-        .then(function () {
-          try { localStorage.setItem('cubby-email-signin', email); } catch (e) {}
-          form.style.display = 'none';
-          note.textContent = 'Check your inbox: we sent a sign-in link to ' + email + '. Open it on this device.';
-        })
-        .catch(function () {
-          // Endpoint unavailable (e.g. not deployed yet): fall back to Firebase's own sender.
-          auth.sendSignInLinkToEmail(email, { url: location.origin + '/app/', handleCodeInApp: true })
-            .then(function () {
-              try { localStorage.setItem('cubby-email-signin', email); } catch (e) {}
-              form.style.display = 'none';
-              note.textContent = 'Check your inbox: we sent a sign-in link to ' + email + '. Open it on this device.';
-            })
-            .catch(function (err) {
-              btn.disabled = false; btn.textContent = 'Send link';
-              note.textContent = 'Could not send the link: ' + ((err && err.message) || err);
-            });
-        });
+      sendLink(email)
+        .then(function () { showSent(email); })
+        .catch(function (err) { btn.disabled = false; btn.textContent = 'Send link'; note.textContent = 'Could not send the link: ' + ((err && err.message) || err); });
     };
   }
   function maybeFinishEmailLink() {
