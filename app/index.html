@@ -696,8 +696,12 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .rel-chip{border:1px solid var(--line);background:var(--surface-2);color:var(--ink);border-radius:999px;padding:8px 14px;font-weight:700;font-size:13px;cursor:pointer;font-family:var(--font-body)}
 .rel-chip:active{transform:scale(.97)}
 .rel-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
-.rel-done{background:var(--surface);border-radius:14px;overflow:hidden;box-shadow:0 3px 9px var(--shadow)}
+.rel-done{background:var(--surface);border-radius:14px;overflow:hidden;box-shadow:0 3px 9px var(--shadow);cursor:pointer}
 .rel-done img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
+.rel-done .rel-ph{width:100%;aspect-ratio:1;display:grid;place-items:center;background:var(--surface-2);border-bottom:1.5px dashed var(--line);color:var(--ink-faint)}
+.rel-done .rel-ph svg{width:26px;height:26px}
+.rel-done.rel-pending .rel-cap{color:var(--ink-soft)}
+.rel-done.rel-pending .rel-cap::after{content:' · add a photo';font-weight:700;font-size:11px;color:var(--ink-faint)}
 .rel-cap{padding:8px 10px;font-weight:700;font-size:13px;color:var(--ink)}
 .mem-ready:active{transform:scale(.97);}
 .mem-ready .mr-ic{font-size:24px;margin-bottom:6px;}
@@ -2830,9 +2834,28 @@ async function saveRelMoment(){
   const d=relDraft; if(!d.photoData){ toast('Choose a photo first'); return; }
   let photoId=uid(); await PhotoStore.set(photoId,d.photoData);
   const arr=journeyRel(b.id);
-  if(d.pendingId){ const e=arr.find(r=>r.id===d.pendingId); if(e){ e.photoId=photoId; e.at=now(); } }
+  let oldPid=null;
+  if(d.pendingId){ const e=arr.find(r=>r.id===d.pendingId); if(e){ oldPid=e.photoId||null; e.photoId=photoId; e.at=now(); } }
   else { arr.push({id:uid(), relation:d.relation, label:d.label, photoId:photoId, at:now()}); }
-  relDraft=null; persist(); closeSheet(); render();
+  relDraft=null; persist(); closeSheet(); render(); toast('Saved to the journey 🤍');
+  if(oldPid&&oldPid!==photoId) maybeDelPhoto(oldPid);
+}
+// Tap a Together tile: view it, refresh the photo, make a keepsake, or remove it.
+function openRelView(id){
+  const b=activeBaby(); if(!b) return;
+  const r=journeyRel(b.id).find(x=>x.id===id); if(!r||!r.photoId) return;
+  openSheet(`<h2>With ${escapeHtml(r.label)}</h2><div class="sub">${glDateLabel(r.at)}</div>
+    <img class="card-prev" src="${photoSrc(r.photoId)}" alt="${escapeHtml(r.label)}">
+    <button class="btn-primary" style="background:var(--star)" onclick="closeSheet();makeMomentFromPhoto(photoSrc('${r.photoId}'),'With ${jArg(r.label)}',${r.at||'null'})">✨ Make a keepsake</button>
+    <button class="btn-ghost" style="margin-top:8px" onclick="openRelCapture('${jArg(r.relation)}','${jArg(r.label)}','${r.id}')">${I.camera} New photo together</button>
+    <button class="btn-ghost" style="margin-top:8px;color:var(--ink-soft)" onclick="removeRelMoment('${r.id}')">Remove</button>`,'star');
+}
+function removeRelMoment(id){
+  const b=activeBaby(); if(!b) return;
+  const arr=journeyRel(b.id); const i=arr.findIndex(x=>x.id===id); if(i<0) return;
+  const pid=arr[i].photoId; arr.splice(i,1);
+  persist(); closeSheet(); render(); toast('Removed');
+  if(pid) maybeDelPhoto(pid);
 }
 const REL_SUGGEST=[['nana','Grandma'],['grandpa','Grandpa'],['auntie','Auntie'],['uncle','Uncle'],['sibling','Big sibling'],['friend','Friend']];
 function openAddSomeone(){
@@ -2841,7 +2864,9 @@ function openAddSomeone(){
     <div class="field" style="margin-top:12px"><label>Or someone else</label><input id="relCustom" placeholder="e.g. Godmother, Ayah" maxlength="24"></div>
     <button class="btn-primary" style="background:var(--star)" onclick="addSomeoneCustom()">Add</button>`,'star');
 }
-function addSomeone(relation,label){ const b=activeBaby(); if(!b) return; journeyRel(b.id).push({id:uid(), relation:relation, label:label, photoId:null, at:now()}); persist(); closeSheet(); render(); }
+// Creating the entry flows STRAIGHT into the photo capture — the old path closed the sheet and the
+// photoless entry was invisible forever (the Together grid only showed entries with photos).
+function addSomeone(relation,label){ const b=activeBaby(); if(!b) return; const id=uid(); journeyRel(b.id).push({id:id, relation:relation, label:label, photoId:null, at:now()}); persist(); openRelCapture(relation,label,id); }
 function addSomeoneCustom(){ let v=((document.getElementById('relCustom')||{}).value||'').trim(); if(!v) return; addSomeone('other', v.slice(0,24)); }
 function babyIdentity(b,opts){
   opts=opts||{};
@@ -6167,8 +6192,10 @@ function renderJourneyLibrary(){
   const suggested=loss?[]:glSuggested(b);
   const openSec=glOpenSection(suggested, order);
   const groups=order.map(s=>glGroupHtml(s, s===openSec)).join('');
-  const relWith=journeyRel(b.id).filter(r=>r.photoId);
-  const relGrid=relWith.length?`<div class="sec-title" style="margin-top:8px">Together</div><div class="rel-grid">${relWith.map(r=>`<div class="rel-done"><img src="${photoSrc(r.photoId)}" alt="${escapeHtml(r.label)}"><div class="rel-cap">${escapeHtml(r.label)}</div></div>`).join('')}</div>`:'';
+  const relAll=journeyRel(b.id);
+  const relGrid=relAll.length?`<div class="sec-title" style="margin-top:8px">Together</div><div class="rel-grid">${relAll.map(r=> r.photoId
+    ?`<div class="rel-done" onclick="openRelView('${r.id}')"><img src="${photoSrc(r.photoId)}" alt="${escapeHtml(r.label)}"><div class="rel-cap">${escapeHtml(r.label)}</div></div>`
+    :`<div class="rel-done rel-pending" onclick="openRelCapture('${jArg(r.relation)}','${jArg(r.label)}','${r.id}')"><div class="rel-ph">${I.camera}</div><div class="rel-cap">${escapeHtml(r.label)}</div></div>`).join('')}</div>`:'';
   const addSomeone=loss?'':`<div class="add-row" onclick="openAddSomeone()">${I.plus} Add someone special</div>`;
   const petRow=(b.hasPet)
     ? `<div class="ms-petbar">🐾 <b>${escapeHtml(b.petName||'Your pet')}</b>&rsquo;s firsts are on<button class="ms-petedit" onclick="openPetSetup()">edit</button></div>`
@@ -6227,6 +6254,7 @@ function renderPhotoPrep(){
     <div class="pp-hint">A soft touch is plenty — the original is lovely too.</div>
     <div class="pp-presets">${chips}</div>
     <button class="btn-primary" style="background:var(--star)" onclick="prepConfirm()">Use this photo</button>
+    <button class="btn-ghost" style="margin-top:8px" onclick="prepUseAsIs()">Keep it exactly as it is</button>
     <button class="btn-ghost" style="margin-top:8px;color:var(--ink-soft)" onclick="prepCancel()">Cancel</button>`,'star');
   requestAnimationFrame(prepInit);
 }
@@ -6301,6 +6329,17 @@ function prepConfirm(){
   const x=c.getContext('2d',{willReadFrequently:true});
   x.drawImage(st.img, sx,sy,sw,sh, 0,0,c.width,c.height);
   if(p.k!=='orig') applyFilterPass(c, p.b, p.c, p.s, p.sep);
+  const data=c.toDataURL('image/jpeg', st.q);
+  const done=st.done; prepTeardown();
+  if(done) done(data);
+}
+// "As-is" = the old behaviour: full frame at original aspect, just downscaled. No crop, no preset.
+function prepUseAsIs(){
+  const st=prepState; if(!st) return;
+  const iw=st.img.naturalWidth, ih=st.img.naturalHeight;
+  const sc=Math.min(1, st.maxDim/Math.max(iw,ih));
+  const c=document.createElement('canvas'); c.width=Math.max(1,Math.round(iw*sc)); c.height=Math.max(1,Math.round(ih*sc));
+  c.getContext('2d').drawImage(st.img,0,0,c.width,c.height);
   const data=c.toDataURL('image/jpeg', st.q);
   const done=st.done; prepTeardown();
   if(done) done(data);
@@ -6381,8 +6420,20 @@ async function saveJourneyMoment(){
   const rec={ photoId:photoId, note:note, date:date, who:d.who||'', at:saved.at||now(), updated:now() };
   if(d.card.custom){ rec.custom=true; rec.title=title||'A moment'; rec.section=isPreg?'Before you arrived':'Custom moments'; }
   if(isPreg) pregJSaved()[d.cardId]=rec; else journeySaved()[d.cardId]=rec;
-  glDraft=null; persist(); closeSheet(); render(); toast(isPreg?'Saved to your pregnancy journey 🤍':'Saved to '+(b.name||'your baby')+'’s scrapbook 🤍');
+  const cap=d.card.custom?(rec.title||'A moment'):(d.card.cap||'A moment');
+  glDraft=null; persist(); closeSheet(); render();
+  // The capture->keepsake bridge lives at the moment of peak emotion, not buried behind a re-open.
+  if(!isPreg && photoId) openKeepsakeNudge(cap, photoId, rec.date);
+  else toast(isPreg?'Saved to your pregnancy journey 🤍':'Saved to '+(b.name||'your baby')+'’s scrapbook 🤍');
   if(oldPid&&oldPid!==photoId) maybeDelPhoto(oldPid);
+}
+function openKeepsakeNudge(cap, photoId, date){
+  const b=activeBaby()||{};
+  const when=date?new Date(String(date)+'T08:00').getTime():null;
+  openSheet(`<h2>Saved 🤍</h2><div class="sub">Tucked into ${escapeHtml(b.name||'your baby')}’s scrapbook.</div>
+    <img class="card-prev" src="${photoSrc(photoId)}" alt="">
+    <button class="btn-primary" style="background:var(--star)" onclick="closeSheet();makeMomentFromPhoto(photoSrc('${photoId}'),'${jArg(cap)}',${when&&!isNaN(when)?when:'null'})">✨ Make a keepsake of it</button>
+    <button class="btn-ghost" style="margin-top:8px" onclick="closeSheet()">Done for now</button>`,'star');
 }
 function removeJourneyMoment(id){ const isPreg=glDraft&&glDraft.scope==='preg'; const m=isPreg?pregJSaved():journeySaved(); const pid=(m[id]||{}).photoId; delete m[id]; glDraft=null; persist(); closeSheet(); render(); toast('Removed'); if(pid) maybeDelPhoto(pid); }
 
@@ -7120,7 +7171,7 @@ function renderLogTab(){
 }
 
 function renderPhotos(){
-  const gal=(state.photos||[]).filter(p=>p.babyId===state.activeBabyId && p.slot===undefined);
+  const gal=(state.photos||[]).filter(p=>p.babyId===state.activeBabyId && p.slot===undefined).slice().reverse();   // newest first — a fresh keepsake used to land invisibly at the bottom
   let galleryHtml = gal.length ? `<div class="sec-title">Saved keepsakes</div><div class="gallery">${gal.map(p=>`<div class="gal-item" onclick="viewPhoto('${p.id}')"><img src="${photoSrc(p.photoId)}">${p.caption?`<div class="cap">${escapeHtml(p.caption)}</div>`:''}</div>`).join('')}</div>` : '';
   const evPhotos=babyEvents().filter(e=>e.photoId&&photoSrc(e.photoId));
   let momentsHtml = evPhotos.length ? `<div class="sec-title">Moments from the day</div><div class="csub" style="margin:-6px 0 10px">Photos tagged to feeds, play, sun time and more. Tap one to turn it into a shareable card.</div><div class="gallery">${evPhotos.map(e=>`<div class="gal-item" onclick="openActivityPhoto('${e.id}')"><img src="${photoSrc(e.photoId)}"><div class="cap">${escapeHtml(eventTitle(e))}</div></div>`).join('')}</div>` : '';
