@@ -196,3 +196,33 @@ top-centre. The thinner 600/52 was "off character, just plain text" — 700/bigg
 app CSS on `.gl-card` (`border-radius:50% 50% 16px 16px / 16% 16% 5px 5px`) — the illustration domes,
 the caption footer stays flat. Badges (saved-tick, "optional" tag) live at the **bottom** corners so
 the dome never clips them. This shape carries into the keepsake boards / scrapbook pages.
+
+---
+
+## 9. Experience review (2026-07-03) — keepsake list ✓, payoff loop is the gap
+
+Two-agent review (UX walkthrough + keepsake completeness vs market): **the keepsake TYPE list has
+no wrong bets** — all 8 live outputs are table stakes done well or genuine differentiators (the
+data-fused memory card and auto-filled birth poster are the moat), and §8/8a's order (collections →
+boards → birth collage → scrapbook → print) matches the market's winning "auto, zero-work" pattern.
+
+**Fixed same day (v163):** dead "Add someone special" flow (capture now opens on pick; pending
+people = tappable tiles; finished tiles get view/keepsake/replace/remove); keepsake nudge at save
+time; gallery newest-first; prep "Keep it exactly as it is".
+
+**The build list that falls out (priority order):**
+1. **Keep the originals** (HIGH): every upload discards the full-res file — 1200px q0.8 is the ONLY
+   copy; monthly slots destructively bake text at 800px. Boards/scrapbook/print need clean, bigger
+   sources. Fix = store an `orig` copy (bounded ~2000px) alongside the display copy + stop baking
+   text into stored monthlies (compose at render).
+2. **"What you've captured" view + collections**: no aggregate saved-moments view exists; nothing
+   composes moments together. This is the assemble stage of the loop — collections (multi-capture)
+   then the first board (My First Year) then Birth collage (auto-fills).
+3. **Owner-private keepsake path for pregnancy** (also unblocks bump-photo download — today a
+   mother cannot get her own bump photos out at all).
+4. **Home surfacing**: saved moments never reach the home hero or the circle's attention; a gentle
+   "recently tucked in" cue closes the family-delight half of the loop.
+5. **Poster print-res** (truthful-copy: "scales to 40x60" is ~85 DPI today; export at 4-5x scale).
+6. **Letters/audio to the future child** — missing keepsake type, most charter-aligned delighter.
+7. Later: grandparent no-app web view per keepsake; monthiversary card should wait, not expire in
+   24h; stats share template review (comparison-anxiety risk on social).
