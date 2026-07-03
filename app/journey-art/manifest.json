@@ -1443,5 +1443,55 @@
     "file": "289_baby_a_family_wish.webp",
     "caption": "A family wish",
     "section": "Custom moments"
+  },
+  "LC-290": {
+    "file": "290_baby_first_car_ride.webp",
+    "caption": "First car ride",
+    "section": "Firsts"
+  },
+  "LC-291": {
+    "file": "291_baby_first_time_in_my_car_seat.webp",
+    "caption": "First time in my car seat",
+    "section": "Firsts"
+  },
+  "LC-292": {
+    "file": "292_baby_first_pram_walk.webp",
+    "caption": "First pram walk",
+    "section": "Firsts"
+  },
+  "LC-293": {
+    "file": "293_baby_first_time_in_the_baby_carrier.webp",
+    "caption": "First time in the baby carrier",
+    "section": "Firsts"
+  },
+  "LC-294": {
+    "file": "294_baby_first_train_ride.webp",
+    "caption": "First train ride",
+    "section": "Firsts"
+  },
+  "LC-295": {
+    "file": "295_baby_first_bus_ride.webp",
+    "caption": "First bus ride",
+    "section": "Firsts"
+  },
+  "LC-296": {
+    "file": "296_baby_first_auto-rickshaw_ride.webp",
+    "caption": "First auto-rickshaw ride",
+    "section": "Firsts"
+  },
+  "LC-297": {
+    "file": "297_baby_first_taxi_ride.webp",
+    "caption": "First taxi ride",
+    "section": "Firsts"
+  },
+  "LC-298": {
+    "file": "298_baby_first_boat_ride.webp",
+    "caption": "First boat ride",
+    "section": "Firsts"
+  },
+  "LC-299": {
+    "file": "299_baby_first_bicycle_ride.webp",
+    "caption": "First bicycle ride",
+    "section": "Firsts"
   }
 }

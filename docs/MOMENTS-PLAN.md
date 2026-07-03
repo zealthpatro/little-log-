@@ -174,7 +174,10 @@ the artifact that doesn't exist yet). Page types:
   (Engine: `composePoster` already exists for the birth poster.)
 - **My First Year** — Newborn + 1–12 month grid + name.
 - **My First [X]** — open-ended themed pages: First trip · First activity · First foods · First
-  holiday · First costumes · expressions · actions · etc. Each = a collection rendered as a page.
+  holiday · First costumes · expressions · actions · **My First Travels** (the travel-firsts set:
+  car ride · car seat · pram · carrier · train · bus · auto-rickshaw · taxi · boat · bicycle,
+  LC-290–299 added 2026-07-03; ferry folded into boat, metro into train) · etc. Each = a
+  collection rendered as a page.
 - **People / "Meet…" collections** (the baby's *village* — who loves me): Meet the family · Meet
   Mama's friends · Meet Papa's friends · Meet my friends. Each = a growing album of the people in
   the baby's world. Seeds from the existing relationship-photo feature ("a photo with Nana Bear")
