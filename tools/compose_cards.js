@@ -32,6 +32,15 @@ const ART_ALIAS = {
   'LC-179': 'LC-067',                                                        // I love bath time -> My first bath
   'LC-215': 'LC-060',                                                        // First family photo (With family) -> First family photo (Newborn)
   'LC-232': 'LC-214',                                                        // First time meeting family -> My family
+  'LC-216': 'LC-155',                                                        // First cousin photo -> Made a new friend (two cubs)
+  'LC-235': 'LC-164',                                                        // Birthday (recurring) -> First birthday party
+  'LC-236': 'LC-162',                                                        // Holiday (recurring) -> First holiday
+  'LC-242': 'LC-159',                                                        // First beach trip -> First beach day
+  'LC-241': 'LC-160',                                                        // First vacation -> First road trip
+  'LC-085': 'LC-087', 'LC-086': 'LC-087', 'LC-088': 'LC-087', 'LC-089': 'LC-087',  // journaling set -> one journal design
+  'LC-082': 'LC-081', 'LC-083': 'LC-081', 'LC-084': 'LC-081',                      // weeks-old markers -> one-week pose
+  'LC-253': 'LC-252',                                                        // First passport photo -> First photoshoot
+  'LC-255': 'LC-161',                                                        // First trip abroad -> First flight
   'LC-218': 'LC-210', 'LC-220': 'LC-210', 'LC-222': 'LC-210', 'LC-224': 'LC-210',   // Mama variants -> Mama and me
   'LC-221': 'LC-211', 'LC-223': 'LC-211', 'LC-225': 'LC-211',                       // Papa variants -> Papa and me
   'LC-219': 'LC-214', 'LC-226': 'LC-214', 'LC-227': 'LC-214', 'LC-228': 'LC-214', 'LC-229': 'LC-214' // family variants -> My family
