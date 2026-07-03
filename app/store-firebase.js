@@ -153,11 +153,16 @@
     ib.onclick = function () { if (window.addToHomeScreen) window.addToHomeScreen('llInstallMsg'); };
   }
   function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function looksLikeEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e); }
   function wireEmailRow(scope) {
     var row = scope.querySelector('.ll-email-row'); if (!row) return;
     var toggle = row.querySelector('.ll-email-toggle'), form = row.querySelector('.ll-email-form'), note = row.querySelector('.ll-email-note');
+    var input = form.querySelector('input'), btn = form.querySelector('button');
+    var LINKBTN = 'border:none;background:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:800;color:#6E635B;text-decoration:underline;padding:2px';
     var cdTimer = null;
-    toggle.onclick = function () { toggle.style.display = 'none'; form.style.display = 'flex'; form.querySelector('input').focus(); };
+    // (re)show the email form keeping what's typed, so a wrong or changed address can be corrected and re-sent.
+    function openForm() { if (cdTimer) { clearInterval(cdTimer); cdTimer = null; } note.textContent = ''; toggle.style.display = 'none'; form.style.display = 'flex'; btn.disabled = false; btn.textContent = 'Send link'; input.focus(); input.select(); }
+    toggle.onclick = openForm;
 
     // Send (or resend) the sign-in link: our own Worker + Resend first (Firebase's built-in sender
     // has poor Gmail delivery), falling back to Firebase's sender if the endpoint is down. The link
@@ -174,8 +179,9 @@
     function showSent(email) {
       form.style.display = 'none';
       note.innerHTML = 'Check your inbox: we sent a sign-in link to <b>' + escHtml(email) + '</b>. Open it on this device.'
-        + '<div class="ll-resend-row" style="margin-top:8px">Not arrived yet? <button type="button" class="ll-resend" style="border:none;background:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:800;color:#6E635B;text-decoration:underline;padding:2px">Resend link</button></div>';
+        + '<div class="ll-resend-row" style="margin-top:8px">Not arrived yet? <button type="button" class="ll-resend" style="' + LINKBTN + '">Resend link</button> &middot; <button type="button" class="ll-changeemail" style="' + LINKBTN + '">Wrong email?</button></div>';
       var rb = note.querySelector('.ll-resend');
+      note.querySelector('.ll-changeemail').onclick = function () { input.value = email; openForm(); }; // fix a typo or use a different address
       if (cdTimer) { clearInterval(cdTimer); cdTimer = null; }
       var left = 30; rb.disabled = true; rb.style.opacity = '.55'; rb.textContent = 'Resend in ' + left + 's';
       cdTimer = setInterval(function () {
@@ -193,8 +199,9 @@
 
     form.onsubmit = function (ev) {
       ev.preventDefault();
-      var email = form.querySelector('input').value.trim(); if (!email) return;
-      var btn = form.querySelector('button'); btn.disabled = true; btn.textContent = 'Sending…';
+      var email = input.value.trim();
+      if (!looksLikeEmail(email)) { note.textContent = 'That email looks a bit off, mind checking it?'; input.focus(); return; }
+      btn.disabled = true; btn.textContent = 'Sending…';
       sendLink(email)
         .then(function () { showSent(email); })
         .catch(function (err) { btn.disabled = false; btn.textContent = 'Send link'; note.textContent = 'Could not send the link: ' + ((err && err.message) || err); });
