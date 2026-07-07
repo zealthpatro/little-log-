@@ -1390,11 +1390,16 @@ function homeNudgeLine(){
   return `A fresh day with ${escapeHtml(b.name)} 🌿`;
 }
 function monthiversary(){
+  // The month card WAITS for the parent (14-day window), not a 24h flash — an exhausted parent
+  // opening the app two days late used to never see it.
   const b=activeBaby(); if(!b||!b.birth) return null;
   const bd=new Date(b.birth), t=new Date();
-  if(bd.getDate()!==t.getDate()) return null;
   let m=(t.getFullYear()-bd.getFullYear())*12+(t.getMonth()-bd.getMonth());
-  return m>=1 ? m : null;
+  if(t.getDate()<bd.getDate()) m--;
+  if(m<1) return null;
+  const mark=new Date(bd); mark.setMonth(bd.getMonth()+m);
+  const days=Math.floor((t-mark)/86400000);
+  return (days>=0&&days<=14) ? m : null;
 }
 function renderGetStarted(){
   if(state.settings.seen && state.settings.seen['tip_getstarted']) return '';
@@ -1800,7 +1805,7 @@ function renderHome(){
   if(mv && !(state.settings.seen&&state.settings.seen['tip_bday'+mv])){
     alerts += `<div class="alert-pill" style="border-color:var(--star)">
       <div class="ap-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🎉</div>
-      <div class="ap-body"><div class="ap-t">${escapeHtml((activeBaby()||{}).name||'Baby')} is ${mv} month${mv>1?'s':''} today!</div><div class="ap-s">Their ${mv}-month card is ready 🐻</div></div>
+      <div class="ap-body"><div class="ap-t">${escapeHtml((activeBaby()||{}).name||'Baby')} is ${mv} month${mv>1?'s':''} 🎉</div><div class="ap-s">Their ${mv}-month card is waiting 🐻</div></div>
       <button onclick="openMemoryCard(${mv},'${memCandPhoto(mv)}');dismissTip('bday${mv}')">See it</button></div>`;
   }
   const _cab=activeBaby();
@@ -7927,20 +7932,17 @@ function renderMemories(){
 let pendingMonth=null;
 function pickMonthly(i){ pendingMonth=i; const el=$('#monthInput'); el.value=''; el.click(); }
 function handleMonthly(input){
-  const f=input.files[0]; if(!f)return; const i=pendingMonth;
-  const img=new Image();
-  img.onload=async()=>{
-    const c=document.createElement('canvas');
-    const draw=()=>composeMonthly(c,img,i);
-    draw(); if(document.fonts&&document.fonts.ready) await document.fonts.ready.then(draw);
-    const data=c.toDataURL('image/jpeg',0.6);
+  const f=input.files[0]; if(!f)return; const i=pendingMonth; input.value='';
+  // NON-DESTRUCTIVE since v168: store the CLEAN framed photo (1440px, print-worthy); the month
+  // stamp is composed at view/download time. Old entries (pre-v168) keep their baked pixels.
+  // Parent frames it through the same prep step as every other upload.
+  openPhotoPrep(f,{aspect:1,maxDim:1440,q:0.8},async(data)=>{
     const mm=monthlyMap();
     if(mm[i]){ await PhotoStore.del(mm[i].photoId); state.photos=state.photos.filter(p=>p.id!==mm[i].id); }
     const pid=uid(); await PhotoStore.set(pid,data);
-    state.photos.push({id:uid(),babyId:state.activeBabyId,photoId:pid,slot:i,caption:slotLabel(i),createdAt:now()});
+    state.photos.push({id:uid(),babyId:state.activeBabyId,photoId:pid,slot:i,clean:true,caption:slotLabel(i),createdAt:now()});
     await persist(); render(); toast(slotLabel(i)+' photo added');
-  };
-  img.src=URL.createObjectURL(f);
+  },()=>{});
 }
 function composeMonthly(canvas,img,i){
   const S=800; canvas.width=S; canvas.height=S;
@@ -7964,16 +7966,39 @@ function composeMonthly(canvas,img,i){
 }
 function viewMonthly(i){
   const p=monthlyMap()[i]; if(!p)return;
-  openSheet(`<h2>${slotLabel(i)}</h2><div class="sub">${new Date(p.createdAt).toLocaleDateString()}</div>
-    <img src="${photoSrc(p.photoId)}" style="width:100%;border-radius:16px;margin-bottom:16px">
-    <button class="btn-primary" style="background:var(--sleep)" onclick="downloadSaved('${p.id}')">${I.download} Download</button>
-    <button class="btn-ghost" onclick="pickMonthly(${i});closeSheet()">Replace photo</button>
-    <button class="btn-ghost btn-danger" onclick="deletePhoto('${p.id}')">${I.trash} Remove</button>`,'feed');
+  if(!p.clean){
+    // pre-v168 entry: the stamp is baked into the stored pixels
+    openSheet(`<h2>${slotLabel(i)}</h2><div class="sub">${new Date(p.createdAt).toLocaleDateString()}</div>
+      <img src="${photoSrc(p.photoId)}" style="width:100%;border-radius:16px;margin-bottom:16px">
+      <button class="btn-primary" style="background:var(--sleep)" onclick="downloadSaved('${p.id}')">${I.download} Download</button>
+      <button class="btn-ghost" onclick="pickMonthly(${i});closeSheet()">Replace photo</button>
+      <button class="btn-ghost btn-danger" onclick="deletePhoto('${p.id}')">${I.trash} Remove</button>`,'feed');
+    return;
+  }
+  // clean entry: compose the stamped keepsake on the fly (the stored photo stays pristine)
+  const img=new Image();
+  img.onload=()=>{
+    const c=document.createElement('canvas'); composeMonthly(c,img,i);
+    const data=c.toDataURL('image/jpeg',0.88); window._lastCard=data;
+    openSheet(`<h2>${slotLabel(i)}</h2><div class="sub">${new Date(p.createdAt).toLocaleDateString()}</div>
+      <img src="${data}" style="width:100%;border-radius:16px;margin-bottom:16px">
+      <button class="btn-primary" style="background:var(--sleep)" onclick="dlNamed('${slotShort(i)}-month')">${I.download} Download</button>
+      <button class="btn-ghost" onclick="shareLastCard('${slotShort(i)}-month')">↗ Share</button>
+      <button class="btn-ghost" onclick="pickMonthly(${i});closeSheet()">Replace photo</button>
+      <button class="btn-ghost btn-danger" onclick="deletePhoto('${p.id}')">${I.trash} Remove</button>`,'feed');
+  };
+  img.src=photoSrc(p.photoId);
 }
+
+/* Watercolour hero-cub tile for the auto keepsakes (poster + memory card). Lazy, cached; the
+   composers stay sync — they just skip the art if it hasn't arrived yet. */
+let _ksArtImg=null;
+function loadKsArt(){ return new Promise(res=>{ if(_ksArtImg){res(_ksArtImg);return;} const im=new Image(); im.onload=()=>{_ksArtImg=im;res(im);}; im.onerror=()=>res(null); im.src='journey-art/ov_hero-cub.webp'; }); }
 
 /* ---- Memory card (data-fused) ---- */
 let cardDraft=null;
 function openMemoryCard(month, photoId){
+  loadKsArt().then(()=>{ try{ drawCardPreview(); }catch(e){} });
   const months=Math.max(0,Math.floor(babyMonths()));
   cardDraft={month:(typeof month==='number'?month:months),photo:null,photoData:null};
   if(photoId){ const src=photoSrc(photoId); if(src){ cardDraft.photoId=photoId; const img=new Image(); img.onload=function(){ cardDraft.photoData=img; renderMemoryCardSheet(); }; img.src=src; } }
@@ -8026,6 +8051,13 @@ function composeMemoryCard(canvas,month,img){
     const w=img.naturalWidth*r, h=img.naturalHeight*r;
     ctx.save(); roundRect(ctx,pad,pad,W-pad*2,photoH-pad,28); ctx.clip();
     fDrawImage(ctx,img,103,100,105,0.06, pad+((W-pad*2)-w)/2, coverY(pad,photoH-pad,h), w, h);
+    ctx.restore();
+  } else if(_ksArtImg){
+    // no photo yet: the watercolour cub keeps the card warm instead of a bare numeral panel
+    ctx.save(); roundRect(ctx,pad,pad,W-pad*2,photoH-pad,28); ctx.clip();
+    const r2=Math.max((W-pad*2)/_ksArtImg.naturalWidth,(photoH-pad)/_ksArtImg.naturalHeight);
+    const w2=_ksArtImg.naturalWidth*r2, h2=_ksArtImg.naturalHeight*r2;
+    ctx.drawImage(_ksArtImg, pad+((W-pad*2)-w2)/2, coverY(pad,photoH-pad,h2), w2, h2);
     ctx.restore();
   } else {
     ctx.fillStyle='#F1E7D3'; roundRect(ctx,pad,pad,W-pad*2,photoH-pad,28); ctx.fill();
@@ -8080,6 +8112,7 @@ function composeMemoryCard(canvas,month,img){
 async function genCard(){
   showLoader(['Gathering this month\'s moments','Mixing in the real numbers','Adding a little sparkle']);
   await paintYield();
+  await loadKsArt();
   const c=document.createElement('canvas'); composeMemoryCard(c,cardDraft.month,cardDraft.photoData);
   const data=c.toDataURL('image/jpeg',0.92);
   hideLoader();
@@ -8288,12 +8321,13 @@ function composePoster(canvas,scale){
   // eyebrow
   ctx.fillStyle=t.accent; ctx.font=`800 ${22*S}px "Nunito Sans", sans-serif`;
   ctx.fillText('• WELCOME TO THE WORLD •', W/2, y); y+=20*S;
-  // optional photo
-  if(posterDraft.withPhoto && posterDraft.img){
+  // photo if chosen; else the watercolour hero cub fills the frame slot so the poster is never bare
+  const slotIm=(posterDraft.withPhoto && posterDraft.img)?posterDraft.img:_ksArtImg;
+  if(slotIm){
     const pw=W*0.46, ph=pw*1.05, px=(W-pw)/2; y+=20*S;
     ctx.save(); roundRect(ctx,px,y,pw,ph,18*S); ctx.fillStyle='#fff'; ctx.shadowColor='rgba(0,0,0,0.15)'; ctx.shadowBlur=20*S; ctx.shadowOffsetY=8*S; ctx.fill(); ctx.restore();
     const ipad=10*S; ctx.save(); roundRect(ctx,px+ipad,y+ipad,pw-ipad*2,ph-ipad*2,12*S); ctx.clip();
-    const im=posterDraft.img, r=Math.max((pw-ipad*2)/im.naturalWidth,(ph-ipad*2)/im.naturalHeight), iw=im.naturalWidth*r, ih=im.naturalHeight*r;
+    const im=slotIm, r=Math.max((pw-ipad*2)/im.naturalWidth,(ph-ipad*2)/im.naturalHeight), iw=im.naturalWidth*r, ih=im.naturalHeight*r;
     ctx.drawImage(im, px+ipad+((pw-ipad*2)-iw)/2, coverY(y+ipad,ph-ipad*2,ih), iw, ih); ctx.restore();
     y+=ph+50*S;
   } else { y+=40*S; }
@@ -8341,13 +8375,20 @@ function composePoster(canvas,scale){
 async function genPoster(){
   showLoader(['Setting the stage','Placing every detail','Framing the announcement']);
   await paintYield();
-  const c=document.createElement('canvas'); composePoster(c,1.4); // high-res ~1680x2352
-  const data=c.toDataURL('image/jpeg',0.94); window._lastCard=data;
+  await loadKsArt();
+  // scale 2.8 = 3360x4704 (~213 DPI at 40x60cm, real print quality) while staying under iOS's
+  // hard 16.7M-pixel canvas cap; fall back to the old size if a low-memory device balks.
+  const c=document.createElement('canvas');
+  let data=null;
+  try{ composePoster(c,2.8); data=c.toDataURL('image/jpeg',0.92); }catch(e){}
+  if(!data){ composePoster(c,1.4); data=c.toDataURL('image/jpeg',0.94); }
+  window._lastCard=data;
   hideLoader();
-  openSheet(`<h2>${escapeHtml(activeBaby().name)}'s poster</h2><div class="sub">Ready to print (portrait, scales to 40×60 / 50×70).</div>
+  openSheet(`<h2>${escapeHtml(activeBaby().name)}'s poster</h2><div class="sub">Ready to print, crisp up to 40×60 cm.</div>
     <img src="${data}" class="card-prev">
     <button class="btn-primary" onclick="savePosterImg()">${I.check} Save to gallery</button>
-    <button class="btn-primary" style="background:var(--sleep)" onclick="dlNamed('birth-poster')">${I.download} Download</button>`,'star');
+    <button class="btn-primary" style="background:var(--sleep)" onclick="dlNamed('birth-poster')">${I.download} Download</button>
+    <button class="btn-ghost" onclick="shareLastCard('birth-poster')">↗ Share</button>`,'star');
 }
 async function savePosterImg(){
   showLoader(['Tucking it into the album']);

@@ -218,6 +218,11 @@ time; gallery newest-first; prep "Keep it exactly as it is".
    copy; monthly slots destructively bake text at 800px. Boards/scrapbook/print need clean, bigger
    sources. Fix = store an `orig` copy (bounded ~2000px) alongside the display copy + stop baking
    text into stored monthlies (compose at render).
+   **PARTIAL v168:** monthly slots now NON-DESTRUCTIVE (clean 1440px stored, `clean:true` flag,
+   stamp composed at view/download; prep step wired, old baked entries grandfathered). Poster
+   exports 3360×4704 (~213 DPI at 40×60, iOS-cap-safe) + Share button + honest copy. Watercolour
+   hero cub fills poster slot when no photo + memory-card panel. Monthiversary card waits 14 days.
+   Remaining for full #1: orig copies on the OTHER upload paths (moments/bump/rel/studio).
 2. **"What you've captured" view + collections**: no aggregate saved-moments view exists; nothing
    composes moments together. This is the assemble stage of the loop — collections (multi-capture)
    then the first board (My First Year) then Birth collage (auto-fills).
