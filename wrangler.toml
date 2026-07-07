@@ -13,6 +13,10 @@ crons = ["*/15 * * * *"]
 [assets]
 directory = "./"
 binding = "ASSETS"
+# Serve the branded /404.html (with a real 404 status) for any unmatched path,
+# instead of an empty-body 404. worker.js falls through to env.ASSETS.fetch for
+# all non-API routes, so this covers the whole static site.
+not_found_handling = "404-page"
 
 # Non-secret config. Secrets (RESEND_API_KEY, FIREBASE_SERVICE_ACCOUNT) are set with
 # `wrangler secret put` and never live in this file or the repo.
