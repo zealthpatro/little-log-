@@ -2229,6 +2229,7 @@ function openQuickLog(){
       <button class="action" onclick="openPump()"><div class="ico" style="background:var(--pump-soft);color:var(--pump)">${I.pump}</div><div class="label">Pump</div><div class="hint">Expressed milk</div></button>
       <button class="action" onclick="openGrowth()"><div class="ico" style="background:var(--star-soft);color:var(--star)">${I.scale}</div><div class="label">Measure</div><div class="hint">Weight &amp; height</div></button>
       <button class="action" onclick="openActivity()"><div class="ico" style="background:var(--note-soft);color:var(--note)">${I.note}</div><div class="label">Activity</div><div class="hint">Bath, play, notes</div></button>
+      <button class="action" onclick="openVoiceLog()"><div class="ico" style="background:var(--feed-soft);color:var(--feed)">🎙️</div><div class="label">Say it</div><div class="hint">Log by voice ✨</div></button>
     </div>`,'feed');
 }
 function openFeed(){
@@ -2912,7 +2913,7 @@ function isPro(){
 function requirePro(featureName){ if(isPro()) return true; openPro(featureName); return false; }
 /* Pro tasters: every Pro treat can be tried a few times for free (outputs keep the
    small Cubby mark). Counts sync with the household via state.settings.proTaste. */
-const PRO_TASTE={styles:3,enhance:3,cutout:3,thennow:1,pdf:1};
+const PRO_TASTE={styles:3,enhance:3,cutout:3,thennow:1,pdf:1,voice:5};
 function tasteUsed(k){ return ((state.settings||{}).proTaste||{})[k]||0; }
 function tasteLeft(k){ return Math.max(0,(PRO_TASTE[k]||0)-tasteUsed(k)); }
 function useTaste(k,featureName){
@@ -8565,6 +8566,7 @@ function normalizeLoadedState(saved){
 <!-- Signed-out landing must load before store-firebase.js: showSignIn() falls back to a bare card if window.cubbyLanding isn't defined yet. -->
 <script src="landing.js"></script>
 <script defer src="store-firebase.js"></script>
+<script defer src="voice-log.js"></script>
 <!-- Bear avatars + custom time picker. -->
 <script src="cubby-extras.js"></script>
 <!-- WHO/CDC growth reference percentiles. -->
