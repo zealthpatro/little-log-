@@ -80,12 +80,12 @@
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
-  <url><loc>https://little-cubby.com/articles/baby/</loc><lastmod>2026-06-21</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://little-cubby.com/articles/feeding/</loc><lastmod>2026-06-21</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://little-cubby.com/articles/sleep/</loc><lastmod>2026-06-21</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://little-cubby.com/articles/health/</loc><lastmod>2026-06-21</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://little-cubby.com/articles/you/</loc><lastmod>2026-06-22</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
-  <url><loc>https://little-cubby.com/articles/pregnancy/</loc><lastmod>2026-06-22</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://little-cubby.com/articles/baby/</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://little-cubby.com/articles/feeding/</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://little-cubby.com/articles/sleep/</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://little-cubby.com/articles/health/</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://little-cubby.com/articles/you/</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://little-cubby.com/articles/pregnancy/</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
   <url><loc>https://little-cubby.com/articles/csec-vs-vaginal-birth-recovery/</loc><lastmod>2026-06-22</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://little-cubby.com/articles/how-to-care-for-new-mum/</loc><lastmod>2026-06-22</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://little-cubby.com/articles/pregnancy-anxiety/</loc><lastmod>2026-06-22</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
@@ -109,6 +109,9 @@
   <url><loc>https://little-cubby.com/articles/baby-teething-and-tooth-care/</loc><lastmod>2026-06-09</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://little-cubby.com/articles/baby-sleep-by-age/</loc><lastmod>2026-06-09</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://little-cubby.com/editorial/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://little-cubby.com/about/</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://little-cubby.com/contact/</loc><changefreq>yearly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://little-cubby.com/refund/</loc><changefreq>yearly</changefreq><priority>0.4</priority></url>
   <url><loc>https://little-cubby.com/articles/best-baby-tracker-app/</loc><lastmod>2026-06-13</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
   <url><loc>https://little-cubby.com/articles/cubby-vs-huckleberry/</loc><lastmod>2026-06-13</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
   <url><loc>https://little-cubby.com/articles/what-is-cubby/</loc><lastmod>2026-06-24</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
@@ -515,7 +518,7 @@
   <url><loc>https://little-cubby.com/articles/babyproofing-your-home/</loc><lastmod>2026-06-24</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://little-cubby.com/articles/sure-start-maternity-grant/</loc><lastmod>2026-06-24</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://little-cubby.com/articles/nct-classes-worth-it/</loc><lastmod>2026-06-24</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
-  <url><loc>https://little-cubby.com/articles/cubby/</loc><lastmod>2026-06-24</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://little-cubby.com/articles/cubby/</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
   <url><loc>https://little-cubby.com/articles/cubby-one-app/</loc><lastmod>2026-06-24</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://little-cubby.com/articles/cubby-for-new-parents/</loc><lastmod>2026-06-24</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://little-cubby.com/articles/cubby-for-dads-partners/</loc><lastmod>2026-06-24</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>

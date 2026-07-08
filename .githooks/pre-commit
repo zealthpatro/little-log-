@@ -24,6 +24,21 @@ if [ -n "$jschanged" ] && command -v node >/dev/null 2>&1; then
   done
 fi
 
+# SEO gate: if any public page or the sitemap is staged, keep the sitemap lastmod fresh
+# and block broken SEO (dead internal links, unresolved og/twitter images, invalid JSON-LD,
+# sitemap -> 404) from ever shipping. This is what keeps SEO "seamless": the regressions the
+# July 2026 audit found can't come back. Bypass (rarely) with  git commit --no-verify.
+seopages=$(printf '%s\n' "$staged" | grep -E '\.html$|^sitemap\.xml$' | grep -vE '^(node_modules|articles-drafts|tools|mockups|test|social|art-src|docs|app|g)/')
+if [ -n "$seopages" ] && command -v python3 >/dev/null 2>&1; then
+  # 1) auto-stamp sitemap lastmod from each article's dateModified, and stage it
+  python3 tools/gen_sitemap.py >/dev/null 2>&1 && git add sitemap.xml 2>/dev/null
+  # 2) guard the staged pages
+  if ! python3 tools/seo_check.py --staged --quiet; then
+    echo "   → fix the SEO issues above, or re-run with  git commit --no-verify"
+    exit 1
+  fi
+fi
+
 # Cacheable app assets, excluding sw.js itself.
 cacheable=$(printf '%s\n' "$staged" | grep -E '^app/.*\.(js|html|css)$' | grep -v '^app/sw\.js$')
 [ -z "$cacheable" ] && exit 0
