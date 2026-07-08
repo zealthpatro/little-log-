@@ -1,5 +1,7 @@
 # Cubby content runbook (for a scheduled agent or /loop)
 
+> **Status (June 2026):** This workflow is current and live; it publishes baby and pregnancy articles to little-cubby.com (~180 articles live so far) by pushing to `main`, which auto-deploys via Cloudflare Workers Builds. Full current state + go-live plan: HANDOFF.md.
+
 This is the full, self-contained workflow to research, write, self-review and **publish** one sourced baby-care article per run. It is YMYL (health) content: accuracy and sourcing are mandatory, fabrication is forbidden.
 
 Point a schedule or loop at the **Master prompt** below. Everything it needs is here and in `CONTENT-QUEUE.md`.
@@ -38,7 +40,9 @@ Point a schedule or loop at the **Master prompt** below. Everything it needs is 
      (If a needed age section heading doesn't exist, add it in the right order.)
    - Add to `sitemap.xml` before `</urlset>`:
      `<url><loc>https://little-cubby.com/articles/<slug>/</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>`
+     (no `<lastmod>` by hand: step 6 runs `tools/gen_sitemap.py`, which stamps it from the article's `dateModified`).
 6. **Validate.**
+   - **Stamp the sitemap `<lastmod>` from the article's `dateModified`:** `python3 tools/gen_sitemap.py` (idempotent; touches only `/articles/` entries, leaves hand-maintained pages alone).
    - **The file is real HTML (do this FIRST — never commit an agent's notes/verification report as the article):**
      `python3 -c "s=open('articles/<slug>/index.html').read();assert s.lstrip().startswith('<!DOCTYPE'),'not HTML';assert '<h1>' in s and s.rstrip().endswith('</html>'),'incomplete';print('HTML OK')"`
    - JSON-LD: `python3 -c "import re,json;[json.loads(x) for x in re.findall(r'<script type=\"application/ld\\+json\">(.*?)</script>', open('articles/<slug>/index.html').read(), re.S)];print('LD OK')"`
@@ -56,3 +60,18 @@ Point a schedule or loop at the **Master prompt** below. Everything it needs is 
 
 ## Recommended cadence
 1 article per run; schedule 2-3 runs/week. Skim the live pages weekly. If any run reports an unsourced claim it couldn't resolve, it should have used Draft mode for that one.
+
+## SEO automation: sitemap lastmod + IndexNow
+- **Sitemap freshness:** `tools/gen_sitemap.py` rewrites every `/articles/<slug>/` `<lastmod>` from that article's `BlogPosting` `dateModified`. Run it after any article add/edit (step 6 above already does). It never touches hand-maintained entries (home, vaccine schedules, pricing, hubs) or their hreflang blocks. Do **not** source lastmod from git/file mtime: the article set shares a couple of bulk-commit dates and that would emit a fake uniform signal.
+- **IndexNow (instant Bing / Yandex / Seznam / Naver discovery).** Our key is hosted at the repo root: `960a9783b1c530262ca0538b140439a8.txt` (served at `https://little-cubby.com/960a9783b1c530262ca0538b140439a8.txt`). It is a crawl protocol, not a tracker, so it is compatible with the no-third-party-tracker promise, and it does not affect Google (Google uses the sitemap `<lastmod>` + Search Console).
+  - **After a content push goes live**, submit the new/changed URL(s) (low-stakes, just asks the Bing-family engines to crawl public URLs):
+    ```sh
+    curl -s "https://api.indexnow.org/indexnow" -H "Content-Type: application/json" -d '{
+      "host": "little-cubby.com",
+      "key": "960a9783b1c530262ca0538b140439a8",
+      "keyLocation": "https://little-cubby.com/960a9783b1c530262ca0538b140439a8.txt",
+      "urlList": ["https://little-cubby.com/articles/<slug>/"]
+    }'
+    ```
+    A `200`/`202` means accepted. `urlList` can hold up to 10,000 URLs (submit the whole sitemap after a big batch).
+  - **Zero-maintenance alternative (owner, ~2 min):** Cloudflare dashboard → the zone → Caching → Configuration → enable **Crawler Hints (IndexNow)**. Cloudflare then generates/hosts its own key and auto-submits changed URLs on every deploy, so the manual `curl` above is no longer needed. If you enable this, the manual key file can stay (harmless) or be removed.

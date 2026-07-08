@@ -23,14 +23,14 @@
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[
 {"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://little-cubby.com/"},{"@type":"ListItem","position":2,"name":"Pricing","item":"https://little-cubby.com/pricing/"}]},
-{"@type":"SoftwareApplication","name":"Cubby Pro","applicationCategory":"HealthApplication","operatingSystem":"Web, iOS, Android","description":"The full keepsake studio (every template, font, palette and format), watermark-free shares, on-device auto-enhance and background cutout, Then and Now cards and doctor PDF reports for families who want more from Cubby.","url":"https://little-cubby.com/pricing/","offers":{"@type":"Offer","price":"90","priceCurrency":"USD","priceSpecification":{"@type":"UnitPriceSpecification","price":"90","priceCurrency":"USD","billingDuration":"P1Y","description":"Annual plan, about $7.50/mo effective (save 17% vs $9/month). 7-day free trial."}}}
+{"@type":"SoftwareApplication","@id":"https://little-cubby.com/#software","name":"Cubby","applicationCategory":"HealthApplication","operatingSystem":"Web browser","description":"Baby tracker with vaccine schedules, multi-caregiver real-time sync, growth charts and keepsakes.","url":"https://little-cubby.com/","featureList":["Vaccine schedules for 11 countries","Feed, nappy, sleep and pumping logs","Multi-caregiver real-time sync","Growth charts (WHO and CDC)","Milestones, moments and keepsakes","Works offline","No ads and no third-party trackers","Free tier"],"screenshot":"https://little-cubby.com/icons/screenshots/track.png","offers":[{"@type":"Offer","price":"0","priceCurrency":"USD","name":"Free"},{"@type":"Offer","price":"90","priceCurrency":"USD","name":"Pro","billingIncrement":"P1Y","description":"$9/month, or $90/year (about $7.50/mo effective, save 17%). 7-day free trial."}],"publisher":{"@id":"https://little-cubby.com/#organization"}}
 ]}
 </script>
 </head>
 <body>
 <nav class="nav"><div class="nav-in">
   <a class="nav-brand" href="/"><img src="/icons/logo-512.png" alt="Cubby"><b>Cubby</b></a>
-  <div class="nav-tabs"><a href="/">Home</a><a href="/pregnancy/">Pregnancy</a><a href="/features/">Features</a><a href="/articles/">Articles</a><a href="/pricing/" class="on">Pricing</a><a href="/faq/">FAQ</a></div>
+  <div class="nav-tabs"><a href="/pregnancy/">Pregnancy</a><a href="/features/">Baby</a><a href="/articles/">Articles</a><a href="/pricing/" class="on">Pricing</a><details class="nav-about"><summary>About</summary><div class="nav-menu"><a href="/why/">Why Cubby</a><a href="/how-it-works/">How it works</a><a href="/faq/">FAQ</a></div></details></div>
   <a class="nav-cta" href="/app/">Start free</a>
 </div></nav>
 
@@ -54,6 +54,7 @@
       <li>Private, no ads, no third-party trackers</li>
     </ul></div>
     <div class="col pro"><div class="ch">Pro <span class="soon">Aug 2026</span></div><div class="price">$9/mo · or $90/yr (save 17%) · 7-day free trial</div><ul>
+      <li>Hands-free voice logging: just say "fed her 120ml" or a quick note, and Cubby writes the entry for you</li>
       <li>Doctor visit reports (PDF): a clean summary to bring to every appointment, recent days, growth, vaccines &amp; medicines</li>
       <li>Watermark-free shares, no "made with Cubby" mark</li>
       <li>Then &amp; Now: side-by-side keepsakes of how far they've come</li>
@@ -129,9 +130,10 @@ function setCur(v) { cur = v; var s = document.getElementById('curSel'); if (s) 
 </script>
 
 <footer class="foot">
-  <div class="fl"><a href="/">Home</a><a href="/pregnancy/">Pregnancy</a><a href="/features/">Features</a><a href="/articles/">Articles</a><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a><a href="/app/">Open app</a></div>
+  <div class="fl"><a href="/">Home</a><a href="/why/">Why Cubby</a><a href="/how-it-works/">How it works</a><a href="/pregnancy/">Pregnancy</a><a href="/features/">Baby</a><a href="/articles/">Articles</a><a href="/articles/baby-vaccination-schedules-compared/">Vaccine schedules</a><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a><a href="/editorial/">Our standards</a><a href="/app/">Open app</a></div>
   Cubby, a warm private baby tracker 🐻
   <div class="tiny">Cubby is informational and not a substitute for medical advice. Always follow your doctor and your country's official guidance.</div>
 </footer>
+<script defer src="/install.js"></script>
 </body>
 </html>

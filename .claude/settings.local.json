@@ -295,7 +295,9 @@
       "Bash(curl -s \"https://little-cubby.com/sitemap.xml\" --output -)",
       "Bash(xxd)",
       "Bash(curl -s --compressed \"https://little-cubby.com/sitemap.xml\")",
-      "Bash(curl -s https://little-cubby.com/robots.txt?cb=__TRACKED_VAR__)"
+      "Bash(curl -s https://little-cubby.com/robots.txt?cb=__TRACKED_VAR__)",
+      "Bash(git -C /Users/sauravpatro/Downloads/little-log-pwa log --oneline -8)",
+      "Bash(grep -oE 'https://[a-zA-Z0-9.-]+\\\\.[a-z]{2,}' /Users/sauravpatro/Downloads/little-log-pwa/robots.txt)"
     ]
   }
 }

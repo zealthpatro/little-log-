@@ -1,0 +1,44 @@
+<svg viewBox="0 0 320 500" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer card -->
+  <rect x="4" y="4" width="312" height="492" rx="22" fill="#ffffff" stroke="#e8e8f0" stroke-width="1.5"/>
+  <!-- Header bar -->
+  <rect x="4" y="4" width="312" height="56" rx="22" fill="#fdf0f5"/>
+  <rect x="4" y="36" width="312" height="24" fill="#fdf0f5"/>
+  <text x="160" y="37" text-anchor="middle" font-family="Georgia,serif" font-size="17" font-weight="600" fill="#1a1a2e">Pregnancy</text>
+  <!-- Header divider -->
+  <line x1="4" y1="60" x2="316" y2="60" stroke="#f0c0d8" stroke-width="1"/>
+
+  <!-- Central hero section -->
+  <rect x="12" y="70" width="296" height="128" rx="16" fill="#fdf0f5" stroke="#f0c0d8" stroke-width="1"/>
+  <text x="160" y="148" text-anchor="middle" font-family="Georgia,serif" font-size="52" font-weight="600" fill="#1a1a2e">26</text>
+  <text x="160" y="168" text-anchor="middle" font-family="Nunito Sans,system-ui,sans-serif" font-size="14" font-weight="700" fill="#c97fa0">weeks</text>
+  <text x="160" y="185" text-anchor="middle" font-family="Nunito Sans,system-ui,sans-serif" font-size="12" fill="#9a9aac">of 40</text>
+
+  <!-- Progress bar -->
+  <rect x="20" y="208" width="280" height="10" rx="5" fill="#e8e8f0"/>
+  <rect x="20" y="208" width="182" height="10" rx="5" fill="#c97fa0"/>
+
+  <!-- Baby size section -->
+  <text x="16" y="244" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" font-weight="700" fill="#9a9aac">THIS WEEK</text>
+  <rect x="12" y="250" width="296" height="52" rx="12" fill="#f5f5fa"/>
+  <text x="40" y="282" text-anchor="middle" font-size="24">🥒</text>
+  <text x="68" y="276" font-family="Nunito Sans,system-ui,sans-serif" font-size="14" font-weight="700" fill="#1a1a2e">Size of a cucumber</text>
+  <text x="68" y="294" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">About 35 cm · 760g</text>
+
+  <!-- Upcoming section -->
+  <text x="16" y="324" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" font-weight="700" fill="#9a9aac">NEXT UP</text>
+
+  <!-- Row 1: 28-week scan -->
+  <rect x="12" y="330" width="296" height="52" rx="12" fill="#f5f5fa"/>
+  <text x="40" y="360" text-anchor="middle" font-size="20">🏥</text>
+  <text x="66" y="352" font-family="Nunito Sans,system-ui,sans-serif" font-size="14" font-weight="700" fill="#1a1a2e">28-week scan</text>
+  <text x="66" y="370" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">In 14 days · Dr Al-Mansouri</text>
+  <rect x="256" y="338" width="48" height="18" rx="9" fill="#fdf0f5" stroke="#f0c0d8" stroke-width="1"/>
+  <text x="280" y="351" text-anchor="middle" font-family="Nunito Sans,system-ui,sans-serif" font-size="9" fill="#c97fa0">14 days</text>
+
+  <!-- Row 2: Vitamins -->
+  <rect x="12" y="392" width="296" height="52" rx="12" fill="#f5f5fa"/>
+  <text x="40" y="422" text-anchor="middle" font-size="20">💊</text>
+  <text x="66" y="414" font-family="Nunito Sans,system-ui,sans-serif" font-size="14" font-weight="700" fill="#1a1a2e">Folic acid · Iron</text>
+  <text x="66" y="432" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">Daily · Reminded in-app</text>
+</svg>

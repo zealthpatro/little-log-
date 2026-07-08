@@ -1,0 +1,24 @@
+<!doctype html><html><head><meta charset="utf-8">
+<!-- Quick gallery of every generated journey card. Open this to review the set produced by
+     tools/gen_journey_art.js. Not shipped; a dev preview only. -->
+<style>
+body{margin:0;background:#faf7f1;font-family:system-ui,sans-serif;color:#5f534a;padding:18px}
+h3{font-weight:600;font-size:15px;margin:22px 6px 10px;color:#8a7d70;text-transform:uppercase;letter-spacing:.06em}
+.g{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
+.c{border-radius:14px;overflow:hidden;box-shadow:0 4px 14px rgba(120,100,80,.16)}
+.c img{display:block;width:100%}
+</style></head><body>
+<h3>Timeline</h3><div class="g" id="t"></div>
+<h3>Milestones</h3><div class="g" id="m"></div>
+<h3>Relationships</h3><div class="g" id="r"></div>
+<h3>Birthday &amp; fallbacks</h3><div class="g" id="x"></div>
+<script>
+var base='../app/journey-art/';
+var T=['bmonth-0','bmonth-1','bmonth-2','bmonth-3','bmonth-4','bmonth-5','bmonth-6','bmonth-7','bmonth-8','bmonth-9','bmonth-10','bmonth-11','bmonth-12','bmonth-15','bmonth-18','bmonth-24'];
+var M=['bms-smile','bms-tooth','bms-sit','bms-steps','bms-words','bms-rollover'];
+var R=['rel-nana','rel-grandma','rel-papa','rel-grandpa','rel-auntie','rel-uncle','rel-sibling','rel-other'];
+var X=['bday','bmonth-default','bms-default'];
+function fill(id,arr){var h='';arr.forEach(function(f){h+='<div class="c"><img src="'+base+f+'.webp" alt="'+f+'"></div>';});document.getElementById(id).innerHTML=h;}
+fill('t',T);fill('m',M);fill('r',R);fill('x',X);
+</script>
+</body></html>

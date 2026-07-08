@@ -1,6 +1,6 @@
 /* Cubby service worker.
    Bump CACHE on every deploy so old assets are cleared. */
-const CACHE = 'little-log-v65';
+const CACHE = 'little-log-v168';
 const ASSETS = [
   '/app/',
   '/app/index.html',
@@ -9,6 +9,9 @@ const ASSETS = [
   '/app/cubby-extras.js',
   '/app/growth-data.js',
   '/app/pregnancy-data.js',
+  '/app/milestone-data.js',
+  '/app/journey-catalogue.js',
+  '/app/firebase-messaging-sw.js',
   '/app/landing.js',
   '/app/manifest.webmanifest',
   '/icons/icon-192.png',
@@ -36,34 +39,24 @@ self.addEventListener('fetch', (e) => {
   // Only manage same-origin requests. Let Firebase, Google sign-in and font CDNs pass through untouched.
   if (new URL(req.url).origin !== self.location.origin) return;
 
-  const accept = req.headers.get('accept') || '';
-  const isHTML = req.mode === 'navigate' || accept.indexOf('text/html') !== -1;
+  const isHTML = req.mode === 'navigate' || (req.headers.get('accept') || '').indexOf('text/html') !== -1;
 
-  if (isHTML) {
-    // Network-first for the page so updates land immediately; fall back to cache offline.
-    e.respondWith(
-      fetch(req)
-        .then((res) => { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); return res; })
-        .catch(() => caches.match(req).then((r) => r || caches.match('./index.html')))
-    );
-  } else if (new URL(req.url).pathname.endsWith('.js')) {
-    // Network-first for our own JS, so HTML and its scripts/CSS never drift out of sync
-    // (a stale cached script was rendering the Pro sheet unstyled). Cache is offline fallback.
-    e.respondWith(
-      fetch(req)
-        .then((res) => { if (res && res.status === 200) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); } return res; })
-        .catch(() => caches.match(req))
-    );
-  } else {
-    // Cache-first for truly-static assets (icons, manifest), revalidate in the background.
-    e.respondWith(
-      caches.match(req).then((cached) => {
-        const net = fetch(req).then((res) => {
-          if (res && res.status === 200) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
-          return res;
-        }).catch(() => cached);
-        return cached || net;
-      })
-    );
-  }
+  // Cache-first (stale-while-revalidate) for the whole same-origin app shell. An installed PWA
+  // opens INSTANTLY from cache — no network wait on launch (the old network-first re-downloaded
+  // ~700KB of HTML+JS every open). The cache refreshes in the background. Freshness is driven by
+  // the CACHE version bump on each deploy: a changed sw.js installs a new SW, `addAll` re-caches
+  // every asset together, and activate claims clients — so a new build lands on the next launch
+  // and HTML+JS never drift within a version. (Trade-off: a returning user may see the previous
+  // build for one launch after a deploy, then it updates — standard PWA behaviour.)
+  e.respondWith(
+    caches.match(req).then((cached) => {
+      const net = fetch(req).then((res) => {
+        if (res && res.status === 200 && res.type === 'basic') {
+          const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy));
+        }
+        return res;
+      }).catch(() => cached || (isHTML ? caches.match('/app/index.html') : undefined));
+      return cached || net;
+    })
+  );
 });

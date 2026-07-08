@@ -1,0 +1,48 @@
+<svg viewBox="0 0 320 420" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer card -->
+  <rect x="4" y="4" width="312" height="412" rx="22" fill="#ffffff" stroke="#e8e8f0" stroke-width="1.5"/>
+  <!-- Header bar bg -->
+  <rect x="4" y="4" width="312" height="56" rx="22" fill="#fdf0f5"/>
+  <rect x="4" y="36" width="312" height="24" fill="#fdf0f5"/>
+  <!-- Header divider -->
+  <line x1="4" y1="60" x2="316" y2="60" stroke="#f0c0d8" stroke-width="1"/>
+
+  <!-- Header title -->
+  <text x="20" y="38" font-family="Georgia,serif" font-size="17" font-weight="700" fill="#1a1a2e">Your circle</text>
+
+  <!-- Row 1: Mama Bear (Owner) -->
+  <rect x="12" y="70" width="296" height="54" rx="12" fill="#f5f5fa"/>
+  <circle cx="40" cy="97" r="18" fill="#fdf0f5"/>
+  <text x="40" y="103" text-anchor="middle" font-size="18">🐻</text>
+  <text x="66" y="92" font-family="Nunito Sans,system-ui,sans-serif" font-size="14" font-weight="700" fill="#1a1a2e">Mama Bear</text>
+  <text x="66" y="108" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">You · Owner</text>
+  <!-- Owner pill -->
+  <rect x="244" y="84" width="52" height="20" rx="10" fill="#fdf0f5" stroke="#f0c0d8" stroke-width="1"/>
+  <text x="270" y="98" text-anchor="middle" font-family="Nunito Sans,system-ui,sans-serif" font-size="10" fill="#c97fa0">Owner</text>
+
+  <!-- Row 2: Papa Bear (Caregiver) -->
+  <rect x="12" y="138" width="296" height="54" rx="12" fill="#f5f5fa"/>
+  <circle cx="40" cy="165" r="18" fill="#fdf0f5"/>
+  <text x="40" y="171" text-anchor="middle" font-size="18">🐻</text>
+  <text x="66" y="160" font-family="Nunito Sans,system-ui,sans-serif" font-size="14" font-weight="700" fill="#1a1a2e">Papa Bear</text>
+  <text x="66" y="176" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">Caregiver</text>
+  <!-- Caregiver pill -->
+  <rect x="226" y="152" width="70" height="20" rx="10" fill="#f5f5fa" stroke="#e8e8f0" stroke-width="1"/>
+  <text x="261" y="166" text-anchor="middle" font-family="Nunito Sans,system-ui,sans-serif" font-size="10" fill="#6b6b80">Caregiver</text>
+
+  <!-- Row 3: Nana Bear (Caregiver) -->
+  <rect x="12" y="206" width="296" height="54" rx="12" fill="#f5f5fa"/>
+  <circle cx="40" cy="233" r="18" fill="#fdf0f5"/>
+  <text x="40" y="239" text-anchor="middle" font-size="18">🐻</text>
+  <text x="66" y="228" font-family="Nunito Sans,system-ui,sans-serif" font-size="14" font-weight="700" fill="#1a1a2e">Nana Bear</text>
+  <text x="66" y="244" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">Caregiver</text>
+  <!-- Caregiver pill -->
+  <rect x="226" y="220" width="70" height="20" rx="10" fill="#f5f5fa" stroke="#e8e8f0" stroke-width="1"/>
+  <text x="261" y="234" text-anchor="middle" font-family="Nunito Sans,system-ui,sans-serif" font-size="10" fill="#6b6b80">Caregiver</text>
+
+  <!-- Invite button (dashed) -->
+  <rect x="12" y="294" width="296" height="52" rx="12" fill="none" stroke="#f0c0d8" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <text x="40" y="325" text-anchor="middle" font-family="Nunito Sans,system-ui,sans-serif" font-size="22" fill="#c97fa0">+</text>
+  <text x="62" y="321" font-family="Nunito Sans,system-ui,sans-serif" font-size="14" font-weight="700" fill="#c97fa0">Invite someone</text>
+  <text x="62" y="337" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">Share a link · Free</text>
+</svg>

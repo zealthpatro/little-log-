@@ -1,0 +1,60 @@
+<svg viewBox="0 0 320 500" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer card -->
+  <rect x="4" y="4" width="312" height="492" rx="22" fill="#ffffff" stroke="#e8e8f0" stroke-width="1.5"/>
+  <!-- Header bar -->
+  <rect x="4" y="4" width="312" height="56" rx="22" fill="#fdf0f5"/>
+  <rect x="4" y="36" width="312" height="24" fill="#fdf0f5"/>
+  <text x="100" y="37" text-anchor="middle" font-family="Georgia,serif" font-size="17" font-weight="600" fill="#1a1a2e">Log</text>
+  <text x="290" y="37" text-anchor="end" font-family="Nunito Sans,system-ui,sans-serif" font-size="12" fill="#6b6b80">6:31pm</text>
+  <!-- Header divider -->
+  <line x1="4" y1="60" x2="316" y2="60" stroke="#f0c0d8" stroke-width="1"/>
+
+  <!-- Section label -->
+  <text x="16" y="78" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" font-weight="700" fill="#9a9aac">TODAY · HANDOVER AT 3PM</text>
+
+  <!-- Entry 1: Feed (y=82) -->
+  <rect x="12" y="82" width="296" height="60" rx="12" fill="#f5f5fa"/>
+  <circle cx="40" cy="112" r="17" fill="#fdf0f5"/>
+  <text x="40" y="119" text-anchor="middle" font-size="17">🍼</text>
+  <text x="66" y="104" font-family="Nunito Sans,system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a1a2e">Feed · Bottle 150ml</text>
+  <text x="66" y="121" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">by Nana Bear</text>
+  <text x="304" y="104" text-anchor="end" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#6b6b80">3:30pm</text>
+
+  <!-- Entry 2: Nap (y=150) -->
+  <rect x="12" y="150" width="296" height="60" rx="12" fill="#f5f5fa"/>
+  <circle cx="40" cy="180" r="17" fill="#fdf0f5"/>
+  <text x="40" y="187" text-anchor="middle" font-size="17">💤</text>
+  <text x="66" y="172" font-family="Nunito Sans,system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a1a2e">Nap · 45 min · on the mat</text>
+  <text x="66" y="189" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">by Nana Bear</text>
+  <text x="304" y="172" text-anchor="end" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#6b6b80">4:15pm</text>
+
+  <!-- Entry 3: Nappy (y=218) -->
+  <rect x="12" y="218" width="296" height="60" rx="12" fill="#f5f5fa"/>
+  <circle cx="40" cy="248" r="17" fill="#fdf0f5"/>
+  <text x="40" y="255" text-anchor="middle" font-size="17">🚿</text>
+  <text x="66" y="240" font-family="Nunito Sans,system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a1a2e">Nappy · Soiled</text>
+  <text x="66" y="257" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">by Sania (nanny)</text>
+  <text x="304" y="240" text-anchor="end" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#6b6b80">5:45pm</text>
+
+  <!-- Entry 4: Note by nanny (y=286, height=80) -->
+  <rect x="12" y="286" width="296" height="80" rx="12" fill="#f5f5fa"/>
+  <circle cx="40" cy="326" r="17" fill="#fdf0f5"/>
+  <text x="40" y="333" text-anchor="middle" font-size="17">📝</text>
+  <text x="66" y="306" font-family="Nunito Sans,system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a1a2e">Note</text>
+  <text x="66" y="323" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">by Sania (nanny)</text>
+  <text x="304" y="306" text-anchor="end" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#6b6b80">6:28pm</text>
+  <text x="66" y="342" font-family="Nunito Sans,system-ui,sans-serif" font-size="12" fill="#6b6b80">Baby a bit unsettled this eve — may be teeth</text>
+  <text x="66" y="358" font-family="Nunito Sans,system-ui,sans-serif" font-size="12" fill="#6b6b80">Gums feel swollen. Used teething gel at 6pm.</text>
+
+  <!-- Section divider -->
+  <line x1="12" y1="380" x2="308" y2="380" stroke="#e8e8f0" stroke-width="1"/>
+  <text x="160" y="393" text-anchor="middle" font-family="Nunito Sans,system-ui,sans-serif" font-size="10" fill="#9a9aac">Earlier · by Nana Bear</text>
+
+  <!-- Past entry (y=400, height=54) -->
+  <rect x="12" y="400" width="296" height="54" rx="12" fill="#f0f0f8"/>
+  <circle cx="40" cy="427" r="17" fill="#e8e8f4"/>
+  <text x="40" y="434" text-anchor="middle" font-size="17">🍼</text>
+  <text x="66" y="420" font-family="Nunito Sans,system-ui,sans-serif" font-size="13" font-weight="600" fill="#6b6b80">Feed · Breast · 22 min</text>
+  <text x="66" y="437" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">by Nana Bear</text>
+  <text x="304" y="420" text-anchor="end" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">1:10pm</text>
+</svg>

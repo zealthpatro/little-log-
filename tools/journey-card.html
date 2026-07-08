@@ -1,0 +1,95 @@
+<!doctype html><html><head><meta charset="utf-8">
+<!-- Cubby journey-card template. A single parametric, textured milestone card.
+     tools/gen_journey_art.js loads this headless, calls window.renderCard(opts) per card,
+     and screenshots #card to a PNG. Keep it self-contained. The script font is loaded from
+     Google Fonts at GENERATION time only (baked into the PNG) — nothing third-party ships. -->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Parisienne&family=Cormorant+Garamond:ital@1&display=swap');
+*{margin:0;box-sizing:border-box}
+html,body{background:#fff}
+#card{width:330px;height:440px;position:relative;overflow:hidden;border-radius:0;color:#5f534a}
+#card .art{position:absolute;inset:0;width:100%;height:100%}
+#card .cap{position:absolute;left:18px;right:18px;bottom:20px;text-align:center;z-index:3}
+#card .band{display:inline-block;padding:6px 18px 8px;border-radius:16px;background:rgba(255,255,255,.42)}
+#card .scr{font-family:'Parisienne',cursive;display:block;line-height:1.04}
+#card .ital{font-family:'Cormorant Garamond',serif;font-style:italic;display:block;letter-spacing:.4px}
+.big{font-size:42px}.sm{font-size:21px;margin-top:2px}
+</style></head><body>
+
+<svg width="0" height="0" style="position:absolute"><defs>
+  <radialGradient id="fur" cx="42%" cy="34%" r="72%"><stop offset="0%" stop-color="#FAF6EF"/><stop offset="62%" stop-color="#EFE7DB"/><stop offset="100%" stop-color="#DFD4C3"/></radialGradient>
+  <radialGradient id="ear" cx="50%" cy="42%" r="60%"><stop offset="0%" stop-color="#EFE5D6"/><stop offset="100%" stop-color="#D7CBB8"/></radialGradient>
+  <radialGradient id="muz" cx="50%" cy="36%" r="70%"><stop offset="0%" stop-color="#FFFEFB"/><stop offset="100%" stop-color="#F4ECDF"/></radialGradient>
+  <radialGradient id="cheek" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#F2C5BB" stop-opacity=".85"/><stop offset="100%" stop-color="#F2C5BB" stop-opacity="0"/></radialGradient>
+  <radialGradient id="nose" cx="40%" cy="32%" r="80%"><stop offset="0%" stop-color="#9A8E80"/><stop offset="100%" stop-color="#6E6356"/></radialGradient>
+  <radialGradient id="shadow" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#5b4f43" stop-opacity=".22"/><stop offset="100%" stop-color="#5b4f43" stop-opacity="0"/></radialGradient>
+  <radialGradient id="leaf" cx="35%" cy="30%" r="80%"><stop offset="0%" stop-color="#CAD5B4"/><stop offset="100%" stop-color="#9BAC82"/></radialGradient>
+  <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch" result="n"/><feColorMatrix in="n" type="saturate" values="0"/><feComponentTransfer><feFuncA type="table" tableValues="0 0.09"/></feComponentTransfer></filter>
+</defs></svg>
+
+<div id="card"><div class="art"></div><div class="cap"></div></div>
+
+<script>
+var PAL = {
+  cream:{c1:'#F4ECDB',c2:'#E7DCC6',rim:'#C7B9A4',leaf:'#9BAC82'},
+  sage :{c1:'#E4E9D7',c2:'#D2DAC2',rim:'#AEB596',leaf:'#8EA078'},
+  blush:{c1:'#F7E2DE',c2:'#EECCC6',rim:'#CDABA6',leaf:'#A7B58E'},
+  coral:{c1:'#F7CDBB',c2:'#EFB7A0',rim:'#C98A6C',leaf:'#A7B58E'},
+  rose :{c1:'#EFD5D2',c2:'#E2C2BE',rim:'#C6ABA7',leaf:'#A7B58E'},
+  sky  :{c1:'#DFE7E6',c2:'#CBD7D6',rim:'#A6B2B0',leaf:'#9BAC82'},
+  butter:{c1:'#F6EBCF',c2:'#ECDBB2',rim:'#C9B584',leaf:'#9BAC82'}
+};
+function sparkle(x,y,s,c){return '<path transform="translate('+x+' '+y+') scale('+s+')" d="M0 -5 C.9 -1.4 1.4 -.9 5 0 C1.4 .9 .9 1.4 0 5 C-.9 1.4 -1.4 .9 -5 0 C-1.4 -.9 -.9 -1.4 0 -5Z" fill="'+c+'" opacity=".85"/>';}
+function sprig(cx,cy,rot,leaf){var L='';for(var i=0;i<5;i++){var t=6+i*8;var side=i%2?1:-1;L+='<ellipse cx="'+(side*5.5)+'" cy="'+t+'" rx="5.4" ry="2.5" transform="rotate('+(side*42)+' '+(side*5.5)+' '+t+')"/>';}
+  return '<g transform="translate('+cx+' '+cy+') rotate('+rot+')" stroke="#94A37E" stroke-width="1.3" fill="'+leaf+'"><path d="M0 2 q3 20 0 42" fill="none"/>'+L+'<circle cx="0" cy="46" r="2" fill="#CE9C98" stroke="none"/></g>';}
+function face(exp){
+  var s='';
+  if(exp==='sleepy'){
+    s+='<g stroke="#544a40" stroke-width="2.4" fill="none" stroke-linecap="round"><path d="M56 108 q6 5 12 0"/><path d="M82 108 q6 5 12 0"/></g>';
+  } else if(exp==='giggly'){
+    s+='<g stroke="#544a40" stroke-width="2.4" fill="none" stroke-linecap="round"><path d="M56 110 q6 -6 12 0"/><path d="M82 110 q6 -6 12 0"/></g>';
+  } else if(exp==='surprised'){
+    s+='<circle cx="62" cy="106" r="5" fill="#544a40"/><circle cx="63.7" cy="104" r="1.7" fill="#fff" opacity=".85"/><circle cx="88" cy="106" r="5" fill="#544a40"/><circle cx="89.7" cy="104" r="1.7" fill="#fff" opacity=".85"/>';
+  } else {
+    s+='<circle cx="62" cy="107" r="4" fill="#544a40"/><circle cx="63.3" cy="105.5" r="1.3" fill="#fff" opacity=".85"/><circle cx="88" cy="107" r="4" fill="#544a40"/><circle cx="89.3" cy="105.5" r="1.3" fill="#fff" opacity=".85"/>';
+  }
+  s+='<ellipse cx="75" cy="116" rx="5.2" ry="3.8" fill="url(#nose)"/><ellipse cx="73" cy="114.5" rx="1.5" ry="1" fill="#fff" opacity=".5"/>';
+  if(exp==='giggly') s+='<path d="M67 122 q8 7 16 0" stroke="#8a6f66" stroke-width="2" fill="none" stroke-linecap="round"/>';
+  else if(exp==='surprised') s+='<ellipse cx="75" cy="124" rx="3.2" ry="3.9" fill="#8a6f66"/>';
+  return s;
+}
+function bear(rim,acc,exp){
+  var s='';
+  s+='<ellipse cx="75" cy="150" rx="44" ry="14" fill="url(#shadow)"/>';
+  s+='<circle cx="46" cy="84" r="17" fill="url(#fur)" stroke="'+rim+'" stroke-width="1.6"/><circle cx="104" cy="84" r="17" fill="url(#fur)" stroke="'+rim+'" stroke-width="1.6"/>';
+  s+='<ellipse cx="46" cy="84" rx="8" ry="9" fill="url(#ear)"/><ellipse cx="104" cy="84" rx="8" ry="9" fill="url(#ear)"/>';
+  s+='<g stroke="'+rim+'" stroke-width="1.3" stroke-linecap="round" fill="none"><path d="M61 80 q-3 -6 -8 -8"/><path d="M75 75 q0 -7 -3 -10"/><path d="M89 80 q3 -6 8 -8"/></g>';
+  s+='<circle cx="75" cy="112" r="40" fill="url(#fur)" stroke="'+rim+'" stroke-width="1.6"/>';
+  s+='<ellipse cx="75" cy="96" rx="26" ry="16" fill="#FFFFFF" opacity=".16"/>';
+  s+='<ellipse cx="75" cy="123" rx="20" ry="14" fill="url(#muz)"/>';
+  s+='<circle cx="57" cy="118" r="5.6" fill="url(#cheek)"/><circle cx="93" cy="118" r="5.6" fill="url(#cheek)"/>';
+  s+=face(exp);
+  if(acc==='hat'){ s+='<path d="M75 36 L90 70 L60 70 Z" fill="#F6E3D2" stroke="'+rim+'" stroke-width="1.6" stroke-linejoin="round"/><circle cx="75" cy="36" r="4" fill="#FBF4EC" stroke="'+rim+'" stroke-width="1.4"/><circle cx="68" cy="58" r="2.4" fill="#E79AA0"/><circle cx="82" cy="62" r="2.4" fill="#9FC0E0"/>'; }
+  if(acc==='flower'){ s+='<g transform="translate(106,68)"><g fill="#EDB1B5"><ellipse cx="0" cy="-7" rx="3.6" ry="5.2"/><ellipse cx="0" cy="7" rx="3.6" ry="5.2"/><ellipse cx="-7" cy="0" rx="5.2" ry="3.6"/><ellipse cx="7" cy="0" rx="5.2" ry="3.6"/></g><circle r="3.2" fill="#F4D27A"/></g>'; }
+  return s;
+}
+function motif(kind,leaf){
+  if(kind==='leaves') return sprig(8,8,0,leaf)+sprig(142,8,90,leaf)+sprig(142,192,180,leaf)+sprig(8,192,270,leaf);
+  if(kind==='both')   return sprig(8,10,8,leaf)+sprig(142,190,188,leaf)+sparkle(126,40,1.4,leaf)+sparkle(28,150,1.2,leaf);
+  return sparkle(28,38,1.6,leaf)+sparkle(124,52,1.3,leaf)+sparkle(22,150,1.2,leaf)+sparkle(128,160,1.5,leaf);
+}
+window.renderCard = function(o){
+  o=o||{}; var p=PAL[o.pal]||PAL.cream;
+  var card=document.getElementById('card');
+  card.style.background='radial-gradient(120% 95% at 50% 26%, '+p.c1+', '+p.c2+')';
+  var svg='<svg viewBox="0 0 150 200" preserveAspectRatio="xMidYMid slice" width="100%" height="100%">'
+    + motif(o.motif||'sparkles', p.leaf)
+    + bear(p.rim, o.acc||'none', o.exp||'calm')
+    + '<rect width="150" height="200" filter="url(#grain)" opacity=".5" style="mix-blend-mode:multiply"/></svg>';
+  card.querySelector('.art').innerHTML=svg;
+  var big=o.big||''; var sm=o.sm||'';
+  card.querySelector('.cap').innerHTML='<span class="band"><span class="scr big"'+(big.length>10?' style="font-size:30px"':'')+'>'+big+'</span>'+(sm?'<span class="ital sm">'+sm+'</span>':'')+'</span>';
+};
+window.renderCard({pal:'cream',big:'One',sm:'month old',motif:'leaves'});
+</script>
+</body></html>

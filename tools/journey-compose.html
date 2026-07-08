@@ -1,0 +1,35 @@
+<!doctype html><html><head><meta charset="utf-8">
+<!-- Card compositor: Layer 1 (illustration, text-free) + Layer 2 (real caption). tools/compose_cards.js
+     loads this headless, calls window.renderCard({img, caption, bg}) per card, screenshots #card -> webp.
+     Caption type spec is fixed here so all 289 cards are identical: EB Garamond Medium, #5F534A,
+     sentence case (caption comes pre-cased from the catalogue), top-centre, balanced wrapping. -->
+<style>
+/* Caption font (Caveat, warm handwriting) is self-hosted and injected by compose_cards.js as a
+   base64 @font-face before rendering, so it ALWAYS loads in headless (the old CDN @import raced the
+   screenshot and baked the plain fallback). 'Fraunces',cursive is the standalone-preview fallback. */
+*{margin:0;box-sizing:border-box}
+html,body{background:#fff}
+#card{width:480px;height:600px;position:relative;overflow:hidden;background:#EFE7DA}
+#layer1{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none}
+#cap{position:absolute;top:6%;left:7%;right:7%;text-align:center;
+  font-family:'Caveat','Fraunces',cursive;font-weight:700;color:#5F534A;
+  font-size:66px;line-height:1.05;letter-spacing:.3px;text-wrap:balance;-webkit-hyphens:none;hyphens:none}
+</style></head><body>
+<div id="card"><img id="layer1" alt=""><div id="cap"></div></div>
+<script>
+window.renderCard = function (o) {
+  o = o || {};
+  var card = document.getElementById('card');
+  card.style.background = o.bg || '#EFE7DA';
+  var l1 = document.getElementById('layer1');
+  if (o.img) { l1.style.display = 'block'; l1.src = o.img; } else { l1.style.display = 'none'; }
+  var cap = document.getElementById('cap');
+  cap.textContent = o.caption || '';
+  // shrink a touch for long captions so they never crowd the illustration (Caveat reads large)
+  var n = (o.caption || '').length;
+  cap.style.fontSize = (n > 26 ? 52 : n > 16 ? 60 : 70) + 'px';
+};
+window.__ready = true;
+window.renderCard({ caption: 'Six months old', bg: '#DDE3D5' });
+</script>
+</body></html>

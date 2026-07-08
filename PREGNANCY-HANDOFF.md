@@ -1,9 +1,11 @@
 # Pregnancy → Birth → Baby — lifecycle build handoff
 
+> **Status (June 2026):** This v1 build spec is done and SHIPPED: the pregnancy track is merged into `main` and live on little-cubby.com (170-country antenatal coverage, opt-in health trackers, kicks, contractions, birth plan, hospital bag, Moments, birth transition, compassionate loss flow) as one stage of Cubby's Trying→Expecting→Baby→Child lifecycle. Full current state + go-live plan: HANDOFF.md.
+
 > **This is v1 (the build spec) and it is SUPERSEDED: the build is done.** For the current
-> state of the pregnancy track ("Mommy To Be", branch `pregnancy-tracker`, rollout runbook,
-> next-work queue) read **`PREGNANCY-HANDOFF-V2.md`** instead. Kept for the reusable code
-> anchors and patterns.
+> state of the pregnancy track (now the **Expecting** stage of Cubby, merged into `main` and
+> live; the "Mommy To Be" name is retired), rollout runbook, and next-work queue read
+> **`PREGNANCY-HANDOFF-V2.md`** instead. Kept for the reusable code anchors and patterns.
 
 This doc is **self-contained to read** (a fresh session can start from it cold), but the feature it
 describes is **not a standalone module**. It is the front end of **one continuous lifecycle inside
@@ -28,10 +30,10 @@ starts a pregnancy from a due date (or last-period date), tracks it week by week
 appointments / symptoms / tools, and at birth Cubby **welcomes the baby** by turning that pregnancy
 into a baby profile that flows straight into the tracker that already exists.
 
-**Status:** Phases 1-5 are DONE and verified in preview (branch `pregnancy-tracker`). Phase 1 (data) in
+**Status:** Phases 1-5 are DONE and shipped (merged into `main` and live; `app/sw.js` cache now v65). Phase 1 (data) in
 `app/pregnancy-data.js`; Phases 2-5 (pregnancy mode + week view + danger signs, logging, tools, and the
 birth transition) live in `app/index.html` (see the `PREGNANCY` section) with sync wired in
-`app/store-firebase.js` and `pregnancy-data.js` added to `app/index.html` + `app/sw.js` (cache v49).
+`app/store-firebase.js` and `pregnancy-data.js` added to `app/index.html` + `app/sw.js`.
 
 ---
 

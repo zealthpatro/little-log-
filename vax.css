@@ -51,8 +51,16 @@ td.when:empty::after{content:"\2014";color:var(--faint);font-weight:600}
 .cta p{color:var(--soft);font-weight:600;margin:0 0 14px;font-size:15px}
 .cta a.btn{display:inline-block;background:var(--pink);color:#fff;font-weight:800;font-size:16px;
   padding:14px 26px;border-radius:13px;text-decoration:none;box-shadow:0 8px 18px rgba(201,127,160,.32)}
-.faq dt{font-weight:800;margin-top:14px}
-.faq dd{margin:4px 0 0;color:var(--soft);font-weight:600}
+.faq{margin:0}
+.faq dt{font-weight:800;font-size:16px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-bottom:none;border-radius:14px 14px 0 0;padding:14px 16px 8px;margin-top:12px}
+.faq dd{margin:0;color:var(--soft);font-weight:600;line-height:1.55;background:var(--surface);border:1px solid var(--line);border-top:none;border-radius:0 0 14px 14px;padding:2px 16px 14px}
+.faq dd a{color:var(--pink-d);font-weight:700}
+/* FAQ search */
+.faq-search{position:relative;margin:0 0 14px}
+.faq-search-i{position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:15px;opacity:.7;pointer-events:none}
+.faq-search input{width:100%;font-family:inherit;font-size:16px;font-weight:600;padding:13px 16px 13px 40px;border:1.5px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink)}
+.faq-search input:focus{outline:none;border-color:var(--pink);box-shadow:0 0 0 3px rgba(201,127,160,.15)}
+.faq-none{color:var(--soft);font-weight:700;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
 .changed{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;
   box-shadow:0 5px 14px rgba(60,46,34,.06)}
 .changed ul{margin:6px 0 0;padding-left:20px}
@@ -79,3 +87,10 @@ footer.src a{color:var(--faint)}
 
 /* A11y: visible keyboard focus everywhere (DESIGN.md) */
 a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--pump);outline-offset:2px;border-radius:4px}
+/* Breadcrumbs: a visible trail on deep pages, mirrors the BreadcrumbList JSON-LD. In vax.css
+   (loaded by every page) so it works on articles, vaccine pages and marketing alike. */
+.crumbs{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px;font-weight:700;line-height:1.5;margin:0 0 14px;color:var(--soft,#6E635B)}
+.crumbs a{color:var(--soft,#6E635B);text-decoration:none}
+.crumbs a:hover{color:var(--ink,#2C2521);text-decoration:underline}
+.crumbs .sep{color:var(--line,#E7DECF);font-weight:600}
+.crumbs .cur{color:var(--ink,#2C2521);font-weight:800}

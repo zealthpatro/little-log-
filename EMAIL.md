@@ -136,7 +136,8 @@ with their own SPF/DKIM, and leave the apex record for Firebase auth mail.
 - 2026-06-11: Magic-link sign-in shipped; Firebase auth emails moved to noreply@little-cubby.com
   (SPF/DKIM in Cloudflare) after Gmail dropped the default sender. Branded auth-email HTML
   deferred to the ESP phase (see §9b), where a Worker + `returnOobLink` takes over sending.
-- 2026-06-14: **§9b Worker sender BUILT (code)** on `pregnancy-tracker`. `worker.js` now exposes
+- 2026-06-14: **§9b Worker sender BUILT (code)** on `main` (production deploys from `main`; push =
+  live via Cloudflare Workers Builds). `worker.js` now exposes
   `POST /api/send-signin-link`: mints the EMAIL_SIGNIN link via the Identity Toolkit Admin API
   (service-account JWT signed with WebCrypto RS256 -> OAuth token -> `sendOobCode` with
   `returnOobLink:true`) and sends a branded email via Resend. Client (`store-firebase.js`) calls
@@ -144,12 +145,14 @@ with their own SPF/DKIM, and leave the apex record for Firebase auth mail.
   `signInWithEmailLink()` is unchanged. Hardened after an adversarial review (2026-06-14): rejects
   requests whose Origin/Referer don't match the host (closes the no-Origin bypass); per-email
   cooldown uses a normalized key (drops +tags / Gmail dots) and is set only after a confirmed send.
-  **REQUIRED before/at deploy: a Cloudflare Rate Limiting rule on POST /api/send-signin-link**
-  (~5-10 req/IP/min) -- the cooldown is per-email/per-colo and is NOT the volume defence; the
-  per-IP rule is. (Optional next-level hardening: Cloudflare Turnstile on the form.) **NOT yet live** -- needs (founder):
-  rotate the leaked Resend key; verify `mail.little-cubby.com` in Resend (DKIM/SPF DNS on a
-  subdomain so the apex stays Firebase's, per §2); a dedicated service account with the minimal
-  *Firebase Authentication Admin* role; `wrangler secret put RESEND_API_KEY` and
-  `FIREBASE_SERVICE_ACCOUNT`; deploy; test end-to-end. Accepts the service-account-in-Worker-secret
-  tradeoff (founder go-ahead 2026-06-14) -- the only way to custom-send Firebase auth links.
+  **Per-IP rate limiting is now done IN-WORKER** (no Cloudflare dashboard rule needed): a Workers
+  rate-limiting binding (`wrangler.toml [[unsafe.bindings]]` `SIGNIN_RATE_LIMITER`, **5 requests /
+  60s per IP**) is enforced in `worker.js` right after the same-origin check, before any body or
+  token work. Over budget it returns **429 + Retry-After**; it fails open if the binding is
+  missing. This replaces the previously-planned dashboard Rate Limiting rule and deploys on push.
+  The cooldown is per-email/per-colo and is NOT the volume defence; the per-IP limiter is. (Optional
+  next-level hardening: Cloudflare Turnstile on the form.) The leaked Resend key was **rotated**
+  (2026-06-14; new key lives only as the `RESEND_API_KEY` Worker secret). **Verified live
+  2026-06-14.** Accepts the service-account-in-Worker-secret tradeoff (founder go-ahead 2026-06-14)
+  -- the only way to custom-send Firebase auth links.
 - Transactional != marketing: always separate streams, domains, and consent.

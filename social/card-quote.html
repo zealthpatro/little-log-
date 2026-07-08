@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cubby card</title>
+<link rel="stylesheet" href="/app/fonts/fonts.css">
+<style>
+  :root{
+    --bg:#F4EEE3; --surface:#FFFFFF; --surface-2:#FBF7EF;
+    --ink:#2C2521; --ink-soft:#6E635B; --ink-faint:#A89C90; --line:#E7DECF;
+    --feed:#E29A3B; --sleep:#5E6AA8; --diaper:#56A08E; --pump:#C97FA0;
+    --note:#9A8C6E; --med:#D2654E; --star:#D9A21B;
+  }
+  *{margin:0;box-sizing:border-box;}
+  html,body{background:#777;}
+  .card{
+    position:relative; width:1080px; height:1350px; background:var(--bg);
+    overflow:hidden; -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  }
+  .stage{position:absolute; left:96px; right:96px; top:96px; bottom:250px;
+    display:flex; flex-direction:column; justify-content:center;}
+  .accent{width:84px; height:8px; border-radius:4px; background:var(--sleep); margin-bottom:36px;}
+  .headline{font-family:'Fraunces'; font-weight:600; font-size:80px; line-height:1.12;
+    letter-spacing:-0.01em; color:var(--ink); max-width:850px;}
+  .footer{position:absolute; left:96px; bottom:92px; display:flex; align-items:center; gap:22px;}
+  .sq{width:88px; height:88px; border-radius:26px; background:var(--surface-2);
+    border:1px solid var(--line); display:flex; align-items:center; justify-content:center;}
+  .lock{display:flex; flex-direction:column;}
+  .wm{font-family:'Fraunces'; font-weight:600; font-size:46px; color:var(--ink); line-height:1.05;}
+  .tag{font-family:'Nunito Sans'; font-weight:600; font-size:25px; color:var(--ink-faint); margin-top:7px;}
+  .pip{position:absolute; right:96px; bottom:122px; width:18px; height:18px; border-radius:50%; background:var(--sleep);}
+</style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="stage">
+      <div class="accent"></div>
+      <div class="headline">awake again, holding the whole night. this counts as enough.</div>
+    </div>
+    <div class="footer">
+      <div class="sq">
+        <svg width="60" height="60" viewBox="0 0 60 60" aria-hidden="true">
+          <circle cx="22" cy="22" r="8" fill="#C9A57E"/>
+          <circle cx="38" cy="22" r="8" fill="#C9A57E"/>
+          <circle cx="30" cy="33" r="16" fill="#C9A57E"/>
+          <ellipse cx="30" cy="38" rx="8" ry="6" fill="#F1E4D0"/>
+          <ellipse cx="30" cy="34" rx="3" ry="2" fill="#6E5A45"/>
+          <circle cx="24" cy="30" r="2.6" fill="#3E3228"/>
+          <circle cx="36" cy="30" r="2.6" fill="#3E3228"/>
+        </svg>
+      </div>
+      <div class="lock">
+        <div class="wm">Cubby</div>
+        <div class="tag">one calm place for your baby</div>
+      </div>
+    </div>
+    <div class="pip"></div>
+  </div>
+</body>
+</html>

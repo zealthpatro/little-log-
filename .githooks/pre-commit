@@ -1,0 +1,59 @@
+#!/bin/sh
+# Block a commit that changes cacheable app/ assets without bumping the service-worker
+# CACHE version. The SW is network-first for HTML/JS but cache-first for everything else,
+# so a missed bump can strand returning users on stale assets (this bit us once: the games
+# feature shipped while sw.js stayed a version behind).
+#
+# Bypass when you really mean it:  git commit --no-verify
+
+staged=$(git diff --cached --name-only)
+
+# Syntax gate: every staged standalone app/*.js must parse. Catches a broken push
+# (syntax error) before it ships. index.html's inline JS isn't checkable this way —
+# run  node tools/smoke.js  (loads /app/ headless) before an app push to cover that.
+jschanged=$(printf '%s\n' "$staged" | grep -E '^app/.*\.js$')
+if [ -n "$jschanged" ] && command -v node >/dev/null 2>&1; then
+  for f in $jschanged; do
+    [ -f "$f" ] || continue
+    if ! node --check "$f" 2>/tmp/cubby-jscheck.err; then
+      echo "✋ JS syntax error in $f:"
+      sed 's/^/      /' /tmp/cubby-jscheck.err
+      echo "   → fix it, or re-run with  git commit --no-verify"
+      exit 1
+    fi
+  done
+fi
+
+# SEO gate: if any public page or the sitemap is staged, keep the sitemap lastmod fresh
+# and block broken SEO (dead internal links, unresolved og/twitter images, invalid JSON-LD,
+# sitemap -> 404) from ever shipping. This is what keeps SEO "seamless": the regressions the
+# July 2026 audit found can't come back. Bypass (rarely) with  git commit --no-verify.
+seopages=$(printf '%s\n' "$staged" | grep -E '\.html$|^sitemap\.xml$' | grep -vE '^(node_modules|articles-drafts|tools|mockups|test|social|art-src|docs|app|g)/')
+if [ -n "$seopages" ] && command -v python3 >/dev/null 2>&1; then
+  # 1) auto-stamp sitemap lastmod from each article's dateModified, and stage it
+  python3 tools/gen_sitemap.py >/dev/null 2>&1 && git add sitemap.xml 2>/dev/null
+  # 2) guard the staged pages
+  if ! python3 tools/seo_check.py --staged --quiet; then
+    echo "   → fix the SEO issues above, or re-run with  git commit --no-verify"
+    exit 1
+  fi
+fi
+
+# Cacheable app assets, excluding sw.js itself.
+cacheable=$(printf '%s\n' "$staged" | grep -E '^app/.*\.(js|html|css)$' | grep -v '^app/sw\.js$')
+[ -z "$cacheable" ] && exit 0
+
+# An app asset changed -> require the staged sw.js CACHE line to differ from HEAD's.
+old=$(git show HEAD:app/sw.js 2>/dev/null | grep -m1 -E "CACHE *= *'little-log-v")
+new=$(git show :app/sw.js   2>/dev/null | grep -m1 -E "CACHE *= *'little-log-v")
+
+if [ -z "$new" ] || [ "$old" = "$new" ]; then
+  echo "✋ Service-worker cache not bumped."
+  echo "   You staged app assets:"
+  printf '%s\n' "$cacheable" | sed 's/^/      /'
+  echo "   → bump the CACHE version in app/sw.js and stage it,"
+  echo "     or re-run with  git commit --no-verify  if this is intentional."
+  exit 1
+fi
+
+exit 0

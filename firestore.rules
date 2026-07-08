@@ -23,6 +23,12 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
 
+    // Newsletter opt-in list: written ONLY by the edge Worker via the service account (which
+    // bypasses these rules). Emails are private — no browser client may read or write it.
+    match /newsletter/{id} {
+      allow read, write: if false;
+    }
+
     // Invites are keyed by the invitee's lowercased email.
     match /invites/{email} {
       allow read: if request.auth != null && request.auth.token.email.lower() == email;
@@ -53,20 +59,41 @@ service cloud.firestore {
       function proUnchanged() {
         return request.resource.data.get('pro', null) == resource.data.get('pro', null);
       }
+      // The circle-shared app blob must never carry maternal-private data: the pregnancy journey and
+      // maternal health live in owner-owned subcollections (/pregnancy, /mhealth), shared only by the
+      // mother's explicit consent. Checked ONLY when the blob is actually written, so a household whose
+      // stored blob still holds a legacy pregnancy key is never blocked from other edits.
+      // NOTE: keep this key list in sync with appBlobFromState() in app/store-firebase.js.
+      function appBlobClean() {
+        return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['app'])
+          || !request.resource.data.app.keys().hasAny(['pregnancy', 'mhealth', 'maternalHealth']);
+      }
+      // A caregiver may edit their OWN memberInfo entry (name, relationship, bear, setup) but never
+      // anyone else's. Checked only when memberInfo is actually written, so a normal app-only save
+      // (which leaves memberInfo untouched) always passes.
+      function onlyOwnMemberInfo() {
+        return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['memberInfo'])
+          || request.resource.data.memberInfo.diff(resource.data.memberInfo).affectedKeys().hasOnly([request.auth.uid]);
+      }
 
       allow read:   if isMember() || invitedHere();
       allow create: if request.auth != null
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.members[request.auth.uid] == 'owner'
         && request.resource.data.get('pro', null) == null;
-      // Owner can change anything (except pro). A caregiver may edit shared data but NOT
-      // membership/owner (no privilege escalation). An invitee may join (adds themselves).
-      allow update: if proUnchanged() && (
+      // Owner can change anything (except pro, and never maternal data into the blob). A caregiver may
+      // edit shared data but NOT membership/owner (no privilege escalation) and only their OWN
+      // memberInfo. An invitee may join (adds themselves). No one may inject maternal-private data.
+      allow update: if proUnchanged() && appBlobClean() && (
            isOwner()
         || ( isMember()
              && request.resource.data.ownerId == resource.data.ownerId
-             && request.resource.data.members == resource.data.members )
-        || invitedHere() );
+             && request.resource.data.members == resource.data.members
+             && onlyOwnMemberInfo() )
+        || ( invitedHere()
+             && request.resource.data.ownerId == resource.data.ownerId
+             && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid])
+             && onlyOwnMemberInfo() ) );
       allow delete: if request.auth != null && resource.data.members[request.auth.uid] == 'owner';
 
       // Members of THIS household (resolved fresh each check).
@@ -81,6 +108,22 @@ service cloud.firestore {
 
       match /photos/{photoId} {
         allow read, create, update, delete: if request.auth != null && request.auth.uid in pm();
+      }
+
+      // Home day-surface notes. NOT in the circle-shared app blob: each note is its own doc so
+      // privacy is enforced by rules, not client hiding. A note is readable only by the author,
+      // by the single member it is addressed to, or by everyone when its audience is 'circle'.
+      // Audience is fixed at create (no client may flip it later); only the author edits/deletes.
+      match /notes/{noteId} {
+        allow read: if request.auth != null && request.auth.uid in pm() && (
+            resource.data.audience == 'circle'
+            || resource.data.audience == request.auth.uid
+            || resource.data.createdBy == request.auth.uid
+        );
+        allow create: if request.auth != null && request.auth.uid in pm()
+            && request.resource.data.createdBy == request.auth.uid;
+        allow update, delete: if request.auth != null && request.auth.uid in pm()
+            && resource.data.createdBy == request.auth.uid;
       }
 
       // Maternal private health (Privacy Max, gate G1). The mother OWNS her health data.
@@ -101,6 +144,24 @@ service cloud.firestore {
             && ( category != 'mood'
                  || !('sharedWith' in request.resource.data)
                  || request.resource.data.sharedWith.size() == 0 );  // mood is never shareable
+        allow delete: if request.auth != null && request.auth.uid == owner && request.auth.uid in pm();
+      }
+
+      // Pregnancy JOURNEY (Privacy Max, Item 7). The bare fact of expecting is the most sensitive
+      // event a family has, so it is NOT in the circle-shared app blob. The owner OWNS her journey
+      // (stage, due date, weeks, appointments, kicks, contractions, birth plan, bag, moments, etc.).
+      // It is readable by the owner plus any uid she lists in sharedWith (the one-time stakeholder
+      // review at creation, editable later). Only the owner writes it. ownerUid is the subject's uid.
+      match /pregnancy/{owner} {
+        allow read: if request.auth != null && request.auth.uid in pm() && (
+            request.auth.uid == owner
+            || ( resource.data.sharedWith is list
+                 && request.auth.uid in resource.data.sharedWith )
+        );
+        // Only the owner writes her own journey, and only as a member of this household.
+        allow create, update: if request.auth != null && request.auth.uid == owner
+            && request.auth.uid in pm()
+            && request.resource.data.ownerUid == owner;
         allow delete: if request.auth != null && request.auth.uid == owner && request.auth.uid in pm();
       }
     }

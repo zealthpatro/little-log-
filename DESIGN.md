@@ -1,5 +1,7 @@
 # Cubby design guide & audit (the design anchor)
 
+> **Status (June 2026):** This design system is live across the merged, shipped Cubby (one app spanning Trying → Expecting → Baby → Child); the tokens, type ramp, icon language and the audit's shipped fixes are all in production. Full current state + go-live plan: HANDOFF.md.
+
 This is the single source of truth for how Cubby looks and feels, in three parts:
 **Part A** the design system as it should be (the anchor), **Part B** the audit of what's right
 and wrong today (10 June 2026, audited at 375/600/768/1280px), **Part C** the recommended
@@ -99,6 +101,7 @@ At ≤ ~620px the 5 tabs wrap into a vertical stack; `.nav-in` grows to **216px 
 and because the nav is sticky it permanently covers the top third of the screen, including the
 hero headline. Root cause: `.nav-tabs{flex-wrap:wrap}` + a 640px media query that only shrinks
 padding. This is the single worst defect on the site and it's on every marketing page.
+_Resolved (C-1, then v0.14.0): the marketing nav is now 4 tabs (Pregnancy / Baby / Articles / Pricing) + a no-JS `<details>` "About" dropdown (Why Cubby / How it works / FAQ); on mobile it's a clean wrapped row with a full-width dropdown panel, not a scroll strip. See CHANGELOG v0.14.0._
 
 **B-2 (P1) The Feed icon reads as a tuning fork.**
 `I.feed` is a U-shape on a stem with a base bar — it scans as a tuning fork (or a sad whisk).
@@ -187,6 +190,28 @@ commit + sw bump), C-4, then the system passes C-5→C-7 as one normalization br
 - **Wide screens (≥1200px)** — carousel 1100px, folds 1140px with bigger type, feats 1000px,
   proof 1080px, quotes 960px; articles hub `.wrap` widened to 1060px (3-col card grid fills it).
   Side margins are now proportionate instead of half the screen.
+
+## Shipped 16 June 2026 ("Why we ask" inline-expander pattern)
+- **New reusable component: `wwa` ("why we ask").** A calm, one-tap inline help expander placed
+  directly UNDER a field. It expands in place and never navigates, never opens a sheet. Built once
+  in `app/index.html` as the `wwa(key)` helper plus a `WWA` copy map and `.wwa`/`.wwa-t`/`.wwa-n`
+  CSS, then reused everywhere a parent might pause and wonder why a fact is being asked for.
+- **When to use it:** sensitive, identity, health or privacy fields where a short, honest reason
+  reduces anxiety. Wired into 22 such fields including baby birthday (add + onboarding), baby name
+  (onboarding), birth details, blood group, doctor contacts, pregnancy dating (due date / last
+  period / cycle length / care country across setup, positive-test, period-update and edit flows),
+  maternal weight, glucose, blood pressure, growth weight+height, and the boy/girl chart toggle.
+- **Always-visible variant:** allergies and the family-list email use an always-visible note
+  instead of a hidden expander, because those facts should not be tucked away.
+- **Truthful copy rule:** every privacy line was checked against `firestore.rules` so no claim
+  over-promises. The family list now states plainly that everyone in the circle can see each
+  other's name and email. (Open gap: the dual-guardian consent gate is a client-only UI
+  convention, not enforced in `firestore.rules`; copy says Cubby "asks" both guardians to agree.)
+
+## Shipped 17 June 2026 (brand mark)
+- **App landing/sign-in brand mark is the "Cubby" wordmark.** The top-left nav on the app landing
+  shows "Cubby" (the brand wordmark), matching the marketing site, not the bare domain. The footer
+  link to little-cubby.com is kept on purpose.
 
 ## Feature promotion hierarchy (what gets the spotlight, in order)
 1. **One-thumb logging** — the core daily action; product truth first.

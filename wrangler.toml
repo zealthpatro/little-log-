@@ -4,11 +4,70 @@ name = "cubby"
 main = "worker.js"
 compatibility_date = "2025-06-01"
 
+# Every 15 minutes: send due push reminders (worker.js scheduled -> sendPushReminders). 15-min
+# granularity so a medicine reminder lands ~30 to 15 min before the dose. Reads each user's
+# precomputed reminder index from Firestore and sends via FCM. Isolated from fetch().
+[triggers]
+crons = ["*/15 * * * *"]
+
 [assets]
 directory = "./"
 binding = "ASSETS"
+# Serve the branded /404.html (with a real 404 status) for any unmatched path,
+# instead of an empty-body 404. worker.js falls through to env.ASSETS.fetch for
+# all non-API routes, so this covers the whole static site.
+not_found_handling = "404-page"
 
 # Non-secret config. Secrets (RESEND_API_KEY, FIREBASE_SERVICE_ACCOUNT) are set with
 # `wrangler secret put` and never live in this file or the repo.
 [vars]
 MAIL_FROM = "Cubby <noreply@mail.little-cubby.com>"
+
+# Per-IP rate limiter for the magic-link endpoint (worker.js sendSigninLink). Caps one IP to
+# 5 POST /api/send-signin-link calls per 60s (per Cloudflare location), so the endpoint can't be
+# abused to blast sign-in emails or burn the Resend quota. Available on all plans. period must be
+# 10 or 60; namespace_id is any unique id for this account's limiter.
+[[unsafe.bindings]]
+name = "SIGNIN_RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 5, period = 60 }
+
+# Per-IP rate limiter for the newsletter opt-in endpoint (worker.js newsletterSignup). Same 5/60s/IP
+# cap so the capture can't be flooded. Falls back to SIGNIN_RATE_LIMITER (distinct key prefix) if absent.
+[[unsafe.bindings]]
+name = "NEWSLETTER_RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1002"
+simple = { limit = 5, period = 60 }
+
+# Newsletter subscriber list — ISOLATED in D1, deliberately separate from the Firestore family-health
+# data (a Worker-secret leak can reach only this email list, never a baby log). Kept COMMENTED until
+# the database exists, so a deploy can never fail on a missing id. To activate (see PAID-TEST notes):
+#   1) npx wrangler d1 create cubby-newsletter            (or CF dashboard > Workers & Pages > D1)
+#   2) npx wrangler d1 execute cubby-newsletter --remote --file=./schema/newsletter.sql
+#   3) paste the database_id below, uncomment this block, then deploy (git push).
+[[d1_databases]]
+binding = "NEWSLETTER_DB"
+database_name = "cubby-newsletter"
+database_id = "d0ee7337-8acf-4028-80bb-2e99a48db694"
+
+# Per-IP rate limiter for the guessing-game guest writes (worker.js gameRoute). 20/60s/IP so a whole
+# family on one wifi can all guess, but a script can't flood. Falls back to SIGNIN_RATE_LIMITER if absent.
+[[unsafe.bindings]]
+name = "GAMES_RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1003"
+simple = { limit = 20, period = 60 }
+
+# Guessing-game store — ISOLATED in its own D1 (cubby-games), never the family Firestore. Holds only
+# the host's public title + {nickname, guess, note}. COMMENTED until the DB exists (an uncommented
+# missing id fails the deploy). The in-circle game works without it; the public /g/<code> link
+# activates once this is provisioned. To activate:
+#   1) npx wrangler d1 create cubby-games
+#   2) npx wrangler d1 execute cubby-games --remote --file=./schema/games.sql
+#   3) paste the database_id below, uncomment this block, then deploy (git push).
+[[d1_databases]]
+binding = "GAMES_DB"
+database_name = "cubby-games"
+database_id = "c2e576e9-ad79-416a-a1b9-4598be4f3c82"

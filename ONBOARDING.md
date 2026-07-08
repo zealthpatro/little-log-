@@ -1,5 +1,9 @@
 # Cubby — Onboarding & education plan
 
+> **Status (June 2026):** This in-app onboarding plan still stands; it now spans the full Cubby lifecycle (Trying → Expecting → Baby → Child) with the pregnancy track merged + live, so first-run education should cover whichever stage a caregiver starts in. Full current state + go-live plan: HANDOFF.md.
+>
+> **Update (2026-06-17):** Sign-in now offers three methods — **Continue with Google**, **Continue with Apple**, and **email magic-link**. "Continue with Apple" appears on both the landing and auth-card sign-in screens. First-run education and the sign-in value strip should reflect all three.
+
 How we teach Cubby's value without a tour, a wall of tips, or added complexity.
 
 ## Principles
@@ -65,7 +69,7 @@ How we teach Cubby's value without a tour, a wall of tips, or added complexity.
    it's done; the whole card **auto-disappears once complete or dismissed**. This is the single
    best activation tool — teaches the top value props with progress, zero tour.
 2. **Sign-in value strip** — 3 short bullets under the logo: *Log in seconds · Share with family,
-   live · Private to you*. Sets the "why" before the Google button.
+   live · Private to you*. Sets the "why" before the sign-in buttons (Google, Apple, email magic-link).
 3. Keep the just-in-time tips already shipped; add new ones **only where testers show confusion**
    (let feedback drive this, don't pre-add).
 

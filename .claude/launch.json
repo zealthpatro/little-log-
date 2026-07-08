@@ -6,6 +6,12 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["tools/serve.js"],
       "port": 8080
+    },
+    {
+      "name": "preg-preview",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["/tmp/serve-preg.js"],
+      "port": 8000
     }
   ]
 }

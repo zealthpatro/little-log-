@@ -1,5 +1,7 @@
 # Cubby SEO & CRO
 
+> **Status (June 2026):** SEO surface is live on little-cubby.com with 180+ baby + pregnancy articles, the four vaccine-schedule pages, and a merged-and-shipped pregnancy track feeding new content; primary conversion is still sign-up. Full current state + go-live plan: HANDOFF.md.
+
 What is live, how it works, and how to keep the vaccine pages accurate. Pair this with the strategy doc the founder pasted (markets: UK / UAE / US / Germany; primary conversion = sign-up).
 
 ## What ships today
@@ -25,7 +27,7 @@ Each page has: per-page meta + OG + hreflang (cross-linked cluster), `MedicalWeb
 - **Shared assets**: `vax.css` (styling) and `vax.js` (the birthday calculator).
 
 ### Articles section (`/articles/`)
-A content hub at 119 articles (June 2026), growing to ~245 via the global expansion plan (CONTENT-QUEUE.md).
+A content hub at 180+ articles (June 2026, baby + pregnancy clusters), growing further via the global expansion plan (CONTENT-QUEUE.md).
 
 **Article naming policy**: title the article after what it IS. If a practice has a name (maalish, zuo yuezi, ofuro), that name is the title. Universal topics get plain descriptive titles. Never use country labels in `<title>`, `<h1>`, or `og:title`. Content body can and should reference the relevant country and authority.
 

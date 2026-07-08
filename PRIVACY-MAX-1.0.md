@@ -1,7 +1,15 @@
 # Privacy Max 1.0 — maternal health, mother-controlled & consent-gated (gate G1)
 
-Branch: `pregnancy-tracker`. Blocks 2.4 / 2.5 / 4.2 (no maternal surface ships until this is done +
-the rules are published in the Firebase console). Authored 2026-06-13.
+Ships from `main` (production deploys from `main`: push = live via Cloudflare Workers Builds). Blocks
+2.4 / 2.5 / 4.2 (no maternal surface ships until this is done + the rules are published in the Firebase
+console). Authored 2026-06-13. Updated 2026-06-14: rules now published; pregnancy journey + per-day
+notes privatized (see below).
+
+## Core tenet (do not lose this)
+Privacy is **server-enforced** in `firestore.rules`. Hiding something in the client UI is **NOT**
+privacy: anyone with the API can read what the rules allow. Every "private" claim in this doc means a
+rule denies the read, not that a tab is hidden. Client gating is only a courtesy layer on top of the
+rules.
 
 ## The problem this fixes (found in live audit)
 Today `state.pregnancy` holds the mother's health data — **bp, glucose, weights, urine, nausea,
@@ -33,17 +41,52 @@ Categories (each its own doc, so sharing is per-category and reads are doc-level
 - `conditions` — GDM/pre-eclampsia/etc. trackers (opt-in)
 - `mood`     — mood / EPDS. **owner-only, never in sharedWith.**
 
-**Stays in the circle-shared `app` blob (about the cub-to-be, fine for the circle):** week/stage,
-size, appts schedule, kicks, contractions, birth plan, hospital bag, Moments, due date/lmp
-(due date drives the shared week view; founder may later lock it down too).
+**The pregnancy journey is now owner-owned too (2026-06-14, item 7), NOT in the circle-shared blob.**
+The journey (stage, due date, weeks, appointments, kicks, contractions, birth plan, hospital bag,
+Moments) was moved OUT of `app.pregnancy` into an owner-owned doc, mirroring the `mhealth` pattern:
 
-## Rules (DONE — in `firestore.rules`, publish in console to enforce)
+```
+households/{hid}/pregnancy/{ownerUid}
+  { ownerUid, sharedWith: [uid...], ...journey }
+```
+- **read**: the owner, plus any uid she lists in `sharedWith[]`.
+- **write**: only the owner.
+Server-enforced in `firestore.rules` (`match /pregnancy/{owner}`). Maternal-private HEALTH stays
+**separate and owner-only** in `mhealth` (above) and is never swept into the journey. A legacy
+in-blob journey self-heals: the owner's client relocates it to the owner doc, then strips it from the
+blob on the next owner login. Note: under the OLD design the in-blob journey was already visible to the
+whole circle, so this is retroactive privatization, not a fresh secret leak.
+
+## Rules (DONE, in `firestore.rules`, PUBLISHED in the Firebase console 2026-06-14)
 Added `match /households/{hid}/mhealth/{owner}/cat/{category}`:
 - **read**: household member AND (you are the owner OR (category≠mood AND your uid ∈ sharedWith)).
 - **write**: only the owner, as a member; `ownerUid` must match; for `mood`, `sharedWith` must be empty/absent.
 - **delete**: owner only.
-This is the literal G1 enforcement. It is additive (new path) — it does not change any existing rule,
-so current flows are untouched. **It enforces nothing until the client writes data there (next chunk).**
+This is the literal G1 enforcement. It is additive (new path), so it does not change any existing rule,
+and current flows are untouched.
+
+The same publish (2026-06-14) also enforces the new **pregnancy journey** block
+(`match /pregnancy/{owner}`: read by owner or `sharedWith[]`, write by owner only) and the new
+**per-day notes** block (see below). The `mhealth` and Pro-lock rules are unchanged. The rules are now
+the live runtime source of truth, so these privacy claims are server-enforced, not client-hidden.
+
+## Per-day notes (2026-06-14, item 5): per-doc, audience-based, enforced by rules
+The old single shared "handoff" note was replaced by per-day notes on the home day-surface. Each note
+is stored one-per-doc (NOT in the circle-shared `app` blob):
+
+```
+households/{hid}/notes/{noteId}
+  { author: uid, audience, ... }
+```
+`audience` is one of:
+- `'circle'`: readable by everyone in the household.
+- a specific member uid: private to that one person (plus the author).
+- the author: private to the author.
+
+`firestore.rules` enforce read by audience/author; only the author can edit or delete. This is
+rules-enforced privacy, not client hiding: a member the note is not addressed to cannot read it via the
+API at all. A one-time, idempotent migration moves any legacy handoff note into a single `'circle'`
+note, authored by the writing owner.
 
 ## Client rewire — DONE (2026-06-13). Approach changed: enforce at the boundary, not 79 accessors.
 The original plan was to centralize ~79 `state.pregnancy` call sites behind `matGet`/`matSet`. We did
@@ -80,6 +123,14 @@ Symptom/Weight quick-actions (Kicks/Contractions stay shared); `doEndPregnancy` 
 data-loss dimensions found nothing real; two issues were confirmed and fixed (the role-gated ownership
 claim above; a leftover brand toast).
 
+## Account-switch teardown (2026-06-14 fix)
+Sign-out / teardown now clears the in-memory **pregnancy journey** and **maternal-private health** so
+neither can survive into the next account during an in-tab account switch. Previously the in-memory
+`state.pregnancy` (which carries both the journey and the owner-private health fields hydrated from the
+mhealth listener) could linger after sign-out and be briefly visible to whoever signed in next. The
+rules already deny cross-account reads at the server; this fix closes the client-memory residue so the
+two layers agree.
+
 ## Acceptance (G1) — STILL PENDING the emulator (cannot run in the build env)
 A non-permitted circle member **cannot** read another member's `mhealth/*` via the API/rules — must be
 proven with the Firestore emulator test suite (or a manual two-account cross-read). `mood` unreadable by
@@ -87,7 +138,39 @@ anyone but the owner even if mis-added to a share list. ✔ verified by code: no
 in `appBlobFromState()` output (`sharedPregnancy` strips them). Do **not** market "private to you" until
 the emulator cross-account denial passes.
 
-## To publish the rules (console is the runtime source of truth) — PENDING founder action
-Firebase Console → Firestore → Rules → paste `firestore.rules` → Publish. The new `mhealth` block is
-additive (no existing rule changed), so publishing it does not affect current flows. Then run the
-emulator suite (or a manual cross-account read test) to confirm a second member is denied.
+## "Why we ask" transparency (2026-06-16): make every privacy claim truthful to the user
+Contextual one-tap "Why we ask" help was wired across the data-entry flows so a parent can see, at the
+point of entry, what a field is for and who can see it. Two privacy-load-bearing surfaces were verified
+against `firestore.rules` so the in-app copy does not over-promise:
+- **Privacy-verified field help.** Each "Why we ask" line that touches privacy was adversarially checked
+  against the published rules before shipping, so the on-screen claim matches what the server actually
+  enforces (no "private" wording where the rules allow the read).
+- **Family list discloses email visibility.** The family/circle list now states plainly that everyone
+  in the circle can see each other's name and email. This is an always-visible note (not a hidden
+  expander) because that fact should not be tucked away. It is the truthful counterpart to the
+  memberInfo gap below.
+
+Shipped on `main` (commit 3365e4d, service worker v80).
+
+## Known enforcement gaps (2026-06-17 audit): client-only guards that are NOT yet rules-enforced
+Per the Core tenet above (hiding in the client is NOT privacy), two findings are documented here as
+gaps, not guarantees:
+- **Dual-guardian consent gate is client-only.** The "both guardians must agree" gate for export/delete
+  is enforced ONLY in `index.html`, NOT in `firestore.rules`. Any household member can write the shared
+  `app` blob, and an owner can delete without a second approval. So it is a UI convention, not a security
+  guarantee. Help copy was softened to "Cubby asks both guardians to agree". **To make the guardian gate
+  a real guarantee it must move into `firestore.rules`.**
+- **Email is circle-visible via memberInfo.** Email is NOT private: it is written to
+  `households/{hid}.memberInfo` and is readable by every member, and shown on the family list. Copy was
+  corrected accordingly (see the family-list disclosure above).
+
+## Rules publication (console is the runtime source of truth): DONE 2026-06-14
+The founder pasted `firestore.rules` into Firebase Console → Firestore → Rules → Publish on 2026-06-14,
+including the new `mhealth`, pregnancy journey, and per-day notes blocks. These blocks are additive (no
+existing rule changed), so publishing did not affect current flows. They are now the live source of
+truth.
+
+**Still pending:** the founder's two-account cross-account read test (or the emulator suite) to confirm
+a non-permitted member is denied; the deferred `app.pregnancy` rules guard (waiting ~a week for old v72
+clients to drain before locking the legacy blob path); and the deferred notes audience-immutability
+rule tweak.

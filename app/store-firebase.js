@@ -10,7 +10,7 @@
   var auth = window.LL.auth, db = window.LL.db;
   var LOCAL_PREFS_KEY = 'little-log-prefs-v1'; // per-device: activeBabyId, timers, theme
 
-  var hhRef = null, eventsRef = null, photosRef = null;
+  var hhRef = null, eventsRef = null, photosRef = null, notesRef = null;
   var booted = false;
   var unsub = [];
   var knownEvents = {};      // id -> JSON of last-synced event (for diffing)
@@ -37,6 +37,24 @@
   var matShared = {};     // category -> sharedWith[] (last seen, so a data write keeps consent)
   var knownMat = {};      // category -> sig of last-synced {data, sharedWith} (diffing)
 
+  /* ---------- pregnancy JOURNEY (owner-owned, Privacy Max, Item 7) ----------
+     The journey (stage, dueDate, lmp, week, appts, kicks, contractions, birthPlan, bag,
+     moments, etc.) is the most sensitive event a family has: the bare fact that someone
+     is expecting. It must NEVER sit in the circle-shared `app` blob, where every member
+     (in-laws, nanny) would see it the moment a pregnancy starts. Instead it lives in
+     households/{hid}/pregnancy/{ownerUid}, written only by the owner, readable by the owner
+     plus any uid she lists in sharedWith[] (the one-time stakeholder review at creation).
+     Same shape and plumbing as mhealth. Maternal-private HEALTH stays separately owner-only
+     in mhealth and is NEVER swept into the journey. ownerUid + id are routing metadata, not
+     journey payload, so they are not duplicated into `data`. */
+  var PREG_META_KEYS = ['ownerUid', 'id']; // routing, not journey payload
+  var pregUnsub = [];     // pregnancy-journey doc listeners
+  var pregOwner = null;   // uid whose journey we are currently listening to
+  var pregShared = [];    // sharedWith[] for the journey (last seen, so a data write keeps consent)
+  var knownPregJourney = null; // sig of last-synced {data, sharedWith} (diffing)
+  var legacyBlobPreg = null;   // a journey found in a legacy `app` blob, awaiting one-time relocation
+  var pregMigrated = false;    // owner has already relocated the legacy journey this session
+
   /* ---------- styles for the sign-in overlay ---------- */
   var st = document.createElement('style');
   st.textContent =
@@ -48,6 +66,10 @@
     + '.ll-auth-card p{color:#6E635B;font-size:15px;margin:0 0 24px;line-height:1.4;}'
     + '.ll-auth-btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;border:1px solid #E0D7C7;background:#fff;color:#2C2521;font-size:16px;font-weight:700;padding:14px 18px;border-radius:14px;cursor:pointer;font-family:inherit;}'
     + '.ll-auth-btn:hover{background:#FBF7EF;}.ll-auth-btn:disabled{opacity:.6;cursor:default;}'
+    + '.ll-auth-btn-apple{background:#000;color:#fff;border-color:#000;margin-top:10px;}'
+    + '.ll-auth-btn-apple:hover{background:#1a1a1a;}.ll-auth-btn-apple svg{width:17px;height:17px;}'
+    + '.lp-apple{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;max-width:340px;margin:10px auto 0;border:none;background:#000;color:#fff;font-size:17px;font-weight:800;padding:16px 22px;border-radius:15px;cursor:pointer;font-family:inherit;}'
+    + '.lp-apple:hover{filter:brightness(1.2);}.lp-apple:disabled{opacity:.6;cursor:default;}.lp-apple svg{width:18px;height:18px;}'
     + '.ll-auth-msg{margin-top:16px;color:#9a8d80;font-size:13px;line-height:1.4;}'
     + '.ll-values{text-align:left;margin:4px 0 20px;display:flex;flex-direction:column;gap:9px;}'
     + '.ll-values div{display:flex;align-items:center;gap:10px;font-size:13.5px;color:#6E635B;font-weight:600;}'
@@ -90,7 +112,18 @@
     if (!ov) { ov = document.createElement('div'); ov.id = 'llAuthOv'; document.body.appendChild(ov); }
     return ov;
   }
-  function hideOverlay() { var ov = document.getElementById('llAuthOv'); if (ov) ov.remove(); }
+  function hideOverlay() { if (_statusRot) { clearInterval(_statusRot); _statusRot = null; } var ov = document.getElementById('llAuthOv'); if (ov) ov.remove(); }
+
+  /* Sign in with Apple button. variant 'lp' = big landing button; otherwise the
+     bordered auth-card style. Uses Apple's official logo + "Continue with Apple". */
+  function appleBtnHtml(variant) {
+    var logo = '<svg viewBox="0 0 384 512" aria-hidden="true" fill="currentColor">'
+      + '<path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>';
+    if (variant === 'lp') {
+      return '<button type="button" class="lp-apple ll-apple-cta">' + logo + 'Continue with Apple</button>';
+    }
+    return '<button type="button" id="llAppleBtn" class="ll-auth-btn ll-auth-btn-apple">' + logo + 'Continue with Apple</button>';
+  }
 
   /* Email magic-link sign-in (alongside Google, never instead of it). */
   function emailRowHtml() {
@@ -101,37 +134,77 @@
       + '<button type="submit" style="border:none;background:#9A8C6E;color:#fff;font-family:inherit;font-weight:800;font-size:14px;padding:11px 14px;border-radius:11px;cursor:pointer;white-space:nowrap">Send link</button>'
       + '</form><div class="ll-email-note" style="font-size:12px;font-weight:600;color:#6E635B;margin-top:7px"></div></div>';
   }
+  /* Privacy reassurance + consent, shown right at the sign-in buttons. Links /privacy/ (live); no Terms
+     link until /terms/ ships. */
+  function consentHtml() {
+    return '<div class="ll-consent" style="margin:13px auto 0;max-width:340px;text-align:center;font-size:12px;line-height:1.55;font-weight:600;color:#8a7d70">'
+      + '🔒 Private to your family. No ads, we never sell your data.<br>'
+      + 'By continuing you agree to our <a href="/privacy/" target="_blank" rel="noopener" style="color:#6E635B;text-decoration:underline">privacy promise</a>.'
+      + '</div>';
+  }
+  // Subtle install affordance at the sign-in gate (the marketing /install.js does not run on /app/).
+  // Reuses the app's own canShowInstall/addToHomeScreen helpers (defined in index.html, loaded first).
+  function installRowHtml() {
+    try { if (!(window.canShowInstall && window.canShowInstall())) return ''; } catch (e) { return ''; }
+    return '<div class="ll-install-row" style="margin:10px auto 0;max-width:340px;text-align:center"><button type="button" id="llInstallBtn" style="border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;color:#6E635B;text-decoration:underline;padding:6px">Or add Cubby to your home screen</button><div id="llInstallMsg" class="ll-auth-msg" style="display:none"></div></div>';
+  }
+  function wireInstall(scope) {
+    var ib = scope.querySelector('#llInstallBtn'); if (!ib || ib.__w) return; ib.__w = 1;
+    ib.onclick = function () { if (window.addToHomeScreen) window.addToHomeScreen('llInstallMsg'); };
+  }
+  function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function looksLikeEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e); }
   function wireEmailRow(scope) {
     var row = scope.querySelector('.ll-email-row'); if (!row) return;
     var toggle = row.querySelector('.ll-email-toggle'), form = row.querySelector('.ll-email-form'), note = row.querySelector('.ll-email-note');
-    toggle.onclick = function () { toggle.style.display = 'none'; form.style.display = 'flex'; form.querySelector('input').focus(); };
+    var input = form.querySelector('input'), btn = form.querySelector('button');
+    var LINKBTN = 'border:none;background:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:800;color:#6E635B;text-decoration:underline;padding:2px';
+    var cdTimer = null;
+    // (re)show the email form keeping what's typed, so a wrong or changed address can be corrected and re-sent.
+    function openForm() { if (cdTimer) { clearInterval(cdTimer); cdTimer = null; } note.textContent = ''; toggle.style.display = 'none'; form.style.display = 'flex'; btn.disabled = false; btn.textContent = 'Send link'; input.focus(); input.select(); }
+    toggle.onclick = openForm;
+
+    // Send (or resend) the sign-in link: our own Worker + Resend first (Firebase's built-in sender
+    // has poor Gmail delivery), falling back to Firebase's sender if the endpoint is down. The link
+    // itself is a standard Firebase email-sign-in link, finished below by signInWithEmailLink().
+    function sendLink(email) {
+      return fetch('/api/send-signin-link', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: email }) })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) throw new Error(d.error || 'send_failed'); return d; }); })
+        .catch(function () { return auth.sendSignInLinkToEmail(email, { url: location.origin + '/app/', handleCodeInApp: true }); })
+        .then(function () { try { localStorage.setItem('cubby-email-signin', email); } catch (e) {} });
+    }
+
+    // "Check your inbox" + a Resend control with a 30s cooldown (links get lost/delayed; the cooldown
+    // avoids spamming the sender). Reused after both the first send and each resend.
+    function showSent(email) {
+      form.style.display = 'none';
+      note.innerHTML = 'Check your inbox: we sent a sign-in link to <b>' + escHtml(email) + '</b>. Open it on this device.'
+        + '<div class="ll-resend-row" style="margin-top:8px">Not arrived yet? <button type="button" class="ll-resend" style="' + LINKBTN + '">Resend link</button> &middot; <button type="button" class="ll-changeemail" style="' + LINKBTN + '">Wrong email?</button></div>';
+      var rb = note.querySelector('.ll-resend');
+      note.querySelector('.ll-changeemail').onclick = function () { input.value = email; openForm(); }; // fix a typo or use a different address
+      if (cdTimer) { clearInterval(cdTimer); cdTimer = null; }
+      var left = 30; rb.disabled = true; rb.style.opacity = '.55'; rb.textContent = 'Resend in ' + left + 's';
+      cdTimer = setInterval(function () {
+        left--;
+        if (left <= 0) { clearInterval(cdTimer); cdTimer = null; rb.disabled = false; rb.style.opacity = '1'; rb.textContent = 'Resend link'; }
+        else rb.textContent = 'Resend in ' + left + 's';
+      }, 1000);
+      rb.onclick = function () {
+        rb.disabled = true; rb.style.opacity = '.55'; rb.textContent = 'Sending…';
+        sendLink(email).then(function () { showSent(email); }).catch(function (err) {
+          var rr = note.querySelector('.ll-resend-row'); if (rr) rr.textContent = 'Could not resend: ' + ((err && err.message) || err);
+        });
+      };
+    }
+
     form.onsubmit = function (ev) {
       ev.preventDefault();
-      var email = form.querySelector('input').value.trim(); if (!email) return;
-      var btn = form.querySelector('button'); btn.disabled = true; btn.textContent = 'Sending…';
-      // Send via our own Worker + Resend (Firebase's built-in sender has poor Gmail delivery).
-      // Completion is unchanged: the link is a standard Firebase email-sign-in link, finished
-      // below by signInWithEmailLink(). Falls back to Firebase's sender if the endpoint is down.
-      fetch('/api/send-signin-link', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: email }) })
-        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) throw new Error(d.error || 'send_failed'); return d; }); })
-        .then(function () {
-          try { localStorage.setItem('cubby-email-signin', email); } catch (e) {}
-          form.style.display = 'none';
-          note.textContent = 'Check your inbox: we sent a sign-in link to ' + email + '. Open it on this device.';
-        })
-        .catch(function () {
-          // Endpoint unavailable (e.g. not deployed yet): fall back to Firebase's own sender.
-          auth.sendSignInLinkToEmail(email, { url: location.origin + '/app/', handleCodeInApp: true })
-            .then(function () {
-              try { localStorage.setItem('cubby-email-signin', email); } catch (e) {}
-              form.style.display = 'none';
-              note.textContent = 'Check your inbox: we sent a sign-in link to ' + email + '. Open it on this device.';
-            })
-            .catch(function (err) {
-              btn.disabled = false; btn.textContent = 'Send link';
-              note.textContent = 'Could not send the link: ' + ((err && err.message) || err);
-            });
-        });
+      var email = input.value.trim();
+      if (!looksLikeEmail(email)) { note.textContent = 'That email looks a bit off, mind checking it?'; input.focus(); return; }
+      btn.disabled = true; btn.textContent = 'Sending…';
+      sendLink(email)
+        .then(function () { showSent(email); })
+        .catch(function (err) { btn.disabled = false; btn.textContent = 'Send link'; note.textContent = 'Could not send the link: ' + ((err && err.message) || err); });
     };
   }
   function maybeFinishEmailLink() {
@@ -160,9 +233,15 @@
     if (typeof window.cubbyLanding === 'function') {
       ov.classList.add('landing');
       ov.innerHTML = window.cubbyLanding(msg);
-      Array.prototype.forEach.call(ov.querySelectorAll('.ll-cta'), function (b) { b.onclick = signInGoogle; });
-      var firstCta = ov.querySelector('.ll-cta');
-      if (firstCta) { firstCta.insertAdjacentHTML('afterend', emailRowHtml()); wireEmailRow(ov); }
+      // Only the primary (hero) CTA carries the full method set + consent, so the three methods are
+      // consistent and not duplicated. (Was: an Apple button after EVERY .ll-cta but the email row only
+      // after the first, so the hero had Google+Apple+email while the footer CTA had Google+Apple+no email.)
+      Array.prototype.forEach.call(ov.querySelectorAll('.ll-cta'), function (b, i) {
+        b.onclick = signInGoogle;
+        if (i === 0) b.insertAdjacentHTML('afterend', appleBtnHtml('lp') + emailRowHtml() + consentHtml() + installRowHtml());
+      });
+      Array.prototype.forEach.call(ov.querySelectorAll('.ll-apple-cta'), function (b) { b.onclick = signInApple; });
+      wireEmailRow(ov); wireInstall(ov);
       return;
     }
     ov.classList.remove('landing');
@@ -171,19 +250,59 @@
       + '<h1>Cubby</h1><p>A warm, private baby log you can share with the people who care for them.</p>'
       + '<div class="ll-values"><div><span>⚡</span>Log feeds, sleep &amp; nappies in seconds</div><div><span>👨‍👩‍👧</span>Share with family &amp; caregivers, live</div><div><span>🔒</span>Private to your family</div></div>'
       + '<button id="llGoogleBtn" class="ll-auth-btn">Continue with Google</button>'
+      + appleBtnHtml('card')
       + emailRowHtml()
+      + consentHtml()
+      + installRowHtml()
       + (msg ? '<div class="ll-auth-msg">' + msg + '</div>' : '')
       + '<div style="margin-top:16px;font-size:12px;font-weight:700"><a href="/" style="color:#6E635B">About Cubby · little-cubby.com</a></div>'
       + '</div>';
     document.getElementById('llGoogleBtn').onclick = signInGoogle;
-    wireEmailRow(ov);
+    var llAppleBtn = document.getElementById('llAppleBtn');
+    if (llAppleBtn) llAppleBtn.onclick = signInApple;
+    wireEmailRow(ov); wireInstall(ov);
   }
+  // Gentle loader lines, rotated while the app wakes. Deliberately loss-safe: about the home, the
+  // parent and the relatable chaos (the kettle, the missing sock) — never the baby's body, which
+  // could sting before we know whether a parent is grieving. Warm, brief, British, no guilt.
+  var LOADER_LINES = [
+    'Putting the kettle on…',
+    'Finding the other sock…',
+    'Folding the tiny washing…',
+    'Brewing you a fresh coffee…',
+    'Smoothing out the day…',
+    'Gathering your little moments…',
+    'Plumping the cushions…',
+    'Tidying the nook…',
+    'Letting the quiet settle…',
+    'Dusting off the memories…',
+    'Untangling the muslins…',
+    'Keeping it all private and yours…',
+    'Lining up the good bits…',
+    'Taking a deep breath…',
+    'Almost there…'
+  ];
+  var _statusRot = null;
   function showStatus(msg) {
     overlay().classList.remove('landing');
+    // Always rotate the gentle lines so the delight covers the whole wait, including the data
+    // load. A meaningful message (e.g. "Setting things up…") leads, then drifts into LOADER_LINES;
+    // the generic "Loading…" just starts on a random gentle line.
+    var meaningful = msg && msg !== 'Loading…' && msg !== 'Loading...';
+    var lines = meaningful ? [msg].concat(LOADER_LINES) : LOADER_LINES;
+    var i = meaningful ? 0 : Math.floor(Math.random() * lines.length);
     overlay().innerHTML =
       '<div class="ll-auth-card"><img src="/icons/logo-512.png" alt="Cubby" class="ll-auth-logo-img">'
       + '<h1>Cubby</h1><div class="ll-spin"></div>'
-      + '<div class="ll-auth-msg">' + (msg || 'Loading…') + '</div></div>';
+      + '<div class="ll-auth-msg" id="llAuthMsg"></div></div>';
+    var mEl = document.getElementById('llAuthMsg'); if (mEl) mEl.textContent = lines[i];
+    if (_statusRot) { clearInterval(_statusRot); _statusRot = null; }
+    _statusRot = setInterval(function () {
+      var el = document.getElementById('llAuthMsg');
+      if (!el) { clearInterval(_statusRot); _statusRot = null; return; }
+      i = (i + 1) % lines.length;
+      el.textContent = lines[i];
+    }, 2200);
   }
 
   function signInGoogle() {
@@ -198,6 +317,18 @@
     });
   }
 
+  function signInApple() {
+    // Disable whichever Apple button was clicked (landing or auth-card) for feedback.
+    Array.prototype.forEach.call(document.querySelectorAll('.ll-apple-cta, #llAppleBtn'), function (b) { b.disabled = true; });
+    auth.signInWithPopup(window.LL.appleProvider).catch(function (err) {
+      if (err && (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request'
+        || err.code === 'auth/operation-not-supported-in-this-environment')) {
+        auth.signInWithRedirect(window.LL.appleProvider); return;
+      }
+      showSignIn('Sign-in failed: ' + ((err && err.message) || err));
+    });
+  }
+
   window.LL.signOut = function () {
     if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
     teardown(); auth.signOut();
@@ -205,8 +336,19 @@
 
   function teardown() {
     unsub.forEach(function (u) { try { u(); } catch (e) {} });
-    unsub = []; booted = false; knownEvents = {};
-    hhRef = eventsRef = photosRef = null;
+    matUnsub.forEach(function (u) { try { u(); } catch (e) {} });
+    pregUnsub.forEach(function (u) { try { u(); } catch (e) {} });
+    unsub = []; matUnsub = []; pregUnsub = []; booted = false; knownEvents = {};
+    matOwner = null; matShared = {}; knownMat = {};
+    pregOwner = null; pregShared = []; knownPregJourney = null; legacyBlobPreg = null; pregMigrated = false;
+    hhRef = eventsRef = photosRef = notesRef = null;
+    state.notes = [];
+    // Clear in-memory subject data so one account's journey + maternal-private health (applyMatDoc
+    // folds mhealth fields into state.pregnancy) can never survive into the next account's session
+    // after an in-tab sign-out/sign-in. Privacy-Max: no leftover.
+    state.pregnancy = null;
+    state.handoff = null;
+    handoffMigrated = false;
   }
 
   /* ---------- per-device prefs ---------- */
@@ -293,26 +435,29 @@
         localStorage.removeItem('cubby-ref');
       }
     } catch (e) {}
+    // Campaign attribution: stamp the first-touch utm_* onto the brand-new family's own user doc.
+    // First-party (the user owns this record); kept in localStorage so the Pro waitlist write can reuse it.
+    try {
+      var acqRaw = localStorage.getItem('cubby-acq');
+      if (acqRaw && !snap.exists) userDoc.acq = JSON.parse(acqRaw);
+    } catch (e) {}
     await userRef.set(userDoc, { merge: true });
     return newRef.id;
   }
 
   /* ---------- state <-> cloud blob ---------- */
-  // Copy of state.pregnancy with all maternal-private fields removed — what's safe for the shared blob.
-  function sharedPregnancy(p) {
-    if (!p) return null;
+  // The journey payload that goes into the owner-owned pregnancy doc: everything in
+  // state.pregnancy EXCEPT maternal-private HEALTH (kept in mhealth) and routing meta
+  // (ownerUid, id, carried on the doc, not duplicated inside `data`).
+  function pregJourneyData(p) {
+    if (!p) return {};
     var out = {};
-    Object.keys(p).forEach(function (k) { if (MAT_PRIVATE_KEYS.indexOf(k) < 0) out[k] = p[k]; });
+    Object.keys(p).forEach(function (k) {
+      if (MAT_PRIVATE_KEYS.indexOf(k) >= 0) return; // health -> mhealth
+      if (PREG_META_KEYS.indexOf(k) >= 0) return;   // routing -> doc id / fields
+      out[k] = p[k];
+    });
     return out;
-  }
-  // Merge the shared (non-private) pregnancy fields from the blob, preserving private fields
-  // already loaded from the mhealth listener (the blob never carries them).
-  function mergeSharedPreg(shared) {
-    if (!shared) { state.pregnancy = null; matOwner = null; return; }
-    var p = state.pregnancy || {};
-    if (p.id && shared.id && p.id !== shared.id) p = {}; // different pregnancy → drop stale private fields
-    Object.keys(shared).forEach(function (k) { p[k] = shared[k]; });
-    state.pregnancy = p;
   }
   function appBlobFromState() {
     return {
@@ -321,11 +466,14 @@
       vaccines: state.vaccines || {}, illnesses: state.illnesses || [],
       photos: state.photos || [],
       handoff: state.handoff || null,  // shared parent<->caregiver note
-      pregnancy: sharedPregnancy(state.pregnancy),  // shared journey only; maternal-private fields stripped out (G1)
+      // pregnancy is NO LONGER in the shared blob (Item 7): the journey is owner-owned in
+      // households/{hid}/pregnancy/{ownerUid} and reaches members only by explicit consent.
       den: state.den || null,  // household hub: chores, shopping, meals, staff, expenses, weights
       consents: state.consents || [],  // dual-guardian approvals for big actions (delete/export)
       guardians: state.guardians || null,  // explicit guardian uids (papa + mama); derived if null
-      timers: state.timers || {}   // shared so an ongoing nap/feed shows on every phone
+      timers: state.timers || {},   // shared so an ongoing nap/feed shows on every phone
+      journey: state.journey || null,   // baby-scope guided-journey: titles, dismissed prompts, relationship captures (NOT pregnancy — that stays owner-owned)
+      lossHolding: state.lossHolding || null   // calm holding state after a loss, so a reload (and a following co-parent) gets the gentle screen, never the upbeat journey chooser
     };
   }
   function applyAppBlob(app) {
@@ -340,12 +488,16 @@
     state.illnesses = app.illnesses || [];
     state.photos = app.photos || [];
     state.handoff = app.handoff || null;
-    mergeSharedPreg(app.pregnancy);  // private fields stay; only the shared journey comes from the blob (G1)
+    // The journey no longer comes from the blob (Item 7). A legacy blob may still carry one;
+    // stash it so the owner can relocate it into the owner-owned doc, then never read it again.
+    if (app.pregnancy && !legacyBlobPreg) legacyBlobPreg = app.pregnancy;
     state.den = app.den || null;
     state.consents = app.consents || [];
     state.guardians = app.guardians || null;
     // Don't stomp a timer the local user just started but hasn't pushed yet.
     if (!pushTimer) state.timers = app.timers || {};
+    state.journey = app.journey || null;
+    state.lossHolding = app.lossHolding || null;
     normalizeLoadedState(state); // defensive legacy migrations
   }
   function stripMeta(ev) { var c = Object.assign({}, ev); delete c.authorId; return c; }
@@ -414,28 +566,120 @@
     if (writes.length) { try { await Promise.all(writes); } catch (e) { console.warn('mhealth push', e); } }
   }
 
+  /* ---------- pregnancy-journey sync (owner-owned pregnancy doc, Item 7) ---------- */
+  // Fold an owner's journey doc into state.pregnancy. Maternal-private HEALTH already loaded
+  // from the mhealth listener is preserved (the journey doc never carries it).
+  function applyPregJourney(owner, d) {
+    if (!d) return;
+    pregShared = d.sharedWith || [];
+    knownPregJourney = stableStringify([d.data || {}, pregShared]); // don't immediately re-write what we just received
+    var data = d.data || {};
+    var p = state.pregnancy || {};
+    if (p.id && data.id && p.id !== data.id) p = {}; // a different pregnancy -> drop stale fields
+    Object.keys(data).forEach(function (k) { p[k] = data[k]; });
+    p.ownerUid = owner; // routing meta lives on the doc, not in data
+    state.pregnancy = p;
+  }
+  // Clear the in-memory journey when the doc is gone / never readable (so a non-permitted
+  // member never even learns a pregnancy exists, and an owner who ended it sees it cleared).
+  function clearPregJourneyState() {
+    state.pregnancy = null;
+    matOwner = null; matShared = {}; knownMat = {};
+    matUnsub.forEach(function (u) { try { u(); } catch (e) {} }); matUnsub = [];
+  }
+  // Listen to the journey doc we're permitted to read: the owner reads her own;
+  // a non-owner tries each member's doc (ones not shared with us fail permission and are ignored).
+  function ensurePregListeners(uidNow) {
+    pregUnsub.forEach(function (u) { try { u(); } catch (e) {} });
+    pregUnsub = []; pregOwner = null; pregShared = []; knownPregJourney = null;
+    if (!hhRef || !uidNow) return;
+    var base = hhRef.collection('pregnancy');
+    // The owner (or whoever holds her own doc) reads her own journey.
+    pregUnsub.push(base.doc(uidNow).onSnapshot(function (doc) {
+      applyingRemote = true;
+      if (doc.exists) { pregOwner = uidNow; applyPregJourney(uidNow, doc.data()); ensureMaternalListeners(uidNow); }
+      else if (pregOwner === uidNow) { pregOwner = null; clearPregJourneyState(); }
+      applyingRemote = false;
+      if (booted) render();
+    }, function (e) { /* own doc not readable yet; ignore */ }));
+    // A non-owner: try every other member's journey doc. Not shared with us -> permission-denied, ignored.
+    var members = (window.LL.members && Object.keys(window.LL.members)) || [];
+    members.forEach(function (m) {
+      if (m === uidNow) return;
+      pregUnsub.push(base.doc(m).onSnapshot(function (doc) {
+        if (!doc.exists) { if (pregOwner === m) { pregOwner = null; clearPregJourneyState(); if (booted) render(); } return; }
+        applyingRemote = true; pregOwner = m; applyPregJourney(m, doc.data()); applyingRemote = false;
+        ensureMaternalListeners(uidNow);
+        if (booted) render();
+      }, function (e) { /* permission-denied = not shared with me; ignore */ }));
+    });
+  }
+  // The owner writes her changed journey doc (data + current sharedWith). No-op for non-owners.
+  async function syncPregJourney(uidNow) {
+    var p = state.pregnancy;
+    if (!hhRef || !p || !p.ownerUid || p.ownerUid !== uidNow) return; // only the owner writes her own journey
+    var data = pregJourneyData(p);
+    var shared = pregShared || [];
+    var sig = stableStringify([data, shared]);
+    if (knownPregJourney === sig) return;
+    knownPregJourney = sig;
+    try {
+      await hhRef.collection('pregnancy').doc(uidNow)
+        .set({ ownerUid: uidNow, data: data, sharedWith: shared, updatedAt: window.LL.serverTimestamp() });
+    } catch (e) { console.warn('pregnancy journey push', e); }
+  }
+  // One-time migration: relocate a legacy in-blob journey to the owner-owned doc, then strip the
+  // blob. Owner-only, once per session. The legacy journey was already visible to the whole circle
+  // (it lived in the shared blob), so the migrated sharedWith defaults to the current members, so
+  // nobody silently loses access they already had. The new-pregnancy audit governs fresh starts.
+  function maybeMigrateLegacyJourney() {
+    if (pregMigrated) return;
+    if (window.LL.role !== 'owner') return;          // only the household owner relocates
+    var uidNow = auth.currentUser && auth.currentUser.uid; if (!uidNow) return;
+    var legacy = legacyBlobPreg; if (!legacy) return;
+    if (pregOwner) { pregMigrated = true; legacyBlobPreg = null; return; } // an owner-owned doc already exists; nothing to relocate
+    pregMigrated = true;
+    // Seed in-memory state from the legacy blob and claim ownership.
+    var p = state.pregnancy || {};
+    Object.keys(legacy).forEach(function (k) { if (p[k] === undefined) p[k] = legacy[k]; });
+    p.ownerUid = uidNow;
+    state.pregnancy = p;
+    pregOwner = uidNow;
+    // Preserve existing visibility: share the journey with the current circle (everyone who could
+    // already see it via the blob). The owner can trim this later in the privacy sheet.
+    pregShared = ((window.LL.members && Object.keys(window.LL.members)) || []).filter(function (m) { return m !== uidNow; });
+    knownPregJourney = null; // force the journey + blob-strip to be written
+    legacyBlobPreg = null;
+    ensureMaternalListeners(uidNow);
+    scheduledPush(); // writes the journey doc + mhealth + the blob without pregnancy
+  }
+
   /* ---------- start real-time sync ---------- */
   function startSync(hid, user) {
     hhRef = db.collection('households').doc(hid);
     eventsRef = hhRef.collection('events');
     photosRef = hhRef.collection('photos');
+    notesRef = hhRef.collection('notes');
 
     var prefs = loadPrefs();
     var gotApp = false, gotEvents = false;
+    var lastMembersSig = null; // resubscribe journey listeners only when membership changes
 
-    function maybeBoot() {
-      if (booted || !(gotApp && gotEvents)) return;
+    function maybeBoot(force) {
+      // Always need the app blob (babies/settings) to render a meaningful home. Normally also wait
+      // for the first events snapshot so the activity is complete on first paint — but `force` (the
+      // boot failsafe below) skips that wait so a slow/hanging events query can never pin the loader.
+      if (booted || !gotApp || (!gotEvents && !force)) return;
       if (!state.timers) state.timers = {}; // timers come from the cloud app blob
       if (prefs.theme) state.settings.theme = prefs.theme;
       state.activeBabyId = prefs.activeBabyId || (state.babies[0] && state.babies[0].id) || null;
       if (state.activeBabyId && !state.babies.some(function (b) { return b.id === state.activeBabyId; }))
         state.activeBabyId = (state.babies[0] && state.babies[0].id) || null;
       booted = true;
-      // One-time relocation: if a legacy blob carried maternal-private fields, the owner moves
-      // them into the protected mhealth docs and strips them from the shared blob on next push.
-      if (state.pregnancy && window.LL.role === 'owner' && MAT_PRIVATE_KEYS.some(function (k) { return state.pregnancy[k] !== undefined; })) {
-        scheduledPush();
-      }
+      // One-time relocation (Item 7): if a legacy blob carried the pregnancy journey (and any
+      // maternal-private fields), the owner moves it into the owner-owned pregnancy doc (plus
+      // mhealth), then strips it from the shared blob. Done only by the household owner, once.
+      maybeMigrateLegacyJourney();
       hideOverlay();
       render();
       maybeFirstRun(user);
@@ -450,33 +694,74 @@
       window.LL.formerMemberInfo = d.formerMemberInfo || {};
       window.LL.pro = d.pro || null; // Pro entitlement: written only by the billing Worker
       window.LL.householdId = hid;
+      // Pregnancy-journey listeners depend on the member set (a non-owner tries each member's
+      // doc). (Re)subscribe whenever membership changes, including the very first snapshot.
+      var membersSig = stableStringify(d.members || {});
+      if (membersSig !== lastMembersSig) { lastMembersSig = membersSig; ensurePregListeners(user.uid); }
       var sig = hhSig(d.app, d.members, d.memberInfo) + '|' + JSON.stringify(d.pro || null);
       if (booted && sig === lastHhSig) return; // our own write echo / duplicate emission, already on screen
       lastHhSig = sig;
       applyingRemote = true; applyAppBlob(d.app); applyingRemote = false;
       ensureMaternalListeners(user.uid); // (re)subscribe once we know whose pregnancy it is
+      migrateHandoffToNote(); // role + handoff are now known; fold any legacy shared note in once
       gotApp = true;
       if (booted) render(); else maybeBoot();
     }, function (e) { console.warn('household listen', e); }));
 
-    unsub.push(eventsRef.onSnapshot(function (snap) {
-      applyingRemote = true;
-      snap.docChanges().forEach(function (ch) {
-        var data = ch.doc.data(); data.id = ch.doc.id;
-        if (ch.type === 'removed') {
-          state.events = (state.events || []).filter(function (e) { return String(e.id) !== String(data.id); });
-          delete knownEvents[data.id];
-        } else {
-          var i = (state.events || []).findIndex(function (e) { return String(e.id) === String(data.id); });
-          if (i >= 0) state.events[i] = data; else (state.events = state.events || []).push(data);
-          knownEvents[data.id] = JSON.stringify(stripMeta(data));
-        }
+    // ---- Two-stage events load (fast signed-in boot) ----
+    // The old listener loaded the ENTIRE event history before the first render (behind the SDK
+    // download) — slow boot that got worse the more you logged. Now we boot on a RECENT window so
+    // the app renders fast, then hydrate the full history in the background so stats/charts/old
+    // months stay correct. where(time>=) keeps a 'removed' change meaning a real delete (no limit()
+    // eviction ambiguity). Anything older than the window, or missing `time`, is caught by the
+    // one-time hydrate. If the windowed query ever errors (e.g. an index issue), we fall back to
+    // the original unbounded listener so boot can never hang.
+    var bootCutoff = Date.now() - 120 * 86400000; // ~4 months
+    var hydratedHistory = false;
+    function hydrateFullHistory() {
+      if (hydratedHistory) return; hydratedHistory = true;
+      eventsRef.get().then(function (snap) {
+        applyingRemote = true; var added = 0;
+        snap.forEach(function (doc) {
+          if ((state.events || []).some(function (e) { return String(e.id) === String(doc.id); })) return; // recent: owned by the live listener
+          var data = doc.data(); data.id = doc.id;
+          (state.events = state.events || []).push(data);
+          knownEvents[doc.id] = JSON.stringify(stripMeta(data)); added++;
+        });
+        applyingRemote = false;
+        if (added && booted) render();
+      }).catch(function (e) { console.warn('events hydrate', e); });
+    }
+    function subscribeEvents(query, isFallback) {
+      return query.onSnapshot(function (snap) {
+        applyingRemote = true;
+        snap.docChanges().forEach(function (ch) {
+          var data = ch.doc.data(); data.id = ch.doc.id;
+          if (ch.type === 'removed') {
+            state.events = (state.events || []).filter(function (e) { return String(e.id) !== String(data.id); });
+            delete knownEvents[data.id];
+          } else {
+            var i = (state.events || []).findIndex(function (e) { return String(e.id) === String(data.id); });
+            if (i >= 0) state.events[i] = data; else (state.events = state.events || []).push(data);
+            knownEvents[data.id] = JSON.stringify(stripMeta(data));
+          }
+        });
+        applyingRemote = false;
+        gotEvents = true;
+        if (!booted) { maybeBoot(); if (!isFallback) hydrateFullHistory(); }
+        else if (!(snap.metadata && snap.metadata.hasPendingWrites)) render();
+      }, function (e) {
+        console.warn('events listen', e);
+        if (!isFallback) { try { unsub.push(subscribeEvents(eventsRef, true)); } catch (x) {} } // windowed query failed -> full listener, so boot never hangs
       });
-      applyingRemote = false;
-      gotEvents = true;
-      if (!booted) maybeBoot();
-      else if (!(snap.metadata && snap.metadata.hasPendingWrites)) render();
-    }, function (e) { console.warn('events listen', e); }));
+    }
+    unsub.push(subscribeEvents(eventsRef.where('time', '>=', bootCutoff), false));
+
+    // Boot failsafe: never let the launch loader hang on a slow Firebase read. Offline persistence
+    // usually serves the first snapshots from disk instantly, but a cold connection or token refresh
+    // can stall the events query for many seconds. So once the app blob is in (babies/settings),
+    // show the app within ~3.5s regardless; events then stream in via the listener's render().
+    setTimeout(function () { if (!booted && gotApp) maybeBoot(true); }, 3500);
 
     unsub.push(photosRef.onSnapshot(function (snap) {
       snap.docChanges().forEach(function (ch) {
@@ -485,7 +770,130 @@
       });
       if (booted && !(snap.metadata && snap.metadata.hasPendingWrites)) render();
     }, function (e) { console.warn('photos listen', e); }));
+
+    startNotesSync(user);
   }
+
+  /* ---------- home day-surface notes (private by rules, never in the app blob) ----------
+     Notes live in households/{hid}/notes/{noteId}. A private note (audience == a member uid) is
+     readable ONLY by that member or its author; a 'circle' note is readable by everyone. We run
+     three scoped queries that each satisfy the read rule, so a member never even attempts to read a
+     note addressed to someone else (no permission-denied churn). We still filter client-side as a
+     belt-and-braces guard: a note must never render for the wrong member. */
+  function noteVisibleTo(n, uid) {
+    if (!n) return false;
+    return n.audience === 'circle' || n.audience === uid || n.createdBy === uid;
+  }
+  function mergeNote(d) {
+    var uidNow = auth.currentUser && auth.currentUser.uid;
+    if (!noteVisibleTo(d, uidNow)) return; // never hold a note this viewer may not see
+    state.notes = state.notes || [];
+    var i = state.notes.findIndex(function (n) { return String(n.id) === String(d.id); });
+    if (i >= 0) state.notes[i] = d; else state.notes.push(d);
+  }
+  function dropNote(id) {
+    state.notes = (state.notes || []).filter(function (n) { return String(n.id) !== String(id); });
+  }
+  function startNotesSync(user) {
+    state.notes = [];
+    function handle(snap) {
+      snap.docChanges().forEach(function (ch) {
+        var d = ch.doc.data(); d.id = ch.doc.id;
+        if (ch.type === 'removed') dropNote(d.id); else mergeNote(d);
+      });
+      migrateHandoffToNote(); // one-time: fold any legacy shared handoff into a circle note
+      if (booted && !(snap.metadata && snap.metadata.hasPendingWrites)) render();
+    }
+    function warn(e) { /* a scoped query a viewer can't run is ignored, never thrown */ }
+    // 1) circle notes (everyone). 2) my own notes. 3) notes addressed privately to me.
+    unsub.push(notesRef.where('audience', '==', 'circle').onSnapshot(handle, warn));
+    unsub.push(notesRef.where('createdBy', '==', user.uid).onSnapshot(handle, warn));
+    unsub.push(notesRef.where('audience', '==', user.uid).onSnapshot(handle, warn));
+  }
+
+  // MIGRATION: the app used to keep a single shared note in state.handoff (inside the app blob).
+  // On first load, the household owner copies it into one 'circle' note on its own day, then clears
+  // state.handoff so the blob no longer carries it. Owner-only so it runs once, not once per member.
+  var handoffMigrated = false;
+  function migrateHandoffToNote() {
+    if (handoffMigrated || !notesRef) return;
+    var h = state.handoff;
+    if (!h || !h.text) { handoffMigrated = true; return; }
+    if (window.LL.role !== 'owner') return; // only the owner migrates the shared blob
+    handoffMigrated = true;
+    var uidNow = (auth.currentUser && auth.currentUser.uid) || null;
+    var at = h.at || Date.now();
+    var note = {
+      // The owner performs the write, so createdBy MUST be the owner or the notes create
+      // rule (createdBy == request.auth.uid) rejects it. The original author is preserved
+      // by name for the circle to see.
+      createdBy: uidNow,
+      createdByName: (h.by && nameForUid(h.by)) || nameForUid(uidNow) || '',
+      at: at, day: dayKeyOf(at), text: String(h.text), audience: 'circle', pinned: false
+    };
+    // Deterministic doc id so a retry (owner reloads before the clear-push lands, or the
+    // push fails) overwrites the same doc instead of adding a duplicate circle note.
+    notesRef.doc('legacy-handoff').set(note).then(function () {
+      state.handoff = null; // clear the legacy field; next push drops it from the blob
+      scheduledPush();
+    }).catch(function (e) { handoffMigrated = false; console.warn('handoff migrate', e); });
+  }
+  function dayKeyOf(ts) { var d = new Date(ts); return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); }
+  function nameForUid(uid) {
+    var info = (window.LL && window.LL.memberInfo) || {};
+    var m = info[uid]; if (!m) return '';
+    return m.relationship || (m.name ? String(m.name).split(' ')[0] : '') || '';
+  }
+
+  /* Notes API consumed by the home day-surface UI in index.html. */
+  // Create a note. audience is set here and is immutable afterward (no update path changes it).
+  window.LL.addNote = async function (text, audience, day, at) {
+    if (!notesRef) return false;
+    var u = auth.currentUser; if (!u) return false;
+    text = String(text == null ? '' : text).trim(); if (!text) return false;
+    audience = (audience === 'circle' || audience == null) ? 'circle' : String(audience);
+    at = at || Date.now();
+    var note = {
+      createdBy: u.uid, createdByName: nameForUid(u.uid),
+      at: at, day: day || dayKeyOf(at), text: text, audience: audience, pinned: false
+    };
+    try {
+      var ref = await notesRef.add(note);
+      note.id = ref.id; mergeNote(note); // optimistic; the listener will reconcile
+      return true;
+    } catch (e) { console.warn('addNote', e); return false; }
+  };
+  // Delete a note (author-only, also enforced by rules).
+  window.LL.deleteNote = async function (id) {
+    if (!notesRef || !id) return false;
+    var u = auth.currentUser; if (!u) return false;
+    var n = (state.notes || []).find(function (x) { return String(x.id) === String(id); });
+    if (n && n.createdBy && n.createdBy !== u.uid) return false; // not mine
+    try { await notesRef.doc(String(id)).delete(); dropNote(id); return true; }
+    catch (e) { console.warn('deleteNote', e); return false; }
+  };
+  // Pin/unpin: at most ONE pinned note per circle. Setting a pin clears any other the author can edit.
+  // (We only ever clear pins on notes the caller authored, so the rules permit the write.)
+  window.LL.setNotePinned = async function (id, pinned) {
+    if (!notesRef || !id) return false;
+    var u = auth.currentUser; if (!u) return false;
+    var target = (state.notes || []).find(function (x) { return String(x.id) === String(id); });
+    if (!target || target.createdBy !== u.uid) return false; // pin only your own (audience stays put)
+    try {
+      var writes = [];
+      if (pinned) {
+        (state.notes || []).forEach(function (n) {
+          if (n.pinned && n.createdBy === u.uid && String(n.id) !== String(id)) {
+            n.pinned = false; writes.push(notesRef.doc(String(n.id)).update({ pinned: false }));
+          }
+        });
+      }
+      target.pinned = !!pinned;
+      writes.push(notesRef.doc(String(id)).update({ pinned: !!pinned }));
+      await Promise.all(writes);
+      return true;
+    } catch (e) { console.warn('setNotePinned', e); return false; }
+  };
 
   /* ---------- push local changes to the cloud (override persist) ---------- */
   function scheduledPush() {
@@ -502,6 +910,7 @@
     // (Maternal data is only ever written by its owner; this claims a new or legacy/offline one.)
     if (state.pregnancy && (!state.pregnancy.ownerUid || state.pregnancy.ownerUid === 'local') && uidNow && window.LL.role === 'owner') {
       state.pregnancy.ownerUid = uidNow;
+      pregOwner = uidNow;
       ensureMaternalListeners(uidNow);
     }
     var cur = {}; (state.events || []).forEach(function (e) { cur[e.id] = e; });
@@ -520,6 +929,7 @@
     lastHhSig = hhSig(appBlob, window.LL.members, window.LL.memberInfo); // mark our own write so its echo doesn't re-render
     writes.push(hhRef.update({ app: appBlob, updatedAt: window.LL.serverTimestamp() }));
     try { await Promise.all(writes); } catch (e) { console.warn('push', e); }
+    syncPregJourney(uidNow); // owner-only; writes the journey to the owner-owned pregnancy doc (Item 7)
     syncMaternal(uidNow); // owner-only; writes her private categories to the protected mhealth docs
   }
 
@@ -578,9 +988,60 @@
     knownMat = {}; matShared = {};
   };
 
+  /* ---------- pregnancy-journey sharing API (Item 7; consumed by index.html) ---------- */
+  // The bare fact of a pregnancy is the most sensitive thing here. The owner alone controls
+  // who in the circle can see the journey, via the sharedWith[] on her owner-owned doc.
+  window.LL.pregIsOwner = function () {
+    var u = auth.currentUser; if (!u) return true;
+    var p = state.pregnancy; if (!p) return true;
+    if (p.ownerUid && p.ownerUid !== 'local') return p.ownerUid === u.uid;
+    return window.LL.role === 'owner';
+  };
+  window.LL.pregJourneyShared = function () { return (pregShared || []).slice(); };
+  // Owner sets who in the circle may see the journey. Claiming an unassigned/legacy pregnancy is
+  // role-gated to the household owner (mirrors pushNow + matSetShared) so a caregiver can never
+  // become owner as a side-effect of toggling a share.
+  window.LL.pregSetShared = async function (uids) {
+    var u = auth.currentUser, p = state.pregnancy;
+    if (!hhRef || !u || !p) return false;
+    var owned = p.ownerUid && p.ownerUid !== 'local';
+    if (owned && p.ownerUid !== u.uid) return false;        // someone else owns it
+    if (!owned && window.LL.role !== 'owner') return false; // unassigned: only the household owner may claim
+    if (!owned) { p.ownerUid = u.uid; pregOwner = u.uid; }   // claim (household owner only)
+    pregShared = (uids || []).slice();
+    var data = pregJourneyData(p);
+    knownPregJourney = stableStringify([data, pregShared]);
+    try {
+      await hhRef.collection('pregnancy').doc(u.uid)
+        .set({ ownerUid: u.uid, data: data, sharedWith: pregShared, updatedAt: window.LL.serverTimestamp() });
+      return true;
+    } catch (e) { console.warn('pregSetShared', e); return false; }
+  };
+  // Owner removes her journey doc (called when a pregnancy is closed). Also clears mhealth.
+  window.LL.pregClear = async function () {
+    var u = auth.currentUser; if (!hhRef || !u) return;
+    var owner = pregOwner || (state.pregnancy && state.pregnancy.ownerUid) || u.uid;
+    if (owner !== u.uid) return; // only the owner clears her own
+    try { await window.LL.matClear(); } catch (e) {}
+    try { await hhRef.collection('pregnancy').doc(u.uid).delete(); } catch (e) {}
+    pregShared = []; knownPregJourney = null; pregOwner = null;
+  };
+
   PhotoStore.set = async function (id, dataUrl) {
     PhotoStore.map[id] = dataUrl;
-    if (photosRef) { try { await photosRef.doc(String(id)).set({ data: dataUrl, authorId: (auth.currentUser && auth.currentUser.uid) || null }); } catch (e) { console.warn('photo set', e); } }
+    if (!photosRef) return;
+    // Firestore rejects docs over 1 MiB; that write used to fail with only a console.warn while
+    // the UI showed success. Pre-check and say so — the photo still works on this device.
+    if (dataUrl && dataUrl.length > 990000) {
+      console.warn('photo too large to sync', id, dataUrl.length);
+      try { window.toast && window.toast('That photo is too big to sync — it stays on this device.'); } catch (e) {}
+      return;
+    }
+    try { await photosRef.doc(String(id)).set({ data: dataUrl, authorId: (auth.currentUser && auth.currentUser.uid) || null }); }
+    catch (e) {
+      console.warn('photo set', e);
+      try { window.toast && window.toast('That photo didn’t sync just now — it’s safe on this device.'); } catch (e2) {}
+    }
   };
   PhotoStore.del = async function (id) {
     delete PhotoStore.map[id];
@@ -609,12 +1070,27 @@
   function closeModal() { var m = document.getElementById('llModalOv'); if (m) m.remove(); }
 
   var RELATIONSHIPS = ['Mama Bear', 'Papa Bear', 'Nana Bear', 'Grandpa Bear', 'Auntie Bear', 'Uncle Bear', 'Nanny', 'Caregiver', 'Other'];
-  function relOptions(sel) {
+  function relOptions(sel, withCustom) {
     var list = RELATIONSHIPS.slice();
-    if (sel && list.indexOf(sel) < 0) list.unshift(sel); // keep any previously-saved label
-    return '<option value="">Relationship…</option>' + list.map(function (r) {
-      return '<option value="' + r + '"' + (r === sel ? ' selected' : '') + '>' + r + '</option>';
+    if (sel && list.indexOf(sel) < 0) list.unshift(sel); // keep any previously-saved label (incl. a custom one)
+    var html = '<option value="">Relationship…</option>' + list.map(function (r) {
+      return '<option value="' + esc(r) + '"' + (r === sel ? ' selected' : '') + '>' + esc(r) + '</option>';
     }).join('');
+    if (withCustom) html += '<option value="__custom__">✏️ Add your own…</option>';
+    return html;
+  }
+  // Free-text role for circles beyond the presets (driver, cook, ayah, godmother…). Plain label, as typed.
+  function relCustomInput(id) { return '<input id="' + id + '" class="ll-rel-custom" placeholder="e.g. Driver, Cook, Godmother" maxlength="24" autocomplete="off" style="display:none;margin-top:6px">'; }
+  function wireRelCustom(selId, inpId) {
+    var s = document.getElementById(selId), i = document.getElementById(inpId);
+    if (!s || !i) return;
+    var sync = function () { var c = (s.value === '__custom__'); i.style.display = c ? 'block' : 'none'; if (c) i.focus(); };
+    s.addEventListener('change', sync); sync();
+  }
+  function relValue(selId, inpId) {
+    var s = document.getElementById(selId); if (!s) return '';
+    if (s.value === '__custom__') { var i = document.getElementById(inpId); return ((i && i.value) || '').trim().slice(0, 24); }
+    return s.value;
   }
 
   function openFamily() {
@@ -632,9 +1108,12 @@
         + '</div><div class="ll-mem-email">' + esc(m.email || '') + '</div></div></div><div style="display:flex;align-items:center;gap:8px"><span class="ll-mem-role">' + esc(who) + '</span>' + rm + '</div></div>';
     }).join('') || '<div class="ll-auth-msg">Just you so far.</div>';
 
-    var youRow = '<div class="ll-invite" style="border-top:none;padding-top:4px"><label>Your relationship to baby</label>'
-      + '<select id="llMyRel">' + relOptions(myRel) + '</select>'
-      + '<button id="llMyRelBtn" class="ll-modal-btn ll-ghost" style="margin-top:8px">Save relationship</button>'
+    var myName = (info[me.uid] && info[me.uid].name) || me.displayName || '';
+    var youRow = '<div class="ll-invite" style="border-top:none;padding-top:4px"><label style="font-weight:800;font-size:15px">Your profile</label>'
+      + '<label>Your name</label><input id="llMyName" maxlength="40" autocomplete="name" placeholder="Your name" value="' + esc(myName) + '">'
+      + '<label style="margin-top:10px;display:block">Your relationship to baby</label>'
+      + '<select id="llMyRel">' + relOptions(myRel, true) + '</select>' + relCustomInput('llMyRelCustom')
+      + '<button id="llMyRelBtn" class="ll-modal-btn ll-ghost" style="margin-top:8px">Save my profile</button>'
       + '<button id="llMyBearBtn" class="ll-modal-btn ll-ghost" style="margin-top:8px">Change my bear avatar</button>'
       + '<button id="llMyFeedbackBtn" class="ll-modal-btn ll-ghost" style="margin-top:8px">💬 Send feedback</button>'
       + '<div id="llMyRelMsg" class="ll-auth-msg"></div></div>';
@@ -653,12 +1132,15 @@
       + '<div class="ll-linkrow"><input id="llAppLink" readonly value="' + esc(location.origin) + '"><button id="llCopyLink" class="ll-modal-btn">Copy</button></div>'
       + '<div class="ll-auth-msg">Cubby doesn\'t send emails. Send this link yourself (text / WhatsApp); the invited person signs in with Google using the invited email and joins automatically.</div></div>';
 
-    modal('Family & sharing', '<div class="ll-mems">' + rows + '</div>' + youRow + invite + share
+    modal('Family & sharing', '<div class="ll-mems">' + rows + '</div>'
+      + '<div class="ll-auth-msg" style="text-align:left;margin:-2px 0 12px">When you invite people, everyone in your circle can see each other\'s name and email here, so you know who is who. Only you can change your own.</div>'
+      + youRow + invite + share
       + '<button id="llSignOut" class="ll-modal-btn ll-ghost">Sign out</button>'
-      + '<div class="ll-auth-msg" style="margin-top:10px">Cubby v' + (window.CUBBY_VERSION || '') + ' · beta</div>');
+      + '<div class="ll-auth-msg" style="margin-top:10px">Cubby v' + (window.CUBBY_VERSION || '') + ' · made with families like you 🐻</div>');
 
     document.getElementById('llSignOut').onclick = function () { closeModal(); window.LL.signOut(); };
     document.getElementById('llMyRelBtn').onclick = saveMyRelationship;
+    wireRelCustom('llMyRel', 'llMyRelCustom');
     document.getElementById('llMyBearBtn').onclick = function () { if (window.openBearPicker) window.openBearPicker('member', me.uid); };
     document.getElementById('llMyFeedbackBtn').onclick = openFeedback;
     document.getElementById('llCopyLink').onclick = copyAppLink;
@@ -671,38 +1153,65 @@
   function maybeFirstRun(user) {
     if (firstRunShown) return;
     var mi = (window.LL.memberInfo || {})[user.uid] || {};
-    if (mi.setupDone || mi.relationship) return;
+    // Require a real, completed setup. (Was `setupDone || relationship`, so an invited caregiver whose
+    // relationship was pre-filled on the invite never got the name prompt.)
+    if (mi.setupDone) return;
     firstRunShown = true;
+    // Brand-new owner with no baby and no pregnancy lands on the onboarding wizard (renderOnboard).
+    // Collect identity as a STEP inside that wizard (after stage + details), not as a locked modal
+    // popped over the stage picker. Caregivers / anyone with existing data get the identity sheet now.
+    var hasData = (state.babies && state.babies.length) || state.pregnancy;
+    if (!hasData) { window.LL.needsIdentity = true; return; }
     openFirstRun(user);
   }
-  function openFirstRun(user) {
+  function openFirstRun(user, opts) {
+    opts = opts || {};
     var uid = user.uid;
     var bear = (typeof window.memberAvatarSvg === 'function') ? window.memberAvatarSvg(uid, 84) : '';
-    // Self-graduating copy: drops the "early beta" framing after the cutoff (45 days from 2026-06-12),
-    // matching the marketing "early access" reframe. No manual edit / cron needed.
-    var betaIntro = (Date.now() < Date.UTC(2026, 6, 27))
-      ? 'An early beta, thanks for trying it! A few notes:'
-      : 'Thanks for trying Cubby! A few notes:';
+    // Relationship label adapts to where the family is, so it never asks "relationship to baby"
+    // before there is a baby (the old confusing case for expecting/trying users).
+    var relLabel = opts.stage === 'expecting' ? 'Your relationship to your little one on the way'
+      : (opts.stage === 'planning' ? 'Your role' : 'Your relationship to your baby');
+    // As a wizard step (after stage + details), it's the warm last beat; as the standalone caregiver
+    // sheet it's the welcome. Either way name is required. (Install moved out of here; it's offered later.)
+    var intro = opts.asStep
+      ? 'Last thing: how should your family see you? You can change this anytime.'
+      : 'We\'re so glad you\'re here. 🤍 Cubby is a calm, private place for everyone who loves your little one, and it\'s shaped by families like yours.';
     modal('Welcome to Cubby 🐻',
-      '<div class="ll-auth-msg" style="margin:0 0 10px;text-align:left;line-height:1.5">' + betaIntro + '<br>• Your log is <b>private</b> to your family.<br>• On a phone: <b>Share → Add to Home Screen</b> to install it like an app.<br>• Bug or idea? <b>Settings → Family &amp; sharing → Send feedback</b>.</div>'
-      + '<div class="ll-auth-msg" style="margin:0 0 6px">First, how you appear to your family:</div>'
+      '<div class="ll-auth-msg" style="margin:0 0 10px;text-align:left;line-height:1.55">' + intro + '<br><br>• Your log stays <b>private</b> to your family, always.<br>• An idea, or something to make better? We read every note: <b>Settings → Family &amp; sharing → Send feedback</b>.</div>'
+      + '<div class="ll-auth-msg" style="margin:0 0 6px">How should your family see you?</div>'
       + '<div class="ll-mem-av" id="llFrBear" style="width:84px;height:84px;margin:10px auto 4px;cursor:pointer">' + bear + '</div>'
       + '<div style="text-align:center;margin-bottom:6px"><button id="llFrBearBtn" class="ll-rm" style="color:#C97FA0">Customise my bear</button></div>'
-      + '<div class="ll-invite" style="border-top:none;padding-top:8px"><label>Your relationship to baby</label><select id="llFrRel">' + relOptions('') + '</select></div>'
-      + '<button id="llFrSave" class="ll-modal-btn">Save</button>'
-      + '<button id="llFrOut" class="ll-modal-btn ll-ghost" style="margin-top:10px">Log out</button>',
+      + '<div class="ll-invite" style="border-top:none;padding-top:8px"><label>Your name</label><input id="llFrName" maxlength="40" autocomplete="name" placeholder="Your name" value="' + esc(user.displayName || '') + '">'
+      + '<label style="margin-top:10px;display:block">' + relLabel + '</label><select id="llFrRel">' + relOptions('', true) + '</select>' + relCustomInput('llFrRelCustom')
+      + '<div id="llFrErr" class="ll-auth-msg" style="color:#C0392B"></div></div>'
+      + '<button id="llFrSave" class="ll-modal-btn">' + (opts.asStep ? 'Continue' : 'Save') + '</button>'
+      + (opts.asStep ? '' : '<button id="llFrOut" class="ll-modal-btn ll-ghost" style="margin-top:10px">Log out</button>'),
       { locked: true, blur: true });
-    document.getElementById('llFrOut').onclick = function () { closeModal(); window.LL.signOut(); };
+    var outBtn = document.getElementById('llFrOut');
+    if (outBtn) outBtn.onclick = function () { closeModal(); window.LL.signOut(); };
     function pickBear() { if (window.openBearPicker) window.openBearPicker('member', uid); }
     document.getElementById('llFrBear').onclick = pickBear;
     document.getElementById('llFrBearBtn').onclick = pickBear;
+    wireRelCustom('llFrRel', 'llFrRelCustom');
     document.getElementById('llFrSave').onclick = async function () {
-      var rel = document.getElementById('llFrRel').value;
-      var u = {}; u['memberInfo.' + uid + '.setupDone'] = true; if (rel) u['memberInfo.' + uid + '.relationship'] = rel;
+      var name = (document.getElementById('llFrName').value || '').trim();
+      if (!name) { var er = document.getElementById('llFrErr'); if (er) er.textContent = 'Please add your name so your family knows who is who.'; document.getElementById('llFrName').focus(); return; }
+      var rel = relValue('llFrRel', 'llFrRelCustom');
+      var u = {}; u['memberInfo.' + uid + '.setupDone'] = true; u['memberInfo.' + uid + '.name'] = name; if (rel) u['memberInfo.' + uid + '.relationship'] = rel;
       try { await hhRef.update(u); } catch (e) {}
+      window.LL.needsIdentity = false;
       closeModal();
+      if (typeof opts.onDone === 'function') opts.onDone();
     };
   }
+  // Identity collection as a forward wizard step (used by the onboarding flow AFTER stage + details).
+  window.LL.collectIdentity = function (stage, onDone) {
+    // In prod currentUser is always set (this only runs post-auth); the fallback is for local e2e.
+    var u = auth.currentUser || { uid: 'local', displayName: '' };
+    firstRunShown = true;
+    openFirstRun(u, { asStep: true, stage: stage, onDone: onDone });
+  };
 
   async function removeMember(uid, email, name) {
     if (!hhRef) return;
@@ -721,10 +1230,20 @@
 
   async function saveMyRelationship() {
     if (!hhRef) return;
-    var v = document.getElementById('llMyRel').value;
+    var v = relValue('llMyRel', 'llMyRelCustom');
+    var nameEl = document.getElementById('llMyName');
+    var name = (nameEl ? (nameEl.value || '').trim().slice(0, 40) : '');
     var msg = document.getElementById('llMyRelMsg');
-    var u = {}; u['memberInfo.' + auth.currentUser.uid + '.relationship'] = v;
-    try { await hhRef.update(u); msg.textContent = '✅ Saved.'; }
+    if (nameEl && !name) { msg.textContent = 'Please add your name so your family knows who is who.'; nameEl.focus(); return; }
+    var uid = auth.currentUser.uid;
+    var u = {}; u['memberInfo.' + uid + '.relationship'] = v;
+    if (nameEl) u['memberInfo.' + uid + '.name'] = name;
+    try {
+      await hhRef.update(u);
+      if (nameEl && name && name !== (auth.currentUser.displayName || '')) { try { await auth.currentUser.updateProfile({ displayName: name }); } catch (_) {} }
+      msg.textContent = '✅ Saved.';
+      if (typeof window.render === 'function') { try { window.render(); } catch (_) {} }
+    }
     catch (e) { msg.textContent = 'Could not save: ' + ((e && e.message) || e); }
   }
 
@@ -803,6 +1322,28 @@
   auth.getRedirectResult().catch(function () {});
   maybeFinishEmailLink();
 
+  // Local E2E boot — localhost + ?e2e=1 ONLY. The hostname guard means this can NEVER run in
+  // prod (little-cubby.com). It skips Firebase + the sign-in gate so tools/uitest.js can drive
+  // the logged-in UI from seeded localStorage. No credentials, no network.
+  var e2eMode = new URLSearchParams(location.search).get('e2e');
+  if ((location.hostname === 'localhost' || location.hostname === '127.0.0.1') && (e2eMode === '1' || e2eMode === 'onboard')) {
+    try {
+      window.LL.role = 'owner';
+      window.LL.members = { local: { role: 'owner' } };
+      if (e2eMode === 'onboard') {
+        // Brand-new owner: no name/setup, no baby, no pregnancy -> the first-run wizard renders.
+        window.LL.memberInfo = { local: { role: 'owner' } };
+        window.LL.needsIdentity = true;
+        try { state.babies = []; state.pregnancy = null; state.activeBabyId = null; } catch (e) {}
+        if (typeof render === 'function') render();
+        ['llAuthOv', 'llModalOv'].forEach(function (id) { var el = document.getElementById(id); if (el) el.remove(); });
+      } else {
+        window.LL.memberInfo = { local: { name: 'Test Parent', relationship: 'Mama Bear', role: 'owner' } };
+        Store.load().then(function (d) { if (d && typeof state !== 'undefined') { try { Object.assign(state, d); } catch (e) {} } if (typeof render === 'function') render(); ['llAuthOv', 'llModalOv'].forEach(function (id) { var el = document.getElementById(id); if (el) el.remove(); }); });
+      }
+    } catch (e) { console.error('e2e boot failed', e); }
+    return;
+  }
   auth.onAuthStateChanged(async function (user) {
     if (!user) { teardown(); showSignIn(''); return; }
     try { localStorage.setItem('cubby-member', '1'); } catch (e) {}

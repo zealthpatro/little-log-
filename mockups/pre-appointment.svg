@@ -1,0 +1,47 @@
+<svg viewBox="0 0 320 560" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer card -->
+  <rect x="4" y="4" width="312" height="552" rx="22" fill="#ffffff" stroke="#e8e8f0" stroke-width="1.5"/>
+  <!-- Header bar -->
+  <rect x="4" y="4" width="312" height="56" rx="22" fill="#fdf0f5"/>
+  <rect x="4" y="36" width="312" height="24" fill="#fdf0f5"/>
+  <text x="160" y="37" text-anchor="middle" font-family="Georgia,serif" font-size="17" font-weight="600" fill="#1a1a2e">Log</text>
+  <!-- Header divider -->
+  <line x1="4" y1="60" x2="316" y2="60" stroke="#f0c0d8" stroke-width="1"/>
+
+  <!-- Pink appointment banner -->
+  <rect x="12" y="68" width="296" height="36" rx="10" fill="#fdf0f5" stroke="#f0c0d8" stroke-width="1"/>
+  <text x="32" y="90" font-size="16">🏥</text>
+  <text x="52" y="82" font-family="Nunito Sans,system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a1a2e">GP appointment Friday 9am</text>
+  <text x="52" y="96" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">Dr Al-Rashid · Prepare your notes</text>
+
+  <!-- Divider -->
+  <line x1="12" y1="110" x2="308" y2="110" stroke="#e8e8f0" stroke-width="1"/>
+
+  <!-- Large NOTE entry (y=114, height=280) -->
+  <rect x="12" y="114" width="296" height="280" rx="12" fill="#f5f5fa"/>
+  <circle cx="40" cy="144" r="17" fill="#fdf0f5"/>
+  <text x="40" y="151" text-anchor="middle" font-size="17">📝</text>
+  <text x="66" y="136" font-family="Nunito Sans,system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a1a2e">Note</text>
+  <text x="66" y="153" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">by Mama Bear</text>
+  <text x="304" y="136" text-anchor="end" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#6b6b80">9:15am</text>
+
+  <!-- Note content -->
+  <text x="24" y="170" font-family="Nunito Sans,system-ui,sans-serif" font-size="12" font-weight="600" fill="#1a1a2e">Before GP Friday — things to mention:</text>
+  <text x="26" y="192" font-family="Nunito Sans,system-ui,sans-serif" font-size="12" fill="#6b6b80">• Rash started Day 3, spreading to torso</text>
+  <text x="26" y="210" font-family="Nunito Sans,system-ui,sans-serif" font-size="12" fill="#6b6b80">• Peak temp 38.1°C (ear, Tuesday 2pm)</text>
+  <text x="26" y="228" font-family="Nunito Sans,system-ui,sans-serif" font-size="12" fill="#6b6b80">• Last feed: 5oz at 8am (below normal)</text>
+  <text x="26" y="246" font-family="Nunito Sans,system-ui,sans-serif" font-size="12" fill="#6b6b80">• Weight: 5.2 kg — last checked 2 weeks ago</text>
+  <text x="26" y="264" font-family="Nunito Sans,system-ui,sans-serif" font-size="12" fill="#6b6b80">• No medicines since Thursday Calpol</text>
+  <text x="26" y="282" font-family="Nunito Sans,system-ui,sans-serif" font-size="12" fill="#6b6b80">• Sleep pattern changed — waking every 90 min</text>
+  <text x="26" y="300" font-family="Nunito Sans,system-ui,sans-serif" font-size="12" fill="#6b6b80">• Right ear pulling since yesterday</text>
+  <text x="26" y="318" font-family="Nunito Sans,system-ui,sans-serif" font-size="12" fill="#6b6b80">• Check red book is up to date</text>
+  <text x="26" y="336" font-family="Nunito Sans,system-ui,sans-serif" font-size="12" fill="#6b6b80">• Ask about referral to paediatric eczema clinic</text>
+
+  <!-- PDF export teaser -->
+  <rect x="12" y="404" width="296" height="44" rx="10" fill="#ffffff" stroke="#e8e8f0" stroke-width="1"/>
+  <text x="36" y="430" font-size="18">🗒</text>
+  <text x="56" y="424" font-family="Nunito Sans,system-ui,sans-serif" font-size="13" font-weight="700" fill="#6b6b80">Share as PDF</text>
+  <text x="56" y="440" font-family="Nunito Sans,system-ui,sans-serif" font-size="11" fill="#9a9aac">Coming soon · Pro</text>
+  <rect x="258" y="416" width="34" height="18" rx="9" fill="#c97fa0"/>
+  <text x="275" y="429" text-anchor="middle" font-family="Nunito Sans,system-ui,sans-serif" font-size="10" fill="#ffffff" font-weight="800">Pro</text>
+</svg>

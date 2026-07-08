@@ -1,5 +1,7 @@
 # Cubby / Den: strategy review brief (for an external evaluator)
 
+> **Status (June 2026):** This brief predates the merge; the canonical product is now ONE Cubby across four lifecycle stages (Trying -> Expecting -> Baby -> Child), the pregnancy track is merged + live (not "Mommy To Be", not an unmerged branch), and "Den" is parked behind a flag rather than a planned master brand. Pricing has since consolidated to a single **Cubby Pro** tier ($9/mo or $90/yr, 7-day trial); the "$59/yr Base" and the Base/Pro/Plus ladder discussed below are the original exploration and are superseded. Full current state + go-live plan: HANDOFF.md.
+
 **Prepared 2026-06-13. Audience: a fresh reviewer agent (or advisor) asked to pressure-test the
 direction and answer one question bluntly: is this on a sound path to a real business on near-zero
 infra, or do we need to raise capital ("more dough") to make it work?**
@@ -10,17 +12,18 @@ clear verdict with reasoning. A list of explicit questions for you is in section
 ---
 
 ## 1. What this is (honest snapshot)
-A **warm, private, multi-caregiver family app**, currently shipped as **Cubby** (a baby tracker
-PWA + marketing/SEO site) and expanding into an **ecosystem** under a planned master brand,
-**Den** (a household OS):
+A **warm, private, multi-caregiver family app**, shipped as **ONE Cubby** (a baby tracker
+PWA + marketing/SEO site) spanning four lifecycle stages (Trying -> Expecting -> Baby -> Child).
+A household-OS layer, **Den**, exists but is parked behind a flag (not a master brand):
 
-- **Cubby** (live): feeds, sleep, nappies, pumping, growth (WHO/CDC), vaccines (12 country
-  schedules), medicine, illness, photos, keepsakes, real-time family sharing. Web PWA.
-- **Mommy To Be** (built, unmerged branch): full pregnancy journey, trying -> positive test ->
+- **Cubby Baby (live):** feeds, sleep, nappies, pumping, growth (WHO/CDC), vaccines (170-country
+  antenatal/schedule coverage), medicine, illness, photos, keepsakes, real-time family sharing. Web PWA.
+- **Cubby Expecting (merged + live):** full pregnancy journey, trying -> positive test ->
   week-by-week -> birth, antenatal schedules, gestational-diabetes/BP/nausea trackers, kick &
-  contraction tools, an ultrasound "Moments" album, and a one-tap conversion into Cubby at birth.
-- **Our Den** (built, dark behind a flag): household hub, chores, shopping, meals, home staff,
-  expenses, adult weights.
+  contraction tools, an ultrasound "Moments" album, and a one-tap conversion into Cubby Baby at birth.
+  (Formerly drafted as "Mommy To Be"; that name is retired.)
+- **Den (built, parked behind `FEATURES.den=false`):** household hub, chores, shopping, meals, home
+  staff, expenses, adult weights. Not a master brand.
 - **Consent governance** (built): the data belongs to the household; bulk delete/export needs
   dual-guardian approval; removed members keep their log attribution.
 
@@ -46,9 +49,9 @@ competitors would have to move.
 - **Cost-heavy features (HD photo backup, push, routines)** stay inside the single Pro tier or a later add-on; not separately priced for now. They include HD photo backup,
   push notifications, smart adaptive routines, sleep/feed insights. Held back until demand + costs
   are proven.
-- **Ecosystem cross-sell:** Mommy To Be acquires users ~9 months earlier than a baby app and
-  converts to Cubby at birth in-product (a screen transition, not a re-acquisition). Den (home
-  management) widens share-of-wallet later.
+- **Ecosystem cross-sell:** the Expecting stage acquires users ~9 months earlier than a baby app and
+  converts to the Baby stage at birth in-product (a screen transition, not a re-acquisition). Den (home
+  management, parked for now) could widen share-of-wallet later.
 
 ## 4. Competitive context (researched, 2026)
 - **Huckleberry**, Plus ~$11.99/mo (~$69/yr), Premium ~$14.99/mo; data-driven sleep guidance is
@@ -122,8 +125,9 @@ the *outcome* (revenue, reach) justifies staying lean or warrants (C).
   (sleep/insights) is *not* in Base. Are we monetizing the wrong tier first?
 - **Focus risk:** one builder spanning baby + pregnancy + home + payments. Is the ecosystem
   ambition spreading effort too thin vs nailing one wedge?
-- **Brand risk:** "Mommy To Be" is a generic, weakly-protectable phrase; "Den"/"Cubby" hold the
-  defensible equity. Naming is settled but trademark depth is shallow.
+- **Brand risk:** "Mommy To Be" was a generic, weakly-protectable phrase and has been retired in
+  favor of the single "Cubby" brand (Expecting stage); "Cubby" holds the defensible equity. Naming is
+  settled but trademark depth is shallow.
 - **Platform risk:** PWA-first; iOS distribution needs a Capacitor wrap + Apple requirements
   (Sign in with Apple, IAP cut, health-app review). Not yet built.
 - **Enforcement gap:** consent + Pro entitlement are server-checked via rules, but deeper
@@ -145,8 +149,8 @@ the *outcome* (revenue, reach) justifies staying lean or warrants (C).
 7. What would you **cut** to go faster?
 
 ## 10. Pointers (if the reviewer wants the source of truth)
-- `README.md` (architecture) · `ECOSYSTEM.md` (the Den vision, naming decisions; on branch
-  `pregnancy-tracker`) · `PRO.md` + `PAYWALL.md` (monetization) · `MONETIZATION-HANDOFF.md`
+- `README.md` (architecture) · `ECOSYSTEM.md` (the four-stage Cubby vision, naming decisions; merged
+  into `main`) · `PRO.md` + `PAYWALL.md` (monetization) · `MONETIZATION-HANDOFF.md`
   (payment loop) · `PREGNANCY-HANDOFF-V2.md` (pregnancy track) · `CONTENT*.md` / `SEO*.md`
   (the organic-growth engine) · `PRODUCTHUNT.md` (launch kit).
 - All revenue/cost figures above are **planning assumptions**, not measured results. There is no

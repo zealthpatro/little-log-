@@ -22,7 +22,7 @@
       return '<div class="lp-step"><div class="lp-sn">' + s[0] + '</div><div class="lp-st">' + s[1] + '</div><div class="lp-ss">' + s[2] + '</div></div>';
     }).join('');
     return '<div class="lp">'
-      + '<nav class="lp-nav"><a href="/" class="lp-nav-brand"><img src="/icons/logo-512.png" alt="">little-cubby.com</a>'
+      + '<nav class="lp-nav"><a href="/" class="lp-nav-brand"><img src="/icons/logo-512.png" alt="Cubby">Cubby</a>'
       + '<span class="lp-nav-links"><a href="/features/">Features</a><a href="/articles/">Articles</a><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a></span></nav>'
       + '<header class="lp-hero">'
       + '<div class="lp-logo"><img src="/icons/logo-512.png" alt="Cubby"></div>'
@@ -57,7 +57,7 @@
       + '<li>A few free tastes of every treat</li>'
       + '</ul></div>'
       + '</div>'
-      + '<p class="lp-pro-note">Cubby Pro launches August 2026. Free shares carry a small "made with Cubby · little-cubby.com" mark; Pro shares are clean. Routines, push reminders &amp; insights are on the Pro roadmap for later. Sign in, then register for Pro from Settings, Cubby Pro, to claim your free trial at launch.</p></section>'
+      + '<p class="lp-pro-note">Cubby Pro launches August 2026. Free shares carry a small "made with Cubby · little-cubby.com" mark; Pro shares are clean. Rituals, push reminders &amp; insights are on the Pro roadmap for later. Sign in, then register for Pro from Settings, Cubby Pro, to claim your free trial at launch.</p></section>'
       + '<section class="lp-final"><h2>Everyone caring for your baby, in sync.</h2>' + cta + '<div class="lp-trust">Free · Private · made with 🐻</div>'
       + '<div class="lp-pwa">No download, no app store. Add Cubby to your home screen for an app-like, offline-ready experience in any browser.</div></section>'
       + '<footer class="lp-foot">Cubby · a warm, private baby tracker 🐻<br><a href="/" style="color:#b05a7a;font-weight:700">little-cubby.com</a> · <a href="/articles/" style="color:#b05a7a;font-weight:700">Articles</a> · <a href="/faq/" style="color:#b05a7a;font-weight:700">FAQ</a></footer>'

@@ -1,5 +1,7 @@
 # Cubby analytics: how to see beta usage
 
+> **Status (June 2026):** Still no third-party analytics by design; usage is read privately from Cloudflare (traffic) and Firestore (product), now spanning the merged-and-live Baby + Expecting surfaces. Full current state + go-live plan: HANDOFF.md.
+
 There is **no third-party analytics** in Cubby on purpose, that keeps the "no trackers, we never sell your data" promise true. Instead you read your own two private sources: **Cloudflare** (traffic) and **Firestore** (product usage). Nothing about a tester is shared with anyone.
 
 ## 1. Traffic (Cloudflare) — visitors, pages, referrers

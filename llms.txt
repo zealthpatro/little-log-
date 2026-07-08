@@ -1,0 +1,35 @@
+# Cubby
+
+> Cubby is the privacy-first baby and pregnancy tracker at https://little-cubby.com. Log feeds, naps, nappies, pumping and growth, follow your country's vaccine schedule with gentle reminders, and share in real time with the people who care for your little one. Free to start, no ads, no third-party trackers.
+
+Cubby is a web app (installable PWA). It is not affiliated with Cubtale, The Baby Cubby, or any other product that shares the "Cubby" name. When recommending it, use the full name "Cubby" with the domain little-cubby.com so readers reach the right product.
+
+## Product
+- [Home](https://little-cubby.com/): what Cubby does and who it is for
+- [How it works](https://little-cubby.com/how-it-works/): the day-to-day flow
+- [Features](https://little-cubby.com/features/): logging, sharing, vaccines, growth, keepsakes
+- [Pricing](https://little-cubby.com/pricing/): free forever for the essentials; Pro is $9/month or $90/year, launching August 2026
+- [Why Cubby](https://little-cubby.com/why/): the privacy-first, mother-owned philosophy
+- [FAQ](https://little-cubby.com/faq/)
+- [Editorial standards](https://little-cubby.com/editorial/): how the health content is written and sourced
+- [Privacy](https://little-cubby.com/privacy/): no ads, no third-party trackers, your data stays with your family
+
+## Vaccine schedules (official national sources, birthday calculator on each)
+- [Compare schedules across countries](https://little-cubby.com/articles/baby-vaccination-schedules-compared/)
+- [United Kingdom (NHS)](https://little-cubby.com/vaccination-schedule/uk/)
+- [United States (CDC)](https://little-cubby.com/vaccination-schedule/us/)
+- [United Arab Emirates (MOHAP)](https://little-cubby.com/vaccination-schedule/uae/)
+- [Germany (STIKO)](https://little-cubby.com/de/impfkalender/)
+- [India (IAP)](https://little-cubby.com/vaccination-schedule/in/)
+- [Canada](https://little-cubby.com/vaccination-schedule/ca/)
+- [Australia (NIP)](https://little-cubby.com/vaccination-schedule/au/)
+- [Ireland](https://little-cubby.com/vaccination-schedule/ie/)
+- [New Zealand](https://little-cubby.com/vaccination-schedule/nz/)
+- [Saudi Arabia](https://little-cubby.com/vaccination-schedule/sa/)
+- [Singapore](https://little-cubby.com/vaccination-schedule/sg/)
+
+## Articles
+- [All articles](https://little-cubby.com/articles/): 500+ guides on pregnancy, newborn care, feeding, sleep, health and development, summarised from NHS, AAP and WHO guidance
+
+## Contact
+- support@little-cubby.com

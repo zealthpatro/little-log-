@@ -1,0 +1,34 @@
+name: SEO guard
+
+# Seamless SEO, enforced. Every push and PR runs the same static guard as the local
+# pre-commit hook (so a --no-verify bypass can't sneak broken SEO past), and every push
+# to main pings IndexNow so Bing/Yandex/Seznam/Naver recrawl the changed pages in minutes.
+# The guard uses only the Python standard library, so there is nothing to install.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly heartbeat: re-run the guard and re-submit the whole sitemap to IndexNow,
+    # so the site stays discovered even in a quiet week (the "constantly updated" floor).
+    - cron: '17 6 * * 1'
+
+jobs:
+  seo-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Guard (broken links, social images, JSON-LD, sitemap)
+        run: python3 tools/seo_check.py
+      - name: Ping IndexNow for changed pages (push to main)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: python3 tools/indexnow_ping.py --changed
+      - name: Ping IndexNow for the whole sitemap (weekly)
+        if: github.event_name == 'schedule'
+        run: python3 tools/indexnow_ping.py --all

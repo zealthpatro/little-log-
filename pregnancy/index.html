@@ -3,209 +3,187 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<script>/* lifecycle stage (Expecting/Baby): visiting this page marks the visitor as expecting */(function(){try{var K='cubby-stage',p=document.documentElement.getAttribute('data-page-stage'),u=new URLSearchParams(location.search).get('stage'),s=(u==='expecting'||u==='baby')?u:((p==='expecting'||p==='baby')?p:(localStorage.getItem(K)||'baby'));if(u||p)localStorage.setItem(K,s);document.documentElement.classList.add('stage-'+s);}catch(e){document.documentElement.classList.add('stage-baby');}})();</script>
+<script>/* lifecycle stage: set root class pre-paint, no flash */(function(){try{var K='cubby-stage',p=document.documentElement.getAttribute('data-page-stage'),u=new URLSearchParams(location.search).get('stage'),s=(u==='expecting'||u==='baby')?u:((p==='expecting'||p==='baby')?p:(localStorage.getItem(K)||'baby'));if(u||p)localStorage.setItem(K,s);document.documentElement.classList.add('stage-'+s);}catch(e){document.documentElement.classList.add('stage-baby');}})();</script>
 <title>Cubby for Pregnancy: Tracker from Trying to Birth</title>
-<meta name="description" content="Cubby walks the whole journey: trying for a baby, the positive test, week-by-week tracking, your antenatal schedule (NHS, ACOG, WHO-aligned), gestational diabetes and blood pressure logs, kick counter, contraction timer, and a Moments album for your ultrasounds. When baby arrives, the same Cubby becomes your baby tracker. Free, private, no ads.">
+<meta name="description" content="Cubby walks the whole journey: trying for a baby, the positive test, week-by-week tracking, your antenatal schedule (NHS, ACOG, WHO-aligned, MoHFW), gestational diabetes and blood pressure logs, kick counter, contraction timer, and a Moments album for your ultrasounds. When baby arrives, the same Cubby becomes your baby tracker. Free, private, no ads.">
 <link rel="canonical" href="https://little-cubby.com/pregnancy/">
 <meta name="robots" content="index,follow">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Cubby">
-<meta property="og:title" content="Cubby for Pregnancy: from Trying to Birth">
-<meta property="og:description" content="From trying, to the positive test, to birth: weeks, appointments, health trackers, birth tools and a Moments album for your scans. The same Cubby that grows with your baby.">
+<meta property="og:title" content="Cubby for Pregnancy: the whole journey, gently">
+<meta property="og:description" content="Your weeks, scans, antenatal visits and the 3am worries, in one calm private place that becomes your baby tracker the day they arrive.">
 <meta property="og:url" content="https://little-cubby.com/pregnancy/">
 <meta property="og:image" content="https://little-cubby.com/og/cubby-home.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://little-cubby.com/og/cubby-home.png">
 <link rel="icon" type="image/png" href="/icons/favicon.png">
+<meta name="theme-color" content="#FBF5E9">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Nunito+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Nunito+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/vax.css"><link rel="stylesheet" href="/site.css">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@graph":[
-{"@type":"SoftwareApplication","name":"Cubby","applicationCategory":"HealthApplication","operatingSystem":"Web, iOS, Android","description":"Cubby for pregnancy: tracking for the whole journey, from trying for a baby through week-by-week guidance, antenatal appointment schedules, gestational diabetes and blood pressure logging, kick counter, contraction timer, birth plan, hospital bag, and a Moments album for ultrasounds. The same Cubby becomes your baby tracker when your baby arrives.","url":"https://little-cubby.com/pregnancy/","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"publisher":{"@type":"Organization","name":"Cubby","url":"https://little-cubby.com/"}},
-{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://little-cubby.com/"},{"@type":"ListItem","position":2,"name":"Pregnancy","item":"https://little-cubby.com/pregnancy/"}]}
-]}
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://little-cubby.com/"},{"@type":"ListItem","position":2,"name":"Pregnancy","item":"https://little-cubby.com/pregnancy/"}]}
 </script>
 </head>
 <body>
 <nav class="nav"><div class="nav-in">
   <a class="nav-brand" href="/"><img src="/icons/logo-512.png" alt="Cubby"><b>Cubby</b></a>
-  <div class="nav-tabs"><a href="/">Home</a><a href="/pregnancy/" class="on">Pregnancy</a><a href="/features/">Features</a><a href="/articles/">Articles</a><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a></div>
+  <div class="nav-tabs"><a href="/pregnancy/" class="on">Pregnancy</a><a href="/features/">Baby</a><a href="/articles/">Articles</a><a href="/pricing/">Pricing</a><details class="nav-about"><summary>About</summary><div class="nav-menu"><a href="/why/">Why Cubby</a><a href="/how-it-works/">How it works</a><a href="/faq/">FAQ</a></div></details></div>
   <a class="nav-cta" href="/app/">Start free</a>
 </div></nav>
 
-<header class="hero">
-  <h1>Cubby for pregnancy 🌸 the whole journey, gently</h1>
-  <p class="sub">From "we're trying", to the positive test, to the week your baby arrives. Appointments, health, kicks and contractions, your birth plan, and a Moments album for every ultrasound. And on the big day the same Cubby becomes your baby tracker, same app, same story.</p>
-  <a class="hero-cta" href="/app/">Start free, wherever you are</a>
-  <div style="margin-top:14px;font-weight:700;font-size:14px;color:var(--soft)">🔒 Mother-owned &amp; private · mood stays yours, always · no ads</div>
-</header>
+<main class="homex">
 
-<!-- Privacy: the wedge -->
-<section class="band"><div class="fold">
-  <div class="fold-txt">
-    <span class="eyebrow">🔒 Yours, and only yours</span>
-    <h2>Your pregnancy is nobody's business but yours</h2>
-    <p>Your health is mother-owned: your weight, blood pressure, glucose and symptoms live in your own space, not a shared family log. You decide, item by item, what your partner or circle can see. And your mood notes stay private to you, always, built into the lock, not a setting we could change.</p>
-    <ul><li>Mother-owned health, shared only with whom you choose</li><li>Mood &amp; mental-health notes can never be shared, with anyone</li><li>No ads, no third-party trackers, never sold</li></ul>
-  </div>
-  <div class="phone"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Cubby</b></div>
-    <div class="pcard"><div class="a">🔒 Your health</div><div class="b">Private to you, choose what your partner sees</div></div>
-    <div class="pcard"><div class="a">🤍 Mood</div><div class="b">Only you, always, never shareable</div></div>
-    <div class="pcard"><div class="a">🚫 No ads</div><div class="b">We sell Cubby, never your data</div></div>
-  </div></div>
-</div></section>
-
-<!-- 0. Start anywhere on the journey -->
-<section class="band tint"><div class="fold">
-  <div class="fold-txt">
-    <span class="eyebrow">🌱 Start wherever you are</span>
-    <h2>Trying, just found out, or counting weeks</h2>
-    <p>Most pregnancy apps assume you already know your due date. Cubby meets you earlier: a gentle preparation mode while you're trying (folic acid, GP checks, an estimated fertile window if you want one), a celebratory setup the day the test turns positive, and full week-by-week tracking from then on.</p>
-    <ul><li>"We're trying": a no-pressure preconception checklist and fertile-window estimate</li><li>"Just found out": one tap turns trying into tracking, weeks computed from your last period</li><li>"Already counting weeks": enter your due date and pick up right where you are</li></ul>
-  </div>
-  <div class="phone"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Cubby</b></div>
-    <div class="pcard"><div class="a">🌱 We're trying</div><div class="b">Get your body and home ready</div></div>
-    <div class="pcard"><div class="a">🎉 Just found out</div><div class="b">A positive test! We'll work out your weeks</div></div>
-    <div class="pcard"><div class="a">🤰 Already counting weeks</div><div class="b">Pick up right where you are</div></div>
-  </div></div>
-</div></section>
-
-<!-- 1. Week by week -->
-<section class="band"><div class="fold">
-  <div class="fold-txt">
-    <span class="eyebrow">🗓 Week by week</span>
-    <h2>Know where you are, every week</h2>
-    <p>Enter your due date, or just the first day of your last period, and Cubby keeps you oriented: how far along you are, what's happening with your baby, and what you might be feeling.</p>
-    <ul><li>Trimester progress and days to go</li><li>Baby's development and "size of" each week</li><li>What you may feel, in plain, gentle language</li></ul>
-  </div>
-  <div class="phone"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Week 28 · Third trimester</b></div>
-    <div class="pcard"><div class="a">🍆 About the size of an aubergine</div><div class="b">84 days to go · due 1 September</div></div>
-    <div class="pcard"><div class="a">👶 Baby this week</div><div class="b">Baby blinks and has sleep cycles.</div></div>
-    <div class="pcard"><div class="a">🤍 You this week</div><div class="b">Bloods and anti-D if needed; count movements.</div></div>
-  </div></div>
-</div></section>
-
-<!-- 1b. Moments: ultrasounds paired with fruit sizes -->
-<section class="band"><div class="fold rev">
-  <div class="phone"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Moments</b></div>
-    <div style="height:108px;border-radius:10px;overflow:hidden;margin-bottom:8px">
-      <svg viewBox="0 0 240 110" width="100%" height="106" preserveAspectRatio="xMidYMid slice" role="img" aria-label="An ultrasound scan">
-        <rect width="240" height="110" fill="#181614"/>
-        <path d="M120,108 L52,18 A86 86 0 0 1 188,18 Z" fill="#2a2622"/>
-        <path d="M120,108 L66,26 A70 70 0 0 1 174,26 Z" fill="#3a342e"/>
-        <ellipse cx="118" cy="62" rx="30" ry="24" fill="#574e44"/>
-        <ellipse cx="112" cy="58" rx="13" ry="11" fill="#6e6256"/>
-        <ellipse cx="128" cy="68" rx="10" ry="8" fill="#645a4e"/>
-        <path d="M30,14 h22 M30,14 v8" stroke="#8a7f6f" stroke-width="2" fill="none"/>
-      </svg>
+<!-- HERO (split: product-first + week-view phone) -->
+<section class="hx-band" style="padding:40px 0 34px">
+  <div class="hx-wide hx-split hx-hero-split">
+    <div class="hx-copy">
+      <div class="hx-eyebrow">🌸 Cubby for pregnancy</div>
+      <h1>Track every week, scan and <em>appointment.</em></h1>
+      <p class="hx-lede">Follow your pregnancy week by week, keep every scan, and never miss an antenatal visit with your country's schedule built in. Plus a kick counter, contraction timer and birth plan, in one private place that becomes your baby tracker the day they arrive.</p>
+      <div><a href="/app/" class="hx-bigcta hero-cta">Start free 🐻</a></div>
+      <p class="hx-fineprint">Free to start · private to you · we never sell your data</p>
     </div>
-    <div class="pcard"><div class="a">Week 20 · 🍌 the size of a banana</div><div class="b">The anomaly scan, waving at us</div></div>
-    <div class="pcard"><div class="a">Week 12 · 🍋 the size of a lime</div><div class="b">First time we saw you</div></div>
-  </div></div>
-  <div class="fold-txt">
-    <span class="eyebrow">📷 Moments</span>
-    <h2>Every scan, next to how big they were</h2>
-    <p>Your ultrasounds deserve better than a glovebox. Save each scan (or bump photo, or the test itself) and Cubby pairs it with the week and the size your baby was that day: the lime, the banana, the little pumpkin. Your first album, before the album.</p>
-    <ul><li>Ultrasounds, bump photos, the positive test</li><li>Each moment saved with its week and "size of" comparison</li><li>Private to your family, kept as the first chapter of baby's story</li></ul>
+    <div class="hx-phone-col">
+      <div class="hx-phone"><div class="hx-island"></div><div class="hx-screen">
+        <div class="hx-statusbar"><span class="time">9:41</span><span class="sys"><span class="hx-sig"><i></i><i></i><i></i><i></i></span><span class="hx-net">5G</span><span class="hx-bat"><i></i></span></span></div>
+        <div class="hx-scr">
+          <div class="hx-apphead"><span class="b">🌸</span> Your pregnancy</div>
+          <div class="hx-erow"><div class="ic" style="background:var(--h-rose-bg)">🤰</div><div class="t"><b>Week 28 · third trimester</b><span>about the size of an aubergine</span></div></div>
+          <div class="hx-erow"><div class="ic" style="background:var(--h-blue-bg)">🩺</div><div class="t"><b>Next: 28-week check</b><span>glucose screen + growth scan</span></div></div>
+          <div class="hx-erow"><div class="ic" style="background:var(--h-green-bg)">👣</div><div class="t"><b>Kicks today</b><span>10 by 11:30 AM</span></div></div>
+          <div class="hx-erow"><div class="ic" style="background:var(--h-cream3)">🖼️</div><div class="t"><b>20-week scan</b><span>saved to Moments</span></div></div>
+          <p class="hx-scrnote">your week, scans and visits, in one place 🌸</p>
+        </div>
+        <div class="hx-tabbar"><div class="on"><span class="gl">🌸</span>Week</div><div><span class="gl">🩺</span>Visits</div><div><span class="gl">🖼️</span>Scans</div><div><span class="gl">💗</span>Health</div></div>
+      </div></div>
+    </div>
   </div>
-</div></section>
-
-<!-- 2. Appointments -->
-<section class="band tint"><div class="fold rev">
-  <div class="phone"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Appointments</b></div>
-    <div class="pcard"><div class="a">Week 20 · done ✓</div><div class="b">20-week (anomaly) scan</div></div>
-    <div class="pcard"><div class="a">Week 28 · next</div><div class="b">Bloods + anti-D · glucose test if at risk</div></div>
-    <div class="pcard"><div class="a">Week 31</div><div class="b">Antenatal check · BP, urine, bump</div></div>
-  </div></div>
-  <div class="fold-txt">
-    <span class="eyebrow">📅 Your antenatal schedule</span>
-    <h2>The right appointments, pre-loaded</h2>
-    <p>Pick where you're having your care and Cubby seeds your antenatal schedule: UK (NHS), US (ACOG), Germany, UAE or a WHO-aligned general plan. Tick them off, reschedule, add your own classes and scans.</p>
-    <ul><li>Country schedules from official guidance</li><li>Editable to match your own clinic's plan</li><li>Your care team (midwife, OB, GP) one tap away</li></ul>
-  </div>
-</div></section>
-
-<!-- 3. Health trackers -->
-<section class="band"><div class="fold">
-  <div class="fold-txt">
-    <span class="eyebrow">🩸 Health, when it gets real</span>
-    <h2>Trackers for the hard parts, only if you need them</h2>
-    <p>Gestational diabetes, raised blood pressure, relentless nausea: when pregnancy hands you homework, Cubby keeps it organised. Each tracker is opt-in, so the app stays calm for everyone else. Your health stays private to you, shared only with the people you choose.</p>
-    <ul><li>Glucose log with common targets, in mmol/L or mg/dL</li><li>Blood pressure watch with pre-eclampsia warning signs</li><li>Supplements ticked off daily; nausea and hydration check-ins</li></ul>
-  </div>
-  <div class="phone"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Gestational diabetes</b></div>
-    <div class="pcard"><div class="a">🎯 87% in target</div><div class="b">this week · 21 readings</div></div>
-    <div class="pcard"><div class="a">5.1 mmol/L · fasting</div><div class="b">today 7:20 AM</div></div>
-    <div class="pcard"><div class="a">8.5 mmol/L · above target</div><div class="b">after breakfast · worth noting for your team</div></div>
-  </div></div>
-</div></section>
-
-<!-- 4. Tools -->
-<section class="band tint"><div class="fold rev">
-  <div class="phone"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Contraction timer</b></div>
-    <div class="pcard"><div class="pbig" style="color:#B06A9A;font-size:24px">5.2 min apart</div><div class="b">lasting about 1 minute · 7 in the last hour</div></div>
-    <div class="pbtn" style="background:#B06A9A">Start a contraction</div>
-    <div class="pcard" style="margin-top:9px"><div class="a">👣 Kick counter</div><div class="b">8 of 10 movements · 24 min</div></div>
-  </div></div>
-  <div class="fold-txt">
-    <span class="eyebrow">⏱ Tools for the home stretch</span>
-    <h2>Kicks, contractions, bag and plan</h2>
-    <p>Count to ten kicks while baby wriggles. Time contractions and see how far apart they really are, with gentle 5-1-1 guidance for when it might be time to call. Your birth plan and hospital bag live right next to them.</p>
-    <ul><li>Kick counter with session history</li><li>Contraction timer: frequency, duration, 5-1-1</li><li>Birth plan notes and a hospital bag checklist</li></ul>
-  </div>
-</div></section>
-
-<!-- 5. Safety stance -->
-<section class="band"><div class="fold">
-  <div class="fold-txt">
-    <span class="eyebrow">⚠️ Built on official guidance</span>
-    <h2>Serious about getting the medical part right</h2>
-    <p>Every schedule and threshold in Cubby traces to official guidance: NHS, ACOG, WHO, NICE and the CDC's urgent maternal warning signs. Cubby never diagnoses. It shows you the common guideline, reminds you to confirm your own plan with your team, and when something needs attention it says one thing clearly: contact your midwife or doctor.</p>
-    <ul><li>Urgent warning signs, one tap from the home screen</li><li>Sources cited and linked, reviewed against guidance yearly</li><li>Informational only, never a substitute for your provider</li></ul>
-  </div>
-  <div class="phone"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Urgent warning signs</b></div>
-    <div class="pcard"><div class="a">A headache that won't go away</div></div>
-    <div class="pcard"><div class="a">Changes in your vision</div></div>
-    <div class="pcard"><div class="a">Baby's movements slowing down</div></div>
-    <div class="pcard"><div class="b">If you notice any of these, call your midwife, doctor or emergency number straight away. Trust your instincts.</div></div>
-  </div></div>
-</div></section>
-
-<!-- 6. The birth transition / ecosystem -->
-<section class="band tint"><div class="fold rev">
-  <div class="phone"><div class="pscr">
-    <div class="ph-top"><img src="/icons/logo-512.png" alt="Cubby"><b>Welcome to the world 🐻</b></div>
-    <div class="pcard" style="text-align:center"><div class="pbig" style="font-size:30px">🐻💕</div><div class="a">Mira has arrived</div><div class="b">born 3:14 AM · 1 September</div></div>
-    <div class="pbtn" style="background:#B06A9A">🎉 Welcome our baby</div>
-    <div class="pcard" style="margin-top:9px"><div class="b">Your pregnancy is saved as part of her story. Feeds, sleep, vaccines and growth pick up right here.</div></div>
-  </div></div>
-  <div class="fold-txt">
-    <span class="eyebrow">🐻 Then baby arrives</span>
-    <h2>The same Cubby, from bump to baby</h2>
-    <p>When your baby arrives, you don't download a new app and start over. You tap "Baby has arrived", and your pregnancy becomes your baby's profile in the same Cubby: the right vaccine schedule from day one, growth charts, feeds and sleep, your whole care circle. The pregnancy, scans and all, stays saved as the first chapter of their story.</p>
-    <ul><li>Country and details carry over automatically</li><li>Pregnancy and Moments kept as history, nothing is lost</li><li>The same private family account, from first test to toddler</li></ul>
-  </div>
-</div></section>
-
-<section class="section alt" style="text-align:center">
-  <h2>Start the journey. Stay for the story.</h2>
-  <p class="lead2">Free to start, private to your family, no ads. Wherever you are, trying, newly pregnant or counting weeks, Cubby is ready, and it grows with you the moment your baby arrives.</p>
-  <a class="hero-cta" href="/app/">Start free, wherever you are</a>
 </section>
 
+<!-- THE SHIFT (two coherent parts) -->
+<section class="hx-band" style="padding-top:0">
+  <div class="hx-wide hx-twocol">
+    <div class="hx-tcol">
+      <h2>A strange and wonderful kind of waiting.</h2>
+      <p>How big are they this week, was that a kick, when is the next scan. The questions run quietly underneath, and most of them live only in your head, often at 3am.</p>
+    </div>
+    <div class="hx-tcol">
+      <h2>Cubby holds it for you, week by week.</h2>
+      <p>So you can feel the wonder without carrying all the admin. No charts shouting, no pressure to log. One place that knows where you are and what is coming next.</p>
+    </div>
+  </div>
+</section>
+
+<!-- PRIVACY (DARK) -->
+<section class="hx-band hx-dark">
+  <div class="hx-wide">
+    <div class="hx-head">
+      <div class="hx-eyebrow">Yours, and only yours</div>
+      <h2>Your pregnancy is nobody's business but yours.</h2>
+      <p>Your body, your data. Enforced in how the app is built, not just promised on a page.</p>
+    </div>
+    <div class="hx-vow"><div class="x">✕</div><div><div class="b">Never a family feed for your body.</div><div class="s">Your weight, blood pressure, glucose and pregnancy live in your space, shared item by item with only the people you choose, or no one at all.</div></div></div>
+    <div class="hx-vow"><div class="x">✕</div><div><div class="b">Never shared mood notes.</div><div class="s">Your mental-health notes can be seen only by you, ever. Not by us, not by a setting we could quietly change later. It is built into the lock.</div></div></div>
+    <div class="hx-vow"><div class="x">✕</div><div><div class="b">Never sold, never an ad.</div><div class="s">No third-party trackers. Cubby earns from Cubby Pro, never from you. Export or delete everything, yourself, anytime.</div></div></div>
+  </div>
+</section>
+
+<!-- CAPABILITY GRID -->
+<section class="hx-band">
+  <div class="hx-wide">
+    <div class="hx-section-head"><h2>Everything you need while you're expecting.</h2><p>Uncluttered by design. Turn on only what's relevant to you.</p></div>
+    <div class="hx-cap-grid">
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-rose-bg)">🌸</div><b>Week by week</b><span>Where you are, how big they are, and what's coming, in plain language, never jargon.</span></div>
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-blue-bg)">🩺</div><b>Your antenatal schedule</b><span>Your country's visits and scans pre-loaded (NHS, ACOG, MoHFW, WHO-aligned), cited and linked.</span></div>
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-cream3)">🖼️</div><b>Every scan, kept</b><span>Your ultrasounds in a Moments album, next to how big they were that week.</span></div>
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-green-bg)">👣</div><b>Kicks &amp; contractions</b><span>A kick counter and a contraction timer, there only when you need them.</span></div>
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-rose-bg)">💗</div><b>Weight, BP &amp; glucose</b><span>Gentle logs for the trickier parts, private to you, shared only if you choose.</span></div>
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-blue-bg)">📋</div><b>Birth plan &amp; hospital bag</b><span>Write your plan and pack your bag well before the day arrives, with nothing left to the last minute.</span></div>
+    </div>
+    <p class="hx-more">Built on official guidance, cited and linked, and honest about what we don't yet have. <a href="/editorial/">Our editorial process →</a></p>
+  </div>
+</section>
+
+<!-- WHEREVER YOU ARE -->
+<section class="hx-band hx-tint">
+  <div class="hx-wrap" style="text-align:center">
+    <div class="hx-eyebrow">Wherever you are</div>
+    <h2>Trying, just found out, or counting weeks?</h2>
+    <p style="font-size:18px;color:var(--h-soft);max-width:600px;margin:0 auto">Cubby meets you where you are: light preparation while you're trying, an estimate of your weeks from a positive test, or pick up right at your due date. No pressure, ever, and a tender path if things don't go as hoped.</p>
+  </div>
+</section>
+
+<!-- FAMILY GAMES -->
+<section class="hx-band">
+  <div class="hx-wide hx-split">
+    <div class="hx-copy">
+      <div class="hx-eyebrow">For the people who love your bump</div>
+      <h2>A little joy: Boy or girl, and a due-date pool.</h2>
+      <p>Share a guessing game with family and friends. They join with just a nickname, no account needed, and you get a happy little reveal when the day comes. Loss-safe, always, and never an assumption.</p>
+    </div>
+    <div class="hx-phone-col">
+      <div class="hx-phone"><div class="hx-island"></div><div class="hx-screen">
+        <div class="hx-statusbar"><span class="time">9:41</span><span class="sys"><span class="hx-sig"><i></i><i></i><i></i><i></i></span><span class="hx-net">5G</span><span class="hx-bat"><i></i></span></span></div>
+        <div class="hx-scr">
+          <div class="hx-apphead"><span class="b">🎉</span> Boy or girl?</div>
+          <div class="hx-erow"><div class="ic" style="background:var(--h-blue-bg)">💙</div><div class="t"><b>Nana Bear guessed boy</b><span>"Kicking like a footballer!"</span></div></div>
+          <div class="hx-erow"><div class="ic" style="background:var(--h-rose-bg)">💗</div><div class="t"><b>Auntie guessed girl</b><span>just now</span></div></div>
+          <div class="hx-erow"><div class="ic" style="background:var(--h-green-bg)">📅</div><div class="t"><b>Due-date pool</b><span>7 guesses so far</span></div></div>
+          <p class="hx-scrnote">they join with a nickname, no account needed 🐻</p>
+        </div>
+        <div class="hx-tabbar"><div class="on"><span class="gl">🎉</span>Games</div><div><span class="gl">🌸</span>Week</div><div><span class="gl">🖼️</span>Scans</div><div><span class="gl">💗</span>Health</div></div>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- AND THERE'S MORE (swipe rail) -->
+<section class="hx-band">
+  <div class="hx-wide">
+    <div class="hx-section-head" style="margin-bottom:20px"><h2>And there's more</h2><p>The smaller helpers, there only when you need them.</p></div>
+    <div class="hx-rail">
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-cream3)">📆</div><b>Due-date countdown</b><span>See how many days to go at a glance, right up to the day they arrive.</span></div>
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-green-bg)">💊</div><b>Vitamins &amp; supplements</b><span>Keep your folic acid, vitamin D and iron in one list, and tick them off each day.</span></div>
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-blue-bg)">📋</div><b>Questions for your visit</b><span>Jot what you want to ask, so nothing slips your mind at the appointment.</span></div>
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-rose-bg)">👶</div><b>A bump and a baby</b><span>Already have a little one? Keep your pregnancy and your baby side by side, a tap to switch.</span></div>
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-rose-bg)">🌙</div><b>Fertile-window estimate</b><span>A simple guide while you're trying, if you want it. Never pressure.</span></div>
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-green-bg)">🤢</div><b>Symptoms &amp; nausea</b><span>Jot how you're feeling, so any pattern is there for your midwife.</span></div>
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-blue-bg)">🩸</div><b>Glucose &amp; BP logs</b><span>For the trickier weeks, in mmol or mg, private to you.</span></div>
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-cream3)">👩‍⚕️</div><b>Your care team</b><span>Your gynaecologist and midwife, saved and one tap away.</span></div>
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-green-bg)">🌿</div><b>Rituals, for the days ahead</b><span>Once they're here, a daily rhythm with a soft look back each week. Never a streak.</span></div>
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-rose-bg)">🗑️</div><b>Recently deleted</b><span>Removed something by mistake? It waits safely for you.</span></div>
+      <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-blue-bg)">📲</div><b>Works offline</b><span>Add it to your home screen. No app store, no password.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- CONTINUITY -->
+<section class="hx-band hx-tint">
+  <div class="hx-wrap" style="text-align:center">
+    <div class="hx-eyebrow">No restarts</div>
+    <h2>The same Cubby, from bump to baby.</h2>
+    <p style="font-size:18px;color:var(--h-soft);max-width:600px;margin:0 auto">When your baby arrives, there's no new app to download. Your pregnancy simply becomes their first chapter. One private account, one care circle, one story that never restarts.</p>
+  </div>
+</section>
+
+<!-- CLOSE -->
+<section class="hx-band hx-tint-rose hx-close">
+  <div class="hx-wrap">
+    <h2>Start the journey. Stay for the story.</h2>
+    <p>Free to start, private to you, ready in seconds. No app store, no password.</p>
+    <a href="/app/" class="hx-bigcta hero-cta">Start free 🐻</a>
+  </div>
+</section>
+
+</main>
+
 <footer class="foot">
-  <div class="fl"><a href="/">Home</a><a href="/pregnancy/">Pregnancy</a><a href="/features/">Features</a><a href="/articles/">Articles</a><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a><a href="/app/">Open app</a></div>
-  Cubby 🐻🌸 the whole journey, from two lines to big kid
-  <div class="tiny">Cubby's pregnancy guidance is informational and not a substitute for medical or fertility advice. Schedules and thresholds summarise official guidance (NHS, ACOG, WHO, NICE, CDC); always follow your midwife, doctor or health visitor and confirm your own plan with your provider.</div>
+  <div class="fl"><a href="/">Home</a><a href="/why/">Why Cubby</a><a href="/how-it-works/">How it works</a><a href="/pregnancy/">Pregnancy</a><a href="/features/">Baby</a><a href="/articles/">Articles</a><a href="/articles/baby-vaccination-schedules-compared/">Vaccine schedules</a><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a><a href="/editorial/">Our standards</a><a href="/app/">Open app</a></div>
+  Cubby, a warm private baby tracker 🐻
+  <div class="tiny">Cubby is informational and not a substitute for medical advice. Always follow your doctor and your country's official guidance.</div>
 </footer>
+<script defer src="/rail.js"></script>
+<script defer src="/install.js"></script>
 </body>
 </html>
