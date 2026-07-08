@@ -4155,6 +4155,22 @@ function renderPregShell(){
   startTick();
 }
 function pregGreeting(){ const name=myName(); const h=new Date().getHours(); const part=(h<5||h>=23)?'Resting up':(h<12?'Good morning':(h<17?'Good afternoon':'Good evening')); return name?`${part}, ${escapeHtml(name)} 🤍`:`${part} 🤍`; }
+/* Home anchor: your doctor one tap away (a real phone call, no friction). Comfort when it matters. */
+function pregDoctorCard(){
+  const p=state.pregnancy; const team=(p&&p.careTeam)||[];
+  if(!team.length) return `<div class="next-appt" onclick="pregGo('care')" style="border-left-color:var(--diaper);cursor:pointer"><div class="pc-ico" style="background:var(--diaper-soft)">👩‍⚕️</div><div class="na-body"><div class="na-t">Add your doctor or midwife</div><div class="na-s">Keep them one tap away on your team.</div></div><span class="chev">${I.chev}</span></div>`;
+  const m=team[0]; const tel=(m.phone||'').replace(/[^0-9+]/g,'');
+  return `<div class="next-appt" onclick="pregGo('care')" style="border-left-color:var(--diaper);cursor:pointer"><div class="pc-ico" style="background:var(--diaper-soft)">👩‍⚕️</div><div class="na-body"><div class="na-t">${escapeHtml(m.name)}</div><div class="na-s">${escapeHtml(m.role||'Your doctor')}${team.length>1?' · +'+(team.length-1):''}</div></div>${tel?`<a href="tel:${tel}" onclick="event.stopPropagation()" style="text-decoration:none;font-size:20px;padding:4px" aria-label="Call">📞</a>`:`<span class="chev">${I.chev}</span>`}</div>`;
+}
+/* For an invited partner/circle member (non-owner): a gentle, week-aware "how to support her" card, so being involved is effortless too. */
+function pregPartnerCard(){
+  const wk=pregWeek(); let tip;
+  if(wk>=36) tip='Baby could come any time. Keep the bag by the door, your phone charged, and be ready to drop everything.';
+  else if(wk>=28) tip='Third trimester is tiring. Take on more of the chores, and check how she is sleeping.';
+  else if(wk>=13) tip='Energy often returns now. Plan something gentle together, and come along to a scan if you can.';
+  else tip='Early weeks can mean nausea and exhaustion. Small kindnesses, snacks, water and patience go a long way.';
+  return `<div class="preg-card" style="border-left:4px solid var(--pump)"><div class="pc-ico">🤝</div><div><div class="pc-t">How to support her this week</div><div class="pc-b">${escapeHtml(tip)}</div></div></div>`;
+}
 
 /* ---- Phase 2: week view ---- */
 function renderPregHome(){
@@ -4188,6 +4204,8 @@ function renderPregHome(){
       <div class="pc-ico" style="background:var(--preg-soft)">🌼</div>
       <div class="na-body"><div class="na-t">Any day now</div><div class="na-s">Your due date is here. Babies keep their own schedule, so rest when you can and follow your midwife or doctor's guidance on monitoring.</div></div></div>`:'')}
     ${act?`<div class="preg-card" style="cursor:pointer;border-left:4px solid var(--star)" onclick="${act.go}"><div class="pc-ico">${act.ico}</div><div><div class="pc-t">${escapeHtml(act.t)}</div><div class="pc-b">${escapeHtml(act.s)}</div></div></div>`:''}
+    ${pregDoctorCard()}
+    ${pregIsOwner()?`<div class="preg-card" onclick="openLogSymptom()" style="cursor:pointer;border-left:4px solid var(--note)"><div class="pc-ico">🤍</div><div style="flex:1;min-width:0"><div class="pc-t">How are you feeling this week?</div><div class="pc-b">A quick note for you: tender, tired, excited, anything.</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>`:pregPartnerCard()}
     ${pregHealthQuick()}
     <div class="sec-title">This week</div>
     <div class="actions stagger">
