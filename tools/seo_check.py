@@ -87,6 +87,24 @@ def strip_domain(u):
     return u[len(DOMAIN):] if u.startswith(DOMAIN) else u
 
 
+def breadcrumb_items(data):
+    """Yield every BreadcrumbList item URL found anywhere in a parsed JSON-LD value."""
+    stack = [data]
+    while stack:
+        n = stack.pop()
+        if isinstance(n, dict):
+            if n.get("@type") == "BreadcrumbList":
+                for el in n.get("itemListElement", []):
+                    it = el.get("item") if isinstance(el, dict) else None
+                    if isinstance(it, str):
+                        yield it
+                    elif isinstance(it, dict) and isinstance(it.get("@id"), str):
+                        yield it["@id"]
+            stack.extend(n.values())
+        elif isinstance(n, list):
+            stack.extend(n)
+
+
 def staged_html():
     out = subprocess.run(["git", "diff", "--cached", "--name-only"],
                          capture_output=True, text=True).stdout.split()
@@ -131,12 +149,18 @@ def check():
                 hard.append((f, f"unresolved social image -> {u}"))
                 og_to_fix.append(f)
 
-        # JSON-LD parses
+        # JSON-LD parses, and its BreadcrumbList item URLs resolve (a bad breadcrumb
+        # points structured data at a 404, which anchor-link checks miss).
         for m in LD.finditer(t):
             try:
-                json.loads(m.group(1))
+                data = json.loads(m.group(1))
             except Exception as e:
                 hard.append((f, f"invalid JSON-LD ({e})"))
+                continue
+            for item in breadcrumb_items(data):
+                p = strip_domain(item)
+                if p.startswith("/") and not resolves(p, files, dirs):
+                    hard.append((f, f"breadcrumb points to a missing page -> {item}"))
 
         # title + description present
         if "<title>" not in t:
