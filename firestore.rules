@@ -34,10 +34,13 @@ service cloud.firestore {
       allow read: if request.auth != null && request.auth.token.email.lower() == email;
       allow create: if request.auth != null
         && get(/databases/$(database)/documents/households/$(request.resource.data.householdId)).data.members[request.auth.uid] == 'owner';
-      allow update: if request.auth != null && (
-        request.auth.token.email.lower() == email
-        || get(/databases/$(database)/documents/households/$(request.resource.data.householdId)).data.members[request.auth.uid] == 'owner'
-      );
+      // Only the owning household's owner may update an invite, and it can never be re-pointed at
+      // another household (that would let an outsider redirect an invite — or their own invite —
+      // into a household they don't own and join it). Invitees never update invites: joining is a
+      // write to the household doc itself.
+      allow update: if request.auth != null
+        && request.resource.data.householdId == resource.data.householdId
+        && get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members[request.auth.uid] == 'owner';
       allow delete: if request.auth != null
         && get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members[request.auth.uid] == 'owner';
     }
@@ -100,14 +103,23 @@ service cloud.firestore {
       function pm() { return get(/databases/$(database)/documents/households/$(hid)).data.members; }
 
       match /events/{eventId} {
-        allow read, create: if request.auth != null && request.auth.uid in pm();
+        allow read: if request.auth != null && request.auth.uid in pm();
+        // New entries are always authored by the writer ("by Mama Bear" can't be forged).
+        allow create: if request.auth != null && request.auth.uid in pm()
+          && request.resource.data.authorId == request.auth.uid;
         // Owner can edit/remove anyone's entry; a caregiver only their own.
         allow update, delete: if request.auth != null && request.auth.uid in pm()
           && ( pm()[request.auth.uid] == 'owner' || resource.data.authorId == request.auth.uid );
       }
 
       match /photos/{photoId} {
-        allow read, create, update, delete: if request.auth != null && request.auth.uid in pm();
+        allow read: if request.auth != null && request.auth.uid in pm();
+        // Same authorship model as events: anyone in the circle adds photos as themselves;
+        // only the owner or the photo's author may replace or delete one.
+        allow create: if request.auth != null && request.auth.uid in pm()
+          && request.resource.data.authorId == request.auth.uid;
+        allow update, delete: if request.auth != null && request.auth.uid in pm()
+          && ( pm()[request.auth.uid] == 'owner' || resource.data.authorId == request.auth.uid );
       }
 
       // Home day-surface notes. NOT in the circle-shared app blob: each note is its own doc so
@@ -122,7 +134,13 @@ service cloud.firestore {
         );
         allow create: if request.auth != null && request.auth.uid in pm()
             && request.resource.data.createdBy == request.auth.uid;
-        allow update, delete: if request.auth != null && request.auth.uid in pm()
+        // Audience and authorship are immutable after create (a private note can never be
+        // flipped to circle, nor re-attributed); only the author edits/deletes.
+        allow update: if request.auth != null && request.auth.uid in pm()
+            && resource.data.createdBy == request.auth.uid
+            && request.resource.data.audience == resource.data.audience
+            && request.resource.data.createdBy == resource.data.createdBy;
+        allow delete: if request.auth != null && request.auth.uid in pm()
             && resource.data.createdBy == request.auth.uid;
       }
 

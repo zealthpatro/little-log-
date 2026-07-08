@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { initializeTestEnvironment, assertFails, assertSucceeds } = require('@firebase/rules-unit-testing');
-const { doc, setDoc, updateDoc, getDoc } = require('firebase/firestore');
+const { doc, setDoc, updateDoc, getDoc, deleteDoc } = require('firebase/firestore');
 
 const RULES = fs.readFileSync(path.join(__dirname, '..', 'firestore.rules'), 'utf8');
 
@@ -45,6 +45,14 @@ async function check(name, p) {
       app: cleanApp({ pregnancy: { weeks: 20 } })
     });
     await setDoc(doc(db, 'invites/inv@x.com'), { householdId: 'H' }); // pending invite for the join test
+    await setDoc(doc(db, 'invites/att@x.com'), { householdId: 'HA' }); // attacker's own-household invite (redirect test)
+    await setDoc(doc(db, 'households/HA'), { ownerId: 'ATT', members: { ATT: 'owner' }, memberInfo: { ATT: { name: 'Attacker' } }, app: cleanApp() });
+    // Subcollection docs for the authorship / immutability tests.
+    await setDoc(doc(db, 'households/H/events/e-own'), { type: 'feed', time: 1, authorId: 'C' });
+    await setDoc(doc(db, 'households/H/events/e-mom'), { type: 'feed', time: 2, authorId: 'O' });
+    await setDoc(doc(db, 'households/H/photos/p-own'), { data: 'x', authorId: 'C' });
+    await setDoc(doc(db, 'households/H/photos/p-mom'), { data: 'x', authorId: 'O' });
+    await setDoc(doc(db, 'households/H/notes/n-priv'), { text: 'secret', audience: 'O', createdBy: 'C', pinned: false });
   });
 
   const C = env.authenticatedContext('C', { email: 'c@x.com' }).firestore(); // caregiver
@@ -72,6 +80,36 @@ async function check(name, p) {
   await check('stranger writes the household', assertFails(updateDoc(doc(S, 'households/H'), { app: cleanApp() })));
   await check('invitee adds ANOTHER member (privilege grab)', assertFails(updateDoc(doc(INV, 'households/H'), { 'members.X': 'owner' })));
   await check('invitee edits another member memberInfo', assertFails(updateDoc(doc(INV, 'households/H'), { 'memberInfo.O.name': 'hacked' })));
+
+  const ATT = env.authenticatedContext('ATT', { email: 'att@x.com' }).firestore(); // owner of HA, attacker
+
+  console.log('\nInvite redirect / hijack (must FAIL):');
+  await check('attacker re-points OWN invite at victim household', assertFails(updateDoc(doc(ATT, 'invites/att@x.com'), { householdId: 'H' })));
+  await check('attacker (an owner elsewhere) hijacks ANOTHER invite to their household', assertFails(updateDoc(doc(ATT, 'invites/inv@x.com'), { householdId: 'HA' })));
+  await check('invitee updates their own invite doc', assertFails(updateDoc(doc(INV, 'invites/inv@x.com'), { householdId: 'HA' })));
+
+  console.log('\nInvite owner maintenance (must SUCCEED):');
+  await check('owner re-saves an invite for the SAME household', assertSucceeds(updateDoc(doc(O, 'invites/inv@x.com'), { householdId: 'H', role: 'caregiver' })));
+
+  console.log('\nEvents authorship:');
+  await check('caregiver creates event as SELF (succeeds)', assertSucceeds(setDoc(doc(C, 'households/H/events/e-new'), { type: 'feed', time: 3, authorId: 'C' })));
+  await check('caregiver creates event forged as OWNER (fails)', assertFails(setDoc(doc(C, 'households/H/events/e-forged'), { type: 'feed', time: 4, authorId: 'O' })));
+  await check('caregiver edits OWN event (succeeds)', assertSucceeds(setDoc(doc(C, 'households/H/events/e-own'), { type: 'feed', time: 9, authorId: 'C' })));
+  await check('caregiver edits OWNER event (fails)', assertFails(setDoc(doc(C, 'households/H/events/e-mom'), { type: 'feed', time: 9, authorId: 'O' })));
+  await check('owner edits caregiver event (succeeds)', assertSucceeds(setDoc(doc(O, 'households/H/events/e-own'), { type: 'feed', time: 10, authorId: 'C' })));
+
+  console.log('\nPhotos authorship:');
+  await check('caregiver adds photo as SELF (succeeds)', assertSucceeds(setDoc(doc(C, 'households/H/photos/p-new'), { data: 'x', authorId: 'C' })));
+  await check('caregiver adds photo forged as OWNER (fails)', assertFails(setDoc(doc(C, 'households/H/photos/p-forged'), { data: 'x', authorId: 'O' })));
+  await check('caregiver deletes OWN photo (succeeds)', assertSucceeds(deleteDoc(doc(C, 'households/H/photos/p-own'))));
+  await check('caregiver deletes OWNER photo (fails)', assertFails(deleteDoc(doc(C, 'households/H/photos/p-mom'))));
+  await check('caregiver overwrites OWNER photo (fails)', assertFails(setDoc(doc(C, 'households/H/photos/p-mom'), { data: 'evil', authorId: 'C' })));
+  await check('owner deletes caregiver photo (succeeds)', assertSucceeds(deleteDoc(doc(O, 'households/H/photos/p-new'))));
+
+  console.log('\nNotes immutability:');
+  await check('author pins own note (succeeds)', assertSucceeds(updateDoc(doc(C, 'households/H/notes/n-priv'), { pinned: true })));
+  await check('author flips private note to circle (fails)', assertFails(updateDoc(doc(C, 'households/H/notes/n-priv'), { audience: 'circle' })));
+  await check('author re-attributes note (fails)', assertFails(updateDoc(doc(C, 'households/H/notes/n-priv'), { createdBy: 'O' })));
 
   console.log('\nInvitee join (must SUCCEED — adds only themselves):');
   await check('invitee joins by adding only themselves', assertSucceeds(updateDoc(doc(INV, 'households/H'), { 'members.INV': 'caregiver', 'memberInfo.INV': { name: 'Invitee', email: 'inv@x.com', role: 'caregiver', relationship: 'Auntie Bear' } })));

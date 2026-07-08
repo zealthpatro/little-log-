@@ -915,20 +915,41 @@
     }
     var cur = {}; (state.events || []).forEach(function (e) { cur[e.id] = e; });
     var writes = [];
+    // A rejected write (e.g. rules denial) un-marks its doc so the next push retries it, instead of
+    // the old behaviour where the entry was marked synced up-front and a rejection was lost forever.
+    // Offline is unaffected: pending promises never reject, and the SDK queue delivers them later.
     Object.keys(cur).forEach(function (id) {
       var ser = JSON.stringify(stripMeta(cur[id]));
       if (knownEvents[id] !== ser) {
         knownEvents[id] = ser;
-        writes.push(eventsRef.doc(String(id)).set(Object.assign({ authorId: cur[id].authorId || uidNow }, cur[id])));
+        writes.push(eventsRef.doc(String(id)).set(Object.assign({ authorId: cur[id].authorId || uidNow }, cur[id]))
+          .catch(function (e) { if (knownEvents[id] === ser) delete knownEvents[id]; throw e; }));
       }
     });
     Object.keys(knownEvents).forEach(function (id) {
-      if (!cur[id]) { delete knownEvents[id]; writes.push(eventsRef.doc(String(id)).delete()); }
+      if (!cur[id]) {
+        var oldSer = knownEvents[id]; delete knownEvents[id];
+        writes.push(eventsRef.doc(String(id)).delete()
+          .catch(function (e) { if (!cur[id] && !(id in knownEvents)) knownEvents[id] = oldSer; throw e; }));
+      }
     });
     var appBlob = appBlobFromState();
     lastHhSig = hhSig(appBlob, window.LL.members, window.LL.memberInfo); // mark our own write so its echo doesn't re-render
-    writes.push(hhRef.update({ app: appBlob, updatedAt: window.LL.serverTimestamp() }));
-    try { await Promise.all(writes); } catch (e) { console.warn('push', e); }
+    writes.push(hhRef.update({ app: appBlob, updatedAt: window.LL.serverTimestamp() })
+      .catch(function (e) { lastHhSig = null; throw e; }));
+    try {
+      await Promise.all(writes);
+      pushNow._retryDelay = 0;
+    } catch (e) {
+      console.warn('push', e);
+      var nowMs = Date.now();
+      if (!pushNow._warnedAt || nowMs - pushNow._warnedAt > 120000) { // gentle: at most one toast per 2 min
+        pushNow._warnedAt = nowMs;
+        try { window.toast && window.toast('That didn’t sync just now. We’ll try again.'); } catch (e2) {}
+      }
+      pushNow._retryDelay = Math.min((pushNow._retryDelay || 4000) * 2, 300000); // backoff 8s → 5 min
+      if (!pushTimer) pushTimer = setTimeout(pushNow, pushNow._retryDelay); // state stays dirty, so later edits also retry
+    }
     syncPregJourney(uidNow); // owner-only; writes the journey to the owner-owned pregnancy doc (Item 7)
     syncMaternal(uidNow); // owner-only; writes her private categories to the protected mhealth docs
   }
