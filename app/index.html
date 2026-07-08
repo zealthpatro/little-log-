@@ -3815,6 +3815,7 @@ function openVisitPrep(id){
     ${qRows}
     <div class="field" style="margin-top:6px"><input id="vqNew" placeholder="Add a question to ask…" onkeydown="if(event.key==='Enter'){addVisitQ();openVisitPrep('${id}');}"></div>
     <div class="hero-invite" onclick="window.openFamily&&window.openFamily()" style="margin-top:4px;cursor:pointer"><div class="hi" style="font-size:22px">👪</div><div><div class="ht">Who's coming with you?</div><div class="hs">Invite your partner so they have the questions too</div></div></div>
+    <button class="btn-ghost" onclick="openPregDoctorReport()">📄 Take a report to this visit ${isPro()?'':(tasteLeft('pdf')>0?'· ✨ free':'· Pro ✨')}</button>
     <button class="btn-ghost" onclick="addApptToCalendar('${id}')">📅 Add to my calendar</button>
     <button class="btn-primary" style="background:var(--preg);margin-top:4px" onclick="markApptDone('${id}')">${I.check} We've been, mark done</button>
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
@@ -4552,6 +4553,51 @@ function toggleBag(id){ const it=(state.pregnancy.bag||[]).find(x=>x.id===id); i
 function removeBag(id){ state.pregnancy.bag=(state.pregnancy.bag||[]).filter(x=>x.id!==id); persist(); openBag(); }
 function addBag(){ const el=$('#bagNew'); const v=(el&&el.value.trim())||''; if(!v)return; state.pregnancy.bag.push({id:uid(),text:v,done:false}); persist(); openBag(); }
 
+/* Pregnancy doctor report: a clean printable summary of the antenatal record (appointments +
+   outcomes, BP/glucose/weight, symptoms, care team) to bring to a visit. On-device, prints/saves
+   as PDF. Pro treat (with a free taste), the re-anchored hero of Pro. */
+function pregVisitSummary(){
+  const p=state.pregnancy; if(!p) return '';
+  const wk=pregWeek(), dtg=pregDaysToGo(); const fd=t=>new Date(t).toLocaleDateString();
+  const L=[];
+  L.push('Week '+wk+' · '+triName(pregTri())+(p.dueDate?' · due '+fd(p.dueDate):'')+(dtg!=null?' ('+(dtg>0?dtg+' days to go':(dtg===0?'due today':Math.abs(dtg)+' days over'))+')':''));
+  L.push('Care schedule: '+pregCareLabel(p.country));
+  const care=(p.careTeam||[]).map(m=>m.name+(m.role?' ('+m.role+')':'')+(m.phone?' '+m.phone:'')).join('; ');
+  if(care) L.push('Care team: '+care);
+  L.push('');
+  const appts=(p.appts||[]).slice().sort((a,b)=>a.week-b.week);
+  const done=appts.filter(a=>a.done), up=appts.filter(a=>!a.done&&a.week>=wk);
+  L.push('Appointments: '+done.length+' attended, '+up.length+' upcoming');
+  done.slice(-6).forEach(a=>L.push('  • wk '+a.week+' — '+a.title+(a.outcome?': '+a.outcome:'')));
+  if(up[0]) L.push('  • next — wk '+up[0].week+' '+up[0].title);
+  const bp=(p.bp||[]).slice().sort((a,b)=>b.at-a.at);
+  if(bp.length){ L.push(''); L.push('Blood pressure ('+bp.length+' readings): latest '+bp[0].sys+'/'+bp[0].dia+' on '+fd(bp[0].at)); bp.slice(0,5).forEach(r=>L.push('  • '+fd(r.at)+': '+r.sys+'/'+r.dia)); }
+  const gl=(p.glucose||[]).slice().sort((a,b)=>b.at-a.at);
+  if(gl.length){ L.push(''); L.push('Glucose ('+gl.length+' readings, '+(p.glucoseUnit||'mmol')+'): latest '+gl[0].val+' on '+fd(gl[0].at)); gl.slice(0,5).forEach(r=>L.push('  • '+fd(r.at)+': '+r.val+(r.context?' ('+r.context+')':''))); }
+  const wts=(p.weights||[]).slice().sort((a,b)=>b.at-a.at);
+  if(wts.length){ L.push(''); L.push('Weight: latest '+wts[0].kg+' '+(wts[0].unit||'kg')+' on '+fd(wts[0].at)); }
+  const sy=(p.symptoms||[]).slice().sort((a,b)=>b.at-a.at).slice(0,10);
+  if(sy.length){ L.push(''); L.push('Recent notes / symptoms:'); sy.forEach(s=>L.push('  • '+fd(s.at)+': '+(s.kind||''))); }
+  const conds=p.conditions?Object.keys(p.conditions).filter(k=>p.conditions[k]):[];
+  if(conds.length){ L.push(''); L.push('Flagged: '+conds.join(', ')); }
+  return L.join('\n');
+}
+function openPregDoctorReport(){
+  const p=state.pregnancy; if(!p) return;
+  if(!useTaste('pdf','Doctor report')) return;
+  const esc=escapeHtml; const wk=pregWeek(); const summary=pregVisitSummary();
+  const w=window.open('','_blank'); if(!w){ toast('Allow pop-ups to create the report'); return; }
+  w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cubby pregnancy report</title>'
+    +'<style>body{font-family:Georgia,"Times New Roman",serif;color:#222;max-width:680px;margin:36px auto;padding:0 24px;line-height:1.55}h1{font-size:24px;margin:0 0 2px}.meta{color:#666;font-size:13px;margin-bottom:22px}h2{font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:#8a7f6f;border-bottom:1px solid #ddd;padding-bottom:4px;margin:24px 0 8px}pre{font-family:inherit;white-space:pre-wrap;font-size:14px;margin:0}.foot{margin-top:30px;color:#999;font-size:12px;border-top:1px solid #eee;padding-top:10px}.noprint{margin:18px 0}.noprint button{font-size:14px;padding:8px 18px;cursor:pointer}@media print{.noprint{display:none}}</style></head><body>'
+    +'<h1>Pregnancy visit report</h1>'
+    +'<div class="meta">Week '+wk+(p.dueDate?' · due '+new Date(p.dueDate).toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'}):'')+' · generated '+new Date().toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'})+' with Cubby</div>'
+    +'<div class="noprint"><button onclick="window.print()">Print / Save as PDF</button></div>'
+    +'<h2>Summary</h2><pre>'+esc(summary)+'</pre>'
+    +'<div class="foot">Recorded by you in Cubby. Informational only, not medical advice; please verify clinically.</div>'
+    +'</body></html>');
+  w.document.close(); try{ w.focus(); }catch(e){}
+}
+
 /* ---- Care: team, danger signs, dates, end ---- */
 function renderPregCare(){
   const p=state.pregnancy;
@@ -4565,6 +4611,7 @@ function renderPregCare(){
     ${amOwner?`<button class="btn-ghost" onclick="openAddCareTeam()">${I.plus} Add to care team</button>`:''}` : '';
   return `<div class="fade-in">
     ${careBlock}
+    ${(amOwner||seeHealth)?`<button class="btn-ghost" onclick="openPregDoctorReport()" style="margin-top:2px;color:var(--preg)">📄 Doctor report for your visit ${isPro()?'':(tasteLeft('pdf')>0?'· ✨ try one free':'· Pro ✨')}</button>`:''}
     ${seeHealth?pregHealthSection():''}
     ${!amOwner&&!seeCare&&!seeHealth?'<div class="csub" style="margin-top:6px">These health details are private to her. She can choose to share them with you.</div>':''}
     ${amOwner?`<div class="set-item" onclick="openPregnancyVisibility()" style="cursor:pointer;margin-top:16px">
