@@ -9,6 +9,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    # Weekly heartbeat: re-run the guard and re-submit the whole sitemap to IndexNow,
+    # so the site stays discovered even in a quiet week (the "constantly updated" floor).
+    - cron: '17 6 * * 1'
 
 jobs:
   seo-guard:
@@ -22,6 +26,9 @@ jobs:
           python-version: '3.x'
       - name: Guard (broken links, social images, JSON-LD, sitemap)
         run: python3 tools/seo_check.py
-      - name: Ping IndexNow for changed pages (main only)
-        if: github.ref == 'refs/heads/main'
+      - name: Ping IndexNow for changed pages (push to main)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: python3 tools/indexnow_ping.py --changed
+      - name: Ping IndexNow for the whole sitemap (weekly)
+        if: github.event_name == 'schedule'
+        run: python3 tools/indexnow_ping.py --all
