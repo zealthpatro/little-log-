@@ -79,7 +79,10 @@ service cloud.firestore {
           || request.resource.data.memberInfo.diff(resource.data.memberInfo).affectedKeys().hasOnly([request.auth.uid]);
       }
 
-      allow read:   if isMember() || invitedHere();
+      // Members only. An invitee does NOT read the full household doc pre-join (it carries the app
+      // blob + every member's name/email); the join flow reads the narrow invite doc instead, then
+      // writes itself into members via the invitedHere() branch of `update` below.
+      allow read:   if isMember();
       allow create: if request.auth != null
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.members[request.auth.uid] == 'owner'
@@ -96,6 +99,10 @@ service cloud.firestore {
         || ( invitedHere()
              && request.resource.data.ownerId == resource.data.ownerId
              && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid])
+             // The joined role must equal the role the OWNER set on the invite (owner-controlled:
+             // invites can only be created by an owner). Prevents an invitee self-promoting to
+             // 'owner' — hasOnly() above restricts WHICH member key changes, never its value.
+             && request.resource.data.members[request.auth.uid] == get(/databases/$(database)/documents/invites/$(request.auth.token.email.lower())).data.get('role', 'caregiver')
              && onlyOwnMemberInfo() ) );
       allow delete: if request.auth != null && resource.data.members[request.auth.uid] == 'owner';
 
@@ -107,8 +114,13 @@ service cloud.firestore {
         // New entries are always authored by the writer ("by Mama Bear" can't be forged).
         allow create: if request.auth != null && request.auth.uid in pm()
           && request.resource.data.authorId == request.auth.uid;
-        // Owner can edit/remove anyone's entry; a caregiver only their own.
-        allow update, delete: if request.auth != null && request.auth.uid in pm()
+        // Owner can edit/remove anyone's entry; a caregiver only their own. authorId is immutable on
+        // update (attribution "by Mama Bear" can't be re-forged after create); delete carries no
+        // request.resource, so it stays a separate rule.
+        allow update: if request.auth != null && request.auth.uid in pm()
+          && ( pm()[request.auth.uid] == 'owner' || resource.data.authorId == request.auth.uid )
+          && ( !('authorId' in resource.data) || request.resource.data.authorId == resource.data.authorId );
+        allow delete: if request.auth != null && request.auth.uid in pm()
           && ( pm()[request.auth.uid] == 'owner' || resource.data.authorId == request.auth.uid );
       }
 
@@ -118,7 +130,11 @@ service cloud.firestore {
         // only the owner or the photo's author may replace or delete one.
         allow create: if request.auth != null && request.auth.uid in pm()
           && request.resource.data.authorId == request.auth.uid;
-        allow update, delete: if request.auth != null && request.auth.uid in pm()
+        // authorId immutable on update (same as events); delete stays separate (no request.resource).
+        allow update: if request.auth != null && request.auth.uid in pm()
+          && ( pm()[request.auth.uid] == 'owner' || resource.data.authorId == request.auth.uid )
+          && ( !('authorId' in resource.data) || request.resource.data.authorId == resource.data.authorId );
+        allow delete: if request.auth != null && request.auth.uid in pm()
           && ( pm()[request.auth.uid] == 'owner' || resource.data.authorId == request.auth.uid );
       }
 
