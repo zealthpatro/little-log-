@@ -1234,19 +1234,26 @@
     openFirstRun(u, { asStep: true, stage: stage, onDone: onDone });
   };
 
-  async function removeMember(uid, email, name) {
+  function removeMember(uid, email, name) {
     if (!hhRef) return;
-    if (!window.confirm('Remove ' + (name || 'this person') + ' from your family? They\'ll lose access, but everything they logged stays part of the baby\'s story.')) return;
-    try {
-      var del = firebase.firestore.FieldValue.delete();
-      var u = {}; u['members.' + uid] = del; u['memberInfo.' + uid] = del;
-      // Keep a tombstone so their past entries stay attributed by name forever.
-      var mi = (window.LL.memberInfo || {})[uid] || {};
-      u['formerMemberInfo.' + uid] = { name: mi.name || name || '', relationship: mi.relationship || '', avatar: mi.avatar || null };
-      await hhRef.update(u);
-      if (email) { try { await db.collection('invites').doc(email).delete(); } catch (e) {} }
-      openFamily();
-    } catch (e) { alert('Could not remove: ' + ((e && e.message) || e)); }
+    var doRemove = async function () {
+      try {
+        var del = firebase.firestore.FieldValue.delete();
+        var u = {}; u['members.' + uid] = del; u['memberInfo.' + uid] = del;
+        // Keep a tombstone so their past entries stay attributed by name forever.
+        var mi = (window.LL.memberInfo || {})[uid] || {};
+        u['formerMemberInfo.' + uid] = { name: mi.name || name || '', relationship: mi.relationship || '', avatar: mi.avatar || null };
+        await hhRef.update(u);
+        if (email) { try { await db.collection('invites').doc(email).delete(); } catch (e) {} }
+        openFamily();
+      } catch (e) { try { window.toast && window.toast('Could not remove ' + (name || 'this person') + ' just now.'); } catch (e2) {} }
+    };
+    // Use the app's own confirm sheet (calm, on-brand); native confirm is only a defensive fallback.
+    if (window.confirmSheet) {
+      window.confirmSheet({ title: 'Remove ' + (name || 'this person') + '?', body: 'They’ll lose access, but everything they logged stays part of the baby’s story.', confirmLabel: 'Remove', cancelLabel: 'Keep', danger: true, onConfirm: doRemove });
+    } else if (window.confirm('Remove ' + (name || 'this person') + ' from your family?')) {
+      doRemove();
+    }
   }
 
   async function saveMyRelationship() {

@@ -157,7 +157,7 @@ body{
 }
 .baby-meta span{font-size:12px;color:var(--ink-soft);font-weight:600;}
 .icon-btn{
-  width:42px;height:42px;border:none;border-radius:50%;
+  width:44px;height:44px;border:none;border-radius:50%;
   background:var(--surface);color:var(--ink-soft);
   display:grid;place-items:center;cursor:pointer;flex-shrink:0;line-height:1;
   box-shadow:0 3px 9px var(--shadow);transition:transform .15s,color .2s;
@@ -310,7 +310,7 @@ body{
 .sheet.show{transform:translate(-50%,0);}
 .grab{width:42px;height:5px;border-radius:3px;background:var(--line);margin:6px auto 18px;cursor:grab;touch-action:none;}
 .grab:active{cursor:grabbing;}
-.sheet-x{position:absolute;top:8px;right:10px;width:40px;height:40px;border:none;background:none;color:var(--ink-faint);font-size:24px;line-height:1;cursor:pointer;opacity:.85;z-index:2;font-family:inherit;padding:0;display:grid;place-items:center;border-radius:50%;}
+.sheet-x{position:absolute;top:6px;right:8px;width:44px;height:44px;border:none;background:none;color:var(--ink-faint);font-size:24px;line-height:1;cursor:pointer;opacity:.85;z-index:2;font-family:inherit;padding:0;display:grid;place-items:center;border-radius:50%;}
 .sheet-x:hover{opacity:1;background:var(--surface-2);}
 .sheet-back{position:absolute;top:6px;left:8px;width:44px;height:44px;border:none;background:none;color:var(--ink-faint);font-size:28px;line-height:1;cursor:pointer;opacity:.85;z-index:2;font-family:inherit;padding:0;display:grid;place-items:center;border-radius:50%;}
 .sheet-back:hover{opacity:1;background:var(--surface-2);}
@@ -345,7 +345,7 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .dp-bl{visibility:hidden;}
 .dp-td{box-shadow:inset 0 0 0 2px var(--diaper);}
 .dp-on,.dp-on:hover{background:var(--diaper);color:#fff;}
-.dp-x{color:#8c8175;opacity:.9;cursor:default;}
+.dp-x{color:#6E635B;opacity:.9;cursor:default;}
 .dp-now{margin-top:8px;border:none;background:var(--surface-2);color:var(--ink);font-weight:800;font-size:13px;padding:8px 14px;border-radius:10px;cursor:pointer;font-family:inherit;width:100%;}
 /* Calendar inside the shared cuModal (card is always white). Hardcode colours so it reads
    correctly in dark mode too, and use the pink accent to match the time / when wheel. */
@@ -357,7 +357,7 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .dp-in-modal .dp-w span{color:#9a8d80;}
 .dp-in-modal .dp-td{box-shadow:inset 0 0 0 2px #C97FA0;}
 .dp-in-modal .dp-on,.dp-in-modal .dp-on:hover{background:#C97FA0;color:#fff;}
-.dp-in-modal .dp-x{color:#8c8175;opacity:1;}
+.dp-in-modal .dp-x{color:#6E635B;opacity:1;}
 .dp-in-modal .dp-now{background:#FBF7EF;color:#2C2521;}
 .field input,.field textarea,.field select{
   width:100%;border:2px solid var(--line);background:var(--surface-2);border-radius:14px;
@@ -2190,6 +2190,21 @@ function openSheet(html,accent){
 }
 function sheetBack(){ var prev=_sheetStack.pop(); var s=$('#sheet'); if(!prev){ closeSheet(); return; } s.dataset.accent=prev.accent; _sheetAccent(s,prev.accent); s.innerHTML=prev.html; }
 function closeSheet(){ _sheetStack=[]; var s=document.getElementById('sheet'); if(s){ s.style.transition=''; s.style.transform=''; } var sc=document.getElementById('scrim'); if(sc)sc.classList.remove('show'); if(s)s.classList.remove('show'); }
+/* One calm confirm sheet, reused everywhere instead of the native window.confirm (which is jarring
+   and off-brand). Stands alone (closes any trigger sheet first, so no stray back button). */
+var __confirmCb=null;
+function confirmSheet(opts){
+  opts=opts||{};
+  closeSheet();
+  __confirmCb=typeof opts.onConfirm==='function'?opts.onConfirm:null;
+  var body=opts.body?('<div class="sub">'+escapeHtml(opts.body)+'</div>'):'';
+  var bg=opts.danger?'var(--diaper)':'var(--feed)';
+  openSheet('<h2>'+escapeHtml(opts.title||'Are you sure?')+'</h2>'+body
+    +'<button class="btn-primary" style="background:'+bg+'" onclick="__confirmYes()">'+escapeHtml(opts.confirmLabel||'Confirm')+'</button>'
+    +'<button class="btn-ghost" onclick="closeSheet()">'+escapeHtml(opts.cancelLabel||'Cancel')+'</button>','note');
+}
+function __confirmYes(){ var cb=__confirmCb; __confirmCb=null; closeSheet(); if(cb) setTimeout(cb,50); }
+if(typeof window!=='undefined'){ window.confirmSheet=confirmSheet; }
 /* Drag-to-dismiss: grab the handle (or the top strip of the sheet) and pull down to close. */
 (function(){
   // Native bottom-sheet feel: pull down to dismiss from the grab handle, or from anywhere ONLY
@@ -3232,7 +3247,7 @@ function pushCfg(){ if(!state.settings.push) state.settings.push={enabled:false,
 function openReminders(){
   const sup=pushSupported(), cfg=pushCfg(), ready=sup&&!!CUBBY_VAPID;
   openSheet(`<h2>Reminders 🔔</h2><div class="sub">Gentle nudges for a due medicine, a confirmed missed vaccine, or your turn on a ritual. Off by default, snoozeable, and never for feeds.</div>
-    ${!ready?`<div class="preg-disclaim">Reminders are coming soon.${sup?'':' Add Cubby to your home screen first, then background notifications can work.'}</div>`:`
+    ${!ready?`<div class="preg-disclaim">${!sup?'Reminders need a browser that supports notifications. On iPhone, add Cubby to your home screen first, then open it from there.':'Reminders are coming soon.'}</div>`:`
     <div class="set-item"><div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🔔</div><div class="si-body"><div class="a">Gentle reminders</div><div class="b">${cfg.enabled?'On for this device':'Off'}</div></div>
       <div class="seg"><button class="${cfg.enabled?'on':''}" onclick="enablePush()">On</button><button class="${!cfg.enabled?'on':''}" onclick="disablePush()">Off</button></div></div>
     <div class="csub" style="margin-top:8px">Quiet hours: nothing between ${cfg.quietStart}:00 and ${cfg.quietEnd}:00.</div>`}
@@ -3387,9 +3402,21 @@ function openDataSheet(){
     <button class="btn-ghost" onclick="openSettings()">Back to settings</button>`,'sleep');
 }
 function exportData(){
-  const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+  // "Export everything" must include the photo bytes, not just metadata — PhotoStore.map is already
+  // fully in memory, so embed every referenced image (feeds/activities, the gallery, baby avatars).
+  const out=Object.assign({}, state);
+  try{
+    const ids=new Set();
+    (state.photos||[]).forEach(p=>{ if(p&&p.photoId) ids.add(p.photoId); });
+    (state.events||[]).forEach(e=>{ if(e&&e.photoId) ids.add(e.photoId); });
+    (state.babies||[]).forEach(b=>{ if(b&&b.avatarPhotoId) ids.add(b.avatarPhotoId); });
+    const photoData={}; ids.forEach(id=>{ const d=PhotoStore.map[id]; if(d) photoData[id]=d; });
+    out.photoData=photoData;
+  }catch(e){}
+  const nPhotos=Object.keys(out.photoData||{}).length;
+  const blob=new Blob([JSON.stringify(out,null,2)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download='cubby-export.json'; a.click(); toast('Exported');
+  a.download='cubby-export.json'; a.click(); toast('Exported'+(nPhotos?(' · '+nPhotos+' photo'+(nPhotos===1?'':'s')+' included'):''));
 }
 /* Referral: deterministic short code from the signed-in uid (djb2 -> base36). */
 function refCode(){
@@ -4238,7 +4265,7 @@ function pushGameReveal(p,result){ // sex reveal -> the hub + any legacy single-
   if(p&&p.gameCode&&p.gameHostKey){ try{ fetch('/api/game/'+p.gameCode+'/reveal',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({result:result,hostKey:p.gameHostKey})}).catch(function(){}); }catch(e){} }
 }
 function closeHubIfAny(p){ if(!p||!p.hubCode) return; idToken().then(function(tok){ if(!tok) return; fetch('/api/hub/'+p.hubCode+'/close',{method:'POST',headers:{'authorization':'Bearer '+tok}}).catch(function(){}); }); } // retire the shared games link (loss-safe / on delete)
-function closeGames(){ const p=state.pregnancy; if(!p||!p.hubCode||!pregIsOwner()) return; if(!confirm('Close the family games link? Guests can no longer see it or add guesses, and this cannot be undone.')) return; closeHubIfAny(p); p.hubCode=null; p.hubGames=null; persist(); openGuessGame(); toast('Games link closed 🤍'); }
+function closeGames(){ const p=state.pregnancy; if(!p||!p.hubCode||!pregIsOwner()) return; confirmSheet({title:'Close the family games link?',body:'Guests can no longer see it or add guesses, and this cannot be undone.',confirmLabel:'Close link',cancelLabel:'Keep it',danger:true,onConfirm:function(){ closeHubIfAny(p); p.hubCode=null; p.hubGames=null; persist(); openGuessGame(); toast('Games link closed 🤍'); }}); }
 function revealSex(s){ const p=state.pregnancy; if(!pregIsOwner())return; p.knownSex=s; persist(); pushGameReveal(p,s); openGuessGame(); }
 function hideReveal(){ const p=state.pregnancy; if(!pregIsOwner())return; p.knownSex=''; persist(); pushGameReveal(p,''); openGuessGame(); }
 /* Hosted guest game (Kahoot-style link, no guest account). Dormant until the cubby-games D1 is provisioned. */
@@ -6076,8 +6103,7 @@ function openVaccineCountry(){
 function chooseVaccineCountry(k){
   const b=activeBaby(); if(!b)return;
   if((b.country||'us')===k){ closeSheet(); return; }
-  if(!confirm('Switch to the '+vaxCountryName(k)+' schedule? This replaces the list (doses you already marked given are kept).')) return;
-  applyScheduleCountry(b.id,k); closeSheet(); render(); toast('Schedule updated');
+  confirmSheet({title:'Switch to the '+vaxCountryName(k)+' schedule?',body:'This replaces the list. Doses you already marked given are kept.',confirmLabel:'Switch schedule',cancelLabel:'Keep current',onConfirm:function(){ applyScheduleCountry(b.id,k); render(); toast('Schedule updated'); }});
 }
 function vxDueDate(v){ const b=activeBaby(); const birth=b&&b.birth?b.birth:now(); return birth + v.dueMonths*30.44*86400000; }
 /* 5-state, calm by default: an un-recorded past-due dose is "to confirm", never "overdue".
