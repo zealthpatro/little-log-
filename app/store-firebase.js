@@ -397,7 +397,22 @@
   async function resolveHousehold(user) {
     var userRef = db.collection('users').doc(user.uid);
     var snap = await userRef.get();
-    if (snap.exists && snap.data().householdId) return snap.data().householdId;
+    if (snap.exists && snap.data().householdId) {
+      var curHid = snap.data().householdId;
+      // If a DIFFERENT pending invite also exists for this email, stash it so we can surface it
+      // after boot. (The old code returned here and the invite sat pending forever — an existing
+      // Cubby user could never accept an invite, a silent dead-end for beta testers.)
+      try {
+        var em0 = (user.email || '').toLowerCase();
+        if (em0) {
+          var pend = await db.collection('invites').doc(em0).get();
+          if (pend.exists && pend.data().householdId && pend.data().householdId !== curHid) {
+            window.LL.pendingInvite = Object.assign({ email: em0 }, pend.data());
+          }
+        }
+      } catch (e) {}
+      return curHid;
+    }
 
     // Invited? Invites are keyed by lowercased email (so the rules can authorize the join).
     var email = (user.email || '').toLowerCase();
@@ -655,6 +670,53 @@
   }
 
   /* ---------- start real-time sync ---------- */
+  // Calm recovery screen for a removed member (or a deleted household) — instead of an endless
+  // loader. Clears the stale pointer so a fresh sign-in starts clean.
+  var accessLostShown = false;
+  function showAccessLost() {
+    if (accessLostShown) return; accessLostShown = true;
+    try { hideOverlay(); } catch (e) {}
+    try { var u = auth.currentUser; if (u) db.collection('users').doc(u.uid).set({ householdId: null }, { merge: true }); } catch (e) {}
+    var ov = document.createElement('div'); ov.id = 'll-access-lost';
+    ov.setAttribute('style', 'position:fixed;inset:0;z-index:3000;background:#FBF5E9;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;');
+    ov.innerHTML = '<div style="max-width:340px;font-family:-apple-system,Segoe UI,Roboto,sans-serif">'
+      + '<div style="font-size:44px">🐻</div>'
+      + '<h2 style="font-family:Georgia,serif;color:#3a2f28;margin:12px 0 8px;font-size:22px">You’re no longer in this family</h2>'
+      + '<div style="color:#8a7a6d;font-size:15px;line-height:1.55">Your access to this Cubby was removed, or the family was closed. Everything you logged stays part of their story.</div>'
+      + '<button id="ll-al-btn" style="margin-top:22px;border:none;border-radius:16px;padding:15px 24px;background:#C97FA0;color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Back to sign in</button></div>';
+    document.body.appendChild(ov);
+    var btn = document.getElementById('ll-al-btn');
+    if (btn) btn.onclick = function () { if (window.LL && typeof window.LL.signOut === 'function') window.LL.signOut(); else { try { location.reload(); } catch (e) {} } };
+  }
+
+  // An existing user (already in a household) who ALSO has a pending invite to a different family:
+  // surface it after boot so they can accept it, instead of it silently sitting pending forever.
+  function maybePromptPendingInvite() {
+    var inv = window.LL && window.LL.pendingInvite;
+    if (!inv || (window.LL && window.LL.needsIdentity)) return;
+    window.LL.pendingInvite = null; // one-shot
+    if (!window.confirmSheet) return;
+    window.confirmSheet({
+      title: 'You’ve been invited 🐻',
+      body: (inv.relationship ? ('You’ve been invited as ' + inv.relationship + '. ') : '') + 'Join this family circle? You’ll switch to their Cubby — your current one stays saved and you can switch back.',
+      confirmLabel: 'Join the family',
+      cancelLabel: 'Not now',
+      onConfirm: function () { joinPendingInvite(inv); }
+    });
+  }
+  async function joinPendingInvite(inv) {
+    try {
+      var user = auth.currentUser; if (!user || !inv || !inv.householdId) return;
+      await db.collection('households').doc(inv.householdId).update(memberUpdate(user, inv.role || 'caregiver', { relationship: inv.relationship, name: inv.name }));
+      await db.collection('users').doc(user.uid).set({ householdId: inv.householdId }, { merge: true });
+      try { if (window.toast) window.toast('Joined the family 🐻'); } catch (e) {}
+      setTimeout(function () { try { location.reload(); } catch (e) {} }, 500);
+    } catch (e) {
+      console.warn('join invite', e);
+      try { if (window.toast) window.toast('Couldn’t join just now — please try again.'); } catch (e2) {}
+    }
+  }
+
   function startSync(hid, user) {
     hhRef = db.collection('households').doc(hid);
     eventsRef = hhRef.collection('events');
@@ -683,6 +745,7 @@
       hideOverlay();
       render();
       maybeFirstRun(user);
+      maybePromptPendingInvite();
     }
 
     unsub.push(hhRef.onSnapshot(function (doc) {
@@ -706,7 +769,19 @@
       migrateHandoffToNote(); // role + handoff are now known; fold any legacy shared note in once
       gotApp = true;
       if (booted) render(); else maybeBoot();
-    }, function (e) { console.warn('household listen', e); }));
+    }, function (e) {
+      console.warn('household listen', e);
+      // Removed from the family (or the household was deleted): the doc becomes unreadable, so the
+      // boot would otherwise hang on the loader forever (gotApp never flips). Confirm it's a real
+      // access loss (not a transient token blip) with a one-shot get, then show a calm recovery
+      // screen instead of an infinite spinner.
+      if (e && e.code === 'permission-denied' && !accessLostShown) {
+        setTimeout(function () {
+          if (accessLostShown) return;
+          hhRef.get().then(function () {}).catch(function (err) { if (err && err.code === 'permission-denied') showAccessLost(); });
+        }, 1500);
+      }
+    }));
 
     // ---- Two-stage events load (fast signed-in boot) ----
     // The old listener loaded the ENTIRE event history before the first render (behind the SDK
@@ -1151,7 +1226,7 @@
 
     var share = '<div class="ll-invite"><label>App link to share</label>'
       + '<div class="ll-linkrow"><input id="llAppLink" readonly value="' + esc(location.origin) + '"><button id="llCopyLink" class="ll-modal-btn">Copy</button></div>'
-      + '<div class="ll-auth-msg">Cubby doesn\'t send emails. Send this link yourself (text / WhatsApp); the invited person signs in with Google using the invited email and joins automatically.</div></div>';
+      + '<div class="ll-auth-msg">Cubby doesn\'t send emails. Send this link yourself (text / WhatsApp); the invited person signs in with the invited email address (Google, Apple or an email link) and joins automatically. If they use Sign in with Apple, they should choose Share My Email so it matches.</div></div>';
 
     modal('Family & sharing', '<div class="ll-mems">' + rows + '</div>'
       + '<div class="ll-auth-msg" style="text-align:left;margin:-2px 0 12px">When you invite people, everyone in your circle can see each other\'s name and email here, so you know who is who. Only you can change your own.</div>'
@@ -1301,7 +1376,7 @@
       var subject = 'Join me on Cubby 🐻';
       var bodyTxt = 'I\'m using Cubby to keep track of ' + babyName + '\'s feeds, naps, nappies and more, and I\'d love you on it too.\n\n'
         + '1) Open this link: ' + link + '\n'
-        + '2) Tap "Continue with Google" using THIS email: ' + email + '\n\n'
+        + '2) Sign in with THIS email address: ' + email + ' (Google, Apple or an email link all work — with Apple, choose Share My Email so it matches).\n\n'
         + 'You\'ll join automatically and see everything, live. (On a phone you can add it to your home screen like an app.)';
       var mailto = 'mailto:' + encodeURIComponent(email) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(bodyTxt);
       msg.innerHTML = '✅ Invite ready for <b>' + esc(email) + '</b>' + (rel ? ' (' + esc(rel) + ')' : '') + '.'

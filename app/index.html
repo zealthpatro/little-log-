@@ -3261,7 +3261,7 @@ function pushSupported(){ try{ return !!(window.firebase && firebase.messaging &
 function pushCfg(){ if(!state.settings.push) state.settings.push={enabled:false,quietStart:21,quietEnd:7}; return state.settings.push; }
 function openReminders(){
   const sup=pushSupported(), cfg=pushCfg(), ready=sup&&!!CUBBY_VAPID;
-  openSheet(`<h2>Reminders 🔔</h2><div class="sub">Gentle nudges for a due medicine, a confirmed missed vaccine, or your turn on a ritual. Off by default, snoozeable, and never for feeds.</div>
+  openSheet(`<h2>Reminders 🔔</h2><div class="sub">A gentle nudge when a medicine is due, so a dose is never missed. Off by default, snoozeable, and never for feeds, naps or milestones.</div>
     ${!ready?`<div class="preg-disclaim">${!sup?'Reminders need a browser that supports notifications. On iPhone, add Cubby to your home screen first, then open it from there.':'Reminders are coming soon.'}</div>`:`
     <div class="set-item"><div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🔔</div><div class="si-body"><div class="a">Gentle reminders</div><div class="b">${cfg.enabled?'On for this device':'Off'}</div></div>
       <div class="seg"><button class="${cfg.enabled?'on':''}" onclick="enablePush()">On</button><button class="${!cfg.enabled?'on':''}" onclick="disablePush()">Off</button></div></div>
@@ -3454,7 +3454,7 @@ function shareCubby(){
   } else { window.prompt('Copy this note:',text); }
 }
 function confirmLogout(){
-  openSheet(`<h2>Log out?</h2><div class="sub">Your data stays safely synced. Sign back in with Google anytime to pick up right where you left off.</div>
+  openSheet(`<h2>Log out?</h2><div class="sub">Your data stays safely synced. Sign back in anytime, with the same method you used, to pick up right where you left off.</div>
     <button class="btn-primary" onclick="doLogout()">Log out</button>
     <button class="btn-ghost" onclick="closeSheet()">Cancel</button>`,'sleep');
 }
@@ -6172,23 +6172,27 @@ function applyScheduleCountry(id,country){
   const b=state.babies.find(x=>x.id===id); if(!b||!country) return;
   b.country=country;
   if(!state.vaccines) state.vaccines={};
-  const byName={}; (state.vaccines[id]||[]).forEach(v=>{ if(v.given||v.missed) byName[v.name]={given:v.given,givenAt:v.givenAt,note:v.note,estimated:v.estimated,missed:v.missed}; });
+  // Carry over given/missed marks across schedules. Country schedules often use different vaccine
+  // NAMES for the same dose, so match by name first, then fall back to (group + due age) so a mark
+  // survives a rename. Not perfect (schedules genuinely differ) — the copy says "where they match".
+  const byName={}, byGM={};
+  (state.vaccines[id]||[]).forEach(v=>{ if(v.given||v.missed){ const rec={given:v.given,givenAt:v.givenAt,note:v.note,estimated:v.estimated,missed:v.missed}; byName[v.name]=rec; byGM[(v.group||'')+'@'+v.dueMonths]=rec; } });
   state.vaccines[id]=scheduleFor(b).map(([name,group,dueMonths])=>{
-    const g=byName[name];
+    const g=byName[name]||byGM[(group||'')+'@'+dueMonths];
     return {id:uid(),name,group,dueMonths,given:!!(g&&g.given),givenAt:g&&g.given?g.givenAt:null,note:g?(g.note||''):'',estimated:!!(g&&g.estimated),missed:!!(g&&g.missed)};
   });
   persist();
 }
 function openVaccineCountry(){
   const b=activeBaby(); if(!b)return;
-  openSheet(`<h2>Vaccine schedule</h2><div class="sub">Choose the country schedule for ${escapeHtml(b.name)}. Anything already marked given is kept, and you can still edit any item.</div>
+  openSheet(`<h2>Vaccine schedule</h2><div class="sub">Choose the country schedule for ${escapeHtml(b.name)}. Doses you already logged carry over where the schedules match, and you can edit any item.</div>
     ${searchPickerHtml('vxCountry', vaxCountryList(), b.country||detectCountry(), 'Search your country…')}
     <button class="btn-primary" style="background:var(--diaper);margin-top:12px" onclick="chooseVaccineCountry((document.getElementById('vxCountry')||{}).value)">Update schedule</button>`,'diaper');
 }
 function chooseVaccineCountry(k){
   const b=activeBaby(); if(!b)return;
   if((b.country||'us')===k){ closeSheet(); return; }
-  confirmSheet({title:'Switch to the '+vaxCountryName(k)+' schedule?',body:'This replaces the list. Doses you already marked given are kept.',confirmLabel:'Switch schedule',cancelLabel:'Keep current',onConfirm:function(){ applyScheduleCountry(b.id,k); render(); toast('Schedule updated'); }});
+  confirmSheet({title:'Switch to the '+vaxCountryName(k)+' schedule?',body:'This rebuilds the list for '+vaxCountryName(k)+'. Doses you already logged carry over where the schedules match; anything that doesn\'t line up you can re-mark.',confirmLabel:'Switch schedule',cancelLabel:'Keep current',onConfirm:function(){ applyScheduleCountry(b.id,k); render(); toast('Schedule updated'); }});
 }
 function vxDueDate(v){ const b=activeBaby(); const birth=b&&b.birth?b.birth:now(); return birth + v.dueMonths*30.44*86400000; }
 /* 5-state, calm by default: an un-recorded past-due dose is "to confirm", never "overdue".
