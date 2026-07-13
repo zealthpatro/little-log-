@@ -408,7 +408,7 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .set-item .si-body .a{font-weight:800;font-size:15px;}
 .set-item .si-body .b{font-size:12px;color:var(--ink-soft);font-weight:600;}
 .seg{display:flex;background:var(--surface-2);border-radius:12px;padding:3px;gap:3px;}
-.seg button{border:none;background:none;padding:8px 13px;border-radius:9px;font-weight:800;font-size:13px;color:var(--ink-soft);cursor:pointer;font-family:var(--font-body);}
+.seg button{border:none;background:none;padding:8px 13px;min-height:44px;border-radius:9px;font-weight:800;font-size:13px;color:var(--ink-soft);cursor:pointer;font-family:var(--font-body);}
 .seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 2px 6px var(--shadow);}
 .baby-item{display:flex;align-items:center;gap:13px;background:var(--surface);border-radius:var(--radius-sm);padding:13px 15px;margin-bottom:9px;box-shadow:0 3px 9px var(--shadow);}
 
@@ -787,7 +787,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .alert-pill .ap-body{flex:1;min-width:0;}
 .alert-pill .ap-t{font-weight:800;font-size:13px;line-height:1.15;}
 .alert-pill .ap-s{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:1px;}
-.alert-pill button{border:none;background:var(--surface-2);font-weight:800;font-size:12px;border-radius:10px;padding:9px 12px;cursor:pointer;color:var(--ink);flex-shrink:0;font-family:var(--font-body);transition:transform .15s;}
+.alert-pill button{border:none;background:var(--surface-2);font-weight:800;font-size:12px;border-radius:10px;padding:9px 14px;min-height:44px;cursor:pointer;color:var(--ink);flex-shrink:0;font-family:var(--font-body);transition:transform .15s;}
 .alert-pill button:active{transform:scale(.93);}
 
 /* ---- coach marks (first-visit hints) & nudges ---- */
@@ -862,7 +862,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .picker-ov-list .country-opt.sel{background:var(--feed-soft);color:var(--ink);font-weight:700;}
 .picker-ov-list .country-opt:active{background:var(--surface-2);}
 .country-list{margin-top:6px;max-height:240px;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:12px;background:var(--surface);}
-.country-opt{padding:11px 14px;cursor:pointer;font-size:15px;border-bottom:1px solid var(--line);}
+.country-opt{padding:13px 14px;min-height:44px;box-sizing:border-box;cursor:pointer;font-size:15px;border-bottom:1px solid var(--line);}
 .country-opt:last-child{border-bottom:none;}
 .country-opt:hover{background:var(--preg-soft);}
 .country-opt.sel{background:var(--preg-soft);font-weight:800;color:var(--preg);}
@@ -3430,8 +3430,11 @@ function exportData(){
   }catch(e){}
   const nPhotos=Object.keys(out.photoData||{}).length;
   const blob=new Blob([JSON.stringify(out,null,2)],{type:'application/json'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download='cubby-export.json'; a.click(); toast('Exported'+(nPhotos?(' · '+nPhotos+' photo'+(nPhotos===1?'':'s')+' included'):''));
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download='cubby-export.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);  // some browsers ignore a click on a detached anchor
+  setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(e){} }, 4000);
+  toast('Exported'+(nPhotos?(' · '+nPhotos+' photo'+(nPhotos===1?'':'s')+' included'):''));
 }
 /* Referral: deterministic short code from the signed-in uid (djb2 -> base36). */
 function refCode(){
@@ -3516,7 +3519,14 @@ function submitDeleteRequest(){
   const keys=DEL_SCOPES.map(s=>s[0]).filter(k=>delDraft[k]);
   if(!keys.length){ toast('Pick what to delete first'); return; }
   const label='Delete: '+keys.map(k=>DEL_SCOPES.find(s=>s[0]===k)[1]).join(', ');
-  requestConsent('delete', keys.reduce((o,k)=>(o[k]=true,o),{}), label);
+  const what=keys.map(k=>DEL_SCOPES.find(s=>s[0]===k)[1]).join(', ').toLowerCase();
+  const go=()=>requestConsent('delete', keys.reduce((o,k)=>(o[k]=true,o),{}), label);
+  // Solo households delete IMMEDIATELY (no second guardian to gate it) — so add a real confirm,
+  // like every other destructive action, instead of a silent one-tap wipe.
+  const solo=(typeof householdGuardians==='function')?householdGuardians().length<=1:true;
+  if(solo && typeof confirmSheet==='function'){
+    confirmSheet({title:'Delete this data?',body:'This permanently removes '+what+'. It can\'t be undone.',confirmLabel:'Delete',cancelLabel:'Keep',danger:true,onConfirm:go});
+  } else go();
 }
 function requestExport(){ requestConsent('export', null, 'Export the household\'s data'); }
 function requestConsent(type,scope,label){
@@ -4280,10 +4290,10 @@ function pregDoctorCard(){
 function pregPartnerCard(){
   const wk=pregWeek(); let tip;
   if(wk>=36) tip='Baby could come any time. Keep the bag by the door, your phone charged, and be ready to drop everything.';
-  else if(wk>=28) tip='Third trimester is tiring. Take on more of the chores, and check how she is sleeping.';
+  else if(wk>=28) tip='Third trimester is tiring. Take on more of the chores, and check how they\'re sleeping.';
   else if(wk>=13) tip='Energy often returns now. Plan something gentle together, and come along to a scan if you can.';
   else tip='Early weeks can mean nausea and exhaustion. Small kindnesses, snacks, water and patience go a long way.';
-  return `<div class="preg-card" style="border-left:4px solid var(--pump)"><div class="pc-ico">🤝</div><div><div class="pc-t">How to support her this week</div><div class="pc-b">${escapeHtml(tip)}</div></div></div>`;
+  return `<div class="preg-card" style="border-left:4px solid var(--pump)"><div class="pc-ico">🤝</div><div><div class="pc-t">How to support your partner this week</div><div class="pc-b">${escapeHtml(tip)}</div></div></div>`;
 }
 
 /* ---- Phase 2: week view ---- */
@@ -4975,6 +4985,8 @@ function removeKeptMemories(){
 /* ---- Phase 5: welcoming the baby (the birth transition) ---- */
 function openWelcomeBaby(){
   const p=state.pregnancy; if(!p)return;
+  // Owner-only, like endPregnancy — welcoming the baby is a big, journey-owning moment.
+  if(typeof pregIsOwner==='function' && !pregIsOwner()){ toast('Only the person whose journey this is can welcome the baby 🤍'); return; }
   newBabyColor=AVATAR_COLORS[Math.floor(Math.random()*AVATAR_COLORS.length)];
   initLogWhen();
   const cc=(p.country&&p.country!=='generic'&&p.country!=='custom')?p.country:detectCountry();
@@ -4990,6 +5002,7 @@ function openWelcomeBaby(){
 }
 function welcomeBaby(){
   const p=state.pregnancy; if(!p)return;
+  if(typeof pregIsOwner==='function' && !pregIsOwner()){ toast('Only the person whose journey this is can welcome the baby 🤍'); return; }
   const name=$('#wbName').value.trim(); if(!name){toast('Add their name first');return;}
   const birth=getWhen('when');
   const cc=($('#wbCountry')&&$('#wbCountry').value)||p.country||detectCountry();
@@ -6236,7 +6249,7 @@ function renderVaccines(){
     });
   });
   // Calm, age-aware hero: never lead with red. "On track" is the resting state.
-  const heroSub = catchup ? (catchup+' to catch up · talk to your doctor') : (toConfirm ? 'tap any vaccine to update it' : 'tap any vaccine to update it');
+  const heroSub = catchup ? (catchup+' to catch up · talk to your doctor') : (toConfirm ? 'tap a dose to confirm it was given' : 'tap any vaccine to update it');
   const heroTitle = (toConfirm && !catchup) ? `${escapeHtml((bb||{}).name||'Baby')} is on track 🌿` : `${done} of ${plan.length} done`;
   return `
     <div class="ms-hero">

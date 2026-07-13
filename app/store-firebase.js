@@ -329,8 +329,10 @@
     });
   }
 
-  window.LL.signOut = function () {
-    if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
+  window.LL.signOut = async function () {
+    // Flush any debounced write before signing out, so the last-logged entry isn't lost
+    // (confirmLogout promises "your data stays safely synced").
+    if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; try { await pushNow(); } catch (e) {} }
     teardown(); auth.signOut();
   };
 
@@ -1197,7 +1199,7 @@
 
     var rows = Object.keys(info).map(function (uid) {
       var m = info[uid] || {};
-      var who = m.relationship || (m.role === 'owner' ? 'Owner' : 'Caregiver');
+      var who = m.relationship ? (m.relationship + (m.role === 'owner' ? ' · Owner' : '')) : (m.role === 'owner' ? 'Owner' : 'Caregiver');
       var av = (typeof window.memberAvatarSvg === 'function') ? '<span class="ll-mem-av">' + window.memberAvatarSvg(uid, 40) + '</span>' : '';
       var rm = (myRole === 'owner' && uid !== me.uid) ? '<button class="ll-rm" data-uid="' + uid + '" data-email="' + esc(m.email || '') + '" data-name="' + esc(m.name || m.email || 'this person') + '">Remove</button>' : '';
       return '<div class="ll-mem"><div style="display:flex;align-items:center;gap:10px">' + av + '<div><div class="ll-mem-name">' + esc(m.name || m.email || 'Member') + (uid === me.uid ? ' (you)' : '')
@@ -1225,7 +1227,7 @@
       : '<div class="ll-auth-msg">Only an owner can invite new people.</div>';
 
     var share = '<div class="ll-invite"><label>App link to share</label>'
-      + '<div class="ll-linkrow"><input id="llAppLink" readonly value="' + esc(location.origin) + '"><button id="llCopyLink" class="ll-modal-btn">Copy</button></div>'
+      + '<div class="ll-linkrow"><input id="llAppLink" readonly value="' + esc(location.origin + '/app/') + '"><button id="llCopyLink" class="ll-modal-btn">Copy</button></div>'
       + '<div class="ll-auth-msg">Cubby doesn\'t send emails. Send this link yourself (text / WhatsApp); the invited person signs in with the invited email address (Google, Apple or an email link) and joins automatically. If they use Sign in with Apple, they should choose Share My Email so it matches.</div></div>';
 
     modal('Family & sharing', '<div class="ll-mems">' + rows + '</div>'
@@ -1371,7 +1373,7 @@
         relationship: rel, name: name,
         invitedBy: auth.currentUser.uid, status: 'pending', createdAt: window.LL.serverTimestamp()
       });
-      var link = location.origin;
+      var link = location.origin + '/app/';
       var babyName = (typeof state !== 'undefined' && state.babies && state.babies[0] && state.babies[0].name) ? state.babies[0].name : 'our baby';
       var subject = 'Join me on Cubby 🐻';
       var bodyTxt = 'I\'m using Cubby to keep track of ' + babyName + '\'s feeds, naps, nappies and more, and I\'d love you on it too.\n\n'
