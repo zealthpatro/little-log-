@@ -16,20 +16,6 @@
 
   firebase.initializeApp(firebaseConfig);
 
-  // App Check — bot/abuse defense (reCAPTCHA v3). It makes Firestore/Auth reject requests that
-  // don't come from the real app. Enforcement is toggled in the Firebase console; keep it in
-  // MONITOR mode until the verified-traffic metric is clean, then enforce. Wrapped in try/catch so
-  // a blocked or failed reCAPTCHA (privacy blockers, offline) never prevents the app from booting.
-  // On localhost we use a debug token instead of reCAPTCHA so the local + e2e harness keeps working.
-  try {
-    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-      self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-    }
-    if (firebase.appCheck) {
-      firebase.appCheck().activate('6LdxBlEtAAAAAICwaxnu9HH20CF8skr5jRglmiXP', true);
-    }
-  } catch (e) { /* App Check must never block boot */ }
-
   var auth = firebase.auth();
   var db = firebase.firestore();
 
