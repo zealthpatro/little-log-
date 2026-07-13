@@ -1,0 +1,13 @@
+rules_version = '2';
+
+// Cubby does NOT use Firebase Storage — photos are stored client-side (IndexedDB) and synced as
+// data URLs inside Firestore docs. The Storage bucket is provisioned by default but unused, so it
+// is locked to deny-all: no client may read or write any object. If photos are ever moved
+// server-side, replace this with per-household, member-scoped rules (mirror firestore.rules).
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

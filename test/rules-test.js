@@ -131,6 +131,83 @@ async function check(name, p) {
   const CO = env.authenticatedContext('CO', { email: 'co@x.com' }).firestore();
   await check('co-owner invitee joins as OWNER (invite role=owner, succeeds)', assertSucceeds(updateDoc(doc(CO, 'households/H'), { 'members.CO': 'owner', 'memberInfo.CO': { name: 'CoOwner', email: 'co@x.com', role: 'owner', relationship: 'Papa Bear' } })));
 
+  // ==========================================================================
+  // PART 2 — the marketed privacy promises + entitlement + lifecycle.
+  // Added 2026-07-12 (design/RULES-REVIEW.md): the suite previously never tested
+  // mhealth (mood NEVER shareable), the pregnancy journey, pro, create/delete,
+  // or the top-level collections. These are the claims on the marketing site.
+  // ==========================================================================
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'households/H/mhealth/O/cat/health'),     { ownerUid: 'O', sharedWith: ['C'], entries: [] });
+    await setDoc(doc(db, 'households/H/mhealth/O/cat/conditions'), { ownerUid: 'O', sharedWith: [], entries: [] });
+    await setDoc(doc(db, 'households/H/mhealth/O/cat/mood'),       { ownerUid: 'O', entries: [{ epds: 4 }] });
+    await setDoc(doc(db, 'households/H/pregnancy/O'), { ownerUid: 'O', stage: 'expecting', edd: 20270101, sharedWith: [] });
+    await setDoc(doc(db, 'households/H/notes/n-mom-priv'), { text: 'owner private', audience: 'O', createdBy: 'O' });
+    await setDoc(doc(db, 'households/H/notes/n-circle'),   { text: 'handoff', audience: 'circle', createdBy: 'O' });
+    await setDoc(doc(db, 'households/HP'), { ownerId: 'O', members: { O: 'owner' }, memberInfo: { O: { name: 'Mom' } }, app: cleanApp(), pro: { active: true, plan: 'annual', status: 'active' } });
+  });
+
+  console.log('\nMaternal health — mood NEVER shareable (the core promise):');
+  await check('owner reads her own health category', assertSucceeds(getDoc(doc(O, 'households/H/mhealth/O/cat/health'))));
+  await check('member on sharedWith reads that category', assertSucceeds(getDoc(doc(C, 'households/H/mhealth/O/cat/health'))));
+  await check('member NOT on sharedWith reads a category (fails)', assertFails(getDoc(doc(C, 'households/H/mhealth/O/cat/conditions'))));
+  await check('MOOD: any other member reads it (fails, always)', assertFails(getDoc(doc(C, 'households/H/mhealth/O/cat/mood'))));
+  await check('MOOD: owner writes mood WITH a sharedWith list (fails)', assertFails(setDoc(doc(O, 'households/H/mhealth/O/cat/mood'), { ownerUid: 'O', sharedWith: ['C'], entries: [] })));
+  await check('MOOD: owner writes mood with no sharedWith (succeeds)', assertSucceeds(setDoc(doc(O, 'households/H/mhealth/O/cat/mood'), { ownerUid: 'O', entries: [{ epds: 5 }] })));
+  await check('another member writes her health data (fails)', assertFails(setDoc(doc(C, 'households/H/mhealth/O/cat/health'), { ownerUid: 'O', sharedWith: ['C'], entries: ['tampered'] })));
+  await check('owner mislabels ownerUid on her own doc (fails)', assertFails(setDoc(doc(O, 'households/H/mhealth/O/cat/health'), { ownerUid: 'C', sharedWith: [], entries: [] })));
+  await check('stranger reads mhealth (fails)', assertFails(getDoc(doc(S, 'households/H/mhealth/O/cat/health'))));
+  // Hostile seed: even if a mood doc somehow CONTAINS a sharedWith list, reads must still deny.
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'households/H/mhealth/O/cat/mood'), { ownerUid: 'O', sharedWith: ['C'], entries: [] });
+  });
+  await check('MOOD: hostile sharedWith present — member read still fails', assertFails(getDoc(doc(C, 'households/H/mhealth/O/cat/mood'))));
+
+  console.log('\nPregnancy journey — owner-owned, consent-shared:');
+  await check('owner reads her journey', assertSucceeds(getDoc(doc(O, 'households/H/pregnancy/O'))));
+  await check('unshared member cannot even see the pregnancy exists (fails)', assertFails(getDoc(doc(C, 'households/H/pregnancy/O'))));
+  await check('owner shares journey (writes sharedWith)', assertSucceeds(setDoc(doc(O, 'households/H/pregnancy/O'), { ownerUid: 'O', stage: 'expecting', edd: 20270101, sharedWith: ['C'] })));
+  await check('shared member CAN read after consent', assertSucceeds(getDoc(doc(C, 'households/H/pregnancy/O'))));
+  await check('shared member still cannot WRITE the journey (fails)', assertFails(setDoc(doc(C, 'households/H/pregnancy/O'), { ownerUid: 'O', stage: 'expecting', sharedWith: ['C'], tampered: true })));
+  await check('stranger reads the journey (fails)', assertFails(getDoc(doc(S, 'households/H/pregnancy/O'))));
+
+  console.log('\nNotes read scope:');
+  await check('member reads a circle note', assertSucceeds(getDoc(doc(C, 'households/H/notes/n-circle'))));
+  await check('non-audience member reads a private note (fails)', assertFails(getDoc(doc(C, 'households/H/notes/n-mom-priv'))));
+  await check('stranger reads a circle note (fails)', assertFails(getDoc(doc(S, 'households/H/notes/n-circle'))));
+  await check('member creates a note forged as someone else (fails)', assertFails(setDoc(doc(C, 'households/H/notes/n-forge'), { text: 'x', audience: 'circle', createdBy: 'O' })));
+
+  console.log('\nPro entitlement — server-only:');
+  await check('owner grants themselves Pro (fails)', assertFails(updateDoc(doc(O, 'households/H'), { pro: { active: true, plan: 'annual' } })));
+  await check('owner extends an EXISTING Pro entitlement (fails)', assertFails(updateDoc(doc(O, 'households/HP'), { pro: { active: true, plan: 'annual', status: 'active', until: 9999999999999 } })));
+  await check('owner saves blob on a Pro household, pro untouched (succeeds)', assertSucceeds(updateDoc(doc(O, 'households/HP'), { app: cleanApp() })));
+  await check('household created WITH pro pre-set (fails)', assertFails(setDoc(doc(S, 'households/HS-pro'), { ownerId: 'S', members: { S: 'owner' }, memberInfo: {}, app: cleanApp(), pro: { active: true } })));
+
+  console.log('\nHousehold lifecycle:');
+  await check('user creates their own new household (succeeds)', assertSucceeds(setDoc(doc(S, 'households/HS'), { ownerId: 'S', members: { S: 'owner' }, memberInfo: { S: { name: 'Solo' } }, app: cleanApp() })));
+  await check('user creates a household claiming another ownerId (fails)', assertFails(setDoc(doc(S, 'households/HS2'), { ownerId: 'O', members: { S: 'owner' }, memberInfo: {}, app: cleanApp() })));
+  await check('create household with maternal data in the app blob (fails)', assertFails(setDoc(doc(S, 'households/HS3'), { ownerId: 'S', members: { S: 'owner' }, memberInfo: {}, app: cleanApp({ pregnancy: { weeks: 10 } }) })));
+  await check('caregiver deletes the household (fails)', assertFails(deleteDoc(doc(C, 'households/H'))));
+  await check('uninvited user writes self into members (fails)', assertFails(updateDoc(doc(S, 'households/H'), { 'members.S': 'caregiver' })));
+  await check('stranger reads events subcollection (fails)', assertFails(getDoc(doc(S, 'households/H/events/e-mom'))));
+
+  console.log('\nInvite create (owner-only + role hygiene):');
+  await check('owner creates an invite, role caregiver (succeeds)', assertSucceeds(setDoc(doc(O, 'invites/newc@x.com'), { householdId: 'H', role: 'caregiver' })));
+  await check('owner creates a co-owner invite, role owner (succeeds)', assertSucceeds(setDoc(doc(O, 'invites/newo@x.com'), { householdId: 'H', role: 'owner' })));
+  await check('owner creates an invite with a BOGUS role (fails)', assertFails(setDoc(doc(O, 'invites/newx@x.com'), { householdId: 'H', role: 'superadmin' })));
+  await check('caregiver creates an invite (fails, owner-only)', assertFails(setDoc(doc(C, 'invites/newy@x.com'), { householdId: 'H', role: 'caregiver' })));
+
+  console.log('\nTop-level collections:');
+  await check('users: own doc write (succeeds)', assertSucceeds(setDoc(doc(O, 'users/O'), { householdId: 'H' })));
+  await check('users: another user\'s doc read (fails)', assertFails(getDoc(doc(C, 'users/O'))));
+  await check('newsletter: signed-in read (fails)', assertFails(getDoc(doc(O, 'newsletter/x'))));
+  await check('newsletter: signed-in write (fails)', assertFails(setDoc(doc(O, 'newsletter/x'), { email: 'a@b.c' })));
+  await check('waitlist: own signup (succeeds)', assertSucceeds(setDoc(doc(C, 'waitlist/C'), { email: 'c@x.com' })));
+  await check('waitlist: someone else\'s signup read (fails)', assertFails(getDoc(doc(C, 'waitlist/O'))));
+  await check('feedback: create (succeeds)', assertSucceeds(setDoc(doc(C, 'feedback/f1'), { text: 'love it' })));
+  await check('feedback: read back (fails)', assertFails(getDoc(doc(C, 'feedback/f1'))));
+
   await env.cleanup();
   console.log('\n' + results.pass + ' passed, ' + results.fail + ' failed');
   process.exit(results.fail ? 1 : 0);
