@@ -4,10 +4,13 @@
 (function () {
   var firebaseConfig = {
     apiKey: "AIzaSyBj10mZkKlaX4BvYprssPdnUKsIXUCVvZU",
-    /* Auth runs on our own domain: the edge worker proxies /__/auth/* to the
-       firebaseapp.com origin, so the Google popup says little-cubby.com.
-       (Revert to "little-log-a9caa.firebaseapp.com" if sign-in ever breaks.) */
-    authDomain: "little-cubby.com",
+    /* Auth runs on Firebase's own always-on domain. We previously proxied /__/auth/* through the
+       edge worker so the Google popup said little-cubby.com, but that proxy 404'd for some
+       regions/clients and broke Google + Apple sign-in (2026-07-13). Reverted to the reliable
+       firebaseapp.com origin per the documented fallback. Trade-off: the sign-in popup briefly
+       shows this domain instead of little-cubby.com. Re-brand only after the proxy is proven
+       stable across regions. */
+    authDomain: "little-log-a9caa.firebaseapp.com",
     projectId: "little-log-a9caa",
     storageBucket: "little-log-a9caa.firebasestorage.app",
     messagingSenderId: "657437500368",
