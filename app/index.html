@@ -848,6 +848,19 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .bag-row .bg-tick{width:24px;height:24px;border-radius:8px;border:2px solid var(--line);display:grid;place-items:center;flex-shrink:0;cursor:pointer;color:#fff;}
 .bag-row.done .bg-tick{background:var(--preg);border-color:var(--preg);}
 .country-search{width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;font-size:16px;background:var(--surface);color:var(--ink);box-sizing:border-box;}
+/* Overlay picker (searchPickerHtml): a tappable field that opens a search-first bottom sheet on top. */
+.picker-field{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:48px;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;font-size:16px;background:var(--surface);color:var(--ink);cursor:pointer;font-family:inherit;text-align:left;box-sizing:border-box;}
+.picker-field .picker-chev{color:var(--ink-faint);font-size:13px;flex-shrink:0;}
+.picker-ov{position:fixed;inset:0;z-index:1000;background:rgba(38,26,18,.5);backdrop-filter:blur(3px);display:flex;align-items:flex-end;animation:pickerFade .18s ease;}
+@keyframes pickerFade{from{opacity:0}to{opacity:1}}
+.picker-ov-panel{background:var(--card,#fff);width:100%;max-height:82vh;border-radius:22px 22px 0 0;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 -8px 30px rgba(0,0,0,.2);}
+.picker-ov-head{display:flex;gap:8px;align-items:center;padding:14px;border-bottom:1px solid var(--line);}
+.picker-ov-search{flex:1;padding:13px 14px;border:1.5px solid var(--line);border-radius:12px;font-size:16px;background:var(--surface);color:var(--ink);box-sizing:border-box;font-family:inherit;}
+.picker-ov-done{border:none;background:none;color:var(--feed);font-weight:800;font-size:15px;font-family:inherit;cursor:pointer;padding:6px 8px;}
+.picker-ov-list{overflow-y:auto;padding:6px 8px 24px;-webkit-overflow-scrolling:touch;}
+.picker-ov-list .country-opt{padding:14px 12px;border-radius:10px;cursor:pointer;font-size:16px;min-height:44px;box-sizing:border-box;}
+.picker-ov-list .country-opt.sel{background:var(--feed-soft);color:var(--ink);font-weight:700;}
+.picker-ov-list .country-opt:active{background:var(--surface-2);}
 .country-list{margin-top:6px;max-height:240px;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:12px;background:var(--surface);}
 .country-opt{padding:11px 14px;cursor:pointer;font-size:15px;border-bottom:1px solid var(--line);}
 .country-opt:last-child{border-bottom:none;}
@@ -3778,13 +3791,40 @@ function searchPickerHtml(id, pairs, sel, ph){
   if((sel===undefined||sel==='') && pairs[0]) sel = pairs[0][0];
   var selRow = pairs.filter(function(p){return p[0]===sel;})[0];
   var selLabel = selRow ? selRow[1] : (sel||'');
+  // Hidden data source: options carry code + a lowercased search key. Not clickable here — the
+  // overlay clones them. The hidden #id keeps the same value contract every consumer reads.
   var rows = pairs.map(function(p){
-    return '<div class="country-opt'+(p[0]===sel?' sel':'')+'" data-code="'+escapeHtml(String(p[0]))+'" data-l="'+escapeHtml(String(p[1]||'').toLowerCase())+'" onclick="pickPick(\''+id+'\',this)">'+escapeHtml(String(p[1]))+'</div>';
+    return '<div class="country-opt" data-code="'+escapeHtml(String(p[0]))+'" data-l="'+escapeHtml(String(p[1]||'').toLowerCase())+'">'+escapeHtml(String(p[1]))+'</div>';
   }).join('');
   return '<input type="hidden" id="'+id+'" value="'+escapeHtml(String(sel))+'">'
-    + '<input id="'+id+'_s" class="country-search" autocomplete="off" placeholder="'+escapeHtml(ph||'Search…')+'" value="'+escapeHtml(String(selLabel))+'" onfocus="this.select();showCountryList(\''+id+'\')" oninput="filterCountryList(\''+id+'\')" onblur="blurCountry(\''+id+'\')">'
-    + '<div id="'+id+'_l" class="country-list" style="display:none">'+rows+'</div>';
+    + '<button type="button" id="'+id+'_btn" class="picker-field" data-ph="'+escapeHtml(ph||'Search…')+'" onclick="openPickerOverlay(\''+id+'\')"><span id="'+id+'_lbl">'+escapeHtml(String(selLabel))+'</span><span class="picker-chev">▾</span></button>'
+    + '<div id="'+id+'_l" class="picker-src" style="display:none">'+rows+'</div>';
 }
+/* Tapping the field opens a search-first overlay ON TOP of the current sheet (a bottom sheet with
+   the search pinned at the top + a scrollable, filterable list) instead of an inline list that
+   fell below the fold on mobile. Picking sets the hidden #id (unchanged contract) + the label. */
+function openPickerOverlay(id){
+  closePickerOverlay(id);
+  var src=document.getElementById(id+'_l'); if(!src) return;
+  var btn=document.getElementById(id+'_btn');
+  var ph=(btn&&btn.getAttribute('data-ph'))||'Search…';
+  var cur=(document.getElementById(id)||{}).value;
+  var opts='';
+  [].forEach.call(src.children, function(o){
+    opts += '<div class="country-opt'+(o.getAttribute('data-code')===cur?' sel':'')+'" data-code="'+escapeHtml(o.getAttribute('data-code'))+'" data-l="'+escapeHtml(o.getAttribute('data-l'))+'" onclick="pickPickOv(\''+id+'\',this)">'+escapeHtml(o.textContent)+'</div>';
+  });
+  var ov=document.createElement('div'); ov.className='picker-ov'; ov.id=id+'_ov';
+  ov.onclick=function(e){ if(e.target===ov) closePickerOverlay(id); };
+  ov.innerHTML='<div class="picker-ov-panel"><div class="picker-ov-head"><input class="picker-ov-search" id="'+id+'_ovs" autocomplete="off" placeholder="'+escapeHtml(ph)+'" oninput="filterOv(\''+id+'\')"><button type="button" class="picker-ov-done" onclick="closePickerOverlay(\''+id+'\')">Done</button></div><div class="picker-ov-list" id="'+id+'_ovl">'+opts+'</div></div>';
+  document.body.appendChild(ov);
+  setTimeout(function(){ var s=document.getElementById(id+'_ovs'); if(s) s.focus(); }, 60);
+}
+function filterOv(id){ var s=document.getElementById(id+'_ovs'), l=document.getElementById(id+'_ovl'); if(!s||!l) return;
+  var q=(s.value||'').trim().toLowerCase();
+  [].forEach.call(l.children,function(el){ el.style.display=(!q||el.getAttribute('data-l').indexOf(q)>=0)?'block':'none'; }); }
+function pickPickOv(id, el){ var h=document.getElementById(id), lbl=document.getElementById(id+'_lbl');
+  if(h) h.value=el.getAttribute('data-code'); if(lbl) lbl.textContent=el.textContent; closePickerOverlay(id); }
+function closePickerOverlay(id){ var ov=document.getElementById(id+'_ov'); if(ov&&ov.parentNode) ov.parentNode.removeChild(ov); }
 function countryPickerHtml(id, sel){ return searchPickerHtml(id, pregCountryList(), sel||'generic', 'Search your country…'); }
 function showCountryList(id){ var l=document.getElementById(id+'_l'); if(l) l.style.display='block';
   // Scroll the field (label + search + the now-open list) into view so the list isn't stuck
