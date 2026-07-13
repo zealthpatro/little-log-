@@ -1,6 +1,6 @@
 /* Cubby newsletter capture — a calm, explicit opt-in for visitors who aren't ready to sign in yet.
    Shown on the marketing site and at the end of every article. First-party only: posts the email to
-   our own Worker (/api/newsletter), which stores it in Firestore. No third-party list broker, no
+   our own Worker (/api/newsletter), which stores it in an isolated Cloudflare D1 database (NEWSLETTER_DB). No third-party list broker, no
    pixel, no cookie. Keeps the "no third-party trackers" promise.
 
    Placement: replaces a [data-cubby-news] element if present (marketing site), else inserts before

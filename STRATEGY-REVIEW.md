@@ -70,8 +70,8 @@ Deliberately near-zero, by design:
 - **Backend:** Firebase **Spark (free)**, Google auth + Firestore. Photos are ~560px base64
   thumbnails stored *in Firestore* (no Firebase Storage, no Blaze). Free-tier ceilings: 1 GiB
   stored, 50k reads/day, 20k writes/day.
-- **Payments:** the billing Worker runs on Cloudflare's free tier. Stripe takes ~2.9% + $0.30
-  per charge (≈ $2.50 on a $90 annual sub -> ~$87 net).
+- **Payments:** the billing Worker runs on Cloudflare's free tier. Lemon Squeezy (merchant of
+  record) takes ~5% + $0.50 per charge (≈ $5 on a $90 annual sub -> ~$85 net).
 - **Base Pro features cost us $0 per user** (all client-side / on-device).
 
 **Where real costs appear (and only then):**
@@ -86,7 +86,7 @@ Deliberately near-zero, by design:
    and any paid acquisition. App Store ($99/yr) + Play ($25 once) for native distribution.
 
 **Rough unit economics (ASSUMPTIONS, challenge these):**
-- Net revenue per paying household ≈ **$57/yr** (annual Base after Stripe).
+- Net revenue per paying household ≈ **$57/yr** (annual Base after Lemon Squeezy).
 - Marginal serving cost per free user ≈ **$0** today; per Base-Pro user ≈ **$0**.
 - Therefore gross margin on Base is ~100% minus payment fees until Firestore tips into Blaze.
 - Implication: the model is **structurally cheap to run**; the binding constraints are

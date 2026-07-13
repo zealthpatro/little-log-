@@ -8,14 +8,14 @@ Status: **planned Pro feature, on the waitlist.** Not built. This is the design 
 so it's ready to build once Pro demand is validated.
 
 ## What it is
-Age-aware daily **routine suggestions** that adapt to your baby as they grow (day 0 to 365) and
-re-flow when real life happens. Cubby already *logs* what happened; the Routine Manager gently
+Age-aware daily **ritual suggestions** that adapt to your baby as they grow (day 0 to 365) and
+re-flow when real life happens. Cubby already *logs* what happened; the Ritual Manager gently
 suggests *what tends to come next* (next feed window, nap window, tummy time, etc.) and nudges
 for it (push = Pro).
 
 ## The golden rule (non-negotiable framing)
 Pediatric guidance is **responsive feeding and following your baby's cues**, especially for
-newborns — never a rigid clock. So the Routine Manager is:
+newborns — never a rigid clock. So the Ritual Manager is:
 - **Suggestions, not alarms.** Soft "nap window opening soon", never "FEED NOW".
 - **Cue-first.** Always "watch your baby, not the clock"; the schedule yields to hunger/sleepy cues.
 - **Wake-window based** (age-appropriate awake time), which is gentler and more accurate than fixed
@@ -50,7 +50,7 @@ surfaced when age-appropriate.
 4. **Re-flows on change.** Log a feed early/late, or a long nap → all downstream suggestions shift
    automatically. No "you're behind schedule" guilt — it just rebases.
 5. **Stage transitions.** As the baby ages, wake windows/feeds auto-advance to the next stage
-   (with a gentle "your routine is growing 🐻" note).
+   (with a gentle "your ritual is growing 🐻" note).
 6. **Pro nudges.** Optional push when a window opens ("nap window opening soon"). In-app always.
 
 ## Data model (when built)

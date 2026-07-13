@@ -27,13 +27,13 @@
 > sheet with the image file → IG Stories/Feed); the Story format chip is labelled "Story · Insta".
 
 > **Pre-launch gate (2026-06-13): "Register for Pro", launching August 2026.** Payments are not
-> open yet (needs a UAE trade/freelancer license + Stripe-or-MoR setup, weeks out). So the Pro
+> open yet (needs a UAE trade/freelancer license + Lemon Squeezy (MoR) setup, weeks out). So the Pro
 > sheet, with `PRO_CFG.checkoutUrl` empty, presents a **"Register for Pro"** button (writes the
 > `waitlist` collection + `localStorage.cubby-pro-waitlist`) and shows the **August 2026** launch
 > window. The free tasters stay live as the hook: users try a treat a few times, hit the wall,
 > and register. Single source of truth for the date is `const PRO_LAUNCH` in `app/index.html`;
 > the "soon" badges on `/`, `/pricing/` and the in-app landing now read "Aug 2026". To go live:
-> set `PRO_CFG.checkoutUrl`/`portalUrl` (Stripe worker) or swap in the MoR checkout, and the
+> set `PRO_CFG.checkoutUrl`/`portalUrl` (Lemon Squeezy MoR worker; the legacy Stripe worker is the alternate), and the
 > sheet flips from register to sell automatically.
 
 A running list of what we *could* put behind Cubby Pro, updated as we build. This is a menu to choose from later, not a commitment. Pricing/flow is designed separately (see PRO.md when we get there). Competitor signal: Precious charges ~$4.99/mo for AI photo art and parents pay, so keepsakes/AI are proven willingness-to-pay.

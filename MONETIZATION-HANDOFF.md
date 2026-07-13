@@ -1,9 +1,15 @@
 # Monetization handoff: Cubby Pro payment loop
 
-> **Status (June 2026):** The Cubby Pro payment loop (Stripe + Worker + tamper-proof entitlement) is built on `main` but NOT yet charging; Pro is $9/mo or $90/yr, gated to an Aug 2026 launch. Full current state + go-live plan: HANDOFF.md.
+> **Status (June 2026):** The Cubby Pro payment loop (Lemon Squeezy + Worker + tamper-proof entitlement) is built on `main` but NOT yet charging; Pro is $9/mo or $90/yr, gated to an Aug 2026 launch. Full current state + go-live plan: HANDOFF.md.
 
 **Version 1 · 2026-06-13.** Operational handoff for the Pro / payments work. Read this cold and
 you can take the payment loop from "built" to "charging real money".
+
+> **Provider note (2026-07):** the chosen processor is now **Lemon Squeezy (merchant of record)** —
+> see `workers/pro-billing/LEMONSQUEEZY.md` and `worker-lemonsqueezy.js` for the live path. The
+> Stripe-specific steps below (webhook event names, `STRIPE_PRICE_ID`, test card `4242…`) describe
+> the **legacy Stripe worker** (`worker.js`), kept as the alternate; do not follow them verbatim for
+> the Lemon Squeezy go-live.
 
 > **Scope:** this doc owns the **monetization track** (entitlement, gates, billing). It is on
 > `main`, which is the production branch (push = live via Cloudflare Workers Builds). The pregnancy

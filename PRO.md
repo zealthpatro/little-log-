@@ -1,6 +1,6 @@
 # Cubby Pro — monetization research & roadmap
 
-> **Status (June 2026):** Cubby Pro is one tier ($9/mo or $90/yr, 7-day trial); the client-side payment loop is built and the gate is live, with Stripe go-live targeted ~Aug 2026. Full current state + go-live plan: HANDOFF.md.
+> **Status (June 2026):** Cubby Pro is one tier ($9/mo or $90/yr, 7-day trial); the client-side payment loop is built and the gate is live, with Lemon Squeezy (MoR) go-live targeted ~Aug 2026. Full current state + go-live plan: HANDOFF.md.
 
 > ## ⚑ CURRENT PRICING (authoritative, 2026-06-13)
 > Cubby Pro is **ONE tier: $9/month or $90/year** (save 17%, about $7.50/mo effective), 7-day free
@@ -9,18 +9,18 @@
 > in other docs — those are historical. Free tier stays free forever. Source of truth for the numbers:
 > the `CUR` table in `pricing/index.html`.
 
-Status: **payment loop BUILT (June 2026), awaiting Stripe + Worker deploy to go live.**
+Status: **payment loop BUILT (June 2026), awaiting Lemon Squeezy + Worker deploy to go live.**
 Everything client-side is in place: entitlement (`households/{hid}.pro`, written only by the
 billing Worker, rules-protected), `isPro()` gating, the upgrade sheet with 7-day-trial checkout
 (falls back to the waitlist until configured), the gated Base feature set (premium studio,
-watermark-free shares, doctor PDF report), and the Cloudflare Worker for Stripe checkout /
+watermark-free shares, doctor PDF report), and the Cloudflare Worker for Lemon Squeezy checkout /
 webhook / portal.
 
-**Launch checklist (the only remaining steps, ~20 min):** follow `workers/pro-billing/README.md`:
-create the Stripe product/price ($9/mo, $90/yr), deploy the Worker, set its four secrets, add the
-Stripe webhook, **publish the updated `firestore.rules` in the Firebase console**, then set
-`PRO_CFG.checkoutUrl/portalUrl` in `app/index.html` and bump the SW cache. Test with Stripe
-test mode (card 4242...) before flipping live keys. Dev preview of Pro:
+**Launch checklist (the only remaining steps, ~20 min):** follow `workers/pro-billing/LEMONSQUEEZY.md`:
+create the Lemon Squeezy product/variants ($9/mo, $90/yr), deploy the Worker, set its secrets, add the
+Lemon Squeezy webhook, **publish the updated `firestore.rules` in the Firebase console**, then set
+`PRO_CFG.checkoutUrl/portalUrl` in `app/index.html` and bump the SW cache. Test in Lemon Squeezy
+test mode before flipping live keys. Dev preview of Pro:
 `localStorage['cubby-pro-dev']='1'`.
 
 ## Positioning
@@ -78,7 +78,7 @@ Implication: lead Pro with **smart sleep/feed insights**, not gimmicks.
 - Possibly a one-time "lifetime/keepsake" option for photo storage.
 - Keep the free tier genuinely good so Pro is a delight, not a hostage.
 
-## Launch pricing — v1 "Base" plan (next venture, design-only for now)
+## Launch pricing — v1 "Base" plan (ARCHIVED — historical; the $5 Base / $15–19 Pro-Plus ladder in this section is DEAD, superseded by the single Cubby Pro $9/mo · $90/yr tier in the CURRENT PRICING note above)
 The first paid version ships **one cheap entry tier**, priced to maximise first conversions, with
 a free trial so there is no risk to try. Full Stripe/paywall build is deferred to the next venture;
 this is the plan to build against. (Beta stays 100% free.)
@@ -96,7 +96,7 @@ this is the plan to build against. (Beta stays 100% free.)
   **HD photos & cloud backup (R2)**, **push notifications (Blaze)**, **smart routines/insights**.
   Those justify a future "Pro/Plus" tier above Base once demand + costs are proven.
 
-### Tier ladder (target)
+### Tier ladder (ARCHIVED — historical, not the current plan)
 | Tier | Price | Who | Includes |
 |---|---|---|---|
 | **Free** | $0 forever | everyone | All logging, sharing, vaccines, growth, health nudges, basic keepsakes. Never paywall safety/basics. |

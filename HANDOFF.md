@@ -48,7 +48,7 @@ stale; the deploy branch is `main`.
   (URL `?stage=` > page `data-page-stage` > localStorage > default baby), two-tab Features, a Home
   "Expecting" section, an Articles strip, and a Pregnancy nav link. Arriving from `/pregnancy/` marks
   the visitor "expecting" everywhere.
-- **~180 articles live** (baby + pregnancy clusters), searchable hub.
+- **~571 articles live** (baby + pregnancy clusters), searchable hub.
 - **Magic-link email FIXED + verified** — own Cloudflare Worker endpoint `POST /api/send-signin-link`
   mints the Firebase sign-in link (service-account JWT → OAuth → Identity Toolkit `returnOobLink`) and
   sends a branded email via **Resend** from `mail.little-cubby.com`. Confirmed delivering to the **Gmail
@@ -106,7 +106,7 @@ pregnancy blocks).
   guard lands. **Pending.**
 - **Deferred notes audience-immutability rule tweak:** the audience-immutability tightening on
   `households/{hid}/notes/{noteId}` is still queued. **Pending.**
-- **Pro billing go-live** — Worker is built (`workers/pro-billing/`); needs Stripe product/secrets/webhook
+- **Pro billing go-live** — Worker is built (`workers/pro-billing/`); needs Lemon Squeezy product/secrets/webhook
   + checkout URLs in the app; targeted Aug 2026. See `MONETIZATION-HANDOFF.md`.
 - **Maternal-surface gates** — emulator cross-account denial test for the consent *sharing* path; a
   source-accuracy pass on the GDM/BP thresholds (no credentialed reviewer required, per founder ruling —
@@ -134,12 +134,12 @@ Don't break production. Make a change → verify → push (auto-deploys).
 
 ## The 30-second model (two halves)
 **1. The marketing/SEO site lives at the root `/`** (static, indexable, no service worker):
-- `index.html` = marketing **home** (5-tab nav, hero carousel, proof, testimonials, pricing).
+- `index.html` = marketing **home** (4-tab nav (+ About in the marketing nav), hero carousel, proof, testimonials, pricing).
   Returning members are detected via `localStorage.cubby-member` → CTAs swap "Start free" →
   "Open Cubby" + a welcome-back strip (no forced redirect).
 - `features/`, `pricing/`, `faq/`, `articles/` = the other marketing tabs.
 - `vaccination-schedule/{uk,us,uae}/` + `de/impfkalender/` = programmatic SEO vaccine pages.
-- `articles/<slug>/` = the sourced content library — **180+ articles** live (baby + pregnancy), each with its own
+- `articles/<slug>/` = the sourced content library — **~571 articles** live (baby + pregnancy), each with its own
   folder, per-page OG image (`og/articles/<slug>.png`), BlogPosting + BreadcrumbList JSON-LD.
   The hub at `articles/` has **live search + topic/age filters** (URL-hash persistence,
   scroll-on-mobile / wrap-on-desktop chips). See content engine below.
@@ -162,7 +162,7 @@ Don't break production. Make a change → verify → push (auto-deploys).
 - `app/pregnancy-data.js` = `window.PREG` week-by-week + antenatal schedule data (170-country
   coverage). The full pregnancy product is **merged into `main` and live** (one Cubby; the old
   "Mommy To Be" name is retired). History/spec: `PREGNANCY-HANDOFF-V2.md`.
-- `app/sw.js` = service worker (`CACHE = little-log-vNN`, currently **v82**; bump on app asset change).
+- `app/sw.js` = service worker (`CACHE = little-log-vNN`, currently **v173**; bump on app asset change).
 - Data lives in `households/{hid}` (see README §3). Events are a subcollection; rest is the `app` blob.
 - Edge worker: root `worker.js` (`wrangler.toml` → `main = "worker.js"`) reverse-proxies `/__/*`
   to the Firebase auth backend so sign-in stays on `little-cubby.com`.
@@ -219,15 +219,15 @@ Articles are produced by a **dedicated Sonnet writer agent**, not the main build
 - YMYL safety is mandatory: no fabrication, no copying, deep-link + verify-200 official sources
   (NHS/CDC/WHO/AAP), dated disclaimer, no diagnosis, no em-dashes. Unsourceable → `articles-drafts/`.
 
-## Monetization (Stripe Pro billing)
-- **Worker is BUILT and launch-ready:** `workers/pro-billing/worker.js` implements the full loop —
-  `/checkout` (Stripe session, 7-day trial), `/webhook` (signature-verified), `/portal`. It is the
+## Monetization (Lemon Squeezy Pro billing)
+- **Worker is BUILT and launch-ready:** `workers/pro-billing/worker-lemonsqueezy.js` implements the full loop —
+  `/checkout` (Lemon Squeezy checkout, 7-day trial), `/webhook` (signature-verified), `/portal`. It is the
   only writer of `households/{hid}.pro = {active, plan, status, until, customer, updatedAt}`
   (rules-protected). Client gates ~9 feature classes behind `isPro()` in `app/index.html`.
 - **Cubby Pro:** $9/month or $90/year (save 17%, ~$7.50/mo effective), 7-day trial. Localized via the
   `pricing/` currency table (USD/GBP/EUR/AED/INR).
-- **To go live (~20 min, see `workers/pro-billing/README.md`):** create Stripe product/price, deploy
-  Worker, set the four secrets, add the Stripe webhook, **publish `firestore.rules` in the console**,
+- **To go live (~20 min, see `workers/pro-billing/README.md`):** create Lemon Squeezy product/price, deploy
+  Worker, set the four secrets, add the Lemon Squeezy webhook, **publish `firestore.rules` in the console**,
   set `PRO_CFG.checkoutUrl/portalUrl` in `app/index.html`, bump `app/sw.js`, test with card 4242.
 - Future Pro/Plus tier (~$15/mo annual, $19/mo monthly: HD photos+R2 backup, push, routines) is
   design-only and held until demand + per-user infra costs are proven.
@@ -270,7 +270,7 @@ Articles are produced by a **dedicated Sonnet writer agent**, not the main build
 - **Pregnancy tracker**: MERGED into `main` and live (one Cubby; "Mommy To Be" retired; 170-country
   schedules; Privacy Max 1.0). History + spec: `PREGNANCY-HANDOFF-V2.md`. (Our Den household hub
   remains dark behind `FEATURES.den = false`.)
-- **Stripe Pro billing**: Worker BUILT and launch-ready — just needs Stripe secrets + webhook + rules
+- **Lemon Squeezy Pro billing**: Worker BUILT and launch-ready — just needs Lemon Squeezy secrets + webhook + rules
   publish (`workers/pro-billing/README.md`). Referral rewards announce once redeemable. `PAYWALL.md`,
   `PRO.md` for design.
 - **Content cadence**: run the queue 2-3×/week via the runbook agent — `CONTENT-RUNBOOK.md`.
@@ -280,7 +280,7 @@ Articles are produced by a **dedicated Sonnet writer agent**, not the main build
 ## Doc index
 `README.md` (full) · `HANDOFF.md` (this) · `DESIGN.md` (**design anchor**: system + audit, follow
 Part A for any UI) · `CHANGELOG.md` · `SEO.md` · `CONTENT.md` /
-`CONTENT-RUNBOOK.md` / `CONTENT-QUEUE.md` · `PRO.md` / `PAYWALL.md` (Stripe billing built,
+`CONTENT-RUNBOOK.md` / `CONTENT-QUEUE.md` · `PRO.md` / `PAYWALL.md` (Lemon Squeezy billing built,
 launch checklist in `workers/pro-billing/README.md`) · `PREGNANCY.md` /
 `PREGNANCY-HANDOFF.md` (v1, superseded) / **`PREGNANCY-HANDOFF-V2.md` (the pregnancy track,
 now merged into `main` and live; rollout + next steps)** · `ROUTINES.md` · `ONBOARDING.md` ·

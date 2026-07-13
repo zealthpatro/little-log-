@@ -36,10 +36,10 @@ Phone / browser
    │                             all other paths → static assets (binding ASSETS)
    │
    ├─ /  (marketing + SEO — static, indexable)
-   │   ├─ index.html ............ marketing home (5-tab nav, hero carousel, proof, pricing)
+   │   ├─ index.html ............ marketing home (4-tab nav (+ About in the marketing nav), hero carousel, proof, pricing)
    │   ├─ features/ pricing/ faq/ articles/ ... the other tabs
    │   ├─ vaccination-schedule/{uk,us,uae}/, de/impfkalender/ ... programmatic SEO pages
-   │   ├─ articles/<slug>/ ...... sourced content library, 180+ articles (baby + pregnancy; see §10)
+   │   ├─ articles/<slug>/ ...... sourced content library, ~571 articles (baby + pregnancy; see §10)
    │   ├─ site.css (marketing) + vax.css (articles/vaccine) ... shared styles
    │   └─ sitemap.xml robots.txt og/*.png ... SEO plumbing
    │
@@ -82,13 +82,13 @@ and runs a diff-based sync engine. The app code still just mutates `state` and c
 | `app/landing.js` | Signed-out in-app landing screen + Pro/paywall copy (incl. Nutrition tracker). |
 | `app/growth-data.js` | `window.GROWTH_REF` = `{who,cdc}.{weight,height}.{M,F}` arrays of `[month,p5,p25,p50,p75,p95]`. Generated from official CDC/WHO data files (see §7). |
 | `app/pregnancy-data.js` | `window.PREG` week-by-week (weeks 4-41) + antenatal schedules (UK/US/DE/UAE/generic) + danger signs + condition thresholds. The full pregnancy product (journey, health tracking, ultrasound Moments, birth→baby conversion) is merged into `main` and live as the Expecting stage of the one Cubby app; the journey is private by default (owner-owned doc + sharedWith). See `PREGNANCY-HANDOFF-V2.md`. |
-| `app/sw.js` | App service worker; bump `CACHE` (`little-log-vN`, currently **v73**) on app asset change. |
+| `app/sw.js` | App service worker; bump `CACHE` (`little-log-vN`, currently **v173**) on app asset change. |
 | `app/manifest.webmanifest` | PWA manifest (name "Cubby", `start_url`/`scope` = `/app/`, icons). |
 
 ### Marketing + SEO (root `/`)
 | File | Purpose |
 |---|---|
-| `index.html` | Marketing home: 5-tab nav, hero carousel, honest proof, real testimonials, pricing widget, Free/Pro comparison. Redirects installed PWA clients to `/app/`. |
+| `index.html` | Marketing home: 4-tab nav (+ About in the marketing nav), hero carousel, honest proof, real testimonials, pricing widget, Free/Pro comparison. Redirects installed PWA clients to `/app/`. |
 | `features/`, `pricing/`, `faq/`, `articles/` | The other four marketing tabs (`pricing/` has the interactive localized Pro widget; `articles/` is the content hub grouped by age). |
 | `vaccination-schedule/{uk,us,uae}/`, `de/impfkalender/` | Programmatic SEO vaccine-schedule pages per country (NHS/CDC/MOHAP/STIKO sourced). |
 | `articles/<slug>/` | Sourced article pages (BlogPosting JSON-LD, deep-linked sources, disclaimer). |
@@ -101,7 +101,7 @@ and runs a diff-based sync engine. The app code still just mutates `state` and c
 |---|---|
 | `firestore.rules` | Security rules: members-only access, owner vs caregiver, invite-by-email join, `households/{hid}.pro` writable only by the billing Worker, per-`notes` read-by-audience/author-only-edit, and owner-owned `pregnancy`/`mhealth` (read by owner + `sharedWith`, write owner-only). Published in the Firebase console (2026-06-14). |
 | `worker.js` | Cloudflare edge worker (`wrangler.toml` `main`): reverse-proxies `/__/*` to `little-log-a9caa.firebaseapp.com` for same-domain sign-in (`authDomain` = `little-cubby.com`); all other paths fall through to static assets via the `ASSETS` binding. Also serves `POST /api/send-signin-link`, rate-limited per IP (5 requests per 60s via the `SIGNIN_RATE_LIMITER` binding) right after the same-origin check, returning 429 + `Retry-After` over budget and failing open if the binding is missing. |
-| `workers/pro-billing/` | Standalone Stripe billing Worker (`worker.js` + `wrangler.toml` + `README.md`): `/checkout`, `/webhook`, `/portal`; verifies Stripe signatures and writes the `households/{hid}.pro` entitlement. Built; deploy + secrets pending (see §9 and its `README.md`). |
+| `workers/pro-billing/` | Standalone Lemon Squeezy billing Worker (`worker-lemonsqueezy.js` + `wrangler.toml` + `README.md`; the legacy Stripe `worker.js` is kept as an alternate): `/checkout`, `/webhook`, `/portal`; verifies Lemon Squeezy webhook signatures and writes the `households/{hid}.pro` entitlement. Built; deploy + secrets pending (see §9 and its `README.md`). |
 | `wrangler.toml` | Cloudflare deploy config: `main = "worker.js"` (edge auth proxy) + `[assets] directory="./"` (static site) + `[[unsafe.bindings]] SIGNIN_RATE_LIMITER` (per-IP magic-link rate limit). |
 | `.assetsignore` | Keeps `tools/`, docs, drafts, node_modules and the service-account key out of the deploy. |
 | `.gitignore` | Ignores `tools/serviceAccountKey.json`, node_modules, logs, `.DS_Store`. |
@@ -300,7 +300,7 @@ Icons: `python3 generate_icons.py`.
 | Firebase services | Authentication (Google + Apple + email magic-link), Cloud Firestore. **No** Storage, **no** Functions. |
 | Firebase web config | in `app/firebase-init.js` (public by design; safe to commit; `authDomain` = `little-cubby.com`) |
 | Edge worker | `worker.js` (`wrangler.toml` `main`) proxies `/__/*` to Firebase for same-domain auth |
-| Stripe billing | `workers/pro-billing/` (separate Worker; built, deploy + secrets pending; see its `README.md`) |
+| Lemon Squeezy billing | `workers/pro-billing/` (separate Worker; built, deploy + secrets pending; see its `README.md`) |
 
 Everything runs on **free tiers**. Nothing here requires a card on file.
 
@@ -308,8 +308,9 @@ Everything runs on **free tiers**. Nothing here requires a card on file.
 
 ## 9. Known limits & roadmap
 
-- **Push notifications** are **in-app only** (fire while the app is open/installed). True
-  background push needs Web Push + Cloud Functions → the paid **Blaze** plan. Deliberately deferred.
+- **Push notifications:** background **medicine reminders** are shipped (Web Push + FCM),
+  delivered by a **Cloudflare Worker cron** — no **Blaze**/Cloud Functions needed. Push is
+  critical-only (medicine due); non-critical notifications are deliberately not sent.
 - **Automated email** (e.g. invites or digests sent *by Cubby's servers*) isn't built. Note that
   sign-in **magic-links are sent by Firebase Auth**, so email sign-in already works without our own
   mail infra. Current "Email the invite" still uses a `mailto:` from the sender's own mail app
@@ -326,9 +327,9 @@ Everything runs on **free tiers**. Nothing here requires a card on file.
   consent governance). The journey is private by default (owner-owned doc + sharedWith). The track
   is owned by `PREGNANCY-HANDOFF-V2.md`.
 - **Pro / paywall:** localized pricing is live on the marketing site and the full payment loop is
-  **built**: `workers/pro-billing/worker.js` (Stripe `/checkout`, `/webhook`, `/portal`, 7-day
+  **built**: `workers/pro-billing/worker-lemonsqueezy.js` (Lemon Squeezy `/checkout`, `/webhook`, `/portal`, 7-day
   trial) plus client-side gating via `isPro()` and the rules-protected `households/{hid}.pro`
-  entitlement. It is **not live yet**: deployment, Stripe product/secrets, the webhook, and wiring
+  entitlement. It is **not live yet**: deployment, Lemon Squeezy product/secrets, the webhook, and wiring
   the checkout/portal URLs are pending (~20 min, see `workers/pro-billing/README.md`, `PAYWALL.md`
   and `PRO.md`). (`firestore.rules` are already published in the console as of 2026-06-14.)
 - **Referral rewards:** the `?ref=` plumbing ships (capture + `referredBy` attribution), but the
@@ -346,7 +347,7 @@ Everything runs on **free tiers**. Nothing here requires a card on file.
   `sitemap.xml`, `robots.txt` and `hreflang`. Pricing widget is localized (USD/GBP/EUR/AED/INR,
   monthly + discounted annual). All visuals are original illustrations / initial avatars and all
   testimonials are real (no stock photos, no fabricated proof). Full plan in `SEO.md`.
-- **Articles hub** (`articles/`): 80+ sourced guides in a searchable hub with live text search plus
+- **Articles hub** (`articles/`): ~571 sourced guides in a searchable hub with live text search plus
   topic filters (Sleep, Feeding, Development, Health, Care & safety, Vaccines, Growth, Wellbeing,
   Comparisons) and age filters (Newborn / 0-3 / 3-6 / 6-12 mo), with dynamic counts, an empty
   state, and filters persisted to the URL hash. Each article carries `BlogPosting` + `BreadcrumbList`
@@ -381,7 +382,7 @@ Everything runs on **free tiers**. Nothing here requires a card on file.
 | `DESIGN.md` | **Design anchor**: design system (tokens, type, spacing, iconography rules) + full design audit + prioritized fix list. New UI must follow Part A. |
 | `CONTENT.md` / `CONTENT-RUNBOOK.md` / `CONTENT-QUEUE.md` | Article rules / publish pipeline / backlog. |
 | `PRO.md` / `PAYWALL.md` | Pro feature list, paywall + referral-reward design, and launch checklist (payment loop built, not yet live). |
-| `workers/pro-billing/README.md` | Stripe billing Worker: endpoints, the four secrets, webhook setup, and the ~20-minute go-live checklist. |
+| `workers/pro-billing/README.md` | Lemon Squeezy billing Worker: endpoints, the secrets, webhook setup, and the ~20-minute go-live checklist. |
 | `PREGNANCY.md` | Phased pregnancy-module spec (original; sources list still canonical). |
 | `PREGNANCY-HANDOFF.md` | v1 build handoff, superseded (build is done). |
 | `PREGNANCY-HANDOFF-V2.md` | **The pregnancy track:** what's built (now merged into `main` and live), brand state, rollout runbook, next-work queue. Start here for any pregnancy work. |
