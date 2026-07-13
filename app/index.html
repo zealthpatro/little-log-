@@ -380,7 +380,9 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .stepper{display:flex;align-items:center;gap:0;border:2px solid var(--line);border-radius:14px;overflow:hidden;background:var(--surface-2);}
 .stepper button{width:54px;height:50px;border:none;background:none;font-size:24px;font-weight:700;color:var(--accent,var(--feed));cursor:pointer;}
 .stepper button:active{background:var(--line);}
-.stepper input{flex:1;border:none;text-align:center;background:none;font-size:19px;font-weight:800;font-family:var(--font-display);}
+.stepper input{flex:1;border:none;text-align:center;background:none;font-size:19px;font-weight:800;font-family:var(--font-display);min-width:0;}
+/* Compact stepper for two-up layouts (e.g. weeks + days) so 2-digit values never clip. */
+.stepper-sm button{width:40px;font-size:22px;}
 .unit-toggle{display:flex;gap:8px;}
 .unit-toggle button{flex:1;border:2px solid var(--line);background:var(--surface-2);border-radius:12px;padding:11px;font-weight:800;font-family:var(--font-body);color:var(--ink-soft);cursor:pointer;font-size:14px;}
 .unit-toggle button.on{border-color:var(--accent,var(--feed));background:var(--accent-soft,var(--feed-soft));color:var(--ink);}
@@ -2770,7 +2772,7 @@ function openOnboardInvite(){
 /* Onboarding stage router: two states (expecting / baby) + a quiet planning link.
    "More than one" is a count, not a stage, so twins/siblings are offered after the first baby. */
 function obStage(kind){
-  if(kind==='expecting'){ pregDraft={mode:'due', date:'', country:detectCountry()}; openExpectingSetup('due'); }
+  if(kind==='expecting'){ pregDraft={mode:'due', date:'', weeks:'', days:0, country:detectCountry()}; openExpectingSetup('due'); }
   else if(kind==='planning'){ openPlanningSetup(); }
   else { openAddBaby({onboarding:true}); }
 }
@@ -3901,9 +3903,9 @@ function openWeekDetail(kind){
 }
 
 /* ---- Pregnancy: the journey starts wherever you are ---- */
-let pregDraft = {mode:'due', date:'', country:'us'};
+let pregDraft = {mode:'due', date:'', weeks:'', days:0, country:'us'};
 function openStartPregnancy(){
-  pregDraft={mode:'due', date:'', country:detectCountry()};
+  pregDraft={mode:'due', date:'', weeks:'', days:0, country:detectCountry()};
   openSheet(`<h2>Start your journey 🌸</h2><div class="sub">Wherever you are on the journey, start there. You can change anything later.</div>
     <div class="prof-cards">
       <div class="prof-card" onclick="openPlanningSetup()"><span class="lead" style="background:var(--diaper-soft);color:var(--diaper);font-size:18px">🌱</span><div class="cflex"><div class="a">We're trying</div><div class="b">Just starting out: get your body and home ready</div></div><span class="chev">${I.chev}</span></div>
@@ -3913,16 +3915,52 @@ function openStartPregnancy(){
     ${(state.pregnancyArchive&&state.pregnancyArchive.length)?`<button class="btn-ghost" style="color:var(--ink-faint);margin-top:4px" onclick="openKeptMemories()">🤍 View kept memories</button>`:''}
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
 }
-function setPregMode(m){ pregDraft.mode=m; pregDraft.date=(($('#pgDate')||{}).value)||pregDraft.date; pregDraft.country=(($('#pgCountry')||{}).value)||pregDraft.country; openExpectingSetup(m); }
+function setPregMode(m){
+  var el;
+  if((el=$('#pgDate'))) pregDraft.date=el.value||pregDraft.date;
+  if((el=$('#pgWeeks'))) pregDraft.weeks=el.value;
+  if((el=$('#pgDays'))) pregDraft.days=el.value;
+  if((el=$('#pgCountry'))&&el.value) pregDraft.country=el.value;
+  pregDraft.mode=m; openExpectingSetup(m);
+}
+function pregStep(f,delta){
+  var w=$('#pgWeeks'),dy=$('#pgDays'),c=$('#pgCountry');
+  if(w) pregDraft.weeks=w.value; if(dy) pregDraft.days=dy.value; if(c&&c.value) pregDraft.country=c.value;
+  if(f==='weeks') pregDraft.weeks=Math.max(4,Math.min(42,(parseInt(pregDraft.weeks)||12)+delta));
+  else pregDraft.days=Math.max(0,Math.min(6,(parseInt(pregDraft.days)||0)+delta));
+  openExpectingSetup('weeks');
+}
 function openExpectingSetup(mode){
   pregDraft.mode=mode||pregDraft.mode;
-  const isDue = pregDraft.mode==='due';
-  openSheet(`<h2>${isDue?'You\'re expecting 🤍':'Congratulations 🎉'}</h2><div class="sub">${isDue?'Let\'s set up your weeks. You can change any of this later.':'What a moment. Tell us your last period and we\'ll work out your weeks and due date.'}</div>
-    <div class="seg" style="margin-bottom:16px">
-      <button class="${isDue?'on':''}" onclick="setPregMode('due')">I know my due date</button>
-      <button class="${!isDue?'on':''}" onclick="setPregMode('lmp')">Use last period</button>
+  const m=pregDraft.mode; // 'due' | 'weeks' | 'lmp'
+  const carrier=(typeof viewerIsCarrier==='function')?viewerIsCarrier():true;
+  // "your last period" assumes the viewer is the pregnant person — reword for a partner onboarding.
+  const lmpLabel=carrier?'First day of your last period':'First day of her last period';
+  const title=(m==='lmp')?'Congratulations 🎉':'You\'re expecting 🤍';
+  const sub=(m==='weeks')?'Pop in how far along you are, from a scan or your midwife, and we\'ll work out the rest.'
+    :(m==='lmp')?(carrier?'Tell us your last period and we\'ll work out your weeks and due date.':'Add the first day of her last period and we\'ll work out the weeks and due date.')
+    :'Set your due date and we\'ll lay out your weeks. You can change anything later.';
+  let entry;
+  if(m==='weeks'){
+    const wv=(pregDraft.weeks!=null&&pregDraft.weeks!=='')?pregDraft.weeks:'';
+    const dv=(pregDraft.days!=null&&pregDraft.days!=='')?pregDraft.days:0;
+    entry=`<div class="field"><label>How far along are you?</label>
+      <div style="display:flex;gap:10px">
+        <div style="flex:1"><div class="stepper stepper-sm"><button type="button" onclick="pregStep('weeks',-1)">−</button><input type="number" id="pgWeeks" inputmode="numeric" value="${wv}" placeholder="weeks" min="4" max="42" oninput="pregDraft.weeks=this.value"><button type="button" onclick="pregStep('weeks',1)">+</button></div><div class="csub" style="text-align:center;margin-top:4px">weeks</div></div>
+        <div style="flex:1"><div class="stepper stepper-sm"><button type="button" onclick="pregStep('days',-1)">−</button><input type="number" id="pgDays" inputmode="numeric" value="${dv}" min="0" max="6" oninput="pregDraft.days=this.value"><button type="button" onclick="pregStep('days',1)">+</button></div><div class="csub" style="text-align:center;margin-top:4px">days</div></div>
+      </div>
+      <div class="csub" style="margin-top:8px">e.g. 20 weeks 3 days, from your dating scan. We'll estimate your due date.</div></div>`;
+  } else {
+    const isDue=(m==='due');
+    entry=`<div class="field"><label>${isDue?'Due date (EDD)':lmpLabel}</label>${datePicker('pgDate', pregDraft.date, {max:isDue?null:now(), empty:true})}${wwa(isDue?'preg.edd':'preg.lmp')}</div>`;
+  }
+  openSheet(`<h2>${title}</h2><div class="sub">${sub}</div>
+    <div class="seg seg-full" style="margin-bottom:16px">
+      <button class="${m==='due'?'on':''}" onclick="setPregMode('due')">Due date</button>
+      <button class="${m==='weeks'?'on':''}" onclick="setPregMode('weeks')">Weeks</button>
+      <button class="${m==='lmp'?'on':''}" onclick="setPregMode('lmp')">Last period</button>
     </div>
-    <div class="field"><label>${isDue?'Due date (EDD)':'First day of your last period'}</label>${datePicker('pgDate', pregDraft.date, {max:isDue?null:now(), empty:true})}${wwa('preg.edd')}</div>
+    ${entry}
     <div class="field"><label>Where you'll have your care</label>${countryPickerHtml('pgCountry', pregDraft.country)}${wwa('preg.country')}</div>
     <button class="btn-primary" style="background:var(--preg)" onclick="savePregnancy()">Start tracking</button>
     <button class="btn-ghost" onclick="openStartPregnancy()">Back</button>
@@ -4109,14 +4147,21 @@ function removeVisitQ(id){ const p=state.pregnancy; p.visitQs=(p.visitQs||[]).fi
 function addVisitQ(){ const el=$('#vqNew'); const v=(el&&el.value.trim())||''; if(!v)return; state.pregnancy.visitQs=state.pregnancy.visitQs||[]; state.pregnancy.visitQs.push({id:uid(),text:v,done:false}); persist(); render(); }
 function resetVisitQsDone(){ const p=state.pregnancy; (p.visitQs||[]).forEach(q=>q.done=false); persist(); render(); }
 function savePregnancy(){
-  const dv=($('#pgDate')||{}).value;
-  if(!dv){ toast('Pick a date first'); return; }
   const sel=(($('#pgCountry')||{}).value)||detectCountry();
   const cc=pregCountryKey(sel);
-  const picked=new Date(dv+'T08:00').getTime();
   let dueDate, lmp=null;
-  if(pregDraft.mode==='due'){ dueDate=picked; }
-  else { lmp=picked; dueDate=picked+PREG_TERM; }
+  if(pregDraft.mode==='weeks'){
+    const w=parseInt(($('#pgWeeks')||{}).value||pregDraft.weeks);
+    if(!w||w<4||w>42){ toast('How many weeks along are you?'); return; }
+    const dd=Math.max(0,Math.min(6,parseInt(($('#pgDays')||{}).value||pregDraft.days)||0));
+    lmp=now()-(w*7+dd)*86400000; dueDate=lmp+PREG_TERM;
+  } else {
+    const dv=($('#pgDate')||{}).value;
+    if(!dv){ toast('Pick a date first'); return; }
+    const picked=new Date(dv+'T08:00').getTime();
+    if(pregDraft.mode==='due'){ dueDate=picked; }
+    else { lmp=picked; dueDate=picked+PREG_TERM; }
+  }
   const appts=(((window.PREG&&PREG.antenatal[cc]&&PREG.antenatal[cc].items))||[]).map(it=>({id:uid(),week:it.week,title:it.title,note:it.note,done:false,at:null}));
   state.pregnancy={ id:uid(), ownerUid:myUid(), stage:'expecting', dueDate, lmp, country:sel,
     careTeam:[], appts, symptoms:[], weights:[], bp:[], kicks:[], contractions:[],
