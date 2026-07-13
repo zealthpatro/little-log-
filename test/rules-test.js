@@ -208,6 +208,18 @@ async function check(name, p) {
   await check('feedback: create (succeeds)', assertSucceeds(setDoc(doc(C, 'feedback/f1'), { text: 'love it' })));
   await check('feedback: read back (fails)', assertFails(getDoc(doc(C, 'feedback/f1'))));
 
+  console.log('\nInvite create — owner-only + role hygiene (2026-07-12 hardening):');
+  await check('owner creates a caregiver invite (succeeds)', assertSucceeds(setDoc(doc(O, 'invites/new-cg@x.com'), { householdId: 'H', role: 'caregiver' })));
+  await check('owner creates a co-owner invite (succeeds)', assertSucceeds(setDoc(doc(O, 'invites/new-co@x.com'), { householdId: 'H', role: 'owner' })));
+  await check('owner creates an invite with NO role — defaults caregiver (succeeds)', assertSucceeds(setDoc(doc(O, 'invites/new-def@x.com'), { householdId: 'H' })));
+  await check('owner creates an invite with a BOGUS role (fails)', assertFails(setDoc(doc(O, 'invites/new-bad@x.com'), { householdId: 'H', role: 'superadmin' })));
+  await check('caregiver creates an invite (non-owner, fails)', assertFails(setDoc(doc(C, 'invites/new-x@x.com'), { householdId: 'H', role: 'caregiver' })));
+
+  console.log('\nHousehold create — maternal-blob guard at CREATE (2026-07-12 hardening):');
+  await check('create a household with a CLEAN app blob (succeeds)', assertSucceeds(setDoc(doc(S, 'households/HS-clean'), { ownerId: 'S', members: { S: 'owner' }, memberInfo: { S: { name: 'Solo' } }, app: cleanApp() })));
+  await check('create a household with pregnancy pre-seeded in the blob (fails)', assertFails(setDoc(doc(S, 'households/HS-preg'), { ownerId: 'S', members: { S: 'owner' }, memberInfo: {}, app: cleanApp({ pregnancy: { weeks: 8 } }) })));
+  await check('create a household with mhealth pre-seeded in the blob (fails)', assertFails(setDoc(doc(S, 'households/HS-mh'), { ownerId: 'S', members: { S: 'owner' }, memberInfo: {}, app: cleanApp({ mhealth: { mood: 'x' } }) })));
+
   await env.cleanup();
   console.log('\n' + results.pass + ' passed, ' + results.fail + ' failed');
   process.exit(results.fail ? 1 : 0);

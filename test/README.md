@@ -1,8 +1,16 @@
 # Firestore rules — cross-account emulator test
 
-Run this **before publishing** the tightened `firestore.rules`. It verifies that the new
-**memberInfo lock** and **app-blob maternal-data guard** block tampering, without breaking a normal
+Run this **before publishing** the tightened `firestore.rules`. It is the executable proof behind
+every privacy promise on the marketing site — **90 cross-account assertions** covering household
+access, invite/join role integrity (SEC-3), event/photo authorship immutability (SEC-4), pre-join
+read exposure (PRIV-4), note audience privacy, **maternal `mhealth` with mood NEVER shareable**,
+the owner-owned pregnancy journey, server-only Pro entitlement, and the top-level collections.
+It also verifies the **memberInfo lock** and **app-blob maternal-data guard** don't break a normal
 save or a household whose stored blob still carries a legacy `pregnancy` key.
+
+> Expanded 2026-07-12 (see `design/RULES-REVIEW.md` and `design/RED-TEAM-REVIEW.md`). The suite was
+> syntax-validated but the emulator run must happen on a dev machine — it needs the Firestore
+> emulator JAR, which is too large to download in the restricted build sandbox.
 
 ## What it checks
 Two accounts (an owner + a caregiver) plus a stranger, against `../firestore.rules`:

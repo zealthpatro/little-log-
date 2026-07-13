@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cubby — Design Audit Dashboard</title>
+<style>
+  :root{--bg:#FBF5E9;--card:#fff;--ink:#3a2f28;--sub:#8a7a6d;--line:#eadfce;--red:#c0392b;--red-bg:#fdeceb;--amber:#b06e00;--amber-bg:#fdf3e0;--green:#2e7d4f;--green-bg:#e8f5ec;--blue:#31567d;--blue-bg:#e9f1f8}
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.5 -apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);padding:28px 18px 60px}
+  .wrap{max-width:1040px;margin:0 auto}
+  h1{font-size:26px;margin:0 0 4px}
+  .meta{color:var(--sub);font-size:13px;margin-bottom:22px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:26px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .kpi b{display:block;font-size:26px}
+  .kpi span{font-size:12.5px;color:var(--sub)}
+  .kpi.red b{color:var(--red)} .kpi.amber b{color:var(--amber)} .kpi.green b{color:var(--green)}
+  h2{font-size:18px;margin:30px 0 10px}
+  .flows{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+  .flow{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .flow h3{margin:0 0 4px;font-size:15px}
+  .flow p{margin:0;font-size:13px;color:var(--sub)}
+  .badge{display:inline-block;font-size:11.5px;font-weight:600;border-radius:99px;padding:2px 10px;margin-bottom:8px}
+  .b-ok{background:var(--green-bg);color:var(--green)} .b-warn{background:var(--amber-bg);color:var(--amber)} .b-crit{background:var(--red-bg);color:var(--red)}
+  table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;font-size:13.5px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#f6efe2;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--sub)}
+  tr:last-child td{border-bottom:none}
+  .sev{font-weight:700;white-space:nowrap}
+  .sev.p0{color:var(--red)} .sev.p1{color:var(--amber)} .sev.p2{color:var(--blue)}
+  .id{font-family:ui-monospace,monospace;font-size:12px;background:#f3ecdd;border-radius:6px;padding:1px 6px;white-space:nowrap}
+  .filters{margin:10px 0 12px;display:flex;gap:8px;flex-wrap:wrap}
+  .filters button{border:1px solid var(--line);background:var(--card);border-radius:99px;padding:5px 14px;font-size:13px;cursor:pointer;color:var(--ink)}
+  .filters button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .foot{margin-top:34px;color:var(--sub);font-size:12.5px}
+  code{background:#f3ecdd;border-radius:6px;padding:1px 5px;font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🐻 Cubby — Design Audit</h1>
+  <div class="meta">Snapshot 2026-07-12 · full code trace + doc sweep + live-site check · specs in <code>design/flows/</code>, findings in <code>design/GAP-AUDIT.md</code></div>
+
+  <div class="kpis">
+    <div class="kpi"><b>10</b><span>flows specced</span></div>
+    <div class="kpi green"><b>7</b><span>flows solid ✅</span></div>
+    <div class="kpi red"><b>4</b><span>P0 findings</span></div>
+    <div class="kpi amber"><b>10</b><span>P1 open (UX)</span></div>
+    <div class="kpi"><b>17</b><span>P2 drift/debt</span></div>
+    <div class="kpi green"><b>OK</b><span>live cron health</span></div>
+  </div>
+
+  <h2>Flows</h2>
+  <div class="flows">
+    <div class="flow"><span class="badge b-ok">✅ solid</span><h3>01 · Sign-in &amp; auth gate</h3><p>3 methods live, same-domain auth, rate-limited magic link. Open: G2 privacy line, G3 equal-weight methods.</p></div>
+    <div class="flow"><span class="badge b-warn">⚠️ 1 structural</span><h3>02 · Onboarding</h3><p>Locked first-run + stage chooser shipped. G1 wizard-order ("DO FIRST") needs verify/fix.</p></div>
+    <div class="flow"><span class="badge b-warn">⚠️ 2 P1 bugs</span><h3>03 · Core logging</h3><p>Rich + shared timers. C1 sheet stays over nav switch; C2 scrim discards drafts silently.</p></div>
+    <div class="flow"><span class="badge b-ok">✅ solid</span><h3>04 · Health &amp; growth</h3><p>Vaccines, WHO/CDC charts, meds push (cron healthy), calm-badge charter win.</p></div>
+    <div class="flow"><span class="badge b-warn">⚠️ loop leaks</span><h3>05 · Sharing &amp; family</h3><p>The free wedge works. S1/S2 share dead-ends; email circle-visible; referral reward dormant.</p></div>
+    <div class="flow"><span class="badge b-crit">🔴 security</span><h3>06 · Pro &amp; billing</h3><p>Waitlist mode by design. SEC-1 portal IDOR must land before launch flip; provider decision (Stripe→LS) undocumented in 5 docs.</p></div>
+    <div class="flow"><span class="badge b-warn">⚠️ verify L1</span><h3>07 · Pregnancy</h3><p>Full lifecycle live, owner-owned privacy. Loss-flow code vs roadmap discrepancy — verify. PV1/PV2 nav open.</p></div>
+    <div class="flow"><span class="badge b-warn">⚠️ consent+export</span><h3>08 · Settings &amp; data</h3><p>Guardian consent client-only (PRIV-1); export omits photo binaries (EXP-1).</p></div>
+    <div class="flow"><span class="badge b-ok">✅ solid</span><h3>09 · Offline &amp; sync</h3><p>Diff push, retry/backoff, per-doc events. Blob LWW = accepted debt.</p></div>
+    <div class="flow"><span class="badge b-crit">🔴 deploy drift</span><h3>10 · Marketing funnel</h3><p>Home current, SEO strong. Live /pricing/ = stale build showing $15/mo vs $9/mo on home. Push branch <code>site</code>.</p></div>
+  </div>
+
+  <h2>Findings</h2>
+  <div class="filters" id="filters">
+    <button data-f="all" class="on">All 33</button>
+    <button data-f="p0">🔴 P0 (4)</button>
+    <button data-f="p1">🟠 P1 (10)</button>
+    <button data-f="p2">🟡 P2 (19)</button>
+  </div>
+  <table id="tbl">
+    <thead><tr><th>Sev</th><th>ID</th><th>Flow</th><th>Finding</th></tr></thead>
+    <tbody>
+      <tr data-s="p0"><td class="sev p0">P0</td><td><span class="id">SEC-1</span></td><td>06</td><td>Billing /portal IDOR — no ownership proof on customer/subId; fix before checkout flip</td></tr>
+      <tr data-s="p0"><td class="sev p0">P0</td><td><span class="id">DEP-1</span></td><td>10</td><td>Production mix of 2 builds: /pricing/ AND /faq/ stale ($15–19/mo old pricing; FAQ says pregnancy "on the way" though shipped) vs current home/features/pregnancy — deploy branch <code>site</code></td></tr>
+      <tr data-s="p0"><td class="sev p0">P0</td><td><span class="id">PRIV-1</span></td><td>08</td><td>Dual-guardian export/delete consent enforced client-only, not in firestore.rules</td></tr>
+      <tr data-s="p0"><td class="sev p0">P0</td><td><span class="id">SEC-3</span></td><td>05</td><td>LIVE NOW: invitee can join as owner (rules never check the role value) → can delete the whole household. One-line rules fix, publish immediately — see RULES-REVIEW.md</td></tr>
+      <tr data-s="p1"><td class="sev p1">P1</td><td><span class="id">G1</span></td><td>02</td><td>First-run identity modal fires over stage question — collapse to one ordered wizard (verify vs v0.14.0)</td></tr>
+      <tr data-s="p1"><td class="sev p1">P1</td><td><span class="id">G2/G3</span></td><td>01</td><td>No privacy line at sign-in; Apple/email methods second-class</td></tr>
+      <tr data-s="p1"><td class="sev p1">P1</td><td><span class="id">C1</span></td><td>03</td><td>Nav tab switch leaves sheet open (go() never closeSheet())</td></tr>
+      <tr data-s="p1"><td class="sev p1">P1</td><td><span class="id">C2</span></td><td>03</td><td>Scrim tap silently discards unsaved draft — the 3am case</td></tr>
+      <tr data-s="p1"><td class="sev p1">P1</td><td><span class="id">L1</span></td><td>07</td><td>Loss flow: roadmap says charter violation, code shows holding screen — verify &amp; close or fix (highest moral priority)</td></tr>
+      <tr data-s="p1"><td class="sev p1">P1</td><td><span class="id">S1/S2</span></td><td>05</td><td>No native share on guess link / guest page — viral loop dead-ends</td></tr>
+      <tr data-s="p1"><td class="sev p1">P1</td><td><span class="id">A1–A3</span></td><td>all</td><td>:focus-visible missing · disabled-date contrast · close targets &lt;44px (WCAG 2.4.7/1.4.3/2.5.5)</td></tr>
+      <tr data-s="p1"><td class="sev p1">P1</td><td><span class="id">M1</span></td><td>10</td><td>Marketing home baby-only; pregnant visitors get fine print, no stage bridge</td></tr>
+      <tr data-s="p1"><td class="sev p1">P1</td><td><span class="id">PV1/PV2</span></td><td>07</td><td>Demote Moments tab (4-tab pregnancy nav); move games card to Tools</td></tr>
+      <tr data-s="p1"><td class="sev p1">P1</td><td><span class="id">EXP-1</span></td><td>08</td><td>Export omits photo binaries — weakens "export anytime" before privacy-wedge launch</td></tr>
+      <tr data-s="p2"><td class="sev p2">P2</td><td><span class="id">DOC-1</span></td><td>06</td><td>Stripe vs Lemon Squeezy: newest decision = LS MoR; 5 docs still say Stripe</td></tr>
+      <tr data-s="p2"><td class="sev p2">P2</td><td><span class="id">DOC-2</span></td><td>06</td><td>Retired Base $5 / Pro-Plus $15–19 ladder still printed in PRO.md + MONETIZATION-HANDOFF</td></tr>
+      <tr data-s="p2"><td class="sev p2">P2</td><td><span class="id">DOC-3</span></td><td>10</td><td>README/HANDOFF: "5-tab nav", "180+ articles" — reality 4-tab + About, ~398 articles</td></tr>
+      <tr data-s="p2"><td class="sev p2">P2</td><td><span class="id">DOC-4</span></td><td>04</td><td>README "push in-app only" vs shipped medicine FCM push</td></tr>
+      <tr data-s="p2"><td class="sev p2">P2</td><td><span class="id">DOC-5</span></td><td>03</td><td>"Routines" docs vs shipped "Rituals" UI naming</td></tr>
+      <tr data-s="p2"><td class="sev p2">P2</td><td><span class="id">DOC-6</span></td><td>10</td><td>news-widget says newsletter→Firestore; worker writes to D1</td></tr>
+      <tr data-s="p2"><td class="sev p2">P2</td><td><span class="id">DOC-7</span></td><td>—</td><td>SW version drift: README v73 · HANDOFF v82 · CHANGELOG v119</td></tr>
+      <tr data-s="p2"><td class="sev p2">P2</td><td><span class="id">SEC-2</span></td><td>06</td><td>/checkout unauthenticated hid; CORS fallback allows instead of denies</td></tr>
+      <tr data-s="p2"><td class="sev p2">P2</td><td><span class="id">PRIV-2</span></td><td>05</td><td>Member emails circle-visible via memberInfo (rules fix open)</td></tr>
+      <tr data-s="p2"><td class="sev p2">P2</td><td><span class="id">PRIV-3</span></td><td>08</td><td>Cross-account rules denial test (emulator) pending — gates "private to you" marketing</td></tr>
+      <tr data-s="p2"><td class="sev p2">P2</td><td><span class="id">SYNC-1</span></td><td>09</td><td>App-blob LWW vs charter merge aspiration (accepted debt)</td></tr>
+      <tr data-s="p2"><td class="sev p2">P2</td><td><span class="id">DEAD-1</span></td><td>app</td><td>"Our Den" module built but disabled (FEATURES.den=false) — keep or cut</td></tr>
+      <tr data-s="p2"><td class="sev p2">P2</td><td><span class="id">COPY-1</span></td><td>08</td><td>Push "coming soon" copy when truth is "unsupported on this browser"</td></tr>
+      <tr data-s="p2"><td class="sev p2">P2</td><td><span class="id">POL-1</span></td><td>app</td><td>window.prompt/confirm/alert used in 3 flows — inconsistent with sheet UI</td></tr>
+      <tr data-s="p2"><td class="sev p2">P2</td><td><span class="id">SEO-1</span></td><td>10</td><td>Pricing JSON-LD missing monthly $9 offer</td></tr>
+      <tr data-s="p2"><td class="sev p2">P2</td><td><span class="id">REF-1</span></td><td>05</td><td>Referral reward designed, not redeemable, unannounced</td></tr>
+      <tr data-s="p2"><td class="sev p2">P2</td><td><span class="id">VER-1</span></td><td>05/07</td><td>Verify /api/hub games backend deployed (client has "coming soon" fallback)</td></tr>
+      <tr data-s="p2"><td class="sev p2">P2</td><td><span class="id">SEC-4</span></td><td>03/04</td><td>Rules: authorId mutable on event/photo update — attribution forgeable after create</td></tr>
+      <tr data-s="p2"><td class="sev p2">P2</td><td><span class="id">PRIV-4</span></td><td>05</td><td>Rules: invited-but-not-joined email can read full household doc pre-join</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Monitoring loop</h2>
+  <table>
+    <thead><tr><th>Check</th><th>How</th><th>Cadence</th></tr></thead>
+    <tbody>
+      <tr><td>Deploy drift</td><td><code>curl https://little-cubby.com/pricing/ | grep '\$[0-9]*/mo'</code> vs repo</td><td>after every push</td></tr>
+      <tr><td>Cron health</td><td><code>curl https://little-cubby.com/api/health</code> → cronHealthy, ageMin&lt;60</td><td>daily</td></tr>
+      <tr><td>Pro flip guard</td><td>grep PRO_CFG checkoutUrl — must stay empty until SEC-1 fixed</td><td>every billing PR</td></tr>
+      <tr><td>SW cache bump</td><td>CACHE vNN changed in same commit as app changes</td><td>every app PR</td></tr>
+      <tr><td>Spec freshness</td><td>PR touching a flow must touch its design/flows/*.md</td><td>every PR</td></tr>
+      <tr><td>Gap review</td><td>walk this table, close shipped, add new</td><td>weekly</td></tr>
+    </tbody>
+  </table>
+
+  <div class="foot">Sources: design/flows/01–10 (file:line refs) · GAP-AUDIT.md · live checks 2026-07-12 (home ✅, /pricing/ ❌ stale, vaccine/uk ✅, /api/health ✅).</div>
+</div>
+<script>
+  const btns=document.querySelectorAll('#filters button'),rows=document.querySelectorAll('#tbl tbody tr');
+  btns.forEach(b=>b.onclick=()=>{btns.forEach(x=>x.classList.remove('on'));b.classList.add('on');
+    const f=b.dataset.f;rows.forEach(r=>r.style.display=(f==='all'||r.dataset.s===f)?'':'none');});
+</script>
+</body>
+</html>

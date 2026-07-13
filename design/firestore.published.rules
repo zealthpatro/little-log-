@@ -1,0 +1,176 @@
+// Snapshot of the PUBLISHED Firestore rules (Firebase console = runtime source of truth),
+// pasted by owner 2026-07-12 for design/RULES-REVIEW.md. If you edit rules in the console,
+// re-snapshot here or this file lies.
+rules_version = '2';
+// Little Log security rules.
+// - Data lives under /households/{hid}; only that household's members can read/write it.
+// - Outsiders (non-members, non-invitees) are fully blocked.
+// - Owners can manage membership; caregivers can add entries and edit/delete their own.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // A user's private pointer to their household.
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+    // Beta feedback: any signed-in user can submit; only the project owner reads it (console).
+    match /feedback/{id} {
+      allow create: if request.auth != null;
+      allow read, update, delete: if false;
+    }
+    // Pro waitlist: a user manages their own signup; only the project owner reads (console).
+    match /waitlist/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+    // Newsletter opt-in list: written ONLY by the edge Worker via the service account (which
+    // bypasses these rules). Emails are private — no browser client may read or write it.
+    match /newsletter/{id} {
+      allow read, write: if false;
+    }
+    // Invites are keyed by the invitee's lowercased email.
+    match /invites/{email} {
+      allow read: if request.auth != null && request.auth.token.email.lower() == email;
+      allow create: if request.auth != null
+        && get(/databases/$(database)/documents/households/$(request.resource.data.householdId)).data.members[request.auth.uid] == 'owner';
+      // Only the owning household's owner may update an invite, and it can never be re-pointed at
+      // another household (that would let an outsider redirect an invite — or their own invite —
+      // into a household they don't own and join it). Invitees never update invites: joining is a
+      // write to the household doc itself.
+      allow update: if request.auth != null
+        && request.resource.data.householdId == resource.data.householdId
+        && get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members[request.auth.uid] == 'owner';
+      allow delete: if request.auth != null
+        && get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members[request.auth.uid] == 'owner';
+    }
+    match /households/{hid} {
+      function isMember() {
+        return request.auth != null && request.auth.uid in resource.data.members;
+      }
+      function isOwner() {
+        return request.auth != null && resource.data.members[request.auth.uid] == 'owner';
+      }
+      function invitedHere() {
+        return request.auth != null
+          && exists(/databases/$(database)/documents/invites/$(request.auth.token.email.lower()))
+          && get(/databases/$(database)/documents/invites/$(request.auth.token.email.lower())).data.householdId == hid;
+      }
+      // Pro entitlement is set ONLY by the billing Worker (Admin credentials bypass rules).
+      // No client, owner included, may grant or change it.
+      function proUnchanged() {
+        return request.resource.data.get('pro', null) == resource.data.get('pro', null);
+      }
+      // The circle-shared app blob must never carry maternal-private data: the pregnancy journey and
+      // maternal health live in owner-owned subcollections (/pregnancy, /mhealth), shared only by the
+      // mother's explicit consent. Checked ONLY when the blob is actually written, so a household whose
+      // stored blob still holds a legacy pregnancy key is never blocked from other edits.
+      // NOTE: keep this key list in sync with appBlobFromState() in app/store-firebase.js.
+      function appBlobClean() {
+        return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['app'])
+          || !request.resource.data.app.keys().hasAny(['pregnancy', 'mhealth', 'maternalHealth']);
+      }
+      // A caregiver may edit their OWN memberInfo entry (name, relationship, bear, setup) but never
+      // anyone else's. Checked only when memberInfo is actually written, so a normal app-only save
+      // (which leaves memberInfo untouched) always passes.
+      function onlyOwnMemberInfo() {
+        return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['memberInfo'])
+          || request.resource.data.memberInfo.diff(resource.data.memberInfo).affectedKeys().hasOnly([request.auth.uid]);
+      }
+      allow read:   if isMember() || invitedHere();
+      allow create: if request.auth != null
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.members[request.auth.uid] == 'owner'
+        && request.resource.data.get('pro', null) == null;
+      // Owner can change anything (except pro, and never maternal data into the blob). A caregiver may
+      // edit shared data but NOT membership/owner (no privilege escalation) and only their OWN
+      // memberInfo. An invitee may join (adds themselves). No one may inject maternal-private data.
+      allow update: if proUnchanged() && appBlobClean() && (
+           isOwner()
+        || ( isMember()
+             && request.resource.data.ownerId == resource.data.ownerId
+             && request.resource.data.members == resource.data.members
+             && onlyOwnMemberInfo() )
+        || ( invitedHere()
+             && request.resource.data.ownerId == resource.data.ownerId
+             && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid])
+             && onlyOwnMemberInfo() ) );
+      allow delete: if request.auth != null && resource.data.members[request.auth.uid] == 'owner';
+      // Members of THIS household (resolved fresh each check).
+      function pm() { return get(/databases/$(database)/documents/households/$(hid)).data.members; }
+      match /events/{eventId} {
+        allow read: if request.auth != null && request.auth.uid in pm();
+        // New entries are always authored by the writer ("by Mama Bear" can't be forged).
+        allow create: if request.auth != null && request.auth.uid in pm()
+          && request.resource.data.authorId == request.auth.uid;
+        // Owner can edit/remove anyone's entry; a caregiver only their own.
+        allow update, delete: if request.auth != null && request.auth.uid in pm()
+          && ( pm()[request.auth.uid] == 'owner' || resource.data.authorId == request.auth.uid );
+      }
+      match /photos/{photoId} {
+        allow read: if request.auth != null && request.auth.uid in pm();
+        // Same authorship model as events: anyone in the circle adds photos as themselves;
+        // only the owner or the photo's author may replace or delete one.
+        allow create: if request.auth != null && request.auth.uid in pm()
+          && request.resource.data.authorId == request.auth.uid;
+        allow update, delete: if request.auth != null && request.auth.uid in pm()
+          && ( pm()[request.auth.uid] == 'owner' || resource.data.authorId == request.auth.uid );
+      }
+      // Home day-surface notes. NOT in the circle-shared app blob: each note is its own doc so
+      // privacy is enforced by rules, not client hiding. A note is readable only by the author,
+      // by the single member it is addressed to, or by everyone when its audience is 'circle'.
+      // Audience is fixed at create (no client may flip it later); only the author edits/deletes.
+      match /notes/{noteId} {
+        allow read: if request.auth != null && request.auth.uid in pm() && (
+            resource.data.audience == 'circle'
+            || resource.data.audience == request.auth.uid
+            || resource.data.createdBy == request.auth.uid
+        );
+        allow create: if request.auth != null && request.auth.uid in pm()
+            && request.resource.data.createdBy == request.auth.uid;
+        // Audience and authorship are immutable after create (a private note can never be
+        // flipped to circle, nor re-attributed); only the author edits/deletes.
+        allow update: if request.auth != null && request.auth.uid in pm()
+            && resource.data.createdBy == request.auth.uid
+            && request.resource.data.audience == resource.data.audience
+            && request.resource.data.createdBy == resource.data.createdBy;
+        allow delete: if request.auth != null && request.auth.uid in pm()
+            && resource.data.createdBy == request.auth.uid;
+      }
+      // Maternal private health (Privacy Max, gate G1). The mother OWNS her health data.
+      // It is NOT in the circle-shared app blob. Each category is shared, by her explicit
+      // consent, only with the guardian uid(s) she lists in sharedWith. Mental health
+      // (category 'mood') is owner-only and can NEVER be shared. ownerUid is the subject's uid.
+      match /mhealth/{owner}/cat/{category} {
+        allow read: if request.auth != null && request.auth.uid in pm() && (
+            request.auth.uid == owner
+            || ( category != 'mood'
+                 && resource.data.sharedWith is list
+                 && request.auth.uid in resource.data.sharedWith )
+        );
+        // Only the owner writes her own health, and only as a member of this household.
+        allow create, update: if request.auth != null && request.auth.uid == owner
+            && request.auth.uid in pm()
+            && request.resource.data.ownerUid == owner
+            && ( category != 'mood'
+                 || !('sharedWith' in request.resource.data)
+                 || request.resource.data.sharedWith.size() == 0 );  // mood is never shareable
+        allow delete: if request.auth != null && request.auth.uid == owner && request.auth.uid in pm();
+      }
+      // Pregnancy JOURNEY (Privacy Max, Item 7). The bare fact of expecting is the most sensitive
+      // event a family has, so it is NOT in the circle-shared app blob. The owner OWNS her journey
+      // (stage, due date, weeks, appointments, kicks, contractions, birth plan, bag, moments, etc.).
+      // It is readable by the owner plus any uid she lists in sharedWith (the one-time stakeholder
+      // review at creation, editable later). Only the owner writes it. ownerUid is the subject's uid.
+      match /pregnancy/{owner} {
+        allow read: if request.auth != null && request.auth.uid in pm() && (
+            request.auth.uid == owner
+            || ( resource.data.sharedWith is list
+                 && request.auth.uid in resource.data.sharedWith )
+        );
+        // Only the owner writes her own journey, and only as a member of this household.
+        allow create, update: if request.auth != null && request.auth.uid == owner
+            && request.auth.uid in pm()
+            && request.resource.data.ownerUid == owner;
+        allow delete: if request.auth != null && request.auth.uid == owner && request.auth.uid in pm();
+      }
+    }
+  }
+}
