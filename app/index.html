@@ -1313,8 +1313,8 @@ function render(){
 function _renderView(){
   document.body.setAttribute('data-theme', state.settings.theme==='night'?'night':'light');
   if(state.pregnancy && !state.pregnancy.bornBabyId && (state.babies.length===0 || viewingPreg)){ renderPregShell(); return; }
-  if(state.lossHolding && state.babies.length){ state.lossHolding=null; } // a baby exists now (e.g. added/synced) -> stop holding
-  if(state.babies.length===0 && state.lossHolding){ renderLossHolding(); return; }
+  if(myLossHolding() && state.babies.length){ clearMyLossHolding(); } // a baby exists now (e.g. added/synced) -> stop holding
+  if(state.babies.length===0 && myLossHolding()){ renderLossHolding(); return; }
   if(state.babies.length===0){ renderOnboard(); return; }
   const b = activeBaby();
   let main = '';
@@ -2828,7 +2828,7 @@ function journeyBearArt(relation, uid, size){
 // HTML attribute it lives in (relationship labels are user free text -> XSS surface otherwise).
 function jArg(s){ return escapeHtml(String(s==null?'':s).replace(/'/g,"\\'")); }
 function renderJourneySection(prompts, scope, titleText){
-  if(state.lossHolding) return '';                 // loss-safe: nothing guided
+  if(myLossHolding()) return '';                 // loss-safe: nothing guided
   if(!prompts || !prompts.length) return '';
   const tiles = prompts.map(p=>`<div class="jr-tile" onclick="${p.onclick}">
       <button class="jr-x" onclick="event.stopPropagation();jDismiss('${p.key}','${scope}')" aria-label="Not now">×</button>
@@ -3716,7 +3716,14 @@ function renderLossHolding(){
     </div>
   </div>`;
 }
-function endLossHolding(){ state.lossHolding=null; persist(); render(); }
+/* lossHolding is a per-uid map { uid:{at} }. Scoped so closing a lost pregnancy never broadcasts the
+   bereavement screen to the whole circle, and one member clearing their own holding never drops another
+   grieving member back onto the upbeat chooser. Legacy flat {at} is attributed to the household owner only. */
+function myLossHolding(){ var lh=state.lossHolding; if(!lh) return null;
+  if(lh.at){ try{ var m=(window.LL&&window.LL.members)||{}; return m[myUid()]==='owner'?lh:null; }catch(_){ return null; } }
+  return lh[myUid()]||null; }
+function clearMyLossHolding(){ var lh=state.lossHolding; if(!lh) return; if(lh.at){ state.lossHolding=null; return; } delete lh[myUid()]; if(!Object.keys(lh).length) state.lossHolding=null; }
+function endLossHolding(){ clearMyLossHolding(); persist(); render(); }
 
 /* ============================================================
    PREGNANCY  (one continuous lifecycle: pregnancy -> birth -> baby)
@@ -3913,13 +3920,65 @@ function addApptToCalendar(id){
 function markApptDone(id){
   const p=state.pregnancy; const a=(p.appts||[]).find(x=>x.id===id); if(!a)return;
   a.done=true; a.at=now(); persist();
-  openSheet(`<h2>How did it go? 🤍</h2><div class="sub">A quick note from <b>${escapeHtml(a.title)}</b>, captured for you and your doctor. Optional.</div>
-    <div class="field"><label>Notes from the visit</label><textarea id="avOut" style="min-height:110px" placeholder="What they said, measurements, anything for next time…">${escapeHtml(a.outcome||'')}</textarea></div>
+  openSheet(`<h2>How did it go? 🤍</h2><div class="sub">A quick note from <b>${escapeHtml(a.title)}</b>, captured for you and your doctor. All optional.</div>
+    <div class="field"><label>Notes from the visit</label><textarea id="avOut" style="min-height:90px" placeholder="What they said, anything for next time…">${escapeHtml(a.outcome||'')}</textarea></div>
+    <div class="sec-title" style="margin-top:6px">Measurements today</div>
+    <div class="csub" style="margin:-2px 0 8px">If your provider gave you numbers, jot them here. They build your record and your doctor report.</div>
+    <div style="display:flex;gap:10px">
+      <div class="field" style="flex:1"><label>Fundal height (cm)</label><input type="number" inputmode="decimal" id="avSfh" value="${a.sfh!=null?a.sfh:''}" placeholder="e.g. 24"></div>
+      <div class="field" style="flex:1"><label>Baby weight est. (g)</label><input type="number" inputmode="numeric" id="avEfw" value="${a.efw!=null?a.efw:''}" placeholder="e.g. 1500"></div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <div class="field" style="flex:1"><label>Position</label><input id="avPos" value="${escapeHtml(a.position||'')}" placeholder="e.g. cephalic"></div>
+      <div class="field" style="flex:1"><label>Hb (g/dL)</label><input type="number" inputmode="decimal" id="avHb" value="${a.hb!=null?a.hb:''}" placeholder="e.g. 11.5"></div>
+    </div>
+    <div class="field"><label>Blood pressure</label><input id="avBp" value="${(a.bpSys&&a.bpDia)?(a.bpSys+'/'+a.bpDia):''}" placeholder="120/80"></div>
     <button class="btn-primary" style="background:var(--preg)" onclick="saveApptOutcome('${id}')">Save</button>
     <button class="btn-ghost" onclick="closeSheet();render()">Skip</button>`,'preg');
 }
-function saveApptOutcome(id){ const p=state.pregnancy; const a=(p.appts||[]).find(x=>x.id===id); if(a){ a.outcome=($('#avOut')||{}).value||''; } persist(); closeSheet(); render(); toast('Saved 🤍'); }
+function saveApptOutcome(id){ const p=state.pregnancy; const a=(p.appts||[]).find(x=>x.id===id); if(a){
+    a.outcome=($('#avOut')||{}).value||'';
+    const num=el=>{ const v=parseFloat((($('#'+el)||{}).value)); return isFinite(v)?v:null; };
+    a.sfh=num('avSfh'); a.efw=num('avEfw'); a.hb=num('avHb'); a.position=(($('#avPos')||{}).value||'').trim();
+    const bp=(($('#avBp')||{}).value||'').trim(); const m=/^(\d{2,3})\s*\/\s*(\d{2,3})$/.exec(bp);
+    if(m){ a.bpSys=+m[1]; a.bpDia=+m[2]; } else { a.bpSys=null; a.bpDia=null; }
+  } persist(); closeSheet(); render(); toast('Saved 🤍'); }
 function pregNextAppt(){ const p=state.pregnancy; if(!p) return null; const wk=pregWeek(); if(wk>40) return null; const open=(p.appts||[]).filter(a=>!a.done).sort((a,b)=>a.week-b.week); return open.find(a=>a.week>=wk)||null; }
+/* Fundal-height trend vs gestational week. The dashed guide is SFH(cm) ≈ week, which holds from ~24w;
+   points near it are tracking. Purpose-built (weeks on the x-axis, not dates like svgLine). */
+function sfhTrendSvg(pts){
+  if(!pts||pts.length<2) return '';
+  const W=320,H=140,padL=26,padB=20,top=12;
+  const wks=pts.map(p=>p.week), vs=pts.map(p=>p.sfh);
+  const wmin=Math.min.apply(null,wks), wmax=Math.max.apply(null,wks)||(wmin+1);
+  const vmin=Math.min.apply(null,vs), vmax=Math.max.apply(null,vs); const vpad=(vmax-vmin)*0.2||2; const lo=Math.max(0,vmin-vpad), hi=vmax+vpad;
+  const x=w=>padL+((w-wmin)/((wmax-wmin)||1))*(W-padL-10);
+  const y=v=>top+(1-((v-lo)/((hi-lo)||1)))*(H-padB-top);
+  const line=pts.map((p,i)=>(i?'L':'M')+x(p.week).toFixed(1)+' '+y(p.sfh).toFixed(1)).join(' ');
+  const ref=`M${x(wmin).toFixed(1)} ${y(wmin).toFixed(1)} L${x(wmax).toFixed(1)} ${y(wmax).toFixed(1)}`;
+  const dots=pts.map(p=>`<circle cx="${x(p.week).toFixed(1)}" cy="${y(p.sfh).toFixed(1)}" r="3.5" fill="var(--preg)"/>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:140px" preserveAspectRatio="none">
+    <path d="${ref}" fill="none" stroke="var(--ink-faint)" stroke-width="1" stroke-dasharray="4 4" opacity="0.55"/>
+    <path d="${line}" fill="none" stroke="var(--preg)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    ${dots}
+    <text x="${padL}" y="${H-5}" font-size="10" font-weight="700" fill="var(--ink-faint)">wk ${wmin}</text>
+    <text x="${W-8}" y="${H-5}" font-size="10" font-weight="700" fill="var(--ink-faint)" text-anchor="end">wk ${wmax}</text>
+  </svg>`;
+}
+function openAntenatalFacts(){
+  const p=state.pregnancy; const groups=['','O','A','B','AB'];
+  openSheet(`<h2>Your antenatal record 🩸</h2><div class="sub">One-time results from your booking bloods. Optional, only for your own reference and your doctor report.</div>
+    <div style="display:flex;gap:10px">
+      <div class="field" style="flex:1"><label>Blood group</label><select id="afGroup">${groups.map(g=>`<option value="${g}" ${(p.bloodGroup||'')===g?'selected':''}>${g||'—'}</option>`).join('')}</select></div>
+      <div class="field" style="flex:1"><label>Rh</label><select id="afRh"><option value="" ${!p.rh?'selected':''}>—</option><option value="positive" ${p.rh==='positive'?'selected':''}>positive</option><option value="negative" ${p.rh==='negative'?'selected':''}>negative</option></select></div>
+    </div>
+    <div class="field"><label>Group B strep (GBS)</label><select id="afGbs"><option value="unknown" ${(!p.gbs||p.gbs==='unknown')?'selected':''}>Not tested / unknown</option><option value="negative" ${p.gbs==='negative'?'selected':''}>Negative</option><option value="positive" ${p.gbs==='positive'?'selected':''}>Positive</option></select></div>
+    <button class="btn-primary" style="background:var(--preg)" onclick="saveAntenatalFacts()">Save</button>
+    <div class="preg-disclaim">Informational only. Your provider holds your official records.</div>`,'preg');
+}
+function saveAntenatalFacts(){ const p=state.pregnancy; if(!p) return;
+  const g=(($('#afGroup')||{}).value||''); const rh=(($('#afRh')||{}).value||''); const gbs=(($('#afGbs')||{}).value||'unknown');
+  p.bloodGroup=g||null; p.rh=(rh==='positive'||rh==='negative')?rh:null; p.gbs=gbs; persist(); closeSheet(); render(); toast('Saved 🤍'); }
 /* Tap a week pill (size / baby / you) to open a fuller, focused detail sheet with a relevant action. */
 function openWeekDetail(kind){
   const wk=pregWeek(), tri=pregTri(), data=pregWeekData();
@@ -3956,14 +4015,7 @@ function openWeekDetail(kind){
 let pregDraft = {mode:'due', date:'', weeks:'', days:0, country:'us'};
 function openStartPregnancy(){
   pregDraft={mode:'due', date:'', weeks:'', days:0, country:detectCountry()};
-  openSheet(`<h2>Start your journey 🌸</h2><div class="sub">Wherever you are on the journey, start there. You can change anything later.</div>
-    <div class="prof-cards">
-      <div class="prof-card" onclick="openPlanningSetup()"><span class="lead" style="background:var(--diaper-soft);color:var(--diaper);font-size:18px">🌱</span><div class="cflex"><div class="a">We're trying</div><div class="b">Just starting out: get your body and home ready</div></div><span class="chev">${I.chev}</span></div>
-      <div class="prof-card" onclick="openExpectingSetup('lmp')"><span class="lead" style="background:var(--preg-soft);color:var(--preg);font-size:18px">🎉</span><div class="cflex"><div class="a">Just found out</div><div class="b">A positive test! We'll work out your weeks</div></div><span class="chev">${I.chev}</span></div>
-      <div class="prof-card" onclick="openExpectingSetup('due')"><span class="lead" style="background:var(--star-soft);color:var(--star);font-size:18px">🤰</span><div class="cflex"><div class="a">Already counting weeks</div><div class="b">You know your due date, pick up right where you are</div></div><span class="chev">${I.chev}</span></div>
-    </div>
-    ${(state.pregnancyArchive&&state.pregnancyArchive.length)?`<button class="btn-ghost" style="color:var(--ink-faint);margin-top:4px" onclick="openKeptMemories()">🤍 View kept memories</button>`:''}
-    <div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
+  openExpectingSetup('due'); // one door: ask the due date. "Not sure?" (weeks/last period) and "we're trying" live inside the setup, so the same question is never asked twice.
 }
 function setPregMode(m){
   var el;
@@ -3980,40 +4032,45 @@ function pregStep(f,delta){
   else pregDraft.days=Math.max(0,Math.min(6,(parseInt(pregDraft.days)||0)+delta));
   openExpectingSetup('weeks');
 }
+/* One door, one question. The due date is the primary ask; "not sure?" quietly reveals the weeks or
+   last-period alternatives (no top-level segmented control asking the same thing three ways). "We're
+   trying" is a gentle escape for anyone who tapped expecting by mistake. */
 function openExpectingSetup(mode){
   pregDraft.mode=mode||pregDraft.mode;
   const m=pregDraft.mode; // 'due' | 'weeks' | 'lmp'
   const carrier=(typeof viewerIsCarrier==='function')?viewerIsCarrier():true;
   // "your last period" assumes the viewer is the pregnant person — reword for a partner onboarding.
   const lmpLabel=carrier?'First day of your last period':'First day of her last period';
-  const title=(m==='lmp')?'Congratulations 🎉':'You\'re expecting 🤍';
-  const sub=(m==='weeks')?'Pop in how far along you are, from a scan or your midwife, and we\'ll work out the rest.'
-    :(m==='lmp')?(carrier?'Tell us your last period and we\'ll work out your weeks and due date.':'Add the first day of her last period and we\'ll work out the weeks and due date.')
-    :'Set your due date and we\'ll lay out your weeks. You can change anything later.';
-  let entry;
+  let entry, title, sub;
   if(m==='weeks'){
+    title=carrier?'How far along are you? 🤍':'How far along is she? 🤍';
+    sub='From a scan or your midwife. We\'ll work out the due date and weeks.';
     const wv=(pregDraft.weeks!=null&&pregDraft.weeks!=='')?pregDraft.weeks:'';
     const dv=(pregDraft.days!=null&&pregDraft.days!=='')?pregDraft.days:0;
-    entry=`<div class="field"><label>How far along are you?</label>
+    entry=`<div class="field"><label>How far along${carrier?'':' is she'}?</label>
       <div style="display:flex;gap:10px">
         <div style="flex:1"><div class="stepper stepper-sm"><button type="button" onclick="pregStep('weeks',-1)">−</button><input type="number" id="pgWeeks" inputmode="numeric" value="${wv}" placeholder="weeks" min="4" max="42" oninput="pregDraft.weeks=this.value"><button type="button" onclick="pregStep('weeks',1)">+</button></div><div class="csub" style="text-align:center;margin-top:4px">weeks</div></div>
         <div style="flex:1"><div class="stepper stepper-sm"><button type="button" onclick="pregStep('days',-1)">−</button><input type="number" id="pgDays" inputmode="numeric" value="${dv}" min="0" max="6" oninput="pregDraft.days=this.value"><button type="button" onclick="pregStep('days',1)">+</button></div><div class="csub" style="text-align:center;margin-top:4px">days</div></div>
       </div>
-      <div class="csub" style="margin-top:8px">e.g. 20 weeks 3 days, from your dating scan. We'll estimate your due date.</div></div>`;
-  } else {
-    const isDue=(m==='due');
-    entry=`<div class="field"><label>${isDue?'Due date (EDD)':lmpLabel}</label>${datePicker('pgDate', pregDraft.date, {max:isDue?null:now(), empty:true})}${wwa(isDue?'preg.edd':'preg.lmp')}</div>`;
+      <div class="csub" style="margin-top:8px">e.g. 20 weeks 3 days, from your dating scan.</div></div>
+      <div class="csub" style="margin-top:6px"><span class="link-inline" onclick="setPregMode('due')">← I actually know my due date</span></div>`;
+  } else if(m==='lmp'){
+    title='Congratulations 🎉';
+    sub=carrier?'Add your last period and we\'ll work out your weeks and due date.':'Add the first day of her last period and we\'ll work out the weeks and due date.';
+    entry=`<div class="field"><label>${lmpLabel}</label>${datePicker('pgDate', pregDraft.date, {max:now(), empty:true})}${wwa('preg.lmp')}</div>
+      <div class="csub" style="margin-top:6px"><span class="link-inline" onclick="setPregMode('due')">← I actually know my due date</span></div>`;
+  } else { // due — the one question
+    title='You\'re expecting 🤍';
+    sub='When\'s your baby due? We\'ll lay out your weeks. You can change anything later.';
+    entry=`<div class="field"><label>Due date</label>${datePicker('pgDate', pregDraft.date, {empty:true})}${wwa('preg.edd')}
+      <div class="csub" style="margin-top:8px">Not sure yet? <span class="link-inline" onclick="setPregMode('weeks')">how many weeks you are</span> · <span class="link-inline" onclick="setPregMode('lmp')">your last period</span></div></div>`;
   }
   openSheet(`<h2>${title}</h2><div class="sub">${sub}</div>
-    <div class="seg seg-full" style="margin-bottom:16px">
-      <button class="${m==='due'?'on':''}" onclick="setPregMode('due')">Due date</button>
-      <button class="${m==='weeks'?'on':''}" onclick="setPregMode('weeks')">Weeks</button>
-      <button class="${m==='lmp'?'on':''}" onclick="setPregMode('lmp')">Last period</button>
-    </div>
     ${entry}
-    <div class="field"><label>Where you'll have your care</label>${countryPickerHtml('pgCountry', pregDraft.country)}${wwa('preg.country')}</div>
+    <div class="field" style="margin-top:14px"><label>Where you'll have your care</label>${countryPickerHtml('pgCountry', pregDraft.country)}${wwa('preg.country')}</div>
     <button class="btn-primary" style="background:var(--preg)" onclick="savePregnancy()">Start tracking</button>
-    <button class="btn-ghost" onclick="openStartPregnancy()">Back</button>
+    <button class="btn-ghost" style="color:var(--ink-faint)" onclick="openPlanningSetup()">We're trying, not pregnant yet</button>
+    ${(state.pregnancyArchive&&state.pregnancyArchive.length)?`<button class="btn-ghost" style="color:var(--ink-faint)" onclick="openKeptMemories()">🤍 View kept memories</button>`:''}
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
 }
 /* ---- planning ("we're trying") stage ---- */
@@ -4261,7 +4318,7 @@ function renderPregShell(){
     <div class="topbar">
       <div class="preg-pill" onclick="pregGo('care')">
         <div class="pp-orb">🤰</div>
-        <div><h1>Cubby</h1><span>Week ${wk} · ${triName(tri)}</span></div>
+        <div><h1>Cubby</h1><span>${pregNoNumbers()?triName(tri):('Week '+wk+' · '+triName(tri))}</span></div>
       </div>
       ${state.babies.length?`<button class="icon-btn" onclick="openBabySheet()" aria-label="switch to baby" style="font-size:17px">👶</button>`:''}
       ${FEATURES.den?`<button class="icon-btn ${pregView==='den'?'icon-on':''}" onclick="goDen()" aria-label="our den" style="font-size:17px">🧺</button>`:''}
@@ -4299,9 +4356,11 @@ function pregPartnerCard(){
 /* ---- Phase 2: week view ---- */
 function renderPregHome(){
   const wk=pregWeek(), tri=pregTri(), data=pregWeekData();
-  const pct=Math.max(3,Math.min(100,Math.round(wk/40*100)));
-  const dtg=pregDaysToGo(), due=pregDueLabel();
-  const countdown = dtg==null ? '' : (dtg>0?`${dtg} day${dtg===1?'':'s'} to go · due ${due}`:(dtg===0?`Due today · ${due}`:`${Math.abs(dtg)} day${dtg===-1?'':'s'} past your due date`));
+  const carrier=viewerIsCarrier();
+  const nn=pregNoNumbers(), al=pregAfterLoss();  // R4: quiet (no-numbers) + pregnancy-after-loss softening
+  // No countdown, no filling birth bar (they spike anxiety and break the no-countdowns promise): lead
+  // with the qualitative week + baby size. In quiet mode the week number is dropped entirely.
+  const heroLine=data?`${carrier?'You and baby':'Baby'}${nn?'':', week '+wk} · about the size of a ${escapeHtml(data.size)}${(window.PREG&&PREG.sizeEmoji)?' '+PREG.sizeEmoji(data.size):''}`:`${carrier?'You and baby':'Baby'}${nn?'':' · week '+wk}`;
   const p=state.pregnancy;
   if(!p.visitQs){ p.visitQs=defaultVisitQs(); persist(); }
   const na=pregNextAppt();
@@ -4311,31 +4370,30 @@ function renderPregHome(){
   return `<div class="fade-in">
     <div class="greeting">${pregGreeting()}</div>
     ${consentBanners()}
+    ${al?`<div class="preg-card" style="border-left:4px solid var(--preg)"><div class="pc-ico">🤍</div><div style="flex:1;min-width:0"><div class="pc-t">One day at a time</div><div class="pc-b">However this week feels is okay. We'll go gently, and there's a private place for anything on your mind.</div></div></div>`:''}
     <div class="week-hero">
-      <div class="wh-top"><div class="wh-week">Week ${wk}</div><div class="wh-tri">${triName(tri)}</div></div>
-      <div class="wh-count">${escapeHtml(countdown)}</div>
-      <div class="preg-bar"><i style="width:${pct}%"></i></div>
+      <div class="wh-top"><div class="wh-week">${nn?triName(tri):('Week '+wk)}</div><div class="wh-tri">${nn?'':triName(tri)}</div></div>
+      <div class="wh-count">${heroLine}</div>
     </div>
     ${data?`<div class="preg-cards">
-      <div class="preg-card" onclick="openWeekDetail('size')" style="cursor:pointer"><div class="pc-ico">${(window.PREG&&PREG.sizeEmoji)?PREG.sizeEmoji(data.size):'🌱'}</div><div style="flex:1;min-width:0"><div class="pc-t">About the size of a ${escapeHtml(data.size)}</div><div class="pc-b">A gentle week-by-week guide. Tap for more.</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>
       <div class="preg-card" onclick="openWeekDetail('baby')" style="cursor:pointer"><div class="pc-ico">👶</div><div style="flex:1;min-width:0"><div class="pc-t">Baby this week</div><div class="pc-b">${escapeHtml(data.baby)}</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>
-      <div class="preg-card" onclick="openWeekDetail('you')" style="cursor:pointer"><div class="pc-ico">🤍</div><div style="flex:1;min-width:0"><div class="pc-t">You this week</div><div class="pc-b">${escapeHtml(data.mum)}</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>
+      ${carrier?`<div class="preg-card" onclick="openWeekDetail('you')" style="cursor:pointer"><div class="pc-ico">🤍</div><div style="flex:1;min-width:0"><div class="pc-t">You this week</div><div class="pc-b">${escapeHtml(data.mum)}</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>`:''}
     </div>`:`<div class="preg-card" onclick="openWeekDetail('early')" style="cursor:pointer"><div class="pc-ico">🤍</div><div style="flex:1;min-width:0"><div class="pc-t">Early days</div><div class="pc-b">Week-by-week guidance appears from week 4. Tap for more.</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>`}
     ${na?`<div class="next-appt" onclick="openVisitPrep('${na.id}')">
       <div class="pc-ico" style="background:var(--preg-soft)">📅</div>
       <div class="na-body"><div class="na-t">Next: ${escapeHtml(na.title)}</div><div class="na-s">${naWhen} · around week ${na.week}${qCount?` · ${qCount} question${qCount===1?'':'s'} ready`:''}</div></div>
       <span class="chev">${I.chev}</span></div>`:(pregWeek()>40?`<div class="next-appt">
       <div class="pc-ico" style="background:var(--preg-soft)">🌼</div>
-      <div class="na-body"><div class="na-t">Any day now</div><div class="na-s">Your due date is here. Babies keep their own schedule, so rest when you can and follow your midwife or doctor's guidance on monitoring.</div></div></div>`:'')}
-    ${act?`<div class="preg-card" style="cursor:pointer;border-left:4px solid var(--star)" onclick="${act.go}"><div class="pc-ico">${act.ico}</div><div><div class="pc-t">${escapeHtml(act.t)}</div><div class="pc-b">${escapeHtml(act.s)}</div></div></div>`:''}
+      <div class="na-body"><div class="na-t">Any day now</div><div class="na-s">${carrier?"Your due date is here. Babies keep their own schedule, so rest when you can and follow your midwife or doctor's guidance on monitoring.":"The due date is here. Babies keep their own schedule. Follow your midwife or doctor's guidance on monitoring."}</div></div></div>`:'')}
+    ${(act&&!nn)?`<div class="preg-card" style="cursor:pointer;border-left:4px solid var(--star)" onclick="${act.go}"><div class="pc-ico">${act.ico}</div><div><div class="pc-t">${escapeHtml(act.t)}</div><div class="pc-b">${escapeHtml(act.s)}</div></div></div>`:''}
     ${pregDoctorCard()}
-    ${pregIsOwner()?`<div class="preg-card" onclick="openLogSymptom()" style="cursor:pointer;border-left:4px solid var(--note)"><div class="pc-ico">🤍</div><div style="flex:1;min-width:0"><div class="pc-t">How are you feeling this week?</div><div class="pc-b">A quick note for you: tender, tired, excited, anything.</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>`:pregPartnerCard()}
+    ${carrier?`<div class="preg-card" onclick="openMoodNote()" style="cursor:pointer;border-left:4px solid var(--note)"><div class="pc-ico">🤍</div><div style="flex:1;min-width:0"><div class="pc-t">How are you, in yourself?</div><div class="pc-b">A private note, just for you. Never shared.</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>`:pregPartnerCard()}
     ${pregHealthQuick()}
     <div class="sec-title">This week</div>
     <div class="actions stagger">
       <button class="action" onclick="openKickCounter()"><div class="ico" style="background:var(--preg-soft);color:var(--preg)">👣</div><div class="label">Kicks</div><div class="hint">Count baby's movements</div></button>
       <button class="action" onclick="openContractions()"><div class="ico" style="background:var(--pump-soft);color:var(--pump)">⏱️</div><div class="label">Contractions</div><div class="hint">Time them, 5-1-1 guide</div></button>
-      ${pregIsOwner()?`<button class="action" onclick="openLogSymptom()"><div class="ico" style="background:var(--note-soft);color:var(--note)">📝</div><div class="label">Symptom</div><div class="hint">How you're feeling</div></button>
+      ${carrier?`<button class="action" onclick="openLogSymptom()"><div class="ico" style="background:var(--note-soft);color:var(--note)">📝</div><div class="label">Symptom</div><div class="hint">Nausea, aches, heartburn</div></button>
       <button class="action" onclick="openLogWeight()"><div class="ico" style="background:var(--star-soft);color:var(--star)">⚖️</div><div class="label">Weight</div><div class="hint">Track your weight</div></button>`:''}
     </div>
     <button class="btn-ghost" onclick="openDangerSigns()" style="color:var(--danger);margin-top:14px">⚠️ Urgent warning signs, when to seek care</button>
@@ -4483,13 +4541,21 @@ function renderPregLog(){
         <div class="ar-t">${escapeHtml(a.title)}</div>
         ${a.note?`<div class="ar-s">${escapeHtml(a.note)}</div>`:''}
         ${a.outcome?`<div class="ar-s" style="color:var(--preg)">🤍 ${escapeHtml(a.outcome)}</div>`:''}
+        ${(a.sfh||a.efw||a.hb||a.position||(a.bpSys&&a.bpDia))?`<div class="ar-s" style="color:var(--ink-faint)">${[a.sfh?'SFH '+a.sfh+'cm':'',a.efw?'EFW '+a.efw+'g':'',a.position?escapeHtml(a.position):'',a.hb?'Hb '+a.hb:'',(a.bpSys&&a.bpDia)?'BP '+a.bpSys+'/'+a.bpDia:''].filter(Boolean).join(' · ')}</div>`:''}
       </div>
     </div>`).join(''):`<div class="csub">No appointments yet. Add your first below.</div>`;
   const logs=pregRecentLogs();
   if(!p.visitQs){ p.visitQs=defaultVisitQs(); persist(); }
+  const sfhPts=(p.appts||[]).filter(a=>a.sfh).map(a=>({week:a.week,sfh:a.sfh})).sort((a,b)=>a.week-b.week);
+  const _facts=[]; if(p.bloodGroup)_facts.push('Blood '+p.bloodGroup+(p.rh?' '+p.rh:'')); if(p.gbs&&p.gbs!=='unknown')_facts.push('GBS '+p.gbs);
+  const recordCard=`<div class="sec-title">Your antenatal record</div>
+    <div class="csub" style="margin:-2px 0 8px">The numbers your provider gives you, in one place for your visits and your doctor report.</div>
+    ${sfhPts.length>=2?`<div class="preg-card" style="display:block"><div class="pc-t" style="margin-bottom:6px">Fundal height</div>${sfhTrendSvg(sfhPts)}<div class="pc-b" style="margin-top:4px">From about 24 weeks, fundal height in cm often tracks close to your week number (the dashed guide). Your provider watches the trend, not any single reading.</div></div>`:''}
+    <button class="set-item" style="width:100%;text-align:left;cursor:pointer" onclick="openAntenatalFacts()"><div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:16px">🩸</div><div class="si-body"><div class="a">Blood group, Rh &amp; GBS</div><div class="b">${_facts.length?escapeHtml(_facts.join(' · ')):'Add the one-time results from your bloods'}</div></div><span class="chev">${I.chev}</span></button>`;
   const qRows=(p.visitQs||[]).map(q=>`<div class="bag-row ${q.done?'done':''}"><div class="bg-tick" onclick="toggleVisitQ('${q.id}')">${q.done?I.check:''}</div><div class="bg-t" onclick="toggleVisitQ('${q.id}')">${escapeHtml(q.text)}</div><button class="bg-x" onclick="removeVisitQ('${q.id}')">${I.trash}</button></div>`).join('');
   return `<div class="fade-in">
-    <div class="sec-title">Appointments</div>
+    ${recordCard}
+    <div class="sec-title" style="margin-top:18px">Appointments</div>
     ${apptIntro}
     ${apptRows}
     <button class="btn-ghost" onclick="openAddAppt()">${I.plus} Add an appointment</button>
@@ -4504,7 +4570,7 @@ function renderPregLog(){
     </div>
     <div class="sec-title" style="margin-top:18px">Quick log</div>
     <div class="actions stagger">
-      <button class="action" onclick="openLogSymptom()"><div class="ico" style="background:var(--note-soft);color:var(--note)">📝</div><div class="label">Symptom</div><div class="hint">Nausea, aches, mood</div></button>
+      <button class="action" onclick="openLogSymptom()"><div class="ico" style="background:var(--note-soft);color:var(--note)">📝</div><div class="label">Symptom</div><div class="hint">Nausea, aches, heartburn</div></button>
       <button class="action" onclick="openLogWeight()"><div class="ico" style="background:var(--star-soft);color:var(--star)">⚖️</div><div class="label">Weight</div><div class="hint">Your weight</div></button>
       <button class="action" onclick="openLogBP()"><div class="ico" style="background:var(--pump-soft);color:var(--pump)">🩺</div><div class="label">Blood pressure</div><div class="hint">If asked to track</div></button>
       <button class="action" onclick="pregGo('care')"><div class="ico" style="background:var(--diaper-soft);color:var(--diaper)">👩‍⚕️</div><div class="label">Care team</div><div class="hint">Gynaecologist, OB, midwife</div></button>
@@ -4552,15 +4618,34 @@ function addAppt(){ const t=$('#apT').value.trim(); if(!t){toast('Give it a titl
 /* symptom / weight / blood pressure */
 function openLogSymptom(){
   initLogWhen();
-  const chips=['Nausea','Tired','Headache','Heartburn','Cramps','Back ache','Swelling','Baby kicking','Feeling good'].map(s=>`<button class="tgt" onclick="pickSym(this,'${s}')">${s}</button>`).join('');
-  openSheet(`<h2>How are you feeling?</h2><div class="sub">Log a symptom or a note for your records.</div>
+  const chips=['Nausea','Tired','Headache','Heartburn','Cramps','Back ache','Swelling','Baby kicking'].map(s=>`<button class="tgt" onclick="pickSym(this,'${s}')">${s}</button>`).join('');
+  openSheet(`<h2>Log a symptom</h2><div class="sub">A physical symptom for your records. Private to you unless you choose to share your health logs.</div>
     <div class="field"><label>Common</label><div class="tgt-row" id="symChips">${chips}</div></div>
     <div class="field"><label>Symptom or note</label><input id="symK" placeholder="e.g. mild nausea after lunch"></div>
     ${timeStrip('when','When')}
-    <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="savePregSymptom()">Save</button>`,'preg');
+    <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="savePregSymptom()">Save</button>
+    <div class="csub" style="margin-top:10px">Want to note how you're feeling in yourself instead? <span class="link-inline" onclick="closeSheet();openMoodNote()">Add a private note 🤍</span></div>`,'preg');
 }
 function pickSym(el,s){ const inp=$('#symK'); if(inp)inp.value=s; document.querySelectorAll('#symChips .tgt').forEach(b=>b.classList.remove('on')); el.classList.add('on'); }
 function savePregSymptom(){ const k=$('#symK').value.trim(); if(!k){toast('Add a note first');return;} state.pregnancy.symptoms.push({id:uid(),at:getWhen('when'),kind:k,note:''}); persist(); closeSheet(); render(); toast('Logged'); }
+/* Owner-only wellbeing note. NEVER shared: it lives in the owner-only 'mood' category (mhealth), not the
+   shareable clinical 'health' bucket, so writing "I feel low" here can never reach a partner or the circle. */
+function openMoodNote(){
+  ensurePregFields(state.pregnancy); initLogWhen(); window._moodSel='';
+  const p=state.pregnancy; const recent=(p.moodLog||[]).slice().sort((a,b)=>b.at-a.at).slice(0,6);
+  const chips=['Calm','Happy','Tired','Anxious','Low','Overwhelmed','Excited'].map(s=>`<button class="tgt" onclick="pickMood(this,'${s}')">${s}</button>`).join('');
+  const list=recent.length?('<div class="sec-title" style="margin-top:14px">Just for you 🔒</div>'+recent.map(m=>`<div class="log-list-item"><div class="lli-ico">🤍</div><div class="lli-body"><div class="lli-t">${escapeHtml(m.mood||'Note')}</div><div class="lli-s">${m.note?escapeHtml(m.note)+' · ':''}${dayLabel(m.at)}</div></div><button class="lli-x" onclick="deleteMoodNote('${m.id}')">${I.trash}</button></div>`).join('')):'';
+  openSheet(`<h2>How are you, in yourself? 🤍</h2><div class="sub">A private note, just for you. This is never shared with anyone in your circle, ever.</div>
+    <div class="field"><label>How you're feeling</label><div class="tgt-row" id="moodChips">${chips}</div></div>
+    <div class="field"><label>Anything you want to say (optional)</label><textarea id="moodNote" placeholder="However you feel is okay. No one else sees this."></textarea></div>
+    ${timeStrip('when','When')}
+    <button class="btn-primary" style="background:var(--note);margin-top:8px" onclick="saveMoodNote()">Save privately</button>
+    ${list}
+    <div class="preg-disclaim">If you're struggling, you're not alone. Your midwife or doctor can help, and a perinatal mental-health line is there day or night.</div>`,'preg');
+}
+function pickMood(el,s){ document.querySelectorAll('#moodChips .tgt').forEach(b=>b.classList.remove('on')); el.classList.add('on'); window._moodSel=s; }
+function saveMoodNote(){ const p=state.pregnancy; ensurePregFields(p); const mood=window._moodSel||''; const note=(($('#moodNote')||{}).value||'').trim(); if(!mood&&!note){ toast('Add a word or a note'); return; } p.moodLog.push({id:uid(),at:getWhen('when'),mood:mood,note:note}); window._moodSel=''; persist(); closeSheet(); render(); toast('Kept private 🤍'); }
+function deleteMoodNote(id){ const p=state.pregnancy; if(!p||!p.moodLog) return; p.moodLog=p.moodLog.filter(x=>x.id!==id); persist(); openMoodNote(); }
 function openLogWeight(){
   initLogWhen();
   const unit=(state.settings.wUnit==='lb')?'lb':'kg';
@@ -4685,6 +4770,8 @@ function pregVisitSummary(){
   const L=[];
   L.push('Week '+wk+' · '+triName(pregTri())+(p.dueDate?' · due '+fd(p.dueDate):'')+(dtg!=null?' ('+(dtg>0?dtg+' days to go':(dtg===0?'due today':Math.abs(dtg)+' days over'))+')':''));
   L.push('Care schedule: '+pregCareLabel(p.country));
+  const _facts=[]; if(p.bloodGroup)_facts.push('Blood group '+p.bloodGroup+(p.rh?' '+p.rh:'')); if(p.gbs&&p.gbs!=='unknown')_facts.push('GBS '+p.gbs);
+  if(_facts.length) L.push(_facts.join(' · '));
   const care=(p.careTeam||[]).map(m=>m.name+(m.role?' ('+m.role+')':'')+(m.phone?' '+m.phone:'')).join('; ');
   if(care) L.push('Care team: '+care);
   L.push('');
@@ -4693,6 +4780,8 @@ function pregVisitSummary(){
   L.push('Appointments: '+done.length+' attended, '+up.length+' upcoming');
   done.slice(-6).forEach(a=>L.push('  • wk '+a.week+' — '+a.title+(a.outcome?': '+a.outcome:'')));
   if(up[0]) L.push('  • next — wk '+up[0].week+' '+up[0].title);
+  const meas=(p.appts||[]).filter(a=>a.sfh||a.efw||a.hb||a.position||(a.bpSys&&a.bpDia)).sort((a,b)=>a.week-b.week);
+  if(meas.length){ L.push(''); L.push('Measurements by visit:'); meas.forEach(a=>{ const bits=[]; if(a.sfh)bits.push('SFH '+a.sfh+'cm'); if(a.efw)bits.push('EFW '+a.efw+'g'); if(a.position)bits.push(a.position); if(a.hb)bits.push('Hb '+a.hb); if(a.bpSys&&a.bpDia)bits.push('BP '+a.bpSys+'/'+a.bpDia); L.push('  • wk '+a.week+': '+bits.join(', ')); }); }
   const bp=(p.bp||[]).slice().sort((a,b)=>b.at-a.at);
   if(bp.length){ L.push(''); L.push('Blood pressure ('+bp.length+' readings): latest '+bp[0].sys+'/'+bp[0].dia+' on '+fd(bp[0].at)); bp.slice(0,5).forEach(r=>L.push('  • '+fd(r.at)+': '+r.sys+'/'+r.dia)); }
   const gl=(p.glucose||[]).slice().sort((a,b)=>b.at-a.at);
@@ -4705,21 +4794,40 @@ function pregVisitSummary(){
   if(conds.length){ L.push(''); L.push('Flagged: '+conds.join(', ')); }
   return L.join('\n');
 }
+/* In-app report overlay. The old version used window.open('','_blank') which returns null inside an
+   installed iOS PWA (no pop-ups) and dead-ended the whole feature. This renders the report in the same
+   document, so Print/Save-PDF (window.print with a print stylesheet that shows only the report) and a
+   native Share/Copy fallback both work everywhere, including a standalone home-screen app. */
 function openPregDoctorReport(){
   const p=state.pregnancy; if(!p) return;
   if(!useTaste('pdf','Doctor report')) return;
+  closeSheet();
   const esc=escapeHtml; const wk=pregWeek(); const summary=pregVisitSummary();
-  const w=window.open('','_blank'); if(!w){ toast('Allow pop-ups to create the report'); return; }
-  w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cubby pregnancy report</title>'
-    +'<style>body{font-family:Georgia,"Times New Roman",serif;color:#222;max-width:680px;margin:36px auto;padding:0 24px;line-height:1.55}h1{font-size:24px;margin:0 0 2px}.meta{color:#666;font-size:13px;margin-bottom:22px}h2{font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:#8a7f6f;border-bottom:1px solid #ddd;padding-bottom:4px;margin:24px 0 8px}pre{font-family:inherit;white-space:pre-wrap;font-size:14px;margin:0}.foot{margin-top:30px;color:#999;font-size:12px;border-top:1px solid #eee;padding-top:10px}.noprint{margin:18px 0}.noprint button{font-size:14px;padding:8px 18px;cursor:pointer}@media print{.noprint{display:none}}</style></head><body>'
-    +'<h1>Pregnancy visit report</h1>'
-    +'<div class="meta">Week '+wk+(p.dueDate?' · due '+new Date(p.dueDate).toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'}):'')+' · generated '+new Date().toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'})+' with Cubby</div>'
-    +'<div class="noprint"><button onclick="window.print()">Print / Save as PDF</button></div>'
-    +'<h2>Summary</h2><pre>'+esc(summary)+'</pre>'
-    +'<div class="foot">Recorded by you in Cubby. Informational only, not medical advice; please verify clinically.</div>'
-    +'</body></html>');
-  w.document.close(); try{ w.focus(); }catch(e){}
+  const gen=new Date().toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'});
+  var old=document.getElementById('reportOv'); if(old) old.remove();
+  if(!document.getElementById('reportPrintCSS')){ var st=document.createElement('style'); st.id='reportPrintCSS';
+    st.textContent='@media print{body{visibility:hidden!important}#reportOv,#reportOv *{visibility:visible!important}#reportOv{position:absolute!important;inset:0!important;background:#fff!important;overflow:visible!important}#reportOv .noprint{display:none!important}}';
+    document.head.appendChild(st); }
+  var ov=document.createElement('div'); ov.id='reportOv';
+  ov.setAttribute('style','position:fixed;inset:0;z-index:100000;background:#fff;color:#1a1a1a;overflow:auto;-webkit-overflow-scrolling:touch;font-family:Georgia,"Times New Roman",serif');
+  ov.innerHTML='<div style="max-width:680px;margin:0 auto;padding:20px 20px 60px">'
+    +'<div class="noprint" style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:16px;font-family:system-ui,sans-serif;flex-wrap:wrap">'
+    +'<button onclick="sharePregReport()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:1px solid #ddd;background:#fff;cursor:pointer">Share / Copy</button>'
+    +'<button onclick="window.print()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:none;background:#C97FA0;color:#fff;cursor:pointer">Print / Save PDF</button>'
+    +'<button onclick="closePregReport()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:1px solid #ddd;background:#fff;cursor:pointer">Close</button>'
+    +'</div>'
+    +'<h1 style="font-size:24px;margin:0 0 2px">Pregnancy visit report</h1>'
+    +'<div style="color:#666;font-size:13px;margin-bottom:20px">Week '+wk+(p.dueDate?' · due '+new Date(p.dueDate).toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'}):'')+' · generated '+gen+' with Cubby</div>'
+    +'<pre style="font-family:inherit;white-space:pre-wrap;font-size:14px;line-height:1.55;margin:0">'+esc(summary)+'</pre>'
+    +'<div style="margin-top:28px;color:#999;font-size:12px;border-top:1px solid #eee;padding-top:10px">Recorded by you in Cubby. Informational only, not medical advice; please verify clinically.</div>'
+    +'</div>';
+  document.body.appendChild(ov);
 }
+function closePregReport(){ var o=document.getElementById('reportOv'); if(o) o.remove(); }
+function sharePregReport(){ const p=state.pregnancy; if(!p) return; const txt=pregVisitSummary();
+  if(navigator.share){ navigator.share({title:'Cubby pregnancy report',text:txt}).catch(function(){}); return; }
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(function(){toast('Report copied 🤍');}).catch(function(){toast('Could not copy');}); }
+  else { toast('Copy not supported here'); } }
 
 /* ---- Care: team, danger signs, dates, end ---- */
 function renderPregCare(){
@@ -4742,7 +4850,10 @@ function renderPregCare(){
       <div class="si-body"><div class="a">Your private pregnancy</div><div class="b">${(()=>{const n=pregJourneyShared().length;return n?('Shared with '+n+' '+(n===1?'person':'people')):'Private to you';})()} · choose who can see it</div></div><span class="chev">${I.chev}</span></div>
     <div class="set-item" onclick="openMaternalPrivacy()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">🔒</div>
-      <div class="si-body"><div class="a">Your private health</div><div class="b">Choose who in your circle can see each part</div></div><span class="chev">${I.chev}</span></div>`:''}
+      <div class="si-body"><div class="a">Your private health</div><div class="b">Choose who in your circle can see each part</div></div><span class="chev">${I.chev}</span></div>
+    <div class="set-item" onclick="openGentleMode()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--note-soft);color:var(--note);font-size:18px">🤍</div>
+      <div class="si-body"><div class="a">Gentle mode</div><div class="b">${(()=>{const g=(state.pregnancy&&state.pregnancy.gentle)||{};const on=[g.afterLoss?'after loss':'',g.noNumbers?'quiet':''].filter(Boolean);return on.length?('On · '+on.join(', ')):'Soften milestones, or hide the numbers';})()}</div></div><span class="chev">${I.chev}</span></div>`:''}
     <div class="sec-title" style="margin-top:18px">Pregnancy</div>
     <div class="set-item" onclick="openDangerSigns()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--med-soft);color:var(--danger);font-size:18px">⚠️</div>
@@ -4817,9 +4928,10 @@ async function toggleMaternalShare(cat,uid){
 }
 
 /* ---- Pregnancy journey: one-time stakeholder review when a pregnancy starts (Item 7) ----
-   The person starting reviews the circle once. Everyone is listed and pre-checked; she accepts or
-   removes anyone before it is shared. The accepted set becomes the journey's sharedWith. A solo
-   household (only the creator) auto-accepts and skips the step. Nothing is ever shared silently. */
+   Opt-in: nobody is pre-selected. She adds only the people she is ready to tell; the fact of a
+   pregnancy (the most sensitive thing a family has) is never announced by default. The chosen set
+   becomes the journey's sharedWith. A solo household (only the creator) skips the step and shares with
+   nobody. Nothing is ever shared silently, and she can change it later from Care. */
 let pregAuditSel=null; // uids currently checked in the review
 async function startPregnancyAudit(onDone){
   const others=otherCircleMembers();
@@ -4828,7 +4940,7 @@ async function startPregnancyAudit(onDone){
     if(typeof onDone==='function') onDone();
     return;
   }
-  pregAuditSel=others.slice(); // default is the whole circle, pre-checked
+  pregAuditSel=[]; // opt-in: nobody pre-selected; she adds only the people she is ready to tell
   renderPregnancyAudit(onDone);
 }
 function renderPregnancyAudit(onDone){
@@ -4841,10 +4953,10 @@ function renderPregnancyAudit(onDone){
     </button>`;
   }).join('');
   window._pregAuditDone=onDone; // stash for the button handler
-  openSheet(`<h2>Who can see this? 🤍</h2>
-    <div class="sub">Being pregnant is yours to share. Choose who in your circle sees your pregnancy. Nobody is told until you say so, and you can change this anytime.</div>
+  openSheet(`<h2>Who are you ready to tell? 🤍</h2>
+    <div class="sub">Being pregnant is yours to share. No one in your circle sees your pregnancy until you add them here. You can change this anytime.</div>
     ${rows}
-    <button class="btn-primary" style="background:var(--preg);margin-top:14px" onclick="confirmPregnancyAudit()">Share with the chosen ${pregAuditSel.length===1?'person':'people'}</button>
+    <button class="btn-primary" style="background:var(--preg);margin-top:14px${pregAuditSel.length?'':';opacity:.45;pointer-events:none'}" onclick="confirmPregnancyAudit()">${pregAuditSel.length?('Share with '+pregAuditSel.length+' '+(pregAuditSel.length===1?'person':'people')):'Tap the people you want to tell'}</button>
     <button class="btn-ghost" onclick="confirmPregnancyAuditNone()">Keep it just to me for now</button>
     <div class="preg-disclaim" style="margin-top:12px">Only you can change who sees your pregnancy. You can open this again from Care, under Your private pregnancy.</div>`,'preg');
 }
@@ -4959,7 +5071,7 @@ function endPregnancy(keep){
   // chooser seconds after a loss. Only for an actual pregnancy (stage 'expecting'); a planning
   // "stop tracking" is a neutral pause, not a loss, so it must NOT show the bereavement screen.
   // Only when there's no baby to return to; persists across reload + to a following co-parent via the blob.
-  if(!state.babies.length && p.stage!=='planning') state.lossHolding={ at:now() };
+  if(!state.babies.length && p.stage!=='planning'){ var _lh=(state.lossHolding&&!state.lossHolding.at)?state.lossHolding:{}; _lh[myUid()]={ at:now() }; state.lossHolding=_lh; }
   persist(); closeSheet(); render();
   if(state.babies.length) toast(keep?'Your memories are kept 🤍':'Be gentle with yourself 🤍');
 }
@@ -5038,8 +5150,28 @@ function ensurePregFields(p){
   if(!p.supplements) p.supplements=[];
   if(!p.supplementLog) p.supplementLog=[];
   if(!p.nausea) p.nausea=[];
+  if(!p.moodLog) p.moodLog=[];   // owner-only private wellbeing notes (mhealth cat 'mood', never shared)
+  if(!p.gentle) p.gentle={afterLoss:false,noNumbers:false};   // R4 softening modes (her own display preference)
   if(!p.guesses) p.guesses=[];
   if(!p.glucoseUnit) p.glucoseUnit=(p.country==='us'||p.country==='uae')?'mgdl':'mmol';
+}
+/* ---- R4: gentle softening modes. "Pregnancy after loss" softens milestone cheer and never presumes a
+   happy ending; "Quiet mode" hides week counts and nudges (journal + appointments + reminders stay).
+   Stored on the owner-owned journey doc; only the owner can change them. ---- */
+function pregGentle(){ const p=state.pregnancy; return (p&&p.gentle)||{}; }
+function pregNoNumbers(){ return !!pregGentle().noNumbers; }
+function pregAfterLoss(){ return !!pregGentle().afterLoss; }
+function setGentle(k,v){ const p=state.pregnancy; if(!p) return; ensurePregFields(p); p.gentle=Object.assign({},p.gentle,{[k]:v}); persist(); openGentleMode(); render(); }
+function openGentleMode(){
+  ensurePregFields(state.pregnancy); const g=pregGentle();
+  openSheet(`<h2>Gentle mode 🤍</h2><div class="sub">However you want your pregnancy to feel. Nothing here is permanent, change it anytime.</div>
+    <div class="set-item"><div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">🕊️</div>
+      <div class="si-body"><div class="a">Pregnancy after loss</div><div class="b">Softer milestones, no assumptions, and a private place for the hard days</div></div>
+      <div class="seg"><button class="${!g.afterLoss?'on':''}" onclick="setGentle('afterLoss',false)">Off</button><button class="${g.afterLoss?'on':''}" onclick="setGentle('afterLoss',true)">On</button></div></div>
+    <div class="set-item"><div class="si-ico" style="background:var(--note-soft);color:var(--note);font-size:18px">🌙</div>
+      <div class="si-body"><div class="a">Quiet mode</div><div class="b">Hide week counts and nudges. Just your journal, appointments and reminders</div></div>
+      <div class="seg"><button class="${!g.noNumbers?'on':''}" onclick="setGentle('noNumbers',false)">Off</button><button class="${g.noNumbers?'on':''}" onclick="setGentle('noNumbers',true)">On</button></div></div>
+    <div class="preg-disclaim">These change how Cubby feels for you. Your appointments and any urgent warning-sign guidance always stay.</div>`,'preg');
 }
 function condCfg(key){ return (window.PREG&&PREG.conditions&&PREG.conditions[key])||null; }
 function condOn(key){ const p=state.pregnancy; return !!(p&&p.conditions&&p.conditions[key]); }
@@ -5086,22 +5218,28 @@ function pregHealthQuick(){
 }
 
 /* ---- Gestational diabetes: glucose ---- */
-let glucoseDraft={context:'fasting'};
+let glucoseDraft={context:'fasting',timing:'1'};
 function setGlucoseCtx(c){ glucoseDraft.context=c; renderGlucoseLog(); }
+function setGlucoseTiming(t){ glucoseDraft.timing=t; const m=/^post[12]-(.+)$/.exec(glucoseDraft.context||''); if(m){ glucoseDraft.context='post'+t+'-'+m[1]; } renderGlucoseLog(); }
 function glucoseUnitLabel(u){ return u==='mmol'?'mmol/L':'mg/dL'; }
-function glucoseCtxLabel(c){ return c==='fasting'?'Fasting':(c==='other'?'Other':({'post1-breakfast':'After breakfast','post1-lunch':'After lunch','post1-dinner':'After dinner'}[c]||'After a meal')); }
+function glucoseCtxLabel(c){ return c==='fasting'?'Fasting':(c==='other'?'Other':({'post1-breakfast':'1h after breakfast','post1-lunch':'1h after lunch','post1-dinner':'1h after dinner','post2-breakfast':'2h after breakfast','post2-lunch':'2h after lunch','post2-dinner':'2h after dinner'}[c]||'After a meal')); }
 function glucoseTarget(context,unit){ const cfg=condCfg('gdm'); const t=cfg&&cfg.targets[unit]; if(!t)return null;
   if(context==='fasting') return {label:'fasting',max:t.fasting};
   if((''+context).indexOf('post1')===0) return {label:'1 hour after a meal',max:t.post1};
+  if((''+context).indexOf('post2')===0 && t.post2!=null) return {label:'2 hours after a meal',max:t.post2};
   return null; }
 function glucoseOver(val,context,unit){ const t=glucoseTarget(context,unit); return t?(val>t.max):false; }
-function openGlucoseLog(){ ensurePregFields(state.pregnancy); glucoseDraft={context:'fasting'}; initLogWhen(); renderGlucoseLog(); }
+function openGlucoseLog(){ ensurePregFields(state.pregnancy); glucoseDraft={context:'fasting',timing:'1'}; initLogWhen(); renderGlucoseLog(); }
 function renderGlucoseLog(){
   const p=state.pregnancy; const unit=p.glucoseUnit, ul=glucoseUnitLabel(unit);
-  const ctxs=[['fasting','Fasting'],['post1-breakfast','After breakfast'],['post1-lunch','After lunch'],['post1-dinner','After dinner'],['other','Other']];
+  const tm=glucoseDraft.timing||'1';
+  const ctxs=[['fasting','Fasting'],['post'+tm+'-breakfast','After breakfast'],['post'+tm+'-lunch','After lunch'],['post'+tm+'-dinner','After dinner'],['other','Other']];
   const chips=ctxs.map(([k,l])=>`<button class="tgt ${glucoseDraft.context===k?'on':''}" onclick="setGlucoseCtx('${k}')">${l}</button>`).join('');
+  const isPost=/^post[12]-/.test(glucoseDraft.context||'');
+  const timingRow=isPost?`<div class="field"><label>How long after eating?</label><div class="seg"><button type="button" class="${tm==='1'?'on':''}" onclick="setGlucoseTiming('1')">1 hour</button><button type="button" class="${tm==='2'?'on':''}" onclick="setGlucoseTiming('2')">2 hours</button></div></div>`:'';
   openSheet(`<h2>Blood glucose</h2><div class="sub">Log a finger-prick reading. Tag when you took it so it lines up with your targets.</div>
     <div class="field"><label>When in the day</label><div class="tgt-row">${chips}</div></div>
+    ${timingRow}
     <div class="field"><label>Reading (${ul})</label><input type="number" inputmode="decimal" id="glVal" value="${glucoseDraft.value||''}" oninput="glucoseDraft.value=this.value" placeholder="${unit==='mmol'?'e.g. 5.1':'e.g. 92'}" autofocus>${wwa('mat.glucose')}</div>
     ${timeStrip('when','When')}
     <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="saveGlucose()">Save reading</button>
@@ -5126,7 +5264,7 @@ function openGlucoseTracker(){
   const t=(condCfg('gdm')||{}).targets&&condCfg('gdm').targets[unit];
   openSheet(`<h2>Gestational diabetes</h2><div class="sub">Your blood glucose readings, in ${ul}.</div>
     ${pctIn!=null?`<div class="tool-stat"><div class="ts-cell"><div class="ts-big">${pctIn}%</div><div class="ts-cap">In target</div></div><div class="ts-cell"><div class="ts-big">${rated.length}</div><div class="ts-cap">Readings</div></div></div>`:''}
-    ${t?`<div class="preg-card"><div class="pc-ico">🎯</div><div><div class="pc-t">Common targets (${ul})</div><div class="pc-b">Fasting under ${t.fasting}, one hour after meals under ${t.post1}. Your own targets may differ, confirm with your team.</div></div></div>`:''}
+    ${t?`<div class="preg-card"><div class="pc-ico">🎯</div><div><div class="pc-t">Common targets (${ul})</div><div class="pc-b">Fasting under ${t.fasting}, one hour after meals under ${t.post1}${t.post2!=null?', two hours under '+t.post2:''}. Your own targets may differ, confirm with your team.</div></div></div>`:''}
     <button class="btn-primary" style="background:var(--preg);margin-top:6px" onclick="openGlucoseLog()">🩸 Log a reading</button>
     <div class="sec-title" style="margin-top:14px">Recent</div>${rows}
     <div class="preg-disclaim">${escapeHtml((condCfg('gdm')||{}).note||PREG_DISCLAIM)}</div>`,'preg');
@@ -6441,7 +6579,7 @@ function renderJourneyLibrary(){
   const b=activeBaby();
   if(!b) return `<div class="gl-empty">Add your baby to start saving moments.</div>`;
   const name=escapeHtml(b.name||'Baby');
-  const loss=!!state.lossHolding;                    // loss-safe: no guided prompts while holding
+  const loss=!!myLossHolding();                    // loss-safe: no guided prompts while holding
   const order=(window.JOURNEY_CAT?window.JOURNEY_CAT.order:[]).filter(s=>s!=='Before you arrived');
   const suggested=loss?[]:glSuggested(b);
   const openSec=glOpenSection(suggested, order);
@@ -6735,7 +6873,7 @@ function pregJCardHtml(card){
   return `<div class="gl-card ${cls}" data-q="${q}" onclick="openPregMoment('${card.id}')"><div class="gl-art">${art}${saved?'<span class="gl-check">'+I.check+'</span>':''}</div><div class="gl-cap">${cap}</div></div>`;
 }
 function renderPregLibrary(){
-  const p=state.pregnancy; if(!p||state.lossHolding) return '';
+  const p=state.pregnancy; if(!p||myLossHolding()) return '';
   const wk=pregWeek(), days=pregDaysToGo();
   const togo=(days!=null&&days>=0)?(days<=7?'almost here':Math.round(days/7)+' weeks to go'):(days!=null?'any day now':'');
   const pjs=pregJSaved();

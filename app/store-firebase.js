@@ -28,8 +28,12 @@
   var MAT_CATS = {
     health:     ['weights', 'bp', 'glucose', 'glucoseUnit', 'urine', 'nausea', 'symptoms', 'supplements', 'supplementLog'],
     careteam:   ['careTeam'],
-    conditions: ['conditions']
-    // 'mood' reserved (EPDS) — owner-only forever; never serialized, never shareable.
+    conditions: ['conditions'],
+    // 'mood' is owner-only FOREVER and can never be shared: hard-blocked in matSetShared/matCanRead and the
+    // non-owner listener skips it (below). Her private feelings/wellbeing notes live here in
+    // households/{hid}/mhealth/{owner}/cat/mood, kept out of the shareable clinical 'health' bucket, so a
+    // note like "I feel low" can never reach a partner or the circle. Rules enforce sharedWith is empty.
+    mood:       ['moodLog']
   };
   var MAT_PRIVATE_KEYS = Object.keys(MAT_CATS).reduce(function (a, c) { return a.concat(MAT_CATS[c]); }, []);
   var matUnsub = [];      // mhealth doc listeners
@@ -490,7 +494,7 @@
       guardians: state.guardians || null,  // explicit guardian uids (papa + mama); derived if null
       timers: state.timers || {},   // shared so an ongoing nap/feed shows on every phone
       journey: state.journey || null,   // baby-scope guided-journey: titles, dismissed prompts, relationship captures (NOT pregnancy — that stays owner-owned)
-      lossHolding: state.lossHolding || null   // calm holding state after a loss, so a reload (and a following co-parent) gets the gentle screen, never the upbeat journey chooser
+      lossHolding: state.lossHolding || null   // per-uid map {uid:{at}} of the calm holding state after a loss: a reload restores it for the SAME person, but it never broadcasts the bereavement screen to other members, and one member clearing their own never clears another's (see myLossHolding/clearMyLossHolding in index.html)
     };
   }
   function applyAppBlob(app) {
