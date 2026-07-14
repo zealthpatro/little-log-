@@ -4378,19 +4378,23 @@ function goodReadCard(kind){
   kind=kind||'preg';
   if(kind==='preg' && typeof pregAfterLoss==='function' && pregAfterLoss()) return '';  // loss-safe
   var r=goodReadPick(kind); if(!r) return '';
-  return '<a class="preg-card" href="'+readUrl(r.s)+'" target="_blank" rel="noopener" style="cursor:pointer;text-decoration:none;color:inherit;border-left:4px solid var(--sleep)">'
-    +'<div class="pc-ico">'+r.e+'</div>'
-    +'<div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--sleep)">A good read for you</div>'
+  var hasCar=(r.k&&r.k.length>=2);   // enough "top points" for a swipeable quick-read carousel
+  var inner='<div class="pc-ico">'+r.e+'</div>'
+    +'<div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--sleep)">A good read for you'+(hasCar?' · quick read':'')+'</div>'
     +'<div class="pc-t">'+escapeHtml(r.t)+'</div><div class="pc-b">'+escapeHtml(r.b)+'</div></div>'
-    +'<span class="chev" style="align-self:center">'+I.chev+'</span></a>'
-    +'<div onclick="openReadingRoom(\''+kind+'\')" style="text-align:center;margin:2px 0 2px;color:var(--sleep);font-weight:700;font-size:13px;cursor:pointer">More good reads →</div>';
+    +'<span class="chev" style="align-self:center">'+I.chev+'</span>';
+  var card = hasCar
+    ? '<div class="preg-card" onclick="openReadCarousel(\''+r.s+'\')" style="cursor:pointer;border-left:4px solid var(--sleep)">'+inner+'</div>'
+    : '<a class="preg-card" href="'+readUrl(r.s)+'" target="_blank" rel="noopener" style="cursor:pointer;text-decoration:none;color:inherit;border-left:4px solid var(--sleep)">'+inner+'</a>';
+  return card + '<div onclick="openReadingRoom(\''+kind+'\')" style="text-align:center;margin:2px 0 2px;color:var(--sleep);font-weight:700;font-size:13px;cursor:pointer">More good reads →</div>';
 }
 function openReadingRoom(kind){
   kind=kind||'preg'; var pos=readsPos(kind); var here=readsFor(kind,pos); var seen={}; here.forEach(function(r){ seen[r.s]=1; });
   var soon = (kind==='planning') ? [] : readsList(kind).filter(function(r){ return !seen[r.s] && r.w0>pos && r.w0<=pos+(kind==='baby'?3:6); }).slice(0,4);
   soon.forEach(function(r){ seen[r.s]=1; });
   var evergreen=readsList(kind).filter(function(r){ return !seen[r.s] && (r.g==='wellbeing'||r.g==='food'); }).slice(0,4);
-  function row(r){ return '<a class="set-item" href="'+readUrl(r.s)+'" target="_blank" rel="noopener" style="text-decoration:none;color:inherit;cursor:pointer"><div class="si-ico" style="background:var(--sleep-soft);font-size:18px">'+r.e+'</div><div class="si-body"><div class="a">'+escapeHtml(r.t)+'</div><div class="b">'+escapeHtml(r.b)+'</div></div><span class="chev">'+I.chev+'</span></a>'; }
+  function row(r){ var hasCar=(r.k&&r.k.length>=2); var inner='<div class="si-ico" style="background:var(--sleep-soft);font-size:18px">'+r.e+'</div><div class="si-body"><div class="a">'+escapeHtml(r.t)+'</div><div class="b">'+escapeHtml(r.b)+'</div></div><span class="chev">'+I.chev+'</span>';
+    return hasCar ? '<div class="set-item" onclick="openReadCarousel(\''+r.s+'\')" style="cursor:pointer">'+inner+'</div>' : '<a class="set-item" href="'+readUrl(r.s)+'" target="_blank" rel="noopener" style="text-decoration:none;color:inherit;cursor:pointer">'+inner+'</a>'; }
   var body=''; var hereTitle = (kind==='planning') ? 'Reads for now' : 'For you around now';
   if(here.length) body+='<div class="sec-title">'+hereTitle+'</div>'+here.map(row).join('');
   if(soon.length) body+='<div class="sec-title" style="margin-top:16px">Coming up</div>'+soon.map(row).join('');
@@ -4399,6 +4403,50 @@ function openReadingRoom(kind){
   openSheet('<h2>Good reads 📖</h2><div class="sub">Short, calm reads from the Cubby library, picked for where you are. Open any to read the whole thing.</div>'+body
     +'<a class="btn-ghost" href="/articles/" target="_blank" rel="noopener" style="display:flex;text-decoration:none;margin-top:12px">Browse all articles</a>'
     +'<div class="preg-disclaim">Informational only, never a substitute for your midwife, doctor or health visitor.</div>','preg');
+}
+/* ---- Swipeable "quick read" carousel: an Instagram-story-style entry point to an article ----
+   Cover slide -> a few "top point" slides (heading + short caption note) -> a final slide + a persistent
+   footer link to the full article (available at any point). Native horizontal scroll-snap (touch swipe),
+   dots track position. All in-document (opens over the sheet), same-origin article link (PWA-safe). */
+var RC_CSS='#readCarousel{position:fixed;inset:0;z-index:100001;background:linear-gradient(160deg,#F7F2E8,#EFE6D6);display:flex;flex-direction:column;font-family:inherit}'
++'#readCarousel .rc-top{display:flex;align-items:center;gap:10px;padding:14px 14px 6px}'
++'#readCarousel .rc-dots{flex:1;display:flex;gap:5px}'
++'#readCarousel .rc-dots i{flex:1;height:4px;border-radius:2px;background:rgba(60,40,30,.15);transition:background .2s}'
++'#readCarousel .rc-dots i.on{background:var(--preg,#C97FA0)}'
++'#readCarousel .rc-x{width:38px;height:38px;flex:0 0 auto;border:none;background:rgba(255,255,255,.75);border-radius:50%;font-size:14px;cursor:pointer;color:#6E635B}'
++'#readCarousel .rc-track{flex:1;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}'
++'#readCarousel .rc-track::-webkit-scrollbar{display:none}'
++'#readCarousel .rc-slide{flex:0 0 100%;width:100%;scroll-snap-align:center;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:16px 30px 24px;gap:16px}'
++'#readCarousel .rc-emoji{font-size:58px;line-height:1}'
++'#readCarousel .rc-kick{font-size:12px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--preg,#C97FA0)}'
++'#readCarousel .rc-num{font-size:13px;font-weight:800;color:#a89a90}'
++'#readCarousel .rc-title{font-family:"Fraunces",Georgia,serif;font-size:29px;line-height:1.18;color:#2C2521;font-weight:700}'
++'#readCarousel .rc-head{font-family:"Fraunces",Georgia,serif;font-size:26px;line-height:1.22;color:#2C2521;font-weight:700}'
++'#readCarousel .rc-sub,#readCarousel .rc-note{font-size:16.5px;line-height:1.5;color:#6E635B}'
++'#readCarousel .rc-swipe{margin-top:6px;font-size:13px;font-weight:800;color:var(--preg,#C97FA0);opacity:.9}'
++'#readCarousel .rc-btn{margin-top:6px;display:inline-block;background:var(--preg,#C97FA0);color:#fff;text-decoration:none;font-weight:800;padding:14px 24px;border-radius:15px;font-size:15px}'
++'#readCarousel .rc-foot{padding:12px 14px calc(14px + env(safe-area-inset-bottom));text-align:center;border-top:1px solid rgba(60,40,30,.08)}'
++'#readCarousel .rc-foot a{color:var(--preg,#C97FA0);font-weight:800;text-decoration:none;font-size:14px}';
+function readBySlug(slug){ if(!window.READS) return null; var all=[].concat(READS.preg||[],READS.baby||[],READS.planning||[]); for(var i=0;i<all.length;i++){ if(all[i].s===slug) return all[i]; } return null; }
+function openArticle(slug){ var a=document.createElement('a'); a.href=readUrl(slug); a.target='_blank'; a.rel='noopener'; document.body.appendChild(a); a.click(); a.remove(); }
+function closeReadCarousel(){ var o=document.getElementById('readCarousel'); if(o) o.remove(); }
+function openReadCarousel(slug){
+  var r=readBySlug(slug); if(!r) return;
+  var pts=(r.k||[]); if(pts.length<2){ openArticle(slug); return; }   // too thin for a carousel: just open it
+  closeReadCarousel();
+  if(!document.getElementById('rcCSS')){ var st=document.createElement('style'); st.id='rcCSS'; st.textContent=RC_CSS; document.head.appendChild(st); }
+  var url=readUrl(slug), slides=[];
+  slides.push('<div class="rc-slide"><div class="rc-emoji">'+r.e+'</div><div class="rc-kick">Quick read · '+pts.length+' things to know</div><div class="rc-title">'+escapeHtml(r.t)+'</div><div class="rc-sub">'+escapeHtml(r.b)+'</div><div class="rc-swipe">Swipe to read →</div></div>');
+  pts.forEach(function(p,i){ slides.push('<div class="rc-slide"><div class="rc-num">'+(i+1)+' / '+pts.length+'</div><div class="rc-head">'+escapeHtml(p.h)+'</div>'+(p.s?'<div class="rc-note">'+escapeHtml(p.s)+'</div>':'')+'</div>'); });
+  slides.push('<div class="rc-slide"><div class="rc-emoji">📖</div><div class="rc-head">Want the whole story?</div><div class="rc-note">The full article has the detail, the sources and answers to common questions.</div><a class="rc-btn" href="'+url+'" target="_blank" rel="noopener">Read the full article →</a></div>');
+  var n=slides.length, dots=''; for(var i=0;i<n;i++) dots+='<i class="'+(i===0?'on':'')+'"></i>';
+  var ov=document.createElement('div'); ov.id='readCarousel';
+  ov.innerHTML='<div class="rc-top"><div class="rc-dots">'+dots+'</div><button class="rc-x" onclick="closeReadCarousel()" aria-label="Close">✕</button></div>'
+    +'<div class="rc-track" id="rcTrack">'+slides.join('')+'</div>'
+    +'<div class="rc-foot"><a href="'+url+'" target="_blank" rel="noopener">Read the full article →</a></div>';
+  document.body.appendChild(ov);
+  var track=document.getElementById('rcTrack');
+  track.addEventListener('scroll', function(){ var w=track.clientWidth||1; var idx=Math.max(0,Math.min(n-1,Math.round(track.scrollLeft/w))); var ds=ov.querySelectorAll('.rc-dots i'); for(var i=0;i<ds.length;i++) ds[i].classList.toggle('on', i===idx); });
 }
 /* ---- Phase 2: week view ---- */
 function renderPregHome(){
