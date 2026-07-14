@@ -1,7 +1,9 @@
-/* Curated pregnancy reads for the Home 'good read' card + Reading room.
-   Generated from real article metadata (title + meta description). Same-origin links only.
-   Loss/clinical-warning topics are intentionally NOT here — they live in the danger-signs flow. */
-window.READS = { preg: [
+/* Curated stage-mapped reads for the Home 'good read' card + Reading room, across every flow.
+   preg = by gestational WEEK; baby = by age in MONTHS; planning = preconception (rotating).
+   Built from real article title + meta-description. Same-origin links only. Loss / emergency /
+   marketing / hyper-local topics are intentionally excluded (they live in danger-signs / Health). */
+window.READS = {
+ preg: [
   {s:'first-trimester-symptoms',t:'First trimester symptoms: what is normal and what to watch for',b:'A guide to common first trimester pregnancy symptoms, when to take a test, and which symptoms…',e:'🤍',w0:4,w1:13,g:'body'},
   {s:'pregnancy-nausea-morning-sickness',t:'Pregnancy nausea and morning sickness: what actually helps',b:'Why nausea happens in pregnancy, when it typically eases, what helps and when to seek medical…',e:'🍋',w0:5,w1:14,g:'body'},
   {s:'pregnancy-fatigue-first-trimester',t:'First trimester fatigue: why you are so tired in early pregnancy and how to cope',b:'Why first trimester exhaustion is so intense, what is driving it, how long it usually lasts,…',e:'😴',w0:4,w1:13,g:'body'},
@@ -45,4 +47,74 @@ window.READS = { preg: [
   {s:'induction-of-labour',t:'Induction of labour: methods, reasons and what to expect',b:'Why induction of labour is offered, the methods used in the NHS, and what the process involves.',e:'🩺',w0:38,w1:42,g:'prep'},
   {s:'overdue-pregnancy',t:'Overdue pregnancy: what to expect and your options',b:'What it means to go past your due date, when induction is offered, and what your options are.',e:'🌼',w0:40,w1:42,g:'prep'},
   {s:'fourth-trimester',t:'The fourth trimester: the first 12 weeks at home',b:'The fourth trimester covers the first 12 weeks after birth, a period of huge adjustment for…',e:'🏡',w0:36,w1:42,g:'prep'}
-] };
+ ],
+ baby: [
+  {s:'your-babys-first-night',t:'Your baby\'s first night: what to expect in those first hours',b:'What to expect during your baby\'s first night in hospital or at home: feeding, sleep, newborn…',e:'🌙',w0:0,w1:0.3,g:'body'},
+  {s:'your-baby-week-1',t:'Your baby at one week: development, feeding and what is normal',b:'Your newborn at one week old: what to expect for weight, feeding, sleep, senses and health.',e:'🐣',w0:0,w1:0.6,g:'dev'},
+  {s:'is-this-normal-newborn',t:'Is this normal? Common newborn things that worry first-time parents',b:'A reassurance guide to the newborn things that look alarming but are usually normal: from…',e:'🤍',w0:0,w1:1.5,g:'body'},
+  {s:'how-often-to-feed-newborn',t:'How often should a newborn feed?',b:'How often should a newborn feed?',e:'🍼',w0:0,w1:1.5,g:'feed'},
+  {s:'newborn-sleep-what-is-normal',t:'Newborn sleep: what is normal in the first weeks',b:'How much do newborns really sleep?',e:'🌙',w0:0,w1:2,g:'sleep'},
+  {s:'soothing-a-crying-baby',t:'Soothing a Crying Baby and Coping with Colic',b:'Why babies cry, gentle ways to soothe them, and what colic is, plus when to get help,…',e:'🤍',w0:0,w1:3,g:'body'},
+  {s:'swaddling-a-baby',t:'Swaddling a baby: technique, benefits and when to stop',b:'How to swaddle a newborn safely, the benefits for settling and sleep, hip health…',e:'🤱',w0:0,w1:3,g:'body'},
+  {s:'bathing-washing-and-nappy-care',t:'Bathing, Washing and Nappy Care for Newborns',b:'How to wash and bathe a newborn safely, how often, topping and tailing, cord care and nappy…',e:'🛁',w0:0,w1:2,g:'body'},
+  {s:'newborn-reflexes',t:'Newborn reflexes: what they are and why they matter',b:'The key newborn reflexes, what triggers each one, when they fade, and what absence of a reflex…',e:'👣',w0:0,w1:1.5,g:'dev'},
+  {s:'newborn-jaundice',t:'Newborn jaundice: what is normal and when to get help',b:'Newborn jaundice causes yellowing of your baby\'s skin and eyes.',e:'🤍',w0:0,w1:1,g:'health'},
+  {s:'safe-baby-sleep',t:'Safe Baby Sleep: Reducing the Risk of SIDS',b:'How to help your newborn sleep safely and lower the risk of SIDS: back to sleep, a clear flat…',e:'🛏️',w0:0,w1:8,g:'safety'},
+  {s:'colic-what-it-is-and-what-helps',t:'Colic: what it is, what helps, and when it ends',b:'What colic is, when it peaks, which remedies have evidence, and how to cope when your baby…',e:'🤍',w0:0,w1:4,g:'body'},
+  {s:'your-baby-2-months',t:'Your baby at two months: smiling, feeding and the first vaccines',b:'What to expect at two months: social smiles, better head control, more efficient feeds, that…',e:'😊',w0:1.4,w1:2.6,g:'dev'},
+  {s:'baby-development-2-months',t:'Baby development at 2 months: milestones and what to try',b:'What most babies do by 2 months: smiling, making sounds, holding their head up and more.',e:'✨',w0:1.4,w1:2.6,g:'dev'},
+  {s:'tummy-time-for-babies',t:'Tummy time: why it matters and how to practise safely',b:'When to start tummy time, how much your baby needs each day, and simple ways to make it…',e:'🤸',w0:1,w1:6,g:'dev'},
+  {s:'reading-your-babys-cues',t:'Reading your baby\'s cues: hunger, tiredness, and overstimulation',b:'How to recognise hunger cues, tiredness signals, and overstimulation in your baby before they…',e:'🤍',w0:0,w1:4,g:'body'},
+  {s:'cluster-feeding-explained',t:'Cluster feeding: why it happens and how to get through it',b:'What cluster feeding is, why babies do it in the evenings, how long it lasts, and how to…',e:'🍼',w0:0,w1:3,g:'feed'},
+  {s:'why-babies-cry',t:'Why babies cry: understanding what your newborn is telling you',b:'Hungry, tired, too hot, or just needing a cuddle: learn what your newborn\'s crying is…',e:'🤍',w0:0,w1:4,g:'body'},
+  {s:'building-a-routine-newborn',t:'Building a routine with a newborn: flexible schedules that actually work',b:'How to gently introduce a flexible routine with a newborn, why strict schedules don\'t work in…',e:'🕰️',w0:1,w1:4,g:'sleep'},
+  {s:'baby-growth-spurts',t:'Baby growth spurts: signs, timing and how to cope',b:'What baby growth spurts look like, when they typically happen in the first year, and practical…',e:'📈',w0:0,w1:8,g:'dev'},
+  {s:'your-baby-3-months',t:'Your baby at three months: development, the three-month corner and what changes',b:'What to expect at three months: the three-month corner when colic often resolves, head control,…',e:'✨',w0:2.4,w1:3.6,g:'dev'},
+  {s:'your-baby-4-months',t:'Your baby at four months: the four-month sleep regression and development changes',b:'What to expect at four months: the four-month sleep regression explained, motor and sensory…',e:'🌙',w0:3.4,w1:4.6,g:'dev'},
+  {s:'four-month-sleep-regression',t:'4-month sleep regression: what it is and how to cope',b:'Understand why your baby\'s sleep suddenly feels harder around 4 months, what normal looks like,…',e:'😴',w0:3.4,w1:5.5,g:'sleep'},
+  {s:'baby-development-4-months',t:'Baby development at 4 months: skills, milestones and play ideas',b:'What can a 4-month-old baby do?',e:'✨',w0:3.4,w1:4.6,g:'dev'},
+  {s:'your-baby-5-months',t:'Your baby at five months: development, sitting and getting ready for solids',b:'What to expect at five months: head control, rolling, reaching and grabbing, name recognition,…',e:'✨',w0:4.4,w1:5.6,g:'dev'},
+  {s:'wake-windows-by-age',t:'Wake windows by age: how long babies can stay awake between naps',b:'Wake windows are the awake time between sleeps.',e:'🕰️',w0:2,w1:14,g:'sleep'},
+  {s:'baby-sleep-by-age',t:'Baby Sleep by Age and Wakeful Phases',b:'How much sleep babies need from newborn to 12 months, why wakeful phases happen, safe sleep…',e:'🌙',w0:0,w1:18,g:'sleep'},
+  {s:'your-baby-6-months',t:'Your baby at six months: development, starting solids and the six-month check',b:'What to expect at six months: physical growth, rolling and early sitting, starting solids,…',e:'🥄',w0:5.4,w1:6.6,g:'dev'},
+  {s:'starting-solids-around-6-months',t:'When to Start Solids: Weaning Around 6 Months',b:'When and how to start your baby on solid foods, around 6 months, the signs of readiness, safe…',e:'🥄',w0:5,w1:7.5,g:'feed'},
+  {s:'first-foods-for-babies',t:'First foods for babies: what to give at the start of weaning',b:'What the NHS recommends as the best first foods for babies, how much to give, and how to…',e:'🍎',w0:5,w1:8,g:'feed'},
+  {s:'baby-finger-foods-at-6-months',t:'Baby finger foods: safe first options at 6 months',b:'When and how to introduce baby finger foods at 6 months: safe first textures, foods to avoid,…',e:'🥕',w0:6,w1:9,g:'feed'},
+  {s:'baby-led-weaning-vs-purees',t:'Baby-led weaning vs purees: how to choose and how to combine',b:'Should you try baby-led weaning, purees, or both?',e:'🥄',w0:5,w1:9,g:'feed'},
+  {s:'iron-rich-foods-for-babies',t:'Iron for babies: why it matters at 6 months and the best food sources',b:'Why iron becomes critical at 6 months, the best haem and non-haem iron foods for babies, how to…',e:'🥬',w0:6,w1:11,g:'feed'},
+  {s:'six-month-sleep-regression',t:'The six-month sleep regression: causes, signs and how to get through it',b:'Why the six-month sleep regression happens, how it differs from the four-month shift, when naps…',e:'😴',w0:5.4,w1:7,g:'sleep'},
+  {s:'your-baby-7-8-months',t:'Your baby at 7 to 8 months: development, feeding and sleep',b:'What to expect from your baby at 7 and 8 months: crawling or pre-crawling, solid food progress,…',e:'✨',w0:6.4,w1:8.6,g:'dev'},
+  {s:'crawling-milestones',t:'Crawling milestones: when babies crawl, the different styles and what to do if they skip it',b:'Most babies start to crawl between seven and ten months, but the range is wide and the style…',e:'🤸',w0:6,w1:12,g:'dev'},
+  {s:'separation-anxiety-babies',t:'Separation anxiety in babies: when it starts and what helps',b:'Separation anxiety is normal and common in babies from around 6 months.',e:'🤍',w0:6,w1:16,g:'dev'},
+  {s:'how-much-solids-by-age',t:'How much solid food by age: a guide from 6 to 12 months',b:'How much solid food babies need at 6, 7, 8, 9 and 12 months, and how meal portions grow…',e:'🍽️',w0:6,w1:12,g:'feed'},
+  {s:'baby-teething-and-tooth-care',t:'Teething and Caring for First Teeth',b:'When teething starts, the real signs (and what isn\'t caused by teething), how to soothe a…',e:'🦷',w0:4,w1:14,g:'health'},
+  {s:'eight-month-sleep-regression',t:'8-month sleep regression: what is happening and what helps',b:'Your 8-month-old was sleeping well and now they\'re not.',e:'😴',w0:7.4,w1:9,g:'sleep'},
+  {s:'object-permanence-babies',t:'Object permanence in babies: what it is, when it develops and why peek-a-boo matters',b:'Object permanence, knowing things exist when out of sight, develops between six and 12 months.',e:'👀',w0:6,w1:10,g:'dev'},
+  {s:'your-baby-9-10-months',t:'Your baby at 9 to 10 months: development, cruising and communication',b:'What to expect at 9 and 10 months: pulling to stand, cruising along furniture, babbling…',e:'✨',w0:8.4,w1:10.6,g:'dev'},
+  {s:'your-baby-11-12-months',t:'Your baby at 11 to 12 months: walking, first words and the first birthday',b:'What to expect in the final months of the first year: first steps, first words, diet…',e:'🎂',w0:10.4,w1:12.6,g:'dev'},
+  {s:'when-babies-walk',t:'When babies walk: the timeline, the stages and when to ask for a check',b:'Most babies take their first steps between nine and 18 months.',e:'👣',w0:9,w1:16,g:'dev'},
+  {s:'first-words-timeline',t:'First words: when babies start talking and what counts as a word',b:'Most babies say their first word between ten and 14 months, but babbling, pointing, and…',e:'🗣️',w0:8,w1:18,g:'dev'},
+  {s:'baby-meal-plan-9-12-months',t:'Baby meal plan at nine to 12 months: textures, portions and what to include',b:'By nine months, your baby is ready for thicker textures, family foods and three meals a day.',e:'🍽️',w0:9,w1:12.5,g:'feed'},
+  {s:'toddler-development-12-18-months',t:'Your toddler at 12 to 18 months: development, milestones and what to expect',b:'From first steps to first words, the 12 to 18 month stage is a big one.',e:'✨',w0:12,w1:18,g:'dev'},
+  {s:'what-to-feed-toddlers',t:'What to feed toddlers from 12 months',b:'A practical guide to feeding toddlers from 12 months: portion sizes, foods to encourage, drinks…',e:'🍽️',w0:12,w1:18,g:'feed'},
+  {s:'twelve-month-sleep-regression',t:'12-month sleep regression: why it happens and what helps',b:'Your baby\'s sleep has gone backwards around their first birthday.',e:'😴',w0:11.4,w1:13.5,g:'sleep'},
+  {s:'dropping-to-one-nap',t:'Dropping to one nap: when babies are ready and how to make the transition smoother',b:'Most babies drop from two naps to one between 12 and 18 months.',e:'🌙',w0:13,w1:18,g:'sleep'},
+  {s:'baby-growth-monitoring',t:'Monitoring your baby\'s growth: weight, length and head circumference',b:'How to understand your baby\'s weight, length and head circumference measurements from 0 to 12…',e:'📈',w0:0,w1:18,g:'health'},
+  {s:'vaccine-side-effects-babies',t:'Baby vaccination side effects: what is normal',b:'What to expect after your baby\'s vaccinations: common side effects, how long they last, when to…',e:'💉',w0:0,w1:18,g:'health'},
+  {s:'baby-massage',t:'Baby massage: how to do it and what the benefits are',b:'A plain-English guide to baby massage: when to do it, how to do it step by step, what the…',e:'💆',w0:0,w1:12,g:'body'}
+ ],
+ planning: [
+  {s:'pre-conception-health',t:'Pre-conception health: folic acid, vitamins and preparing your body',b:'What to do before trying to conceive: folic acid, vitamin D, lifestyle changes and when to see…',e:'🌱',w0:0,w1:99,g:'body'},
+  {s:'folic-acid-dosage-preconception',t:'Folic acid in pregnancy and before: the right dose and when to start',b:'How much folic acid you need before and during pregnancy, who needs a higher dose, which…',e:'💊',w0:0,w1:99,g:'body'},
+  {s:'understanding-your-fertility',t:'Understanding your cycle and fertile window',b:'How the menstrual cycle works, when ovulation happens, what the fertile window is and how to…',e:'🗓️',w0:0,w1:99,g:'body'},
+  {s:'how-long-to-get-pregnant',t:'How long does it take to get pregnant?',b:'How long most couples take to conceive, what affects the timeline, when to see a GP and what…',e:'🤍',w0:0,w1:99,g:'body'},
+  {s:'fertility-diet-and-lifestyle',t:'Fertility diet and lifestyle: what the evidence actually says',b:'From the Mediterranean diet to CoQ10, folic acid and exercise, we look at what research…',e:'🥗',w0:0,w1:99,g:'food'},
+  {s:'ovulation-predictor-kits',t:'Ovulation predictor kits: how they work and how to use them',b:'How to use an OPK correctly, when to start testing, how to read the result line and what the…',e:'🧪',w0:0,w1:99,g:'body'},
+  {s:'basal-body-temperature-tracking',t:'Basal body temperature tracking for fertility: how to do it and what it tells you',b:'Basal body temperature (BBT) rises after ovulation.',e:'🌡️',w0:0,w1:99,g:'body'},
+  {s:'pcos-and-fertility',t:'PCOS and fertility: what it means for getting pregnant',b:'PCOS affects one in ten women and is the most common cause of irregular ovulation.',e:'🤍',w0:0,w1:99,g:'body'},
+  {s:'irregular-periods-trying-to-conceive',t:'Irregular periods and trying to conceive: tracking your cycle when it is unpredictable',b:'When your cycle is irregular, timing conception feels harder.',e:'🗓️',w0:0,w1:99,g:'body'},
+  {s:'male-fertility-sperm-health',t:'Male fertility and sperm health: what affects it and what you can do',b:'Male fertility is involved in around half of all fertility challenges.',e:'🤍',w0:0,w1:99,g:'body'},
+  {s:'when-to-seek-fertility-help',t:'When to seek fertility help: how long to try before asking for tests',b:'Standard advice says try for a year, but that is not always the right call.',e:'🤍',w0:0,w1:99,g:'body'},
+  {s:'early-pregnancy-test-accuracy',t:'Early pregnancy test accuracy: when to test, faint lines and false results',b:'When should you take a pregnancy test?',e:'🧪',w0:0,w1:99,g:'body'}
+ ]
+};
