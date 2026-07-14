@@ -3881,7 +3881,7 @@ function pregCountryKey(c){ c=c||(state.pregnancy&&state.pregnancy.country)||det
 function pregNextAction(){
   const p=state.pregnancy; if(!p||p.stage==='planning') return null;
   const wk=pregWeek();
-  if(wk>=36) return {ico:'🧳',t:'Keep your hospital bag ready',s:'From about 36 weeks, have it packed by the door.',go:"pregGo('tools')"};
+  if(wk>=36) return {ico:'🧳',t:'Keep your hospital bag ready',s:'From about 36 weeks, have it packed by the door.',go:"openBag()"};
   if(wk>=28) return {ico:'👣',t:'Get to know your baby’s kicks',s:'From around 28 weeks, count movements now and then. Any change, call your team.',go:'openKickCounter()'};
   if(wk>=24 && wk<=29 && !((p.glucose||[]).length)) return {ico:'🩸',t:'Glucose test is usually around now',s:'The gestational-diabetes test is typically 24–28 weeks. Ask your provider.',go:"pregGo('log')"};
   if(wk>=19 && wk<24) return {ico:'🩺',t:'Your 20-week scan',s:'The detailed anomaly scan is around now, check it’s booked.',go:"pregGo('log')"};
@@ -4199,6 +4199,7 @@ function renderPregMoments(){
     <div class="greeting">${escapeHtml(pregJourneyTitle())}</div>
     <div class="greeting-sub">Your story before they arrive${togo?', '+escapeHtml(togo):''} — the little moments on the way to meeting them.</div>
     ${renderPregLibrary()}
+    <div class="preg-card" onclick="openGuessGame()" style="cursor:pointer;border-left:4px solid var(--feed);margin-top:14px"><div class="pc-ico">🎉</div><div style="flex:1;min-width:0"><div class="pc-t">Family games</div><div class="pc-b">${guessSummaryLine()}</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>
     <div class="sec-title" style="margin-top:18px">Bump &amp; scan album</div>
     <div class="greeting-sub" style="margin-bottom:10px">Week-tagged scans and bump photos, with how big your baby was that week.</div>
     ${cards||''}
@@ -4285,7 +4286,10 @@ function savePregnancy(){
 }
 
 /* ---- shell (topbar + nav) ---- */
-function pregGo(v){ pregView=v; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
+// Three tabs now: This Week / Moments / Care. The old 'log' (appointments + record) and 'tools' were
+// folded away, so any jump to them lands on Care (which absorbed the record). Tools' contents relocated:
+// kicks/contractions/bag/birth-plan surface contextually on Week; family games moved to Moments.
+function pregGo(v){ if(v==='log'||v==='tools') v='care'; pregView=v; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
 function renderPregShell(){
   ensurePregFields(state.pregnancy);
   const planning = state.pregnancy.stage==='planning';
@@ -4308,10 +4312,8 @@ function renderPregShell(){
   }
   const wk=pregWeek(), tri=pregTri();
   let main='';
-  if(pregView==='log') main=renderPregLog();
-  else if(pregView==='tools') main=renderPregTools();
-  else if(pregView==='moments') main=renderPregMoments();
-  else if(pregView==='care') main=renderPregCare();
+  if(pregView==='moments') main=renderPregMoments();
+  else if(pregView==='care') main=renderPregLog()+renderPregCare(); // Care = the record (was Log) + care/settings
   else if(pregView==='den') main=renderDenHub();
   else main=renderPregHome();
   app().innerHTML=`
@@ -4327,10 +4329,8 @@ function renderPregShell(){
     </div>
     <div class="scroll" id="scroll">${main}</div>
     <div class="nav"><div class="nav-inner">
-      <button class="nav-btn ${pregView==='week'?'active':''}" onclick="pregGo('week')">${I.home}Week</button>
-      <button class="nav-btn ${pregView==='log'?'active':''}" onclick="pregGo('log')">${I.list}Log</button>
+      <button class="nav-btn ${pregView==='week'?'active':''}" onclick="pregGo('week')">${I.home}This Week</button>
       <button class="nav-btn ${pregView==='moments'?'active':''}" onclick="pregGo('moments')">${I.camera}Moments</button>
-      <button class="nav-btn ${pregView==='tools'?'active':''}" onclick="pregGo('tools')">${I.heart}Tools</button>
       <button class="nav-btn ${pregView==='care'?'active':''}" onclick="pregGo('care')">${I.cross}Care</button>
     </div></div>`;
   startTick();
@@ -4396,6 +4396,10 @@ function renderPregHome(){
       const tiles=[];
       if(wk>=28) tiles.push(`<button class="action" onclick="openKickCounter()"><div class="ico" style="background:var(--preg-soft);color:var(--preg)">👣</div><div class="label">Kicks</div><div class="hint">Count baby's movements</div></button>`);
       if(wk>=36) tiles.push(`<button class="action" onclick="openContractions()"><div class="ico" style="background:var(--pump-soft);color:var(--pump)">⏱️</div><div class="label">Contractions</div><div class="hint">Time them, 5-1-1 guide</div></button>`);
+      if(wk>=30){
+        tiles.push(`<button class="action" onclick="openBag()"><div class="ico" style="background:var(--star-soft);color:var(--star)">🧳</div><div class="label">Hospital bag</div><div class="hint">Pack the essentials</div></button>`);
+        tiles.push(`<button class="action" onclick="openBirthPlan()"><div class="ico" style="background:var(--sleep-soft);color:var(--sleep)">📋</div><div class="label">Birth plan</div><div class="hint">Your preferences</div></button>`);
+      }
       if(carrier){
         tiles.push(`<button class="action" onclick="openLogSymptom()"><div class="ico" style="background:var(--note-soft);color:var(--note)">📝</div><div class="label">Symptom</div><div class="hint">Nausea, aches, heartburn</div></button>`);
         tiles.push(`<button class="action" onclick="openLogWeight()"><div class="ico" style="background:var(--star-soft);color:var(--star)">⚖️</div><div class="label">Weight</div><div class="hint">Track your weight</div></button>`);
@@ -4579,10 +4583,8 @@ function renderPregLog(){
       <button class="action" onclick="openLogSymptom()"><div class="ico" style="background:var(--note-soft);color:var(--note)">📝</div><div class="label">Symptom</div><div class="hint">Nausea, aches, heartburn</div></button>
       <button class="action" onclick="openLogWeight()"><div class="ico" style="background:var(--star-soft);color:var(--star)">⚖️</div><div class="label">Weight</div><div class="hint">Your weight</div></button>
       <button class="action" onclick="openLogBP()"><div class="ico" style="background:var(--pump-soft);color:var(--pump)">🩺</div><div class="label">Blood pressure</div><div class="hint">If asked to track</div></button>
-      <button class="action" onclick="pregGo('care')"><div class="ico" style="background:var(--diaper-soft);color:var(--diaper)">👩‍⚕️</div><div class="label">Care team</div><div class="hint">Gynaecologist, OB, midwife</div></button>
     </div>
     ${logs?`<div class="sec-title" style="margin-top:18px">Recent</div>${logs}`:''}
-    <div class="preg-disclaim">${PREG_DISCLAIM}</div>
   </div>`;
 }
 function pregRecentLogs(){
