@@ -4353,6 +4353,43 @@ function pregPartnerCard(){
   return `<div class="preg-card" style="border-left:4px solid var(--pump)"><div class="pc-ico">🤝</div><div><div class="pc-t">How to support your partner this week</div><div class="pc-b">${escapeHtml(tip)}</div></div></div>`;
 }
 
+/* ---- Home "good read": a gentle, week-relevant article from our own library ----
+   Same-origin links only (no third-party fetch, no trackers). Loss / clinical-warning topics are never
+   in READS (they live in the danger-signs flow), and the card is suppressed entirely in pregnancy-after-
+   loss mode. The pick is stable per week (rotates weekly, not on every render) — calmer, and no Math.random. */
+function pregReads(){ return (window.READS&&window.READS.preg)||[]; }
+function pregReadsFor(wk){ return pregReads().filter(function(r){ return wk>=r.w0 && wk<=r.w1; }); }
+function pregGoodReadPick(wk){
+  var list=pregReadsFor(wk);
+  if(!list.length) list=pregReads().filter(function(r){ return r.w1>=wk; });
+  if(!list.length) list=pregReads();
+  return list.length ? list[wk % list.length] : null;
+}
+function readUrl(slug){ return '/articles/'+slug+'/'; }
+function pregGoodReadCard(){
+  if(pregAfterLoss()) return '';                 // loss-safe: never push reading after a loss
+  var r=pregReads().length ? pregGoodReadPick(pregWeek()) : null; if(!r) return '';
+  return '<a class="preg-card" href="'+readUrl(r.s)+'" target="_blank" rel="noopener" style="cursor:pointer;text-decoration:none;color:inherit;border-left:4px solid var(--sleep)">'
+    +'<div class="pc-ico">'+r.e+'</div>'
+    +'<div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--sleep)">A good read this week</div>'
+    +'<div class="pc-t">'+escapeHtml(r.t)+'</div><div class="pc-b">'+escapeHtml(r.b)+'</div></div>'
+    +'<span class="chev" style="align-self:center">'+I.chev+'</span></a>'
+    +'<div onclick="openReadingRoom()" style="text-align:center;margin:2px 0 2px;color:var(--sleep);font-weight:700;font-size:13px;cursor:pointer">More good reads →</div>';
+}
+function openReadingRoom(){
+  var wk=pregWeek(); var here=pregReadsFor(wk); var seen={}; here.forEach(function(r){ seen[r.s]=1; });
+  var soon=pregReads().filter(function(r){ return !seen[r.s] && r.w0>wk && r.w0<=wk+6; }).slice(0,4); soon.forEach(function(r){ seen[r.s]=1; });
+  var evergreen=pregReads().filter(function(r){ return !seen[r.s] && (r.g==='wellbeing'||r.g==='food'); }).slice(0,4);
+  function row(r){ return '<a class="set-item" href="'+readUrl(r.s)+'" target="_blank" rel="noopener" style="text-decoration:none;color:inherit;cursor:pointer"><div class="si-ico" style="background:var(--sleep-soft);font-size:18px">'+r.e+'</div><div class="si-body"><div class="a">'+escapeHtml(r.t)+'</div><div class="b">'+escapeHtml(r.b)+'</div></div><span class="chev">'+I.chev+'</span></a>'; }
+  var body='';
+  if(here.length) body+='<div class="sec-title">For you around now</div>'+here.map(row).join('');
+  if(soon.length) body+='<div class="sec-title" style="margin-top:16px">Coming up</div>'+soon.map(row).join('');
+  if(evergreen.length) body+='<div class="sec-title" style="margin-top:16px">Good any time</div>'+evergreen.map(row).join('');
+  if(!body) body='<div class="csub">Gentle reads appear here as your weeks go on.</div>';
+  openSheet('<h2>Good reads 📖</h2><div class="sub">Short, calm reads from the Cubby library, picked for where you are. Open any to read the whole thing.</div>'+body
+    +'<a class="btn-ghost" href="/articles/" target="_blank" rel="noopener" style="display:flex;text-decoration:none;margin-top:12px">Browse all articles</a>'
+    +'<div class="preg-disclaim">Informational only, never a substitute for your midwife or doctor.</div>','preg');
+}
 /* ---- Phase 2: week view ---- */
 function renderPregHome(){
   const wk=pregWeek(), tri=pregTri(), data=pregWeekData();
@@ -4389,6 +4426,7 @@ function renderPregHome(){
     ${pregDoctorCard()}
     ${carrier?`<div class="preg-card" onclick="openMoodNote()" style="cursor:pointer;border-left:4px solid var(--note)"><div class="pc-ico">🤍</div><div style="flex:1;min-width:0"><div class="pc-t">How are you, in yourself?</div><div class="pc-b">A private note, just for you. Never shared.</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>`:pregPartnerCard()}
     ${pregHealthQuick()}
+    ${pregGoodReadCard()}
     ${(()=>{
       // Show tools only when they're relevant to this week; until then they live one tap deeper in Tools.
       // Kick counting is a ~third-trimester practice (a "count movements" tile too early only worries);
@@ -8847,6 +8885,8 @@ function normalizeLoadedState(saved){
 <script src="growth-data.js"></script>
 <!-- Week-by-week, antenatal schedules and danger signs (informational). -->
 <script src="pregnancy-data.js"></script>
+<!-- Curated, week-mapped pregnancy reads (same-origin article links) for the Home good-read card + Reading room. -->
+<script src="reads-data.js"></script>
 <script>
 /* PWA: register only on a real http(s) host. Skips file:// and the in-app artifact sandbox. */
 if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){
