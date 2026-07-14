@@ -4389,13 +4389,19 @@ function renderPregHome(){
     ${pregDoctorCard()}
     ${carrier?`<div class="preg-card" onclick="openMoodNote()" style="cursor:pointer;border-left:4px solid var(--note)"><div class="pc-ico">🤍</div><div style="flex:1;min-width:0"><div class="pc-t">How are you, in yourself?</div><div class="pc-b">A private note, just for you. Never shared.</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>`:pregPartnerCard()}
     ${pregHealthQuick()}
-    <div class="sec-title">This week</div>
-    <div class="actions stagger">
-      <button class="action" onclick="openKickCounter()"><div class="ico" style="background:var(--preg-soft);color:var(--preg)">👣</div><div class="label">Kicks</div><div class="hint">Count baby's movements</div></button>
-      <button class="action" onclick="openContractions()"><div class="ico" style="background:var(--pump-soft);color:var(--pump)">⏱️</div><div class="label">Contractions</div><div class="hint">Time them, 5-1-1 guide</div></button>
-      ${carrier?`<button class="action" onclick="openLogSymptom()"><div class="ico" style="background:var(--note-soft);color:var(--note)">📝</div><div class="label">Symptom</div><div class="hint">Nausea, aches, heartburn</div></button>
-      <button class="action" onclick="openLogWeight()"><div class="ico" style="background:var(--star-soft);color:var(--star)">⚖️</div><div class="label">Weight</div><div class="hint">Track your weight</div></button>`:''}
-    </div>
+    ${(()=>{
+      // Show tools only when they're relevant to this week; until then they live one tap deeper in Tools.
+      // Kick counting is a ~third-trimester practice (a "count movements" tile too early only worries);
+      // the 5-1-1 contraction timer is a labour tool. Symptom + Weight matter throughout.
+      const tiles=[];
+      if(wk>=28) tiles.push(`<button class="action" onclick="openKickCounter()"><div class="ico" style="background:var(--preg-soft);color:var(--preg)">👣</div><div class="label">Kicks</div><div class="hint">Count baby's movements</div></button>`);
+      if(wk>=36) tiles.push(`<button class="action" onclick="openContractions()"><div class="ico" style="background:var(--pump-soft);color:var(--pump)">⏱️</div><div class="label">Contractions</div><div class="hint">Time them, 5-1-1 guide</div></button>`);
+      if(carrier){
+        tiles.push(`<button class="action" onclick="openLogSymptom()"><div class="ico" style="background:var(--note-soft);color:var(--note)">📝</div><div class="label">Symptom</div><div class="hint">Nausea, aches, heartburn</div></button>`);
+        tiles.push(`<button class="action" onclick="openLogWeight()"><div class="ico" style="background:var(--star-soft);color:var(--star)">⚖️</div><div class="label">Weight</div><div class="hint">Track your weight</div></button>`);
+      }
+      return tiles.length?`<div class="sec-title">This week</div><div class="actions stagger">${tiles.join('')}</div>`:'';
+    })()}
     <button class="btn-ghost" onclick="openDangerSigns()" style="color:var(--danger);margin-top:14px">⚠️ Urgent warning signs, when to seek care</button>
     <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="openWelcomeBaby()">🐻 Baby has arrived</button>
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>
