@@ -28,3 +28,6 @@ art-src/
 /package.json
 /package-lock.json
 /cap-web/App/
+
+# TestFlight export config + scratch (local only)
+native-build/
