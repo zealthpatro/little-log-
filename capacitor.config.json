@@ -1,0 +1,26 @@
+{
+  "appId": "com.littlecubby.app",
+  "appName": "Cubby",
+  "webDir": "cap-web",
+  "server": {
+    "url": "https://little-cubby.com/app/",
+    "cleartext": false
+  },
+  "ios": {
+    "contentInset": "always",
+    "backgroundColor": "#F7F2E8"
+  },
+  "android": {
+    "backgroundColor": "#F7F2E8"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 800,
+      "backgroundColor": "#F7F2E8",
+      "showSpinner": false
+    },
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  }
+}

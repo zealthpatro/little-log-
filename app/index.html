@@ -9005,6 +9005,8 @@ function normalizeLoadedState(saved){
 <script src="pregnancy-data.js"></script>
 <!-- Curated, week-mapped pregnancy reads (same-origin article links) for the Home good-read card + Reading room. -->
 <script src="reads-data.js"></script>
+<!-- Capacitor native bridge (push + deep links inside the App Store / Play Store wrapper). Inert on the web. -->
+<script defer src="native-bridge.js"></script>
 <script>
 /* PWA: register only on a real http(s) host. Skips file:// and the in-app artifact sandbox. */
 if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){

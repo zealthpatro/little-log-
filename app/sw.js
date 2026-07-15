@@ -1,6 +1,6 @@
 /* Cubby service worker.
    Bump CACHE on every deploy so old assets are cleared. */
-const CACHE = 'little-log-v189';
+const CACHE = 'little-log-v190';
 const ASSETS = [
   '/app/',
   '/app/index.html',
@@ -11,6 +11,7 @@ const ASSETS = [
   '/app/growth-data.js',
   '/app/pregnancy-data.js',
   '/app/reads-data.js',
+  '/app/native-bridge.js',
   '/app/milestone-data.js',
   '/app/journey-catalogue.js',
   '/app/firebase-messaging-sw.js',

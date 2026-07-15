@@ -27,35 +27,20 @@ Recommendation: **start with A**, keep B as the fallback if review pushes back.
 - Apple Developer — already have.
 
 ## 3. Scaffold Capacitor 🖥️
-Run from the repo root:
-```bash
-npm i -D @capacitor/cli
-npm i @capacitor/core @capacitor/ios @capacitor/android @capacitor/app @capacitor/splash-screen @capacitor/status-bar @capacitor/push-notifications
-npx cap init "Cubby" "com.littlecubby.app" --web-dir="cap-web"
-mkdir -p cap-web && printf '<!doctype html><meta http-equiv="refresh" content="0; url=https://little-cubby.com/app/">' > cap-web/index.html
-```
-(`cap-web` is a throwaway dir so `cap init` is happy; the real content comes from `server.url` below.)
+**Already in the repo (built + verified, inert on web):** `capacitor.config.json` (option A, remote-load),
+`cap-web/index.html` (throwaway webDir), and `app/native-bridge.js` (push + deep-link bridge, wired into
+the app, guarded on `Capacitor.isNativePlatform()` so it's a no-op in the browser). So **skip `cap init`**.
 
-`capacitor.config.json` (option A):
-```json
-{
-  "appId": "com.littlecubby.app",
-  "appName": "Cubby",
-  "webDir": "cap-web",
-  "server": { "url": "https://little-cubby.com/app/", "cleartext": false },
-  "ios": { "contentInset": "always" },
-  "plugins": {
-    "SplashScreen": { "launchShowDuration": 800, "backgroundColor": "#F7F2E8", "showSpinner": false },
-    "PushNotifications": { "presentationOptions": ["badge", "sound", "alert"] }
-  }
-}
-```
-Then:
+On the Mac, from the repo root — install the deps and add the platforms:
 ```bash
+npm i @capacitor/core @capacitor/ios @capacitor/android @capacitor/app @capacitor/splash-screen @capacitor/status-bar @capacitor/push-notifications
+npm i -D @capacitor/cli
 npx cap add ios
 npx cap add android
 npx cap sync
 ```
+(The bridge accesses the plugins via `window.Capacitor.Plugins.*` at runtime — no bundler/import needed,
+which is why it works with the remote-loaded PWA.)
 
 ## 4. Icons + splash 🖥️
 Use `@capacitor/assets`:
