@@ -19,3 +19,12 @@ _mock-*.html
 
 # Layer-1 source illustrations (large; composed outputs in app/journey-art/ are what ship)
 art-src/
+
+# Capacitor native wrapper — generated/built ON THE MAC and regenerable from capacitor.config.json
+# (npm i @capacitor/* + npx cap add ios android). Kept OUT of git so the Cloudflare Worker, which
+# serves the whole repo ([assets] directory="./"), never publishes or trips over them.
+/ios/
+/android/
+/package.json
+/package-lock.json
+/cap-web/App/
