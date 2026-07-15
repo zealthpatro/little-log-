@@ -1309,7 +1309,67 @@ function render(){
   var _ss=document.getElementById('scroll'); var _sy=_ss?_ss.scrollTop:0;
   _renderView();
   if(_sy){ var _ns=document.getElementById('scroll'); if(_ns) _ns.scrollTop=_sy; }
+  maybeRunDeepLink();
 }
+
+/* ---- Deep-link router: a CTA / email / push / article button can open a specific screen in one tap ----
+   e.g. /app/?go=kicks · ?stage=expecting · ?read=<slug> · ?tab=care. The intent is stashed at load so it
+   survives the sign-in / OAuth redirect (sessionStorage), the URL is tidied, and it fires ONCE the app is
+   booted and usable. Stage-guarded (a pregnancy action on a baby account just no-ops). Note: on iOS a link
+   opens the web app in Safari — Apple won't route external links into an installed home-screen PWA. */
+var _dlRan=false;
+function stashDeepLink(){
+  try{
+    var q=new URLSearchParams(location.search||'');
+    var dl={go:q.get('go'),stage:q.get('stage'),read:q.get('read'),tab:q.get('tab')};
+    if(dl.go||dl.stage||dl.read||dl.tab){
+      sessionStorage.setItem('cubby-dl', JSON.stringify(dl));
+      ['go','stage','read','tab'].forEach(function(k){ q.delete(k); });   // strip ONLY the deep-link keys; keep utm/e2e/etc
+      var qs=q.toString();
+      try{ history.replaceState({}, '', location.pathname + (qs?('?'+qs):'') + (location.hash||'')); }catch(e){}
+    }
+  }catch(e){}
+}
+function _fn(name){ return (typeof window[name]==='function') ? window[name] : null; }
+function maybeRunDeepLink(){
+  if(_dlRan) return;
+  var raw=null; try{ raw=sessionStorage.getItem('cubby-dl'); }catch(e){}
+  if(!raw) return;
+  if(window.LL && window.LL.needsIdentity) return;      // still finishing identity / first-run
+  if(document.getElementById('llAuthOv')) return;       // sign-in overlay still up
+  _dlRan=true; try{ sessionStorage.removeItem('cubby-dl'); }catch(e){}
+  var dl; try{ dl=JSON.parse(raw); }catch(e){ return; }
+  setTimeout(function(){ try{ runDeepLink(dl); }catch(e){} }, 350);
+}
+function runDeepLink(dl){
+  var hasPreg=!!state.pregnancy, hasBaby=!!(state.babies&&state.babies.length);
+  if(dl.read){ var fr=_fn('openReadCarousel'); if(fr) fr(dl.read); return; }
+  if(dl.stage){
+    if(dl.stage==='planning'){ var p=_fn('openPlanningSetup'); if(p) p(); }
+    else if(dl.stage==='expecting'){ if(hasPreg){ var g=_fn('pregGo'); if(g) g('week'); } else { var e=_fn('openExpectingSetup'); if(e) e('due'); } }
+    else if(dl.stage==='baby'){ var ab=_fn('openAddBaby'); if(ab) ab({onboarding:!hasBaby}); }
+    return;
+  }
+  if(dl.tab){
+    if(hasPreg && !hasBaby){ var gp=_fn('pregGo'); if(gp){ gp(dl.tab); return; } }
+    var gv=_fn('go'); if(gv) gv(dl.tab);
+    return;
+  }
+  if(dl.go){
+    if(dl.go==='reads'){ var rr=_fn('openReadingRoom'); if(rr) rr(hasPreg?'preg':(hasBaby?'baby':'planning')); return; }
+    var PREG_GO={kicks:'openKickCounter',contractions:'openContractions',symptom:'openLogSymptom',weight:'openLogWeight',mood:'openMoodNote',glucose:'openGlucoseTracker',bag:'openBag',birthplan:'openBirthPlan',games:'openGuessGame',doctorreport:'openPregDoctorReport',danger:'openDangerSigns'};
+    var BABY_GO={feed:'openFeed',diaper:'openDiaper',sleep:'openSleep',temp:'openTemp'};
+    if(hasPreg && PREG_GO[dl.go]){ var f1=_fn(PREG_GO[dl.go]); if(f1){ f1(); return; } }
+    if(hasBaby && BABY_GO[dl.go]){ var f2=_fn(BABY_GO[dl.go]); if(f2){ f2(); return; } }
+  }
+}
+function scheduleDeepLink(){
+  var raw=null; try{ raw=sessionStorage.getItem('cubby-dl'); }catch(e){}
+  if(!raw) return;                                  // nothing to route
+  var tries=0;                                      // poll until the app is booted past sign-in (render() cadence alone can miss it)
+  var iv=setInterval(function(){ tries++; if(_dlRan || tries>80){ clearInterval(iv); return; } maybeRunDeepLink(); if(_dlRan) clearInterval(iv); }, 250);
+}
+try{ stashDeepLink(); scheduleDeepLink(); }catch(e){}   // stash at load (survives the sign-in redirect), fire when ready
 function _renderView(){
   document.body.setAttribute('data-theme', state.settings.theme==='night'?'night':'light');
   if(state.pregnancy && !state.pregnancy.bornBabyId && (state.babies.length===0 || viewingPreg)){ renderPregShell(); return; }
