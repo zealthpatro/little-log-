@@ -3495,8 +3495,7 @@ function exportData(){
   const nPhotos=Object.keys(out.photoData||{}).length;
   const blob=new Blob([JSON.stringify(out,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
-  const a=document.createElement('a'); a.href=url; a.download='cubby-export.json';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);  // some browsers ignore a click on a detached anchor
+  saveFile(url, 'cubby-export.json');
   setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(e){} }, 4000);
   toast('Exported'+(nPhotos?(' · '+nPhotos+' photo'+(nPhotos===1?'':'s')+' included'):''));
 }
@@ -3978,7 +3977,7 @@ function addApptToCalendar(id){
   const pad=n=>String(n).padStart(2,'0'); const dstr=`${dt.getFullYear()}${pad(dt.getMonth()+1)}${pad(dt.getDate())}`;
   const clean=s=>(s||'').replace(/[,;\\]/g,' ').replace(/\r?\n/g,' ');
   const ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Cubby//Pregnancy//EN','BEGIN:VEVENT','UID:'+uid()+'@little-cubby.com','DTSTART;VALUE=DATE:'+dstr,'SUMMARY:'+clean(a.title||'Antenatal appointment'),'DESCRIPTION:'+clean('Estimated from week '+a.week+'. Confirm the exact date and time with your clinic.'+(a.note?' '+a.note:'')),'BEGIN:VALARM','TRIGGER:-P1D','ACTION:DISPLAY','DESCRIPTION:Appointment tomorrow','END:VALARM','END:VEVENT','END:VCALENDAR'].join('\r\n');
-  try{ const url=URL.createObjectURL(new Blob([ics],{type:'text/calendar'})); const l=document.createElement('a'); l.href=url; l.download=(a.title||'appointment').replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.ics'; document.body.appendChild(l); l.click(); document.body.removeChild(l); setTimeout(()=>URL.revokeObjectURL(url),1500); toast('Added, check your downloads 📅'); }catch(e){ toast('Could not add to calendar'); }
+  try{ const url=URL.createObjectURL(new Blob([ics],{type:'text/calendar'})); saveFile(url, (a.title||'appointment').replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.ics', isNativeApp()?'Appointment ready 📅':'Added, check your downloads 📅'); setTimeout(()=>URL.revokeObjectURL(url),1500); }catch(e){ toast('Could not add to calendar'); }
 }
 /* Post-visit capture: closes the loop and feeds the doctor report. */
 function markApptDone(id){
@@ -4980,7 +4979,7 @@ function openPregDoctorReport(){
   ov.innerHTML='<div style="max-width:680px;margin:0 auto;padding:20px 20px 60px">'
     +'<div class="noprint" style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:16px;font-family:system-ui,sans-serif;flex-wrap:wrap">'
     +'<button onclick="sharePregReport()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:1px solid #ddd;background:#fff;cursor:pointer">Share / Copy</button>'
-    +'<button onclick="window.print()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:none;background:#C97FA0;color:#fff;cursor:pointer">Print / Save PDF</button>'
+    +'<button onclick="printPregReport()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:none;background:#C97FA0;color:#fff;cursor:pointer">'+(isNativeApp()?'Save / Send report':'Print / Save PDF')+'</button>'
     +'<button onclick="closePregReport()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:1px solid #ddd;background:#fff;cursor:pointer">Close</button>'
     +'</div>'
     +'<h1 style="font-size:24px;margin:0 0 2px">Pregnancy visit report</h1>'
@@ -4991,6 +4990,18 @@ function openPregDoctorReport(){
   document.body.appendChild(ov);
 }
 function closePregReport(){ var o=document.getElementById('reportOv'); if(o) o.remove(); }
+/* The pregnancy report is rendered as a full-screen overlay in THIS document and printed with a print
+   stylesheet. WKWebView has no window.print(), so in the wrapper we lift the report out of the overlay
+   (minus its own buttons) into a standalone file and share it. */
+function printPregReport(){
+  if(!isNativeApp()){ window.print(); return; }
+  var ov=document.getElementById('reportOv'); if(!ov){ window.print(); return; }
+  var clone=ov.cloneNode(true);
+  Array.prototype.forEach.call(clone.querySelectorAll('.noprint'), function(n){ n.remove(); });
+  openPrintable('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cubby pregnancy report</title></head>'
+    + '<body style="font-family:Georgia,\'Times New Roman\',serif;color:#1a1a1a;line-height:1.55">'
+    + clone.innerHTML + '</body></html>', 'cubby-pregnancy-report');
+}
 function sharePregReport(){ const p=state.pregnancy; if(!p) return; const txt=pregVisitSummary();
   if(navigator.share){ navigator.share({title:'Cubby pregnancy report',text:txt}).catch(function(){}); return; }
   if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(function(){toast('Report copied 🤍');}).catch(function(){toast('Could not copy');}); }
@@ -6080,9 +6091,7 @@ function openDoctorReport(){
   let medsLines='';
   try{ medsLines=babyMeds().filter(m=>m.active).map(m=>'- '+m.name+' · '+m.dose+' '+m.unit+(m.everyH?(' every '+m.everyH+'h'):'')).join('\n'); }catch(e){}
   const dob=b.birth?new Date(b.birth).toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'}):'';
-  const w=window.open('','_blank');
-  if(!w){ toast('Allow pop-ups to create the report'); return; }
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(b.name)} · Cubby visit report</title>
+  openPrintable(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(b.name)} · Cubby visit report</title>
     <style>
       body{font-family:Georgia,'Times New Roman',serif;color:#222;max-width:680px;margin:36px auto;padding:0 24px;line-height:1.55;}
       h1{font-size:24px;margin:0 0 2px;} .meta{color:#666;font-size:13px;margin-bottom:22px;}
@@ -6100,7 +6109,23 @@ function openDoctorReport(){
     ${vaxLine?`<h2>Vaccinations</h2><pre>${esc(vaxLine)}</pre>`:''}
     ${medsLines?`<h2>Active medicines</h2><pre>${esc(medsLines)}</pre>`:''}
     <div class="foot">Recorded by the family in Cubby. Informational only, not medical advice; please verify clinically.</div>
-    </body></html>`);
+    </body></html>`, (b.name||'baby')+'-visit-report');
+}
+/* Hand a generated report to the parent. In a browser: a new tab they can print or save as PDF.
+   In the wrapper neither half of that exists — window.open('','_blank') returns null in WKWebView and
+   window.print() is a no-op — so the doctor report, which is the whole point of the feature, would be
+   a dead button. Natively we write the report to a file and hand it to the share sheet instead: save
+   it to Files, or mail it straight to the doctor. */
+function openPrintable(html, filename){
+  if(isNativeApp()){
+    const url=URL.createObjectURL(new Blob([html],{type:'text/html'}));
+    saveFile(url, filename.replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.html', 'Report ready to share');
+    setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(e){} }, 4000);
+    return;
+  }
+  const w=window.open('','_blank');
+  if(!w){ toast('Allow pop-ups to create the report'); return; }
+  w.document.write(html);
   w.document.close();
   try{ w.focus(); }catch(e){}
 }
@@ -8270,7 +8295,7 @@ function recordVideo(){
     var blob=new Blob(chunks,{type:mime});
     var fname='cubby-'+(((activeBaby()||{}).name||'moment').toLowerCase().replace(/[^a-z0-9]/g,''))+'.'+ext;
     try{ var file=new File([blob],fname,{type:mime}); if(navigator.canShare&&navigator.canShare({files:[file]})){ navigator.share({files:[file]}).catch(function(){}); toast('Video ready'); return; } }catch(e){}
-    var url=URL.createObjectURL(blob); var a=document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){URL.revokeObjectURL(url);},6000); toast('Video saved');
+    var url=URL.createObjectURL(blob); saveFile(url, fname, 'Video saved'); setTimeout(function(){URL.revokeObjectURL(url);},6000);
   };
   toast('Recording a few seconds…');
   try{ rec.start(); }catch(e){ _recording=false; photoEditor._recRes=0; if(!wasAnim){photoEditor.anim=false;stopAnim();} toast('Could not record on this device'); return; }
@@ -8289,8 +8314,7 @@ function exportGate(){
 function downloadPhoto(){
   if(!exportGate()) return;
   const tmp=document.createElement('canvas'); composeAny(tmp,1600);
-  const a=document.createElement('a'); a.href=tmp.toDataURL('image/jpeg',0.92);
-  a.download=(activeBaby().name||'baby')+'-moment.jpg'; a.click(); toast('Downloaded');
+  saveFile(tmp.toDataURL('image/jpeg',0.92), (activeBaby().name||'baby')+'-moment.jpg', isNativeApp()?'Saved':'Downloaded');
 }
 /* Share straight to the OS share sheet (Instagram, WhatsApp, anywhere) as a real
    image file; falls back to a download where file-sharing isn't supported. */
@@ -8304,8 +8328,9 @@ async function shareComposed(){
     const file=new File([blob],name,{type:'image/jpeg'});
     if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file],title:'Cubby moment'}); return; }
   }catch(e){ if(e&&e.name==='AbortError') return; }
-  const a=document.createElement('a'); a.href=tmp.toDataURL('image/jpeg',0.92);
-  a.download=name; a.click(); toast('Saved the image, share it anywhere');
+  // In the wrapper this lands on the native share sheet, which is the same ending the Web Share API
+  // gives in Safari — navigator.share just doesn't exist inside WKWebView to get us there.
+  saveFile(tmp.toDataURL('image/jpeg',0.92), name, 'Saved the image, share it anywhere');
 }
 async function savePhoto(){
   const tmp=document.createElement('canvas'); composeAny(tmp,900);
@@ -8384,7 +8409,7 @@ async function shareEventPhoto(id){
     if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file],title:'Cubby moment'}); return; }
     if(navigator.share){ await navigator.share({title:'Cubby moment'}); return; }
   }catch(err){}
-  const a=document.createElement('a'); a.href=photoSrc(e.photoId); a.download=((activeBaby()||{}).name||'baby')+'-moment.jpg'; a.click();
+  saveFile(photoSrc(e.photoId), ((activeBaby()||{}).name||'baby')+'-moment.jpg');
 }
 async function sharePhoto(id){
   const p=(state.photos||[]).find(x=>x.id===id); if(!p)return;
@@ -8398,7 +8423,7 @@ async function sharePhoto(id){
 }
 function downloadSaved(id){
   const p=(state.photos||[]).find(x=>x.id===id);
-  const a=document.createElement('a'); a.href=photoSrc(p.photoId); a.download=(activeBaby().name||'baby')+'-photo.jpg'; a.click();
+  saveFile(photoSrc(p.photoId), (activeBaby().name||'baby')+'-photo.jpg');
 }
 async function deletePhoto(id){
   const p=(state.photos||[]).find(x=>x.id===id);
@@ -8677,7 +8702,7 @@ async function genCard(){
     <button class="btn-primary" style="background:var(--sleep)" onclick="dlCard()">${I.download} Download</button>`,'feed');
   window._lastCard=data;
 }
-function dlCard(){ const a=document.createElement('a'); a.href=window._lastCard; a.download=(activeBaby().name||'baby')+'-'+slotShort(cardDraft.month)+'-card.jpg'; a.click(); toast('Downloaded'); }
+function dlCard(){ saveFile(window._lastCard, (activeBaby().name||'baby')+'-'+slotShort(cardDraft.month)+'-card.jpg', isNativeApp()?'Saved':'Downloaded'); }
 async function saveCardImg(){
   showLoader(['Tucking it into the album']);
   const small=document.createElement('canvas'); composeMemoryCard(small,cardDraft.month,cardDraft.photoData);
@@ -8753,7 +8778,7 @@ function drawThenNow(objs){
     <button class="btn-primary" style="background:var(--sleep)" onclick="dlNamed('thenvsnow')">${I.download} Download</button>
     ${isPro()?'':'<div class="csub" style="text-align:center;margin-top:8px">Pro shares come without the Cubby mark ✨</div>'}`,'sleep');
 }
-function dlNamed(n){ const a=document.createElement('a'); a.href=window._lastCard; a.download=(activeBaby().name||'baby')+'-'+n+'.jpg'; a.click(); toast('Downloaded'); }
+function dlNamed(n){ saveFile(window._lastCard, (activeBaby().name||'baby')+'-'+n+'.jpg', isNativeApp()?'Saved':'Downloaded'); }
 async function shareLastCard(n){
   try{
     const blob=await (await fetch(window._lastCard)).blob();
@@ -9016,6 +9041,20 @@ if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){
   window.addEventListener('beforeinstallprompt',function(e){ e.preventDefault(); window._bip=e; }); // Android/Chrome: stash for an in-app install button
   window.addEventListener('load',function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
 }
+/* ONE way to get a file out of Cubby (build once, reuse — every keepsake save, photo, video,
+   data export and .ics goes through here).
+   In a browser this is a plain download. Inside the iOS/Android wrapper it must not be: WKWebView
+   SILENTLY IGNORES `a.download` — no error, no file, the button just does nothing. That quietly
+   killed every save in the app. Natively we write the file and hand it to the OS share sheet
+   (Save to Files, AirDrop, WhatsApp), which is a better ending than a download anyway.
+   `href` may be a data:, blob: or object URL — fetch() handles all three. */
+function saveFile(href, filename, okMsg){
+  if(window.cubbyNativeSaveFile){ window.cubbyNativeSaveFile(href, filename, okMsg); return; }
+  const a=document.createElement('a'); a.href=href; a.download=filename;
+  document.body.appendChild(a); a.click(); a.remove();   // some browsers ignore a click on a detached anchor
+  if(okMsg) toast(okMsg);
+}
+
 /* Add-to-home-screen, shared by the first-run welcome sheet and Settings (build once, reuse).
    Android/Chrome give us a real install prompt (window._bip); iOS Safari blocks it, so we
    reveal the Share -> Add to Home Screen steps instead. */

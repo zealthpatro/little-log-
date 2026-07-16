@@ -39,9 +39,40 @@
     } catch (e) {}
   };
 
+  /* Getting a file out of the app. WKWebView SILENTLY IGNORES `a.download` — no error, no file, the
+     button simply does nothing — which quietly killed every keepsake/photo/video/export save in the
+     wrapper. So write the bytes to the cache dir and hand the file to the OS share sheet: Save to
+     Files, AirDrop, WhatsApp. index.html's saveFile() delegates here when this exists. */
+  function nativeSaveFile(href, filename, okMsg) {
+    var P = (window.Capacitor && window.Capacitor.Plugins) || {};
+    if (!P.Filesystem || !P.Share) { try { toast("Couldn't save that here"); } catch (e) {} return; }
+    var safe = String(filename || 'cubby').replace(/[^a-zA-Z0-9._-]/g, '-');
+    fetch(href)
+      .then(function (r) { return r.blob(); })
+      .then(function (b) {
+        return new Promise(function (resolve, reject) {
+          var fr = new FileReader();
+          // Filesystem wants base64 without the data: prefix.
+          fr.onload = function () { resolve(String(fr.result).split(',')[1]); };
+          fr.onerror = reject;
+          fr.readAsDataURL(b);
+        });
+      })
+      .then(function (b64) { return P.Filesystem.writeFile({ path: safe, data: b64, directory: 'CACHE' }); })
+      .then(function (w) { return P.Share.share({ title: safe, url: w.uri }); })
+      .then(function () { try { if (okMsg) toast(okMsg); } catch (e) {} },
+        function (err) {
+          // Dismissing the share sheet is a normal choice, not an error worth a message.
+          var m = '' + ((err && err.message) || '');
+          if (/cancel|abort|dismiss/i.test(m)) return;
+          try { toast("Couldn't save that"); } catch (e) {}
+        });
+  }
+
   function boot() {
     var Cap = window.Capacitor;
     if (!Cap || typeof Cap.isNativePlatform !== 'function' || !Cap.isNativePlatform()) return; // web PWA -> no-op
+    window.cubbyNativeSaveFile = nativeSaveFile;
     var platform = (Cap.getPlatform && Cap.getPlatform()) || 'native';
     window.__cubbyNative = platform;
     try { document.documentElement.setAttribute('data-native', platform); } catch (e) {}
