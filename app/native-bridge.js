@@ -144,26 +144,38 @@
       });
     } catch (e) {}
 
-    /* Native push. Deliberately does NOT ask on launch: an OS permission dialog in front of a parent
-       who hasn't even signed in yet is exactly the anxiety the charter says to design out, and Cubby's
-       push policy is critical-only (a due dose). So we re-register silently if permission was already
-       granted, and expose cubbyEnableNativePush() for the medicine-reminder toggle to call in context. */
+    /* Native push, via FirebaseMessaging rather than @capacitor/push-notifications. That matters: on iOS
+       the plain push plugin hands back the raw APNs device token, but Cubby's whole pipeline is FCM —
+       the app stores users/{uid}.push.tokens and the Worker cron sends via the FCM API. FirebaseMessaging
+       wraps the native SDK, so getToken() returns a real FCM registration token and the cron, quiet hours
+       and the push.due index all keep working untouched.
+
+       Deliberately does NOT ask on launch: an OS permission dialog in front of a parent who hasn't even
+       signed in yet is exactly the anxiety the charter says to design out, and Cubby's push policy is
+       critical-only (a due dose). So we re-register silently if permission was already granted, and
+       expose cubbyEnableNativePush() for the Reminders toggle to call in context. */
     try {
-      var Push = P.PushNotifications;
-      if (Push) {
-        Push.checkPermissions().then(function (res) { if (res && res.receive === 'granted') Push.register(); }, function () {});
+      var Msg = P.FirebaseMessaging;
+      if (Msg) {
+        var handOverToken = function (tok) {
+          if (!tok) return null;
+          window.__cubbyPushToken = tok;
+          if (typeof window.onNativePushToken === 'function') { try { window.onNativePushToken(tok, window.__cubbyNative); } catch (e) {} }
+          return tok;
+        };
+        var fetchToken = function () { return Msg.getToken().then(function (r) { return handOverToken(r && r.token); }); };
+
+        Msg.checkPermissions().then(function (res) { if (res && res.receive === 'granted') fetchToken(); }, function () {});
         window.cubbyEnableNativePush = function () {
-          return Push.requestPermissions().then(function (res) {
-            if (res && res.receive === 'granted') { Push.register(); return true; }
-            return false;
+          return Msg.requestPermissions().then(function (res) {
+            if (!res || res.receive !== 'granted') return false;
+            return fetchToken().then(function (t) { return !!t; });
           });
         };
-        Push.addListener('registration', function (token) {
-          window.__cubbyPushToken = token && token.value;
-          if (typeof window.onNativePushToken === 'function') { try { window.onNativePushToken(window.__cubbyPushToken, window.__cubbyNative); } catch (e) {} }
-        });
-        Push.addListener('pushNotificationActionPerformed', function (action) {
-          try { routeDeepLink(action && action.notification && action.notification.data); } catch (e) {}
+        // FCM rotates tokens; keep the stored one current or reminders quietly stop arriving.
+        Msg.addListener('tokenReceived', function (ev) { try { handOverToken(ev && ev.token); } catch (e) {} });
+        Msg.addListener('notificationActionPerformed', function (ev) {
+          try { routeDeepLink(ev && ev.notification && ev.notification.data); } catch (e) {}
         });
       }
     } catch (e) {}

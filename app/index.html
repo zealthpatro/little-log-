@@ -3321,18 +3321,42 @@ function saveBabyDetails(id){
 /* ---- Push reminders (opt-in; dormant until a VAPID key + Cloud Messaging are set in Firebase).
    Scope: medicine due, confirmed-missed vaccine, your-turn-on-a-routine. Never feeds. ---- */
 const CUBBY_VAPID='BJsMLPFLN5hLbJsdAs2ovSVaRii-sxjaz3bLha7ffXB7Iq4N6vUHKwlH6g9zBuyNUkgAGRKk-ii5VDMq-9tto-k'; // Web Push certificate (public key) from Firebase Cloud Messaging. Public by design.
-function pushSupported(){ try{ return !!(window.firebase && firebase.messaging && firebase.messaging.isSupported && firebase.messaging.isSupported() && ('Notification' in window) && ('serviceWorker' in navigator)); }catch(e){ return false; } }
+function pushSupported(){ try{ if(isNativeApp()) return true; /* the wrapper registers with APNs/FCM natively, so none of the web gates below apply */ return !!(window.firebase && firebase.messaging && firebase.messaging.isSupported && firebase.messaging.isSupported() && ('Notification' in window) && ('serviceWorker' in navigator)); }catch(e){ return false; } }
 function pushCfg(){ if(!state.settings.push) state.settings.push={enabled:false,quietStart:21,quietEnd:7}; return state.settings.push; }
 function openReminders(){
-  const sup=pushSupported(), cfg=pushCfg(), ready=sup&&!!CUBBY_VAPID;
+  const sup=pushSupported(), cfg=pushCfg(), ready=sup&&(isNativeApp()||!!CUBBY_VAPID);  // VAPID is a web-push concept; the wrapper goes via APNs
   openSheet(`<h2>Reminders 🔔</h2><div class="sub">A gentle nudge when a medicine is due, so a dose is never missed. Off by default, snoozeable, and never for feeds, naps or milestones.</div>
-    ${!ready?`<div class="preg-disclaim">${!sup?'Reminders need a browser that supports notifications. On iPhone, add Cubby to your home screen first, then open it from there.':'Reminders are coming soon.'}</div>`:`
+    ${!ready?`<div class="preg-disclaim">${!sup?(isNativeApp()?'Reminders need notification permission for Cubby. You can turn it on in your phone settings.':'Reminders need a browser that supports notifications. On iPhone, add Cubby to your home screen first, then open it from there.'):'Reminders are coming soon.'}</div>`:`
     <div class="set-item"><div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🔔</div><div class="si-body"><div class="a">Gentle reminders</div><div class="b">${cfg.enabled?'On for this device':'Off'}</div></div>
       <div class="seg"><button class="${cfg.enabled?'on':''}" onclick="enablePush()">On</button><button class="${!cfg.enabled?'on':''}" onclick="disablePush()">Off</button></div></div>
     <div class="csub" style="margin-top:8px">Quiet hours: nothing between ${cfg.quietStart}:00 and ${cfg.quietEnd}:00.</div>`}
     <div class="preg-disclaim" style="margin-top:12px">Cubby never sends feed reminders. Delivery uses Firebase, our own sign-in and database provider, not a third-party ad tracker.</div>`,'star');
 }
+/* Store a push token the Worker cron can deliver to. Shared by the web (VAPID/service-worker token)
+   and the wrapper (native FCM token) — both are FCM registration tokens, so the cron, the quiet hours
+   and the push.due index are identical either way. */
+async function storePushToken(tok){
+  if(!tok) return false;
+  const cfg=pushCfg(); cfg.enabled=true;
+  if(window.LL&&LL.db&&myUid()){ const t={}; t[tok]={ua:(navigator.userAgent||'').slice(0,120),at:Date.now()}; await LL.db.collection('users').doc(myUid()).set({push:{enabled:true,quietStart:cfg.quietStart,quietEnd:cfg.quietEnd,tokens:t}},{merge:true}); }
+  persist(); syncReminderIndex();
+  return true;
+}
+/* The wrapper registers with APNs natively and hands the FCM token back here (native-bridge.js).
+   Defined on web too, where it simply never fires. */
+window.onNativePushToken=function(tok){ storePushToken(tok).catch(function(){}); };
 async function enablePush(){
+  // The wrapper has no VAPID + service-worker path: permission and registration are native, and the
+  // token comes back through onNativePushToken above.
+  if(isNativeApp()){
+    try{
+      if(!window.cubbyEnableNativePush){ toast('Reminders coming soon'); return; }
+      const granted=await window.cubbyEnableNativePush();
+      if(!granted){ toast('Notifications are turned off for Cubby'); return; }
+      openReminders(); toast('Reminders on 🔔');
+    }catch(e){ toast('Could not enable reminders'); }
+    return;
+  }
   if(!CUBBY_VAPID){ toast('Reminders coming soon'); return; }
   try{
     const perm=await Notification.requestPermission();
@@ -3340,9 +3364,8 @@ async function enablePush(){
     const reg=await navigator.serviceWorker.register('firebase-messaging-sw.js');
     const tok=await firebase.messaging().getToken({vapidKey:CUBBY_VAPID, serviceWorkerRegistration:reg});
     if(!tok){ toast('Could not enable reminders'); return; }
-    const cfg=pushCfg(); cfg.enabled=true;
-    if(window.LL&&LL.db&&myUid()){ const t={}; t[tok]={ua:(navigator.userAgent||'').slice(0,120),at:Date.now()}; await LL.db.collection('users').doc(myUid()).set({push:{enabled:true,quietStart:cfg.quietStart,quietEnd:cfg.quietEnd,tokens:t}},{merge:true}); }
-    persist(); syncReminderIndex(); openReminders(); toast('Reminders on 🔔');
+    await storePushToken(tok);
+    openReminders(); toast('Reminders on 🔔');
   }catch(e){ toast('Could not enable reminders'); }
 }
 function disablePush(){ const cfg=pushCfg(); cfg.enabled=false; if(window.LL&&LL.db&&myUid()){ try{ LL.db.collection('users').doc(myUid()).set({push:{enabled:false,due:[]}},{merge:true}); }catch(e){} } persist(); openReminders(); toast('Reminders off'); }
