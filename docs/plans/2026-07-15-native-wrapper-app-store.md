@@ -98,6 +98,32 @@ serves the whole repo); `tools/cap_ios_configure.rb` copies it in and bundles it
 > Never. If a signed-out preview is genuinely needed (e.g. for Apple review), build a native-gated demo mode
 > on seeded fake data instead, or hand review a demo account.
 
+## 3e. What WKWebView silently breaks (audit these before claiming "100% of the PWA")
+A wrapper is not Safari. These fail **silently** — no error, the button just does nothing — so they will
+not show up in any smoke test that only checks for exceptions. Found and fixed 2026-07-16 (sw v192):
+
+| API | In WKWebView | Cubby's fix |
+|---|---|---|
+| `a.download` | **ignored entirely** | `saveFile()` → `Filesystem.writeFile` + `Share.share` (OS share sheet) |
+| `window.print()` | no-op | `openPrintable()` → shareable report file |
+| `window.open('','_blank')` | returns **null** | `openPrintable()` branches before it |
+| `navigator.share` | **absent** | existing clipboard/`saveFile` fallbacks now reach the native sheet |
+| Service Worker | unavailable without `WKAppBoundDomains` | **UNVERIFIED — see below** |
+
+`a.download` had **nine** call sites (keepsake cards, named cards, moment photos, saved photos, video
+export, data export, `.ics`). All were dead in builds 1–3. `window.print()` powered the **doctor report**,
+which is the Pro anchor. Everything now routes through `saveFile()` / `openPrintable()` in `app/index.html`,
+which delegate to `window.cubbyNativeSaveFile` (`app/native-bridge.js`) only when it exists — the web path
+is byte-for-byte unchanged and asserted by the native smoke.
+
+> **OPEN RISK — offline/Service Worker.** WKWebView does not expose Service Workers unless the app declares
+> `WKAppBoundDomains` in Info.plist (and that in turn restricts `evaluateJavaScript`/user scripts unless
+> `limitsNavigationsToAppBoundDomains` is set, which may conflict with how Capacitor injects its bridge — so
+> it is NOT a safe blind change). Cubby's SW is what makes an installed PWA launch instantly and work
+> offline, so the wrapper may currently have **no offline support and no cached launch**. Cheap on-device
+> test: open the app, enable airplane mode, force-quit, reopen. Loads = SW is working. Fails = it is not.
+> Do not guess at this; measure it first.
+
 ## 3d. What the wrapper must hide (a wrapper has no browser chrome)
 Verified by a 27-assertion smoke that boots `/app/` with and without a faked Capacitor bridge
 (`scratchpad/native-smoke.js`; run with `NODE_PATH=<repo>/tools/node_modules`, where puppeteer-core lives):
