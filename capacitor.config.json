@@ -20,7 +20,7 @@
       "backgroundColor": "#F7F2E8",
       "showSpinner": false
     },
-    "PushNotifications": {
+    "FirebaseMessaging": {
       "presentationOptions": ["badge", "sound", "alert"]
     },
     "FirebaseAuthentication": {

@@ -108,7 +108,7 @@ not show up in any smoke test that only checks for exceptions. Found and fixed 2
 | `window.print()` | no-op | `openPrintable()` → shareable report file |
 | `window.open('','_blank')` | returns **null** | `openPrintable()` branches before it |
 | `navigator.share` | **absent** | existing clipboard/`saveFile` fallbacks now reach the native sheet |
-| Service Worker | unavailable without `WKAppBoundDomains` | **UNVERIFIED — see below** |
+| Service Worker | unavailable without `WKAppBoundDomains` | declared + `limitsNavigationsToAppBoundDomains` — **VERIFIED on the simulator** |
 
 `a.download` had **nine** call sites (keepsake cards, named cards, moment photos, saved photos, video
 export, data export, `.ics`). All were dead in builds 1–3. `window.print()` powered the **doctor report**,
@@ -116,13 +116,37 @@ which is the Pro anchor. Everything now routes through `saveFile()` / `openPrint
 which delegate to `window.cubbyNativeSaveFile` (`app/native-bridge.js`) only when it exists — the web path
 is byte-for-byte unchanged and asserted by the native smoke.
 
-> **OPEN RISK — offline/Service Worker.** WKWebView does not expose Service Workers unless the app declares
-> `WKAppBoundDomains` in Info.plist (and that in turn restricts `evaluateJavaScript`/user scripts unless
-> `limitsNavigationsToAppBoundDomains` is set, which may conflict with how Capacitor injects its bridge — so
-> it is NOT a safe blind change). Cubby's SW is what makes an installed PWA launch instantly and work
-> offline, so the wrapper may currently have **no offline support and no cached launch**. Cheap on-device
-> test: open the app, enable airplane mode, force-quit, reopen. Loads = SW is working. Fails = it is not.
-> Do not guess at this; measure it first.
+### Offline / Service Workers — RESOLVED and measured (build 5)
+WKWebView does not expose Service Workers unless the app declares `WKAppBoundDomains`, so builds 1–4 had **no
+SW: no offline, no cached launch** — strictly worse than the website they wrap. Now declared
+(`little-cubby.com`, in `tools/cap_ios_configure.rb`) and paired with
+`ios.limitsNavigationsToAppBoundDomains: true`, which is **mandatory**: with the key present but the flag
+false, WebKit restricts script injection and Capacitor's own bridge breaks.
+
+The feared side effect (the webview may not navigate outside the listed domains) is affordable *because*
+sign-in is now native and articles/off-site links open in a separate process (`Browser.open` /
+UIApplication). This change would NOT have been safe before §3c.
+
+**Verified on the iPhone 17 Pro simulator, not assumed** — the three things that had to be true:
+```
+WebPageProxy::decidePolicyForNavigationAction: policyAction=Use, isAppBoundDomain=1   # allowed, and IS app-bound
+ServiceWorkerContainer::addRegistration: Registering service worker. jobID=230        # SW registers
+ServiceWorkerContainer::jobFinishedLoadingScript: Successfuly finished fetching script # its script loads
+```
+plus `.../WebsiteData/Default/<origin>/ServiceWorkers/ServiceWorkerRegistrations-8.sqlite3` on disk, and a
+screenshot showing the **native** landing (no marketing nav, no install CTA) — which proves the Capacitor
+bridge still injects under app-bound domains, the actual risk.
+
+How to re-check after any native change:
+```bash
+xcrun simctl boot <UDID>; xcrun simctl install <UDID> <App.app>; xcrun simctl launch <UDID> com.littlecubby.app
+# the sim needs ~20s to commit the remote page — screenshotting earlier shows a blank cream screen
+xcrun simctl spawn <UDID> log show --last 3m --predicate 'processImagePath CONTAINS "App"' --style compact \
+  | grep -iE "serviceworker|isAppBoundDomain"
+```
+> **Watch the disk.** An archive + a simulator build cost ~4GB of `/tmp` and this Mac runs near full; a full
+> disk shows up as a blank webview and "No space left on device" from unrelated commands. `rm -rf
+> /tmp/cubby-dd /tmp/cubby-sim` and `xcrun simctl erase <UDID>` when done.
 
 ## 3d. What the wrapper must hide (a wrapper has no browser chrome)
 Verified by a 27-assertion smoke that boots `/app/` with and without a faked Capacitor bridge
@@ -167,7 +191,7 @@ Web push on iOS only works if the PWA is installed; the wrapper gives reliable A
 3. Enable the **Push Notifications** capability: add `aps-environment` to `ios/App/App/App.entitlements` via
    `tools/cap_ios_configure.rb` (NOT by hand in Xcode — `ios/` is regenerated). The App ID must have the Push
    capability enabled first, or provisioning fails at export.
-4. **⚠️ Swap the plugin: `@capacitor/push-notifications` gives the wrong kind of token.** On iOS its
+4. **DONE (build 5) — but note `@capacitor/push-notifications` gives the wrong kind of token.** On iOS its
    `registration` event returns the raw **APNs device token**. Cubby's existing push path is **FCM**: the web
    stores `users/{uid}.push.tokens[<FCM token>]` (`enablePush()` in `app/index.html`) and the Worker cron
    reads that map and sends via the FCM API. Handing it an APNs token would simply fail to deliver. Use
@@ -179,6 +203,9 @@ Web push on iOS only works if the PWA is installed; the wrapper gives reliable A
    `firebase.messaging.isSupported()` + `Notification in window`, which is false in the wrapper — the
    Reminders sheet needs a native branch that calls `cubbyEnableNativePush()` instead.
    Android: add the Firebase Android app + `google-services.json`.
+   **Uninstall `@capacitor/push-notifications` once messaging is in** — both plugins swizzle the APNs
+   delegate and having them side by side is a real conflict. The config block is `FirebaseMessaging`, not
+   `PushNotifications`.
 
 **Policy (do not regress):** the bridge deliberately does **not** ask for push permission on launch — it only
 `checkPermissions()` and re-registers if already granted, and exposes `window.cubbyEnableNativePush()` for the
