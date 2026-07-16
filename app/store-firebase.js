@@ -1535,6 +1535,10 @@
       showStatus('Setting things up…');
       var hid = await resolveHousehold(user);
       startSync(hid, user);
+      // A push token can arrive before auth restores (APNs/FCM can beat the IndexedDB restore), and
+      // storePushToken parks it rather than writing to the 'local' sentinel uid. Flush it now that
+      // there's a real uid to write under, or a rotated token would silently never reach the cron.
+      try { if (window.cubbyFlushPendingPush) window.cubbyFlushPendingPush(); } catch (e) {}
     } catch (err) {
       console.error(err);
       showSignIn('Could not load your data: ' + ((err && err.message) || err));

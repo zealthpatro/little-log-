@@ -157,23 +157,38 @@
     try {
       var Msg = P.FirebaseMessaging;
       if (Msg) {
-        var handOverToken = function (tok) {
+        /* `explicit` says the parent just tapped On. It has to be threaded from the tap all the way
+           through, because enabling and the silent launch re-register share this exact path — and only
+           the tap may switch reminders on. Without it, every launch with the OS permission still
+           granted would resurrect reminders the parent had turned off. */
+        var handOverToken = function (tok, explicit) {
           if (!tok) return null;
           window.__cubbyPushToken = tok;
-          if (typeof window.onNativePushToken === 'function') { try { window.onNativePushToken(tok, window.__cubbyNative); } catch (e) {} }
+          if (typeof window.onNativePushToken === 'function') {
+            try { window.onNativePushToken(tok, window.__cubbyNative, !!explicit); } catch (e) {}
+          }
           return tok;
         };
-        var fetchToken = function () { return Msg.getToken().then(function (r) { return handOverToken(r && r.token); }); };
+        var fetchToken = function (explicit) {
+          return Msg.getToken().then(function (r) { return handOverToken(r && r.token, explicit); });
+        };
 
-        Msg.checkPermissions().then(function (res) { if (res && res.receive === 'granted') fetchToken(); }, function () {});
+        // Silent: refresh a rotated token for someone already opted in. storePushToken() drops it if
+        // they aren't — this must never be the thing that turns reminders on.
+        Msg.checkPermissions().then(function (res) { if (res && res.receive === 'granted') fetchToken(false); }, function () {});
         window.cubbyEnableNativePush = function () {
           return Msg.requestPermissions().then(function (res) {
             if (!res || res.receive !== 'granted') return false;
-            return fetchToken().then(function (t) { return !!t; });
+            return fetchToken(true).then(function (t) { return !!t; });
           });
         };
-        // FCM rotates tokens; keep the stored one current or reminders quietly stop arriving.
-        Msg.addListener('tokenReceived', function (ev) { try { handOverToken(ev && ev.token); } catch (e) {} });
+        // Off means off: drop the registration so a stale token can't be delivered to.
+        window.cubbyDisableNativePush = function () {
+          try { window.__cubbyPushToken = null; return Msg.deleteToken(); } catch (e) { return null; }
+        };
+        // FCM rotates tokens; keep the stored one current or reminders quietly stop arriving. Never
+        // explicit — a rotation is not a request to switch reminders back on.
+        Msg.addListener('tokenReceived', function (ev) { try { handOverToken(ev && ev.token, false); } catch (e) {} });
         Msg.addListener('notificationActionPerformed', function (ev) {
           try { routeDeepLink(ev && ev.notification && ev.notification.data); } catch (e) {}
         });

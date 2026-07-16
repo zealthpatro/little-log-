@@ -3332,17 +3332,41 @@ function openReminders(){
 }
 /* Store a push token the Worker cron can deliver to. Shared by the web (VAPID/service-worker token)
    and the wrapper (native FCM token) — both are FCM registration tokens, so the cron, the quiet hours
-   and the push.due index are identical either way. */
-async function storePushToken(tok){
+   and the push.due index are identical either way.
+
+   `explicit` = the parent just tapped On. It is the ONLY thing that may switch reminders on. The
+   wrapper re-registers silently on every launch when the OS permission is still granted (to keep a
+   rotated token fresh), and that path must never resurrect reminders the parent turned off — they'd
+   have no way to stop them short of revoking notifications in iOS Settings, and this is a 3am buzz
+   next to a sleeping baby. Note enablePush() reaches this through the SAME token hand-over as the
+   silent refresh, which is why the flag is threaded all the way from the tap. */
+var _pendingPushTok=null;
+async function storePushToken(tok, explicit){
   if(!tok) return false;
-  const cfg=pushCfg(); cfg.enabled=true;
-  if(window.LL&&LL.db&&myUid()){ const t={}; t[tok]={ua:(navigator.userAgent||'').slice(0,120),at:Date.now()}; await LL.db.collection('users').doc(myUid()).set({push:{enabled:true,quietStart:cfg.quietStart,quietEnd:cfg.quietEnd,tokens:t}},{merge:true}); }
+  const cfg=pushCfg();
+  if(explicit) cfg.enabled=true;
+  else if(!cfg.enabled) return false;   // silent refresh, and the parent hasn't opted in: store nothing
+  // myUid() falls back to the sentinel 'local' before auth restores, so it can't be used as a guard:
+  // it would write users/local, the rules would reject it, and the catch below would swallow it while
+  // a rotated token quietly never reached the cron. Demand a REAL uid, and park the token until then.
+  const uid=(window.LL&&LL.auth&&LL.auth.currentUser&&LL.auth.currentUser.uid)||null;
+  if(!(window.LL&&LL.db&&uid)){ _pendingPushTok={tok:tok,explicit:!!explicit}; return false; }
+  const t={}; t[tok]={ua:(navigator.userAgent||'').slice(0,120),at:Date.now()};
+  try{
+    await LL.db.collection('users').doc(uid).set({push:{enabled:true,quietStart:cfg.quietStart,quietEnd:cfg.quietEnd,tokens:t}},{merge:true});
+  }catch(e){ console.warn('[cubby] could not store the push token', e); return false; }
   persist(); syncReminderIndex();
   return true;
 }
+// Called once auth restores, so a token that arrived before sign-in still lands (FCM/APNs can beat the
+// IndexedDB auth restore, and that race decided whether reminders worked at all).
+window.cubbyFlushPendingPush=function(){
+  const p=_pendingPushTok; _pendingPushTok=null;
+  if(p) storePushToken(p.tok,p.explicit).catch(function(){});
+};
 /* The wrapper registers with APNs natively and hands the FCM token back here (native-bridge.js).
    Defined on web too, where it simply never fires. */
-window.onNativePushToken=function(tok){ storePushToken(tok).catch(function(){}); };
+window.onNativePushToken=function(tok,_platform,explicit){ storePushToken(tok,explicit).catch(function(){}); };
 async function enablePush(){
   // The wrapper has no VAPID + service-worker path: permission and registration are native, and the
   // token comes back through onNativePushToken above.
@@ -3362,11 +3386,22 @@ async function enablePush(){
     const reg=await navigator.serviceWorker.register('firebase-messaging-sw.js');
     const tok=await firebase.messaging().getToken({vapidKey:CUBBY_VAPID, serviceWorkerRegistration:reg});
     if(!tok){ toast('Could not enable reminders'); return; }
-    await storePushToken(tok);
+    await storePushToken(tok, true);
     openReminders(); toast('Reminders on 🔔');
   }catch(e){ toast('Could not enable reminders'); }
 }
-function disablePush(){ const cfg=pushCfg(); cfg.enabled=false; if(window.LL&&LL.db&&myUid()){ try{ LL.db.collection('users').doc(myUid()).set({push:{enabled:false,due:[]}},{merge:true}); }catch(e){} } persist(); openReminders(); toast('Reminders off'); }
+/* Off must mean off. Drop the token as well as the flag: a token left in users/{uid}.push.tokens is a
+   token the cron can still deliver to, and `due:[]` only empties the queue until the next sync. */
+function disablePush(){
+  const cfg=pushCfg(); cfg.enabled=false;
+  _pendingPushTok=null;                                   // don't let a parked token re-enable it
+  const uid=(window.LL&&LL.auth&&LL.auth.currentUser&&LL.auth.currentUser.uid)||null;
+  if(window.LL&&LL.db&&uid){
+    try{ LL.db.collection('users').doc(uid).set({push:{enabled:false,due:[],tokens:{}}},{merge:true}); }catch(e){}
+  }
+  try{ if(window.cubbyDisableNativePush) window.cubbyDisableNativePush(); }catch(e){}
+  persist(); openReminders(); toast('Reminders off');
+}
 /* Reminder index: the client (which has the medicine logic) precomputes the next ~36h of fire-times
    into users/{uid}.push.due; the Worker cron only reads + sends, so it needs no domain logic.
    Refreshed on app use (throttled), on enabling push, and on any medicine change. */
