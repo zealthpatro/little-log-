@@ -50,6 +50,7 @@ npx cap add android
 npx cap sync
 gem install --user-install xcodeproj # once
 ruby tools/cap_ios_configure.rb      # plist as a resource + Sign in with Apple entitlement
+python3 tools/gen_app_icon.py        # the real bear icon — cap ships a placeholder (§4)
 ```
 
 ### 3b. The Facebook SDK trap (do not skip)
@@ -110,15 +111,23 @@ Verified by a 27-assertion smoke that boots `/app/` with and without a faked Cap
   button) instead of ejecting to Safari. Off-site links still get the system browser.
 
 ## 4. Icons + splash 🖥️
-Use `@capacitor/assets`:
-```bash
-npm i -D @capacitor/assets
-mkdir -p assets
-cp icons/logo-512.png assets/icon.png            # 1024x1024 ideal — upscale/redraw if needed
-# create assets/splash.png (2732x2732, bear on #F7F2E8)
-npx capacitor-assets generate --iconBackgroundColor "#F7F2E8" --splashBackgroundColor "#F7F2E8"
-```
-> TODO before submit: a 1024×1024 icon (Apple requires it) and a 2732×2732 splash. The current 512 icons are too small — regenerate at 1024 from the bear art.
+**App icon: DONE (build 3).** `npx cap add ios` ships a **placeholder** (Capacitor's blue X) — builds 1 and 2
+carried it, which would fail review and looks broken to testers. `python3 tools/gen_app_icon.py` builds the
+required 1024×1024 from `icons/logo-512.png`. It is **not** a plain resize, because Apple demands the icon be
+**square and opaque** (no alpha, no pre-rounded corners — iOS applies its own squircle mask, so a pre-rounded
+icon gets double-rounded and an alpha channel is an outright rejection), while our source is a 512 rounded
+rect *with* alpha and there is no vector original. So the script:
+- erodes the anti-aliased boundary fringe (whose alpha rounds to 255 but whose colour blends toward white —
+  left in, it skews the fit and paints a bright arc where the old corner was),
+- fits the cream background gradient from the artwork's own opaque border pixels with a quadratic surface
+  (a plane left 27/255 residuals and a visible seam; the quadratic gets max **0.7/255**),
+- renders that gradient full-bleed to the corners, composites the 2× Lanczos bear, flattens to RGB.
+
+Re-run it after any `cap add ios` (the icon lives under gitignored `ios/`). If a true 1024 or vector bear ever
+exists, drop it at `icons/logo-1024.png` and the script prefers it automatically — the current icon is an
+honest upscale of 512 art, which is the one quality compromise in the build.
+
+> STILL TODO: a 2732×2732 splash (`assets/splash.png`, bear on `#F7F2E8`) via `@capacitor/assets`.
 
 ## 5. Push notifications (the reason iOS users need this) 🖥️
 Web push on iOS only works if the PWA is installed; the wrapper gives reliable APNs push.
