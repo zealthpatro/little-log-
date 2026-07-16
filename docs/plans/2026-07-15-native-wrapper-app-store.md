@@ -141,9 +141,18 @@ Web push on iOS only works if the PWA is installed; the wrapper gives reliable A
 3. Enable the **Push Notifications** capability: add `aps-environment` to `ios/App/App/App.entitlements` via
    `tools/cap_ios_configure.rb` (NOT by hand in Xcode — `ios/` is regenerated). The App ID must have the Push
    capability enabled first, or provisioning fails at export.
-4. Wire the token: `app/native-bridge.js` already registers and calls `window.onNativePushToken(token,
-   platform)`. Implement that hook to store the token the same way the web FCM token is stored, so the
-   existing Worker cron delivers to it. Android: add the Firebase Android app + `google-services.json`.
+4. **⚠️ Swap the plugin: `@capacitor/push-notifications` gives the wrong kind of token.** On iOS its
+   `registration` event returns the raw **APNs device token**. Cubby's existing push path is **FCM**: the web
+   stores `users/{uid}.push.tokens[<FCM token>]` (`enablePush()` in `app/index.html`) and the Worker cron
+   reads that map and sends via the FCM API. Handing it an APNs token would simply fail to deliver. Use
+   **`@capacitor-firebase/messaging`** instead — it wraps the native Firebase Messaging SDK, so `getToken()`
+   returns a real **FCM registration token** that drops straight into the same map, and the Worker, the quiet
+   hours, the `push.due` index and the whole medicine-reminder pipeline keep working unchanged. Then
+   `app/native-bridge.js` calls `window.onNativePushToken(token, platform)`; implement that hook to write the
+   token exactly where `enablePush()` does. Note `pushSupported()` (index.html) gates on
+   `firebase.messaging.isSupported()` + `Notification in window`, which is false in the wrapper — the
+   Reminders sheet needs a native branch that calls `cubbyEnableNativePush()` instead.
+   Android: add the Firebase Android app + `google-services.json`.
 
 **Policy (do not regress):** the bridge deliberately does **not** ask for push permission on launch — it only
 `checkPermissions()` and re-registers if already granted, and exposes `window.cubbyEnableNativePush()` for the
