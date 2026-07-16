@@ -129,8 +129,15 @@
     return '<button type="button" id="llAppleBtn" class="ll-auth-btn ll-auth-btn-apple">' + logo + 'Continue with Apple</button>';
   }
 
-  /* Email magic-link sign-in (alongside Google, never instead of it). */
+  /* Email magic-link sign-in (alongside Google, never instead of it).
+     HIDDEN in the native wrapper, because there it cannot complete: the emailed link is minted on
+     little-log-a9caa.firebaseapp.com/__/auth/action (worker.js), so tapping it in Mail opens SAFARI and
+     signs the parent in there. Back in Cubby they are still staring at the landing page, with no error
+     and nothing to explain it. Offering a broken escape hatch to someone whose sign-in already failed is
+     worse than not offering one. (Universal links would NOT fix this — iOS does not fire them through a
+     server redirect; it needs the emailed link re-hosted on an app-bound AASA-matched URL.) */
   function emailRowHtml() {
+    if (isNativeApp()) return '';
     return '<div class="ll-email-row" style="margin:14px auto 0;max-width:340px;text-align:center">'
       + '<button type="button" class="ll-email-toggle" style="border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;color:#6E635B;text-decoration:underline;padding:6px">Prefer email? Get a sign-in link</button>'
       + '<form class="ll-email-form" style="display:none;gap:8px;margin-top:8px">'
@@ -327,6 +334,14 @@
   }
   window.LL.isNativeApp = isNativeApp;
 
+  /* Which STEP failed matters more than the message: the native provider sheet and the Firebase
+     exchange fail for completely different reasons (entitlement/config vs audience/provider setup),
+     and the raw text alone can't tell them apart. Stamped on the error so the sign-in screen can
+     report it — without it a failure on a device we can't attach a debugger to is unreadable. */
+  function stampStep(err, step) {
+    try { if (err && typeof err === 'object' && !err.cubbyStep) err.cubbyStep = step; } catch (e) {}
+    throw err;
+  }
   // skipNativeAuth keeps the native Firebase SDK out of the auth state, so the JS SDK stays the
   // single source of truth (one session, not two that can drift apart).
   function nativeSignIn(kind) {
@@ -334,23 +349,37 @@
     var call = kind === 'apple'
       ? P.signInWithApple({ skipNativeAuth: true })
       : P.signInWithGoogle({ skipNativeAuth: true });
-    return call.then(function (res) {
+    return call.catch(function (e) { return stampStep(e, 'provider'); }).then(function (res) {
       var c = (res && res.credential) || {};
-      if (!c.idToken) throw new Error('the sign-in did not complete');
+      if (!c.idToken) { var e = new Error('no idToken came back from ' + kind); e.cubbyStep = 'provider'; throw e; }
       var cred = kind === 'apple'
         ? new firebase.auth.OAuthProvider('apple.com').credential({ idToken: c.idToken, rawNonce: c.nonce })
         : firebase.auth.GoogleAuthProvider.credential(c.idToken, c.accessToken || null);
-      return auth.signInWithCredential(cred);
+      return auth.signInWithCredential(cred).catch(function (e) { return stampStep(e, 'firebase'); });
     });
   }
-  // Backing out of the native sheet is a normal thing to do, not an error worth a red message.
+  /* Backing out of the native sheet is normal and must stay silent. But detect it NARROWLY: an earlier
+     version matched /cancel/i on the message and err.code === 1001, and BOTH are wrong — the plugin
+     sends code as a string like "auth/...", and Apple's cancel reads "The operation couldn't be
+     completed. (com.apple.AuthenticationServices.AuthorizationError error 1001.)", which never contains
+     the word "cancel". So real cancels showed a red error, and (worse) any future broadening of this
+     test risks swallowing a genuine failure into silence. Match the exact Apple/Google cancel codes. */
   function userCancelled(err) {
     var m = '' + ((err && (err.message || err.errorMessage)) || '');
-    return /cancel/i.test(m) || (err && (err.code === 1001 || err.code === '1001'));
+    var c = '' + ((err && err.code) || '');
+    return /AuthorizationError error 100[13]\b/.test(m)          // Apple: 1001 canceled, 1003 notHandled
+      || /\bcanceled|cancelled\b/i.test(m)                        // Google Sign-In / generic
+      || c === 'auth/cancelled-popup-request';
   }
   function nativeSignInFailed(err) {
     if (userCancelled(err)) { showSignIn(''); return; }
-    showSignIn('Sign-in failed: ' + ((err && err.message) || err));
+    // Show the step + code, not just the text. This is the only diagnostic we get back from a
+    // TestFlight device, so it has to be specific enough to act on.
+    var step = (err && err.cubbyStep) || 'native';
+    var code = (err && err.code) ? ' [' + err.code + ']' : '';
+    var msg = (err && err.message) || String(err);
+    try { console.error('[cubby] native sign-in failed at ' + step + code, err); } catch (e) {}
+    showSignIn('Sign-in failed (' + step + ')' + code + ': ' + msg);
   }
 
   function signInGoogle() {
