@@ -5,6 +5,10 @@
      - hides the native splash + themes the status bar
      - registers for OS push (APNs/FCM) and exposes the token (server delivery finished on-device)
      - routes tapped-notification data and universal/custom-scheme links through the deep-link router
+     - opens same-origin _blank links (the article reads) in an in-app browser instead of throwing
+       the user out to Safari, so the reading room never loses the app
+     - gives the Android hardware back button somewhere sensible to go
+     - adds haptics, which iOS web can never have
    The token->server wiring (onNativePushToken) is completed during the on-device build, once the
    Firebase iOS app + GoogleService-Info.plist exist. See docs/plans/2026-07-15-native-wrapper-app-store.md */
 (function () {
@@ -19,28 +23,110 @@
       }
     } catch (e) {}
   }
+
+  /* Haptics. Defined on web too so call sites never have to guard: on the wrapper it's a real Taptic
+     tap, on Android web a short vibrate, on iOS web (which has no vibration API at all) a no-op. */
+  window.cubbyHaptic = function (kind) {
+    try {
+      var Cap = window.Capacitor;
+      var H = Cap && Cap.isNativePlatform && Cap.isNativePlatform() && (Cap.Plugins || {}).Haptics;
+      if (H) {
+        if (kind === 'success' || kind === 'warning' || kind === 'error') H.notification({ type: kind.toUpperCase() });
+        else H.impact({ style: kind === 'heavy' ? 'HEAVY' : kind === 'medium' ? 'MEDIUM' : 'LIGHT' });
+        return;
+      }
+      if (navigator.vibrate) navigator.vibrate(kind === 'heavy' ? 18 : 8);
+    } catch (e) {}
+  };
+
   function boot() {
     var Cap = window.Capacitor;
     if (!Cap || typeof Cap.isNativePlatform !== 'function' || !Cap.isNativePlatform()) return; // web PWA -> no-op
-    window.__cubbyNative = (Cap.getPlatform && Cap.getPlatform()) || 'native';
-    try { document.documentElement.setAttribute('data-native', window.__cubbyNative); } catch (e) {}
+    var platform = (Cap.getPlatform && Cap.getPlatform()) || 'native';
+    window.__cubbyNative = platform;
+    try { document.documentElement.setAttribute('data-native', platform); } catch (e) {}
     var P = Cap.Plugins || {};
 
     try { P.SplashScreen && P.SplashScreen.hide && P.SplashScreen.hide(); } catch (e) {}
-    try { P.StatusBar && P.StatusBar.setStyle && P.StatusBar.setStyle({ style: 'LIGHT' }); } catch (e) {}
+    // Cubby's chrome is cream (#F7F2E8), so the status bar needs DARK text. In Capacitor's naming that
+    // is Style.Light ("light background"), which reads backwards but is correct.
+    try {
+      if (P.StatusBar) {
+        P.StatusBar.setStyle && P.StatusBar.setStyle({ style: 'LIGHT' });
+        if (platform === 'android') {
+          P.StatusBar.setOverlaysWebView && P.StatusBar.setOverlaysWebView({ overlay: false });
+          P.StatusBar.setBackgroundColor && P.StatusBar.setBackgroundColor({ color: '#F7F2E8' });
+        }
+      }
+    } catch (e) {}
+
+    /* Articles + any other same-origin _blank link: keep them inside the app.
+       The web app deliberately opens reads with target="_blank" so the browser gives a new tab. In the
+       wrapper a _blank link is punted to Safari, which dumps the user out of Cubby with only the little
+       "< Cubby" chip to get back. An in-app browser sheet has a Done button and keeps the app alive
+       underneath, so the reading room behaves like a native reader. Falls through to the default
+       behaviour if the Browser plugin isn't present. */
+    try {
+      document.addEventListener('click', function (ev) {
+        try {
+          var a = ev.target && ev.target.closest && ev.target.closest('a[target="_blank"]');
+          if (!a || !a.href) return;
+          var u = new URL(a.href, location.href);
+          if (u.origin !== location.origin) return;           // off-site links can have the system browser
+          var B = (window.Capacitor.Plugins || {}).Browser;
+          if (!B || !B.open) return;
+          ev.preventDefault();
+          B.open({ url: u.href, presentationStyle: 'popover', toolbarColor: '#F7F2E8' });
+        } catch (e) {}
+      }, true);
+    } catch (e) {}
 
     // Deep links from a universal link / custom scheme (Associated Domains).
     try {
       P.App && P.App.addListener && P.App.addListener('appUrlOpen', function (ev) {
-        try { var u = new URL(ev.url); var q = u.searchParams; routeDeepLink({ go: q.get('go'), stage: q.get('stage'), read: q.get('read'), tab: q.get('tab') }); } catch (e) {}
+        try {
+          var u = new URL(ev.url);
+          // An email sign-in link must be HANDLED, not just parsed for deep-link keys: hand the whole
+          // URL to the web app so signInWithEmailLink() can finish inside the webview (in Safari it
+          // would sign in to the wrong place entirely).
+          if (/[?&](oobCode|mode=signIn)/.test(u.search)) { location.replace('/app/' + u.search + u.hash); return; }
+          var q = u.searchParams;
+          routeDeepLink({ go: q.get('go'), stage: q.get('stage'), read: q.get('read'), tab: q.get('tab') });
+        } catch (e) {}
       });
     } catch (e) {}
 
-    // Native push: request permission, register, expose the token, and deep-link on tap.
+    /* Android hardware back. Without this, back on the home screen quits the app instantly, which is a
+       horrible way to lose a half-typed note. Close whatever is open first; only exit from the top. */
+    try {
+      P.App && P.App.addListener && P.App.addListener('backButton', function (ev) {
+        try {
+          if (typeof closeReadCarousel === 'function' && document.getElementById('readCarousel')) { closeReadCarousel(); return; }
+          var sheet = document.getElementById('sheet');
+          if (sheet && sheet.classList.contains('show') && typeof closeSheet === 'function') { closeSheet(); return; }
+          // store-firebase's closeModal() is IIFE-scoped, so remove the node the same way it does.
+          var modal = document.getElementById('llModalOv');
+          if (modal) { modal.remove(); return; }
+          if (ev && ev.canGoBack) { window.history.back(); return; }
+          P.App.exitApp && P.App.exitApp();
+        } catch (e) {}
+      });
+    } catch (e) {}
+
+    /* Native push. Deliberately does NOT ask on launch: an OS permission dialog in front of a parent
+       who hasn't even signed in yet is exactly the anxiety the charter says to design out, and Cubby's
+       push policy is critical-only (a due dose). So we re-register silently if permission was already
+       granted, and expose cubbyEnableNativePush() for the medicine-reminder toggle to call in context. */
     try {
       var Push = P.PushNotifications;
       if (Push) {
-        Push.requestPermissions().then(function (res) { if (res && res.receive === 'granted') Push.register(); }, function () {});
+        Push.checkPermissions().then(function (res) { if (res && res.receive === 'granted') Push.register(); }, function () {});
+        window.cubbyEnableNativePush = function () {
+          return Push.requestPermissions().then(function (res) {
+            if (res && res.receive === 'granted') { Push.register(); return true; }
+            return false;
+          });
+        };
         Push.addListener('registration', function (token) {
           window.__cubbyPushToken = token && token.value;
           if (typeof window.onNativePushToken === 'function') { try { window.onNativePushToken(window.__cubbyPushToken, window.__cubbyNative); } catch (e) {} }

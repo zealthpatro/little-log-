@@ -1186,6 +1186,9 @@ function dayLabel(ts){
 function toast(msg){
   const t=$('#toast'); t.textContent=msg; t.classList.add('show');
   clearTimeout(t._tm); t._tm=setTimeout(()=>t.classList.remove('show'),1900);
+  // A toast is Cubby's "that landed" moment, so it's the one honest place for a haptic. One light tap,
+  // never a buzz: this fires at 3am next to a sleeping baby. No-op on the web (see native-bridge.js).
+  try{ window.cubbyHaptic && window.cubbyHaptic('light'); }catch(e){}
 }
 let _loaderTimer=null;
 function showLoader(msgs){
@@ -9023,8 +9026,12 @@ function isWebView(){ // in-app browsers (Instagram, Facebook, etc.) can't add t
   if(/FBAN|FBAV|FB_IAB|Instagram|Line\/|KAKAOTALK|WhatsApp|Twitter|TikTok|Snapchat|Pinterest|MicroMessenger/i.test(ua)) return true;
   return isIOSDevice() && /AppleWebKit/.test(ua) && !/Safari/.test(ua); // generic iOS WKWebView lacks the Safari token
 }
+// True only inside the Capacitor wrapper (App Store / Play build), never in a browser.
+function isNativeApp(){ try{ return !!(window.Capacitor && typeof window.Capacitor.isNativePlatform==='function' && window.Capacitor.isNativePlatform()); }catch(e){ return false; } }
 // Include webview so we can GUIDE those users out (they can't install in-app, but shouldn't hit a dead end).
-function canShowInstall(){ return !isStandaloneApp() && (!!window._bip || isIOSDevice() || isWebView()); }
+// The wrapper is itself a WKWebView, so isNativeApp() must veto first: an installed app must never be
+// told to install itself.
+function canShowInstall(){ return !isNativeApp() && !isStandaloneApp() && (!!window._bip || isIOSDevice() || isWebView()); }
 function _iaName(){ var ua=navigator.userAgent||''; if(/Instagram/i.test(ua))return 'Instagram'; if(/FBAN|FBAV|FB_IAB/i.test(ua))return 'Facebook'; if(/WhatsApp/i.test(ua))return 'WhatsApp'; if(/TikTok/i.test(ua))return 'TikTok'; if(/Snapchat/i.test(ua))return 'Snapchat'; if(/Line\//i.test(ua))return 'Line'; return 'this app'; }
 var _INS_SHARE='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#3C7DFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin:0 3px"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M6 12H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-1"/></svg>';
 var _INS_CSS='#cbInstallOv{position:fixed;inset:0;z-index:2147483000;background:rgba(20,15,12,.55);display:flex;flex-direction:column;justify-content:flex-end;font-family:inherit}'

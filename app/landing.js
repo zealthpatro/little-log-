@@ -1,6 +1,18 @@
-/* Cubby landing page, shown to signed-out visitors. Primary CTA = Continue with Google. */
+/* Cubby landing page, shown to signed-out visitors. Primary CTA = Continue with Google.
+
+   Inside the iOS/Android wrapper this page is trimmed (see `native` below). Three reasons, all real:
+   1. No back button. The wrapper has no browser chrome, so the nav/footer links to /features/, /pricing/
+      etc. navigate the webview out of /app/ and strand the user on a marketing page with no way home.
+   2. An installed app must not sell itself an install ("no app store", "add to your home screen").
+   3. App Review 3.1.1: an app may not point at a subscription bought outside Apple's IAP. Pro is
+      register-interest only until Aug 2026, so the safe move is to keep the Pro/pricing block out of the
+      native build entirely rather than argue the edge case with a reviewer. */
 (function () {
+  function isNative() {
+    try { return !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()); } catch (e) { return false; }
+  }
   window.cubbyLanding = function (msg) {
+    var native = isNative();
     var cta = '<button class="lp-cta ll-cta">Continue with Google</button>';
     var features = [
       ['<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H13z"/></svg>', 'One-thumb logging', 'Feeds, sleep, nappies, pumping, logged in seconds, even at 3am.'],
@@ -15,15 +27,15 @@
       return '<div class="lp-feat"><div class="lp-fi">' + f[0] + '</div><div><div class="lp-ft">' + f[1] + '</div><div class="lp-fs">' + f[2] + '</div></div></div>';
     }).join('');
     var steps = [
-      ['1', 'Sign in with Google', 'Ten seconds, no password, no app store.'],
+      ['1', 'Sign in', native ? 'Ten seconds, and no password to remember.' : 'Ten seconds, no password, no app store.'],
       ['2', 'Add your baby', 'Name, birthday, and you\'re ready to log.'],
       ['3', 'Invite your partner', 'Start caring for your little one, together.']
     ].map(function (s) {
       return '<div class="lp-step"><div class="lp-sn">' + s[0] + '</div><div class="lp-st">' + s[1] + '</div><div class="lp-ss">' + s[2] + '</div></div>';
     }).join('');
-    return '<div class="lp">'
-      + '<nav class="lp-nav"><a href="/" class="lp-nav-brand"><img src="/icons/logo-512.png" alt="Cubby">Cubby</a>'
-      + '<span class="lp-nav-links"><a href="/features/">Features</a><a href="/articles/">Articles</a><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a></span></nav>'
+    return '<div class="lp' + (native ? ' lp-native' : '') + '">'
+      + (native ? '' : '<nav class="lp-nav"><a href="/" class="lp-nav-brand"><img src="/icons/logo-512.png" alt="Cubby">Cubby</a>'
+      + '<span class="lp-nav-links"><a href="/features/">Features</a><a href="/articles/">Articles</a><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a></span></nav>')
       + '<header class="lp-hero">'
       + '<div class="lp-logo"><img src="/icons/logo-512.png" alt="Cubby"></div>'
       + '<h1 class="lp-name">Cubby</h1>'
@@ -38,7 +50,7 @@
       + '<section class="lp-steps-wrap"><h2>How it works</h2><div class="lp-steps">' + steps + '</div></section>'
       + '<section class="lp-why lp-working"><h2>Made for working parents</h2>'
       + '<p>Leave your little one with a nanny, grandparent or daycare and still feel close. They log the feeds, naps and meals; you see it the moment it happens, and get a tidy recap of the whole day, from wherever you are.</p></section>'
-      + '<section class="lp-pro"><h2>Free forever, with Pro for the extras</h2>'
+      + (native ? '' : '<section class="lp-pro"><h2>Free forever, with Pro for the extras</h2>'
       + '<div class="lp-cmp">'
       + '<div class="lp-col"><div class="lp-col-h">Free</div><ul>'
       + '<li>Unlimited logging: feeds, sleep, nappies, pumping</li>'
@@ -57,10 +69,12 @@
       + '<li>A few free tastes of every treat</li>'
       + '</ul></div>'
       + '</div>'
-      + '<p class="lp-pro-note">Cubby Pro launches August 2026. Free shares carry a small "made with Cubby · little-cubby.com" mark; Pro shares are clean. Rituals, push reminders &amp; insights are on the Pro roadmap for later. Sign in, then register for Pro from Settings, Cubby Pro, to claim your free trial at launch.</p></section>'
+      + '<p class="lp-pro-note">Cubby Pro launches August 2026. Free shares carry a small "made with Cubby · little-cubby.com" mark; Pro shares are clean. Rituals, push reminders &amp; insights are on the Pro roadmap for later. Sign in, then register for Pro from Settings, Cubby Pro, to claim your free trial at launch.</p></section>')
       + '<section class="lp-final"><h2>Everyone caring for your baby, in sync.</h2>' + cta + '<div class="lp-trust">Free · Private · made with 🐻</div>'
-      + '<div class="lp-pwa">No download, no app store. Add Cubby to your home screen for an app-like, offline-ready experience in any browser.</div></section>'
-      + '<footer class="lp-foot">Cubby · a warm, private baby tracker 🐻<br><a href="/" style="color:#b05a7a;font-weight:700">little-cubby.com</a> · <a href="/articles/" style="color:#b05a7a;font-weight:700">Articles</a> · <a href="/faq/" style="color:#b05a7a;font-weight:700">FAQ</a></footer>'
+      + (native ? '' : '<div class="lp-pwa">No download, no app store. Add Cubby to your home screen for an app-like, offline-ready experience in any browser.</div>') + '</section>'
+      + (native
+        ? '<footer class="lp-foot">Cubby · a warm, private baby tracker 🐻</footer>'
+        : '<footer class="lp-foot">Cubby · a warm, private baby tracker 🐻<br><a href="/" style="color:#b05a7a;font-weight:700">little-cubby.com</a> · <a href="/articles/" style="color:#b05a7a;font-weight:700">Articles</a> · <a href="/faq/" style="color:#b05a7a;font-weight:700">FAQ</a></footer>')
       + '</div>';
   };
 

@@ -31,3 +31,6 @@ art-src/
 
 # TestFlight export config + scratch (local only)
 native-build/
+
+# NEVER commit signing keys (the Worker serves the whole repo)
+*.p8

@@ -309,9 +309,54 @@
     }, 2200);
   }
 
+  /* ---------- native (Capacitor) sign-in ----------
+     signInWithPopup / signInWithRedirect are BROWSER mechanisms. Inside the iOS/Android wrapper the
+     webview hands the OAuth URL to the system browser, so the redirect lands in Safari while the
+     handshake state sits in the webview's sessionStorage -> Firebase fails with "missing initial
+     state" (seen on the first TestFlight build, 2026-07-16). The fix is to run the provider dance
+     NATIVELY (@capacitor-firebase/authentication wraps Google Sign-In and ASAuthorization), then hand
+     the resulting credential to the same JS SDK the rest of the app already uses, so auth state,
+     Firestore rules and every downstream listener are unchanged.
+     The browser is untouched: every path here is guarded on nativeAuth(), which can only be non-null
+     inside the wrapper. */
+  function isNativeApp() {
+    try { return !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()); } catch (e) { return false; }
+  }
+  function nativeAuth() {
+    try { return (isNativeApp() && (window.Capacitor.Plugins || {}).FirebaseAuthentication) || null; } catch (e) { return null; }
+  }
+  window.LL.isNativeApp = isNativeApp;
+
+  // skipNativeAuth keeps the native Firebase SDK out of the auth state, so the JS SDK stays the
+  // single source of truth (one session, not two that can drift apart).
+  function nativeSignIn(kind) {
+    var P = nativeAuth();
+    var call = kind === 'apple'
+      ? P.signInWithApple({ skipNativeAuth: true })
+      : P.signInWithGoogle({ skipNativeAuth: true });
+    return call.then(function (res) {
+      var c = (res && res.credential) || {};
+      if (!c.idToken) throw new Error('the sign-in did not complete');
+      var cred = kind === 'apple'
+        ? new firebase.auth.OAuthProvider('apple.com').credential({ idToken: c.idToken, rawNonce: c.nonce })
+        : firebase.auth.GoogleAuthProvider.credential(c.idToken, c.accessToken || null);
+      return auth.signInWithCredential(cred);
+    });
+  }
+  // Backing out of the native sheet is a normal thing to do, not an error worth a red message.
+  function userCancelled(err) {
+    var m = '' + ((err && (err.message || err.errorMessage)) || '');
+    return /cancel/i.test(m) || (err && (err.code === 1001 || err.code === '1001'));
+  }
+  function nativeSignInFailed(err) {
+    if (userCancelled(err)) { showSignIn(''); return; }
+    showSignIn('Sign-in failed: ' + ((err && err.message) || err));
+  }
+
   function signInGoogle() {
     var btn = document.getElementById('llGoogleBtn');
     if (btn) { btn.disabled = true; btn.textContent = 'Signing in…'; }
+    if (nativeAuth()) { nativeSignIn('google').catch(nativeSignInFailed); return; }
     auth.signInWithPopup(window.LL.googleProvider).catch(function (err) {
       if (err && (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request'
         || err.code === 'auth/operation-not-supported-in-this-environment')) {
@@ -324,6 +369,7 @@
   function signInApple() {
     // Disable whichever Apple button was clicked (landing or auth-card) for feedback.
     Array.prototype.forEach.call(document.querySelectorAll('.ll-apple-cta, #llAppleBtn'), function (b) { b.disabled = true; });
+    if (nativeAuth()) { nativeSignIn('apple').catch(nativeSignInFailed); return; }
     auth.signInWithPopup(window.LL.appleProvider).catch(function (err) {
       if (err && (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request'
         || err.code === 'auth/operation-not-supported-in-this-environment')) {
