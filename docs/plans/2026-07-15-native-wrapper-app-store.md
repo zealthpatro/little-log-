@@ -2,7 +2,11 @@
 
 **Goal:** a one‑tap install on iPhone (and a Play Store listing) that reuses 100% of the existing PWA. No rewrite.
 **Why Capacitor, not TWA:** TWA is Android‑only. Capacitor wraps the *same* web app for **both** iOS and Android.
-**Status:** runbook ready. Steps marked 🖥️ must run on the founder's Mac (Xcode + Apple login). Claude can prep config/assets and walk through it live, but cannot archive/sign/submit or clear Apple review.
+**Status (2026-07-16):** **build 2 uploaded and VALID in TestFlight**, with native Google + Apple sign-in.
+Build 1 proved the wrapper loads the PWA but could not sign in (§3c). Steps marked 🖥️ need the founder's Mac —
+though Claude Code *runs on* that Mac, so it drives `xcodebuild`/`xcrun` directly (§7). What Claude still
+cannot do: Apple/Firebase console login + 2FA, create API/APNs keys, the 1024 icon, an on-device sign-in or
+push test, or clear Apple review.
 
 ---
 
@@ -31,16 +35,79 @@ Recommendation: **start with A**, keep B as the fallback if review pushes back.
 `cap-web/index.html` (throwaway webDir), and `app/native-bridge.js` (push + deep-link bridge, wired into
 the app, guarded on `Capacitor.isNativePlatform()` so it's a no-op in the browser). So **skip `cap init`**.
 
-On the Mac, from the repo root — install the deps and add the platforms:
+On the Mac, from the repo root — install the deps, add the platforms, then run the two config scripts.
+**`ios/`, `android/`, `package.json` and `node_modules/` are all gitignored** (the Worker serves the whole
+repo), so the native project is disposable and regenerated from this block. Anything you change by hand in
+Xcode is LOST on the next `cap add` — that is why the scripts exist. Re-run this whole block on a fresh machine:
 ```bash
-npm i @capacitor/core @capacitor/ios @capacitor/android @capacitor/app @capacitor/splash-screen @capacitor/status-bar @capacitor/push-notifications
+npm i @capacitor/core @capacitor/ios @capacitor/android @capacitor/app @capacitor/splash-screen \
+      @capacitor/status-bar @capacitor/push-notifications @capacitor/browser @capacitor/haptics \
+      @capacitor-firebase/authentication
 npm i -D @capacitor/cli
+node tools/cap_strip_facebook.js     # MUST run before sync — see §3b
 npx cap add ios
 npx cap add android
 npx cap sync
+gem install --user-install xcodeproj # once
+ruby tools/cap_ios_configure.rb      # plist as a resource + Sign in with Apple entitlement
+```
+
+### 3b. The Facebook SDK trap (do not skip)
+`@capacitor-firebase/authentication`'s **CocoaPods** podspec defaults to a `Lite` subspec with no third-party
+deps. Its **Swift Package Manager** manifest does not: it hardcodes `facebook-ios-sdk`. Capacitor 8 uses SPM,
+so a plain `npm i` links **Meta's SDK into the Cubby binary** — directly against the "no third-party trackers"
+promise. `tools/cap_strip_facebook.js` removes the dependency and the `RGCFA_INCLUDE_FACEBOOK` flag (all the
+plugin's Facebook code is behind that `#if`, so it still compiles). Verify after any archive:
+```bash
+otool -L /tmp/Cubby.xcarchive/Products/Applications/App.app/App | grep -i fbsdk   # must be empty
+strings  /tmp/Cubby.xcarchive/Products/Applications/App.app/App | grep -ci fbsdk  # must be 0
 ```
 (The bridge accesses the plugins via `window.Capacitor.Plugins.*` at runtime — no bundler/import needed,
 which is why it works with the remote-loaded PWA.)
+
+## 3c. Sign-in: why the wrapper needs native auth (SOLVED, build 2)
+**Symptom (build 1, 2026-07-16):** the app loaded fine but sign-in bounced out to Safari and died with
+*"Unable to process request due to missing initial state ... signInWithRedirect in a storage-partitioned
+browser environment."*
+
+**Cause:** `signInWithPopup` / `signInWithRedirect` are *browser* mechanisms. Inside a WKWebView the OAuth URL
+is handed to the system browser, so the redirect completes in Safari while Firebase's handshake state sits in
+the *webview's* `sessionStorage`. It can never work in a wrapper. This is not fixable by config, and **do not
+try to "fix" it by re-pointing `authDomain`** — that caused the 2026-07-13 sign-in outage (see
+`reference_signin_authdomain.md`); it stays `little-log-a9caa.firebaseapp.com`.
+
+**Fix:** do the provider dance natively, then hand the credential to the same JS SDK the app already uses, so
+auth state / Firestore rules / listeners are unchanged. In `app/store-firebase.js`, `signInGoogle()` and
+`signInApple()` branch on `nativeAuth()` (non-null only inside the wrapper) into `nativeSignIn(kind)`:
+`FirebaseAuthentication.signInWithGoogle|Apple({ skipNativeAuth: true })` → `auth.signInWithCredential(...)`.
+`skipNativeAuth` keeps the *native* Firebase SDK out of the auth state so the JS SDK stays the single source of
+truth. Apple's `credential.nonce` is the **raw** nonce (the plugin sends `sha256(nonce)` to Apple), which is
+exactly what `OAuthProvider('apple.com').credential({ idToken, rawNonce })` wants.
+
+**Requires:** the Firebase **iOS app** (`com.littlecubby.app` in project `little-log-a9caa`) →
+`GoogleService-Info.plist`. Park it at **`native-build/GoogleService-Info.plist`** (gitignored — the Worker
+serves the whole repo); `tools/cap_ios_configure.rb` copies it in and bundles it. Info.plist needs the
+`REVERSED_CLIENT_ID` URL scheme (set by the PlistBuddy step, re-apply if Info.plist is regenerated) and
+`FirebaseApp.configure()` must run in `AppDelegate.swift`.
+
+> **Never remove the auth layer to "unblock" a test build.** The wrapper remote-loads `little-cubby.com/app/`,
+> so there is no separate TestFlight copy — removing auth removes it for every web user. And without
+> `request.auth` the Firestore rules return nothing, so an auth-less build is an empty shell. The only way to
+> show real data unauthenticated is to open the rules, which would expose every family's private health log.
+> Never. If a signed-out preview is genuinely needed (e.g. for Apple review), build a native-gated demo mode
+> on seeded fake data instead, or hand review a demo account.
+
+## 3d. What the wrapper must hide (a wrapper has no browser chrome)
+Verified by a 27-assertion smoke that boots `/app/` with and without a faked Capacitor bridge
+(`scratchpad/native-smoke.js`; run with `NODE_PATH=<repo>/tools/node_modules`, where puppeteer-core lives):
+- `canShowInstall()` vetoes on `isNativeApp()` — the wrapper IS a WKWebView, so `isWebView()` is true and an
+  installed app was offering to install itself.
+- `app/landing.js` drops the marketing nav + footer links on native: they navigate the webview off `/app/`
+  and strand the user with **no back button**.
+- It also drops the Pro/pricing block on native — **App Review 3.1.1**: no pointing at a subscription bought
+  outside IAP (Pro is register-interest until Aug 2026 anyway).
+- Same-origin `target="_blank"` links (the article reads) route to `Browser.open` (in-app sheet with a Done
+  button) instead of ejecting to Safari. Off-site links still get the system browser.
 
 ## 4. Icons + splash 🖥️
 Use `@capacitor/assets`:
@@ -55,10 +122,24 @@ npx capacitor-assets generate --iconBackgroundColor "#F7F2E8" --splashBackground
 
 ## 5. Push notifications (the reason iOS users need this) 🖥️
 Web push on iOS only works if the PWA is installed; the wrapper gives reliable APNs push.
-1. **APNs key**: Apple Developer → Keys → create a key with **Apple Push Notifications service (APNs)** enabled → download the `.p8` (never commit it). You already have a Sign‑in key (`78HP3BF2S5`); make a **separate** APNs key.
-2. **Firebase**: add an **iOS app** (`com.littlecubby.app`) to project `little-log-a9caa`, upload the APNs `.p8` (Key ID + Team ID `F5NVQV7NVB`) under Cloud Messaging. Download `GoogleService-Info.plist` → drop into the Xcode project.
-3. In the web app, when running inside Capacitor, register with `@capacitor/push-notifications` and hand the token to your existing FCM/Worker flow (detect Capacitor via `window.Capacitor?.isNativePlatform`). Android: add the Firebase Android app + `google-services.json`.
-4. Enable the **Push Notifications** capability in Xcode → Signing & Capabilities. Also add **Associated Domains** later if you want universal links (`applinks:little-cubby.com`) so `?go=`/`?read=` deep links open the installed app.
+**DONE:** the Firebase **iOS app** (`com.littlecubby.app`, project `little-log-a9caa`) exists and its
+`GoogleService-Info.plist` is bundled (§3c — native sign-in needed it too).
+**REMAINING:**
+1. **APNs key**: Apple Developer → Keys → new key with **Apple Push Notifications service (APNs)** enabled →
+   download the `.p8` → move to `~/.appstore-keys/` (never commit; `*.p8` is gitignored). The Sign-in key
+   `78HP3BF2S5` is a *different* key — make a separate APNs one.
+2. **Firebase** → Cloud Messaging → upload that `.p8` with its Key ID + Team ID `F5NVQV7NVB`.
+3. Enable the **Push Notifications** capability: add `aps-environment` to `ios/App/App/App.entitlements` via
+   `tools/cap_ios_configure.rb` (NOT by hand in Xcode — `ios/` is regenerated). The App ID must have the Push
+   capability enabled first, or provisioning fails at export.
+4. Wire the token: `app/native-bridge.js` already registers and calls `window.onNativePushToken(token,
+   platform)`. Implement that hook to store the token the same way the web FCM token is stored, so the
+   existing Worker cron delivers to it. Android: add the Firebase Android app + `google-services.json`.
+
+**Policy (do not regress):** the bridge deliberately does **not** ask for push permission on launch — it only
+`checkPermissions()` and re-registers if already granted, and exposes `window.cubbyEnableNativePush()` for the
+medicine-reminder toggle to call **in context**. A cold OS permission dialog in front of a parent who hasn't
+signed in yet is exactly the anxiety the charter designs out, and Cubby's push policy is critical-only.
 
 ## 6. Avoid the Apple 4.2 rejection
 - Ship push (above), the native splash, and status‑bar theming — concrete native value.
@@ -66,11 +147,48 @@ Web push on iOS only works if the PWA is installed; the wrapper gives reliable A
 - Have real content on first launch (it does).
 - Sign in with Apple is already supported → good signal.
 
-## 7. Build + submit — iOS 🖥️
+## 7. Build + upload — iOS 🖥️ (WORKING RECIPE — this is what shipped builds 1 and 2)
+No Xcode GUI needed. Two commands from the repo root:
+
 ```bash
-npx cap open ios      # opens Xcode
+# 1. Archive UNSIGNED. Archiving WITH automatic signing FAILS ("Your team has no devices from which to
+#    generate a provisioning profile") because it wants an iOS App *Development* profile. Sign at export
+#    instead — the App Store profile needs no registered device.
+rm -rf /tmp/Cubby.xcarchive
+xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
+  -destination 'generic/platform=iOS' -archivePath /tmp/Cubby.xcarchive \
+  -derivedDataPath /tmp/cubby-dd \
+  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO archive
+
+# 2. Sign + upload. MUST use the ADMIN key 33AU4Z9QJ4 — the App-Manager key 45N9W4NQT2 fails with
+#    "Cloud signing permission error / No signing certificate iOS Distribution found" (only Admin keys
+#    can mint the cloud distribution cert).
+xcodebuild -exportArchive -archivePath /tmp/Cubby.xcarchive \
+  -exportOptionsPlist native-build/ExportOptions.plist -allowProvisioningUpdates \
+  -authenticationKeyPath ~/.appstore-keys/AuthKey_33AU4Z9QJ4.p8 \
+  -authenticationKeyID 33AU4Z9QJ4 \
+  -authenticationKeyIssuerID 6b58eca9-6e61-450a-8b7c-f49fcb03a7e6 \
+  -exportPath /tmp/Cubby-export
 ```
-In Xcode: set the Team (`F5NVQV7NVB`), bump version/build, Product → Archive → Distribute → App Store Connect → Upload. Then in **App Store Connect**: create the app record (`com.littlecubby.app`), fill the listing (§9), attach the build, submit to **TestFlight** first (dogfood with the WhatsApp beta users), then **Submit for Review**. Review ≈ 1–3 days.
+Success looks like `Upload succeeded` / `Uploaded App` / `** EXPORT SUCCEEDED **`. With
+`destination: upload` **no local IPA is written** (`/tmp/Cubby-export` stays empty — normal).
+`manageAppVersionAndBuildNumber: true` auto-bumps the build number, so no version editing between uploads.
+
+Check processing state without opening a browser: `node scratchpad/asc.js` (App Store Connect API, read-only;
+app id `6791454709`). `state=VALID` = installable in TestFlight.
+
+Because the wrapper **remote-loads** `little-cubby.com/app/`, **deploy the web first** (`sw.js` CACHE bump →
+push to `main` → poll the live `sw.js`), or the new build will load the old JS.
+
+Then: TestFlight for the WhatsApp crew (external testers need a one-time Beta App Review, ~24h), then
+**Submit for Review** (≈1–3 days).
+
+**macOS gotchas that cost an hour:** a `.p8` downloaded by Safari into `~/Downloads` is Safari-scoped
+(`com.apple.macl`) → every read/copy/xattr is "Operation not permitted" even with the sandbox off. Fix: Full
+Disk Access ON for **both** `claude` rows, then **fully quit and relaunch** (TCC only applies on app restart;
+toggling it mid-session revokes the running process's access to everything, including the repo). Keys live in
+`~/.appstore-keys/` (chmod 600, outside the repo) and `*.p8` is gitignored — a committed key would be public
+at `little-cubby.com/AuthKey_*.p8`.
 
 ## 8. Build + submit — Android 🖥️
 ```bash
