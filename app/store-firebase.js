@@ -73,6 +73,10 @@
     + '.ll-auth-card h1{font-family:"Fraunces",Georgia,serif;font-size:30px;margin:6px 0 4px;color:#2C2521;}'
     + '.ll-auth-card p{color:#6E635B;font-size:15px;margin:0 0 24px;line-height:1.4;}'
     + '.ll-auth-btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;border:1px solid #E0D7C7;background:#fff;color:#2C2521;font-size:16px;font-weight:700;padding:14px 18px;border-radius:14px;cursor:pointer;font-family:inherit;}'
+    // Google's light-theme surface/border/text, per their sign-in branding guidelines.
+    + '.ll-auth-btn-google{border-color:#747775;background:#FFFFFF;color:#1F1F1F;}'
+    + '.ll-auth-btn-google:hover{background:#F7F8F8;}'
+    + '.ll-auth-btn-google svg{width:20px;height:20px;flex:0 0 auto;}'
     + '.ll-auth-btn:hover{background:#FBF7EF;}.ll-auth-btn:disabled{opacity:.6;cursor:default;}'
     + '.ll-auth-btn-apple{background:#000;color:#fff;border-color:#000;margin-top:10px;}'
     + '.ll-auth-btn-apple:hover{background:#1a1a1a;}.ll-auth-btn-apple svg{width:17px;height:17px;}'
@@ -264,7 +268,9 @@
       '<div class="ll-auth-card"><img src="/icons/logo-512.png" alt="Cubby" class="ll-auth-logo-img">'
       + '<h1>Cubby</h1><p>A warm, private baby log you can share with the people who care for them.</p>'
       + '<div class="ll-values"><div><span>⚡</span>Log feeds, sleep &amp; nappies in seconds</div><div><span>👨‍👩‍👧</span>Share with family &amp; caregivers, live</div><div><span>🔒</span>Private to your family</div></div>'
-      + '<button id="llGoogleBtn" class="ll-auth-btn">Continue with Google</button>'
+      // Google's branding guidelines apply wherever their button appears, so carry the same official
+      // four-colour G as the landing rather than a plain text button (landing.js loads first).
+      + '<button id="llGoogleBtn" class="ll-auth-btn ll-auth-btn-google">' + (window.cubbyGoogleG || '') + 'Continue with Google</button>'
       + appleBtnHtml('card')
       + emailRowHtml()
       + consentHtml()

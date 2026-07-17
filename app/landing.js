@@ -19,6 +19,21 @@
     try { return !!(window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'ios'); } catch (e) { return false; }
   }
 
+  /* The official Google "G", exactly as Google ships it: four brand colours, untouched. Their sign-in
+     branding guidelines are a condition of using Google Sign-In, and they forbid recolouring, redrawing
+     or distorting the mark — so this is the real artwork, never tinted to Cubby's palette. */
+  var GOOGLE_G = '<svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">'
+    + '<path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>'
+    + '<path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>'
+    + '<path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>'
+    + '<path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>'
+    + '</svg>';
+  /* "Continue with Google" is one of Google's approved labels. Built once and reused everywhere the
+     button appears, so the two surfaces can never drift out of compliance separately. */
+  var GOOGLE_BTN = '<button type="button" class="lp-cta ll-cta">' + GOOGLE_G + 'Continue with Google</button>';
+  window.cubbyGoogleG = GOOGLE_G;
+  window.cubbyGoogleBtn = GOOGLE_BTN;
+
   /* Icons shared by the web feature grid and the app carousel — drawn once, used twice. */
   var ICON = {
     log: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H13z"/></svg>',
@@ -59,7 +74,7 @@
       + '<div class="ac-wrap"><div class="ac-track" id="acTrack">' + tiles + '</div>'
       + '<div class="ac-dots" id="acDots">' + dots + '</div></div>'
       + '<div class="lp-app-auth">'
-      + '<button class="lp-cta ll-cta">Continue with Google</button>'
+      + GOOGLE_BTN
       + (msg ? '<div class="lp-msg">' + msg + '</div>' : '')
       + '</div>'
       + '<div class="lp-trust">Free · Private to your family</div>'
@@ -112,7 +127,7 @@
       setTimeout(startCarousel, 0);
       return appSignIn(msg);
     }
-    var cta = '<button class="lp-cta ll-cta">Continue with Google</button>';
+    var cta = GOOGLE_BTN;
     var features = [
       ['<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H13z"/></svg>', 'One-thumb logging', 'Feeds, sleep, nappies, pumping, logged in seconds, even at 3am.'],
       ['<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.8 20a6.2 6.2 0 0 1 12.4 0"/><circle cx="17.2" cy="9.4" r="2.6"/><path d="M16 20a5.4 5.4 0 0 1 5.2-4.4"/></svg>', 'Your whole care circle', 'Parents, grandparents, the nanny, daycare or playschool, anyone who helps sees the same log, live.'],
@@ -191,8 +206,21 @@
     + '.lp-logo img{width:88px;height:88px;border-radius:22px;box-shadow:0 8px 22px rgba(0,0,0,.12);display:block;margin:0 auto;}'
     + '.lp-name{font-family:"Fraunces",Georgia,serif;font-size:40px;margin:14px 0 6px;color:#2C2521;}'
     + '.lp-tag{font-size:17px;line-height:1.5;color:#6E635B;max-width:440px;margin:0 auto 22px;font-weight:600;}'
-    + '.lp-cta{display:block;width:100%;max-width:340px;margin:0 auto;border:none;background:#C97FA0;color:#fff;font-size:17px;font-weight:800;padding:16px 22px;border-radius:15px;cursor:pointer;font-family:inherit;box-shadow:0 8px 20px rgba(201,127,160,.35);}'
-    + '.lp-cta:hover{filter:brightness(1.03);}'
+    /* Google's sign-in branding guidelines, followed: their light-theme surface (#FFFFFF), their border
+       (#747775) and their text colour (#1F1F1F), with the untouched four-colour G. It is deliberately
+       NOT Cubby pink — recolouring their button or mark breaks the guidelines we agree to by using
+       Google Sign-In. (Their spec asks for Roboto; we keep Nunito Sans because pulling Roboto from
+       Google Fonts would put a third-party request back in the boot path, against the no-third-party
+       promise the self-hosted fonts exist to keep. Their guidance allows a substitute when Roboto isn't
+       available.) 15px padding + a 1px border matches Apple's 16px borderless height exactly, so
+       neither provider is more prominent — which is also App Review 4.8. */
+    + '.lp-cta{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;max-width:340px;margin:0 auto;'
+    + 'border:1px solid #747775;background:#FFFFFF;color:#1F1F1F;font-size:17px;font-weight:800;padding:15px 22px;'
+    + 'border-radius:15px;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(60,40,30,.08);}'
+    + '.lp-cta svg{width:20px;height:20px;flex:0 0 auto;}'
+    + '.lp-cta:hover{background:#F7F8F8;}'
+    + '.lp-cta:active{background:#F1F3F4;}'
+    + '.lp-cta:disabled{opacity:.6;cursor:default;}'
     + '.lp-msg{margin-top:12px;color:#b05a7a;font-size:13px;font-weight:700;}'
     + '.lp-trust{margin-top:12px;font-size:13px;color:#9a8d80;font-weight:700;}'
     + '.lp-why{text-align:center;padding:24px 6px 6px;}'
