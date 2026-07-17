@@ -67,10 +67,14 @@ File.write(ENTITLEMENTS, <<~PLIST)
   	</array>
   	<key>aps-environment</key>
   	<string>development</string>
+  	<key>com.apple.developer.associated-domains</key>
+  	<array>
+  		<string>applinks:little-cubby.com</string>
+  	</array>
   </dict>
   </plist>
 PLIST
-puts '✓ Wrote App.entitlements (Sign in with Apple + push)'
+puts '✓ Wrote App.entitlements (Sign in with Apple + push + universal links)'
 
 # WKAppBoundDomains: the Service Worker / offline unlock (see header). Applied with PlistBuddy because
 # `npx cap add ios` regenerates Info.plist.

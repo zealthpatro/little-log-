@@ -572,6 +572,26 @@ export default {
   async scheduled(event, env) { try { await sendPushReminders(env); } catch (e) { console.error('push_cron_fail', (e && e.message) || String(e)); } },
   async fetch(request, env) {
     const url = new URL(request.url);
+    // Apple universal links. When Cubby is installed, iOS opens the APP (not Safari) for these paths —
+    // so an email sign-in link taps straight into the wrapper (finishing in the webview's own storage
+    // instead of Safari's, which is the whole reason email couldn't complete in the app), and a
+    // /app/?go=… deep link opens the installed app. Must be application/json, no redirect, no auth.
+    // Served for both the modern and legacy filenames iOS may request.
+    if (url.pathname === '/.well-known/apple-app-site-association' || url.pathname === '/apple-app-site-association') {
+      return new Response(JSON.stringify({
+        applinks: {
+          details: [{
+            appIDs: ['F5NVQV7NVB.com.littlecubby.app'],
+            // /app/* = the app itself + deep links; /__/auth/action = the email sign-in link the worker
+            // mints. Query strings are ignored for matching, so the oobCode still rides along.
+            components: [
+              { '/': '/app/*' },
+              { '/': '/__/auth/action', comment: 'email sign-in link' }
+            ]
+          }]
+        }
+      }), { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=3600' } });
+    }
     if (url.pathname === '/api/send-signin-link') {
       if (request.method !== 'POST') return new Response('method not allowed', { status: 405 });
       return sendSigninLink(request, env);

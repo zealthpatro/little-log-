@@ -137,15 +137,14 @@
     return '<button type="button" id="llAppleBtn" class="ll-auth-btn ll-auth-btn-apple">' + logo + 'Continue with Apple</button>';
   }
 
-  /* Email magic-link sign-in (alongside Google, never instead of it).
-     HIDDEN in the native wrapper, because there it cannot complete: the emailed link is minted on
-     little-log-a9caa.firebaseapp.com/__/auth/action (worker.js), so tapping it in Mail opens SAFARI and
-     signs the parent in there. Back in Cubby they are still staring at the landing page, with no error
-     and nothing to explain it. Offering a broken escape hatch to someone whose sign-in already failed is
-     worse than not offering one. (Universal links would NOT fix this — iOS does not fire them through a
-     server redirect; it needs the emailed link re-hosted on an app-bound AASA-matched URL.) */
+  /* Email magic-link sign-in (alongside Google, never instead of it). Works in the app now that the
+     universal link is in place: the worker mints the link on little-cubby.com, the AASA
+     (/.well-known/apple-app-site-association) claims /__/auth/action for the app, so tapping it in Mail
+     opens Cubby DIRECTLY — native-bridge.js's appUrlOpen catches the oobCode and finishes the sign-in
+     inside the webview's own storage. This is also the path that lets a parent who signed up by email on
+     the web get back into their account from the app. Requires the app to be installed on the same
+     device (universal links are per-device), which is what "Open it on this device" tells them. */
   function emailRowHtml() {
-    if (isNativeApp()) return '';
     return '<div class="ll-email-row" style="margin:14px auto 0;max-width:340px;text-align:center">'
       + '<button type="button" class="ll-email-toggle" style="border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;color:#6E635B;text-decoration:underline;padding:6px">Prefer email? Get a sign-in link</button>'
       + '<form class="ll-email-form" style="display:none;gap:8px;margin-top:8px">'
