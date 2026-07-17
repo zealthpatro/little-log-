@@ -1,18 +1,117 @@
-/* Cubby landing page, shown to signed-out visitors. Primary CTA = Continue with Google.
+/* Cubby's signed-out screen. TWO different jobs, so two different screens:
 
-   Inside the iOS/Android wrapper this page is trimmed (see `native` below). Three reasons, all real:
-   1. No back button. The wrapper has no browser chrome, so the nav/footer links to /features/, /pricing/
-      etc. navigate the webview out of /app/ and strand the user on a marketing page with no way home.
-   2. An installed app must not sell itself an install ("no app store", "add to your home screen").
-   3. App Review 3.1.1: an app may not point at a subscription bought outside Apple's IAP. Pro is
-      register-interest only until Aug 2026, so the safe move is to keep the Pro/pricing block out of the
-      native build entirely rather than argue the edge case with a reviewer. */
+   WEB (little-cubby.com/app/) = a landing page. The visitor arrived from a link or a search and has not
+   decided yet, so it has to earn the sign-in: hero, features, how it works, Pro, footer.
+
+   APP (the iOS/Android wrapper) = a sign-in screen. This person already searched the App Store, read the
+   listing, downloaded and opened it. They are sold. Making them scroll a sales page to reach the buttons
+   is friction at the exact moment we can least afford it, so the app gets a compact screen: brand, an
+   auto-scrolling reminder of what they came for, and the buttons in the first fold.
+   The wrapper also can't show the marketing page safely: it has no back button, so the nav/footer links
+   would strand the user off /app/; an installed app must not sell itself an install; and App Review 3.1.1
+   forbids pointing at a subscription bought outside Apple's IAP (Pro is register-interest until Aug 2026).
+   Email sign-in is hidden natively too (store-firebase.js) because its link opens in Safari. */
 (function () {
   function isNative() {
     try { return !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()); } catch (e) { return false; }
   }
+  function isIOS() {
+    try { return !!(window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'ios'); } catch (e) { return false; }
+  }
+
+  /* Icons shared by the web feature grid and the app carousel — drawn once, used twice. */
+  var ICON = {
+    log: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H13z"/></svg>',
+    circle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.8 20a6.2 6.2 0 0 1 12.4 0"/><circle cx="17.2" cy="9.4" r="2.6"/><path d="M16 20a5.4 5.4 0 0 1 5.2-4.4"/></svg>',
+    health: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v5a4 4 0 0 0 8 0V3"/><path d="M5 3H3.5M13 3h1.5"/><path d="M9 16v1a5 5 0 0 0 5 5 5 5 0 0 0 5-5v-3"/><circle cx="19" cy="11" r="2.2"/></svg>',
+    keepsake: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h3l2-3h8l2 3h3v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/><circle cx="12" cy="13" r="4"/></svg>',
+    lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/><path d="M12 15v2"/></svg>'
+  };
+
+  /* The app carousel. Five, not eight: this is a reminder of why they downloaded, not a pitch. Every
+     line is a feature that actually ships (truthful-copy rule), and every line is calm — a signed-out
+     parent may be anxious, pregnant, or grieving, so nothing here counts, urges or assumes a baby. */
+  var TILES = [
+    [ICON.log, 'Log it in seconds', 'Feeds, sleep and nappies. One thumb, even at 3am.'],
+    [ICON.circle, 'Everyone in sync', 'Parents, grandparents, the nanny. One shared log, live.'],
+    [ICON.health, 'Health, handled', 'Medicine reminders, and a tidy summary for the doctor.'],
+    [ICON.keepsake, 'Keep the moments', 'Milestones and memory cards from your own photos.'],
+    [ICON.lock, 'Private to your family', 'No ads. We never sell your data.']
+  ];
+
+  function appSignIn(msg) {
+    var tiles = TILES.map(function (t) {
+      return '<div class="ac-tile"><div class="ac-ic">' + t[0] + '</div>'
+        + '<div class="ac-t">' + t[1] + '</div><div class="ac-s">' + t[2] + '</div></div>';
+    }).join('');
+    var dots = TILES.map(function (_, i) {
+      return '<span class="ac-dot' + (i === 0 ? ' on' : '') + '"></span>';
+    }).join('');
+    // The Apple/consent block is injected right after .ll-cta by store-firebase's showSignIn, so the
+    // markup here stops at the Google button on purpose. On iOS, CSS order puts Apple first (platform
+    // convention, and the smoothest path: Face ID, no account picker).
+    return '<div class="lp lp-app' + (isIOS() ? ' lp-ios' : '') + '">'
+      + '<div class="lp-app-top">'
+      + '<div class="lp-logo"><img src="/icons/logo-512.png" alt="Cubby"></div>'
+      + '<h1 class="lp-name">Cubby</h1>'
+      + '<p class="lp-app-tag">One calm place for everyone caring for your little one.</p>'
+      + '</div>'
+      + '<div class="ac-wrap"><div class="ac-track" id="acTrack">' + tiles + '</div>'
+      + '<div class="ac-dots" id="acDots">' + dots + '</div></div>'
+      + '<div class="lp-app-auth">'
+      + '<button class="lp-cta ll-cta">Continue with Google</button>'
+      + (msg ? '<div class="lp-msg">' + msg + '</div>' : '')
+      + '</div>'
+      + '<div class="lp-trust">Free · Private to your family</div>'
+      + '</div>';
+  }
+
+  /* Auto-advance. Deliberately gentle and never a trap: it pauses the moment the parent touches it
+     (their swipe wins, permanently), honours prefers-reduced-motion, and stops itself the instant the
+     sign-in overlay goes away — otherwise it would tick forever behind the signed-in app. */
+  var acTimer = null;
+  function stopCarousel() { if (acTimer) { clearInterval(acTimer); acTimer = null; } }
+  function startCarousel() {
+    stopCarousel();
+    var track = document.getElementById('acTrack');
+    if (!track) return;
+    var dots = document.getElementById('acDots');
+    var slides = track.children.length;
+    var i = 0, paused = false;
+
+    function paint() {
+      if (!dots) return;
+      for (var d = 0; d < dots.children.length; d++) dots.children[d].classList.toggle('on', d === i);
+    }
+    // The parent taking over is a decision, not an interruption: don't fight them by resuming.
+    ['touchstart', 'pointerdown', 'wheel'].forEach(function (ev) {
+      track.addEventListener(ev, function () { paused = true; stopCarousel(); }, { passive: true });
+    });
+    track.addEventListener('scroll', function () {
+      var w = track.clientWidth || 1;
+      var n = Math.round(track.scrollLeft / w);
+      if (n !== i && n >= 0 && n < slides) { i = n; paint(); }
+    }, { passive: true });
+
+    var reduce = false;
+    try { reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+    if (reduce || paused) return;
+
+    acTimer = setInterval(function () {
+      if (!document.getElementById('acTrack')) { stopCarousel(); return; }  // signed in; the overlay is gone
+      i = (i + 1) % slides;
+      try { track.scrollTo({ left: i * track.clientWidth, behavior: 'smooth' }); } catch (e) { track.scrollLeft = i * track.clientWidth; }
+      paint();
+    }, 3600);
+  }
+
   window.cubbyLanding = function (msg) {
     var native = isNative();
+    if (native) {
+      // showSignIn assigns this straight into innerHTML, so the nodes exist by the next tick.
+      setTimeout(startCarousel, 0);
+      return appSignIn(msg);
+    }
     var cta = '<button class="lp-cta ll-cta">Continue with Google</button>';
     var features = [
       ['<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H13z"/></svg>', 'One-thumb logging', 'Feeds, sleep, nappies, pumping, logged in seconds, even at 3am.'],
@@ -124,6 +223,36 @@
     + '.lp-col li::before{content:"✓";position:absolute;left:0;color:#56A08E;font-weight:900;}'
     + '.lp-col-pro li::before{content:"✦";color:#C97FA0;}'
     + '@media(max-width:520px){.lp-cmp{grid-template-columns:1fr;}}'
+    /* ---- app sign-in screen (native wrapper only) ---- */
+    /* One viewport, no scrolling for the thing they came to do. The buttons sit at the bottom where the
+       thumb already is; the carousel fills the space above instead of a sales pitch. */
+    + '.lp-app{min-height:100dvh;display:flex;flex-direction:column;justify-content:space-between;'
+    + 'padding:calc(28px + env(safe-area-inset-top)) 22px calc(20px + env(safe-area-inset-bottom));max-width:520px;gap:14px;}'
+    + '.lp-app-top{text-align:center;}'
+    + '.lp-app .lp-logo img{width:76px;height:76px;}'
+    + '.lp-app .lp-name{font-size:34px;margin:10px 0 4px;}'
+    + '.lp-app-tag{font-size:15.5px;line-height:1.5;color:#6E635B;font-weight:600;margin:0 auto;max-width:300px;}'
+    /* scroll-snap does the swiping; the timer only nudges scrollLeft, so a finger always wins.
+       flex:1 + centring lets the carousel take the slack between the brand and the buttons, so the
+       spacing stays even from a small iPhone SE up to a Pro Max instead of pooling at one end. */
+    + '.ac-wrap{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;min-height:0;}'
+    + '.ac-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;}'
+    + '.ac-track::-webkit-scrollbar{display:none;}'
+    + '.ac-tile{flex:0 0 100%;scroll-snap-align:center;text-align:center;padding:4px 10px;box-sizing:border-box;}'
+    + '.ac-ic{width:54px;height:54px;margin:0 auto 10px;border-radius:17px;background:#fff;color:#9A8C6E;display:grid;place-items:center;box-shadow:0 5px 14px rgba(0,0,0,.06);}'
+    + '.ac-ic svg{width:27px;height:27px;}'
+    + '.ac-t{font-family:"Fraunces",Georgia,serif;font-size:19px;color:#2C2521;margin-bottom:4px;}'
+    + '.ac-s{font-size:14px;line-height:1.5;color:#6E635B;font-weight:600;max-width:280px;margin:0 auto;}'
+    + '.ac-dots{display:flex;justify-content:center;gap:6px;margin-top:12px;}'
+    + '.ac-dot{width:6px;height:6px;border-radius:50%;background:#DDD2C0;transition:background .3s,width .3s;}'
+    + '.ac-dot.on{background:#C97FA0;width:18px;border-radius:3px;}'
+    + '.lp-app-auth{display:flex;flex-direction:column;}'
+    /* Apple first on iOS: the platform convention, and the least friction (Face ID, no account picker).
+       store-firebase injects it after the Google button, so reorder visually rather than restructure. */
+    + '.lp-ios .lp-app-auth .lp-apple{order:-1;margin-bottom:9px;margin-top:0;}'
+    + '.lp-app-auth .ll-email-row,.lp-app-auth .ll-install-row{margin-top:10px;}'
+    + '@media(max-height:700px){.lp-app .lp-logo img{width:60px;height:60px;}.lp-app .lp-name{font-size:28px;}'
+    + '.lp-app-tag{font-size:14px;}.ac-ic{width:46px;height:46px;margin-bottom:8px;}.ac-t{font-size:17px;}}'
     + '.lp-final{text-align:center;padding:34px 0 6px;}'
     + '.lp-pwa{max-width:380px;margin:16px auto 0;font-size:12px;line-height:1.5;color:#a99e92;font-weight:600;}'
     + '.lp-foot{text-align:center;color:#9a8d80;font-size:13px;font-weight:700;padding:28px 0 0;}'
