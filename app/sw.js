@@ -1,11 +1,17 @@
 /* Cubby service worker.
    Bump CACHE on every deploy so old assets are cleared. */
-const CACHE = 'little-log-v195';
+const CACHE = 'little-log-v196';
 const ASSETS = [
   '/app/',
   '/app/index.html',
   '/app/firebase-init.js',
   '/app/store-firebase.js',
+  // The boot chain's hardest dependency. Precached with everything else so `addAll` is atomic: an
+  // offline launch either has the whole build or none of it, never a shell whose SDK is missing.
+  '/app/vendor/firebase/10.12.2/firebase-app-compat.js',
+  '/app/vendor/firebase/10.12.2/firebase-auth-compat.js',
+  '/app/vendor/firebase/10.12.2/firebase-firestore-compat.js',
+  '/app/vendor/firebase/10.12.2/firebase-messaging-compat.js',
   '/app/voice-log.js',
   '/app/cubby-extras.js',
   '/app/growth-data.js',

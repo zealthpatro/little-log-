@@ -7,6 +7,10 @@
    - timers / activeBabyId / theme stay per-device (not shared)
    ============================================================ */
 (function () {
+  // firebase-init.js bails (and shows a "check your connection" screen) if the SDK didn't load, so
+  // window.LL may not exist. Reading .auth off undefined here would throw and take the boot state
+  // machine down on top of the message the parent is already being shown.
+  if (!window.LL || !window.LL.auth) return;
   var auth = window.LL.auth, db = window.LL.db;
   var LOCAL_PREFS_KEY = 'little-log-prefs-v1'; // per-device: activeBabyId, timers, theme
 

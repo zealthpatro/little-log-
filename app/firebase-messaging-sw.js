@@ -3,8 +3,8 @@
    requires its own firebase-messaging-sw.js at the app scope. It only does anything once
    Cloud Messaging is enabled and a VAPID key is set in the app (CUBBY_VAPID in index.html).
    Config values are public by design (security is enforced by Firestore rules). */
-importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
+importScripts('/app/vendor/firebase/10.12.2/firebase-app-compat.js');
+importScripts('/app/vendor/firebase/10.12.2/firebase-messaging-compat.js');
 
 firebase.initializeApp({
   apiKey: 'AIzaSyBj10mZkKlaX4BvYprssPdnUKsIXUCVvZU',
