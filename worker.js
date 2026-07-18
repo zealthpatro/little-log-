@@ -274,6 +274,75 @@ async function sendPushReminders(env){
   console.log('push_run', JSON.stringify({ users: docs.length, sent, userErrors }));
   await recordCronRun(env, { users: docs.length, sent, userErrors });
 }
+/* ---- Account deletion, second half (App Store 5.1.1(v)).
+   When the LAST member deletes their account the client cannot erase the household: it would have to
+   delete subcollections it is no longer a member of, and Firestore has no recursive delete from a
+   browser anyway. So the client flags the doc with `deleteAfter` (+30 days) and this runs on the
+   existing 15-minute cron with the service account, which bypasses rules.
+
+   The 30 days is a grace window, not retention — it exists so a mistaken tap is recoverable, and
+   privacy/index.html states it. Once it lapses the household goes completely: every subcollection
+   first, then the doc itself, so a crash mid-purge can never leave a household doc that looks alive
+   but has been gutted. ---- */
+const HH_SUBCOLLECTIONS = ['events', 'photos', 'notes', 'pregnancy'];
+async function fsDeleteAll(base, token, path) {
+  // Firestore REST has no recursive delete; page the ids and delete them one by one.
+  let n = 0, pageToken = '';
+  do {
+    const url = base + '/' + path + '?pageSize=300&mask.fieldPaths=__name__'
+      + (pageToken ? ('&pageToken=' + encodeURIComponent(pageToken)) : '');
+    const r = await fetch(url, { headers: { authorization: 'Bearer ' + token } });
+    if (!r.ok) { if (r.status !== 404) console.error('purge_list_fail', path, r.status); return n; }
+    const j = await r.json();
+    for (const d of (j.documents || [])) {
+      const del = await fetch('https://firestore.googleapis.com/v1/' + d.name, {
+        method: 'DELETE', headers: { authorization: 'Bearer ' + token }
+      });
+      if (del.ok) n++; else console.error('purge_del_fail', d.name, del.status);
+    }
+    pageToken = j.nextPageToken || '';
+  } while (pageToken);
+  return n;
+}
+async function purgeDeletedHouseholds(env) {
+  if (!env.FIREBASE_SERVICE_ACCOUNT) return { households: 0, docs: 0 };
+  let sa; try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return { households: 0, docs: 0 }; }
+  const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore');
+  const base = 'https://firestore.googleapis.com/v1/projects/' + FS_PROJECT + '/databases/(default)/documents';
+  const now = Date.now();
+  let households = 0, docs = 0, pageToken = '';
+  do {
+    const r = await fetch(base + '/households?pageSize=200&mask.fieldPaths=deleteAfter'
+      + (pageToken ? ('&pageToken=' + encodeURIComponent(pageToken)) : ''), { headers: { authorization: 'Bearer ' + token } });
+    if (!r.ok) { console.error('purge_hh_fetch_fail', r.status); break; }
+    const j = await r.json();
+    for (const d of (j.documents || [])) {
+      const after = _fsNum(d.fields && d.fields.deleteAfter);
+      if (after == null || after > now) continue;
+      const hid = d.name.split('/documents/households/')[1];
+      if (!hid) continue;
+      try {
+        for (const sub of HH_SUBCOLLECTIONS) docs += await fsDeleteAll(base, token, 'households/' + hid + '/' + sub);
+        // mhealth is nested one level deeper: mhealth/{uid}/cat/{category}.
+        const mh = await fetch(base + '/households/' + hid + '/mhealth?pageSize=300&mask.fieldPaths=__name__', { headers: { authorization: 'Bearer ' + token } });
+        if (mh.ok) {
+          const mj = await mh.json();
+          for (const owner of (mj.documents || [])) {
+            const ouid = owner.name.split('/mhealth/')[1];
+            if (ouid) docs += await fsDeleteAll(base, token, 'households/' + hid + '/mhealth/' + ouid + '/cat');
+          }
+        }
+        // The household doc LAST, so an interrupted run retries rather than orphaning subcollections.
+        const delHh = await fetch(base + '/households/' + hid, { method: 'DELETE', headers: { authorization: 'Bearer ' + token } });
+        if (delHh.ok) { households++; docs++; } else console.error('purge_hh_del_fail', hid, delHh.status);
+      } catch (e) { console.error('purge_hh_fail', hid, (e && e.message) || String(e)); }
+    }
+    pageToken = j.nextPageToken || '';
+  } while (pageToken);
+  if (households) console.log('purge_run', JSON.stringify({ households, docs }));
+  return { households, docs };
+}
+
 // Operational heartbeat for the push cron: persist last-run summary in the Worker's own D1 (cubby-games),
 // read by GET /api/health so a silently-dead cron is detectable. Holds counts + a timestamp only, never
 // any family / Firestore data.
@@ -284,6 +353,33 @@ async function recordCronRun(env, summary) {
     await env.GAMES_DB.prepare("INSERT INTO ops_state(key,value,updated_at) VALUES('push_last_run',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at")
       .bind(JSON.stringify(summary || {}), Date.now()).run();
   } catch (e) { console.error('ops_state_write_fail', (e && e.message) || String(e)); }
+}
+
+// Deletes the D1 rows tied to one Firebase uid. Firestore rules cannot see D1, so without this a
+// deleted account would leave its guessing-game hubs (and every guest's nickname and guess) behind.
+// Same cascade order as the hub-close path: children first, then the hub row.
+async function purgeAccountData(request, env) {
+  let body; try { body = await request.json(); } catch (e) { return json({ error: 'bad_request' }, 400); }
+  let auth; try { auth = await verifyFirebaseToken((body && body.idToken) || ''); }
+  catch (e) { return json({ error: 'unauthorized' }, 401); }
+  if (!auth || !auth.uid) return json({ error: 'unauthorized' }, 401);
+  if (!env.GAMES_DB) return json({ ok: true, hubs: 0 });
+  try {
+    // A user who never hosted a game hits this before the tables exist; creating them is cheaper
+    // than letting a missing table read as a failed deletion.
+    await ensureHubSchema(env);
+    const owned = await env.GAMES_DB.prepare('SELECT code FROM hubs WHERE owner_uid=?').bind(auth.uid).all();
+    const codes = ((owned && owned.results) || []).map(r => r.code);
+    for (const code of codes) {
+      await env.GAMES_DB.prepare('DELETE FROM hub_guesses WHERE hub_code=?').bind(code).run();
+      await env.GAMES_DB.prepare('DELETE FROM hub_games WHERE hub_code=?').bind(code).run();
+      await env.GAMES_DB.prepare('DELETE FROM hubs WHERE code=?').bind(code).run();
+    }
+    return json({ ok: true, hubs: codes.length });
+  } catch (e) {
+    console.error('purge_account_fail', (e && e.message) || String(e));
+    return json({ error: 'db_error' }, 500);
+  }
 }
 
 // ---- Boy-or-girl guessing game (hosted, guests need no account). ISOLATED in cubby-games D1. ----
@@ -569,7 +665,12 @@ async function hubRoute(request, env, url) {
 }
 
 export default {
-  async scheduled(event, env) { try { await sendPushReminders(env); } catch (e) { console.error('push_cron_fail', (e && e.message) || String(e)); } },
+  async scheduled(event, env) {
+    try { await sendPushReminders(env); } catch (e) { console.error('push_cron_fail', (e && e.message) || String(e)); }
+    // Independent of push: a failure to send a reminder must never postpone an erasure someone asked
+    // for, and vice versa.
+    try { await purgeDeletedHouseholds(env); } catch (e) { console.error('purge_cron_fail', (e && e.message) || String(e)); }
+  },
   async fetch(request, env) {
     const url = new URL(request.url);
     // Apple universal links. When Cubby is installed, iOS opens the APP (not Safari) for these paths —
@@ -612,6 +713,13 @@ export default {
       // Cron fires every 15 min; flag unhealthy if the last success is older than an hour.
       const cronHealthy = cron ? (now - cron.at) < 60 * 60000 : null;
       return json({ ok: true, time: now, cron, cronHealthy });
+    }
+    // Account deletion reaches into D1, which Firestore rules cannot govern: the guessing-game hubs
+    // are keyed by Firebase uid. The client calls this while still signed in; we verify the token
+    // ourselves and delete only rows owned by that exact uid.
+    if (url.pathname === '/api/account/purge') {
+      if (request.method !== 'POST') return new Response('method not allowed', { status: 405 });
+      return purgeAccountData(request, env);
     }
     if (url.pathname.startsWith('/api/game/')) {
       return gameRoute(request, env, url);

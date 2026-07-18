@@ -353,7 +353,11 @@
   }
   // skipNativeAuth keeps the native Firebase SDK out of the auth state, so the JS SDK stays the
   // single source of truth (one session, not two that can drift apart).
-  function nativeSignIn(kind) {
+  // Runs the native provider sheet and returns a Firebase credential. Split out from nativeSignIn
+  // because account deletion needs the SAME credential for reauthenticateWithCredential — Firebase
+  // demands a fresh login before it will destroy a user, and duplicating this dance would mean two
+  // places to get the Apple rawNonce handling wrong.
+  function nativeCredential(kind) {
     var P = nativeAuth();
     var call = kind === 'apple'
       ? P.signInWithApple({ skipNativeAuth: true })
@@ -361,11 +365,35 @@
     return call.catch(function (e) { return stampStep(e, 'provider'); }).then(function (res) {
       var c = (res && res.credential) || {};
       if (!c.idToken) { var e = new Error('no idToken came back from ' + kind); e.cubbyStep = 'provider'; throw e; }
-      var cred = kind === 'apple'
+      return kind === 'apple'
         ? new firebase.auth.OAuthProvider('apple.com').credential({ idToken: c.idToken, rawNonce: c.nonce })
         : firebase.auth.GoogleAuthProvider.credential(c.idToken, c.accessToken || null);
+    });
+  }
+  function nativeSignIn(kind) {
+    return nativeCredential(kind).then(function (cred) {
       return auth.signInWithCredential(cred).catch(function (e) { return stampStep(e, 'firebase'); });
     });
+  }
+  // Which provider this account actually signs in with, so a reauth prompt matches the button they
+  // originally used instead of guessing.
+  function providerKind(u) {
+    var ids = ((u && u.providerData) || []).map(function (p) { return (p && p.providerId) || ''; });
+    if (ids.indexOf('apple.com') >= 0) return 'apple';
+    if (ids.indexOf('google.com') >= 0) return 'google';
+    return null;
+  }
+  // Firebase refuses user.delete() on a stale session (auth/requires-recent-login). Prove who they
+  // are again, through whichever door they came in by.
+  function reauthenticate(u) {
+    var kind = providerKind(u);
+    // Email-link accounts would need a whole new link round trip mid-deletion. Rather than build a
+    // half-working flow, say so plainly and let the UI ask them to sign in again first.
+    if (!kind) { var e = new Error('reauth_unsupported'); e.cubbyStep = 'reauth'; return Promise.reject(e); }
+    if (isNativeApp() && nativeAuth()) {
+      return nativeCredential(kind).then(function (cred) { return u.reauthenticateWithCredential(cred); });
+    }
+    return u.reauthenticateWithPopup(kind === 'apple' ? window.LL.appleProvider : window.LL.googleProvider);
   }
   /* Backing out of the native sheet is normal and must stay silent. But detect it NARROWLY: an earlier
      version matched /cancel/i on the message and err.code === 1001, and BOTH are wrong — the plugin
@@ -764,7 +792,12 @@
   // loader. Clears the stale pointer so a fresh sign-in starts clean.
   var accessLostShown = false;
   function showAccessLost() {
-    if (accessLostShown) return; accessLostShown = true;
+    if (accessLostShown) return;
+    // Deleting your own account also drops you from members, which fires this same snapshot. Telling
+    // someone "you're no longer in this family" mid-deletion would be both alarming and wrong, so the
+    // deletion flow owns the screen until it finishes.
+    if (typeof deletingAccount !== 'undefined' && deletingAccount) return;
+    accessLostShown = true;
     try { hideOverlay(); } catch (e) {}
     try { var u = auth.currentUser; if (u) db.collection('users').doc(u.uid).set({ householdId: null }, { merge: true }); } catch (e) {}
     var ov = document.createElement('div'); ov.id = 'll-access-lost';
@@ -1212,6 +1245,130 @@
     try { await hhRef.collection('pregnancy').doc(u.uid).delete(); } catch (e) {}
     pregShared = []; knownPregJourney = null; pregOwner = null;
   };
+
+  /* ---------- account deletion (App Store 5.1.1(v)) ---------- */
+  // A parent can always delete their own account, alone. This is deliberately NOT routed through the
+  // guardian-consent flow that gates "Delete data": that one erases the household's shared story and
+  // rightly asks both parents, but a person's own account is theirs, and Apple treats a second
+  // person's approval as an obstacle.
+  //
+  // What goes: their access, their identity, their PRIVATE health and pregnancy records, their login.
+  // What stays: the household's shared story, because the other caregivers are still living in it.
+  // Their past entries keep their bear label through the formerMemberInfo tombstone — authorTag()
+  // and loggerName() prefer `relationship`, so history still reads "by Mama" while the real name and
+  // avatar are dropped. Removal keeps the name; deletion should not.
+  //
+  // If they are the LAST member there is nobody for the story to stay for, so the household is
+  // flagged with deleteAfter and the Worker cron hard-deletes it 30 days later.
+  var deletingAccount = false;
+  window.LL.isDeletingAccount = function () { return deletingAccount; };
+  window.LL.deleteAccount = async function () {
+    var u = auth.currentUser;
+    if (!u) throw new Error('not_signed_in');
+    var uid = u.uid;
+    var email = (u.email || '').toLowerCase();
+    // Removing ourselves from members makes the household snapshot fire "you were removed". Suppress
+    // that mid-deletion so the calm access-lost screen can't race the flow we are already running.
+    deletingAccount = true;
+
+    try {
+      // 1. Private records FIRST. Their rules require membership, so once we drop out of members we
+      //    could never reach them again — they would sit in the household forever, unreadable by
+      //    everyone including her, but still stored. That is the exact failure the existing
+      //    removeMember() path already has for a removed member.
+      if (hhRef) {
+        try {
+          var cats = await hhRef.collection('mhealth').doc(uid).collection('cat').get();
+          await Promise.all(cats.docs.map(function (d) { return d.ref.delete().catch(function () {}); }));
+        } catch (e) { console.warn('del mhealth', e); }
+        try { await hhRef.collection('pregnancy').doc(uid).delete(); } catch (e) { console.warn('del pregnancy', e); }
+        // Notes she wrote privately to herself: nobody else can read them, so they go with her.
+        // Notes to the circle stay (shared story); notes another member addressed to her are their
+        // content, not hers, and rules only let the author delete them anyway.
+        try {
+          var priv = await hhRef.collection('notes').where('audience', '==', uid).get();
+          await Promise.all(priv.docs
+            .filter(function (d) { return (d.data() || {}).createdBy === uid; })
+            .map(function (d) { return d.ref.delete().catch(function () {}); }));
+        } catch (e) { console.warn('del notes', e); }
+      }
+
+      // 2. Leave the household.
+      if (hhRef) {
+        var members = window.LL.members || {};
+        var others = Object.keys(members).filter(function (m) { return m !== uid; });
+        var mi = (window.LL.memberInfo || {})[uid] || {};
+        var del = firebase.firestore.FieldValue.delete();
+        var upd = {};
+        upd['members.' + uid] = del;
+        upd['memberInfo.' + uid] = del;
+        upd['formerMemberInfo.' + uid] = { name: '', relationship: mi.relationship || '', avatar: null };
+        if (others.length) {
+          if (members[uid] === 'owner') {
+            var heir = pickHeir(others);
+            upd['members.' + heir] = 'owner';
+            upd.ownerId = heir;
+          }
+        } else {
+          // Last one out. 30 days is a grace window, not retention: the cron hard-deletes after it,
+          // and privacy/index.html states the window.
+          upd.deleteAfter = Date.now() + 30 * 24 * 60 * 60 * 1000;
+          upd.deletionRequestedBy = uid;
+        }
+        await hhRef.update(upd);
+      }
+
+      // 3. Everything keyed to them outside the household.
+      if (email) { try { await db.collection('invites').doc(email).delete(); } catch (e) {} }
+      try { await db.collection('waitlist').doc(uid).delete(); } catch (e) {}
+      // users/{uid} carries the push tokens, so deleting it also stops delivery at the cron.
+      try { await db.collection('users').doc(uid).delete(); } catch (e) { console.warn('del user doc', e); }
+      try { if (window.cubbyDisableNativePush) await window.cubbyDisableNativePush(); } catch (e) {}
+      // Guessing-game hubs live in D1, keyed by this uid, and rules do not reach them.
+      try {
+        var tok = await u.getIdToken();
+        await fetch('/api/account/purge', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ idToken: tok })
+        });
+      } catch (e) { console.warn('purge d1', e); }
+
+      // 4. Local traces.
+      try {
+        ['little-log-v1', 'little-log-photos-v1', 'cubby-member', 'cubby-acq', 'cubby-ref',
+         'cubby-country', 'cubby-email-signin', 'cubby-pro-waitlist', 'cubby-pro-dev']
+          .forEach(function (k) { try { localStorage.removeItem(k); } catch (e2) {} });
+      } catch (e) {}
+
+      // 5. The login itself. Last, because everything above needs an authenticated session.
+      try {
+        await u.delete();
+      } catch (e) {
+        if (e && e.code === 'auth/requires-recent-login') {
+          await reauthenticate(u);
+          await auth.currentUser.delete();
+        } else throw e;
+      }
+      return true;
+    } catch (e) {
+      deletingAccount = false;
+      throw e;
+    }
+  };
+  // Who inherits the circle when a departing owner leaves others behind. We do not record a join
+  // date anywhere, so "longest-standing" is not actually knowable — prefer a co-parent, which is
+  // what the household means by a guardian, and fall back to a stable pick so two devices racing
+  // the same deletion cannot promote two different people.
+  function pickHeir(others) {
+    var info = window.LL.memberInfo || {};
+    var parent = ['mother', 'mom', 'mama', 'father', 'dad', 'papa', 'parent', 'guardian'];
+    var sorted = others.slice().sort();
+    var coParent = sorted.filter(function (m) {
+      return parent.indexOf((((info[m] || {}).relationship) || '').toLowerCase()) >= 0;
+    });
+    return coParent.length ? coParent[0] : sorted[0];
+  }
 
   PhotoStore.set = async function (id, dataUrl) {
     PhotoStore.map[id] = dataUrl;

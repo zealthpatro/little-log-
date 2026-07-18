@@ -3524,7 +3524,7 @@ function openDataSheet(){
       <div class="lli-ico" style="background:var(--note-soft)">🛡️</div>
       <div class="lli-body"><div class="lli-t">${escapeHtml(c.label)}</div><div class="lli-s">by ${escapeHtml(c.requestedByName||'a family member')} · ${badge}</div></div></div>`;
   }).join('');
-  openSheet(`<h2>Your data</h2><div class="sub">This is the household's shared story, so the big actions ask both guardians (usually mama and papa) to agree first.</div>
+  openSheet(`<h2>Your data</h2><div class="sub">The shared story belongs to the whole household, so exporting or erasing it asks both guardians (usually mama and papa) to agree. Your own account is yours alone.</div>
     <div class="set-item" onclick="requestExport()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--note-soft);color:var(--note)">${I.note}</div>
       <div class="si-body"><div class="a">Export data</div><div class="b">Download everything as a JSON file, with consent</div></div>
@@ -3536,6 +3536,10 @@ function openDataSheet(){
     <div class="set-item" onclick="openGuardians()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:17px">🛡️</div>
       <div class="si-body"><div class="a">Guardians</div><div class="b">${householdGuardians().map(u=>guardianName(u)).join(' + ')||'Who approves the big actions'}</div></div>
+    </div>
+    <div class="set-item" onclick="openDeleteAccount()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--danger);color:#fff">${I.trash}</div>
+      <div class="si-body"><div class="a" style="color:var(--danger)">Delete my account</div><div class="b">Your account and your private records, on your own</div></div>
     </div>
     ${recent?`<div class="set-label">Recent decisions</div>${recent}`:''}
     <button class="btn-ghost" onclick="openSettings()">Back to settings</button>`,'sleep');
@@ -3558,6 +3562,61 @@ function exportData(){
   saveFile(url, 'cubby-export.json');
   setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(e){} }, 4000);
   toast('Exported'+(nPhotos?(' · '+nPhotos+' photo'+(nPhotos===1?'':'s')+' included'):''));
+}
+/* Account deletion (App Store 5.1.1(v)). Deliberately NOT routed through requestConsent(): the
+   guardian-consent flow is right for erasing the household's shared story, but a person's own
+   account is theirs alone, and a second person's approval would be an obstacle Apple rejects. */
+function deleteAccountIsSolo(){
+  const m=(window.LL&&window.LL.members)||{};
+  return !Object.keys(m).filter(u=>u!==myUid()).length;
+}
+function openDeleteAccount(){
+  const solo=deleteAccountIsSolo();
+  // Say exactly what happens, once, without softening it into vagueness or piling on warnings.
+  const body=solo
+    ? `You are the only one in this cubby, so everything here goes with you: the logs, the photos, the moments and your private records.<br><br>We keep it for 30 days in case you change your mind, then it is deleted for good.`
+    : `Your account, your access, and your private health and pregnancy records are deleted.<br><br>What you logged stays with your family, still signed with your bear name.`;
+  openSheet(`<h2>Delete my account</h2><div class="sub">This is yours to do. Nobody else needs to agree.</div>
+    <div style="font-size:14px;color:var(--ink-soft);font-weight:600;line-height:1.6;margin:4px 2px 14px">${body}</div>
+    <button class="btn-primary" style="background:var(--danger)" onclick="confirmDeleteAccount()">Delete my account</button>
+    <button class="btn-ghost" onclick="openDataSheet()">Keep my account</button>
+    <div class="csub" style="margin-top:8px">You may be asked to sign in once more first, so we know it is you.</div>`,'feed');
+}
+function confirmDeleteAccount(){
+  const solo=deleteAccountIsSolo();
+  const go=()=>doDeleteAccount();
+  if(typeof confirmSheet==='function'){
+    confirmSheet({title:'Delete your account?',body:solo?'After 30 days this cannot be undone.':'This cannot be undone.',confirmLabel:'Delete',cancelLabel:'Keep',danger:true,onConfirm:go});
+  } else if(window.confirm('Delete your account?')) go();
+}
+async function doDeleteAccount(){
+  if(!(window.LL&&typeof window.LL.deleteAccount==='function')){ toast('Not available right now'); return; }
+  toast('Deleting your account...');
+  try{
+    await window.LL.deleteAccount();
+    try{ closeSheet(); }catch(e){}
+    showDeletedGoodbye();
+  }catch(e){
+    const s=((e&&(e.code||e.message))||'')+'';
+    // Reauth was cancelled at the provider sheet: that is a normal "actually, not now", not a fault.
+    if(/cancel/i.test(s)||/AuthorizationError error 100[13]/.test(s)) toast('Nothing was deleted');
+    else if(/reauth_unsupported/.test(s)) toast('Please log out, sign in again, then delete');
+    else toast('Could not finish deleting. Please try again');
+  }
+}
+/* The auth user is gone, so the app would otherwise snap straight to the sign-in screen. Say goodbye
+   first: this is someone leaving, and it should not feel like being logged out by an error. */
+function showDeletedGoodbye(){
+  const ov=document.createElement('div');
+  ov.setAttribute('style','position:fixed;inset:0;z-index:4000;background:#FBF5E9;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center');
+  ov.innerHTML=`<div style="max-width:340px">
+    <div style="font-size:44px">🐻</div>
+    <h2 style="font-family:Georgia,serif;color:#3a2f28;margin:12px 0 8px;font-size:22px">Your account is deleted</h2>
+    <div style="color:#8a7a6d;font-size:15px;line-height:1.55;font-weight:600">Thank you for letting us look after some of it for a while. Take care of yourself.</div>
+    <button id="cb-del-done" style="margin-top:22px;border:none;border-radius:16px;padding:15px 24px;background:#C97FA0;color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Close</button></div>`;
+  document.body.appendChild(ov);
+  const b=document.getElementById('cb-del-done');
+  if(b) b.onclick=function(){ try{ location.replace('/app/'); }catch(e){ location.reload(); } };
 }
 /* Referral: deterministic short code from the signed-in uid (djb2 -> base36). */
 function refCode(){

@@ -220,6 +220,73 @@ async function check(name, p) {
   await check('create a household with pregnancy pre-seeded in the blob (fails)', assertFails(setDoc(doc(S, 'households/HS-preg'), { ownerId: 'S', members: { S: 'owner' }, memberInfo: {}, app: cleanApp({ pregnancy: { weeks: 8 } }) })));
   await check('create a household with mhealth pre-seeded in the blob (fails)', assertFails(setDoc(doc(S, 'households/HS-mh'), { ownerId: 'S', members: { S: 'owner' }, memberInfo: {}, app: cleanApp({ mhealth: { mood: 'x' } }) })));
 
+  // Account deletion (A6, App Store 5.1.1(v)). The departingSelf() branch has to let a CAREGIVER
+  // walk out unaided — the isMember() branch freezes the members map, so without it a caregiver
+  // could not delete their own account without an owner's help. It must not become a back door.
+  console.log('\nAccount deletion — self-departure (A6):');
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    // HD: owner O2 + caregivers C2 and C3, so a departure still leaves the circle populated.
+    await setDoc(doc(db, 'households/HD'), {
+      ownerId: 'O2', members: { O2: 'owner', C2: 'caregiver', C3: 'caregiver' },
+      memberInfo: { O2: { name: 'Mom' }, C2: { name: 'Dad' }, C3: { name: 'Nana' } }, app: cleanApp()
+    });
+    await setDoc(doc(db, 'invites/c2@x.com'), { householdId: 'HD', role: 'caregiver' });
+  });
+  const C2 = env.authenticatedContext('C2', { email: 'c2@x.com' }).firestore();
+  const C3 = env.authenticatedContext('C3', { email: 'c3@x.com' }).firestore();
+  const O2 = env.authenticatedContext('O2', { email: 'o2@x.com' }).firestore();
+  const gone = require('firebase/firestore').deleteField;
+
+  await check('caregiver removes ONLY themselves + own tombstone (succeeds)', assertSucceeds(updateDoc(doc(C2, 'households/HD'), {
+    'members.C2': gone(), 'memberInfo.C2': gone(), 'formerMemberInfo.C2': { name: '', relationship: 'Papa Bear', avatar: null }
+  })));
+  await check('caregiver deletes the invite addressed to their OWN email (succeeds)', assertSucceeds(deleteDoc(doc(C2, 'invites/c2@x.com'))));
+  // The same branch must not become a way to attack anyone else.
+  await check('caregiver removes ANOTHER member while leaving (fails)', assertFails(updateDoc(doc(C3, 'households/HD'), {
+    'members.C3': gone(), 'members.O2': gone(), 'memberInfo.C3': gone()
+  })));
+  await check('caregiver leaves but promotes themselves owner (fails)', assertFails(updateDoc(doc(C3, 'households/HD'), {
+    'members.C3': 'owner', 'memberInfo.C3': gone()
+  })));
+  await check('caregiver leaves and re-points ownerId at themselves (fails)', assertFails(updateDoc(doc(C3, 'households/HD'), {
+    'members.C3': gone(), 'memberInfo.C3': gone(), ownerId: 'C3'
+  })));
+  await check('caregiver leaves and writes SOMEONE ELSE\'s tombstone (fails)', assertFails(updateDoc(doc(C3, 'households/HD'), {
+    'members.C3': gone(), 'memberInfo.C3': gone(), 'formerMemberInfo.O2': { name: 'x' }
+  })));
+  await check('caregiver leaves and smuggles a deleteAfter onto the household (fails)', assertFails(updateDoc(doc(C3, 'households/HD'), {
+    'members.C3': gone(), 'memberInfo.C3': gone(), deleteAfter: 1
+  })));
+  await check('caregiver leaves and edits the shared app blob in the same write (fails)', assertFails(updateDoc(doc(C3, 'households/HD'), {
+    'members.C3': gone(), 'memberInfo.C3': gone(), app: cleanApp({ babies: [{ name: 'x' }] })
+  })));
+  await check('caregiver leaves and grants themselves Pro (fails)', assertFails(updateDoc(doc(C3, 'households/HD'), {
+    'members.C3': gone(), 'memberInfo.C3': gone(), pro: { plan: 'yearly' }
+  })));
+  await check('stranger tries the departure shape on a household they are not in (fails)', assertFails(updateDoc(doc(S, 'households/HD'), {
+    'members.S': gone(), 'memberInfo.S': gone()
+  })));
+  await check('caregiver deletes an invite for SOMEONE ELSE\'s email (fails)', assertFails(deleteDoc(doc(C3, 'invites/inv@x.com'))));
+  // A departing owner needs the fuller update (successor + ownerId), which isOwner() already covers
+  // because it reads the pre-write state.
+  await check('owner leaves, promoting a successor in the same write (succeeds)', assertSucceeds(updateDoc(doc(O2, 'households/HD'), {
+    'members.O2': gone(), 'memberInfo.O2': gone(), 'members.C3': 'owner', ownerId: 'C3',
+    'formerMemberInfo.O2': { name: '', relationship: 'Mama Bear', avatar: null }
+  })));
+
+  console.log('\nAccount deletion — sole owner flags the household (A6):');
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'households/HSOLO'), {
+      ownerId: 'S2', members: { S2: 'owner' }, memberInfo: { S2: { name: 'Solo' } }, app: cleanApp()
+    });
+  });
+  const S2 = env.authenticatedContext('S2', { email: 's2@x.com' }).firestore();
+  await check('sole owner sets deleteAfter and removes themselves (succeeds)', assertSucceeds(updateDoc(doc(S2, 'households/HSOLO'), {
+    'members.S2': gone(), 'memberInfo.S2': gone(), deleteAfter: 1, deletionRequestedBy: 'S2'
+  })));
+  await check('a stranger cannot flag someone else\'s household for deletion (fails)', assertFails(updateDoc(doc(S, 'households/H'), { deleteAfter: 1 })));
+
   await env.cleanup();
   console.log('\n' + results.pass + ' passed, ' + results.fail + ' failed');
   process.exit(results.fail ? 1 : 0);

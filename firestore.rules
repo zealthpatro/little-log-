@@ -44,8 +44,13 @@ service cloud.firestore {
       allow update: if request.auth != null
         && request.resource.data.householdId == resource.data.householdId
         && get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members[request.auth.uid] == 'owner';
-      allow delete: if request.auth != null
-        && get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members[request.auth.uid] == 'owner';
+      // The household's owner may withdraw an invite. An invitee may also delete the invite addressed
+      // to their OWN email — needed for account deletion, where a caregiver must be able to clear
+      // every trace of themselves without an owner's help (App Store 5.1.1(v): deletion can never be
+      // gated on another person). The email is the doc id, so this grants nothing beyond their own.
+      allow delete: if request.auth != null && (
+           request.auth.token.email.lower() == email
+        || get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members[request.auth.uid] == 'owner' );
     }
 
     match /households/{hid} {
@@ -81,6 +86,26 @@ service cloud.firestore {
         return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['memberInfo'])
           || request.resource.data.memberInfo.diff(resource.data.memberInfo).affectedKeys().hasOnly([request.auth.uid]);
       }
+      // Account deletion: a member removes THEMSELVES. Without this a caregiver could not delete
+      // their own account, because the isMember() branch below freezes the members map — and
+      // App Store 5.1.1(v) forbids gating deletion on an owner's cooperation.
+      //
+      // An OWNER leaving does not need this branch: isOwner() already permits the fuller update
+      // (promoting a successor, or flagging a sole-member household with deleteAfter), and isOwner()
+      // reads resource.data, the state BEFORE the write, so they are still owner at check time.
+      //
+      // Scoped hard so it can never become a privilege-escalation path: exactly three keys may move,
+      // the writer must be GONE from members afterwards, and each of those maps may differ only at
+      // the writer's own uid. So no promoting, no removing anyone else, no touching ownerId,
+      // deleteAfter, pro or the app blob.
+      function departingSelf() {
+        return isMember()
+          && !(request.auth.uid in request.resource.data.members)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'memberInfo', 'formerMemberInfo'])
+          && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid])
+          && request.resource.data.memberInfo.diff(resource.data.memberInfo).affectedKeys().hasOnly([request.auth.uid])
+          && request.resource.data.get('formerMemberInfo', {}).diff(resource.data.get('formerMemberInfo', {})).affectedKeys().hasOnly([request.auth.uid]);
+      }
 
       // Members only. An invitee does NOT read the full household doc pre-join (it carries the app
       // blob + every member's name/email); the join flow reads the narrow invite doc instead, then
@@ -99,6 +124,7 @@ service cloud.firestore {
       // memberInfo. An invitee may join (adds themselves). No one may inject maternal-private data.
       allow update: if proUnchanged() && appBlobClean() && (
            isOwner()
+        || departingSelf()
         || ( isMember()
              && request.resource.data.ownerId == resource.data.ownerId
              && request.resource.data.members == resource.data.members
