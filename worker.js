@@ -568,49 +568,6 @@ async function hubRoute(request, env, url) {
   }
 }
 
-// Browser cache policy for static assets.
-//
-// Cloudflare's asset server answers everything with `public, max-age=0, must-revalidate`
-// and IGNORES Cache-Control set in _headers — a Workers Static Assets limitation (every
-// other header in _headers still applies, which is why the security headers land). So a
-// cold /app/ load spent ~26 round trips re-fetching bytes that were already correct, and
-// the only place we can fix it is here, on the way out.
-//
-// THE RULE IF YOU ADD A PATTERN: only cache a path whose bytes cannot change without the
-// path changing. A wrong entry here is close to unfixable — browsers that cached it will
-// not ask again for the full duration and there is no way to reach them.
-//
-// Deliberately absent: /app/*.js and all HTML. app/sw.js re-fetches its precache list
-// through the HTTP cache on every CACHE version bump, so a long-lived hit on app JS would
-// make a new service worker install the PREVIOUS build's code. They stay revalidating.
-const ASSET_CACHE_RULES = [
-  // Version lives in the path (/app/vendor/firebase/10.12.2/...), so a bump is a new URL.
-  // ~160KB, and the biggest thing on the app's cold path since we stopped using gstatic.
-  [/^\/app\/vendor\//, 'public, max-age=31536000, immutable'],
-  // Font binaries: the name encodes family + weight + subset, so different bytes mean a
-  // different name. fonts.css is excluded on purpose — it is the one file here a redesign
-  // rewrites in place.
-  [/^\/app\/fonts\/[^/]+\.woff2$/, 'public, max-age=31536000, immutable'],
-  // Icons and logos: fixed names, and a change is cosmetic, so a month of staleness costs
-  // less than the round trips it saves.
-  [/^\/icons\//, 'public, max-age=2592000'],
-  // Marketing CSS/JS. These DO change on deploy and the marketing site has no service
-  // worker to force an update, so: no request at all within 10 minutes, then paint from
-  // cache immediately while refreshing in the background. Worst case a returning visitor
-  // sees the previous build for a single load.
-  [/^\/(?:site|vax)\.css$/, 'public, max-age=600, stale-while-revalidate=86400'],
-  [/^\/(?:rail|vax|install|news-widget)\.js$/, 'public, max-age=600, stale-while-revalidate=86400']
-];
-
-async function serveAsset(request, env, pathname) {
-  const res = await env.ASSETS.fetch(request);
-  const rule = ASSET_CACHE_RULES.find((r) => r[0].test(pathname));
-  if (!rule) return res;
-  const out = new Response(res.body, res);
-  out.headers.set('cache-control', rule[1]);
-  return out;
-}
-
 export default {
   async scheduled(event, env) { try { await sendPushReminders(env); } catch (e) { console.error('push_cron_fail', (e && e.message) || String(e)); } },
   async fetch(request, env) {
@@ -670,6 +627,6 @@ export default {
       const upstream = new URL(url.pathname + url.search, 'https://little-log-a9caa.firebaseapp.com');
       return fetch(new Request(upstream, request));
     }
-    return serveAsset(request, env, url.pathname);
+    return env.ASSETS.fetch(request);
   }
 };

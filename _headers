@@ -6,8 +6,81 @@
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
   Content-Security-Policy: object-src 'none'; base-uri 'self'; frame-ancestors 'none'; upgrade-insecure-requests
 
-# Cache-Control is NOT set here. Cloudflare's Workers Static Assets server ignores
-# Cache-Control from _headers and always answers `public, max-age=0, must-revalidate`
-# (verified live — every other header in this file does apply). Browser cache policy
-# therefore lives in worker.js, in ASSET_CACHE_RULES. Adding Cache-Control back here
-# would be a silent no-op that reads like protection, so don't.
+# ---------------------------------------------------------------------------
+# Caching.
+#
+# Cloudflare's default for static assets is `public, max-age=0, must-revalidate`,
+# so EVERY file costs a network round trip on every visit — measured at ~26 requests
+# for a cold /app/ load. The rules below buy that back for the files whose bytes are
+# pinned by their path.
+#
+# THIS FILE IS THE ONLY PLACE THIS CAN BE DONE. Static assets are served directly by
+# Cloudflare's asset server and never invoke worker.js (there is no run_worker_first
+# in wrangler.toml), so setting Cache-Control on the way out of the Worker looks
+# reasonable and silently does nothing. It was tried; it does not work.
+#
+# Deploys take up to ~2 minutes to reflect here. Verify with curl -I, and wait, before
+# concluding a rule has not applied.
+#
+# THE RULE IF YOU EDIT THIS FILE: never put a long max-age on a path whose contents can
+# change without the name changing. A wrong entry is close to unfixable — browsers that
+# already cached it will not ask again for the full duration, and there is no way to
+# reach them.
+# ---------------------------------------------------------------------------
+
+# The service workers are how a new build reaches an installed app, so they must never sit
+# in the HTTP cache. /app/sw.js is the PWA's; /sw.js is the marketing site's.
+/sw.js
+  Cache-Control: no-cache
+/app/sw.js
+  Cache-Control: no-cache
+/app/firebase-messaging-sw.js
+  Cache-Control: no-cache
+/manifest.webmanifest
+  Cache-Control: no-cache
+/app/manifest.webmanifest
+  Cache-Control: no-cache
+/sitemap.xml
+  Cache-Control: no-cache
+/robots.txt
+  Cache-Control: no-cache
+
+# Firebase SDK: the version lives in the path (/app/vendor/firebase/10.12.2/...), so a bump
+# is a new URL and these bytes are immutable by construction. ~160KB, and the single biggest
+# item on the app's cold critical path since we stopped loading it from gstatic.
+/app/vendor/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Font binaries. The name encodes family + weight + subset, so the bytes only change if the
+# typeface does, at which point the file is regenerated under a new name. fonts.css is
+# deliberately NOT covered: it is the one file here that a redesign rewrites in place.
+/app/fonts/*.woff2
+  Cache-Control: public, max-age=31536000, immutable
+
+# App icons and logos: fixed names, and a change is cosmetic rather than functional, so a
+# month of staleness costs less than the round trips it saves.
+/icons/*
+  Cache-Control: public, max-age=2592000
+
+# Marketing CSS/JS. These DO change on deploy and the marketing site has no service worker to
+# force an update, so they get a short window plus stale-while-revalidate: a repeat visit
+# inside 10 minutes makes no request at all, and after that the browser paints from cache
+# immediately while refreshing in the background. Worst case a returning visitor sees the
+# previous build for a single load.
+#
+# Nothing under /app/ that a deploy can rewrite is listed here, and that is load-bearing:
+# app/sw.js re-fetches its whole precache list through the HTTP cache on every CACHE version
+# bump, so a long-lived hit on app JS would make a new service worker install the PREVIOUS
+# build's code. /app/*.js and all HTML stay on the revalidating default on purpose.
+/site.css
+  Cache-Control: public, max-age=600, stale-while-revalidate=86400
+/vax.css
+  Cache-Control: public, max-age=600, stale-while-revalidate=86400
+/rail.js
+  Cache-Control: public, max-age=600, stale-while-revalidate=86400
+/vax.js
+  Cache-Control: public, max-age=600, stale-while-revalidate=86400
+/install.js
+  Cache-Control: public, max-age=600, stale-while-revalidate=86400
+/news-widget.js
+  Cache-Control: public, max-age=600, stale-while-revalidate=86400
