@@ -1047,6 +1047,35 @@ try{ window.CUBBY_VERSION = CUBBY_VERSION; }catch(e){}
    Our Den (home management) is built and tested but gated until its own launch. */
 const FEATURES = { den: false };
 
+/* ---------- Native-first rollout ----------------------------------------------------------------
+   "Ship it to the app first, then decide about the PWA" cannot be a BUILD decision here: the
+   Capacitor wrapper remote-loads little-cubby.com/app/, so the iOS app and the web app run the same
+   HTML from the same deploy. There is no separate app binary to put a feature into.
+
+   So it is a RUNTIME decision instead, and this is the one place it is made. Add a key here to hold
+   a new experience back to app users, then change one word to release it to everyone. No rebuild, no
+   TestFlight round trip, no branch: the next page load picks it up.
+
+     'native' — only inside the iOS/Android wrapper
+     'all'    — everyone, app and web
+     'off'    — nobody (kill switch; safer than reverting a deploy)
+
+   An unlisted key is fully shipped, so gates disappear on their own once a feature graduates.
+
+   DO NOT put bug fixes behind this. A fix gated to native leaves the PWA broken, which is why
+   nothing shipped on 2026-07-18/19 (share buttons, invite recovery, loss guards, growth colour) is
+   listed here. This is for NEW experiences you want app users to meet first. */
+const ROLLOUT = {
+  // 'journeyBook': 'native',   ← example: app-only until you're happy, then flip to 'all'
+};
+function rolloutOn(key){
+  const stage = ROLLOUT[key];
+  if(stage === undefined) return true;           // not gated = fully shipped
+  if(stage === 'off') return false;
+  if(stage === 'native') return isNativeApp();
+  return stage === 'all';
+}
+
 const AVATAR_COLORS = ['#E29A3B','#5E6AA8','#56A08E','#C97FA0','#D2654E','#7B9E5B'];
 
 /* ---------- Icons ---------- */
