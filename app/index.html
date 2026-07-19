@@ -1355,6 +1355,13 @@ function maybeRunDeepLink(){
   setTimeout(function(){ try{ runDeepLink(dl); }catch(e){} }, 350);
 }
 function runDeepLink(dl){
+  // Loss-safety. After a loss the holding screen is the entire screen, deliberately: no chooser, no
+  // prompts, nothing to do until she moves on herself. A stashed intent from an older link or an old
+  // notification (`?stage=expecting`) would otherwise land a "when is your due date?" sheet on top
+  // of it, minutes after the worst news she will get from this app.
+  // Swallowed, not queued: maybeRunDeepLink has already cleared the stash, so the intent dies here
+  // rather than waiting to ambush her later. She can navigate herself, when she is ready.
+  if(typeof myLossHolding==='function' && myLossHolding() && !(state.babies&&state.babies.length)) return;
   var hasPreg=!!state.pregnancy, hasBaby=!!(state.babies&&state.babies.length);
   if(dl.read){ var fr=_fn('openReadCarousel'); if(fr) fr(dl.read); return; }
   if(dl.stage){
