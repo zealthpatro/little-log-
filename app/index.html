@@ -206,6 +206,10 @@ body{
 @media(prefers-reduced-motion:reduce){.ticker .roll{animation:none}}
 .tip-static{display:flex;align-items:center;gap:9px;padding:11px 15px;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 3px 9px var(--shadow);margin-bottom:14px;font-size:13px;font-weight:700;color:var(--ink-soft);line-height:1.4;transition:opacity .35s;min-height:24px;}
 .tip-static .tk-ic{font-size:16px;flex:0 0 auto;}
+/* The ticker can now be dismissed, like every other hint. Sits at the end so the tip text keeps
+   the full width it needs; the tap target stays 30px even though the glyph is small. */
+.tip-static #tipTxt{flex:1 1 auto;}
+.tip-static .tip-x{flex:0 0 auto;border:none;background:none;color:var(--ink-faint);font-size:19px;line-height:1;width:30px;height:30px;margin:-6px -8px -6px 0;cursor:pointer;font-family:inherit;}
 .tip-static b{color:var(--ink);font-weight:800;}
 .since-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;}
 .since-card{
@@ -1446,8 +1450,18 @@ function meGreeting(){
   const part = (h<5||h>=23)?'Still up':(h<12?'Good morning':(h<17?'Good afternoon':'Good evening'));
   return name ? `${part}, ${escapeHtml(name)} 🐻` : `${part} 🐻`;
 }
+/* Retires itself. Every other hint in this file is one-shot — coachMark checks hasSeen(), tipLine
+   checks hasSeen() — but the ticker had no gate of any kind, so five beginner tips cycled on the
+   home screen forever. A parent eighteen months in was still being told how to start a nap timer,
+   which quietly says "we don't think you've got this yet" on the one screen she sees most.
+
+   Retirement is keyed to logged entries rather than time: it measures whether she has actually
+   learned to log, which is what the tips are for. She can also dismiss it outright. */
+const TIPS_RETIRE_AFTER=25;
 function tipsTicker(){
   const b=activeBaby();
+  if(hasSeen('tip_ticker')) return '';
+  if((state.events||[]).length>=TIPS_RETIRE_AFTER) return '';
   const tips=[
     ['😴','Tap <b>Sleep</b> to start a live nap timer, it shows on every phone.'],
     ['🤝','Invite your partner or the nanny, the day gets logged for you.']
@@ -1462,7 +1476,7 @@ function tipsTicker(){
   if(_tipIdx>=tips.length) _tipIdx=0;
   const t=tips[_tipIdx];
   startTipCycle();
-  return `<div class="tip-static" id="tipStatic"><span class="tk-ic" id="tipIc">${t[0]}</span><span id="tipTxt">${t[1]}</span></div>`;
+  return `<div class="tip-static" id="tipStatic"><span class="tk-ic" id="tipIc">${t[0]}</span><span id="tipTxt">${t[1]}</span><button class="tip-x" onclick="dismissTip('ticker')" aria-label="Hide tips">×</button></div>`;
 }
 var _tipList=[], _tipIdx=0, _tipTimer=null;
 function startTipCycle(){
@@ -1508,7 +1522,12 @@ function renderGetStarted(){
   const shared=Object.keys(members).length>1;
   const ab=activeBaby();
   const hasPhoto=!!(ab && (ab.avatarPhotoId || (state.photos||[]).some(p=>p.babyId===ab.id && p.photoId)));
-  if(haveBaby && haveLog && shared && hasPhoto) return ''; // all done → auto-hide
+  // Auto-hide does NOT require `shared`. Inviting someone is a real suggestion, but plenty of
+  // parents are doing this alone, or simply do not want family in the log — and for them the card
+  // could never complete, so a permanent unfinished checklist sat on the home screen with one row
+  // they were structurally unable to tick. The invite row stays offered while the card is up; it
+  // just no longer holds the card hostage.
+  if(haveBaby && haveLog && hasPhoto) return ''; // the things she can actually do → auto-hide
   const row=(done,label,sub,action)=>`<div class="gs-row${done?' done':''}"${(action&&!done)?` onclick="${action}"`:''}>
     <span class="gs-check">${done?'✓':''}</span>
     <div class="gs-body"><div class="gs-t">${label}</div><div class="gs-s">${sub}</div></div>
