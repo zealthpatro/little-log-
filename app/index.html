@@ -1329,10 +1329,15 @@ var _dlRan=false;
 function stashDeepLink(){
   try{
     var q=new URLSearchParams(location.search||'');
+    // "I arrived from an invite" intent. Carries NO personal data — just the fact that this open
+    // came from someone's invite link, so that a failure to match can be explained instead of
+    // silently handing them a brand-new empty household. Stashed here because it has to survive the
+    // sign-in redirect, same as the deep-link keys.
+    if(q.get('join')){ try{ sessionStorage.setItem('cubby-join','1'); }catch(e){} }
     var dl={go:q.get('go'),stage:q.get('stage'),read:q.get('read'),tab:q.get('tab')};
-    if(dl.go||dl.stage||dl.read||dl.tab){
-      sessionStorage.setItem('cubby-dl', JSON.stringify(dl));
-      ['go','stage','read','tab'].forEach(function(k){ q.delete(k); });   // strip ONLY the deep-link keys; keep utm/e2e/etc
+    if(dl.go||dl.stage||dl.read||dl.tab||q.get('join')){
+      if(dl.go||dl.stage||dl.read||dl.tab) sessionStorage.setItem('cubby-dl', JSON.stringify(dl));
+      ['go','stage','read','tab','join'].forEach(function(k){ q.delete(k); });   // strip ONLY the deep-link keys; keep utm/e2e/etc
       var qs=q.toString();
       try{ history.replaceState({}, '', location.pathname + (qs?('?'+qs):'') + (location.hash||'')); }catch(e){}
     }

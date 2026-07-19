@@ -544,6 +544,18 @@
       }
     }
 
+    // They followed someone's invite link, but no invite matches the address they just signed in
+    // with. Creating a fresh household here (which is what used to happen) is the worst possible
+    // answer: they land in an empty Cubby, as its owner, with their partner's circle nowhere in
+    // sight and nothing on screen suggesting anything went wrong. Apple's Hide My Email makes this
+    // the DEFAULT outcome for a caregiver invited to their real address.
+    //
+    // So stop, explain, and give them the two ways out. Nothing is written.
+    if (joinIntent() && email) {
+      showInviteMismatch(email);
+      return null;
+    }
+
     // Otherwise create a fresh household (this user is the owner) and migrate any local data.
     var newRef = db.collection('households').doc();
     var m = await buildMigrationPayload();
@@ -796,6 +808,42 @@
   /* ---------- start real-time sync ---------- */
   // Calm recovery screen for a removed member (or a deleted household) — instead of an endless
   // loader. Clears the stale pointer so a fresh sign-in starts clean.
+  // Did this open come from someone's invite link? Set by stashDeepLink() in index.html from
+  // `?join=1`, which carries no personal data and survives the sign-in redirect.
+  function joinIntent() {
+    try { return sessionStorage.getItem('cubby-join') === '1'; } catch (e) { return false; }
+  }
+  // The invite did not match the address they signed in with. Explain it in their terms and offer
+  // the only two things that actually resolve it, rather than silently starting a new family.
+  var inviteMismatchShown = false;
+  function showInviteMismatch(email) {
+    if (inviteMismatchShown) return; inviteMismatchShown = true;
+    try { hideOverlay(); } catch (e) {}
+    try { sessionStorage.removeItem('cubby-join'); } catch (e) {}
+    var ov = document.createElement('div'); ov.id = 'll-invite-mismatch';
+    ov.setAttribute('style', 'position:fixed;inset:0;z-index:3000;background:#FBF5E9;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;overflow-y:auto');
+    ov.innerHTML = '<div style="max-width:360px;font-family:-apple-system,Segoe UI,Roboto,sans-serif">'
+      + '<div style="font-size:44px">🐻</div>'
+      + '<h2 style="font-family:Georgia,serif;color:#3a2f28;margin:12px 0 8px;font-size:22px">We could not find your invite</h2>'
+      + '<div style="color:#8a7a6d;font-size:15px;line-height:1.55">You signed in as <b>' + esc(email) + '</b>, and there is no invite waiting for that address.</div>'
+      + '<div style="color:#8a7a6d;font-size:15px;line-height:1.55;margin-top:12px">Invites are matched by email. If you signed in with Apple and chose to hide your address, Cubby sees the hidden one instead of yours.</div>'
+      + '<div style="color:#8a7a6d;font-size:15px;line-height:1.55;margin-top:12px">Sign in again with the address they sent it to, or ask them to re-send it to <b>' + esc(email) + '</b>.</div>'
+      + '<button id="ll-im-btn" style="margin-top:22px;border:none;border-radius:16px;padding:15px 24px;background:#C97FA0;color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Try a different sign in</button>'
+      + '<div style="margin-top:14px"><a href="#" id="ll-im-own" style="color:#8a7a6d;font-size:14px;font-weight:700">Start my own Cubby instead</a></div>'
+      + '</div>';
+    document.body.appendChild(ov);
+    var btn = document.getElementById('ll-im-btn');
+    if (btn) btn.onclick = function () { if (window.LL && typeof window.LL.signOut === 'function') window.LL.signOut(); else { try { location.reload(); } catch (e) {} } };
+    // They may genuinely want their own household after all; honour that, just never by accident.
+    var own = document.getElementById('ll-im-own');
+    if (own) own.onclick = function (e) {
+      e.preventDefault();
+      try { ov.remove(); } catch (e2) {}
+      inviteMismatchShown = false;
+      try { location.reload(); } catch (e2) {}
+    };
+  }
+
   var accessLostShown = false;
   function showAccessLost() {
     if (accessLostShown) return;
@@ -1478,8 +1526,8 @@
       : '<div class="ll-auth-msg">Only an owner can invite new people.</div>';
 
     var share = '<div class="ll-invite"><label>App link to share</label>'
-      + '<div class="ll-linkrow"><input id="llAppLink" readonly value="' + esc(location.origin + '/app/') + '"><button id="llCopyLink" class="ll-modal-btn">Copy</button></div>'
-      + '<div class="ll-auth-msg">Cubby doesn\'t send emails. Send this link yourself (text / WhatsApp); the invited person signs in with the invited email address (Google, Apple or an email link) and joins automatically. If they use Sign in with Apple, they should choose Share My Email so it matches.</div></div>';
+      + '<div class="ll-linkrow"><input id="llAppLink" readonly value="' + esc(location.origin + '/app/?join=1') + '"><button id="llCopyLink" class="ll-modal-btn">' + (navigator.share ? 'Share' : 'Copy') + '</button></div>'
+      + '<div class="ll-auth-msg">Send this link yourself, by text or WhatsApp. Whoever you invite signs in with the email address you invited, and joins straight away. Share or Copy sends the address along with the link, so they know which one to use.</div></div>';
 
     modal('Family & sharing', '<div class="ll-mems">' + rows + '</div>'
       + '<div class="ll-auth-msg" style="text-align:left;margin:-2px 0 12px">When you invite people, everyone in your circle can see each other\'s name and email here, so you know who is who. Only you can change your own.</div>'
@@ -1603,11 +1651,33 @@
     catch (e) { msg.textContent = 'Could not save: ' + ((e && e.message) || e); }
   }
 
+  // The message a recipient actually needs. The whole invite is matched by email address, so an
+  // invite link WITHOUT "sign in with this exact address" is not an invite, it is a trap — and the
+  // copy button used to hand over exactly that: a bare URL, identical for every family, with the
+  // instructions living only in the mailto: branch that WhatsApp users never touch.
+  function inviteText(email) {
+    var link = location.origin + '/app/?join=1';
+    var babyName = (typeof state !== 'undefined' && state.babies && state.babies[0] && state.babies[0].name) ? state.babies[0].name : 'our little one';
+    return 'I\'m using Cubby to keep track of ' + babyName + '\'s feeds, naps and nappies, and I\'d love you on it too.\n\n'
+      + '1) Open this link: ' + link + '\n'
+      + (email ? ('2) Sign in with this email address: ' + email + '\n   It has to be that one, that is how Cubby knows to let you in.\n\n') : '\n')
+      + 'You\'ll see everything, live.';
+  }
+  var _lastInviteEmail = '';
   function copyAppLink() {
-    var inp = document.getElementById('llAppLink'), btn = document.getElementById('llCopyLink');
+    var btn = document.getElementById('llCopyLink');
+    var text = inviteText(_lastInviteEmail);
     var done = function () { if (btn) { btn.textContent = 'Copied!'; setTimeout(function () { btn.textContent = 'Copy'; }, 1500); } };
-    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(inp.value).then(done).catch(function () { try { inp.select(); document.execCommand('copy'); done(); } catch (e) {} }); }
-    else { try { inp.select(); document.execCommand('copy'); done(); } catch (e) {} }
+    // Native share sheet first: in the wrapper this is the idiom, and mailto: in a WKWebView is the
+    // worst option available. Falls back to the clipboard everywhere it is missing.
+    if (navigator.share) {
+      navigator.share({ title: 'Join me on Cubby 🐻', text: text }).then(function () {
+        if (btn) { btn.textContent = 'Shared!'; setTimeout(function () { btn.textContent = 'Copy'; }, 1500); }
+      }).catch(function () {});
+      return;
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(done).catch(function () { try { var inp = document.getElementById('llAppLink'); inp.select(); document.execCommand('copy'); done(); } catch (e) {} }); }
+    else { try { var inp2 = document.getElementById('llAppLink'); inp2.select(); document.execCommand('copy'); done(); } catch (e) {} }
   }
 
   async function submitInvite() {
@@ -1624,18 +1694,24 @@
         relationship: rel, name: name,
         invitedBy: auth.currentUser.uid, status: 'pending', createdAt: window.LL.serverTimestamp()
       });
-      var link = location.origin + '/app/';
-      var babyName = (typeof state !== 'undefined' && state.babies && state.babies[0] && state.babies[0].name) ? state.babies[0].name : 'our baby';
+      // One message, used by every route out of here. It used to be composed twice, and only the
+      // mailto: copy carried the "sign in with this address" line that makes the invite work at all.
+      _lastInviteEmail = email;
+      var bodyTxt = inviteText(email);
       var subject = 'Join me on Cubby 🐻';
-      var bodyTxt = 'I\'m using Cubby to keep track of ' + babyName + '\'s feeds, naps, nappies and more, and I\'d love you on it too.\n\n'
-        + '1) Open this link: ' + link + '\n'
-        + '2) Sign in with THIS email address: ' + email + ' (Google, Apple or an email link all work — with Apple, choose Share My Email so it matches).\n\n'
-        + 'You\'ll join automatically and see everything, live. (On a phone you can add it to your home screen like an app.)';
       var mailto = 'mailto:' + encodeURIComponent(email) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(bodyTxt);
+      // We no longer coach people out of Apple's Hide My Email here. That advice existed to paper
+      // over the email-matching design, and telling a parent to give up a privacy default is not
+      // something a privacy-max product should be doing. If it mismatches, the sign-in now explains
+      // it and offers the way back instead.
       msg.innerHTML = '✅ Invite ready for <b>' + esc(email) + '</b>' + (rel ? ' (' + esc(rel) + ')' : '') + '.'
-        + '<button id="llInvEmailBtn" class="ll-modal-btn" style="margin-top:10px">📧 Email the invite</button>'
-        + '<div style="font-size:12px;color:#9a8d80;margin-top:8px">Opens your email app with the link ready to send. Or use <b>Copy</b> above for WhatsApp/text.</div>';
-      var eb = document.getElementById('llInvEmailBtn'); if (eb) eb.onclick = function () { window.location.href = mailto; };
+        + '<button id="llInvShareBtn" class="ll-modal-btn" style="margin-top:10px">' + (navigator.share ? '📤 Share the invite' : '📧 Email the invite') + '</button>'
+        + '<div style="font-size:12px;color:#9a8d80;margin-top:8px">Sends the link <b>and</b> the address they need to sign in with. Or use <b>Copy</b> above for WhatsApp.</div>';
+      var eb = document.getElementById('llInvShareBtn');
+      if (eb) eb.onclick = function () {
+        if (navigator.share) { navigator.share({ title: subject, text: bodyTxt }).catch(function () {}); return; }
+        window.location.href = mailto;
+      };
       btn.textContent = 'Create invite'; btn.disabled = false;
       document.getElementById('llInvName').value = ''; document.getElementById('llInvEmail').value = '';
     } catch (e) {
@@ -1706,6 +1782,11 @@
     try {
       showStatus('Setting things up…');
       var hid = await resolveHousehold(user);
+      // null means resolveHousehold deliberately declined to place this user: they followed an
+      // invite link but no invite matches the address they signed in with, and showInviteMismatch()
+      // already owns the screen. Starting a sync against a null household would throw over the top
+      // of a message they need to read.
+      if (!hid) return;
       startSync(hid, user);
       // A push token can arrive before auth restores (APNs/FCM can beat the IndexedDB restore), and
       // storePushToken parks it rather than writing to the 'local' sentinel uid. Flush it now that
