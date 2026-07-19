@@ -1314,6 +1314,7 @@ function render(){
   // toggling state doesn't jump the page to the top (which read as a jarring full refresh).
   // View/tab changes still scroll to top because they call $('#scroll').scrollTo(0,0) after render().
   var _ss=document.getElementById('scroll'); var _sy=_ss?_ss.scrollTop:0;
+  migrateSeenOnce();   // no-op after it succeeds once; retries while the role is still unknown
   _renderView();
   if(_sy){ var _ns=document.getElementById('scroll'); if(_ns) _ns.scrollTop=_sy; }
   maybeRunDeepLink();
@@ -1484,7 +1485,7 @@ function monthiversary(){
   return (days>=0&&days<=14) ? m : null;
 }
 function renderGetStarted(){
-  if(state.settings.seen && state.settings.seen['tip_getstarted']) return '';
+  if(hasSeen('tip_getstarted')) return '';
   const haveBaby=(state.babies||[]).length>0;
   const haveLog=(state.events||[]).length>0;
   const members=(window.LL&&window.LL.members)||{};
@@ -1686,7 +1687,7 @@ function daySurface(){
 
   const notesEmpty = !dayNotes.length && !showPin;
   // First-time soft pulse on the compose button (until the member has left a note).
-  const pulse = (!state.settings.seen || !state.settings.seen['tip_leftnote']) ? ' pulse' : '';
+  const pulse = hasSeen('tip_leftnote') ? '' : ' pulse';
 
   let notesLane='';
   if(notesEmpty){
@@ -1785,7 +1786,7 @@ async function saveNote(){
     const mine=(state.notes||[]).filter(n=>n.createdBy===me&&n.day===dayKey(ts)).sort((a,b)=>(b.at||0)-(a.at||0))[0];
     if(mine&&window.LL.setNotePinned) await window.LL.setNotePinned(mine.id, true);
   }
-  if(!state.settings.seen)state.settings.seen={}; state.settings.seen['tip_leftnote']=true; persist();
+  markSeen('tip_leftnote');
   closeSheet(); render(); toast('Note left 🐻');
 }
 function openNoteView(id){
@@ -1884,7 +1885,7 @@ function renderHome(){
       <button onclick="openVisitSummary()">Summary</button></div>`;
   }
   const mv=monthiversary();
-  if(mv && !(state.settings.seen&&state.settings.seen['tip_bday'+mv])){
+  if(mv && !hasSeen('tip_bday'+mv)){
     alerts += `<div class="alert-pill" style="border-color:var(--star)">
       <div class="ap-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🎉</div>
       <div class="ap-body"><div class="ap-t">${escapeHtml((activeBaby()||{}).name||'Baby')} is ${mv} month${mv>1?'s':''} 🎉</div><div class="ap-s">Their ${mv}-month card is waiting 🐻</div></div>
@@ -1898,7 +1899,7 @@ function renderHome(){
       <button onclick="ackChild()">Lovely</button></div>`;
   }
   // One-time gentle nudge: many web users never realise Cubby installs to the home screen.
-  if(typeof canShowInstall==='function' && canShowInstall() && !(state.settings.seen && state.settings.seen['tip_install'])){
+  if(typeof canShowInstall==='function' && canShowInstall() && !hasSeen('tip_install')){
     alerts += `<div class="coach"><div class="cm-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M8 11l4 4 4-4"/><path d="M5 20h14"/></svg></div>
       <div class="cm-body"><div class="cm-t">Use Cubby like an app</div><div class="cm-s">Add it to your home screen for one-tap, full-screen, offline access. No app store.</div>
       <button class="btn-primary" style="margin-top:9px;padding:8px 14px;font-size:13px" onclick="addToHomeScreen('homeInstallMsg')">Add to home screen</button>
@@ -1980,19 +1981,65 @@ function initHero(){
   },4500);
 }
 
+/* ---- "already seen this" state, PER PERSON -------------------------------------------
+   Coach marks, tips, the get-started checklist and the install nudge all used
+   state.settings.seen — and state.settings is the household's SHARED app blob
+   (appBlobFromState in store-firebase.js sends it wholesale; applyAppBlob excepts only
+   `theme` as per-device). So whoever opened Cubby first burned every hint for the whole
+   circle: the second, third and fourth caregiver arrived to an app that had already
+   decided it had explained itself to them. In a product whose entire premise is "caring
+   is a team sport", the co-parent got the worst first run of anyone.
+
+   Same fix as the quick-log button: keyed by uid in localStorage, never in the blob.
+
+   Migration: an existing OWNER keeps their seen state, because they are almost certainly
+   the person who actually dismissed those hints during first run. Everyone else starts
+   fresh, which is the bug being fixed, not a regression. */
+function seenKey(){ return 'cubby-seen-'+quickUid(); }
+function seenMap(){
+  try{ return JSON.parse(localStorage.getItem(seenKey())||'{}')||{}; }catch(e){ return {}; }
+}
+function hasSeen(k){ return !!seenMap()[k]; }
+function markSeen(k){
+  const m=seenMap(); m[k]=1;
+  try{ localStorage.setItem(seenKey(), JSON.stringify(m)); }catch(e){}
+}
+// Runs once per user. Only the owner inherits the old shared map; a caregiver inheriting it
+// would reproduce the exact bug we are removing.
+function migrateSeenOnce(){
+  try{
+    if(localStorage.getItem(seenKey())) return;
+    // Wait until the role is actually known. Guessing "owner" while the household snapshot is
+    // still in flight would hand a caregiver the owner's seen-state and quietly reproduce the
+    // very bug this replaces, so an unknown role means try again on the next render.
+    const role=window.LL&&window.LL.role;
+    if(!role) return;
+    const old=(state.settings&&state.settings.seen)||{};
+    localStorage.setItem(seenKey(), JSON.stringify(role==='owner'?old:{}));
+  }catch(e){}
+}
+
+/* Share CTAs used to be render-gated on navigator.share, which WKWebView does not provide. So in the
+   shipped iOS app the primary viral action was simply invisible — on the one platform where the
+   share sheet IS the native idiom. The gate was never needed: every share function already falls
+   through to saveFile(), and in the wrapper saveFile() routes to the real iOS share sheet via the
+   native bridge. So the button is always shown now, and named for what it will actually do, rather
+   than promising "Share" to a desktop browser that can only download. */
+function shareVerb(){ return (navigator.share||window.cubbyNativeSaveFile)?'Share':'Save'; }
+
 /* ---- coach marks (one-time hints) & contextual nudges ---- */
 function coachMark(tab,title,text){
-  if(state.settings.seen && state.settings.seen[tab]) return '';
+  if(hasSeen(tab)) return '';
   return `<div class="coach"><div class="cm-ico">${I.star}</div>
     <div class="cm-body"><div class="cm-t">${title}</div><div class="cm-s">${text}</div></div>
     <button class="cm-x" onclick="dismissCoach('${tab}')">Got it</button></div>`;
 }
-function dismissCoach(tab){ if(!state.settings.seen)state.settings.seen={}; state.settings.seen[tab]=true; persist(); render(); }
+function dismissCoach(tab){ markSeen(tab); render(); }
 function tipLine(key,text){
-  if(state.settings.seen && state.settings.seen['tip_'+key]) return '';
+  if(hasSeen('tip_'+key)) return '';
   return `<div class="tip-line"><span>💡 ${text}</span><button onclick="dismissTip('${key}')">Got it</button></div>`;
 }
-function dismissTip(key){ if(!state.settings.seen)state.settings.seen={}; state.settings.seen['tip_'+key]=true; persist(); render(); }
+function dismissTip(key){ markSeen('tip_'+key); render(); }
 /* ---- Child stage: the home grows up with the baby. Quick log reshapes by age (feed/nappy/pump
    recede behind "More" once they are a toddler); reversible per baby. ---- */
 function actBtn(onclick,bg,c,ico,label,hint){ return `<button class="action" onclick="${onclick}"><div class="ico" style="background:${bg};color:${c}">${ico}</div><div class="label">${label}</div><div class="hint">${hint}</div></button>`; }
@@ -8082,7 +8129,7 @@ function renderPhotos(){
       <button class="btn-primary" onclick="savePhoto()">${I.check} Save</button>
       <button class="btn-primary" style="background:var(--sleep)" onclick="downloadPhoto()">${I.download} Download</button>
     </div>
-    ${navigator.share?`<button class="btn-primary" style="background:var(--pump)" onclick="shareComposed()">📤 Share · Instagram-ready</button>`:''}
+    <button class="btn-primary" style="background:var(--pump)" onclick="shareComposed()">📤 ${shareVerb()} · Instagram-ready</button>
     ${(isCard&&canRecordVideo())?`<button class="btn-primary" style="background:var(--preg)" onclick="recordVideo()">🎬 Save as video ✨</button>`:''}
     ${(!isPro()&&isCard)?`<div class="csub" style="text-align:center;margin:6px 0 10px">Free shares carry a small "made with Cubby" mark · Pro shares are clean ✨</div>`:''}
     <button class="btn-ghost" onclick="discardPhoto()">Discard & start over</button>
@@ -8603,7 +8650,7 @@ function viewPhoto(id){
     <img src="${photoSrc(p.photoId)}" style="width:100%;border-radius:16px;margin-bottom:16px">
     <button class="btn-primary" style="background:var(--star)" onclick="setAvatarFromView('${id}')">${I.star} Set as profile photo</button>
     <button class="btn-ghost" onclick="editPhotoCaption('${id}')">${I.note} Edit caption</button>
-    ${navigator.share?`<button class="btn-ghost" onclick="sharePhoto('${id}')">Share</button>`:''}
+    <button class="btn-ghost" onclick="sharePhoto('${id}')">${shareVerb()}</button>
     <button class="btn-ghost" onclick="downloadSaved('${id}')">${I.download} Download</button>
     <button class="btn-ghost btn-danger" onclick="deletePhoto('${id}')">${I.trash} Delete photo</button>`,'feed');
 }
@@ -8627,7 +8674,7 @@ function openActivityPhoto(id){
   openSheet(`<h2>${escapeHtml(eventTitle(e))}</h2><div class="sub">${escapeHtml(when)}${by?' · logged by '+escapeHtml(by):''}</div>
     <img src="${photoSrc(e.photoId)}" style="width:100%;border-radius:16px;margin-bottom:16px">
     <button class="btn-primary" style="background:var(--star)" onclick="makeMomentFromEvent('${id}')">✨ Make a shareable moment</button>
-    ${navigator.share?`<button class="btn-ghost" onclick="shareEventPhoto('${id}')">Share photo</button>`:''}
+    <button class="btn-ghost" onclick="shareEventPhoto('${id}')">${shareVerb()} photo</button>
     <button class="btn-ghost" onclick="openEdit('${id}')">Edit this log</button>`,'star');
 }
 function makeMomentFromEvent(id){
@@ -8708,8 +8755,8 @@ function memCandPhoto(month){
   var ph=(state.photos||[]).filter(function(p){return p.babyId===state.activeBabyId&&p.photoId&&p.createdAt>=w[0]&&p.createdAt<w[1];}).sort(function(a,b){return b.createdAt-a.createdAt;})[0];
   return ph?ph.photoId:'';
 }
-function memDismissed(k){ return !!(state.settings.seen && state.settings.seen['mem_'+k]); }
-function memDismiss(k){ if(!state.settings.seen)state.settings.seen={}; state.settings.seen['mem_'+k]=1; persist(); render(); }
+function memDismissed(k){ return hasSeen('mem_'+k); }
+function memDismiss(k){ markSeen('mem_'+k); render(); }
 function memoryCandidates(){
   var b=activeBaby(); if(!b) return [];
   var out=[], months=Math.floor(babyMonths());
@@ -8945,7 +8992,7 @@ async function genCard(){
   openSheet(`<h2>${slotLabel(cardDraft.month)}</h2><div class="sub">${escapeHtml(activeBaby().name)}'s memory card</div>
     <img src="${data}" class="card-prev">
     <button class="btn-primary" onclick="saveCardImg()">${I.check} Save to gallery</button>
-    ${navigator.share?`<button class="btn-primary" style="background:var(--pump)" onclick="shareLastCard('memory-card')">📤 Share · Instagram-ready</button>`:''}
+    <button class="btn-primary" style="background:var(--pump)" onclick="shareLastCard('memory-card')">📤 ${shareVerb()} · Instagram-ready</button>
     <button class="btn-primary" style="background:var(--sleep)" onclick="dlCard()">${I.download} Download</button>`,'feed');
   window._lastCard=data;
 }
@@ -9021,7 +9068,7 @@ function drawThenNow(objs){
   hideLoader();
   openSheet(`<h2>Then vs Now</h2><div class="sub">${escapeHtml(b.name)}, growing up.</div>
     <img src="${data}" class="card-prev">
-    ${navigator.share?`<button class="btn-primary" onclick="shareLastCard('thenvsnow')">📤 Share · Instagram-ready</button>`:''}
+    <button class="btn-primary" onclick="shareLastCard('thenvsnow')">📤 ${shareVerb()} · Instagram-ready</button>
     <button class="btn-primary" style="background:var(--sleep)" onclick="dlNamed('thenvsnow')">${I.download} Download</button>
     ${isPro()?'':'<div class="csub" style="text-align:center;margin-top:8px">Pro shares come without the Cubby mark ✨</div>'}`,'sleep');
 }

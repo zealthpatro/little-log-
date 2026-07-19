@@ -594,7 +594,13 @@
   }
   function appBlobFromState() {
     return {
-      babies: state.babies || [], settings: state.settings || {},
+      babies: state.babies || [],
+      // `seen` (coach marks, tips, the get-started checklist, the install nudge) is PER PERSON and
+      // must never ride along in the circle-shared blob: it used to, which meant whoever opened
+      // Cubby first marked every hint as explained for the co-parent and every later caregiver.
+      // It lives in localStorage under the uid now (seenMap/markSeen in index.html). Stripped on
+      // the way out so existing households stop re-broadcasting the old value.
+      settings: (function () { var s = Object.assign({}, state.settings || {}); delete s.seen; return s; })(),
       milestones: state.milestones || [], meds: state.meds || [],
       vaccines: state.vaccines || {}, illnesses: state.illnesses || [],
       photos: state.photos || [],
