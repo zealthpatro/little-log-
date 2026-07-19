@@ -2073,7 +2073,11 @@ const QUICK_ACTIONS=[
   // Mood is owner-only forever (Privacy Max). It must never appear for a caregiver, not even as an
   // unchecked option in the customiser, or the option itself leaks that the record exists.
   {k:'mood',        s:['pregnancy'],                 label:'Mood',        hint:'Private to you',         fn:'openMoodNote()',        soft:'--sleep-soft',  tone:'--sleep',  ico:()=>'🤍', ownerOnly:true},
-  {k:'voice',       s:['baby','child','pregnancy'],  label:'Say it',      hint:'Log by voice ✨',        fn:'openVoiceLog()',        soft:'--feed-soft',   tone:'--feed',   ico:()=>'🎙️'}
+  // The sheet already degrades honestly when the Web Speech API is missing (it offers typing), but
+  // the tile promising "log by voice" would still be a small lie on the way in — and WKWebView is
+  // exactly where that bites, since the wrapper is where this tile is most likely to be tapped.
+  // Same check speechSupported() uses in voice-log.js, inlined rather than coupling to its IIFE.
+  {k:'voice',       s:['baby','child','pregnancy'],  label:'Say it',      hint:()=>(window.SpeechRecognition||window.webkitSpeechRecognition)?'Log by voice ✨':'Type it naturally ✨', fn:'openVoiceLog()', soft:'--feed-soft', tone:'--feed', ico:()=>'🎙️'}
 ];
 // Defaults reproduce exactly what each surface showed before, so nobody's button changes under them.
 const QUICK_DEFAULTS={
@@ -2109,10 +2113,14 @@ function quickChosen(stage){
   const keys=Array.isArray(picked)?picked:(QUICK_DEFAULTS[stage]||[]);
   return keys.filter(k=>avail.indexOf(k)>=0);
 }
+// A hint may be a function when it depends on what the device can actually do (voice), so every
+// place that renders one has to resolve it. Interpolating the function itself would print its
+// source into the tile.
+function quickHint(a){ return (typeof a.hint==='function') ? a.hint() : a.hint; }
 function quickBtn(a,ts){
   // Sleep is the one action whose label depends on live state (a running timer means "wake up").
   if(a.k==='sleep'&&ts) return actBtn("stopSleep('"+state.activeBabyId+"')",'var('+a.soft+')','var('+a.tone+')',a.ico(),'Wake up','Stop the timer');
-  return actBtn(a.fn,'var('+a.soft+')','var('+a.tone+')',a.ico(),a.label,a.hint);
+  return actBtn(a.fn,'var('+a.soft+')','var('+a.tone+')',a.ico(),a.label,quickHint(a));
 }
 function quickLogActions(ts){
   // The home tiles keep the stage's full default set (they are the main surface, not a shortcut),
@@ -3660,7 +3668,7 @@ function openQuickSettings(){
     const on=chosen.indexOf(a.k)>=0;
     return `<div class="bag-row ${on?'done':''}" id="qs-${a.k}" onclick="toggleQuickAction('${a.k}')" style="cursor:pointer">
       <div class="bg-tick">${on?I.check:''}</div>
-      <div style="flex:1"><div class="bg-t" style="text-decoration:none">${a.label}</div><div style="font-size:12px;color:var(--ink-soft);font-weight:600;line-height:1.4">${a.hint}</div></div>
+      <div style="flex:1"><div class="bg-t" style="text-decoration:none">${a.label}</div><div style="font-size:12px;color:var(--ink-soft);font-weight:600;line-height:1.4">${quickHint(a)}</div></div>
     </div>`;
   }).join('');
   openSheet(`<h2>Quick log button</h2><div class="sub">The round button above the tabs. These choices are yours alone, they do not change what anyone else in your circle sees.</div>
