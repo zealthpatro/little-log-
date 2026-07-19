@@ -540,6 +540,10 @@
         var data = inv.data();
         await db.collection('households').doc(data.householdId).update(memberUpdate(user, data.role || 'caregiver', { relationship: data.relationship, name: data.name }));
         await userRef.set({ householdId: data.householdId, name: user.displayName || '', email: user.email || '' }, { merge: true });
+        // Remember that this session is a JOIN, not a return, so the first-run screen can say whose
+        // circle they have walked into. Read once by openFirstRun and never persisted.
+        window.LL.justJoined = { invitedBy: data.invitedBy || null, role: data.role || 'caregiver' };
+        try { sessionStorage.removeItem('cubby-join'); } catch (e) {}
         return data.householdId;
       }
     }
@@ -1561,6 +1565,38 @@
     if (!hasData) { window.LL.needsIdentity = true; return; }
     openFirstRun(user);
   }
+  /* The invitee's welcome: who, what you'll do, what you cannot see. Nothing else.
+
+     The privacy line is stated TO THE PERSON IT CONSTRAINS, which is the only place it is really
+     credible and where it does the most work for the mother's safe space.
+
+     Checked against firestore.rules before it was written, because a comforting overstatement here
+     would be the worst kind of lie. What the rules actually say: `mhealth/{owner}/cat/{category}`
+     refuses category 'mood' to everyone except her, ALWAYS, with no mechanism to share it. Her OTHER
+     health categories, and her pregnancy, are readable only by uids she has explicitly listed in
+     sharedWith. So "how they're feeling, always private" is exactly true, and the rest is "private
+     unless they choose to share it with you" — which the design brief's proposed wording ("health
+     notes stay private, always") would have got wrong in the direction that erodes trust later. */
+  function inviteeIntro() {
+    var jj = window.LL.justJoined || {};
+    var mi = window.LL.memberInfo || {};
+    var inviter = '';
+    if (jj.invitedBy && mi[jj.invitedBy]) {
+      var m = mi[jj.invitedBy];
+      inviter = m.relationship || (m.name ? String(m.name).split(' ')[0] : '');
+    }
+    var baby = '';
+    try { baby = (state.babies && state.babies[0] && state.babies[0].name) || ''; } catch (e) {}
+    // Pregnancy is deliberately never named here. An invitee does not get told a family is expecting
+    // as a side effect of joining; that is the mother's to share, and it is loss-sensitive.
+    var whose = baby ? (esc(baby) + '’s') : 'their';
+    var who = inviter
+      ? (esc(inviter) + ' asked you to join ' + whose + ' Cubby.')
+      : ('You’ve joined ' + (baby ? (esc(baby) + '’s') : 'a family’s') + ' Cubby.');
+    return who
+      + '<br><br>Anything you log shows up for them straight away, and anything they log shows up for you.'
+      + '<br><br>How they’re feeling stays private to them, always. Their own health notes and their pregnancy stay theirs too, unless they choose to share them with you.';
+  }
   function openFirstRun(user, opts) {
     opts = opts || {};
     var uid = user.uid;
@@ -1571,11 +1607,21 @@
       : (opts.stage === 'planning' ? 'Your role' : 'Your relationship to your baby');
     // As a wizard step (after stage + details), it's the warm last beat; as the standalone caregiver
     // sheet it's the welcome. Either way name is required. (Install moved out of here; it's offered later.)
+    // Someone who just accepted an invite is not a prospect: a person they trust already told them
+    // what Cubby is. So they get three things and nothing else, per the invitee spec.
+    var isJoin = !opts.asStep && !!window.LL.justJoined;
     var intro = opts.asStep
       ? 'Last thing: how should your family see you? You can change this anytime.'
-      : 'We\'re so glad you\'re here. 🤍 Cubby is a calm, private place for everyone who loves your little one, and it\'s shaped by families like yours.';
-    modal('Welcome to Cubby 🐻',
-      '<div class="ll-auth-msg" style="margin:0 0 10px;text-align:left;line-height:1.55">' + intro + '<br><br>• Your log stays <b>private</b> to your family, always.<br>• An idea, or something to make better? We read every note: <b>Settings → Family &amp; sharing → Send feedback</b>.</div>'
+      : (isJoin
+        ? inviteeIntro()
+        : 'We\'re so glad you\'re here. 🤍 Cubby is a calm, private place for everyone who loves your little one, and it\'s shaped by families like yours.');
+    // The generic bullets are acquisition copy. They would dilute the three things above, and the
+    // "your log stays private to your family" line reads oddly to someone joining a family that is
+    // not theirs.
+    var bullets = isJoin ? ''
+      : '<br><br>• Your log stays <b>private</b> to your family, always.<br>• An idea, or something to make better? We read every note: <b>Settings → Family &amp; sharing → Send feedback</b>.';
+    modal(isJoin ? 'You\'re in 🐻' : 'Welcome to Cubby 🐻',
+      '<div class="ll-auth-msg" style="margin:0 0 10px;text-align:left;line-height:1.55">' + intro + bullets + '</div>'
       + '<div class="ll-auth-msg" style="margin:0 0 6px">How should your family see you?</div>'
       + '<div class="ll-mem-av" id="llFrBear" style="width:84px;height:84px;margin:10px auto 4px;cursor:pointer">' + bear + '</div>'
       + '<div style="text-align:center;margin-bottom:6px"><button id="llFrBearBtn" class="ll-rm" style="color:#C97FA0">Customise my bear</button></div>'

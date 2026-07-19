@@ -120,7 +120,49 @@
     }, 3600);
   }
 
+  /* Did they arrive from someone's invite link? `?join=1` is set by the invite, and stashed to
+     sessionStorage by stashDeepLink() so it survives the sign-in redirect. Carries no personal data. */
+  function joinIntent() {
+    try {
+      if (/[?&]join=1/.test(location.search || '')) return true;
+      return sessionStorage.getItem('cubby-join') === '1';
+    } catch (e) { return false; }
+  }
+
+  /* The invitee's first screen. Someone they trust has already told them what Cubby is, so selling it
+     again is noise — the job here is the opposite: get them signed in as the RIGHT person.
+
+     The whole invite is matched on email address, so "use the address they invited" is the single
+     most load-bearing sentence on this screen. Saying it here prevents the mismatch; the recovery
+     screen after sign-in only cleans it up.
+
+     Deliberately does NOT name the inviter or the baby. The invite doc is keyed by email and the
+     rules require auth to read it, so pre-sign-in we genuinely do not know who this is from, and
+     guessing warmly would be a lie. The names appear on the next screen, once we can actually read
+     them. */
+  function inviteSignIn(msg) {
+    return '<div class="lp lp-app' + (isIOS() ? ' lp-ios' : '') + '">'
+      + '<div class="lp-app-top">'
+      + '<div class="lp-logo"><img src="/icons/logo-512.png" alt="Cubby"></div>'
+      + '<h1 class="lp-name">You\'re invited</h1>'
+      + '<p class="lp-app-tag">Someone has added you to their Cubby, the calm, private log they keep for their little one.</p>'
+      + '</div>'
+      + '<div class="lp-inv">'
+      + '<div class="lp-inv-t">Sign in with the email address they invited</div>'
+      + '<div class="lp-inv-s">That is how Cubby knows which family to let you into. If you use a different address, we will not find the invite.</div>'
+      + '</div>'
+      + '<div class="lp-app-auth">'
+      + GOOGLE_BTN
+      + (msg ? '<div class="lp-msg">' + msg + '</div>' : '')
+      + '</div>'
+      + '<div class="lp-trust">Free · Private to your family</div>'
+      + '</div>';
+  }
+
   window.cubbyLanding = function (msg) {
+    // Before the native/web split: an invitee gets the same focused screen either way, including
+    // when a universal link opens the invite straight into the installed app.
+    if (joinIntent()) return inviteSignIn(msg);
     var native = isNative();
     if (native) {
       // showSignIn assigns this straight into innerHTML, so the nodes exist by the next tick.
@@ -223,6 +265,12 @@
     + '.lp-cta:disabled{opacity:.6;cursor:default;}'
     + '.lp-msg{margin-top:12px;color:#b05a7a;font-size:13px;font-weight:700;}'
     + '.lp-trust{margin-top:12px;font-size:13px;color:#9a8d80;font-weight:700;}'
+    // The invitee's one instruction. Sits where the feature carousel goes on the acquisition screen:
+    // they were sold by the person who invited them, so this space is for getting the address right.
+    + '.lp-inv{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;min-height:0;'
+    + 'background:rgba(255,255,255,.62);border:1px solid #ECE0D2;border-radius:20px;padding:18px 18px;margin:8px 0;text-align:left;}'
+    + '.lp-inv-t{font-weight:800;font-size:16px;color:#2C2521;line-height:1.35;}'
+    + '.lp-inv-s{font-size:14px;color:#6B5D50;font-weight:600;line-height:1.5;margin-top:7px;}'
     + '.lp-why{text-align:center;padding:24px 6px 6px;}'
     + '.lp-why h2,.lp-steps-wrap h2,.lp-final h2,.lp-pro h2{font-family:"Fraunces",Georgia,serif;font-size:25px;color:#2C2521;margin:0 0 10px;line-height:1.25;}'
     + '.lp-why p{color:#6E635B;font-size:15px;line-height:1.6;max-width:480px;margin:0 auto;font-weight:600;}'
