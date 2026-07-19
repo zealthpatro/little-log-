@@ -5596,7 +5596,54 @@ function welcomeBaby(){
   p.bornBabyId=b.id; p.birthAt=birth;
   view='home';
   persist(); closeSheet(); render();
-  toast('Welcome to the world, '+name+'! 🐻');
+  showBirthArrival(b);
+}
+/* The birth arrival moment.
+
+   Everything about the app changes shape at this instant: the pregnancy's three tabs become the
+   baby's four, the quick-log actions swap from kicks and contractions to feeds and nappies, Health
+   and Album appear. That used to happen under a toast, at the most exhausted moment in the whole
+   journey. And then the baby-home coach mark greeted a parent who had used Cubby daily since week
+   six with "Welcome to Cubby 👋", hours after she gave birth.
+
+   So: say the one thing, name the one change, point at what is already waiting, one button out.
+
+   The vaccine line is the payload, and it is only possible here: country and birthday are both known
+   for the first time at this exact instant, so a real country-correct schedule with real dates
+   already exists before she taps through. It turns setup into proof at minute two.
+
+   LOSS-SAFE: reachable only from welcomeBaby(). endPregnancy() must never route here. */
+function showBirthArrival(b){
+  // She is not a new user. Pre-dismiss the baby-shell coach marks so the app stops introducing
+  // itself to someone who has been here for months. 'log' is deliberately left: one hint, the first
+  // time she opens the Log tab, is orientation rather than noise.
+  ['home','health','album'].forEach(markSeen);
+  // vaccinePlan() is one row per DOSE, and several doses share a single appointment, so counting
+  // rows and calling them "visits" would be a plain untruth to a parent reading it at 3am. Count
+  // distinct due-ages instead: that is what she will actually turn up for.
+  let visits=0, where='';
+  try{
+    const plan=vaccinePlan()||[];
+    visits=new Set(plan.map(v=>v.dueMonths)).size;
+    where=vaxCountryName(b.country)||'';
+  }catch(e){}
+  const vaxLine=visits
+    ? `Their vaccine plan is already waiting in Health: ${visits} visit${visits===1?'':'s'}, on the ${escapeHtml(where)} schedule.`
+    : '';
+  const ov=document.createElement('div');
+  ov.id='cb-birth-arrival';
+  ov.setAttribute('style','position:fixed;inset:0;z-index:4000;background:linear-gradient(180deg,#FDF3E7,#FBF3E9);display:flex;align-items:center;justify-content:center;padding:30px 24px;text-align:center;overflow-y:auto');
+  ov.innerHTML=`<div style="max-width:360px">
+    <div style="font-size:52px;line-height:1">🐻</div>
+    <h2 style="font-family:var(--font-display,Georgia),serif;color:var(--ink,#2C2521);margin:14px 0 8px;font-size:26px;line-height:1.2">Welcome to the world, ${escapeHtml(b.name)}</h2>
+    <div style="color:var(--ink-soft,#6B5D50);font-size:15px;line-height:1.6;font-weight:600">Your pregnancy is saved as part of their story.</div>
+    <div style="color:var(--ink-soft,#6B5D50);font-size:15px;line-height:1.6;font-weight:600;margin-top:14px">Cubby has changed shape for them. Feeds, sleep and nappies are on your home screen now.</div>
+    ${vaxLine?`<div style="color:var(--ink-soft,#6B5D50);font-size:15px;line-height:1.6;font-weight:600;margin-top:14px">${vaxLine}</div>`:''}
+    <button id="cb-birth-go" style="margin-top:26px;border:none;border-radius:16px;padding:15px 30px;background:var(--feed,#C97FA0);color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Take me in</button>
+  </div>`;
+  document.body.appendChild(ov);
+  const go=document.getElementById('cb-birth-go');
+  if(go) go.onclick=function(){ try{ ov.remove(); }catch(e){} try{ cubbyHaptic&&cubbyHaptic('light'); }catch(e){} render(); };
 }
 
 /* ============================================================
