@@ -4900,7 +4900,7 @@ function renderPregHome(){
       return tiles.length?`<div class="sec-title">This week</div><div class="actions stagger">${tiles.join('')}</div>`:'';
     })()}
     <button class="btn-ghost" onclick="openDangerSigns()" style="color:var(--danger);margin-top:14px">⚠️ Urgent warning signs, when to seek care</button>
-    <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="openWelcomeBaby()">🐻 Baby has arrived</button>
+    ${pregIsOwner()?`<button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="openWelcomeBaby()">🐻 Baby has arrived</button>`:''}
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>
   </div>`;
 }
@@ -5374,8 +5374,8 @@ function renderPregCare(){
     <div class="set-item" onclick="openEditPregnancy()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">📅</div>
       <div class="si-body"><div class="a">Due date &amp; schedule</div><div class="b">${pregDueLabel()||'Set your dates'} · ${escapeHtml(cname)}</div></div><span class="chev">${I.chev}</span></div>
-    <button class="btn-primary" style="background:var(--preg);margin-top:14px" onclick="openWelcomeBaby()">🐻 Baby has arrived</button>
-    <button class="btn-ghost" style="color:var(--ink-faint)" onclick="confirmEndPregnancy()">End this pregnancy</button>
+    ${pregIsOwner()?`<button class="btn-primary" style="background:var(--preg);margin-top:14px" onclick="openWelcomeBaby()">🐻 Baby has arrived</button>
+    <button class="btn-ghost" style="color:var(--ink-faint)" onclick="confirmEndPregnancy()">End this pregnancy</button>`:''}
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>
   </div>`;
 }
@@ -5548,6 +5548,11 @@ function saveEditPregnancy(){
 }
 function confirmEndPregnancy(){
   const p=state.pregnancy; if(!p){ closeSheet(); return; }
+  // Owner-only, and gated HERE rather than only inside endPregnancy(). This sheet is written for
+  // someone who may have just lost a pregnancy ("if you've experienced a loss, we're so sorry"), so
+  // opening it and refusing afterwards showed bereavement framing to a caregiver about a pregnancy
+  // that is fine. The buttons are hidden for non-owners now; this stops a stale render reaching it.
+  if(typeof pregIsOwner==='function' && !pregIsOwner()){ closeSheet(); toast('Only the person whose journey this is can close it'); return; }
   if(p.stage==='planning'){
     openSheet(`<h2>Stop tracking?</h2><div class="sub">This clears your planning checklist and notes. Whenever you're ready, there's no rush.</div>
       <button class="btn-primary" style="background:var(--preg)" onclick="endPregnancy(false)">Stop tracking</button>
@@ -6713,8 +6718,8 @@ function renderGrowthSection(){
   const wDelta=growthDelta(wPts), hDelta=growthDelta(hPts);
   return `<div class="sec-title" style="margin-top:24px">Growth</div>
     <div class="gx-stat">
-      <div class="gx-box"><div class="n" style="color:var(--feed)">${lw?(+convW(lw.weight,lw.wUnit||'kg',wU).toFixed(2)):'·'}${lw?' '+wU:''}</div><div class="l">Latest weight</div>${wDelta?`<div class="d" style="color:${wDelta>0?'var(--diaper)':'var(--med)'}">${wDelta>0?'+':''}${wDelta} ${wU}</div>`:''}</div>
-      <div class="gx-box"><div class="n" style="color:var(--sleep)">${lh?(+convH(lh.height,lh.hUnit||'cm',hU).toFixed(1)):'·'}${lh?' '+hU:''}</div><div class="l">Latest height</div>${hDelta?`<div class="d" style="color:${hDelta>0?'var(--diaper)':'var(--med)'}">${hDelta>0?'+':''}${hDelta} ${hU}</div>`:''}</div>
+      <div class="gx-box"><div class="n" style="color:var(--feed)">${lw?(+convW(lw.weight,lw.wUnit||'kg',wU).toFixed(2)):'·'}${lw?' '+wU:''}</div><div class="l">Latest weight</div>${wDelta?`<div class="d" style="color:var(--ink-soft)">${wDelta>0?'+':''}${wDelta} ${wU}</div>`:''}</div>
+      <div class="gx-box"><div class="n" style="color:var(--sleep)">${lh?(+convH(lh.height,lh.hUnit||'cm',hU).toFixed(1)):'·'}${lh?' '+hU:''}</div><div class="l">Latest height</div>${hDelta?`<div class="d" style="color:var(--ink-soft)">${hDelta>0?'+':''}${hDelta} ${hU}</div>`:''}</div>
     </div>
     ${tipLine('growth','Set Boy/Girl to overlay WHO/CDC percentile curves behind the dots.')}
     ${growthControls(b)}
@@ -6724,6 +6729,11 @@ function renderGrowthSection(){
     <div class="add-row" onclick="openGrowth()">${I.plus} Add a measurement</div>
     <p style="font-size:12px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:12px">${(b&&b.sex)?'Bands: '+(effGrowthSource()==='who'?'WHO Child Growth Standards (0–24 mo)':'CDC growth charts (0–36 mo)')+'. ':''}A guide, not a diagnosis, your pediatrician is the best judge.</p>`;
 }
+/* Deltas are deliberately NOT colour-coded by direction. `--med` is #D2654E, byte-identical to
+   `--danger`, so any loss rendered in the same red as a medical warning — and a newborn losing up to
+   7-10% of birth weight in the first days is normal and expected, as is a toddler wobbling between
+   weigh-ins. Painting that as alarm, with no explanation and nothing to do about it, is the exact
+   3am anxiety the charter exists to prevent. The sign already carries the information. */
 function growthDelta(pts){ if(pts.length<2)return null; const d=pts[pts.length-1].v-pts[pts.length-2].v; return +d.toFixed(2); }
 function svgLine(pts,color,unit){
   const W=320,H=150,pad=30, top=14, bot=H-24;
