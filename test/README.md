@@ -1,16 +1,28 @@
 # Firestore rules — cross-account emulator test
 
-Run this **before publishing** the tightened `firestore.rules`. It is the executable proof behind
-every privacy promise on the marketing site — **90 cross-account assertions** covering household
+Run this **before publishing** `firestore.rules`. It is the executable proof behind
+every privacy promise on the marketing site — **105 cross-account assertions** covering household
 access, invite/join role integrity (SEC-3), event/photo authorship immutability (SEC-4), pre-join
 read exposure (PRIV-4), note audience privacy, **maternal `mhealth` with mood NEVER shareable**,
 the owner-owned pregnancy journey, server-only Pro entitlement, and the top-level collections.
 It also verifies the **memberInfo lock** and **app-blob maternal-data guard** don't break a normal
 save or a household whose stored blob still carries a legacy `pregnancy` key.
 
-> Expanded 2026-07-12 (see `design/RULES-REVIEW.md` and `design/RED-TEAM-REVIEW.md`). The suite was
-> syntax-validated but the emulator run must happen on a dev machine — it needs the Firestore
-> emulator JAR, which is too large to download in the restricted build sandbox.
+It also covers **A6 account deletion** (added 2026-07-19): the `departingSelf()` branch that lets a
+caregiver remove themselves — required, because the `isMember()` branch freezes the members map, so
+without it a caregiver could not delete their own account at all — and the 15 assertions proving it
+cannot become a privilege-escalation path (leaving while promoting yourself, removing someone else
+on the way out, writing another member's tombstone, smuggling `deleteAfter`, granting yourself Pro,
+a stranger using the same write shape).
+
+> Expanded 2026-07-12 (see `design/RULES-REVIEW.md` and `design/RED-TEAM-REVIEW.md`), and again
+> 2026-07-19 for A6.
+>
+> **⚠ The A6 rules were published on 2026-07-19 WITHOUT this suite having been run.** It has never
+> executed on any machine: it needs a JRE (`brew install temurin`) and the session that wrote it had
+> neither Java nor Homebrew. The rules are reasoned and syntax-clean, not proven. Running this is now
+> a verification rather than a gate — and if it fails, the fix is urgent, because those rules are
+> already serving live traffic.
 
 ## What it checks
 Two accounts (an owner + a caregiver) plus a stranger, against `../firestore.rules`:
