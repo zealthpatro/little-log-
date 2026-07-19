@@ -1405,7 +1405,7 @@ function _renderView(){
       <button class="icon-btn" onclick="openSettings()" aria-label="settings">${I.settings}</button>
     </div>
     <div class="scroll" id="scroll">${main}</div>
-    ${view==='home'?`<button class="qadd" onclick="openQuickLog()" aria-label="Quick log">${I.plus}</button>`:''}
+    ${quickFab()}
     <div class="nav"><div class="nav-inner">
       <button class="nav-btn ${view==='home'?'active':''}" onclick="go('home')">${I.home}Home</button>
       <button class="nav-btn ${view==='log'?'active':''}" onclick="go('log')">${I.list}Log</button>
@@ -1996,19 +1996,94 @@ function dismissTip(key){ if(!state.settings.seen)state.settings.seen={}; state.
 /* ---- Child stage: the home grows up with the baby. Quick log reshapes by age (feed/nappy/pump
    recede behind "More" once they are a toddler); reversible per baby. ---- */
 function actBtn(onclick,bg,c,ico,label,hint){ return `<button class="action" onclick="${onclick}"><div class="ico" style="background:${bg};color:${c}">${ico}</div><div class="label">${label}</div><div class="hint">${hint}</div></button>`; }
+/* ---- Quick logger -------------------------------------------------------------------
+   ONE registry behind three surfaces: the home tiles, the floating button's sheet, and the
+   Settings customiser. openQuickLog() used to keep its own hardcoded copy of this list, which is
+   exactly how the two drifted apart (the sheet had "Say it", the tiles did not).
+
+   Preferences are per-USER and deliberately NOT in state.settings: that object is the household's
+   shared app blob, so a toggle there would let one parent hide the other parent's button, the same
+   trap the push settings fell into. They live in localStorage under the signed-in uid instead.
+   Trade-off, stated plainly: they do not follow you to a second device. For a layout preference
+   that is the right way round.
+*/
+const QUICK_ACTIONS=[
+  {k:'feed',        s:['baby','child'],              label:'Feed',        hint:'Breast, bottle, solids', fn:'openFeed()',            soft:'--feed-soft',   tone:'--feed',   ico:()=>I.feed},
+  {k:'sleep',       s:['baby','child'],              label:'Sleep',       hint:'Start or stop a nap',    fn:'openSleep()',           soft:'--sleep-soft',  tone:'--sleep',  ico:()=>I.sleep},
+  {k:'diaper',      s:['baby','child'],              label:'Diaper',      hint:'Wet, dirty, both',       fn:'openDiaper()',          soft:'--diaper-soft', tone:'--diaper', ico:()=>I.diaper},
+  {k:'pump',        s:['baby','child'],              label:'Pump',        hint:'Expressed milk',         fn:'openPump()',            soft:'--pump-soft',   tone:'--pump',   ico:()=>I.pump},
+  {k:'measure',     s:['baby','child'],              label:'Measure',     hint:'Weight & height',        fn:'openGrowth()',          soft:'--star-soft',   tone:'--star',   ico:()=>I.scale},
+  {k:'activity',    s:['baby','child'],              label:'Activity',    hint:'Bath, play, notes',      fn:'openActivity()',        soft:'--note-soft',   tone:'--note',   ico:()=>I.note},
+  {k:'milestone',   s:['baby','child'],              label:'Milestone',   hint:'A first to remember',    fn:'openCustomMilestone()', soft:'--diaper-soft', tone:'--diaper', ico:()=>(I.star||'🌟')},
+  {k:'kicks',       s:['pregnancy'],                 label:'Kicks',       hint:'Count the movements',    fn:'openKickCounter()',     soft:'--star-soft',   tone:'--star',   ico:()=>'👣'},
+  {k:'contractions',s:['pregnancy'],                 label:'Contractions',hint:'Time them',              fn:'openContractions()',    soft:'--feed-soft',   tone:'--feed',   ico:()=>'⏱️'},
+  {k:'symptom',     s:['pregnancy'],                 label:'Symptom',     hint:'How you are feeling',    fn:'openSymptom()',         soft:'--note-soft',   tone:'--note',   ico:()=>I.note},
+  // Mood is owner-only forever (Privacy Max). It must never appear for a caregiver, not even as an
+  // unchecked option in the customiser, or the option itself leaks that the record exists.
+  {k:'mood',        s:['pregnancy'],                 label:'Mood',        hint:'Private to you',         fn:'openMoodNote()',        soft:'--sleep-soft',  tone:'--sleep',  ico:()=>'🤍', ownerOnly:true},
+  {k:'voice',       s:['baby','child','pregnancy'],  label:'Say it',      hint:'Log by voice ✨',        fn:'openVoiceLog()',        soft:'--feed-soft',   tone:'--feed',   ico:()=>'🎙️'}
+];
+// Defaults reproduce exactly what each surface showed before, so nobody's button changes under them.
+const QUICK_DEFAULTS={
+  baby:['feed','sleep','diaper','pump','measure','activity','voice'],
+  child:['sleep','measure','milestone','activity','voice'],
+  pregnancy:['kicks','contractions','symptom','voice']
+};
+function quickStage(){
+  if(typeof viewingPreg!=='undefined' && state.pregnancy && !state.pregnancy.bornBabyId && (!state.babies.length||viewingPreg)) return 'pregnancy';
+  return stageOf()==='child'?'child':'baby';
+}
+function quickAvailable(stage){
+  stage=stage||quickStage();
+  return QUICK_ACTIONS.filter(a=>a.s.indexOf(stage)>=0)
+    .filter(a=>!a.ownerOnly||!(window.LL&&typeof window.LL.matIsOwner==='function')||window.LL.matIsOwner());
+}
+function quickUid(){ return (window.LL&&window.LL.auth&&window.LL.auth.currentUser&&window.LL.auth.currentUser.uid)||'local'; }
+function quickPrefsKey(){ return 'cubby-quick-'+quickUid(); }
+function quickPrefs(){
+  let p={}; try{ p=JSON.parse(localStorage.getItem(quickPrefsKey())||'{}')||{}; }catch(e){ p={}; }
+  return { on: p.on!==false, pick: (p.pick&&typeof p.pick==='object')?p.pick:{} };
+}
+function saveQuickPrefs(p){ try{ localStorage.setItem(quickPrefsKey(), JSON.stringify(p)); }catch(e){} }
+// The chosen keys for a stage, falling back to that stage's defaults until they customise it.
+function quickChosen(stage){
+  stage=stage||quickStage();
+  const p=quickPrefs();
+  const avail=quickAvailable(stage).map(a=>a.k);
+  // "Never customised" (undefined) and "customised down to nothing" (empty array) are different
+  // answers. Treating an empty pick as "use the defaults" would silently re-add every shortcut
+  // someone had just removed, and make the "pick at least one" line untrue.
+  const picked=p.pick[stage];
+  const keys=Array.isArray(picked)?picked:(QUICK_DEFAULTS[stage]||[]);
+  return keys.filter(k=>avail.indexOf(k)>=0);
+}
+function quickBtn(a,ts){
+  // Sleep is the one action whose label depends on live state (a running timer means "wake up").
+  if(a.k==='sleep'&&ts) return actBtn("stopSleep('"+state.activeBabyId+"')",'var('+a.soft+')','var('+a.tone+')',a.ico(),'Wake up','Stop the timer');
+  return actBtn(a.fn,'var('+a.soft+')','var('+a.tone+')',a.ico(),a.label,a.hint);
+}
 function quickLogActions(ts){
-  var sleep=actBtn(ts?("stopSleep('"+state.activeBabyId+"')"):'openSleep()','var(--sleep-soft)','var(--sleep)',I.sleep,ts?'Wake up':'Sleep',ts?'Stop the timer':'Start a nap timer');
-  var measure=actBtn('openGrowth()','var(--star-soft)','var(--star)',I.scale,'Measure','Weight & height');
-  var activity=actBtn('openActivity()','var(--note-soft)','var(--note)',I.note,'Activity','Bath, play, notes');
-  if(stageOf()==='child'){
-    var milestone=actBtn('openCustomMilestone()','var(--diaper-soft)','var(--diaper)',(I.star||'🌟'),'Milestone','A first to remember');
-    var more=actBtn('openMoreLogs()','var(--feed-soft)','var(--feed)',(I.plus||'+'),'More','Feeds, nappies, pump');
-    return sleep+measure+milestone+activity+more;
-  }
-  var feed=actBtn('openFeed()','var(--feed-soft)','var(--feed)',I.feed,'Feed','Breast, bottle, solids, water');
-  var diaper=actBtn('openDiaper()','var(--diaper-soft)','var(--diaper)',I.diaper,'Diaper','Wet, dirty, dry or both');
-  var pump=actBtn('openPump()','var(--pump-soft)','var(--pump)',I.pump,'Pump','Log expressed milk');
-  return feed+sleep+diaper+pump+measure+activity;
+  // The home tiles keep the stage's full default set (they are the main surface, not a shortcut),
+  // and child still gets the "More" escape hatch for the early-days logs.
+  const stage=quickStage();
+  const byKey={}; quickAvailable(stage).forEach(a=>{ byKey[a.k]=a; });
+  const keys=(QUICK_DEFAULTS[stage]||[]).filter(k=>k!=='voice');
+  let out=keys.map(k=>byKey[k]?quickBtn(byKey[k],ts):'').join('');
+  if(stage==='child') out+=actBtn('openMoreLogs()','var(--feed-soft)','var(--feed)',(I.plus||'+'),'More','Feeds, nappies, pump');
+  return out;
+}
+/* The floating button. Shown on EVERY view now, not just home: the whole point of a quick logger is
+   that you can reach it from wherever you happen to be standing. Three ways it can be absent, in
+   order: switched off for good (per user), hidden for this session, or nothing left to show. */
+function quickFabHidden(){ try{ return sessionStorage.getItem('cubby-quick-hidden')==='1'; }catch(e){ return false; } }
+function hideQuickFabForSession(){
+  try{ sessionStorage.setItem('cubby-quick-hidden','1'); }catch(e){}
+  closeSheet(); render();
+  toast('Hidden until you reopen Cubby');
+}
+function quickFab(){
+  if(!quickPrefs().on||quickFabHidden()||!quickChosen().length) return '';
+  return `<button class="qadd" onclick="openQuickLog()" aria-label="Quick log">${I.plus}</button>`;
 }
 function openMoreLogs(){
   openSheet(`<h2>More logs</h2><div class="sub">The early-days logs, whenever you need them.</div><div class="actions">${actBtn('openFeed()','var(--feed-soft)','var(--feed)',I.feed,'Feed','Breast, bottle, solids')}${actBtn('openDiaper()','var(--diaper-soft)','var(--diaper)',I.diaper,'Diaper','Wet, dirty, both')}${actBtn('openPump()','var(--pump-soft)','var(--pump)',I.pump,'Pump','Expressed milk')}</div>`,'feed');
@@ -2319,16 +2394,16 @@ if(typeof window!=='undefined'){ window.confirmSheet=confirmSheet; }
 /* ---------- FEED ---------- */
 let feedDraft={method:'breast',side:'left',amount:120,unit:null,content:'breastmilk',wAmount:30};
 function openQuickLog(){
+  const stage=quickStage();
+  // Guard the id: timersFor() creates state.timers[id] on read, so calling it with no active baby
+  // (every pregnancy-stage tap) would write a `undefined` key straight into the shared app blob.
+  const ts=(stage!=='pregnancy'&&state.activeBabyId)?timersFor(state.activeBabyId).sleep:null;
+  const byKey={}; quickAvailable(stage).forEach(a=>{ byKey[a.k]=a; });
+  const tiles=quickChosen(stage).map(k=>byKey[k]?quickBtn(byKey[k],stage==='pregnancy'?null:ts):'').join('');
   openSheet(`<h2>Quick log</h2><div class="sub">What happened?</div>
-    <div class="actions">
-      <button class="action" onclick="openFeed()"><div class="ico" style="background:var(--feed-soft);color:var(--feed)">${I.feed}</div><div class="label">Feed</div><div class="hint">Breast, bottle, solids</div></button>
-      <button class="action" onclick="openSleep()"><div class="ico" style="background:var(--sleep-soft);color:var(--sleep)">${I.sleep}</div><div class="label">Sleep</div><div class="hint">Start or stop a nap</div></button>
-      <button class="action" onclick="openDiaper()"><div class="ico" style="background:var(--diaper-soft);color:var(--diaper)">${I.diaper}</div><div class="label">Diaper</div><div class="hint">Wet, dirty, both</div></button>
-      <button class="action" onclick="openPump()"><div class="ico" style="background:var(--pump-soft);color:var(--pump)">${I.pump}</div><div class="label">Pump</div><div class="hint">Expressed milk</div></button>
-      <button class="action" onclick="openGrowth()"><div class="ico" style="background:var(--star-soft);color:var(--star)">${I.scale}</div><div class="label">Measure</div><div class="hint">Weight &amp; height</div></button>
-      <button class="action" onclick="openActivity()"><div class="ico" style="background:var(--note-soft);color:var(--note)">${I.note}</div><div class="label">Activity</div><div class="hint">Bath, play, notes</div></button>
-      <button class="action" onclick="openVoiceLog()"><div class="ico" style="background:var(--feed-soft);color:var(--feed)">🎙️</div><div class="label">Say it</div><div class="hint">Log by voice ✨</div></button>
-    </div>`,'feed');
+    <div class="actions">${tiles}</div>
+    <button class="btn-ghost" onclick="openQuickSettings()">Choose what shows here</button>
+    <button class="btn-ghost" onclick="hideQuickFabForSession()">Hide the button for now</button>`,'feed');
 }
 function openFeed(){
   const b=activeBaby();
@@ -3505,6 +3580,11 @@ function openSettings(){
       <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🔔</div>
       <div class="si-body"><div class="a">Reminders</div><div class="b">Gentle nudges for medicine, vaccines &amp; rituals</div></div>
       <span class="chev">${I.chev}</span></div>
+    <div class="set-item" onclick="openQuickSettings()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--feed-soft);color:var(--feed)">${I.plus}</div>
+      <div class="si-body"><div class="a">Quick log button</div><div class="b">${quickPrefs().on?'On · '+quickChosen().length+' shortcut'+(quickChosen().length===1?'':'s'):'Off'} · just for you</div></div>
+      <span class="chev">${I.chev}</span>
+    </div>
     <div class="set-label">Your data &amp; account</div>
     <div class="set-item" onclick="openDataSheet()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--note-soft);color:var(--note)">${I.note}</div>
@@ -3516,6 +3596,53 @@ function openSettings(){
       <div class="si-body"><div class="a">Log out</div><div class="b">Sign out · your data stays safely synced</div></div>
     </div>
     <p style="font-size:12px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:14px">Cubby v${CUBBY_VERSION} · ${Date.now()<Date.UTC(2026,6,27)?'beta':'early access'}</p>`,'sleep');
+}
+/* Settings for the floating quick-log button. Everything here is per-user (localStorage under the
+   uid), so one caregiver tidying their own shortcuts never touches anyone else's. */
+function openQuickSettings(){
+  const stage=quickStage();
+  const p=quickPrefs();
+  const chosen=quickChosen(stage);
+  const stageWord=stage==='pregnancy'?'your pregnancy':(stage==='child'?'your child':'your baby');
+  const rows=quickAvailable(stage).map(a=>{
+    const on=chosen.indexOf(a.k)>=0;
+    return `<div class="bag-row ${on?'done':''}" id="qs-${a.k}" onclick="toggleQuickAction('${a.k}')" style="cursor:pointer">
+      <div class="bg-tick">${on?I.check:''}</div>
+      <div style="flex:1"><div class="bg-t" style="text-decoration:none">${a.label}</div><div style="font-size:12px;color:var(--ink-soft);font-weight:600;line-height:1.4">${a.hint}</div></div>
+    </div>`;
+  }).join('');
+  openSheet(`<h2>Quick log button</h2><div class="sub">The round button above the tabs. These choices are yours alone, they do not change what anyone else in your circle sees.</div>
+    <div class="toggle-row"><div><div class="tr-a">Show the button</div><div class="tr-b">On every screen, so logging is always one tap away</div></div>
+      <div class="sw ${p.on?'on':''}" onclick="toggleQuickFab()"></div></div>
+    ${p.on?`<div class="set-label">What shows when you tap it</div>
+    <div class="sub" style="margin:-4px 2px 10px">Right now, for ${stageWord}.</div>
+    ${rows}
+    ${!chosen.length?`<div class="csub" style="margin-top:10px">Pick at least one, or the button stays hidden.</div>`:''}
+    <button class="btn-ghost" onclick="resetQuickActions()">Reset to the usual set</button>`:''}
+    <button class="btn-ghost" onclick="openSettings()">Back to settings</button>`,'feed');
+}
+function toggleQuickFab(){
+  const p=quickPrefs(); p.on=!p.on; saveQuickPrefs(p);
+  // Turning it back on undoes a session hide too: otherwise the switch says On and nothing appears.
+  if(p.on){ try{ sessionStorage.removeItem('cubby-quick-hidden'); }catch(e){} }
+  render(); openQuickSettings();
+}
+function toggleQuickAction(k){
+  const stage=quickStage();
+  const p=quickPrefs();
+  const cur=quickChosen(stage).slice();
+  const i=cur.indexOf(k);
+  if(i>=0) cur.splice(i,1); else {
+    // Keep the registry's order rather than tap order, so the sheet always reads the same way.
+    const order=quickAvailable(stage).map(a=>a.k);
+    cur.push(k); cur.sort((a,b)=>order.indexOf(a)-order.indexOf(b));
+  }
+  p.pick[stage]=cur; saveQuickPrefs(p);
+  render(); openQuickSettings();
+}
+function resetQuickActions(){
+  const p=quickPrefs(); delete p.pick[quickStage()]; saveQuickPrefs(p);
+  render(); openQuickSettings();
 }
 function openDataSheet(){
   const recent=(state.consents||[]).slice(-3).reverse().map(c=>{
@@ -4511,6 +4638,7 @@ function renderPregShell(){
       <button class="icon-btn" onclick="openSettings()" aria-label="settings">${I.settings}</button>
     </div>
     <div class="scroll" id="scroll">${main}</div>
+    ${quickFab()}
     <div class="nav"><div class="nav-inner">
       <button class="nav-btn ${pregView==='week'?'active':''}" onclick="pregGo('week')">${I.home}Home</button>
       <button class="nav-btn ${pregView==='moments'?'active':''}" onclick="pregGo('moments')">${I.camera}Moments</button>
