@@ -1,7 +1,7 @@
 # Firestore rules — cross-account emulator test
 
 Run this **before publishing** `firestore.rules`. It is the executable proof behind
-every privacy promise on the marketing site — **105 cross-account assertions** covering household
+every privacy promise on the marketing site — **109 cross-account assertions** covering household
 access, invite/join role integrity (SEC-3), event/photo authorship immutability (SEC-4), pre-join
 read exposure (PRIV-4), note audience privacy, **maternal `mhealth` with mood NEVER shareable**,
 the owner-owned pregnancy journey, server-only Pro entitlement, and the top-level collections.
@@ -18,11 +18,9 @@ a stranger using the same write shape).
 > Expanded 2026-07-12 (see `design/RULES-REVIEW.md` and `design/RED-TEAM-REVIEW.md`), and again
 > 2026-07-19 for A6.
 >
-> **⚠ The A6 rules were published on 2026-07-19 WITHOUT this suite having been run.** It has never
-> executed on any machine: it needs a JRE (`brew install temurin`) and the session that wrote it had
-> neither Java nor Homebrew. The rules are reasoned and syntax-clean, not proven. Running this is now
-> a verification rather than a gate — and if it fails, the fix is urgent, because those rules are
-> already serving live traffic.
+> **Last run: 2026-07-19 against the published rules — 109 passed, 0 failed.** The A6 rules had
+> already gone live at that point, so this was a verification rather than a gate. It confirmed every
+> escalation attempt `departingSelf()` must refuse, and that the four legitimate paths still work.
 
 ## What it checks
 Two accounts (an owner + a caregiver) plus a stranger, against `../firestore.rules`:
@@ -37,8 +35,24 @@ into the circle-shared app blob; caregiver promotes self to owner / changes `own
 stranger reads or writes the household.
 
 ## Prereqs
-- **Java** — the Firestore emulator needs a JRE (e.g. `brew install temurin`).
+- **Java** — the Firestore emulator needs a JRE. `brew install temurin` if you have Homebrew.
+  If you don't, you do NOT need to install anything system-wide; a JRE in a scratch folder works:
+
+  ```sh
+  curl -sL "https://api.adoptium.net/v3/binary/latest/21/ga/mac/aarch64/jre/hotspot/normal/eclipse" -o jre.tar.gz
+  # verify against the checksum at https://api.adoptium.net/v3/assets/latest/21/hotspot?architecture=aarch64&image_type=jre&os=mac
+  mkdir -p /tmp/jre && tar xzf jre.tar.gz -C /tmp/jre
+  export JAVA_HOME="$(find /tmp/jre -maxdepth 3 -name Home -type d | head -1)"
+  export PATH="$JAVA_HOME/bin:$PATH"
+  ```
 - Node 18+.
+- **Port 8080 must be free.** `tools/serve.js` uses the same port, so stop it first
+  (`pkill -f "node serve.js"`) or the emulator refuses to start.
+
+The emulator config lives in `firebase.json` at the REPO ROOT, not here, and the npm script `cd ..`
+before running: firebase-tools rejects a rules path that escapes the project directory, so a
+`test/firebase.json` pointing at `../firestore.rules` cannot work. Running from the root also means
+the suite tests the real file rather than a copy that can drift.
 
 ## Run
 ```
