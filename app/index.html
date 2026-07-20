@@ -3604,7 +3604,8 @@ function disablePush(){
   _pendingPushTok=null;                                   // don't let a parked token re-enable it
   const uid=(window.LL&&LL.auth&&LL.auth.currentUser&&LL.auth.currentUser.uid)||null;
   if(window.LL&&LL.db&&uid){
-    try{ LL.db.collection('users').doc(uid).set({push:{enabled:false,due:[],tokens:{}}},{merge:true}); }catch(e){}
+    try{ LL.db.collection('users').doc(uid).set({push:{enabled:false,due:[],tokens:{},
+      nextAt:firebase.firestore.FieldValue.delete()}},{merge:true}); }catch(e){}
   }
   try{ if(window.cubbyDisableNativePush) window.cubbyDisableNativePush(); }catch(e){}
   persist(); openReminders(); toast('Reminders off');
@@ -3659,7 +3660,13 @@ async function syncReminderIndex(){
     function _q(at){ if(qs==null||qe==null||qs===qe) return false; var h=new Date(at).getHours(); return qs<qe?(h>=qs&&h<qe):(h>=qs||h<qe); }
     due=due.filter(function(e){ return !_q(e.at); });
     due.sort(function(a,b){return a.at-b.at;});
-    await LL.db.collection('users').doc(myUid()).set({push:{due:due.slice(0,60)}},{merge:true});
+    // `nextAt` is what the Worker cron QUERIES on (users where push.nextAt <= now), so it must be
+    // written with every index refresh. Without it the cron had to page the entire /users collection
+    // 96 times a day. Deleted rather than nulled when nothing is due, so the doc leaves the
+    // single-field index altogether instead of just failing to match.
+    var slice=due.slice(0,60);
+    await LL.db.collection('users').doc(myUid()).set({push:{due:slice,
+      nextAt: slice.length ? slice[0].at : firebase.firestore.FieldValue.delete()}},{merge:true});
   }catch(e){}
 }
 function openSettings(){

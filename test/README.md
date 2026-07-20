@@ -89,6 +89,20 @@ cd test && npm install && npm run test:app
   28-day cycle stays byte-identical to the classic calculation, and the weeks-along door is
   deliberately NOT shifted.
 
+## Cron query test (emulator)
+```
+cd test && npm run test:pushquery
+```
+Proves the two structured queries that replaced the cron's full-collection scans: users where
+`push.nextAt <= now`, households where `deleteAfter <= now`. Push is critical-only (medicine), so a
+wrong field path means a dose reminder silently never fires — this asserts it against a real
+Firestore instead of reasoning about it, and it already caught one wrong assumption (Firestore
+comparison filters are TYPE-SCOPED, so a null never matches a numeric range; the original comment
+claimed the opposite).
+
+**Port 8080 is shared.** The emulator and `tools/serve.js` both want it, so run the app suites and
+the emulator suites separately — never with `serve.js` still up, or the emulator exits silently.
+
 **The trap both files exist to stop repeating:** top-level `let` declarations (`pregDraft`, `view`,
 `pregView`) are lexical bindings, NOT window properties. `window.pregDraft = x` silently creates a
 second object the app never reads, and the test then asserts against a code path that never ran.

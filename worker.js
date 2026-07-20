@@ -217,6 +217,83 @@ const FS_PROJECT = 'little-log-a9caa';
 function _fsNum(v){ if(!v) return null; if(v.integerValue!=null) return +v.integerValue; if(v.doubleValue!=null) return +v.doubleValue; return null; }
 function _fsStr(v){ return (v && v.stringValue!=null) ? v.stringValue : ''; }
 function _inQuiet(hr, qs, qe){ if(qs==null||qe==null||qs===qe) return false; return qs<qe ? (hr>=qs&&hr<qe) : (hr>=qs||hr<qe); }
+/* Firestore structured query over REST.
+   This replaces the list-everything scans both cron jobs used to do. Paging `/users` and
+   `/households` in full, 96 times a day, cost (every user + every household) in reads whether or not
+   a single reminder was due — against Spark's 50k reads/day that capped the whole product at roughly
+   260 users, and made the CRON the binding constraint on growth rather than the app.
+   A range filter on ONE field is served by Firestore's automatic single-field index, so there is no
+   composite index to author or deploy. Returns null (not []) when the query itself fails, so a
+   caller can tell "nothing was due" apart from "we never found out". */
+async function fsQuery(base, token, collectionId, fieldPath, op, value, limit, selectFields) {
+  const sq = {
+    from: [{ collectionId }],
+    where: { fieldFilter: { field: { fieldPath }, op, value: { integerValue: String(value) } } },
+    orderBy: [{ field: { fieldPath }, direction: 'ASCENDING' }],
+    limit: limit || 300
+  };
+  if (selectFields) sq.select = { fields: selectFields.map(f => ({ fieldPath: f })) };
+  const r = await fetch(base + ':runQuery', {
+    method: 'POST',
+    headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+    body: JSON.stringify({ structuredQuery: sq })
+  }).catch(e => { console.error('fs_query_throw', collectionId, (e && e.message) || String(e)); return null; });
+  if (!r || !r.ok) { console.error('fs_query_fail', collectionId, r ? r.status : 'throw'); return null; }
+  const j = await r.json().catch(() => null);
+  if (!Array.isArray(j)) return null;
+  return j.map(e => e && e.document).filter(Boolean);
+}
+/* One-time backfill. Anyone who enabled push BEFORE nextAt existed has a valid push.due and no
+   nextAt, so the new query would not see them and their medicine reminders would stop silently.
+   Push is critical-only (medicine), so a missed one is the worst outcome this file can produce.
+   Pages /users ONCE, fills in nextAt where it is missing, then records that in D1 and never scans
+   again. A fetch failure returns WITHOUT marking it done, so it retries on the next tick.
+   This is the only full-collection scan left in the Worker and it runs at most once. */
+async function backfillPushNextAt(env, base, token) {
+  if (!env.GAMES_DB) return;
+  try {
+    await env.GAMES_DB.prepare("CREATE TABLE IF NOT EXISTS ops_state (key TEXT PRIMARY KEY, value TEXT, updated_at INTEGER)").run();
+    const done = await env.GAMES_DB.prepare("SELECT value FROM ops_state WHERE key='push_nextat_backfill'").first();
+    if (done && done.value) return;
+    let pageToken = '', fixed = 0, seen = 0;
+    do {
+      const r = await fetch(base + '/users?pageSize=300' + (pageToken ? ('&pageToken=' + encodeURIComponent(pageToken)) : ''), { headers: { authorization: 'Bearer ' + token } });
+      if (!r.ok) { console.error('backfill_fetch_fail', r.status); return; }
+      const j = await r.json();
+      for (const d of (j.documents || [])) {
+        seen++;
+        const push = d.fields && d.fields.push && d.fields.push.mapValue && d.fields.push.mapValue.fields;
+        if (!push || _fsNum(push.nextAt) != null) continue;
+        const dueArr = (push.due && push.due.arrayValue && push.due.arrayValue.values) || [];
+        const sentUpTo = _fsNum(push.sentUpTo) || 0;
+        let nextAt = null;
+        for (const v of dueArr) {
+          const f = v.mapValue && v.mapValue.fields; const at = f && _fsNum(f.at);
+          if (at != null && at > sentUpTo && (nextAt == null || at < nextAt)) nextAt = at;
+        }
+        const id = nextAt == null ? '' : d.name.split('/documents/users/')[1];
+        if (!id) continue;
+        await fetch(base + '/users/' + encodeURIComponent(id) + '?updateMask.fieldPaths=push.nextAt', {
+          method: 'PATCH', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+          body: JSON.stringify({ fields: { push: { mapValue: { fields: { nextAt: { integerValue: String(nextAt) } } } } } })
+        }).catch(e => console.error('backfill_patch_fail', (e && e.message) || String(e)));
+        fixed++;
+      }
+      pageToken = j.nextPageToken || '';
+    } while (pageToken);
+    await env.GAMES_DB.prepare("INSERT INTO ops_state(key,value,updated_at) VALUES('push_nextat_backfill',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at")
+      .bind(JSON.stringify({ seen, fixed }), Date.now()).run();
+    console.log('backfill_push_nextat', JSON.stringify({ seen, fixed }));
+  } catch (e) { console.error('backfill_fail', (e && e.message) || String(e)); }
+}
+/* Drop `push.nextAt` so this user stops matching the cron's query. Naming the path in the updateMask
+   while omitting it from the body is how Firestore REST deletes a field. */
+async function clearPushNextAt(base, token, id) {
+  return fetch(base + '/users/' + encodeURIComponent(id) + '?updateMask.fieldPaths=push.nextAt', {
+    method: 'PATCH', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+    body: JSON.stringify({ fields: { push: { mapValue: { fields: {} } } } })
+  }).catch(e => console.error('push_clear_nextat_fail', (e && e.message) || String(e)));
+}
 async function sendPushReminders(env){
   if(!env.FIREBASE_SERVICE_ACCOUNT) return;
   let sa; try{ sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); }catch(e){ return; }
@@ -224,19 +301,24 @@ async function sendPushReminders(env){
   const base = 'https://firestore.googleapis.com/v1/projects/' + FS_PROJECT + '/databases/(default)/documents';
   const now = Date.now();
   let sent = 0, userErrors = 0;
-  let docs = [], pageToken = '';
-  do {
-    const r = await fetch(base + '/users?pageSize=300' + (pageToken ? ('&pageToken=' + encodeURIComponent(pageToken)) : ''), { headers: { authorization: 'Bearer ' + token } });
-    if (!r.ok) { console.error('push_users_fetch_fail', r.status); break; }
-    const j = await r.json(); (j.documents || []).forEach(d => docs.push(d)); pageToken = j.nextPageToken || '';
-  } while (pageToken);
+  await backfillPushNextAt(env, base, token);
+  // Only the users with something actually due. `push.nextAt` is the earliest unsent fire time,
+  // written by the client alongside push.due and kept honest below. Users who have never enabled
+  // push have no nextAt at all, so they are not in the index and cost nothing.
+  const docs = await fsQuery(base, token, 'users', 'push.nextAt', 'LESS_THAN_OR_EQUAL', now, 500);
+  if (!docs) { await recordCronRun(env, { due: 0, sent: 0, userErrors: 0, queryFailed: true }); return; }
   for (const d of docs) {
     try {
+      const id = d.name.split('/documents/users/')[1];
       const push = d.fields && d.fields.push && d.fields.push.mapValue && d.fields.push.mapValue.fields;
-      if (!push || !(push.enabled && push.enabled.booleanValue)) continue;
-      const tokensMap = push.tokens && push.tokens.mapValue && push.tokens.mapValue.fields;
+      const tokensMap = push && push.tokens && push.tokens.mapValue && push.tokens.mapValue.fields;
       const tokens = tokensMap ? Object.keys(tokensMap) : [];
-      if (!tokens.length) continue;
+      // Matched the query but cannot be delivered to. Clear nextAt or this doc is re-read on every
+      // run forever (96 wasted reads/day each) — the exact failure mode this change exists to remove.
+      if (!push || !(push.enabled && push.enabled.booleanValue) || !tokens.length) {
+        if (id) await clearPushNextAt(base, token, id);
+        continue;
+      }
       const dueArr = (push.due && push.due.arrayValue && push.due.arrayValue.values) || [];
       const sentUpTo = _fsNum(push.sentUpTo) || 0;
       let maxAt = sentUpTo; const toSend = [];
@@ -262,17 +344,26 @@ async function sendPushReminders(env){
           if (fcmOk) sent++;
         }
       }
-      if (maxAt > sentUpTo) {
-        const id = d.name.split('/documents/users/')[1];
-        if (id) await fetch(base + '/users/' + encodeURIComponent(id) + '?updateMask.fieldPaths=push.sentUpTo', {
+      // Advance the send cursor and the query key together. nextAt = the earliest fire time still
+      // unsent, and it is CLEARED rather than nulled when nothing is left, so the doc drops out of
+      // the single-field index entirely instead of merely failing to match (test/push-query.test.js).
+      let nextAt = null;
+      for (const v of dueArr) {
+        const f = v.mapValue && v.mapValue.fields; const at = f && _fsNum(f.at);
+        if (at != null && at > maxAt && (nextAt == null || at < nextAt)) nextAt = at;
+      }
+      if (id && (maxAt > sentUpTo || nextAt !== _fsNum(push.nextAt))) {
+        const fields = { sentUpTo: { integerValue: String(maxAt) } };
+        if (nextAt != null) fields.nextAt = { integerValue: String(nextAt) };
+        await fetch(base + '/users/' + encodeURIComponent(id) + '?updateMask.fieldPaths=push.sentUpTo&updateMask.fieldPaths=push.nextAt', {
           method: 'PATCH', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-          body: JSON.stringify({ fields: { push: { mapValue: { fields: { sentUpTo: { integerValue: String(maxAt) } } } } } })
+          body: JSON.stringify({ fields: { push: { mapValue: { fields } } } })
         }).catch(e => console.error('push_sentupto_fail', (e && e.message) || String(e)));
       }
     } catch (e) { userErrors++; console.error('push_user_fail', (e && e.message) || String(e)); }
   }
-  console.log('push_run', JSON.stringify({ users: docs.length, sent, userErrors }));
-  await recordCronRun(env, { users: docs.length, sent, userErrors });
+  console.log('push_run', JSON.stringify({ due: docs.length, sent, userErrors }));
+  await recordCronRun(env, { due: docs.length, sent, userErrors });
 }
 /* ---- Account deletion, second half (App Store 5.1.1(v)).
    When the LAST member deletes their account the client cannot erase the household: it would have to
@@ -310,15 +401,14 @@ async function purgeDeletedHouseholds(env) {
   const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore');
   const base = 'https://firestore.googleapis.com/v1/projects/' + FS_PROJECT + '/databases/(default)/documents';
   const now = Date.now();
-  let households = 0, docs = 0, pageToken = '';
-  do {
-    const r = await fetch(base + '/households?pageSize=200&mask.fieldPaths=deleteAfter'
-      + (pageToken ? ('&pageToken=' + encodeURIComponent(pageToken)) : ''), { headers: { authorization: 'Bearer ' + token } });
-    if (!r.ok) { console.error('purge_hh_fetch_fail', r.status); break; }
-    const j = await r.json();
-    for (const d of (j.documents || [])) {
-      const after = _fsNum(d.fields && d.fields.deleteAfter);
-      if (after == null || after > now) continue;
+  let households = 0, docs = 0;
+  // Only households whose grace window has actually lapsed. A household that was never flagged has
+  // no `deleteAfter` field, so it is absent from the index and is never read. Capped per run because
+  // each hit fans out into subcollection deletes; the 15-minute cron picks up the rest.
+  {
+    const found = await fsQuery(base, token, 'households', 'deleteAfter', 'LESS_THAN_OR_EQUAL', now, 50, ['deleteAfter']);
+    if (!found) return { households: 0, docs: 0 };
+    for (const d of found) {
       const hid = d.name.split('/documents/households/')[1];
       if (!hid) continue;
       try {
@@ -337,8 +427,7 @@ async function purgeDeletedHouseholds(env) {
         if (delHh.ok) { households++; docs++; } else console.error('purge_hh_del_fail', hid, delHh.status);
       } catch (e) { console.error('purge_hh_fail', hid, (e && e.message) || String(e)); }
     }
-    pageToken = j.nextPageToken || '';
-  } while (pageToken);
+  }
   if (households) console.log('purge_run', JSON.stringify({ households, docs }));
   return { households, docs };
 }
