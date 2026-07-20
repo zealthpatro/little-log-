@@ -238,10 +238,31 @@ async function fsQuery(base, token, collectionId, fieldPath, op, value, limit, s
     headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
     body: JSON.stringify({ structuredQuery: sq })
   }).catch(e => { console.error('fs_query_throw', collectionId, (e && e.message) || String(e)); return null; });
-  if (!r || !r.ok) { console.error('fs_query_fail', collectionId, r ? r.status : 'throw'); return null; }
+  if (!r) return { docs: null, error: 'throw' };
+  if (!r.ok) {
+    // Log the whole body (it names the exact cause, e.g. a FAILED_PRECONDITION missing-index link)
+    // but return only the status: /api/health is PUBLIC, so it must not carry Firestore internals.
+    const body = await r.text().catch(() => '');
+    console.error('fs_query_fail', collectionId, r.status, body.slice(0, 500));
+    return { docs: null, error: String(r.status) };
+  }
   const j = await r.json().catch(() => null);
-  if (!Array.isArray(j)) return null;
-  return j.map(e => e && e.document).filter(Boolean);
+  if (!Array.isArray(j)) { console.error('fs_query_shape', collectionId); return { docs: null, error: 'shape' }; }
+  return { docs: j.map(e => e && e.document).filter(Boolean), error: null };
+}
+/* Page a whole collection. This is the thing the queries above exist to avoid, kept for exactly two
+   callers: the one-time nextAt backfill, and the push fallback below. */
+async function fsPageAll(base, token, path, mask) {
+  let out = [], pageToken = '';
+  do {
+    const r = await fetch(base + '/' + path + '?pageSize=300' + (mask ? ('&mask.fieldPaths=' + mask) : '')
+      + (pageToken ? ('&pageToken=' + encodeURIComponent(pageToken)) : ''), { headers: { authorization: 'Bearer ' + token } });
+    if (!r.ok) { console.error('fs_page_fail', path, r.status); return null; }
+    const j = await r.json();
+    (j.documents || []).forEach(d => out.push(d));
+    pageToken = j.nextPageToken || '';
+  } while (pageToken);
+  return out;
 }
 /* One-time backfill. Anyone who enabled push BEFORE nextAt existed has a valid push.due and no
    nextAt, so the new query would not see them and their medicine reminders would stop silently.
@@ -305,8 +326,16 @@ async function sendPushReminders(env){
   // Only the users with something actually due. `push.nextAt` is the earliest unsent fire time,
   // written by the client alongside push.due and kept honest below. Users who have never enabled
   // push have no nextAt at all, so they are not in the index and cost nothing.
-  const docs = await fsQuery(base, token, 'users', 'push.nextAt', 'LESS_THAN_OR_EQUAL', now, 500);
-  if (!docs) { await recordCronRun(env, { due: 0, sent: 0, userErrors: 0, queryFailed: true }); return; }
+  const q = await fsQuery(base, token, 'users', 'push.nextAt', 'LESS_THAN_OR_EQUAL', now, 500);
+  let docs = q.docs, queryError = q.error;
+  if (!docs) {
+    // The query is the OPTIMISATION, not the feature. Push is critical-only (medicine), so if the
+    // query fails for any reason we fall back to the old full page rather than silently sending
+    // nothing. Expensive, and deliberately loud: the status shows up at /api/health so a degraded
+    // cron cannot sit unnoticed the way a missing reminder would.
+    docs = await fsPageAll(base, token, 'users');
+    if (!docs) { await recordCronRun(env, { due: 0, sent: 0, userErrors: 0, queryError, fallback: 'failed' }); return; }
+  }
   for (const d of docs) {
     try {
       const id = d.name.split('/documents/users/')[1];
@@ -315,8 +344,10 @@ async function sendPushReminders(env){
       const tokens = tokensMap ? Object.keys(tokensMap) : [];
       // Matched the query but cannot be delivered to. Clear nextAt or this doc is re-read on every
       // run forever (96 wasted reads/day each) — the exact failure mode this change exists to remove.
+      // Only when nextAt is actually SET: on the fallback path `docs` is every user in the project,
+      // and an unguarded clear would PATCH every one of them on every tick.
       if (!push || !(push.enabled && push.enabled.booleanValue) || !tokens.length) {
-        if (id) await clearPushNextAt(base, token, id);
+        if (id && _fsNum(push && push.nextAt) != null) await clearPushNextAt(base, token, id);
         continue;
       }
       const dueArr = (push.due && push.due.arrayValue && push.due.arrayValue.values) || [];
@@ -362,8 +393,9 @@ async function sendPushReminders(env){
       }
     } catch (e) { userErrors++; console.error('push_user_fail', (e && e.message) || String(e)); }
   }
-  console.log('push_run', JSON.stringify({ due: docs.length, sent, userErrors }));
-  await recordCronRun(env, { due: docs.length, sent, userErrors });
+  console.log('push_run', JSON.stringify({ due: docs.length, sent, userErrors, queryError }));
+  await recordCronRun(env, queryError ? { due: docs.length, sent, userErrors, queryError, fallback: 'scan' }
+                                      : { due: docs.length, sent, userErrors });
 }
 /* ---- Account deletion, second half (App Store 5.1.1(v)).
    When the LAST member deletes their account the client cannot erase the household: it would have to
@@ -406,7 +438,9 @@ async function purgeDeletedHouseholds(env) {
   // no `deleteAfter` field, so it is absent from the index and is never read. Capped per run because
   // each hit fans out into subcollection deletes; the 15-minute cron picks up the rest.
   {
-    const found = await fsQuery(base, token, 'households', 'deleteAfter', 'LESS_THAN_OR_EQUAL', now, 50, ['deleteAfter']);
+    // No fallback here on purpose: a 30-day grace window can wait for the next tick, and a full
+    // /households scan is the expensive one. A failure is logged and retried, never scanned around.
+    const found = (await fsQuery(base, token, 'households', 'deleteAfter', 'LESS_THAN_OR_EQUAL', now, 50, ['deleteAfter'])).docs;
     if (!found) return { households: 0, docs: 0 };
     for (const d of found) {
       const hid = d.name.split('/documents/households/')[1];

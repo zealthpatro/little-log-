@@ -98,8 +98,17 @@ const ids = (docs) => (docs || []).map(d => d.name.split('/').pop()).sort();
   ok("worker queries 'push.nextAt'", src.includes("'users', 'push.nextAt', 'LESS_THAN_OR_EQUAL'"));
   ok("worker queries 'deleteAfter'", src.includes("'households', 'deleteAfter', 'LESS_THAN_OR_EQUAL'"));
   ok('worker no longer pages /households', !src.includes("'/households?pageSize"));
-  ok('the only /users paging left is the one-time backfill',
+  ok('the only literal /users paging is the one-time backfill',
      (src.match(/'\/users\?pageSize/g) || []).length === 1);
+  // The emulator auto-creates indexes and never returns FAILED_PRECONDITION, so it CANNOT catch a
+  // missing-index error in production. That is not hypothetical: the first deploy of this change
+  // came back queryFailed. Hence the fallback, which keeps medicine reminders flowing regardless.
+  ok('push falls back to a full page when the query fails', src.includes("docs = await fsPageAll(base, token, 'users')"));
+  ok('the failure is surfaced at /api/health', src.includes('queryError'));
+  ok('only the HTTP status is made public, never the Firestore body',
+     src.includes("return { docs: null, error: String(r.status) };"));
+  ok('clearing nextAt is guarded so a fallback scan cannot PATCH every user',
+     src.includes('_fsNum(push && push.nextAt) != null'));
   const app = fs.readFileSync(path.join(__dirname, '..', 'app', 'index.html'), 'utf8');
   ok('the client writes nextAt with the index', app.includes('nextAt: slice.length ? slice[0].at'));
   ok('the client DELETES nextAt rather than nulling it',
