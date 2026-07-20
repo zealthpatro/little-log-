@@ -4,11 +4,13 @@
   "private": true,
   "description": "Cross-account emulator test for firestore.rules. Run green before publishing tightened rules.",
   "scripts": {
-    "test:rules": "cd .. && firebase emulators:exec --only firestore --project demo-cubby \"node test/rules-test.js\""
+    "test:rules": "cd .. && firebase emulators:exec --only firestore --project demo-cubby \"node test/rules-test.js\"",
+    "test:app": "node fab-quicklog.test.js && node duedate-cycle.test.js"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^3.0.4",
     "firebase": "^10.12.2",
-    "firebase-tools": "^13.11.2"
+    "firebase-tools": "^13.11.2",
+    "puppeteer-core": "^25.3.0"
   }
 }

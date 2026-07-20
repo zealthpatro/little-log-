@@ -3245,21 +3245,25 @@ function openPro(lockedFeature, tastedOut){
     <div class="pro-list">${feats}</div>
     <div class="csub" style="text-align:center;margin:2px 0 10px">Every treat comes with a free taste or two, so try before you decide 🐻</div>
     ${canBuy
-      ? `<button class="btn-primary" style="background:var(--star)" onclick="startProCheckout()">Start 7-day free trial</button>
-         <div class="csub" style="text-align:center;margin-top:8px">${PRO_CFG.priceLine}. Cancel anytime in the trial and pay nothing. One plan covers your whole family.</div>`
+      ? `<button class="btn-primary" style="background:var(--star)" onclick="startProCheckout('annual')">Start 7-day free trial · $90 a year</button>
+         <button class="btn-ghost" onclick="startProCheckout('monthly')">Or pay $9 a month</button>
+         <div class="csub" style="text-align:center;margin-top:8px">Cancel anytime in the trial and pay nothing. One plan covers your whole family.</div>`
       : (joined
         ? `<div class="pro-joined">✅ You're registered for Pro. We'll email you the moment it opens, ${PRO_LAUNCH} 🐻</div>`
         : `<button class="btn-primary" style="background:var(--star)" onclick="joinProWaitlist()">Register for Pro</button>
            <div class="csub" style="text-align:center;margin-top:8px">Cubby Pro arrives ${PRO_LAUNCH}. Register now to claim your 7-day free trial at launch, ${PRO_CFG.priceLine}. No charge today.</div>`)}`,'star');
 }
-async function startProCheckout(){
+/* `plan` is required: the billing Worker picks the variant with
+   `plan === 'monthly' ? LS_VARIANT_MONTHLY : LS_VARIANT_ANNUAL`, so omitting it silently sold
+   everyone the annual plan and made the advertised $9/month unbuyable. Send it explicitly. */
+async function startProCheckout(plan){
   const hid = window.LL && window.LL.householdId;
   if(!hid){ toast('Sign in first'); return; }
   if(!PRO_CFG.checkoutUrl){ openPro(); return; }
   showLoader(['Opening secure checkout']);
   try{
     const r = await fetch(PRO_CFG.checkoutUrl, { method:'POST', headers:{'content-type':'application/json'},
-      body: JSON.stringify({ hid, origin: location.origin,
+      body: JSON.stringify({ hid, origin: location.origin, plan: plan==='monthly'?'monthly':'annual',
         email: (window.LL.auth&&window.LL.auth.currentUser&&window.LL.auth.currentUser.email)||'' }) });
     const d = await r.json(); hideLoader();
     if(d && d.url) location.href = d.url; else toast('Could not start checkout, try again');
@@ -4164,6 +4168,15 @@ function endLossHolding(){ clearMyLossHolding(); persist(); render(); }
    to app/pregnancy-data.js (NHS / ACOG / G-BA / WHO / CDC).
    ============================================================ */
 const PREG_MS_WEEK = 7*86400000, PREG_TERM = 280*86400000;
+/* Naegele's rule (LMP + 280 days) assumes a 28-day cycle ovulating on day 14. When the cycle
+   is longer or shorter, ovulation moves with it and the due date shifts by the same amount.
+   Without this a 35-day cycle is dated a week early on every screen we show, including the
+   antenatal schedule we generate from it. Only applied where we actually asked for the cycle
+   length; 28 (and anything unknown) leaves the classic calculation untouched. Dating is still
+   the clinic's call, and the copy says so. */
+function cycleShift(cycleLen){ return (Math.max(21,Math.min(40,+cycleLen||28)) - 28)*86400000; }
+function dueFromLmp(lmp, cycleLen){ return lmp + PREG_TERM + cycleShift(cycleLen); }
+function lmpFromDue(due, cycleLen){ return due - PREG_TERM - cycleShift(cycleLen); }
 const PREG_DISCLAIM = 'Informational only, not medical advice. Always follow your midwife, doctor or health visitor, and confirm your own appointment plan with your provider.';
 let pregView = 'week';
 const PREG_COUNTRY_OPTS = [['uk','United Kingdom (NHS)'],['us','United States (ACOG)'],['de','Deutschland'],['uae','United Arab Emirates'],['generic','Other / general (WHO)']];
@@ -4578,7 +4591,7 @@ function confirmPositiveTest(){
   const sel=(($('#ptCountry')||{}).value)||detectCountry();
   const cc=pregCountryKey(sel);
   p.lmp=new Date(dv+'T08:00').getTime();
-  p.dueDate=p.lmp+PREG_TERM;
+  p.dueDate=dueFromLmp(p.lmp, p.cycleLen);
   p.stage='expecting';
   p.country=sel;
   p.appts=(((window.PREG&&PREG.antenatal[cc]&&PREG.antenatal[cc].items))||[]).map(it=>({id:uid(),week:it.week,title:it.title,note:it.note,done:false,at:null}));
@@ -4702,7 +4715,7 @@ function savePregnancy(){
     if(!dv){ toast('Pick a date first'); return; }
     const picked=new Date(dv+'T08:00').getTime();
     if(pregDraft.mode==='due'){ dueDate=picked; }
-    else { lmp=picked; dueDate=picked+PREG_TERM; }
+    else { lmp=picked; dueDate=dueFromLmp(picked, state.pregnancy&&state.pregnancy.cycleLen); }
   }
   const appts=(((window.PREG&&PREG.antenatal[cc]&&PREG.antenatal[cc].items))||[]).map(it=>({id:uid(),week:it.week,title:it.title,note:it.note,done:false,at:null}));
   state.pregnancy={ id:uid(), ownerUid:myUid(), stage:'expecting', dueDate, lmp, country:sel,
@@ -5590,7 +5603,7 @@ function openEditPregnancy(){
 }
 function saveEditPregnancy(){
   const p=state.pregnancy; const dv=$('#epDue').value; const sel=$('#epC').value||p.country; const cc=pregCountryKey(sel); const prevKey=pregCountryKey(p.country);
-  if(dv){ p.dueDate=new Date(dv+'T08:00').getTime(); p.lmp=p.dueDate-PREG_TERM; }
+  if(dv){ p.dueDate=new Date(dv+'T08:00').getTime(); p.lmp=lmpFromDue(p.dueDate, p.cycleLen); }
   if(sel!==p.country){
     p.country=sel;
     if(cc!==prevKey){

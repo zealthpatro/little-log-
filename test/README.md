@@ -75,3 +75,21 @@ npx firebase deploy --only firestore:rules --project little-log-a9caa
 `rules-test.js` mirrors `appBlobFromState()` in `app/store-firebase.js`. If you add a new key to the
 app blob there, no rule change is needed (the guard is a denylist of maternal keys), but keep this
 test's `cleanApp()` representative.
+
+## App behaviour tests (no emulator, real Chrome)
+Separate from the rules suite: these drive the real app in headless Chrome via `puppeteer-core`,
+so they catch what DOM assertions alone miss.
+```
+node tools/serve.js &      # must be running: the tests load http://localhost:8080/app/?e2e=1
+cd test && npm install && npm run test:app
+```
+- `fab-quicklog.test.js` — the quick-log FAB: on every view, session-dismissible, customisable,
+  and per-user rather than in the shared household blob.
+- `duedate-cycle.test.js` — the due date follows the cycle length she gave us, an unknown or
+  28-day cycle stays byte-identical to the classic calculation, and the weeks-along door is
+  deliberately NOT shifted.
+
+**The trap both files exist to stop repeating:** top-level `let` declarations (`pregDraft`, `view`,
+`pregView`) are lexical bindings, NOT window properties. `window.pregDraft = x` silently creates a
+second object the app never reads, and the test then asserts against a code path that never ran.
+Assign them bare. Four "failures" in these suites have been the harness, not the app.
