@@ -207,11 +207,19 @@ Kept so the research is not lost. Effort is the generating agent's estimate, unv
 
 Three findings make the above moot until addressed.
 
-**6.1 — Hard scale ceiling at roughly 260 users.** `sendPushReminders` pages the **entire** `/users`
-collection every run (`worker.js:230-236`, no filter, no watermark) and `purgeDeletedHouseholds`
-full-scans `/households` (`worker.js:318-321`). That is 96 runs/day × (every user + every
-household) in Firestore reads on an idle app, against Spark's 50k/day cap. This is arithmetic, not
-an estimate, and it is the binding constraint on growth — not the app. **Treat as P0.**
+**6.1 — Hard scale ceiling at roughly 260 users. FIXED 2026-07-20, commit f245f62.**
+`sendPushReminders` paged the **entire** `/users` collection every run and `purgeDeletedHouseholds`
+full-scanned `/households`: 96 runs/day × (every user + every household) on an idle app, against
+Spark's 50k/day. Both are now single-field range queries (`users where push.nextAt <= now`,
+`households where deleteAfter <= now`), served by the automatic single-field index.
+
+**New invariant to protect:** `push.nextAt` is the cron's query key. The client writes it beside
+`push.due`, the Worker recomputes it after sending and clears it when nothing is left. Break that
+and either a doc burns a read on every run, or a medicine reminder silently never fires. Covered by
+`test/push-query.test.js` (19 assertions, against a real Firestore).
+
+Worth recording honestly: the cron reported `users: 0` immediately before the fix, so this was a
+real latent ceiling rather than an active outage.
 
 **6.2 — The August Pro launch.** ~2 weeks out, published in 8+ places (pricing hero, `index.html:239/248`,
 `faq:136/:445`, `refund:42`, `app/index.html:3200`, `landing.js:219/228`, JSON-LD), and blocked on a
@@ -257,7 +265,7 @@ calls it a PDF: either build real PDF output or fix the copy before charging.
 
 | # | What | Effort | Why now |
 | --- | --- | --- | --- |
-| 0 | Cron full-scan (§6.1) | M | Hard ceiling at ~260 users; blocks everything |
+| 0 | ~~Cron full-scan (§6.1)~~ | — | **Done, commit f245f62** |
 | 1 | ~~Due-date cycle fix~~ | — | **Done, commit 88511a8** |
 | 2 | ~~Checkout `plan` field~~ | — | **Done, commit 88511a8** |
 | 3 | Privacy policy controller (§6.3) | S | Needs founder's registered entity |
