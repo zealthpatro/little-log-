@@ -408,6 +408,15 @@ async function sendPushReminders(env){
    first, then the doc itself, so a crash mid-purge can never leave a household doc that looks alive
    but has been gutted. ---- */
 const HH_SUBCOLLECTIONS = ['events', 'photos', 'notes', 'pregnancy'];
+/* Returns the number deleted, or NULL if anything at all went wrong.
+   Null matters: the caller deletes the household doc only after every subcollection is gone. This
+   used to return the running count on a failed listing and merely log a failed DELETE, so a 403 or a
+   500 read as "0 documents, nothing to do" and the parent was deleted anyway — orphaning every
+   remaining child for ever (unreachable, because rules key off membership, but still stored) and
+   destroying the retry, since `deleteAfter` went with the parent. On the A6 deletion path those are
+   documents someone ASKED to have erased, so a silent partial delete is a privacy failure that
+   reports itself as success. A 404 is different and still counts as fine: the collection simply
+   never existed. */
 async function fsDeleteAll(base, token, path) {
   // Firestore REST has no recursive delete; page the ids and delete them one by one.
   let n = 0, pageToken = '';
@@ -415,13 +424,20 @@ async function fsDeleteAll(base, token, path) {
     const url = base + '/' + path + '?pageSize=300&mask.fieldPaths=__name__'
       + (pageToken ? ('&pageToken=' + encodeURIComponent(pageToken)) : '');
     const r = await fetch(url, { headers: { authorization: 'Bearer ' + token } });
-    if (!r.ok) { if (r.status !== 404) console.error('purge_list_fail', path, r.status); return n; }
-    const j = await r.json();
+    if (!r.ok) {
+      if (r.status === 404) return n;
+      console.error('purge_list_fail', path, r.status);
+      return null;
+    }
+    const j = await r.json().catch(() => null);
+    if (!j) { console.error('purge_list_shape', path); return null; }
     for (const d of (j.documents || [])) {
       const del = await fetch('https://firestore.googleapis.com/v1/' + d.name, {
         method: 'DELETE', headers: { authorization: 'Bearer ' + token }
       });
-      if (del.ok) n++; else console.error('purge_del_fail', d.name, del.status);
+      if (del.ok) { n++; continue; }
+      console.error('purge_del_fail', d.name, del.status);
+      return null;
     }
     pageToken = j.nextPageToken || '';
   } while (pageToken);
@@ -446,16 +462,31 @@ async function purgeDeletedHouseholds(env) {
       const hid = d.name.split('/documents/households/')[1];
       if (!hid) continue;
       try {
-        for (const sub of HH_SUBCOLLECTIONS) docs += await fsDeleteAll(base, token, 'households/' + hid + '/' + sub);
-        // mhealth is nested one level deeper: mhealth/{uid}/cat/{category}.
-        const mh = await fetch(base + '/households/' + hid + '/mhealth?pageSize=300&mask.fieldPaths=__name__', { headers: { authorization: 'Bearer ' + token } });
-        if (mh.ok) {
-          const mj = await mh.json();
-          for (const owner of (mj.documents || [])) {
-            const ouid = owner.name.split('/mhealth/')[1];
-            if (ouid) docs += await fsDeleteAll(base, token, 'households/' + hid + '/mhealth/' + ouid + '/cat');
-          }
+        // Every child must be confirmed gone before the parent goes. Any failure abandons THIS
+        // household untouched: `deleteAfter` stays set, so the next tick retries the whole thing.
+        // Partial progress is safe to repeat; a deleted parent is not.
+        let complete = true;
+        for (const sub of HH_SUBCOLLECTIONS) {
+          const n = await fsDeleteAll(base, token, 'households/' + hid + '/' + sub);
+          if (n === null) { complete = false; break; }
+          docs += n;
         }
+        // mhealth is nested one level deeper: mhealth/{uid}/cat/{category}.
+        if (complete) {
+          const mh = await fetch(base + '/households/' + hid + '/mhealth?pageSize=300&mask.fieldPaths=__name__', { headers: { authorization: 'Bearer ' + token } });
+          if (mh.ok) {
+            const mj = await mh.json().catch(() => null);
+            if (!mj) complete = false;
+            for (const owner of ((mj && mj.documents) || [])) {
+              const ouid = owner.name.split('/mhealth/')[1];
+              if (!ouid) continue;
+              const n = await fsDeleteAll(base, token, 'households/' + hid + '/mhealth/' + ouid + '/cat');
+              if (n === null) { complete = false; break; }
+              docs += n;
+            }
+          } else if (mh.status !== 404) { console.error('purge_mhealth_list_fail', hid, mh.status); complete = false; }
+        }
+        if (!complete) { console.error('purge_hh_incomplete', hid); continue; }
         // The household doc LAST, so an interrupted run retries rather than orphaning subcollections.
         const delHh = await fetch(base + '/households/' + hid, { method: 'DELETE', headers: { authorization: 'Bearer ' + token } });
         if (delHh.ok) { households++; docs++; } else console.error('purge_hh_del_fail', hid, delHh.status);

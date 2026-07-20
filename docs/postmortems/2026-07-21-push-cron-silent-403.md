@@ -95,7 +95,24 @@ not verification.
 | 3 | Push falls back to a full page if the query fails, so an optimisation can never silently stop a medicine reminder | me | **Done** |
 | 4 | **Find and fix the 403.** Check that the Firestore API is enabled on `little-log-a9caa`, that the service account in the `FIREBASE_SERVICE_ACCOUNT` Worker secret still exists and is enabled, and that it holds `roles/datastore.user`. `npx wrangler tail` prints the full `fs_query_fail` body, which names the exact reason | **founder** | **OPEN** |
 | 5 | Re-verify after the fix: `/api/health` must show `cronHealthy: true` with no `queryError` | me | Blocked on 4 |
-| 6 | Audit the remaining `if (!r.ok) ... break/return` sites in `worker.js` for the same "failure becomes a plausible zero" shape | me | Open |
+| 6 | Audit the remaining `if (!r.ok) ... break/return` sites in `worker.js` for the same "failure becomes a plausible zero" shape | me | **Done — and it found one** |
+
+## The audit found a second, worse instance
+
+`fsDeleteAll()` returned its running count when the LISTING failed, and merely logged a failed
+individual DELETE. So a 403 or 500 read as "0 documents, nothing to do", and `purgeDeletedHouseholds`
+went on to delete the household doc anyway — orphaning every remaining child for ever (unreachable,
+because rules key off membership, but still stored) and destroying the retry, since `deleteAfter`
+went with the parent.
+
+The ordering comment one line below it — "The household doc LAST, so an interrupted run retries
+rather than orphaning subcollections" — describes the right invariant. The error handling silently
+defeated it.
+
+This is the **A6 account-deletion** path, so the orphans are documents someone explicitly asked to
+have erased, and the failure reported itself as success. Fixed: `fsDeleteAll` returns `null` on any
+real failure (a 404 still counts as legitimately empty), and the parent is deleted only once every
+child is confirmed gone. Anything else abandons that household untouched so the next tick retries.
 
 ## The rule worth keeping
 

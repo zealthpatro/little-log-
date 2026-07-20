@@ -109,6 +109,18 @@ const ids = (docs) => (docs || []).map(d => d.name.split('/').pop()).sort();
      src.includes("return { docs: null, error: String(r.status) };"));
   ok('clearing nextAt is guarded so a fallback scan cannot PATCH every user',
      src.includes('_fsNum(push && push.nextAt) != null'));
+  // Same shape as the push bug, found by auditing for it: fsDeleteAll used to return its running
+  // count when LISTING failed, so a 403 read as "0 documents, nothing to do" and the household doc
+  // was deleted anyway -- orphaning every remaining child for ever and taking `deleteAfter`, and so
+  // the retry, with it. These are structural (source) assertions, not behavioural: the purge path
+  // needs a service account and cannot be driven from here.
+  ok('fsDeleteAll signals failure instead of returning a count', src.includes('return null;\n    }\n    const j = await r.json().catch(() => null);'));
+  ok('a failed individual DELETE aborts rather than being logged and ignored',
+     src.includes("console.error('purge_del_fail', d.name, del.status);\n      return null;"));
+  ok('the household doc is only deleted when every child is confirmed gone',
+     src.includes("if (!complete) { console.error('purge_hh_incomplete', hid); continue; }"));
+  ok('a 404 collection still counts as successfully empty',
+     src.includes('if (r.status === 404) return n;'));
   const app = fs.readFileSync(path.join(__dirname, '..', 'app', 'index.html'), 'utf8');
   ok('the client writes nextAt with the index', app.includes('nextAt: slice.length ? slice[0].at'));
   ok('the client DELETES nextAt rather than nulling it',
