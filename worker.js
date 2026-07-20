@@ -834,8 +834,14 @@ export default {
         } catch (e) {}
       }
       // Cron fires every 15 min; flag unhealthy if the last success is older than an hour.
-      const cronHealthy = cron ? (now - cron.at) < 60 * 60000 : null;
-      return json({ ok: true, time: now, cron, cronHealthy });
+      // Healthy has to mean RECENT **and** SUCCESSFUL. It used to mean only recent, which is exactly
+      // how a cron that was 403-ing on every single run still reported healthy: the old push loop
+      // swallowed a failed /users fetch with `break` and then logged `users: 0`, which reads as
+      // "nobody had a reminder due" rather than "we never got to look". A heartbeat that cannot go
+      // red is not a heartbeat.
+      const cronFresh = cron ? (now - cron.at) < 60 * 60000 : null;
+      const cronHealthy = cron ? !!(cronFresh && !cron.queryError && cron.fallback !== 'failed') : null;
+      return json({ ok: true, time: now, cron, cronHealthy, cronFresh });
     }
     // Account deletion reaches into D1, which Firestore rules cannot govern: the guessing-game hubs
     // are keyed by Firebase uid. The client calls this while still signed in; we verify the token
