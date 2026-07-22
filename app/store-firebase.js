@@ -544,6 +544,7 @@
         // circle they have walked into. Read once by openFirstRun and never persisted.
         window.LL.justJoined = { invitedBy: data.invitedBy || null, role: data.role || 'caregiver' };
         try { sessionStorage.removeItem('cubby-join'); } catch (e) {}
+        clearInviteMismatch(); // a corrected address joined for real: never leave the mismatch screen on top
         return data.householdId;
       }
     }
@@ -616,7 +617,13 @@
       // Cubby first marked every hint as explained for the co-parent and every later caregiver.
       // It lives in localStorage under the uid now (seenMap/markSeen in index.html). Stripped on
       // the way out so existing households stop re-broadcasting the old value.
-      settings: (function () { var s = Object.assign({}, state.settings || {}); delete s.seen; return s; })(),
+      // `push` (reminder on/off + quiet hours) is PER DEVICE for the same reason: a push token is
+      // one device's, so the enabled flag must be too. In the shared blob it meant caregiver B was
+      // shown "On for this device" they never enabled, and B tapping Off wrote enabled:false back to
+      // A, stopping A's reminder index from refreshing — the A5-class per-user-vs-shared bug. The
+      // token map and the cron's enabled flag already live per-uid in users/{uid}.push; this keeps
+      // the UI's own view of it out of the circle. It stays in localStorage via persist().
+      settings: (function () { var s = Object.assign({}, state.settings || {}); delete s.seen; delete s.push; return s; })(),
       milestones: state.milestones || [], meds: state.meds || [],
       vaccines: state.vaccines || {}, illnesses: state.illnesses || [],
       photos: state.photos || [],
@@ -634,9 +641,11 @@
   function applyAppBlob(app) {
     if (!app) return;
     var localTheme = state.settings && state.settings.theme; // theme is per-device
+    var localPush = state.settings && state.settings.push;   // reminder on/off + quiet hours: per-device (see appBlobFromState)
     state.babies = app.babies || [];
     state.settings = Object.assign({}, app.settings || {});
     if (localTheme) state.settings.theme = localTheme;
+    if (localPush) state.settings.push = localPush;
     state.milestones = app.milestones || [];
     state.meds = app.meds || [];
     state.vaccines = app.vaccines || {};
@@ -766,7 +775,14 @@
         applyingRemote = true; pregOwner = m; applyPregJourney(m, doc.data()); applyingRemote = false;
         ensureMaternalListeners(uidNow);
         if (booted) render();
-      }, function (e) { /* permission-denied = not shared with me; ignore */ }));
+      }, function (e) {
+        // We WERE reading this member's journey and now can't: she removed us from sharedWith. Losing
+        // read access has to clear the pregnancy we were rendering — otherwise the week hero and the
+        // size-of-a-fruit line keep updating forever on a journey we are no longer permitted to see,
+        // and after a loss that is the exact thing the charter forbids. Distinct from the ordinary
+        // "never shared with us" error, where pregOwner !== m and there is correctly nothing to clear.
+        if (pregOwner === m) { pregOwner = null; clearPregJourneyState(); if (booted) render(); }
+      }));
     });
   }
   // The owner writes her changed journey doc (data + current sharedWith). No-op for non-owners.
@@ -820,10 +836,20 @@
   // The invite did not match the address they signed in with. Explain it in their terms and offer
   // the only two things that actually resolve it, rather than silently starting a new family.
   var inviteMismatchShown = false;
+  // Tear the mismatch screen down and let it show again. signOut() does NOT reload, so the overlay
+  // (z-index 3000) otherwise survives a "try a different sign in" and ends up covering the working app
+  // after the corrected address actually joins. Any exit from the mismatch state routes through here.
+  function clearInviteMismatch() {
+    try { var el = document.getElementById('ll-invite-mismatch'); if (el) el.remove(); } catch (e) {}
+    inviteMismatchShown = false;
+  }
   function showInviteMismatch(email) {
     if (inviteMismatchShown) return; inviteMismatchShown = true;
     try { hideOverlay(); } catch (e) {}
-    try { sessionStorage.removeItem('cubby-join'); } catch (e) {}
+    // Do NOT clear cubby-join here. If we did, a second wrong sign-in (Apple hands back the SAME relay
+    // address every time, so a wrong guess repeats) would no longer count as a join attempt and would
+    // silently create a fresh empty household. Join intent is abandoned in exactly one place: the
+    // "Start my own Cubby instead" button below, and on a successful join (resolveHousehold).
     var ov = document.createElement('div'); ov.id = 'll-invite-mismatch';
     ov.setAttribute('style', 'position:fixed;inset:0;z-index:3000;background:#FBF5E9;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;overflow-y:auto');
     ov.innerHTML = '<div style="max-width:360px;font-family:-apple-system,Segoe UI,Roboto,sans-serif">'
@@ -837,13 +863,17 @@
       + '</div>';
     document.body.appendChild(ov);
     var btn = document.getElementById('ll-im-btn');
-    if (btn) btn.onclick = function () { if (window.LL && typeof window.LL.signOut === 'function') window.LL.signOut(); else { try { location.reload(); } catch (e) {} } };
-    // They may genuinely want their own household after all; honour that, just never by accident.
+    // Tear the overlay down BEFORE signing out (join intent is kept, so the corrected address retries
+    // the join). Otherwise it lingers on top of the sign-in screen and then the joined app.
+    if (btn) btn.onclick = function () { clearInviteMismatch(); if (window.LL && typeof window.LL.signOut === 'function') window.LL.signOut(); else { try { location.reload(); } catch (e) {} } };
+    // They may genuinely want their own household after all; honour that, just never by accident. This
+    // is the ONE place join intent is deliberately dropped, so the reload creates a fresh household
+    // instead of returning to this screen.
     var own = document.getElementById('ll-im-own');
     if (own) own.onclick = function (e) {
       e.preventDefault();
-      try { ov.remove(); } catch (e2) {}
-      inviteMismatchShown = false;
+      try { sessionStorage.removeItem('cubby-join'); } catch (e2) {}
+      clearInviteMismatch();
       try { location.reload(); } catch (e2) {}
     };
   }
@@ -879,7 +909,11 @@
     if (!window.confirmSheet) return;
     window.confirmSheet({
       title: 'You’ve been invited 🐻',
-      body: (inv.relationship ? ('You’ve been invited as ' + inv.relationship + '. ') : '') + 'Join this family circle? You’ll switch to their Cubby — your current one stays saved and you can switch back.',
+      // HONEST: joining overwrites users/{uid}.householdId, and there is no in-app way back to the old
+      // one (a household switcher is not built). The old data is not deleted, but it becomes
+      // unreachable from here. The previous copy promised "you can switch back", which reads as data
+      // loss to a tester who joins and then can't find their own baby. Say what actually happens.
+      body: (inv.relationship ? ('You’ve been invited as ' + inv.relationship + '. ') : '') + 'Join this family circle? You’ll switch to their Cubby on this account. Your own Cubby isn’t deleted, but you won’t be able to open it from here afterwards — so only join if you’re ready to switch for good.',
       confirmLabel: 'Join the family',
       cancelLabel: 'Not now',
       onConfirm: function () { joinPendingInvite(inv); }
@@ -1529,9 +1563,14 @@
         + '<div id="llInvMsg" class="ll-auth-msg"></div></div>'
       : '<div class="ll-auth-msg">Only an owner can invite new people.</div>';
 
-    var share = '<div class="ll-invite"><label>App link to share</label>'
-      + '<div class="ll-linkrow"><input id="llAppLink" readonly value="' + esc(location.origin + '/app/?join=1') + '"><button id="llCopyLink" class="ll-modal-btn">' + (navigator.share ? 'Share' : 'Copy') + '</button></div>'
-      + '<div class="ll-auth-msg">Send this link yourself, by text or WhatsApp. Whoever you invite signs in with the email address you invited, and joins straight away. Share or Copy sends the address along with the link, so they know which one to use.</div></div>';
+    // Owner-only, like the invite form above it: sharing a working invite needs an email to pair the
+    // link with, and only an owner can create one. Showing this to a caregiver offered a bare link
+    // that could only ever strand the recipient (they have no invite to pair it with).
+    var share = (myRole === 'owner')
+      ? '<div class="ll-invite"><label>App link to share</label>'
+        + '<div class="ll-linkrow"><input id="llAppLink" readonly value="' + esc(location.origin + '/app/?join=1') + '"><button id="llCopyLink" class="ll-modal-btn">' + (navigator.share ? 'Share' : 'Copy') + '</button></div>'
+        + '<div class="ll-auth-msg">Create an invite above first. Then Share (or Copy) sends the link <b>together with the exact email address</b> they need to sign in with — that pairing is what actually lets them in. A link on its own is not enough, because Cubby matches invites by email.</div></div>'
+      : '';
 
     modal('Family & sharing', '<div class="ll-mems">' + rows + '</div>'
       + '<div class="ll-auth-msg" style="text-align:left;margin:-2px 0 12px">When you invite people, everyone in your circle can see each other\'s name and email here, so you know who is who. Only you can change your own.</div>'
@@ -1544,7 +1583,7 @@
     wireRelCustom('llMyRel', 'llMyRelCustom');
     document.getElementById('llMyBearBtn').onclick = function () { if (window.openBearPicker) window.openBearPicker('member', me.uid); };
     document.getElementById('llMyFeedbackBtn').onclick = openFeedback;
-    document.getElementById('llCopyLink').onclick = copyAppLink;
+    var copyBtn = document.getElementById('llCopyLink'); if (copyBtn) copyBtn.onclick = copyAppLink; // owner-only now
     if (myRole === 'owner') document.getElementById('llInvBtn').onclick = submitInvite;
     Array.prototype.forEach.call(document.querySelectorAll('.ll-rm'), function (b) {
       b.onclick = function () { removeMember(b.getAttribute('data-uid'), b.getAttribute('data-email'), b.getAttribute('data-name')); };
@@ -1558,6 +1597,12 @@
     // relationship was pre-filled on the invite never got the name prompt.)
     if (mi.setupDone) return;
     firstRunShown = true;
+    // Someone who just accepted an invite is NOT a brand-new owner: they must get the invitee welcome
+    // (openFirstRun -> inviteeIntro), never the stage picker. Without this, an invitee joining a
+    // family with no baby VISIBLE TO THEM — e.g. an expecting family whose pregnancy is owner-private —
+    // had hasData=false and fell through to needsIdentity, then renderOnboard, i.e. the owner wizard,
+    // where tapping "We're expecting" created their own pregnancy inside the family they just joined.
+    if (window.LL.justJoined) { openFirstRun(user); return; }
     // Brand-new owner with no baby and no pregnancy lands on the onboarding wizard (renderOnboard).
     // Collect identity as a STEP inside that wizard (after stage + details), not as a locked modal
     // popped over the stage picker. Caregivers / anyone with existing data get the identity sheet now.
@@ -1637,15 +1682,30 @@
     document.getElementById('llFrBear').onclick = pickBear;
     document.getElementById('llFrBearBtn').onclick = pickBear;
     wireRelCustom('llFrRel', 'llFrRelCustom');
-    document.getElementById('llFrSave').onclick = async function () {
+    document.getElementById('llFrSave').onclick = function () {
+      var er = document.getElementById('llFrErr');
       var name = (document.getElementById('llFrName').value || '').trim();
-      if (!name) { var er = document.getElementById('llFrErr'); if (er) er.textContent = 'Please add your name so your family knows who is who.'; document.getElementById('llFrName').focus(); return; }
+      if (!name) { if (er) er.textContent = 'Please add your name so your family knows who is who.'; document.getElementById('llFrName').focus(); return; }
       var rel = relValue('llFrRel', 'llFrRelCustom');
       var u = {}; u['memberInfo.' + uid + '.setupDone'] = true; u['memberInfo.' + uid + '.name'] = name; if (rel) u['memberInfo.' + uid + '.relationship'] = rel;
-      try { await hhRef.update(u); } catch (e) {}
-      window.LL.needsIdentity = false;
-      closeModal();
-      if (typeof opts.onDone === 'function') opts.onDone();
+      var saveBtn = document.getElementById('llFrSave');
+      if (er) er.textContent = '';
+      if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+      var done = false;
+      function finish() { window.LL.needsIdentity = false; closeModal(); if (typeof opts.onDone === 'function') opts.onDone(); }
+      // This modal is the ONLY thing on screen: locked, blurred, no ×, no backdrop-dismiss, and on the
+      // wizard step no Log out. So its single button must never hang. The Firestore write is applied to
+      // the local cache immediately and syncs when the connection returns, so we do NOT hold the exit
+      // behind the server round-trip: proceed optimistically after a short wait, and surface only a real
+      // rejection (which re-enables the button to retry) instead of trapping the person on a dead screen.
+      var t = setTimeout(function () { if (done) return; done = true; finish(); }, 6000);
+      var doUpdate = (hhRef && hhRef.update) ? hhRef.update(u) : Promise.resolve();
+      doUpdate.then(function () { if (done) return; done = true; clearTimeout(t); finish(); })
+        .catch(function () {
+          if (done) return; done = true; clearTimeout(t);
+          if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = (opts.asStep ? 'Continue' : 'Save'); }
+          if (er) er.textContent = 'Could not save just now — check your connection and try again.';
+        });
     };
   }
   // Identity collection as a forward wizard step (used by the onboarding flow AFTER stage + details).
@@ -1712,6 +1772,17 @@
   var _lastInviteEmail = '';
   function copyAppLink() {
     var btn = document.getElementById('llCopyLink');
+    // No invite created this session -> we do NOT know which address they should sign in with, so
+    // inviteText('') would hand over a bare link with no address: the exact trap that lands the
+    // recipient in an empty household as owner. Refuse it and point them at the invite box, where
+    // creating the invite sets _lastInviteEmail and makes this button send the full, correct message.
+    if (!_lastInviteEmail) {
+      var m0 = document.getElementById('llInvMsg');
+      if (m0) m0.textContent = 'First add their email in “Invite a family member” above and tap Create invite — then this sends the link and the exact address they sign in with.';
+      try { var e0 = document.getElementById('llInvEmail'); if (e0) e0.focus(); } catch (_) {}
+      if (btn) { var t0 = btn.textContent; btn.textContent = 'Create an invite first'; setTimeout(function () { btn.textContent = t0; }, 2200); }
+      return;
+    }
     var text = inviteText(_lastInviteEmail);
     var done = function () { if (btn) { btn.textContent = 'Copied!'; setTimeout(function () { btn.textContent = 'Copy'; }, 1500); } };
     // Native share sheet first: in the wrapper this is the idiom, and mailto: in a WKWebView is the

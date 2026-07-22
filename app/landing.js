@@ -49,7 +49,7 @@
   var TILES = [
     [ICON.log, 'Log it in seconds', 'Feeds, sleep and nappies. One thumb, even at 3am.'],
     [ICON.circle, 'Everyone in sync', 'Parents, grandparents, the nanny. One shared log, live.'],
-    [ICON.health, 'Health, handled', 'Medicine reminders, and a tidy summary for the doctor.'],
+    [ICON.health, 'Health, handled', 'Gentle fever guidance, and a tidy summary for the doctor.'],
     [ICON.keepsake, 'Keep the moments', 'Milestones and memory cards from your own photos.'],
     [ICON.lock, 'Private to your family', 'No ads. We never sell your data.']
   ];
@@ -175,7 +175,7 @@
       ['<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.8 20a6.2 6.2 0 0 1 12.4 0"/><circle cx="17.2" cy="9.4" r="2.6"/><path d="M16 20a5.4 5.4 0 0 1 5.2-4.4"/></svg>', 'Your whole care circle', 'Parents, grandparents, the nanny, daycare or playschool, anyone who helps sees the same log, live.'],
       ['<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="7"/><circle cx="5.8" cy="5.8" r="2.3"/><circle cx="18.2" cy="5.8" r="2.3"/><path d="M9.6 12.4h.01M14.4 12.4h.01M12 15.4h.01"/></svg>', 'Who did what', 'Know exactly who logged each feed, nap and nappy: you, your partner, or the nanny.'],
       ['<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="13" y="7" width="3" height="10"/></svg>', 'Growth charts', 'WHO & CDC percentile curves behind your baby\'s weight and height.'],
-      ['<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v5a4 4 0 0 0 8 0V3"/><path d="M5 3H3.5M13 3h1.5"/><path d="M9 16v1a5 5 0 0 0 5 5 5 5 0 0 0 5-5v-3"/><circle cx="19" cy="11" r="2.2"/></svg>', 'Health, handled', 'Medicine reminders, gentle fever guidance, and a one-tap summary for the doctor.'],
+      ['<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v5a4 4 0 0 0 8 0V3"/><path d="M5 3H3.5M13 3h1.5"/><path d="M9 16v1a5 5 0 0 0 5 5 5 5 0 0 0 5-5v-3"/><circle cx="19" cy="11" r="2.2"/></svg>', 'Health, handled', 'Medicines and doses in one place, gentle fever guidance, and a one-tap summary for the doctor.'],
       ['<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h3l2-3h8l2 3h3v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/><circle cx="12" cy="13" r="4"/></svg>', 'Keepsakes', 'Monthly memory cards, milestones and a birth poster from your real moments.'],
       ['<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/><path d="M12 15v2"/></svg>', 'Private by design', 'Your log is locked to your family. No ads, and we never sell your data.'],
       ['<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>', 'See the day from anywhere', 'Checking in from work? Get a tidy recap of feeds, naps and meals, live.']

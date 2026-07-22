@@ -15,6 +15,15 @@
   function routeDeepLink(obj) {
     try {
       if (!obj) return;
+      // An invite link (?join=1) carries no deep-link screen, only intent. On iOS the WKWebView loads
+      // a FIXED URL, so the query string never reaches location.search — the only way join intent
+      // reaches resolveHousehold / landing.js's joinIntent() is this sessionStorage key. Without it
+      // an invited tester who signs in with a non-matching address (Hide My Email makes that the
+      // default) silently became the owner of a brand-new empty Cubby. Set it before any deep-link
+      // screen routing so it is present the moment sign-in resolves.
+      if (obj.join === '1' || obj.join === true || obj.join === 1) {
+        try { sessionStorage.setItem('cubby-join', '1'); } catch (e) {}
+      }
       var dl = { go: obj.go || null, stage: obj.stage || null, read: obj.read || null, tab: obj.tab || null };
       if (dl.go || dl.stage || dl.read || dl.tab) {
         sessionStorage.setItem('cubby-dl', JSON.stringify(dl));
@@ -113,18 +122,25 @@
     } catch (e) {}
 
     // Deep links from a universal link / custom scheme (Associated Domains).
+    function routeUrl(rawUrl) {
+      try {
+        var u = new URL(rawUrl);
+        // An email sign-in link must be HANDLED, not just parsed for deep-link keys: hand the whole
+        // URL to the web app so signInWithEmailLink() can finish inside the webview (in Safari it
+        // would sign in to the wrong place entirely).
+        if (/[?&](oobCode|mode=signIn)/.test(u.search)) { location.replace('/app/' + u.search + u.hash); return; }
+        var q = u.searchParams;
+        routeDeepLink({ join: q.get('join'), go: q.get('go'), stage: q.get('stage'), read: q.get('read'), tab: q.get('tab') });
+      } catch (e) {}
+    }
     try {
-      P.App && P.App.addListener && P.App.addListener('appUrlOpen', function (ev) {
-        try {
-          var u = new URL(ev.url);
-          // An email sign-in link must be HANDLED, not just parsed for deep-link keys: hand the whole
-          // URL to the web app so signInWithEmailLink() can finish inside the webview (in Safari it
-          // would sign in to the wrong place entirely).
-          if (/[?&](oobCode|mode=signIn)/.test(u.search)) { location.replace('/app/' + u.search + u.hash); return; }
-          var q = u.searchParams;
-          routeDeepLink({ go: q.get('go'), stage: q.get('stage'), read: q.get('read'), tab: q.get('tab') });
-        } catch (e) {}
-      });
+      P.App && P.App.addListener && P.App.addListener('appUrlOpen', function (ev) { routeUrl(ev && ev.url); });
+      // A universal link that COLD-LAUNCHES the app does not always fire appUrlOpen — the tapped URL
+      // arrives via getLaunchUrl instead. Without this, tapping an invite link on a freshly-killed app
+      // (the common tester case) dropped the ?join=1 entirely.
+      if (P.App && P.App.getLaunchUrl) {
+        P.App.getLaunchUrl().then(function (r) { if (r && r.url) routeUrl(r.url); }).catch(function () {});
+      }
     } catch (e) {}
 
     /* Android hardware back. Without this, back on the home screen quits the app instantly, which is a

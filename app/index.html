@@ -1432,6 +1432,10 @@ function _renderView(){
   if(state.pregnancy && (viewingPreg || (!state.pregnancy.bornBabyId && state.babies.length===0))){ renderPregShell(); return; }
   if(myLossHolding() && state.babies.length){ clearMyLossHolding(); } // a baby exists now (e.g. added/synced) -> stop holding
   if(state.babies.length===0 && myLossHolding()){ renderLossHolding(); return; }
+  // A caregiver in a family that has no baby yet (expecting, or the pregnancy is owner-private and not
+  // shared with them) must NOT see the owner's "Where are you on the journey?" stage picker — tapping
+  // it would start a SECOND pregnancy inside the family they joined. Only owners set up a stage.
+  if(state.babies.length===0 && window.LL && window.LL.role==='caregiver'){ renderCaregiverWaiting(); return; }
   if(state.babies.length===0){ renderOnboard(); return; }
   const b = activeBaby();
   let main = '';
@@ -2128,7 +2132,11 @@ const QUICK_ACTIONS=[
   {k:'milestone',   s:['baby','child'],              label:'Milestone',   hint:'A first to remember',    fn:'openCustomMilestone()', soft:'--diaper-soft', tone:'--diaper', ico:()=>(I.star||'🌟')},
   {k:'kicks',       s:['pregnancy'],                 label:'Kicks',       hint:'Count the movements',    fn:'openKickCounter()',     soft:'--star-soft',   tone:'--star',   ico:()=>'👣'},
   {k:'contractions',s:['pregnancy'],                 label:'Contractions',hint:'Time them',              fn:'openContractions()',    soft:'--feed-soft',   tone:'--feed',   ico:()=>'⏱️'},
-  {k:'symptom',     s:['pregnancy'],                 label:'Symptom',     hint:'How you are feeling',    fn:'openSymptom()',         soft:'--note-soft',   tone:'--note',   ico:()=>I.note},
+  // openSymptom() is the BABY illness tracker (fever/rash, severity, into the shared event log). The
+  // pregnancy symptom logger is openLogSymptom() — private to her, into her pregnancy record. Wiring
+  // the pregnancy quick-tile to the baby one gave a pregnant woman a sick-baby form and quietly wrote
+  // it to the circle. They read almost identically, hence the mix-up; keep them straight.
+  {k:'symptom',     s:['pregnancy'],                 label:'Symptom',     hint:'How you are feeling',    fn:'openLogSymptom()',      soft:'--note-soft',   tone:'--note',   ico:()=>I.note},
   // Mood is owner-only forever (Privacy Max). It must never appear for a caregiver, not even as an
   // unchecked option in the customiser, or the option itself leaks that the record exists.
   {k:'mood',        s:['pregnancy'],                 label:'Mood',        hint:'Private to you',         fn:'openMoodNote()',        soft:'--sleep-soft',  tone:'--sleep',  ico:()=>'🤍', ownerOnly:true},
@@ -2136,13 +2144,17 @@ const QUICK_ACTIONS=[
   // the tile promising "log by voice" would still be a small lie on the way in — and WKWebView is
   // exactly where that bites, since the wrapper is where this tile is most likely to be tapped.
   // Same check speechSupported() uses in voice-log.js, inlined rather than coupling to its IIFE.
-  {k:'voice',       s:['baby','child','pregnancy'],  label:'Say it',      hint:()=>(window.SpeechRecognition||window.webkitSpeechRecognition)?'Log by voice ✨':'Type it naturally ✨', fn:'openVoiceLog()', soft:'--feed-soft', tone:'--feed', ico:()=>'🎙️'}
+  // NOT offered in pregnancy: voice-log.js only parses feed/sleep/diaper/pump grammar, so anything
+  // she says is dropped to a "note for your circle" written with a null babyId that no pregnancy
+  // screen renders — a marquee feature that cannot work for her, and silently loses what she said.
+  // Re-add 'pregnancy' here (and to QUICK_DEFAULTS) once pregnancy intents exist in voice-log.js.
+  {k:'voice',       s:['baby','child'],              label:'Say it',      hint:()=>(window.SpeechRecognition||window.webkitSpeechRecognition)?'Log by voice ✨':'Type it naturally ✨', fn:'openVoiceLog()', soft:'--feed-soft', tone:'--feed', ico:()=>'🎙️'}
 ];
 // Defaults reproduce exactly what each surface showed before, so nobody's button changes under them.
 const QUICK_DEFAULTS={
   baby:['feed','sleep','diaper','pump','measure','activity','voice'],
   child:['sleep','measure','milestone','activity','voice'],
-  pregnancy:['kicks','contractions','symptom','voice']
+  pregnancy:['kicks','contractions','symptom']
 };
 function quickStage(){
   if(typeof viewingPreg!=='undefined' && state.pregnancy && !state.pregnancy.bornBabyId && (!state.babies.length||viewingPreg)) return 'pregnancy';
@@ -3526,12 +3538,20 @@ function saveBabyDetails(id){
 /* ---- Push reminders (opt-in; dormant until a VAPID key + Cloud Messaging are set in Firebase).
    Scope: medicine due, confirmed-missed vaccine, your-turn-on-a-routine. Never feeds. ---- */
 const CUBBY_VAPID='BJsMLPFLN5hLbJsdAs2ovSVaRii-sxjaz3bLha7ffXB7Iq4N6vUHKwlH6g9zBuyNUkgAGRKk-ii5VDMq-9tto-k'; // Web Push certificate (public key) from Firebase Cloud Messaging. Public by design.
+/* Delivery is NOT live yet. The Worker push cron is 403-ing on every run in production
+   (docs/postmortems/2026-07-21-push-cron-silent-403.md), and iOS additionally needs an APNs .p8 the
+   founder has not uploaded. A working-looking On switch over a dead delivery path is the worst kind
+   of promise: a parent could grant notifications, add a medicine, see "Reminders on 🔔", and never
+   hear a thing — on the one feature Cubby calls critical. So the toggle is held behind this flag and
+   the sheet says, honestly, that reminders are still in testing.
+   FLIP TO true ONLY once /api/health reports cronHealthy:true AND the APNs key is uploaded. */
+const REMINDERS_LIVE=false;
 function pushSupported(){ try{ if(isNativeApp()) return true; /* the wrapper registers with APNs/FCM natively, so none of the web gates below apply */ return !!(window.firebase && firebase.messaging && firebase.messaging.isSupported && firebase.messaging.isSupported() && ('Notification' in window) && ('serviceWorker' in navigator)); }catch(e){ return false; } }
 function pushCfg(){ if(!state.settings.push) state.settings.push={enabled:false,quietStart:21,quietEnd:7}; return state.settings.push; }
 function openReminders(){
-  const sup=pushSupported(), cfg=pushCfg(), ready=sup&&(isNativeApp()||!!CUBBY_VAPID);  // VAPID is a web-push concept; the wrapper goes via APNs
-  openSheet(`<h2>Reminders 🔔</h2><div class="sub">A gentle nudge when a medicine is due, so a dose is never missed. Off by default, snoozeable, and never for feeds, naps or milestones.</div>
-    ${!ready?`<div class="preg-disclaim">${!sup?(isNativeApp()?'Reminders need notification permission for Cubby. You can turn it on in your phone settings.':'Reminders need a browser that supports notifications. On iPhone, add Cubby to your home screen first, then open it from there.'):'Reminders are coming soon.'}</div>`:`
+  const sup=pushSupported(), cfg=pushCfg(), ready=REMINDERS_LIVE&&sup&&(isNativeApp()||!!CUBBY_VAPID);  // VAPID is a web-push concept; the wrapper goes via APNs
+  openSheet(`<h2>Reminders 🔔</h2><div class="sub">A gentle nudge when a medicine is due. Off by default, snoozeable, and never for feeds, naps or milestones.</div>
+    ${!ready?`<div class="preg-disclaim">${!REMINDERS_LIVE?'Reminders are still in testing. We’re making sure a nudge always arrives before we switch them on — we don’t want to be the reason a dose is missed. We’ll let you know the moment they’re ready.':!sup?(isNativeApp()?'Reminders need notification permission for Cubby. You can turn it on in your phone settings.':'Reminders need a browser that supports notifications. On iPhone, add Cubby to your home screen first, then open it from there.'):'Reminders are coming soon.'}</div>`:`
     <div class="set-item"><div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🔔</div><div class="si-body"><div class="a">Gentle reminders</div><div class="b">${cfg.enabled?'On for this device':'Off'}</div></div>
       <div class="seg"><button class="${cfg.enabled?'on':''}" onclick="enablePush()">On</button><button class="${!cfg.enabled?'on':''}" onclick="disablePush()">Off</button></div></div>
     <div class="csub" style="margin-top:8px">Quiet hours: nothing between ${cfg.quietStart}:00 and ${cfg.quietEnd}:00.</div>`}
@@ -3575,6 +3595,9 @@ window.cubbyFlushPendingPush=function(){
    Defined on web too, where it simply never fires. */
 window.onNativePushToken=function(tok,_platform,explicit){ storePushToken(tok,explicit).catch(function(){}); };
 async function enablePush(){
+  // Delivery is dead in prod (see REMINDERS_LIVE). Never request OS notification permission for a
+  // channel that will never fire — the sheet already shows the honest "still in testing" state.
+  if(!REMINDERS_LIVE){ toast('Reminders are still in testing 🤍'); openReminders(); return; }
   // The wrapper has no VAPID + service-worker path: permission and registration are native, and the
   // token comes back through onNativePushToken above.
   if(isNativeApp()){
@@ -4141,6 +4164,26 @@ function renderOnboard(){
     </div>
   </div>`;
 }
+/* A caregiver who has joined a family that has nothing to show them yet (expecting, or a pregnancy the
+   owner has not shared). A calm "you're in, nothing to do" — deliberately NOT the stage picker, which
+   would let them start their own pregnancy inside the household they just joined. */
+function renderCaregiverWaiting(){
+  let fam='';
+  try{
+    const mi=(window.LL&&window.LL.memberInfo)||{}, mem=(window.LL&&window.LL.members)||{};
+    const ownerUid=Object.keys(mem).find(u=>mem[u]==='owner');
+    const o=ownerUid&&mi[ownerUid];
+    if(o) fam=(o.name?String(o.name).split(' ')[0]:'')||o.relationship||'';
+  }catch(e){}
+  app().innerHTML=`<div class="ob-wrap">
+    <div class="onboard ob-card fade-in">
+      <div class="logo">Cubby</div>
+      <div class="tag" style="font-size:21px;color:var(--ink);font-weight:600;margin:2px 0 6px">You're in 🐻</div>
+      <div class="tag">${fam?`You've joined ${escapeHtml(fam)}'s Cubby.`:`You've joined the family's Cubby.`} There's nothing for you to set up. As soon as they log a moment, or their little one arrives, it'll show up right here for you.</div>
+      <button class="ob-logout" onclick="confirmLogout()">Log out</button>
+    </div>
+  </div>`;
+}
 /* Loss-safe holding state (L1). After a pregnancy ends with no baby to return to, this shows INSTEAD of
    the upbeat "Where are you on the journey?" chooser, until the parent chooses to move on. No cheerful
    cards, no countdown, no "start again" pressure; quiet links to kept memories + real support. */
@@ -4491,16 +4534,19 @@ function pregStep(f,delta){
 function openExpectingSetup(mode){
   pregDraft.mode=mode||pregDraft.mode;
   const m=pregDraft.mode; // 'due' | 'weeks' | 'lmp'
-  const carrier=(typeof viewerIsCarrier==='function')?viewerIsCarrier():true;
-  // "your last period" assumes the viewer is the pregnant person — reword for a partner onboarding.
-  const lmpLabel=carrier?'First day of your last period':'First day of her last period';
+  // Pronoun-neutral on purpose. This setup sheet runs during first-run BEFORE identity is collected
+  // (stage -> details -> identity, a deliberate order), so viewerIsCarrier() has no relationship to
+  // read yet and always returned true — which meant a partner setting Cubby up was addressed as the
+  // pregnant person ("your last period"). Neutral wording reads correctly for whoever is holding the
+  // phone; the ongoing home/week screens reword by carrier later, once identity is known (T4).
+  const lmpLabel='First day of the last period';
   let entry, title, sub;
   if(m==='weeks'){
-    title=carrier?'How far along are you? 🤍':'How far along is she? 🤍';
-    sub='From a scan or your midwife. We\'ll work out the due date and weeks.';
+    title='How far along? 🤍';
+    sub='From a scan or the midwife. We\'ll work out the due date and weeks.';
     const wv=(pregDraft.weeks!=null&&pregDraft.weeks!=='')?pregDraft.weeks:'';
     const dv=(pregDraft.days!=null&&pregDraft.days!=='')?pregDraft.days:0;
-    entry=`<div class="field"><label>How far along${carrier?'':' is she'}?</label>
+    entry=`<div class="field"><label>How far along?</label>
       <div style="display:flex;gap:10px">
         <div style="flex:1"><div class="stepper stepper-sm"><button type="button" onclick="pregStep('weeks',-1)">−</button><input type="number" id="pgWeeks" inputmode="numeric" value="${wv}" placeholder="weeks" min="4" max="42" oninput="pregDraft.weeks=this.value"><button type="button" onclick="pregStep('weeks',1)">+</button></div><div class="csub" style="text-align:center;margin-top:4px">weeks</div></div>
         <div style="flex:1"><div class="stepper stepper-sm"><button type="button" onclick="pregStep('days',-1)">−</button><input type="number" id="pgDays" inputmode="numeric" value="${dv}" min="0" max="6" oninput="pregDraft.days=this.value"><button type="button" onclick="pregStep('days',1)">+</button></div><div class="csub" style="text-align:center;margin-top:4px">days</div></div>
@@ -4509,12 +4555,12 @@ function openExpectingSetup(mode){
       <div class="csub" style="margin-top:6px"><span class="link-inline" onclick="setPregMode('due')">← I actually know my due date</span></div>`;
   } else if(m==='lmp'){
     title='Congratulations 🎉';
-    sub=carrier?'Add your last period and we\'ll work out your weeks and due date.':'Add the first day of her last period and we\'ll work out the weeks and due date.';
+    sub='Add the first day of the last period and we\'ll work out the weeks and due date.';
     entry=`<div class="field"><label>${lmpLabel}</label>${datePicker('pgDate', pregDraft.date, {max:now(), empty:true})}${wwa('preg.lmp')}</div>
       <div class="csub" style="margin-top:6px"><span class="link-inline" onclick="setPregMode('due')">← I actually know my due date</span></div>`;
   } else { // due — the one question
     title='You\'re expecting 🤍';
-    sub='When\'s your baby due? We\'ll lay out your weeks. You can change anything later.';
+    sub='When\'s the baby due? We\'ll lay out the weeks. You can change anything later.';
     entry=`<div class="field"><label>Due date</label>${datePicker('pgDate', pregDraft.date, {empty:true})}${wwa('preg.edd')}
       <div class="csub" style="margin-top:8px">Not sure yet? <span class="link-inline" onclick="setPregMode('weeks')">how many weeks you are</span> · <span class="link-inline" onclick="setPregMode('lmp')">your last period</span></div></div>`;
   }
@@ -5637,7 +5683,7 @@ function confirmEndPregnancy(){
   const moments=(p.moments&&p.moments.length)||0;
   openSheet(`<h2>Closing this pregnancy</h2>
     <div class="sub">Whatever brings you here, take it gently and in your own time. If you've experienced a loss, we're so sorry, and you don't have to do anything right now.</div>
-    ${moments?`<div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">Keep your ${moments===1?'memory':moments+' memories'}</div><div class="pc-b">Your scans and photos can stay saved privately on this device, for whenever you want them. Your health logs are cleared either way.</div></div></div>`:''}
+    ${moments?`<div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">Keep your ${moments===1?'memory':moments+' memories'}</div><div class="pc-b">Your scans and photos stay saved in your Cubby, for whenever you want them, until you choose to remove them. Your health logs are cleared either way.</div></div></div>`:''}
     ${moments?`<button class="btn-primary" style="background:var(--preg)" onclick="endPregnancy(true)">Keep my ${moments===1?'memory':'memories'}</button>`:''}
     ${moments?`<div class="sub" style="font-size:12px;color:var(--ink-faint);margin:2px 2px 6px">Clearing also deletes those photos for good. This can't be undone.</div>`:''}
     <button class="${moments?'btn-ghost':'btn-primary'}" style="${moments?'color:var(--ink-faint)':'background:var(--preg)'}" onclick="endPregnancy(false)">Close and clear everything</button>
@@ -5649,6 +5695,10 @@ function endPregnancy(keep){
   // Owner-only: this was a cosmetic gap (any member viewing the pregnancy could trigger it and wipe
   // their local state while the cloud delete silently no-op'd, leaving them confused).
   if(typeof pregIsOwner==='function' && !pregIsOwner()){ closeSheet(); toast('Only the person whose journey this is can close it'); return; }
+  // Capture who was sharing this journey BEFORE pregClear() wipes the sharing state. They are the
+  // people whose home was showing the cheerful week hero; each must land on the calm holding screen,
+  // not the "Where are you on the journey?" chooser, when the pregnancy disappears from under them.
+  const sharedUids = (typeof pregJourneyShared==='function') ? (pregJourneyShared()||[]).slice() : [];
   closeHubIfAny(p); // a pregnancy that ends without a birth also retires the shared games link
   if(keep){
     state.pregnancyArchive=state.pregnancyArchive||[];
@@ -5664,7 +5714,15 @@ function endPregnancy(keep){
   // chooser seconds after a loss. Only for an actual pregnancy (stage 'expecting'); a planning
   // "stop tracking" is a neutral pause, not a loss, so it must NOT show the bereavement screen.
   // Only when there's no baby to return to; persists across reload + to a following co-parent via the blob.
-  if(!state.babies.length && p.stage!=='planning'){ var _lh=(state.lossHolding&&!state.lossHolding.at)?state.lossHolding:{}; _lh[myUid()]={ at:now() }; state.lossHolding=_lh; }
+  if(!state.babies.length && p.stage!=='planning'){
+    var _lh=(state.lossHolding&&!state.lossHolding.at)?state.lossHolding:{};
+    // Seed the holding entry for the carrier AND everyone the journey was shared with. lossHolding is
+    // a per-uid map in the shared blob, so each of them restores the calm screen on their own device;
+    // members who were NOT sharing the journey get no entry and never see the bereavement screen (so
+    // her loss is not broadcast beyond the people who already knew she was expecting).
+    [myUid()].concat(sharedUids).forEach(function(u){ if(u) _lh[u]={ at:now() }; });
+    state.lossHolding=_lh;
+  }
   persist(); closeSheet(); render();
   if(state.babies.length) toast(keep?'Your memories are kept 🤍':'Be gentle with yourself 🤍');
 }
