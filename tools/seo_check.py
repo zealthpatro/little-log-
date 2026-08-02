@@ -17,6 +17,9 @@ HARD failures (block the commit / fail CI):
   - any reference to the dead domain littlecubby.app
   - a JSON-LD block that does not parse
   - a sitemap <loc> whose path has no file on disk (sitemap -> 404)
+  - an articles/<slug>/index.html with no <loc> in sitemap.xml (article invisible to crawlers)
+  - an articles/<slug>/index.html not linked from articles/index.html or any category hub
+    (orphan page: no internal link, so it can't rank and readers can't find it)
 
 WARN (printed, non-blocking):
   - page missing <title> or meta description
@@ -33,6 +36,11 @@ DOMAIN = "https://little-cubby.com"
 IMG_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg")
 # Worker-handled / client-routed prefixes that legitimately have no static file.
 DYNAMIC = re.compile(r'^/(api|__|g)(/|$)')
+# The category hub pages under articles/ (not articles themselves). An article must be
+# linked from articles/index.html or one of these; the hubs themselves are linked from
+# the topic-hub nav on articles/index.html.
+HUBS = ("baby", "feeding", "sleep", "health", "pregnancy", "toddler", "fertility",
+        "breastfeeding", "postnatal-recovery", "mental-health", "you", "cubby")
 
 FIX   = "--fix" in sys.argv
 STAGED = "--staged" in sys.argv
@@ -183,6 +191,25 @@ def check():
             if not resolves(p, files, dirs):
                 hard.append(("sitemap.xml", f"loc has no file -> {loc.strip()}"))
 
+        # ...and the reverse: every article on disk is IN the sitemap and reachable from
+        # the articles index or a category hub. An orphan article is invisible to
+        # crawlers and unreachable for readers, so it ships as dead weight.
+        sm_slugs = set(re.findall(r'<loc>https://little-cubby\.com/articles/([^/<]+)/</loc>', sm))
+        hub_files = ["articles/index.html"] + [f"articles/{h}/index.html" for h in HUBS]
+        linked = set()
+        for hf in hub_files:
+            if not os.path.exists(hf):
+                continue
+            for m in re.finditer(r'href="(?:https://little-cubby\.com)?/articles/([^/"#?]+)/?"',
+                                 open(hf, encoding="utf-8").read()):
+                linked.add(m.group(1))
+        for f in sorted(glob.glob("articles/*/index.html")):
+            slug = f.replace("\\", "/").split("/")[1]
+            if slug not in sm_slugs:
+                hard.append(("sitemap.xml", f"article missing from sitemap -> /articles/{slug}/"))
+            if slug not in HUBS and slug not in linked:
+                hard.append((f, "orphan article: not linked from articles/index.html or any hub"))
+
     return hard, warn, sorted(set(og_to_fix))
 
 
@@ -227,7 +254,7 @@ def main():
 
     if not QUIET:
         scope = "staged pages" if STAGED else "whole site"
-        print(f"✓ SEO guard passed ({scope}): no broken links, social images resolve, JSON-LD valid, sitemap clean.")
+        print(f"✓ SEO guard passed ({scope}): no broken links, social images resolve, JSON-LD valid, sitemap clean, no orphan articles.")
 
 
 if __name__ == "__main__":
