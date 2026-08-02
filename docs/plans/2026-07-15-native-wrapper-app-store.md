@@ -2,7 +2,12 @@
 
 **Goal:** a one‑tap install on iPhone (and a Play Store listing) that reuses 100% of the existing PWA. No rewrite.
 **Why Capacitor, not TWA:** TWA is Android‑only. Capacitor wraps the *same* web app for **both** iOS and Android.
-**Status (2026-07-16):** **build 2 uploaded and VALID in TestFlight**, with native Google + Apple sign-in.
+**Status (2026-08-02):** **build 8 uploaded** (builds through 7 VALID in TestFlight). Build 8 = the real bear
+launch splash (no more Capacitor blue X; `tools/gen_splash.py`, §4) + a clean rebuild on Xcode 26.6 / iOS 26.5
+SDK after the Mac lost Xcode in a disk cleanup (reinstall via App Store, then `xcodebuild -downloadPlatform iOS`;
+`DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` beats sudo `xcode-select`). Builds 6-7 (2026-07-16/17)
+carried the Sign in with Apple entitlement fix + universal links. Simulator smoke re-verified on build 8:
+app-bound domain, SW registration, native landing, splash.
 Build 1 proved the wrapper loads the PWA but could not sign in (§3c). Steps marked 🖥️ need the founder's Mac —
 though Claude Code *runs on* that Mac, so it drives `xcodebuild`/`xcrun` directly (§7). What Claude still
 cannot do: Apple/Firebase console login + 2FA, create API/APNs keys, the 1024 icon, an on-device sign-in or
@@ -177,7 +182,10 @@ Re-run it after any `cap add ios` (the icon lives under gitignored `ios/`). If a
 exists, drop it at `icons/logo-1024.png` and the script prefers it automatically — the current icon is an
 honest upscale of 512 art, which is the one quality compromise in the build.
 
-> STILL TODO: a 2732×2732 splash (`assets/splash.png`, bear on `#F7F2E8`) via `@capacitor/assets`.
+**Splash: DONE (build 8).** `python3 tools/gen_splash.py` — segments the bear out of `icons/logo-512.png`
+(flood fill against the fitted tile gradient, so the enclosed cream muzzle survives) and composites it at the
+optical centre of a flat `#F7F2E8` 2732×2732, written to all three `Splash.imageset` scales. Before this,
+every launch flashed Capacitor's blue X on white. Same durability rule as the icon: re-run after `cap add ios`.
 
 ## 5. Push notifications (the reason iOS users need this) 🖥️
 Web push on iOS only works if the PWA is installed; the wrapper gives reliable APNs push.
