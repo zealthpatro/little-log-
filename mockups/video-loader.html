@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cubby — video loader mock</title>
+<style>
+  /* Mock of the Moments video-export loading state. Motion rules: one breathing loop on the
+     bear (the single place a loop is allowed), soft sequential dots, everything off under
+     prefers-reduced-motion. Palette + voice per DESIGN.md. */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #F7F2E8;
+    font-family: -apple-system, "Nunito Sans", "Segoe UI", sans-serif;
+    color: #4A3F35;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh;
+  }
+  .loader { text-align: center; padding: 32px; max-width: 340px; }
+  .bear {
+    width: 180px; height: 180px; margin: 0 auto 20px;
+    border-radius: 50%;
+    background: #F1E9DA;
+    overflow: hidden;
+    animation: breathe 4s ease-in-out infinite;
+  }
+  .bear img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.35); transform-origin: 50% 62%; }
+  @keyframes breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.015); } }
+  h1 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+  p  { font-size: 14.5px; line-height: 1.45; color: #7A6E60; margin-bottom: 22px; }
+  .bar {
+    height: 8px; border-radius: 99px; background: #EBE1CF; overflow: hidden; margin-bottom: 14px;
+  }
+  .bar > i {
+    display: block; height: 100%; width: 38%;
+    border-radius: 99px;
+    background: linear-gradient(90deg, #D9A9A0, #C98B85);
+    animation: fill 9s ease-out forwards;
+  }
+  @keyframes fill { from { width: 6%; } to { width: 92%; } }
+  .dots { display: flex; gap: 7px; justify-content: center; }
+  .dots i { width: 7px; height: 7px; border-radius: 50%; background: #C9BBA6; animation: pulse 1.6s ease-in-out infinite; }
+  .dots i:nth-child(2) { animation-delay: .25s; }
+  .dots i:nth-child(3) { animation-delay: .5s; }
+  @keyframes pulse { 0%,100% { opacity: .35; transform: scale(1); } 50% { opacity: 1; transform: scale(1.25); } }
+  .hint { margin-top: 22px; font-size: 12.5px; color: #A79A88; }
+  @media (prefers-reduced-motion: reduce) {
+    .bear, .bar > i, .dots i { animation: none; }
+    .bar > i { width: 60%; }
+  }
+</style>
+</head>
+<body>
+  <div class="loader">
+    <div class="bear"><img src="../art-src/spot_notes_cub.png" alt=""></div>
+    <h1>Making your little film</h1>
+    <p>Cubby is stitching your moments together. This usually takes under a minute.</p>
+    <div class="bar"><i></i></div>
+    <div class="dots"><i></i><i></i><i></i></div>
+    <div class="hint">You can keep using Cubby. We'll let you know when it's ready.</div>
+  </div>
+</body>
+</html>

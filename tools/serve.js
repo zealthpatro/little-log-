@@ -1,6 +1,6 @@
 /* Minimal static file server for local preview (no deps). */
 const http = require('http'), fs = require('fs'), path = require('path');
-const ROOT = '/Users/sauravpatro/Downloads/little-log-pwa';
+const ROOT = path.dirname(__dirname); // the repo root, wherever the repo lives
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.tflite': 'application/octet-stream', '.css': 'text/css', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.xml': 'application/xml', '.txt': 'text/plain', '.ico': 'image/x-icon' };
 http.createServer((req, res) => {
   let p = decodeURIComponent((req.url || '/').split('?')[0]);

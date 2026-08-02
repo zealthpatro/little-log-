@@ -6,7 +6,7 @@
 // Engines (pick with --engine, default gemini):
 //   gemini  -> Gemini 2.5 Flash Image ("Nano Banana"), great at keeping the SAME character
 //              across many cards when you pass a reference image (--ref). Recommended.
-//   openai  -> OpenAI gpt-image-1.
+//   openai  -> OpenAI gpt-image-2.
 //
 // The API key is read from a gitignored file so it never touches the repo or chat:
 //   art-src/gemini.key   (or env GEMINI_API_KEY)
@@ -77,19 +77,20 @@ async function genGemini(key, { prompt, ref, aspect, dryRun }) {
   return Buffer.from(img.inlineData.data, 'base64');
 }
 
-// ---- OpenAI gpt-image-1 ----
+// ---- OpenAI gpt-image-2 ----
 function openaiSize(aspect) { return aspect === '4:5' || aspect === '2:3' || aspect === '3:4' ? '1024x1536' : (aspect === '3:2' || aspect === '16:9' ? '1536x1024' : '1024x1024'); }
 async function genOpenAI(key, { prompt, ref, aspect, dryRun }) {
   const size = openaiSize(aspect);
-  if (dryRun) { console.log('[dry-run] POST openai gpt-image-1  size=' + size + (ref ? '  edit(ref=' + ref + ')' : '  generation') + '\n  prompt: ' + prompt.slice(0, 120) + '…'); return null; }
+  if (dryRun) { console.log('[dry-run] POST openai gpt-image-2  size=' + size + (ref ? '  edit(ref=' + ref + ')' : '  generation') + '\n  prompt: ' + prompt.slice(0, 120) + '…'); return null; }
   let r;
   if (ref) {
     const fd = new FormData();
-    fd.append('model', 'gpt-image-1'); fd.append('prompt', prompt); fd.append('size', size);
-    fd.append('image', new Blob([fs.readFileSync(ref)]), path.basename(ref));
+    fd.append('model', 'gpt-image-2'); fd.append('prompt', prompt); fd.append('size', size);
+    const refType = ref.toLowerCase().endsWith('.webp') ? 'image/webp' : (ref.toLowerCase().endsWith('.jpg') || ref.toLowerCase().endsWith('.jpeg') ? 'image/jpeg' : 'image/png');
+    fd.append('image', new Blob([fs.readFileSync(ref)], { type: refType }), path.basename(ref));
     r = await fetch('https://api.openai.com/v1/images/edits', { method: 'POST', headers: { Authorization: 'Bearer ' + key }, body: fd });
   } else {
-    r = await fetch('https://api.openai.com/v1/images/generations', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key }, body: JSON.stringify({ model: 'gpt-image-1', prompt, size, n: 1 }) });
+    r = await fetch('https://api.openai.com/v1/images/generations', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key }, body: JSON.stringify({ model: 'gpt-image-2', prompt, size, n: 1 }) });
   }
   const j = await r.json();
   if (j.error) throw new Error('openai ' + r.status + ': ' + (j.error.message || '').slice(0, 160));
