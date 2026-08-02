@@ -44,10 +44,16 @@ ruby tools/cap_ios_configure.rb
 python3 tools/gen_app_icon.py
 python3 tools/gen_splash.py
 
+# CalVer: year.ISOweek.release (founder-approved 2026-08-02). A second build in the same week:
+# CUBBY_REL=2 bash tools/cap_ios_build.sh. Apple compares segments numerically, so 2027.4 > 2026.53.
+VER="$(date +%G).$(date +%V | sed 's/^0//').${CUBBY_REL:-1}"
+echo "▸ Version $VER (CalVer year.week.release)"
+
 echo "▸ Archiving (unsigned — see the header for why)…"
 rm -rf "$ARCHIVE" "$OUT"
 xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
   -destination 'generic/platform=iOS' -archivePath "$ARCHIVE" -derivedDataPath "$DD" \
+  MARKETING_VERSION="$VER" \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO archive \
   | grep -E "error:|ARCHIVE SUCCEEDED|ARCHIVE FAILED" || true
 
