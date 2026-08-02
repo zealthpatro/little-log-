@@ -448,6 +448,11 @@ body.night .ob-card{background:rgba(38,32,28,.86);}
 .empty-state svg{width:48px;height:48px;margin-bottom:14px;opacity:.5;}
 .empty-state p{font-weight:700;font-size:15px;}
 .empty-state span{font-size:13px;font-weight:600;}
+/* Spot bears: one painted cub per cold screen. One entrance rise, then stillness (Anxiety Test). */
+.es-bear{width:132px;height:132px;border-radius:50%;display:block;margin:0 auto 14px;animation:esRise .35s ease-out both;}
+.rt-empty .es-bear{margin:4px auto 12px;}
+@keyframes esRise{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+@media(prefers-reduced-motion:reduce){.es-bear{animation:none;}}
 
 .fade-in{animation:rise .45s cubic-bezier(.2,.9,.3,1);}
 @keyframes rise{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
@@ -2260,7 +2265,7 @@ function sinceCard(type,label,ev){
 function renderTimeline(){
   const evs = babyEvents();
   if(evs.length===0){
-    return `<div class="empty-state fade-in">${I.list}<p>No entries yet</p><span>Tap Home to log your first feed or nap.</span></div>`;
+    return `<div class="empty-state fade-in"><img class="es-bear" src="/app/spot-art/notes_cub.webp" alt="" loading="lazy"><p>No entries yet</p><span>Tap Home to log your first feed or nap. Cubby will keep the notes.</span></div>`;
   }
   const groups={};
   evs.forEach(e=>{ const k=dayKey(e.time); (groups[k]=groups[k]||[]).push(e); });
@@ -2358,6 +2363,9 @@ function tlItem(e){
 /* ---------- STATS ---------- */
 function renderStats(){
   const evs = babyEvents();
+  if(!evs.length){
+    return `<div class="empty-state fade-in"><img class="es-bear" src="/app/spot-art/stats_cub.webp" alt="" loading="lazy"><p>No patterns yet</p><span>Once you've logged a few days, Cubby shows the week at a glance.</span></div>`;
+  }
   const days=[];
   for(let i=6;i>=0;i--){ const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-i); days.push(d); }
   const feedData=days.map(d=>{
@@ -8071,7 +8079,7 @@ function renderRoutines(){
   const today=dayKey(now());
   let rows;
   if(!list.length){
-    rows=`<div class="rt-empty">No rituals yet. Add one whenever you like, or leave this off, it's entirely up to you.</div>`;
+    rows=`<div class="rt-empty"><img class="es-bear" src="/app/spot-art/rituals_cub.webp" alt="" loading="lazy">No rituals yet. Add one whenever you like, or leave this off, it's entirely up to you.</div>`;
   } else {
     rows=list.slice().sort((a,c)=>String(a.time).localeCompare(String(c.time))).map(r=>{
       const done = !!(r.done && r.done[today]);
@@ -8177,7 +8185,7 @@ function openRoutinesEdit(){
   const list=ensureRoutines(b).slice().sort((a,c)=>String(a.time).localeCompare(String(c.time)));
   let rows;
   if(!list.length){
-    rows=`<div class="rt-empty">No rituals yet. Add the little moments you want to remember, a morning feed, tummy time, a bath.</div>`;
+    rows=`<div class="rt-empty"><img class="es-bear" src="/app/spot-art/rituals_cub.webp" alt="" loading="lazy">No rituals yet. Add the little moments you want to remember, a morning feed, tummy time, a bath.</div>`;
   } else {
     rows=list.map(r=>{
       const sub=[routineFmtTime(r.time), r.assignee?(loggerName(r.assignee)||'someone'):''].filter(Boolean).join(' · ');
@@ -8303,7 +8311,7 @@ function renderPhotos(){
         <p>Add a photo</p><span>Upload, beautify with stamps, filters & frames, then save or download.</span>
       </div>
       <input type="file" id="phInput" accept="image/*" style="display:none" onchange="loadPhoto(this)">
-      ${empty?`<div class="empty-state">${I.camera}<p>No photos yet</p><span>Add a photo here, or snap one on any activity (play, sun time, a cuddle) and it appears as a moment.</span></div>`:galleryHtml+momentsHtml}
+      ${empty?`<div class="empty-state"><img class="es-bear" src="/app/spot-art/moments_cub.webp" alt="" loading="lazy"><p>No photos yet</p><span>Add a photo here, or snap one on any activity (play, sun time, a cuddle) and it appears as a moment.</span></div>`:galleryHtml+momentsHtml}
     </div>`;
   }
   // editor

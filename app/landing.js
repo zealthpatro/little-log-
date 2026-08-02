@@ -67,7 +67,7 @@
     // convention, and the smoothest path: Face ID, no account picker).
     return '<div class="lp lp-app' + (isIOS() ? ' lp-ios' : '') + '">'
       + '<div class="lp-app-top">'
-      + '<div class="lp-logo"><img src="/icons/logo-512.png" alt="Cubby"></div>'
+      + '<div class="lp-logo"><img src="/app/spot-art/welcome_cub.webp" alt="Cubby"></div>'
       + '<h1 class="lp-name">Cubby</h1>'
       + '<p class="lp-app-tag">One calm place for everyone caring for your little one.</p>'
       + '</div>'
@@ -143,7 +143,7 @@
   function inviteSignIn(msg) {
     return '<div class="lp lp-app' + (isIOS() ? ' lp-ios' : '') + '">'
       + '<div class="lp-app-top">'
-      + '<div class="lp-logo"><img src="/icons/logo-512.png" alt="Cubby"></div>'
+      + '<div class="lp-logo"><img src="/app/spot-art/invite_bears.webp" alt="Cubby"></div>'
       + '<h1 class="lp-name">You\'re invited</h1>'
       + '<p class="lp-app-tag">Someone has added you to their Cubby, the calm, private log they keep for their little one.</p>'
       + '</div>'
