@@ -2,12 +2,16 @@
 
 **Goal:** a one‑tap install on iPhone (and a Play Store listing) that reuses 100% of the existing PWA. No rewrite.
 **Why Capacitor, not TWA:** TWA is Android‑only. Capacitor wraps the *same* web app for **both** iOS and Android.
-**Status (2026-08-02):** **build 8 uploaded** (builds through 7 VALID in TestFlight). Build 8 = the real bear
-launch splash (no more Capacitor blue X; `tools/gen_splash.py`, §4) + a clean rebuild on Xcode 26.6 / iOS 26.5
-SDK after the Mac lost Xcode in a disk cleanup (reinstall via App Store, then `xcodebuild -downloadPlatform iOS`;
-`DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` beats sudo `xcode-select`). Builds 6-7 (2026-07-16/17)
-carried the Sign in with Apple entitlement fix + universal links. Simulator smoke re-verified on build 8:
-app-bound domain, SW registration, native landing, splash.
+**Status (2026-08-02):** **build 9 VALID in TestFlight — use this one.** Build 9 = the real bear launch splash
+(no more Capacitor blue X; `tools/gen_splash.py`, §4) + a clean rebuild on Xcode 26.6 / iOS 26.5 SDK, shipped
+via `tools/cap_ios_build.sh` with the entitlement + Meta-SDK gates green. **Build 8 (same day) is BROKEN — do
+not test on it**: it was uploaded via the raw §7 commands, which skip entitlement embedding (the builds 1-5 bug
+again), so Apple sign-in and push are silently dead in it. Founder will expire it later.
+The Mac had lost Xcode in a disk cleanup (reinstall via App Store, then `xcodebuild -downloadPlatform iOS`;
+`DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` beats sudo `xcode-select`) and the Apple Development
+cert with it — recreated via the ASC API (Admin key, POST /v1/certificates; private key in
+`~/.appstore-keys/dev-cert/`). Builds 6-7 (2026-07-16/17) carried the Sign in with Apple entitlement fix +
+universal links. Simulator smoke re-verified: app-bound domain, SW registration, native landing, splash.
 Build 1 proved the wrapper loads the PWA but could not sign in (§3c). Steps marked 🖥️ need the founder's Mac —
 though Claude Code *runs on* that Mac, so it drives `xcodebuild`/`xcrun` directly (§7). What Claude still
 cannot do: Apple/Firebase console login + 2FA, create API/APNs keys, the 1024 icon, an on-device sign-in or
@@ -226,8 +230,14 @@ signed in yet is exactly the anxiety the charter designs out, and Cubby's push p
 - Have real content on first launch (it does).
 - Sign in with Apple is already supported → good signal.
 
-## 7. Build + upload — iOS 🖥️ (WORKING RECIPE — this is what shipped builds 1 and 2)
-No Xcode GUI needed. Two commands from the repo root:
+## 7. Build + upload — iOS 🖥️
+
+**The entry point is `bash tools/cap_ios_build.sh`** (add `--local` to export an IPA without uploading). It runs
+configure + icon + splash, archives unsigned, **hand-signs the .app with the entitlements** (aborting if
+`applesignin`/`aps-environment` are missing), gates on 0 fbsdk strings, then exports/uploads. Do NOT run the raw
+commands below on their own: archiving with `CODE_SIGNING_ALLOWED=NO` and exporting directly ships an app with
+NO entitlements — that broke builds 1-5 and again build 8 (2026-08-02). The commands are kept for understanding
+what the script does:
 
 ```bash
 # 1. Archive UNSIGNED. Archiving WITH automatic signing FAILS ("Your team has no devices from which to
