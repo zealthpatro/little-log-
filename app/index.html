@@ -453,6 +453,8 @@ body.night .ob-card{background:rgba(38,32,28,.86);}
 .rt-empty .es-bear{margin:4px auto 12px;}
 @keyframes esRise{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
 @media(prefers-reduced-motion:reduce){.es-bear{animation:none;}}
+/* The door lives in the empty state itself (Mobbin punch list #1), not directions to another tab. */
+.es-cta{display:inline-flex;align-items:center;gap:6px;margin-top:14px;border:none;cursor:pointer;background:var(--ink);color:#FFFDF8;font-family:var(--font-body);font-weight:800;font-size:13.5px;padding:10px 18px;border-radius:99px;}
 
 .fade-in{animation:rise .45s cubic-bezier(.2,.9,.3,1);}
 @keyframes rise{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
@@ -2265,7 +2267,7 @@ function sinceCard(type,label,ev){
 function renderTimeline(){
   const evs = babyEvents();
   if(evs.length===0){
-    return `<div class="empty-state fade-in"><img class="es-bear" src="/app/spot-art/notes_cub.webp" alt="" loading="lazy"><p>No entries yet</p><span>Tap Home to log your first feed or nap. Cubby will keep the notes.</span></div>`;
+    return `<div class="empty-state fade-in"><img class="es-bear" src="/app/spot-art/notes_cub.webp" alt="" loading="lazy"><p>No entries yet</p><span>Your first feed or nap goes here. Cubby will keep the notes.</span><br><button class="es-cta" onclick="go('home')">Log your first moment</button></div>`;
   }
   const groups={};
   evs.forEach(e=>{ const k=dayKey(e.time); (groups[k]=groups[k]||[]).push(e); });
@@ -8311,7 +8313,7 @@ function renderPhotos(){
         <p>Add a photo</p><span>Upload, beautify with stamps, filters & frames, then save or download.</span>
       </div>
       <input type="file" id="phInput" accept="image/*" style="display:none" onchange="loadPhoto(this)">
-      ${empty?`<div class="empty-state"><img class="es-bear" src="/app/spot-art/moments_cub.webp" alt="" loading="lazy"><p>No photos yet</p><span>Add a photo here, or snap one on any activity (play, sun time, a cuddle) and it appears as a moment.</span></div>`:galleryHtml+momentsHtml}
+      ${empty?`<div class="empty-state"><img class="es-bear" src="/app/spot-art/moments_cub.webp" alt="" loading="lazy"><p>No photos yet</p><span>Add a photo here, or snap one on any activity (play, sun time, a cuddle) and it appears as a moment.</span><br><button class="es-cta" onclick="document.getElementById('phInput').click()">Add a photo</button></div>`:galleryHtml+momentsHtml}
     </div>`;
   }
   // editor
