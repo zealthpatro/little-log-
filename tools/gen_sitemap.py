@@ -10,6 +10,10 @@ Non-article URLs (home, vaccine schedules, pricing, faq, hubs, etc.) keep their
 hand-maintained <lastmod> and hreflang blocks untouched. Idempotent: re-running
 refreshes article lastmods in place.
 
+Any articles/<slug>/index.html that has no <loc> in the sitemap yet is appended
+(with its lastmod) just before </urlset>, so new articles can never ship
+invisible to crawlers.
+
 Run from the repo root after editing or adding articles:
     python3 tools/gen_sitemap.py
 """
@@ -72,8 +76,26 @@ def main():
 
     sm = re.sub(r'<loc>https://little-cubby\.com/articles/([^/]+)/</loc>', repl, sm)
 
+    # 3. Append an entry for every article dir the sitemap does not know yet.
+    present = set(re.findall(r'<loc>https://little-cubby\.com/articles/([^/]+)/</loc>', sm))
+    added = 0
+    new_entries = []
+    for idx in sorted(ARTICLES.glob('*/index.html')):
+        slug = idx.parent.name
+        if slug in present:
+            continue
+        d = slug_date.get(slug)
+        lastmod = f'<lastmod>{d}</lastmod>' if d else ''
+        new_entries.append(
+            f'  <url><loc>https://little-cubby.com/articles/{slug}/</loc>'
+            f'{lastmod}<changefreq>monthly</changefreq><priority>0.7</priority></url>\n'
+        )
+        added += 1
+    if new_entries:
+        sm = sm.replace('</urlset>', ''.join(new_entries) + '</urlset>')
+
     SITEMAP.write_text(sm, encoding='utf-8')
-    print(f'Articles found: {len(slug_date)}   lastmod stamped: {stamped["n"]}')
+    print(f'Articles found: {len(slug_date)}   lastmod stamped: {stamped["n"]}   new entries added: {added}')
     if missing:
         print(f'WARNING: {len(missing)} article(s) had no dateModified: {missing}', file=sys.stderr)
 
