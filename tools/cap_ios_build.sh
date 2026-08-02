@@ -42,6 +42,7 @@ LOCAL=${1:-}
 echo "▸ Configuring the Xcode project (entitlements, plist, AppDelegate, icon)…"
 ruby tools/cap_ios_configure.rb
 python3 tools/gen_app_icon.py
+python3 tools/gen_splash.py
 
 echo "▸ Archiving (unsigned — see the header for why)…"
 rm -rf "$ARCHIVE" "$OUT"
@@ -52,6 +53,11 @@ xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
 
 APP="$ARCHIVE/Products/Applications/App.app"
 [ -d "$APP" ] || { echo "✖ Archive failed"; exit 1; }
+
+# No Meta SDK in the binary, ever (tools/cap_strip_facebook.js should have run before cap sync).
+FB=$(strings "$APP/App" | grep -ci fbsdk || true)
+[ "$FB" = "0" ] || { echo "✖ $FB fbsdk strings in the binary — Meta's SDK got linked. Run tools/cap_strip_facebook.js + cap sync and rebuild."; exit 1; }
+echo "  ✓ 0 fbsdk strings"
 
 # The whole point of this script. Without it the entitlements are silently absent (builds 1-5).
 IDENTITY=$(security find-identity -v -p codesigning | grep -m1 "Apple Development" | awk '{print $2}')
