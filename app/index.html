@@ -2487,6 +2487,7 @@ var WWA={
   "preg.edd":"We use this to count your weeks and lay out your care schedule. Only you, and anyone you choose, can see it. You can change it anytime.",
   "preg.lmp":"We use your last period date to work out your weeks and dating. It's private to you, and you can change it anytime.",
   "preg.cycle":"Your cycle length helps estimate your fertile window if you're tracking. It's optional and private to you, and you can change it anytime.",
+  "preg.since":"If it's been a while, we'll quietly point you to the right guidance at the right time. That's all it's used for. It's optional and private to you.",
   "preg.country":"Your care location lets us show the antenatal appointment schedule that fits your country. It's private to you, and you can change it anytime.",
   "preg.careteam":"Keep your doctor, midwife and clinic details in one place. They stay private to you unless you choose to share them, and you can change who anytime.",
   "mat.weight":"Your weight is yours to track, for you and your care team. It lives in your private health logs, and only the people you choose for that category can see it.",
@@ -4626,10 +4627,58 @@ function viewerIsCarrier(){
     return ['papa bear','grandpa bear','uncle bear'].indexOf(rel)<0; }
   catch(_){ return true; }
 }
+/* "Since when?" month list for the setup picker: recent months, newest first, skip on top.
+   49 options, so it goes through the standard searchable overlay picker. */
+function tryingSincePairs(){
+  var out=[['','I\'d rather not say']];
+  var d=new Date(); d.setDate(1);
+  for(var i=0;i<48;i++){
+    out.push([d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'), d.toLocaleDateString(undefined,{month:'long',year:'numeric'})]);
+    d.setMonth(d.getMonth()-1);
+  }
+  return out;
+}
+/* Whole months since tryingSince ('YYYY-MM'), or null when unset. Drives exactly one thing:
+   surfacing the kind see-your-doctor line at the right time. Never a percentage, never a compare. */
+function tryingMonths(){
+  var ts=state.pregnancy&&state.pregnancy.tryingSince; if(!ts) return null;
+  var t=new Date(ts+'-01T08:00').getTime(); if(!isFinite(t)) return null;
+  return Math.floor((now()-t)/(30.44*86400000));
+}
+/* Period-start history, ascending. p.periods is the record; the legacy single p.lmp field is
+   folded in so households from before the history existed lose nothing, and p.lmp itself stays
+   maintained (= latest start) so fertileEstimate and the positive-test flow are untouched. */
+function periodHistory(){
+  var p=state.pregnancy; if(!p) return [];
+  var list=(p.periods||[]).slice();
+  if(p.lmp && list.indexOf(p.lmp)<0) list.push(p.lmp);
+  return list.sort(function(a,b){return a-b;});
+}
+/* Completed cycle lengths in days, oldest→newest, last 6. A gap under 15 or over 90 days is a
+   missed log or a break, not a cycle, so it never pollutes the honest range. */
+function cycleLengths(){
+  var h=periodHistory(), out=[];
+  for(var i=1;i<h.length;i++){
+    var d=Math.round((h[i]-h[i-1])/86400000);
+    if(d>=15&&d<=90) out.push(d);
+  }
+  return out.slice(-6);
+}
+/* The cycle the newest period start just closed, shown quietly for a week then gone.
+   A statement about the past only; nothing here projects forward. */
+function lastClosedCycle(){
+  var h=periodHistory(); if(h.length<2) return null;
+  var latest=h[h.length-1];
+  if(now()-latest>7*86400000) return null;
+  var d=Math.round((latest-h[h.length-2])/86400000);
+  if(d<15||d>90) return null;
+  return d;
+}
 function openPlanningSetup(){
   openSheet(`<h2>We're trying 🌱</h2><div class="sub">Lovely. We'll keep it gentle: a little preparation${viewerIsCarrier()?', an estimated fertile window if you want it,':''} and zero pressure.</div>
     ${viewerIsCarrier()?`<div class="field"><label>First day of your last period (optional)</label>${datePicker('plLmp','',{max:now(),empty:true})}${wwa('preg.lmp')}</div>
-    <div class="field"><label>Usual cycle length (days)</label><input type="number" id="plCycle" value="28" min="21" max="40">${wwa('preg.cycle')}</div>`:''}
+    <div class="field"><label>Usual cycle length (days)</label><input type="number" id="plCycle" value="28" min="21" max="40">${wwa('preg.cycle')}</div>
+    <div class="field"><label>Since when? (optional)</label>${searchPickerHtml('plSince', tryingSincePairs(), '', 'Search a month…')}${wwa('preg.since')}</div>`:''}
     <button class="btn-primary" style="background:var(--diaper)" onclick="savePlanning()">Start</button>
     <button class="btn-ghost" onclick="openExpectingSetup('due')">Already expecting? Set your due date →</button>
     <button class="btn-ghost" onclick="openStartPregnancy()">Back</button>
@@ -4638,7 +4687,10 @@ function openPlanningSetup(){
 function savePlanning(){
   const dv=($('#plLmp')||{}).value;
   const cyc=Math.max(21,Math.min(40,parseInt(($('#plCycle')||{}).value)||28));
-  state.pregnancy={ id:uid(), ownerUid:myUid(), stage:'planning', dueDate:null, lmp:dv?new Date(dv+'T08:00').getTime():null, cycleLen:cyc,
+  const since=(($('#plSince')||{}).value)||null;
+  const lmpMs=dv?new Date(dv+'T08:00').getTime():null;
+  state.pregnancy={ id:uid(), ownerUid:myUid(), stage:'planning', dueDate:null, lmp:lmpMs, cycleLen:cyc,
+    periods:lmpMs?[lmpMs]:[], tryingSince:since,
     country:detectCountry(), precon:defaultPrecon(),
     careTeam:[], appts:[], symptoms:[], weights:[], bp:[], kicks:[], contractions:[],
     birthPlan:'', bag:[], moments:[],
@@ -4665,7 +4717,19 @@ function openPeriodUpdate(){
     <div class="field"><label>First day</label>${datePicker('puDate','',{max:now()})}${wwa('preg.lmp')}</div>
     <button class="btn-primary" style="background:var(--diaper)" onclick="savePeriodUpdate()">Save</button>`,'diaper');
 }
-function savePeriodUpdate(){ const dv=($('#puDate')||{}).value; if(!dv){toast('Pick the date');return;} state.pregnancy.lmp=new Date(dv+'T08:00').getTime(); persist(); closeSheet(); render(); }
+function savePeriodUpdate(){
+  const dv=($('#puDate')||{}).value; if(!dv){toast('Pick the date');return;}
+  const t=new Date(dv+'T08:00').getTime();
+  const p=state.pregnancy;
+  // Append to the history instead of overwriting: periodHistory() folds in the legacy single
+  // p.lmp, so the first tap on an existing household starts the record with both dates.
+  const hist=periodHistory();
+  if(hist.indexOf(t)<0) hist.push(t);
+  hist.sort(function(a,b){return a-b;});
+  p.periods=hist.slice(-12);              // roughly the last year of starts is plenty
+  p.lmp=hist[hist.length-1];              // legacy field stays = latest start (fertileEstimate reads it)
+  persist(); closeSheet(); render();
+}
 function togglePrecon(id){ const it=(state.pregnancy.precon||[]).find(x=>x.id===id); if(!it)return; it.done=!it.done; persist(); render(); }
 function removePrecon(id){ state.pregnancy.precon=(state.pregnancy.precon||[]).filter(x=>x.id!==id); persist(); render(); }
 function addPrecon(){ const el=$('#pcNew'); const v=(el&&el.value.trim())||''; if(!v)return; state.pregnancy.precon.push({id:uid(),text:v,done:false}); persist(); render(); }
@@ -4699,6 +4763,17 @@ function renderPlanningHome(){
   const feCard = !p.lmp ? `<div class="preg-card" onclick="openPeriodUpdate()" style="cursor:pointer"><div class="pc-ico">🗓️</div><div><div class="pc-t">Add your last period</div><div class="pc-b">We'll estimate your fertile window, only if you find it helpful.</div></div></div>`
     : (fe&&fe.stale ? `<div class="preg-card" onclick="openPeriodUpdate()" style="cursor:pointer"><div class="pc-ico">🗓️</div><div><div class="pc-t">Update your period</div><div class="pc-b">It's been a while since the last one we know about. Tap to update, or if you think you might be pregnant, take a test 🤍</div></div></div>`
     : `<div class="preg-card"><div class="pc-ico">${fe.inWindow?'✨':'🗓️'}</div><div><div class="pc-t">${fe.inWindow?'You may be in your fertile window':'Estimated fertile window'}</div><div class="pc-b">Around ${fe.start} to ${fe.end}. Next period around ${fe.next}. A rough guide only, every body is different.</div></div></div>`);
+  // Honest look-back, never a forecast: the just-closed cycle (quiet, fades after a week),
+  // then the range across recorded cycles once there are two or more. Carrier-only, like feCard.
+  const closed=lastClosedCycle();
+  const lookBackCard = closed!=null ? `<div class="preg-card"><div class="pc-ico">🌙</div><div><div class="pc-t">Looking back</div><div class="pc-b">That cycle was ${closed} days.</div></div></div>` : '';
+  const cl=cycleLengths();
+  const cMin=cl.length?Math.min.apply(null,cl):0, cMax=cl.length?Math.max.apply(null,cl):0;
+  const rangeCard = cl.length>=2 ? `<div class="preg-card"><div class="pc-ico">📖</div><div><div class="pc-t">Your cycles so far</div><div class="pc-b">${cMin===cMax?`Your last ${cl.length} cycles each ran ${cMax} days.`:`Your last ${cl.length} cycles ran ${cMin} to ${cMax} days.`} Just what happened, not a forecast.</div></div></div>` : '';
+  // The one thing "since when?" is for: after a year of trying, quietly surface the kind
+  // see-your-doctor guidance that already lives in the disclaimer below.
+  const tm=tryingMonths();
+  const doctorCard = (tm!=null&&tm>=12) ? `<div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">A kind next step</div><div class="pc-b">You've been trying for over a year now. It's worth a kind chat with your doctor, whenever feels right. No rush, no pressure.</div></div></div>` : '';
   const items=(p.precon||[]).map(it=>`<div class="bag-row ${it.done?'done':''}"><div class="bg-tick" onclick="togglePrecon('${it.id}')">${it.done?I.check:''}</div><div class="bg-t" onclick="togglePrecon('${it.id}')">${escapeHtml(it.text)}</div><button class="bg-x" onclick="removePrecon('${it.id}')">${I.trash}</button></div>`).join('');
   return `<div class="fade-in">
     <div class="greeting">Getting ready 🌱</div>
@@ -4706,6 +4781,7 @@ function renderPlanningHome(){
     ${consentBanners()}
     ${viewerIsCarrier()?feCard:''}
     ${viewerIsCarrier()?`<button class="btn-ghost" onclick="openPeriodUpdate()" style="margin-top:2px">🗓️ My period started</button>`:''}
+    ${viewerIsCarrier()?lookBackCard+rangeCard+doctorCard:''}
     ${goodReadCard('planning')}
     <div class="sec-title">Getting your body ready</div>
     ${items}
