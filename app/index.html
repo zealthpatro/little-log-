@@ -172,6 +172,11 @@ body{
 /* ============ SCROLL AREA ============ */
 .scroll{flex:1;overflow-y:auto;padding:4px 20px 110px;-webkit-overflow-scrolling:touch;}
 .scroll::-webkit-scrollbar{width:0;}
+/* When the quick-log button floats over the list, the plain 110px only clears the nav: the button's
+   top edge sits 142px (+ home-indicator inset) above the frame bottom, so the tail of the last row
+   could hide under it. Applied only when the button actually renders, so FAB-less shells keep the
+   tighter padding. */
+.scroll.has-fab{padding-bottom:calc(158px + env(safe-area-inset-bottom));}
 
 /* ============ ACTIVE TIMER BANNER ============ */
 .active-banner{
@@ -1452,6 +1457,7 @@ function _renderView(){
   else if(view==='health') main = renderHealth();
   else if(view==='den') main = renderDenHub();
 
+  const fab = quickFab(); // computed once: the scroll area pads for the button only when it shows
   app().innerHTML = `
     <div class="topbar">
       <div class="baby-pill" onclick="openBabySheet()">
@@ -1465,8 +1471,8 @@ function _renderView(){
       <button class="icon-btn" onclick="toggleTheme()" aria-label="theme">${state.settings.theme==='night'?I.sun:I.moon}</button>
       <button class="icon-btn" onclick="openSettings()" aria-label="settings">${I.settings}</button>
     </div>
-    <div class="scroll" id="scroll">${main}</div>
-    ${quickFab()}
+    <div class="scroll${fab?' has-fab':''}" id="scroll">${main}</div>
+    ${fab}
     <div class="nav"><div class="nav-inner">
       <button class="nav-btn ${view==='home'?'active':''}" onclick="go('home')">${I.home}Home</button>
       <button class="nav-btn ${view==='log'?'active':''}" onclick="go('log')">${I.list}Log</button>
@@ -2172,7 +2178,15 @@ function quickAvailable(stage){
   return QUICK_ACTIONS.filter(a=>a.s.indexOf(stage)>=0)
     .filter(a=>!a.ownerOnly||!(window.LL&&typeof window.LL.matIsOwner==='function')||window.LL.matIsOwner());
 }
-function quickUid(){ return (window.LL&&window.LL.auth&&window.LL.auth.currentUser&&window.LL.auth.currentUser.uid)||'local'; }
+// The Firebase chain is deferred, so the first paint can run before auth restores. Falling straight
+// to 'local' there meant someone who turned the button off saw it flash back on until the auth
+// re-render, and anything saved in that window landed under a key no signed-in session reads.
+// Remembering the last signed-in uid keeps the first paint on THIS person's prefs.
+function quickUid(){
+  const u=(window.LL&&window.LL.auth&&window.LL.auth.currentUser&&window.LL.auth.currentUser.uid)||null;
+  if(u){ try{ localStorage.setItem('cubby-quick-uid',u); }catch(e){} return u; }
+  try{ return localStorage.getItem('cubby-quick-uid')||'local'; }catch(e){ return 'local'; }
+}
 function quickPrefsKey(){ return 'cubby-quick-'+quickUid(); }
 function quickPrefs(){
   let p={}; try{ p=JSON.parse(localStorage.getItem(quickPrefsKey())||'{}')||{}; }catch(e){ p={}; }
@@ -2213,9 +2227,12 @@ function quickLogActions(ts){
 /* The floating button. Shown on EVERY view now, not just home: the whole point of a quick logger is
    that you can reach it from wherever you happen to be standing. Three ways it can be absent, in
    order: switched off for good (per user), hidden for this session, or nothing left to show. */
-function quickFabHidden(){ try{ return sessionStorage.getItem('cubby-quick-hidden')==='1'; }catch(e){ return false; } }
+// The hide is per-uid like the prefs, so switching accounts in one tab session never carries one
+// person's "hide it for now" over to the next.
+function quickHiddenKey(){ return 'cubby-quick-hidden-'+quickUid(); }
+function quickFabHidden(){ try{ return sessionStorage.getItem(quickHiddenKey())==='1'; }catch(e){ return false; } }
 function hideQuickFabForSession(){
-  try{ sessionStorage.setItem('cubby-quick-hidden','1'); }catch(e){}
+  try{ sessionStorage.setItem(quickHiddenKey(),'1'); }catch(e){}
   closeSheet(); render();
   toast('Hidden until you reopen Cubby');
 }
@@ -3792,7 +3809,7 @@ function openQuickSettings(){
 function toggleQuickFab(){
   const p=quickPrefs(); p.on=!p.on; saveQuickPrefs(p);
   // Turning it back on undoes a session hide too: otherwise the switch says On and nothing appears.
-  if(p.on){ try{ sessionStorage.removeItem('cubby-quick-hidden'); }catch(e){} }
+  if(p.on){ try{ sessionStorage.removeItem(quickHiddenKey()); }catch(e){} }
   render(); openQuickSettings();
 }
 function toggleQuickAction(k){
@@ -4845,6 +4862,7 @@ function renderPregShell(){
   else if(pregView==='care') main=renderPregLog()+renderPregCare(); // Care = the record (was Log) + care/settings
   else if(pregView==='den') main=renderDenHub();
   else main=renderPregHome();
+  const fab=quickFab(); // computed once: the scroll area pads for the button only when it shows
   app().innerHTML=`
     <div class="topbar">
       <div class="preg-pill" onclick="pregGo('care')">
@@ -4856,8 +4874,8 @@ function renderPregShell(){
       <button class="icon-btn" onclick="toggleTheme()" aria-label="theme">${state.settings.theme==='night'?I.sun:I.moon}</button>
       <button class="icon-btn" onclick="openSettings()" aria-label="settings">${I.settings}</button>
     </div>
-    <div class="scroll" id="scroll">${main}</div>
-    ${quickFab()}
+    <div class="scroll${fab?' has-fab':''}" id="scroll">${main}</div>
+    ${fab}
     <div class="nav"><div class="nav-inner">
       <button class="nav-btn ${pregView==='week'?'active':''}" onclick="pregGo('week')">${I.home}Home</button>
       <button class="nav-btn ${pregView==='moments'?'active':''}" onclick="pregGo('moments')">${I.camera}Moments</button>
