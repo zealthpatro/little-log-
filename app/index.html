@@ -843,6 +843,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .preg-card .pc-ico{width:40px;height:40px;border-radius:13px;display:grid;place-items:center;font-size:20px;flex-shrink:0;background:var(--preg-soft);}
 .preg-card .pc-t{font-weight:800;font-size:15px;color:var(--ink);}
 .preg-card .pc-b{font-size:13px;color:var(--ink-soft);font-weight:600;line-height:1.5;margin-top:3px;}
+.preg-card .pc-hide{border:none;background:none;padding:0;margin-top:7px;font-family:var(--font-body);font-size:12px;font-weight:700;color:var(--ink-faint);text-decoration:underline;cursor:pointer;}
 .next-appt{display:flex;align-items:center;gap:12px;background:var(--surface);border-left:4px solid var(--preg);border-radius:14px;padding:13px 15px;margin:14px 0 6px;box-shadow:0 3px 9px var(--shadow);}
 .next-appt .na-body{flex:1;min-width:0;}
 .next-appt .na-t{font-weight:800;font-size:14px;}
@@ -4627,6 +4628,24 @@ function viewerIsCarrier(){
     return ['papa bear','grandpa bear','uncle bear'].indexOf(rel)<0; }
   catch(_){ return true; }
 }
+/* The fertile-window card is opt-out per PERSON, never per household: whether she wants the
+   estimate in her face is her call alone, so the choice lives in localStorage under the uid
+   (the per-user rule, same as quickPrefs) — never in the shared blob or the journey doc. */
+function feCardKey(){ return 'cubby-fertile-hidden-'+quickUid(); }
+function fertileCardHidden(){ try{ return localStorage.getItem(feCardKey())==='1'; }catch(e){ return false; } }
+function hideFertileCard(){
+  try{ localStorage.setItem(feCardKey(),'1'); }catch(e){}
+  render(); toast('Hidden. Bring it back any time in Cycle details');
+}
+function toggleFertileCard(){
+  const showing=fertileCardHidden();            // hidden now -> this tap turns it back on
+  try{ if(showing) localStorage.removeItem(feCardKey()); else localStorage.setItem(feCardKey(),'1'); }catch(e){}
+  // Flip just the switch in the open sheet (a full sheet re-render would drop unsaved fields);
+  // the home behind it re-renders so the card appears or goes right away.
+  const sw=document.querySelector('#sheet .sw[aria-label="Show the rough fertile window"]');
+  if(sw){ sw.classList.toggle('on',showing); sw.setAttribute('aria-checked',showing?'true':'false'); }
+  render();
+}
 /* "Since when?" month list for the setup picker: recent months, newest first, skip on top.
    49 options, so it goes through the standard searchable overlay picker. */
 function tryingSincePairs(){
@@ -4675,13 +4694,19 @@ function lastClosedCycle(){
   return d;
 }
 function openPlanningSetup(){
-  openSheet(`<h2>We're trying 🌱</h2><div class="sub">Lovely. We'll keep it gentle: a little preparation${viewerIsCarrier()?', an estimated fertile window if you want it,':''} and zero pressure.</div>
-    ${viewerIsCarrier()?`<div class="field"><label>First day of your last period (optional)</label>${datePicker('plLmp','',{max:now(),empty:true})}${wwa('preg.lmp')}</div>
-    <div class="field"><label>Usual cycle length (days)</label><input type="number" id="plCycle" value="28" min="21" max="40">${wwa('preg.cycle')}</div>
-    <div class="field"><label>Since when? (optional)</label>${searchPickerHtml('plSince', tryingSincePairs(), '', 'Search a month…')}${wwa('preg.since')}</div>`:''}
-    <button class="btn-primary" style="background:var(--diaper)" onclick="savePlanning()">Start</button>
-    <button class="btn-ghost" onclick="openExpectingSetup('due')">Already expecting? Set your due date →</button>
-    <button class="btn-ghost" onclick="openStartPregnancy()">Back</button>
+  // Reopened from the planning home (or the ?stage=planning deep link) once trying is already
+  // set up: prefill her choices so Save updates in place instead of starting over.
+  const ex=(state.pregnancy&&state.pregnancy.stage==='planning')?state.pregnancy:null;
+  const exLmp=(ex&&ex.lmp)?new Date(ex.lmp).toISOString().slice(0,10):'';
+  openSheet(`<h2>We're trying 🌱</h2><div class="sub">${ex?'Your details, whenever they change. Everything here is optional.':`Lovely. We'll keep it gentle: a little preparation${viewerIsCarrier()?', an estimated fertile window if you want it,':''} and zero pressure.`}</div>
+    ${viewerIsCarrier()?`<div class="field"><label>First day of your last period (optional)</label>${datePicker('plLmp',exLmp,{max:now(),empty:true})}${wwa('preg.lmp')}</div>
+    <div class="field"><label>Usual cycle length (days)</label><input type="number" id="plCycle" value="${(ex&&ex.cycleLen)||28}" min="21" max="40">${wwa('preg.cycle')}</div>
+    <div class="field"><label>Since when? (optional)</label>${searchPickerHtml('plSince', tryingSincePairs(), (ex&&ex.tryingSince)||'', 'Search a month…')}${wwa('preg.since')}</div>
+    <div class="toggle-row"><div style="padding-right:10px"><div class="tr-a">Show the rough fertile window</div><div class="tr-b">A wide range on your home, just for you. Even careful estimates pick the wrong day most of the time.</div></div>
+      <div class="sw ${fertileCardHidden()?'':'on'}" role="switch" aria-checked="${fertileCardHidden()?'false':'true'}" aria-label="Show the rough fertile window" onclick="toggleFertileCard()"></div></div>`:''}
+    <button class="btn-primary" style="background:var(--diaper)" onclick="savePlanning()">${ex?'Save':'Start'}</button>
+    ${ex?'':`<button class="btn-ghost" onclick="openExpectingSetup('due')">Already expecting? Set your due date →</button>
+    <button class="btn-ghost" onclick="openStartPregnancy()">Back</button>`}
     <div class="preg-disclaim">Fertile-window estimates are rough guides, every body is different. This is informational only, not fertility advice.</div>`,'diaper');
 }
 function savePlanning(){
@@ -4689,6 +4714,20 @@ function savePlanning(){
   const cyc=Math.max(21,Math.min(40,parseInt(($('#plCycle')||{}).value)||28));
   const since=(($('#plSince')||{}).value)||null;
   const lmpMs=dv?new Date(dv+'T08:00').getTime():null;
+  const ex=state.pregnancy;
+  if(ex&&ex.stage==='planning'){
+    // Setup reopened mid-journey: update the choices in place. Recreating the record here would
+    // wipe the period history, observations and checklist she has built up.
+    ex.cycleLen=cyc; ex.tryingSince=since;
+    if(lmpMs){
+      const hist=periodHistory();
+      if(hist.indexOf(lmpMs)<0) hist.push(lmpMs);
+      hist.sort(function(a,b){return a-b;});
+      ex.periods=hist.slice(-12); ex.lmp=hist[hist.length-1];
+    }
+    persist(); closeSheet(); render();
+    return;
+  }
   state.pregnancy={ id:uid(), ownerUid:myUid(), stage:'planning', dueDate:null, lmp:lmpMs, cycleLen:cyc,
     periods:lmpMs?[lmpMs]:[], tryingSince:since,
     country:detectCountry(), precon:defaultPrecon(),
@@ -4710,7 +4749,8 @@ function fertileEstimate(){
   const start=ovulation-5*86400000, end=ovulation+86400000;
   if(now()>nextPeriod+10*86400000) return {stale:true};
   const f=ms=>new Date(ms).toLocaleDateString(undefined,{month:'short',day:'numeric'});
-  return {start:f(start), end:f(end), next:f(nextPeriod), inWindow: now()>=start&&now()<=end};
+  // Deliberately no dated next-period forecast here: a range only, never a day to circle.
+  return {start:f(start), end:f(end), inWindow: now()>=start&&now()<=end};
 }
 function openPeriodUpdate(){
   openSheet(`<h2>Period started</h2><div class="sub">Updating it keeps the estimate honest. And if it's a hard day, be kind to yourself.</div>
@@ -4729,6 +4769,57 @@ function savePeriodUpdate(){
   p.periods=hist.slice(-12);              // roughly the last year of starts is plenty
   p.lmp=hist[hist.length-1];              // legacy field stays = latest start (fertileEstimate reads it)
   persist(); closeSheet(); render();
+}
+/* ---- Observation diary: a tiny private record, never an engine ----
+   Carrier-only, owner-owned: entries live in state.pregnancy.observations, so they ride the
+   consent-gated journey doc exactly like the period history (pregJourneyData sweeps every
+   non-health key along). Hard rules: an observation never changes any estimate, Cubby never
+   prompts for one, days without one simply don't exist on screen, and nothing here pushes. */
+const OBS_CHIPS=['Test: positive line','Test: negative','Cramps','Energy'];
+let obsDraft={tags:[],note:''};
+function obsEntries(){ const p=state.pregnancy; return ((p&&p.observations)||[]).slice().sort((a,b)=>b.at-a.at); }
+function obsLine(o){ const bits=(o.tags||[]).slice(); const t=(o.note||'').trim(); if(t) bits.push(t); return bits.join(' · '); }
+function obsRow(o,canDelete){
+  return `<div class="log-list-item"><div class="lli-ico" style="background:var(--diaper-soft)">🌿</div>
+    <div class="lli-body"><div class="lli-t">${escapeHtml(obsLine(o))}</div><div class="lli-s">${dayLabel(o.at)}</div></div>
+    ${canDelete?`<button class="lli-x" onclick="deleteObservation('${o.id}')" aria-label="Delete">${I.trash}</button>`:''}</div>`;
+}
+function openObservation(){ obsDraft={tags:[],note:''}; renderObsSheet(); }
+function renderObsSheet(){
+  const chips=OBS_CHIPS.map((c,i)=>`<div class="chip ${obsDraft.tags.indexOf(c)>=0?'sel':''}" onclick="toggleObsChip(${i})">${c}</div>`).join('');
+  openSheet(`<h2>Today I noticed</h2><div class="sub">A private note for your own record, in your journey's home. It never changes any estimate.</div>
+    <div class="chip-row" style="flex-wrap:wrap;white-space:normal;gap:8px">${chips}</div>
+    <div class="field"><label>In your own words (optional)</label><input id="obsNote" value="${escapeHtml(obsDraft.note)}" placeholder="e.g. Felt a little off today"></div>
+    <button class="btn-primary" style="background:var(--diaper)" onclick="saveObservation()">Keep it</button>`,'diaper');
+}
+function toggleObsChip(i){
+  const c=OBS_CHIPS[i]; if(!c) return;
+  obsDraft.note=(($('#obsNote')||{}).value)||'';   // keep her typing across the re-render
+  const ix=obsDraft.tags.indexOf(c);
+  if(ix>=0) obsDraft.tags.splice(ix,1); else obsDraft.tags.push(c);
+  renderObsSheet();
+}
+function saveObservation(){
+  const p=state.pregnancy; if(!p) return;
+  const note=((($('#obsNote')||{}).value)||'').trim();
+  if(!note&&!obsDraft.tags.length){ toast('Add a note or pick a chip first'); return; }
+  p.observations=(p.observations||[]).concat([{id:uid(),at:now(),note:note,tags:obsDraft.tags.slice()}]).slice(-200);
+  persist(); closeSheet(); render(); toast('Kept, just for you 🤍');
+}
+function openObsList(){
+  const rows=obsEntries().map(o=>obsRow(o,true)).join('');
+  openSheet(`<h2>Things you noticed</h2><div class="sub">Your own quiet record, newest first. Only what you chose to note, no gaps to fill.</div>
+    ${rows||'<div class="sub">Nothing noted yet, and that\'s fine.</div>'}
+    <button class="btn-ghost" onclick="openObservation()">Add one</button>`,'diaper');
+}
+function deleteObservation(id){
+  confirmSheet({title:'Delete this observation?',body:'It can\'t be brought back.',confirmLabel:'Delete',cancelLabel:'Keep',danger:true,onConfirm:function(){
+    const p=state.pregnancy; if(!p) return;
+    p.observations=(p.observations||[]).filter(o=>o.id!==id);
+    persist(); render();
+    if((p.observations||[]).length) openObsList();
+    toast('Deleted');
+  }});
 }
 function togglePrecon(id){ const it=(state.pregnancy.precon||[]).find(x=>x.id===id); if(!it)return; it.done=!it.done; persist(); render(); }
 function removePrecon(id){ state.pregnancy.precon=(state.pregnancy.precon||[]).filter(x=>x.id!==id); persist(); render(); }
@@ -4760,9 +4851,14 @@ function confirmPositiveTest(){
 function renderPlanningHome(){
   const p=state.pregnancy;
   const fe=fertileEstimate();
-  const feCard = !p.lmp ? `<div class="preg-card" onclick="openPeriodUpdate()" style="cursor:pointer"><div class="pc-ico">🗓️</div><div><div class="pc-t">Add your last period</div><div class="pc-b">We'll estimate your fertile window, only if you find it helpful.</div></div></div>`
-    : (fe&&fe.stale ? `<div class="preg-card" onclick="openPeriodUpdate()" style="cursor:pointer"><div class="pc-ico">🗓️</div><div><div class="pc-t">Update your period</div><div class="pc-b">It's been a while since the last one we know about. Tap to update, or if you think you might be pregnant, take a test 🤍</div></div></div>`
-    : `<div class="preg-card"><div class="pc-ico">${fe.inWindow?'✨':'🗓️'}</div><div><div class="pc-t">${fe.inWindow?'You may be in your fertile window':'Estimated fertile window'}</div><div class="pc-b">Around ${fe.start} to ${fe.end}. Next period around ${fe.next}. A rough guide only, every body is different.</div></div></div>`);
+  // The window is opt-out on the card itself (per person, localStorage) and restorable from the
+  // Cycle details sheet. Copy stays a range with the honest-uncertainty line — never a dated
+  // forecast, never a day coloured by chance.
+  const hideBtn=`<button class="pc-hide" onclick="event.stopPropagation();hideFertileCard()">Hide this</button>`;
+  const feCard = fertileCardHidden() ? ''
+    : (!p.lmp ? `<div class="preg-card" onclick="openPeriodUpdate()" style="cursor:pointer"><div class="pc-ico">🗓️</div><div><div class="pc-t">Add your last period</div><div class="pc-b">We'll estimate your fertile window, only if you find it helpful.</div>${hideBtn}</div></div>`
+    : (fe&&fe.stale ? `<div class="preg-card" onclick="openPeriodUpdate()" style="cursor:pointer"><div class="pc-ico">🗓️</div><div><div class="pc-t">Update your period</div><div class="pc-b">It's been a while since the last one we know about. Tap to update, or if you think you might be pregnant, take a test 🤍</div>${hideBtn}</div></div>`
+    : `<div class="preg-card"><div class="pc-ico">${fe.inWindow?'✨':'🗓️'}</div><div><div class="pc-t">${fe.inWindow?'You may be in your fertile window':'A rough fertile window'}</div><div class="pc-b">Somewhere around ${fe.start} to ${fe.end}. Even careful estimates pick the wrong day most of the time, so hold it lightly.</div>${hideBtn}</div></div>`));
   // Honest look-back, never a forecast: the just-closed cycle (quiet, fades after a week),
   // then the range across recorded cycles once there are two or more. Carrier-only, like feCard.
   const closed=lastClosedCycle();
@@ -4774,14 +4870,21 @@ function renderPlanningHome(){
   // see-your-doctor guidance that already lives in the disclaimer below.
   const tm=tryingMonths();
   const doctorCard = (tm!=null&&tm>=12) ? `<div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">A kind next step</div><div class="pc-b">You've been trying for over a year now. It's worth a kind chat with your doctor, whenever feels right. No rush, no pressure.</div></div></div>` : '';
+  // Observation diary: an add door plus the latest note or two. Only days she wrote on exist
+  // here — no empty-day grid, no prompt to fill one in.
+  const obs=obsEntries();
+  const obsBlock=`<div class="preg-card" onclick="openObservation()" style="cursor:pointer"><div class="pc-ico">🌿</div><div><div class="pc-t">Today I noticed</div><div class="pc-b">Test results, body signs, anything at all. A private note when you feel like it. No streaks, nothing to keep up.</div></div></div>
+    ${obs.slice(0,2).map(o=>obsRow(o,false)).join('')}
+    ${obs.length>2?`<button class="btn-ghost" onclick="openObsList()" style="margin-top:2px">See all ${obs.length}</button>`:''}`;
   const items=(p.precon||[]).map(it=>`<div class="bag-row ${it.done?'done':''}"><div class="bg-tick" onclick="togglePrecon('${it.id}')">${it.done?I.check:''}</div><div class="bg-t" onclick="togglePrecon('${it.id}')">${escapeHtml(it.text)}</div><button class="bg-x" onclick="removePrecon('${it.id}')">${I.trash}</button></div>`).join('');
   return `<div class="fade-in">
     <div class="greeting">Getting ready 🌱</div>
     <div class="greeting-sub">No pressure, no countdowns. Just gentle preparation for when your little one decides it's time.</div>
     ${consentBanners()}
     ${viewerIsCarrier()?feCard:''}
-    ${viewerIsCarrier()?`<button class="btn-ghost" onclick="openPeriodUpdate()" style="margin-top:2px">🗓️ My period started</button>`:''}
-    ${viewerIsCarrier()?lookBackCard+rangeCard+doctorCard:''}
+    ${viewerIsCarrier()?`<button class="btn-ghost" onclick="openPeriodUpdate()" style="margin-top:2px">🗓️ My period started</button>
+    <button class="btn-ghost" onclick="openPlanningSetup()" style="margin-top:2px;color:var(--ink-faint)">Cycle details</button>`:''}
+    ${viewerIsCarrier()?lookBackCard+rangeCard+doctorCard+obsBlock:''}
     ${goodReadCard('planning')}
     <div class="sec-title">Getting your body ready</div>
     ${items}
