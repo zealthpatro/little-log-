@@ -4821,6 +4821,115 @@ function deleteObservation(id){
     toast('Deleted');
   }});
 }
+/* ---- TTC doctor report: "For your appointment" ----
+   The trying-stage sibling of openPregDoctorReport: cycle history and honest range, trying-since,
+   the observation diary and checklist status, worded to make a first GP or fertility appointment
+   easier. Statements about the past only — no predictions, no scoring, no percentages, ever.
+   Pro-taste rule (per the 2026-08-03 audit): never spend the taste on open; charge once on the
+   Print / Share action, after she has seen what she'd get. */
+function ttcCarrierName(){
+  try{ const mi=(window.LL&&window.LL.memberInfo)||{}; const me=mi[myUid()];
+    return (me&&me.name)?String(me.name).split(' ')[0]:''; }catch(e){ return ''; }
+}
+function ttcVisitSummary(){
+  const p=state.pregnancy; if(!p) return '';
+  const fd=t=>new Date(t).toLocaleDateString();
+  const L=[];
+  const ts=p.tryingSince;
+  if(ts){
+    const d=new Date(ts+'-01T08:00'); const tm=tryingMonths();
+    L.push('Trying since '+d.toLocaleDateString(undefined,{month:'long',year:'numeric'})+((tm!=null&&tm>=1)?' (about '+tm+' month'+(tm===1?'':'s')+')':''));
+    L.push('');
+  }
+  const hist=periodHistory(), cl=cycleLengths();
+  if(hist.length){
+    L.push('Period start dates ('+hist.length+' recorded):');
+    hist.slice(-8).forEach(t=>L.push('  • '+fd(t)));
+    if(cl.length){
+      const cMin=Math.min.apply(null,cl), cMax=Math.max.apply(null,cl);
+      L.push(cl.length>=2
+        ? 'Cycle lengths: the last '+cl.length+' completed cycles '+(cMin===cMax?('each ran '+cMax+' days'):('ran '+cMin+' to '+cMax+' days'))+' ('+cl.join(', ')+')'
+        : 'One completed cycle recorded so far: '+cl[0]+' days');
+    }
+    L.push('');
+  }
+  const obs=obsEntries();                       // newest first
+  if(obs.length){
+    L.push('Observation notes ('+obs.length+', newest first):');
+    obs.slice(0,20).forEach(o=>L.push('  • '+fd(o.at)+': '+obsLine(o)));
+    if(obs.length>20) L.push('  … and '+(obs.length-20)+' earlier notes in Cubby');
+    L.push('');
+  }
+  const pc=p.precon||[];
+  if(pc.length){
+    const done=pc.filter(i=>i.done).length;
+    L.push('Preparation checklist ('+done+' of '+pc.length+' done):');
+    pc.forEach(i=>L.push('  '+(i.done?'✓':'·')+' '+i.text));
+    L.push('');
+  }
+  // Planning has no meds/conditions UI of its own; these only appear if data exists on the record.
+  const conds=p.conditions?Object.keys(p.conditions).filter(k=>p.conditions[k]):[];
+  if(conds.length){
+    const names=conds.map(k=>{ const c=PREG_CONDS.find(x=>x.key===k); return c?c.label:k; });
+    L.push('Also tracking: '+names.join(', '));
+  }
+  const sup=(p.supplements||[]).map(s=>s.name).filter(Boolean);
+  if(sup.length) L.push('Supplements & meds: '+sup.join(', '));
+  while(L.length&&L[L.length-1]==='') L.pop();
+  if(!L.length) L.push('Nothing recorded yet. Anything you note in Cubby — periods, observations, the checklist — will appear here.');
+  return L.join('\n');
+}
+let ttcReportCharged=false;
+function openTtcDoctorReport(){
+  const p=state.pregnancy; if(!p) return;
+  ttcReportCharged=false;                       // free to open and read; Print / Share is the treat
+  closeSheet();
+  const esc=escapeHtml, name=ttcCarrierName();
+  const gen=new Date().toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'});
+  var old=document.getElementById('reportOv'); if(old) old.remove();
+  if(!document.getElementById('reportPrintCSS')){ var st=document.createElement('style'); st.id='reportPrintCSS';
+    st.textContent='@media print{body{visibility:hidden!important}#reportOv,#reportOv *{visibility:visible!important}#reportOv{position:absolute!important;inset:0!important;background:#fff!important;overflow:visible!important}#reportOv .noprint{display:none!important}}';
+    document.head.appendChild(st); }
+  var ov=document.createElement('div'); ov.id='reportOv';
+  ov.setAttribute('style','position:fixed;inset:0;z-index:100000;background:#fff;color:#1a1a1a;overflow:auto;-webkit-overflow-scrolling:touch;font-family:Georgia,"Times New Roman",serif');
+  ov.innerHTML='<div style="max-width:680px;margin:0 auto;padding:20px 20px 60px">'
+    +'<div class="noprint" style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:16px;font-family:system-ui,sans-serif;flex-wrap:wrap">'
+    +'<button onclick="shareTtcReport()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:1px solid #ddd;background:#fff;cursor:pointer">Share / Copy'+(isPro()?'':' ✨')+'</button>'
+    +'<button onclick="printTtcReport()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:none;background:#56A08E;color:#fff;cursor:pointer">'+(isNativeApp()?'Save / Send report':'Print / Save PDF')+(isPro()?'':' ✨')+'</button>'
+    +'<button onclick="closePregReport()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:1px solid #ddd;background:#fff;cursor:pointer">Close</button>'
+    +'</div>'
+    +'<h1 style="font-size:24px;margin:0 0 2px">For your appointment</h1>'
+    +'<div style="color:#666;font-size:13px;margin-bottom:14px">Trying to conceive · generated '+gen+' with Cubby</div>'
+    +'<div style="font-size:14px;color:#444;margin-bottom:18px;font-style:italic">Notes '+(name?esc(name):'we')+' kept while trying, to make this conversation easier.</div>'
+    +'<pre style="font-family:inherit;white-space:pre-wrap;font-size:14px;line-height:1.55;margin:0">'+esc(ttcVisitSummary())+'</pre>'
+    +'<div style="margin-top:28px;color:#999;font-size:12px;border-top:1px solid #eee;padding-top:10px">Recorded dates and notes only, no predictions. Kept by you in Cubby. Informational only, not medical advice; please verify clinically.</div>'
+    +'</div>';
+  document.body.appendChild(ov);
+}
+/* Charge the pdf taste once per open, on the delivery action. On a failed charge the Pro sheet
+   (z-index 51) would sit invisibly under the report overlay (100000), so lift the overlay first. */
+function ttcChargeOnce(){
+  if(ttcReportCharged) return true;
+  if(!useTaste('pdf','Doctor report')){ closePregReport(); return false; }
+  ttcReportCharged=true; return true;
+}
+function printTtcReport(){
+  if(!ttcChargeOnce()) return;
+  if(!isNativeApp()){ window.print(); return; }
+  var ov=document.getElementById('reportOv'); if(!ov){ window.print(); return; }
+  var clone=ov.cloneNode(true);
+  Array.prototype.forEach.call(clone.querySelectorAll('.noprint'), function(n){ n.remove(); });
+  openPrintable('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cubby appointment notes</title></head>'
+    + '<body style="font-family:Georgia,\'Times New Roman\',serif;color:#1a1a1a;line-height:1.55">'
+    + clone.innerHTML + '</body></html>', 'cubby-appointment-notes');
+}
+function shareTtcReport(){
+  if(!ttcChargeOnce()) return;
+  const txt='For your appointment · '+new Date().toLocaleDateString()+'\n\n'+ttcVisitSummary();
+  if(navigator.share){ navigator.share({title:'Cubby appointment notes',text:txt}).catch(function(){}); return; }
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(function(){toast('Notes copied 🤍');}).catch(function(){toast('Could not copy');}); }
+  else { toast('Copy not supported here'); }
+}
 function togglePrecon(id){ const it=(state.pregnancy.precon||[]).find(x=>x.id===id); if(!it)return; it.done=!it.done; persist(); render(); }
 function removePrecon(id){ state.pregnancy.precon=(state.pregnancy.precon||[]).filter(x=>x.id!==id); persist(); render(); }
 function addPrecon(){ const el=$('#pcNew'); const v=(el&&el.value.trim())||''; if(!v)return; state.pregnancy.precon.push({id:uid(),text:v,done:false}); persist(); render(); }
@@ -4876,6 +4985,9 @@ function renderPlanningHome(){
   const obsBlock=`<div class="preg-card" onclick="openObservation()" style="cursor:pointer"><div class="pc-ico">🌿</div><div><div class="pc-t">Today I noticed</div><div class="pc-b">Test results, body signs, anything at all. A private note when you feel like it. No streaks, nothing to keep up.</div></div></div>
     ${obs.slice(0,2).map(o=>obsRow(o,false)).join('')}
     ${obs.length>2?`<button class="btn-ghost" onclick="openObsList()" style="margin-top:2px">See all ${obs.length}</button>`:''}`;
+  // "For your appointment": the notes she kept, turned into a doctor-friendly summary. Free to
+  // open and read; the pdf taste is only spent on Print / Share (charge on delivery, audit rule).
+  const reportCard=`<div class="preg-card" onclick="openTtcDoctorReport()" style="cursor:pointer"><div class="pc-ico">📄</div><div><div class="pc-t">For your appointment ${isPro()?'':(tasteLeft('pdf')>0?'· ✨ try one free':'· Pro ✨')}</div><div class="pc-b">Preparing for an appointment? Turn your notes into a doctor-friendly summary.</div></div></div>`;
   const items=(p.precon||[]).map(it=>`<div class="bag-row ${it.done?'done':''}"><div class="bg-tick" onclick="togglePrecon('${it.id}')">${it.done?I.check:''}</div><div class="bg-t" onclick="togglePrecon('${it.id}')">${escapeHtml(it.text)}</div><button class="bg-x" onclick="removePrecon('${it.id}')">${I.trash}</button></div>`).join('');
   return `<div class="fade-in">
     <div class="greeting">Getting ready 🌱</div>
@@ -4884,7 +4996,7 @@ function renderPlanningHome(){
     ${viewerIsCarrier()?feCard:''}
     ${viewerIsCarrier()?`<button class="btn-ghost" onclick="openPeriodUpdate()" style="margin-top:2px">🗓️ My period started</button>
     <button class="btn-ghost" onclick="openPlanningSetup()" style="margin-top:2px;color:var(--ink-faint)">Cycle details</button>`:''}
-    ${viewerIsCarrier()?lookBackCard+rangeCard+doctorCard+obsBlock:''}
+    ${viewerIsCarrier()?lookBackCard+rangeCard+doctorCard+obsBlock+reportCard:''}
     ${goodReadCard('planning')}
     <div class="sec-title">Getting your body ready</div>
     ${items}
