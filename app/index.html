@@ -442,6 +442,9 @@ body.night .ob-card{background:rgba(38,32,28,.86);}
 .onboard{display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;padding:40px 30px;text-align:center;}
 .onboard.ob-card{height:auto;padding:30px 26px;}
 .onboard .logo{font-family:var(--font-display);font-size:40px;font-weight:600;letter-spacing:-.02em;margin-bottom:6px;}
+.onboard .ob-hi{font-family:var(--font-display);font-size:17px;font-weight:600;color:var(--ink);margin-bottom:8px;}
+.onboard .ob-priv{margin-top:16px;font-size:12.5px;font-weight:600;color:var(--ink-faint);line-height:1.5;}
+.onboard .ob-priv a{color:var(--ink-soft);text-decoration:underline;text-underline-offset:2px;}
 .onboard .tag{color:var(--ink-soft);font-weight:600;margin-bottom:38px;font-size:15px;}
 .onboard .field{width:100%;text-align:left;}
 #apick{display:flex;gap:10px;justify-content:center;margin-bottom:22px;flex-wrap:wrap;}
@@ -4187,12 +4190,14 @@ function renderOnboard(){
     <div class="ob-bg">${obPreview()}</div>
     <div class="onboard ob-card fade-in">
       <div class="logo">Cubby</div>
+      <div class="ob-hi">Hi, I'm Cubby. Let's set up your den.</div>
       <div class="tag">Where are you on the journey? Pick what fits today. You can change anything later.</div>
       <div class="prof-cards" style="width:100%;text-align:left">
         <div class="prof-card" onclick="obStage('expecting')"><span class="lead" style="background:var(--preg-soft);font-size:20px">🌸</span><div class="cflex"><div class="a">We're expecting</div><div class="b">A baby (or two) on the way</div></div><span class="chev">${I.chev}</span></div>
         <div class="prof-card" onclick="obStage('baby')"><span class="lead" style="background:var(--feed-soft);font-size:20px">🐻</span><div class="cflex"><div class="a">Our baby's here</div><div class="b">One or more, track feeds, sleep and growth</div></div><span class="chev">${I.chev}</span></div>
         <div class="prof-card" onclick="obStage('planning')"><span class="lead" style="background:#e9f0e7;font-size:20px">🌱</span><div class="cflex"><div class="a">We're trying</div><div class="b">Getting ready, with a gentle hand if you want it</div></div><span class="chev">${I.chev}</span></div>
       </div>
+      <div class="ob-priv">🔒 <a href="/privacy/" target="_blank" rel="noopener">Private to your family</a>. No ads. We never sell your data.</div>
       <button class="ob-logout" onclick="confirmLogout()">Log out</button>
     </div>
   </div>`;
