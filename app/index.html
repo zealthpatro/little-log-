@@ -4693,6 +4693,30 @@ function lastClosedCycle(){
   if(d<15||d>90) return null;
   return d;
 }
+/* ---- Two-week-wait care: one calm affordance, never a countdown ----
+   Shows ONLY when this cycle has already run longer than her own longest recorded cycle —
+   measured against her body's range (2+ completed cycles required), never an app average.
+   The copy is static (no day counts, nothing changes daily), nothing pushes, and dismissing
+   is per carrier AND per cycle: the localStorage key carries this cycle's start, so "Not now"
+   holds for this whole wait but the card may quietly return next cycle if that's where
+   things land. Same per-person localStorage rule as the fertile-window hide. */
+function twwKey(last){ return 'cubby-tww-hidden-'+quickUid()+'-'+last; }
+function twwEligible(){
+  var h=periodHistory(); if(!h.length) return null;
+  var cl=cycleLengths(); if(cl.length<2) return null;   // fewer than 2 completed cycles = no honest personal range: never show
+  var last=h[h.length-1];
+  var daysSince=Math.floor((now()-last)/86400000);
+  var longest=Math.max.apply(null,cl);
+  if(daysSince<=longest) return null;                   // not later than her own longest cycle yet
+  if(daysSince>90) return null;                         // months on it's a missed log or a break (cycleLengths' own rule), not a late period
+  try{ if(localStorage.getItem(twwKey(last))==='1') return null; }catch(e){}
+  return {last:last};
+}
+function hideTwwCard(){
+  var h=periodHistory(); var last=h.length?h[h.length-1]:0;
+  try{ localStorage.setItem(twwKey(last),'1'); }catch(e){}
+  render();
+}
 function openPlanningSetup(){
   // Reopened from the planning home (or the ?stage=planning deep link) once trying is already
   // set up: prefill her choices so Save updates in place instead of starting over.
@@ -4957,8 +4981,54 @@ function confirmPositiveTest(){
   if(!(p.bag||[]).length) p.bag=defaultBag();
   pregView='week'; persist(); closeSheet(); render(); toast("You're expecting 🤍");
 }
+/* First name of the person whose journey this is (the doc owner = the carrier in practice),
+   for the partner-home privacy line. Falls back to 'her' when the circle has no name yet. */
+function carrierFirstName(){
+  try{ const p=state.pregnancy; const mi=(window.LL&&window.LL.memberInfo)||{};
+    const m=p&&p.ownerUid&&mi[p.ownerUid];
+    return (m&&m.name)?String(m.name).split(' ')[0]:''; }catch(e){ return ''; }
+}
+/* ---- The partner's trying-stage home: real, warm, and without her data ----
+   What a non-carrier sees. HARD boundary: periods, the fertile window, observations,
+   trying-since and the doctor report never render here — cycle details are the carrier's
+   alone. The shared preparation checklist IS visible (it rides the journey doc she shared),
+   but Firestore lets only the journey's OWNER write that doc (firestore.rules
+   /pregnancy/{owner}; syncPregJourney no-ops for everyone else), so a caregiver-partner's
+   tick would sit locally, never sync, then snap back on the next snapshot — a lie dressed
+   as a feature. Honest split: interactive only when pregJourneyIsOwner() (the rare partner
+   who created the record and owns the doc), read-only with supportive copy otherwise. */
+function renderPlanningPartnerHome(p){
+  const name=carrierFirstName();
+  const canWrite=(typeof pregJourneyIsOwner==='function')?pregJourneyIsOwner():false;
+  const items=(p.precon||[]);
+  const done=items.filter(it=>it.done).length;
+  const rows=items.map(it=>canWrite
+    ?`<div class="bag-row ${it.done?'done':''}"><div class="bg-tick" onclick="togglePrecon('${it.id}')">${it.done?I.check:''}</div><div class="bg-t" onclick="togglePrecon('${it.id}')">${escapeHtml(it.text)}</div><button class="bg-x" onclick="removePrecon('${it.id}')">${I.trash}</button></div>`
+    :`<div class="bag-row ${it.done?'done':''}"><div class="bg-tick">${it.done?I.check:''}</div><div class="bg-t">${escapeHtml(it.text)}</div></div>`).join('');
+  const listSub = items.length
+    ? (canWrite?'Tick things off as you take care of them together.':`${done} of ${items.length} done so far. ${name?escapeHtml(name):'She'} keeps this list; you'll see it move as things get taken care of.`)
+    : 'The preparation list will appear here as it takes shape.';
+  // "How to support" reads: only ever linked when they exist in the library, never invented.
+  const reads=['male-fertility-sperm-health','fertility-diet-and-lifestyle']
+    .map(s=>(typeof readBySlug==='function')?readBySlug(s):null).filter(Boolean).slice(0,2);
+  const readCards=reads.map(r=>`<div class="preg-card" onclick="openReadCarousel('${r.s}')" style="cursor:pointer;border-left:4px solid var(--sleep)"><div class="pc-ico">${r.e}</div><div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--sleep)">A way to help</div><div class="pc-t">${escapeHtml(r.t)}</div><div class="pc-b">${escapeHtml(r.b)}</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>`).join('');
+  return `<div class="fade-in">
+    <div class="greeting">Getting ready, together 🌱</div>
+    <div class="greeting-sub">You're on this journey too. Here's the preparation you share, and a few ways to help.</div>
+    ${consentBanners()}
+    <div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">What stays private</div><div class="pc-b">Cycle details stay with ${name?escapeHtml(name):'her'} unless she shares them. What you see here is the preparation you share, never her private record.</div></div></div>
+    <div class="sec-title">Getting ready together</div>
+    <div class="greeting-sub" style="margin-bottom:10px">${listSub}</div>
+    ${rows}
+    ${canWrite?`<div class="field" style="margin-top:10px"><label>Add your own</label><input id="pcNew" placeholder="e.g. Dentist check" onkeydown="if(event.key==='Enter')addPrecon()"></div>`:''}
+    ${readCards?`<div class="sec-title" style="margin-top:18px">Ways to support</div>${readCards}`:''}
+    ${goodReadCard('planning')}
+    <div class="preg-disclaim">Informational only, not medical or fertility advice.</div>
+  </div>`;
+}
 function renderPlanningHome(){
   const p=state.pregnancy;
+  if(!viewerIsCarrier()) return renderPlanningPartnerHome(p);
   const fe=fertileEstimate();
   // The window is opt-out on the card itself (per person, localStorage) and restorable from the
   // Cycle details sheet. Copy stays a range with the honest-uncertainty line — never a dated
@@ -4968,6 +5038,11 @@ function renderPlanningHome(){
     : (!p.lmp ? `<div class="preg-card" onclick="openPeriodUpdate()" style="cursor:pointer"><div class="pc-ico">🗓️</div><div><div class="pc-t">Add your last period</div><div class="pc-b">We'll estimate your fertile window, only if you find it helpful.</div>${hideBtn}</div></div>`
     : (fe&&fe.stale ? `<div class="preg-card" onclick="openPeriodUpdate()" style="cursor:pointer"><div class="pc-ico">🗓️</div><div><div class="pc-t">Update your period</div><div class="pc-b">It's been a while since the last one we know about. Tap to update, or if you think you might be pregnant, take a test 🤍</div>${hideBtn}</div></div>`
     : `<div class="preg-card"><div class="pc-ico">${fe.inWindow?'✨':'🗓️'}</div><div><div class="pc-t">${fe.inWindow?'You may be in your fertile window':'A rough fertile window'}</div><div class="pc-b">Somewhere around ${fe.start} to ${fe.end}. Even careful estimates pick the wrong day most of the time, so hold it lightly.</div>${hideBtn}</div></div>`));
+  // Two-week-wait care (twwEligible): exactly one calm card, only when this cycle is already
+  // longer than her own longest recorded one. Static copy, no day counts, dismissible per cycle.
+  const tww=twwEligible();
+  const twwRead=(typeof readBySlug==='function')&&readBySlug('early-pregnancy-test-accuracy');
+  const twwCard = tww ? `<div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">If it feels right</div><div class="pc-b">Your period is a little later than your longest recent cycle. If it feels right, a test might tell you more. Whatever it shows, take your time.${twwRead?` <span class="link-inline" onclick="openReadCarousel('early-pregnancy-test-accuracy')">When to test, gently →</span>`:''}</div><button class="pc-hide" onclick="event.stopPropagation();hideTwwCard()">Not now</button></div></div>` : '';
   // Honest look-back, never a forecast: the just-closed cycle (quiet, fades after a week),
   // then the range across recorded cycles once there are two or more. Carrier-only, like feCard.
   const closed=lastClosedCycle();
@@ -4993,10 +5068,10 @@ function renderPlanningHome(){
     <div class="greeting">Getting ready 🌱</div>
     <div class="greeting-sub">No pressure, no countdowns. Just gentle preparation for when your little one decides it's time.</div>
     ${consentBanners()}
-    ${viewerIsCarrier()?feCard:''}
-    ${viewerIsCarrier()?`<button class="btn-ghost" onclick="openPeriodUpdate()" style="margin-top:2px">🗓️ My period started</button>
-    <button class="btn-ghost" onclick="openPlanningSetup()" style="margin-top:2px;color:var(--ink-faint)">Cycle details</button>`:''}
-    ${viewerIsCarrier()?lookBackCard+rangeCard+doctorCard+obsBlock+reportCard:''}
+    ${feCard}${twwCard}
+    <button class="btn-ghost" onclick="openPeriodUpdate()" style="margin-top:2px">🗓️ My period started</button>
+    <button class="btn-ghost" onclick="openPlanningSetup()" style="margin-top:2px;color:var(--ink-faint)">Cycle details</button>
+    ${lookBackCard+rangeCard+doctorCard+obsBlock+reportCard}
     ${goodReadCard('planning')}
     <div class="sec-title">Getting your body ready</div>
     ${items}
