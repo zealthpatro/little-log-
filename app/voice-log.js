@@ -114,8 +114,16 @@
       case 'pump': commitEvent({ type: 'pump', amount: f.amount, unit: f.unit, side: f.side, time: tNow }); saveUnit(f.unit); done('Pump logged'); break;
       case 'sleepPast': commitEvent({ type: 'sleep', time: f.startMs, end: f.endMs }); done('Sleep logged · ' + prettyDur(f.durMs)); break;
       case 'sleepStart': if (typeof startSleep === 'function') { startSleep(); } else { done('Nap started'); } break; // startSleep closes + navigates
-      case 'sleepStop': if (typeof stopSleep === 'function' && window.state) { stopSleep(state.activeBabyId); } closeSheet(); if (typeof render === 'function') render(); break;
+      case 'sleepStop':
+        // stopSleep early-returns when no timer exists; without this check the sheet closed
+        // with nothing logged and nothing said — the worst failure class in a shared log.
+        if (!napTimerRunning()) { done('No nap timer is running. Try saying "napped 2 hours".'); break; }
+        if (typeof stopSleep === 'function' && window.state) { stopSleep(state.activeBabyId); }
+        closeSheet(); if (typeof render === 'function') render(); break;
     }
+  }
+  function napTimerRunning() {
+    try { return !!(typeof timersFor === 'function' && window.state && timersFor(state.activeBabyId).sleep); } catch (e) { return false; }
   }
   function saveUnit(u) { try { if (window.state && state.settings) { state.settings.unit = u; if (typeof persist === 'function') persist(); } } catch (e) {} }
   function done(msg) { closeSheet(); if (typeof render === 'function') render(); if (typeof toast === 'function') toast(msg); }
@@ -188,6 +196,9 @@
 
   window.voiceSaveStructured = function () {
     if (!vs.intent) return;
+    // "End the nap" with no running timer: be honest before the Pro gate, so the tap never
+    // silently no-ops and never spends a taste on nothing.
+    if (vs.intent.kind === 'sleepStop' && !napTimerRunning()) { done('No nap timer is running. Try saying "napped 2 hours".'); return; }
     // Smart structured parse = Pro (free taste). Note path stays free.
     if (typeof isPro === 'function' && !isPro() && typeof useTaste === 'function') {
       if (!useTaste('voice', 'Voice logging')) { return; } // tasted out → useTaste opens Pro
@@ -204,11 +215,36 @@
 
   window.voiceEditManually = function () {
     var k = vs.intent && vs.intent.kind;
+    var f = (vs.intent && vs.intent.fields) || {};
     closeSheet();
     // route to the trusted manual sheet so a wrong hearing is fixed in the real UI
     var map = { diaper: 'openDiaper', feedBottle: 'openFeed', feedWater: 'openFeed', feedBreast: 'openFeed', pump: 'openPump', sleepPast: 'openSleep', sleepStart: 'openSleep', sleepStop: 'openSleep' };
     var fn = map[k];
-    if (fn && typeof window[fn] === 'function') { setTimeout(window[fn], 60); }
+    if (!fn || typeof window[fn] !== 'function') return;
+    setTimeout(function () {
+      // A finished nap carries its parsed times straight into the past-sleep sheet.
+      if (k === 'sleepPast' && f.startMs && f.endMs && typeof openPastSleep === 'function') {
+        try { logTimes = { when: f.startMs, end: f.endMs }; openPastSleep(false); return; } catch (e) {}
+      }
+      window[fn]();
+      // Prefill the parsed draft so "Not right? Edit" starts from what she said, not a blank
+      // sheet (the open* functions reset their drafts to defaults). Best-effort: any miss
+      // simply leaves the plain sheet open.
+      try {
+        if ((k === 'feedBottle' || k === 'feedWater' || k === 'feedBreast') && typeof feedDraft !== 'undefined' && feedDraft) {
+          feedDraft.method = (k === 'feedBottle') ? 'bottle' : (k === 'feedWater') ? 'water' : 'breast';
+          if (k === 'feedBottle' && f.amount) { feedDraft.amount = f.amount; feedDraft.unit = f.unit || feedDraft.unit; }
+          if (k === 'feedWater' && f.amount) { feedDraft.wAmount = f.amount; feedDraft.unit = f.unit || feedDraft.unit; }
+          if (k === 'feedBreast' && f.side) { feedDraft.side = f.side; }
+          if (typeof renderFeedSheet === 'function') renderFeedSheet();
+        } else if (k === 'pump' && typeof pumpDraft !== 'undefined' && pumpDraft) {
+          if (f.amount) pumpDraft.amount = f.amount;
+          if (f.unit) pumpDraft.unit = f.unit;
+          if (f.side) pumpDraft.side = f.side;
+          if (typeof renderPumpSheet === 'function') renderPumpSheet();
+        }
+      } catch (e) {}
+    }, 60);
   };
 
   window.openVoiceLog = openVoiceLog;
@@ -232,7 +268,7 @@
         + '</div>'
         + tasteNote;
     } else if (vs.mode === 'note') {
-      body = '<h2>Saved as a note?</h2>'
+      body = '<h2>Save it as a note?</h2>'
         + '<div class="sub">I couldn’t turn that into a feed, sleep or diaper, but I can keep it as a note for your circle.</div>'
         + '<div class="opt" style="pointer-events:none">📝 ' + escapeHtml(vs.text || '') + '</div>'
         + '<button class="btn-primary" style="background:var(--note)" onclick="voiceSaveNote()">Save as note</button>'

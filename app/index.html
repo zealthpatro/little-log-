@@ -1424,6 +1424,10 @@ function runDeepLink(dl){
     if(dl.go==='reads'){ var rr=_fn('openReadingRoom'); if(rr) rr(hasPreg?'preg':(hasBaby?'baby':'planning')); return; }
     var PREG_GO={kicks:'openKickCounter',contractions:'openContractions',symptom:'openLogSymptom',weight:'openLogWeight',mood:'openMoodNote',glucose:'openGlucoseTracker',bag:'openBag',birthplan:'openBirthPlan',games:'openGuessGame',doctorreport:'openPregDoctorReport',danger:'openDangerSigns'};
     var BABY_GO={feed:'openFeed',diaper:'openDiaper',sleep:'openSleep',temp:'openTemp'};
+    // Mood is owner-only forever. The deep link must respect the same gate as the home card and
+    // quick tiles, or any member could open the "never shared" sheet. Swallowed silently: even a
+    // toast here would leak that the record exists.
+    if(dl.go==='mood' && typeof pregIsOwner==='function' && !pregIsOwner()) return;
     if(hasPreg && PREG_GO[dl.go]){ var f1=_fn(PREG_GO[dl.go]); if(f1){ f1(); return; } }
     if(hasBaby && BABY_GO[dl.go]){ var f2=_fn(BABY_GO[dl.go]); if(f2){ f2(); return; } }
   }
@@ -1886,9 +1890,11 @@ async function toggleNotePin(id){
   if(window.LL.setNotePinned) await window.LL.setNotePinned(id, !n.pinned);
   closeSheet(); render(); toast(n.pinned?'Unpinned':'Pinned to top');
 }
-async function deleteNote(id){
-  if(window.LL.deleteNote){ const ok=await window.LL.deleteNote(id); if(!ok){ toast('Could not delete'); return; } }
-  closeSheet(); render(); toast('Note deleted');
+function deleteNote(id){
+  confirmSheet({title:'Delete this note?',body:'It can\'t be brought back.',confirmLabel:'Delete',cancelLabel:'Keep',danger:true,onConfirm:async function(){
+    if(window.LL.deleteNote){ const ok=await window.LL.deleteNote(id); if(!ok){ toast('Could not delete'); return; } }
+    render(); toast('Note deleted');
+  }});
 }
 /* swipe between days on the surface (left = next day, right = previous day) */
 (function(){
@@ -4225,7 +4231,7 @@ function renderLossHolding(){
         ${hasMem?`<div class="prof-card" onclick="openKeptMemories()"><span class="lead" style="background:var(--preg-soft);font-size:20px">🤍</span><div class="cflex"><div class="a">Your kept memories</div><div class="b">Yours to revisit, privately, whenever you like</div></div><span class="chev">${I.chev}</span></div>`:''}
         <a class="prof-card" href="/articles/miscarriage-early-pregnancy-loss/" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><span class="lead" style="background:var(--feed-soft);font-size:20px">🫂</span><div class="cflex"><div class="a">If you need support</div><div class="b">Gentle reading, and helplines that are there day or night</div></div><span class="chev">${I.chev}</span></a>
       </div>
-      <button class="btn-ghost" onclick="endLossHolding()" style="color:var(--ink-faint);margin-top:10px">When you're ready</button>
+      <button class="btn-ghost" onclick="endLossHolding()" style="color:var(--ink-faint);margin-top:10px">When you're ready, move on from this screen</button>
       <button class="ob-logout" onclick="confirmLogout()">Log out</button>
     </div>
   </div>`;
@@ -4237,7 +4243,11 @@ function myLossHolding(){ var lh=state.lossHolding; if(!lh) return null;
   if(lh.at){ try{ var m=(window.LL&&window.LL.members)||{}; return m[myUid()]==='owner'?lh:null; }catch(_){ return null; } }
   return lh[myUid()]||null; }
 function clearMyLossHolding(){ var lh=state.lossHolding; if(!lh) return; if(lh.at){ state.lossHolding=null; return; } delete lh[myUid()]; if(!Object.keys(lh).length) state.lossHolding=null; }
-function endLossHolding(){ clearMyLossHolding(); persist(); render(); }
+/* Leaving the holding screen is one-way (it leads back to the start-a-journey chooser), so it says
+   where it goes and asks once, calmly. Kept memories stay kept either way. */
+function endLossHolding(){
+  confirmSheet({title:'Ready to move on?',body:'Cubby will go back to the start screen, for whenever a new chapter begins. This quiet page won\'t show again. Nothing you kept is deleted.',confirmLabel:'I\'m ready',cancelLabel:'Not yet',onConfirm:function(){ clearMyLossHolding(); persist(); render(); }});
+}
 
 /* ============================================================
    PREGNANCY  (one continuous lifecycle: pregnancy -> birth -> baby)
@@ -5281,6 +5291,9 @@ function savePregSymptom(){ const k=$('#symK').value.trim(); if(!k){toast('Add a
 /* Owner-only wellbeing note. NEVER shared: it lives in the owner-only 'mood' category (mhealth), not the
    shareable clinical 'health' bucket, so writing "I feel low" here can never reach a partner or the circle. */
 function openMoodNote(){
+  // Defense in depth for the owner-only gate: every entry path (card, tile, deep link) checks
+  // before this, but nothing that reaches here may open her private notes for anyone else.
+  if(typeof pregIsOwner==='function' && !pregIsOwner()) return;
   ensurePregFields(state.pregnancy); initLogWhen(); window._moodSel='';
   const p=state.pregnancy; const recent=(p.moodLog||[]).slice().sort((a,b)=>b.at-a.at).slice(0,6);
   const chips=['Calm','Happy','Tired','Anxious','Low','Overwhelmed','Excited'].map(s=>`<button class="tgt" onclick="pickMood(this,'${s}')">${s}</button>`).join('');
@@ -5769,8 +5782,10 @@ function openKeptMemories(){
     <button class="btn-ghost" style="color:var(--ink-faint);margin-top:10px" onclick="removeKeptMemories()">Remove these memories</button>`,'preg');
 }
 function removeKeptMemories(){
-  (state.pregnancyArchive||[]).forEach(a=>(a.moments||[]).forEach(m=>{ try{ PhotoStore.del(m.photoId); }catch(e){} }));
-  state.pregnancyArchive=[]; persist(); closeSheet(); render(); toast('Removed');
+  confirmSheet({title:'Remove these memories?',body:'Your kept photos and notes go for good, and can\'t be brought back. There\'s no rush to decide.',confirmLabel:'Remove them',cancelLabel:'Keep them',danger:true,onConfirm:function(){
+    (state.pregnancyArchive||[]).forEach(a=>(a.moments||[]).forEach(m=>{ try{ PhotoStore.del(m.photoId); }catch(e){} }));
+    state.pregnancyArchive=[]; persist(); render(); toast('Removed 🤍');
+  }});
 }
 
 /* ---- Phase 5: welcoming the baby (the birth transition) ---- */
@@ -6276,7 +6291,10 @@ function medNextDue(m){
   if(m.pattern.type==='asNeeded') return null;
   if(m.pattern.type==='everyX'){
     const last=lastDose(m.id);
-    if(!last) return now(); // never given -> due now
+    // Never dosed -> no due time yet: the first logged dose starts the clock. Returning now() here
+    // made a fresh medicine permanently "overdue" and, because now() changes every tick, re-fired
+    // checkMedReminders' notification + persist once a second, forever.
+    if(!last) return null;
     return last.time + m.pattern.hours*3600000;
   }
   if(m.pattern.type==='daily'){
@@ -6311,7 +6329,9 @@ function renderHomeMeds(){
   let rows=meds.map(m=>{
     const due=medNextDue(m);
     let sub;
-    if(due===null) sub='As needed';
+    // A never-dosed schedule is a quiet fact, not a red nag: say what starts it.
+    if(m.pattern.type==='everyX' && !lastDose(m.id)) sub='Log the first dose to start the schedule';
+    else if(due===null) sub='As needed';
     else if(now()>=due) sub=`<span class="due">${fmtDue(due-now())}</span>`;
     else sub=`Next ${fmtClock(due)} · <span data-due="${due}">${fmtDue(due-now())}</span>`;
     return `<div class="med-card">
@@ -6389,8 +6409,11 @@ function saveMed(id){
   persist(); syncReminderIndex(); closeSheet(); render(); toast('Medicine saved');
 }
 function deleteMed(id){
-  state.meds=state.meds.filter(m=>m.id!==id);
-  persist(); syncReminderIndex(); closeSheet(); render(); toast('Removed');
+  const m=babyMeds().find(x=>x.id===id);
+  confirmSheet({title:'Remove '+((m&&m.name)||'this medicine')+'?',body:'It comes off the list and reminders stop. Doses already logged stay in your log.',confirmLabel:'Remove',cancelLabel:'Keep',danger:true,onConfirm:function(){
+    state.meds=state.meds.filter(x=>x.id!==id);
+    persist(); syncReminderIndex(); render(); toast('Removed');
+  }});
 }
 function logDose(id){
   const m=babyMeds().find(x=>x.id===id); if(!m)return;
@@ -6405,6 +6428,8 @@ function requestNotif(){
 function checkMedReminders(){
   let changed=false;
   babyMeds().filter(m=>m.active&&m.remind).forEach(m=>{
+    // Fires at most ONCE per due-event: due is a stable timestamp (null until the first dose),
+    // so the lastNotified check holds until logDose resets it. Never re-alerts on the 1s tick.
     const due=medNextDue(m);
     if(due!==null && now()>=due && m.lastNotified!==due){
       m.lastNotified=due; changed=true;
@@ -6511,7 +6536,12 @@ function reopenIllness(id){
     <button class="btn-ghost btn-danger" onclick="deleteIllness('${id}')">${I.trash} Delete record</button>`,'med');
 }
 function resumeIllness(id){ const i=(state.illnesses||[]).find(x=>x.id===id); if(i)i.endedAt=null; persist(); closeSheet(); healthTab='illness'; render(); }
-function deleteIllness(id){ state.illnesses=(state.illnesses||[]).filter(x=>x.id!==id); persist(); closeSheet(); render(); toast('Deleted'); }
+function deleteIllness(id){
+  const i=(state.illnesses||[]).find(x=>x.id===id);
+  confirmSheet({title:'Delete '+((i&&i.name)?'the '+i.name+' record':'this record')+'?',body:'Its dates and notes go too. It can\'t be brought back.',confirmLabel:'Delete',cancelLabel:'Keep',danger:true,onConfirm:function(){
+    state.illnesses=(state.illnesses||[]).filter(x=>x.id!==id); persist(); render(); toast('Deleted');
+  }});
+}
 
 let tempDraft=null;
 function openTemp(){
@@ -6637,7 +6667,7 @@ function openDoctorReport(){
     vaxLine=given+' of '+plan.length+' doses recorded as given'+(nextV?('  ·  next: '+nextV.name+' ('+nextV.group+')'):'');
   }catch(e){}
   let medsLines='';
-  try{ medsLines=babyMeds().filter(m=>m.active).map(m=>'- '+m.name+' · '+m.dose+' '+m.unit+(m.everyH?(' every '+m.everyH+'h'):'')).join('\n'); }catch(e){}
+  try{ medsLines=babyMeds().filter(m=>m.active).map(m=>{ const sched=medScheduleText(m); return '- '+m.name+' · '+m.dose+' '+m.unit+(sched?(' · '+sched):''); }).join('\n'); }catch(e){}
   const dob=b.birth?new Date(b.birth).toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'}):'';
   openPrintable(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(b.name)} · Cubby visit report</title>
     <style>
@@ -7224,7 +7254,12 @@ function saveVaccineEdit(id){
   v.name=$('#vxName').value.trim()||v.name; v.dueMonths=Math.max(0,+$('#vxMo').value||0); v.group=$('#vxGroup').value.trim()||v.group;
   persist(); closeSheet(); render(); toast('Saved');
 }
-function deleteVaccine(id){ state.vaccines[state.activeBabyId]=vaccinePlan().filter(v=>v.id!==id); persist(); closeSheet(); render(); toast('Removed'); }
+function deleteVaccine(id){
+  const v=vaccinePlan().find(x=>x.id===id);
+  confirmSheet({title:'Remove '+((v&&v.name)||'this vaccine')+'?',body:'It comes off the schedule'+(v&&v.given?', along with the given date you recorded':'')+'. It can\'t be brought back.',confirmLabel:'Remove',cancelLabel:'Keep',danger:true,onConfirm:function(){
+    state.vaccines[state.activeBabyId]=vaccinePlan().filter(x=>x.id!==id); persist(); render(); toast('Removed');
+  }});
+}
 function openAddVaccine(){
   openSheet(`<h2>Add a vaccine</h2><div class="sub">For ones not on the default list.</div>
     <div class="field"><label>Name</label><input id="avName" placeholder="e.g. BCG, Meningococcal B"></div>
@@ -8297,12 +8332,15 @@ function saveRoutineItem(){
 }
 function removeRoutine(id){
   const b=activeBaby(); if(!b) return;
-  const list=ensureRoutines(b);
-  const i=list.findIndex(x=>x.id===id);
-  if(i>=0) list.splice(i,1);
-  routineDraft=null;
-  persist(); render();
-  closeSheet(); openRoutinesEdit(); toast('Removed');
+  const r=ensureRoutines(b).find(x=>x.id===id);
+  confirmSheet({title:'Remove '+((r&&r.title)?'"'+r.title+'"':'this ritual')+'?',body:'It leaves your rituals for good. It can\'t be brought back.',confirmLabel:'Remove',cancelLabel:'Keep',danger:true,onConfirm:function(){
+    const list=ensureRoutines(b);
+    const i=list.findIndex(x=>x.id===id);
+    if(i>=0) list.splice(i,1);
+    routineDraft=null;
+    persist(); render();
+    openRoutinesEdit(); toast('Removed');
+  }});
 }
 
 function renderLogTab(){

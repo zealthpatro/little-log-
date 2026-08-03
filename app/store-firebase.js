@@ -419,11 +419,27 @@
     showSignIn('Sign-in failed (' + step + ')' + code + ': ' + msg);
   }
 
+  /* Busy state for EVERY sign-in surface. The production landing uses id-less .ll-cta buttons
+     (landing.js), so disabling only #llGoogleBtn left the primary button dead-silent for the 1-3s
+     popup wait — inviting the double-tap that cancels the first popup. Disable them all and swap
+     the label text node (the Google G / Apple mark stays untouched, per branding rules). Buttons
+     come back via showSignIn()'s full re-render on cancel or failure. */
+  function signInBusy() {
+    Array.prototype.forEach.call(document.querySelectorAll('.ll-cta, .ll-apple-cta, #llGoogleBtn, #llAppleBtn'), function (b) {
+      if (b.disabled) return;
+      b.disabled = true; b.style.opacity = '.6'; b.style.pointerEvents = 'none';
+      for (var i = 0; i < b.childNodes.length; i++) {
+        var n = b.childNodes[i];
+        if (n.nodeType === 3 && n.textContent.trim()) { n.textContent = 'Signing in…'; break; }
+      }
+    });
+  }
   function signInGoogle() {
-    var btn = document.getElementById('llGoogleBtn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Signing in…'; }
+    signInBusy();
     if (nativeAuth()) { nativeSignIn('google').catch(nativeSignInFailed); return; }
     auth.signInWithPopup(window.LL.googleProvider).catch(function (err) {
+      // Backing out of the popup is a normal, chosen action — stay quiet, like native does.
+      if (err && err.code === 'auth/popup-closed-by-user') { showSignIn(''); return; }
       if (err && (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request'
         || err.code === 'auth/operation-not-supported-in-this-environment')) {
         auth.signInWithRedirect(window.LL.googleProvider); return;
@@ -433,10 +449,11 @@
   }
 
   function signInApple() {
-    // Disable whichever Apple button was clicked (landing or auth-card) for feedback.
-    Array.prototype.forEach.call(document.querySelectorAll('.ll-apple-cta, #llAppleBtn'), function (b) { b.disabled = true; });
+    signInBusy();
     if (nativeAuth()) { nativeSignIn('apple').catch(nativeSignInFailed); return; }
     auth.signInWithPopup(window.LL.appleProvider).catch(function (err) {
+      // Backing out of the popup is a normal, chosen action — stay quiet, like native does.
+      if (err && err.code === 'auth/popup-closed-by-user') { showSignIn(''); return; }
       if (err && (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request'
         || err.code === 'auth/operation-not-supported-in-this-environment')) {
         auth.signInWithRedirect(window.LL.appleProvider); return;
