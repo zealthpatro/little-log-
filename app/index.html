@@ -1575,7 +1575,7 @@ function renderGetStarted(){
   const members=(window.LL&&window.LL.members)||{};
   const shared=Object.keys(members).length>1;
   const ab=activeBaby();
-  const hasPhoto=!!(ab && (ab.avatarPhotoId || (state.photos||[]).some(p=>p.babyId===ab.id && p.photoId)));
+  const hasPhoto=!!(ab && (ab.avatarPhotoId || (state.photos||[]).some(p=>p.babyId===ab.id && p.photoId && !p.deleted)));
   // Auto-hide does NOT require `shared`. Inviting someone is a real suggestion, but plenty of
   // parents are doing this alone, or simply do not want family in the log — and for them the card
   // could never complete, so a permanent unfinished checklist sat on the home screen with one row
@@ -1731,7 +1731,7 @@ function quoteOfDay(ts){ return DAY_QUOTES[dayHash(ts)%DAY_QUOTES.length]; }
    but we re-check audience here so a private note can never render for the wrong member. */
 function visibleNotes(){
   const me=myUid();
-  return (state.notes||[]).filter(n=>n && (n.audience==='circle' || n.audience===me || n.createdBy===me));
+  return (state.notes||[]).filter(n=>n && !n.deleted && (n.audience==='circle' || n.audience===me || n.createdBy===me));
 }
 function notesForDay(ts){
   const k=dayKey(ts);
@@ -1771,7 +1771,7 @@ function daySurface(){
   const pin=pinnedNote();
   // The pinned note always shows on today; avoid showing it twice if it also belongs to this day.
   const showPin = pin && isToday && !dayNotes.some(n=>n.id===pin.id);
-  const photos=(state.photos||[]).filter(p=>p.babyId===state.activeBabyId && p.photoId && dayKey(p.createdAt)===dayKey(ts)).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+  const photos=(state.photos||[]).filter(p=>p.babyId===state.activeBabyId && p.photoId && !p.deleted && dayKey(p.createdAt)===dayKey(ts)).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
   const recap=daySurfaceRecap(ts);
 
   const notesEmpty = !dayNotes.length && !showPin;
@@ -1895,9 +1895,10 @@ async function toggleNotePin(id){
   closeSheet(); render(); toast(n.pinned?'Unpinned':'Pinned to top');
 }
 function deleteNote(id){
-  confirmSheet({title:'Delete this note?',body:'It can\'t be brought back.',confirmLabel:'Delete',cancelLabel:'Keep',danger:true,onConfirm:async function(){
-    if(window.LL.deleteNote){ const ok=await window.LL.deleteNote(id); if(!ok){ toast('Could not delete'); return; } }
-    render(); toast('Note deleted');
+  confirmSheet({title:'Delete this note?',body:'It moves to recently deleted, where you can bring it back for 30 days.',confirmLabel:'Delete',cancelLabel:'Keep',danger:true,onConfirm:async function(){
+    if(window.LL&&window.LL.softDeleteNote){ const ok=await window.LL.softDeleteNote(id); if(!ok){ toast('Could not delete'); return; } }
+    else if(window.LL&&window.LL.deleteNote){ const ok=await window.LL.deleteNote(id); if(!ok){ toast('Could not delete'); return; } }
+    render(); toast('Moved to recently deleted');
   }});
 }
 /* swipe between days on the surface (left = next day, right = previous day) */
@@ -2036,7 +2037,7 @@ function renderHome(){
 
 /* ---- home hero carousel ---- */
 let heroIdx=0, heroTimer=null;
-function heroPhotos(){ return (state.photos||[]).filter(p=>p.babyId===state.activeBabyId); }
+function heroPhotos(){ return (state.photos||[]).filter(p=>p.babyId===state.activeBabyId && !p.deleted); }
 function renderHero(){
   const ph=heroPhotos();
   if(!ph.length){
@@ -2712,7 +2713,10 @@ function quickFeedNoTimer(){
   closeSheet(); render(); toast('Feed logged');
 }
 function openPastFeed(){
-  openSheet(`<h2>Past feed</h2><div class="sub">When did it happen, and how long? Tap a length to log.</div>
+  // Chips pick a length, the stepper fine-tunes it, and nothing is logged until the one clear
+  // button is tapped (a brushed chip used to commit instantly).
+  if(!(feedDraft.pastMins>0)) feedDraft.pastMins=15;
+  openSheet(`<h2>Past feed</h2><div class="sub">When did it happen, and how long?</div>
     ${targetChips('openPastFeed')}
     <div class="field"><label>Side</label><div class="unit-toggle">
       <button class="${feedDraft.side==='left'?'on':''}" onclick="feedDraft.side='left';openPastFeed()">Left</button>
@@ -2721,11 +2725,19 @@ function openPastFeed(){
     </div></div>
     ${timeStrip('when','Time')}
     <div class="field"><label>How long?</label>
-      <div class="chip-row" style="flex-wrap:wrap;gap:8px">
-        ${[5,10,15,20,30,45].map(m=>`<div class="chip" onclick="savePastFeed(${m})">${m} min</div>`).join('')}
-      </div></div>`,'feed');
+      <div class="chip-row" style="flex-wrap:wrap;gap:8px;margin-bottom:10px">
+        ${[5,10,15,20,30,45].map(m=>`<div class="chip ${feedDraft.pastMins===m?'sel':''}" onclick="feedDraft.pastMins=${m};openPastFeed()">${m} min</div>`).join('')}
+      </div>
+      <div class="stepper">
+        <button onclick="feedDraft.pastMins=Math.max(1,(+feedDraft.pastMins||15)-5);openPastFeed()">−</button>
+        <input type="number" value="${feedDraft.pastMins}" oninput="feedDraft.pastMins=+this.value;var el=document.getElementById('pfMins');if(el)el.textContent=(+this.value>0?Math.round(+this.value):'?')">
+        <button onclick="feedDraft.pastMins=(+feedDraft.pastMins||15)+5;openPastFeed()">+</button>
+      </div></div>
+    <button class="btn-primary" style="background:var(--feed)" onclick="savePastFeed()">Log feed · <span id="pfMins">${feedDraft.pastMins}</span> min</button>`,'feed');
 }
-function savePastFeed(mins){
+function savePastFeed(){
+  const mins=Math.round(+feedDraft.pastMins||0);
+  if(!(mins>0)){ toast('How long was the feed?'); return; }
   const t=getWhen('when');
   commitEvent({type:'feed',method:'breast',side:feedDraft.side,time:t,dur:mins*60000});
   closeSheet(); render(); toast('Feed logged · '+mins+' min');
@@ -2955,21 +2967,40 @@ async function saveActivity(){
 function openNote(){ openActivity(); }
 
 /* ---------- EDIT / DELETE ---------- */
+/* The edit sheet fixes the mistakes people actually make: wrong day, wrong time, a nap's wake
+   time, a diaper's kind, a feed's amount or length — without delete + re-log. Date AND time go
+   through the shared openWhenPicker (the same "When?" control as every logging flow). */
+function pickEditKind(btn){
+  const w=btn.parentNode; if(!w)return;
+  Array.prototype.forEach.call(w.children,function(x){ x.classList.remove('on'); });
+  btn.classList.add('on');
+}
 function openEdit(id){
   const e=state.events.find(x=>x.id===id); if(!e)return;
-  const m=TYPE_META[e.type];
-  const d=new Date(e.time);
-  let extra='';
-  if(e.type==='feed'&&e.method==='bottle') extra=`<div class="field"><label>Amount (${e.unit||'ml'})</label><input type="number" id="eAmt" value="${e.amount||0}"></div>`;
-  if(e.type==='feed'&&e.method==='solids') extra=`<div class="field"><label>Food</label><textarea id="eNote">${escapeHtml(e.notes||'')}</textarea></div>`;
-  if(e.type==='pump') extra=`<div class="field"><label>Amount (${e.unit||'ml'})</label><input type="number" id="eAmt" value="${e.amount||0}"></div>`;
-  if(e.type==='note') extra=`<div class="field"><label>Note</label><textarea id="eNote">${escapeHtml(e.notes||'')}</textarea></div>`;
-  if(e.type==='activity') extra=`<div class="field"><label>Minutes</label><input type="number" id="eMins" value="${e.mins||''}"></div><div class="field"><label>Note</label><textarea id="eNote">${escapeHtml(e.notes||'')}</textarea></div>`;
-  if(e.photoId&&photoSrc(e.photoId)) extra+=`<div class="field"><label>Photo</label><div class="food-preview"><img src="${photoSrc(e.photoId)}"><button class="rm" onclick="removeEventPhoto('${id}')">×</button></div></div>`;
+  const m=TYPE_META[e.type]||{c:'note'};
   const canEd=canEditEvent(e);
+  // seed the shared when-picker slots with this entry's real times
+  logTimes.edit=e.time;
+  if(e.type==='sleep') logTimes.editEnd=e.end||e.time;
+  let extra='';
+  if(e.type==='feed'&&e.method==='bottle') extra=`<div class="field"><label>Amount (${e.unit||'ml'})</label><input type="number" id="eAmt" value="${e.amount||0}"${canEd?'':' disabled'}></div>`;
+  if(e.type==='feed'&&e.method==='breast') extra=`<div class="field"><label>How long (minutes)</label><input type="number" id="eDur" value="${Math.round((e.dur||0)/60000)}"${canEd?'':' disabled'}></div>`;
+  if(e.type==='feed'&&e.method==='water') extra=`<div class="field"><label>Amount (${e.unit||'ml'})</label><input type="number" id="eAmt" value="${e.amount||0}"${canEd?'':' disabled'}></div>`;
+  if(e.type==='feed'&&e.method==='solids') extra=`<div class="field"><label>Food</label><textarea id="eNote"${canEd?'':' disabled'}>${escapeHtml(e.notes||'')}</textarea></div>`
+    +(e.amount!==undefined?`<div class="field"><label>Amount (${escapeHtml(e.unit||'tbsp')})</label><input type="number" id="eAmt" value="${e.amount||0}"${canEd?'':' disabled'}></div>`:'');
+  if(e.type==='diaper') extra=`<div class="field"><label>Kind</label><div class="unit-toggle" id="eKind">
+    ${['wet','dirty','both','dry'].map(k=>`<button class="${(e.kind||'wet')===k?'on':''}" data-k="${k}" ${canEd?`onclick="pickEditKind(this)"`:'disabled'}>${k.charAt(0).toUpperCase()+k.slice(1)}</button>`).join('')}
+  </div></div>`;
+  if(e.type==='pump') extra=`<div class="field"><label>Amount (${e.unit||'ml'})</label><input type="number" id="eAmt" value="${e.amount||0}"${canEd?'':' disabled'}></div>`;
+  if(e.type==='note') extra=`<div class="field"><label>Note</label><textarea id="eNote"${canEd?'':' disabled'}>${escapeHtml(e.notes||'')}</textarea></div>`;
+  if(e.type==='activity') extra=`<div class="field"><label>Minutes</label><input type="number" id="eMins" value="${e.mins||''}"${canEd?'':' disabled'}></div><div class="field"><label>Note</label><textarea id="eNote"${canEd?'':' disabled'}>${escapeHtml(e.notes||'')}</textarea></div>`;
+  if(e.photoId&&photoSrc(e.photoId)) extra+=`<div class="field"><label>Photo</label><div class="food-preview"><img src="${photoSrc(e.photoId)}">${canEd?`<button class="rm" onclick="removeEventPhoto('${id}')">×</button>`:''}</div></div>`;
+  const whenRows=canEd
+    ? (e.type==='sleep' ? timeStrip('edit','Fell asleep')+timeStrip('editEnd','Woke up') : timeStrip('edit','When'))
+    : '';
   const edNote=e.editedBy?`<div class="csub" style="margin:-4px 0 8px">edited by ${escapeHtml(loggerName(e.editedBy)||'someone')} · ${dayLabel(e.editedAt||e.time)}</div>`:'';
   openSheet(`<h2>${escapeHtml(eventTitle(e))}</h2><div class="sub">${dayLabel(e.time)} at ${fmtClock(e.time)}${(e.authorId&&loggerName(e.authorId))?' · logged by '+escapeHtml(loggerName(e.authorId)):''}</div>${edNote}
-    <div class="field"><label>Time</label><input type="time" id="eTime" value="${tval(d)}"${canEd?'':' disabled'}></div>
+    ${whenRows}
     ${extra}
     ${canEd?`<button class="btn-primary" style="background:var(--${m.c})" onclick="saveEdit('${id}')">Save changes</button>
     <button class="btn-ghost btn-danger" onclick="deleteEvent('${id}')">${I.trash} Delete entry</button>`:`<div class="preg-disclaim">Only ${escapeHtml(loggerName(e.authorId)||'the person who logged this')} or an owner can change this entry. It stays on the record either way.</div>`}`,m.c);
@@ -2979,10 +3010,20 @@ function saveEdit(id){
   if(!canEditEvent(e)){ toast('Only the logger or an owner can edit this'); return; }
   const u=myUid(), t=now(), hist=[];
   function chg(field,from,to){ hist.push({field,from:(from===undefined?null:from),to:(to===undefined?null:to),by:u,at:t}); }
-  const nt=$('#eTime').value;
-  if(nt){ const old=new Date(e.time); const[h,m]=nt.split(':').map(Number); old.setHours(h,m);
-    const delta=old.getTime()-e.time; if(delta){ chg('time',e.time,old.getTime()); e.time=old.getTime(); if(e.end)e.end+=delta; } }
+  const nw=getWhen('edit');
+  if(e.type==='sleep'){
+    let s=nw, en=getWhen('editEnd');
+    if(en<=s) en+=86400000; // woke after midnight -> next day (same rule as logging a finished nap)
+    if(s!==e.time){ chg('time',e.time,s); e.time=s; }
+    if(en!==e.end){ chg('end',e.end,en); e.end=en; }
+  } else if(nw!==e.time){
+    const delta=nw-e.time;
+    chg('time',e.time,nw); e.time=nw; if(e.end)e.end+=delta;
+  }
   if($('#eAmt')){ const v=+$('#eAmt').value; if(v!==e.amount){ chg('amount',e.amount,v); e.amount=v; } }
+  if($('#eDur')){ const mins=parseInt($('#eDur').value,10); const v=(mins>0?mins:0)*60000; if(v!==(e.dur||0)){ chg('duration',e.dur||0,v); e.dur=v; } }
+  const kb=document.querySelector('#eKind .on');
+  if(kb){ const k=kb.getAttribute('data-k'); if(k && k!==e.kind){ chg('kind',e.kind,k); e.kind=k; } }
   if($('#eMins')){ const v=parseInt($('#eMins').value,10)||null; if(v!==(e.mins||null)){ chg('mins',e.mins,v); e.mins=v; } }
   if($('#eNote')){ const v=$('#eNote').value; if(v!==(e.notes||'')){ chg('note',e.notes||'',v); e.notes=v; } }
   if(hist.length){ e.editedBy=u; e.editedAt=t; e.history=(e.history||[]).concat(hist); }
@@ -2991,7 +3032,7 @@ function saveEdit(id){
 function deleteEvent(id){
   const e=state.events.find(x=>x.id===id); if(!e)return;
   if(!canEditEvent(e)){ toast('Only the logger or an owner can delete this'); return; }
-  openSheet(`<h2>Delete this entry?</h2><div class="sub">It moves to recently deleted and can be recovered. The original logger and time stay on the record.</div>
+  openSheet(`<h2>Delete this entry?</h2><div class="sub">It moves to recently deleted, where you can bring it back for 30 days. The original logger and time stay on the record.</div>
     <button class="btn-primary btn-danger" onclick="confirmDeleteEvent('${id}')">Delete entry</button>
     <button class="btn-ghost" onclick="closeSheet()">Keep it</button>`,'note');
 }
@@ -3007,12 +3048,68 @@ function recoverEvent(id){
   delete e.deleted; delete e.deletedBy; delete e.deletedAt;
   persist(); render(); toast('Recovered'); openTrash();
 }
+/* ---------- Recently deleted (log entries + photos + notes) ----------
+   Soft-deleted things wait here for 30 days, then the lazy purge on boot clears them for good
+   (there is no server cron; the honest mechanism is the purge below, run on load). While a photo
+   sits here its bytes are kept, so a restore brings the photo itself back, not just its place. */
+function babyDeletedPhotos(){ return (state.photos||[]).filter(p=>p.babyId===state.activeBabyId && p.deleted).sort((a,b)=>(b.deletedAt||0)-(a.deletedAt||0)); }
+function myDeletedNotes(){ const me=myUid(); return (state.notes||[]).filter(n=>n && n.deleted && n.createdBy===me).sort((a,b)=>(b.deletedAt||0)-(a.deletedAt||0)); }
+function trashCount(){ return babyDeletedEvents().length + babyDeletedPhotos().length + myDeletedNotes().length; }
+function restorePhoto(id){
+  const p=(state.photos||[]).find(x=>x.id===id); if(!p)return;
+  delete p.deleted; delete p.deletedBy; delete p.deletedAt;
+  // If its month slot has a new photo now, this one rejoins the gallery instead of clashing.
+  if(p.slot!==undefined && (state.photos||[]).some(x=>x!==p && !x.deleted && x.babyId===p.babyId && x.slot===p.slot)) delete p.slot;
+  persist(); render(); toast('Photo restored'); openTrash();
+}
+async function restoreNote(id){
+  if(window.LL&&window.LL.restoreNote){ const ok=await window.LL.restoreNote(id); if(!ok){ toast('Could not restore just now'); return; } }
+  render(); toast('Note restored'); openTrash();
+}
 function openTrash(){
-  const del=babyDeletedEvents();
-  const rows=del.length?del.map(e=>`<div class="log-list-item"><div class="lli-ico">${(TYPE_META[e.type]&&TYPE_META[e.type].icon)||'🗒️'}</div>
+  const del=babyDeletedEvents(), ph=babyDeletedPhotos(), nt=myDeletedNotes();
+  const evRows=del.map(e=>`<div class="log-list-item"><div class="lli-ico">${(TYPE_META[e.type]&&TYPE_META[e.type].icon)||'🗒️'}</div>
     <div class="lli-body"><div class="lli-t">${escapeHtml(eventTitle(e))}</div><div class="lli-s">${dayLabel(e.time)} at ${fmtClock(e.time)}${e.deletedBy?' · deleted by '+escapeHtml(loggerName(e.deletedBy)||'someone'):''}</div></div>
-    ${canEditEvent(e)?`<button class="btn-ghost" style="width:auto;padding:7px 12px" onclick="recoverEvent('${e.id}')">Recover</button>`:''}</div>`).join(''):'<div class="csub">Nothing here. Deleted entries land here and can be recovered.</div>';
-  openSheet(`<h2>Recently deleted</h2><div class="sub">${escapeHtml(activeBaby()?activeBaby().name:'This baby')}'s removed entries. Recover any that should not have gone.</div>${rows}`,'note');
+    ${canEditEvent(e)?`<button class="btn-ghost" style="width:auto;padding:7px 12px" onclick="recoverEvent('${e.id}')">Restore</button>`:''}</div>`).join('');
+  const phRows=ph.map(p=>`<div class="log-list-item">${photoSrc(p.photoId)?`<img src="${photoSrc(p.photoId)}" style="width:34px;height:34px;border-radius:11px;object-fit:cover;flex-shrink:0">`:`<div class="lli-ico">📷</div>`}
+    <div class="lli-body"><div class="lli-t">${escapeHtml(p.caption||'Photo')}</div><div class="lli-s">${dayLabel(p.createdAt||now())}${p.deletedBy?' · deleted by '+escapeHtml(loggerName(p.deletedBy)||'someone'):''}</div></div>
+    <button class="btn-ghost" style="width:auto;padding:7px 12px" onclick="restorePhoto('${p.id}')">Restore</button></div>`).join('');
+  const ntRows=nt.map(n=>`<div class="log-list-item"><div class="lli-ico">✍️</div>
+    <div class="lli-body"><div class="lli-t">${escapeHtml((n.text||'').length>60?(n.text||'').slice(0,60)+'…':(n.text||'Note'))}</div><div class="lli-s">${dayLabel(n.at||now())} · ${escapeHtml(noteAudienceLabel(n))}</div></div>
+    <button class="btn-ghost" style="width:auto;padding:7px 12px" onclick="restoreNote('${n.id}')">Restore</button></div>`).join('');
+  const body=(del.length||ph.length||nt.length)
+    ? `${del.length?`<div class="sec-title">Log entries</div>${evRows}`:''}
+       ${ph.length?`<div class="sec-title">Photos</div>${phRows}`:''}
+       ${nt.length?`<div class="sec-title">Your notes</div>${ntRows}`:''}`
+    : '<div class="csub">Nothing here. Deleted entries, photos and notes land here, ready to bring back.</div>';
+  openSheet(`<h2>Recently deleted</h2><div class="sub">Anything here can be brought back with a tap. After 30 days, Cubby clears it for good.</div>${body}`,'note');
+}
+/* The honest 30-day purge: there is no server cron, so on each load (after sync settles) anything
+   soft-deleted more than 30 days ago is cleared for good — entries, photo references AND photo
+   bytes, notes. Only clears what this person is allowed to delete (the rules would refuse the
+   rest); the author's or an owner's next visit clears theirs. */
+const TRASH_KEEP_MS=30*86400000;
+function purgeRecentlyDeleted(){
+  const cutoff=now()-TRASH_KEEP_MS;
+  let changed=false;
+  const orphaned=[];
+  // Legacy soft-deletes without a timestamp: start their 30 days now rather than guessing.
+  (state.events||[]).concat(state.photos||[]).forEach(x=>{ if(x&&x.deleted&&!x.deletedAt){ x.deletedAt=now(); changed=true; } });
+  const keptEvents=(state.events||[]).filter(e=>{
+    if(e.deleted && (e.deletedAt||0)<cutoff && canEditEvent(e)){ changed=true; if(e.photoId) orphaned.push(e.photoId); return false; }
+    return true;
+  });
+  if(keptEvents.length!==(state.events||[]).length) state.events=keptEvents;
+  const keptPhotos=(state.photos||[]).filter(p=>{
+    if(p.deleted && (p.deletedAt||0)<cutoff){ changed=true; orphaned.push(p.photoId); return false; }
+    return true;
+  });
+  if(keptPhotos.length!==(state.photos||[]).length) state.photos=keptPhotos;
+  const me=myUid();
+  (state.notes||[]).slice().forEach(n=>{
+    if(n && n.deleted && (n.deletedAt||0)<cutoff && n.createdBy===me && window.LL && window.LL.deleteNote) window.LL.deleteNote(n.id);
+  });
+  if(changed){ persist(); orphaned.forEach(pid=>{ try{ maybeDelPhoto(pid); }catch(e){} }); }
 }
 
 /* ============================================================
@@ -3033,7 +3130,7 @@ function openBabySheet(){
   openSheet(`<h2>Switch</h2><div class="sub">Switch between your little ones.</div>${pregRow}${list}
     <button class="btn-primary" style="background:var(--star)" onclick="openBabyProfile()">${I.note} ${escapeHtml(activeBaby().name)}'s profile</button>
     <button class="btn-primary" onclick="openAddEntry()">${I.plus} Add to Cubby</button>
-    ${babyDeletedEvents().length?`<button class="btn-ghost" onclick="openTrash()">${I.trash} Recently deleted (${babyDeletedEvents().length})</button>`:''}`,'diaper');
+    ${trashCount()?`<button class="btn-ghost" onclick="openTrash()">${I.trash} Recently deleted (${trashCount()})</button>`:''}`,'diaper');
 }
 function switchBaby(id){ viewingPreg=false; state.activeBabyId=id; persist(); closeSheet(); go('home'); }
 
@@ -3131,7 +3228,7 @@ const ZODIAC=[[1,20,'Aquarius'],[2,19,'Pisces'],[3,21,'Aries'],[4,20,'Taurus'],[
 function zodiac(ts){ if(!ts)return ''; const d=new Date(ts), m=d.getMonth()+1, day=d.getDate(); const z=ZODIAC[m-1]; return (day>=z[1])?z[2]:ZODIAC[(m+10)%12][2]; }
 function babyAvatarSrc(b){
   if(!b) return '';
-  const photos=(state.photos||[]).filter(p=>p.babyId===b.id);
+  const photos=(state.photos||[]).filter(p=>p.babyId===b.id && !p.deleted);
   // 1) user-chosen profile photo (if it still exists)
   if(b.avatarPhotoId){ const s=photoSrc(b.avatarPhotoId); if(s) return s; }
   // 2) stable default: the first photo ever added for this baby (does not shift as more are added)
@@ -3395,7 +3492,7 @@ function openStageSheet(){
 }
 function openAvatarPicker(){
   const b=activeBaby(); if(!b)return;
-  const photos=(state.photos||[]).filter(p=>p.babyId===b.id).slice().reverse();
+  const photos=(state.photos||[]).filter(p=>p.babyId===b.id && !p.deleted).slice().reverse();
   const grid = photos.length
     ? `<div class="av-grid">${photos.map(p=>{const sel=(b.avatarPhotoId?b.avatarPhotoId===p.photoId:false);return `<div class="av-opt ${sel?'sel':''}" onclick="setAvatar('${p.photoId}')"><img src="${photoSrc(p.photoId)}"></div>`;}).join('')}</div>`
     : `<div class="csub" style="margin:4px 0 14px">No photos yet. Add some in the Album, then come back to pick a profile photo.</div>`;
@@ -3803,6 +3900,11 @@ function openSettings(){
       <span class="chev">${I.chev}</span>
     </div>
     <div class="set-label">Your data &amp; account</div>
+    <div class="set-item" onclick="openTrash()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--sleep-soft);color:var(--sleep)">${I.trash}</div>
+      <div class="si-body"><div class="a">Recently deleted</div><div class="b">${trashCount()?trashCount()+' waiting · kept for 30 days':'Deleted things wait here for 30 days'}</div></div>
+      <span class="chev">${I.chev}</span>
+    </div>
     <div class="set-item" onclick="openDataSheet()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--note-soft);color:var(--note)">${I.note}</div>
       <div class="si-body"><div class="a">Data</div><div class="b">Export or delete your data</div></div>
@@ -8768,7 +8870,7 @@ function renderLogTab(){
 }
 
 function renderPhotos(){
-  const gal=(state.photos||[]).filter(p=>p.babyId===state.activeBabyId && p.slot===undefined).slice().reverse();   // newest first — a fresh keepsake used to land invisibly at the bottom
+  const gal=(state.photos||[]).filter(p=>p.babyId===state.activeBabyId && p.slot===undefined && !p.deleted).slice().reverse();   // newest first — a fresh keepsake used to land invisibly at the bottom
   let galleryHtml = gal.length ? `<div class="sec-title">Saved keepsakes</div><div class="gallery">${gal.map(p=>`<div class="gal-item" onclick="viewPhoto('${p.id}')"><img src="${photoSrc(p.photoId)}">${p.caption?`<div class="cap">${escapeHtml(p.caption)}</div>`:''}</div>`).join('')}</div>` : '';
   const evPhotos=babyEvents().filter(e=>e.photoId&&photoSrc(e.photoId));
   let momentsHtml = evPhotos.length ? `<div class="sec-title">Moments from the day</div><div class="csub" style="margin:-6px 0 10px">Photos tagged to feeds, play, sun time and more. Tap one to turn it into a shareable card.</div><div class="gallery">${evPhotos.map(e=>`<div class="gal-item" onclick="openActivityPhoto('${e.id}')"><img src="${photoSrc(e.photoId)}"><div class="cap">${escapeHtml(eventTitle(e))}</div></div>`).join('')}</div>` : '';
@@ -9434,10 +9536,15 @@ function downloadSaved(id){
   const p=(state.photos||[]).find(x=>x.id===id);
   saveFile(photoSrc(p.photoId), (activeBaby().name||'baby')+'-photo.jpg');
 }
-async function deletePhoto(id){
+function deletePhoto(id){
   const p=(state.photos||[]).find(x=>x.id===id);
-  if(p){ await PhotoStore.del(p.photoId); state.photos=state.photos.filter(x=>x.id!==id); (state.babies||[]).forEach(bb=>{ if(bb.avatarPhotoId===p.photoId) delete bb.avatarPhotoId; }); await persist(); }
-  closeSheet(); render(); toast('Deleted');
+  if(!p){ closeSheet(); return; }
+  // Soft delete: the photo and its bytes wait in Recently deleted for 30 days, fully restorable.
+  confirmSheet({title:'Delete this photo?',body:'It moves to recently deleted, where you can bring it back for 30 days.',confirmLabel:'Delete',cancelLabel:'Keep',danger:true,onConfirm:async function(){
+    p.deleted=true; p.deletedBy=myUid(); p.deletedAt=now();
+    (state.babies||[]).forEach(bb=>{ if(bb.avatarPhotoId===p.photoId) delete bb.avatarPhotoId; });
+    await persist(); render(); toast('Moved to recently deleted');
+  }});
 }
 
 /* ============================================================
@@ -9447,7 +9554,7 @@ async function deletePhoto(id){
 const MONTH_SLOTS=[0,1,2,3,4,5,6,7,8,9,10,11,12,15,18,24];
 function slotLabel(i){ return i===0?'Newborn':(i<12?i+' month'+(i>1?'s':''):(i===12?'1 year':(i%12===0?(i/12)+' years':i+' months'))); }
 function slotShort(i){ return i===0?'NB':(i<12?i+'mo':(i%12===0?(i/12)+'y':i+'mo')); }
-function monthlyMap(){ const m={}; (state.photos||[]).filter(p=>p.babyId===state.activeBabyId&&p.slot!==undefined).forEach(p=>m[p.slot]=p); return m; }
+function monthlyMap(){ const m={}; (state.photos||[]).filter(p=>p.babyId===state.activeBabyId&&p.slot!==undefined&&!p.deleted).forEach(p=>m[p.slot]=p); return m; }
 
 function monthWindow(i){ const b=activeBaby(); const birth=b.birth||now(); const d=30.44*86400000; return [birth+i*d, birth+(i+1)*d]; }
 function monthStats(i){
@@ -9467,7 +9574,7 @@ function monthStats(i){
 function memCandPhoto(month){
   var mm=monthlyMap(); if(mm[month]) return mm[month].photoId;
   var w=monthWindow(month);
-  var ph=(state.photos||[]).filter(function(p){return p.babyId===state.activeBabyId&&p.photoId&&p.createdAt>=w[0]&&p.createdAt<w[1];}).sort(function(a,b){return b.createdAt-a.createdAt;})[0];
+  var ph=(state.photos||[]).filter(function(p){return p.babyId===state.activeBabyId&&p.photoId&&!p.deleted&&p.createdAt>=w[0]&&p.createdAt<w[1];}).sort(function(a,b){return b.createdAt-a.createdAt;})[0];
   return ph?ph.photoId:'';
 }
 function memDismissed(k){ return hasSeen('mem_'+k); }
@@ -9479,7 +9586,7 @@ function memoryCandidates(){
     out.push({key:'m'+months, icon:'🗓️', title:slotLabel(months)+' recap', sub:'This month’s moments, ready to share', onclick:"openMemoryCard("+months+",'"+memCandPhoto(months)+"')"});
   }
   var hasBump=(state.pregnancy&&(state.pregnancy.moments||[]).some(function(m){return m.photoId;})) || ((state.pregnancyArchive||[]).some(function(a){return !a.loss && (a.moments||[]).some(function(m){return m.photoId;});}));
-  var hasBabyPhoto=(state.photos||[]).some(function(p){return p.babyId===b.id&&p.photoId;});
+  var hasBabyPhoto=(state.photos||[]).some(function(p){return p.babyId===b.id&&p.photoId&&!p.deleted;});
   if(hasBump && hasBabyPhoto && !memDismissed('thennow')){
     out.push({key:'thennow', icon:'🤍', title:'Bump to baby', sub:'A then & now from your journey', onclick:'openThenNow()'});
   }
@@ -9526,7 +9633,7 @@ function handleMonthly(input){
   // Parent frames it through the same prep step as every other upload.
   openPhotoPrep(f,{aspect:1,maxDim:1440,q:0.8},async(data)=>{
     const mm=monthlyMap();
-    if(mm[i]){ await PhotoStore.del(mm[i].photoId); state.photos=state.photos.filter(p=>p.id!==mm[i].id); }
+    if(mm[i]){ mm[i].deleted=true; mm[i].deletedBy=myUid(); mm[i].deletedAt=now(); } // the replaced photo waits in Recently deleted, not gone
     const pid=uid(); await PhotoStore.set(pid,data);
     state.photos.push({id:uid(),babyId:state.activeBabyId,photoId:pid,slot:i,clean:true,caption:slotLabel(i),createdAt:now()});
     await persist(); render(); toast(slotLabel(i)+' photo added');
@@ -9605,7 +9712,7 @@ function renderMemoryCardSheet(){
   drawCardPreview();
 }
 function albumStrip(selId,pickFn,uploadOnclick){
-  let gal=(state.photos||[]).filter(p=>p.babyId===state.activeBabyId && p.photoId).slice().reverse();
+  let gal=(state.photos||[]).filter(p=>p.babyId===state.activeBabyId && p.photoId && !p.deleted).slice().reverse();
   // journey-moment photos (baby scope) are keepsake ingredients too — surface them in every picker
   const seen=new Set(gal.map(p=>p.photoId));
   const jm=journeySaved(); Object.keys(jm).forEach(id=>{ const s=jm[id]; if(s&&s.photoId&&!seen.has(s.photoId)){ gal.push({photoId:s.photoId,babyId:state.activeBabyId}); seen.add(s.photoId); } });
@@ -9738,7 +9845,7 @@ async function saveCardImg(){
 let pickSel=[];
 function openThenNow(){
   if(!isPro()&&tasteLeft('thennow')<=0){ openPro('Then & Now',true); return; }
-  const gal=(state.photos||[]).filter(p=>p.babyId===state.activeBabyId);
+  const gal=(state.photos||[]).filter(p=>p.babyId===state.activeBabyId && !p.deleted);
   if(gal.length<2){ toast('Save at least 2 photos first'); return; }
   pickSel=[];
   openSheet(`<h2>Then vs Now</h2><div class="sub">Pick two photos. Oldest first looks best.</div>
@@ -10061,6 +10168,9 @@ function normalizeLoadedState(saved){
 <!-- Capacitor native bridge (push + deep links inside the App Store / Play Store wrapper). Inert on the web. -->
 <script defer src="native-bridge.js"></script>
 <script>
+/* Lazy 30-day purge of Recently deleted: once per load, after the cloud sync has had a moment
+   to settle. There is no server cron; this on-load sweep IS the purge the trash copy promises. */
+window.addEventListener('load',function(){ setTimeout(function(){ try{ purgeRecentlyDeleted(); }catch(e){} }, 9000); });
 /* PWA: register only on a real http(s) host. Skips file:// and the in-app artifact sandbox. */
 if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){
   window.addEventListener('beforeinstallprompt',function(e){ e.preventDefault(); window._bip=e; }); // Android/Chrome: stash for an in-app install button

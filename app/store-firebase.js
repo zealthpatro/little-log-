@@ -1199,6 +1199,26 @@
     try { await notesRef.doc(String(id)).delete(); dropNote(id); return true; }
     catch (e) { console.warn('deleteNote', e); return false; }
   };
+  // Soft delete / restore (author-only, same update rule as pinning). A soft-deleted note keeps
+  // its doc with deleted:true + deletedAt, hides everywhere, and sits in Recently deleted for
+  // 30 days; the lazy purge on boot then hard-deletes it via LL.deleteNote.
+  window.LL.softDeleteNote = async function (id) {
+    if (!notesRef || !id) return false;
+    var u = auth.currentUser; if (!u) return false;
+    var n = (state.notes || []).find(function (x) { return String(x.id) === String(id); });
+    if (!n || (n.createdBy && n.createdBy !== u.uid)) return false; // only your own
+    var at = Date.now();
+    try { await notesRef.doc(String(id)).update({ deleted: true, deletedAt: at }); n.deleted = true; n.deletedAt = at; return true; }
+    catch (e) { console.warn('softDeleteNote', e); return false; }
+  };
+  window.LL.restoreNote = async function (id) {
+    if (!notesRef || !id) return false;
+    var u = auth.currentUser; if (!u) return false;
+    var n = (state.notes || []).find(function (x) { return String(x.id) === String(id); });
+    if (!n || (n.createdBy && n.createdBy !== u.uid)) return false; // only your own
+    try { await notesRef.doc(String(id)).update({ deleted: false, deletedAt: null }); delete n.deleted; delete n.deletedAt; return true; }
+    catch (e) { console.warn('restoreNote', e); return false; }
+  };
   // Pin/unpin: at most ONE pinned note per circle. Setting a pin clears any other the author can edit.
   // (We only ever clear pins on notes the caller authored, so the rules permit the write.)
   window.LL.setNotePinned = async function (id, pinned) {
