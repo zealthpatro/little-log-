@@ -118,7 +118,7 @@ async function fetchFeedback() {
   if (!sa) {
     return {
       rows: [], status: 'missing-service-account',
-      note: 'tools/serviceAccountKey.json not found — feedback source skipped. Setup (see ANALYTICS.md, ' +
+      note: 'tools/serviceAccountKey.json not found. Feedback source skipped. Setup (see ANALYTICS.md, ' +
         '"One-time setup"): Firebase console > Project settings > Service accounts > Generate new private ' +
         'key, save the file as tools/serviceAccountKey.json (already gitignored), then ' +
         '`cd tools && npm init -y && npm install firebase-admin`.',
@@ -140,8 +140,8 @@ async function fetchFeedback() {
     const rows = snap.docs.map(d => String((d.data() || {}).text || '').trim()).filter(Boolean);
     return {
       rows, status: rows.length ? 'ok' : 'empty',
-      note: rows.length ? '' : 'feedback collection exists but has 0 rows — no tester has used ' +
-        'Settings > Family & sharing > Send feedback yet.',
+      note: rows.length ? '' : 'feedback collection exists but has 0 rows. No tester has used ' +
+        'Settings > Tell us how it feels yet.',
     };
   } catch (e) {
     return { rows: [], status: 'error', note: 'Firestore read failed: ' + e.message };
@@ -197,14 +197,14 @@ function loadArticles() {
 }
 
 // The FAQ page mixes many short, topically DIFFERENT Q&As on one page (10 categories, 123
-// questions), unlike a prose article that stays on one subject. Chunking it with the same fixed
-// word-window as articles would cram unrelated Q&A pairs into a chunk together and dilute the
-// embedding signal for any one question in it — which would make well-answered FAQ questions
-// look like false content gaps (this is exactly what happened before this fix: see the report's
-// "known limitation" note if it is still present). So the FAQ gets its own per-<h2>-category
-// chunking instead: each category ("Sharing & your care circle", "Vaccines & country schedules"…)
-// is one natural topic and becomes its own chunk (falling back to the normal word-window only if
-// a single category runs long).
+// questions), unlike a prose article that stays on one subject. Two chunking granularities were
+// tried and rejected before this one: a plain word-window across the whole page crammed unrelated
+// Q&As together; a per-<h2>-category chunk (one chunk per ~12-question category) was still too
+// coarse, because a question's own answer sits alongside 11 unrelated answers, diluting the
+// embedding enough that a spot-check on 2026-08-04 found directly-answered questions ("How do I
+// invite someone?", answered two lines below itself) scoring as false gaps. The correct grain is
+// the FAQ's own atomic unit: one <dt>/<dd> question-answer pair per document, tagged with its
+// category only as readable context, never merged with sibling Q&As.
 function loadFaqSectionDocs() {
   const html = fs.readFileSync(FAQ_FILE, 'utf8');
   const mainM = html.match(/<main[\s\S]*?<\/main>/i);
@@ -213,9 +213,17 @@ function loadFaqSectionDocs() {
   const docs = [];
   sections.forEach((part) => {
     const h2M = part.match(/<h2[^>]*>([\s\S]*?)<\/h2>/i);
-    const title = h2M ? stripTags(h2M[1]) + ' (FAQ)' : 'FAQ (intro)';
-    const text = stripTags(part);
-    if (text.length > 20) docs.push({ slug: 'faq', title, text });
+    const category = h2M ? stripTags(h2M[1]) : 'FAQ';
+    const dl = part.match(/<dl[^>]*class="faq"[^>]*>([\s\S]*?)<\/dl>/i);
+    if (!dl) return;
+    const pairRe = /<dt[^>]*>([\s\S]*?)<\/dt>\s*<dd[^>]*>([\s\S]*?)<\/dd>/gi;
+    let m;
+    while ((m = pairRe.exec(dl[1]))) {
+      const q = stripTags(m[1]).trim();
+      const a = stripTags(m[2]).trim();
+      if (!q || !a) continue;
+      docs.push({ slug: 'faq', title: `${category} (FAQ)`, text: `${q} ${a}` });
+    }
   });
   return docs;
 }
@@ -359,7 +367,7 @@ function suggestAngle(question) {
 // ---------------------------------------------------------------------------------------------
 
 function runCheck() {
-  console.log('— question_gaps --check (no network calls, no spend) —\n');
+  console.log('question_gaps --check (no network calls, no spend)\n');
 
   let keySource = null;
   if (process.env.OPENAI_API_KEY) keySource = 'OPENAI_API_KEY env var';
@@ -368,8 +376,8 @@ function runCheck() {
 
   const sa = loadServiceAccount();
   console.log(sa
-    ? '✅ tools/serviceAccountKey.json: found — feedback source will be attempted.'
-    : '❌ tools/serviceAccountKey.json: not found — feedback source will be skipped, FAQ used as bootstrap. See ANALYTICS.md.');
+    ? '✅ tools/serviceAccountKey.json: found. Feedback source will be attempted.'
+    : '❌ tools/serviceAccountKey.json: not found. Feedback source will be skipped, FAQ used as bootstrap. See ANALYTICS.md.');
 
   let hasFirebaseAdmin = true;
   try { require.resolve('firebase-admin'); } catch (e) { hasFirebaseAdmin = false; }
@@ -383,7 +391,7 @@ function runCheck() {
 
   console.log(fs.existsSync(CACHE_FILE)
     ? `ℹ️  Embedding cache present: ${CACHE_FILE}`
-    : 'ℹ️  No embedding cache yet — first real run will embed everything.');
+    : 'ℹ️  No embedding cache yet. First real run will embed everything.');
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -411,7 +419,7 @@ function writeReport(ctx) {
   L('# Question-to-article gap analysis');
   L('');
   L(`**Generated:** ${now}  `);
-  L('**Tool:** `tools/rag/question_gaps.js` (server-side, founder-run, offline — not shipped to the PWA)');
+  L('**Tool:** `tools/rag/question_gaps.js` (server-side, founder-run, offline, not shipped to the PWA)');
   L('**Purpose:** find which real user questions are NOT well answered by any existing article/FAQ, so `CONTENT-QUEUE.md` can be enriched with genuine, question-grounded topics instead of guesses.');
   L('');
   L('This is a smaller sibling of the deferred `docs/plans/2026-07-13-rag-chatbot-pro.md` proposal. It reuses that plan’s chunking approach (section 4b) but does not build a chatbot, does not run live, and touches nothing client-facing.');
@@ -424,7 +432,7 @@ function writeReport(ctx) {
   if (feedbackInfo.status === 'ok') {
     L(`- **Feedback (Firestore \`feedback\` collection):** ${feedbackInfo.rows.length} free-text rows, read via \`tools/serviceAccountKey.json\` (same pattern as \`tools/analytics.js\`). Used on this run.`);
   } else {
-    L(`- **Feedback (Firestore \`feedback\` collection):** NOT used on this run — ${feedbackInfo.note}`);
+    L(`- **Feedback (Firestore \`feedback\` collection):** NOT used on this run. ${feedbackInfo.note}`);
     L('  The integration is built and ready (see `fetchFeedback()` in the script); it simply has nothing to read yet in this environment. This is stated honestly rather than fabricated: no feedback rows were invented to pad this report.');
   }
   L('');
@@ -434,12 +442,12 @@ function writeReport(ctx) {
   L('');
   L('## Methodology');
   L('');
-  L(`1. **Corpus:** ${articleDocCount} article documents (\`articles/*/index.html\`) + ${faqSectionCount} FAQ category documents (\`faq/index.html\`, split at each \`<h2>\` — see chunking note below), each stripped to \`<title>\` + \`<main>\` body text only — nav sits outside \`<main>\` on every page so it is excluded by construction, and \`<footer>\`/\`<script>\`/JSON-LD are stripped explicitly. Mirrors the extraction approach in \`docs/plans/2026-07-13-rag-chatbot-pro.md\` section 4b.`);
-  L(`2. **Chunking:** ~400-word sliding window, 80-word overlap, applied per document (word count is used as a token approximation — real tokenizers run ~1.3 tokens/word for this kind of prose, so actual chunks land a little under the nominal 400/80 token target; that’s a safety margin, not a source of error, since chunk boundaries only affect which chunk a match lands in, not whether a match is found). **The FAQ page is chunked per \`<h2>\` category ("Sharing & your care circle", "Vaccines & country schedules", …) instead of as one continuous word-window across the whole page** — it holds 123 short, topically different Q&As, and window-chunking straight across category boundaries would mix unrelated Q&As into one chunk and dilute the match for any single question in it (a real failure mode caught while building this: see the git history of this file / report for the earlier run where it happened). Each category is naturally one topic and only falls back to the plain word-window if a single category runs unusually long. Produced **${chunkCount} chunks**.`);
+  L(`1. **Corpus:** ${articleDocCount} article documents (\`articles/*/index.html\`) + ${faqSectionCount} FAQ question-answer documents (\`faq/index.html\`, one document per \`<dt>\`/\`<dd>\` pair, see chunking note below), each stripped to \`<title>\` + \`<main>\` body text only (nav sits outside \`<main>\` on every page so it is excluded by construction, and \`<footer>\`/\`<script>\`/JSON-LD are stripped explicitly). Mirrors the extraction approach in \`docs/plans/2026-07-13-rag-chatbot-pro.md\` section 4b.`);
+  L(`2. **Chunking:** ~400-word sliding window, 80-word overlap, applied per document (word count is used as a token approximation; real tokenizers run ~1.3 tokens/word for this kind of prose, so actual chunks land a little under the nominal 400/80 token target, which is a safety margin, not a source of error, since chunk boundaries only affect which chunk a match lands in, not whether a match is found). **The FAQ is chunked one document per question-answer pair, not per \`<h2>\` category.** An earlier version of this script chunked per category (10 categories, ~12 questions each) and that was too coarse: a question's own answer sat beside 11 unrelated ones in the same chunk, diluting the embedding enough that a 2026-08-04 spot-check found directly-answered questions scoring as false gaps. One document per \`<dt>\`/\`<dd>\` pair fixes that; each question is now scored only against its own answer plus whatever else in the corpus happens to be genuinely similar. Produced **${chunkCount} chunks**.`);
   L(`3. **Embedding:** OpenAI \`${EMBED_MODEL}\`, corpus chunks and questions embedded in the same space, cached to a gitignored local file keyed by \`sha256(model + exact text)\` so unchanged content is never re-billed on re-runs.`);
   L('4. **Scoring:** for each question, cosine similarity against every corpus chunk; keep the maximum and its chunk’s article slug.');
   L('5. **Gap threshold:** see below.');
-  L('6. **Clustering:** gap questions are grouped greedily — any two whose own question-embeddings are ≥ 0.85 cosine similar are treated as "the same ask". Clusters are sorted largest first, so recurring gaps outrank one-offs.');
+  L('6. **Clustering:** gap questions are grouped greedily. Any two whose own question-embeddings are ≥ 0.85 cosine similar are treated as "the same ask". Clusters are sorted largest first, so recurring gaps outrank one-offs.');
   L('');
   L('### Threshold: why ' + threshold.toFixed(2));
   L('');
@@ -449,25 +457,26 @@ function writeReport(ctx) {
   L('|---|---|');
   [0, 10, 25, 50, 75, 90, 100].forEach(p => L(`| p${p} | ${percentile(sortedSims, p).toFixed(3)} |`));
   L('');
-  L(`Because this run’s question set is dominated by the FAQ’s own questions being scored against a corpus that **includes the FAQ page itself**, most scores cluster high (each FAQ question’s own Q&A pair usually sits in the same or an adjacent chunk). That is expected and is itself a sanity check: the pipeline correctly recognises that curated FAQ questions ARE well answered by the FAQ. The threshold of **${threshold.toFixed(2)}** was picked just below where the distribution visibly breaks — the low tail, where a question’s best match comes from a chunk that only shares vocabulary with it, not a real answer (e.g. a general vaccines chunk matching a very specific edge-case question, or a question whose own Q&A pair got split across a chunk boundary so no single chunk contains the whole answer). Anything below that line is a genuine "nothing in the corpus really answers this" candidate, not just a slightly-worse-than-average match.`);
+  L(`Because this run’s question set is dominated by the FAQ’s own questions being scored against a corpus that **includes the FAQ page itself**, most scores cluster high (each FAQ question’s own Q&A pair now sits alone in its own chunk, so its match is usually itself). That is expected and is itself a sanity check: the pipeline correctly recognises that curated FAQ questions ARE well answered by the FAQ. The threshold of **${threshold.toFixed(2)}** was picked just below where the distribution visibly breaks, at the low tail where a question’s best match comes from a chunk that only shares vocabulary with it, not a real answer (for example a general vaccines chunk matching a very specific edge-case question). Anything below that line is a genuine "nothing in the corpus really answers this" candidate, not just a slightly-worse-than-average match. Treat any single run’s gap list as a lead to check by hand, not a verdict: read the flagged question against its cited nearest match yourself before adding anything to CONTENT-QUEUE.md, since a chunk boundary or an unusual phrasing can still produce a false positive.`);
   L('');
-  L(`Once real feedback rows exist (currently 0 — see Data sources above), re-run and expect the distribution to shift: feedback text was never written to match FAQ/article vocabulary, so real gaps should separate more clearly from good matches than they do in this self-referential bootstrap run. Revisit this constant then rather than trusting it blindly.`);
+  L(`Once real feedback rows exist (currently 0, see Data sources above), re-run and expect the distribution to shift: feedback text was never written to match FAQ/article vocabulary, so real gaps should separate more clearly from good matches than they do in this self-referential bootstrap run. Revisit this constant then rather than trusting it blindly.`);
   L('');
-  L(`**Result on this run:** ${results.length - gapClustersFlatCount(gapClusters)} of ${results.length} questions matched the corpus at or above ${threshold.toFixed(2)} (well answered). ${gapClustersFlatCount(gapClusters)} fell below — the gap candidates below, in ${gapClusters.length} cluster(s).`);
+  L(`**Result on this run:** ${results.length - gapClustersFlatCount(gapClusters)} of ${results.length} questions matched the corpus at or above ${threshold.toFixed(2)} (well answered). ${gapClustersFlatCount(gapClusters)} fell below; the gap candidates are listed below, in ${gapClusters.length} cluster(s).`);
   L('');
   L('---');
   L('');
   L('## Content gap candidates (ranked by cluster size, largest first)');
   L('');
   if (!gapClusters.length) {
-    L('No gap candidates on this run — every FAQ question was well answered by the FAQ/article corpus it was scored against, which is the expected sane result for a self-referential bootstrap run. This is the correct time to re-run against real feedback once testers have used Send Feedback (Settings > Family & sharing > Send feedback); that question set is not already inside the corpus, so real gaps are far more likely to surface there.');
+    L('No gap candidates on this run. Every FAQ question was well answered by the FAQ/article corpus it was scored against, which is the expected sane result for a self-referential bootstrap run. This is the correct time to re-run against real feedback once testers have used "Tell us how it feels" in Settings; that question set is not already inside the corpus, so real gaps are far more likely to surface there.');
+    L('');
   } else {
     gapClusters.forEach((cluster, i) => {
       const rep = cluster[0];
-      L(`### ${i + 1}. ${cluster.length > 1 ? `Cluster of ${cluster.length} similar questions` : 'Single question'} — top score ${Math.max(...cluster.map(c => c.maxSim)).toFixed(3)}`);
+      L(`### ${i + 1}. ${cluster.length > 1 ? `Cluster of ${cluster.length} similar questions` : 'Single question'}, top score ${Math.max(...cluster.map(c => c.maxSim)).toFixed(3)}`);
       L('');
       cluster.forEach(c => {
-        L(`- **"${c.question}"** _(source: ${c.source})_ — nearest match: \`${c.bestSlug}\` (${c.bestTitle}), similarity ${c.maxSim.toFixed(3)}`);
+        L(`- **"${c.question}"** _(source: ${c.source})_, nearest match: \`${c.bestSlug}\` (${c.bestTitle}), similarity ${c.maxSim.toFixed(3)}`);
       });
       L('');
       L(`**Suggested article angle:** ${suggestAngle(rep.question)}`);
@@ -492,8 +501,8 @@ function writeReport(ctx) {
   L('node tools/rag/question_gaps.js           # run the pipeline, spend the (small) embedding cost, rewrite this report');
   L('```');
   L('');
-  L('- To pick up real user questions, get `tools/serviceAccountKey.json` from Firebase console (Project settings > Service accounts > Generate new private key) — see `ANALYTICS.md`. Once the `feedback` collection has rows, they are automatically included alongside the FAQ questions on the next run.');
-  L(`- Embeddings are cached at \`tools/rag/.embedding-cache.json\` (gitignored). Only new/changed article, FAQ, or question text gets re-embedded — unchanged content is free on re-runs.`);
+  L('- To pick up real user questions, get `tools/serviceAccountKey.json` from Firebase console (Project settings > Service accounts > Generate new private key), see `ANALYTICS.md`. Once the `feedback` collection has rows, they are automatically included alongside the FAQ questions on the next run.');
+  L(`- Embeddings are cached at \`tools/rag/.embedding-cache.json\` (gitignored). Only new/changed article, FAQ, or question text gets re-embedded; unchanged content is free on re-runs.`);
   L('- Re-reading `docs/plans/2026-07-13-rag-chatbot-pro.md` section 4b is worthwhile if the article HTML template changes shape (new wrapper element, moved nav), since the extraction regex here assumes the current `<main>`-wraps-content structure.');
   L('');
 
@@ -522,7 +531,7 @@ async function main() {
   const allDocs = [...articleDocs, ...faqSectionDocs];
   let chunks = [];
   allDocs.forEach(d => { chunks = chunks.concat(chunkDoc(d)); });
-  console.log(`Corpus: ${allDocs.length} documents (${articleDocs.length} articles + ${faqSectionDocs.length} FAQ categories) -> ${chunks.length} chunks.`);
+  console.log(`Corpus: ${allDocs.length} documents (${articleDocs.length} articles + ${faqSectionDocs.length} FAQ question-answer pairs) -> ${chunks.length} chunks.`);
 
   console.log('Loading question sources...');
   const feedbackInfo = await fetchFeedback();
@@ -532,7 +541,7 @@ async function main() {
     ...faqQ.map(t => ({ text: t, source: 'faq' })),
   ];
   console.log(`Question set: ${feedbackInfo.rows.length} feedback + ${faqQ.length} FAQ = ${questions.length}.`);
-  if (feedbackInfo.status !== 'ok') console.log(`  (feedback source: ${feedbackInfo.status} — ${feedbackInfo.note})`);
+  if (feedbackInfo.status !== 'ok') console.log(`  (feedback source: ${feedbackInfo.status}. ${feedbackInfo.note})`);
 
   const cache = loadCache();
 
