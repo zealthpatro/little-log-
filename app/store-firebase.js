@@ -82,6 +82,21 @@
   var legacyBlobPreg = null;   // a journey found in a legacy `app` blob, awaiting one-time relocation
   var pregMigrated = false;    // owner has already relocated the legacy journey this session
 
+  /* ---------- kept-after-loss archive (state.pregnancyArchive) ----------
+     The memories a mother chooses to KEEP when a pregnancy closes (endPregnancy(true)) were
+     memory-only in cloud mode: persist() never wrote them anywhere, so one reload after a loss
+     silently discarded the scans she had just decided to keep. They persist OWNER-PRIVATE in
+     users/{uid}.pregnancyArchive — the one doc only she can ever read or write (rules:
+     users/{uid} is self-only, already published), so it needs NO rules change, survives reload
+     AND device switch, is never visible to the circle, and account deletion (which deletes
+     users/{uid} and purges her pregnancy photo bytes) takes it along correctly. The journey doc
+     was the wrong home: pregClear deletes it, syncPregJourney overwrites it wholesale, and its
+     sharedWith would show a LATER journey's readers her earlier loss. The photo BYTES survive
+     separately in pregnancy/{uid}/photos, whose rules already let the owner read her own with
+     the parent doc gone (asserted in test/rules-test.js Part 3). */
+  var knownPregArchive = null;    // sig of the last-synced archive (diffing; null = dirty/unknown)
+  var pregArchiveLoaded = false;  // boot read landed; until then NEVER push (an early [] would clobber the cloud copy)
+
   /* ---------- pregnancy photo BYTES (owner-gated, PRIV: bytes follow the metadata) ----------
      A bump/scan photo's metadata (moments, journey cards) lives on the owner-gated pregnancy
      doc — but the BYTES used to go to households/{hid}/photos, which every circle member can
@@ -146,11 +161,30 @@
     + '.tl-by{font-size:11px;color:var(--ink-soft,#9a8d80);opacity:.85;margin-top:2px;}'
     + '.nap-toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:6px 0 12px;font-size:14px;color:var(--ink,#2C2521);cursor:pointer;}'
     + '.nap-toggle input{position:absolute;opacity:0;width:0;height:0;}'
-    + '.nap-switch{width:44px;height:25px;border-radius:999px;background:#D9CDBB;position:relative;transition:.2s;flex:0 0 auto;}'
+    + '.nap-switch{width:44px;height:25px;border-radius:999px;background:var(--switch-off,#D9CDBB);position:relative;transition:.2s;flex:0 0 auto;}'
     + '.nap-switch::after{content:"";position:absolute;top:2px;left:2px;width:21px;height:21px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2);}'
     + '.nap-toggle input:checked + .nap-switch{background:var(--sleep,#7C8FB5);}'
     + '.nap-toggle input:checked + .nap-switch::after{transform:translateX(19px);}'
-    + '.ll-mem-av{width:40px;height:40px;border-radius:50%;overflow:hidden;flex:0 0 auto;}.ll-mem-av svg{width:100%;height:100%;display:block;}';
+    + '.ll-mem-av{width:40px;height:40px;border-radius:50%;overflow:hidden;flex:0 0 auto;}.ll-mem-av svg{width:100%;height:100%;display:block;}'
+
+    /* ---------- Night ----------
+       #llModalOv is the circle / invite / share sheet. It was hardcoded light and readable, but it
+       opened as a full-brightness white sheet from a dark app. Stated as overrides so nothing about
+       the light rendering moves. The sign-in card above (#llAuthOv, .ll-auth-*) is deliberately NOT
+       in this list: it stays light in both themes because Google's branding guidelines fix the
+       Continue-with-Google button to their white surface, and a white button alone on a dark card
+       would look like the bug. That whole surface is self-consistent light on purpose. */
+    + '[data-theme="night"] .ll-modal{background:var(--card);}'
+    + '[data-theme="night"] .ll-modal-head h2,[data-theme="night"] .ll-mem-name,'
+    + '[data-theme="night"] .ll-invite label{color:var(--ink);}'
+    + '[data-theme="night"] #llModalX,[data-theme="night"] .ll-mem-email{color:var(--ink-faint);}'
+    + '[data-theme="night"] .ll-mem{background:var(--surface);}'
+    + '[data-theme="night"] .ll-invite{border-top-color:var(--divider);}'
+    + '[data-theme="night"] .ll-invite input,[data-theme="night"] .ll-invite select{background:var(--surface);border-color:var(--line);color:var(--ink);}'
+    + '[data-theme="night"] .ll-linkrow input{background:var(--surface);border-color:var(--line);color:var(--ink-soft);}'
+    + '[data-theme="night"] .ll-ghost{background:var(--surface);color:var(--ink-soft);}'
+    + '[data-theme="night"] .ll-check{color:var(--ink-soft);}'
+    + '[data-theme="night"] .ll-modal-btn{color:var(--bg);}';
   document.head.appendChild(st);
 
   function overlay() {
@@ -522,8 +556,12 @@
     state.notes = [];
     // Clear in-memory subject data so one account's journey + maternal-private health (applyMatDoc
     // folds mhealth fields into state.pregnancy) can never survive into the next account's session
-    // after an in-tab sign-out/sign-in. Privacy-Max: no leftover.
+    // after an in-tab sign-out/sign-in. Privacy-Max: no leftover. The kept-after-loss archive is
+    // hers alone for the same reason (the per-uid localStorage cache stays: it is keyed by HER uid
+    // and the next account never reads another uid's key).
     state.pregnancy = null;
+    state.pregnancyArchive = [];
+    knownPregArchive = null; pregArchiveLoaded = false; pregArchiveStamp = 0; pregArchCacheSig = null;
     state.handoff = null;
     handoffMigrated = false;
   }
@@ -610,6 +648,9 @@
   async function resolveHousehold(user) {
     var userRef = db.collection('users').doc(user.uid);
     var snap = await userRef.get();
+    // Kept-after-loss memories ride this same read (no extra fetch), and this await sits BEFORE
+    // startSync/booted — so renderLossHolding and the look-back see them on the very first paint.
+    applyPregArchive(user.uid, snap.exists ? snap.data() : null);
     if (snap.exists && snap.data().householdId) {
       var curHid = snap.data().householdId;
       // If a DIFFERENT pending invite also exists for this email, stash it so we can surface it
@@ -981,6 +1022,68 @@
         .set({ ownerUid: uidNow, data: data, sharedWith: shared, updatedAt: window.LL.serverTimestamp() });
     } catch (e) { console.warn('pregnancy journey push', e); }
   }
+
+  /* ---------- kept-after-loss archive sync (owner-private, users/{uid}) ---------- */
+  // A per-uid localStorage cache {at, arr}, written synchronously on every persist() (see
+  // scheduledPush): a tab closed inside the 350 ms push debounce, right after she chose "Keep
+  // my memories", must still not lose them. Keyed by uid so one account's loss is never
+  // another's to read. `at` moves ONLY when the archive itself changes, so at boot the fresher
+  // of cache vs cloud wins — a crash-cached keep beats an old cloud [], while a remove done on
+  // another device is never resurrected by this device's stale cache.
+  var pregArchiveStamp = 0;   // when the adopted archive last changed (ms)
+  var pregArchCacheSig = null; // sig behind the stamp (advance `at` only on real change)
+  function pregArchCacheKey(uidNow) { return 'cubby-pregarch-' + uidNow; }
+  function savePregArchiveCache(uidNow) {
+    if (!uidNow) return;
+    try {
+      var arr = state.pregnancyArchive || [];
+      var sig = stableStringify(arr);
+      if (sig !== pregArchCacheSig) { pregArchCacheSig = sig; pregArchiveStamp = Date.now(); }
+      localStorage.setItem(pregArchCacheKey(uidNow), JSON.stringify({ at: pregArchiveStamp, arr: arr }));
+    } catch (e) {}
+  }
+  // Fold the users/{uid} doc into state at boot. Whichever side changed most recently wins;
+  // adopting the cache leaves the sync dirty (knownPregArchive=null) so the next push writes it
+  // up. Nothing here ever deletes anything.
+  function applyPregArchive(uidNow, d) {
+    var cloudArr = (d && Array.isArray(d.pregnancyArchive)) ? d.pregnancyArchive : null;
+    var cloudAt = (d && typeof d.pregnancyArchiveAt === 'number') ? d.pregnancyArchiveAt : 0;
+    var cache = null;
+    try {
+      var raw = localStorage.getItem(pregArchCacheKey(uidNow));
+      if (raw) { cache = JSON.parse(raw); if (Array.isArray(cache)) cache = { at: 0, arr: cache }; }
+    } catch (e) { cache = null; }
+    if (cache && Array.isArray(cache.arr) && (cache.at || 0) > cloudAt) {
+      // The cache is fresher: a crash (or a failed push) beat the cloud. Restore, and push up.
+      state.pregnancyArchive = cache.arr;
+      pregArchiveStamp = cache.at || 0;
+      knownPregArchive = null;
+    } else {
+      state.pregnancyArchive = cloudArr || [];
+      pregArchiveStamp = cloudAt;
+      knownPregArchive = stableStringify(state.pregnancyArchive);
+    }
+    pregArchCacheSig = stableStringify(state.pregnancyArchive);
+    pregArchiveLoaded = true;
+    savePregArchiveCache(uidNow);
+  }
+  // The archive's share of persist(): only she can write her own users doc (rules), and merge
+  // keeps householdId / push tokens / acq intact. Mirrors the events retry pattern — a failed
+  // write goes back to dirty so the next push tries again, instead of being lost forever.
+  async function syncPregArchive(uidNow) {
+    if (!uidNow || !pregArchiveLoaded) return; // never push (especially not []) before the boot read landed
+    var arr = state.pregnancyArchive || [];
+    var sig = stableStringify(arr);
+    if (sig !== pregArchCacheSig) { pregArchCacheSig = sig; pregArchiveStamp = Date.now(); } // changed outside persist()
+    if (knownPregArchive === sig) return;
+    knownPregArchive = sig;
+    try {
+      await db.collection('users').doc(uidNow).set({ pregnancyArchive: arr, pregnancyArchiveAt: pregArchiveStamp || Date.now() }, { merge: true });
+    } catch (e) {
+      if (knownPregArchive === sig) knownPregArchive = null;
+      console.warn('pregnancy archive push', e);
+    }
+  }
   // One-time migration: relocate a legacy in-blob journey to the owner-owned doc, then strip the
   // blob. Owner-only, once per session. The legacy journey was already visible to the whole circle
   // (it lived in the shared blob), so the migrated sharedWith defaults to the current members, so
@@ -1124,9 +1227,13 @@
     // before the email move shipped and whose blob entry the owner has already stripped).
     if (!ownEmailWritten) { ownEmailWritten = true; writeOwnMemberEmail(hhRef); }
     // My own journey-photo bytes. Attached for every member unconditionally: the rules always
-    // let me read my OWN pregnancy photos path, and after a kept loss (pregClear removed the
-    // journey doc, the archive is device-local) these are exactly the kept keepsake bytes.
+    // let me read my OWN pregnancy photos path, and after a kept loss these are exactly the
+    // kept keepsake bytes the archive (users/{uid}.pregnancyArchive) points at.
     ensureOwnPregPhotoListener(user.uid);
+    // Crash recovery for kept memories: the boot read found none in the cloud but the local
+    // cache had some (applyPregArchive left the sync dirty). Push ONLY the archive — never
+    // scheduledPush here, which would write the whole still-empty blob over the household.
+    if (pregArchiveLoaded && knownPregArchive === null) syncPregArchive(user.uid);
 
     var prefs = loadPrefs();
     var gotApp = false, gotEvents = false;
@@ -1423,6 +1530,10 @@
   /* ---------- push local changes to the cloud (override persist) ---------- */
   function scheduledPush() {
     savePrefs();
+    // Kept-after-loss memories hit the local cache SYNCHRONOUSLY (the cloud write below is
+    // debounced 350 ms, and "Keep my memories" followed by an immediate tab close must stick).
+    // Guarded on the boot read so a pre-load persist can't stomp a cache we haven't applied yet.
+    if (pregArchiveLoaded) { var au = auth.currentUser; if (au) savePregArchiveCache(au.uid); }
     if (applyingRemote) return; // don't echo remote-applied changes back
     if (pushTimer) clearTimeout(pushTimer);
     pushTimer = setTimeout(pushNow, 350);
@@ -1486,6 +1597,7 @@
     }
     syncPregJourney(uidNow); // owner-only; writes the journey to the owner-owned pregnancy doc (Item 7)
     syncMaternal(uidNow); // owner-only; writes her private categories to the protected mhealth docs
+    syncPregArchive(uidNow); // kept-after-loss memories -> her self-only users/{uid} doc
   }
 
   // Swap the app's persistence + photo storage for the cloud versions.
@@ -1666,7 +1778,10 @@
       if (email) { try { await db.collection('invites').doc(email).delete(); } catch (e) {} }
       try { await db.collection('waitlist').doc(uid).delete(); } catch (e) {}
       // users/{uid} carries the push tokens, so deleting it also stops delivery at the cron.
+      // It also carries her kept-after-loss archive — deletion takes it along (correct: her
+      // pregnancy photo bytes were purged above), and the device cache must not outlive it.
       try { await db.collection('users').doc(uid).delete(); } catch (e) { console.warn('del user doc', e); }
+      try { localStorage.removeItem(pregArchCacheKey(uid)); } catch (e) {}
       try { if (window.cubbyDisableNativePush) await window.cubbyDisableNativePush(); } catch (e) {}
       // Guessing-game hubs live in D1, keyed by this uid, and rules do not reach them.
       try {

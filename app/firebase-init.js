@@ -39,6 +39,33 @@
   var auth = firebase.auth();
   var db = firebase.firestore();
 
+  // Localhost-only cloud-path test hook (?fsemu=<port>&fsuid=<uid>), sibling of the ?e2e=1 hook
+  // in store-firebase.js: point Firestore at the local emulator and stand in a stub signed-in
+  // user, so the REAL sync layer (resolveHousehold -> startSync -> persist) can be driven
+  // headlessly by test/*.test.js. The hostname guard means this can NEVER engage in prod, and a
+  // stray flag on prod hostnames changes nothing. Must run before any other Firestore call.
+  try {
+    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+      var _emuQ = new URLSearchParams(location.search);
+      var _emuPort = parseInt(_emuQ.get('fsemu'), 10);
+      if (_emuPort) {
+        db.useEmulator('localhost', _emuPort);
+        var _emuUser = {
+          uid: _emuQ.get('fsuid') || 'EMU1', email: (_emuQ.get('fsuid') || 'emu1') + '@emu.test',
+          displayName: 'Emu Parent', photoURL: ''
+        };
+        auth = {
+          currentUser: _emuUser,
+          onAuthStateChanged: function (cb) { setTimeout(function () { cb(_emuUser); }, 0); return function () {}; },
+          getRedirectResult: function () { return Promise.resolve({}); },
+          isSignInWithEmailLink: function () { return false; },
+          setPersistence: function () { return Promise.resolve(); },
+          signOut: function () { return Promise.resolve(); }
+        };
+      }
+    }
+  } catch (e) {}
+
   // Keep the user signed in across launches (important for an installed PWA).
   try { auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL); } catch (e) {}
 

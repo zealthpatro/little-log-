@@ -339,6 +339,16 @@ async function check(name, p) {
   await check('KEPT: previously-shared member reads kept bytes (fails)', assertFails(getDoc(doc(CG, 'households/HPB/pregnancy/PO/photos/bump1'))));
   await check('KEPT: owner can still remove a kept byte doc', assertSucceeds(deleteDoc(doc(PO, 'households/HPB/pregnancy/PO/photos/bump2'))));
   await check('departed-member path: byte doc write by a NON-member owner uid (fails)', assertFails(setDoc(doc(S, 'households/HPB/pregnancy/S/photos/x'), { data: 'x' })));
+  // The kept-memories ARCHIVE (the metadata those kept bytes belong to) persists in
+  // users/{uid}.pregnancyArchive — self-only by the existing users rule, so it needed no rules
+  // change. These pin that home: only she can write it, and nobody else can ever read it.
+  await check('ARCHIVE: owner writes her kept memories into her own users doc', assertSucceeds(setDoc(doc(PO, 'users/PO'), { pregnancyArchive: [{ id: 'a1', endedAt: 1, weeks: 12, loss: true, moments: [{ week: 12, photoId: 'bump1' }] }] }, { merge: true })));
+  await check('ARCHIVE: owner reads her own archive back', assertSucceeds(getDoc(doc(PO, 'users/PO'))));
+  await check('ARCHIVE: circle member reads her users doc (fails)', assertFails(getDoc(doc(CG, 'users/PO'))));
+  await check('ARCHIVE: household owner reads her users doc (fails)', assertFails(getDoc(doc(HO, 'users/PO'))));
+  await check('ARCHIVE: circle member writes her archive (fails)', assertFails(setDoc(doc(CG, 'users/PO'), { pregnancyArchive: [] }, { merge: true })));
+  await check('ARCHIVE: stranger writes her archive (fails)', assertFails(setDoc(doc(S, 'users/PO'), { pregnancyArchive: [] }, { merge: true })));
+  await check('ARCHIVE: owner clears it (removeKeptMemories writes [])', assertSucceeds(setDoc(doc(PO, 'users/PO'), { pregnancyArchive: [] }, { merge: true })));
 
   console.log('\nMember emails (PRIV-2) — gated doc + migration off the shared blob:');
   // H still carries the legacy shape: memberInfo.{O,C}.email seeded at the top, and INV/CO
