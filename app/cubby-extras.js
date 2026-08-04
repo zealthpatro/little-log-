@@ -144,22 +144,51 @@
     });
   }
 
-  async function savePick() {
+  function savePick() {
     var p = pickState; if (!p) return;
     var avatar = { fur: p.fur, acc: p.acc };
+    function finish() {
+      cuClose();
+      // The first-run identity sheet keeps its own bear preview (#llFrBear) open under this
+      // picker; refresh it (and the local memberInfo it reads from) so the new bear shows at once
+      // instead of waiting for the snapshot echo.
+      if (p.kind === 'member') {
+        try {
+          var mi = window.LL && window.LL.memberInfo;
+          if (mi) { mi[p.id] = mi[p.id] || {}; mi[p.id].avatar = avatar; }
+          var fr = document.getElementById('llFrBear');
+          if (fr && typeof window.memberAvatarSvg === 'function') fr.innerHTML = window.memberAvatarSvg(p.id, 84);
+        } catch (e) {}
+      }
+      if (typeof render === 'function') render();
+      if (typeof toast === 'function') toast('Avatar updated');
+    }
     if (p.kind === 'member') {
+      var btn = document.getElementById('cuSave');
+      if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+      var done = false;
+      function fail(e) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+        if (typeof toast === 'function') toast(window.cubbyErrText ? window.cubbyErrText(e, 'Could not save your bear just now. Mind trying again?') : 'Could not save your bear just now. Mind trying again?');
+      }
+      // Optimistic exit (same 6s pattern as the first-run sheet): the write lands in the local
+      // cache immediately and syncs later, so the picker never hangs on a slow or absent network.
+      var t = setTimeout(function () { if (done) return; done = true; finish(); }, 6000);
       try {
         var uid = window.LL.auth.currentUser.uid;
         var u = {}; u['memberInfo.' + uid + '.avatar'] = avatar;
-        await window.LL.db.collection('households').doc(window.LL.householdId).update(u);
-      } catch (e) { /* ignore */ }
+        window.LL.db.collection('households').doc(window.LL.householdId).update(u)
+          .then(function () { if (done) return; done = true; clearTimeout(t); finish(); })
+          .catch(function (e) { if (done) return; done = true; clearTimeout(t); fail(e); });
+      } catch (e) {
+        // No signed-in user / local mode: nothing to save remotely, just close.
+        if (!done) { done = true; clearTimeout(t); finish(); }
+      }
     } else {
       var b = (state.babies || []).filter(function (x) { return x.id === p.id; })[0];
       if (b) { b.avatar = avatar; persist(); }
+      finish();
     }
-    cuClose();
-    if (typeof render === 'function') render();
-    if (typeof toast === 'function') toast('Avatar updated');
   }
 
   /* ---------- custom time picker (shared columns) ---------- */

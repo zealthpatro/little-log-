@@ -23,6 +23,22 @@
   var firstRunShown = false;
   var lastHhSig = null; // signature of the last-applied household doc (dedupes our own write echoes)
 
+  // Raw SDK errors ("client is offline", "permission-denied", "auth/…") must never reach a
+  // parent's eyes. One translator, used by every catch that shows a message.
+  function errText(e, fallback) {
+    var code = (e && e.code) || '';
+    var m = String((e && e.message) || '');
+    if (navigator.onLine === false || code === 'unavailable' || code === 'auth/network-request-failed' || /offline|network/i.test(m)) {
+      return 'You look offline. Cubby will pick this up when you’re back.';
+    }
+    if (code === 'permission-denied') return 'Cubby wasn’t allowed to save that. If this keeps happening, sign out and back in.';
+    if (code === 'auth/invalid-action-code' || code === 'auth/expired-action-code') return 'That sign-in link has expired or was already used. Send yourself a fresh one.';
+    if (code === 'auth/invalid-email') return 'That email doesn’t look right. Mind checking it?';
+    if (code === 'auth/too-many-requests') return 'Lots of tries in a row. Give it a minute, then try again.';
+    return fallback || 'That didn’t work just now. Mind trying again?';
+  }
+  window.cubbyErrText = errText;
+
   /* ---------- maternal-private health (Privacy Max, gate G1) ----------
      The mother's clinical data NEVER enters the shared `app` blob. It lives in
      households/{hid}/mhealth/{ownerUid}/cat/{category}, written only by the owner,
@@ -210,7 +226,7 @@
       rb.onclick = function () {
         rb.disabled = true; rb.style.opacity = '.55'; rb.textContent = 'Sending…';
         sendLink(email).then(function () { showSent(email); }).catch(function (err) {
-          var rr = note.querySelector('.ll-resend-row'); if (rr) rr.textContent = 'Could not resend: ' + ((err && err.message) || err);
+          var rr = note.querySelector('.ll-resend-row'); if (rr) rr.textContent = errText(err, 'Could not resend just now. Mind trying again?');
         });
       };
     }
@@ -222,7 +238,7 @@
       btn.disabled = true; btn.textContent = 'Sending…';
       sendLink(email)
         .then(function () { showSent(email); })
-        .catch(function (err) { btn.disabled = false; btn.textContent = 'Send link'; note.textContent = 'Could not send the link: ' + ((err && err.message) || err); });
+        .catch(function (err) { btn.disabled = false; btn.textContent = 'Send link'; note.textContent = errText(err, 'Could not send the link just now. Mind trying again?'); });
     };
   }
   function maybeFinishEmailLink() {
@@ -242,7 +258,7 @@
         }
       })
       .catch(function (err) {
-        showSignIn('Email sign-in failed: ' + ((err && err.message) || err));
+        showSignIn(errText(err, 'That sign-in didn’t finish. Send yourself a fresh link and try once more.'));
       });
   }
 
@@ -474,6 +490,7 @@
     matUnsub.forEach(function (u) { try { u(); } catch (e) {} });
     pregUnsub.forEach(function (u) { try { u(); } catch (e) {} });
     unsub = []; matUnsub = []; pregUnsub = []; booted = false; knownEvents = {};
+    _lastInviteEmail = ''; // per-uid cache: never let one account's invite email survive into the next
     matOwner = null; matShared = {}; knownMat = {};
     pregOwner = null; pregShared = []; knownPregJourney = null; legacyBlobPreg = null; pregMigrated = false;
     hhRef = eventsRef = photosRef = notesRef = null;
@@ -987,6 +1004,9 @@
       window.LL.members = d.members || {};
       window.LL.memberInfo = d.memberInfo || {};
       window.LL.formerMemberInfo = d.formerMemberInfo || {};
+      // Pending invites live mirrored on the household doc (owners cannot query /invites: reads
+      // there are invitee-only by rule), so the circle screen can show and cancel them.
+      window.LL.hhPending = d.pendingInvites || {};
       window.LL.pro = d.pro || null; // Pro entitlement: written only by the billing Worker
       window.LL.householdId = hid;
       // Pregnancy-journey listeners depend on the member set (a non-owner tries each member's
@@ -1250,11 +1270,20 @@
     } catch (e) {
       console.warn('push', e);
       var nowMs = Date.now();
+      // permission-denied is NOT offline: for a removed member "we'll try again" is a lie. Say what
+      // actually happened and where the door is; offline keeps its honest, patient message.
+      var denied = !!(e && e.code === 'permission-denied');
       if (!pushNow._warnedAt || nowMs - pushNow._warnedAt > 120000) { // gentle: at most one toast per 2 min
         pushNow._warnedAt = nowMs;
-        try { window.toast && window.toast('That didn’t sync just now. We’ll try again.'); } catch (e2) {}
+        try {
+          if (denied) window.toast && window.toast('Cubby wasn’t allowed to save that. If you’ve been removed from this circle, sign out and back in.');
+          else if (navigator.onLine === false) window.toast && window.toast('You look offline. Cubby will sync when you’re back.');
+          else window.toast && window.toast('That didn’t sync just now. We’ll try again.');
+        } catch (e2) {}
       }
-      pushNow._retryDelay = Math.min((pushNow._retryDelay || 4000) * 2, 300000); // backoff 8s → 5 min
+      // Offline/transient errors back off gently; a rules denial will not heal on a timer, so it
+      // goes straight to the 5 min ceiling instead of hammering a door that is closed.
+      pushNow._retryDelay = denied ? 300000 : Math.min((pushNow._retryDelay || 4000) * 2, 300000); // backoff 8s → 5 min
       if (!pushTimer) pushTimer = setTimeout(pushNow, pushNow._retryDelay); // state stays dirty, so later edits also retry
     }
     syncPregJourney(uidNow); // owner-only; writes the journey to the owner-owned pregnancy doc (Item 7)
@@ -1560,6 +1589,19 @@
         + '</div><div class="ll-mem-email">' + esc(m.email || '') + '</div></div></div><div style="display:flex;align-items:center;gap:8px"><span class="ll-mem-role">' + esc(who) + '</span>' + rm + '</div></div>';
     }).join('') || '<div class="ll-auth-msg">Just you so far.</div>';
 
+    // Pending invites, owner-only (only an owner can act on them, and an invitee who never joined
+    // has not consented to being shown to the whole circle). Anyone already in memberInfo has
+    // joined, so their mirror entry is display-filtered here rather than cleaned up at join time.
+    var joinedEmails = {};
+    Object.keys(info).forEach(function (uid) { var em = ((info[uid] || {}).email || '').toLowerCase(); if (em) joinedEmails[em] = 1; });
+    var pendMap = (myRole === 'owner') ? (window.LL.hhPending || {}) : {};
+    var pendRows = Object.keys(pendMap).filter(function (em) { return !joinedEmails[em]; }).sort().map(function (em) {
+      var pv = pendMap[em] || {};
+      return '<div class="ll-mem"><div><div class="ll-mem-name">' + esc(pv.name || em) + '</div><div class="ll-mem-email">' + esc(em) + '</div></div>'
+        + '<div style="display:flex;align-items:center;gap:8px"><span class="ll-mem-role">Invited · waiting</span>'
+        + '<button class="ll-rm ll-cancel-inv" data-email="' + esc(em) + '">Cancel</button></div></div>';
+    }).join('');
+
     var myName = (info[me.uid] && info[me.uid].name) || me.displayName || '';
     var youRow = '<div class="ll-invite" style="border-top:none;padding-top:4px"><label style="font-weight:800;font-size:15px">Your profile</label>'
       + '<label>Your name</label><input id="llMyName" maxlength="40" autocomplete="name" placeholder="Your name" value="' + esc(myName) + '">'
@@ -1573,7 +1615,8 @@
     var invite = (myRole === 'owner')
       ? '<div class="ll-invite"><label>Invite a family member</label>'
         + '<input id="llInvName" type="text" placeholder="Their name (optional)" autocomplete="off">'
-        + '<input id="llInvEmail" type="email" placeholder="their-google-email@gmail.com" autocomplete="off" autocapitalize="off">'
+        + '<input id="llInvEmail" type="email" placeholder="Their email address" autocomplete="off" autocapitalize="off">'
+        + '<div class="ll-auth-msg" style="text-align:left;margin:2px 0 6px">Any email works: Google, Apple or a sign-in link. They’ll need to sign in with this exact address, so use the one they actually use.</div>'
         + '<select id="llInvRel">' + relOptions('') + '</select>'
         + '<label class="ll-check"><input type="checkbox" id="llInvOwner"><span>Co-owner, full control (can edit everyone\'s entries &amp; invite others)</span></label>'
         + '<button id="llInvBtn" class="ll-modal-btn">Create invite</button>'
@@ -1590,6 +1633,7 @@
       : '';
 
     modal('Family & sharing', '<div class="ll-mems">' + rows + '</div>'
+      + (pendRows ? ('<div class="ll-auth-msg" style="text-align:left;margin:6px 0 2px;font-weight:800">Invited, not joined yet</div><div class="ll-mems">' + pendRows + '</div>') : '')
       + '<div class="ll-auth-msg" style="text-align:left;margin:-2px 0 12px">When you invite people, everyone in your circle can see each other\'s name and email here, so you know who is who. Only you can change your own.</div>'
       + youRow + invite + share
       + '<button id="llSignOut" class="ll-modal-btn ll-ghost">Sign out</button>'
@@ -1603,8 +1647,52 @@
     var copyBtn = document.getElementById('llCopyLink'); if (copyBtn) copyBtn.onclick = copyAppLink; // owner-only now
     if (myRole === 'owner') document.getElementById('llInvBtn').onclick = submitInvite;
     Array.prototype.forEach.call(document.querySelectorAll('.ll-rm'), function (b) {
+      if (b.classList.contains('ll-cancel-inv')) return; // pending-invite cancels are wired below
       b.onclick = function () { removeMember(b.getAttribute('data-uid'), b.getAttribute('data-email'), b.getAttribute('data-name')); };
     });
+    Array.prototype.forEach.call(document.querySelectorAll('.ll-cancel-inv'), function (b) {
+      b.onclick = function () { cancelInvite(b.getAttribute('data-email')); };
+    });
+  }
+
+  // Withdraw a pending invite: the invite doc is what grants join rights, so deleting it is the
+  // real revocation; the household mirror entry is just the visible list. firestore.rules already
+  // lets any household owner delete an invite pointing at their household.
+  function cancelInvite(email) {
+    if (!email || !hhRef) return;
+    var doCancel = function () {
+      var done = false;
+      function finish() {
+        try { hhRef.update(new firebase.firestore.FieldPath('pendingInvites', email), firebase.firestore.FieldValue.delete()).catch(function () {}); } catch (e) {}
+        if (window.LL.hhPending) delete window.LL.hhPending[email];
+        if (getLastInvite() === email) setLastInvite('');
+        try { window.toast && window.toast('Invite cancelled.'); } catch (e) {}
+        openFamily();
+      }
+      // Same optimistic exit as saves: offline the delete is queued and will land; don't hang.
+      var t = setTimeout(function () { if (done) return; done = true; finish(); }, 6000);
+      db.collection('invites').doc(email).delete()
+        .then(function () { if (done) return; done = true; clearTimeout(t); finish(); })
+        .catch(function (e) {
+          if (done) return; done = true; clearTimeout(t);
+          // A denied delete here almost always means the invite doc is already gone (used and
+          // later cleaned up elsewhere): tidy the stale mirror entry rather than erroring forever.
+          if (e && e.code === 'permission-denied') {
+            try { hhRef.update(new firebase.firestore.FieldPath('pendingInvites', email), firebase.firestore.FieldValue.delete()).catch(function () {}); } catch (e3) {}
+            if (window.LL.hhPending) delete window.LL.hhPending[email];
+            if (getLastInvite() === email) setLastInvite('');
+            try { window.toast && window.toast('That invite was already gone, so it has been tidied away.'); } catch (e2) {}
+            openFamily();
+            return;
+          }
+          try { window.toast && window.toast(errText(e, 'Could not cancel that invite just now. Mind trying again?')); } catch (e2) {}
+        });
+    };
+    if (window.confirmSheet) {
+      window.confirmSheet({ title: 'Cancel this invite?', body: 'The invite for ' + email + ' will stop working. You can always invite them again.', confirmLabel: 'Cancel invite', cancelLabel: 'Keep it', danger: true, onConfirm: doCancel });
+    } else if (window.confirm('Cancel the invite for ' + email + '?')) {
+      doCancel();
+    }
   }
 
   function maybeFirstRun(user) {
@@ -1743,7 +1831,12 @@
         var mi = (window.LL.memberInfo || {})[uid] || {};
         u['formerMemberInfo.' + uid] = { name: mi.name || name || '', relationship: mi.relationship || '', avatar: mi.avatar || null };
         await hhRef.update(u);
-        if (email) { try { await db.collection('invites').doc(email).delete(); } catch (e) {} }
+        if (email) {
+          try { await db.collection('invites').doc(email).delete(); } catch (e) {}
+          // Drop any pending-invite mirror entry too, so a removed member's email doesn't linger
+          // in the "Invited, waiting" list once they're gone from memberInfo.
+          try { hhRef.update(new firebase.firestore.FieldPath('pendingInvites', String(email).toLowerCase()), firebase.firestore.FieldValue.delete()).catch(function () {}); } catch (e) {}
+        }
         openFamily();
       } catch (e) { try { window.toast && window.toast('Could not remove ' + (name || 'this person') + ' just now.'); } catch (e2) {} }
     };
@@ -1755,7 +1848,7 @@
     }
   }
 
-  async function saveMyRelationship() {
+  function saveMyRelationship() {
     if (!hhRef) return;
     var v = relValue('llMyRel', 'llMyRelCustom');
     var nameEl = document.getElementById('llMyName');
@@ -1765,13 +1858,26 @@
     var uid = auth.currentUser.uid;
     var u = {}; u['memberInfo.' + uid + '.relationship'] = v;
     if (nameEl) u['memberInfo.' + uid + '.name'] = name;
-    try {
-      await hhRef.update(u);
-      if (nameEl && name && name !== (auth.currentUser.displayName || '')) { try { await auth.currentUser.updateProfile({ displayName: name }); } catch (_) {} }
-      msg.textContent = '✅ Saved.';
+    var btn = document.getElementById('llMyRelBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    var done = false;
+    function finish() {
+      if (btn) { btn.disabled = false; btn.textContent = 'Save my profile'; }
+      if (msg) msg.textContent = '✅ Saved.';
       if (typeof window.render === 'function') { try { window.render(); } catch (_) {} }
     }
-    catch (e) { msg.textContent = 'Could not save: ' + ((e && e.message) || e); }
+    // Same optimistic exit as the first-run sheet (openFirstRun): the write lands in the local
+    // cache immediately and syncs when the connection returns, so "Saved" is not held hostage to
+    // the server round-trip. Only a real rejection re-opens the door to retry.
+    var t = setTimeout(function () { if (done) return; done = true; finish(); }, 6000);
+    hhRef.update(u).then(function () {
+      if (nameEl && name && name !== (auth.currentUser.displayName || '')) { try { auth.currentUser.updateProfile({ displayName: name }).catch(function () {}); } catch (_) {} }
+      if (done) return; done = true; clearTimeout(t); finish();
+    }).catch(function (e) {
+      if (done) return; done = true; clearTimeout(t);
+      if (btn) { btn.disabled = false; btn.textContent = 'Save my profile'; }
+      if (msg) msg.textContent = errText(e, 'Could not save just now. Mind trying again?');
+    });
   }
 
   // The message a recipient actually needs. The whole invite is matched by email address, so an
@@ -1780,27 +1886,57 @@
   // instructions living only in the mailto: branch that WhatsApp users never touch.
   function inviteText(email) {
     var link = location.origin + '/app/?join=1';
-    var babyName = (typeof state !== 'undefined' && state.babies && state.babies[0] && state.babies[0].name) ? state.babies[0].name : 'our little one';
+    var steps = '1) Open this link: ' + link + '\n'
+      + (email ? ('2) Sign in with this email address: ' + email + '\n   It has to be that one, that is how Cubby knows to let you in.\n\n') : '\n');
+    var hasBaby = (typeof state !== 'undefined' && state.babies && state.babies.length);
+    // Stage-aware, and honest about what the recipient will actually see. A pregnancy is
+    // owner-private unless she shares it, so an expecting family's invitee may land on a quiet
+    // screen: promising "you'll see everything, live" there was a broken promise on arrival.
+    if (!hasBaby && typeof state !== 'undefined' && state.pregnancy) {
+      return 'I\'m using Cubby to keep everything about our growing family in one calm place, and I\'d love you in our circle.\n\n'
+        + steps
+        + 'I\'ll share updates when I\'m ready, and once baby arrives you\'ll see the day as it happens.';
+    }
+    if (!hasBaby) {
+      return 'I\'m using Cubby as our family\'s calm little corner, and I\'d love you on it too.\n\n'
+        + steps
+        + 'There isn\'t much to see just yet, but you\'ll be in from the start.';
+    }
+    var babyName = (state.babies[0] && state.babies[0].name) || 'our little one';
     return 'I\'m using Cubby to keep track of ' + babyName + '\'s feeds, naps and nappies, and I\'d love you on it too.\n\n'
-      + '1) Open this link: ' + link + '\n'
-      + (email ? ('2) Sign in with this email address: ' + email + '\n   It has to be that one, that is how Cubby knows to let you in.\n\n') : '\n')
+      + steps
       + 'You\'ll see everything, live.';
   }
+  // The last-created invite email, per signed-in person, surviving relaunch (it used to be a
+  // page-session variable, so after a relaunch Share refused with "Create an invite first" even
+  // though a perfectly good invite existed).
   var _lastInviteEmail = '';
+  function lastInviteKey() { var u = auth.currentUser; return 'cubby-lastinvite-' + ((u && u.uid) || 'local'); }
+  function getLastInvite() {
+    if (!_lastInviteEmail) { try { _lastInviteEmail = localStorage.getItem(lastInviteKey()) || ''; } catch (e) {} }
+    return _lastInviteEmail;
+  }
+  function setLastInvite(email) {
+    _lastInviteEmail = email || '';
+    try {
+      if (email) localStorage.setItem(lastInviteKey(), email);
+      else localStorage.removeItem(lastInviteKey());
+    } catch (e) {}
+  }
   function copyAppLink() {
     var btn = document.getElementById('llCopyLink');
-    // No invite created this session -> we do NOT know which address they should sign in with, so
+    // No invite on record -> we do NOT know which address they should sign in with, so
     // inviteText('') would hand over a bare link with no address: the exact trap that lands the
     // recipient in an empty household as owner. Refuse it and point them at the invite box, where
-    // creating the invite sets _lastInviteEmail and makes this button send the full, correct message.
-    if (!_lastInviteEmail) {
+    // creating the invite records the email and makes this button send the full, correct message.
+    if (!getLastInvite()) {
       var m0 = document.getElementById('llInvMsg');
       if (m0) m0.textContent = 'First add their email in “Invite a family member” above and tap Create invite — then this sends the link and the exact address they sign in with.';
       try { var e0 = document.getElementById('llInvEmail'); if (e0) e0.focus(); } catch (_) {}
       if (btn) { var t0 = btn.textContent; btn.textContent = 'Create an invite first'; setTimeout(function () { btn.textContent = t0; }, 2200); }
       return;
     }
-    var text = inviteText(_lastInviteEmail);
+    var text = inviteText(getLastInvite());
     var done = function () { if (btn) { btn.textContent = 'Copied!'; setTimeout(function () { btn.textContent = 'Copy'; }, 1500); } };
     // Native share sheet first: in the wrapper this is the idiom, and mailto: in a WKWebView is the
     // worst option available. Falls back to the clipboard everywhere it is missing.
@@ -1814,7 +1950,7 @@
     else { try { var inp2 = document.getElementById('llAppLink'); inp2.select(); document.execCommand('copy'); done(); } catch (e) {} }
   }
 
-  async function submitInvite() {
+  function submitInvite() {
     var name = ((document.getElementById('llInvName').value) || '').trim();
     var email = ((document.getElementById('llInvEmail').value) || '').trim().toLowerCase();
     var rel = document.getElementById('llInvRel').value || '';
@@ -1822,15 +1958,11 @@
     var msg = document.getElementById('llInvMsg');
     if (!email || email.indexOf('@') < 1) { msg.textContent = 'Please enter a valid email.'; return; }
     var btn = document.getElementById('llInvBtn'); btn.disabled = true; btn.textContent = 'Creating…';
-    try {
-      await db.collection('invites').doc(email).set({
-        householdId: window.LL.householdId, role: owner ? 'owner' : 'caregiver',
-        relationship: rel, name: name,
-        invitedBy: auth.currentUser.uid, status: 'pending', createdAt: window.LL.serverTimestamp()
-      });
+    var done = false;
+    function showReady() {
       // One message, used by every route out of here. It used to be composed twice, and only the
       // mailto: copy carried the "sign in with this address" line that makes the invite work at all.
-      _lastInviteEmail = email;
+      setLastInvite(email);
       var bodyTxt = inviteText(email);
       var subject = 'Join me on Cubby 🐻';
       var mailto = 'mailto:' + encodeURIComponent(email) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(bodyTxt);
@@ -1848,10 +1980,28 @@
       };
       btn.textContent = 'Create invite'; btn.disabled = false;
       document.getElementById('llInvName').value = ''; document.getElementById('llInvEmail').value = '';
-    } catch (e) {
-      msg.textContent = 'Could not create invite: ' + ((e && e.message) || e);
-      btn.textContent = 'Create invite'; btn.disabled = false;
     }
+    // Same optimistic exit as the first-run sheet: offline the SDK queues the write and the
+    // promise stays pending, so waiting on it would freeze "Creating…" forever. Proceed after a
+    // short wait; only a real rejection turns into an error.
+    var t = setTimeout(function () { if (done) return; done = true; showReady(); }, 6000);
+    db.collection('invites').doc(email).set({
+      householdId: window.LL.householdId, role: owner ? 'owner' : 'caregiver',
+      relationship: rel, name: name,
+      invitedBy: auth.currentUser.uid, status: 'pending', createdAt: window.LL.serverTimestamp()
+    }).then(function () { if (done) return; done = true; clearTimeout(t); showReady(); })
+      .catch(function (e) {
+        if (done) return; done = true; clearTimeout(t);
+        msg.textContent = errText(e, 'Could not create the invite just now. Mind trying again?');
+        btn.textContent = 'Create invite'; btn.disabled = false;
+      });
+    // Mirror the pending invite onto the household doc so the circle screen can list and cancel
+    // it (owners cannot query /invites: reads there are invitee-only by rule). FieldPath keeps the
+    // dots in the email from being read as a nested path. Best-effort: the invite doc is the
+    // grant, this is only the visible list.
+    try {
+      if (hhRef) hhRef.update(new firebase.firestore.FieldPath('pendingInvites', email), { name: name, relationship: rel, role: owner ? 'owner' : 'caregiver', at: Date.now() }).catch(function () {});
+    } catch (e) {}
   }
 
   /* ---------- feedback ---------- */
@@ -1928,7 +2078,7 @@
       try { if (window.cubbyFlushPendingPush) window.cubbyFlushPendingPush(); } catch (e) {}
     } catch (err) {
       console.error(err);
-      showSignIn('Could not load your data: ' + ((err && err.message) || err));
+      showSignIn(errText(err, 'Could not load your data just now. Mind trying again?'));
     }
   });
 })();
