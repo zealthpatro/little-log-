@@ -266,6 +266,9 @@
         + '<button class="btn-ghost" style="flex:1;margin:0" onclick="voiceEditManually()">Not right? Edit</button>'
         + '<button class="btn-ghost" style="flex:1;margin:0" onclick="voiceRetry()">Try again</button>'
         + '</div>'
+        // The free door stays open on success too: what she said is never confiscated at the
+        // Pro wall, it can always be kept as a plain note for the circle.
+        + '<button class="btn-ghost" onclick="voiceSaveNote()">Save it as a note instead' + ((typeof isPro === 'function' && !isPro()) ? ' · free' : '') + '</button>'
         + tasteNote;
     } else if (vs.mode === 'note') {
       body = '<h2>Save it as a note?</h2>'

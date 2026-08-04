@@ -78,10 +78,23 @@
         });
   }
 
+  /* Plain-text share through the OS share sheet. WKWebView's navigator.share is flaky for
+     text-only payloads, so the doctor reports try this first inside the wrapper. Returns true
+     when the native sheet was invoked, false when the plugin is missing (callers then fall
+     back to navigator.share / clipboard). */
+  function nativeShareText(title, text) {
+    var P = (window.Capacitor && window.Capacitor.Plugins) || {};
+    if (!P.Share || !P.Share.share) return false;
+    P.Share.share({ title: String(title || 'Cubby'), text: String(text || '') })
+      .catch(function () {}); // dismissing the sheet is a normal choice, not an error
+    return true;
+  }
+
   function boot() {
     var Cap = window.Capacitor;
     if (!Cap || typeof Cap.isNativePlatform !== 'function' || !Cap.isNativePlatform()) return; // web PWA -> no-op
     window.cubbyNativeSaveFile = nativeSaveFile;
+    window.cubbyNativeShareText = nativeShareText;
     var platform = (Cap.getPlatform && Cap.getPlatform()) || 'native';
     window.__cubbyNative = platform;
     try { document.documentElement.setAttribute('data-native', platform); } catch (e) {}

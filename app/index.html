@@ -2412,9 +2412,15 @@ function renderStats(){
   });
   const labels=days.map(d=>['S','M','T','W','T','F','S'][d.getDay()]);
 
-  const avgFeed=(feedData.reduce((a,b)=>a+b,0)/7).toFixed(1);
-  const avgSleep=(sleepData.reduce((a,b)=>a+b,0)/7).toFixed(1);
-  const avgDia=(diaperData.reduce((a,b)=>a+b,0)/7).toFixed(1);
+  // Honest averages: divide by the days that actually have logs, not a fixed 7,
+  // so a day-2 family never reads "underfed, underslept baby".
+  const rawLogged=days.filter(d=>{ const k=dayKey(d.getTime()); return evs.some(e=>dayKey(e.time)===k); }).length;
+  const loggedDays=rawLogged||1;
+  const avgFeed=(feedData.reduce((a,b)=>a+b,0)/loggedDays).toFixed(1);
+  const avgSleep=(sleepData.reduce((a,b)=>a+b,0)/loggedDays).toFixed(1);
+  const avgDia=(diaperData.reduce((a,b)=>a+b,0)/loggedDays).toFixed(1);
+  const avgNote=rawLogged===0?`<div class="csub" style="text-align:center;margin:4px 0 10px">Nothing logged in the last 7 days yet</div>`
+    :rawLogged<7?`<div class="csub" style="text-align:center;margin:4px 0 10px">Averages over the ${rawLogged===1?'1 day':rawLogged+' days'} logged this week so far</div>`:'';
 
   return `<div class="fade-in">
     <div class="avg-row">
@@ -2422,6 +2428,7 @@ function renderStats(){
       <div class="avg-box"><div class="n" style="color:var(--sleep)">${avgSleep}h</div><div class="l">Avg sleep / day</div></div>
       <div class="avg-box"><div class="n" style="color:var(--diaper)">${avgDia}</div><div class="l">Avg diapers / day</div></div>
     </div>
+    ${avgNote}
     ${barCard('Feeds','Last 7 days',feedData,labels,'feed','')}
     ${barCard('Sleep','Hours per day',sleepData,labels,'sleep','h')}
     ${barCard('Diapers','Last 7 days',diaperData,labels,'diaper','')}
@@ -2578,9 +2585,18 @@ function openFeed(){
   const b=activeBaby();
   const ft=b.feedType||'combo';
   const solidsStage = b.solidsStarted || babyMonths()>=6;
-  // post-6mo (or solids started) defaults to solids; otherwise a milk feed
-  const def = solidsStage ? 'solids' : (ft==='formula' ? 'bottle' : 'breast');
-  feedDraft={method:def, side:'left', amount:120, unit:state.settings.unit||'ml', notes:'', content:(ft==='formula'?'formula':'breastmilk'), wAmount:30, foods:[], solidAmount:'', solidUnit:'tbsp', photoData:null};
+  // Right defaults: open on what this family actually does. Last-used method wins;
+  // amounts and unit come from the last matching feed, in the unit they were logged in,
+  // so an oz household never opens at "120 oz".
+  const feeds=babyEvents().filter(e=>e.type==='feed');           // newest first
+  const lastBottle=feeds.find(e=>e.method==='bottle');
+  const lastWater=feeds.find(e=>e.method==='water');
+  const unit=(lastBottle&&lastBottle.unit)||state.settings.unit||'ml';
+  const amount=(lastBottle&&lastBottle.amount)||(unit==='oz'?4:120);
+  const wAmount=(lastWater&&lastWater.amount)||(unit==='oz'?1:30);
+  const def = (feeds[0]&&feeds[0].method) || (solidsStage ? 'solids' : (ft==='formula' ? 'bottle' : 'breast'));
+  const content=(lastBottle&&lastBottle.content)||(ft==='formula'?'formula':'breastmilk');
+  feedDraft={method:def, side:'left', amount:amount, unit:unit, notes:'', content:content, wAmount:wAmount, foods:[], solidAmount:'', solidUnit:'tbsp', photoData:null};
   initTargets();
   initLogWhen();
   renderFeedSheet();
@@ -2599,7 +2615,9 @@ function renderFeedSheet(){
     water:[I.drop,'Water','A few sips']
   };
   const milk = ft==='formula' ? ['bottle'] : ['breast','bottle'];
-  const order = solidsStage ? ['solids','water',...milk] : [...milk,'water','solids'];
+  // Solids leads once weaning starts, but milk stays right behind it: most 6-12mo babies
+  // still take several milk feeds a day, so milk never drops below Water.
+  const order = solidsStage ? ['solids',...milk,'water'] : [...milk,'water','solids'];
   const grid = `<div class="opt-grid">${order.map((m,i)=>{
     const wide = (order.length%2===1 && i===order.length-1);
     const [icon,label,sub]=meta[m];
@@ -2865,7 +2883,10 @@ function saveDiaper(kind){
 /* ---------- PUMP ---------- */
 let pumpDraft={amount:60,unit:'ml',side:'both'};
 function openPump(){
-  pumpDraft={amount:60,unit:state.settings.unit,side:'both'}; initTargets(); initLogWhen(); renderPumpSheet();
+  // Same right-defaults rule as feeds: open on the last pump, in its own unit.
+  const lp=babyEvents().find(e=>e.type==='pump');
+  const u=(lp&&lp.unit)||state.settings.unit||'ml';
+  pumpDraft={amount:(lp&&lp.amount)||(u==='oz'?2:60), unit:u, side:(lp&&lp.side)||'both'}; initTargets(); initLogWhen(); renderPumpSheet();
 }
 function renderPumpSheet(){
   const d=pumpDraft;
@@ -4950,6 +4971,7 @@ function printTtcReport(){
 function shareTtcReport(){
   if(!ttcChargeOnce()) return;
   const txt='For your appointment · '+new Date().toLocaleDateString()+'\n\n'+ttcVisitSummary();
+  if(typeof window.cubbyNativeShareText==='function' && window.cubbyNativeShareText('Cubby appointment notes',txt)) return;
   if(navigator.share){ navigator.share({title:'Cubby appointment notes',text:txt}).catch(function(){}); return; }
   if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(function(){toast('Notes copied 🤍');}).catch(function(){toast('Could not copy');}); }
   else { toast('Copy not supported here'); }
@@ -5832,9 +5854,10 @@ function pregVisitSummary(){
    installed iOS PWA (no pop-ups) and dead-ended the whole feature. This renders the report in the same
    document, so Print/Save-PDF (window.print with a print stylesheet that shows only the report) and a
    native Share/Copy fallback both work everywhere, including a standalone home-screen app. */
+let pregReportCharged=false;
 function openPregDoctorReport(){
   const p=state.pregnancy; if(!p) return;
-  if(!useTaste('pdf','Doctor report')) return;
+  pregReportCharged=false;                     // free to open and read; Print / Share is the treat
   closeSheet();
   const esc=escapeHtml; const wk=pregWeek(); const summary=pregVisitSummary();
   const gen=new Date().toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'});
@@ -5846,8 +5869,8 @@ function openPregDoctorReport(){
   ov.setAttribute('style','position:fixed;inset:0;z-index:100000;background:#fff;color:#1a1a1a;overflow:auto;-webkit-overflow-scrolling:touch;font-family:Georgia,"Times New Roman",serif');
   ov.innerHTML='<div style="max-width:680px;margin:0 auto;padding:20px 20px 60px">'
     +'<div class="noprint" style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:16px;font-family:system-ui,sans-serif;flex-wrap:wrap">'
-    +'<button onclick="sharePregReport()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:1px solid #ddd;background:#fff;cursor:pointer">Share / Copy</button>'
-    +'<button onclick="printPregReport()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:none;background:#C97FA0;color:#fff;cursor:pointer">'+(isNativeApp()?'Save / Send report':'Print / Save PDF')+'</button>'
+    +'<button onclick="sharePregReport()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:1px solid #ddd;background:#fff;cursor:pointer">Share / Copy'+(isPro()?'':' ✨')+'</button>'
+    +'<button onclick="printPregReport()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:none;background:#C97FA0;color:#fff;cursor:pointer">'+(isNativeApp()?'Save / Send report':'Print / Save PDF')+(isPro()?'':' ✨')+'</button>'
     +'<button onclick="closePregReport()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:1px solid #ddd;background:#fff;cursor:pointer">Close</button>'
     +'</div>'
     +'<h1 style="font-size:24px;margin:0 0 2px">Pregnancy visit report</h1>'
@@ -5858,10 +5881,19 @@ function openPregDoctorReport(){
   document.body.appendChild(ov);
 }
 function closePregReport(){ var o=document.getElementById('reportOv'); if(o) o.remove(); }
+/* Charge the pdf taste once per open, on the delivery action (same rule as the TTC report):
+   never spend a taste before value is delivered. On a failed charge the Pro sheet would sit
+   invisibly under the report overlay (z-index 100000), so close the overlay first. */
+function pregChargeOnce(){
+  if(pregReportCharged) return true;
+  if(!useTaste('pdf','Doctor report')){ closePregReport(); return false; }
+  pregReportCharged=true; return true;
+}
 /* The pregnancy report is rendered as a full-screen overlay in THIS document and printed with a print
    stylesheet. WKWebView has no window.print(), so in the wrapper we lift the report out of the overlay
    (minus its own buttons) into a standalone file and share it. */
 function printPregReport(){
+  if(!pregChargeOnce()) return;
   if(!isNativeApp()){ window.print(); return; }
   var ov=document.getElementById('reportOv'); if(!ov){ window.print(); return; }
   var clone=ov.cloneNode(true);
@@ -5870,7 +5902,10 @@ function printPregReport(){
     + '<body style="font-family:Georgia,\'Times New Roman\',serif;color:#1a1a1a;line-height:1.55">'
     + clone.innerHTML + '</body></html>', 'cubby-pregnancy-report');
 }
-function sharePregReport(){ const p=state.pregnancy; if(!p) return; const txt=pregVisitSummary();
+function sharePregReport(){ const p=state.pregnancy; if(!p) return;
+  if(!pregChargeOnce()) return;
+  const txt=pregVisitSummary();
+  if(typeof window.cubbyNativeShareText==='function' && window.cubbyNativeShareText('Cubby pregnancy report',txt)) return;
   if(navigator.share){ navigator.share({title:'Cubby pregnancy report',text:txt}).catch(function(){}); return; }
   if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(function(){toast('Report copied 🤍');}).catch(function(){toast('Could not copy');}); }
   else { toast('Copy not supported here'); } }
@@ -8361,14 +8396,20 @@ function composeShareCard(canvas,maxW){
     ctx.fillText(ed.captionText||b.name, cx, cTop+capH*0.18);
     ctx.fillStyle=pal.sub; ctx.font=`800 ${Math.round(W*0.028)}px ${NUN}`;
     ctx.fillText(slotLabel(i).toUpperCase()+'  ·  '+dateStr, cx, cTop+capH*0.30);
-    const cols=[[st.feedsPerDay,'feeds / day'],[st.sleepPerDay+'h','sleep / day'],[String(st.diapers),'nappies']];
-    const xs=[W*0.27,W*0.5,W*0.73];
-    cols.forEach((c2,j)=>{
-      ctx.fillStyle=pal.accent; ctx.font=`700 ${Math.round(W*0.072)}px ${fam}`;
-      ctx.fillText(c2[0], xs[j], cTop+capH*0.58);
-      ctx.fillStyle=pal.sub; ctx.font=`800 ${Math.round(W*0.022)}px ${NUN}`;
-      ctx.fillText(c2[1].toUpperCase(), xs[j], cTop+capH*0.70);
-    });
+    // Only logged numbers make the keepsake; an unlogged month shows a soft line, never "0.0".
+    const cols=[[st.feedsPerDay,'feeds / day',+st.feedsPerDay>0],[st.sleepPerDay+'h','sleep / day',+st.sleepPerDay>0],[String(st.diapers),'nappies',st.diapers>0]].filter(c2=>c2[2]);
+    if(cols.length){
+      const xs=cols.map((c2,j)=>W*(0.5+(j-(cols.length-1)/2)*0.23));
+      cols.forEach((c2,j)=>{
+        ctx.fillStyle=pal.accent; ctx.font=`700 ${Math.round(W*0.072)}px ${fam}`;
+        ctx.fillText(c2[0], xs[j], cTop+capH*0.58);
+        ctx.fillStyle=pal.sub; ctx.font=`800 ${Math.round(W*0.022)}px ${NUN}`;
+        ctx.fillText(c2[1].toUpperCase(), xs[j], cTop+capH*0.70);
+      });
+    } else {
+      ctx.fillStyle=pal.sub; ctx.font=`600 italic ${Math.round(W*0.032)}px ${fam}`;
+      ctx.fillText('Not logged this month, and that is fine.', cx, cTop+capH*0.62);
+    }
     if(st.milestones&&st.milestones.length){
       ctx.fillStyle=pal.ink; ctx.font=`600 ${Math.round(W*0.03)}px ${fam}`;
       ctx.fillText('🌟 '+st.milestones.map(m=>m.title).slice(0,2).join(' · '), cx, cTop+capH*0.85);
@@ -9621,20 +9662,27 @@ function composeMemoryCard(canvas,month,img){
   ctx.fillText(b.name, W/2, y+72);
   ctx.fillStyle='#8a7d72'; ctx.font=`700 26px "Nunito Sans", sans-serif`;
   ctx.fillText(st.range, W/2, y+118);
-  // stat tiles
+  // stat tiles: only the numbers that were actually logged. A keepsake must never
+  // read as a report card of failure, so all-zero months skip the tiles entirely.
   y+=190;
-  const tiles=[['Avg sleep', st.sleepPerDay+'h', 'per day', '#5E6AA8'],
-               ['Feeds', st.feedsPerDay, 'per day', '#E29A3B'],
-               ['Diapers', String(st.diapers), 'this month', '#56A08E']];
-  const tw=(W-pad*2-40)/3;
-  tiles.forEach((t,i)=>{
-    const x=pad+i*(tw+20);
-    ctx.fillStyle='#fff'; roundRect(ctx,x,y,tw,180,22); ctx.fill();
+  const tiles=[['Avg sleep', st.sleepPerDay+'h', 'per day', '#5E6AA8', +st.sleepPerDay>0],
+               ['Feeds', st.feedsPerDay, 'per day', '#E29A3B', +st.feedsPerDay>0],
+               ['Diapers', String(st.diapers), 'this month', '#56A08E', st.diapers>0]].filter(t=>t[4]);
+  if(tiles.length){
+    const tw=(W-pad*2-20*(tiles.length-1))/tiles.length;
+    tiles.forEach((t,i)=>{
+      const x=pad+i*(tw+20);
+      ctx.fillStyle='#fff'; roundRect(ctx,x,y,tw,180,22); ctx.fill();
+      ctx.textAlign='center';
+      ctx.fillStyle=t[3]; ctx.font=`600 52px Fraunces, serif`; ctx.fillText(t[1], x+tw/2, y+78);
+      ctx.fillStyle='#3a2f28'; ctx.font=`800 22px "Nunito Sans", sans-serif`; ctx.fillText(t[0], x+tw/2, y+118);
+      ctx.fillStyle='#a89c90'; ctx.font=`700 19px "Nunito Sans", sans-serif`; ctx.fillText(t[2], x+tw/2, y+148);
+    });
+  } else {
     ctx.textAlign='center';
-    ctx.fillStyle=t[3]; ctx.font=`600 52px Fraunces, serif`; ctx.fillText(t[1], x+tw/2, y+78);
-    ctx.fillStyle='#3a2f28'; ctx.font=`800 22px "Nunito Sans", sans-serif`; ctx.fillText(t[0], x+tw/2, y+118);
-    ctx.fillStyle='#a89c90'; ctx.font=`700 19px "Nunito Sans", sans-serif`; ctx.fillText(t[2], x+tw/2, y+148);
-  });
+    ctx.fillStyle='#a89c90'; ctx.font=`600 italic 30px "Nunito Sans", sans-serif`;
+    ctx.fillText('A month of moments, not numbers.', W/2, y+90);
+  }
   // milestones
   y+=230;
   ctx.textAlign='left';
@@ -9709,8 +9757,13 @@ function genThenNow(){
   if(!useTaste('thennow','Then & Now')) return;
   showLoader(['Lining up then and now','Watching them grow up']);
   const imgs=pickSel.map(id=>{ const p=(state.photos||[]).find(x=>x.id===id); return {p,data:photoSrc(p.photoId)}; });
-  let loaded=0; const objs=[];
-  imgs.forEach((it,idx)=>{ const im=new Image(); im.onload=()=>{ objs[idx]={img:im,createdAt:it.p.createdAt}; if(++loaded===2) drawThenNow(objs); }; im.src=it.data; });
+  // A photo that fails to load must never leave the loader up with the free try spent:
+  // dismiss, give the taste back, and say so calmly.
+  let loaded=0, failed=false; const objs=[];
+  imgs.forEach((it,idx)=>{ const im=new Image();
+    im.onload=()=>{ if(failed) return; objs[idx]={img:im,createdAt:it.p.createdAt}; if(++loaded===2) drawThenNow(objs); };
+    im.onerror=()=>{ if(failed) return; failed=true; hideLoader(); refundTaste('thennow'); toast('One of those photos would not load. Nothing was used, please try again.'); };
+    im.src=it.data; });
 }
 function drawThenNow(objs){
   const W=1200,H=780,gap=24,cw=(W-gap*3)/2;
@@ -9762,8 +9815,12 @@ function makeCollage(){
   const mm=monthlyMap(); const slots=MONTH_SLOTS.filter(i=>mm[i]);
   if(slots.length<2){ toast('Add at least 2 monthly photos first'); return; }
   const items=slots.map(i=>({i,data:photoSrc(mm[i].photoId)}));
-  let loaded=0; const objs=[];
-  items.forEach((it,idx)=>{ const im=new Image(); im.onload=()=>{ objs[idx]={img:im,i:it.i}; if(++loaded===items.length) drawCollage(objs); }; im.src=it.data; });
+  // Same rule as Then & Now: a broken photo says so instead of silently doing nothing.
+  let loaded=0, failed=false; const objs=[];
+  items.forEach((it,idx)=>{ const im=new Image();
+    im.onload=()=>{ if(failed) return; objs[idx]={img:im,i:it.i}; if(++loaded===items.length) drawCollage(objs.filter(Boolean)); };
+    im.onerror=()=>{ if(failed) return; failed=true; toast('One of those photos would not load, please try again.'); };
+    im.src=it.data; });
 }
 function drawCollage(objs){
   const cols=objs.length<=4?2:3;
