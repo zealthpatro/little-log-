@@ -5267,7 +5267,7 @@ function saveMoment(){
   if(!d.photoData){ toast('Choose a photo first'); return; }
   const week=Math.max(1,Math.min(42,parseInt(d.week)||pregWeek()));
   const photoId=uid();
-  PhotoStore.set(photoId, d.photoData);
+  PhotoStore.set(photoId, d.photoData, {preg:true}); // bytes go to the owner-gated journey subcollection, never the circle album
   state.pregnancy.moments.push({id:uid(), photoId, week, note:(d.note||'').trim(), at:now()});
   persist(); closeSheet(); pregGo('moments'); toast('Moment saved 🤍');
 }
@@ -8100,7 +8100,7 @@ async function saveJourneyMoment(){
   const saved=(isPreg?pregJGet(d.cardId):glGetSaved(d.cardId))||{};
   const oldPid=saved.photoId||null;
   let photoId=saved.photoId||null; if(d.removePhoto) photoId=null;
-  if(d.photoData){ photoId=uid(); await PhotoStore.set(photoId,d.photoData); }
+  if(d.photoData){ photoId=uid(); await PhotoStore.set(photoId,d.photoData,isPreg?{preg:true}:null); } // pregnancy-card bytes stay owner-gated
   if(!photoId && !note && !(d.card.custom&&title)){ toast('Add a photo or a note'); return; }
   const rec={ photoId:photoId, note:note, date:date, who:d.who||'', at:saved.at||now(), updated:now() };
   if(d.card.custom){ rec.custom=true; rec.title=title||'A moment'; rec.section=isPreg?'Before you arrived':'Custom moments'; }

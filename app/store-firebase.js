@@ -13,6 +13,9 @@
   if (!window.LL || !window.LL.auth) return;
   var auth = window.LL.auth, db = window.LL.db;
   var LOCAL_PREFS_KEY = 'little-log-prefs-v1'; // per-device: activeBabyId, timers, theme
+  // Ids whose bytes came from an owner-gated pregnancy photos subcollection (not the circle
+  // collection). Lets the two byte listeners share PhotoStore.map without stepping on each other.
+  PhotoStore.privIds = PhotoStore.privIds || {};
 
   var hhRef = null, eventsRef = null, photosRef = null, notesRef = null;
   var booted = false;
@@ -78,6 +81,21 @@
   var knownPregJourney = null; // sig of last-synced {data, sharedWith} (diffing)
   var legacyBlobPreg = null;   // a journey found in a legacy `app` blob, awaiting one-time relocation
   var pregMigrated = false;    // owner has already relocated the legacy journey this session
+
+  /* ---------- pregnancy photo BYTES (owner-gated, PRIV: bytes follow the metadata) ----------
+     A bump/scan photo's metadata (moments, journey cards) lives on the owner-gated pregnancy
+     doc — but the BYTES used to go to households/{hid}/photos, which every circle member can
+     read. So the bytes now live in households/{hid}/pregnancy/{owner}/photos/{photoId}, where
+     rules apply the exact gate the metadata already has (owner, or her sharedWith list). */
+  var pregPhotoUnsubOwn = null;     // my own journey-photos listener (always on: kept keepsakes survive pregClear)
+  var pregPhotoUnsubOther = null;   // one foreign journey's photos (when her doc is shared with me)
+  var pregPhotoOtherOwner = null;   // whose foreign photos we listen to
+  var circlePhotoIds = {};          // ids currently present in the circle-visible /photos collection
+  var pregBytesMigrating = false;   // one in-flight migration pass at a time
+  window.LL.memberEmails = {};      // PRIV-2: owner-only mirror of /memberEmails (uid -> email)
+  var memberEmailsUnsub = null;     // owner-only listener on /memberEmails
+  var memberEmailsMigrated = false; // one owner migration attempt per session
+  var ownEmailWritten = false;      // wrote my own memberEmails doc this session
 
   /* ---------- styles for the sign-in overlay ---------- */
   var st = document.createElement('style');
@@ -493,6 +511,13 @@
     _lastInviteEmail = ''; // per-uid cache: never let one account's invite email survive into the next
     matOwner = null; matShared = {}; knownMat = {};
     pregOwner = null; pregShared = []; knownPregJourney = null; legacyBlobPreg = null; pregMigrated = false;
+    if (pregPhotoUnsubOwn) { try { pregPhotoUnsubOwn(); } catch (e) {} pregPhotoUnsubOwn = null; }
+    if (pregPhotoUnsubOther) { try { pregPhotoUnsubOther(); } catch (e) {} pregPhotoUnsubOther = null; }
+    pregPhotoOtherOwner = null; circlePhotoIds = {}; pregBytesMigrating = false;
+    ownPregPhotoIds = {}; otherPregPhotoIds = {};
+    PhotoStore.privIds = {}; PhotoStore.map = {}; // one account's photo bytes never survive into the next session
+    if (memberEmailsUnsub) { try { memberEmailsUnsub(); } catch (e) {} memberEmailsUnsub = null; }
+    window.LL.memberEmails = {}; memberEmailsMigrated = false; ownEmailWritten = false;
     hhRef = eventsRef = photosRef = notesRef = null;
     state.notes = [];
     // Clear in-memory subject data so one account's journey + maternal-private health (applyMatDoc
@@ -515,13 +540,49 @@
   }
 
   /* ---------- household resolution ---------- */
+  // PRIV-2: record my own sign-in email in my memberEmails doc (self + owner readable by rule).
+  // Best-effort and idempotent; called after create/join and once per session at sync start, so
+  // the address exists wherever the owner needs it (invite matching, removal cleanup) without
+  // ever sitting in the circle-readable household doc.
+  function writeOwnMemberEmail(hidOrRef) {
+    try {
+      var u = auth.currentUser; if (!u) return;
+      var em = (u.email || '').toLowerCase(); if (!em) return;
+      var ref = (typeof hidOrRef === 'string') ? db.collection('households').doc(hidOrRef) : hidOrRef;
+      if (!ref) return;
+      ref.collection('memberEmails').doc(u.uid).set({ email: em })
+        .catch(function (e) { console.warn('memberEmail set', e); });
+    } catch (e) {}
+  }
+  // LAZY MIGRATION (PRIV-2), owner's device only: move every email still sitting in the shared
+  // memberInfo blob into /memberEmails/{uid}, then strip the blob fields. The email docs are
+  // written and awaited FIRST; the strip runs only after every copy landed, so a failure can
+  // never lose an address — worst case it stays where it was and the next load retries.
+  function maybeMigrateMemberEmails(d) {
+    if (memberEmailsMigrated || !hhRef) return;
+    if ((window.LL.role || '') !== 'owner') return;
+    var info = (d && d.memberInfo) || {};
+    var withEmail = Object.keys(info).filter(function (u) { return info[u] && info[u].email; });
+    if (!withEmail.length) { memberEmailsMigrated = true; return; }
+    memberEmailsMigrated = true; // one attempt per session; a failed attempt retries next load
+    Promise.all(withEmail.map(function (u) {
+      return hhRef.collection('memberEmails').doc(u).set({ email: String(info[u].email).toLowerCase() });
+    })).then(function () {
+      var upd = {};
+      withEmail.forEach(function (u) { upd['memberInfo.' + u + '.email'] = firebase.firestore.FieldValue.delete(); });
+      return hhRef.update(upd);
+    }).catch(function (e) { console.warn('memberEmail migrate', e); });
+  }
   function membersMap(uid, r) { var m = {}; m[uid] = r; return m; }
-  function memberInfoMap(user, r, rel) { var m = {}; m[user.uid] = { name: user.displayName || '', email: user.email || '', photoURL: user.photoURL || '', role: r, relationship: rel || '' }; return m; }
+  // PRIV-2: memberInfo (the circle-shared blob) no longer carries email addresses. A member's
+  // sign-in email goes to households/{hid}/memberEmails/{uid} (writeOwnMemberEmail), which rules
+  // gate to that member + the household owner(s). Everyone still sees names and bear labels.
+  function memberInfoMap(user, r, rel) { var m = {}; m[user.uid] = { name: user.displayName || '', photoURL: user.photoURL || '', role: r, relationship: rel || '' }; return m; }
   function memberUpdate(user, r, opts) {
     opts = opts || {};
     var u = {};
     u['members.' + user.uid] = r;
-    u['memberInfo.' + user.uid] = { name: opts.name || user.displayName || '', email: user.email || '', photoURL: user.photoURL || '', role: r, relationship: opts.relationship || '' };
+    u['memberInfo.' + user.uid] = { name: opts.name || user.displayName || '', photoURL: user.photoURL || '', role: r, relationship: opts.relationship || '' };
     return u;
   }
 
@@ -573,6 +634,7 @@
       if (inv.exists) {
         var data = inv.data();
         await db.collection('households').doc(data.householdId).update(memberUpdate(user, data.role || 'caregiver', { relationship: data.relationship, name: data.name }));
+        writeOwnMemberEmail(data.householdId); // PRIV-2: email goes to the gated doc, not memberInfo
         await userRef.set({ householdId: data.householdId, name: user.displayName || '', email: user.email || '' }, { merge: true });
         // Remember that this session is a JOIN, not a return, so the first-run screen can say whose
         // circle they have walked into. Read once by openFirstRun and never persisted.
@@ -609,6 +671,7 @@
     m.events.forEach(function (ev) { writes.push(newRef.collection('events').doc(String(ev.id)).set(Object.assign({ authorId: user.uid }, ev))); });
     Object.keys(m.photos).forEach(function (pid) { writes.push(newRef.collection('photos').doc(pid).set({ data: m.photos[pid], authorId: user.uid })); });
     await Promise.all(writes);
+    writeOwnMemberEmail(newRef); // PRIV-2: email goes to the gated doc, not memberInfo
     var userDoc = { householdId: newRef.id, name: user.displayName || '', email: user.email || '' };
     // Referral attribution: brand-new family + a remembered ?ref= code -> record who referred them.
     // (Invited caregivers above join an existing household; that's the care-circle loop, not a referral.)
@@ -784,6 +847,89 @@
     state.pregnancy = null;
     matOwner = null; matShared = {}; knownMat = {};
     matUnsub.forEach(function (u) { try { u(); } catch (e) {} }); matUnsub = [];
+    ensureOtherPregPhotoListener(null); // and stop rendering byte we may no longer see
+  }
+
+  /* ---------- pregnancy photo BYTES (owner-gated subcollection) ---------- */
+  // Bytes live in households/{hid}/pregnancy/{owner}/photos/{photoId} = {data, authorId}.
+  // Two listeners can feed PhotoStore.map: my OWN subcollection (always attached — rules always
+  // allow it, and after a kept loss these are the kept keepsakes) and at most ONE foreign
+  // journey's (attached only once her doc is readable, i.e. she shared with me).
+  var ownPregPhotoIds = {}, otherPregPhotoIds = {};
+  function handlePregPhotoSnap(snap, bag) {
+    snap.docChanges().forEach(function (ch) {
+      var id = ch.doc.id;
+      if (ch.type === 'removed') {
+        delete bag[id]; delete PhotoStore.privIds[id];
+        if (!circlePhotoIds[id]) delete PhotoStore.map[id];
+      } else {
+        bag[id] = 1; PhotoStore.privIds[id] = 1;
+        PhotoStore.map[id] = ch.doc.data().data;
+      }
+    });
+    if (booted && !(snap.metadata && snap.metadata.hasPendingWrites)) render();
+  }
+  function ensureOwnPregPhotoListener(uidNow) {
+    if (pregPhotoUnsubOwn || !hhRef || !uidNow) return;
+    pregPhotoUnsubOwn = hhRef.collection('pregnancy').doc(uidNow).collection('photos')
+      .onSnapshot(function (snap) { handlePregPhotoSnap(snap, ownPregPhotoIds); },
+        function (e) { /* nothing readable yet; ignore */ });
+  }
+  function ensureOtherPregPhotoListener(owner) {
+    if (owner === pregPhotoOtherOwner) return;
+    if (pregPhotoUnsubOther) { try { pregPhotoUnsubOther(); } catch (e) {} pregPhotoUnsubOther = null; }
+    // Drop the old journey's bytes from the map: losing read access (unshared, or a loss she
+    // chose not to broadcast) must also stop these photos rendering on this device.
+    Object.keys(otherPregPhotoIds).forEach(function (id) {
+      delete PhotoStore.privIds[id];
+      if (!circlePhotoIds[id]) delete PhotoStore.map[id];
+    });
+    otherPregPhotoIds = {};
+    pregPhotoOtherOwner = owner;
+    if (!owner || !hhRef) return;
+    pregPhotoUnsubOther = hhRef.collection('pregnancy').doc(owner).collection('photos')
+      .onSnapshot(function (snap) { handlePregPhotoSnap(snap, otherPregPhotoIds); },
+        function (e) { if (pregPhotoOtherOwner === owner) ensureOtherPregPhotoListener(null); });
+  }
+
+  // LAZY MIGRATION (PRIV: pregnancy bytes). Before this build the bytes of every pregnancy
+  // photo were written to the circle-visible /photos collection. On the device that owns the
+  // referencing metadata (her journey, or a device-local kept-memories archive), copy each
+  // referenced byte doc into the owner-gated subcollection, then delete the circle copy.
+  // Copy-first and awaited, so a failure can never lose bytes; a failed delete just leaves
+  // the old copy for the next pass.
+  function pregReferencedPhotoIds() {
+    var ids = {};
+    var p = state.pregnancy || {};
+    (p.moments || []).forEach(function (m) { if (m && m.photoId) ids[m.photoId] = 1; });
+    var saved = (p.journey && p.journey.saved) || {};
+    Object.keys(saved).forEach(function (k) { var r = saved[k]; if (r && r.photoId) ids[r.photoId] = 1; });
+    (state.pregnancyArchive || []).forEach(function (a) {
+      (a.moments || []).forEach(function (m) { if (m && m.photoId) ids[m.photoId] = 1; });
+    });
+    return Object.keys(ids);
+  }
+  function maybeMigratePregPhotoBytes() {
+    if (pregBytesMigrating || !hhRef || !photosRef) return;
+    var uidNow = auth.currentUser && auth.currentUser.uid; if (!uidNow) return;
+    var p = state.pregnancy;
+    var ownsJourney = !!(p && p.ownerUid && p.ownerUid !== 'local' && p.ownerUid === uidNow);
+    var hasKept = (state.pregnancyArchive || []).some(function (a) { return (a.moments || []).length; });
+    if (!ownsJourney && !hasKept) return; // nothing here is ours to relocate
+    var pending = pregReferencedPhotoIds().filter(function (id) { return circlePhotoIds[id] && PhotoStore.map[id]; });
+    if (!pending.length) return;
+    pregBytesMigrating = true;
+    var priv = hhRef.collection('pregnancy').doc(uidNow).collection('photos');
+    (async function () {
+      for (var i = 0; i < pending.length; i++) {
+        var id = pending[i];
+        try {
+          await priv.doc(String(id)).set({ data: PhotoStore.map[id], authorId: uidNow });
+          PhotoStore.privIds[id] = 1; ownPregPhotoIds[id] = 1;
+          await photosRef.doc(String(id)).delete();
+        } catch (e) { console.warn('preg photo migrate', e); }
+      }
+    })().then(function () { pregBytesMigrating = false; }, function () { pregBytesMigrating = false; });
   }
   // Listen to the journey doc we're permitted to read: the owner reads her own;
   // a non-owner tries each member's doc (ones not shared with us fail permission and are ignored).
@@ -798,6 +944,7 @@
       if (doc.exists) { pregOwner = uidNow; applyPregJourney(uidNow, doc.data()); ensureMaternalListeners(uidNow); }
       else if (pregOwner === uidNow) { pregOwner = null; clearPregJourneyState(); }
       applyingRemote = false;
+      maybeMigratePregPhotoBytes(); // my journey metadata just (re)arrived: relocate any circle-visible bytes
       if (booted) render();
     }, function (e) { /* own doc not readable yet; ignore */ }));
     // A non-owner: try every other member's journey doc. Not shared with us -> permission-denied, ignored.
@@ -808,6 +955,7 @@
         if (!doc.exists) { if (pregOwner === m) { pregOwner = null; clearPregJourneyState(); if (booted) render(); } return; }
         applyingRemote = true; pregOwner = m; applyPregJourney(m, doc.data()); applyingRemote = false;
         ensureMaternalListeners(uidNow);
+        ensureOtherPregPhotoListener(m); // her doc is readable -> her photo bytes are too
         if (booted) render();
       }, function (e) {
         // We WERE reading this member's journey and now can't: she removed us from sharedWith. Losing
@@ -957,6 +1105,7 @@
     try {
       var user = auth.currentUser; if (!user || !inv || !inv.householdId) return;
       await db.collection('households').doc(inv.householdId).update(memberUpdate(user, inv.role || 'caregiver', { relationship: inv.relationship, name: inv.name }));
+      writeOwnMemberEmail(inv.householdId); // PRIV-2: email goes to the gated doc, not memberInfo
       await db.collection('users').doc(user.uid).set({ householdId: inv.householdId }, { merge: true });
       try { if (window.toast) window.toast('Joined the family 🐻'); } catch (e) {}
       setTimeout(function () { try { location.reload(); } catch (e) {} }, 500);
@@ -971,6 +1120,13 @@
     eventsRef = hhRef.collection('events');
     photosRef = hhRef.collection('photos');
     notesRef = hhRef.collection('notes');
+    // PRIV-2: make sure my own gated email doc exists (idempotent; covers members who joined
+    // before the email move shipped and whose blob entry the owner has already stripped).
+    if (!ownEmailWritten) { ownEmailWritten = true; writeOwnMemberEmail(hhRef); }
+    // My own journey-photo bytes. Attached for every member unconditionally: the rules always
+    // let me read my OWN pregnancy photos path, and after a kept loss (pregClear removed the
+    // journey doc, the archive is device-local) these are exactly the kept keepsake bytes.
+    ensureOwnPregPhotoListener(user.uid);
 
     var prefs = loadPrefs();
     var gotApp = false, gotEvents = false;
@@ -1013,6 +1169,20 @@
       // doc). (Re)subscribe whenever membership changes, including the very first snapshot.
       var membersSig = stableStringify(d.members || {});
       if (membersSig !== lastMembersSig) { lastMembersSig = membersSig; ensurePregListeners(user.uid); }
+      // PRIV-2: only owners sync the memberEmails subcollection (rules deny it to everyone
+      // else); the family sheet reads window.LL.memberEmails. A demoted/departing owner
+      // drops the listener and the mirror.
+      if (window.LL.role === 'owner' && !memberEmailsUnsub) {
+        memberEmailsUnsub = hhRef.collection('memberEmails').onSnapshot(function (s) {
+          var m = {};
+          s.forEach(function (dd) { m[dd.id] = (dd.data() || {}).email || ''; });
+          window.LL.memberEmails = m;
+        }, function (e) { /* denied (not an owner any more) or offline: sheet shows no emails */ });
+      } else if (window.LL.role !== 'owner' && memberEmailsUnsub) {
+        try { memberEmailsUnsub(); } catch (e2) {}
+        memberEmailsUnsub = null; window.LL.memberEmails = {};
+      }
+      maybeMigrateMemberEmails(d); // owner's device moves legacy blob emails into /memberEmails
       var sig = hhSig(d.app, d.members, d.memberInfo) + '|' + JSON.stringify(d.pro || null);
       if (booted && sig === lastHhSig) return; // our own write echo / duplicate emission, already on screen
       lastHhSig = sig;
@@ -1092,9 +1262,17 @@
 
     unsub.push(photosRef.onSnapshot(function (snap) {
       snap.docChanges().forEach(function (ch) {
-        if (ch.type === 'removed') delete PhotoStore.map[ch.doc.id];
-        else PhotoStore.map[ch.doc.id] = ch.doc.data().data;
+        if (ch.type === 'removed') {
+          delete circlePhotoIds[ch.doc.id];
+          // A migrated pregnancy photo leaves the circle collection while its bytes live on
+          // in the gated subcollection — don't blank it out from under the owner's screen.
+          if (!PhotoStore.privIds[ch.doc.id]) delete PhotoStore.map[ch.doc.id];
+        } else {
+          circlePhotoIds[ch.doc.id] = 1;
+          PhotoStore.map[ch.doc.id] = ch.doc.data().data;
+        }
       });
+      maybeMigratePregPhotoBytes(); // owner's device moves any circle-visible pregnancy bytes out
       if (booted && !(snap.metadata && snap.metadata.hasPendingWrites)) render();
     }, function (e) { console.warn('photos listen', e); }));
 
@@ -1440,6 +1618,14 @@
           await Promise.all(cats.docs.map(function (d) { return d.ref.delete().catch(function () {}); }));
         } catch (e) { console.warn('del mhealth', e); }
         try { await hhRef.collection('pregnancy').doc(uid).delete(); } catch (e) { console.warn('del pregnancy', e); }
+        // The journey's photo BYTES are a subcollection under that doc, and deleting a doc
+        // never deletes its subcollections — purge them explicitly while still a member.
+        try {
+          var pph = await hhRef.collection('pregnancy').doc(uid).collection('photos').get();
+          await Promise.all(pph.docs.map(function (d2) { return d2.ref.delete().catch(function () {}); }));
+        } catch (e) { console.warn('del preg photos', e); }
+        // PRIV-2: their gated email doc goes with them (self-delete needs no membership).
+        try { await hhRef.collection('memberEmails').doc(uid).delete(); } catch (e) {}
         // Notes she wrote privately to herself: nobody else can read them, so they go with her.
         // Notes to the circle stay (shared story); notes another member addressed to her are their
         // content, not hers, and rules only let the author delete them anyway.
@@ -1528,7 +1714,7 @@
     return coParent.length ? coParent[0] : sorted[0];
   }
 
-  PhotoStore.set = async function (id, dataUrl) {
+  PhotoStore.set = async function (id, dataUrl, opts) {
     PhotoStore.map[id] = dataUrl;
     if (!photosRef) return;
     // Firestore rejects docs over 1 MiB; that write used to fail with only a console.warn while
@@ -1538,7 +1724,23 @@
       try { window.toast && window.toast('That photo is too big to sync — it stays on this device.'); } catch (e) {}
       return;
     }
-    try { await photosRef.doc(String(id)).set({ data: dataUrl, authorId: (auth.currentUser && auth.currentUser.uid) || null }); }
+    var uidNow = (auth.currentUser && auth.currentUser.uid) || null;
+    // Pregnancy-private bytes (bump photos, scan moments, journey cards) NEVER go to the
+    // circle-visible /photos collection: they live under the owner-gated journey doc, so the
+    // rules give the bytes the exact visibility the metadata already has (owner + sharedWith).
+    if (opts && opts.preg) {
+      var p = state.pregnancy;
+      var powner = (p && p.ownerUid && p.ownerUid !== 'local') ? p.ownerUid : uidNow;
+      if (!uidNow || powner !== uidNow) return; // not her journey: metadata won't sync either; bytes stay on this device
+      PhotoStore.privIds[id] = 1; ownPregPhotoIds[id] = 1;
+      try { await hhRef.collection('pregnancy').doc(uidNow).collection('photos').doc(String(id)).set({ data: dataUrl, authorId: uidNow }); }
+      catch (e) {
+        console.warn('preg photo set', e);
+        try { window.toast && window.toast('That photo didn’t sync just now — it’s safe on this device.'); } catch (e2) {}
+      }
+      return;
+    }
+    try { await photosRef.doc(String(id)).set({ data: dataUrl, authorId: uidNow }); }
     catch (e) {
       console.warn('photo set', e);
       try { window.toast && window.toast('That photo didn’t sync just now — it’s safe on this device.'); } catch (e2) {}
@@ -1546,7 +1748,17 @@
   };
   PhotoStore.del = async function (id) {
     delete PhotoStore.map[id];
-    if (photosRef) { try { await photosRef.doc(String(id)).delete(); } catch (e) {} }
+    var wasPriv = !!PhotoStore.privIds[id];
+    delete PhotoStore.privIds[id]; delete ownPregPhotoIds[id]; delete otherPregPhotoIds[id];
+    if (!photosRef) return;
+    // The byte doc may live in either home (circle collection, or my own journey subcollection —
+    // e.g. deleting a moment, discarding after a loss, removing kept memories). Try both; the
+    // rules referee each delete server-side and a miss is a harmless no-op.
+    if (!wasPriv || circlePhotoIds[id]) { try { await photosRef.doc(String(id)).delete(); } catch (e) {} }
+    var uidNow = auth.currentUser && auth.currentUser.uid;
+    if (wasPriv && uidNow && hhRef) {
+      try { await hhRef.collection('pregnancy').doc(uidNow).collection('photos').doc(String(id)).delete(); } catch (e) {}
+    }
   };
   PhotoStore.load = async function () {};
   PhotoStore.save = async function () {};
@@ -1600,20 +1812,34 @@
     var info = window.LL.memberInfo || {};
     var myRel = (info[me.uid] && info[me.uid].relationship) || '';
 
+    // PRIV-2: emails live in the owner-gated memberEmails subcollection now. I always know my
+    // own (auth token); an owner sees everyone's (their mirror is rules-enforced); any address
+    // still sitting in a legacy pre-migration blob entry is the fallback until the owner's
+    // device strips it.
+    function emailForUid(uid) {
+      if (uid === me.uid) return me.email || '';
+      var em = (window.LL.memberEmails || {})[uid];
+      if (em) return em;
+      return ((info[uid] || {}).email) || '';
+    }
+
     var rows = Object.keys(info).map(function (uid) {
       var m = info[uid] || {};
+      // A caregiver sees names and bear labels; email addresses are shown only to owners
+      // (who need them to run the circle) and to each person for themselves.
+      var em = (myRole === 'owner' || uid === me.uid) ? emailForUid(uid) : '';
       var who = m.relationship ? (m.relationship + (m.role === 'owner' ? ' · Owner' : '')) : (m.role === 'owner' ? 'Owner' : 'Caregiver');
       var av = (typeof window.memberAvatarSvg === 'function') ? '<span class="ll-mem-av">' + window.memberAvatarSvg(uid, 40) + '</span>' : '';
-      var rm = (myRole === 'owner' && uid !== me.uid) ? '<button class="ll-rm" data-uid="' + uid + '" data-email="' + esc(m.email || '') + '" data-name="' + esc(m.name || m.email || 'this person') + '">Remove</button>' : '';
-      return '<div class="ll-mem"><div style="display:flex;align-items:center;gap:10px">' + av + '<div><div class="ll-mem-name">' + esc(m.name || m.email || 'Member') + (uid === me.uid ? ' (you)' : '')
-        + '</div><div class="ll-mem-email">' + esc(m.email || '') + '</div></div></div><div style="display:flex;align-items:center;gap:8px"><span class="ll-mem-role">' + esc(who) + '</span>' + rm + '</div></div>';
+      var rm = (myRole === 'owner' && uid !== me.uid) ? '<button class="ll-rm" data-uid="' + uid + '" data-email="' + esc(em || '') + '" data-name="' + esc(m.name || 'this person') + '">Remove</button>' : '';
+      return '<div class="ll-mem"><div style="display:flex;align-items:center;gap:10px">' + av + '<div><div class="ll-mem-name">' + esc(m.name || 'Member') + (uid === me.uid ? ' (you)' : '')
+        + '</div><div class="ll-mem-email">' + esc(em || '') + '</div></div></div><div style="display:flex;align-items:center;gap:8px"><span class="ll-mem-role">' + esc(who) + '</span>' + rm + '</div></div>';
     }).join('') || '<div class="ll-auth-msg">Just you so far.</div>';
 
     // Pending invites, owner-only (only an owner can act on them, and an invitee who never joined
     // has not consented to being shown to the whole circle). Anyone already in memberInfo has
     // joined, so their mirror entry is display-filtered here rather than cleaned up at join time.
     var joinedEmails = {};
-    Object.keys(info).forEach(function (uid) { var em = ((info[uid] || {}).email || '').toLowerCase(); if (em) joinedEmails[em] = 1; });
+    Object.keys(info).forEach(function (uid) { var em = (emailForUid(uid) || '').toLowerCase(); if (em) joinedEmails[em] = 1; });
     var pendMap = (myRole === 'owner') ? (window.LL.hhPending || {}) : {};
     var pendRows = Object.keys(pendMap).filter(function (em) { return !joinedEmails[em]; }).sort().map(function (em) {
       var pv = pendMap[em] || {};
@@ -1654,7 +1880,7 @@
 
     modal('Family & sharing', '<div class="ll-mems">' + rows + '</div>'
       + (pendRows ? ('<div class="ll-auth-msg" style="text-align:left;margin:6px 0 2px;font-weight:800">Invited, not joined yet</div><div class="ll-mems">' + pendRows + '</div>') : '')
-      + '<div class="ll-auth-msg" style="text-align:left;margin:-2px 0 12px">When you invite people, everyone in your circle can see each other\'s name and email here, so you know who is who. Only you can change your own.</div>'
+      + '<div class="ll-auth-msg" style="text-align:left;margin:-2px 0 12px">When you invite people, everyone in your circle can see each other\'s name here, so you know who is who. Email addresses stay between each person and the circle owner. Only you can change your own.</div>'
       + youRow + invite + share
       + '<button id="llSignOut" class="ll-modal-btn ll-ghost">Sign out</button>'
       + '<div class="ll-auth-msg" style="margin-top:10px">Cubby v' + (window.CUBBY_VERSION || '') + ' · made with families like you 🐻</div>');
@@ -1851,6 +2077,9 @@
         var mi = (window.LL.memberInfo || {})[uid] || {};
         u['formerMemberInfo.' + uid] = { name: mi.name || name || '', relationship: mi.relationship || '', avatar: mi.avatar || null };
         await hhRef.update(u);
+        // PRIV-2: drop the removed member's gated email doc too (owner may, by rule). Their
+        // address should not linger in a circle they are no longer part of.
+        try { hhRef.collection('memberEmails').doc(uid).delete().catch(function () {}); } catch (e) {}
         if (email) {
           try { await db.collection('invites').doc(email).delete(); } catch (e) {}
           // Drop any pending-invite mirror entry too, so a removed member's email doesn't linger

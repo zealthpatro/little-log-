@@ -193,6 +193,27 @@ service cloud.firestore {
             && resource.data.createdBy == request.auth.uid;
       }
 
+      // Member email addresses (PRIV-2). Emails used to ride inside the circle-shared
+      // memberInfo blob, where every member could read every other member's address. They
+      // now live here: one doc per member, readable only by that member and the household's
+      // owner(s), who genuinely need them (pending-invite matching, invite cleanup when
+      // someone is removed). A member writes their OWN sign-in address and it must match
+      // their auth token, so nobody can plant a fake address; an owner may also write them
+      // (the lazy migration out of memberInfo runs on the owner's device) and delete them
+      // (member removal). Self-delete skips the membership check so account deletion can
+      // always clear a person's own address, even mid-departure.
+      match /memberEmails/{uid} {
+        allow read: if request.auth != null && request.auth.uid in pm()
+            && ( request.auth.uid == uid || pm()[request.auth.uid] == 'owner' );
+        allow create, update: if request.auth != null && request.auth.uid in pm() && (
+            ( request.auth.uid == uid
+              && request.resource.data.email == request.auth.token.email.lower() )
+            || pm()[request.auth.uid] == 'owner' );
+        allow delete: if request.auth != null && (
+            request.auth.uid == uid
+            || ( request.auth.uid in pm() && pm()[request.auth.uid] == 'owner' ) );
+      }
+
       // Maternal private health (Privacy Max, gate G1). The mother OWNS her health data.
       // It is NOT in the circle-shared app blob. Each category is shared, by her explicit
       // consent, only with the guardian uid(s) she lists in sharedWith. Mental health
@@ -230,6 +251,27 @@ service cloud.firestore {
             && request.auth.uid in pm()
             && request.resource.data.ownerUid == owner;
         allow delete: if request.auth != null && request.auth.uid == owner && request.auth.uid in pm();
+
+        // The journey's photo BYTES (bump photos, scan moments, journey-card photos).
+        // Their metadata is owner-gated on the doc above, and the bytes must honor the
+        // SAME gate — so they live under it, not in the circle-visible /photos
+        // collection (which is for the baby's shared story). Readable by the journey
+        // owner, or by a member she lists in sharedWith. After a kept loss the parent
+        // doc may be gone (pregClear) while kept keepsake bytes remain: the owner
+        // branch needs no parent get, so she can always reach her own; nobody else can.
+        // Only the owner writes or deletes — same as the journey itself.
+        match /photos/{photoId} {
+          allow read: if request.auth != null && request.auth.uid in pm() && (
+              request.auth.uid == owner
+              || ( exists(/databases/$(database)/documents/households/$(hid)/pregnancy/$(owner))
+                   && get(/databases/$(database)/documents/households/$(hid)/pregnancy/$(owner)).data.sharedWith is list
+                   && request.auth.uid in get(/databases/$(database)/documents/households/$(hid)/pregnancy/$(owner)).data.sharedWith )
+          );
+          allow create, update: if request.auth != null && request.auth.uid == owner
+              && request.auth.uid in pm();
+          allow delete: if request.auth != null && request.auth.uid == owner
+              && request.auth.uid in pm();
+        }
       }
     }
   }

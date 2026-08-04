@@ -145,10 +145,11 @@ against `firestore.rules` so the in-app copy does not over-promise:
 - **Privacy-verified field help.** Each "Why we ask" line that touches privacy was adversarially checked
   against the published rules before shipping, so the on-screen claim matches what the server actually
   enforces (no "private" wording where the rules allow the read).
-- **Family list discloses email visibility.** The family/circle list now states plainly that everyone
-  in the circle can see each other's name and email. This is an always-visible note (not a hidden
-  expander) because that fact should not be tucked away. It is the truthful counterpart to the
-  memberInfo gap below.
+- **Family list discloses email visibility.** The family/circle list states plainly what is visible.
+  Until 2026-08-04 that was "everyone can see each other's name and email" (the truthful counterpart
+  to the memberInfo gap below). With the PRIV-2 email move (sw v229) the copy now says names are
+  circle-visible while email addresses stay between each person and the circle owner — matching the
+  new `memberEmails` rules gate.
 
 Shipped on `main` (commit 3365e4d, service worker v80).
 
@@ -160,9 +161,14 @@ gaps, not guarantees:
   `app` blob, and an owner can delete without a second approval. So it is a UI convention, not a security
   guarantee. Help copy was softened to "Cubby asks both guardians to agree". **To make the guardian gate
   a real guarantee it must move into `firestore.rules`.**
-- **Email is circle-visible via memberInfo.** Email is NOT private: it is written to
-  `households/{hid}.memberInfo` and is readable by every member, and shown on the family list. Copy was
-  corrected accordingly (see the family-list disclosure above).
+- **Email is circle-visible via memberInfo — CLOSED 2026-08-04 (PRIV-2), pending rules publish.**
+  Emails now live in `households/{hid}/memberEmails/{uid}`, readable only by that member and the
+  household owner(s); the client no longer writes email into `memberInfo`, and the owner's device
+  lazily migrates legacy blob emails out (copy first, strip after). Same date, same shape: pregnancy
+  photo BYTES moved out of the circle-readable `/photos` collection into the owner-gated
+  `pregnancy/{owner}/photos/{photoId}` (bytes now honor the metadata's gate). Both are emulator-verified
+  in `test/rules-test.js` (144 assertions) and enforced ONLY once the founder publishes the updated
+  `firestore.rules` to the console.
 
 ## Rules publication (console is the runtime source of truth): DONE 2026-06-14
 The founder pasted `firestore.rules` into Firebase Console → Firestore → Rules → Publish on 2026-06-14,

@@ -287,6 +287,90 @@ async function check(name, p) {
   })));
   await check('a stranger cannot flag someone else\'s household for deletion (fails)', assertFails(updateDoc(doc(S, 'households/H'), { deleteAfter: 1 })));
 
+  // ==========================================================================
+  // PART 3 — 2026-08-04: the two closed privacy-enforcement gaps.
+  //  A) Pregnancy photo BYTES: metadata was owner-gated on pregnancy/{owner}, but the
+  //     bytes sat in the circle-readable /photos collection. They now live under the
+  //     journey doc at pregnancy/{owner}/photos/{photoId} with the SAME gate.
+  //  B) Member emails (PRIV-2): moved out of the circle-shared memberInfo blob into
+  //     /memberEmails/{uid}, readable only by that member + household owners.
+  // ==========================================================================
+
+  console.log('\nPregnancy photo BYTES — owner-gated like their metadata:');
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    // HPB: household owner HO; PO is a CAREGIVER who owns the pregnancy (the journey owner
+    // need not be the household owner); CG is another caregiver. Nobody is shared yet.
+    await setDoc(doc(db, 'households/HPB'), {
+      ownerId: 'HO', members: { HO: 'owner', PO: 'caregiver', CG: 'caregiver' },
+      memberInfo: { HO: { name: 'Dad' }, PO: { name: 'Mom' }, CG: { name: 'Nana' } }, app: cleanApp()
+    });
+    await setDoc(doc(db, 'households/HPB/pregnancy/PO'), { ownerUid: 'PO', stage: 'expecting', sharedWith: [] });
+    await setDoc(doc(db, 'households/HPB/pregnancy/PO/photos/bump1'), { data: 'PRIVATE-BYTES', authorId: 'PO' });
+    await setDoc(doc(db, 'households/HPB/photos/legacy-bump'), { data: 'PRIVATE-BYTES', authorId: 'PO' }); // pre-fix circle copy, for the migration shape
+    await setDoc(doc(db, 'households/HPB/photos/baby1'), { data: 'CIRCLE-BYTES', authorId: 'HO' });        // an ordinary baby photo
+  });
+  const HO = env.authenticatedContext('HO', { email: 'ho@x.com' }).firestore();
+  const PO = env.authenticatedContext('PO', { email: 'po@x.com' }).firestore();
+  const CG = env.authenticatedContext('CG', { email: 'cg@x.com' }).firestore();
+
+  await check('journey owner reads her own photo bytes', assertSucceeds(getDoc(doc(PO, 'households/HPB/pregnancy/PO/photos/bump1'))));
+  await check('caregiver in the circle reads her bytes (fails)', assertFails(getDoc(doc(CG, 'households/HPB/pregnancy/PO/photos/bump1'))));
+  await check('household OWNER, not shared, reads her bytes (fails)', assertFails(getDoc(doc(HO, 'households/HPB/pregnancy/PO/photos/bump1'))));
+  await check('stranger reads her bytes (fails)', assertFails(getDoc(doc(S, 'households/HPB/pregnancy/PO/photos/bump1'))));
+  await check('caregiver writes a byte doc into her journey (fails)', assertFails(setDoc(doc(CG, 'households/HPB/pregnancy/PO/photos/evil'), { data: 'x', authorId: 'CG' })));
+  await check('journey owner adds a new byte doc (succeeds)', assertSucceeds(setDoc(doc(PO, 'households/HPB/pregnancy/PO/photos/bump2'), { data: 'PRIVATE-BYTES', authorId: 'PO' })));
+  await check('caregiver deletes her byte doc (fails)', assertFails(deleteDoc(doc(CG, 'households/HPB/pregnancy/PO/photos/bump1'))));
+  // Consent: she shares the journey -> the shared member can read the bytes (the after-birth
+  // look-back path too: welcomeBaby keeps the journey doc, so sharedWith keeps working).
+  await check('owner shares journey with CG (writes sharedWith)', assertSucceeds(setDoc(doc(PO, 'households/HPB/pregnancy/PO'), { ownerUid: 'PO', stage: 'expecting', sharedWith: ['CG'] })));
+  await check('SHARED member reads her bytes after consent', assertSucceeds(getDoc(doc(CG, 'households/HPB/pregnancy/PO/photos/bump1'))));
+  await check('household owner STILL not shared (fails)', assertFails(getDoc(doc(HO, 'households/HPB/pregnancy/PO/photos/bump1'))));
+  await check('shared member still cannot WRITE her bytes (fails)', assertFails(setDoc(doc(CG, 'households/HPB/pregnancy/PO/photos/bump1'), { data: 'tampered', authorId: 'PO' })));
+  // The lazy byte migration the app runs on her device: copy the circle doc into the gated
+  // subcollection, then delete the circle copy (she authored it, so the photos rule allows it).
+  await check('MIGRATION: owner copies a circle byte doc into her journey', assertSucceeds(setDoc(doc(PO, 'households/HPB/pregnancy/PO/photos/legacy-bump'), { data: 'PRIVATE-BYTES', authorId: 'PO' })));
+  await check('MIGRATION: owner deletes her old circle copy', assertSucceeds(deleteDoc(doc(PO, 'households/HPB/photos/legacy-bump'))));
+  await check('ordinary baby photo stays circle-readable (caregiver)', assertSucceeds(getDoc(doc(CG, 'households/HPB/photos/baby1'))));
+  // Keepsake-kept after a loss: pregClear deletes the journey DOC, kept bytes remain. The
+  // owner must still reach them (no parent get on her branch); nobody else can any more.
+  await check('owner closes the journey (doc delete, keepsakes kept)', assertSucceeds(deleteDoc(doc(PO, 'households/HPB/pregnancy/PO'))));
+  await check('KEPT: owner still reads kept bytes with the doc gone', assertSucceeds(getDoc(doc(PO, 'households/HPB/pregnancy/PO/photos/bump1'))));
+  await check('KEPT: previously-shared member reads kept bytes (fails)', assertFails(getDoc(doc(CG, 'households/HPB/pregnancy/PO/photos/bump1'))));
+  await check('KEPT: owner can still remove a kept byte doc', assertSucceeds(deleteDoc(doc(PO, 'households/HPB/pregnancy/PO/photos/bump2'))));
+  await check('departed-member path: byte doc write by a NON-member owner uid (fails)', assertFails(setDoc(doc(S, 'households/HPB/pregnancy/S/photos/x'), { data: 'x' })));
+
+  console.log('\nMember emails (PRIV-2) — gated doc + migration off the shared blob:');
+  // H still carries the legacy shape: memberInfo.{O,C}.email seeded at the top, and INV/CO
+  // joined earlier in this run with email in their memberInfo entries (the old client shape —
+  // which must STAY allowed for backwards compat; those joins already passed above).
+  await check('owner writes his own gated email doc (token match)', assertSucceeds(setDoc(doc(O, 'households/H/memberEmails/O'), { email: 'o@x.com' })));
+  await check('MIGRATION: owner writes another member\'s email doc', assertSucceeds(setDoc(doc(O, 'households/H/memberEmails/C'), { email: 'c@x.com' })));
+  await check('MIGRATION: owner writes the remaining members\' docs', assertSucceeds(Promise.all([
+    setDoc(doc(O, 'households/H/memberEmails/INV'), { email: 'inv@x.com' }),
+    setDoc(doc(O, 'households/H/memberEmails/CO'), { email: 'co@x.com' })
+  ])));
+  await check('MIGRATION: owner strips every email out of memberInfo', assertSucceeds(updateDoc(doc(O, 'households/H'), {
+    'memberInfo.O.email': gone(), 'memberInfo.C.email': gone(), 'memberInfo.INV.email': gone(), 'memberInfo.CO.email': gone()
+  })));
+  await check('post-migration blob carries NO emails (caregiver view)', (async () => {
+    const snap = await getDoc(doc(C, 'households/H'));
+    const mi = (snap.data() || {}).memberInfo || {};
+    const leaked = Object.keys(mi).filter((u) => mi[u] && mi[u].email !== undefined);
+    if (leaked.length) throw new Error('emails still in the shared blob: ' + leaked.join(','));
+  })());
+  await check('caregiver reads their OWN email doc', assertSucceeds(getDoc(doc(C, 'households/H/memberEmails/C'))));
+  await check('caregiver reads ANOTHER member\'s email doc (fails)', assertFails(getDoc(doc(C, 'households/H/memberEmails/O'))));
+  await check('owner reads a member\'s email doc', assertSucceeds(getDoc(doc(O, 'households/H/memberEmails/C'))));
+  await check('caregiver re-writes their own doc with their real email', assertSucceeds(setDoc(doc(C, 'households/H/memberEmails/C'), { email: 'c@x.com' })));
+  await check('caregiver plants a FORGED address in their own doc (fails)', assertFails(setDoc(doc(C, 'households/H/memberEmails/C'), { email: 'fake@x.com' })));
+  await check('caregiver writes ANOTHER member\'s email doc (fails)', assertFails(setDoc(doc(C, 'households/H/memberEmails/O'), { email: 'o@x.com' })));
+  await check('stranger reads an email doc (fails)', assertFails(getDoc(doc(S, 'households/H/memberEmails/O'))));
+  await check('stranger writes an email doc (fails)', assertFails(setDoc(doc(S, 'households/H/memberEmails/S'), { email: 's@x.com' })));
+  await check('caregiver deletes their OWN email doc (account deletion, A6)', assertSucceeds(deleteDoc(doc(C, 'households/H/memberEmails/C'))));
+  await check('caregiver deletes ANOTHER member\'s email doc (fails)', assertFails(deleteDoc(doc(C, 'households/H/memberEmails/O'))));
+  await check('owner deletes a member\'s email doc (removal cleanup)', assertSucceeds(deleteDoc(doc(O, 'households/H/memberEmails/INV'))));
+
   await env.cleanup();
   console.log('\n' + results.pass + ' passed, ' + results.fail + ' failed');
   process.exit(results.fail ? 1 : 0);
