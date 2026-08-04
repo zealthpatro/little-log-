@@ -66,7 +66,7 @@ The calm, private tracker the whole family shares. Feeds, sleep, vaccines and me
 ## 3. Keywords (100 chars exactly, limit 100)
 
 ```
-newborn,feeding,sleep,diaper,vaccine,growth,milestones,breastfeeding,nanny,family,shared,private,log
+newborn,feeding,sleep,diaper,vaccine,growth,milestones,breastfeeding,nanny,family,twins,private,log
 ```
 
 No spaces, no duplicates of name or subtitle words (Apple indexes those already). `diaper` over `nappy` for the en-US locale; add `nappy` in the en-GB locale keywords instead if we localise later.
@@ -161,7 +161,7 @@ First, please try these four things:
 
 Then just live with it for a few days and be brutally honest. If anything is confusing, slow, ugly or broken, we want to know.
 
-Found a problem? Either use Send feedback inside the app (Settings > Family & sharing), or send a screenshot here on WhatsApp with one line on what you expected. In TestFlight you can also screenshot and tap Share Beta Feedback, which sends it straight to us with the details attached.
+Found a problem? Either tap "Tell us how it feels" in Settings inside the app, or send a screenshot here on WhatsApp with one line on what you expected. In TestFlight you can also screenshot and tap Share Beta Feedback, which sends it straight to us with the details attached.
 
 One honest note: it's a beta. Reminders and notifications aren't switched on yet, so don't rely on Cubby for medicine timing this week. Your data is real though, private to your family, no ads, never sold.
 
