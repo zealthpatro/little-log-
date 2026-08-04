@@ -34,3 +34,7 @@ native-build/
 
 # NEVER commit signing keys (the Worker serves the whole repo)
 *.p8
+credentials/
+
+# Question-gap analysis embedding cache (tools/rag/question_gaps.js) — local, cheap to rebuild
+tools/rag/.embedding-cache.json
