@@ -1735,6 +1735,17 @@
       PhotoStore.privIds[id] = 1; ownPregPhotoIds[id] = 1;
       try { await hhRef.collection('pregnancy').doc(uidNow).collection('photos').doc(String(id)).set({ data: dataUrl, authorId: uidNow }); }
       catch (e) {
+        delete PhotoStore.privIds[id]; delete ownPregPhotoIds[id];
+        // DEPLOY-ORDER SAFETY: the app can reach phones before the founder publishes the
+        // updated rules, and in that window the gated path is denied. A mother's scan photo
+        // must never be lost to that ordering — fall back to the legacy circle write (the
+        // status quo before this build); the owner-device migration relocates it into the
+        // gated subcollection the moment the new rules are live. Any other failure keeps
+        // the honest "safe on this device" toast.
+        if (e && e.code === 'permission-denied') {
+          try { await photosRef.doc(String(id)).set({ data: dataUrl, authorId: uidNow }); return; }
+          catch (e3) { console.warn('preg photo fallback', e3); }
+        }
         console.warn('preg photo set', e);
         try { window.toast && window.toast('That photo didn’t sync just now — it’s safe on this device.'); } catch (e2) {}
       }
