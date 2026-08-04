@@ -72,18 +72,60 @@
 <script defer src="vendor/firebase/10.12.2/firebase-firestore-compat.js"></script>
 <script defer src="vendor/firebase/10.12.2/firebase-messaging-compat.js"></script>
 <script defer src="firebase-init.js"></script>
+<script>
+/* Paint the appearance before the first frame. This repeats a few lines of the appearance engine
+   at the bottom of the file on purpose: that engine only runs once the app boots, and a cream
+   flash on the way into a 3am feed is precisely what night mode exists to prevent.
+   Reads the same per-uid key, and the same remembered-uid fallback, as the engine does. */
+(function(){try{
+  var uid='local'; try{ uid=localStorage.getItem('cubby-quick-uid')||'local'; }catch(e){}
+  var m=null; try{ m=localStorage.getItem('cubby-theme:'+uid); }catch(e){}
+  if(!m){
+    // First load after the upgrade. store-firebase.js already kept a per-DEVICE copy of the old
+    // theme, so adopt a Night choice here, at first paint, rather than waiting for the state to
+    // load: otherwise a Night user gets one cream flash on the way into this build.
+    try{
+      var lp=JSON.parse(localStorage.getItem('little-log-prefs-v1')||'{}');
+      if(lp&&lp.theme==='night'){ m='night'; localStorage.setItem('cubby-theme:'+uid,'night'); }
+    }catch(e){}
+  }
+  m=m||'system';
+  var night = m==='night' || (m!=='light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.setAttribute('data-theme', night?'night':'light');
+  var mt=document.querySelector('meta[name="theme-color"]');
+  if(mt) mt.setAttribute('content', night?'#1A1614':'#FBF5E9');
+}catch(e){}})();
+</script>
 <style>
 /* ============ THEME ============ */
 :root{
+  color-scheme:light;
   --bg:#F4EEE3;
   --bg-grad-1:#F7F2E8;
   --bg-grad-2:#EFE6D6;
   --surface:#FFFFFF;
   --surface-2:#FBF7EF;
+  /* Elevation is a four-step ramp, not two surfaces: page -> card -> sheet/modal -> menu/toast.
+     In light the last two stay white because a shadow reads fine on cream. In night they climb in
+     lightness instead, because a shadow on a near-black page is literally invisible and a sheet
+     sitting on a card would otherwise read as one flat plane. */
+  --surface-3:#FFFFFF;
+  --surface-4:#FFFFFF;
   --ink:#2C2521;
   --ink-soft:#6E635B;
   --ink-faint:#A89C90;
+  --ink-dim:#BDB2A6;
   --line:#E7DECF;
+  --hairline:rgba(60,46,34,0.08);
+  --divider:var(--line);
+  --grid:rgba(60,46,34,0.10);
+  --knob:#FFFFFF;
+  --on-accent-fill:rgba(255,255,255,.95);
+  /* The painted bear library is keyed to cream and cannot be repainted, so art keeps its own
+     "paper" tile. In light that is just the card. */
+  --paper:#FFFFFF;
+  --toast-bg:var(--ink);
+  --toast-ink:var(--bg);
   --shadow:rgba(60,46,34,0.10);
   --shadow-strong:rgba(60,46,34,0.18);
 
@@ -101,15 +143,29 @@
   --font-body:'Nunito Sans',-apple-system,sans-serif;
 }
 [data-theme="night"]{
+  color-scheme:dark;
   --bg:#1A1614;
   --bg-grad-1:#211B18;
   --bg-grad-2:#15110F;
   --surface:#26201C;
   --surface-2:#2E2722;
-  --ink:#F0E7DB;
-  --ink-soft:#B7A99A;
-  --ink-faint:#7C7064;
+  --surface-3:#302923;   /* bottom sheets, modals */
+  --surface-4:#3A322C;   /* menus, toasts, sticky bars */
+  /* Warm text ladder, never pure white: full white on near-black halates and hurts at 3am.
+     Measured on --surface #26201C: ink 13.5:1, ink-soft 8.3:1 (was 7.0:1), ink-faint 4.2:1. */
+  --ink:#F2EADF;
+  --ink-soft:#C4B8AB;
+  --ink-faint:#8C8177;
+  --ink-dim:#6B615A;
   --line:#3A312A;
+  --hairline:rgba(255,255,255,0.07);
+  --divider:rgba(255,255,255,0.09);
+  --grid:rgba(255,255,255,0.08);
+  --knob:#E8DFD3;
+  --on-accent-fill:rgba(232,223,211,.92);
+  --paper:#EFE7DA;
+  --toast-bg:#3A322C;
+  --toast-ink:#F2EADF;
   --shadow:rgba(0,0,0,0.35);
   --shadow-strong:rgba(0,0,0,0.5);
 
@@ -119,9 +175,52 @@
   --pump:#D793B0;      --pump-soft:#342029;
   --note:#B6A985;      --note-soft:#2C281D;
   --preg:#C98BB5;      --preg-soft:#33202D;
+  /* Night had no --danger of its own, so the light #D2654E leaked through: a saturated red on a
+     health screen at 3am reads as an alarm about the baby, not as data. Muted terracotta, and it
+     also lifts contrast on --surface from a failing 4.4:1 to 6.8:1. */
+  --danger:#D89A8A;
 }
+/* A shadow does nothing on #1A1614, so raised surfaces get a hairline instead. `outline` with a
+   negative offset draws inside the box, follows border-radius and costs no layout, so this can be
+   one rule over the existing components rather than a border added to fifty of them. */
+[data-theme="night"] .icon-btn,[data-theme="night"] .ticker,[data-theme="night"] .tip-static,
+[data-theme="night"] .stat-card,[data-theme="night"] .avg-box,[data-theme="night"] .nav-inner,
+[data-theme="night"] .set-item,[data-theme="night"] .baby-item,[data-theme="night"] .ob-tile,
+[data-theme="night"] .ob-pcard,[data-theme="night"] .med-card,[data-theme="night"] .ms-hero,
+[data-theme="night"] .ms-row,[data-theme="night"] .rt-card,[data-theme="night"] .toggle-row,
+[data-theme="night"] .mem-card,[data-theme="night"] .gx-box,[data-theme="night"] .hero-invite,
+[data-theme="night"] .alert-pill,[data-theme="night"] .preg-card,[data-theme="night"] .next-appt,
+[data-theme="night"] .danger-row,[data-theme="night"] .sheet,[data-theme="night"] .toast,
+[data-theme="night"] .loader-card,[data-theme="night"] .gal-item,[data-theme="night"] .hero,
+[data-theme="night"] .card-prev,[data-theme="night"] .canvas-wrap{
+  outline:1px solid var(--hairline);outline-offset:-1px;
+}
+/* Rows inside a card separate with a hairline rule, not a gap. */
+[data-theme="night"] .ms-band .ms-row{border-bottom-color:var(--divider);}
+/* Depth ramp: sheets and modals sit one step above a card, the sticky nav one step above that.
+   .ob-card is the only full-width pure-white fill in the app and read as un-themed in night. */
+[data-theme="night"] .sheet{background:var(--surface-3);}
+[data-theme="night"] .nav-inner{background:var(--surface-4);}
+[data-theme="night"] .ob-card{background:rgba(48,41,35,.88);}
+/* One piece of night-only atmosphere and no other: a very wide, very soft warm wash behind the
+   header, like a lamp left on in the room. No other glow, bloom or coloured shadow anywhere. */
+[data-theme="night"] .topbar::before{
+  content:"";position:absolute;left:50%;top:-120px;transform:translateX(-50%);
+  width:150%;height:300px;pointer-events:none;z-index:-1;
+  background:radial-gradient(closest-side,rgba(224,166,85,.055),rgba(224,166,85,0) 100%);
+}
+/* User photos and the painted art are never dimmed: dimming a parent's photo of their baby reads
+   as a bug and breaks the keepsake promise. The hairline above stops a bright photo glaring as an
+   unbounded hole, and cream-keyed art gets a deliberate paper tile so it looks intentional. */
+[data-theme="night"] .es-bear,[data-theme="night"] .card-prev,
+[data-theme="night"] .gl-card img,[data-theme="night"] .jr-tile img,
+[data-theme="night"] .mem-ready img{background:var(--paper);}
 
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+/* The document background, not just body's gradient: WKWebView draws the rubber-band overscroll
+   gutter and the safe-area edges from it once the page has painted, so without this a Night user
+   flashed the cream native webView background on every bounce. */
+html{background-color:var(--bg);}
 html,body{height:100%;}
 body{
   font-family:var(--font-body);
@@ -141,7 +240,7 @@ body{
 /* ============ TOPBAR ============ */
 .topbar{
   display:flex;align-items:center;gap:12px;
-  padding:18px 20px 12px;flex-shrink:0;
+  padding:18px 20px 12px;flex-shrink:0;position:relative;
 }
 .baby-pill{
   display:flex;align-items:center;gap:10px;flex:1;
@@ -195,7 +294,7 @@ body{
 .active-banner .info .time{font-family:var(--font-display);font-size:30px;font-weight:600;line-height:1;margin-top:3px;font-variant-numeric:tabular-nums;}
 .active-banner .info .sub{font-size:13px;opacity:.85;margin-top:4px;font-weight:600;}
 .stop-btn{
-  background:rgba(255,255,255,.95);border:none;border-radius:18px;
+  background:var(--on-accent-fill);border:none;border-radius:18px;
   padding:12px 18px;font-family:var(--font-body);font-weight:800;font-size:14px;
   cursor:pointer;color:var(--ink);transition:transform .15s;
 }
@@ -423,6 +522,26 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .seg{display:flex;background:var(--surface-2);border-radius:12px;padding:3px;gap:3px;}
 .seg button{border:none;background:none;padding:8px 13px;min-height:44px;border-radius:9px;font-weight:800;font-size:13px;color:var(--ink-soft);cursor:pointer;font-family:var(--font-body);}
 .seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 2px 6px var(--shadow);}
+/* Appearance picker. Each option carries a rendered mini-preview so a tired parent can see what
+   they get without switching to find out. The previews are FROZEN artifacts: they depict a fixed
+   theme with literal colours, so they look the same whichever theme is active. */
+.apx-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;}
+.apx-opt{border:2px solid var(--line);background:var(--surface-2);border-radius:16px;padding:10px 8px 11px;cursor:pointer;font-family:var(--font-body);display:flex;flex-direction:column;align-items:center;gap:7px;min-height:44px;}
+.apx-opt.on{border-color:var(--sleep);background:var(--sleep-soft);}
+.apx-lbl{font-weight:800;font-size:13px;color:var(--ink);}
+.apx-hint{font-size:11px;font-weight:700;color:var(--ink-soft);margin-top:-4px;}
+.apx-prev{width:100%;aspect-ratio:9/13;border-radius:10px;overflow:hidden;display:flex;flex-direction:column;gap:4px;padding:7px 6px;position:relative;}
+.apx-prev .apx-bar{height:7px;border-radius:4px;width:62%;}
+.apx-prev .apx-card{height:14px;border-radius:5px;width:100%;}
+.apx-prev .apx-short{width:72%;}
+.apx-light{background:#F4EEE3;}
+.apx-light .apx-bar{background:#A89C90;} .apx-light .apx-card{background:#FFFFFF;}
+.apx-night{background:#1A1614;}
+.apx-night .apx-bar{background:#8C8177;} .apx-night .apx-card{background:#26201C;}
+.apx-sys{padding:0;position:relative;}
+.apx-sys .apx-half{position:absolute;inset:0;display:flex;flex-direction:column;gap:4px;padding:7px 6px;}
+.apx-sys .apx-clip{clip-path:inset(0 0 0 50%);}
+.apx-note{font-size:12px;font-weight:700;color:var(--ink-soft);line-height:1.5;margin-bottom:6px;}
 .baby-item{display:flex;align-items:center;gap:13px;background:var(--surface);border-radius:var(--radius-sm);padding:13px 15px;margin-bottom:9px;box-shadow:0 3px 9px var(--shadow);}
 
 /* onboarding */
@@ -474,7 +593,7 @@ body.night .ob-card{background:rgba(38,32,28,.86);}
 .stagger>*:nth-child(5){animation-delay:.18s;}
 .stagger>*:nth-child(6){animation-delay:.22s;}
 
-.toast{position:fixed;bottom:96px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:13px 22px;border-radius:30px;font-weight:800;font-size:14px;z-index:60;opacity:0;transition:all .3s;pointer-events:none;box-shadow:0 8px 24px var(--shadow-strong);}
+.toast{position:fixed;bottom:96px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--toast-bg);color:var(--toast-ink);padding:13px 22px;border-radius:30px;font-weight:800;font-size:14px;z-index:60;opacity:0;transition:all .3s;pointer-events:none;box-shadow:0 8px 24px var(--shadow-strong);}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
 /* ---- extra accents ---- */
@@ -689,7 +808,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .toggle-row .tr-b{font-size:12px;color:var(--ink-soft);font-weight:600;}
 .sw{width:48px;height:28px;border-radius:20px;background:var(--line);position:relative;cursor:pointer;flex-shrink:0;transition:background .2s;}
 .sw.on{background:var(--feed);}
-.sw::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 2px 5px rgba(0,0,0,.25);}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--knob);transition:transform .2s;box-shadow:0 2px 5px rgba(0,0,0,.25);}
 .sw.on::after{transform:translateX(20px);}
 .gallery{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .gal-item{position:relative;border-radius:var(--radius-sm);overflow:hidden;box-shadow:0 4px 12px var(--shadow);cursor:pointer;aspect-ratio:1;background:var(--surface-2);}
@@ -975,6 +1094,24 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
   body{padding:28px 0;}
   #app{height:calc(100dvh - 56px);border-radius:34px;border:1px solid var(--line);box-shadow:0 30px 70px var(--shadow-strong);overflow:hidden;}
   .sheet{bottom:28px;border-radius:30px;}
+}
+
+/* Print is always paper. A parent in night mode must never hand the doctor a black page, so the
+   whole token ladder is reset to ink-on-white for print and the body gradient is switched off.
+   This covers every print path at once (visit report, appointment notes, pregnancy report),
+   including the parts that print from THIS document rather than a new window. */
+@media print{
+  :root,[data-theme="night"]{
+    color-scheme:light;
+    --bg:#FFFFFF;--bg-grad-1:#FFFFFF;--bg-grad-2:#FFFFFF;
+    --surface:#FFFFFF;--surface-2:#FFFFFF;--surface-3:#FFFFFF;--surface-4:#FFFFFF;--paper:#FFFFFF;
+    --ink:#111111;--ink-soft:#444444;--ink-faint:#666666;--ink-dim:#888888;
+    --line:#DDDDDD;--hairline:#DDDDDD;--divider:#DDDDDD;--grid:#DDDDDD;
+    --shadow:transparent;--shadow-strong:transparent;
+    --toast-bg:#FFFFFF;--toast-ink:#111111;
+  }
+  html,body{background:#FFFFFF!important;background-image:none!important;color:#111111!important;}
+  .ob-card{background:#FFFFFF!important;}   /* the one night surface set as a literal, not a token */
 }
 </style>
 </head>
@@ -1444,7 +1581,7 @@ function scheduleDeepLink(){
 }
 try{ stashDeepLink(); scheduleDeepLink(); }catch(e){}   // stash at load (survives the sign-in redirect), fire when ready
 function _renderView(){
-  document.body.setAttribute('data-theme', state.settings.theme==='night'?'night':'light');
+  applyTheme();
   // Post-birth, `viewingPreg` opens the journey as a keepsake. Before this the pregnancy became
   // completely unreachable the instant welcomeBaby() set bornBabyId, while the birth screen was
   // telling her "your pregnancy is saved as part of their story" — true only in the sense that the
@@ -1476,7 +1613,7 @@ function _renderView(){
         </div>
       </div>
       ${FEATURES.den?`<button class="icon-btn ${view==='den'?'icon-on':''}" onclick="goDen()" aria-label="our den" style="font-size:17px">🧺</button>`:''}
-      <button class="icon-btn" onclick="toggleTheme()" aria-label="theme">${state.settings.theme==='night'?I.sun:I.moon}</button>
+      <button class="icon-btn" data-themebtn onclick="toggleTheme()" aria-label="${themeResolved()==='night'?'switch to light':'switch to night'}" title="Appearance: ${themeModeLabel()}">${themeResolved()==='night'?I.sun:I.moon}</button>
       <button class="icon-btn" onclick="openSettings()" aria-label="settings">${I.settings}</button>
     </div>
     <div class="scroll${fab?' has-fab':''}" id="scroll">${main}</div>
@@ -2473,8 +2610,118 @@ function startTick(){
    NAV / THEME
    ============================================================ */
 function go(v){ if(typeof closeSheet==='function') closeSheet(); if(v==='home') surfaceReset(); view=v; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
-function toggleTheme(){ state.settings.theme = state.settings.theme==='night'?'light':'night'; persist(); render(); }
-function setTheme(t){ state.settings.theme=t; persist(); render(); }
+/* ---------------- APPEARANCE -------------------------------------------------
+   Three modes, System by default, and stored PER PERSON.
+
+   `state.settings` is the shared household blob, so the old `state.settings.theme` meant one
+   caregiver picking Night darkened the app for every member of the circle: the same shape as the
+   A5 push-prefs bug. Appearance is a personal UI preference, so it lives in localStorage keyed by
+   uid, exactly like the quick-log button prefs (quickUid / quickPrefs below).
+   No clock-based auto-switching, ever: a surprise repaint mid-log fails the Anxiety Test. */
+var THEME_MODES={system:1,light:1,night:1};
+function themeKey(){ return 'cubby-theme:'+quickUid(); }
+function themeMode(){                                    // what this person chose
+  try{ var v=localStorage.getItem(themeKey()); if(v&&THEME_MODES[v]) return v; }catch(e){}
+  return 'system';
+}
+function systemIsNight(){
+  try{ return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); }catch(e){ return false; }
+}
+function themeResolved(){ var m=themeMode(); return m==='system' ? (systemIsNight()?'night':'light') : m; }
+/* One-time adoption of the old shared setting, run whenever a saved state loads.
+   Order matters and is deliberate:
+     1. a local pref always wins and is never overwritten, so a choice made here can't be undone
+        by a stale value another device syncs in later;
+     2. only 'night' is adopted. 'light' is the seeded default of a fresh state object
+        (see the state initialiser and normalizeLoadedState), so it is indistinguishable from
+        "never chose" and adopting it would pin every existing account to Light and nobody would
+        ever reach System;
+     3. it is driven from applyTheme(), not from the state-load path, so it does not depend on the
+        cloud blob having arrived (the device copy in little-log-prefs-v1 is plain localStorage and
+        is readable at first paint). Until it finds something to adopt it simply keeps looking, so
+        a slow sync can never cause the choice to be missed;
+     4. the shared key is left in place, not deleted. Devices still running the previous build read
+        state.settings.theme directly, and a deletion syncs to all of them: it would flip a Night
+        household to Light mid-session. It is inert once every device is on this build. */
+function migrateThemePref(){
+  try{
+    if(localStorage.getItem(themeKey())) return;                       // already personal, leave it
+    // store-firebase.js already kept a per-DEVICE copy in little-log-prefs-v1 and re-applied it over
+    // the synced blob, so that copy is the truest record of what this person is actually looking at.
+    // Read it first, then fall back to the shared blob.
+    var was=null;
+    try{ var p=JSON.parse(localStorage.getItem('little-log-prefs-v1')||'{}'); was=p&&p.theme; }catch(e){}
+    if(!was) was=state.settings&&state.settings.theme;
+    if(was==='night') localStorage.setItem(themeKey(),'night');        // a deliberate choice, keep the look
+  }catch(e){}
+}
+/* Paints the resolved theme onto the document, the browser/OS chrome and the native status bar.
+   Cheap enough to call on every render, and it can never drift from what is on screen. */
+function applyTheme(){
+  migrateThemePref();                       // no-op once this person has a pref of their own
+  var night = themeResolved()==='night';
+  var v = night?'night':'light';
+  try{ document.documentElement.setAttribute('data-theme', v); }catch(e){}
+  document.body.setAttribute('data-theme', v);
+  /* A single JS-updated meta, not a prefers-color-scheme pair: the app's source of truth is the
+     person's own choice, so on a light phone with Night picked a media pair would report cream
+     while the app is near-black. (The marketing site has no override, so it uses the pair.) */
+  try{
+    var m=document.querySelector('meta[name="theme-color"]');
+    if(m) m.setAttribute('content', night?'#1A1614':'#FBF5E9');
+  }catch(e){}
+  try{ if(window.cubbyNativeSetTheme) window.cubbyNativeSetTheme(night); }catch(e){}
+}
+function setTheme(t){
+  if(!THEME_MODES[t]) t='system';
+  try{ localStorage.setItem(themeKey(), t); }catch(e){}
+  applyTheme(); render();
+}
+/* The header sun/moon stays a one-tap switch of what you are looking at, so it always makes a
+   visible change. It lands on an explicit Light or Night; Settings > Appearance is the way back
+   to System, and it shows which mode is active. */
+function toggleTheme(){ setTheme(themeResolved()==='night'?'light':'night'); }
+/* Follow the phone live while on System. Only the attribute and the two header glyphs are
+   repainted: a full render() would throw away whatever the parent is part-way through typing. */
+(function watchSystemTheme(){
+  try{
+    var mq=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)');
+    if(!mq) return;
+    var onChange=function(){
+      if(themeMode()!=='system') return;
+      applyTheme();
+      try{
+        var glyph=themeResolved()==='night'?I.sun:I.moon;
+        document.querySelectorAll('[data-themebtn]').forEach(function(b){ b.innerHTML=glyph; });
+      }catch(e){}
+      // the Appearance sheet names what System currently resolves to, so refresh it if it is open
+      try{ if(document.getElementById('apxSheet')) openAppearance(); }catch(e){}
+    };
+    if(mq.addEventListener) mq.addEventListener('change',onChange);
+    else if(mq.addListener) mq.addListener(onChange);
+  }catch(e){}
+})();
+function openAppearance(){
+  var mode=themeMode(), sysNight=systemIsNight();
+  var rows='<span class="apx-bar"></span><span class="apx-card"></span><span class="apx-card apx-short"></span>';
+  // System shows the two looks side by side: the night half is the same preview clipped to the
+  // right, so the rows line up and the split is one straight edge.
+  var sysPrev='<span class="apx-prev apx-sys"><span class="apx-half apx-light">'+rows+'</span>'
+             +'<span class="apx-half apx-night apx-clip">'+rows+'</span></span>';
+  var opt=function(k,label,hint,prev){
+    return '<button class="apx-opt'+(mode===k?' on':'')+'" type="button" onclick="setTheme(\''+k+'\');openAppearance()" aria-pressed="'+(mode===k?'true':'false')+'">'
+      +(k==='system'?sysPrev:'<span class="apx-prev '+prev+'">'+rows+'</span>')
+      +'<span class="apx-lbl">'+label+'</span><span class="apx-hint">'+hint+'</span></button>';
+  };
+  openSheet('<h2 id="apxSheet">Appearance</h2><div class="sub">Cubby can follow your phone, or stay the way you like it.</div>'
+    +'<div class="apx-grid">'
+    + opt('system','System', sysNight?'Now night':'Now light','apx-sys')
+    + opt('light','Light','Always cream','apx-light')
+    + opt('night','Night','Kind at 3am','apx-night')
+    +'</div>'
+    +'<div class="apx-note">Night mode is only ever set by you. Cubby never switches on a clock.</div>','sleep');
+}
+function themeModeLabel(){ var m=themeMode(); return m==='system'?'System':(m==='night'?'Night':'Light'); }
 
 /* ============================================================
    SHEETS
@@ -3851,13 +4098,11 @@ async function syncReminderIndex(){
 function openSettings(){
   const s=state.settings;
   openSheet(`<h2>Settings</h2><div class="sub">Cubby preferences.</div>
-    <div class="set-item">
+    <div class="set-item" onclick="openAppearance()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--sleep-soft);color:var(--sleep)">${I.moon}</div>
-      <div class="si-body"><div class="a">Theme</div><div class="b">Night mode for dark feeds</div></div>
-      <div class="seg">
-        <button class="${s.theme==='light'?'on':''}" onclick="setTheme('light');openSettings()">Light</button>
-        <button class="${s.theme==='night'?'on':''}" onclick="setTheme('night');openSettings()">Night</button>
-      </div>
+      <div class="si-body"><div class="a">Appearance</div><div class="b">Light, night, or follow your phone</div></div>
+      <span style="font-weight:800;font-size:13px;color:var(--ink-soft)">${themeModeLabel()}</span>
+      <span class="chev">${I.chev}</span>
     </div>
     ${canShowInstall()?`<div class="set-item" onclick="addToHomeScreen('llSetInstallMsg')" style="cursor:pointer">
       <div class="si-ico" style="background:var(--feed-soft);color:var(--feed);font-size:18px">📲</div>
@@ -5071,8 +5316,8 @@ function printTtcReport(){
   var ov=document.getElementById('reportOv'); if(!ov){ window.print(); return; }
   var clone=ov.cloneNode(true);
   Array.prototype.forEach.call(clone.querySelectorAll('.noprint'), function(n){ n.remove(); });
-  openPrintable('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cubby appointment notes</title></head>'
-    + '<body style="font-family:Georgia,\'Times New Roman\',serif;color:#1a1a1a;line-height:1.55">'
+  openPrintable('<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light"><title>Cubby appointment notes</title></head>'
+    + '<body style="font-family:Georgia,\'Times New Roman\',serif;background:#fff;color:#1a1a1a;line-height:1.55">'
     + clone.innerHTML + '</body></html>', 'cubby-appointment-notes');
 }
 function shareTtcReport(){
@@ -5340,7 +5585,7 @@ function renderPregShell(){
         </div>
         ${state.babies.length?`<button class="icon-btn" onclick="openBabySheet()" aria-label="switch to baby" style="font-size:17px">👶</button>`:''}
         ${FEATURES.den?`<button class="icon-btn ${pregView==='den'?'icon-on':''}" onclick="goDen()" aria-label="our den" style="font-size:17px">🧺</button>`:''}
-        <button class="icon-btn" onclick="toggleTheme()" aria-label="theme">${state.settings.theme==='night'?I.sun:I.moon}</button>
+        <button class="icon-btn" data-themebtn onclick="toggleTheme()" aria-label="${themeResolved()==='night'?'switch to light':'switch to night'}" title="Appearance: ${themeModeLabel()}">${themeResolved()==='night'?I.sun:I.moon}</button>
         <button class="icon-btn" onclick="openSettings()" aria-label="settings">${I.settings}</button>
       </div>
       <div class="scroll" id="scroll">${main}</div>`;
@@ -5359,7 +5604,7 @@ function renderPregShell(){
           <div><h1>Your pregnancy</h1><span>Looking back</span></div>
         </div>
         <button class="icon-btn" onclick="exitPregLookBack()" aria-label="back to baby" style="font-size:17px">👶</button>
-        <button class="icon-btn" onclick="toggleTheme()" aria-label="theme">${state.settings.theme==='night'?I.sun:I.moon}</button>
+        <button class="icon-btn" data-themebtn onclick="toggleTheme()" aria-label="${themeResolved()==='night'?'switch to light':'switch to night'}" title="Appearance: ${themeModeLabel()}">${themeResolved()==='night'?I.sun:I.moon}</button>
         <button class="icon-btn" onclick="openSettings()" aria-label="settings">${I.settings}</button>
       </div>
       <div class="scroll" id="scroll">${renderPregMoments(true)}</div>`;
@@ -5381,7 +5626,7 @@ function renderPregShell(){
       </div>
       ${state.babies.length?`<button class="icon-btn" onclick="openBabySheet()" aria-label="switch to baby" style="font-size:17px">👶</button>`:''}
       ${FEATURES.den?`<button class="icon-btn ${pregView==='den'?'icon-on':''}" onclick="goDen()" aria-label="our den" style="font-size:17px">🧺</button>`:''}
-      <button class="icon-btn" onclick="toggleTheme()" aria-label="theme">${state.settings.theme==='night'?I.sun:I.moon}</button>
+      <button class="icon-btn" data-themebtn onclick="toggleTheme()" aria-label="${themeResolved()==='night'?'switch to light':'switch to night'}" title="Appearance: ${themeModeLabel()}">${themeResolved()==='night'?I.sun:I.moon}</button>
       <button class="icon-btn" onclick="openSettings()" aria-label="settings">${I.settings}</button>
     </div>
     <div class="scroll${fab?' has-fab':''}" id="scroll">${main}</div>
@@ -6005,8 +6250,8 @@ function printPregReport(){
   var ov=document.getElementById('reportOv'); if(!ov){ window.print(); return; }
   var clone=ov.cloneNode(true);
   Array.prototype.forEach.call(clone.querySelectorAll('.noprint'), function(n){ n.remove(); });
-  openPrintable('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cubby pregnancy report</title></head>'
-    + '<body style="font-family:Georgia,\'Times New Roman\',serif;color:#1a1a1a;line-height:1.55">'
+  openPrintable('<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light"><title>Cubby pregnancy report</title></head>'
+    + '<body style="font-family:Georgia,\'Times New Roman\',serif;background:#fff;color:#1a1a1a;line-height:1.55">'
     + clone.innerHTML + '</body></html>', 'cubby-pregnancy-report');
 }
 function sharePregReport(){ const p=state.pregnancy; if(!p) return;
@@ -7182,9 +7427,9 @@ function openDoctorReport(){
   let medsLines='';
   try{ medsLines=babyMeds().filter(m=>m.active).map(m=>{ const sched=medScheduleText(m); return '- '+m.name+' · '+m.dose+' '+m.unit+(sched?(' · '+sched):''); }).join('\n'); }catch(e){}
   const dob=b.birth?new Date(b.birth).toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'}):'';
-  openPrintable(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(b.name)} · Cubby visit report</title>
+  openPrintable(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light"><title>${esc(b.name)} · Cubby visit report</title>
     <style>
-      body{font-family:Georgia,'Times New Roman',serif;color:#222;max-width:680px;margin:36px auto;padding:0 24px;line-height:1.55;}
+      body{font-family:Georgia,'Times New Roman',serif;background:#fff;color:#222;max-width:680px;margin:36px auto;padding:0 24px;line-height:1.55;}
       h1{font-size:24px;margin:0 0 2px;} .meta{color:#666;font-size:13px;margin-bottom:22px;}
       h2{font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:#8a7f6f;border-bottom:1px solid #ddd;padding-bottom:4px;margin:24px 0 8px;}
       pre{font-family:inherit;white-space:pre-wrap;font-size:14px;margin:0;}
@@ -7402,7 +7647,7 @@ function svgPercentile(meas,unit){
   const col=meas==='weight'?'var(--feed)':'var(--sleep)';
   const bands=[1,2,3,4,5].map(idx=>`<path d="${bandPath(idx)}" fill="none" stroke="${idx===3?'var(--ink-soft)':'var(--line)'}" stroke-width="${idx===3?1.4:1}" ${idx===3?'':'stroke-dasharray="2 2"'}/>`).join('');
   const bl=bpts.map((p,i)=>(i?'L':'M')+X(p.mo).toFixed(1)+' '+Y(p.v).toFixed(1)).join(' ');
-  const dots=bpts.map(p=>`<circle cx="${X(p.mo).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="3.2" fill="${col}" stroke="#fff" stroke-width="1.5"/>`).join('');
+  const dots=bpts.map(p=>`<circle cx="${X(p.mo).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="3.2" fill="${col}" stroke="var(--surface)" stroke-width="1.5"/>`).join('');
   let xt=''; for(let m=0;m<=XM;m+=6){ xt+=`<text x="${X(m).toFixed(1)}" y="${H-5}" text-anchor="middle" font-size="9" fill="var(--ink-faint)">${m}m</text>`; }
   const lbl=`<text x="${W-padR}" y="${(Y(refConv(meas,ref[ref.length-1][5],unit))-2).toFixed(1)}" text-anchor="end" font-size="8" fill="var(--ink-faint)">95th</text><text x="${W-padR}" y="${(Y(refConv(meas,ref[ref.length-1][1],unit))+8).toFixed(1)}" text-anchor="end" font-size="8" fill="var(--ink-faint)">5th</text>`;
   return `<svg class="growth-line" viewBox="0 0 ${W} ${H}"><path d="${top+' '+botR+' Z'}" fill="${col}" opacity="0.07"/>${bands}${lbl}<path d="${bl}" fill="none" stroke="${col}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>${dots}${xt}</svg>`;
@@ -10154,6 +10399,9 @@ function normalizeLoadedState(saved){
     if(!state.settings.hUnit)state.settings.hUnit='cm';
     if(!state.settings.tempUnit)state.settings.tempUnit='C';
     if(!state.settings.seen)state.settings.seen={};
+    // Appearance moved out of the shared blob into per-uid localStorage. applyTheme() runs the
+    // one-time adoption, so paint as soon as a state (and therefore settings.theme) exists.
+    try{ applyTheme(); }catch(e){}
   }
 }
 </script>

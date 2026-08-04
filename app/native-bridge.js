@@ -101,17 +101,34 @@
     var P = Cap.Plugins || {};
 
     try { P.SplashScreen && P.SplashScreen.hide && P.SplashScreen.hide(); } catch (e) {}
-    // Cubby's chrome is cream (#F7F2E8), so the status bar needs DARK text. In Capacitor's naming that
-    // is Style.Light ("light background"), which reads backwards but is correct.
-    try {
-      if (P.StatusBar) {
-        P.StatusBar.setStyle && P.StatusBar.setStyle({ style: 'LIGHT' });
+    /* Status bar follows the app's appearance. In Capacitor's naming Style.LIGHT means "light
+       background, therefore dark glyphs", which reads backwards but is correct: cream chrome wants
+       LIGHT, the near-black night chrome wants DARK. This used to be hardcoded to LIGHT, so a Night
+       user's clock, battery and signal were dark-on-near-black, i.e. invisible, and on Android the
+       bar itself was painted cream above a near-black app.
+       Exposed as a window function (same pattern as cubbyNativeSaveFile / cubbyNativeShareText) so
+       it can be re-called: it used to run once in boot(), so switching theme in Settings left the
+       old status bar until the app was relaunched. app/index.html calls it from applyTheme(),
+       which also covers the live prefers-color-scheme listener while on System.
+       The P.StatusBar && P.StatusBar.setStyle && guards stay so an older installed binary without
+       the plugin is a no-op rather than a crash. */
+    function nativeSetTheme(isNight) {
+      try {
+        if (!P.StatusBar) return;
+        P.StatusBar.setStyle && P.StatusBar.setStyle({ style: isNight ? 'DARK' : 'LIGHT' });
         if (platform === 'android') {
           P.StatusBar.setOverlaysWebView && P.StatusBar.setOverlaysWebView({ overlay: false });
-          P.StatusBar.setBackgroundColor && P.StatusBar.setBackgroundColor({ color: '#F7F2E8' });
+          P.StatusBar.setBackgroundColor && P.StatusBar.setBackgroundColor({ color: isNight ? '#1A1614' : '#F7F2E8' });
         }
-      }
-    } catch (e) {}
+      } catch (e) {}
+    }
+    window.cubbyNativeSetTheme = nativeSetTheme;
+    // Paint it now from whatever the early appearance script already resolved, so the bar is right
+    // before the app's first render() gets around to calling applyTheme().
+    try {
+      var t = document.documentElement.getAttribute('data-theme');
+      nativeSetTheme(t === 'night');
+    } catch (e) { nativeSetTheme(false); }
 
     /* Articles + any other same-origin _blank link: keep them inside the app.
        The web app deliberately opens reads with target="_blank" so the browser gives a new tab. In the
