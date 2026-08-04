@@ -2030,7 +2030,8 @@
       '<div class="ll-auth-msg" style="margin:0 0 8px">Bugs, ideas, anything, it goes straight to the Cubby team. Thank you for testing! 🐻</div>'
       + '<textarea id="llFbText" class="ll-fb" placeholder="What happened, or what would make Cubby better?"></textarea>'
       + '<button id="llFbSend" class="ll-modal-btn">Send</button>'
-      + '<div id="llFbMsg" class="ll-auth-msg"></div>');
+      + '<div id="llFbMsg" class="ll-auth-msg"></div>'
+      + '<div class="ll-auth-msg" style="margin:10px 0 0">Got a screenshot? Email <a href="mailto:support@little-cubby.com">support@little-cubby.com</a> instead.</div>');
     document.getElementById('llFbSend').onclick = async function () {
       var t = (document.getElementById('llFbText').value || '').trim();
       var msg = document.getElementById('llFbMsg');
