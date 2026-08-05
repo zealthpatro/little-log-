@@ -230,24 +230,51 @@
       + (native ? '' : '<div class="lp-pwa">No download, no app store. Add Cubby to your home screen for an app-like, offline-ready experience in any browser.</div>') + '</section>'
       + (native
         ? '<footer class="lp-foot">Cubby · a warm, private baby tracker 🐻</footer>'
-        : '<footer class="lp-foot">Cubby · a warm, private baby tracker 🐻<br><a href="/" style="color:#b05a7a;font-weight:700">little-cubby.com</a> · <a href="/articles/" style="color:#b05a7a;font-weight:700">Articles</a> · <a href="/faq/" style="color:#b05a7a;font-weight:700">FAQ</a></footer>')
+        : '<footer class="lp-foot">Cubby · a warm, private baby tracker 🐻<br><a href="/">little-cubby.com</a> · <a href="/articles/">Articles</a> · <a href="/faq/">FAQ</a></footer>')
       + '</div>';
   };
 
+  /* ---- theming ----------------------------------------------------------------------------
+     These rules are injected into the app document (document.head, below), so the app's own
+     custom properties from index.html's :root / [data-theme="night"] resolve here exactly as they
+     do anywhere else. That is the whole fix: this screen had ZERO theme awareness, so a Night
+     parent who signed out — including from the "Log out" on the bereavement holding screen — got a
+     full cream page under a near-black status bar.
+
+     Which screens follow the theme: ALL THREE (app sign-in, invite sign-in, and the web landing).
+     Splitting them was considered and rejected. The overlay behind all three is one element with
+     one background, so keeping the web landing cream while the app screens go dark needs a
+     parent-of-child selector, and it would not have fixed the reported bug anyway: the browser PWA
+     is where signing out lands most people, and the mismatch measured (cream page, #1A1614 chrome)
+     is the same mismatch on the acquisition page. A visitor on a dark phone gets data-theme=night
+     before they have ever chosen anything, so "acquisition stays cream" would mean shipping the bug
+     to exactly the people we want to impress.
+
+     How: light values are left byte-for-byte where a token's light value isn't identical, and the
+     Night block at the bottom re-points those rules at the tokens. Where the literal already WAS
+     the token's light value (#2C2521 = --ink, #6E635B = --ink-soft, #FBF7EF = --surface-2,
+     #C97FA0 = --pump, #9A8C6E = --note, #56A08E = --diaper) the token is used inline instead, so
+     there is nothing to override and light cannot drift. Same discipline the .cu-* modal and
+     #cb-birth-arrival already use.
+
+     What does NOT follow the theme: Google's button stays their white surface with their untouched
+     four-colour G, and Apple's stays black, in both themes. Their branding guidelines fix the
+     BUTTON, not the page behind it, and App Review 4.8 only asks that neither provider be more
+     prominent — which the equal-height rule below still guarantees. */
   var st = document.createElement('style');
   st.textContent =
     '#llAuthOv.landing{display:block;align-items:initial;justify-content:initial;padding:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:linear-gradient(180deg,#FBF5E9,#F1E4CF);}'
-    + '.lp{max-width:680px;margin:0 auto;padding:0 22px 56px;font-family:"Nunito Sans",system-ui,sans-serif;color:#2C2521;}'
+    + '.lp{max-width:680px;margin:0 auto;padding:0 22px 56px;font-family:"Nunito Sans",system-ui,sans-serif;color:var(--ink,#2C2521);}'
     + '.lp-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 0 0;}'
-    + '.lp-nav-brand{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:800;color:#6E635B;text-decoration:none;}'
+    + '.lp-nav-brand{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:800;color:var(--ink-soft,#6E635B);text-decoration:none;}'
     + '.lp-nav-brand img{width:22px;height:22px;border-radius:7px;}'
     + '.lp-nav-links{display:flex;gap:2px;}'
-    + '.lp-nav-links a{font-size:13px;font-weight:700;color:#6E635B;text-decoration:none;padding:6px 8px;border-radius:8px;}'
-    + '.lp-nav-links a:hover{background:#FBF7EF;color:#2C2521;}'
+    + '.lp-nav-links a{font-size:13px;font-weight:700;color:var(--ink-soft,#6E635B);text-decoration:none;padding:6px 8px;border-radius:8px;}'
+    + '.lp-nav-links a:hover{background:var(--surface-2,#FBF7EF);color:var(--ink,#2C2521);}'
     + '.lp-hero{text-align:center;padding:40px 0 28px;}'
     + '.lp-logo img{width:88px;height:88px;border-radius:22px;box-shadow:0 8px 22px rgba(0,0,0,.12);display:block;margin:0 auto;}'
-    + '.lp-name{font-family:"Fraunces",Georgia,serif;font-size:40px;margin:14px 0 6px;color:#2C2521;}'
-    + '.lp-tag{font-size:17px;line-height:1.5;color:#6E635B;max-width:440px;margin:0 auto 22px;font-weight:600;}'
+    + '.lp-name{font-family:"Fraunces",Georgia,serif;font-size:40px;margin:14px 0 6px;color:var(--ink,#2C2521);}'
+    + '.lp-tag{font-size:17px;line-height:1.5;color:var(--ink-soft,#6E635B);max-width:440px;margin:0 auto 22px;font-weight:600;}'
     /* Google's sign-in branding guidelines, followed: their light-theme surface (#FFFFFF), their border
        (#747775) and their text colour (#1F1F1F), with the untouched four-colour G. It is deliberately
        NOT Cubby pink — recolouring their button or mark breaks the guidelines we agree to by using
@@ -269,35 +296,35 @@
     // they were sold by the person who invited them, so this space is for getting the address right.
     + '.lp-inv{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;min-height:0;'
     + 'background:rgba(255,255,255,.62);border:1px solid #ECE0D2;border-radius:20px;padding:18px 18px;margin:8px 0;text-align:left;}'
-    + '.lp-inv-t{font-weight:800;font-size:16px;color:#2C2521;line-height:1.35;}'
+    + '.lp-inv-t{font-weight:800;font-size:16px;color:var(--ink,#2C2521);line-height:1.35;}'
     + '.lp-inv-s{font-size:14px;color:#6B5D50;font-weight:600;line-height:1.5;margin-top:7px;}'
     + '.lp-why{text-align:center;padding:24px 6px 6px;}'
-    + '.lp-why h2,.lp-steps-wrap h2,.lp-final h2,.lp-pro h2{font-family:"Fraunces",Georgia,serif;font-size:25px;color:#2C2521;margin:0 0 10px;line-height:1.25;}'
-    + '.lp-why p{color:#6E635B;font-size:15px;line-height:1.6;max-width:480px;margin:0 auto;font-weight:600;}'
+    + '.lp-why h2,.lp-steps-wrap h2,.lp-final h2,.lp-pro h2{font-family:"Fraunces",Georgia,serif;font-size:25px;color:var(--ink,#2C2521);margin:0 0 10px;line-height:1.25;}'
+    + '.lp-why p{color:var(--ink-soft,#6E635B);font-size:15px;line-height:1.6;max-width:480px;margin:0 auto;font-weight:600;}'
     + '.lp-feats{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:28px 0;}'
     + '.lp-feat{background:#fff;border-radius:16px;padding:16px;box-shadow:0 5px 14px rgba(0,0,0,.05);display:flex;gap:11px;align-items:flex-start;}'
-    + '.lp-fi{flex:0 0 auto;width:40px;height:40px;border-radius:12px;background:#FBF7EF;color:#9A8C6E;display:grid;place-items:center;}.lp-fi svg{width:22px;height:22px;}'
+    + '.lp-fi{flex:0 0 auto;width:40px;height:40px;border-radius:12px;background:var(--surface-2,#FBF7EF);color:var(--note,#9A8C6E);display:grid;place-items:center;}.lp-fi svg{width:22px;height:22px;}'
     + '.lp-ft{font-weight:800;font-size:15px;margin-bottom:3px;}'
-    + '.lp-fs{font-size:13px;color:#6E635B;line-height:1.45;font-weight:600;}'
+    + '.lp-fs{font-size:13px;color:var(--ink-soft,#6E635B);line-height:1.45;font-weight:600;}'
     + '.lp-steps-wrap{text-align:center;margin:14px 0 8px;}'
     + '.lp-steps{display:flex;flex-direction:column;gap:14px;max-width:430px;margin:18px auto 0;text-align:left;}'
     + '.lp-step{background:#fff;border-radius:16px;padding:16px 18px 16px 64px;box-shadow:0 5px 14px rgba(0,0,0,.05);position:relative;}'
-    + '.lp-sn{position:absolute;left:16px;top:15px;width:34px;height:34px;border-radius:50%;background:#C97FA0;color:#fff;font-weight:900;display:flex;align-items:center;justify-content:center;font-family:"Fraunces",Georgia,serif;}'
+    + '.lp-sn{position:absolute;left:16px;top:15px;width:34px;height:34px;border-radius:50%;background:var(--pump,#C97FA0);color:#fff;font-weight:900;display:flex;align-items:center;justify-content:center;font-family:"Fraunces",Georgia,serif;}'
     + '.lp-st{font-weight:800;font-size:15px;}'
-    + '.lp-ss{font-size:13px;color:#6E635B;font-weight:600;margin-top:2px;}'
+    + '.lp-ss{font-size:13px;color:var(--ink-soft,#6E635B);font-weight:600;margin-top:2px;}'
     + '.lp-pro{text-align:center;background:#fff;border:1px solid #EADFcf;border-radius:18px;padding:24px 20px;margin:30px 0 6px;box-shadow:0 5px 14px rgba(0,0,0,.05);}'
-    + '.lp-pro-badge{display:inline-block;background:#C97FA0;color:#fff;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:4px 11px;border-radius:999px;margin-bottom:8px;}'
-    + '.lp-pro p{color:#6E635B;font-size:15px;line-height:1.55;max-width:460px;margin:0 auto;font-weight:600;}'
+    + '.lp-pro-badge{display:inline-block;background:var(--pump,#C97FA0);color:#fff;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:4px 11px;border-radius:999px;margin-bottom:8px;}'
+    + '.lp-pro p{color:var(--ink-soft,#6E635B);font-size:15px;line-height:1.55;max-width:460px;margin:0 auto;font-weight:600;}'
     + '.lp-pro-note{margin-top:14px !important;font-size:13px !important;color:#9a8d80 !important;}'
     + '.lp-cmp{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:18px 0 4px;text-align:left;}'
-    + '.lp-col{background:#FBF7EF;border:1px solid #EADFcf;border-radius:14px;padding:16px;}'
-    + '.lp-col-pro{background:#fff;border-color:#C97FA0;}'
-    + '.lp-col-h{font-family:"Fraunces",Georgia,serif;font-size:18px;font-weight:600;color:#2C2521;margin-bottom:10px;}'
-    + '.lp-soon{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;background:#C97FA0;color:#fff;padding:2px 7px;border-radius:999px;vertical-align:middle;margin-left:4px;}'
+    + '.lp-col{background:var(--surface-2,#FBF7EF);border:1px solid #EADFcf;border-radius:14px;padding:16px;}'
+    + '.lp-col-pro{background:#fff;border-color:var(--pump,#C97FA0);}'
+    + '.lp-col-h{font-family:"Fraunces",Georgia,serif;font-size:18px;font-weight:600;color:var(--ink,#2C2521);margin-bottom:10px;}'
+    + '.lp-soon{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;background:var(--pump,#C97FA0);color:#fff;padding:2px 7px;border-radius:999px;vertical-align:middle;margin-left:4px;}'
     + '.lp-col ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;}'
-    + '.lp-col li{font-size:13px;color:#6E635B;font-weight:600;line-height:1.4;padding-left:21px;position:relative;}'
-    + '.lp-col li::before{content:"✓";position:absolute;left:0;color:#56A08E;font-weight:900;}'
-    + '.lp-col-pro li::before{content:"✦";color:#C97FA0;}'
+    + '.lp-col li{font-size:13px;color:var(--ink-soft,#6E635B);font-weight:600;line-height:1.4;padding-left:21px;position:relative;}'
+    + '.lp-col li::before{content:"✓";position:absolute;left:0;color:var(--diaper,#56A08E);font-weight:900;}'
+    + '.lp-col-pro li::before{content:"✦";color:var(--pump,#C97FA0);}'
     + '@media(max-width:520px){.lp-cmp{grid-template-columns:1fr;}}'
     /* ---- app sign-in screen (native wrapper only) ---- */
     /* One viewport, no scrolling for the thing they came to do. The buttons sit at the bottom where the
@@ -307,7 +334,7 @@
     + '.lp-app-top{text-align:center;}'
     + '.lp-app .lp-logo img{width:76px;height:76px;}'
     + '.lp-app .lp-name{font-size:34px;margin:10px 0 4px;}'
-    + '.lp-app-tag{font-size:15.5px;line-height:1.5;color:#6E635B;font-weight:600;margin:0 auto;max-width:300px;}'
+    + '.lp-app-tag{font-size:15.5px;line-height:1.5;color:var(--ink-soft,#6E635B);font-weight:600;margin:0 auto;max-width:300px;}'
     /* scroll-snap does the swiping; the timer only nudges scrollLeft, so a finger always wins.
        flex:1 + centring lets the carousel take the slack between the brand and the buttons, so the
        spacing stays even from a small iPhone SE up to a Pro Max instead of pooling at one end. */
@@ -315,13 +342,14 @@
     + '.ac-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;}'
     + '.ac-track::-webkit-scrollbar{display:none;}'
     + '.ac-tile{flex:0 0 100%;scroll-snap-align:center;text-align:center;padding:4px 10px;box-sizing:border-box;}'
-    + '.ac-ic{width:54px;height:54px;margin:0 auto 10px;border-radius:17px;background:#fff;color:#9A8C6E;display:grid;place-items:center;box-shadow:0 5px 14px rgba(0,0,0,.06);}'
+    + '.ac-ic{width:54px;height:54px;margin:0 auto 10px;border-radius:17px;background:#fff;color:var(--note,#9A8C6E);display:grid;place-items:center;box-shadow:0 5px 14px rgba(0,0,0,.06);}'
     + '.ac-ic svg{width:27px;height:27px;}'
-    + '.ac-t{font-family:"Fraunces",Georgia,serif;font-size:19px;color:#2C2521;margin-bottom:4px;}'
-    + '.ac-s{font-size:14px;line-height:1.5;color:#6E635B;font-weight:600;max-width:280px;margin:0 auto;}'
+    + '.ac-t{font-family:"Fraunces",Georgia,serif;font-size:19px;color:var(--ink,#2C2521);margin-bottom:4px;}'
+    + '.ac-s{font-size:14px;line-height:1.5;color:var(--ink-soft,#6E635B);font-weight:600;max-width:280px;margin:0 auto;}'
     + '.ac-dots{display:flex;justify-content:center;gap:6px;margin-top:12px;}'
-    + '.ac-dot{width:6px;height:6px;border-radius:50%;background:#DDD2C0;transition:background .3s,width .3s;}'
-    + '.ac-dot.on{background:#C97FA0;width:18px;border-radius:3px;}'
+    // The unselected dot is the same "off" grey the app's switches use, one token for both.
+    + '.ac-dot{width:6px;height:6px;border-radius:50%;background:var(--switch-off,#DDD2C0);transition:background .3s,width .3s;}'
+    + '.ac-dot.on{background:var(--pump,#C97FA0);width:18px;border-radius:3px;}'
     + '.lp-app-auth{display:flex;flex-direction:column;}'
     /* Apple first on iOS: the platform convention, and the least friction (Face ID, no account picker).
        store-firebase injects it after the Google button, so reorder visually rather than restructure. */
@@ -332,6 +360,30 @@
     + '.lp-final{text-align:center;padding:34px 0 6px;}'
     + '.lp-pwa{max-width:380px;margin:16px auto 0;font-size:12px;line-height:1.5;color:#a99e92;font-weight:600;}'
     + '.lp-foot{text-align:center;color:#9a8d80;font-size:13px;font-weight:700;padding:28px 0 0;}'
-    + '@media(max-width:480px){.lp-feats{grid-template-columns:1fr;}.lp-name{font-size:34px;}}';
+    + '.lp-foot a{color:#b05a7a;font-weight:700;}'
+    + '@media(max-width:480px){.lp-feats{grid-template-columns:1fr;}.lp-name{font-size:34px;}}'
+
+    /* ---------- Night ----------
+       Everything above whose literal was NOT already a token's light value. Stated as overrides so
+       the light rendering is byte-for-byte what it has always been. */
+    + '[data-theme="night"] #llAuthOv.landing{background:linear-gradient(180deg,var(--bg-grad-1),var(--bg-grad-2));}'
+    /* Raised surfaces: on #1A1614 a shadow is invisible, so a card earns its edge from a hairline —
+       the same rule the app's own cards use in Night. */
+    + '[data-theme="night"] .lp-feat,[data-theme="night"] .lp-step,[data-theme="night"] .lp-pro,'
+    + '[data-theme="night"] .ac-ic,[data-theme="night"] .lp-col{background:var(--surface);outline:1px solid var(--hairline);outline-offset:-1px;}'
+    /* Free vs Pro reads by elevation in Light (cream card, white card). In Night elevation climbs in
+       lightness rather than in shadow, so Pro takes the higher rung instead of the brighter white. */
+    + '[data-theme="night"] .lp-col-pro{background:var(--surface-3);}'
+    + '[data-theme="night"] .lp-col,[data-theme="night"] .lp-pro{border-color:var(--line);}'
+    + '[data-theme="night"] .lp-col-pro{border-color:var(--pump);}'
+    + '[data-theme="night"] .lp-inv{background:var(--surface);border-color:var(--line);}'
+    + '[data-theme="night"] .lp-inv-s{color:var(--ink-soft);}'
+    + '[data-theme="night"] .lp-trust,[data-theme="night"] .lp-pwa,[data-theme="night"] .lp-foot,'
+    + '[data-theme="night"] .lp-pro-note{color:var(--ink-faint) !important;}'
+    + '[data-theme="night"] .lp-msg,[data-theme="night"] .lp-foot a{color:var(--preg);}'
+    /* The step numerals and the Pro pill sit ON an accent, and Night lightens every accent on
+       purpose, so white ink there is worse at 3am than at noon. --on-accent is the dark-ink token. */
+    + '[data-theme="night"] .lp-sn,[data-theme="night"] .lp-soon,'
+    + '[data-theme="night"] .lp-pro-badge{color:var(--on-accent);}';
   document.head.appendChild(st);
 })();

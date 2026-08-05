@@ -388,7 +388,11 @@
     + '.gx-ctrl{display:flex;gap:8px;justify-content:space-between;margin:0 0 12px;flex-wrap:wrap;}'
     + '.gx-seg{display:inline-flex;background:var(--surface-2,#FBF7EF);border:1px solid var(--line,#E0D7C7);border-radius:10px;overflow:hidden;}'
     + '.gx-seg button{border:none;background:none;padding:7px 13px;font-size:12px;font-weight:800;color:var(--ink-soft,#9a8d80);cursor:pointer;font-family:inherit;}'
-    + '.gx-seg button.on{background:var(--star,#C97FA0);color:#fff;}'
+    /* The selected segment. White on the gold accent never passed (2.30:1 in Light) and Night makes
+       it worse, not better, because Night lightens the accent on purpose: 1.79:1, the worst text in
+       the app. --on-accent is the dark-ink-on-a-light-fill token, so both themes land above 6:1 and
+       the brand gold itself is untouched. */
+    + '.gx-seg button.on{background:var(--star,#C97FA0);color:var(--on-accent,#2C2521);}'
     + '.ll-fb{width:100%;min-height:120px;border:1px solid #E0D7C7;border-radius:12px;padding:12px;font-size:15px;font-family:inherit;resize:vertical;box-sizing:border-box;margin-bottom:12px;}'
     + '.greeting{font-family:var(--font-display),Georgia,serif;font-size:19px;font-weight:600;color:var(--ink,#2C2521);margin:2px 2px 2px;}'
     + '.greeting-sub{font-size:13px;color:var(--ink-soft,#9a8d80);font-weight:600;margin:0 2px 12px;}'
@@ -400,7 +404,9 @@
     + '.gs-x{border:none;background:none;font-size:22px;line-height:1;color:var(--ink-faint,#b3a99d);cursor:pointer;}'
     + '.gs-row{display:flex;align-items:center;gap:11px;padding:9px 0;border-top:1px solid var(--line,#efe6d6);cursor:pointer;}'
     + '.gs-row:first-of-type{border-top:none;}'
-    + '.gs-check{flex:0 0 auto;width:22px;height:22px;border-radius:50%;border:2px solid var(--line,#E0D7C7);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:#fff;}'
+    // The tick only shows once .done fills the disc with --diaper, so this is ink on an accent:
+    // #fff was 3.08:1 in Light and 2.25:1 in Night. --on-accent clears 4.5:1 in both.
+    + '.gs-check{flex:0 0 auto;width:22px;height:22px;border-radius:50%;border:2px solid var(--line,#E0D7C7);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:var(--on-accent,#2C2521);}'
     + '.gs-row.done .gs-check{background:var(--diaper,#56A08E);border-color:var(--diaper,#56A08E);}'
     + '.gs-row.done{cursor:default;}'
     + '.gs-body{flex:1;}'
@@ -427,7 +433,7 @@
     + '.hm-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}'
     + '.hm-seg{display:inline-flex;background:var(--surface-2,#FBF7EF);border:1px solid var(--line,#E0D7C7);border-radius:9px;overflow:hidden;}'
     + '.hm-seg button{border:none;background:none;padding:5px 12px;font-size:12px;font-weight:800;color:var(--ink-soft,#9a8d80);cursor:pointer;font-family:inherit;}'
-    + '.hm-seg button.on{background:var(--star,#C97FA0);color:#fff;}'
+    + '.hm-seg button.on{background:var(--star,#C97FA0);color:var(--on-accent,#2C2521);}'  // see .gx-seg above
     + '.hm-row{display:flex;align-items:center;gap:8px;margin-bottom:5px;}'
     + '.hm-label{width:54px;flex:0 0 54px;font-size:11px;font-weight:700;color:var(--ink-soft,#9a8d80);text-align:right;}'
     + '.hm-cells{display:flex;gap:3px;flex:1;}'

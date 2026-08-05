@@ -170,10 +170,27 @@
     /* ---------- Night ----------
        #llModalOv is the circle / invite / share sheet. It was hardcoded light and readable, but it
        opened as a full-brightness white sheet from a dark app. Stated as overrides so nothing about
-       the light rendering moves. The sign-in card above (#llAuthOv, .ll-auth-*) is deliberately NOT
-       in this list: it stays light in both themes because Google's branding guidelines fix the
-       Continue-with-Google button to their white surface, and a white button alone on a dark card
-       would look like the bug. That whole surface is self-consistent light on purpose. */
+       the light rendering moves.
+
+       #llAuthOv and .ll-auth-* used to be excluded here, on the reasoning that Google's white button
+       would look like a bug on a dark card. That was the wrong call, and it cost us the worst
+       defect in the theme: this overlay is the boot loader AND the screen every sign-out lands on,
+       including "Log out" on the bereavement holding screen, so a Night parent got a full cream
+       page under a #1A1614 status bar. Google's guidelines protect the BUTTON, not the page behind
+       it; a white button on a dark sheet is what every dark-mode app on the phone already looks
+       like. So the surface follows the theme and the two provider buttons do not. */
+    + '[data-theme="night"] #llAuthOv{background:linear-gradient(160deg,var(--bg-grad-1),var(--bg-grad-2));}'
+    + '[data-theme="night"] .ll-auth-card{background:var(--card);outline:1px solid var(--hairline);outline-offset:-1px;}'
+    + '[data-theme="night"] .ll-auth-card h1{color:var(--ink);}'
+    + '[data-theme="night"] .ll-auth-card p,[data-theme="night"] .ll-values div{color:var(--ink-soft);}'
+    + '[data-theme="night"] .ll-auth-msg{color:var(--ink-faint);}'
+    + '[data-theme="night"] .ll-auth-btn{background:var(--surface);border-color:var(--line);color:var(--ink);}'
+    + '[data-theme="night"] .ll-auth-btn:hover{background:var(--surface-2);}'
+    // ...except these two. Google keeps their white surface + untouched four-colour G, Apple keeps
+    // black, in both themes: the guidelines are a condition of using the providers at all.
+    + '[data-theme="night"] .ll-auth-btn-google{background:#FFFFFF;border-color:#747775;color:#1F1F1F;}'
+    + '[data-theme="night"] .ll-auth-btn-google:hover{background:#F7F8F8;}'
+    + '[data-theme="night"] .ll-spin{border-color:var(--line);border-top-color:var(--pump);}'
     + '[data-theme="night"] .ll-modal{background:var(--card);}'
     + '[data-theme="night"] .ll-modal-head h2,[data-theme="night"] .ll-mem-name,'
     + '[data-theme="night"] .ll-invite label{color:var(--ink);}'
@@ -212,27 +229,32 @@
      inside the webview's own storage. This is also the path that lets a parent who signed up by email on
      the web get back into their account from the app. Requires the app to be installed on the same
      device (universal links are per-device), which is what "Open it on this device" tells them. */
+  /* These three rows are injected straight under the provider buttons on the sign-in screen, so they
+     have to follow the theme with it. Their colours are set inline (they are built as strings, not
+     classes), and an inline style can't be beaten by a [data-theme] rule — but it CAN hold a custom
+     property, which resolves per theme like any other. Every token's light value is the literal it
+     replaces, so nothing here moves in Light. */
   function emailRowHtml() {
     return '<div class="ll-email-row" style="margin:14px auto 0;max-width:340px;text-align:center">'
-      + '<button type="button" class="ll-email-toggle" style="border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;color:#6E635B;text-decoration:underline;padding:6px">Prefer email? Get a sign-in link</button>'
+      + '<button type="button" class="ll-email-toggle" style="border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;color:var(--ink-soft,#6E635B);text-decoration:underline;padding:6px">Prefer email? Get a sign-in link</button>'
       + '<form class="ll-email-form" style="display:none;gap:8px;margin-top:8px">'
-      + '<input type="email" required placeholder="you@example.com" autocomplete="email" style="flex:1;min-width:0;font-family:inherit;font-size:15px;padding:11px 13px;border:1.5px solid #E7DECF;border-radius:11px;background:#FBF7EF;color:#2C2521">'
-      + '<button type="submit" style="border:none;background:#9A8C6E;color:#fff;font-family:inherit;font-weight:800;font-size:14px;padding:11px 14px;border-radius:11px;cursor:pointer;white-space:nowrap">Send link</button>'
-      + '</form><div class="ll-email-note" style="font-size:12px;font-weight:600;color:#6E635B;margin-top:7px"></div></div>';
+      + '<input type="email" required placeholder="you@example.com" autocomplete="email" style="flex:1;min-width:0;font-family:inherit;font-size:15px;padding:11px 13px;border:1.5px solid var(--line,#E7DECF);border-radius:11px;background:var(--surface-2,#FBF7EF);color:var(--ink,#2C2521)">'
+      + '<button type="submit" style="border:none;background:var(--note,#9A8C6E);color:var(--on-accent,#2C2521);font-family:inherit;font-weight:800;font-size:14px;padding:11px 14px;border-radius:11px;cursor:pointer;white-space:nowrap">Send link</button>'
+      + '</form><div class="ll-email-note" style="font-size:12px;font-weight:600;color:var(--ink-soft,#6E635B);margin-top:7px"></div></div>';
   }
   /* Privacy reassurance + consent, shown right at the sign-in buttons. Links /privacy/ (live); no Terms
      link until /terms/ ships. */
   function consentHtml() {
-    return '<div class="ll-consent" style="margin:13px auto 0;max-width:340px;text-align:center;font-size:12px;line-height:1.55;font-weight:600;color:#8a7d70">'
+    return '<div class="ll-consent" style="margin:13px auto 0;max-width:340px;text-align:center;font-size:12px;line-height:1.55;font-weight:600;color:var(--ink-soft,#8a7d70)">'
       + '🔒 Private to your family. No ads, we never sell your data.<br>'
-      + 'By continuing you agree to our <a href="/privacy/" target="_blank" rel="noopener" style="color:#6E635B;text-decoration:underline">privacy promise</a>.'
+      + 'By continuing you agree to our <a href="/privacy/" target="_blank" rel="noopener" style="color:var(--ink-soft,#6E635B);text-decoration:underline">privacy promise</a>.'
       + '</div>';
   }
   // Subtle install affordance at the sign-in gate (the marketing /install.js does not run on /app/).
   // Reuses the app's own canShowInstall/addToHomeScreen helpers (defined in index.html, loaded first).
   function installRowHtml() {
     try { if (!(window.canShowInstall && window.canShowInstall())) return ''; } catch (e) { return ''; }
-    return '<div class="ll-install-row" style="margin:10px auto 0;max-width:340px;text-align:center"><button type="button" id="llInstallBtn" style="border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;color:#6E635B;text-decoration:underline;padding:6px">Or add Cubby to your home screen</button><div id="llInstallMsg" class="ll-auth-msg" style="display:none"></div></div>';
+    return '<div class="ll-install-row" style="margin:10px auto 0;max-width:340px;text-align:center"><button type="button" id="llInstallBtn" style="border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;color:var(--ink-soft,#6E635B);text-decoration:underline;padding:6px">Or add Cubby to your home screen</button><div id="llInstallMsg" class="ll-auth-msg" style="display:none"></div></div>';
   }
   function wireInstall(scope) {
     var ib = scope.querySelector('#llInstallBtn'); if (!ib || ib.__w) return; ib.__w = 1;
@@ -343,7 +365,7 @@
       + consentHtml()
       + installRowHtml()
       + (msg ? '<div class="ll-auth-msg">' + msg + '</div>' : '')
-      + '<div style="margin-top:16px;font-size:12px;font-weight:700"><a href="/" style="color:#6E635B">About Cubby · little-cubby.com</a></div>'
+      + '<div style="margin-top:16px;font-size:12px;font-weight:700"><a href="/" style="color:var(--ink-soft,#6E635B)">About Cubby · little-cubby.com</a></div>'
       + '</div>';
     document.getElementById('llGoogleBtn').onclick = signInGoogle;
     var llAppleBtn = document.getElementById('llAppleBtn');
@@ -624,15 +646,29 @@
     return u;
   }
 
+  /* The three settings keys that must never reach the circle-shared blob: `seen` (per-uid), `push`
+     (per-device) and `theme` (per-uid). One helper for every write path, because there are two and
+     they used to disagree: appBlobFromState stripped them on every ongoing save, while the
+     first-sign-in migration below seeded the brand-new household with state.settings raw — so a
+     household could still be born carrying one person's Night. Kept as a single function so a
+     fourth key can never be stripped in one path and forgotten in the other. Stripping is
+     OUTBOUND ONLY: applyAppBlob still reads an existing settings.theme, and migrateThemePref in
+     index.html still uses it as migration input for anyone yet to open this build. */
+  function sharedSettings(src) {
+    var s = Object.assign({}, src || state.settings || {});
+    delete s.seen; delete s.push; delete s.theme;
+    return s;
+  }
+
   async function buildMigrationPayload() {
-    var app = { babies: [], settings: state.settings, milestones: [], meds: [], vaccines: {}, illnesses: [], photos: [] };
+    var app = { babies: [], settings: sharedSettings(), milestones: [], meds: [], vaccines: {}, illnesses: [], photos: [] };
     var events = [], photos = {};
     try {
       var raw = localStorage.getItem('little-log-v1');
       if (raw) {
         var s = JSON.parse(raw);
         if (s) {
-          app.babies = s.babies || []; app.settings = s.settings || state.settings;
+          app.babies = s.babies || []; app.settings = sharedSettings(s.settings);
           app.milestones = s.milestones || []; app.meds = s.meds || [];
           app.vaccines = s.vaccines || {}; app.illnesses = s.illnesses || [];
           app.photos = s.photos || [];
@@ -761,7 +797,15 @@
       // A, stopping A's reminder index from refreshing — the A5-class per-user-vs-shared bug. The
       // token map and the cron's enabled flag already live per-uid in users/{uid}.push; this keeps
       // the UI's own view of it out of the circle. It stays in localStorage via persist().
-      settings: (function () { var s = Object.assign({}, state.settings || {}); delete s.seen; delete s.push; return s; })(),
+      // `theme` is the third of the same family and the reason the appearance work happened: one
+      // caregiver picking Night darkened the app for the whole circle. The per-uid choice now lives
+      // in localStorage under cubby-theme:<uid> (themeKey in index.html), so this write was the last
+      // thing keeping the old shared value alive and re-broadcasting it. Dropped on the way OUT
+      // only: applyAppBlob still READS an existing settings.theme, and migrateThemePref still uses
+      // it as migration input for anyone who has not opened this build yet. A device on the previous
+      // build reads its own per-device copy in little-log-prefs-v1 first, so losing the shared field
+      // cannot flip a household that actually chose Night — only one that never did.
+      settings: sharedSettings(),
       milestones: state.milestones || [], meds: state.meds || [],
       vaccines: state.vaccines || {}, illnesses: state.illnesses || [],
       photos: state.photos || [],

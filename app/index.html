@@ -129,6 +129,13 @@
   /* Text sitting on an --ink-coloured fill (the empty-state CTA). Same idea as --toast-ink, but the
      CTA's cream is a shade warmer than the page, so it keeps its own value rather than reusing it. */
   --on-ink:#FFFDF8;
+  /* The mirror of --on-ink: ink that sits ON a light accent fill (a selected segment, a checkmark on
+     a green disc, a step numeral on pink). Those fills were all written as color:#fff, which never
+     passed in Light and got WORSE in Night, because Night deliberately lightens every accent so it
+     doesn't glare: white on the Night gold measured 1.79:1, the worst text in the app. The accents
+     are light in both themes, so the ink on them is dark in both; Night goes a shade deeper because
+     its accents are lighter still. */
+  --on-accent:#2C2521;
   /* Paper glints: the tiny white highlights that make a cream card look like paper. Meaningless on
      a near-black card, where they read as a milky haze instead. */
   --glint:rgba(255,255,255,.5);
@@ -183,6 +190,7 @@
   /* One step above a card, so a JS-built panel lands on the same rung as a .sheet. */
   --card:#302923;
   --on-ink:#F2EADF;      /* the CTA's fill is --toast-bg in night, a light surface, so the label flips */
+  --on-accent:#1A1614;   /* = --bg: night's accents are lighter, so the ink on them goes deeper */
   --glint:rgba(255,255,255,.05);
   --glint-edge:rgba(255,255,255,.06);
   --switch-off:#3A312A;  /* = --line, what the .sw switch already uses */
@@ -2716,9 +2724,12 @@ function themeResolved(){ var m=themeMode(); return m==='system' ? (systemIsNigh
         cloud blob having arrived (the device copy in little-log-prefs-v1 is plain localStorage and
         is readable at first paint). Until it finds something to adopt it simply keeps looking, so
         a slow sync can never cause the choice to be missed;
-     4. the shared key is left in place, not deleted. Devices still running the previous build read
-        state.settings.theme directly, and a deletion syncs to all of them: it would flip a Night
-        household to Light mid-session. It is inert once every device is on this build. */
+     4. the shared key is READ but no longer WRITTEN. appBlobFromState() (store-firebase.js) now
+        strips `theme` from the circle-shared blob, so nothing re-broadcasts one person's choice any
+        more; an existing value stays readable here as migration input until every device has opened
+        this build. A device still on the previous build reads its own per-device copy in
+        little-log-prefs-v1 before the shared one, so the field going away cannot flip a household
+        that actually chose Night — only one that was never asked. */
 function migrateThemePref(){
   try{
     if(localStorage.getItem(themeKey())) return;                       // already personal, leave it
@@ -4647,7 +4658,11 @@ function renderOnboard(){
       <div class="prof-cards" style="width:100%;text-align:left">
         <div class="prof-card" onclick="obStage('expecting')"><span class="lead" style="background:var(--preg-soft);font-size:20px">🌸</span><div class="cflex"><div class="a">We're expecting</div><div class="b">A baby (or two) on the way</div></div><span class="chev">${I.chev}</span></div>
         <div class="prof-card" onclick="obStage('baby')"><span class="lead" style="background:var(--feed-soft);font-size:20px">🐻</span><div class="cflex"><div class="a">Our baby's here</div><div class="b">One or more, track feeds, sleep and growth</div></div><span class="chev">${I.chev}</span></div>
-        <div class="prof-card" onclick="obStage('planning')"><span class="lead" style="background:#e9f0e7;font-size:20px">🌱</span><div class="cflex"><div class="a">We're trying</div><div class="b">Getting ready, with a gentle hand if you want it</div></div><span class="chev">${I.chev}</span></div>
+        <!-- Trying is a first-class stage, so its tile has to sit at the same weight as the other two.
+             It carried a raw pale green while its siblings used --preg-soft / --feed-soft, which made it
+             a near-white square in Night. --diaper-soft is the app's green-family soft, the same token
+             every other green tile uses. -->
+        <div class="prof-card" onclick="obStage('planning')"><span class="lead" style="background:var(--diaper-soft);font-size:20px">🌱</span><div class="cflex"><div class="a">We're trying</div><div class="b">Getting ready, with a gentle hand if you want it</div></div><span class="chev">${I.chev}</span></div>
       </div>
       <div class="ob-priv">🔒 <a href="/privacy/" target="_blank" rel="noopener">Private to your family</a>. No ads. We never sell your data.</div>
       <button class="ob-logout" onclick="confirmLogout()">Log out</button>
