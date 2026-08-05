@@ -124,9 +124,11 @@ async function fetchFeedback() {
         '`cd tools && npm init -y && npm install firebase-admin`.',
     };
   }
-  let admin;
-  try { admin = require('firebase-admin'); }
-  catch (e) {
+  let initializeApp, cert, getApps, getFirestore;
+  try {
+    ({ initializeApp, cert, getApps } = require('firebase-admin/app'));
+    ({ getFirestore } = require('firebase-admin/firestore'));
+  } catch (e) {
     return {
       rows: [], status: 'missing-dependency',
       note: 'tools/serviceAccountKey.json found, but firebase-admin is not installed. Run: ' +
@@ -134,8 +136,13 @@ async function fetchFeedback() {
     };
   }
   try {
-    if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.cert(sa) });
-    const db = admin.firestore();
+    // firebase-admin 14 dropped the old admin.initializeApp()/admin.firestore() namespace API in
+    // favour of these modular subpath imports (firebase-admin/app, firebase-admin/firestore) -
+    // a fresh `npm install firebase-admin` on this machine pulled 14.2.0, which broke the
+    // namespace calls this script was first written against. tools/analytics.js had the identical
+    // bug (same fix applied there).
+    const app = getApps().length ? getApps()[0] : initializeApp({ credential: cert(sa) });
+    const db = getFirestore(app);
     const snap = await db.collection('feedback').get();
     const rows = snap.docs.map(d => String((d.data() || {}).text || '').trim()).filter(Boolean);
     return {

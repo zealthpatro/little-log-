@@ -1,6 +1,6 @@
 # Question-to-article gap analysis
 
-**Generated:** 2026-08-04  
+**Generated:** 2026-08-05  
 **Tool:** `tools/rag/question_gaps.js` (server-side, founder-run, offline, not shipped to the PWA)
 **Purpose:** find which real user questions are NOT well answered by any existing article/FAQ, so `CONTENT-QUEUE.md` can be enriched with genuine, question-grounded topics instead of guesses.
 
@@ -11,7 +11,7 @@ This is a smaller sibling of the deferred `docs/plans/2026-07-13-rag-chatbot-pro
 ## Data sources used on this run
 
 - **FAQ (bootstrap, zero setup):** 123 real Q&As parsed from the FAQPage JSON-LD in `faq/index.html`. Used on every run.
-- **Feedback (Firestore `feedback` collection):** NOT used on this run. tools/serviceAccountKey.json not found. Feedback source skipped. Setup (see ANALYTICS.md, "One-time setup"): Firebase console > Project settings > Service accounts > Generate new private key, save the file as tools/serviceAccountKey.json (already gitignored), then `cd tools && npm init -y && npm install firebase-admin`.
+- **Feedback (Firestore `feedback` collection):** NOT used on this run. feedback collection exists but has 0 rows. No tester has used Settings > Tell us how it feels yet.
   The integration is built and ready (see `fetchFeedback()` in the script); it simply has nothing to read yet in this environment. This is stated honestly rather than fabricated: no feedback rows were invented to pad this report.
 
 **Question set size:** 123 (0 feedback + 123 FAQ).

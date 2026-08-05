@@ -3,15 +3,19 @@
    Runs on YOUR machine with a service account key. Sends nothing anywhere.
    Setup + usage: see ANALYTICS.md.  Run:  node tools/analytics.js  */
 
-const admin = require('firebase-admin');
+// firebase-admin 14 dropped the old admin.initializeApp()/admin.firestore() namespace API for
+// these modular subpath imports - a fresh `npm install firebase-admin` pulls 14.x and breaks the
+// namespace calls this file used to have (fixed 2026-08-05, same bug hit tools/rag/question_gaps.js).
+const { initializeApp, cert } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
 const path = require('path');
 const { leakyBucket } = require('./funnel');
 let sa;
 try { sa = require(path.join(__dirname, 'serviceAccountKey.json')); }
 catch (e) { console.error('\nMissing tools/serviceAccountKey.json. See ANALYTICS.md (Firebase console > Project settings > Service accounts > Generate new private key).\n'); process.exit(1); }
 
-admin.initializeApp({ credential: admin.credential.cert(sa) });
-const db = admin.firestore();
+const app = initializeApp({ credential: cert(sa) });
+const db = getFirestore(app);
 
 const DAY = 86400000, now = Date.now();
 const ms = (t) => (t && t.toMillis) ? t.toMillis() : (typeof t === 'number' ? t : 0);
