@@ -121,9 +121,26 @@
   --grid:rgba(60,46,34,0.10);
   --knob:#FFFFFF;
   --on-accent-fill:rgba(255,255,255,.95);
+  /* Sheets and panels that are built in JS (the searchable picker, the date/time and bear modals,
+     the invite sheet, the install sheet) were all written as a literal #fff behind var(--card,#fff).
+     --card was never actually declared anywhere, so every one of them stayed pure white in Night.
+     Declaring it is the single fix for all of them; the light value is the same #fff they had. */
+  --card:#FFFFFF;
+  /* Text sitting on an --ink-coloured fill (the empty-state CTA). Same idea as --toast-ink, but the
+     CTA's cream is a shade warmer than the page, so it keeps its own value rather than reusing it. */
+  --on-ink:#FFFDF8;
+  /* Paper glints: the tiny white highlights that make a cream card look like paper. Meaningless on
+     a near-black card, where they read as a milky haze instead. */
+  --glint:rgba(255,255,255,.5);
+  --glint-edge:rgba(255,255,255,.4);
+  /* The off state of a switch. Two older switches hardcoded this; the token is what unifies them. */
+  --switch-off:#D9CDBB;
   /* The painted bear library is keyed to cream and cannot be repainted, so art keeps its own
      "paper" tile. In light that is just the card. */
   --paper:#FFFFFF;
+  /* The paper the spot-art cubs were painted on, now that it is cut out of the files. Light puts
+     it back so those empty states look exactly as they always have; night leaves the cub alone. */
+  --spot-paper:#ECDBC5;
   --toast-bg:var(--ink);
   --toast-ink:var(--bg);
   --shadow:rgba(60,46,34,0.10);
@@ -163,7 +180,14 @@
   --grid:rgba(255,255,255,0.08);
   --knob:#E8DFD3;
   --on-accent-fill:rgba(232,223,211,.92);
+  /* One step above a card, so a JS-built panel lands on the same rung as a .sheet. */
+  --card:#302923;
+  --on-ink:#F2EADF;      /* the CTA's fill is --toast-bg in night, a light surface, so the label flips */
+  --glint:rgba(255,255,255,.05);
+  --glint-edge:rgba(255,255,255,.06);
+  --switch-off:#3A312A;  /* = --line, what the .sw switch already uses */
   --paper:#EFE7DA;
+  --spot-paper:transparent;   /* the cub is cut out; a tile here would rebuild the headlight */
   --toast-bg:#3A322C;
   --toast-ink:#F2EADF;
   --shadow:rgba(0,0,0,0.35);
@@ -211,10 +235,35 @@
 }
 /* User photos and the painted art are never dimmed: dimming a parent's photo of their baby reads
    as a bug and breaks the keepsake promise. The hairline above stops a bright photo glaring as an
-   unbounded hole, and cream-keyed art gets a deliberate paper tile so it looks intentional. */
-[data-theme="night"] .es-bear,[data-theme="night"] .card-prev,
+   unbounded hole, and art that arrives with transparency gets a deliberate paper tile behind it. */
+[data-theme="night"] .card-prev,
 [data-theme="night"] .gl-card img,[data-theme="night"] .jr-tile img,
 [data-theme="night"] .mem-ready img{background:var(--paper);}
+/* The spot-art cubs shipped as 512x512 RGB with NO alpha, so each one carried a baked opaque
+   cream background and rendered as a 132px disc of #ECDBC5 on a #26201C surface: an 11.9:1 step
+   with a hard edge, a headlight rather than a picture. Nothing CSS can reach fixes that. A mask
+   only rounds the glare into a glowing orb; a filter dims the painting itself to a grey-brown and
+   fails the art bar. So the paper was cut out of the ASSET instead (transparent WebP, same file,
+   same 512px, ~19KB) and the cub is left exactly as painted: full brightness, full saturation,
+   no filter and no second copy to keep in sync.
+
+   Light therefore has to put the paper back, or the cubs would silently change there too. It is
+   the same cream the art was painted on, so light renders as it always did -- the disc is now
+   drawn by CSS instead of being baked into the pixels. (welcome_cub and invite_bears are NOT cut:
+   they are the sign-in landing logo, presented as a shadowed tile on a hardcoded-light screen,
+   where the baked paper IS the tile.) */
+.es-bear{background:var(--spot-paper);}
+/* Two full-screen moments that are built in JS. Their text is themed but their fill used to be a
+   literal cream set on the element, which put the birth headline at 1.1:1 in Night. The light
+   values below are the exact ones they carried inline, so nothing about Light moves. */
+#cb-birth-arrival{background:linear-gradient(180deg,#FDF3E7,#FBF3E9);}
+#cb-del-goodbye{background:#FBF5E9;}
+#cb-del-goodbye h2{color:#3a2f28;}
+#cb-del-goodbye .cb-del-sub{color:#8a7a6d;}
+[data-theme="night"] #cb-birth-arrival{background:linear-gradient(180deg,var(--bg-grad-1),var(--bg-grad-2));}
+[data-theme="night"] #cb-del-goodbye{background:var(--bg);}
+[data-theme="night"] #cb-del-goodbye h2{color:var(--ink);}
+[data-theme="night"] #cb-del-goodbye .cb-del-sub{color:var(--ink-soft);}
 
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 /* The document background, not just body's gradient: WKWebView draws the rubber-band overscroll
@@ -457,10 +506,11 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .dp-bl{visibility:hidden;}
 .dp-td{box-shadow:inset 0 0 0 2px var(--diaper);}
 .dp-on,.dp-on:hover{background:var(--diaper);color:#fff;}
-.dp-x{color:#6E635B;opacity:.9;cursor:default;}
+.dp-x{color:var(--ink-soft);opacity:.9;cursor:default;}   /* was the light ink-soft as a literal: 2.8:1 in night */
 .dp-now{margin-top:8px;border:none;background:var(--surface-2);color:var(--ink);font-weight:800;font-size:13px;padding:8px 14px;border-radius:10px;cursor:pointer;font-family:inherit;width:100%;}
-/* Calendar inside the shared cuModal (card is always white). Hardcode colours so it reads
-   correctly in dark mode too, and use the pink accent to match the time / when wheel. */
+/* Calendar inside the shared cuModal. These literals were written when .cu-card was white in every
+   theme; now that the card follows the theme (cubby-extras.js) the calendar has to follow it too,
+   so the light values stay exactly as they were and Night gets its own set below. */
 .dp-in-modal{border:none;background:none;padding:2px 0 0;}
 .dp-in-modal .dp-t{color:#2C2521;}
 .dp-in-modal .dp-c{color:#2C2521;}
@@ -471,6 +521,16 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .dp-in-modal .dp-on,.dp-in-modal .dp-on:hover{background:#C97FA0;color:#fff;}
 .dp-in-modal .dp-x{color:#6E635B;opacity:1;}
 .dp-in-modal .dp-now{background:#FBF7EF;color:#2C2521;}
+[data-theme="night"] .dp-in-modal .dp-t,
+[data-theme="night"] .dp-in-modal .dp-c{color:var(--ink);}
+[data-theme="night"] .dp-in-modal .dp-c:hover:not(.dp-x),
+[data-theme="night"] .dp-in-modal .dp-nav,
+[data-theme="night"] .dp-in-modal .dp-now{background:var(--surface);color:var(--ink);}
+[data-theme="night"] .dp-in-modal .dp-w span{color:var(--ink-faint);}
+[data-theme="night"] .dp-in-modal .dp-td{box-shadow:inset 0 0 0 2px var(--preg);}
+[data-theme="night"] .dp-in-modal .dp-on,
+[data-theme="night"] .dp-in-modal .dp-on:hover{background:var(--preg);color:var(--bg);}
+[data-theme="night"] .dp-in-modal .dp-x{color:var(--ink-soft);}
 .field input,.field textarea,.field select{
   width:100%;border:2px solid var(--line);background:var(--surface-2);border-radius:14px;
   padding:13px 15px;font-family:var(--font-body);font-size:16px;font-weight:600;color:var(--ink);
@@ -556,7 +616,9 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .ob-pcard .a{font-weight:800;color:var(--ink);}
 .ob-pcard .bg{font-size:13px;color:var(--ink-soft);font-weight:600;margin-top:3px;}
 .ob-card{position:relative;z-index:1;width:100%;max-width:400px;background:rgba(255,255,255,.86);backdrop-filter:blur(6px) saturate(120%);-webkit-backdrop-filter:blur(6px) saturate(120%);border:1px solid var(--line);border-radius:28px;box-shadow:0 24px 60px var(--shadow-strong);}
-body.night .ob-card{background:rgba(38,32,28,.86);}
+/* (The night override for .ob-card lives with the other [data-theme="night"] rules at the top of
+   this stylesheet. The `body.night` selector that used to sit here never matched anything: the
+   theme is an ATTRIBUTE, and no code has ever added a `night` class.) */
 .ob-logout{display:block;margin:16px auto 0;border:none;background:none;color:var(--ink-soft);font-family:var(--font-body);font-weight:700;font-size:13px;cursor:pointer;text-decoration:underline;}
 .onboard{display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;padding:40px 30px;text-align:center;}
 .onboard.ob-card{height:auto;padding:30px 26px;}
@@ -581,7 +643,9 @@ body.night .ob-card{background:rgba(38,32,28,.86);}
 @keyframes esRise{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
 @media(prefers-reduced-motion:reduce){.es-bear{animation:none;}}
 /* The door lives in the empty state itself (Mobbin punch list #1), not directions to another tab. */
-.es-cta{display:inline-flex;align-items:center;gap:6px;margin-top:14px;border:none;cursor:pointer;background:var(--ink);color:#FFFDF8;font-family:var(--font-body);font-weight:800;font-size:13.5px;padding:10px 18px;border-radius:99px;}
+/* Inverted pill, the same shape as .toast: the fill is the ink colour, so the label has to be the
+   page colour. It was a literal cream, which in Night put near-white on a cream fill at 1.2:1. */
+.es-cta{display:inline-flex;align-items:center;gap:6px;margin-top:14px;border:none;cursor:pointer;background:var(--toast-bg);color:var(--on-ink);font-family:var(--font-body);font-weight:800;font-size:13.5px;padding:10px 18px;border-radius:99px;}
 
 .fade-in{animation:rise .45s cubic-bezier(.2,.9,.3,1);}
 @keyframes rise{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
@@ -1032,11 +1096,11 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 /* ---- Home day surface (Item 5): warm paper, polaroids, a handwritten accent ---- */
 .day-surface{
   background:
-    radial-gradient(120% 80% at 0% 0%, rgba(255,255,255,.5), transparent 60%),
+    radial-gradient(120% 80% at 0% 0%, var(--glint), transparent 60%),
     linear-gradient(180deg, var(--surface), var(--surface-2));
   border:1px solid var(--line);border-radius:var(--radius);
   padding:14px 16px 16px;margin-bottom:18px;
-  box-shadow:0 8px 22px var(--shadow), inset 0 1px 0 rgba(255,255,255,.4);
+  box-shadow:0 8px 22px var(--shadow), inset 0 1px 0 var(--glint-edge);
 }
 .ds-nav{display:flex;align-items:center;justify-content:space-between;margin:0 0 12px;}
 .ds-day{font-family:var(--font-display);font-size:17px;font-weight:600;color:var(--ink);}
@@ -1083,7 +1147,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .aud-sub{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:8px;line-height:1.4;}
 .ds-pinrow{display:flex;align-items:center;gap:10px;margin:4px 0 16px;cursor:pointer;}
 .ds-pinrow input{position:absolute;opacity:0;width:0;height:0;}
-.ds-pinsw{width:44px;height:25px;border-radius:999px;background:#D9CDBB;position:relative;transition:.2s;flex:0 0 auto;}
+.ds-pinsw{width:44px;height:25px;border-radius:999px;background:var(--switch-off);position:relative;transition:.2s;flex:0 0 auto;}
 .ds-pinsw::after{content:"";position:absolute;top:2px;left:2px;width:21px;height:21px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2);}
 .ds-pinrow input:checked + .ds-pinsw{background:var(--note);}
 .ds-pinrow input:checked + .ds-pinsw::after{transform:translateX(19px);}
@@ -1096,6 +1160,18 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
   .sheet{bottom:28px;border-radius:30px;}
 }
 
+/* The doctor reports (#reportOv, built by openTtcDoctorReport and openPregDoctorReport) are
+   deliberately ink-on-white in BOTH themes: they are a document you hand to a clinician, not a
+   screen. That part was already right. What was missing is that the night palette sets
+   color-scheme:dark on the root, and a control that does not name its own colour inherits the UA
+   keyword `buttontext` -- which under a dark scheme resolves to WHITE. The report's own
+   "Share / Copy" and "Close" buttons set a white background but no colour, so in night they were
+   white-on-white: the only way out of a full-screen overlay, invisible. Declaring the scheme on
+   the overlay fixes those two and any control added to the document later.
+   (Checked and deliberately NOT changed: the sign-in landing sets an explicit colour on every
+   button and on the email field, so it renders identically in both themes -- including Google's
+   white button, which must stay white per their brand guidelines.) */
+#reportOv{color-scheme:light;}
 /* Print is always paper. A parent in night mode must never hand the doctor a black page, so the
    whole token ladder is reset to ink-on-white for print and the body gradient is switched off.
    This covers every print path at once (visit report, appointment notes, pregnancy report),
@@ -4304,11 +4380,12 @@ async function doDeleteAccount(){
    first: this is someone leaving, and it should not feel like being logged out by an error. */
 function showDeletedGoodbye(){
   const ov=document.createElement('div');
-  ov.setAttribute('style','position:fixed;inset:0;z-index:4000;background:#FBF5E9;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center');
+  ov.id='cb-del-goodbye';
+  ov.setAttribute('style','position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center');
   ov.innerHTML=`<div style="max-width:340px">
     <div style="font-size:44px">🐻</div>
-    <h2 style="font-family:Georgia,serif;color:#3a2f28;margin:12px 0 8px;font-size:22px">Your account is deleted</h2>
-    <div style="color:#8a7a6d;font-size:15px;line-height:1.55;font-weight:600">Thank you for letting us look after some of it for a while. Take care of yourself.</div>
+    <h2 style="font-family:Georgia,serif;margin:12px 0 8px;font-size:22px">Your account is deleted</h2>
+    <div class="cb-del-sub" style="font-size:15px;line-height:1.55;font-weight:600">Thank you for letting us look after some of it for a while. Take care of yourself.</div>
     <button id="cb-del-done" style="margin-top:22px;border:none;border-radius:16px;padding:15px 24px;background:#C97FA0;color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Close</button></div>`;
   document.body.appendChild(ov);
   const b=document.getElementById('cb-del-done');
@@ -5709,7 +5786,9 @@ function openReadingRoom(kind){
    Cover slide -> a few "top point" slides (heading + short caption note) -> a final slide + a persistent
    footer link to the full article (available at any point). Native horizontal scroll-snap (touch swipe),
    dots track position. All in-document (opens over the sheet), same-origin article link (PWA-safe). */
-var RC_CSS='#readCarousel{position:fixed;inset:0;z-index:100001;background:linear-gradient(160deg,#F7F2E8,#EFE6D6);display:flex;flex-direction:column;font-family:inherit}'
+/* A quick read takes over the whole screen, so at 3am it was a full-page flash of cream out of a
+   dark app. The tokens below carry the identical light values it already had. */
+var RC_CSS='#readCarousel{position:fixed;inset:0;z-index:100001;background:linear-gradient(160deg,var(--bg-grad-1),var(--bg-grad-2));display:flex;flex-direction:column;font-family:inherit}'
 +'#readCarousel .rc-top{display:flex;align-items:center;gap:10px;padding:14px 14px 6px}'
 +'#readCarousel .rc-dots{flex:1;display:flex;gap:5px}'
 +'#readCarousel .rc-dots i{flex:1;height:4px;border-radius:2px;background:rgba(60,40,30,.15);transition:background .2s}'
@@ -5720,14 +5799,19 @@ var RC_CSS='#readCarousel{position:fixed;inset:0;z-index:100001;background:linea
 +'#readCarousel .rc-slide{flex:0 0 100%;width:100%;scroll-snap-align:center;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:16px 30px 24px;gap:16px}'
 +'#readCarousel .rc-emoji{font-size:58px;line-height:1}'
 +'#readCarousel .rc-kick{font-size:12px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--preg,#C97FA0)}'
-+'#readCarousel .rc-num{font-size:13px;font-weight:800;color:#a89a90}'
-+'#readCarousel .rc-title{font-family:"Fraunces",Georgia,serif;font-size:29px;line-height:1.18;color:#2C2521;font-weight:700}'
-+'#readCarousel .rc-head{font-family:"Fraunces",Georgia,serif;font-size:26px;line-height:1.22;color:#2C2521;font-weight:700}'
-+'#readCarousel .rc-sub,#readCarousel .rc-note{font-size:16.5px;line-height:1.5;color:#6E635B}'
++'#readCarousel .rc-num{font-size:13px;font-weight:800;color:var(--ink-faint)}'
++'#readCarousel .rc-title{font-family:"Fraunces",Georgia,serif;font-size:29px;line-height:1.18;color:var(--ink);font-weight:700}'
++'#readCarousel .rc-head{font-family:"Fraunces",Georgia,serif;font-size:26px;line-height:1.22;color:var(--ink);font-weight:700}'
++'#readCarousel .rc-sub,#readCarousel .rc-note{font-size:16.5px;line-height:1.5;color:var(--ink-soft)}'
 +'#readCarousel .rc-swipe{margin-top:6px;font-size:13px;font-weight:800;color:var(--preg,#C97FA0);opacity:.9}'
 +'#readCarousel .rc-btn{margin-top:6px;display:inline-block;background:var(--preg,#C97FA0);color:#fff;text-decoration:none;font-weight:800;padding:14px 24px;border-radius:15px;font-size:15px}'
 +'#readCarousel .rc-foot{padding:12px 14px calc(14px + env(safe-area-inset-bottom));text-align:center;border-top:1px solid rgba(60,40,30,.08)}'
-+'#readCarousel .rc-foot a{color:var(--preg,#C97FA0);font-weight:800;text-decoration:none;font-size:14px}';
++'#readCarousel .rc-foot a{color:var(--preg,#C97FA0);font-weight:800;text-decoration:none;font-size:14px}'
+/* The three remaining literals are warm browns-on-cream that have no identical token, so Night
+   states them rather than shifting the light values. */
++'[data-theme="night"] #readCarousel .rc-dots i{background:rgba(255,255,255,.16)}'
++'[data-theme="night"] #readCarousel .rc-x{background:var(--surface-2);color:var(--ink-soft)}'
++'[data-theme="night"] #readCarousel .rc-foot{border-top-color:var(--divider)}';
 function readBySlug(slug){ if(!window.READS) return null; var all=[].concat(READS.preg||[],READS.baby||[],READS.planning||[]); for(var i=0;i<all.length;i++){ if(all[i].s===slug) return all[i]; } return null; }
 function openArticle(slug){ var a=document.createElement('a'); a.href=readUrl(slug); a.target='_blank'; a.rel='noopener'; document.body.appendChild(a); a.click(); a.remove(); }
 function closeReadCarousel(){ var o=document.getElementById('readCarousel'); if(o) o.remove(); }
@@ -6612,7 +6696,9 @@ function showBirthArrival(b){
     : '';
   const ov=document.createElement('div');
   ov.id='cb-birth-arrival';
-  ov.setAttribute('style','position:fixed;inset:0;z-index:4000;background:linear-gradient(180deg,#FDF3E7,#FBF3E9);display:flex;align-items:center;justify-content:center;padding:30px 24px;text-align:center;overflow-y:auto');
+  // The background lives in the stylesheet, not here: it has to follow the theme, and the text
+  // inside is already themed, so an un-themed cream fill put the headline at 1.1:1 in Night.
+  ov.setAttribute('style','position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;padding:30px 24px;text-align:center;overflow-y:auto');
   ov.innerHTML=`<div style="max-width:360px">
     <div style="font-size:52px;line-height:1">🐻</div>
     <h2 style="font-family:var(--font-display,Georgia),serif;color:var(--ink,#2C2521);margin:14px 0 8px;font-size:26px;line-height:1.2">Welcome to the world, ${escapeHtml(b.name)}</h2>
@@ -10462,16 +10548,18 @@ function canShowInstall(){ return !isNativeApp() && !isStandaloneApp() && (!!win
 function _iaName(){ var ua=navigator.userAgent||''; if(/Instagram/i.test(ua))return 'Instagram'; if(/FBAN|FBAV|FB_IAB/i.test(ua))return 'Facebook'; if(/WhatsApp/i.test(ua))return 'WhatsApp'; if(/TikTok/i.test(ua))return 'TikTok'; if(/Snapchat/i.test(ua))return 'Snapchat'; if(/Line\//i.test(ua))return 'Line'; return 'this app'; }
 var _INS_SHARE='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#3C7DFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin:0 3px"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M6 12H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-1"/></svg>';
 var _INS_CSS='#cbInstallOv{position:fixed;inset:0;z-index:2147483000;background:rgba(20,15,12,.55);display:flex;flex-direction:column;justify-content:flex-end;font-family:inherit}'
-+'#cbInstallOv .cbi-card{position:relative;background:#fff;padding:24px 22px calc(24px + env(safe-area-inset-bottom));box-shadow:0 -10px 40px rgba(0,0,0,.22);animation:cbiUp .28s ease}'
++'#cbInstallOv .cbi-card{position:relative;background:var(--card,#fff);padding:24px 22px calc(24px + env(safe-area-inset-bottom));box-shadow:0 -10px 40px rgba(0,0,0,.22);animation:cbiUp .28s ease}'
 +'#cbInstallOv .cbi-sheet{border-radius:22px 22px 0 0}#cbInstallOv .cbi-mid{border-radius:20px;margin:auto 16px 16px;max-width:400px;width:calc(100% - 32px);box-sizing:border-box}'
 +'@keyframes cbiUp{from{transform:translateY(26px);opacity:.4}to{transform:none;opacity:1}}'
 +'#cbInstallOv .cbi-x{position:absolute;top:12px;right:12px;width:34px;height:34px;border:none;background:#F2ECE0;border-radius:50%;font-size:18px;line-height:1;cursor:pointer;color:#6E635B}'
-+'#cbInstallOv .cbi-emoji{font-size:40px;line-height:1}#cbInstallOv .cbi-h{font-family:"Fraunces",Georgia,serif;font-size:22px;font-weight:700;color:#2C2521;margin:6px 0 8px}'
-+'#cbInstallOv .cbi-p{font-size:15px;line-height:1.5;color:#6E635B;margin:0 0 14px}'
-+'#cbInstallOv .cbi-step{display:flex;align-items:center;gap:10px;font-size:15.5px;color:#2C2521;padding:10px 0;border-top:1px solid #F1EADF}'
++'#cbInstallOv .cbi-emoji{font-size:40px;line-height:1}#cbInstallOv .cbi-h{font-family:"Fraunces",Georgia,serif;font-size:22px;font-weight:700;color:var(--ink);margin:6px 0 8px}'
++'#cbInstallOv .cbi-p{font-size:15px;line-height:1.5;color:var(--ink-soft);margin:0 0 14px}'
++'#cbInstallOv .cbi-step{display:flex;align-items:center;gap:10px;font-size:15.5px;color:var(--ink);padding:10px 0;border-top:1px solid #F1EADF}'
 +'#cbInstallOv .cbi-n{flex:0 0 auto;width:24px;height:24px;border-radius:50%;background:#C97FA0;color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center}'
 +'#cbInstallOv .cbi-point{margin-top:14px;text-align:center;font-weight:800;color:#C97FA0;font-size:15px;animation:cbiBob 1s ease-in-out infinite}@keyframes cbiBob{0%,100%{transform:translateY(0)}50%{transform:translateY(5px)}}'
-+'#cbInstallOv .cbi-btn{margin-top:16px;width:100%;background:#C97FA0;color:#fff;border:none;font-weight:800;padding:14px;border-radius:14px;font-size:15px;cursor:pointer}';
++'#cbInstallOv .cbi-btn{margin-top:16px;width:100%;background:#C97FA0;color:#fff;border:none;font-weight:800;padding:14px;border-radius:14px;font-size:15px;cursor:pointer}'
++'[data-theme="night"] #cbInstallOv .cbi-step{border-top-color:var(--divider)}'
++'[data-theme="night"] #cbInstallOv .cbi-x{background:var(--surface-2);color:var(--ink-soft)}';
 function closeInstall(){ var o=document.getElementById('cbInstallOv'); if(o&&o.parentNode) o.parentNode.removeChild(o); }
 function _insCopy(btn){ var u=location.origin+'/app/'; try{ navigator.clipboard.writeText(u).then(function(){ if(btn) btn.textContent='Link copied ✓'; },function(){}); }catch(e){} }
 function openInstall(){

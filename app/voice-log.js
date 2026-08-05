@@ -304,7 +304,13 @@
       s.textContent = '.vc-mic{display:block;margin:14px auto;width:88px;height:88px;border-radius:50%;border:none;font-size:38px;background:var(--feed-soft);color:var(--feed);cursor:pointer;transition:transform .15s}'
         + '.vc-mic.on{background:var(--feed);color:#fff;animation:vcpulse 1.3s ease-in-out infinite}'
         + '@keyframes vcpulse{0%,100%{box-shadow:0 0 0 0 rgba(0,0,0,.12)}50%{box-shadow:0 0 0 12px rgba(0,0,0,0)}}'
-        + '.vc-live{min-height:44px;margin:6px 0 2px;padding:10px 12px;border-radius:12px;background:var(--card,#fff);border:1px solid rgba(0,0,0,.06);text-align:center;font-size:16px;color:var(--ink,#5F534A)}';
+        // The live "what Cubby heard" readout. --card is now declared per theme (app/index.html):
+        // it never was, so this resolved to the #fff fallback in BOTH themes and put cream --ink
+        // text on a white box at 1.2:1 — the one line a parent has to read before anything is
+        // saved. The box is defined by its border rather than its fill, so the border has to be
+        // visible on dark too; rgba(0,0,0,.06) is not.
+        + '.vc-live{min-height:44px;margin:6px 0 2px;padding:10px 12px;border-radius:12px;background:var(--card,#fff);border:1px solid rgba(0,0,0,.06);text-align:center;font-size:16px;color:var(--ink,#5F534A)}'
+        + '[data-theme="night"] .vc-live{border-color:var(--line)}';
       document.head.appendChild(s);
     }
   } catch (e) {}

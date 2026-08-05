@@ -435,6 +435,28 @@
     + '.hm-cell.empty{background:transparent;border:1px dashed var(--line,#E0D7C7);}'
     + '.hm-day{flex:1;text-align:center;font-size:10px;color:var(--ink-faint,#b3a99d);font-weight:700;}'
     + '.bear-av{overflow:hidden;padding:0!important;}.bear-av svg{width:100%;height:100%;display:block;}'
-    + '.tl-byav{display:inline-block;width:16px;height:16px;border-radius:50%;overflow:hidden;vertical-align:middle;margin-right:5px;}.tl-byav svg{width:100%;height:100%;display:block;}';
+    + '.tl-byav{display:inline-block;width:16px;height:16px;border-radius:50%;overflow:hidden;vertical-align:middle;margin-right:5px;}.tl-byav svg{width:100%;height:100%;display:block;}'
+
+    /* ---------- Night ----------
+       The .cu-* modal (the shared date, time and bear-avatar sheet, so one of the most-opened
+       surfaces in the app) was written as a hardcoded light card. It was readable, but it fired a
+       full-brightness white sheet out of a dark app, which is the opposite of what someone logging
+       a 3am feed needs. These are stated as Night overrides rather than as edits to the rules above
+       so the light rendering is byte-for-byte what it already was.
+       The calendar that renders INSIDE this card (.dp-in-modal) is themed alongside it in
+       app/index.html; the two have to move together or the card flips and the dates stay dark. */
+    + '[data-theme="night"] .cu-card{background:var(--card);}'
+    + '[data-theme="night"] .cu-head h2,[data-theme="night"] .cu-tdisp{color:var(--ink);}'
+    + '[data-theme="night"] .cu-x,[data-theme="night"] .cu-label{color:var(--ink-faint);}'
+    + '[data-theme="night"] .cu-sw.on{border-color:var(--ink);}'
+    + '[data-theme="night"] .cu-acc,[data-theme="night"] .cu-chip{background:var(--surface);border-color:var(--line);color:var(--ink-soft);}'
+    + '[data-theme="night"] .cu-acc.on{background:var(--preg);border-color:var(--preg);color:var(--bg);}'
+    + '[data-theme="night"] .cu-btn{background:var(--preg);color:var(--bg);}'
+    + '[data-theme="night"] .cu-tcol{background:var(--surface);}'
+    + '[data-theme="night"] .cu-tcell{color:var(--ink-faint);}'
+    + '[data-theme="night"] .cu-tcell.on{color:var(--ink);background:var(--preg-soft);}'
+    /* Two strays that were never tokenised at all: the remove link and the feedback box. */
+    + '[data-theme="night"] .ll-rm{color:var(--danger);}'
+    + '[data-theme="night"] .ll-fb{background:var(--surface);border-color:var(--line);color:var(--ink);}';
   document.head.appendChild(st);
 })();
