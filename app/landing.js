@@ -258,9 +258,20 @@
      #cb-birth-arrival already use.
 
      What does NOT follow the theme: Google's button stays their white surface with their untouched
-     four-colour G, and Apple's stays black, in both themes. Their branding guidelines fix the
-     BUTTON, not the page behind it, and App Review 4.8 only asks that neither provider be more
-     prominent — which the equal-height rule below still guarantees. */
+     four-colour G in both themes. Their branding guidelines fix the BUTTON, not the page behind it,
+     and App Review 4.8 only asks that neither provider be more prominent — which the equal-height
+     rule below still guarantees. Apple's button is the one exception, and it is Apple's own rule
+     that makes it one: their HIG ships three appearances and tells you to pick by background, so
+     black in Light and white in Night is what following the guideline looks like, not a deviation
+     from it. That switch lives with the rest of the .lp-apple styles, in store-firebase.js.
+
+     ---- contrast ----
+     A later adversarial sweep measured this screen and found the calm greys were calm because they
+     were unreadable: six Light elements between 2.15:1 and 3.96:1, all of them on the first screen
+     every visitor sees, plus one Night failure. Every fix below is a colour change on the element
+     itself. Nothing was resized or re-weighted to qualify for the 3:1 large-text exemption, and no
+     token's value was touched, because a token change ripples through the whole app and these are
+     local problems. */
   var st = document.createElement('style');
   st.textContent =
     '#llAuthOv.landing{display:block;align-items:initial;justify-content:initial;padding:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:linear-gradient(180deg,#FBF5E9,#F1E4CF);}'
@@ -290,8 +301,15 @@
     + '.lp-cta:hover{background:#F7F8F8;}'
     + '.lp-cta:active{background:#F1F3F4;}'
     + '.lp-cta:disabled{opacity:.6;cursor:default;}'
-    + '.lp-msg{margin-top:12px;color:#b05a7a;font-size:13px;font-weight:700;}'
-    + '.lp-trust{margin-top:12px;font-size:13px;color:#9a8d80;font-weight:700;}'
+    /* Both of these were a shade chosen to be quiet, not a shade chosen to be readable. #b05a7a is
+       the marketing site's --pink-d; on this cream gradient it measured 3.68:1, and the grey trust
+       line 2.67:1, so the two calmest lines on the page were the two hardest to read. The plum keeps
+       --pink-d's exact hue and saturation (337.7deg / 35.2%) and only drops lightness 52% -> 43%, so
+       it is the same brand plum, deep enough to pass (5.0:1 at the gradient's darkest point). The
+       trust line moves to --ink-soft, the token the tagline and every body line on this page already
+       use, rather than to a new grey. */
+    + '.lp-msg{margin-top:12px;color:#944764;font-size:13px;font-weight:700;}'
+    + '.lp-trust{margin-top:12px;font-size:13px;color:var(--ink-soft,#6E635B);font-weight:700;}'
     // The invitee's one instruction. Sits where the feature carousel goes on the acquisition screen:
     // they were sold by the person who invited them, so this space is for getting the address right.
     + '.lp-inv{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;min-height:0;'
@@ -309,18 +327,25 @@
     + '.lp-steps-wrap{text-align:center;margin:14px 0 8px;}'
     + '.lp-steps{display:flex;flex-direction:column;gap:14px;max-width:430px;margin:18px auto 0;text-align:left;}'
     + '.lp-step{background:#fff;border-radius:16px;padding:16px 18px 16px 64px;box-shadow:0 5px 14px rgba(0,0,0,.05);position:relative;}'
-    + '.lp-sn{position:absolute;left:16px;top:15px;width:34px;height:34px;border-radius:50%;background:var(--pump,#C97FA0);color:#fff;font-weight:900;display:flex;align-items:center;justify-content:center;font-family:"Fraunces",Georgia,serif;}'
+    /* The numeral sits ON an accent. White there measured 2.99:1 in Light at 16px — the exemption for
+       large text needs 18.66px bold, so this is ordinary text and owes the full 4.5. --on-accent is
+       the app's ink-on-a-light-accent token and reads 5.04:1 here; Night already used it. */
+    + '.lp-sn{position:absolute;left:16px;top:15px;width:34px;height:34px;border-radius:50%;background:var(--pump,#C97FA0);color:var(--on-accent,#2C2521);font-weight:900;display:flex;align-items:center;justify-content:center;font-family:"Fraunces",Georgia,serif;}'
     + '.lp-st{font-weight:800;font-size:15px;}'
     + '.lp-ss{font-size:13px;color:var(--ink-soft,#6E635B);font-weight:600;margin-top:2px;}'
     + '.lp-pro{text-align:center;background:#fff;border:1px solid #EADFcf;border-radius:18px;padding:24px 20px;margin:30px 0 6px;box-shadow:0 5px 14px rgba(0,0,0,.05);}'
-    + '.lp-pro-badge{display:inline-block;background:var(--pump,#C97FA0);color:#fff;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:4px 11px;border-radius:999px;margin-bottom:8px;}'
+    + '.lp-pro-badge{display:inline-block;background:var(--pump,#C97FA0);color:var(--on-accent,#2C2521);font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:4px 11px;border-radius:999px;margin-bottom:8px;}'
     + '.lp-pro p{color:var(--ink-soft,#6E635B);font-size:15px;line-height:1.55;max-width:460px;margin:0 auto;font-weight:600;}'
-    + '.lp-pro-note{margin-top:14px !important;font-size:13px !important;color:#9a8d80 !important;}'
+    /* The note used to force its own grey (3.23:1 on the white card in Light, 4.23:1 on --surface in
+       Night: the only Night failure on this screen). It is a <p> inside .lp-pro, so dropping the
+       colour hands it back to .lp-pro p and it inherits --ink-soft in both themes. The two
+       !importants stay because .lp-pro p out-specifies this selector on margin and size. */
+    + '.lp-pro-note{margin-top:14px !important;font-size:13px !important;}'
     + '.lp-cmp{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:18px 0 4px;text-align:left;}'
     + '.lp-col{background:var(--surface-2,#FBF7EF);border:1px solid #EADFcf;border-radius:14px;padding:16px;}'
     + '.lp-col-pro{background:#fff;border-color:var(--pump,#C97FA0);}'
     + '.lp-col-h{font-family:"Fraunces",Georgia,serif;font-size:18px;font-weight:600;color:var(--ink,#2C2521);margin-bottom:10px;}'
-    + '.lp-soon{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;background:var(--pump,#C97FA0);color:#fff;padding:2px 7px;border-radius:999px;vertical-align:middle;margin-left:4px;}'
+    + '.lp-soon{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;background:var(--pump,#C97FA0);color:var(--on-accent,#2C2521);padding:2px 7px;border-radius:999px;vertical-align:middle;margin-left:4px;}'
     + '.lp-col ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;}'
     + '.lp-col li{font-size:13px;color:var(--ink-soft,#6E635B);font-weight:600;line-height:1.4;padding-left:21px;position:relative;}'
     + '.lp-col li::before{content:"✓";position:absolute;left:0;color:var(--diaper,#56A08E);font-weight:900;}'
@@ -358,9 +383,12 @@
     + '@media(max-height:700px){.lp-app .lp-logo img{width:60px;height:60px;}.lp-app .lp-name{font-size:28px;}'
     + '.lp-app-tag{font-size:14px;}.ac-ic{width:46px;height:46px;margin-bottom:8px;}.ac-t{font-size:17px;}}'
     + '.lp-final{text-align:center;padding:34px 0 6px;}'
-    + '.lp-pwa{max-width:380px;margin:16px auto 0;font-size:12px;line-height:1.5;color:#a99e92;font-weight:600;}'
-    + '.lp-foot{text-align:center;color:#9a8d80;font-size:13px;font-weight:700;padding:28px 0 0;}'
-    + '.lp-foot a{color:#b05a7a;font-weight:700;}'
+    /* The last three lines a visitor reads, and the three quietest greys on the page: 2.15:1, 2.62:1
+       and 3.68:1 measured. All three move onto tokens/values that carry, and none of them changes
+       size or weight to buy the large-text exemption. */
+    + '.lp-pwa{max-width:380px;margin:16px auto 0;font-size:12px;line-height:1.5;color:var(--ink-soft,#6E635B);font-weight:600;}'
+    + '.lp-foot{text-align:center;color:var(--ink-soft,#6E635B);font-size:13px;font-weight:700;padding:28px 0 0;}'
+    + '.lp-foot a{color:#944764;font-weight:700;}'
     + '@media(max-width:480px){.lp-feats{grid-template-columns:1fr;}.lp-name{font-size:34px;}}'
 
     /* ---------- Night ----------
@@ -378,12 +406,12 @@
     + '[data-theme="night"] .lp-col-pro{border-color:var(--pump);}'
     + '[data-theme="night"] .lp-inv{background:var(--surface);border-color:var(--line);}'
     + '[data-theme="night"] .lp-inv-s{color:var(--ink-soft);}'
-    + '[data-theme="night"] .lp-trust,[data-theme="night"] .lp-pwa,[data-theme="night"] .lp-foot,'
-    + '[data-theme="night"] .lp-pro-note{color:var(--ink-faint) !important;}'
-    + '[data-theme="night"] .lp-msg,[data-theme="night"] .lp-foot a{color:var(--preg);}'
-    /* The step numerals and the Pro pill sit ON an accent, and Night lightens every accent on
-       purpose, so white ink there is worse at 3am than at noon. --on-accent is the dark-ink token. */
-    + '[data-theme="night"] .lp-sn,[data-theme="night"] .lp-soon,'
-    + '[data-theme="night"] .lp-pro-badge{color:var(--on-accent);}';
+    /* Measured on the Night gradient these three sit at 4.71-4.88:1, so --ink-faint still carries them
+       and Night's shipped look is left exactly as it is. .lp-pro-note is NOT in this group any more:
+       it sits on --surface, not on the page, where --ink-faint measured 4.23:1 and failed. It now
+       inherits --ink-soft from .lp-pro p in both themes (8.26:1 here). */
+    + '[data-theme="night"] .lp-trust,[data-theme="night"] .lp-pwa,'
+    + '[data-theme="night"] .lp-foot{color:var(--ink-faint) !important;}'
+    + '[data-theme="night"] .lp-msg,[data-theme="night"] .lp-foot a{color:var(--preg);}';
   document.head.appendChild(st);
 })();

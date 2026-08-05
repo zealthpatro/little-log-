@@ -186,10 +186,32 @@
     + '[data-theme="night"] .ll-auth-msg{color:var(--ink-faint);}'
     + '[data-theme="night"] .ll-auth-btn{background:var(--surface);border-color:var(--line);color:var(--ink);}'
     + '[data-theme="night"] .ll-auth-btn:hover{background:var(--surface-2);}'
-    // ...except these two. Google keeps their white surface + untouched four-colour G, Apple keeps
-    // black, in both themes: the guidelines are a condition of using the providers at all.
+    // ...except the two provider buttons, which answer to their owners' guidelines rather than to our
+    // theme: those guidelines are a condition of using the providers at all. Google keeps their white
+    // surface + untouched four-colour G in both themes; Apple's own guideline is background-dependent,
+    // so it changes appearance below.
     + '[data-theme="night"] .ll-auth-btn-google{background:#FFFFFF;border-color:#747775;color:#1F1F1F;}'
     + '[data-theme="night"] .ll-auth-btn-google:hover{background:#F7F8F8;}'
+    /* Apple is the opposite case, and following their guideline is what moves it. The HIG ships three
+       appearances and tells you to choose by background: the white style is "for dark backgrounds
+       that provide sufficient contrast", and of the black style it says outright "don't use it on
+       black or dark backgrounds". Ours was black on a #211B18 page — 1.17:1 against it, an invisible
+       button-shaped hole held together by nothing but the edge. So Night takes the white style.
+       NOT the white-outlined style: Apple reserves that for light backgrounds and explicitly says to
+       avoid it on a dark one, and an outline would also add 2px of height and break the equal-height
+       parity with Google that App Review 4.8 depends on.
+       Everything Apple fixes stays fixed: their logo artwork and the "Continue with Apple" title are
+       untouched, and their rule that the logo and title must both be black or white is satisfied by
+       flipping `color` alone — the mark is fill="currentColor", so it turns black with the label.
+       Google's button is white in both themes, so the two remain the same size and the same weight of
+       white; neither provider is more prominent. */
+    + '[data-theme="night"] .lp-apple{background:#FFFFFF;color:#000000;}'
+    // brightness(1.2) lightens black; on a white fill it does nothing, so Night hovers the other way.
+    + '[data-theme="night"] .lp-apple:hover{filter:brightness(.94);}'
+    // The fallback auth card (used only if landing.js never loaded) is --card in Night, so its Apple
+    // button is on a dark surface too and takes the same white style, by the same rule.
+    + '[data-theme="night"] .ll-auth-btn-apple{background:#FFFFFF;border-color:#FFFFFF;color:#000000;}'
+    + '[data-theme="night"] .ll-auth-btn-apple:hover{background:#F2F2F2;}'
     + '[data-theme="night"] .ll-spin{border-color:var(--line);border-top-color:var(--pump);}'
     + '[data-theme="night"] .ll-modal{background:var(--card);}'
     + '[data-theme="night"] .ll-modal-head h2,[data-theme="night"] .ll-mem-name,'
