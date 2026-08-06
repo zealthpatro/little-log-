@@ -3,6 +3,11 @@
 // seeded localStorage. Catches dead taps (a control that opens nothing) + uncaught errors —
 // the class of bug the load-only smoke test can't see.
 //
+// It also runs the CONTRAST GATE (Definition of Done, "Accessibility"): it walks the screens in
+// BOTH themes and fails on any settled, readable text below its WCAG AA threshold. Cubby shipped
+// a whole night mode and a whole light mode with hundreds of sub-AA strings precisely because no
+// automated check ever looked, and because this file only ever seeded one theme.
+//
 //   node tools/serve.js &   &&   node tools/uitest.js [baseUrl] [out.png]
 const puppeteer = require('puppeteer-core');
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -16,6 +21,111 @@ const SEED = {
   settings: { unit: 'ml', wUnit: 'kg', hUnit: 'cm', tempUnit: 'C', theme: 'light', seen: { home: 1, log: 1, growth: 1, album: 1, health: 1 } },
   timers: {}, milestones: [], meds: [], photos: [], vaccines: {}, illnesses: [], pregnancy: null, notes: []
 };
+
+// Screens the contrast gate walks. Cheap on purpose: this runs on every ship, so it covers the
+// surfaces a parent actually lives on rather than all 60 states the full audit sweeps.
+const CONTRAST_STEPS = [
+  ['home', "go('home')"],
+  ['log', "go('log')"],
+  ['stats', "go('log'); typeof setLogTab==='function' && setLogTab('stats')"],
+  ['album', "go('album')"],
+  ['health', "go('health')"],
+  ['sheet: feed', "go('home'); openFeed()"],
+  ['sheet: settings', "closeSheet(); openSettings()"],
+  ['sheet: baby profile', "closeSheet(); openBabyProfile()"]
+];
+
+/* Runs in the page. One row per element that renders its own text, measured against the real
+   composited background and the full opacity chain. Deliberate exemptions, each of which would
+   otherwise be a false positive:
+     - colour emoji / punctuation-only nodes: the glyph paints its own bitmap, `color` never
+       reaches it, so the ratio is meaningless
+     - aria-hidden subtrees and disabled controls: WCAG 1.4.3 exempts inactive components
+     - anything mid entrance-fade: transient by definition, so callers finish animations first
+       and this drops whatever is still below full opacity                                     */
+const CONTRAST_PROBE = function () {
+  function parse(c) {
+    if (!c || c === 'transparent') return [0, 0, 0, 0];
+    var m = c.match(/rgba?\(([^)]+)\)/); if (!m) return null;
+    var p = m[1].split(/[,\s/]+/).filter(Boolean).map(Number);
+    return [p[0], p[1], p[2], p.length > 3 ? p[3] : 1];
+  }
+  function over(f, b) { var a = f[3]; return [f[0] * a + b[0] * (1 - a), f[1] * a + b[1] * (1 - a), f[2] * a + b[2] * (1 - a), 1]; }
+  function lum(c) { function f(v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); } return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); }
+  function ratio(a, b) { var x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+  function sel(el) { var s = el.tagName.toLowerCase(); if (el.id) s += '#' + el.id; var c = (el.getAttribute('class') || '').trim(); if (c) s += '.' + c.split(/\s+/).join('.'); return s; }
+  function ownText(el) { var t = ''; for (var i = 0; i < el.childNodes.length; i++) if (el.childNodes[i].nodeType === 3) t += el.childNodes[i].nodeValue; return t.replace(/\s+/g, ' ').trim(); }
+  function up(el, fn) { var n = el; while (n && n.nodeType === 1) { if (fn(n)) return true; n = n.parentElement; } return false; }
+  var READABLE = /[A-Za-z0-9]/;   // a string with no letter or digit carries nothing to read
+
+  var out = [];
+  var all = document.querySelectorAll('body *');
+  for (var i = 0; i < all.length; i++) {
+    var el = all[i], txt = ownText(el);
+    if (!txt || !READABLE.test(txt)) continue;
+    if (up(el, function (n) { return n.getAttribute && n.getAttribute('aria-hidden') === 'true'; })) continue;
+    if (up(el, function (n) { return n.disabled === true || (n.getAttribute && n.getAttribute('aria-disabled') === 'true'); })) continue;
+    var cs = getComputedStyle(el);
+    if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+    var r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2 || r.bottom < -4000 || r.top > 20000) continue;
+
+    // composite the background from every painted ancestor layer, root-first
+    var stack = [], node = el, chain = 1;
+    while (node && node.nodeType === 1) {
+      var ncs = getComputedStyle(node);
+      var op = parseFloat(ncs.opacity); if (!isNaN(op)) chain *= op;
+      var bc = parse(ncs.backgroundColor);
+      if (bc && bc[3] > 0) stack.push(bc);
+      node = node.parentElement;
+    }
+    if (chain < 0.999) continue;                       // mid-fade, or a deliberately inactive control
+    var base = parse(getComputedStyle(document.documentElement).backgroundColor);
+    if (!base || base[3] === 0) base = [255, 255, 255, 1];
+    var bg = [base[0], base[1], base[2], 1];
+    for (var j = stack.length - 1; j >= 0; j--) bg = over(stack[j], bg);
+
+    var fg = parse(cs.color); if (!fg) continue;
+    var cr = ratio(over(fg, bg), bg);
+    var fs = parseFloat(cs.fontSize), fw = parseInt(cs.fontWeight, 10) || 400;
+    var need = (fs >= 24 || (fs >= 18.66 && fw >= 700)) ? 3.0 : 4.5;
+    if (cr + 0.005 < need) out.push({ sel: sel(el), text: txt.slice(0, 46), ratio: Math.round(cr * 100) / 100, need: need, fs: fs, fw: fw });
+  }
+  return out;
+};
+
+async function settle(page) {
+  await new Promise(r => setTimeout(r, 600));
+  await page.evaluate(() => { document.getAnimations().forEach(a => { try { a.finish(); } catch (e) { } }); });
+  await new Promise(r => setTimeout(r, 200));
+}
+
+// Walks CONTRAST_STEPS in one theme and returns the distinct failures.
+async function contrastWalk(browser, theme) {
+  const page = await browser.newPage();
+  await page.setViewport({ width: 390, height: 850, deviceScaleFactor: 1 });
+  await page.goto(APP, { waitUntil: 'networkidle2', timeout: 30000 });
+  await page.evaluate((s, t) => {
+    localStorage.setItem('little-log-v1', JSON.stringify(s));
+    localStorage.setItem('cubby-quick-uid', 'local');
+    localStorage.setItem('cubby-theme:local', t);
+  }, SEED, theme);
+  await page.reload({ waitUntil: 'networkidle2' });
+  await new Promise(r => setTimeout(r, 1600));
+  await page.evaluate(t => document.documentElement.setAttribute('data-theme', t), theme);
+  const found = new Map();
+  for (const [label, code] of CONTRAST_STEPS) {
+    await page.evaluate(c => { try { eval(c); } catch (e) { } }, code);
+    await settle(page);
+    const rows = await page.evaluate(CONTRAST_PROBE);
+    for (const r of rows) {
+      const k = theme + ' ' + r.sel + ' ' + r.fs + '/' + r.fw;
+      if (!found.has(k) || r.ratio < found.get(k).ratio) found.set(k, Object.assign({ key: k, screen: label }, r));
+    }
+  }
+  await page.close();
+  return [...found.values()].sort((a, b) => a.ratio - b.ratio);
+}
 
 (async () => {
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });
@@ -53,11 +163,20 @@ const SEED = {
     else if (!opened) deadTaps.push(fn + ' (no sheet)');
   }
 
+  // ---- contrast gate: the same walk, once per theme ----
+  const contrast = [];
+  for (const theme of ['light', 'night']) {
+    const bad = await contrastWalk(browser, theme);
+    console.log(`contrast (${theme}): ${bad.length ? bad.length + ' below AA' : 'all text clears AA'}`);
+    bad.slice(0, 12).forEach(b => console.log(`  ✕ ${b.ratio.toFixed(2)}/${b.need} ${b.sel} ${b.fs}px/${b.fw} "${b.text}" [${b.screen}]`));
+    contrast.push(...bad);
+  }
+
   await browser.close();
   console.log('booted logged-in UI:', booted.babies > 0 && booted.seesBaby, '| babies:', booted.babies, '| view:', booted.view);
   console.log('uncaught errors:', errs.length); errs.slice(0, 8).forEach(e => console.log('  ✕', e));
   console.log('dead taps (settings rows that opened nothing):', deadTaps.length ? deadTaps.join(', ') : 'none');
-  const ok = booted.babies > 0 && booted.seesBaby && errs.length === 0 && deadTaps.length === 0;
+  const ok = booted.babies > 0 && booted.seesBaby && errs.length === 0 && deadTaps.length === 0 && contrast.length === 0;
   console.log(ok ? '\nUITEST: PASS ✅' : '\nUITEST: FAIL ❌');
   process.exit(ok ? 0 : 1);
 })().catch(e => { console.error('runner error:', e.message); process.exit(2); });

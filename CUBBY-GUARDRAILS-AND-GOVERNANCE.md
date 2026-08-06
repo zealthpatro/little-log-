@@ -70,7 +70,16 @@ A guardrail is real only when it is blocking, owned, and checked at the moment o
 - **Charter:** passes the Anxiety Test across the relevant states; calm by default, red only earned + actioned.
 - **Simplicity:** one screen / one thing; one-thumb; no new jargon.
 - **States:** empty, loading, error and offline all defined and gentle.
-- **Accessibility:** AA contrast, >= 44px targets, labels, reduced-motion, no colour-only meaning.
+- **Accessibility:** AA contrast **in both themes**, >= 44px targets, labels, reduced-motion, no
+  colour-only meaning.
+- **Themes:** every screen checked in Light AND Night. `node tools/uitest.js` walks both and fails
+  the build on any settled, readable text below AA, so this is a blocking check, not a promise.
+  Owner: whoever ships the surface. Two rules the check cannot see, so read them yourself:
+  an accent is a FILL, never ink on a light surface (use the `--*-ink` rung); ink on an accent fill
+  comes from `--on-accent` (or `--on-<accent>` where that accent needs the opposite polarity).
+  This line exists because Cubby shipped a whole night mode, and then a whole light mode, with
+  hundreds of sub-AA strings: nothing was checking, and the one UI walk we had only ever ran one
+  theme. Never hit a ratio by shrinking, bolding, or hiding text.
 - **Privacy:** if sensitive data, server-side visibility enforced; no third-party tracker; minimal data.
 - **YMYL:** if clinical, deeplinked source + named-reviewer line; reviewer sign-off attached.
 - **i18n:** strings externalised; units/dates/RTL handled.

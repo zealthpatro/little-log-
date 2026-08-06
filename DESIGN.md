@@ -238,6 +238,40 @@ the issue), CSS framework adoption (vanilla is fine at this size).
 
 ---
 
+## Colour roles: fill vs ink (read this before picking a colour)
+
+The category colours (`--feed` amber, `--sleep` indigo, `--diaper` sage, `--pump` pink, `--preg`
+plum, plus `--star`, `--med`, `--danger`) are tuned to be seen as a **fill**: a dot, a chip, a
+progress bar, a tint. They are not text colours. As ink on a light surface they measured 2.15–4.43:1
+— amber numerals on the stats card were 2.35:1, gold links 2.15:1. So each has a second rung:
+
+- **`--<name>`** — the brand hue. Fills, borders, dots, chart strokes. Never changes.
+- **`--<name>-ink`** — the same hue carried down to a text-safe depth. Use this **whenever the
+  accent is the colour of a word.** Clears 4.6:1 on white, on the page gradient and on its own
+  `-soft` tint. In Night these alias straight back to the accent, which already reads on a dark
+  surface, so a call site never has to know which theme it is in.
+
+The mirror of that, for ink sitting **on** an accent fill:
+
+- **`--on-accent`** — the deep warm near-black that clears AA on every accent in both themes.
+  This is the answer to `color:#fff` on a coloured button; white on the light accents ran
+  2.30–3.91:1 and got worse in Night, down to 1.79:1.
+- **`--on-<accent>`** — the escape hatch for an accent where the polarity flips. Only `--on-sleep`
+  exists: light indigo is dark enough that white wins (5.12:1 vs 3.51:1). `.btn-primary` and the
+  running-timer banner read `var(--accent-ink, var(--on-accent))`, and `_sheetAccent()` sets
+  `--accent-ink` from the sheet's accent, so the ink always follows the fill.
+
+Ink ladder: `--ink` → `--ink-soft` → `--ink-faint`. All three clear AA on a card in both themes.
+`--ink-faint` is the *quiet* rung, not an unreadable one — the quiet is carried by type (11px/800
+uppercase, letter-spaced), not by fading the colour out. Light's cream page is the darkest
+background in the theme, so the handful of `--ink-faint` consumers that sit **directly on the page**
+(`.sec-title`, the day-surface labels, `.nav-btn`, inline `.btn-ghost` overrides) use `--ink-soft`.
+
+Both themes are a blocking check: `node tools/uitest.js` walks the app twice and fails on any
+settled, readable text below AA. See the Definition of Done in CUBBY-GUARDRAILS-AND-GOVERNANCE.md.
+
+---
+
 *Process note: any new UI must pick from Part A (tokens, ramp, scale, icon rules). If a needed
 value isn't in the system, extend the system here first, then use it. This file is the anchor;
 update it when a Part C item ships.*

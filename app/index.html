@@ -113,7 +113,12 @@
   --surface-4:#FFFFFF;
   --ink:#2C2521;
   --ink-soft:#6E635B;
-  --ink-faint:#A89C90;
+  /* The quiet rung. #A89C90 measured 2.68:1 on a card and 2.17:1 on the page: it was never a
+     "faint" colour, it was an unreadable one, and 76 consumers inherited that. Cubby's cream page
+     is the darkest background in Light, so a rung that clears AA on a card lands at 4.20:1 there --
+     the handful of --ink-faint consumers that sit directly on the page use --ink-soft instead.
+     The quiet is carried by type (11px/800 uppercase), which is where it always really lived. */
+  --ink-faint:#756B62;
   --ink-dim:#BDB2A6;
   --line:#E7DECF;
   --hairline:rgba(60,46,34,0.08);
@@ -135,7 +140,7 @@
      doesn't glare: white on the Night gold measured 1.79:1, the worst text in the app. The accents
      are light in both themes, so the ink on them is dark in both; Night goes a shade deeper because
      its accents are lighter still. */
-  --on-accent:#2C2521;
+  --on-accent:#1A1614;
   /* Paper glints: the tiny white highlights that make a cream card look like paper. Meaningless on
      a near-black card, where they read as a milky haze instead. */
   --glint:rgba(255,255,255,.5);
@@ -160,6 +165,16 @@
   --note:#9A8C6E;      --note-soft:#EFE9DA;
   --preg:#B06A9A;      --preg-soft:#F4E3EE;
   --danger:#D2654E;
+  /* An accent used as INK on a light surface is a different job from the same accent used as a
+     FILL. The brand hues above are tuned to be seen as a fill (a dot, a chip, a tint) and measure
+     2.15-4.43:1 as text on white -- amber numerals on the stats card were 2.35:1. These are the
+     same hues carried down to a text-safe depth: every one clears 4.6:1 on white, on the page
+     gradient AND on its own -soft tint. Nothing about a fill changes; only ink moves. */
+  --feed-ink:#895D24;  --sleep-ink:#56629B;  --diaper-ink:#3C6F63;  --pump-ink:#8A576E;
+  --note-ink:#706550;  --preg-ink:#8C547A;   --danger-ink:#9F4C3B;
+  /* Sleep indigo is the one accent dark enough that light ink wins on it: white measures 5.12:1
+     where --on-accent measures 3.51:1. Everything else takes the deep ink. */
+  --on-sleep:#FFFFFF;
 
   --radius:26px;
   --radius-sm:16px;
@@ -179,7 +194,9 @@
      Measured on --surface #26201C: ink 13.5:1, ink-soft 8.3:1 (was 7.0:1), ink-faint 4.2:1. */
   --ink:#F2EADF;
   --ink-soft:#C4B8AB;
-  --ink-faint:#8C8177;
+  /* #8C8177 cleared AA on a card (4.23:1) but not on the rungs above it: 3.76:1 on a sheet and
+     3.30:1 on the nav, where the tab labels live. Light's old value is night's right one. */
+  --ink-faint:#A89C90;
   --ink-dim:#6B615A;
   --line:#3A312A;
   --hairline:rgba(255,255,255,0.07);
@@ -211,6 +228,13 @@
      health screen at 3am reads as an alarm about the baby, not as data. Muted terracotta, and it
      also lifts contrast on --surface from a failing 4.4:1 to 6.8:1. */
   --danger:#D89A8A;
+  /* Night's accents were already recalibrated to read on a dark surface (5.4-9.0:1 as text), so
+     the ink rung is just the accent itself. The token exists so a call site never has to know
+     which theme it is in. */
+  --feed-ink:var(--feed);   --sleep-ink:var(--sleep);   --diaper-ink:var(--diaper);
+  --pump-ink:var(--pump);   --note-ink:var(--note);     --preg-ink:var(--preg);
+  --danger-ink:var(--danger);
+  --on-sleep:var(--on-accent);   /* night lightens sleep, so the deep ink wins here instead */
 }
 /* A shadow does nothing on #1A1614, so raised surfaces get a hairline instead. `outline` with a
    negative offset draws inside the box, follows border-radius and costs no layout, so this can be
@@ -224,7 +248,15 @@
 [data-theme="night"] .alert-pill,[data-theme="night"] .preg-card,[data-theme="night"] .next-appt,
 [data-theme="night"] .danger-row,[data-theme="night"] .sheet,[data-theme="night"] .toast,
 [data-theme="night"] .loader-card,[data-theme="night"] .gal-item,[data-theme="night"] .hero,
-[data-theme="night"] .card-prev,[data-theme="night"] .canvas-wrap{
+[data-theme="night"] .card-prev,[data-theme="night"] .canvas-wrap,
+[data-theme="night"] .since-card,[data-theme="night"] .appt-row,[data-theme="night"] .log-list-item,
+[data-theme="night"] .moment-card,[data-theme="night"] .note-card,[data-theme="night"] .bag-row,
+[data-theme="night"] .coach,[data-theme="night"] .week-hero,[data-theme="night"] .gl-card,
+[data-theme="night"] .gl-group,[data-theme="night"] .jr-tile,[data-theme="night"] .mem-ready,
+[data-theme="night"] .ms-band,[data-theme="night"] .picker-ov-panel,[data-theme="night"] .ob-card,
+[data-theme="night"] .ts-cell,[data-theme="night"] .rel-done,[data-theme="night"] .month-slot.filled,
+[data-theme="night"] .seg button.on,[data-theme="night"] .ds-arrow,[data-theme="night"] .pola,
+[data-theme="night"] .pick-item,[data-theme="night"] .day-surface{
   outline:1px solid var(--hairline);outline-offset:-1px;
 }
 /* Rows inside a card separate with a hairline rule, not a gap. */
@@ -337,23 +369,23 @@ body{
 /* ============ ACTIVE TIMER BANNER ============ */
 .active-banner{
   border-radius:var(--radius);padding:18px 20px;margin:8px 0 18px;
-  display:flex;align-items:center;gap:16px;color:#fff;position:relative;overflow:hidden;
+  display:flex;align-items:center;gap:16px;color:var(--accent-ink,var(--on-accent));position:relative;overflow:hidden;
   box-shadow:0 12px 26px var(--shadow-strong);
   animation:rise .5s cubic-bezier(.2,.9,.3,1);
 }
 .active-banner .pulse{
-  width:14px;height:14px;border-radius:50%;background:#fff;flex-shrink:0;
-  box-shadow:0 0 0 0 rgba(255,255,255,.7);animation:pulse 1.8s infinite;
+  width:14px;height:14px;border-radius:50%;background:currentColor;flex-shrink:0;
+  box-shadow:0 0 0 0 rgba(26,22,20,.45);animation:pulse 1.8s infinite;
 }
-@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,255,255,.6);}70%{box-shadow:0 0 0 12px rgba(255,255,255,0);}100%{box-shadow:0 0 0 0 rgba(255,255,255,0);}}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(26,22,20,.4);}70%{box-shadow:0 0 0 12px rgba(26,22,20,0);}100%{box-shadow:0 0 0 0 rgba(26,22,20,0);}}
 .active-banner .info{flex:1;}
-.active-banner .info .lbl{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;opacity:.85;}
+.active-banner .info .lbl{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;}
 .active-banner .info .time{font-family:var(--font-display);font-size:30px;font-weight:600;line-height:1;margin-top:3px;font-variant-numeric:tabular-nums;}
-.active-banner .info .sub{font-size:13px;opacity:.85;margin-top:4px;font-weight:600;}
+.active-banner .info .sub{font-size:13px;margin-top:4px;font-weight:600;}
 .stop-btn{
   background:var(--on-accent-fill);border:none;border-radius:18px;
   padding:12px 18px;font-family:var(--font-body);font-weight:800;font-size:14px;
-  cursor:pointer;color:var(--ink);transition:transform .15s;
+  cursor:pointer;color:var(--on-accent);transition:transform .15s;
 }
 .stop-btn:active{transform:scale(.93);}
 
@@ -385,7 +417,7 @@ body{
 /* ============ SECTION TITLE ============ */
 .sec-title{
   font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;
-  color:var(--ink-faint);margin:6px 4px 12px;
+  color:var(--ink-soft);margin:6px 4px 12px;
 }
 
 /* ============ ACTION GRID ============ */
@@ -459,10 +491,10 @@ body{
 .nav-inner{display:flex;justify-content:space-around;background:var(--surface);border-radius:24px;padding:8px;flex:1;box-shadow:0 8px 24px var(--shadow-strong);}
 /* Persistent quick-add: the 3am core action stays one tap, no scrolling past photos. Sits inside
    the app frame (absolute, like .nav) so it lands correctly in the desktop frame too. */
-.qadd{position:absolute;right:16px;bottom:calc(86px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:50%;border:none;background:var(--feed);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:40;box-shadow:0 10px 26px var(--shadow-strong);transition:transform .15s;}
+.qadd{position:absolute;right:16px;bottom:calc(86px + env(safe-area-inset-bottom));width:56px;height:56px;border-radius:50%;border:none;background:var(--feed);color:var(--on-accent);display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:40;box-shadow:0 10px 26px var(--shadow-strong);transition:transform .15s;}
 .qadd:active{transform:scale(.92);}
 .qadd svg{width:26px;height:26px;}
-.nav-btn{flex:1;border:none;background:none;cursor:pointer;padding:9px 0;border-radius:18px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--ink-faint);font-family:var(--font-body);font-weight:700;font-size:11px;transition:color .2s,background .2s;}
+.nav-btn{flex:1;border:none;background:none;cursor:pointer;padding:9px 0;border-radius:18px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--ink-soft);font-family:var(--font-body);font-weight:700;font-size:11px;transition:color .2s,background .2s;}
 .nav-btn svg{width:22px;height:22px;}
 .nav-btn.active{color:var(--ink);background:var(--surface-2);}
 
@@ -479,9 +511,9 @@ body{
 .sheet.show{transform:translate(-50%,0);}
 .grab{width:42px;height:5px;border-radius:3px;background:var(--line);margin:6px auto 18px;cursor:grab;touch-action:none;}
 .grab:active{cursor:grabbing;}
-.sheet-x{position:absolute;top:6px;right:8px;width:44px;height:44px;border:none;background:none;color:var(--ink-faint);font-size:24px;line-height:1;cursor:pointer;opacity:.85;z-index:2;font-family:inherit;padding:0;display:grid;place-items:center;border-radius:50%;}
+.sheet-x{position:absolute;top:6px;right:8px;width:44px;height:44px;border:none;background:none;color:var(--ink-soft);font-size:24px;line-height:1;cursor:pointer;z-index:2;font-family:inherit;padding:0;display:grid;place-items:center;border-radius:50%;}
 .sheet-x:hover{opacity:1;background:var(--surface-2);}
-.sheet-back{position:absolute;top:6px;left:8px;width:44px;height:44px;border:none;background:none;color:var(--ink-faint);font-size:28px;line-height:1;cursor:pointer;opacity:.85;z-index:2;font-family:inherit;padding:0;display:grid;place-items:center;border-radius:50%;}
+.sheet-back{position:absolute;top:6px;left:8px;width:44px;height:44px;border:none;background:none;color:var(--ink-soft);font-size:28px;line-height:1;cursor:pointer;z-index:2;font-family:inherit;padding:0;display:grid;place-items:center;border-radius:50%;}
 .sheet-back:hover{opacity:1;background:var(--surface-2);}
 .sheet h2{font-family:var(--font-display);font-size:22px;font-weight:600;margin-bottom:4px;}
 .sheet .sub{font-size:13px;color:var(--ink-soft);font-weight:600;margin-bottom:20px;}
@@ -513,7 +545,7 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .dp-c:hover:not(.dp-x){background:var(--surface-2);}
 .dp-bl{visibility:hidden;}
 .dp-td{box-shadow:inset 0 0 0 2px var(--diaper);}
-.dp-on,.dp-on:hover{background:var(--diaper);color:#fff;}
+.dp-on,.dp-on:hover{background:var(--diaper);color:var(--on-accent);}
 .dp-x{color:var(--ink-soft);opacity:.9;cursor:default;}   /* was the light ink-soft as a literal: 2.8:1 in night */
 .dp-now{margin-top:8px;border:none;background:var(--surface-2);color:var(--ink);font-weight:800;font-size:13px;padding:8px 14px;border-radius:10px;cursor:pointer;font-family:inherit;width:100%;}
 /* Calendar inside the shared cuModal. These literals were written when .cu-card was white in every
@@ -526,7 +558,7 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .dp-in-modal .dp-nav{background:#FBF7EF;color:#2C2521;}
 .dp-in-modal .dp-w span{color:#9a8d80;}
 .dp-in-modal .dp-td{box-shadow:inset 0 0 0 2px #C97FA0;}
-.dp-in-modal .dp-on,.dp-in-modal .dp-on:hover{background:#C97FA0;color:#fff;}
+.dp-in-modal .dp-on,.dp-in-modal .dp-on:hover{background:var(--pump);color:var(--on-accent);}
 .dp-in-modal .dp-x{color:#6E635B;opacity:1;}
 .dp-in-modal .dp-now{background:#FBF7EF;color:#2C2521;}
 [data-theme="night"] .dp-in-modal .dp-t,
@@ -568,7 +600,7 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .unit-toggle button.on{border-color:var(--accent,var(--feed));background:var(--accent-soft,var(--feed-soft));color:var(--ink);}
 .btn-primary{
   width:100%;border:none;border-radius:18px;padding:17px;font-family:var(--font-body);
-  font-weight:800;font-size:16px;color:#fff;cursor:pointer;background:var(--accent,var(--feed));
+  font-weight:800;font-size:16px;color:var(--accent-ink,var(--on-accent));cursor:pointer;background:var(--accent,var(--feed));
   margin-top:6px;transition:transform .15s,opacity .2s;box-shadow:0 8px 18px var(--shadow-strong);
   display:flex;align-items:center;justify-content:center;gap:9px;
 }
@@ -576,7 +608,7 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .btn-primary:disabled{opacity:.4;}
 .btn-ghost{width:100%;border:none;background:none;padding:14px;font-family:var(--font-body);font-weight:800;font-size:14px;color:var(--ink-soft);cursor:pointer;margin-top:6px;display:flex;align-items:center;justify-content:center;gap:8px;}
 .btn-primary svg,.btn-ghost svg,.dose-btn svg{width:18px;height:18px;flex-shrink:0;}
-.btn-danger{color:var(--danger);}
+.btn-danger{color:var(--danger-ink);}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 
 /* settings */
@@ -669,15 +701,18 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
 /* ---- extra accents ---- */
-:root{--med:#D2654E;--med-soft:#F7E0D9;--star:#D9A21B;--star-soft:#F6ECCB;}
-[data-theme="night"]{--med:#E0795F;--med-soft:#3A241D;--star:#E5BD55;--star-soft:#332B16;}
+:root{--med:#D2654E;--med-soft:#F7E0D9;--star:#D9A21B;--star-soft:#F6ECCB;
+  /* Gold is the worst light accent for text: #D9A21B measured 2.15:1 on a card. */
+  --med-ink:#9F4C3B;--star-ink:#826110;}
+[data-theme="night"]{--med:#E0795F;--med-soft:#3A241D;--star:#E5BD55;--star-soft:#332B16;
+  --med-ink:var(--med);--star-ink:var(--star);}
 
 /* ---- medicine ---- */
-.med-due{border-radius:var(--radius);padding:16px 18px;margin:8px 0 14px;display:flex;align-items:center;gap:14px;background:var(--med);color:#fff;box-shadow:0 12px 26px var(--shadow-strong);animation:rise .5s cubic-bezier(.2,.9,.3,1);}
+.med-due{border-radius:var(--radius);padding:16px 18px;margin:8px 0 14px;display:flex;align-items:center;gap:14px;background:var(--med);color:var(--on-accent);box-shadow:0 12px 26px var(--shadow-strong);animation:rise .5s cubic-bezier(.2,.9,.3,1);}
 .med-due .info{flex:1;}
-.med-due .info .lbl{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;opacity:.85;}
+.med-due .info .lbl{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;}
 .med-due .info .nm{font-family:var(--font-display);font-size:20px;font-weight:600;line-height:1.05;margin-top:2px;}
-.med-due .info .sub{font-size:13px;opacity:.9;margin-top:3px;font-weight:600;}
+.med-due .info .sub{font-size:13px;margin-top:3px;font-weight:600;}
 .med-due > svg{width:30px;height:30px;flex-shrink:0;}
 .med-card{display:flex;align-items:center;gap:13px;background:var(--surface);border-radius:var(--radius-sm);padding:13px 15px;margin-bottom:9px;box-shadow:0 3px 9px var(--shadow);}
 .med-card .mc-ico{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--med-soft);color:var(--med);flex-shrink:0;}
@@ -685,8 +720,8 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .med-card .mc-body{flex:1;min-width:0;cursor:pointer;}
 .med-card .mc-body .a{font-weight:800;font-size:15px;}
 .med-card .mc-body .b{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:1px;}
-.med-card .mc-body .b.due{color:var(--med);font-weight:800;}
-.dose-btn{border:none;background:var(--med-soft);color:var(--med);font-weight:800;font-size:13px;border-radius:13px;padding:11px 14px;cursor:pointer;font-family:var(--font-body);flex-shrink:0;transition:transform .15s;}
+.med-card .mc-body .b.due{color:var(--med-ink);font-weight:800;}
+.dose-btn{border:none;background:var(--med-soft);color:var(--med-ink);font-weight:800;font-size:13px;border-radius:13px;padding:11px 14px;cursor:pointer;font-family:var(--font-body);flex-shrink:0;transition:transform .15s;}
 .dose-btn:active{transform:scale(.93);}
 .add-row{display:flex;align-items:center;justify-content:center;gap:9px;background:var(--surface);border:2px dashed var(--line);border-radius:var(--radius-sm);padding:15px;cursor:pointer;font-weight:800;color:var(--ink-soft);font-size:14px;}
 .add-row svg{width:18px;height:18px;}
@@ -700,7 +735,7 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .ms-hero .mh-body .b{font-size:13px;color:var(--ink-soft);font-weight:600;margin-top:3px;}
 .ms-row{display:flex;align-items:center;gap:13px;background:var(--surface);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:9px;box-shadow:0 3px 9px var(--shadow);cursor:pointer;transition:transform .12s;}
 .ms-row:active{transform:scale(.985);}
-.ms-check{width:30px;height:30px;border-radius:50%;border:2.5px solid var(--line);flex-shrink:0;display:grid;place-items:center;color:#fff;transition:all .2s;}
+.ms-check{width:30px;height:30px;border-radius:50%;border:2.5px solid var(--line);flex-shrink:0;display:grid;place-items:center;color:var(--on-accent);transition:all .2s;}
 .ms-check svg{width:16px;height:16px;opacity:0;}
 .ms-row.done .ms-check{background:var(--star);border-color:var(--star);}
 .ms-row.done .ms-check svg{opacity:1;}
@@ -719,7 +754,7 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .ms-bcount{font-size:12px;color:var(--ink-soft);font-weight:700;}
 .ms-petadd{width:100%;border:1.5px dashed var(--line);background:var(--surface-2);border-radius:14px;padding:12px;font-weight:800;font-size:14px;color:var(--ink-soft);cursor:pointer;font-family:var(--font-body);margin-bottom:12px;}
 .ms-petbar{display:flex;align-items:center;gap:6px;background:var(--star-soft);border-radius:12px;padding:9px 13px;font-size:13px;font-weight:700;color:var(--ink);margin-bottom:12px;}
-.ms-petedit{margin-left:auto;border:none;background:none;color:var(--star);font-weight:800;font-size:13px;cursor:pointer;font-family:var(--font-body);text-decoration:underline;}
+.ms-petedit{margin-left:auto;border:none;background:none;color:var(--star-ink);font-weight:800;font-size:13px;cursor:pointer;font-family:var(--font-body);text-decoration:underline;}
 .ms-thumb{width:40px;height:40px;border-radius:10px;object-fit:cover;flex-shrink:0;}
 
 /* ---- moments: the gentle library ---- */
@@ -745,7 +780,7 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .gl-art img{width:100%;height:100%;object-fit:cover;display:block;}
 .gl-ph{padding:14px;text-align:center;font-family:var(--font-display);font-size:15px;font-weight:600;color:var(--ink-soft);line-height:1.2;}
 .gl-tag{position:absolute;bottom:7px;left:7px;background:var(--star-soft);color:var(--ink);font-size:10px;font-weight:800;padding:3px 8px;border-radius:20px;letter-spacing:.02em;}
-.gl-check{position:absolute;bottom:7px;right:7px;width:26px;height:26px;border-radius:50%;background:var(--star);color:#fff;display:grid;place-items:center;box-shadow:0 2px 6px var(--shadow);}
+.gl-check{position:absolute;bottom:7px;right:7px;width:26px;height:26px;border-radius:50%;background:var(--star);color:var(--on-accent);display:grid;place-items:center;box-shadow:0 2px 6px var(--shadow);}
 .gl-check svg{width:14px;height:14px;}
 .gl-cap{padding:9px 11px 10px;}
 .gl-cap .t{font-weight:800;font-size:13px;color:var(--ink);line-height:1.25;}
@@ -784,19 +819,19 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .chip-row::-webkit-scrollbar{height:0;}
 .chip{display:inline-flex;align-items:center;gap:5px;border:2px solid var(--line);background:var(--surface);border-radius:30px;padding:9px 15px;font-weight:800;font-size:13px;color:var(--ink-soft);cursor:pointer;white-space:nowrap;flex-shrink:0;font-family:var(--font-body);transition:all .15s;}
 .chip.lk{border-color:var(--star);background:var(--star-soft);color:var(--ink);}
-.chip.lk.sel{border-color:var(--star);background:var(--star);color:#fff;}
+.chip.lk.sel{border-color:var(--star);background:var(--star);color:var(--on-accent);}
 .pro-pill{display:flex;align-items:center;justify-content:center;gap:6px;background:var(--star-soft);border:1.5px dashed var(--star);color:var(--ink);border-radius:14px;padding:8px 12px;font-size:13px;font-weight:700;margin:0 0 10px;text-align:center;}
 .chip svg{width:15px;height:15px;}
 .chip.allergen{border-color:var(--med);color:var(--med);}
-.chip.allergen.sel{background:var(--med);color:#fff;border-color:var(--med);}
+.chip.allergen.sel{background:var(--med);color:var(--on-accent);border-color:var(--med);}
 .prof-id{display:flex;align-items:center;gap:14px;margin-bottom:18px;}
 .prof-id .avatar-lg{width:54px;height:54px;border-radius:50%;display:grid;place-items:center;color:#fff;font-family:var(--font-display);font-size:24px;font-weight:600;flex-shrink:0;box-shadow:0 6px 16px var(--shadow);}
 .prof-id .pi-name{font-family:var(--font-display);font-size:22px;font-weight:600;line-height:1.1;}
 .prof-id .pi-sub{font-size:13px;color:var(--ink-soft);font-weight:600;margin-top:2px;}
 .avatar-pick{position:relative;flex-shrink:0;cursor:pointer;}
-.avatar-pick .cam{position:absolute;right:-3px;bottom:-3px;width:25px;height:25px;border-radius:50%;background:var(--star);color:#fff;display:grid;place-items:center;box-shadow:0 2px 6px var(--shadow);border:2px solid var(--surface);}
+.avatar-pick .cam{position:absolute;right:-3px;bottom:-3px;width:25px;height:25px;border-radius:50%;background:var(--star);color:var(--on-accent);display:grid;place-items:center;box-shadow:0 2px 6px var(--shadow);border:2px solid var(--surface);}
 .avatar-pick .cam svg{width:13px;height:13px;}
-.link-inline{color:var(--star);font-weight:800;text-decoration:underline;cursor:pointer;}
+.link-inline{color:var(--star-ink);font-weight:800;text-decoration:underline;cursor:pointer;}
 .ps-strip{display:flex;gap:8px;overflow-x:auto;padding:4px 0 12px;-webkit-overflow-scrolling:touch;}
 .ps-opt{flex:0 0 auto;width:66px;height:66px;border-radius:13px;overflow:hidden;border:3px solid transparent;cursor:pointer;}
 .ps-opt img{width:100%;height:100%;object-fit:cover;display:block;}
@@ -835,20 +870,20 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .rt-card{background:var(--surface);border-radius:var(--radius);padding:14px 14px 8px;margin:0 0 18px;box-shadow:0 4px 12px var(--shadow);}
 .rt-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 2px 4px;}
 .rt-head .rt-t{font-family:var(--font-display);font-size:16px;font-weight:600;color:var(--ink);}
-.rt-head .rt-edit{border:none;background:none;font-family:var(--font-body);font-weight:800;font-size:13px;color:var(--diaper);cursor:pointer;padding:4px 2px;}
+.rt-head .rt-edit{border:none;background:none;font-family:var(--font-body);font-weight:800;font-size:13px;color:var(--diaper-ink);cursor:pointer;padding:4px 2px;}
 .rt-sub{font-size:12px;color:var(--ink-faint);font-weight:600;line-height:1.5;margin:0 2px 12px;}
 .rt-item{display:flex;align-items:center;gap:12px;padding:10px 2px;border-top:1px solid var(--line);}
 .rt-item:first-of-type{border-top:none;}
 .rt-check{width:30px;height:30px;border-radius:50%;border:2px solid var(--line);background:var(--surface-2);flex-shrink:0;cursor:pointer;display:grid;place-items:center;color:transparent;transition:all .15s;padding:0;}
 .rt-check svg{width:16px;height:16px;}
-.rt-check.on{border-color:var(--diaper);background:var(--diaper);color:#fff;}
+.rt-check.on{border-color:var(--diaper);background:var(--diaper);color:var(--on-accent);}
 .rt-body{flex:1;min-width:0;}
 .rt-body .a{font-weight:800;font-size:14px;color:var(--ink);}
 .rt-body.done .a{color:var(--ink-faint);text-decoration:line-through;}
 .rt-body .b{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:1px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
 .rt-time{font-variant-numeric:tabular-nums;font-weight:800;color:var(--ink-soft);font-size:13px;white-space:nowrap;flex-shrink:0;}
 .rt-empty{font-size:13px;color:var(--ink-soft);font-weight:600;line-height:1.5;padding:10px 2px 14px;}
-.rt-add{width:100%;border:none;background:none;padding:11px;font-family:var(--font-body);font-weight:800;font-size:13px;color:var(--diaper);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;border-top:1px solid var(--line);}
+.rt-add{width:100%;border:none;background:none;padding:11px;font-family:var(--font-body);font-weight:800;font-size:13px;color:var(--diaper-ink);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;border-top:1px solid var(--line);}
 .rt-add svg{width:15px;height:15px;}
 /* Ritual weekly rhythm (gentle, non-judgmental: soft dots, no red, a quiet day is allowed) */
 .rhy-row{padding:11px 2px;border-top:1px solid var(--line);}
@@ -858,7 +893,7 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .rhy-count{font-size:12.5px;color:var(--ink-soft);font-weight:700;white-space:nowrap;}
 .rhy-dots{display:flex;gap:6px;}
 .rhy-d{flex:1;max-width:32px;aspect-ratio:1;border-radius:50%;display:grid;place-items:center;font-size:10px;font-weight:800;background:var(--surface-2);color:var(--ink-faint);}
-.rhy-d.on{background:var(--diaper);color:#fff;}
+.rhy-d.on{background:var(--diaper);color:var(--on-accent);}
 .rhy-d.today{box-shadow:0 0 0 2px var(--diaper);}
 .rt-edit-row{display:flex;align-items:center;gap:10px;padding:10px 2px;border-top:1px solid var(--line);}
 .rt-edit-row:first-of-type{border-top:none;}
@@ -925,9 +960,9 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .mem-ready .mr-s{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:2px;line-height:1.3;}
 .mem-x{position:absolute;top:5px;right:7px;border:none;background:none;color:var(--ink-faint);font-size:18px;line-height:1;cursor:pointer;opacity:.55;font-family:inherit;padding:2px;}
 .mem-card:active{transform:scale(.96);}
-.mem-card.hero{grid-column:span 2;flex-direction:row;align-items:center;gap:16px;background:linear-gradient(120deg,var(--feed),var(--pump));color:#fff;}
+.mem-card.hero{grid-column:span 2;flex-direction:row;align-items:center;gap:16px;background:linear-gradient(120deg,var(--feed),var(--pump));color:var(--on-accent);}
 .mem-card .mi{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;background:var(--feed-soft);color:var(--feed);flex-shrink:0;}
-.mem-card.hero .mi{background:rgba(255,255,255,.22);color:#fff;}
+.mem-card.hero .mi{background:rgba(255,255,255,.22);color:var(--on-accent);}
 .mem-card .mi svg{width:24px;height:24px;}
 .mem-card .mt{font-weight:800;font-size:15px;}
 .mem-card .mh{font-size:12px;font-weight:600;opacity:.8;margin-top:2px;}
@@ -944,7 +979,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .pick-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;}
 .pick-item{aspect-ratio:1;border-radius:12px;overflow:hidden;position:relative;cursor:pointer;border:3px solid transparent;}
 .pick-item img{width:100%;height:100%;object-fit:cover;}
-.pick-item .pk{position:absolute;top:5px;right:5px;width:22px;height:22px;border-radius:50%;background:var(--feed);color:#fff;display:none;place-items:center;font-weight:800;font-size:12px;}
+.pick-item .pk{position:absolute;top:5px;right:5px;width:22px;height:22px;border-radius:50%;background:var(--feed);color:var(--on-accent);display:none;place-items:center;font-weight:800;font-size:12px;}
 .pick-item.sel{border-color:var(--feed);}
 .pick-item.sel .pk{display:grid;}
 
@@ -963,7 +998,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .vx-setup .vs-t{font-weight:800;font-size:14px;color:var(--ink);}
 .vx-setup .vs-s{font-size:12.5px;color:var(--ink-soft);font-weight:600;margin-top:3px;line-height:1.45;}
 .vx-setup .vs-btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:11px;}
-.vx-setup .vs-btn{border:none;border-radius:11px;padding:9px 13px;font-family:var(--font-body);font-weight:800;font-size:12.5px;cursor:pointer;background:var(--diaper);color:#fff;}
+.vx-setup .vs-btn{border:none;border-radius:11px;padding:9px 13px;font-family:var(--font-body);font-weight:800;font-size:12.5px;cursor:pointer;background:var(--diaper);color:var(--on-accent);}
 .vx-setup .vs-btn.ghost{background:var(--surface);color:var(--ink-soft);border:1px solid var(--line);}
 .disclaimer{background:var(--surface-2);border:1px solid var(--line);border-radius:14px;padding:13px 15px;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:18px;line-height:1.5;}
 
@@ -1025,7 +1060,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .week-hero{background:linear-gradient(140deg,var(--preg-soft),var(--surface));border-radius:var(--radius);padding:20px 20px 22px;margin-bottom:16px;box-shadow:0 4px 14px var(--shadow);}
 .week-hero .wh-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;}
 .week-hero .wh-week{font-family:var(--font-display);font-size:30px;font-weight:600;letter-spacing:-.02em;color:var(--ink);line-height:1;}
-.week-hero .wh-tri{font-size:12.5px;font-weight:800;color:var(--preg);text-transform:uppercase;letter-spacing:.04em;}
+.week-hero .wh-tri{font-size:12.5px;font-weight:800;color:var(--preg-ink);text-transform:uppercase;letter-spacing:.04em;}
 .week-hero .wh-count{font-size:13px;color:var(--ink-soft);font-weight:700;margin-top:7px;}
 .preg-bar{height:9px;border-radius:6px;background:var(--surface-2);overflow:hidden;margin-top:14px;}
 .preg-bar i{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,var(--preg),var(--pump));}
@@ -1044,10 +1079,10 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .danger-row .dr-dot{color:var(--danger);font-size:15px;line-height:1.4;flex-shrink:0;}
 .danger-row .dr-t{font-size:13.5px;font-weight:700;color:var(--ink);line-height:1.45;}
 .appt-row{display:flex;align-items:center;gap:12px;background:var(--surface);border-radius:14px;padding:12px 14px;margin-bottom:9px;box-shadow:0 3px 9px var(--shadow);}
-.appt-row .ar-tick{width:26px;height:26px;border-radius:9px;border:2px solid var(--line);display:grid;place-items:center;flex-shrink:0;cursor:pointer;color:#fff;}
+.appt-row .ar-tick{width:26px;height:26px;border-radius:9px;border:2px solid var(--line);display:grid;place-items:center;flex-shrink:0;cursor:pointer;color:var(--on-accent);}
 .appt-row.done .ar-tick{background:var(--preg);border-color:var(--preg);}
 .appt-row .ar-body{flex:1;min-width:0;cursor:pointer;}
-.appt-row .ar-wk{font-size:11px;font-weight:800;color:var(--preg);text-transform:uppercase;letter-spacing:.04em;}
+.appt-row .ar-wk{font-size:11px;font-weight:800;color:var(--preg-ink);text-transform:uppercase;letter-spacing:.04em;}
 .appt-row .ar-t{font-weight:800;font-size:14px;margin-top:1px;}
 .appt-row.done .ar-t{text-decoration:line-through;color:var(--ink-soft);}
 .appt-row .ar-s{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:2px;line-height:1.45;}
@@ -1060,7 +1095,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .tool-stat .ts-big{font-family:var(--font-display);font-size:24px;font-weight:600;color:var(--ink);}
 .tool-stat .ts-cap{font-size:11px;color:var(--ink-soft);font-weight:700;margin-top:3px;}
 .bag-row{display:flex;align-items:center;gap:11px;background:var(--surface);border-radius:13px;padding:11px 13px;margin-bottom:8px;box-shadow:0 2px 7px var(--shadow);}
-.bag-row .bg-tick{width:24px;height:24px;border-radius:8px;border:2px solid var(--line);display:grid;place-items:center;flex-shrink:0;cursor:pointer;color:#fff;}
+.bag-row .bg-tick{width:24px;height:24px;border-radius:8px;border:2px solid var(--line);display:grid;place-items:center;flex-shrink:0;cursor:pointer;color:var(--on-accent);}
 .bag-row.done .bg-tick{background:var(--preg);border-color:var(--preg);}
 .country-search{width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;font-size:16px;background:var(--surface);color:var(--ink);box-sizing:border-box;}
 /* Overlay picker (searchPickerHtml): a tappable field that opens a search-first bottom sheet on top. */
@@ -1118,8 +1153,8 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .ds-lane{margin-top:12px;}
 .ds-lane:first-of-type{margin-top:0;}
 .ds-lh{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
-.ds-lt{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint);}
-.ds-add{display:inline-flex;align-items:center;gap:5px;border:none;background:var(--note-soft);color:var(--note);font-family:var(--font-body);font-weight:800;font-size:12.5px;padding:7px 11px;border-radius:11px;cursor:pointer;transition:transform .15s;}
+.ds-lt{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);}
+.ds-add{display:inline-flex;align-items:center;gap:5px;border:none;background:var(--note-soft);color:var(--note-ink);font-family:var(--font-body);font-weight:800;font-size:12.5px;padding:7px 11px;border-radius:11px;cursor:pointer;transition:transform .15s;}
 .ds-add:active{transform:scale(.94);}
 .ds-add svg{width:14px;height:14px;}
 .ds-add.pulse{animation:dsPulse 2.2s ease-out infinite;}
@@ -1135,14 +1170,14 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .note-card .nt-aud{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-faint);}
 .note-empty{text-align:center;padding:16px 10px 8px;}
 .note-empty .qod{font-family:var(--font-display);font-size:17px;font-weight:500;font-style:italic;color:var(--ink);line-height:1.5;max-width:320px;margin:0 auto;}
-.note-empty .qod-by{font-family:'Caveat',cursive;font-size:16px;font-weight:700;color:var(--ink-faint);margin-top:8px;}
+.note-empty .qod-by{font-family:'Caveat',cursive;font-size:16px;font-weight:700;color:var(--ink-soft);margin-top:8px;}
 .ds-recap{cursor:pointer;}
-.ds-more{display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:800;color:var(--ink-faint);}
+.ds-more{display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:800;color:var(--ink-soft);}
 .ds-more svg{width:13px;height:13px;}
 .ds-recap-s{font-size:13.5px;font-weight:600;color:var(--ink-soft);line-height:1.45;}
 .ds-polas{display:flex;gap:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 2px 6px;}
 .ds-polas::-webkit-scrollbar{display:none;}
-.pola{flex:0 0 auto;background:#fff;padding:6px 6px 16px;border-radius:4px;box-shadow:0 4px 11px var(--shadow);transform:rotate(-1.5deg);cursor:pointer;transition:transform .15s;}
+.pola{flex:0 0 auto;background:var(--paper);padding:6px 6px 16px;border-radius:4px;box-shadow:0 4px 11px var(--shadow);transform:rotate(-1.5deg);cursor:pointer;transition:transform .15s;}
 .pola:nth-child(even){transform:rotate(1.5deg);}
 .pola:active{transform:scale(.96) rotate(0deg);}
 .pola-img{width:76px;height:76px;border-radius:2px;background-size:cover;background-position:center;background-color:#e9e2d6;}
@@ -1156,7 +1191,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .ds-pinrow{display:flex;align-items:center;gap:10px;margin:4px 0 16px;cursor:pointer;}
 .ds-pinrow input{position:absolute;opacity:0;width:0;height:0;}
 .ds-pinsw{width:44px;height:25px;border-radius:999px;background:var(--switch-off);position:relative;transition:.2s;flex:0 0 auto;}
-.ds-pinsw::after{content:"";position:absolute;top:2px;left:2px;width:21px;height:21px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2);}
+.ds-pinsw::after{content:"";position:absolute;top:2px;left:2px;width:21px;height:21px;border-radius:50%;background:var(--knob);transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2);}
 .ds-pinrow input:checked + .ds-pinsw{background:var(--note);}
 .ds-pinrow input:checked + .ds-pinsw::after{transform:translateX(19px);}
 .ds-pinlbl{font-size:13.5px;font-weight:700;color:var(--ink);}
@@ -1190,6 +1225,11 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
     --bg:#FFFFFF;--bg-grad-1:#FFFFFF;--bg-grad-2:#FFFFFF;
     --surface:#FFFFFF;--surface-2:#FFFFFF;--surface-3:#FFFFFF;--surface-4:#FFFFFF;--paper:#FFFFFF;
     --ink:#111111;--ink-soft:#444444;--ink-faint:#666666;--ink-dim:#888888;
+    /* Night aliases its accent inks to the accents themselves, which are pale by design. On white
+       paper that is unreadable, so print pins the deep light values for both themes. */
+    --feed-ink:#895D24;--sleep-ink:#56629B;--diaper-ink:#3C6F63;--pump-ink:#8A576E;
+    --note-ink:#706550;--preg-ink:#8C547A;--danger-ink:#9F4C3B;--med-ink:#9F4C3B;--star-ink:#826110;
+    --on-accent:#1A1614;--on-sleep:#FFFFFF;
     --line:#DDDDDD;--hairline:#DDDDDD;--divider:#DDDDDD;--grid:#DDDDDD;
     --shadow:transparent;--shadow-strong:transparent;
     --toast-bg:#FFFFFF;--toast-ink:#111111;
@@ -1202,13 +1242,13 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 <body>
 <div id="app"><!-- Static, crawlable content. The app replaces this on first render(); no-JS crawlers and link previews read it. -->
 <noscript><style>#seo-fallback{display:block!important}</style></noscript>
-<main id="seo-fallback" style="max-width:680px;margin:0 auto;padding:40px 22px;font-family:'Nunito Sans',system-ui,sans-serif;color:#2C2521">
+<main id="seo-fallback" style="max-width:680px;margin:0 auto;padding:40px 22px;font-family:'Nunito Sans',system-ui,sans-serif;color:var(--ink)">
 <img src="/icons/logo-512.png" alt="Cubby logo" width="76" height="76" style="border-radius:18px">
 <h1 style="font-family:'Fraunces',Georgia,serif;font-size:34px;margin:14px 0 6px">Cubby: a warm, private baby tracker</h1>
-<p style="font-size:17px;line-height:1.5;color:#6E635B">Log every feed, nap, nappy and vaccine in one calm place, shared in real time with everyone who cares for your little one: parents, grandparents, the nanny, daycare and more. Free to start, no ads, private to your family.</p>
-<p><a href="/app/" style="font-weight:800;color:#C97FA0">Start free with Google</a></p>
+<p style="font-size:17px;line-height:1.5;color:var(--ink-soft)">Log every feed, nap, nappy and vaccine in one calm place, shared in real time with everyone who cares for your little one: parents, grandparents, the nanny, daycare and more. Free to start, no ads, private to your family.</p>
+<p><a href="/app/" style="font-weight:800;color:var(--pump-ink)">Start free with Google</a></p>
 <h2 style="font-family:'Fraunces',Georgia,serif">What Cubby does</h2>
-<ul style="line-height:1.7;color:#3a322c">
+<ul style="line-height:1.7;color:var(--ink)">
 <li><strong>One-thumb logging</strong> for feeds, sleep, nappies and pumping, even at 3am.</li>
 <li><strong>Your whole care circle</strong> sees the same log, live, with who-did-what attribution.</li>
 <li><strong>Vaccine schedule</strong> with due dates and reminders so you never miss a dose.</li>
@@ -1218,7 +1258,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 <li><strong>Private by design</strong>: no ads, no third-party trackers, we never sell your data.</li>
 </ul>
 <h2 style="font-family:'Fraunces',Georgia,serif">Made for working parents and caregivers</h2>
-<p style="line-height:1.6;color:#6E635B">Leave your little one with a nanny, grandparent or daycare and still feel close. They log the feeds, naps and meals; you see it the moment it happens and get a tidy recap of the whole day, from wherever you are.</p>
+<p style="line-height:1.6;color:var(--ink-soft)">Leave your little one with a nanny, grandparent or daycare and still feel close. They log the feeds, naps and meals; you see it the moment it happens and get a tidy recap of the whole day, from wherever you are.</p>
 <h2 style="font-family:'Fraunces',Georgia,serif">Vaccine schedules by country</h2>
 <ul style="line-height:1.8">
 <li><a href="/vaccination-schedule/uk/">UK baby vaccination schedule (NHS)</a></li>
@@ -1226,12 +1266,12 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 <li><a href="/vaccination-schedule/uae/">UAE baby vaccination schedule</a></li>
 <li><a href="/de/impfkalender/">Impfkalender Baby (STIKO)</a></li>
 </ul>
-<p><a href="/articles/" style="font-weight:700;color:#C97FA0">Read the Cubby articles</a>: baby care, vaccines, feeding and sleep guides.</p>
+<p><a href="/articles/" style="font-weight:700;color:var(--pump-ink)">Read the Cubby articles</a>: baby care, vaccines, feeding and sleep guides.</p>
 <h2 style="font-family:'Fraunces',Georgia,serif">Questions</h2>
 <p><strong>Is Cubby free?</strong> Yes, logging and caregiver sharing are free. Pro adds extras.<br>
 <strong>Can both parents and a nanny use it?</strong> Yes, real-time sync across every caregiver.<br>
 <strong>Is my data private?</strong> Yes, no ads, no third-party trackers, never sold.</p>
-<p style="color:#9a8d80;font-size:13px;margin-top:28px">Cubby, a warm private baby tracker. Loading the app...</p>
+<p style="color:var(--ink-soft);font-size:13px;margin-top:28px">Cubby, a warm private baby tracker. Loading the app...</p>
 </main>
 </div>
 <div class="scrim" id="scrim" onclick="closeSheet()"></div>
@@ -1883,7 +1923,7 @@ function openDayRecap(){
   const text=dayRecapText(); window.__dayRecapText=text;
   openSheet(`<h2>${escapeHtml(b.name)}'s day 🐻</h2><div class="sub">Today at a glance, for whoever's away.</div>
     <pre class="visit-sum">${escapeHtml(text)}</pre>
-    <button class="btn-primary" style="background:var(--feed)" onclick="copyDayRecap()">Copy / share</button>
+    <button class="btn-primary" style="background:var(--feed);--accent-ink:var(--on-feed,var(--on-accent))" onclick="copyDayRecap()">Copy / share</button>
     <button class="btn-ghost" onclick="closeSheet()">Close</button>`,'feed');
 }
 function copyDayRecap(){
@@ -2491,7 +2531,7 @@ function renderNudge(){
 
 function timerBanner(type,label,start,sub,stopFn){
   const m=TYPE_META[type];
-  return `<div class="active-banner" style="background:linear-gradient(120deg,var(--${m.c}),var(--${m.c}))">
+  return `<div class="active-banner" style="background:linear-gradient(120deg,var(--${m.c}),var(--${m.c}));--accent-ink:var(--on-${m.c},var(--on-accent))">
     <div class="pulse"></div>
     <div class="info">
       <div class="lbl">${label}</div>
@@ -2646,9 +2686,9 @@ function renderStats(){
 
   return `<div class="fade-in">
     <div class="avg-row">
-      <div class="avg-box"><div class="n" style="color:var(--feed)">${avgFeed}</div><div class="l">Avg feeds / day</div></div>
-      <div class="avg-box"><div class="n" style="color:var(--sleep)">${avgSleep}h</div><div class="l">Avg sleep / day</div></div>
-      <div class="avg-box"><div class="n" style="color:var(--diaper)">${avgDia}</div><div class="l">Avg diapers / day</div></div>
+      <div class="avg-box"><div class="n" style="color:var(--feed-ink)">${avgFeed}</div><div class="l">Avg feeds / day</div></div>
+      <div class="avg-box"><div class="n" style="color:var(--sleep-ink)">${avgSleep}h</div><div class="l">Avg sleep / day</div></div>
+      <div class="avg-box"><div class="n" style="color:var(--diaper-ink)">${avgDia}</div><div class="l">Avg diapers / day</div></div>
     </div>
     ${avgNote}
     ${barCard('Feeds','Last 7 days',feedData,labels,'feed','')}
@@ -2663,7 +2703,7 @@ function barCard(title,sub,data,labels,color,suffix){
   data.forEach((v,i)=>{
     const h=Math.round((v/max)*100);
     bars+=`<div class="bar-col">
-      <div class="bar-val" style="color:var(--${color})">${v?v+suffix:''}</div>
+      <div class="bar-val" style="color:var(--${color}-ink)">${v?v+suffix:''}</div>
       <div class="bar-track"><div class="bar" style="height:${v?h:0}%;background:var(--${color})"></div></div>
       <div class="bar-day">${labels[i]}</div>
     </div>`;
@@ -2814,7 +2854,10 @@ function themeModeLabel(){ var m=themeMode(); return m==='system'?'System':(m===
    SHEETS
    ============================================================ */
 var _sheetStack=[];
-function _sheetAccent(s,accent){ s.style.setProperty('--accent', accent?`var(--${accent})`:'var(--feed)'); s.style.setProperty('--accent-soft', accent?`var(--${accent}-soft)`:'var(--feed-soft)'); }
+function _sheetAccent(s,accent){ s.style.setProperty('--accent', accent?`var(--${accent})`:'var(--feed)'); s.style.setProperty('--accent-soft', accent?`var(--${accent}-soft)`:'var(--feed-soft)');
+  /* Ink follows the fill. Only sleep declares an --on-sleep (it is the one light accent dark enough
+     that white wins); everything else falls through to --on-accent. */
+  s.style.setProperty('--accent-ink', accent?`var(--on-${accent},var(--on-accent))`:'var(--on-accent)'); }
 /* Contextual "why we ask": one-tap expander dropped under a field via ${wwa('key')}. Copy is in
    the WWA map (privacy-verified). Returns '' for unknown keys so calls are always safe. */
 function wwa(key){ var t=WWA[key]; if(!t) return ''; return '<div class="wwa"><button type="button" class="wwa-t" aria-expanded="false" onclick="wwaToggle(this)">Why we ask<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></button><div class="wwa-n" hidden>'+t+'</div></div>'; }
@@ -2998,7 +3041,7 @@ function renderFeedSheet(){
       </div></div>
       ${months<6?`<div class="csub" style="margin:-4px 0 12px">Most babies don't need water before about 6 months. Worth a quick check with your pediatrician.</div>`:''}
       ${timeStrip('when','Time')}
-      <button class="btn-primary" style="background:var(--sleep)" onclick="saveWater()">Log water</button>`;
+      <button class="btn-primary" style="background:var(--sleep);--accent-ink:var(--on-sleep,var(--on-accent))" onclick="saveWater()">Log water</button>`;
   } else {
     const diet=b.diet||'all';
     const allergies=b.allergies||[];
@@ -3026,7 +3069,7 @@ function renderFeedSheet(){
         <input type="file" id="foodPhoto" accept="image/*" style="display:none" onchange="loadFoodPhoto(this)">
       </div>
       ${timeStrip('when','Time')}
-      <button class="btn-primary" style="background:var(--note)" onclick="saveSolids()">Log solids</button>`;
+      <button class="btn-primary" style="background:var(--note);--accent-ink:var(--on-note,var(--on-accent))" onclick="saveSolids()">Log solids</button>`;
   }
   openSheet(`<h2>Feed</h2><div class="sub">How are they feeding right now?</div>${body}`,'feed');
 }
@@ -3067,7 +3110,7 @@ function openPastFeed(){
         <input type="number" value="${feedDraft.pastMins}" oninput="feedDraft.pastMins=+this.value;var el=document.getElementById('pfMins');if(el)el.textContent=(+this.value>0?Math.round(+this.value):'?')">
         <button onclick="feedDraft.pastMins=(+feedDraft.pastMins||15)+5;openPastFeed()">+</button>
       </div></div>
-    <button class="btn-primary" style="background:var(--feed)" onclick="savePastFeed()">Log feed · <span id="pfMins">${feedDraft.pastMins}</span> min</button>`,'feed');
+    <button class="btn-primary" style="background:var(--feed);--accent-ink:var(--on-feed,var(--on-accent))" onclick="savePastFeed()">Log feed · <span id="pfMins">${feedDraft.pastMins}</span> min</button>`,'feed');
 }
 function savePastFeed(){
   const mins=Math.round(+feedDraft.pastMins||0);
@@ -3173,7 +3216,7 @@ function openSleepOngoing(){
   openSheet(`<h2>Already napping</h2><div class="sub">When did they fall asleep? We'll keep a live timer running until they wake.</div>
     ${targetChips('openSleepOngoing')}
     ${timeStrip('when','Fell asleep')}
-    <button class="btn-primary" style="background:var(--sleep)" onclick="startSleepFrom()">Start ongoing nap</button>`,'sleep');
+    <button class="btn-primary" style="background:var(--sleep);--accent-ink:var(--on-sleep,var(--on-accent))" onclick="startSleepFrom()">Start ongoing nap</button>`,'sleep');
 }
 function startSleepFrom(){
   let s=getWhen('when'); if(s>now()) s-=86400000;
@@ -3193,7 +3236,7 @@ function openPastSleep(fresh){
     ${targetChips('openPastSleep')}
     ${timeStrip('when','Fell asleep')}
     ${timeStrip('end','Woke up')}
-    <button class="btn-primary" style="background:var(--sleep)" onclick="savePastSleep()">Log nap</button>`,'sleep');
+    <button class="btn-primary" style="background:var(--sleep);--accent-ink:var(--on-sleep,var(--on-accent))" onclick="savePastSleep()">Log nap</button>`,'sleep');
 }
 function savePastSleep(){
   let s = getWhen('when');
@@ -3254,7 +3297,7 @@ function renderPumpSheet(){
       <button class="${d.side==='both'?'on':''}" onclick="pumpDraft.side='both';renderPumpSheet()">Both</button>
     </div></div>
     ${timeStrip('when','Time')}
-    <button class="btn-primary" style="background:var(--pump)" onclick="savePump()">Log pump</button>`,'pump');
+    <button class="btn-primary" style="background:var(--pump);--accent-ink:var(--on-pump,var(--on-accent))" onclick="savePump()">Log pump</button>`,'pump');
 }
 function savePump(){
   commitEvent({type:'pump',amount:pumpDraft.amount,unit:pumpDraft.unit,side:pumpDraft.side,time:getWhen('when')});
@@ -3284,7 +3327,7 @@ function renderActivitySheet(){
     </div>
     ${targetChips('renderActivitySheet')}
     ${timeStrip('when','Time')}
-    <button class="btn-primary" style="background:var(--note)" onclick="saveActivity()">Log it</button>`,'note');
+    <button class="btn-primary" style="background:var(--note);--accent-ink:var(--on-note,var(--on-accent))" onclick="saveActivity()">Log it</button>`,'note');
 }
 async function saveActivity(){
   const name=$('#actName')?$('#actName').value.trim():'';
@@ -3336,7 +3379,7 @@ function openEdit(id){
   openSheet(`<h2>${escapeHtml(eventTitle(e))}</h2><div class="sub">${dayLabel(e.time)} at ${fmtClock(e.time)}${(e.authorId&&loggerName(e.authorId))?' · logged by '+escapeHtml(loggerName(e.authorId)):''}</div>${edNote}
     ${whenRows}
     ${extra}
-    ${canEd?`<button class="btn-primary" style="background:var(--${m.c})" onclick="saveEdit('${id}')">Save changes</button>
+    ${canEd?`<button class="btn-primary" style="background:var(--${m.c});--accent-ink:var(--on-${m.c},var(--on-accent))" onclick="saveEdit('${id}')">Save changes</button>
     <button class="btn-ghost btn-danger" onclick="deleteEvent('${id}')">${I.trash} Delete entry</button>`:`<div class="preg-disclaim">Only ${escapeHtml(loggerName(e.authorId)||'the person who logged this')} or an owner can change this entry. It stays on the record either way.</div>`}`,m.c);
 }
 function saveEdit(id){
@@ -3455,14 +3498,14 @@ function openBabySheet(){
     <div class="baby-item" onclick="switchBaby('${b.id}')">
       ${babyAvatarBox(b,'avatar','width:38px;height:38px;font-size:16px')}
       <div style="flex:1"><div style="font-weight:800">${escapeHtml(b.name)}</div><div style="font-size:12px;color:var(--ink-soft);font-weight:600">${ageString(b.birth)}</div></div>
-      ${b.id===state.activeBabyId?'<div style="color:var(--diaper);font-weight:800;font-size:13px">Active</div>':''}
+      ${b.id===state.activeBabyId?'<div style="color:var(--diaper-ink);font-weight:800;font-size:13px">Active</div>':''}
     </div>`).join('');
   // The switcher is the way back into the journey after the birth too. It used to vanish the moment
   // bornBabyId was set, which is what made "saved as part of their story" untrue.
   const pregBorn=!!(state.pregnancy && state.pregnancy.bornBabyId);
-  const pregRow=state.pregnancy?`<div class="baby-item" onclick="viewingPreg=true;closeSheet();render()"><div style="width:38px;height:38px;display:grid;place-items:center;background:var(--preg-soft);border-radius:50%;font-size:18px">${pregBorn?'🤍':'🤰'}</div><div style="flex:1"><div style="font-weight:800">Your pregnancy</div><div style="font-size:12px;color:var(--ink-soft);font-weight:600">${pregBorn?'Look back on the journey':(state.pregnancy.stage==='planning'?'Getting ready':'Week '+pregWeek())}</div></div>${viewingPreg?'<div style="color:var(--preg);font-weight:800;font-size:13px">Active</div>':''}</div>`:'';
+  const pregRow=state.pregnancy?`<div class="baby-item" onclick="viewingPreg=true;closeSheet();render()"><div style="width:38px;height:38px;display:grid;place-items:center;background:var(--preg-soft);border-radius:50%;font-size:18px">${pregBorn?'🤍':'🤰'}</div><div style="flex:1"><div style="font-weight:800">Your pregnancy</div><div style="font-size:12px;color:var(--ink-soft);font-weight:600">${pregBorn?'Look back on the journey':(state.pregnancy.stage==='planning'?'Getting ready':'Week '+pregWeek())}</div></div>${viewingPreg?'<div style="color:var(--preg-ink);font-weight:800;font-size:13px">Active</div>':''}</div>`:'';
   openSheet(`<h2>Switch</h2><div class="sub">Switch between your little ones.</div>${pregRow}${list}
-    <button class="btn-primary" style="background:var(--star)" onclick="openBabyProfile()">${I.note} ${escapeHtml(activeBaby().name)}'s profile</button>
+    <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="openBabyProfile()">${I.note} ${escapeHtml(activeBaby().name)}'s profile</button>
     <button class="btn-primary" onclick="openAddEntry()">${I.plus} Add to Cubby</button>
     ${trashCount()?`<button class="btn-ghost" onclick="openTrash()">${I.trash} Recently deleted (${trashCount()})</button>`:''}`,'diaper');
 }
@@ -3537,14 +3580,14 @@ function openOnboardInvite(){
     const planning=state.pregnancy.stage==='planning';
     openSheet(`<h2>You're all set ${planning?'🌱':'🌸'}</h2><div class="sub">Cubby is for everyone on this journey with you. Invite your partner or a grandparent so they can follow along, privately.</div>
       <div class="preg-card"><div class="pc-ico" style="background:var(--preg-soft)">👨‍👩‍👧</div><div><div class="pc-t">They follow along, live</div><div class="pc-b">Your week, scans and visits, in sync and private to your family.</div></div></div>
-      <button class="btn-primary" style="background:var(--preg);margin-top:14px" onclick="window.openFamily&&window.openFamily()">Invite someone</button>
+      <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:14px" onclick="window.openFamily&&window.openFamily()">Invite someone</button>
       ${(typeof canShowInstall==='function'&&canShowInstall())?`<div class="sub" style="margin-top:14px;font-size:13px">Use Cubby right here, or add it to your home screen to open it like an app, one tap away.</div><button class="btn-ghost" onclick="addToHomeScreen('obInstallMsg')">Add Cubby to your home screen</button><div id="obInstallMsg" class="sub" style="display:none;text-align:left"></div>`:''}
       <button class="btn-ghost" onclick="closeSheet()">Maybe later</button>`,'feed');
     return;
   }
   openSheet(`<h2>${n>1?'Your little ones are in 🐻':"You're all set 🐻"}</h2><div class="sub">Cubby is for everyone who loves ${n>1?'them':'your little one'}. Invite a partner, grandparent or nanny so you're never the only one who knows.</div>
     <div class="preg-card"><div class="pc-ico" style="background:var(--feed-soft)">👨‍👩‍👧</div><div><div class="pc-t">They see everything, live</div><div class="pc-b">The last feed, the nap, the next dose, all in sync and private to your family.</div></div></div>
-    <button class="btn-primary" style="background:var(--feed);margin-top:14px" onclick="window.openFamily&&window.openFamily()">Invite someone</button>
+    <button class="btn-primary" style="background:var(--feed);--accent-ink:var(--on-feed,var(--on-accent));margin-top:14px" onclick="window.openFamily&&window.openFamily()">Invite someone</button>
     <button class="btn-ghost" onclick="openAddBaby({onboarding:true,birth:lastBabyBirth})">＋ Add another little one</button>
     ${(typeof canShowInstall==='function'&&canShowInstall())?`<div class="sub" style="margin-top:14px;font-size:13px">Use Cubby right here, or add it to your home screen to open it like an app, one tap away.</div><button class="btn-ghost" onclick="addToHomeScreen('obInstallMsg')">Add Cubby to your home screen</button><div id="obInstallMsg" class="sub" style="display:none;text-align:left"></div>`:''}
     <button class="btn-ghost" onclick="closeSheet()">Maybe later</button>`,'feed');
@@ -3629,7 +3672,7 @@ function renderRelCapture(){
   openSheet(`<h2>A photo with ${escapeHtml(d.label)}</h2><div class="sub">A moment together, for the journey</div>
     <input type="file" id="relPhoto" accept="image/*" style="display:none" onchange="loadRelPhoto(this)">
     ${d.photoData?`<div class="food-preview"><img src="${d.photoData}"><button class="rm" onclick="relDraft.photoData=null;renderRelCapture()">×</button></div>`:`<button class="btn-ghost" style="margin:0" onclick="document.getElementById('relPhoto').click()">${I.camera} Choose a photo</button>`}
-    <button class="btn-primary" style="background:var(--star)" onclick="saveRelMoment()">Save</button>`,'star');
+    <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="saveRelMoment()">Save</button>`,'star');
 }
 function loadRelPhoto(input){ const f=input.files[0]; if(!f)return; input.value=''; openPhotoPrep(f,{aspect:0.8,maxDim:1200,q:0.8},(data)=>{ relDraft.photoData=data; renderRelCapture(); },()=>{ renderRelCapture(); }); }
 async function saveRelMoment(){
@@ -3649,7 +3692,7 @@ function openRelView(id){
   const r=journeyRel(b.id).find(x=>x.id===id); if(!r||!r.photoId) return;
   openSheet(`<h2>With ${escapeHtml(r.label)}</h2><div class="sub">${glDateLabel(r.at)}</div>
     <img class="card-prev" src="${photoSrc(r.photoId)}" alt="${escapeHtml(r.label)}">
-    <button class="btn-primary" style="background:var(--star)" onclick="closeSheet();makeMomentFromPhoto(photoSrc('${r.photoId}'),'With ${jArg(r.label)}',${r.at||'null'})">✨ Make a keepsake</button>
+    <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="closeSheet();makeMomentFromPhoto(photoSrc('${r.photoId}'),'With ${jArg(r.label)}',${r.at||'null'})">✨ Make a keepsake</button>
     <button class="btn-ghost" style="margin-top:8px" onclick="openRelCapture('${jArg(r.relation)}','${jArg(r.label)}','${r.id}')">${I.camera} New photo together</button>
     <button class="btn-ghost" style="margin-top:8px;color:var(--ink-soft)" onclick="removeRelMoment('${r.id}')">Remove</button>`,'star');
 }
@@ -3665,7 +3708,7 @@ function openAddSomeone(){
   openSheet(`<h2>Add someone special</h2><div class="sub">Someone you'd love a photo with</div>
     <div class="rel-chips">${REL_SUGGEST.map(([k,l])=>`<button class="rel-chip" onclick="addSomeone('${k}','${l}')">${escapeHtml(l)}</button>`).join('')}</div>
     <div class="field" style="margin-top:12px"><label>Or someone else</label><input id="relCustom" placeholder="e.g. Godmother, Ayah" maxlength="24"></div>
-    <button class="btn-primary" style="background:var(--star)" onclick="addSomeoneCustom()">Add</button>`,'star');
+    <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="addSomeoneCustom()">Add</button>`,'star');
 }
 // Creating the entry flows STRAIGHT into the photo capture — the old path closed the sheet and the
 // photoless entry was invisible forever (the Together grid only showed entries with photos).
@@ -3747,12 +3790,12 @@ function openPro(lockedFeature, tastedOut){
     <div class="pro-list">${feats}</div>
     <div class="csub" style="text-align:center;margin:2px 0 10px">Every treat comes with a free taste or two, so try before you decide 🐻</div>
     ${canBuy
-      ? `<button class="btn-primary" style="background:var(--star)" onclick="startProCheckout('annual')">Start 7-day free trial · $90 a year</button>
+      ? `<button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="startProCheckout('annual')">Start 7-day free trial · $90 a year</button>
          <button class="btn-ghost" onclick="startProCheckout('monthly')">Or pay $9 a month</button>
          <div class="csub" style="text-align:center;margin-top:8px">Cancel anytime in the trial and pay nothing. One plan covers your whole family.</div>`
       : (joined
         ? `<div class="pro-joined">✅ You're registered for Pro. We'll email you the moment it opens, ${PRO_LAUNCH} 🐻</div>`
-        : `<button class="btn-primary" style="background:var(--star)" onclick="joinProWaitlist()">Register for Pro</button>
+        : `<button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="joinProWaitlist()">Register for Pro</button>
            <div class="csub" style="text-align:center;margin-top:8px">Cubby Pro arrives ${PRO_LAUNCH}. Register now to claim your 7-day free trial at launch, ${PRO_CFG.priceLine}. No charge today.</div>`)}`,'star');
 }
 /* `plan` is required: the billing Worker picks the variant with
@@ -3858,7 +3901,7 @@ function openBirthDetails(){
     </div>
     <div class="field"><label>Place of birth</label><input id="dPlace" value="${escapeHtml(b.place||'')}" placeholder="Hospital, city"></div>
     <div class="field"><label>Proud parents</label><input id="dParents" value="${escapeHtml(b.parents||'')}" placeholder="e.g. Aaron & Olivia"></div>
-    <button class="btn-primary" style="background:var(--star)" onclick="saveBabyDetails('${b.id}')">Save details</button>`,'star');
+    <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="saveBabyDetails('${b.id}')">Save details</button>`,'star');
 }
 let customAllergyDraft='';
 function openFoodPrefs(){
@@ -3891,7 +3934,7 @@ function openFoodPrefs(){
       </div>
       <div class="csub" style="margin-top:6px">So everyone caring for your baby can see what to watch for. Always follow your pediatrician's guidance on introducing allergens.</div>
     </div>
-    <button class="btn-primary" style="background:var(--feed)" onclick="closeSheet();render()">Done</button>`,'feed');
+    <button class="btn-primary" style="background:var(--feed);--accent-ink:var(--on-feed,var(--on-accent))" onclick="closeSheet();render()">Done</button>`,'feed');
 }
 function feedSolidsOn(b){ return (b.solidsStarted!=null)? b.solidsStarted : babyMonths()>=6; }
 function setFeedType(id,ft){ const b=state.babies.find(x=>x.id===id); if(b){ b.feedType=ft; persist(); } openFoodPrefs(); }
@@ -3951,7 +3994,7 @@ function renderDoctorEdit(){
       <div class="field"><label>Phone</label><input id="docPhone" value="${escapeHtml(d.phone||'')}" placeholder="Contact" inputmode="tel"></div>
       <div class="field"><label>Next appointment</label>${datePicker('docNext', d.nextVisit||'', {empty:true})}</div>
     </div>
-    <button class="btn-primary" style="background:var(--sleep)" onclick="saveDoctorEntry()">${d.id?'Save changes':'Add doctor'}</button>
+    <button class="btn-primary" style="background:var(--sleep);--accent-ink:var(--on-sleep,var(--on-accent))" onclick="saveDoctorEntry()">${d.id?'Save changes':'Add doctor'}</button>
     ${d.id?`<button class="btn-ghost btn-danger" onclick="deleteDoctor('${d.id}')">${I.trash} Remove doctor</button>`:''}`,'sleep');
 }
 function saveDoctorEntry(){
@@ -3994,7 +4037,7 @@ function renderVisitSheet(){
     <div class="field"><label>Doctor (optional)</label><div class="chip-row" style="flex-wrap:wrap;gap:8px">${docChips}${addChip}</div>${newForm}</div>
     <div class="field"><label>Date</label>${datePicker('visDate', d.date, {max:now(), oninput:'visitDraft.date=this.value'})}</div>
     <div class="field"><label>Notes (optional)</label><textarea id="visNote" rows="3" placeholder="What was discussed, advice, measurements" oninput="visitDraft.notes=this.value">${escapeHtml(d.notes||'')}</textarea></div>
-    <button class="btn-primary" style="background:var(--sleep)" onclick="saveVisit()">Log visit</button>`,'sleep');
+    <button class="btn-primary" style="background:var(--sleep);--accent-ink:var(--on-sleep,var(--on-accent))" onclick="saveVisit()">Log visit</button>`,'sleep');
 }
 function saveVisit(){
   const b=activeBaby(); const d=visitDraft;
@@ -4314,7 +4357,7 @@ function openDataSheet(){
     </div>
     <div class="set-item" onclick="openDeleteRequest()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--danger);color:#fff">${I.trash}</div>
-      <div class="si-body"><div class="a" style="color:var(--danger)">Delete data...</div><div class="b">Choose what to erase, both guardians must agree</div></div>
+      <div class="si-body"><div class="a" style="color:var(--danger-ink)">Delete data...</div><div class="b">Choose what to erase, both guardians must agree</div></div>
     </div>
     <div class="set-item" onclick="openGuardians()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:17px">🛡️</div>
@@ -4322,7 +4365,7 @@ function openDataSheet(){
     </div>
     <div class="set-item" onclick="openDeleteAccount()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--danger);color:#fff">${I.trash}</div>
-      <div class="si-body"><div class="a" style="color:var(--danger)">Delete my account</div><div class="b">Your account and your private records, on your own</div></div>
+      <div class="si-body"><div class="a" style="color:var(--danger-ink)">Delete my account</div><div class="b">Your account and your private records, on your own</div></div>
     </div>
     ${recent?`<div class="set-label">Recent decisions</div>${recent}`:''}
     <button class="btn-ghost" onclick="openSettings()">Back to settings</button>`,'sleep');
@@ -4361,7 +4404,7 @@ function openDeleteAccount(){
     : `Your account, your access, and your private health and pregnancy records are deleted.<br><br>What you logged stays with your family, still signed with your bear name.`;
   openSheet(`<h2>Delete my account</h2><div class="sub">This is yours to do. Nobody else needs to agree.</div>
     <div style="font-size:14px;color:var(--ink-soft);font-weight:600;line-height:1.6;margin:4px 2px 14px">${body}</div>
-    <button class="btn-primary" style="background:var(--danger)" onclick="confirmDeleteAccount()">Delete my account</button>
+    <button class="btn-primary" style="background:var(--danger);--accent-ink:var(--on-danger,var(--on-accent))" onclick="confirmDeleteAccount()">Delete my account</button>
     <button class="btn-ghost" onclick="openDataSheet()">Keep my account</button>
     <div class="csub" style="margin-top:8px">You may be asked to sign in once more first, so we know it is you.</div>`,'feed');
 }
@@ -4397,7 +4440,7 @@ function showDeletedGoodbye(){
     <div style="font-size:44px">🐻</div>
     <h2 style="font-family:Georgia,serif;margin:12px 0 8px;font-size:22px">Your account is deleted</h2>
     <div class="cb-del-sub" style="font-size:15px;line-height:1.55;font-weight:600">Thank you for letting us look after some of it for a while. Take care of yourself.</div>
-    <button id="cb-del-done" style="margin-top:22px;border:none;border-radius:16px;padding:15px 24px;background:#C97FA0;color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Close</button></div>`;
+    <button id="cb-del-done" style="margin-top:22px;border:none;border-radius:16px;padding:15px 24px;background:#C97FA0;color:#1A1614;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Close</button></div>`;
   document.body.appendChild(ov);
   const b=document.getElementById('cb-del-done');
   if(b) b.onclick=function(){ try{ location.replace('/app/'); }catch(e){ location.reload(); } };
@@ -4476,7 +4519,7 @@ function openDeleteRequest(){
   const solo=gs.length<2;
   openSheet(`<h2>Delete data</h2><div class="sub">Pick exactly what should go. ${solo?'You are the only guardian, so this happens straight away and can\'t be undone.':'Both guardians must agree before anything is erased. Nothing happens until then.'}</div>
     ${rows}
-    <button class="btn-primary" style="background:var(--danger);margin-top:12px" onclick="submitDeleteRequest()">${solo?'Delete selected now':'Ask to delete selected'}</button>
+    <button class="btn-primary" style="background:var(--danger);--accent-ink:var(--on-danger,var(--on-accent));margin-top:12px" onclick="submitDeleteRequest()">${solo?'Delete selected now':'Ask to delete selected'}</button>
     <button class="btn-ghost" onclick="openDataSheet()">Back</button>
     <div class="csub" style="margin-top:8px">Removing a family member never deletes what they logged: the story belongs to the household.</div>`,'feed');
 }
@@ -4565,7 +4608,7 @@ function openConsentReview(id){
     ${canDecide?`<button class="btn-primary" style="background:${c.type==='delete'?'var(--danger)':'var(--diaper)'}" onclick="approveConsent('${c.id}')">I agree${c.type==='delete'?', delete it':''}</button>
       <button class="btn-ghost" onclick="declineConsent('${c.id}')">Decline</button>`:''}
     ${c.status==='ready'&&mine?`<button class="btn-primary" onclick="downloadExport('${c.id}')">Download export</button>`:''}
-    ${c.status==='pending'&&mine&&!canDecide?`<button class="btn-ghost" style="color:var(--danger)" onclick="cancelConsent('${c.id}')">Cancel my request</button>`:''}
+    ${c.status==='pending'&&mine&&!canDecide?`<button class="btn-ghost" style="color:var(--danger-ink)" onclick="cancelConsent('${c.id}')">Cancel my request</button>`:''}
     ${(c.status==='declined'||c.status==='done')?`<button class="btn-ghost" onclick="cancelConsent('${c.id}')">Remove from history</button>`:''}
     <button class="btn-ghost" onclick="closeSheet()">Close</button>`, c.type==='delete'?'feed':'sleep');
 }
@@ -4617,7 +4660,7 @@ function openGuardians(){
     return `<div class="set-item">
       <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:16px">${on?'🛡️':'👤'}</div>
       <div class="si-body"><div class="a">${escapeHtml(nm)}${u===myUid()?' (you)':''}</div><div class="b">${LL.members[u]==='owner'?'Owner':'Caregiver'}</div></div>
-      ${canEdit?`<div class="seg"><button class="${!on?'on':''}" onclick="setGuardian('${u}',false)">Off</button><button class="${on?'on':''}" onclick="setGuardian('${u}',true)">On</button></div>`:(on?'<div style="color:var(--star);font-weight:800;font-size:13px">Guardian</div>':'')}
+      ${canEdit?`<div class="seg"><button class="${!on?'on':''}" onclick="setGuardian('${u}',false)">Off</button><button class="${on?'on':''}" onclick="setGuardian('${u}',true)">On</button></div>`:(on?'<div style="color:var(--star-ink);font-weight:800;font-size:13px">Guardian</div>':'')}
     </div>`;
   }).join('');
   openSheet(`<h2>Guardians 🛡️</h2><div class="sub">Guardians (usually mama and papa, up to two) must all agree before the family's data is deleted or exported.</div>
@@ -4703,7 +4746,7 @@ function renderLossHolding(){
         ${hasMem?`<div class="prof-card" onclick="openKeptMemories()"><span class="lead" style="background:var(--preg-soft);font-size:20px">🤍</span><div class="cflex"><div class="a">Your kept memories</div><div class="b">Yours to revisit, privately, whenever you like</div></div><span class="chev">${I.chev}</span></div>`:''}
         <a class="prof-card" href="/articles/miscarriage-early-pregnancy-loss/" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><span class="lead" style="background:var(--feed-soft);font-size:20px">🫂</span><div class="cflex"><div class="a">If you need support</div><div class="b">Gentle reading, and helplines that are there day or night</div></div><span class="chev">${I.chev}</span></a>
       </div>
-      <button class="btn-ghost" onclick="endLossHolding()" style="color:var(--ink-faint);margin-top:10px">When you're ready, move on from this screen</button>
+      <button class="btn-ghost" onclick="endLossHolding()" style="color:var(--ink-soft);margin-top:10px">When you're ready, move on from this screen</button>
       <button class="ob-logout" onclick="confirmLogout()">Log out</button>
     </div>
   </div>`;
@@ -4909,7 +4952,7 @@ function openVisitPrep(id){
     <div class="hero-invite" onclick="window.openFamily&&window.openFamily()" style="margin-top:4px;cursor:pointer"><div class="hi" style="font-size:22px">👪</div><div><div class="ht">Who's coming with you?</div><div class="hs">Invite your partner so they have the questions too</div></div></div>
     <button class="btn-ghost" onclick="openPregDoctorReport()">📄 Take a report to this visit ${isPro()?'':(tasteLeft('pdf')>0?'· ✨ free':'· Pro ✨')}</button>
     <button class="btn-ghost" onclick="addApptToCalendar('${id}')">📅 Add to my calendar</button>
-    <button class="btn-primary" style="background:var(--preg);margin-top:4px" onclick="markApptDone('${id}')">${I.check} We've been, mark done</button>
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:4px" onclick="markApptDone('${id}')">${I.check} We've been, mark done</button>
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
 }
 /* Add-to-calendar borrows the phone's own reminders (a real "the day before" alert) without needing push. */
@@ -4938,7 +4981,7 @@ function markApptDone(id){
       <div class="field" style="flex:1"><label>Hb (g/dL)</label><input type="number" inputmode="decimal" id="avHb" value="${a.hb!=null?a.hb:''}" placeholder="e.g. 11.5"></div>
     </div>
     <div class="field"><label>Blood pressure</label><input id="avBp" value="${(a.bpSys&&a.bpDia)?(a.bpSys+'/'+a.bpDia):''}" placeholder="120/80"></div>
-    <button class="btn-primary" style="background:var(--preg)" onclick="saveApptOutcome('${id}')">Save</button>
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="saveApptOutcome('${id}')">Save</button>
     <button class="btn-ghost" onclick="closeSheet();render()">Skip</button>`,'preg');
 }
 function saveApptOutcome(id){ const p=state.pregnancy; const a=(p.appts||[]).find(x=>x.id===id); if(a){
@@ -4978,7 +5021,7 @@ function openAntenatalFacts(){
       <div class="field" style="flex:1"><label>Rh</label><select id="afRh"><option value="" ${!p.rh?'selected':''}>—</option><option value="positive" ${p.rh==='positive'?'selected':''}>positive</option><option value="negative" ${p.rh==='negative'?'selected':''}>negative</option></select></div>
     </div>
     <div class="field"><label>Group B strep (GBS)</label><select id="afGbs"><option value="unknown" ${(!p.gbs||p.gbs==='unknown')?'selected':''}>Not tested / unknown</option><option value="negative" ${p.gbs==='negative'?'selected':''}>Negative</option><option value="positive" ${p.gbs==='positive'?'selected':''}>Positive</option></select></div>
-    <button class="btn-primary" style="background:var(--preg)" onclick="saveAntenatalFacts()">Save</button>
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="saveAntenatalFacts()">Save</button>
     <div class="preg-disclaim">Informational only. Your provider holds your official records.</div>`,'preg');
 }
 function saveAntenatalFacts(){ const p=state.pregnancy; if(!p) return;
@@ -4991,7 +5034,7 @@ function openWeekDetail(kind){
     openSheet(`<h2>Early days</h2><div class="sub">A little more for these early weeks.</div>`
       +`<div class="preg-card"><div class="pc-ico">🌱</div><div><div class="pc-t">Week ${wk} · the very beginning</div><div class="pc-b">Right now the embryo is implanting and the placenta is starting to form. You might notice a missed period, tender breasts or tiredness, or nothing yet. Either way is normal.</div></div></div>`
       +`<div class="preg-card"><div class="pc-ico">💛</div><div><div class="pc-t">Be gentle with yourself</div><div class="pc-b">Week-by-week size guides begin at week 4. For now, rest when you can and trust what your body is telling you.</div></div></div>`
-      +`<button class="btn-ghost" onclick="openDangerSigns()" style="color:var(--danger);margin-top:8px">⚠️ Urgent warning signs, when to seek care</button>`
+      +`<button class="btn-ghost" onclick="openDangerSigns()" style="color:var(--danger-ink);margin-top:8px">⚠️ Urgent warning signs, when to seek care</button>`
       +`<div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
     return;
   }
@@ -5006,7 +5049,7 @@ function openWeekDetail(kind){
     title='You this week';
     body=`<div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">Week ${wk} · ${triName(tri)}</div><div class="pc-b">${escapeHtml(data.mum)}</div></div></div>`
       +`<div class="preg-card"><div class="pc-ico">💛</div><div><div class="pc-t">Be gentle with yourself</div><div class="pc-b">Every pregnancy feels different. Rest when you can, and trust what your body is telling you.</div></div></div>`
-      +`<button class="btn-ghost" onclick="openDangerSigns()" style="color:var(--danger);margin-top:8px">⚠️ Urgent warning signs, when to seek care</button>`;
+      +`<button class="btn-ghost" onclick="openDangerSigns()" style="color:var(--danger-ink);margin-top:8px">⚠️ Urgent warning signs, when to seek care</button>`;
   } else {
     title='About the size of a '+data.size;
     body=`<div style="text-align:center;font-size:60px;line-height:1;margin:4px 0 12px">${emoji}</div>`
@@ -5076,9 +5119,9 @@ function openExpectingSetup(mode){
   openSheet(`<h2>${title}</h2><div class="sub">${sub}</div>
     ${entry}
     <div class="field" style="margin-top:14px"><label>Where you'll have your care</label>${countryPickerHtml('pgCountry', pregDraft.country)}${wwa('preg.country')}</div>
-    <button class="btn-primary" style="background:var(--preg)" onclick="savePregnancy()">Start tracking</button>
-    <button class="btn-ghost" style="color:var(--ink-faint)" onclick="openPlanningSetup()">We're trying, not pregnant yet</button>
-    ${(state.pregnancyArchive&&state.pregnancyArchive.length)?`<button class="btn-ghost" style="color:var(--ink-faint)" onclick="openKeptMemories()">🤍 View kept memories</button>`:''}
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="savePregnancy()">Start tracking</button>
+    <button class="btn-ghost" style="color:var(--ink-soft)" onclick="openPlanningSetup()">We're trying, not pregnant yet</button>
+    ${(state.pregnancyArchive&&state.pregnancyArchive.length)?`<button class="btn-ghost" style="color:var(--ink-soft)" onclick="openKeptMemories()">🤍 View kept memories</button>`:''}
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
 }
 /* ---- planning ("we're trying") stage ---- */
@@ -5193,7 +5236,7 @@ function openPlanningSetup(){
     <div class="field"><label>Since when? (optional)</label>${searchPickerHtml('plSince', tryingSincePairs(), (ex&&ex.tryingSince)||'', 'Search a month…')}${wwa('preg.since')}</div>
     <div class="toggle-row"><div style="padding-right:10px"><div class="tr-a">Show the rough fertile window</div><div class="tr-b">A wide range on your home, just for you. Even careful estimates pick the wrong day most of the time.</div></div>
       <div class="sw ${fertileCardHidden()?'':'on'}" role="switch" aria-checked="${fertileCardHidden()?'false':'true'}" aria-label="Show the rough fertile window" onclick="toggleFertileCard()"></div></div>`:''}
-    <button class="btn-primary" style="background:var(--diaper)" onclick="savePlanning()">${ex?'Save':'Start'}</button>
+    <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent))" onclick="savePlanning()">${ex?'Save':'Start'}</button>
     ${ex?'':`<button class="btn-ghost" onclick="openExpectingSetup('due')">Already expecting? Set your due date →</button>
     <button class="btn-ghost" onclick="openStartPregnancy()">Back</button>`}
     <div class="preg-disclaim">Fertile-window estimates are rough guides, every body is different. This is informational only, not fertility advice.</div>`,'diaper');
@@ -5244,7 +5287,7 @@ function fertileEstimate(){
 function openPeriodUpdate(){
   openSheet(`<h2>Period started</h2><div class="sub">Updating it keeps the estimate honest. And if it's a hard day, be kind to yourself.</div>
     <div class="field"><label>First day</label>${datePicker('puDate','',{max:now()})}${wwa('preg.lmp')}</div>
-    <button class="btn-primary" style="background:var(--diaper)" onclick="savePeriodUpdate()">Save</button>`,'diaper');
+    <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent))" onclick="savePeriodUpdate()">Save</button>`,'diaper');
 }
 function savePeriodUpdate(){
   const dv=($('#puDate')||{}).value; if(!dv){toast('Pick the date');return;}
@@ -5279,7 +5322,7 @@ function renderObsSheet(){
   openSheet(`<h2>Today I noticed</h2><div class="sub">A private note for your own record, in your journey's home. It never changes any estimate.</div>
     <div class="chip-row" style="flex-wrap:wrap;white-space:normal;gap:8px">${chips}</div>
     <div class="field"><label>In your own words (optional)</label><input id="obsNote" value="${escapeHtml(obsDraft.note)}" placeholder="e.g. Felt a little off today"></div>
-    <button class="btn-primary" style="background:var(--diaper)" onclick="saveObservation()">Keep it</button>`,'diaper');
+    <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent))" onclick="saveObservation()">Keep it</button>`,'diaper');
 }
 function toggleObsChip(i){
   const c=OBS_CHIPS[i]; if(!c) return;
@@ -5384,14 +5427,14 @@ function openTtcDoctorReport(){
   ov.innerHTML='<div style="max-width:680px;margin:0 auto;padding:20px 20px 60px">'
     +'<div class="noprint" style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:16px;font-family:system-ui,sans-serif;flex-wrap:wrap">'
     +'<button onclick="shareTtcReport()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:1px solid #ddd;background:#fff;cursor:pointer">Share / Copy'+(isPro()?'':' ✨')+'</button>'
-    +'<button onclick="printTtcReport()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:none;background:#56A08E;color:#fff;cursor:pointer">'+(isNativeApp()?'Save / Send report':'Print / Save PDF')+(isPro()?'':' ✨')+'</button>'
+    +'<button onclick="printTtcReport()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:none;background:#56A08E;color:#1a1a1a;cursor:pointer">'+(isNativeApp()?'Save / Send report':'Print / Save PDF')+(isPro()?'':' ✨')+'</button>'
     +'<button onclick="closePregReport()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:1px solid #ddd;background:#fff;cursor:pointer">Close</button>'
     +'</div>'
     +'<h1 style="font-size:24px;margin:0 0 2px">For your appointment</h1>'
     +'<div style="color:#666;font-size:13px;margin-bottom:14px">Trying to conceive · generated '+gen+' with Cubby</div>'
     +'<div style="font-size:14px;color:#444;margin-bottom:18px;font-style:italic">Notes '+(name?esc(name):'we')+' kept while trying, to make this conversation easier.</div>'
     +'<pre style="font-family:inherit;white-space:pre-wrap;font-size:14px;line-height:1.55;margin:0">'+esc(ttcVisitSummary())+'</pre>'
-    +'<div style="margin-top:28px;color:#999;font-size:12px;border-top:1px solid #eee;padding-top:10px">Recorded dates and notes only, no predictions. Kept by you in Cubby. Informational only, not medical advice; please verify clinically.</div>'
+    +'<div style="margin-top:28px;color:#666;font-size:12px;border-top:1px solid #eee;padding-top:10px">Recorded dates and notes only, no predictions. Kept by you in Cubby. Informational only, not medical advice; please verify clinically.</div>'
     +'</div>';
   document.body.appendChild(ov);
 }
@@ -5431,7 +5474,7 @@ function openPositiveTest(){
     <div class="sub" style="text-align:center">Wonderful news. Let's turn trying into tracking: confirm your last period and we'll set up your weeks.</div>
     <div class="field"><label>First day of your last period</label>${datePicker('ptLmp', dv, {max:now()})}${wwa('preg.lmp')}</div>
     <div class="field"><label>Where you'll have your care</label>${countryPickerHtml('ptCountry', p.country)}${wwa('preg.country')}</div>
-    <button class="btn-primary" style="background:var(--preg)" onclick="confirmPositiveTest()">Start my pregnancy 🤍</button>
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="confirmPositiveTest()">Start my pregnancy 🤍</button>
     <div class="csub" style="text-align:center;margin-top:8px">A home test is a great sign. Your provider will confirm it properly.</div>`,'preg');
 }
 function confirmPositiveTest(){
@@ -5477,7 +5520,7 @@ function renderPlanningPartnerHome(p){
   // "How to support" reads: only ever linked when they exist in the library, never invented.
   const reads=['male-fertility-sperm-health','fertility-diet-and-lifestyle']
     .map(s=>(typeof readBySlug==='function')?readBySlug(s):null).filter(Boolean).slice(0,2);
-  const readCards=reads.map(r=>`<div class="preg-card" onclick="openReadCarousel('${r.s}')" style="cursor:pointer;border-left:4px solid var(--sleep)"><div class="pc-ico">${r.e}</div><div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--sleep)">A way to help</div><div class="pc-t">${escapeHtml(r.t)}</div><div class="pc-b">${escapeHtml(r.b)}</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>`).join('');
+  const readCards=reads.map(r=>`<div class="preg-card" onclick="openReadCarousel('${r.s}')" style="cursor:pointer;border-left:4px solid var(--sleep)"><div class="pc-ico">${r.e}</div><div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--sleep-ink)">A way to help</div><div class="pc-t">${escapeHtml(r.t)}</div><div class="pc-b">${escapeHtml(r.b)}</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>`).join('');
   return `<div class="fade-in">
     <div class="greeting">Getting ready, together 🌱</div>
     <div class="greeting-sub">You're on this journey too. Here's the preparation you share, and a few ways to help.</div>
@@ -5536,14 +5579,14 @@ function renderPlanningHome(){
     ${consentBanners()}
     ${feCard}${twwCard}
     <button class="btn-ghost" onclick="openPeriodUpdate()" style="margin-top:2px">🗓️ My period started</button>
-    <button class="btn-ghost" onclick="openPlanningSetup()" style="margin-top:2px;color:var(--ink-faint)">Cycle details</button>
+    <button class="btn-ghost" onclick="openPlanningSetup()" style="margin-top:2px;color:var(--ink-soft)">Cycle details</button>
     ${lookBackCard+rangeCard+doctorCard+obsBlock+reportCard}
     ${goodReadCard('planning')}
     <div class="sec-title">Getting your body ready</div>
     ${items}
     <div class="field" style="margin-top:10px"><label>Add your own</label><input id="pcNew" placeholder="e.g. Dentist check" onkeydown="if(event.key==='Enter')addPrecon()"></div>
-    <button class="btn-primary" style="background:var(--preg);margin-top:14px" onclick="openPositiveTest()">🎉 I got a positive test</button>
-    <button class="btn-ghost" style="color:var(--ink-faint)" onclick="confirmEndPregnancy()">Stop tracking</button>
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:14px" onclick="openPositiveTest()">🎉 I got a positive test</button>
+    <button class="btn-ghost" style="color:var(--ink-soft)" onclick="confirmEndPregnancy()">Stop tracking</button>
     <div class="preg-disclaim">Informational only, not medical or fertility advice. Folic acid before pregnancy is standard guidance (NHS); confirm what's right for you with your GP. If you've been trying for over a year (or six months if you're 35 or older), it's worth a kind chat with your doctor.</div>
   </div>`;
 }
@@ -5596,7 +5639,7 @@ function renderAddMoment(){
     <div class="field"><label>Week</label><input type="number" id="momWeek" min="1" max="42" value="${d.week}" oninput="momentDraft.week=this.value;var s=momentSize(this.value);var el=document.getElementById('momSize');if(el)el.textContent=s?('About the size of a '+s+' that week'):''"></div>
     <div class="csub" id="momSize" style="margin:-6px 0 12px">${size?'About the size of a '+size+' that week':''}</div>
     <div class="field"><label>Note (optional)</label><input id="momNote" placeholder="e.g. The 20 week scan, waving at us" value="${escapeHtml(d.note)}" oninput="momentDraft.note=this.value"></div>
-    <button class="btn-primary" style="background:var(--preg)" onclick="saveMoment()">Save moment</button>`,'preg');
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="saveMoment()">Save moment</button>`,'preg');
 }
 function loadMomentPhoto(input){ const f=input.files[0]; if(!f)return; input.value=''; openPhotoPrep(f,{aspect:0.8,maxDim:1200,q:0.8},(data)=>{ momentDraft.photoData=data; renderAddMoment(); },()=>{ renderAddMoment(); }); }
 function saveMoment(){
@@ -5773,13 +5816,13 @@ function goodReadCard(kind){
   var r=goodReadPick(kind); if(!r) return '';
   var hasCar=(r.k&&r.k.length>=2);   // enough "top points" for a swipeable quick-read carousel
   var inner='<div class="pc-ico">'+r.e+'</div>'
-    +'<div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--sleep)">A good read for you'+(hasCar?' · quick read':'')+'</div>'
+    +'<div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--sleep-ink)">A good read for you'+(hasCar?' · quick read':'')+'</div>'
     +'<div class="pc-t">'+escapeHtml(r.t)+'</div><div class="pc-b">'+escapeHtml(r.b)+'</div></div>'
     +'<span class="chev" style="align-self:center">'+I.chev+'</span>';
   var card = hasCar
     ? '<div class="preg-card" onclick="openReadCarousel(\''+r.s+'\')" style="cursor:pointer;border-left:4px solid var(--sleep)">'+inner+'</div>'
     : '<a class="preg-card" href="'+readUrl(r.s)+'" target="_blank" rel="noopener" style="cursor:pointer;text-decoration:none;color:inherit;border-left:4px solid var(--sleep)">'+inner+'</a>';
-  return card + '<div onclick="openReadingRoom(\''+kind+'\')" style="text-align:center;margin:2px 0 2px;color:var(--sleep);font-weight:700;font-size:13px;cursor:pointer">More good reads →</div>';
+  return card + '<div onclick="openReadingRoom(\''+kind+'\')" style="text-align:center;margin:2px 0 2px;color:var(--sleep-ink);font-weight:700;font-size:13px;cursor:pointer">More good reads →</div>';
 }
 function openReadingRoom(kind){
   kind=kind||'preg'; var pos=readsPos(kind); var here=readsFor(kind,pos); var seen={}; here.forEach(function(r){ seen[r.s]=1; });
@@ -5814,14 +5857,14 @@ var RC_CSS='#readCarousel{position:fixed;inset:0;z-index:100001;background:linea
 +'#readCarousel .rc-slide{flex:0 0 100%;width:100%;scroll-snap-align:center;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:16px 30px 24px;gap:16px}'
 +'#readCarousel .rc-emoji{font-size:58px;line-height:1}'
 +'#readCarousel .rc-kick{font-size:12px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--preg,#C97FA0)}'
-+'#readCarousel .rc-num{font-size:13px;font-weight:800;color:var(--ink-faint)}'
++'#readCarousel .rc-num{font-size:13px;font-weight:800;color:var(--ink-soft)}'
 +'#readCarousel .rc-title{font-family:"Fraunces",Georgia,serif;font-size:29px;line-height:1.18;color:var(--ink);font-weight:700}'
 +'#readCarousel .rc-head{font-family:"Fraunces",Georgia,serif;font-size:26px;line-height:1.22;color:var(--ink);font-weight:700}'
 +'#readCarousel .rc-sub,#readCarousel .rc-note{font-size:16.5px;line-height:1.5;color:var(--ink-soft)}'
-+'#readCarousel .rc-swipe{margin-top:6px;font-size:13px;font-weight:800;color:var(--preg,#C97FA0);opacity:.9}'
-+'#readCarousel .rc-btn{margin-top:6px;display:inline-block;background:var(--preg,#C97FA0);color:#fff;text-decoration:none;font-weight:800;padding:14px 24px;border-radius:15px;font-size:15px}'
++'#readCarousel .rc-swipe{margin-top:6px;font-size:13px;font-weight:800;color:var(--preg-ink,#8C547A)}'
++'#readCarousel .rc-btn{margin-top:6px;display:inline-block;background:var(--preg,#C97FA0);color:var(--on-accent,#1A1614);text-decoration:none;font-weight:800;padding:14px 24px;border-radius:15px;font-size:15px}'
 +'#readCarousel .rc-foot{padding:12px 14px calc(14px + env(safe-area-inset-bottom));text-align:center;border-top:1px solid rgba(60,40,30,.08)}'
-+'#readCarousel .rc-foot a{color:var(--preg,#C97FA0);font-weight:800;text-decoration:none;font-size:14px}'
++'#readCarousel .rc-foot a{color:var(--preg-ink,#8C547A);font-weight:800;text-decoration:none;font-size:14px}'
 /* The three remaining literals are warm browns-on-cream that have no identical token, so Night
    states them rather than shifting the light values. */
 +'[data-theme="night"] #readCarousel .rc-dots i{background:rgba(255,255,255,.16)}'
@@ -5902,8 +5945,8 @@ function renderPregHome(){
       }
       return tiles.length?`<div class="sec-title">This week</div><div class="actions stagger">${tiles.join('')}</div>`:'';
     })()}
-    <button class="btn-ghost" onclick="openDangerSigns()" style="color:var(--danger);margin-top:14px">⚠️ Urgent warning signs, when to seek care</button>
-    ${pregIsOwner()?`<button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="openWelcomeBaby()">🐻 Baby has arrived</button>`:''}
+    <button class="btn-ghost" onclick="openDangerSigns()" style="color:var(--danger-ink);margin-top:14px">⚠️ Urgent warning signs, when to seek care</button>
+    ${pregIsOwner()?`<button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:8px" onclick="openWelcomeBaby()">🐻 Baby has arrived</button>`:''}
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>
   </div>`;
 }
@@ -6024,7 +6067,7 @@ function openGuessGame(){
     ${ownerBlock}
     ${ddSection}
     <button class="btn-ghost" onclick="shareGuessGame()" style="margin-top:14px">🔗 ${p.hubCode?'Copy the family-games link':'Invite family to play (share a link)'}</button>
-    ${(owner&&p.hubCode)?`<button class="btn-ghost" onclick="closeGames()" style="color:var(--ink-faint)">Close the games link</button>`:''}
+    ${(owner&&p.hubCode)?`<button class="btn-ghost" onclick="closeGames()" style="color:var(--ink-soft)">Close the games link</button>`:''}
     <details style="margin-top:14px"><summary style="cursor:pointer;font-weight:800;font-size:13px;color:var(--ink-soft)">Need inspiration? (old wives' tales, just for fun)</summary>
       <div class="csub" style="margin-top:8px;line-height:1.6">Carrying high, some say girl; low, boy.<br>Craving sweet, they say girl; salty or sour, boy.<br>A faster heartbeat, old tales say girl.<br><b>None of it is science 🤍</b> the only sure way is a scan with your provider.</div></details>`,'preg');
   if(p.hubCode) loadHubState(); else if(p.gameCode) loadGuestGuesses();
@@ -6038,7 +6081,7 @@ function renderPregLog(){
   const _src=(window.PREG&&PREG.antenatal[_sk]&&PREG.antenatal[_sk].source)||'';
   const apptIntro = _sk==='custom'
     ? `<div class="csub" style="margin:-2px 0 12px">Your own plan. Add each appointment your provider gives you below.</div>`
-    : `<div class="csub" style="margin:-2px 0 12px">Based on ${escapeHtml(pregCareLabel(p.country))}${_src?` · <a href="${_src}" target="_blank" rel="noopener" style="color:var(--preg);font-weight:700">source</a>`:''}. A sourced, indicative starting point, every clinic and doctor runs their own flow, so tick off, reschedule, add or remove anything to match your plan.</div>`;
+    : `<div class="csub" style="margin:-2px 0 12px">Based on ${escapeHtml(pregCareLabel(p.country))}${_src?` · <a href="${_src}" target="_blank" rel="noopener" style="color:var(--preg-ink);font-weight:700">source</a>`:''}. A sourced, indicative starting point, every clinic and doctor runs their own flow, so tick off, reschedule, add or remove anything to match your plan.</div>`;
   const apptRows=appts.length?appts.map(a=>`
     <div class="appt-row ${a.done?'done':''}">
       <div class="ar-tick" onclick="toggleAppt('${a.id}')">${a.done?I.check:''}</div>
@@ -6046,7 +6089,7 @@ function renderPregLog(){
         <div class="ar-wk">Week ${a.week}${a.done&&a.at?' · done '+new Date(a.at).toLocaleDateString(undefined,{month:'short',day:'numeric'}):''}</div>
         <div class="ar-t">${escapeHtml(a.title)}</div>
         ${a.note?`<div class="ar-s">${escapeHtml(a.note)}</div>`:''}
-        ${a.outcome?`<div class="ar-s" style="color:var(--preg)">🤍 ${escapeHtml(a.outcome)}</div>`:''}
+        ${a.outcome?`<div class="ar-s" style="color:var(--preg-ink)">🤍 ${escapeHtml(a.outcome)}</div>`:''}
         ${(a.sfh||a.efw||a.hb||a.position||(a.bpSys&&a.bpDia))?`<div class="ar-s" style="color:var(--ink-faint)">${[a.sfh?'SFH '+a.sfh+'cm':'',a.efw?'EFW '+a.efw+'g':'',a.position?escapeHtml(a.position):'',a.hb?'Hb '+a.hb:'',(a.bpSys&&a.bpDia)?'BP '+a.bpSys+'/'+a.bpDia:''].filter(Boolean).join(' · ')}</div>`:''}
       </div>
     </div>`).join(''):`<div class="csub">No appointments yet. Add your first below.</div>`;
@@ -6069,7 +6112,7 @@ function renderPregLog(){
     <div class="csub" style="margin:-2px 0 10px">Jot down what you want to ask, so it doesn't slip your mind in the room. Tick them off as you go; they stay for next time.</div>
     ${qRows}
     <div class="field" style="margin-top:8px"><input id="vqNew" placeholder="Add a question to ask…" onkeydown="if(event.key==='Enter')addVisitQ()"></div>
-    ${(p.visitQs||[]).some(q=>q.done)?`<button class="btn-ghost" style="color:var(--ink-faint)" onclick="resetVisitQsDone()">Uncheck all for next visit</button>`:''}
+    ${(p.visitQs||[]).some(q=>q.done)?`<button class="btn-ghost" style="color:var(--ink-soft)" onclick="resetVisitQsDone()">Uncheck all for next visit</button>`:''}
     <div class="hero-invite" onclick="window.openFamily&&window.openFamily()" style="margin-top:10px;cursor:pointer">
       <div class="hi" style="font-size:22px">👪</div>
       <div><div class="ht">Who's coming with you?</div><div class="hs">Invite your partner so they have the questions and your appointments too</div></div>
@@ -6105,9 +6148,9 @@ function openApptEdit(id){
     <div class="field"><label>Title</label><input id="apT" value="${escapeHtml(a.title)}"></div>
     <div class="field"><label>Around week</label><input type="number" id="apW" min="1" max="42" value="${a.week}"></div>
     <div class="field"><label>Note</label><textarea id="apN">${escapeHtml(a.note||'')}</textarea></div>
-    <button class="btn-primary" style="background:var(--preg)" onclick="saveAppt('${a.id}')">Save</button>
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="saveAppt('${a.id}')">Save</button>
     <button class="btn-ghost" onclick="toggleAppt('${a.id}');closeSheet()">${a.done?'Mark not done':'Mark done'}</button>
-    <button class="btn-ghost" style="color:var(--danger)" onclick="deleteAppt('${a.id}')">Remove appointment</button>`,'preg');
+    <button class="btn-ghost" style="color:var(--danger-ink)" onclick="deleteAppt('${a.id}')">Remove appointment</button>`,'preg');
 }
 function saveAppt(id){ const a=(state.pregnancy.appts||[]).find(x=>x.id===id); if(!a)return; a.title=$('#apT').value.trim()||a.title; a.week=Math.max(1,Math.min(42,parseInt($('#apW').value)||a.week)); a.note=$('#apN').value.trim(); persist(); closeSheet(); render(); toast('Saved'); }
 function deleteAppt(id){ state.pregnancy.appts=(state.pregnancy.appts||[]).filter(x=>x.id!==id); persist(); closeSheet(); render(); }
@@ -6116,7 +6159,7 @@ function openAddAppt(){
     <div class="field"><label>Title</label><input id="apT" placeholder="e.g. Growth scan" autofocus></div>
     <div class="field"><label>Around week</label><input type="number" id="apW" min="1" max="42" value="${pregWeek()}"></div>
     <div class="field"><label>Note (optional)</label><textarea id="apN" placeholder="Anything to remember"></textarea></div>
-    <button class="btn-primary" style="background:var(--preg)" onclick="addAppt()">Add</button>`,'preg');
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="addAppt()">Add</button>`,'preg');
 }
 function addAppt(){ const t=$('#apT').value.trim(); if(!t){toast('Give it a title');return;} state.pregnancy.appts.push({id:uid(),week:Math.max(1,Math.min(42,parseInt($('#apW').value)||pregWeek())),title:t,note:$('#apN').value.trim(),done:false,at:null}); persist(); closeSheet(); render(); toast('Appointment added'); }
 /* symptom / weight / blood pressure */
@@ -6127,7 +6170,7 @@ function openLogSymptom(){
     <div class="field"><label>Common</label><div class="tgt-row" id="symChips">${chips}</div></div>
     <div class="field"><label>Symptom or note</label><input id="symK" placeholder="e.g. mild nausea after lunch"></div>
     ${timeStrip('when','When')}
-    <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="savePregSymptom()">Save</button>
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:8px" onclick="savePregSymptom()">Save</button>
     <div class="csub" style="margin-top:10px">Want to note how you're feeling in yourself instead? <span class="link-inline" onclick="closeSheet();openMoodNote()">Add a private note 🤍</span></div>`,'preg');
 }
 function pickSym(el,s){ const inp=$('#symK'); if(inp)inp.value=s; document.querySelectorAll('#symChips .tgt').forEach(b=>b.classList.remove('on')); el.classList.add('on'); }
@@ -6146,7 +6189,7 @@ function openMoodNote(){
     <div class="field"><label>How you're feeling</label><div class="tgt-row" id="moodChips">${chips}</div></div>
     <div class="field"><label>Anything you want to say (optional)</label><textarea id="moodNote" placeholder="However you feel is okay. No one else sees this."></textarea></div>
     ${timeStrip('when','When')}
-    <button class="btn-primary" style="background:var(--note);margin-top:8px" onclick="saveMoodNote()">Save privately</button>
+    <button class="btn-primary" style="background:var(--note);--accent-ink:var(--on-note,var(--on-accent));margin-top:8px" onclick="saveMoodNote()">Save privately</button>
     ${list}
     <div class="preg-disclaim">If you're struggling, you're not alone. Your midwife or doctor can help, and a perinatal mental-health line is there day or night.</div>`,'preg');
 }
@@ -6159,7 +6202,7 @@ function openLogWeight(){
   openSheet(`<h2>Your weight</h2><div class="sub">Optional, only if it's useful to you.</div>
     <div class="field"><label>Weight (${unit})</label><input type="number" inputmode="decimal" id="wKg" placeholder="e.g. 68" autofocus>${wwa('mat.weight')}</div>
     ${timeStrip('when','When')}
-    <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="saveWeightPreg('${unit}')">Save</button>`,'preg');
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:8px" onclick="saveWeightPreg('${unit}')">Save</button>`,'preg');
 }
 function saveWeightPreg(unit){ const v=parseFloat($('#wKg').value); if(!v){toast('Enter a number');return;} state.pregnancy.weights.push({id:uid(),at:getWhen('when'),kg:v,unit}); persist(); closeSheet(); render(); toast('Saved'); }
 function openLogBP(){
@@ -6171,7 +6214,7 @@ function openLogBP(){
     </div>
     ${wwa('mat.bp')}
     ${timeStrip('when','When')}
-    <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="saveBP()">Save</button>
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:8px" onclick="saveBP()">Save</button>
     <div class="preg-disclaim">A high reading with a bad headache, vision changes or sudden swelling can be serious. Contact your midwife or doctor, and seek urgent care if you're worried.</div>`,'preg');
 }
 function saveBP(){ const s=parseInt($('#bpS').value), d=parseInt($('#bpD').value); if(!s||!d){toast('Enter both numbers');return;} state.pregnancy.bp.push({id:uid(),at:getWhen('when'),sys:s,dia:d}); persist(); closeSheet(); render(); toast('Saved'); }
@@ -6209,7 +6252,7 @@ function openKickCounter(){
     <button class="kick-big" onclick="tapKick()"><div class="kb-n">${sess?sess.count:0}</div><div class="kb-c">${sess?(sess.count>=10?'All done 🎉':'Tap for each kick'):'Tap to start'}</div></button>
     ${sess?`<div class="csub" style="text-align:center">Started ${fmtClock(sess.start)} · ${fmtDur(now()-sess.start)} so far</div>
       ${sess.count>0?`<button class="btn-ghost" style="margin-top:10px" onclick="undoKick()">− Undo last tap</button>`:''}
-      <button class="btn-primary" style="background:var(--preg);margin-top:10px" onclick="finishKicks()">${sess.count>=10?'Save session':'Stop and save'}</button>
+      <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:10px" onclick="finishKicks()">${sess.count>=10?'Save session':'Stop and save'}</button>
       <button class="btn-ghost" onclick="cancelKicks()">Cancel</button>`:''}
     ${recentHtml}
     <div class="preg-disclaim">If your baby's movements slow down or change, do not wait. Contact your midwife or maternity unit straight away, day or night.</div>`,'preg');
@@ -6253,7 +6296,7 @@ function deleteContraction(id){ state.pregnancy.contractions=(state.pregnancy.co
 function openBirthPlan(){
   openSheet(`<h2>Birth plan</h2><div class="sub">A place for your preferences. There's no right answer, and plans can change on the day.</div>
     <div class="field"><label>Your notes</label><textarea id="bpTxt" style="min-height:170px" placeholder="Pain relief, who's with you, skin to skin, feeding, anything that matters to you...">${escapeHtml(state.pregnancy.birthPlan||'')}</textarea></div>
-    <button class="btn-primary" style="background:var(--preg)" onclick="saveBirthPlan()">Save</button>`,'preg');
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="saveBirthPlan()">Save</button>`,'preg');
 }
 function saveBirthPlan(){ state.pregnancy.birthPlan=$('#bpTxt').value; persist(); closeSheet(); render(); toast('Birth plan saved'); }
 function openBag(){
@@ -6262,7 +6305,7 @@ function openBag(){
   openSheet(`<h2>Hospital bag</h2><div class="sub">A starter list, tweak it to fit you. Tap to tick things off as you pack.</div>
     ${rows||'<div class="csub">Your bag list is empty.</div>'}
     <div class="field" style="margin-top:12px"><label>Add an item</label><input id="bagNew" placeholder="e.g. Birth ball" onkeydown="if(event.key==='Enter')addBag()"></div>
-    <button class="btn-primary" style="background:var(--preg)" onclick="addBag()">Add to bag</button>`,'preg');
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="addBag()">Add to bag</button>`,'preg');
 }
 function toggleBag(id){ const it=(state.pregnancy.bag||[]).find(x=>x.id===id); if(!it)return; it.done=!it.done; persist(); openBag(); }
 function removeBag(id){ state.pregnancy.bag=(state.pregnancy.bag||[]).filter(x=>x.id!==id); persist(); openBag(); }
@@ -6321,13 +6364,13 @@ function openPregDoctorReport(){
   ov.innerHTML='<div style="max-width:680px;margin:0 auto;padding:20px 20px 60px">'
     +'<div class="noprint" style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:16px;font-family:system-ui,sans-serif;flex-wrap:wrap">'
     +'<button onclick="sharePregReport()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:1px solid #ddd;background:#fff;cursor:pointer">Share / Copy'+(isPro()?'':' ✨')+'</button>'
-    +'<button onclick="printPregReport()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:none;background:#C97FA0;color:#fff;cursor:pointer">'+(isNativeApp()?'Save / Send report':'Print / Save PDF')+(isPro()?'':' ✨')+'</button>'
+    +'<button onclick="printPregReport()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:none;background:#C97FA0;color:#1a1a1a;cursor:pointer">'+(isNativeApp()?'Save / Send report':'Print / Save PDF')+(isPro()?'':' ✨')+'</button>'
     +'<button onclick="closePregReport()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:1px solid #ddd;background:#fff;cursor:pointer">Close</button>'
     +'</div>'
     +'<h1 style="font-size:24px;margin:0 0 2px">Pregnancy visit report</h1>'
     +'<div style="color:#666;font-size:13px;margin-bottom:20px">Week '+wk+(p.dueDate?' · due '+new Date(p.dueDate).toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'}):'')+' · generated '+gen+' with Cubby</div>'
     +'<pre style="font-family:inherit;white-space:pre-wrap;font-size:14px;line-height:1.55;margin:0">'+esc(summary)+'</pre>'
-    +'<div style="margin-top:28px;color:#999;font-size:12px;border-top:1px solid #eee;padding-top:10px">Recorded by you in Cubby. Informational only, not medical advice; please verify clinically.</div>'
+    +'<div style="margin-top:28px;color:#666;font-size:12px;border-top:1px solid #eee;padding-top:10px">Recorded by you in Cubby. Informational only, not medical advice; please verify clinically.</div>'
     +'</div>';
   document.body.appendChild(ov);
 }
@@ -6374,7 +6417,7 @@ function renderPregCare(){
     ${amOwner?`<button class="btn-ghost" onclick="openAddCareTeam()">${I.plus} Add to care team</button>`:''}` : '';
   return `<div class="fade-in">
     ${careBlock}
-    ${(amOwner||seeHealth)?`<button class="btn-ghost" onclick="openPregDoctorReport()" style="margin-top:2px;color:var(--preg)">📄 Doctor report for your visit ${isPro()?'':(tasteLeft('pdf')>0?'· ✨ try one free':'· Pro ✨')}</button>`:''}
+    ${(amOwner||seeHealth)?`<button class="btn-ghost" onclick="openPregDoctorReport()" style="margin-top:2px;color:var(--preg-ink)">📄 Doctor report for your visit ${isPro()?'':(tasteLeft('pdf')>0?'· ✨ try one free':'· Pro ✨')}</button>`:''}
     ${seeHealth?pregHealthSection():''}
     ${!amOwner&&!seeCare&&!seeHealth?'<div class="csub" style="margin-top:6px">These health details are private to her. She can choose to share them with you.</div>':''}
     ${amOwner?`<div class="set-item" onclick="openPregnancyVisibility()" style="cursor:pointer;margin-top:16px">
@@ -6388,13 +6431,13 @@ function renderPregCare(){
       <div class="si-body"><div class="a">Gentle mode</div><div class="b">${(()=>{const g=(state.pregnancy&&state.pregnancy.gentle)||{};const on=[g.afterLoss?'after loss':'',g.noNumbers?'quiet':''].filter(Boolean);return on.length?('On · '+on.join(', ')):'Soften milestones, or hide the numbers';})()}</div></div><span class="chev">${I.chev}</span></div>`:''}
     <div class="sec-title" style="margin-top:18px">Pregnancy</div>
     <div class="set-item" onclick="openDangerSigns()" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--med-soft);color:var(--danger);font-size:18px">⚠️</div>
+      <div class="si-ico" style="background:var(--med-soft);color:var(--danger-ink);font-size:18px">⚠️</div>
       <div class="si-body"><div class="a">Urgent warning signs</div><div class="b">When to seek care, trust your instincts</div></div><span class="chev">${I.chev}</span></div>
     <div class="set-item" onclick="openEditPregnancy()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">📅</div>
       <div class="si-body"><div class="a">Due date &amp; schedule</div><div class="b">${pregDueLabel()||'Set your dates'} · ${escapeHtml(cname)}</div></div><span class="chev">${I.chev}</span></div>
-    ${pregIsOwner()?`<button class="btn-primary" style="background:var(--preg);margin-top:14px" onclick="openWelcomeBaby()">🐻 Baby has arrived</button>
-    <button class="btn-ghost" style="color:var(--ink-faint)" onclick="confirmEndPregnancy()">End this pregnancy</button>`:''}
+    ${pregIsOwner()?`<button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:14px" onclick="openWelcomeBaby()">🐻 Baby has arrived</button>
+    <button class="btn-ghost" style="color:var(--ink-soft)" onclick="confirmEndPregnancy()">End this pregnancy</button>`:''}
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>
   </div>`;
 }
@@ -6403,7 +6446,7 @@ function openAddCareTeam(){
     <div class="field"><label>Name</label><input id="ctName" placeholder="e.g. Dr Khan or City Midwives" autofocus></div>
     <div class="field"><label>Role</label><select id="ctRole"><option>Gynaecologist (OB-GYN)</option><option>Obstetrician</option><option>Midwife</option><option>GP / Family doctor</option><option>Doula</option><option>Clinic / Hospital</option><option>Other</option></select></div>
     <div class="field"><label>Phone (optional)</label><input id="ctPhone" inputmode="tel" placeholder="Phone number">${wwa('preg.careteam')}</div>
-    <button class="btn-primary" style="background:var(--preg)" onclick="addCareTeam()">Add</button>`,'preg');
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="addCareTeam()">Add</button>`,'preg');
 }
 function addCareTeam(){ const n=$('#ctName').value.trim(); if(!n){toast('Add a name');return;} state.pregnancy.careTeam.push({id:uid(),name:n,role:$('#ctRole').value,phone:$('#ctPhone').value.trim()}); persist(); closeSheet(); render(); toast('Added'); }
 function removeCareTeam(id){ state.pregnancy.careTeam=(state.pregnancy.careTeam||[]).filter(m=>m.id!==id); persist(); render(); }
@@ -6488,7 +6531,7 @@ function renderPregnancyAudit(onDone){
   openSheet(`<h2>Who are you ready to tell? 🤍</h2>
     <div class="sub">Being pregnant is yours to share. No one in your circle sees your pregnancy until you add them here. You can change this anytime.</div>
     ${rows}
-    <button class="btn-primary" style="background:var(--preg);margin-top:14px${pregAuditSel.length?'':';opacity:.45;pointer-events:none'}" onclick="confirmPregnancyAudit()">${pregAuditSel.length?('Share with '+pregAuditSel.length+' '+(pregAuditSel.length===1?'person':'people')):'Tap the people you want to tell'}</button>
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:14px${pregAuditSel.length?'':';opacity:.45;pointer-events:none'}" onclick="confirmPregnancyAudit()">${pregAuditSel.length?('Share with '+pregAuditSel.length+' '+(pregAuditSel.length===1?'person':'people')):'Tap the people you want to tell'}</button>
     <button class="btn-ghost" onclick="confirmPregnancyAuditNone()">Keep it just to me for now</button>
     <div class="preg-disclaim" style="margin-top:12px">Only you can change who sees your pregnancy. You can open this again from Care, under Your private pregnancy.</div>`,'preg');
 }
@@ -6549,7 +6592,7 @@ function openEditPregnancy(){
   openSheet(`<h2>Due date &amp; schedule</h2><div class="sub">Update your dates or the antenatal schedule we suggest.</div>
     <div class="field"><label>Due date (EDD)</label>${datePicker('epDue', dv, {empty:true})}${wwa('preg.edd')}</div>
     <div class="field"><label>Care schedule</label>${countryPickerHtml('epC', p.country)}${wwa('preg.country')}</div>
-    <button class="btn-primary" style="background:var(--preg)" onclick="saveEditPregnancy()">Save</button>
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="saveEditPregnancy()">Save</button>
     <div class="preg-disclaim">Changing the schedule adds any new suggested appointments. Anything you've added or ticked is kept.</div>`,'preg');
 }
 function saveEditPregnancy(){
@@ -6574,7 +6617,7 @@ function confirmEndPregnancy(){
   if(typeof pregIsOwner==='function' && !pregIsOwner()){ closeSheet(); toast('Only the person whose journey this is can close it'); return; }
   if(p.stage==='planning'){
     openSheet(`<h2>Stop tracking?</h2><div class="sub">This clears your planning checklist and notes. Whenever you're ready, there's no rush.</div>
-      <button class="btn-primary" style="background:var(--preg)" onclick="endPregnancy(false)">Stop tracking</button>
+      <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="endPregnancy(false)">Stop tracking</button>
       <button class="btn-ghost" onclick="closeSheet()">Keep going</button>`,'preg');
     return;
   }
@@ -6582,9 +6625,9 @@ function confirmEndPregnancy(){
   openSheet(`<h2>Closing this pregnancy</h2>
     <div class="sub">Whatever brings you here, take it gently and in your own time. If you've experienced a loss, we're so sorry, and you don't have to do anything right now.</div>
     ${moments?`<div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">Keep your ${moments===1?'memory':moments+' memories'}</div><div class="pc-b">Your scans and photos stay saved in your Cubby, for whenever you want them, until you choose to remove them. Your health logs are cleared either way.</div></div></div>`:''}
-    ${moments?`<button class="btn-primary" style="background:var(--preg)" onclick="endPregnancy(true)">Keep my ${moments===1?'memory':'memories'}</button>`:''}
+    ${moments?`<button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="endPregnancy(true)">Keep my ${moments===1?'memory':'memories'}</button>`:''}
     ${moments?`<div class="sub" style="font-size:12px;color:var(--ink-faint);margin:2px 2px 6px">Clearing also deletes those photos for good. This can't be undone.</div>`:''}
-    <button class="${moments?'btn-ghost':'btn-primary'}" style="${moments?'color:var(--ink-faint)':'background:var(--preg)'}" onclick="endPregnancy(false)">Close and clear everything</button>
+    <button class="${moments?'btn-ghost':'btn-primary'}" style="${moments?'color:var(--ink-soft)':'background:var(--preg)'}" onclick="endPregnancy(false)">Close and clear everything</button>
     <button class="btn-ghost" onclick="closeSheet()">Not now</button>
     <div class="preg-disclaim">If you're struggling, you're not alone. Your midwife or doctor, or a pregnancy loss support line, can help, day or night. Informational only, not medical advice.</div>`,'preg');
 }
@@ -6636,7 +6679,7 @@ function openKeptMemories(){
   }).join('');
   openSheet(`<h2>Kept memories 🤍</h2><div class="sub">Yours to keep, privately, for as long as you like.</div>
     ${cards||'<div class="sub">Nothing saved here.</div>'}
-    <button class="btn-ghost" style="color:var(--ink-faint);margin-top:10px" onclick="removeKeptMemories()">Remove these memories</button>`,'preg');
+    <button class="btn-ghost" style="color:var(--ink-soft);margin-top:10px" onclick="removeKeptMemories()">Remove these memories</button>`,'preg');
 }
 function removeKeptMemories(){
   confirmSheet({title:'Remove these memories?',body:'Your kept photos and notes go for good, and can\'t be brought back. There\'s no rush to decide.',confirmLabel:'Remove them',cancelLabel:'Keep them',danger:true,onConfirm:function(){
@@ -6660,7 +6703,7 @@ function openWelcomeBaby(){
     ${timeStrip('when','Born')}
     <div class="field" style="margin-top:14px"><label>Sex (optional, for growth charts)</label>${sexSegHtml('wbSex', (p.knownSex==='M'||p.knownSex==='F')?p.knownSex:'')}</div>
     <div class="field"><label>Vaccine schedule</label>${searchPickerHtml('wbCountry', vaxCountryList(), cc, 'Search your country…')}</div>
-    <button class="btn-primary" style="background:var(--preg);margin-top:6px" onclick="welcomeBaby()">🎉 Welcome our baby</button>
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:6px" onclick="welcomeBaby()">🎉 Welcome our baby</button>
     <div class="csub" style="text-align:center;margin-top:8px">Your pregnancy is saved as part of their story.</div>`,'preg');
 }
 function welcomeBaby(){
@@ -6720,7 +6763,7 @@ function showBirthArrival(b){
     <div style="color:var(--ink-soft,#6B5D50);font-size:15px;line-height:1.6;font-weight:600">Your pregnancy is saved as part of their story. You can look back on it any time from the baby switcher.</div>
     <div style="color:var(--ink-soft,#6B5D50);font-size:15px;line-height:1.6;font-weight:600;margin-top:14px">Cubby has changed shape for them. Feeds, sleep and nappies are on your home screen now.</div>
     ${vaxLine?`<div style="color:var(--ink-soft,#6B5D50);font-size:15px;line-height:1.6;font-weight:600;margin-top:14px">${vaxLine}</div>`:''}
-    <button id="cb-birth-go" style="margin-top:26px;border:none;border-radius:16px;padding:15px 30px;background:var(--feed,#C97FA0);color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Take me in</button>
+    <button id="cb-birth-go" style="margin-top:26px;border:none;border-radius:16px;padding:15px 30px;background:var(--feed,#C97FA0);color:var(--on-accent,#1A1614);font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Take me in</button>
   </div>`;
   document.body.appendChild(ov);
   const go=document.getElementById('cb-birth-go');
@@ -6842,7 +6885,7 @@ function renderGlucoseLog(){
     ${timingRow}
     <div class="field"><label>Reading (${ul})</label><input type="number" inputmode="decimal" id="glVal" value="${glucoseDraft.value||''}" oninput="glucoseDraft.value=this.value" placeholder="${unit==='mmol'?'e.g. 5.1':'e.g. 92'}" autofocus>${wwa('mat.glucose')}</div>
     ${timeStrip('when','When')}
-    <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="saveGlucose()">Save reading</button>
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:8px" onclick="saveGlucose()">Save reading</button>
     <button class="btn-ghost" onclick="toggleGlucoseUnit()">Using ${ul}, switch to ${glucoseUnitLabel(unit==='mmol'?'mgdl':'mmol')}</button>
     <div class="preg-disclaim">${escapeHtml((condCfg('gdm')||{}).note||PREG_DISCLAIM)}</div>`,'preg');
 }
@@ -6865,7 +6908,7 @@ function openGlucoseTracker(){
   openSheet(`<h2>Gestational diabetes</h2><div class="sub">Your blood glucose readings, in ${ul}.</div>
     ${pctIn!=null?`<div class="tool-stat"><div class="ts-cell"><div class="ts-big">${pctIn}%</div><div class="ts-cap">In target</div></div><div class="ts-cell"><div class="ts-big">${rated.length}</div><div class="ts-cap">Readings</div></div></div>`:''}
     ${t?`<div class="preg-card"><div class="pc-ico">🎯</div><div><div class="pc-t">Common targets (${ul})</div><div class="pc-b">Fasting under ${t.fasting}, one hour after meals under ${t.post1}${t.post2!=null?', two hours under '+t.post2:''}. Your own targets may differ, confirm with your team.</div></div></div>`:''}
-    <button class="btn-primary" style="background:var(--preg);margin-top:6px" onclick="openGlucoseLog()">🩸 Log a reading</button>
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:6px" onclick="openGlucoseLog()">🩸 Log a reading</button>
     <div class="sec-title" style="margin-top:14px">Recent</div>${rows}
     <div class="preg-disclaim">${escapeHtml((condCfg('gdm')||{}).note||PREG_DISCLAIM)}</div>`,'preg');
 }
@@ -6882,7 +6925,7 @@ function openBPWatch(){
   const urows=urines.map(u=>`<div class="log-list-item"><div class="lli-ico">🧪</div><div class="lli-body"><div class="lli-t">Urine protein: ${escapeHtml(u.result)}</div><div class="lli-s">${dayLabel(u.at)} ${fmtClock(u.at)}</div></div><button class="lli-x" onclick="deleteUrine('${u.id}')">${I.trash}</button></div>`).join('');
   const sym=cfg?cfg.symptoms.map(s=>`<div class="danger-row"><span class="dr-dot">●</span><div class="dr-t">${escapeHtml(s)}</div></div>`).join(''):'';
   openSheet(`<h2>Blood pressure watch</h2><div class="sub">Keep an eye on your blood pressure and any pre-eclampsia signs. This never replaces your provider's checks.</div>
-    <div style="display:flex;gap:8px"><button class="btn-primary" style="background:var(--preg);flex:1" onclick="openLogBP()">🩺 Log BP</button><button class="btn-primary" style="background:var(--note);flex:1" onclick="openUrineLog()">🧪 Urine result</button></div>
+    <div style="display:flex;gap:8px"><button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));flex:1" onclick="openLogBP()">🩺 Log BP</button><button class="btn-primary" style="background:var(--note);--accent-ink:var(--on-note,var(--on-accent));flex:1" onclick="openUrineLog()">🧪 Urine result</button></div>
     <div class="sec-title" style="margin-top:14px">Recent blood pressure</div>${rows}
     ${urows?`<div class="sec-title" style="margin-top:12px">Urine protein</div>${urows}`:''}
     <div class="sec-title" style="margin-top:14px">Tell your team straight away if you notice</div>${sym}
@@ -6895,7 +6938,7 @@ function openUrineLog(){
     <div class="field"><label>Result</label><div class="tgt-row" id="urChips">${opts.map(o=>`<button class="tgt" onclick="pickUrine(this,'${o}')">${o}</button>`).join('')}</div></div>
     <input type="hidden" id="urResult" value="">
     ${timeStrip('when','When')}
-    <button class="btn-primary" style="background:var(--preg);margin-top:8px" onclick="saveUrine()">Save</button>`,'preg');
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:8px" onclick="saveUrine()">Save</button>`,'preg');
 }
 function pickUrine(el,v){ $('#urResult').value=v; document.querySelectorAll('#urChips .tgt').forEach(b=>b.classList.remove('on')); el.classList.add('on'); }
 function saveUrine(){ const v=$('#urResult').value; if(!v){toast('Pick a result');return;} ensurePregFields(state.pregnancy); state.pregnancy.urine.push({id:uid(),at:getWhen('when'),result:v}); persist(); openBPWatch(); toast('Saved'); }
@@ -6916,7 +6959,7 @@ function openSupplements(){
     ${rows||'<div class="csub">Add your supplements below.</div>'}
     ${chips?`<div class="field" style="margin-top:12px"><label>Add common ones</label><div class="tgt-row">${chips}</div></div>`:''}
     <div class="field"><label>Add your own</label><input id="supNew" placeholder="e.g. Pregnacare" onkeydown="if(event.key==='Enter')addSupplementInput()"></div>
-    <button class="btn-primary" style="background:var(--preg)" onclick="addSupplementInput()">Add</button>
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="addSupplementInput()">Add</button>
     <div class="preg-disclaim">${escapeHtml((condCfg('supplements')||{}).note||PREG_DISCLAIM)}</div>`,'preg');
 }
 function addSupplement(name){ ensurePregFields(state.pregnancy); state.pregnancy.supplements.push({id:uid(),name:name}); persist(); openSupplements(); }
@@ -6936,7 +6979,7 @@ function openNausea(){
     <div class="field"><label>Times you were sick today</label><input type="number" inputmode="numeric" id="nzV" placeholder="0" value="0"></div>
     <div class="field"><label>Could you keep fluids down?</label><div class="seg"><button id="nzFy" class="on" onclick="setNzFluids(true)">Yes</button><button id="nzFn" onclick="setNzFluids(false)">No</button></div></div>
     <div class="field"><label>Glasses of water (roughly)</label><input type="number" inputmode="numeric" id="nzW" placeholder="e.g. 6"></div>
-    <button class="btn-primary" style="background:var(--preg)" onclick="saveNausea()">Save check-in</button>
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="saveNausea()">Save check-in</button>
     ${rows?`<div class="sec-title" style="margin-top:14px">Recent</div>${rows}`:''}
     <div class="preg-disclaim">${escapeHtml((condCfg('nausea')||{}).note||PREG_DISCLAIM)}</div>`,'preg');
 }
@@ -7017,7 +7060,7 @@ function openDenChores(){
       <div class="field" style="flex:2;margin-bottom:0"><label>Chore</label><input id="dcText" placeholder="e.g. Laundry" onkeydown="if(event.key==='Enter')addDenChore()"></div>
       <div class="field" style="flex:1;margin-bottom:0"><label>Who</label><input id="dcWho" placeholder="optional"></div>
     </div>
-    <button class="btn-primary" style="background:var(--diaper);margin-top:12px" onclick="addDenChore()">Add chore</button>
+    <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent));margin-top:12px" onclick="addDenChore()">Add chore</button>
     ${d.chores.some(c=>c.done)?`<button class="btn-ghost" onclick="clearDenChoresDone()">Clear completed</button>`:''}`,'diaper');
 }
 function addDenChore(){ const t=($('#dcText').value||'').trim(); if(!t){toast('What needs doing?');return;} ensureDenFields().chores.push({id:uid(),text:t,who:($('#dcWho').value||'').trim(),done:false}); persist(); openDenChores(); }
@@ -7035,7 +7078,7 @@ function openDenShopping(){
   openSheet(`<h2>Things to buy</h2><div class="sub">One shared list. Whoever's at the shop sees it live.</div>
     ${rows||'<div class="csub">The list is clear.</div>'}
     <div class="field" style="margin-top:12px"><label>Add an item</label><input id="dsText" placeholder="e.g. Nappies size 3" onkeydown="if(event.key==='Enter')addDenShop()"></div>
-    <button class="btn-primary" style="background:var(--feed)" onclick="addDenShop()">Add to list</button>
+    <button class="btn-primary" style="background:var(--feed);--accent-ink:var(--on-feed,var(--on-accent))" onclick="addDenShop()">Add to list</button>
     ${d.shopping.some(s=>s.done)?`<button class="btn-ghost" onclick="clearDenShopDone()">Clear bought</button>`:''}`,'feed');
 }
 function addDenShop(){ const t=($('#dsText').value||'').trim(); if(!t)return; ensureDenFields().shopping.push({id:uid(),text:t,done:false}); persist(); openDenShopping(); }
@@ -7056,7 +7099,7 @@ function openDenMeals(){
   openSheet(`<h2>Meal plan</h2><div class="sub">Sketch the week's meals so 5pm never has to be a surprise.</div>
     <div class="field"><label>Day</label><div class="tgt-row">${chips}</div></div>
     <div class="field"><label>Meal</label><input id="dmText" placeholder="e.g. Dal and rice, veg curry" onkeydown="if(event.key==='Enter')addDenMeal()"></div>
-    <button class="btn-primary" style="background:var(--note)" onclick="addDenMeal()">Add to plan</button>
+    <button class="btn-primary" style="background:var(--note);--accent-ink:var(--on-note,var(--on-accent))" onclick="addDenMeal()">Add to plan</button>
     ${list?`<div class="sec-title" style="margin-top:14px">This week</div>${list}`:''}`,'note');
 }
 function addDenMeal(){ const t=($('#dmText').value||'').trim(); if(!t){toast('What are we eating?');return;} ensureDenFields().meals.push({id:uid(),day:denMealDay,text:t}); persist(); openDenMeals(); }
@@ -7077,7 +7120,7 @@ function openDenStaff(){
       <div class="field" style="flex:1"><label>Phone (optional)</label><input id="dfPhone" inputmode="tel" placeholder="Phone"></div>
     </div>
     <div class="field"><label>Note (optional)</label><input id="dfNote" placeholder="e.g. Comes Mon and Thu, paid monthly"></div>
-    <button class="btn-primary" style="background:var(--sleep)" onclick="addDenStaff()">Add</button>`,'sleep');
+    <button class="btn-primary" style="background:var(--sleep);--accent-ink:var(--on-sleep,var(--on-accent))" onclick="addDenStaff()">Add</button>`,'sleep');
 }
 function addDenStaff(){ const n=($('#dfName').value||'').trim(); if(!n){toast('Add a name');return;} ensureDenFields().staff.push({id:uid(),name:n,role:$('#dfRole').value,phone:($('#dfPhone').value||'').trim(),note:($('#dfNote').value||'').trim()}); persist(); openDenStaff(); }
 function deleteDenStaff(id){ const d=ensureDenFields(); d.staff=d.staff.filter(x=>x.id!==id); persist(); openDenStaff(); }
@@ -7100,7 +7143,7 @@ function openDenExpenses(){
       <div class="field" style="flex:1"><label>Amount</label><input type="number" inputmode="decimal" id="dxAmt" placeholder="e.g. 250"></div>
       <div class="field" style="flex:2"><label>Note (optional)</label><input id="dxNote" placeholder="e.g. Weekly groceries"></div>
     </div>
-    <button class="btn-primary" style="background:var(--star)" onclick="addDenExpense()">Add expense</button>
+    <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="addDenExpense()">Add expense</button>
     ${rows?`<div class="sec-title" style="margin-top:14px">Recent</div>${rows}`:''}`,'star');
 }
 function addDenExpense(){ const v=parseFloat($('#dxAmt').value); if(!v){toast('Enter an amount');return;} ensureDenFields().expenses.push({id:uid(),at:now(),amount:v,cat:denExpCat,note:($('#dxNote').value||'').trim()}); persist(); openDenExpenses(); }
@@ -7131,7 +7174,7 @@ function openDenWeights(){
       <div class="field" style="flex:1"><label>Name</label><input id="dwWho" placeholder="Mom, Dad, a name"></div>
       <div class="field" style="flex:1"><label>Weight (${unit})</label><input type="number" inputmode="decimal" id="dwKg" placeholder="e.g. 70"></div>
     </div>
-    <button class="btn-primary" style="background:var(--pump)" onclick="addDenWeight('${unit}')">Save</button>
+    <button class="btn-primary" style="background:var(--pump);--accent-ink:var(--on-pump,var(--on-accent))" onclick="addDenWeight('${unit}')">Save</button>
     ${recent?`<div class="sec-title" style="margin-top:14px">Recent</div>${recent}`:''}
     <div class="csub" style="margin-top:10px">Informational only. For weight, diet or postpartum recovery advice, talk to your doctor.</div>`,'pump');
 }
@@ -7244,7 +7287,7 @@ function renderMedSheet(editing){
     ${schedUI}
     <div class="toggle-row"><div><div class="tr-a">Remind me</div><div class="tr-b">Alert when a dose is due (while app is open)</div></div>
       <div class="sw ${d.remind?'on':''}" onclick="toggleMedRemind(${editing})"></div></div>
-    <button class="btn-primary" style="background:var(--med)" onclick="saveMed('${editing?d.id:''}')">${editing?'Save changes':'Add medicine'}</button>
+    <button class="btn-primary" style="background:var(--med);--accent-ink:var(--on-med,var(--on-accent))" onclick="saveMed('${editing?d.id:''}')">${editing?'Save changes':'Add medicine'}</button>
     ${editing?`<button class="btn-ghost btn-danger" onclick="deleteMed('${d.id}')">${I.trash} Remove medicine</button>`:''}`,'med');
 }
 function toggleMedRemind(editing){
@@ -7346,15 +7389,15 @@ function renderIllness(){
         <div class="info"><div class="lbl">Day ${days} · since ${new Date(ill.startedAt).toLocaleDateString(undefined,{month:'short',day:'numeric'})}</div>
         <div class="nm">${escapeHtml(ill.name)}</div>
         <div class="sub">${lt?('last temp '+lt.temp+'°'+(lt.unit||'C')+(isFever(lt.temp,lt.unit)?' · fever':'')):'no temperature logged yet'}</div></div></div>
-      <div class="row2"><button class="btn-primary" style="background:var(--med)" onclick="openTemp()">${I.thermo} Temperature</button>
-        <button class="btn-primary" style="background:var(--pump)" onclick="openSymptom()">${I.pulse} Symptom</button></div>
+      <div class="row2"><button class="btn-primary" style="background:var(--med);--accent-ink:var(--on-med,var(--on-accent))" onclick="openTemp()">${I.thermo} Temperature</button>
+        <button class="btn-primary" style="background:var(--pump);--accent-ink:var(--on-pump,var(--on-accent))" onclick="openSymptom()">${I.pulse} Symptom</button></div>
       ${pts.length?`<div class="stat-card" style="margin-top:14px"><h3>Temperature</h3><div class="csub">${pts.length} reading${pts.length>1?'s':''} · °${tu} · fever ≥ ${tu==='F'?'100.4':'38'}°</div>${svgLine(pts,'med','°'+tu)}</div>`:''}
       ${syms.length?`<div class="sec-title">Recent symptoms</div>${syms.map(s=>`<div class="tl-item" onclick="openEdit('${s.id}')"><div class="tl-ico" style="background:var(--pump-soft);color:var(--pump)">${I.pulse}</div><div class="tl-body"><div class="t1">${escapeHtml(s.symptom)}</div><div class="t2">${s.severity||''} · ${fmtClock(s.time)}</div></div></div>`).join('')}`:''}
       ${doses.length?`<div class="sec-title">Medicine given this illness</div>${doses.slice(0,6).map(d=>`<div class="tl-item"><div class="tl-ico" style="background:var(--med-soft);color:var(--med)">${I.pill}</div><div class="tl-body"><div class="t1">${escapeHtml(d.medName||'Medicine')}</div><div class="t2">${d.dose||''} ${d.unit||''} · ${new Date(d.time).toLocaleDateString(undefined,{month:'short',day:'numeric'})} ${fmtClock(d.time)}</div></div></div>`).join('')}`:''}
-      <button class="btn-primary" style="background:var(--diaper);margin-top:16px" onclick="endIllness('${ill.id}')">${I.check} Mark recovered</button>`;
+      <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent));margin-top:16px" onclick="endIllness('${ill.id}')">${I.check} Mark recovered</button>`;
   } else {
     head=`<div class="stat-card" style="text-align:center"><h3>Everyone's well 🌿</h3><div class="csub" style="margin-bottom:14px">When they're under the weather, log it here to keep track of temperature, symptoms and the medicine you give.</div>
-      <button class="btn-primary" style="background:var(--med)" onclick="openStartIllness()">${I.thermo} Log an illness</button></div>`;
+      <button class="btn-primary" style="background:var(--med);--accent-ink:var(--on-med,var(--on-accent))" onclick="openStartIllness()">${I.thermo} Log an illness</button></div>`;
   }
   // history
   const past=babyIllnesses().filter(i=>i.endedAt);
@@ -7377,7 +7420,7 @@ function openStartIllness(){
       <div class="opt" onclick="startIllness('Ear infection')">${I.ear}<span>Ear infection</span></div>
     </div>
     <div class="field" style="margin-top:6px"><label>Or name it</label><input id="illName" placeholder="e.g. Teething, chesty cough"></div>
-    <button class="btn-primary" style="background:var(--med)" onclick="startIllness(($('#illName').value||'Illness'))">Log it</button>`,'med');
+    <button class="btn-primary" style="background:var(--med);--accent-ink:var(--on-med,var(--on-accent))" onclick="startIllness(($('#illName').value||'Illness'))">Log it</button>`,'med');
 }
 function startIllness(name){
   name=(typeof name==='string'?name:'Illness').trim()||'Illness';
@@ -7391,7 +7434,7 @@ function endIllness(id){
 function reopenIllness(id){
   const i=(state.illnesses||[]).find(x=>x.id===id); if(!i)return;
   openSheet(`<h2>${escapeHtml(i.name)}</h2><div class="sub">${new Date(i.startedAt).toLocaleDateString()} – ${i.endedAt?new Date(i.endedAt).toLocaleDateString():'ongoing'}</div>
-    <button class="btn-primary" style="background:var(--med)" onclick="resumeIllness('${id}')">Reopen this illness</button>
+    <button class="btn-primary" style="background:var(--med);--accent-ink:var(--on-med,var(--on-accent))" onclick="resumeIllness('${id}')">Reopen this illness</button>
     <button class="btn-ghost btn-danger" onclick="deleteIllness('${id}')">${I.trash} Delete record</button>`,'med');
 }
 function resumeIllness(id){ const i=(state.illnesses||[]).find(x=>x.id===id); if(i)i.endedAt=null; persist(); closeSheet(); healthTab='illness'; render(); }
@@ -7420,7 +7463,7 @@ function renderTempSheet(){
         </div>
       </div>
     </div>
-    <button class="btn-primary" style="background:var(--med)" onclick="saveTemp()">Log temperature</button>`,'med');
+    <button class="btn-primary" style="background:var(--med);--accent-ink:var(--on-med,var(--on-accent))" onclick="saveTemp()">Log temperature</button>`,'med');
 }
 function saveTemp(){
   const v=parseFloat(tempDraft.temp); if(isNaN(v)){ toast('Enter a reading'); return; }
@@ -7441,7 +7484,7 @@ function feverGuidance(){
 function openFeverNudge(v,unit){
   openSheet(`<h2>That's a fever</h2><div class="sub">${v}°${unit} is at or above the fever line (38°C / 100.4°F).</div>
     <div class="csub" style="margin:-4px 0 16px">${feverGuidance()} This isn't medical advice, trust your instincts and your pediatrician.</div>
-    <button class="btn-primary" style="background:var(--sleep)" onclick="openVisitSummary()">${I.stetho} Prepare a summary for the doctor</button>
+    <button class="btn-primary" style="background:var(--sleep);--accent-ink:var(--on-sleep,var(--on-accent))" onclick="openVisitSummary()">${I.stetho} Prepare a summary for the doctor</button>
     <button class="btn-ghost" onclick="openSymptom()">Log a symptom</button>
     <button class="btn-ghost" onclick="closeSheet()">Got it</button>`,'med');
 }
@@ -7500,7 +7543,7 @@ function openVisitSummary(){
   const text=visitSummary(7);
   openSheet(`<h2>Visit summary</h2><div class="sub">A snapshot of ${escapeHtml(b.name)}'s last 7 days for your appointment.</div>
     <pre class="visit-sum">${escapeHtml(text)}</pre>
-    <button class="btn-primary" style="background:var(--sleep)" onclick="copyVisitSummary()">${I.list||''} Copy summary</button>
+    <button class="btn-primary" style="background:var(--sleep);--accent-ink:var(--on-sleep,var(--on-accent))" onclick="copyVisitSummary()">${I.list||''} Copy summary</button>
     <button class="btn-ghost" onclick="openDoctorReport()">📄 Doctor PDF report ${isPro()?'':(tasteLeft('pdf')>0?'· ✨ try one free':'· Pro ✨')}</button>
     <button class="btn-ghost" onclick="closeSheet()">Close</button>`,'sleep');
   window.__visitSummaryText=text;
@@ -7589,7 +7632,7 @@ function renderSymptomSheet(){
       <button class="${d.severity==='severe'?'on':''}" onclick="symptomDraft.severity='severe';renderSymptomSheet()">Severe</button>
     </div></div>
     <div class="field"><label>Note (optional)</label><input id="symNote" placeholder="Anything to add"></div>
-    <button class="btn-primary" style="background:var(--pump)" onclick="saveSymptom()">Log symptom</button>`,'pump');
+    <button class="btn-primary" style="background:var(--pump);--accent-ink:var(--on-pump,var(--on-accent))" onclick="saveSymptom()">Log symptom</button>`,'pump');
 }
 function saveSymptom(){
   const ill=activeIllness();
@@ -7682,7 +7725,7 @@ function renderGrowthSheet(){
     </div>
     ${wwa('growth.measure')}
     ${timeStrip('when','When')}
-    <button class="btn-primary" style="background:var(--diaper)" onclick="saveGrowth()">Save measurement</button>`,'diaper');
+    <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent))" onclick="saveGrowth()">Save measurement</button>`,'diaper');
 }
 function saveGrowth(){
   const d=growthDraft;
@@ -7702,7 +7745,7 @@ function defaultGrowthSource(c){ return c==='us'?'cdc':'who'; }
 function effGrowthSource(b){ b=b||activeBaby(); return (b&&b.growthSource)||defaultGrowthSource(b&&b.country)||'who'; }
 function setGrowthSource(s){ const b=activeBaby(); if(b){ b.growthSource=s; persist(); } render(); }
 function toggleGrowthSource(){ const b=activeBaby(); if(!b)return; b.growthSource=(effGrowthSource(b)==='who')?'cdc':'who'; persist(); render(); }
-function growthChangeBtn(){ return '<button onclick="toggleGrowthSource()" style="background:none;border:none;color:var(--pink-d,#B06A9A);font-weight:700;cursor:pointer;font:inherit;padding:0;text-decoration:underline">change</button>'; }
+function growthChangeBtn(){ return '<button onclick="toggleGrowthSource()" style="background:none;border:none;color:var(--preg-ink,#8C547A);font-weight:700;cursor:pointer;font:inherit;padding:0;text-decoration:underline">change</button>'; }
 function setBabySex(s){ const b=activeBaby(); if(!b)return; b.sex=s; persist(); render(); }
 function growthRef(meas){ const b=activeBaby(); let sex=b&&b.sex; if(sex==='male')sex='M'; else if(sex==='female')sex='F'; if(!sex||!window.GROWTH_REF)return null; const src=window.GROWTH_REF[effGrowthSource(b)]; return (src&&src[meas]&&src[meas][sex])||null; }
 function refConv(meas,v,unit){ return meas==='weight'?convW(v,'kg',unit):convH(v,'cm',unit); }
@@ -7759,7 +7802,7 @@ function renderGrowthSection(){
   if(!g.length){
     return `<div class="sec-title" style="margin-top:24px">Growth</div>
       <div class="stat-card" style="text-align:center"><div class="csub" style="margin:0">No measurements yet.</div>
-      <button class="btn-primary" style="background:var(--diaper);margin-top:12px" onclick="openGrowth()">${I.scale} Add weight & height</button></div>`;
+      <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent));margin-top:12px" onclick="openGrowth()">${I.scale} Add weight & height</button></div>`;
   }
   const wU=state.settings.wUnit||'kg', hU=state.settings.hUnit||'cm';
   const wPts=g.filter(e=>e.weight).map(e=>({t:e.time, v:+convW(e.weight, e.wUnit||'kg', wU).toFixed(2)}));
@@ -7768,8 +7811,8 @@ function renderGrowthSection(){
   const wDelta=growthDelta(wPts), hDelta=growthDelta(hPts);
   return `<div class="sec-title" style="margin-top:24px">Growth</div>
     <div class="gx-stat">
-      <div class="gx-box"><div class="n" style="color:var(--feed)">${lw?(+convW(lw.weight,lw.wUnit||'kg',wU).toFixed(2)):'·'}${lw?' '+wU:''}</div><div class="l">Latest weight</div>${wDelta?`<div class="d" style="color:var(--ink-soft)">${wDelta>0?'+':''}${wDelta} ${wU}</div>`:''}</div>
-      <div class="gx-box"><div class="n" style="color:var(--sleep)">${lh?(+convH(lh.height,lh.hUnit||'cm',hU).toFixed(1)):'·'}${lh?' '+hU:''}</div><div class="l">Latest height</div>${hDelta?`<div class="d" style="color:var(--ink-soft)">${hDelta>0?'+':''}${hDelta} ${hU}</div>`:''}</div>
+      <div class="gx-box"><div class="n" style="color:var(--feed-ink)">${lw?(+convW(lw.weight,lw.wUnit||'kg',wU).toFixed(2)):'·'}${lw?' '+wU:''}</div><div class="l">Latest weight</div>${wDelta?`<div class="d" style="color:var(--ink-soft)">${wDelta>0?'+':''}${wDelta} ${wU}</div>`:''}</div>
+      <div class="gx-box"><div class="n" style="color:var(--sleep-ink)">${lh?(+convH(lh.height,lh.hUnit||'cm',hU).toFixed(1)):'·'}${lh?' '+hU:''}</div><div class="l">Latest height</div>${hDelta?`<div class="d" style="color:var(--ink-soft)">${hDelta>0?'+':''}${hDelta} ${hU}</div>`:''}</div>
     </div>
     ${tipLine('growth','Set Boy/Girl to overlay WHO/CDC percentile curves behind the dots.')}
     ${growthControls(b)}
@@ -7972,7 +8015,7 @@ function openVaccineCountry(){
   const b=activeBaby(); if(!b)return;
   openSheet(`<h2>Vaccine schedule</h2><div class="sub">Choose the country schedule for ${escapeHtml(b.name)}. Doses you already logged carry over where the schedules match, and you can edit any item.</div>
     ${searchPickerHtml('vxCountry', vaxCountryList(), b.country||detectCountry(), 'Search your country…')}
-    <button class="btn-primary" style="background:var(--diaper);margin-top:12px" onclick="chooseVaccineCountry((document.getElementById('vxCountry')||{}).value)">Update schedule</button>`,'diaper');
+    <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent));margin-top:12px" onclick="chooseVaccineCountry((document.getElementById('vxCountry')||{}).value)">Update schedule</button>`,'diaper');
 }
 function chooseVaccineCountry(k){
   const b=activeBaby(); if(!b)return;
@@ -8074,11 +8117,11 @@ function openVaccine(id){
   openSheet(`<h2>${escapeHtml(v.name)}</h2><div class="sub">${v.group} · due ~${v.dueMonths===0?'birth':v.dueMonths+' months'}</div>
     ${v.given?`<div class="field"><label>Date given</label>${datePicker('vxDate', dv, {max:now()})}</div>${estNote}
       <div class="field"><label>Note (optional)</label><input id="vxNote" value="${escapeHtml(v.note||'')}" placeholder="Batch no, reaction, clinic"></div>
-      <button class="btn-primary" style="background:var(--diaper)" onclick="saveVaccine('${id}')">Save</button>
+      <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent))" onclick="saveVaccine('${id}')">Save</button>
       <button class="btn-ghost" onclick="unmarkVaccine('${id}')">Mark as not given</button>`
     :`<div class="field"><label>Date given</label>${datePicker('vxDate','',{max:now()})}</div>
       <div class="field"><label>Note (optional)</label><input id="vxNote" placeholder="Batch no, reaction, clinic"></div>
-      <button class="btn-primary" style="background:var(--diaper)" onclick="markVaccine('${id}')">${I.check} Mark as given</button>
+      <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent))" onclick="markVaccine('${id}')">${I.check} Mark as given</button>
       ${past?(v.missed?`<button class="btn-ghost" onclick="vaxSetMissed('${id}',false)">Not missed (back to to-confirm)</button>`:`<button class="btn-ghost" onclick="vaxSetMissed('${id}',true)">This dose was missed</button>`):''}`}
     <button class="btn-ghost" onclick="editVaccine('${id}')">Edit name or due age</button>
     <button class="btn-ghost btn-danger" onclick="deleteVaccine('${id}')">${I.trash} Remove from list</button>`,'diaper');
@@ -8106,7 +8149,7 @@ function editVaccine(id){
     <div class="field"><label>Name</label><input id="vxName" value="${escapeHtml(v.name)}"></div>
     <div class="field"><label>Due at (months of age, 0 = birth)</label><input type="number" id="vxMo" value="${v.dueMonths}"></div>
     <div class="field"><label>Visit group label</label><input id="vxGroup" value="${escapeHtml(v.group)}"></div>
-    <button class="btn-primary" style="background:var(--diaper)" onclick="saveVaccineEdit('${id}')">Save</button>`,'diaper');
+    <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent))" onclick="saveVaccineEdit('${id}')">Save</button>`,'diaper');
 }
 function saveVaccineEdit(id){
   const v=vaccinePlan().find(x=>x.id===id); if(!v)return;
@@ -8123,7 +8166,7 @@ function openAddVaccine(){
   openSheet(`<h2>Add a vaccine</h2><div class="sub">For ones not on the default list.</div>
     <div class="field"><label>Name</label><input id="avName" placeholder="e.g. BCG, Meningococcal B"></div>
     <div class="field"><label>Due at (months of age, 0 = birth)</label><input type="number" id="avMo" value="2"></div>
-    <button class="btn-primary" style="background:var(--diaper)" onclick="saveNewVaccine()">Add</button>`,'diaper');
+    <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent))" onclick="saveNewVaccine()">Add</button>`,'diaper');
 }
 function saveNewVaccine(){
   const name=$('#avName').value.trim(); if(!name){toast('Name it first');return;}
@@ -8284,7 +8327,7 @@ function renderPhotoPrep(){
     <div class="pp-stage" id="ppStage" style="aspect-ratio:${st.aspect}"><img id="ppImg" src="${st.url}" alt=""></div>
     <div class="pp-hint">A soft touch is plenty — the original is lovely too.</div>
     <div class="pp-presets">${chips}</div>
-    <button class="btn-primary" style="background:var(--star)" onclick="prepConfirm()">Use this photo</button>
+    <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="prepConfirm()">Use this photo</button>
     <button class="btn-ghost" style="margin-top:8px" onclick="prepUseAsIs()">Keep it exactly as it is</button>
     <button class="btn-ghost" style="margin-top:8px;color:var(--ink-soft)" onclick="prepCancel()">Cancel</button>`,'star');
   requestAnimationFrame(prepInit);
@@ -8421,7 +8464,7 @@ function renderMomentDetail(){
     <div class="field" style="margin-top:12px"><label>A little note (optional)</label><input id="glNote" placeholder="${escapeHtml(glNotePlaceholder(card))}" value="${escapeHtml((d.note!=null?d.note:(saved&&saved.note))||'')}"></div>
     <div class="field"><label>When</label>${datePicker('glDate',d.date||(saved&&saved.date)||now(),{max:_dpYMD()})}</div>
     <div class="field"><label>Who’s in it (optional)</label><div class="rel-chips" id="glWho">${glWhoChips(d.who)}</div></div>
-    <button class="btn-primary" style="background:var(--star)" onclick="saveJourneyMoment()">Save moment</button>
+    <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="saveJourneyMoment()">Save moment</button>
     ${(!isPreg&&saved&&saved.photoId&&!d.removePhoto)?`<button class="btn-ghost" style="margin-top:8px" onclick="makeKeepsakeFromMoment()">✨ Make a keepsake</button>`:''}
     ${saved?`<button class="btn-ghost" style="margin-top:8px;color:var(--ink-soft)" onclick="removeJourneyMoment('${d.cardId}')">Remove this moment</button>`:''}`,'star');
 }
@@ -8463,7 +8506,7 @@ function openKeepsakeNudge(cap, photoId, date){
   const when=date?new Date(String(date)+'T08:00').getTime():null;
   openSheet(`<h2>Saved 🤍</h2><div class="sub">Tucked into ${escapeHtml(b.name||'your baby')}’s scrapbook.</div>
     <img class="card-prev" src="${photoSrc(photoId)}" alt="">
-    <button class="btn-primary" style="background:var(--star)" onclick="closeSheet();makeMomentFromPhoto(photoSrc('${photoId}'),'${jArg(cap)}',${when&&!isNaN(when)?when:'null'})">✨ Make a keepsake of it</button>
+    <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="closeSheet();makeMomentFromPhoto(photoSrc('${photoId}'),'${jArg(cap)}',${when&&!isNaN(when)?when:'null'})">✨ Make a keepsake of it</button>
     <button class="btn-ghost" style="margin-top:8px" onclick="closeSheet()">Done for now</button>`,'star');
 }
 function removeJourneyMoment(id){ const isPreg=glDraft&&glDraft.scope==='preg'; const m=isPreg?pregJSaved():journeySaved(); const pid=(m[id]||{}).photoId; delete m[id]; glDraft=null; persist(); closeSheet(); render(); toast('Removed'); if(pid) maybeDelPhoto(pid); }
@@ -8546,7 +8589,7 @@ function openPetSetup(){
   openSheet(`<h2>Your pet 🐾</h2><div class="sub">Add your pet so Cubby can celebrate their firsts with ${escapeHtml(b.name)}. Skip anytime.</div>
     <div class="field"><label>Pet's name</label><input id="petName" value="${escapeHtml(b.petName||'')}" placeholder="e.g. Rocky" autofocus></div>
     <div class="field"><label>What kind? (optional)</label><input id="petType" value="${escapeHtml(b.petType||'')}" placeholder="e.g. dog, cat"></div>
-    <button class="btn-primary" style="background:var(--star)" onclick="savePet()">Add their firsts</button>
+    <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="savePet()">Add their firsts</button>
     ${b.hasPet?`<button class="btn-ghost btn-danger" onclick="removePet()">Remove pet firsts</button>`:''}`,'star');
 }
 function savePet(){ const b=activeBaby(); if(!b)return; b.petName=(($('#petName')&&$('#petName').value)||'').trim(); b.petType=(($('#petType')&&$('#petType').value)||'').trim(); b.hasPet=true; persist(); closeSheet(); render(); toast('Pet firsts added 🐾'); }
@@ -8565,7 +8608,7 @@ function openMilestone(key){
     <div id="msPhotoSlot">${msDraft.photoId?`<img src="${photoSrc(msDraft.photoId)}" style="width:100%;border-radius:14px;margin-bottom:14px">`:''}</div>
     <button class="btn-ghost" onclick="document.getElementById('msPhotoInput').click()">${I.camera} ${msDraft.photoId?'Change photo':'Add a photo'}</button>
     <input type="file" id="msPhotoInput" accept="image/*" style="display:none" onchange="attachMsPhoto(this)">
-    <button class="btn-primary" style="background:var(--star)" onclick="saveMilestone()">${a?'Save':'Mark as reached'}</button>
+    <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="saveMilestone()">${a?'Save':'Mark as reached'}</button>
     ${a?`<button class="btn-ghost btn-danger" onclick="unMilestone('${key}')">Remove this moment</button>`:''}`,'star');
 }
 function attachMsPhoto(input){
@@ -8611,7 +8654,7 @@ function openCustomMilestone(){
     <div id="msPhotoSlot"></div>
     <button class="btn-ghost" onclick="document.getElementById('msPhotoInput').click()">${I.camera} Add a photo</button>
     <input type="file" id="msPhotoInput" accept="image/*" style="display:none" onchange="attachMsPhoto(this)">
-    <button class="btn-primary" style="background:var(--star)" onclick="saveCustomMilestone()">Save moment</button>`,'star');
+    <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="saveCustomMilestone()">Save moment</button>`,'star');
 }
 function saveCustomMilestone(){
   const title=$('#cmTitle').value.trim(); if(!title){toast('Give it a title');return;}
@@ -9170,7 +9213,7 @@ function reopenRoutineItem(){
       <div class="csub" style="margin-top:6px">When you tap it done, it adds this kind of entry to the log.</div></div>
     ${showPicker?`<div class="field"><label>Who usually does it</label>${searchPickerHtml('rtWho',pairs,d.assignee||'','Anyone in your circle')}
       <div class="csub" style="margin-top:6px">Optional. We'll credit them in the log when it's done.</div></div>`:''}
-    <button class="btn-primary" style="background:var(--diaper)" onclick="saveRoutineItem()">${existing?'Save':'Add ritual'}</button>
+    <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent))" onclick="saveRoutineItem()">${existing?'Save':'Add ritual'}</button>
     ${existing?`<button class="btn-ghost btn-danger" onclick="removeRoutine('${d.id}')">${I.trash} Remove ritual</button>`:''}`,'diaper');
 }
 function saveRoutineItem(){
@@ -9264,8 +9307,8 @@ function renderPhotos(){
   return `<div class="fade-in">
     <div class="canvas-wrap"><canvas id="photoCanvas" onclick="placeSticker(event)" style="${photoEditor.activeSticker?'cursor:crosshair':''}"></canvas></div>
     <div class="row2" style="margin:0 0 12px">
-      <button class="btn-primary" style="background:var(--star)" onclick="autoEnhance()">✨ Auto-enhance${proTag('enhance')}</button>
-      <button class="btn-primary" style="background:var(--diaper)" onclick="cutoutBackground()">✂️ Cut out${proTag('cutout')}</button>
+      <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="autoEnhance()">✨ Auto-enhance${proTag('enhance')}</button>
+      <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent))" onclick="cutoutBackground()">✂️ Cut out${proTag('cutout')}</button>
     </div>
     ${photoEditor.cutImg?`<div class="chip-row" style="margin:-4px 0 12px"><div class="chip ${photoEditor.cutout?'sel':''}" onclick="photoEditor.cutout=true;render();drawPhoto()">Cutout</div><div class="chip ${!photoEditor.cutout?'sel':''}" onclick="photoEditor.cutout=false;render();drawPhoto()">Original</div></div>`:''}
     <div class="sec-title">Stickers ${photoEditor.activeSticker?'· tap the photo to place':''}</div>
@@ -9295,10 +9338,10 @@ function renderPhotos(){
     ${(!isPro()&&usesProStyles())?`<div class="pro-pill">✨ ${photoEditor._styleCharged?'Pro styles unlocked for this card, share away':`Pro styles on this card · ${tasteLeft('styles')} free share${tasteLeft('styles')===1?'':'s'} left`}</div>`:''}
     <div class="row2">
       <button class="btn-primary" onclick="savePhoto()">${I.check} Save</button>
-      <button class="btn-primary" style="background:var(--sleep)" onclick="downloadPhoto()">${I.download} Download</button>
+      <button class="btn-primary" style="background:var(--sleep);--accent-ink:var(--on-sleep,var(--on-accent))" onclick="downloadPhoto()">${I.download} Download</button>
     </div>
-    <button class="btn-primary" style="background:var(--pump)" onclick="shareComposed()">📤 ${shareVerb()} · Instagram-ready</button>
-    ${(isCard&&canRecordVideo())?`<button class="btn-primary" style="background:var(--preg)" onclick="recordVideo()">🎬 Save as video ✨</button>`:''}
+    <button class="btn-primary" style="background:var(--pump);--accent-ink:var(--on-pump,var(--on-accent))" onclick="shareComposed()">📤 ${shareVerb()} · Instagram-ready</button>
+    ${(isCard&&canRecordVideo())?`<button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="recordVideo()">🎬 Save as video ✨</button>`:''}
     ${(!isPro()&&isCard)?`<div class="csub" style="text-align:center;margin:6px 0 10px">Free shares carry a small "made with Cubby" mark · Pro shares are clean ✨</div>`:''}
     <button class="btn-ghost" onclick="discardPhoto()">Discard & start over</button>
     ${galleryHtml}
@@ -9807,7 +9850,7 @@ function askAvatarFromPhoto(babyId, photoId){
   const b=(state.babies||[]).find(x=>x.id===babyId); if(!b)return;
   openSheet(`<h2>Set as profile picture?</h2><div class="sub">Use this photo for ${escapeHtml(b.name)}, or keep the bear avatar.</div>
     <img src="${photoSrc(photoId)}" style="width:120px;height:120px;object-fit:cover;border-radius:50%;display:block;margin:6px auto 18px">
-    <button class="btn-primary" style="background:var(--star)" onclick="setAvatarFor('${babyId}','${photoId}')">Use this photo</button>
+    <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="setAvatarFor('${babyId}','${photoId}')">Use this photo</button>
     <button class="btn-ghost" onclick="closeSheet()">Keep bear avatar</button>`,'star');
 }
 function setAvatarFor(babyId, photoId){ const b=(state.babies||[]).find(x=>x.id===babyId); if(!b)return; b.avatarPhotoId=photoId; persist(); closeSheet(); render(); toast('Profile photo set'); }
@@ -9816,7 +9859,7 @@ function viewPhoto(id){
   const p=(state.photos||[]).find(x=>x.id===id); if(!p)return;
   openSheet(`<h2>Photo</h2><div class="sub">${p.caption?escapeHtml(p.caption)+' · ':''}${new Date(p.createdAt).toLocaleDateString()}</div>
     <img src="${photoSrc(p.photoId)}" style="width:100%;border-radius:16px;margin-bottom:16px">
-    <button class="btn-primary" style="background:var(--star)" onclick="setAvatarFromView('${id}')">${I.star} Set as profile photo</button>
+    <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="setAvatarFromView('${id}')">${I.star} Set as profile photo</button>
     <button class="btn-ghost" onclick="editPhotoCaption('${id}')">${I.note} Edit caption</button>
     <button class="btn-ghost" onclick="sharePhoto('${id}')">${shareVerb()}</button>
     <button class="btn-ghost" onclick="downloadSaved('${id}')">${I.download} Download</button>
@@ -9827,7 +9870,7 @@ function editPhotoCaption(id){
   const p=(state.photos||[]).find(x=>x.id===id); if(!p)return;
   openSheet(`<h2>Edit caption</h2><div class="sub">A little note to remember this moment by.</div>
     <div class="field"><label>Caption</label><input id="pcap" value="${escapeHtml(p.caption||'')}" placeholder="e.g. First proper giggle" maxlength="120" autofocus></div>
-    <button class="btn-primary" style="background:var(--star)" onclick="savePhotoCaption('${id}')">Save caption</button>`,'star');
+    <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="savePhotoCaption('${id}')">Save caption</button>`,'star');
 }
 function savePhotoCaption(id){
   const p=(state.photos||[]).find(x=>x.id===id); if(!p)return;
@@ -9841,7 +9884,7 @@ function openActivityPhoto(id){
   const by=authorTag(e);
   openSheet(`<h2>${escapeHtml(eventTitle(e))}</h2><div class="sub">${escapeHtml(when)}${by?' · logged by '+escapeHtml(by):''}</div>
     <img src="${photoSrc(e.photoId)}" style="width:100%;border-radius:16px;margin-bottom:16px">
-    <button class="btn-primary" style="background:var(--star)" onclick="makeMomentFromEvent('${id}')">✨ Make a shareable moment</button>
+    <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="makeMomentFromEvent('${id}')">✨ Make a shareable moment</button>
     <button class="btn-ghost" onclick="shareEventPhoto('${id}')">${shareVerb()} photo</button>
     <button class="btn-ghost" onclick="openEdit('${id}')">Edit this log</button>`,'star');
 }
@@ -10016,7 +10059,7 @@ function viewMonthly(i){
     // pre-v168 entry: the stamp is baked into the stored pixels
     openSheet(`<h2>${slotLabel(i)}</h2><div class="sub">${new Date(p.createdAt).toLocaleDateString()}</div>
       <img src="${photoSrc(p.photoId)}" style="width:100%;border-radius:16px;margin-bottom:16px">
-      <button class="btn-primary" style="background:var(--sleep)" onclick="downloadSaved('${p.id}')">${I.download} Download</button>
+      <button class="btn-primary" style="background:var(--sleep);--accent-ink:var(--on-sleep,var(--on-accent))" onclick="downloadSaved('${p.id}')">${I.download} Download</button>
       <button class="btn-ghost" onclick="pickMonthly(${i});closeSheet()">Replace photo</button>
       <button class="btn-ghost btn-danger" onclick="deletePhoto('${p.id}')">${I.trash} Remove</button>`,'feed');
     return;
@@ -10028,7 +10071,7 @@ function viewMonthly(i){
     const data=c.toDataURL('image/jpeg',0.88); window._lastCard=data;
     openSheet(`<h2>${slotLabel(i)}</h2><div class="sub">${new Date(p.createdAt).toLocaleDateString()}</div>
       <img src="${data}" style="width:100%;border-radius:16px;margin-bottom:16px">
-      <button class="btn-primary" style="background:var(--sleep)" onclick="dlNamed('${slotShort(i)}-month')">${I.download} Download</button>
+      <button class="btn-primary" style="background:var(--sleep);--accent-ink:var(--on-sleep,var(--on-accent))" onclick="dlNamed('${slotShort(i)}-month')">${I.download} Download</button>
       <button class="btn-ghost" onclick="shareLastCard('${slotShort(i)}-month')">↗ Share</button>
       <button class="btn-ghost" onclick="pickMonthly(${i});closeSheet()">Replace photo</button>
       <button class="btn-ghost btn-danger" onclick="deletePhoto('${p.id}')">${I.trash} Remove</button>`,'feed');
@@ -10172,8 +10215,8 @@ async function genCard(){
   openSheet(`<h2>${slotLabel(cardDraft.month)}</h2><div class="sub">${escapeHtml(activeBaby().name)}'s memory card</div>
     <img src="${data}" class="card-prev">
     <button class="btn-primary" onclick="saveCardImg()">${I.check} Save to gallery</button>
-    <button class="btn-primary" style="background:var(--pump)" onclick="shareLastCard('memory-card')">📤 ${shareVerb()} · Instagram-ready</button>
-    <button class="btn-primary" style="background:var(--sleep)" onclick="dlCard()">${I.download} Download</button>`,'feed');
+    <button class="btn-primary" style="background:var(--pump);--accent-ink:var(--on-pump,var(--on-accent))" onclick="shareLastCard('memory-card')">📤 ${shareVerb()} · Instagram-ready</button>
+    <button class="btn-primary" style="background:var(--sleep);--accent-ink:var(--on-sleep,var(--on-accent))" onclick="dlCard()">${I.download} Download</button>`,'feed');
   window._lastCard=data;
 }
 function dlCard(){ saveFile(window._lastCard, (activeBaby().name||'baby')+'-'+slotShort(cardDraft.month)+'-card.jpg', isNativeApp()?'Saved':'Downloaded'); }
@@ -10254,7 +10297,7 @@ function drawThenNow(objs){
   openSheet(`<h2>Then vs Now</h2><div class="sub">${escapeHtml(b.name)}, growing up.</div>
     <img src="${data}" class="card-prev">
     <button class="btn-primary" onclick="shareLastCard('thenvsnow')">📤 ${shareVerb()} · Instagram-ready</button>
-    <button class="btn-primary" style="background:var(--sleep)" onclick="dlNamed('thenvsnow')">${I.download} Download</button>
+    <button class="btn-primary" style="background:var(--sleep);--accent-ink:var(--on-sleep,var(--on-accent))" onclick="dlNamed('thenvsnow')">${I.download} Download</button>
     ${isPro()?'':'<div class="csub" style="text-align:center;margin-top:8px">Pro shares come without the Cubby mark ✨</div>'}`,'sleep');
 }
 function dlNamed(n){ saveFile(window._lastCard, (activeBaby().name||'baby')+'-'+n+'.jpg', isNativeApp()?'Saved':'Downloaded'); }
@@ -10302,7 +10345,7 @@ function drawCollage(objs){
   const data=c.toDataURL('image/jpeg',0.9); window._lastCard=data;
   openSheet(`<h2>Growth collage</h2><div class="sub">${objs.length} months of ${escapeHtml(b.name)}.</div>
     <img src="${data}" class="card-prev">
-    <button class="btn-primary" style="background:var(--diaper)" onclick="dlNamed('collage')">${I.download} Download</button>`,'diaper');
+    <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent))" onclick="dlNamed('collage')">${I.download} Download</button>`,'diaper');
 }
 
 /* ============================================================
@@ -10333,7 +10376,7 @@ function renderPosterSheet(hasDetails){
     <div id="posterPrevSlot"></div>
     <button class="btn-ghost" onclick="openBirthDetails()">${I.note} Edit birth details</button>
     <input type="file" id="posterPhotoInput" accept="image/*" style="display:none" onchange="posterPhoto(this,${hasDetails})">
-    <button class="btn-primary" style="background:var(--star)" onclick="genPoster()">${I.download} Generate poster</button>`,'star');
+    <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="genPoster()">${I.download} Generate poster</button>`,'star');
   drawPosterPrev();
 }
 function togglePosterPhoto(hd){
@@ -10449,7 +10492,7 @@ async function genPoster(){
   openSheet(`<h2>${escapeHtml(activeBaby().name)}'s poster</h2><div class="sub">Ready to print, crisp up to 40×60 cm.</div>
     <img src="${data}" class="card-prev">
     <button class="btn-primary" onclick="savePosterImg()">${I.check} Save to gallery</button>
-    <button class="btn-primary" style="background:var(--sleep)" onclick="dlNamed('birth-poster')">${I.download} Download</button>
+    <button class="btn-primary" style="background:var(--sleep);--accent-ink:var(--on-sleep,var(--on-accent))" onclick="dlNamed('birth-poster')">${I.download} Download</button>
     <button class="btn-ghost" onclick="shareLastCard('birth-poster')">↗ Share</button>`,'star');
 }
 async function savePosterImg(){
@@ -10570,9 +10613,9 @@ var _INS_CSS='#cbInstallOv{position:fixed;inset:0;z-index:2147483000;background:
 +'#cbInstallOv .cbi-emoji{font-size:40px;line-height:1}#cbInstallOv .cbi-h{font-family:"Fraunces",Georgia,serif;font-size:22px;font-weight:700;color:var(--ink);margin:6px 0 8px}'
 +'#cbInstallOv .cbi-p{font-size:15px;line-height:1.5;color:var(--ink-soft);margin:0 0 14px}'
 +'#cbInstallOv .cbi-step{display:flex;align-items:center;gap:10px;font-size:15.5px;color:var(--ink);padding:10px 0;border-top:1px solid #F1EADF}'
-+'#cbInstallOv .cbi-n{flex:0 0 auto;width:24px;height:24px;border-radius:50%;background:#C97FA0;color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center}'
++'#cbInstallOv .cbi-n{flex:0 0 auto;width:24px;height:24px;border-radius:50%;background:#C97FA0;color:var(--on-accent,#1A1614);font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center}'
 +'#cbInstallOv .cbi-point{margin-top:14px;text-align:center;font-weight:800;color:#C97FA0;font-size:15px;animation:cbiBob 1s ease-in-out infinite}@keyframes cbiBob{0%,100%{transform:translateY(0)}50%{transform:translateY(5px)}}'
-+'#cbInstallOv .cbi-btn{margin-top:16px;width:100%;background:#C97FA0;color:#fff;border:none;font-weight:800;padding:14px;border-radius:14px;font-size:15px;cursor:pointer}'
++'#cbInstallOv .cbi-btn{margin-top:16px;width:100%;background:#C97FA0;color:var(--on-accent,#1A1614);border:none;font-weight:800;padding:14px;border-radius:14px;font-size:15px;cursor:pointer}'
 +'[data-theme="night"] #cbInstallOv .cbi-step{border-top-color:var(--divider)}'
 +'[data-theme="night"] #cbInstallOv .cbi-x{background:var(--surface-2);color:var(--ink-soft)}';
 function closeInstall(){ var o=document.getElementById('cbInstallOv'); if(o&&o.parentNode) o.parentNode.removeChild(o); }
