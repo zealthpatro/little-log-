@@ -32,7 +32,16 @@ const CONTRAST_STEPS = [
   ['health', "go('health')"],
   ['sheet: feed', "go('home'); openFeed()"],
   ['sheet: settings', "closeSheet(); openSettings()"],
-  ['sheet: baby profile', "closeSheet(); openBabyProfile()"]
+  ['sheet: baby profile', "closeSheet(); openBabyProfile()"],
+  /* States that hid real failures until they were seeded here. The note composer carries the
+     audience chips (accent-on-its-own-soft-wash); rituals carries the heatmap weekday letters;
+     a running timer paints a gradient banner, which is exactly the case the probe used to
+     mis-read as 1.0 because it only saw backgroundColor. */
+  ['sheet: note', "closeSheet(); openNoteCompose()"],
+  ['rituals', "closeSheet(); go('log'); typeof setLogTab==='function' && setLogTab('rituals')"],
+  /* Set in memory rather than via startSleep(): that persists, which kicks off a sync the offline
+     test page retries forever, and the next page.goto never reaches networkidle2. */
+  ['home: sleep timer running', "closeSheet(); go('home'); timersFor(state.activeBabyId).sleep={start:Date.now()-3600000}; render()"]
 ];
 
 /* Runs in the page. One row per element that renders its own text, measured against the real
@@ -70,22 +79,39 @@ const CONTRAST_PROBE = function () {
     var r = el.getBoundingClientRect();
     if (r.width < 2 || r.height < 2 || r.bottom < -4000 || r.top > 20000) continue;
 
-    // composite the background from every painted ancestor layer, root-first
+    // Composite the background from every painted ancestor layer, root-first.
+    // backgroundColor alone is not what a parent sees: a gradient layer paints over it and is
+    // invisible to getComputedStyle().backgroundColor, so body's radial wash used to vanish here
+    // and text was scored against the flat --bg. Gradient layers therefore contribute every one of
+    // their colour stops as a candidate, and the element is scored against its WORST stop.
     var stack = [], node = el, chain = 1;
     while (node && node.nodeType === 1) {
       var ncs = getComputedStyle(node);
       var op = parseFloat(ncs.opacity); if (!isNaN(op)) chain *= op;
+      var bi = ncs.backgroundImage;
+      if (bi && bi !== 'none' && /gradient/i.test(bi)) {
+        var stops = (bi.match(/rgba?\([^)]+\)/g) || []).map(parse).filter(function (c) { return c && c[3] > 0; });
+        if (stops.length) stack.push(stops);            // an array marks "one of these"
+      }
       var bc = parse(ncs.backgroundColor);
-      if (bc && bc[3] > 0) stack.push(bc);
+      if (bc && bc[3] > 0) stack.push([bc]);
       node = node.parentElement;
     }
     if (chain < 0.999) continue;                       // mid-fade, or a deliberately inactive control
     var base = parse(getComputedStyle(document.documentElement).backgroundColor);
     if (!base || base[3] === 0) base = [255, 255, 255, 1];
-    var bg = [base[0], base[1], base[2], 1];
-    for (var j = stack.length - 1; j >= 0; j--) bg = over(stack[j], bg);
 
     var fg = parse(cs.color); if (!fg) continue;
+    // Worst stop per gradient layer, chosen up front: the stop whose luminance sits closest to the
+    // text is the one that yields the lowest ratio. One candidate per layer keeps the walk O(n).
+    var flum = lum(fg);
+    var bg = [base[0], base[1], base[2], 1];
+    for (var j = stack.length - 1; j >= 0; j--) {
+      var layer = stack[j], worst = layer[0];
+      for (var s = 1; s < layer.length; s++)
+        if (Math.abs(lum(layer[s]) - flum) < Math.abs(lum(worst) - flum)) worst = layer[s];
+      bg = over(worst, bg);
+    }
     var cr = ratio(over(fg, bg), bg);
     var fs = parseFloat(cs.fontSize), fw = parseInt(cs.fontWeight, 10) || 400;
     var need = (fs >= 24 || (fs >= 18.66 && fw >= 700)) ? 3.0 : 4.5;

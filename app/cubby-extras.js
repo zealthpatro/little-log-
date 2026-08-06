@@ -439,7 +439,9 @@
     + '.hm-cells{display:flex;gap:3px;flex:1;}'
     + '.hm-cell{flex:1;height:22px;border-radius:5px;background:var(--surface-2,#FBF7EF);}'
     + '.hm-cell.empty{background:transparent;border:1px dashed var(--line,#E0D7C7);}'
-    + '.hm-day{flex:1;text-align:center;font-size:10px;color:var(--ink-faint,#b3a99d);font-weight:700;}'
+    /* Weekday letters sit on the page, so they take --ink-soft: --ink-faint measures 4.28 against
+       the body gradient's darkest stop (it only clears against the flat --bg). */
+    + '.hm-day{flex:1;text-align:center;font-size:10px;color:var(--ink-soft,#6E635B);font-weight:700;}'
     + '.bear-av{overflow:hidden;padding:0!important;}.bear-av svg{width:100%;height:100%;display:block;}'
     + '.tl-byav{display:inline-block;width:16px;height:16px;border-radius:50%;overflow:hidden;vertical-align:middle;margin-right:5px;}.tl-byav svg{width:100%;height:100%;display:block;}'
 

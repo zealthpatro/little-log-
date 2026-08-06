@@ -451,7 +451,9 @@ body{
 /* ============ TIMELINE ============ */
 .day-group{margin-bottom:22px;}
 .day-head{font-family:var(--font-display);font-size:16px;font-weight:600;margin:0 4px 12px;display:flex;justify-content:space-between;align-items:baseline;}
-.day-head .day-sum{font-family:var(--font-body);font-size:12px;color:var(--ink-faint);font-weight:700;}
+/* On the page, not on a card: --ink-faint clears 4.5 only against the flat --bg, and the body
+   gradient's darkest stop drags it to 4.28. --ink-soft holds at 4.71 there. */
+.day-head .day-sum{font-family:var(--font-body);font-size:12px;color:var(--ink-soft);font-weight:700;}
 .tl-item{
   display:flex;align-items:center;gap:13px;background:var(--surface);
   border-radius:var(--radius-sm);padding:13px 15px;margin-bottom:9px;
@@ -673,7 +675,9 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .avatar-pick .ap:active{transform:scale(.9);}
 .avatar-pick .ap.sel{border-color:var(--ink);}
 
-.empty-state{text-align:center;padding:50px 20px;color:var(--ink-faint);}
+/* Empty states sit on the page, not on a card, so --ink-faint lands at 4.20 against the body
+   gradient. These are the first words a new parent reads: they take --ink-soft. */
+.empty-state{text-align:center;padding:50px 20px;color:var(--ink-soft);}
 .empty-state svg{width:48px;height:48px;margin-bottom:14px;opacity:.5;}
 .empty-state p{font-weight:700;font-size:15px;}
 .empty-state span{font-size:13px;font-weight:600;}
@@ -1186,7 +1190,9 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .aud{display:inline-flex;align-items:center;gap:6px;border:2px solid var(--line);background:var(--surface-2);color:var(--ink);font-family:var(--font-body);font-weight:800;font-size:13px;padding:9px 13px;border-radius:13px;cursor:pointer;transition:transform .15s,border-color .15s;}
 .aud:active{transform:scale(.95);}
 .aud .aud-i{font-size:14px;line-height:1;}
-.aud.on{border-color:var(--accent,var(--note));background:var(--accent-soft,var(--note-soft));color:var(--accent,var(--note));}
+/* The label sits on the soft tint, so it takes the tint ink, not the fill hue: the raw accent on
+   its own soft wash measures 2.73:1 in light. */
+.aud.on{border-color:var(--accent,var(--note));background:var(--accent-soft,var(--note-soft));color:var(--accent-tint-ink,var(--note-ink));}
 .aud-sub{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:8px;line-height:1.4;}
 .ds-pinrow{display:flex;align-items:center;gap:10px;margin:4px 0 16px;cursor:pointer;}
 .ds-pinrow input{position:absolute;opacity:0;width:0;height:0;}
@@ -2857,7 +2863,11 @@ var _sheetStack=[];
 function _sheetAccent(s,accent){ s.style.setProperty('--accent', accent?`var(--${accent})`:'var(--feed)'); s.style.setProperty('--accent-soft', accent?`var(--${accent}-soft)`:'var(--feed-soft)');
   /* Ink follows the fill. Only sleep declares an --on-sleep (it is the one light accent dark enough
      that white wins); everything else falls through to --on-accent. */
-  s.style.setProperty('--accent-ink', accent?`var(--on-${accent},var(--on-accent))`:'var(--on-accent)'); }
+  s.style.setProperty('--accent-ink', accent?`var(--on-${accent},var(--on-accent))`:'var(--on-accent)');
+  /* Ink on the SOFT tint is a different problem from ink on the fill: the tint flips with the
+     theme (pale in light, deep in night), so --accent-ink, which is built for the solid fill,
+     lands dark-on-dark at 1.22:1 in night. The *-ink family is the one that tracks the tint. */
+  s.style.setProperty('--accent-tint-ink', accent?`var(--${accent}-ink)`:'var(--feed-ink)'); }
 /* Contextual "why we ask": one-tap expander dropped under a field via ${wwa('key')}. Copy is in
    the WWA map (privacy-verified). Returns '' for unknown keys so calls are always safe. */
 function wwa(key){ var t=WWA[key]; if(!t) return ''; return '<div class="wwa"><button type="button" class="wwa-t" aria-expanded="false" onclick="wwaToggle(this)">Why we ask<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></button><div class="wwa-n" hidden>'+t+'</div></div>'; }
