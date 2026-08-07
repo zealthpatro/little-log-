@@ -1,9 +1,19 @@
 rules_version = '2';
 
 // Cubby does NOT use Firebase Storage — photos are stored client-side (IndexedDB) and synced as
-// data URLs inside Firestore docs. The Storage bucket is provisioned by default but unused, so it
-// is locked to deny-all: no client may read or write any object. If photos are ever moved
-// server-side, replace this with per-household, member-scoped rules (mirror firestore.rules).
+// data URLs inside Firestore docs.
+//
+// NOT DEPLOYED, AND THAT IS CORRECT (verified 2026-08-07). The project has no Storage bucket at all:
+// `firebase deploy --only storage` fails with "Firebase Storage has not been set up on project".
+// No bucket means no exposure, so there is nothing to lock — the earlier assumption that an unused
+// bucket sat on Firebase's permissive defaults was wrong. Do NOT press "Get Started" in the console
+// to make this deployable: that provisions a bucket Cubby does not use and would only add surface.
+// `storage` is deliberately absent from firebase.json for the same reason — declaring the target
+// with no bucket makes every full `firebase deploy` fail.
+//
+// This file is the ready-made lock for the day photos move server-side: create the bucket, add
+// "storage": { "rules": "storage.rules" } to firebase.json, then replace the deny-all below with
+// per-household, member-scoped rules mirroring firestore.rules.
 service firebase.storage {
   match /b/{bucket}/o {
     match /{allPaths=**} {
