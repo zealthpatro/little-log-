@@ -84,7 +84,18 @@ A guardrail is real only when it is blocking, owned, and checked at the moment o
 - **YMYL:** if clinical, deeplinked source + named-reviewer line; reviewer sign-off attached.
 - **i18n:** strings externalised; units/dates/RTL handled.
 - **Voice:** copy matches the style guide (warm, no-guilt, no em-dash).
-- **Performance:** within budget (LCP < 2.5s; action < 100ms).
+- **Performance:** within budget (LCP < 2.5s; action < 100ms). `node tools/perf_check.js` is the
+  blocking check — it seeds four months of real logging and measures the render path at 4x CPU
+  throttle, so it fails on the regressions a screenshot cannot show. Owner: whoever ships the
+  surface. Three rules it enforces, and one it cannot: never hand a whole screen to `innerHTML`
+  (paint through `paintShell`, which no-ops on identical markup and keeps the `#scroll` node —
+  destroying that node destroys iOS scroll momentum mid-flick); never render an unbounded list in
+  full (the Log timeline paints a fortnight of days at a time and reveals more on approach, hiding
+  nothing behind a tap); never sweep the whole document on a timer. The one it cannot see: a repaint
+  driven by the network goes through `renderSoon()` (one per frame), never straight to `render()`.
+  This line exists because the app shipped for months rebuilding its entire shell on every render
+  and building every event ever logged into the Log tab — 498ms of frozen phone per repaint, four
+  months in, and worse every week a parent kept using it. Nothing was measuring.
 - **Data integrity:** offline-safe; no data loss; sync conflicts handled.
 - **Tests:** logic tested; verified in preview; SW cache bumped if assets changed.
 - **Notifications:** if added, gentle, capped, loss-aware, mutable.

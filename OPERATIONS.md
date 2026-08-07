@@ -12,11 +12,18 @@ Run these by hand before an **app** push (catches what the hook can't):
 ```sh
 node tools/serve.js &              # serve the repo on :8080
 node tools/validate.js             # JSON-LD parses, sitemap balanced, FAQ schema==visible lockstep
-node tools/smoke.js                # loads /app/ headless; fails on uncaught error / missing global
+node tools/smoke.js http://localhost:8080/app/   # fails on uncaught error / missing global
+node tools/uitest.js               # authed UI: dead taps + the contrast gate, both themes
+node tools/perf_check.js           # jitter gate: render budgets on a real 4-month history
 node tools/shot.js http://localhost:8080/<page>/ /tmp/x.png 390 full   # eyeball any page (see tools/shot.js)
 ```
-`tools/uitest.js` is a scaffolded authed-UI harness (drives the logged-in app to catch dead-taps); it needs a
-small localhost-only `?e2e=1` boot hook in the app to run — build that when dead-tap regressions justify it.
+`tools/uitest.js` and `tools/perf_check.js` both drive the logged-in app through the localhost-only
+`?e2e=1` boot hook. **Run perf_check after anything that touches rendering.** It seeds four months of
+real logging (2,500+ events) and measures at 4x CPU throttle, because the failure it exists to catch is
+invisible in a screenshot: the app spent months rebuilding its whole shell on every render and building
+every event ever logged into the Log tab, which is ~500ms of frozen phone per repaint. Budgets are ~4x
+the measured numbers, so it fails on a regression in kind (full-shell rebuild, unwindowed list,
+per-second document sweep), not on laptop noise.
 
 ## If a push breaks prod — rollback
 - **Site/app (Cloudflare):** the dashboard keeps every deployment → Deployments → **Rollback** to the last good one (instant). Or `git revert` + push.
@@ -43,6 +50,7 @@ keeps a future backend swap (e.g. to Cloudflare D1) a contained job rather than 
 - `tools/shot.js` — headless screenshots (the mcp preview tool is broken here; uses the system Chrome)
 - `tools/smoke.js` — app load smoke test
 - `tools/validate.js` — marketing static validation
-- `tools/uitest.js` — authed-UI harness scaffold (needs the `?e2e=1` boot hook)
+- `tools/uitest.js` — authed-UI harness: dead taps + WCAG contrast in both themes (`?e2e=1`)
+- `tools/perf_check.js` — jitter gate: render/tick budgets on a seeded 4-month history (`?e2e=1`)
 - `tools/gen_sitemap.py` — stamps article lastmods
 - `test/` — Firestore rules emulator test (needs Java): `cd test && npm i && npm run test:rules`
