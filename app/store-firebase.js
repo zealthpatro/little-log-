@@ -109,6 +109,7 @@
   var pregBytesMigrating = false;   // one in-flight migration pass at a time
   window.LL.memberEmails = {};      // PRIV-2: owner-only mirror of /memberEmails (uid -> email)
   var memberEmailsUnsub = null;     // owner-only listener on /memberEmails
+  var avatarClaimT = null;          // debounce: write down which bear is ours once the roster settles
   var memberEmailsMigrated = false; // one owner migration attempt per session
   var ownEmailWritten = false;      // wrote my own memberEmails doc this session
 
@@ -600,6 +601,7 @@
     ownPregPhotoIds = {}; otherPregPhotoIds = {};
     PhotoStore.privIds = {}; PhotoStore.map = {}; // one account's photo bytes never survive into the next session
     if (memberEmailsUnsub) { try { memberEmailsUnsub(); } catch (e) {} memberEmailsUnsub = null; }
+    if (avatarClaimT) { clearTimeout(avatarClaimT); avatarClaimT = null; } // never claim a bear into the account being left
     window.LL.memberEmails = {}; memberEmailsMigrated = false; ownEmailWritten = false;
     hhRef = eventsRef = photosRef = notesRef = null;
     state.notes = [];
@@ -1343,6 +1345,16 @@
       window.LL.hhPending = d.pendingInvites || {};
       window.LL.pro = d.pro || null; // Pro entitlement: written only by the billing Worker
       window.LL.householdId = hid;
+      // A bear that is only ever computed would change every time the circle grows, so the first
+      // time one is assigned we write it down (cubby-extras.js, cubbyClaimAvatar: our own uid only,
+      // never over an existing avatar). Re-armed on every household snapshot and run once things
+      // settle, because the claim has to see the WHOLE roster -- and, for a baby, the applied app
+      // blob -- or it books a bear someone else is already wearing.
+      if (avatarClaimT) clearTimeout(avatarClaimT);
+      avatarClaimT = setTimeout(function () {
+        avatarClaimT = null;
+        try { if (window.cubbyClaimAvatar) window.cubbyClaimAvatar(); } catch (e) {}
+      }, 2000);
       // Pregnancy-journey listeners depend on the member set (a non-owner tries each member's
       // doc). (Re)subscribe whenever membership changes, including the very first snapshot.
       var membersSig = stableStringify(d.members || {});

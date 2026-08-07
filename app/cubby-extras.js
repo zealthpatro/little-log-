@@ -13,9 +13,11 @@
   function lighten(hexc, amt) { var c = toRGB(hexc); return '#' + hx(c[0] + (255 - c[0]) * amt) + hx(c[1] + (255 - c[1]) * amt) + hx(c[2] + (255 - c[2]) * amt); }
 
   /* The legacy palette. It is no longer what anyone SEES -- the painted portraits below are --
-     but it is still the key that every existing person's avatar is stored under, so variantFor
-     has to keep returning exactly what it always did or the migration changes people's bears.
-     ACCS is likewise kept only so the hash steps the same way it always has. */
+     but it is still the key that an existing person's stored avatar.fur is written in, which is
+     what FUR_TONE maps. variantFor is no longer consulted when a bear is assigned (see WHICH BEAR
+     IS WHOSE below: hashing the uid was the bug), and stays only as the exported legacy helper
+     and the source of cubbyBear's default fur. ACCS keeps its order so an avatar saved by an
+     older build still draws the accessory that person chose. */
   var FURS = ['#C4863F', '#9C6B3D', '#E0A96D', '#6E4E36', '#B8843A', '#D7B27E', '#8C8C8C', '#46403A'];
   var ACCS = ['none', 'glasses', 'bow', 'flower', 'cap', 'bowtie', 'headphones', 'crown'];
 
@@ -134,19 +136,166 @@
   function toneForFur(f) { return FUR_TONE[String(f || '').toUpperCase()] || 'cream'; }
   function toneOf(slug) { return String(slug || '').replace(/^av-|^cub-/, '').replace(/-[ab]$/, ''); }
 
-  /* kind: 'baby' -> cub sculpt, anything else -> adult. seed keeps the old deterministic
-     uid -> variant hash, so an auto-assigned person keeps the bear they already had.
-     The pose bit is salted rather than taken from the same hash: variantFor picks the fur
-     with h % 8, so the low bit is already spoken for and reusing it would lock every tone
-     to one pose. */
-  function artFor(kind, seed, avatar) {
+  /* ============================================================
+     WHICH BEAR IS WHOSE
+     Twelve painted adults exist, so a four-person circle should show four different people.
+     Hashing the uid does not do that, and salting the hash does not fix it.
+
+     hashStr is h = h*31 + c, so hashStr(A + B) = hashStr(A) * 31^|B| + hashStr(B). 31 is odd,
+     31^|B| is odd, and therefore hashStr('pose:' + uid) & 1 === (hashStr('pose:') & 1) XOR
+     (hashStr(uid) & 1). The salt is a CONSTANT BIT FLIP, not decorrelation: the pose bit was
+     just the parity of the fur index. Since the fur index was h % 8 and the pose was h & 1,
+     the two were locked together and only six of the twelve portraits could ever be produced,
+     skewed 25 / 25 / 12.5 / 12.5 / 12.5 / 12.5. Two people collided 18.8% of the time and four
+     people 76.1% -- worse than the eight flat SVG bears this art replaced (9.1% at four).
+
+     So the fix is not a better hash. It is to stop asking a hash a question it cannot answer,
+     and to assign from what the household already shows:
+
+       1. Anyone with a bear KEEPS it. An explicit pick (avatar.art) or a legacy stored fur
+          (avatar.fur, mapped by the table above) is a fact about that person, never recomputed.
+       2. Anyone without one takes the variant LEAST USED by the rest of the household, ties
+          broken by their own uid so every device computes the same answer.
+       3. The moment a bear is assigned it is written down (see cubbyClaimAvatar), so a person
+          never changes bear as the circle grows. Stability beats a marginally better spread.
+
+     mix32 is the avalanche step hashStr never had (the lowbias32 finalizer). It is used ONLY
+     for the tie-break. The legacy migration path still uses raw hashStr, untouched, because
+     changing it would change the bear of everyone who already has one.
+     ============================================================ */
+  function mix32(h) {
+    h = h >>> 0;
+    h ^= h >>> 16; h = Math.imul(h, 0x7feb352d);
+    h ^= h >>> 15; h = Math.imul(h, 0x846ca68b);
+    h ^= h >>> 16; return h >>> 0;
+  }
+  function seedRank(id) { return mix32(hashStr(id)); }
+  function poolFor(kind) { return (kind === 'baby') ? CUB_ART : ADULT_ART; }
+
+  /* The bear this person is already committed to, or null if they have never been given one.
+     Two ways to be committed: they picked one (avatar.art), or they carry a legacy fur from
+     before the portraits existed, which the table above maps. The legacy branch is byte-for-byte
+     what shipped in v244 -- same tone table, same pose bit -- so nobody who already has a bear
+     wakes up as someone else. (The pose bit is sound HERE: for a stored fur the tone does not
+     come from the hash, so the parity is an independent coin. It was only broken when the fur
+     came from the same hash.) */
+  function storedSlug(kind, id, avatar) {
     avatar = avatar || {};
     var isCub = (kind === 'baby');
     if (avatar.art && ART_SET[avatar.art] && isCub === (avatar.art.indexOf('cub-') === 0)) return avatar.art;
-    var tone = toneForFur(avatar.fur || variantFor(seed).fur);
-    if (isCub) return 'cub-' + tone;
-    return 'av-' + tone + '-' + ((hashStr('pose:' + seed) & 1) ? 'b' : 'a');
+    if (avatar.fur && FUR_TONE[String(avatar.fur).toUpperCase()]) {
+      var tone = toneForFur(avatar.fur);
+      return isCub ? ('cub-' + tone) : ('av-' + tone + '-' + ((hashStr('pose:' + id) & 1) ? 'b' : 'a'));
+    }
+    return null;
   }
+
+  /* Both rosters are read straight from what is already in memory, so this needs no extra
+     fetch and works offline. Members are sorted by uid: every device has the same map, so
+     every device walks it in the same order and shows the same person the same bear.
+     Babies are deliberately NOT sorted -- state.babies is creation order and a new baby is
+     appended, so an older sibling's cub cannot move when a new one arrives. */
+  function memberRoster() {
+    var LL = window.LL || {}, info = LL.memberInfo || {}, seen = {}, ids = [];
+    [LL.members || {}, info].forEach(function (m) {
+      for (var k in m) { if (Object.prototype.hasOwnProperty.call(m, k) && !seen[k]) { seen[k] = 1; ids.push(k); } }
+    });
+    ids.sort();
+    return ids.map(function (uid) { return { id: uid, avatar: (info[uid] || {}).avatar }; });
+  }
+  function babyRoster() {
+    var bs = [];
+    try { bs = (state && state.babies) || []; } catch (e) { bs = []; }
+    return bs.map(function (b) { return { id: b.id || b.name || 'baby', avatar: b.avatar }; });
+  }
+
+  function leastUsed(counts, pool, id) {
+    var min = Infinity, i;
+    for (i = 0; i < pool.length; i++) if (counts[pool[i]] < min) min = counts[pool[i]];
+    var tied = [];
+    for (i = 0; i < pool.length; i++) if (counts[pool[i]] === min) tied.push(pool[i]);
+    return tied[seedRank(id) % tied.length];
+  }
+
+  /* Least used in this household. Everyone already committed claims their bear first, then the
+     rest are dealt in roster order, each taking the emptiest slot. A circle of up to twelve
+     adults never repeats; the thirteenth starts a second lap. Deterministic all the way down:
+     same household, same answer, on every device and after every reload. */
+  function autoSlug(kind, id) {
+    var pool = poolFor(kind), counts = {}, i, s;
+    for (i = 0; i < pool.length; i++) counts[pool[i]] = 0;
+    var roster = (kind === 'baby') ? babyRoster() : memberRoster();
+    var pending = [];
+    for (i = 0; i < roster.length; i++) {
+      s = storedSlug(kind, roster[i].id, roster[i].avatar);
+      if (s && counts[s] != null) counts[s]++;
+      else if (!s) pending.push(roster[i].id);
+    }
+    for (i = 0; i < pending.length; i++) {
+      s = leastUsed(counts, pool, pending[i]);
+      if (pending[i] === id) return s;   // us: this is our bear
+      counts[s]++;
+    }
+    // Not in the roster: a household that has not loaded yet, or a relative who is not a
+    // member. Still deterministic, and still spread across all twelve.
+    return leastUsed(counts, pool, id);
+  }
+
+  // kind: 'baby' -> cub sculpt, anything else -> adult.
+  function artFor(kind, seed, avatar) {
+    return storedSlug(kind, seed, avatar) || autoSlug(kind, seed);
+  }
+
+  /* Write the assignment down the first time it is made, so a bear stops being a function of
+     who else is in the circle. Without this, Nana joining could hand Papa a different face.
+
+     Where it is stored: memberInfo.<uid>.avatar, the same per-uid slot the picker has always
+     written and the same slot every avatar is read from. It is a shared blob, so the write is
+     kept safe two ways -- this only ever touches OUR OWN uid key, and firestore.rules
+     onlyOwnMemberInfo() enforces the same thing on the server, so a caregiver joining cannot
+     rewrite anyone else's bear even if a future caller got this wrong.
+
+     A baby has no uid and no device of its own, so its bear lives on the baby object in the
+     shared app blob, exactly where the picker already puts it.
+
+     Never over an existing avatar, so an explicit pick always wins. */
+  var claiming = {};
+  function claimBabies() {
+    var bs;
+    try { bs = (state && state.babies) || []; } catch (e) { return; }
+    if (!bs.length) return;
+    var changed = false;
+    for (var i = 0; i < bs.length; i++) {
+      var b = bs[i], id = b.id || b.name || 'baby';
+      if (storedSlug('baby', id, b.avatar)) continue;
+      var slug = autoSlug('baby', id);
+      b.avatar = { art: slug, fur: TONE_FUR[toneOf(slug)] || TONE_FUR.cream, acc: 'none', auto: true };
+      changed = true;
+    }
+    if (changed) { try { persist(); } catch (e) {} }
+  }
+  window.cubbyClaimAvatar = function () {
+    try {
+      var LL = window.LL || {};
+      var uid = LL.auth && LL.auth.currentUser && LL.auth.currentUser.uid;
+      var info = LL.memberInfo || {};
+      // Signed in, household loaded, and we are actually in it. Claiming against a roster that
+      // has not arrived would book a bear someone else is already wearing.
+      if (uid && LL.db && LL.householdId && info[uid] && !claiming[uid]
+          && !storedSlug('member', uid, info[uid].avatar)) {
+        var slug = autoSlug('member', uid);
+        var avatar = { art: slug, fur: TONE_FUR[toneOf(slug)] || TONE_FUR.cream, acc: 'none', auto: true };
+        claiming[uid] = 1;
+        var u = {}; u['memberInfo.' + uid + '.avatar'] = avatar;
+        // No optimistic local echo: the SDK applies the write to the local cache and re-emits the
+        // snapshot immediately, so the bear is on screen either way. If the write is rejected the
+        // cache rolls back and the next snapshot tries again.
+        LL.db.collection('households').doc(LL.householdId).update(u)
+          .catch(function () { claiming[uid] = 0; });
+      }
+    } catch (e) {}
+    claimBabies();
+  };
 
   function artImg(slug, size) {
     if (!ART_SET[slug]) slug = 'av-cream-a';
