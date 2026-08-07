@@ -43,7 +43,33 @@ const ART_ALIAS = {
   'LC-255': 'LC-161',                                                        // First trip abroad -> First flight
   'LC-218': 'LC-210', 'LC-220': 'LC-210', 'LC-222': 'LC-210', 'LC-224': 'LC-210',   // Mama variants -> Mama and me
   'LC-221': 'LC-211', 'LC-223': 'LC-211', 'LC-225': 'LC-211',                       // Papa variants -> Papa and me
-  'LC-219': 'LC-214', 'LC-226': 'LC-214', 'LC-227': 'LC-214', 'LC-228': 'LC-214', 'LC-229': 'LC-214' // family variants -> My family
+  'LC-219': 'LC-214', 'LC-226': 'LC-214', 'LC-227': 'LC-214', 'LC-228': 'LC-214', 'LC-229': 'LC-214', // family variants -> My family
+
+  // --- shares that used to be duplicated PNG BYTES in art-src/ (35 copies, ~40.6 MB) ---
+  // One painted scene was copied on disk under every slug that reuses it, so the reuse was
+  // invisible to anyone reading this file and the sources cost 40 MB more than they needed to.
+  // Same baked output, stated once, here.
+  'LC-077': 'LC-076', 'LC-078': 'LC-076', 'LC-079': 'LC-076', 'LC-080': 'LC-076', // days 3-6 old -> the two-days-old sleeping newborn
+  'LC-196': 'LC-192', 'LC-197': 'LC-192',                                          // growing fast / tiny but mighty -> I am brave
+  'LC-199': 'LC-194', 'LC-205': 'LC-194', 'LC-207': 'LC-194',                      // smiles + laughter -> I am happy
+  'LC-201': 'LC-191',                                                              // I made a funny face -> I am cheeky
+  'LC-206': 'LC-190',                                                              // Today I surprised everyone -> I am curious
+  'LC-198': 'LC-193',                                                              // I had a big day -> I am sleepy
+  'LC-208': 'LC-195', 'LC-209': 'LC-195',                                          // today was special / a moment to remember -> I am loved
+  'LC-265': 'LC-202',                                                              // I ate... -> I had a messy meal
+  'LC-276': 'LC-275',                                                              // a hard day we got through -> something sweet happened
+  'LC-279': 'LC-278',                                                              // this made us proud -> a big milestone
+  'LC-268': 'LC-264', 'LC-269': 'LC-264', 'LC-274': 'LC-264',                      // said/smiled/laughed prompts -> one speech-bubble design
+  'LC-272': 'LC-270', 'LC-285': 'LC-270',                                          // letter prompts -> one "note from" design
+  // the open-ended journaling prompts all share one deliberately near-empty design
+  'LC-261': 'LC-260', 'LC-262': 'LC-260', 'LC-263': 'LC-260', 'LC-266': 'LC-260',
+  'LC-273': 'LC-260', 'LC-277': 'LC-260', 'LC-280': 'LC-260', 'LC-281': 'LC-260',
+  'LC-282': 'LC-260', 'LC-283': 'LC-260', 'LC-284': 'LC-260', 'LC-286': 'LC-260',
+  // NOTE: month 2 borrowing month 1 is a stand-in, not a design choice — at one and two months
+  // pregnant the bump reads the same, but this is the one entry worth replacing with its own art.
+  'LC-024': 'LC-023'
+  // Monthly growth 18-23 months (LC-107..LC-112) is deliberately NOT aliased: each month has
+  // its own illustration so a toddler's months don't repeat down the list.
 };
 
 (async () => {
