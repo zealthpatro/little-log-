@@ -1770,7 +1770,14 @@ var _renderQueued=false;
 function renderSoon(){
   if(_renderQueued) return;
   _renderQueued=true;
-  requestAnimationFrame(function(){ _renderQueued=false; try{ render(); }catch(e){} });
+  var fire=function(){ if(!_renderQueued) return; _renderQueued=false; try{ render(); }catch(e){} };
+  // Armed twice on purpose. requestAnimationFrame does not fire on a hidden or frozen page, and if
+  // that one callback is ever dropped (a backgrounded tab Safari discards and restores) the queued
+  // flag would stay up forever and every later listener update would quietly stop painting: a
+  // caregiver's feeds landing in the data and never reaching the screen. The timer is the floor.
+  // Whichever runs first wins; the flag makes the second a no-op.
+  requestAnimationFrame(fire);
+  setTimeout(fire, 250);
 }
 window.renderSoon=renderSoon;
 
@@ -2827,9 +2834,17 @@ function paintTimeline(){
    the next fortnight is painted in, so there is nothing to wait for and nothing to tap. */
 function initTimelineReveal(){
   if(_tlIO){ _tlIO.disconnect(); _tlIO=null; }
-  if(typeof IntersectionObserver!=='function'){ if(document.getElementById('tlMore')) growTimeline(); return; }
   const sen=document.getElementById('tlMore'), root=document.getElementById('scroll');
   if(!sen||!root) return;
+  if(typeof IntersectionObserver!=='function'){
+    // No observer (a very old browser): watch the scroll instead. The older days must never become
+    // unreachable — that would be losing her history to save work, which is not a trade we make.
+    if(!root.__tlScroll){
+      root.__tlScroll=function(){ if(root.scrollTop+root.clientHeight>root.scrollHeight-700) growTimeline(); };
+      root.addEventListener('scroll', root.__tlScroll, {passive:true});
+    }
+    return;
+  }
   _tlIO=new IntersectionObserver(function(ens){
     for(var i=0;i<ens.length;i++) if(ens[i].isIntersecting){ growTimeline(); return; }
   },{root:root, rootMargin:'600px 0px'});
