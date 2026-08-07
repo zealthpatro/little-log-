@@ -7581,13 +7581,21 @@ function medNextDue(m){
   if(m.pattern.type==='daily'){
     const times=(m.pattern.times||[]).slice().sort();
     if(!times.length) return null;
-    const base=new Date(); base.setSeconds(0,0);
-    for(const t of times){
-      const [h,mm]=t.split(':').map(Number);
-      const cand=new Date(); cand.setHours(h,mm,0,0);
-      if(cand.getTime()>now()-60000) return cand.getTime();
-    }
-    // all passed -> first time tomorrow
+    const slots=times.map(t=>{ const [h,mm]=t.split(':').map(Number); const d=new Date(); d.setHours(h,mm,0,0); return d.getTime(); });
+    const last=lastDose(m.id);
+    /* The most recent slot that has already passed STAYS the due dose, so the row reads "overdue 1h"
+       instead of counting down to tonight. It used to survive only 60 seconds: at 8:01 the 8am dose
+       was not late, it was gone, and Home said the next dose was at 8pm. "Set times" is the schedule
+       a parent picks for a course of antibiotics, so the one most likely to matter was the one that
+       forgot. A missed dose now ends three ways only: it gets logged, the next slot supersedes it,
+       or the day does. */
+    const passed=slots.filter(s=>s<=now()).pop();
+    // Only ever nag about a slot the medicine was actually around for. Added at 9am, an 8am slot was
+    // never this medicine's to give, and opening on a red "overdue" would be a lie on day one.
+    if(passed!=null && passed>=(m.createdAt||0) && !(last&&last.time>=passed)) return passed;
+    const next=slots.find(s=>s>now());
+    if(next!=null) return next;
+    // every slot today is accounted for -> the first time tomorrow
     const [h,mm]=times[0].split(':').map(Number);
     const tm=new Date(); tm.setDate(tm.getDate()+1); tm.setHours(h,mm,0,0);
     return tm.getTime();
@@ -7598,9 +7606,21 @@ function fmtDue(ms){
   if(ms<=0){ const o=fmtDur(-ms); return -ms<60000?'due now':'overdue '+o; }
   return 'in '+fmtDur(ms);
 }
+/* How a prescription actually reads. A parent copying "three times a day" off a pharmacy label
+   should not have to divide 24 by anything, least of all at 2am with a sick baby.
+   Only the intervals a prescription is genuinely worded that way get a phrase: 4h is dispensed as
+   "every 4 hours", never as "six times a day", so it keeps the plain form.
+   The exact interval always stays alongside the phrase, and that is the safety-carrying half.
+   "Four times a day" is widely heard as waking hours, while "every 6h" means round the clock
+   including the 2am dose, and for a course of antibiotics that gap is the whole point. */
+const DOSE_PHRASE={1:'Hourly',6:'Four times a day',8:'Three times a day',12:'Twice a day',24:'Once a day'};
+function dosePhrase(h){ return DOSE_PHRASE[h]||''; }
 function medScheduleText(m){
   if(m.pattern.type==='asNeeded') return 'As needed';
-  if(m.pattern.type==='everyX') return 'Every '+m.pattern.hours+'h';
+  if(m.pattern.type==='everyX'){
+    const p=dosePhrase(m.pattern.hours);
+    return p ? p+' · every '+m.pattern.hours+'h' : 'Every '+m.pattern.hours+'h';
+  }
   if(m.pattern.type==='daily') return (m.pattern.times||[]).map(t=>fmtClock(timeToToday(t))).join(', ');
   return '';
 }
@@ -7643,10 +7663,18 @@ function renderMedSheet(editing){
   const d=medDraft, p=d.pattern;
   let schedUI='';
   if(p.type==='everyX'){
-    schedUI=`<div class="field"><label>Every how many hours?</label>
+    // The five ways a prescription is actually written, as one tap each. The stepper stays for
+    // anything unusual, and the line underneath always spells out the real interval so a preset is
+    // never the only thing a parent has to go on.
+    const phrase=dosePhrase(p.hours);
+    schedUI=`<div class="field"><label>How often?</label>
+      <div class="unit-toggle" style="margin-bottom:10px">
+        ${[[24,'Once'],[12,'Twice'],[8,'3×'],[6,'4×'],[1,'Hourly']].map(o=>`<button class="${p.hours===o[0]?'on':''}" onclick="medDraft.pattern.hours=${o[0]};renderMedSheet(${editing})">${o[1]}</button>`).join('')}
+      </div>
       <div class="stepper"><button onclick="medDraft.pattern.hours=Math.max(1,medDraft.pattern.hours-1);renderMedSheet(${editing})">−</button>
-      <input type="number" value="${p.hours}" onchange="medDraft.pattern.hours=Math.max(1,+this.value)">
-      <button onclick="medDraft.pattern.hours+=1;renderMedSheet(${editing})">+</button></div></div>`;
+      <input type="number" value="${p.hours}" onchange="medDraft.pattern.hours=Math.max(1,+this.value);renderMedSheet(${editing})">
+      <button onclick="medDraft.pattern.hours+=1;renderMedSheet(${editing})">+</button></div>
+      <div class="csub" style="margin-top:8px">${phrase?phrase+', a dose every '+p.hours+'h':'A dose every '+p.hours+'h'} counting from the last one you log, overnight included.</div></div>`;
   } else if(p.type==='daily'){
     schedUI=`<div class="field"><label>Times of day</label>
       ${p.times.map((t,i)=>`<div style="display:flex;gap:8px;margin-bottom:8px"><input type="time" value="${t}" onchange="medDraft.pattern.times[${i}]=this.value" style="flex:1;border:2px solid var(--line);background:var(--surface-2);border-radius:12px;padding:11px;font-weight:700;font-family:var(--font-body);font-size:15px;color:var(--ink)">
@@ -7662,7 +7690,7 @@ function renderMedSheet(editing){
       </select></div>
     </div>
     <div class="field"><label>Schedule</label><div class="unit-toggle">
-      <button class="${p.type==='everyX'?'on':''}" onclick="medDraft.pattern.type='everyX';renderMedSheet(${editing})">Every X hrs</button>
+      <button class="${p.type==='everyX'?'on':''}" onclick="medDraft.pattern.type='everyX';renderMedSheet(${editing})">Every few hours</button>
       <button class="${p.type==='daily'?'on':''}" onclick="medDraft.pattern.type='daily';renderMedSheet(${editing})">Set times</button>
       <button class="${p.type==='asNeeded'?'on':''}" onclick="medDraft.pattern.type='asNeeded';renderMedSheet(${editing})">As needed</button>
     </div></div>

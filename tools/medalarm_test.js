@@ -7,7 +7,7 @@
  * off switch. No unit test could have caught it, because nothing wrong happens until real time
  * passes inside the real add flow.
  *
- * So this drives the ACTUAL UI (tap Add a medicine, type, tap Every X hrs, tap Add medicine, tap
+ * So this drives the ACTUAL UI (tap Add a medicine, type, tap Every few hours, tap Add medicine, tap
  * Dose), moves the clock by moving the data, and then watches the real 1s tick. It FAILS if a
  * single due event produces more than one alert, or if the parent has no one-tap way out.
  *
@@ -159,7 +159,7 @@ async function tapText(page, selector, text) {
   await sleep(450);
   await page.type('#mName', 'Calpol');
   await page.type('#mDose', '2.5');
-  check(await tapText(page, '.unit-toggle button', 'Every X hrs'), 'tapped "Every X hrs"');
+  check(await tapText(page, '.unit-toggle button', 'Every few hours'), 'tapped "Every few hours"');
   await sleep(300);
   await page.evaluate(h => { var i = document.querySelector('.stepper input'); i.value = h; i.dispatchEvent(new Event('change')); }, HOURS);
   await sleep(200);
@@ -365,6 +365,59 @@ async function tapText(page, selector, text) {
   check(offSwitch && offSwitch.describesSnooze && offSwitch.describesDismiss,
     'and the copy describes BOTH ways out, so it is not promising something the code cannot do', JSON.stringify(offSwitch));
   check(offSwitch && offSwitch.noEmDash, 'reminders copy carries no em-dashes (house voice)');
+
+  // ---- 10. A MISSED DOSE ON THE "SET TIMES" SCHEDULE STAYS VISIBLE ----------------------------
+  /* This gate had ZERO daily coverage (`grep -c daily tools/medalarm_test.js` returned 0), and the
+     hole was exactly the shape of the bug it missed. medNextDue only ever returned a fixed time
+     still ahead, or less than 60 seconds behind. Sixty-one seconds after 8am the dose was not late,
+     it was gone, and the row said cheerfully that the next one was tonight. "Set times" is what a
+     parent picks for an antibiotic course, so the schedule most likely to be safety-critical was
+     the one that forgot.
+
+     Everything below is pinned to '00:00' and '23:59' rather than to offsets from the current
+     clock, so it reads identically whether the gate runs at 9am or 11pm. */
+  console.log('\n10. a missed dose on "Set times" reads as overdue, it does not roll to tomorrow');
+  const clockRoom = await page.evaluate(() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); });
+  check(clockRoom >= 2 && clockRoom <= 1437, 'the clock leaves room for a passed slot and a future one',
+    `(minutes past midnight: ${clockRoom}; this gate is blind only between 00:00-00:01 and 23:58-23:59)`);
+
+  const daily = await page.evaluate(() => {
+    const DAY = 86400000;
+    function slot(hhmm) { const p = hhmm.split(':').map(Number); const d = new Date(); d.setHours(p[0], p[1], 0, 0); return d.getTime(); }
+    function mk(times, createdAt, doseAt) {
+      const m = { id: 'dtest', babyId: state.activeBabyId, name: 'Amoxicillin', dose: '5', unit: 'ml',
+        pattern: { type: 'daily', times: times.slice() }, remind: true, active: true, createdAt: createdAt };
+      state.meds = (state.meds || []).filter(x => x.id !== 'dtest').concat([m]);
+      state.events = (state.events || []).filter(e => e.medId !== 'dtest');
+      if (doseAt) state.events.unshift({ id: 'ev-dtest', type: 'medicine', medId: 'dtest', babyId: state.activeBabyId, time: doseAt });
+      return m;
+    }
+    const out = { slot0: slot('00:00'), slot1: slot('00:01'), slotEnd: slot('23:59') };
+    const yesterday = Date.now() - DAY;
+
+    // (a) due at 00:00, never given, on a medicine that already existed when the slot passed
+    out.missed = medNextDue(mk(['00:00', '23:59'], yesterday, null));
+    out.missedText = typeof fmtDue === 'function' ? fmtDue(out.missed - Date.now()) : '(no fmtDue)';
+    // (b) the same medicine once the dose IS logged: it moves on to tonight
+    out.afterDose = medNextDue(mk(['00:00', '23:59'], yesterday, out.slot0 + 300000));
+    // (c) a medicine ADDED after the slot passed must never open on a retro-nag
+    out.freshlyAdded = medNextDue(mk(['00:00', '23:59'], Date.now(), null));
+    // (d) two passed slots: the newer supersedes the older, so one miss cannot nag all day
+    out.superseded = medNextDue(mk(['00:00', '00:01'], yesterday, null));
+
+    state.meds = (state.meds || []).filter(x => x.id !== 'dtest');
+    state.events = (state.events || []).filter(e => e.medId !== 'dtest');
+    return out;
+  });
+
+  const rolled = daily.missed === daily.slotEnd;
+  check(daily.missed === daily.slot0, 'a missed dose is still the dose that is due',
+    rolled ? '(it silently rolled forward to tonight — the exact regression)' : `(due ${new Date(daily.missed).toTimeString().slice(0, 5)})`);
+  check(/^overdue/.test(String(daily.missedText)), 'and the parent reads it as overdue, not as a countdown',
+    `(row says "${daily.missedText}")`);
+  check(daily.afterDose === daily.slotEnd, 'once the dose is logged it moves on to the next time');
+  check(daily.freshlyAdded === daily.slotEnd, 'a medicine added after the slot never opens on a retro-nag');
+  check(daily.superseded === daily.slot1, 'a newer missed slot supersedes an older one, so one miss cannot nag all day');
 
   // ---- harness integrity, re-checked at the end ------------------------------------------------
   const stillSpied = await page.evaluate(() => /__spy/.test(String(window.toast)) && /__spy/.test(String(window.cubbyHaptic)));
