@@ -3653,20 +3653,24 @@ function babyAvatarBox(b, cls, extraStyle){
   if(typeof window.babyBearSvg==='function') return `<div class="${cls} bear-av" style="${extraStyle||''}">${window.babyBearSvg(b)}</div>`;
   return `<div class="${cls}" style="background:${b.color};${extraStyle||''}">${b.name.charAt(0).toUpperCase()}</div>`;
 }
-// A warm placeholder bear per relationship, shown until the real photo exists.
+// A warm placeholder bear per relationship, shown until the real photo exists. These are the
+// painted portraits from app/avatars/, same set the circle uses. The old map put a beanie on
+// a sibling, headphones on a friend and a bow tie on an uncle, which broke the no-clothes rule
+// on a second surface (these render at 56px on the journey tiles); age and role are carried by
+// fur and sculpt instead. A sibling and a cousin are children, so they get the cub sculpt.
 const RELATION_BEAR = {
-  nana:{fur:'#D7B27E',acc:'flower'}, grandma:{fur:'#D7B27E',acc:'flower'},
-  grandpa:{fur:'#8C8C8C',acc:'glasses'}, papa:{fur:'#9C6B3D',acc:'none'}, mama:{fur:'#C4863F',acc:'bow'},
-  auntie:{fur:'#E0A96D',acc:'bow'}, uncle:{fur:'#6E4E36',acc:'bowtie'},
-  sibling:{fur:'#E0A96D',acc:'cap'}, friend:{fur:'#B8843A',acc:'headphones'}, other:{fur:'#C4863F',acc:'none'}
+  nana:'av-oat-b', grandma:'av-cream-b',
+  grandpa:'av-ash-a', papa:'av-cinnamon-a', mama:'av-honey-a',
+  auntie:'av-oat-a', uncle:'av-cocoa-a',
+  sibling:'cub-oat', cousin:'cub-honey', friend:'av-honey-b', other:'av-cream-a'
 };
 // substring match against the map keys (order = insertion order); keep most-specific keys first if the map grows.
 function relKeyFromLabel(label){ const s=(label||'').toLowerCase(); for(const k in RELATION_BEAR){ if(s.indexOf(k)>=0) return k; } if(s.indexOf('nan')>=0) return 'nana'; return 'other'; }
 // uid present + a real circle member -> their own avatar bear; else a relationship bear.
 function journeyBearArt(relation, uid, size){
   if(uid && typeof window.memberAvatarSvg==='function'){ const info=(window.LL&&window.LL.memberInfo)||{}; if(info[uid]) return window.memberAvatarSvg(uid, size||64); }
-  const v = RELATION_BEAR[relation] || RELATION_BEAR.other;
-  return (typeof window.cubbyBear==='function') ? window.cubbyBear({fur:v.fur, acc:v.acc, size:size||64}) : '🐻';
+  const slug = RELATION_BEAR[relation] || RELATION_BEAR.other;
+  return (typeof window.cubbyArtImg==='function') ? window.cubbyArtImg(slug, size||64) : '🐻';
 }
 // Prompt objects carry RAW title/sub (renderers MUST escapeHtml them). onclick is pre-escaped
 // here: jArg makes a user string safe for both the single-quoted JS arg and the double-quoted
@@ -9830,17 +9834,19 @@ function startAnim(){
 function setDecor(k){ if(!photoEditor)return; photoEditor.decor=k; if(k==='none'&&photoEditor.anim){ photoEditor.anim=false; stopAnim(); } render(); drawPhoto(); }
 function setDecorDensity(d){ if(!photoEditor)return; photoEditor.decorDensity=d; render(); drawPhoto(); }
 function toggleAnim(){ if(!photoEditor)return; photoEditor.anim=!photoEditor.anim; render(); if(photoEditor.anim) startAnim(); else { stopAnim(); drawPhoto(); } }
-/* ---- Character on the card: the baby's own Cubby bear (cubbyBear SVG), rasterized once and
-   cached so it draws cheaply every animation frame. ---- */
+/* ---- Character on the card: the baby's own Cubby bear (a painted portrait from
+   app/avatars/), loaded once and cached so it draws cheaply every animation frame.
+   The URL is same-origin on purpose: a cross-origin one taints the canvas and the
+   keepsake download stops working with no error anyone would see. ---- */
 function ensureCharImg(){
   var ed=photoEditor; if(!ed||ed._charImg||ed._charLoading) return;
-  var b=activeBaby(); if(!b||typeof window.babyBearSvg!=='function') return;
-  var svg; try{ svg=window.babyBearSvg(b,240); }catch(e){ return; } if(!svg) return;
+  var b=activeBaby(); if(!b||typeof window.cubbyBabyArtSrc!=='function') return;
+  var src; try{ src=window.cubbyBabyArtSrc(b); }catch(e){ return; } if(!src) return;
   ed._charLoading=true;
   var im=new Image();
   im.onload=function(){ if(photoEditor){ photoEditor._charImg=im; photoEditor._charLoading=false; if(!photoEditor.anim) drawPhoto(); } };
   im.onerror=function(){ if(photoEditor) photoEditor._charLoading=false; };
-  im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+  im.src=src;
 }
 // Watercolour bear-art tiles (text-free ov_*.webp, baked by tools/bake_overlays.js) — the brand
 // art finally travels on exported keepsakes. Free tier: our art on shares is marketing, not a lock.
@@ -9869,8 +9875,14 @@ function drawCharacter(ctx,W,H,px,py,pw,ph){
   }
   if(!ed.character) return;
   if(!ed._charImg){ ensureCharImg(); return; }
+  // The SVG bear drew its own disc and left the corners clear. The painted file is a square
+  // with its paper baked in, so the disc is clipped here instead -- otherwise the export
+  // gets a cream rectangle stamped on the photo.
   var s2=pw*0.3, x2=px+pw-s2*0.92, y2=py+ph-s2*0.92;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x2+s2/2,y2+s2/2,s2/2,0,Math.PI*2); ctx.closePath(); ctx.clip();
   ctx.drawImage(ed._charImg,x2,y2,s2,s2);
+  ctx.restore();
 }
 function setChar(){ if(!photoEditor)return; photoEditor.character=!photoEditor.character; photoEditor.charArt=null; if(photoEditor.character){ photoEditor._charImg=null; photoEditor._charLoading=false; ensureCharImg(); } render(); drawPhoto(); }
 function setCharArt(slug){

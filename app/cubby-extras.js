@@ -1,8 +1,8 @@
 /* ============================================================
    CUBBY EXTRAS
-   - cubbyBear(): parametric SVG bear used as avatars
-   - per-member + per-baby avatar variants (auto-assigned, changeable)
-   - openBearPicker(): choose fur + accessory
+   - the painted avatar portraits (app/avatars/*.webp) + how a person resolves to one
+   - cubbyBear(): the old parametric SVG bear, now only the offline/decode fallback
+   - openBearPicker(): choose a painted bear
    - custom warm time picker (replaces the native one)
    Loads after the app + store-firebase, talks to them via globals.
    ============================================================ */
@@ -12,14 +12,21 @@
   function toRGB(h) { h = h.replace('#', ''); return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]; }
   function lighten(hexc, amt) { var c = toRGB(hexc); return '#' + hx(c[0] + (255 - c[0]) * amt) + hx(c[1] + (255 - c[1]) * amt) + hx(c[2] + (255 - c[2]) * amt); }
 
+  /* The legacy palette. It is no longer what anyone SEES -- the painted portraits below are --
+     but it is still the key that every existing person's avatar is stored under, so variantFor
+     has to keep returning exactly what it always did or the migration changes people's bears.
+     ACCS is likewise kept only so the hash steps the same way it always has. */
   var FURS = ['#C4863F', '#9C6B3D', '#E0A96D', '#6E4E36', '#B8843A', '#D7B27E', '#8C8C8C', '#46403A'];
   var ACCS = ['none', 'glasses', 'bow', 'flower', 'cap', 'bowtie', 'headphones', 'crown'];
-  var ACC_LABEL = { none: 'None', glasses: 'Glasses', bow: 'Bow', flower: 'Flower', cap: 'Beanie', bowtie: 'Bow tie', headphones: 'Headphones', crown: 'Crown' };
 
   function hashStr(s) { var h = 0; s = String(s || ''); for (var i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) >>> 0; } return h; }
   function variantFor(seed) { var h = hashStr(seed); return { fur: FURS[h % FURS.length], acc: ACCS[Math.floor(h / FURS.length) % ACCS.length] }; }
 
-  /* ---------- the bear ---------- */
+  /* ---------- the old SVG bear ----------
+     Demoted to the fallback: it renders only when a painted WebP will not decode or was
+     never fetched before the household went offline (see cubbyArtFail). Nothing calls it
+     with an accessory any more, but accessory() stays so an avatar saved by an older build
+     still draws what that person chose rather than losing a limb. */
   function accessory(acc, fur) {
     var D = '#42301F';
     switch (acc) {
@@ -74,16 +81,110 @@
   window.cubbyBear = cubbyBear;
   window.cubbyVariantFor = variantFor;
 
+  /* ============================================================
+     THE PAINTED AVATARS
+     Eighteen hand-painted portraits (app/avatars/*.webp, baked by tools/bake_avatars.py)
+     replace the SVG bear everywhere a person or a baby is shown. Twelve adults, six fur
+     tones x two poses, plus six cubs, one per tone.
+
+     Adults get the adult sculpt and the baby gets the cub sculpt, because the app prints
+     "Mama Bear" and "Nana Bear" next to these and an all-cub circle contradicts the label.
+
+     The files keep their painted paper (opaque WebP) rather than being cut to alpha. That
+     is the opposite call from the spot-art cubs, and deliberately so: an avatar is a
+     disc-framed portrait, so the disc has to be filled in BOTH themes, whereas a 132px
+     cream disc floating on a dark empty state was the bug 5a13dd9 fixed. It is the same
+     call already made for welcome_cub and invite_bears -- where the art is the tile, the
+     paper stays. It also matches what shipped before: cubbyBear drew its own opaque
+     lighten(fur,.74) disc in both themes, and a baby's photo avatar is full-brightness in
+     night. Night gets a hairline (see the styles below), never a filter.
+     ============================================================ */
+  // Absolute and same-origin, exactly like /app/spot-art/: the keepsake canvas draws these,
+  // and a cross-origin URL would taint it and break the export silently.
+  var ART_BASE = '/app/avatars/';
+  var TONES = ['cream', 'oat', 'honey', 'cinnamon', 'cocoa', 'ash'];
+  var TONE_LABEL = { cream: 'Cream', oat: 'Oat', honey: 'Honey', cinnamon: 'Cinnamon', cocoa: 'Cocoa', ash: 'Ash' };
+  var ADULT_ART = [];
+  for (var ti = 0; ti < TONES.length; ti++) { ADULT_ART.push('av-' + TONES[ti] + '-a'); ADULT_ART.push('av-' + TONES[ti] + '-b'); }
+  var CUB_ART = TONES.map(function (t) { return 'cub-' + t; });
+  var ART_SET = {};
+  ADULT_ART.concat(CUB_ART).forEach(function (s) { ART_SET[s] = 1; });
+
+  /* Migration, applied at READ time so there is no Firestore write, no rules change, it
+     works offline and it is safe if the service worker serves the previous build for one
+     launch. Nobody wakes up as a different bear: a person's stored fur (or, for anyone who
+     never opened the picker, the fur their uid already hashes to) picks the painted tone.
+     Four of the eight map exactly; #46403A is the one deliberate change, because near-black
+     fur cannot carry this hand and disappears on a night surface, so it lightens to Cocoa. */
+  var FUR_TONE = {
+    '#D7B27E': 'oat',       // light tan, same family
+    '#E0A96D': 'oat',       // light honey, slightly less saturated
+    '#C4863F': 'honey',     // exact
+    '#B8843A': 'honey',     // imperceptible at 40px
+    '#9C6B3D': 'cinnamon',  // exact
+    '#6E4E36': 'cocoa',     // negligible
+    '#46403A': 'cocoa',     // deliberate lightening, see above
+    '#8C8C8C': 'ash'        // warmed to sit in the painted palette
+  };
+  // Back to the nearest legacy fur, so the SVG fallback and any client still running the
+  // previous build show the right-coloured bear. Cream has no legacy equivalent; the
+  // lightest tan is the closest thing the old palette could say.
+  var TONE_FUR = { cream: '#D7B27E', oat: '#D7B27E', honey: '#C4863F', cinnamon: '#9C6B3D', cocoa: '#6E4E36', ash: '#8C8C8C' };
+
+  function toneForFur(f) { return FUR_TONE[String(f || '').toUpperCase()] || 'cream'; }
+  function toneOf(slug) { return String(slug || '').replace(/^av-|^cub-/, '').replace(/-[ab]$/, ''); }
+
+  /* kind: 'baby' -> cub sculpt, anything else -> adult. seed keeps the old deterministic
+     uid -> variant hash, so an auto-assigned person keeps the bear they already had.
+     The pose bit is salted rather than taken from the same hash: variantFor picks the fur
+     with h % 8, so the low bit is already spoken for and reusing it would lock every tone
+     to one pose. */
+  function artFor(kind, seed, avatar) {
+    avatar = avatar || {};
+    var isCub = (kind === 'baby');
+    if (avatar.art && ART_SET[avatar.art] && isCub === (avatar.art.indexOf('cub-') === 0)) return avatar.art;
+    var tone = toneForFur(avatar.fur || variantFor(seed).fur);
+    if (isCub) return 'cub-' + tone;
+    return 'av-' + tone + '-' + ((hashStr('pose:' + seed) & 1) ? 'b' : 'a');
+  }
+
+  function artImg(slug, size) {
+    if (!ART_SET[slug]) slug = 'av-cream-a';
+    var dim = size ? (' width="' + size + '" height="' + size + '"') : '';
+    return '<img class="cb-av" src="' + ART_BASE + slug + '.webp"' + dim
+      + ' alt="" aria-hidden="true" decoding="async" data-tone="' + toneOf(slug) + '"'
+      + ' onerror="window.cubbyArtFail&amp;&amp;window.cubbyArtFail(this)">';
+  }
+
+  // Nothing is ever blank: a file that will not decode (or was never fetched before the
+  // household went offline) falls back to the old SVG in the same tone, and never in a hat.
+  window.cubbyArtFail = function (img) {
+    try {
+      var tone = img.getAttribute('data-tone') || 'cream';
+      var size = img.getAttribute('width');
+      img.outerHTML = cubbyBear({ fur: TONE_FUR[tone] || TONE_FUR.cream, acc: 'none', size: size ? +size : 0 });
+    } catch (e) {}
+  };
+
+  window.cubbyArtImg = artImg;
+  window.cubbyArtFor = artFor;
+  // The raw file URL, for the one caller that needs pixels rather than markup (the keepsake
+  // canvas rasterises the baby's bear onto the photo).
+  window.cubbyBabyArtSrc = function (b) {
+    if (!b) return '';
+    return ART_BASE + artFor('baby', b.id || b.name || 'baby', b.avatar) + '.webp';
+  };
+
+  // Kept under their old names: these are called from index.html and store-firebase.js in
+  // a dozen places, and the callers only ever drop the string into innerHTML.
   window.memberAvatarSvg = function (uid, size) {
     var info = (window.LL && window.LL.memberInfo) || {};
     var m = info[uid] || {};
-    var v = (m.avatar && m.avatar.fur) ? m.avatar : variantFor(uid || 'member');
-    return cubbyBear({ fur: v.fur, acc: v.acc, size: size });
+    return artImg(artFor('member', uid || 'member', m.avatar), size);
   };
   window.babyBearSvg = function (b, size) {
     if (!b) return '';
-    var v = (b.avatar && b.avatar.fur) ? b.avatar : variantFor(b.id || b.name || 'baby');
-    return cubbyBear({ fur: v.fur, acc: v.acc, size: size });
+    return artImg(artFor('baby', b.id || b.name || 'baby', b.avatar), size);
   };
 
   /* ---------- a small modal (independent of store-firebase's) ---------- */
@@ -102,51 +203,51 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
   /* ---------- avatar picker ---------- */
-  var pickState = null; // {kind, id, fur, acc}
+  var pickState = null; // {kind, id, art}
 
-  function currentVariant(kind, id) {
+  function currentArt(kind, id) {
     if (kind === 'member') {
       var m = (window.LL && window.LL.memberInfo && window.LL.memberInfo[id]) || {};
-      return (m.avatar && m.avatar.fur) ? { fur: m.avatar.fur, acc: m.avatar.acc } : variantFor(id);
+      return artFor('member', id, m.avatar);
     }
     var b = (state.babies || []).filter(function (x) { return x.id === id; })[0];
-    return (b && b.avatar && b.avatar.fur) ? { fur: b.avatar.fur, acc: b.avatar.acc } : variantFor(id);
+    return artFor('baby', id, b && b.avatar);
   }
 
   window.openBearPicker = function (kind, id) {
-    var v = currentVariant(kind, id);
-    pickState = { kind: kind, id: id, fur: v.fur, acc: v.acc };
+    pickState = { kind: kind, id: id, art: currentArt(kind, id) };
     renderPicker();
   };
 
   function renderPicker() {
     var p = pickState;
-    var furs = FURS.map(function (f) {
-      return '<button class="cu-sw' + (f === p.fur ? ' on' : '') + '" style="background:' + f + '" data-fur="' + f + '"></button>';
-    }).join('');
-    var accs = ACCS.map(function (a) {
-      return '<button class="cu-acc' + (a === p.acc ? ' on' : '') + '" data-acc="' + a + '">' + esc(ACC_LABEL[a]) + '</button>';
+    var set = (p.kind === 'baby') ? CUB_ART : ADULT_ART;
+    var thumbs = set.map(function (s) {
+      return '<button class="cu-art' + (s === p.art ? ' on' : '') + '" data-art="' + s + '"'
+        + ' aria-label="' + esc(TONE_LABEL[toneOf(s)] || 'Bear') + '" aria-pressed="' + (s === p.art) + '">'
+        + artImg(s, 72) + '</button>';
     }).join('');
     cuModal(
       '<div class="cu-head"><h2>Choose a bear</h2><button id="cuX" class="cu-x">×</button></div>'
-      + '<div class="cu-preview">' + cubbyBear({ fur: p.fur, acc: p.acc, size: 110 }) + '</div>'
-      + '<div class="cu-label">Fur</div><div class="cu-swatches">' + furs + '</div>'
-      + '<div class="cu-label">Accessory</div><div class="cu-accs">' + accs + '</div>'
+      + '<div class="cu-preview">' + artImg(p.art, 110) + '</div>'
+      // Says the quiet part out loud: the hats, bows and glasses are gone, and the bear
+      // underneath is the one they already had.
+      + '<div class="cu-note">Bears don\'t wear things now. Yours is the same bear, painted by hand.</div>'
+      + '<div class="cu-arts">' + thumbs + '</div>'
       + '<button id="cuSave" class="cu-btn">Save</button>'
     );
     document.getElementById('cuX').onclick = cuClose;
     document.getElementById('cuSave').onclick = savePick;
-    Array.prototype.forEach.call(document.querySelectorAll('.cu-sw'), function (b) {
-      b.onclick = function () { pickState.fur = b.getAttribute('data-fur'); renderPicker(); };
-    });
-    Array.prototype.forEach.call(document.querySelectorAll('.cu-acc'), function (b) {
-      b.onclick = function () { pickState.acc = b.getAttribute('data-acc'); renderPicker(); };
+    Array.prototype.forEach.call(document.querySelectorAll('.cu-art'), function (b) {
+      b.onclick = function () { pickState.art = b.getAttribute('data-art'); renderPicker(); };
     });
   }
 
   function savePick() {
     var p = pickState; if (!p) return;
-    var avatar = { fur: p.fur, acc: p.acc };
+    // fur and acc are written alongside art, not instead of it: the service worker can serve
+    // the previous build for one launch after a deploy, and that client still reads fur.
+    var avatar = { art: p.art, fur: TONE_FUR[toneOf(p.art)] || TONE_FUR.cream, acc: 'none' };
     function finish() {
       cuClose();
       // The first-run identity sheet keeps its own bear preview (#llFrBear) open under this
@@ -187,6 +288,10 @@
     } else {
       var b = (state.babies || []).filter(function (x) { return x.id === p.id; })[0];
       if (b) { b.avatar = avatar; persist(); }
+      // The keepsake editor caches the rasterised bear; drop it so a new pick is picked up.
+      // (photoEditor is a top-level `let` in index.html: shared global lexical scope, not a
+      // property of window, so it is reached bare. try/catch covers the load-order TDZ.)
+      try { if (photoEditor) { photoEditor._charImg = null; photoEditor._charLoading = false; } } catch (e) {}
       finish();
     }
   }
@@ -362,12 +467,13 @@
     + '.cu-x{border:none;background:none;font-size:27px;line-height:1;color:#9a8d80;cursor:pointer;}'
     + '.cu-preview{width:110px;height:110px;margin:6px auto 14px;border-radius:50%;overflow:hidden;box-shadow:0 6px 18px rgba(0,0,0,.12);}'
     + '.cu-label{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#9a8d80;font-weight:700;margin:12px 0 8px;}'
-    + '.cu-swatches{display:flex;flex-wrap:wrap;gap:10px;}'
-    + '.cu-sw{width:38px;height:38px;border-radius:50%;border:3px solid transparent;cursor:pointer;}'
-    + '.cu-sw.on{border-color:#2C2521;}'
-    + '.cu-accs{display:flex;flex-wrap:wrap;gap:8px;}'
-    + '.cu-acc{border:1px solid #E0D7C7;background:#FBF7EF;border-radius:999px;padding:8px 14px;font-size:13px;font-weight:600;color:#6E635B;cursor:pointer;font-family:inherit;}'
-    + '.cu-acc.on{background:#C97FA0;color:#fff;border-color:#C97FA0;}'
+    /* The picker is now a grid of the portraits themselves. Fur swatches and the accessory
+       row are gone: the painting IS the swatch, and there is nothing left to put on it. */
+    + '.cu-note{font-size:12.5px;line-height:1.45;color:#6E635B;text-align:center;margin:0 0 14px;}'
+    + '.cu-arts{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}'
+    + '.cu-art{border:3px solid transparent;background:none;padding:0;border-radius:50%;overflow:hidden;cursor:pointer;aspect-ratio:1/1;}'
+    + '.cu-art.on{border-color:#2C2521;}'
+    + '.cu-art img{width:100%;height:100%;display:block;}'
     + '.cu-btn{border:none;border-radius:13px;padding:14px;font-size:16px;font-weight:700;background:#C97FA0;color:#fff;cursor:pointer;font-family:inherit;width:100%;margin-top:20px;}'
     + '.cu-tdisp{text-align:center;font-family:"Fraunces",Georgia,serif;font-size:30px;color:#2C2521;margin:4px 0 12px;}'
     + '.cu-time{display:flex;gap:10px;height:200px;}'
@@ -444,6 +550,10 @@
     + '.hm-day{flex:1;text-align:center;font-size:10px;color:var(--ink-soft,#6E635B);font-weight:700;}'
     + '.bear-av{overflow:hidden;padding:0!important;}.bear-av svg{width:100%;height:100%;display:block;}'
     + '.tl-byav{display:inline-block;width:16px;height:16px;border-radius:50%;overflow:hidden;vertical-align:middle;margin-right:5px;}.tl-byav svg{width:100%;height:100%;display:block;}'
+    /* One rule for the painted portrait in all nine of its boxes (16px chip through the
+       110px picker preview). The width/height attributes are there for intrinsic sizing;
+       the box is what actually decides how big it renders. */
+    + '.cb-av{width:100%;height:100%;display:block;object-fit:cover;border-radius:inherit;}'
 
     /* ---------- Night ----------
        The .cu-* modal (the shared date, time and bear-avatar sheet, so one of the most-opened
@@ -456,9 +566,16 @@
     + '[data-theme="night"] .cu-card{background:var(--card);}'
     + '[data-theme="night"] .cu-head h2,[data-theme="night"] .cu-tdisp{color:var(--ink);}'
     + '[data-theme="night"] .cu-x,[data-theme="night"] .cu-label{color:var(--ink-faint);}'
-    + '[data-theme="night"] .cu-sw.on{border-color:var(--ink);}'
-    + '[data-theme="night"] .cu-acc,[data-theme="night"] .cu-chip{background:var(--surface);border-color:var(--line);color:var(--ink-soft);}'
-    + '[data-theme="night"] .cu-acc.on{background:var(--preg);border-color:var(--preg);color:var(--bg);}'
+    + '[data-theme="night"] .cu-art.on{border-color:var(--ink);}'
+    + '[data-theme="night"] .cu-note{color:var(--ink-soft);}'
+    + '[data-theme="night"] .cu-chip{background:var(--surface);border-color:var(--line);color:var(--ink-soft);}'
+    /* The portraits keep their painted cream paper, so in night each one is a warm disc on a
+       dark card. That is the same treatment a parent's photo avatar already gets, and the
+       same one the old SVG bear gave itself. It is never dimmed or filtered: it is bounded,
+       exactly like the photo rule in index.html, so the edge is deliberate rather than a
+       bright hole. The 16px .tl-byav chip is left out on purpose, a hairline there is noise. */
+    + '[data-theme="night"] .ll-mem-av,[data-theme="night"] .bear-av,[data-theme="night"] .cu-preview,'
+    + '[data-theme="night"] .cu-art img,[data-theme="night"] .jr-art{outline:1px solid var(--hairline);outline-offset:-1px;}'
     + '[data-theme="night"] .cu-btn{background:var(--preg);color:var(--bg);}'
     + '[data-theme="night"] .cu-tcol{background:var(--surface);}'
     + '[data-theme="night"] .cu-tcell{color:var(--ink-faint);}'
