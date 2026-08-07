@@ -17,6 +17,13 @@
   // collection). Lets the two byte listeners share PhotoStore.map without stepping on each other.
   PhotoStore.privIds = PhotoStore.privIds || {};
 
+  // Repaints the NETWORK asked for, not the parent. Thirteen listeners live in this file and each
+  // one used to call render() the moment its snapshot landed, so a single sync burst (sign-in, a
+  // reconnect, a caregiver logging three feeds) meant a dozen full repaints back to back — on a
+  // real timeline that is seconds of frozen phone. renderSoon coalesces them to one per frame.
+  // Taps stay on the synchronous render(): they measure and scroll on the very next line.
+  function rerender() { try { (window.renderSoon || window.render || function () {})(); } catch (e) {} }
+
   var hhRef = null, eventsRef = null, photosRef = null, notesRef = null;
   var booted = false;
   var unsub = [];
@@ -909,7 +916,7 @@
         applyingRemote = true;
         snap.forEach(function (doc) { applyMatDoc(doc.id, doc.data()); });
         applyingRemote = false;
-        if (booted) render();
+        if (booted) rerender();
       }, function (e) { console.warn('mhealth own listen', e); }));
     } else {
       // A non-owner: try each shareable category; ones not shared with us fail permission and are ignored.
@@ -918,7 +925,7 @@
         matUnsub.push(base.doc(cat).onSnapshot(function (doc) {
           if (!doc.exists) return;
           applyingRemote = true; applyMatDoc(cat, doc.data()); applyingRemote = false;
-          if (booted) render();
+          if (booted) rerender();
         }, function (e) { /* permission-denied = not shared with me; ignore */ }));
       });
     }
@@ -981,7 +988,7 @@
         PhotoStore.map[id] = ch.doc.data().data;
       }
     });
-    if (booted && !(snap.metadata && snap.metadata.hasPendingWrites)) render();
+    if (booted && !(snap.metadata && snap.metadata.hasPendingWrites)) rerender();
   }
   function ensureOwnPregPhotoListener(uidNow) {
     if (pregPhotoUnsubOwn || !hhRef || !uidNow) return;
@@ -1059,25 +1066,25 @@
       else if (pregOwner === uidNow) { pregOwner = null; clearPregJourneyState(); }
       applyingRemote = false;
       maybeMigratePregPhotoBytes(); // my journey metadata just (re)arrived: relocate any circle-visible bytes
-      if (booted) render();
+      if (booted) rerender();
     }, function (e) { /* own doc not readable yet; ignore */ }));
     // A non-owner: try every other member's journey doc. Not shared with us -> permission-denied, ignored.
     var members = (window.LL.members && Object.keys(window.LL.members)) || [];
     members.forEach(function (m) {
       if (m === uidNow) return;
       pregUnsub.push(base.doc(m).onSnapshot(function (doc) {
-        if (!doc.exists) { if (pregOwner === m) { pregOwner = null; clearPregJourneyState(); if (booted) render(); } return; }
+        if (!doc.exists) { if (pregOwner === m) { pregOwner = null; clearPregJourneyState(); if (booted) rerender(); } return; }
         applyingRemote = true; pregOwner = m; applyPregJourney(m, doc.data()); applyingRemote = false;
         ensureMaternalListeners(uidNow);
         ensureOtherPregPhotoListener(m); // her doc is readable -> her photo bytes are too
-        if (booted) render();
+        if (booted) rerender();
       }, function (e) {
         // We WERE reading this member's journey and now can't: she removed us from sharedWith. Losing
         // read access has to clear the pregnancy we were rendering — otherwise the week hero and the
         // size-of-a-fruit line keep updating forever on a journey we are no longer permitted to see,
         // and after a loss that is the exact thing the charter forbids. Distinct from the ordinary
         // "never shared with us" error, where pregOwner !== m and there is correctly nothing to clear.
-        if (pregOwner === m) { pregOwner = null; clearPregJourneyState(); if (booted) render(); }
+        if (pregOwner === m) { pregOwner = null; clearPregJourneyState(); if (booted) rerender(); }
       }));
     });
   }
@@ -1380,7 +1387,7 @@
       ensureMaternalListeners(user.uid); // (re)subscribe once we know whose pregnancy it is
       migrateHandoffToNote(); // role + handoff are now known; fold any legacy shared note in once
       gotApp = true;
-      if (booted) render(); else maybeBoot();
+      if (booted) rerender(); else maybeBoot();
     }, function (e) {
       console.warn('household listen', e);
       // Removed from the family (or the household was deleted): the doc becomes unreadable, so the
@@ -1416,7 +1423,7 @@
           knownEvents[doc.id] = JSON.stringify(stripMeta(data)); added++;
         });
         applyingRemote = false;
-        if (added && booted) render();
+        if (added && booted) rerender();
       }).catch(function (e) { console.warn('events hydrate', e); });
     }
     function subscribeEvents(query, isFallback) {
@@ -1436,7 +1443,7 @@
         applyingRemote = false;
         gotEvents = true;
         if (!booted) { maybeBoot(); if (!isFallback) hydrateFullHistory(); }
-        else if (!(snap.metadata && snap.metadata.hasPendingWrites)) render();
+        else if (!(snap.metadata && snap.metadata.hasPendingWrites)) rerender();
       }, function (e) {
         console.warn('events listen', e);
         if (!isFallback) { try { unsub.push(subscribeEvents(eventsRef, true)); } catch (x) {} } // windowed query failed -> full listener, so boot never hangs
@@ -1463,7 +1470,7 @@
         }
       });
       maybeMigratePregPhotoBytes(); // owner's device moves any circle-visible pregnancy bytes out
-      if (booted && !(snap.metadata && snap.metadata.hasPendingWrites)) render();
+      if (booted && !(snap.metadata && snap.metadata.hasPendingWrites)) rerender();
     }, function (e) { console.warn('photos listen', e); }));
 
     startNotesSync(user);
@@ -1497,7 +1504,7 @@
         if (ch.type === 'removed') dropNote(d.id); else mergeNote(d);
       });
       migrateHandoffToNote(); // one-time: fold any legacy shared handoff into a circle note
-      if (booted && !(snap.metadata && snap.metadata.hasPendingWrites)) render();
+      if (booted && !(snap.metadata && snap.metadata.hasPendingWrites)) rerender();
     }
     function warn(e) { /* a scoped query a viewer can't run is ignored, never thrown */ }
     // 1) circle notes (everyone). 2) my own notes. 3) notes addressed privately to me.

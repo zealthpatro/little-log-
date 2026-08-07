@@ -462,6 +462,9 @@ body{
 
 /* ============ TIMELINE ============ */
 .day-group{margin-bottom:22px;}
+/* Marker for the days not built yet. Deliberately quiet and deliberately still: no spinner, no
+   pulse. It is usually replaced by real days before she ever reaches it. */
+.tl-more{text-align:center;padding:10px 0 26px;color:var(--ink-soft);font-size:12px;font-weight:800;letter-spacing:.02em;}
 .day-head{font-family:var(--font-display);font-size:16px;font-weight:600;margin:0 4px 12px;display:flex;justify-content:space-between;align-items:baseline;}
 /* On the page, not on a card: --ink-faint clears 4.5 only against the flat --bg, and the body
    gradient's darkest stop drags it to 4.28. --ink-soft holds at 4.71 there. */
@@ -1680,14 +1683,123 @@ function _dpToday(id){ var s=_dp[id]; if(!s)return; var t=new Date(); s.y=t.getF
    RENDER
    ============================================================ */
 let viewingPreg=false;  // show the pregnancy shell even when born babies also exist (subject switch)
+/* ---- Paint, don't rebuild -------------------------------------------------------------------
+   render() used to hand the entire shell to innerHTML every single time: topbar, #scroll, the
+   quick button and the nav all re-parsed because one card had changed. Two costs, both felt as
+   jitter. The scroll container was one of the casualties, and destroying the scrolling element
+   destroys the scroll itself — iOS drops inertial momentum the instant the node goes, so a sync
+   landing while she was flicking through the timeline stopped it dead under her thumb.
+   paintShell leaves the frame standing. Identical markup is a no-op (a burst of listeners all
+   reporting the same state now costs nothing at all), and when something has genuinely changed
+   only the parts that differ are touched — the #scroll node always survives, so the scroll does. */
+var _shellSig=null, _shellHtml='', _shellTpl=null;
+function paintShell(sig, html){
+  var root=app(); if(!root) return;
+  var cur=document.getElementById('scroll');
+  if(_shellSig!==sig || !cur || cur.parentNode!==root){
+    root.innerHTML=html; _shellSig=sig; _shellHtml=html; refreshTickTargets(); return;
+  }
+  if(html===_shellHtml) return;                    // nothing changed: don't touch the DOM at all
+  _shellTpl=_shellTpl||document.createElement('div');
+  _shellTpl.innerHTML=html;
+  var a=root.children, b=_shellTpl.children;
+  if(a.length!==b.length){ root.innerHTML=html; _shellHtml=html; _shellTpl.innerHTML=''; refreshTickTargets(); return; }
+  for(var i=0;i<a.length;i++){
+    var an=a[i], bn=b[i];
+    if(an.id==='scroll' && bn.id==='scroll'){
+      if(an.className!==bn.className) an.className=bn.className;
+      // Move the already-parsed nodes across rather than serialising them back to a string and
+      // asking the browser to parse the same markup a second time.
+      if(!patchTimeline(an,bn)){
+        if(an.replaceChildren) an.replaceChildren.apply(an, [].slice.call(bn.childNodes));
+        else an.innerHTML=bn.innerHTML;
+      }
+      continue;
+    }
+    if(an.outerHTML!==bn.outerHTML) an.replaceWith(bn.cloneNode(true));
+  }
+  _shellHtml=html; _shellTpl.innerHTML=''; refreshTickTargets();
+}
+/* Every other screen that paints over #app — onboarding, the loss holding screen, the pregnancy
+   shells — has to say so, or the next shell paint would diff against markup that left the page. */
+function dropShellCache(){ _shellSig=null; _shellHtml=''; }
+
+/* ---- The timeline gets patched, not rebuilt ------------------------------------------------
+   The Log timeline is the one list with no ceiling: scroll back far enough and it is every day
+   she has ever logged. Rebuilding it because one feed arrived means style and layout for tens of
+   thousands of nodes — 155ms with four months revealed, and it grows from there. So the day
+   groups carry their day as a key: an untouched day is left exactly where it is (a node nobody
+   touches costs no style, no layout, no paint) and only the day that actually changed is swapped.
+   Every check below is a reason to bail: anything unexpected falls back to the plain swap, which
+   is always correct. Correct-and-slower beats clever-and-wrong on a screen parents rely on. */
+/* Walks from #scroll down to the timeline, mirroring the live tree against the new one level by
+   level. Anything off the path that changed (the week strip, the day recap button) is swapped on
+   its own — those are small. The list at the end of the path is left standing: paintTimeline owns
+   its contents. Any structural surprise on the way down returns false and the caller does the
+   plain, always-correct swap, after which paintTimeline fills the empty list back in. */
+function patchTimeline(oldSc,newSc){
+  var o=oldSc.querySelector('#tlList'), n=newSc.querySelector('#tlList');
+  if(!o||!n) return false;
+  var path=[], cur=n;
+  while(cur && cur!==newSc){ path.unshift(cur); cur=cur.parentNode; }
+  if(cur!==newSc || !path.length || path.length>6) return false;
+  var oldCur=oldSc, newCur=newSc, d, i, idx, kidsO, kidsN;
+  for(d=0;d<path.length;d++){
+    kidsO=oldCur.children; kidsN=newCur.children;
+    if(kidsO.length!==kidsN.length) return false;
+    idx=[].indexOf.call(kidsN, path[d]);
+    if(idx<0) return false;
+    for(i=0;i<kidsN.length;i++) if(kidsO[i].tagName!==kidsN[i].tagName) return false;
+    for(i=0;i<kidsN.length;i++){
+      if(i===idx) continue;
+      if(kidsO[i].outerHTML!==kidsN[i].outerHTML) kidsO[i].replaceWith(kidsN[i].cloneNode(true));
+    }
+    var oNext=oldCur.children[idx];
+    if(oNext.className!==path[d].className) oNext.className=path[d].className;
+    if(d===path.length-1) return oNext===o;   // reached the list: leave its days exactly as they are
+    oldCur=oNext; newCur=path[d];
+  }
+  return false;
+}
+
+/* One render per frame for the listeners. Thirteen Firestore subscriptions called render()
+   directly, so a single sync burst meant a dozen full repaints back to back. The direct callers
+   stay synchronous (several of them scroll or measure on the next line) — this is only for the
+   ones that fire on their own schedule, whenever the network feels like it. */
+var _renderQueued=false;
+function renderSoon(){
+  if(_renderQueued) return;
+  _renderQueued=true;
+  requestAnimationFrame(function(){ _renderQueued=false; try{ render(); }catch(e){} });
+}
+window.renderSoon=renderSoon;
+
+/* The 1s tick used to ask the whole document three separate questions every second — on a real
+   four-month timeline that is a 19ms hitch, every second, felt as a permanent shimmer. The
+   elements that need ticking are known at paint time, so they're collected once here instead. */
+var _tickTimers=[], _tickSince=[], _tickDue=[];
+function refreshTickTargets(){
+  try{
+    _tickTimers=[]; _tickSince=[]; _tickDue=[];
+    var all=document.querySelectorAll('[data-timer],[data-since],[data-due]');
+    for(var i=0;i<all.length;i++){
+      var el=all[i];
+      if(el.hasAttribute('data-timer')) _tickTimers.push(el);
+      if(el.hasAttribute('data-since')) _tickSince.push(el);
+      if(el.hasAttribute('data-due')) _tickDue.push(el);
+    }
+  }catch(e){ _tickTimers=[]; _tickSince=[]; _tickDue=[]; }
+}
+
 function render(){
-  // Preserve the scroll position across the full-shell rebuild, so ticking a checkbox or
-  // toggling state doesn't jump the page to the top (which read as a jarring full refresh).
-  // View/tab changes still scroll to top because they call $('#scroll').scrollTo(0,0) after render().
+  // Scroll position: paintShell keeps the #scroll node alive, so the browser holds the offset for
+  // us. Only a real rebuild (a different shell shape, or another screen having painted over #app)
+  // needs it put back by hand. Reading and writing scrollTop on every render forced two extra
+  // layouts for nothing. View/tab changes still scroll to top: they call scrollTo(0,0) after this.
   var _ss=document.getElementById('scroll'); var _sy=_ss?_ss.scrollTop:0;
   migrateSeenOnce();   // no-op after it succeeds once; retries while the role is still unknown
   _renderView();
-  if(_sy){ var _ns=document.getElementById('scroll'); if(_ns) _ns.scrollTop=_sy; }
+  if(_sy){ var _ns=document.getElementById('scroll'); if(_ns && _ns!==_ss) _ns.scrollTop=_sy; }
   maybeRunDeepLink();
 }
 
@@ -1788,7 +1900,7 @@ function _renderView(){
   else if(view==='den') main = renderDenHub();
 
   const fab = quickFab(); // computed once: the scroll area pads for the button only when it shows
-  app().innerHTML = `
+  paintShell('baby:'+view+':'+b.id, `
     <div class="topbar">
       <div class="baby-pill" onclick="openBabySheet()">
         ${babyAvatarBox(b,'avatar')}
@@ -1808,8 +1920,10 @@ function _renderView(){
       <button class="nav-btn ${view==='log'?'active':''}" onclick="go('log')">${I.list}Log</button>
       <button class="nav-btn ${view==='album'?'active':''}" onclick="go('album')">${I.camera}Album</button>
       <button class="nav-btn ${view==='health'?'active':''}" onclick="go('health')">${I.cross}Health</button>
-    </div></div>`;
+    </div></div>`);
   startTick();
+  paintTimeline();      // the days live in the DOM, not in the shell string
+  initTimelineReveal();
   if(view==='home') initHero(); else if(heroTimer){ clearInterval(heroTimer); heroTimer=null; }
 }
 
@@ -2383,10 +2497,16 @@ function renderHero(){
     ${dots}
   </div>`;
 }
+var _heroFirst=null;
 function initHero(){
-  if(heroTimer){ clearInterval(heroTimer); heroTimer=null; }
   const slides=document.querySelectorAll('#scroll .hero-slide');
-  if(slides.length<2) return;
+  if(slides.length<2){ if(heroTimer){ clearInterval(heroTimer); heroTimer=null; } _heroFirst=null; return; }
+  // The slideshow survives a repaint now, so re-arming it every render would snap her back to the
+  // first photo and restart the 4.5s clock each time a listener reported in. Same nodes still
+  // cycling: leave them cycling.
+  if(heroTimer && _heroFirst===slides[0]) return;
+  if(heroTimer){ clearInterval(heroTimer); heroTimer=null; }
+  _heroFirst=slides[0];
   const dots=document.querySelectorAll('#scroll .hero-dots span');
   heroIdx=0;
   heroTimer=setInterval(()=>{
@@ -2619,25 +2739,109 @@ function sinceCard(type,label,ev){
 }
 
 /* ---------- TIMELINE ---------- */
-function renderTimeline(){
-  const evs = babyEvents();
-  if(evs.length===0){
-    return `<div class="empty-state fade-in"><img class="es-bear" src="/app/spot-art/notes_cub.webp" alt="" loading="lazy"><p>No entries yet</p><span>Your first feed or nap goes here. Cubby will keep the notes.</span><br><button class="es-cta" onclick="go('home')">Log your first moment</button></div>`;
-  }
-  const groups={};
-  evs.forEach(e=>{ const k=dayKey(e.time); (groups[k]=groups[k]||[]).push(e); });
-  let html='<div class="fade-in">';
-  Object.keys(groups).forEach(k=>{
-    const list=groups[k];
-    const feeds=list.filter(e=>e.type==='feed').length;
-    const sleepMs=list.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+(e.end-e.time),0);
-    const dia=list.filter(e=>e.type==='diaper').length;
-    html+=`<div class="day-group"><div class="day-head">${dayLabel(list[0].time)}
+/* The timeline is the one screen that grows without any ceiling: every feed, nappy and nap she has
+   ever logged, forever. It used to be built in full on every render — four months of logging is
+   27,000 nodes and 1.5MB of markup per repaint, which is half a second of frozen phone, and a year
+   is 84,000 nodes. It is now built a fortnight of days at a time, with the next fortnight appended
+   as she scrolls towards it. Nothing is hidden behind a tap and nothing is dropped: every day she
+   has ever logged is still there, in order, reachable by scrolling. It just isn't all built at once. */
+const TL_CHUNK=14;                       // day-groups per chunk
+var _tlShown=TL_CHUNK, _tlIO=null;
+function tlResetReveal(){ _tlShown=TL_CHUNK; }
+function tlGroups(){
+  const evs=babyEvents(); const groups={}, order=[];
+  evs.forEach(e=>{ const k=dayKey(e.time); if(!groups[k]){ groups[k]=[]; order.push(k); } groups[k].push(e); });
+  return {groups:groups, order:order};    // newest first: babyEvents() is sorted descending
+}
+function tlGroupHtml(k,list){
+  const feeds=list.filter(e=>e.type==='feed').length;
+  const sleepMs=list.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+(e.end-e.time),0);
+  const dia=list.filter(e=>e.type==='diaper').length;
+  // data-day is the patch key: it lets a day that has not changed keep its nodes untouched.
+  let html=`<div class="day-group" data-day="${escapeHtml(String(k))}"><div class="day-head">${dayLabel(list[0].time)}
       <span class="day-sum">${feeds} feeds · ${sleepMs?fmtDur(sleepMs):'0m'} sleep · ${dia} diapers</span></div>`;
-    list.forEach(e=>html+=tlItem(e));
-    html+='</div>';
-  });
+  list.forEach(e=>html+=tlItem(e));
   return html+'</div>';
+}
+/* The shell only reserves the space. The days themselves are painted straight into the live list by
+   paintTimeline, which is the whole point: markup for a day that has not changed is never built,
+   never parsed and never inserted, however deep into her history she has scrolled. */
+function renderTimeline(){ return `<div class="fade-in" id="tlList"></div>`; }
+function tlEmptyHtml(){
+  return `<div class="empty-state fade-in"><img class="es-bear" src="/app/spot-art/notes_cub.webp" alt="" loading="lazy"><p>No entries yet</p><span>Your first feed or nap goes here. Cubby will keep the notes.</span><br><button class="es-cta" onclick="go('home')">Log your first moment</button></div>`;
+}
+var _tlSigs={}, _tlTmp=null;
+function paintTimeline(){
+  const host=document.getElementById('tlList'); if(!host) return;
+  const g=tlGroups();
+  if(!g.order.length){
+    if(host.getAttribute('data-empty')!=='1'){ host.innerHTML=tlEmptyHtml(); host.setAttribute('data-empty','1'); _tlSigs={}; }
+    return;
+  }
+  if(host.getAttribute('data-empty')==='1'){ host.innerHTML=''; host.removeAttribute('data-empty'); }
+  // Keep whatever she has already scrolled into view: a sync landing must never collapse the list
+  // back to a fortnight underneath her.
+  if(_tlShown>g.order.length) _tlShown=g.order.length;
+  var have={}, i, k, kids=host.children;
+  /* Hold her place. If she is reading last month and a caregiver logs a feed, today's group grows
+     by a row — everything below it slides, and the line she was reading walks up the screen. So we
+     note which day is under the top of the viewport, then put the scroll back on it afterwards. */
+  var sc=document.getElementById('scroll'), scTop=sc?sc.scrollTop:0, anchorKey=null, anchorTop=0;
+  if(sc && scTop>4){
+    for(i=0;i<kids.length;i++){
+      if(kids[i].offsetTop+kids[i].offsetHeight>scTop){ anchorKey=kids[i].getAttribute('data-day'); anchorTop=kids[i].offsetTop; break; }
+    }
+  }
+  for(i=0;i<kids.length;i++){ k=kids[i].getAttribute('data-day'); if(k) have[k]=kids[i]; }
+  var prev=null;
+  for(i=0;i<_tlShown;i++){
+    k=g.order[i];
+    var html=tlGroupHtml(k, g.groups[k]);       // building a day's string is cheap; parsing it is not
+    var node=have[k];
+    if(!node || _tlSigs[k]!==html){
+      _tlTmp=_tlTmp||document.createElement('div');
+      _tlTmp.innerHTML=html;
+      var fresh=_tlTmp.firstElementChild;
+      _tlTmp.innerHTML='';
+      if(node) node.replaceWith(fresh); else host.appendChild(fresh);
+      node=fresh;
+    }
+    _tlSigs[k]=html;
+    var want=prev?prev.nextElementSibling:host.firstElementChild;
+    if(want!==node) host.insertBefore(node, want||null);
+    prev=node; delete have[k];
+  }
+  // The marker for the days not built yet, always last.
+  var sen=have.__more||null; delete have.__more;
+  if(_tlShown<g.order.length){
+    if(!sen){ sen=document.createElement('div'); sen.className='tl-more'; sen.id='tlMore'; sen.setAttribute('data-day','__more'); sen.textContent='Earlier days'; }
+    if(host.lastElementChild!==sen) host.appendChild(sen);
+  } else if(sen && sen.parentNode===host) host.removeChild(sen);
+  for(k in have) if(have[k].parentNode===host){ host.removeChild(have[k]); delete _tlSigs[k]; }
+  if(anchorKey){
+    var back=host.querySelector('[data-day="'+(window.CSS&&CSS.escape?CSS.escape(anchorKey):anchorKey)+'"]');
+    if(back){ var delta=back.offsetTop-anchorTop; if(delta) sc.scrollTop=scTop+delta; }
+  }
+}
+/* Reveal on approach. The marker sits under the last built day; 600px before it reaches the fold
+   the next fortnight is painted in, so there is nothing to wait for and nothing to tap. */
+function initTimelineReveal(){
+  if(_tlIO){ _tlIO.disconnect(); _tlIO=null; }
+  if(typeof IntersectionObserver!=='function'){ if(document.getElementById('tlMore')) growTimeline(); return; }
+  const sen=document.getElementById('tlMore'), root=document.getElementById('scroll');
+  if(!sen||!root) return;
+  _tlIO=new IntersectionObserver(function(ens){
+    for(var i=0;i<ens.length;i++) if(ens[i].isIntersecting){ growTimeline(); return; }
+  },{root:root, rootMargin:'600px 0px'});
+  _tlIO.observe(sen);
+}
+function growTimeline(){
+  const g=tlGroups();
+  if(_tlShown>=g.order.length) return;
+  _tlShown=Math.min(_tlShown+TL_CHUNK, g.order.length);
+  paintTimeline();
+  refreshTickTargets();
+  initTimelineReveal();     // the marker may have moved or gone
 }
 function eventTitle(e){
   if(e.type==='feed'){
@@ -2780,26 +2984,29 @@ function barCard(title,sub,data,labels,color,suffix){
 /* ============================================================
    LIVE TICK (timers + "since" labels)
    ============================================================ */
+var _tickBeat=0;
 function startTick(){
   if(tickInterval) return;
   tickInterval=setInterval(()=>{
-    document.querySelectorAll('[data-timer]').forEach(el=>{
-      el.textContent=fmtDurClock(now()-(+el.dataset.timer));
-    });
-    document.querySelectorAll('[data-since]').forEach(el=>{
-      const s=fmtSince(+el.dataset.since); if(s)el.textContent=s;
-    });
-    document.querySelectorAll('[data-due]').forEach(el=>{
-      el.textContent=fmtDue((+el.dataset.due)-now());
-    });
-    checkMedReminders();
+    _tickBeat++;
+    // Every tenth beat, re-collect. refreshTickTargets already runs on every paint and on every
+    // sheet, so this is only a safety net for any surface that paints its own way — it self-heals
+    // within ten seconds instead of leaving a running timer frozen for good.
+    if((_tickBeat%10)===0) refreshTickTargets();
+    var i, el;
+    for(i=0;i<_tickTimers.length;i++){ el=_tickTimers[i]; if(el.isConnected) el.textContent=fmtDurClock(now()-(+el.dataset.timer)); }
+    for(i=0;i<_tickSince.length;i++){ el=_tickSince[i]; if(!el.isConnected) continue; var s=fmtSince(+el.dataset.since); if(s) el.textContent=s; }
+    for(i=0;i<_tickDue.length;i++){ el=_tickDue[i]; if(el.isConnected) el.textContent=fmtDue((+el.dataset.due)-now()); }
+    // Doses are minutes apart, so looking every five seconds is as instant as a parent can tell,
+    // and it keeps a medicine scan from running on top of every single second of every screen.
+    if((_tickBeat%5)===0) checkMedReminders();
   },1000);
 }
 
 /* ============================================================
    NAV / THEME
    ============================================================ */
-function go(v){ if(typeof closeSheet==='function') closeSheet(); if(v==='home') surfaceReset(); view=v; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
+function go(v){ if(typeof closeSheet==='function') closeSheet(); if(v==='home') surfaceReset(); if(v!==view) tlResetReveal(); view=v; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
 /* ---------------- APPEARANCE -------------------------------------------------
    Three modes, System by default, and stored PER PERSON.
 
@@ -2969,9 +3176,10 @@ function openSheet(html,accent){
   var back=_sheetStack.length?'<button class="sheet-back" type="button" onclick="sheetBack()" aria-label="Back">‹</button>':'';
   s.innerHTML='<div class="grab"></div>'+back+'<button class="sheet-x" type="button" onclick="closeSheet()" aria-label="Close">×</button>'+html;
   $('#scrim').classList.add('show'); s.classList.add('show');
+  refreshTickTargets();   // a sheet can hold a running timer, and the tick works off this list now
 }
-function sheetBack(){ var prev=_sheetStack.pop(); var s=$('#sheet'); if(!prev){ closeSheet(); return; } s.dataset.accent=prev.accent; _sheetAccent(s,prev.accent); s.innerHTML=prev.html; }
-function closeSheet(){ _sheetStack=[]; var s=document.getElementById('sheet'); if(s){ s.style.transition=''; s.style.transform=''; } var sc=document.getElementById('scrim'); if(sc)sc.classList.remove('show'); if(s)s.classList.remove('show'); }
+function sheetBack(){ var prev=_sheetStack.pop(); var s=$('#sheet'); if(!prev){ closeSheet(); return; } s.dataset.accent=prev.accent; _sheetAccent(s,prev.accent); s.innerHTML=prev.html; refreshTickTargets(); }
+function closeSheet(){ _sheetStack=[]; var s=document.getElementById('sheet'); if(s){ s.style.transition=''; s.style.transform=''; } var sc=document.getElementById('scrim'); if(sc)sc.classList.remove('show'); if(s)s.classList.remove('show'); refreshTickTargets(); }
 /* One calm confirm sheet, reused everywhere instead of the native window.confirm (which is jarring
    and off-brand). Stands alone (closes any trigger sheet first, so no stray back button). */
 var __confirmCb=null;
@@ -4771,7 +4979,7 @@ function obPreview(){
   </div>`;
 }
 function renderOnboard(){
-  app().innerHTML=`<div class="ob-wrap">
+  dropShellCache(); app().innerHTML=`<div class="ob-wrap">
     <div class="ob-bg">${obPreview()}</div>
     <div class="onboard ob-card fade-in">
       <div class="logo">Cubby</div>
@@ -4802,7 +5010,7 @@ function renderCaregiverWaiting(){
     const o=ownerUid&&mi[ownerUid];
     if(o) fam=(o.name?String(o.name).split(' ')[0]:'')||o.relationship||'';
   }catch(e){}
-  app().innerHTML=`<div class="ob-wrap">
+  dropShellCache(); app().innerHTML=`<div class="ob-wrap">
     <div class="onboard ob-card fade-in">
       <div class="logo">Cubby</div>
       <div class="tag" style="font-size:21px;color:var(--ink);font-weight:600;margin:2px 0 6px">You're in 🐻</div>
@@ -4816,7 +5024,7 @@ function renderCaregiverWaiting(){
    cards, no countdown, no "start again" pressure; quiet links to kept memories + real support. */
 function renderLossHolding(){
   const hasMem=(state.pregnancyArchive||[]).some(a=>(a.moments||[]).length);
-  app().innerHTML=`<div class="ob-wrap">
+  dropShellCache(); app().innerHTML=`<div class="ob-wrap">
     <div class="onboard ob-card fade-in">
       <div class="logo">Cubby</div>
       <div class="tag" style="font-size:21px;color:var(--ink);font-weight:600;margin:2px 0 6px">Take all the time you need 🤍</div>
@@ -5791,7 +5999,7 @@ function renderPregShell(){
   const planning = state.pregnancy.stage==='planning';
   if(planning){
     const main = pregView==='den' ? renderDenHub() : renderPlanningHome();
-    app().innerHTML=`
+    paintShell('preg:planning:'+pregView, `
       <div class="topbar">
         <div class="preg-pill">
           <div class="pp-orb">🌱</div>
@@ -5802,7 +6010,7 @@ function renderPregShell(){
         <button class="icon-btn" data-themebtn onclick="toggleTheme()" aria-label="${themeResolved()==='night'?'switch to light':'switch to night'}" title="Appearance: ${themeModeLabel()}">${themeResolved()==='night'?I.sun:I.moon}</button>
         <button class="icon-btn" onclick="openSettings()" aria-label="settings">${I.settings}</button>
       </div>
-      <div class="scroll" id="scroll">${main}</div>`;
+      <div class="scroll" id="scroll">${main}</div>`);
     startTick();
     return;
   }
@@ -5811,7 +6019,7 @@ function renderPregShell(){
   // a mistake), no quick-log button, no tabs, no "add a bump photo". Just the story, and one way
   // back to the baby.
   if(state.pregnancy.bornBabyId){
-    app().innerHTML=`
+    paintShell('preg:lookback', `
       <div class="topbar">
         <div class="preg-pill" onclick="exitPregLookBack()" style="cursor:pointer">
           <div class="pp-orb">🤍</div>
@@ -5821,7 +6029,7 @@ function renderPregShell(){
         <button class="icon-btn" data-themebtn onclick="toggleTheme()" aria-label="${themeResolved()==='night'?'switch to light':'switch to night'}" title="Appearance: ${themeModeLabel()}">${themeResolved()==='night'?I.sun:I.moon}</button>
         <button class="icon-btn" onclick="openSettings()" aria-label="settings">${I.settings}</button>
       </div>
-      <div class="scroll" id="scroll">${renderPregMoments(true)}</div>`;
+      <div class="scroll" id="scroll">${renderPregMoments(true)}</div>`);
     startTick();
     return;
   }
@@ -5832,7 +6040,7 @@ function renderPregShell(){
   else if(pregView==='den') main=renderDenHub();
   else main=renderPregHome();
   const fab=quickFab(); // computed once: the scroll area pads for the button only when it shows
-  app().innerHTML=`
+  paintShell('preg:'+pregView, `
     <div class="topbar">
       <div class="preg-pill" onclick="pregGo('care')">
         <div class="pp-orb">🤰</div>
@@ -5849,7 +6057,7 @@ function renderPregShell(){
       <button class="nav-btn ${pregView==='week'?'active':''}" onclick="pregGo('week')">${I.home}Home</button>
       <button class="nav-btn ${pregView==='moments'?'active':''}" onclick="pregGo('moments')">${I.camera}Moments</button>
       <button class="nav-btn ${pregView==='care'?'active':''}" onclick="pregGo('care')">${I.cross}Care</button>
-    </div></div>`;
+    </div></div>`);
   startTick();
 }
 function pregGreeting(){ const name=myName(); const h=new Date().getHours(); const part=(h<5||h>=23)?'Resting up':(h<12?'Good morning':(h<17?'Good afternoon':'Good evening')); return name?`${part}, ${escapeHtml(name)} 🤍`:`${part} 🤍`; }
@@ -9156,7 +9364,7 @@ function renderAlbum(){
   return `<div class="fade-in">${coachMark('album','This is your Album','Photos, keepsake cards (birth poster, monthly cards) and milestones, all here. Tap a milestone to mark it: teeth, first steps, the fun stuff.')}${seg}${body}</div>`;
 }
 let logTab='log';
-function setLogTab(t){ logTab=t; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
+function setLogTab(t){ if(t!==logTab) tlResetReveal(); logTab=t; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
 let logRange='week';
 function setLogRange(r){ logRange=r; render(); }
 function heatDays(n){ const a=[]; const d=new Date(); d.setHours(0,0,0,0); for(let i=n-1;i>=0;i--){ const x=new Date(d); x.setDate(d.getDate()-i); a.push(x); } return a; }
@@ -9478,9 +9686,11 @@ function renderLogTab(){
 
 function renderPhotos(){
   const gal=(state.photos||[]).filter(p=>p.babyId===state.activeBabyId && p.slot===undefined && !p.deleted).slice().reverse();   // newest first — a fresh keepsake used to land invisibly at the bottom
-  let galleryHtml = gal.length ? `<div class="sec-title">Saved keepsakes</div><div class="gallery">${gal.map(p=>`<div class="gal-item" onclick="viewPhoto('${p.id}')"><img src="${photoSrc(p.photoId)}">${p.caption?`<div class="cap">${escapeHtml(p.caption)}</div>`:''}</div>`).join('')}</div>` : '';
+  // lazy + async decode: the album can hold a hundred photos, and every one of them is an inline
+  // data URL. Decoding them all on the main thread on the way in is what made the album stutter.
+  let galleryHtml = gal.length ? `<div class="sec-title">Saved keepsakes</div><div class="gallery">${gal.map(p=>`<div class="gal-item" onclick="viewPhoto('${p.id}')"><img src="${photoSrc(p.photoId)}" loading="lazy" decoding="async" alt="">${p.caption?`<div class="cap">${escapeHtml(p.caption)}</div>`:''}</div>`).join('')}</div>` : '';
   const evPhotos=babyEvents().filter(e=>e.photoId&&photoSrc(e.photoId));
-  let momentsHtml = evPhotos.length ? `<div class="sec-title">Moments from the day</div><div class="csub" style="margin:-6px 0 10px">Photos tagged to feeds, play, sun time and more. Tap one to turn it into a shareable card.</div><div class="gallery">${evPhotos.map(e=>`<div class="gal-item" onclick="openActivityPhoto('${e.id}')"><img src="${photoSrc(e.photoId)}"><div class="cap">${escapeHtml(eventTitle(e))}</div></div>`).join('')}</div>` : '';
+  let momentsHtml = evPhotos.length ? `<div class="sec-title">Moments from the day</div><div class="csub" style="margin:-6px 0 10px">Photos tagged to feeds, play, sun time and more. Tap one to turn it into a shareable card.</div><div class="gallery">${evPhotos.map(e=>`<div class="gal-item" onclick="openActivityPhoto('${e.id}')"><img src="${photoSrc(e.photoId)}" loading="lazy" decoding="async" alt=""><div class="cap">${escapeHtml(eventTitle(e))}</div></div>`).join('')}</div>` : '';
 
   if(!photoEditor){
     const empty = !galleryHtml && !momentsHtml;
