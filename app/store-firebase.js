@@ -117,6 +117,11 @@
   st.textContent =
     '#llAuthOv{position:fixed;inset:0;z-index:99999;background:linear-gradient(160deg,#F7F2E8,#EFE6D6);display:flex;align-items:center;justify-content:center;padding:24px;font-family:"Nunito Sans",system-ui,sans-serif;}'
     + '.ll-auth-card{background:#fff;border-radius:24px;padding:40px 28px;max-width:360px;width:100%;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.12);}'
+    /* Boot loader is a splash, not a dialog. The iOS app opens with a full-bleed bear splash; the
+       card version made the very next moment feel like a popup. Same content, no card chrome —
+       the page itself carries it, in both themes. */
+    + '.ll-auth-card.ll-boot{background:transparent;border-radius:0;box-shadow:none;padding:0;}'
+    + '[data-theme="night"] .ll-auth-card.ll-boot{background:transparent;outline:none;}'
     + '.ll-auth-logo{font-size:54px;line-height:1;margin-bottom:8px;}'
     + '.ll-auth-logo-img{width:84px;height:84px;border-radius:20px;display:block;margin:0 auto 12px;box-shadow:0 6px 18px rgba(0,0,0,.12);}'
     + '.ll-auth-card h1{font-family:"Fraunces",Georgia,serif;font-size:30px;margin:6px 0 4px;color:#2C2521;}'
@@ -424,7 +429,7 @@
     var lines = meaningful ? [msg].concat(LOADER_LINES) : LOADER_LINES;
     var i = meaningful ? 0 : Math.floor(Math.random() * lines.length);
     overlay().innerHTML =
-      '<div class="ll-auth-card"><img src="/icons/logo-512.png" alt="Cubby" class="ll-auth-logo-img">'
+      '<div class="ll-auth-card ll-boot"><img src="/icons/logo-512.png" alt="Cubby" class="ll-auth-logo-img">'
       + '<h1>Cubby</h1><div class="ll-spin"></div>'
       + '<div class="ll-auth-msg" id="llAuthMsg"></div></div>';
     var mEl = document.getElementById('llAuthMsg'); if (mEl) mEl.textContent = lines[i];
