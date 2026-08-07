@@ -202,6 +202,9 @@
   --hairline:rgba(255,255,255,0.07);
   --divider:rgba(255,255,255,0.09);
   --grid:rgba(255,255,255,0.08);
+  /* Slightly stronger than --hairline: a photo can be brighter than any surface, so its edge has to
+     survive sitting against its own highlights. */
+  --photo-edge:rgba(255,255,255,0.10);
   --knob:#E8DFD3;
   --on-accent-fill:rgba(232,223,211,.92);
   /* One step above a card, so a JS-built panel lands on the same rung as a .sheet. */
@@ -261,6 +264,15 @@
 }
 /* Rows inside a card separate with a hairline rule, not a gap. */
 [data-theme="night"] .ms-band .ms-row{border-bottom-color:var(--divider);}
+/* A parent's photo is never dimmed, filtered or faded in night: that reads as a bug and breaks the
+   keepsake promise. It gets bounded instead, so a bright picture stops glaring as an unbounded hole
+   in a dark screen. Outline, not border, so no layout shifts and no double edge on the ones that
+   already carry a radius. (.pola, .month-slot.filled, .pick-item and .rel-done are bounded above.) */
+[data-theme="night"] .gal-item,[data-theme="night"] .ms-thumb,[data-theme="night"] .tl-thumb,
+[data-theme="night"] .food-preview img,[data-theme="night"] .moment-card img,
+[data-theme="night"] .pp-chip img,[data-theme="night"] .gl-art{
+  outline:1px solid var(--photo-edge);outline-offset:-1px;
+}
 /* Depth ramp: sheets and modals sit one step above a card, the sticky nav one step above that.
    .ob-card is the only full-width pure-white fill in the app and read as un-themed in night. */
 [data-theme="night"] .sheet{background:var(--surface-3);}
