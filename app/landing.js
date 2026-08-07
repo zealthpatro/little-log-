@@ -16,7 +16,18 @@
     try { return !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()); } catch (e) { return false; }
   }
   function isIOS() {
-    try { return !!(window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'ios'); } catch (e) { return false; }
+    try {
+      if (window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'ios') return true;
+      return isStandalone() && /iPhone|iPad|iPod/.test(navigator.userAgent);
+    } catch (e) { return false; }
+  }
+  /* An installed PWA launched from the home screen. Someone here already chose Cubby - the
+     marketing landing (nav, pricing, install pitch) is noise, and a sign-in card popping over
+     it feels like a dialog box. They get the same focused full-screen sign-in as the native app. */
+  function isStandalone() {
+    try {
+      return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+    } catch (e) { return false; }
   }
 
   /* The official Google "G", exactly as Google ships it: four brand colours, untouched. Their sign-in
@@ -164,7 +175,7 @@
     // when a universal link opens the invite straight into the installed app.
     if (joinIntent()) return inviteSignIn(msg);
     var native = isNative();
-    if (native) {
+    if (native || isStandalone()) {
       // showSignIn assigns this straight into innerHTML, so the nodes exist by the next tick.
       setTimeout(startCarousel, 0);
       return appSignIn(msg);
