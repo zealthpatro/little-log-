@@ -41,7 +41,13 @@ const CONTRAST_STEPS = [
   ['rituals', "closeSheet(); go('log'); typeof setLogTab==='function' && setLogTab('rituals')"],
   /* Set in memory rather than via startSleep(): that persists, which kicks off a sync the offline
      test page retries forever, and the next page.goto never reaches networkidle2. */
-  ['home: sleep timer running', "closeSheet(); go('home'); timersFor(state.activeBabyId).sleep={start:Date.now()-3600000}; render()"]
+  ['home: sleep timer running', "closeSheet(); go('home'); timersFor(state.activeBabyId).sleep={start:Date.now()-3600000}; render()"],
+  /* The medicine alert and its way out. This pill is the loudest thing Cubby ever shows a parent
+     and no theme walk had ever looked at it, so its quiet "Not now" shipped unmeasured. Seeded in
+     memory (never persisted) for the same reason as the sleep timer above. Last in the list because
+     it mutates meds/events and every step after it would inherit the pill. */
+  ['home: dose due + dismiss', "closeSheet(); go('home'); state.meds=[{id:'m1',babyId:state.activeBabyId,name:'Calpol',dose:'2.5',unit:'ml',pattern:{type:'everyX',hours:6},remind:true,active:true}]; state.events=[{id:'e1',babyId:state.activeBabyId,type:'medicine',medId:'m1',medName:'Calpol',time:Date.now()-7*3600000}].concat(state.events); render()"],
+  ['sheet: reminders', "closeSheet(); openReminders()"]
 ];
 
 /* Runs in the page. One row per element that renders its own text, measured against the real

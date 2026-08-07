@@ -703,6 +703,9 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 
 .toast{position:fixed;bottom:96px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--toast-bg);color:var(--toast-ink);padding:13px 22px;border-radius:30px;font-weight:800;font-size:14px;z-index:60;opacity:0;transition:all .3s;pointer-events:none;box-shadow:0 8px 24px var(--shadow-strong);}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+/* A toast is normally click-through so it can never swallow a tap. An alert the app raised on its
+   own is the exception: the parent must be able to end it with one tap, so that one becomes real. */
+.toast.tappable{pointer-events:auto;cursor:pointer;}
 
 /* ---- extra accents ---- */
 :root{--med:#D2654E;--med-soft:#F7E0D9;--star:#D9A21B;--star-soft:#F6ECCB;
@@ -1042,6 +1045,10 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .alert-pill .ap-s{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:1px;}
 .alert-pill button{border:none;background:var(--surface-2);font-weight:800;font-size:12px;border-radius:10px;padding:9px 14px;min-height:44px;cursor:pointer;color:var(--ink);flex-shrink:0;font-family:var(--font-body);transition:transform .15s;}
 .alert-pill button:active{transform:scale(.93);}
+.alert-pill .ap-acts{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+/* The way out. Quieter than the primary action because waving a dose off should never look like
+   the thing to do, but it is a real 44px target and it is always there. */
+.alert-pill button.ap-quiet{background:transparent;color:var(--ink-soft);padding:9px 8px;font-weight:700;}
 
 /* ---- coach marks (first-visit hints) & nudges ---- */
 .coach{display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1.5px solid var(--line);border-radius:16px;padding:14px 15px;margin-bottom:16px;box-shadow:0 4px 12px var(--shadow);animation:rise .4s ease;}
@@ -1503,12 +1510,27 @@ function dayLabel(ts){
   if(dayKey(ts)===dayKey(y.getTime())) return 'Yesterday';
   return d.toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'});
 }
-function toast(msg){
-  const t=$('#toast'); t.textContent=msg; t.classList.add('show');
-  clearTimeout(t._tm); t._tm=setTimeout(()=>t.classList.remove('show'),1900);
-  // A toast is Cubby's "that landed" moment, so it's the one honest place for a haptic. One light tap,
-  // never a buzz: this fires at 3am next to a sleeping baby. No-op on the web (see native-bridge.js).
-  try{ window.cubbyHaptic && window.cubbyHaptic('light'); }catch(e){}
+/* HAPTIC POLICY. A haptic is honest feedback for "your tap landed" — it answers a hand, never a
+   clock. Toasts are both: most follow a tap, but some are raised by the app itself (a dose alert on
+   the 1s tick, a sync retry). Those used to buzz identically, which is how a schedule bug turned
+   into an alarm the founder could not switch off: repeated toast == repeated Taptic on the wrapper.
+   So the haptic is gated on a real gesture in the last second rather than on the call site. That
+   covers all ~210 toast() calls without auditing them one by one, it can't be forgotten by the next
+   feature, and it fails SILENT — the right direction for an app used at 3am beside a sleeping baby.
+   An automated alert is silent on the haptic channel by default; the screen is already in the
+   parent's hand when an in-app alert fires, so the buzz was never carrying the information anyway. */
+let _gestureAt=0;
+try{ ['pointerdown','keydown','touchstart'].forEach(ev=>window.addEventListener(ev,()=>{_gestureAt=Date.now();},{capture:true,passive:true})); }catch(e){}
+/* opts: {silent} never buzz, {tapToDismiss} one tap ends it, {ms} how long it stays. */
+function toast(msg,opts){
+  opts=opts||{};
+  const t=$('#toast'); t.textContent=msg;
+  t.classList.toggle('tappable',!!opts.tapToDismiss);
+  t.onclick=opts.tapToDismiss?function(){ clearTimeout(t._tm); t.classList.remove('show'); }:null;
+  t.classList.add('show');
+  clearTimeout(t._tm); t._tm=setTimeout(()=>t.classList.remove('show'),opts.ms||1900);
+  // One light tap, and only when a hand caused this. No-op on the web (see native-bridge.js).
+  if(!opts.silent && (Date.now()-_gestureAt)<1000){ try{ window.cubbyHaptic && window.cubbyHaptic('light'); }catch(e){} }
 }
 let _loaderTimer=null;
 function showLoader(msgs){
@@ -2206,11 +2228,14 @@ function renderHome(){
   let alerts='';
   babyMeds().filter(m=>m.active).forEach(m=>{
     const due=medNextDue(m);
-    if(due!==null && now()>=due){
+    // "Not now" is the only honest way out of a dose alert. Before it, the alternatives were logging
+    // a dose you didn't give (falsifying a health record) or deleting the medicine.
+    if(due!==null && now()>=due && !medDismissed(m,due)){
       alerts += `<div class="alert-pill" style="border-color:var(--med)">
         <div class="ap-ico" style="background:var(--med-soft);color:var(--med)">${I.pill}</div>
         <div class="ap-body"><div class="ap-t">${escapeHtml(m.name)} ${now()-due>60000?'overdue':'due'}</div><div class="ap-s">${m.dose} ${m.unit} · <span data-due="${due}">${fmtDue(due-now())}</span></div></div>
-        <button onclick="logDose('${m.id}')">Log</button></div>`;
+        <div class="ap-acts"><button onclick="logDose('${m.id}')">Log</button>
+        <button class="ap-quiet" onclick="dismissMedAlert('${m.id}',${due})">Not now</button></div></div>`;
     }
   });
   const odv=vaccineOverdue();
@@ -4093,7 +4118,11 @@ function pushSupported(){ try{ if(isNativeApp()) return true; /* the wrapper reg
 function pushCfg(){ if(!state.settings.push) state.settings.push={enabled:false,quietStart:21,quietEnd:7}; return state.settings.push; }
 function openReminders(){
   const sup=pushSupported(), cfg=pushCfg(), ready=REMINDERS_LIVE&&sup&&(isNativeApp()||!!CUBBY_VAPID);  // VAPID is a web-push concept; the wrapper goes via APNs
-  openSheet(`<h2>Reminders 🔔</h2><div class="sub">A gentle nudge when a medicine is due. Off by default, snoozeable, and never for feeds, naps or milestones.</div>
+  const muted=medAlertsMuted();
+  openSheet(`<h2>Reminders 🔔</h2><div class="sub">A gentle nudge when a medicine is due. One nudge per dose, and never for feeds, naps or milestones.</div>
+    <div class="set-item"><div class="si-ico" style="background:var(--med-soft);color:var(--med);font-size:18px">⏰</div><div class="si-body"><div class="a">Dose alerts in the app</div><div class="b">${muted?'Off on this device':'One nudge per dose, while Cubby is open'}</div></div>
+      <div class="seg"><button class="${!muted?'on':''}" onclick="setMedAlerts(true)">On</button><button class="${muted?'on':''}" onclick="setMedAlerts(false)">Off</button></div></div>
+    <div class="csub" style="margin-top:8px">Off stops every dose alert on this phone, and your medicines and their schedules stay exactly as they are.</div>
     ${!ready?`<div class="preg-disclaim">${!REMINDERS_LIVE?'Reminders are still in testing. We’re making sure a nudge always arrives before we switch them on — we don’t want to be the reason a dose is missed. We’ll let you know the moment they’re ready.':!sup?(isNativeApp()?'Reminders need notification permission for Cubby. You can turn it on in your phone settings.':'Reminders need a browser that supports notifications. On iPhone, add Cubby to your home screen first, then open it from there.'):'Reminders are coming soon.'}</div>`:`
     <div class="set-item"><div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🔔</div><div class="si-body"><div class="a">Gentle reminders</div><div class="b">${cfg.enabled?'On for this device':'Off'}</div></div>
       <div class="seg"><button class="${cfg.enabled?'on':''}" onclick="enablePush()">On</button><button class="${!cfg.enabled?'on':''}" onclick="disablePush()">Off</button></div></div>
@@ -7199,6 +7228,54 @@ function deleteDenWeight(id){ const d=ensureDenFields(); d.weights=d.weights.fil
 function babyMeds(){ return (state.meds||[]).filter(m=>m.babyId===state.activeBabyId); }
 function lastDose(medId){ return babyEvents().find(e=>e.type==='medicine'&&e.medId===medId); }
 
+/* ---- dose-alert ledger ---------------------------------------------------------------------
+   What this device has already said out loud, and what the parent has waved off. Keyed by the
+   medicine AND the exact due timestamp, so a single due event can raise at most one alert, ever.
+
+   Device-local, deliberately NOT in the synced household blob, and that is the whole point. The
+   only thing that used to stand between the 1s tick and a haptic was `m.lastNotified`, which rides
+   inside `meds` in the shared doc (store-firebase.js appBlobFromState) and is replaced wholesale by
+   every incoming snapshot (`state.meds = app.meds || []`). Any remote write authored before this
+   device stamped it wiped the guard, and the next tick re-fired immediately — the same firehose the
+   everyX schedule bug opened, reachable from a second direction. A ledger no other device can write
+   cannot be wiped by one.
+   It is also the honest scope: "I have been told" and "I waved this off" are facts about a person on
+   a phone, not about the household, so the other caregiver still gets their own single nudge. Same
+   rule as every other per-person preference — localStorage, keyed by uid. */
+var _medLedger=null,_medLedgerKey='';
+function medLedger(){
+  const k='cubby-med-alerts:'+myUid();
+  if(_medLedger&&_medLedgerKey===k) return _medLedger;
+  _medLedgerKey=k; _medLedger={};
+  try{ _medLedger=JSON.parse(localStorage.getItem(k)||'{}')||{}; }catch(e){ _medLedger={}; }
+  return _medLedger;
+}
+function medLedgerSave(){
+  const l=_medLedger||{},cut=now()-7*86400000;
+  // A dose is answered within hours, so a week-old entry is dead weight. Keeps this bounded forever.
+  Object.keys(l).forEach(k=>{ const r=l[k]||{}; if(Math.max(r.a||0,r.d||0)<cut) delete l[k]; });
+  try{ localStorage.setItem(_medLedgerKey,JSON.stringify(l)); }catch(e){}
+}
+function medDueKey(m,due){ return m.id+'@'+due; }
+function medAlerted(m,due){ const r=medLedger()[medDueKey(m,due)]; return !!(r&&r.a); }
+function medDismissed(m,due){ const r=medLedger()[medDueKey(m,due)]; return !!(r&&r.d); }
+function medLedgerMark(m,due,field){
+  const l=medLedger(),k=medDueKey(m,due); (l[k]||(l[k]={}))[field]=now(); medLedgerSave();
+}
+/* The global off switch, reachable from Settings -> Reminders. Per device, because that is where
+   the alert happens. Turning it off must not need the parent to delete a medicine. */
+function medAlertsMuted(){ try{ return localStorage.getItem('cubby-med-alerts-off:'+myUid())==='1'; }catch(e){ return false; } }
+function setMedAlerts(on){
+  try{ localStorage.setItem('cubby-med-alerts-off:'+myUid(),on?'0':'1'); }catch(e){}
+  openReminders(); toast(on?'Dose alerts on for this device':'Dose alerts off for this device');
+}
+/* "Not now" on the alert pill. Ends this dose's alert on this device and keeps it ended: the
+   medicine, its schedule and every logged dose are untouched, and the next dose alerts normally. */
+function dismissMedAlert(id,due){
+  const m=babyMeds().find(x=>x.id===id); if(!m) return;
+  medLedgerMark(m,+due,'d'); render(); toast('Okay. It stays on the Health tab.');
+}
+
 function medNextDue(m){
   if(m.pattern.type==='asNeeded') return null;
   if(m.pattern.type==='everyX'){
@@ -7330,6 +7407,9 @@ function deleteMed(id){
 function logDose(id){
   const m=babyMeds().find(x=>x.id===id); if(!m)return;
   addEvent({type:'medicine',medId:m.id,medName:m.name,dose:m.dose,unit:m.unit,time:now()});
+  // lastNotified is no longer this build's guard (the device-local ledger is) — a logged dose moves
+  // `due` to a brand new timestamp, which is a brand new ledger key. Kept only so a caregiver still
+  // on an older cached bundle keeps behaving.
   m.lastNotified=null; persist(); render(); toast('Dose logged · '+m.name);
 }
 
@@ -7337,20 +7417,42 @@ function logDose(id){
 function requestNotif(){
   try{ if('Notification' in window && Notification.permission==='default') Notification.requestPermission(); }catch(e){}
 }
+/* ONE due event = at most ONE alert on this device. Ever.
+   This runs on a 1s interval and the worst-case failure is an alarm beside a sleeping baby, so it
+   does not rely on any single guard being correct:
+     1. the ledger    — the real guard. Per medicine, per due timestamp, and no remote write can
+                        reach it, which is the hole the old `m.lastNotified` check left open.
+     2. a dismissal   — "Not now" ends that dose for good.
+     3. a 60s floor   — a pure backstop. If 1 and 2 both fail for a reason nobody has thought of,
+                        the most this loop can physically do is one alert a minute instead of one a
+                        second. Real due events sit minutes to hours apart and everything due in the
+                        same tick is coalesced into one line, so it cannot swallow a legitimate
+                        reminder (an entry blocked by the floor stays unmarked and lands next pass).
+                        It should never engage. It exists so the next bug in medNextDue is an
+                        annoyance rather than the 3am emergency this one was. */
+var _medAlertFloorAt=0;
 function checkMedReminders(){
-  let changed=false;
+  if(medAlertsMuted()) return;
+  const ready=[];
   babyMeds().filter(m=>m.active&&m.remind).forEach(m=>{
-    // Fires at most ONCE per due-event: due is a stable timestamp (null until the first dose),
-    // so the lastNotified check holds until logDose resets it. Never re-alerts on the 1s tick.
     const due=medNextDue(m);
-    if(due!==null && now()>=due && m.lastNotified!==due){
-      m.lastNotified=due; changed=true;
-      const msg=m.name+' · '+m.dose+' '+m.unit+' is due';
-      try{ if('Notification' in window && Notification.permission==='granted') new Notification('Medicine due', {body:msg}); }catch(e){}
-      toast('⏰ '+msg);
-    }
+    if(due===null||!(now()>=due)) return;
+    if(medAlerted(m,due)||medDismissed(m,due)) return;
+    ready.push({m:m,due:due});
   });
-  if(changed) persist();
+  if(!ready.length) return;
+  if(now()-_medAlertFloorAt<60000) return;
+  _medAlertFloorAt=now();
+  ready.forEach(x=>medLedgerMark(x.m,x.due,'a'));
+  const one=ready[0].m;
+  const msg=ready.length===1 ? one.name+' · '+one.dose+' '+one.unit+' is due'
+                             : ready.length+' medicines are due';
+  // tag: without it every repeat stacks a fresh row in the OS notification centre instead of
+  // replacing the last one, which is its own version of "I couldn't make it stop".
+  try{ if('Notification' in window && Notification.permission==='granted') new Notification('Medicine due', {body:msg,tag:'cubby-med-due'}); }catch(e){}
+  // silent: a clock is talking, not the parent's hand. Tappable and slower, because a health alert
+  // the parent cannot read in 1.9s or clear on purpose is not an alert, it's an interruption.
+  toast('⏰ '+msg,{silent:true,tapToDismiss:true,ms:6000});
 }
 
 /* ============================================================
