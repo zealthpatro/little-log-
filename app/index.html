@@ -1683,13 +1683,32 @@ function _dpGrid(id){
     var dis=(s.max&&ymd>s.max)||(s.min&&ymd<s.min);
     cells+='<button type="button" class="dp-c'+(ymd===s.sel?' dp-on':'')+(ymd===today?' dp-td':'')+(dis?' dp-x':'')+'"'+(dis?' disabled':'')+' onclick="_dpPick(\''+id+'\',\''+ymd+'\')">'+d+'</button>';
   }
-  return '<div class="dp-h"><button type="button" class="dp-nav" onclick="_dpMove(\''+id+'\',-1)">‹</button><span class="dp-t">'+MN[s.m]+' '+s.y+'</span><button type="button" class="dp-nav" onclick="_dpMove(\''+id+'\',1)">›</button></div>'
+  /* Year steps as well as months. Month-only navigation meant the ONLY way into Cubby with an
+     older child (back-date the birthday) cost 36 taps on '‹' for a three-year-old, and a
+     second-trimester signup stepped five months forward one tap at a time. */
+  return '<div class="dp-h">'
+       +'<button type="button" class="dp-nav" onclick="_dpMove(\''+id+'\',-12)" aria-label="Previous year">«</button>'
+       +'<button type="button" class="dp-nav" onclick="_dpMove(\''+id+'\',-1)" aria-label="Previous month">‹</button>'
+       +'<span class="dp-t">'+MN[s.m]+' '+s.y+'</span>'
+       +'<button type="button" class="dp-nav" onclick="_dpMove(\''+id+'\',1)" aria-label="Next month">›</button>'
+       +'<button type="button" class="dp-nav" onclick="_dpMove(\''+id+'\',12)" aria-label="Next year">»</button></div>'
        +'<div class="dp-w">'+['S','M','T','W','T','F','S'].map(function(x){return '<span>'+x+'</span>';}).join('')+'</div>'
        +'<div class="dp-g">'+cells+'</div>'
        +'<button type="button" class="dp-now" onclick="_dpToday(\''+id+'\')">Today</button>';
 }
 function _dpRefresh(id){ var el=document.getElementById('dp_'+id); if(el)el.innerHTML=_dpGrid(id); }
-function _dpMove(id,delta){ var s=_dp[id]; if(!s)return; s.m+=delta; if(s.m<0){s.m=11;s.y--;} else if(s.m>11){s.m=0;s.y++;} _dpRefresh(id); }
+/* Normalised, because the year buttons move twelve at a time and the old single-step wrap
+   (`if(m<0){m=11;y--}`) only ever handled one. Clamped to min/max where the field sets them, so a
+   run of year taps stops at the edge of what is selectable instead of wandering into a decade of
+   disabled cells. Out-of-range still renders, it just renders disabled: never throws. */
+function _dpMove(id,delta){
+  var s=_dp[id]; if(!s)return;
+  var t=s.y*12+s.m+delta, lim;
+  if(s.min){ lim=(+s.min.slice(0,4))*12+(+s.min.slice(5,7))-1; if(t<lim) t=lim; }
+  if(s.max){ lim=(+s.max.slice(0,4))*12+(+s.max.slice(5,7))-1; if(t>lim) t=lim; }
+  s.y=Math.floor(t/12); s.m=t-s.y*12;
+  _dpRefresh(id);
+}
 function _dpPick(id,ymd){ var s=_dp[id]; if(!s)return; s.sel=ymd; var inp=document.getElementById(id); if(inp){ inp.value=ymd; try{inp.dispatchEvent(new Event('input',{bubbles:true}));}catch(_){ } } var lb=document.getElementById('dpsl_'+id); if(lb) lb.textContent=_dpLabel(ymd); _dpRefresh(id); }
 function _dpToday(id){ var s=_dp[id]; if(!s)return; var t=new Date(); s.y=t.getFullYear(); s.m=t.getMonth(); _dpPick(id,_dpYMD()); }
 

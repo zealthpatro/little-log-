@@ -160,7 +160,11 @@
   function openVoiceLog() {
     vs = { mode: 'input', text: '', intent: null, listening: false, err: '' };
     renderVoiceSheet();
-    if (speechSupported()) beginListen();
+    /* The mic does NOT start on open. It used to, so tapping "Say it" put a live microphone in the
+       room before anyone had decided to speak, and on the first ever tap it fired the browser's
+       permission prompt as if the app had asked for it rather than the person. The sheet already
+       renders the mic button and the words "Tap the mic to speak"; that button is now the truth.
+       voiceRetry still starts on its own, because "Try again" IS the person asking. */
   }
 
   function beginListen() {
