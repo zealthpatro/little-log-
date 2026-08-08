@@ -4124,7 +4124,7 @@ const PRO_CFG = {
 /* Pre-launch: payments aren't open yet, so the Pro sheet collects registrations
    and shows the target launch window. Change this one string when the date moves;
    set PRO_CFG.checkoutUrl (see workers/pro-billing) to flip the sheet to selling. */
-const PRO_LAUNCH = 'August 2026';
+const PRO_LAUNCH = 'October 2026';
 function isPro(){
   try{ if(localStorage.getItem('cubby-pro-dev')==='1') return true; }catch(e){}
   const p = window.LL && window.LL.pro;
