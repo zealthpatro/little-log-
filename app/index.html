@@ -2748,6 +2748,22 @@ function quickLogActions(ts){
   if(stage==='child') out+=actBtn('openMoreLogs()','var(--feed-soft)','var(--feed)',(I.plus||'+'),'More','Feeds, nappies, pump');
   return out;
 }
+/* An empty state should be a door, not directions. "No entries yet ... tap Home to log your first
+   feed" sent a brand-new parent to another screen to find a button, which is the moment most of them
+   put the phone down. Both the action and its label come from the same registry the home tiles use,
+   so a toddler's parent is offered a nap rather than a feed and the two can never drift apart. */
+function firstLogAction(){
+  const stage=quickStage();
+  const byKey={}; quickAvailable(stage).forEach(a=>{ byKey[a.k]=a; });
+  return (QUICK_DEFAULTS[stage]||[]).map(k=>byKey[k]).filter(Boolean)[0]||null;
+}
+const FIRST_LOG_VERB={feed:'Log a feed',sleep:'Start a nap',diaper:'Log a nappy',kicks:'Count kicks',measure:'Add a measurement'};
+function firstLogLabel(){ const a=firstLogAction(); return (a&&FIRST_LOG_VERB[a.k])||'Log your first moment'; }
+function openFirstLog(){
+  const a=firstLogAction();
+  if(a){ const fn=String(a.fn||'').replace(/\(.*$/,''); if(typeof window[fn]==='function'){ window[fn](); return; } }
+  if(typeof openQuickLog==='function') openQuickLog();
+}
 /* The floating button. Shown on EVERY view now, not just home: the whole point of a quick logger is
    that you can reach it from wherever you happen to be standing. Three ways it can be absent, in
    order: switched off for good (per user), hidden for this session, or nothing left to show. */
@@ -2834,7 +2850,7 @@ function tlGroupHtml(k,list){
    never parsed and never inserted, however deep into her history she has scrolled. */
 function renderTimeline(){ return `<div class="fade-in" id="tlList"></div>`; }
 function tlEmptyHtml(){
-  return `<div class="empty-state fade-in"><img class="es-bear" src="/app/spot-art/notes_cub.webp" alt="" loading="lazy"><p>No entries yet</p><span>Your first feed or nap goes here. Cubby will keep the notes.</span><br><button class="es-cta" onclick="go('home')">Log your first moment</button></div>`;
+  return `<div class="empty-state fade-in"><img class="es-bear" src="/app/spot-art/notes_cub.webp" alt="" loading="lazy"><p>No entries yet</p><span>Your first feed or nap goes here. Cubby will keep the notes.</span><br><button class="es-cta" onclick="openFirstLog()">${firstLogLabel()}</button></div>`;
 }
 var _tlSigs={}, _tlTmp=null;
 function paintTimeline(){

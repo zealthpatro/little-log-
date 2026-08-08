@@ -333,8 +333,39 @@ async function chapterLabels(page) {
   check(notes.quoteKept, 'and the quote of the day is still there, nothing was removed');
   check(notes.maxlen === '1000', 'the composer caps a note at 1000 characters', String(notes.maxlen));
 
-  // ---- 9. NO PAGE ERRORS THROUGHOUT ------------------------------------------------------------
-  console.log('\n9. clean console');
+  // ---- 9. THE EMPTY LOG IS A DOOR, NOT A SIGNPOST ----------------------------------------------
+  /* It used to say "log your first moment" and then send her to another screen to find the button,
+     which is the moment most people put the phone down. Both the action and its label come off the
+     quick-log registry, so this also proves a toddler's parent is offered a nap, not a feed. */
+  console.log('\n9. the empty Log tab opens a sheet instead of pointing at one');
+  const door = await page.evaluate(() => {
+    state.events = []; state.babies[0].birth = Date.now() - 45 * 86400000;
+    go('log');
+    var html = document.getElementById('scroll').innerHTML;
+    var out = { navigates: /es-cta[^>]*onclick="go\(/.test(html), label: '' };
+    var btn = document.querySelector('.es-cta');
+    out.label = btn ? btn.textContent.trim() : '';
+    if (btn) btn.click();
+    out.sheetOpen = !!document.querySelector('#sheet.show');
+    out.sheetTitle = (document.querySelector('#sheet h2') || {}).textContent || '';
+    closeSheet();
+    // A toddler leads with sleep, not a feed. Leave the tab and come back rather than re-rendering
+    // in place: the empty state is painted by the windowed timeline, which reconciles by day
+    // signature and correctly leaves an unchanged empty list alone. Every real path to a changed
+    // birthday goes out through Settings and back, so this is the walk a parent actually takes.
+    state.babies[0].birth = Date.now() - 610 * 86400000;
+    go('home'); go('log');
+    var b2 = document.querySelector('.es-cta');
+    out.toddlerLabel = b2 ? b2.textContent.trim() : '';
+    return out;
+  });
+  check(!door.navigates, 'the empty-state button no longer just navigates to another tab');
+  check(door.label === 'Log a feed', 'a six-week-old\'s parent is offered "Log a feed"', door.label);
+  check(door.sheetOpen, 'tapping it opens a log sheet there and then', door.sheetTitle);
+  check(door.toddlerLabel === 'Start a nap', 'a twenty-month-old\'s parent is offered "Start a nap"', door.toddlerLabel);
+
+  // ---- 10. NO PAGE ERRORS THROUGHOUT -----------------------------------------------------------
+  console.log('\n10. clean console');
   check(page.__errs.length === 0, 'no uncaught page errors', page.__errs.join(' | '));
   await page.close();
 
