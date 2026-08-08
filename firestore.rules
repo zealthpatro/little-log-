@@ -185,6 +185,10 @@ service cloud.firestore {
             && request.resource.data.createdBy == request.auth.uid;
         // Audience and authorship are immutable after create (a private note can never be
         // flipped to circle, nor re-attributed); only the author edits/deletes.
+        // This is also why a pin is PER MEMBER and not per circle: clearing somebody else's
+        // pinned flag would mean widening this update rule to every member, and a private note
+        // addressed to a third person is not even readable to the member doing the clearing.
+        // Do not widen it for a pin. Home renders every pin instead (pinnedNotes() in index.html).
         allow update: if request.auth != null && request.auth.uid in pm()
             && resource.data.createdBy == request.auth.uid
             && request.resource.data.audience == resource.data.audience

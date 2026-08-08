@@ -18,6 +18,11 @@ node tools/perf_check.js           # jitter gate: render budgets on a real 4-mon
 node tools/guide_test.js           # the guide + Notes lane: age bands, privacy gates, loss safety
 node tools/shot.js http://localhost:8080/<page>/ /tmp/x.png 390 full   # eyeball any page (see tools/shot.js)
 ```
+Working in a git worktree? `serve.js` takes `PORT=8099` and every gate takes the base URL as its
+first argument (`node tools/guide_test.js http://localhost:8099`). Otherwise the second `serve.js`
+dies on EADDRINUSE in the background and the gates quietly grade the **other** checkout's code, which
+reads exactly like a fix that does not work. `serve.js` prints the directory it is serving: read it.
+
 `tools/uitest.js` and `tools/perf_check.js` both drive the logged-in app through the localhost-only
 `?e2e=1` boot hook. **Run perf_check after anything that touches rendering.** It seeds four months of
 real logging (2,500+ events) and measures at 4x CPU throttle, because the failure it exists to catch is

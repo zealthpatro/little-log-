@@ -280,13 +280,29 @@ async function chapterLabels(page) {
     var me = myUid();
     var today = dayKey(Date.now());
 
-    // N4: "Pin to today (always shows up top)" has to be true on today too.
+    // N4: "Pin to today (your note stays up top)" has to be true on today too.
     state.notes = [
       { id: 'n_new', createdBy: me, createdByName: 'Me', at: Date.now(), day: today, text: 'newer chatter', audience: 'circle', pinned: false },
       { id: 'n_pin', createdBy: me, createdByName: 'Me', at: Date.now() - 3600000, day: today, text: 'formula is in the top cupboard', audience: 'circle', pinned: true }
     ];
     var html = daySurface();
     out.pinFirst = html.indexOf('formula is in the top cupboard') < html.indexOf('newer chatter');
+
+    // N7: one pin PER MEMBER, so two caregivers' pins both stay on the screen. Rules make a note
+    // editable only by its author, so nobody can clear anyone else's — but the lane took
+    // pinnedNote()[0] and dropped the rest, silently. Papa's pin is from two days ago (it reaches
+    // today only because it is pinned); Mama's is today's, so it also proves the de-dup holds.
+    state.notes = [
+      { id: 'p_mama', createdBy: me, createdByName: 'Mama', at: Date.now() - 60000, day: today, text: 'the sling is in the car', audience: 'circle', pinned: true },
+      { id: 'p_papa', createdBy: 'u_papa', createdByName: 'Papa', at: Date.now() - 2 * 86400000, day: dayKey(Date.now() - 2 * 86400000), text: 'formula is in the top cupboard', audience: 'circle', pinned: true },
+      { id: 'p_chat', createdBy: 'u_papa', createdByName: 'Papa', at: Date.now(), day: today, text: 'newer chatter', audience: 'circle', pinned: false }
+    ];
+    var two = daySurface();
+    out.keepsMama = /the sling is in the car/.test(two);
+    out.keepsPapa = /formula is in the top cupboard/.test(two);
+    out.pinBadges = (two.match(/nt-pin/g) || []).length;   // each pin rendered once, not twice
+    out.pinsAboveChatter = two.indexOf('formula is in the top cupboard') < two.indexOf('newer chatter')
+      && two.indexOf('the sling is in the car') < two.indexOf('newer chatter');
 
     // N2: three impatient taps.
     var calls = 0;
@@ -313,7 +329,21 @@ async function chapterLabels(page) {
     out.onPin = said[said.length - 1];
     await toggleNotePin('n1');
     out.onUnpin = said[said.length - 1];
+
+    // N7b: your own second pin takes your first one down. Say so, rather than letting it go the
+    // way another member's pin used to.
+    state.notes = [
+      { id: 'q1', createdBy: me, createdByName: 'Me', at: Date.now() - 1000, day: today, text: 'first', audience: 'circle', pinned: true },
+      { id: 'q2', createdBy: me, createdByName: 'Me', at: Date.now(), day: today, text: 'second', audience: 'circle', pinned: false }
+    ];
+    await toggleNotePin('q2');
+    out.onReplace = said[said.length - 1];
     window.toast = realToast;
+
+    // N7c: the pin control says whose pin it is.
+    openNoteCompose();
+    out.pinLabel = (document.querySelector('.ds-pinlbl') || {}).textContent || '';
+    closeSheet();
 
     // N6 + the empty state.
     state.notes = [];
@@ -326,6 +356,13 @@ async function chapterLabels(page) {
     return out;
   });
   check(notes.pinFirst, 'a note pinned today renders above the day\'s chatter');
+  check(notes.keepsMama && notes.keepsPapa, 'two members\' pins BOTH stay on home, neither is dropped',
+    'mama: ' + notes.keepsMama + ' papa: ' + notes.keepsPapa);
+  check(notes.pinBadges === 2, 'and each of the two renders exactly once', 'badges: ' + notes.pinBadges);
+  check(notes.pinsAboveChatter, 'both pins sit above the day\'s ordinary notes');
+  check(notes.onReplace === 'Pinned to top, your earlier pin came down',
+    'pinning a second note of your own says the first one came down', notes.onReplace);
+  check(/your note/i.test(notes.pinLabel), 'the pin control says whose pin it is', notes.pinLabel);
   check(notes.addCalls === 1, 'three taps on "Leave note" write one note, not three', 'calls: ' + notes.addCalls);
   check(notes.onPin === 'Pinned to top', 'pinning says "Pinned to top"', notes.onPin);
   check(notes.onUnpin === 'Unpinned', 'unpinning says "Unpinned"', notes.onUnpin);

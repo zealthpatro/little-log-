@@ -1,6 +1,7 @@
 /* Minimal static file server for local preview (no deps). */
 const http = require('http'), fs = require('fs'), path = require('path');
 const ROOT = path.dirname(__dirname); // the repo root, wherever the repo lives
+const PORT = Number(process.env.PORT) || 8080;
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.tflite': 'application/octet-stream', '.css': 'text/css', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.xml': 'application/xml', '.txt': 'text/plain', '.ico': 'image/x-icon' };
 http.createServer((req, res) => {
   let p = decodeURIComponent((req.url || '/').split('?')[0]);
@@ -11,4 +12,7 @@ http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': TYPES[path.extname(fp)] || 'application/octet-stream' });
     res.end(data);
   });
-}).listen(8080, () => console.log('serving', ROOT, 'on http://localhost:8080'));
+// PORT override so a worktree can serve itself alongside the main checkout. Without it the second
+// serve.js dies on EADDRINUSE in the background and every gate silently grades the OTHER tree's
+// code — which reads exactly like a failing fix.
+}).listen(PORT, () => console.log('serving', ROOT, 'on http://localhost:' + PORT));

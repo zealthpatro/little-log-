@@ -1239,6 +1239,8 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .ds-pinrow input:checked + .ds-pinsw{background:var(--note);}
 .ds-pinrow input:checked + .ds-pinsw::after{transform:translateX(19px);}
 .ds-pinlbl{font-size:13.5px;font-weight:700;color:var(--ink);}
+.ds-pinrow.has-sub{margin-bottom:6px;}
+.ds-pinsub{margin:0 0 16px 54px;}
 .note-read{font-family:var(--font-display);font-size:17px;font-weight:500;color:var(--ink);line-height:1.55;white-space:pre-wrap;word-break:break-word;margin-bottom:18px;}
 /* Wide screens: present the app as a framed den, not a bare strip (DESIGN.md C-4) */
 @media(min-width:900px){
@@ -2205,10 +2207,13 @@ function notesForDay(ts){
   const k=dayKey(ts);
   return visibleNotes().filter(n=>n.day===k).sort((a,b)=>(b.at||0)-(a.at||0));
 }
-function pinnedNote(){
-  // At most one pinned note; it always shows on today regardless of the selected day.
-  const me=myUid();
-  return visibleNotes().filter(n=>n.pinned).sort((a,b)=>(b.at||0)-(a.at||0))[0]||null;
+function pinnedNotes(){
+  // One pin PER MEMBER, not per circle (see setNotePinned): rules make a note editable only by its
+  // author, so nobody can take anybody else's pin down. Take them ALL — [0] used to keep the newest
+  // and drop the rest, so the day Mama pinned hers, Papa's "formula is in the top cupboard" stopped
+  // showing on home for good. Still pinned in the data, gone from the screen, nobody told.
+  // A pin always shows on today regardless of the day it was left on.
+  return visibleNotes().filter(n=>n.pinned).sort((a,b)=>(b.at||0)-(a.at||0));
 }
 function noteAudienceLabel(n){
   if(!n) return '';
@@ -2235,17 +2240,17 @@ function noteCard(n){
 function daySurface(){
   const ts=surfaceDayTs;
   const isToday=surfaceIsToday();
-  // "Pin to today (always shows up top)" has to be true on today as well. A pin filed today sits
+  // "Pin to today (your note stays up top)" has to be true on today as well. A pin filed today sits
   // inside dayNotes, which is ordered newest-first, so it used to sink under the day's chatter —
   // the one day the promise mattered most.
   const dayNotes=notesForDay(ts).slice().sort((a,b)=>(b.pinned?1:0)-(a.pinned?1:0));
-  const pin=pinnedNote();
-  // The pinned note always shows on today; avoid showing it twice if it also belongs to this day.
-  const showPin = pin && isToday && !dayNotes.some(n=>n.id===pin.id);
+  // Every pin the viewer can see shows on today, one per member at most, newest first. Not one.
+  // Skip any that already sits in this day's list so it cannot render twice.
+  const pins=(isToday?pinnedNotes():[]).filter(p=>!dayNotes.some(n=>n.id===p.id));
   const photos=(state.photos||[]).filter(p=>p.babyId===state.activeBabyId && p.photoId && !p.deleted && dayKey(p.createdAt)===dayKey(ts)).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
   const recap=daySurfaceRecap(ts);
 
-  const notesEmpty = !dayNotes.length && !showPin;
+  const notesEmpty = !dayNotes.length && !pins.length;
   // First-time soft pulse on the compose button (until the member has left a note).
   const pulse = hasSeen('tip_leftnote') ? '' : ' pulse';
 
@@ -2259,7 +2264,7 @@ function daySurface(){
       <div class="qod-by">Cubby · ${escapeHtml(dayLabel(ts))}</div>
     </div>`;
   } else {
-    notesLane = (showPin?noteCard(pin):'') + dayNotes.map(noteCard).join('');
+    notesLane = pins.map(noteCard).join('') + dayNotes.map(noteCard).join('');
   }
 
   const nav = `<div class="ds-nav">
@@ -2330,10 +2335,14 @@ function renderNoteCompose(){
     // and what becomes true later, so nothing is written under the wrong idea of who is reading.
     ? (others.length ? 'Everyone in your circle will see this.' : 'Only you are in this circle right now. Whoever you invite will see this.')
     : 'Only '+escapeHtml(loggerName(noteDraft.audience)||((info[noteDraft.audience]&&info[noteDraft.audience].name)?info[noteDraft.audience].name.split(' ')[0]:'')||'this person')+' will see this. It stays private.';
+  // Whose pin is this? Yours. Everyone in the circle keeps one, so pinning yours never takes anyone
+  // else's down. Say it only when there is somebody else to reassure them about.
+  const pinSub = others.length ? 'You each keep your own pin, so this will not take anyone else\'s down.' : '';
   openSheet(`<h2>Leave a note ✍️</h2><div class="sub">A warm word for whoever is with baby ${surfaceIsToday()?'today':'on '+escapeHtml(dayLabel(surfaceDayTs))}.</div>
     <div class="field"><label>Note</label><textarea id="ntText" maxlength="1000" placeholder="e.g. Slight cold today, extra cuddles. Last fed 8am."></textarea></div>
     <div class="field"><label>Who can see it</label><div class="aud-row">${chips}</div><div class="aud-sub">${audSub}</div></div>
-    <label class="ds-pinrow"><input type="checkbox" id="ntPin"><span class="ds-pinsw"></span><span class="ds-pinlbl">Pin to today (always shows up top)</span></label>
+    <label class="ds-pinrow${pinSub?' has-sub':''}"><input type="checkbox" id="ntPin"><span class="ds-pinsw"></span><span class="ds-pinlbl">Pin to today (your note stays up top)</span></label>
+    ${pinSub?`<div class="aud-sub ds-pinsub">${pinSub}</div>`:''}
     <button class="btn-primary" id="ntSave" onclick="saveNote()">Leave note</button>`,'note');
 }
 let _savingNote=false;
@@ -2350,14 +2359,18 @@ async function saveNote(){
   try{
     const ok = window.LL&&window.LL.addNote ? await window.LL.addNote(t, aud, dayKey(ts), ts) : false;
     if(!ok){ toast('Could not save the note'); if(btn){ btn.disabled=false; btn.textContent='Leave note'; } return; }
+    let replaced=false;
     if(pin){
       // find the note we just created (most recent by us, this day) and pin it
       const me=myUid();
+      // Read this BEFORE the pin write clears it: one pin each, so an earlier one of yours comes
+      // down here, and going quiet about it is the bug this whole change is about.
+      replaced=(state.notes||[]).some(n=>n.createdBy===me&&n.pinned&&!n.deleted);
       const mine=(state.notes||[]).filter(n=>n.createdBy===me&&n.day===dayKey(ts)).sort((a,b)=>(b.at||0)-(a.at||0))[0];
       if(mine&&window.LL.setNotePinned) await window.LL.setNotePinned(mine.id, true);
     }
     markSeen('tip_leftnote');
-    closeSheet(); render(); toast('Note left 🐻');
+    closeSheet(); render(); toast(replaced?'Note left and pinned, your earlier pin came down':'Note left 🐻');
   } finally { _savingNote=false; }
 }
 function openNoteView(id){
@@ -2376,8 +2389,12 @@ async function toggleNotePin(id){
   // Read the state BEFORE the await: setNotePinned mutates this very object, so the old line
   // reported the new value and every pin was announced as an unpin.
   const wasPinned=!!n.pinned;
+  // You get one pin, so pinning a second note of your own quietly takes the first one down. Say so
+  // rather than letting it go the way another member's pin used to.
+  const me=myUid();
+  const replaces=!wasPinned&&(state.notes||[]).some(x=>x.createdBy===me&&x.pinned&&!x.deleted&&x.id!==id);
   if(window.LL.setNotePinned) await window.LL.setNotePinned(id, !wasPinned);
-  closeSheet(); render(); toast(wasPinned?'Unpinned':'Pinned to top');
+  closeSheet(); render(); toast(wasPinned?'Unpinned':(replaces?'Pinned to top, your earlier pin came down':'Pinned to top'));
 }
 function deleteNote(id){
   confirmSheet({title:'Delete this note?',body:'It moves to recently deleted, where you can bring it back for 30 days.',confirmLabel:'Delete',cancelLabel:'Keep',danger:true,onConfirm:async function(){

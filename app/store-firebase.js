@@ -1606,27 +1606,36 @@
     try { await notesRef.doc(String(id)).update({ deleted: false, deletedAt: null }); delete n.deleted; delete n.deletedAt; return true; }
     catch (e) { console.warn('restoreNote', e); return false; }
   };
-  // Pin/unpin: at most ONE pinned note per circle. Setting a pin clears any other the author can edit.
-  // (We only ever clear pins on notes the caller authored, so the rules permit the write.)
+  // Pin/unpin: at most one pinned note PER MEMBER, not per circle. This comment used to claim
+  // per-circle, which the code never did and no client ever could: rules make a note editable only
+  // by its author, and a note addressed privately to somebody else is not even readable, so one
+  // member cannot clear another's pin. A true per-circle pin would need a privileged server that
+  // can reach into every private note, which is a far bigger hole than one pin is worth.
+  // So each person keeps their own pin, and home renders every pin the viewer can see
+  // (pinnedNotes() in index.html). Papa's "formula is in the top cupboard" stays up when Mama pins
+  // hers; taking only the newest is how one of them used to vanish with nobody told.
   window.LL.setNotePinned = async function (id, pinned) {
     if (!notesRef || !id) return false;
     var u = auth.currentUser; if (!u) return false;
     var target = (state.notes || []).find(function (x) { return String(x.id) === String(id); });
     if (!target || target.createdBy !== u.uid) return false; // pin only your own (audience stays put)
-    try {
-      var writes = [];
-      if (pinned) {
-        (state.notes || []).forEach(function (n) {
-          if (n.pinned && n.createdBy === u.uid && String(n.id) !== String(id)) {
-            n.pinned = false; writes.push(notesRef.doc(String(n.id)).update({ pinned: false }));
-          }
-        });
-      }
-      target.pinned = !!pinned;
-      writes.push(notesRef.doc(String(id)).update({ pinned: !!pinned }));
-      await Promise.all(writes);
-      return true;
-    } catch (e) { console.warn('setNotePinned', e); return false; }
+    // Local first, the way addNote and commitEvent are. An update() made offline resolves only on a
+    // server ack, so awaiting it left the note sheet open with no toast either way on a bad line —
+    // the same wait that addNote was already fixed for. Roll the flag back if the write is refused.
+    if (pinned) {
+      (state.notes || []).forEach(function (n) {
+        if (n.pinned && n.createdBy === u.uid && String(n.id) !== String(id)) {
+          n.pinned = false;
+          notesRef.doc(String(n.id)).update({ pinned: false })
+            .catch(function (e) { console.warn('setNotePinned', e); n.pinned = true; rerender(); });
+        }
+      });
+    }
+    var was = !!target.pinned;
+    target.pinned = !!pinned;
+    notesRef.doc(String(id)).update({ pinned: !!pinned })
+      .catch(function (e) { console.warn('setNotePinned', e); target.pinned = was; rerender(); });
+    return true;
   };
 
   /* ---------- push local changes to the cloud (override persist) ---------- */
