@@ -56,7 +56,10 @@ const CONTRAST_STEPS = [
      sleep exercise different ink-on-accent rungs (sleep is the one accent that declares its own
      --on-sleep). One chapter would only ever measure the fallback. */
   ['guide: chapter (feed)', "typeof CubbyGuide!=='undefined' && CubbyGuide.chapter('feed')"],
-  ['guide: chapter (sleep)', "typeof CubbyGuide!=='undefined' && CubbyGuide.chapter('sleep')"]
+  ['guide: chapter (sleep)', "typeof CubbyGuide!=='undefined' && CubbyGuide.chapter('sleep')"],
+  /* The vaccine-card table: its own injected stylesheet, its own overlay, and ~25 rows of small
+     secondary text next to native date inputs. Nothing else in this walk renders it. */
+  ['vaccine card: table', "typeof CubbyVaxCard!=='undefined' && (CubbyVaxCard.close(), CubbyVaxCard.begin(false))"]
 ];
 
 /* Runs in the page. One row per element that renders its own text, measured against the real

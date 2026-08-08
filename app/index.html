@@ -8951,20 +8951,23 @@ function renderVaccines(){
     ${vaxSetupCard(bb,plan,toConfirm)}
     <div class="disclaimer">⚕️ Showing the ${vaxCountryName((bb&&bb.country)||detectCountry())} schedule as a starting template. <span class="link-inline" onclick="openVaccineCountry()">Change country</span>. Always follow your doctor and local health authority, and edit any item to match your child's actual plan.</div>
     ${list}
-    <div class="add-row" onclick="openAddVaccine()">${I.plus} Add a vaccine</div>`;
+    <div class="add-row" onclick="openAddVaccine()">${I.plus} Add a vaccine</div>
+    ${window.CubbyVaxCard?`<div class="add-row" onclick="CubbyVaxCard.open()">📷 Fill these in from their card</div>`:''}`;
 }
 /* Catch-up card: turns "what's un-recorded" into a calm two-tap setup, never a wall of red. */
 function vaxSetupCard(b,plan,toConfirm){
   if(!toConfirm) return '';
   const nm=escapeHtml((b||{}).name||'your baby');
+  const cardBtn = window.CubbyVaxCard ? `<button class="vs-btn ghost" onclick="CubbyVaxCard.open()">📷 From their card</button>` : '';
   if(b && b.vaxSetupSeen){
-    return `<div class="vx-setup"><span class="vs-emoji">🐻</span><div class="vs-body"><div class="vs-t">Set up ${nm}'s vaccine history</div><div class="vs-s">Record what's already done so the list shows what's actually next.</div><div class="vs-btns"><button class="vs-btn" onclick="vaxCatchupReopen()">Start</button></div></div></div>`;
+    return `<div class="vx-setup"><span class="vs-emoji">🐻</span><div class="vs-body"><div class="vs-t">Set up ${nm}'s vaccine history</div><div class="vs-s">Record what's already done so the list shows what's actually next.</div><div class="vs-btns"><button class="vs-btn" onclick="vaxCatchupReopen()">Start</button>${cardBtn}</div></div></div>`;
   }
   return `<div class="vx-setup"><span class="vs-emoji">🐻</span><div class="vs-body">
     <div class="vs-t">Has ${nm} had vaccinations so far?</div>
     <div class="vs-s">No guilt, just a tidy record. We'll set the schedule to match. Estimated dates are tagged "est." and you can fix any later.</div>
     <div class="vs-btns">
       <button class="vs-btn" onclick="vaxCatchUpAllDone()">Yes, all up to date</button>
+      ${cardBtn}
       <button class="vs-btn ghost" onclick="vaxCatchupDismiss('check')">Let me check the list</button>
       <button class="vs-btn ghost" onclick="vaxCatchupDismiss('later')">Not sure / later</button>
     </div></div></div>`;
@@ -9001,6 +9004,34 @@ function openVaccine(id){
     <button class="btn-ghost" onclick="editVaccine('${id}')">Edit name or due age</button>
     <button class="btn-ghost btn-danger" onclick="deleteVaccine('${id}')">${I.trash} Remove from list</button>`,'diaper');
 }
+/* ---- the two windows app/vax-card.js gets onto the schedule --------------------------------- */
+window.cubbyVaxCtx=function(){
+  const b=activeBaby(); if(!b) return null;
+  return {
+    babyName:b.name||'', birth:b.birth||null, country:vaxCountryName(b.country),
+    rows:vaccinePlan().map((v,i)=>({ i:i, name:v.name, group:v.group, dueMonths:v.dueMonths,
+      given:!!v.given, givenAt:v.givenAt||null, estimated:!!v.estimated, dueAt:vxDueDate(v) }))
+  };
+};
+/* PATCH ONLY. Four rules, each of which is a way this could quietly corrupt a health record:
+   - rows are addressed by INDEX into the plan, never by v.id, because ids are regenerated every
+     time the schedule country changes (applyScheduleCountry);
+   - it never creates a row, so an unreadable scribble cannot invent a dose;
+   - it never sets v.missed, which is the only path to amber and is earned only by a parent saying so;
+   - it never calls addEvent. Twelve backdated doses stamped with today's author is not a log, and
+     vaxCatchUpAllDone already sets the precedent of marking history without writing events.
+   A date in the future, or before the baby was born, is dropped rather than argued with. */
+window.cubbyVaxCommit=function(entries){
+  const plan=vaccinePlan(), b=activeBaby(); let n=0;
+  const birth=(b&&b.birth)||0;
+  (entries||[]).forEach(function(e){
+    const v=plan[e&&e.i]; if(!v) return;
+    const t=+e.at; if(!t || t>now() || (birth && t<birth-86400000)) return;
+    v.given=true; v.givenAt=t; v.estimated=false; v.missed=false; v.source='card'; n++;
+  });
+  if(n){ if(b) b.vaxSetupSeen=true; persist(); render(); }
+  return n;
+};
 function markVaccine(id){
   const v=vaccinePlan().find(x=>x.id===id); if(!v)return;
   const dt=$('#vxDate')?$('#vxDate').value:'';
@@ -11442,6 +11473,7 @@ function normalizeLoadedState(saved){
      first paint, so a new parent's Get started card came up without its guide row and only grew one
      on the next render. First paint is the one that matters here. -->
 <script defer src="log-guide.js"></script>
+<script defer src="vax-card.js"></script>
 <script defer src="store-firebase.js"></script>
 <script defer src="voice-log.js"></script>
 <!-- Bear avatars + custom time picker. -->
