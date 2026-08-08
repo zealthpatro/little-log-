@@ -2042,10 +2042,14 @@ function renderGetStarted(){
   return `<div class="gs-card">
     <div class="gs-head"><div class="gs-title">Get started 🐻</div><button class="gs-x" onclick="dismissTip('getstarted')">×</button></div>
     ${row(haveBaby,'Add your baby','Name and birthday','')}
-    ${row(hasPhoto,'Add a photo','A face for the feed and keepsakes',"go('album')")}
     ${(window.CubbyGuide&&window.cubbyOpenGuide)?row(hasSeen('tip_logguide'),'See what to log, and why','What each one gives you back','cubbyOpenGuide()'):''}
-    ${row(haveLog,'Log your first entry','One tap below, feed, sleep or nappy','openFeed()')}
+    ${/* This row used to open the feed sheet, whose primary button starts a nursing TIMER — which
+          writes state.timers, not state.events, while this row's own tick reads state.events. So a
+          parent did exactly what the app told her and the box stayed empty. A nappy is two taps and
+          it always writes an entry, which is the whole promise of the row. */''}
+    ${row(haveLog,'Log your first entry','A nappy change is two taps','openDiaper()')}
     ${row(shared,'Invite a co-parent','Share the log live with family',"window.openFamily&&window.openFamily()")}
+    ${row(hasPhoto,'Add a photo','A face for the feed and keepsakes',"go('album')")}
   </div>`;
 }
 
@@ -3898,7 +3902,10 @@ function openAddBaby(opts){
   opts=opts||{};
   addBabyCtx={onboarding:!!opts.onboarding, birth:opts.birth||''};
   newBabyColor=AVATAR_COLORS[Math.floor(Math.random()*AVATAR_COLORS.length)];
-  openSheet(`<h2>Add a baby</h2><div class="sub">Just a name to get started. You can add another any time.</div>
+  /* "Just a name to get started" was not true: saveBaby blocks on the birthday too, so the very
+     first form in the product promised one field and then refused on a second. Say what is actually
+     needed. Everything below the birthday genuinely is optional, and stays optional. */
+  openSheet(`<h2>Add a baby</h2><div class="sub">Their name and birthday to get started. Everything else can wait, and you can add another little one any time.</div>
     <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
     <div class="field"><label>Name</label><input id="bName" placeholder="Baby's name" autofocus></div>
     <div class="field"><label>Birthday</label>${datePicker('bDate',addBabyCtx.birth,{max:now(),empty:true})}${wwa('baby.birthday')}</div>
@@ -3956,6 +3963,7 @@ function openOnboardInvite(){
   }
   openSheet(`<h2>${n>1?'Your little ones are in 🐻':"You're all set 🐻"}</h2><div class="sub">Cubby is for everyone who loves ${n>1?'them':'your little one'}. Invite a partner, grandparent or nanny so you're never the only one who knows.</div>
     <div class="preg-card"><div class="pc-ico" style="background:var(--feed-soft)">👨‍👩‍👧</div><div><div class="pc-t">They see everything, live</div><div class="pc-b">The last feed, the nap, the next dose, all in sync and private to your family.</div></div></div>
+    ${vaxProofLine()?`<div class="sub" style="margin-top:12px;text-align:left">💉 ${vaxProofLine()}</div>`:''}
     <button class="btn-primary" style="background:var(--feed);--accent-ink:var(--on-feed,var(--on-accent));margin-top:14px" onclick="window.openFamily&&window.openFamily()">Invite someone</button>
     <button class="btn-ghost" onclick="openAddBaby({onboarding:true,birth:lastBabyBirth})">＋ Add another little one</button>
     ${(typeof canShowInstall==='function'&&canShowInstall())?`<div class="sub" style="margin-top:14px;font-size:13px">Use Cubby right here, or add it to your home screen to open it like an app, one tap away.</div><button class="btn-ghost" onclick="addToHomeScreen('obInstallMsg')">Add Cubby to your home screen</button><div id="obInstallMsg" class="sub" style="display:none;text-align:left"></div>`:''}
@@ -7115,6 +7123,23 @@ function welcomeBaby(){
    already exists before she taps through. It turns setup into proof at minute two.
 
    LOSS-SAFE: reachable only from welcomeBaby(). endPregnancy() must never route here. */
+/* The one moment in the whole funnel where Cubby can prove it knew something she never typed: the
+   country-correct vaccine plan was seeded the instant she gave a birthday. It was only ever said on
+   the birth-arrival screen, which is reachable from the pregnancy path alone — so the parent who
+   signs up with a baby already here, the commonest path of all, was never told.
+   vaccinePlan() is one row per DOSE and several doses share one appointment, so counting rows and
+   calling them "visits" would be a plain untruth to a parent reading it at 3am. Distinct due-ages
+   is what she will actually turn up for. */
+function vaxProofLine(b){
+  b=b||activeBaby(); if(!b) return '';
+  try{
+    const plan=vaccinePlan()||[];
+    const visits=new Set(plan.map(v=>v.dueMonths)).size;
+    const where=vaxCountryName(b.country)||'';
+    if(!visits||!where) return '';
+    return `Their vaccine plan is already waiting in Health: ${visits} visit${visits===1?'':'s'}, on the ${escapeHtml(where)} schedule.`;
+  }catch(e){ return ''; }
+}
 function showBirthArrival(b){
   // She is not a new user. Pre-dismiss the baby-shell coach marks so the app stops introducing
   // itself to someone who has been here for months. 'log' is deliberately left: one hint, the first
@@ -7123,15 +7148,7 @@ function showBirthArrival(b){
   // vaccinePlan() is one row per DOSE, and several doses share a single appointment, so counting
   // rows and calling them "visits" would be a plain untruth to a parent reading it at 3am. Count
   // distinct due-ages instead: that is what she will actually turn up for.
-  let visits=0, where='';
-  try{
-    const plan=vaccinePlan()||[];
-    visits=new Set(plan.map(v=>v.dueMonths)).size;
-    where=vaxCountryName(b.country)||'';
-  }catch(e){}
-  const vaxLine=visits
-    ? `Their vaccine plan is already waiting in Health: ${visits} visit${visits===1?'':'s'}, on the ${escapeHtml(where)} schedule.`
-    : '';
+  const vaxLine=vaxProofLine(b);
   const ov=document.createElement('div');
   ov.id='cb-birth-arrival';
   // The background lives in the stylesheet, not here: it has to follow the theme, and the text
@@ -7718,7 +7735,7 @@ function renderHomeMeds(){
     else sub=`Next ${fmtClock(due)} · <span data-due="${due}">${fmtDue(due-now())}</span>`;
     return `<div class="med-card">
       <div class="mc-ico">${I.pill}</div>
-      <div class="mc-body" onclick="openMedManage('${m.id}')"><div class="a">${escapeHtml(m.name)}</div><div class="b">${m.dose} ${m.unit} · ${sub}</div></div>
+      <div class="mc-body" onclick="openMedManage('${m.id}')"><div class="a">${escapeHtml(m.name)}</div><div class="b">${m.dose} ${m.unit} · ${sub}</div>${lastDoseLine(m)?`<div class="b">${lastDoseLine(m)}</div>`:''}</div>
       <button class="dose-btn" onclick="logDose('${m.id}')">Dose</button>
     </div>`;
   }).join('');
@@ -7805,8 +7822,47 @@ function deleteMed(id){
     persist(); syncReminderIndex(); render(); toast('Removed');
   }});
 }
+/* The interval the parent's OWN schedule implies. Used only to decide whether a second dose right
+   now is worth one question. It is never advice about timing, which is not ours to give: "as needed"
+   has no interval, so it gets the fact on the row and no question at all. */
+function medIntervalMs(m){
+  if(!m||!m.pattern) return 0;
+  if(m.pattern.type==='everyX') return Math.max(0,(m.pattern.hours||0))*3600000;
+  if(m.pattern.type==='daily'){
+    const t=(m.pattern.times||[]).map(x=>{ const p=String(x).split(':').map(Number); return p[0]*60+p[1]; }).sort((a,b)=>a-b);
+    if(t.length<2) return 86400000;
+    let gap=Infinity;
+    for(let i=1;i<t.length;i++) gap=Math.min(gap,t[i]-t[i-1]);
+    gap=Math.min(gap,(t[0]+1440)-t[t.length-1]);          // the wrap past midnight counts too
+    return gap*60000;
+  }
+  return 0;
+}
+/* "Did someone already give her the Calpol?" is the most frightening recurring question in this
+   whole domain, and the medicine row used to say when the NEXT dose was due while never once saying
+   when the last one was given, or by whom. Two caregivers and one baby is exactly the case. */
+function lastDoseLine(m){
+  const last=lastDose(m.id); if(!last) return '';
+  const who=loggerName(last.authorId);
+  return 'Last dose '+escapeHtml(fmtClock(last.time))+(who?(' · by '+escapeHtml(who)):'');
+}
 function logDose(id){
   const m=babyMeds().find(x=>x.id===id); if(!m)return;
+  const last=lastDose(m.id), iv=medIntervalMs(m);
+  // One question, made of facts. Never "are you sure?", never a warning, never a number we invented.
+  if(last && iv && (now()-last.time) < iv){
+    const who=loggerName(last.authorId);
+    confirmSheet({
+      title:'A dose is already logged',
+      body:(who||'Someone')+' logged '+m.name+' '+fmtDur(now()-last.time)+' ago, at '+fmtClock(last.time)+'.',
+      confirmLabel:'Log another', cancelLabel:'Not now',
+      onConfirm:function(){ commitDose(m); }
+    });
+    return;
+  }
+  commitDose(m);
+}
+function commitDose(m){
   addEvent({type:'medicine',medId:m.id,medName:m.name,dose:m.dose,unit:m.unit,time:now()});
   // lastNotified is no longer this build's guard (the device-local ledger is) — a logged dose moves
   // `due` to a brand new timestamp, which is a brand new ledger key. Kept only so a caregiver still

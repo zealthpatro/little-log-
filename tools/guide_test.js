@@ -364,8 +364,61 @@ async function chapterLabels(page) {
   check(door.sheetOpen, 'tapping it opens a log sheet there and then', door.sheetTitle);
   check(door.toddlerLabel === 'Start a nap', 'a twenty-month-old\'s parent is offered "Start a nap"', door.toddlerLabel);
 
-  // ---- 10. NO PAGE ERRORS THROUGHOUT -----------------------------------------------------------
-  console.log('\n10. clean console');
+  // ---- 10. THE FIRST FORM'S PROMISE MATCHES ITS VALIDATION -------------------------------------
+  /* It said "just a name to get started" and then refused to save without a birthday. Whatever the
+     copy names as needed has to be exactly what saveBaby enforces, or the very first thing a parent
+     does in this product is get told off for believing it. */
+  console.log('\n10. the add-baby sheet asks for what it actually requires');
+  const form = await page.evaluate(() => {
+    openAddBaby({ onboarding: false });
+    var sub = (document.querySelector('#sheet .sub') || {}).textContent || '';
+    var said = [];
+    var realToast = window.toast; window.toast = function (m) { said.push(m); };
+    var before = (state.babies || []).length;
+    document.querySelector('#bName').value = 'Aria';
+    saveBaby();                                   // name only: must be refused
+    var refusedOnBirthday = /birthday/i.test(said.join(' ')) && (state.babies || []).length === before;
+    window.toast = realToast;
+    closeSheet();
+    return { sub: sub, refusedOnBirthday: refusedOnBirthday };
+  });
+  check(form.refusedOnBirthday, 'a name alone is still refused, so the birthday really is required', form.sub);
+  check(/birthday/i.test(form.sub), 'and the sub line says so instead of promising "just a name"', form.sub);
+
+  // ---- 11. THE CHECKLIST TICKS WHEN YOU FOLLOW IT ----------------------------------------------
+  /* "Log your first entry" opened the feed sheet, whose primary button starts a nursing TIMER — and
+     a timer writes state.timers, while this row's own completion test reads state.events. A parent
+     did exactly what the app told her and the box stayed empty. Whatever the row points at has to
+     be able to tick the row. */
+  console.log('\n11. following "log your first entry" actually ticks it');
+  const list = await page.evaluate(async () => {
+    state.events = []; markSeen('tip_logguide'); go('home');
+    const html = renderGetStarted();
+    const out = { rowAction: (html.match(/onclick="([^"]*)"[^>]*>\s*<span class="gs-check">/g) || []).length };
+    const m = html.match(/<div class="gs-row"[^>]*onclick="([^"]+)"[^>]*>(?:(?!<\/div>).)*?Log your first entry/s);
+    out.action = m ? m[1] : (html.split('Log your first entry')[0].match(/onclick="([^"]+)"[^>]*$/) || [])[1] || '';
+    out.notFeedTimer = !/openFeed/.test(out.action);
+    out.doneBefore = /gs-row done[^>]*>(?:(?!<\/div>).)*?/.test(html) && false;
+    // follow it end to end
+    try { eval(out.action); } catch (e) { out.err = e.message; }
+    await new Promise(r => setTimeout(r, 250));
+    out.sheetOpened = !!document.querySelector('#sheet.show');
+    const opt = document.querySelector('#sheet.show .opt');
+    if (opt) opt.click();
+    await new Promise(r => setTimeout(r, 350));
+    out.eventsAfter = (state.events || []).length;
+    out.rowNowDone = /Log your first entry/.test(renderGetStarted())
+      ? /class="gs-row done"[^>]*>(?:(?!gs-row)[\s\S])*?Log your first entry/.test(renderGetStarted())
+      : false;
+    return out;
+  });
+  check(list.notFeedTimer, 'the row no longer points at the sheet whose button writes a timer', list.action);
+  check(list.sheetOpened, 'tapping the row opens a log sheet', list.action);
+  check(list.eventsAfter > 0, 'following it through writes a real entry', 'events: ' + list.eventsAfter);
+  check(list.rowNowDone, 'and the row it belongs to is now ticked');
+
+  // ---- 12. NO PAGE ERRORS THROUGHOUT -----------------------------------------------------------
+  console.log('\n12. clean console');
   check(page.__errs.length === 0, 'no uncaught page errors', page.__errs.join(' | '));
   await page.close();
 

@@ -419,6 +419,84 @@ async function tapText(page, selector, text) {
   check(daily.freshlyAdded === daily.slotEnd, 'a medicine added after the slot never opens on a retro-nag');
   check(daily.superseded === daily.slot1, 'a newer missed slot supersedes an older one, so one miss cannot nag all day');
 
+  // ---- 11. THE DOUBLE-DOSE QUESTION ------------------------------------------------------------
+  /* "Did someone already give her the Calpol?" is the most frightening recurring question in this
+     domain, and the row answered a different one: it said when the NEXT dose was due and never once
+     said when the last was given, or by whom. Tapping Dose wrote instantly, so two caregivers and
+     one baby is all it took. The guard is one fact and one question, never a warning, and it uses
+     the interval the PARENT's own schedule implies — "as needed" has none, so it is never asked. */
+  console.log('\n11. a second dose inside the schedule asks one question, made of facts');
+  const dbl = await page.evaluate(async () => {
+    const HOUR = 3600000;
+    function mk(pattern, id) {
+      const m = { id: id, babyId: state.activeBabyId, name: 'Calpol', dose: '2.5', unit: 'ml',
+        pattern: pattern, remind: true, active: true, createdAt: Date.now() - 48 * HOUR };
+      state.meds = (state.meds || []).filter(x => x.id !== id).concat([m]);
+      return m;
+    }
+    function dosedAgo(medId, ms, author) {
+      state.events = [{ id: 'ev_' + medId, babyId: state.activeBabyId, type: 'medicine', medId: medId,
+        medName: 'Calpol', time: Date.now() - ms, authorId: author || null }].concat(state.events || []);
+    }
+    const out = {};
+    out.interval6h = medIntervalMs({ pattern: { type: 'everyX', hours: 6 } });
+    out.intervalDaily = medIntervalMs({ pattern: { type: 'daily', times: ['08:00', '12:00', '20:00'] } });
+    out.intervalAsNeeded = medIntervalMs({ pattern: { type: 'asNeeded' } });
+
+    // the row now states the fact
+    const m1 = mk({ type: 'everyX', hours: 6 }, 'dbl1');
+    out.lineWhenNever = lastDoseLine(m1);
+    dosedAgo('dbl1', 1 * HOUR);
+    out.lineAfterDose = lastDoseLine(m1);
+    out.rowShowsIt = /Last dose/.test(renderHomeMeds());
+
+    // inside the interval -> one question, and nothing is written until it is answered
+    const before = (state.events || []).length;
+    logDose('dbl1');
+    await new Promise(r => setTimeout(r, 250));
+    out.askedInside = !!document.querySelector('#sheet.show');
+    out.sheetText = (document.querySelector('#sheet.show') || {}).innerText || '';
+    out.wroteBeforeAnswer = (state.events || []).length !== before;
+    if (typeof closeSheet === 'function') closeSheet();
+    await new Promise(r => setTimeout(r, 200));
+
+    // outside the interval -> no question at all
+    state.events = (state.events || []).filter(e => e.medId !== 'dbl1');
+    dosedAgo('dbl1', 7 * HOUR);
+    const before2 = (state.events || []).length;
+    logDose('dbl1');
+    await new Promise(r => setTimeout(r, 250));
+    out.askedOutside = !!document.querySelector('#sheet.show');
+    out.wroteOutside = (state.events || []).length > before2;
+    if (typeof closeSheet === 'function') closeSheet();
+
+    // "as needed" has no interval we could honestly claim, so it is never asked
+    mk({ type: 'asNeeded' }, 'dbl2');
+    dosedAgo('dbl2', 10 * 60000);
+    logDose('dbl2');
+    await new Promise(r => setTimeout(r, 250));
+    out.askedAsNeeded = !!document.querySelector('#sheet.show');
+    if (typeof closeSheet === 'function') closeSheet();
+
+    state.meds = (state.meds || []).filter(x => x.id !== 'dbl1' && x.id !== 'dbl2');
+    state.events = (state.events || []).filter(e => e.medId !== 'dbl1' && e.medId !== 'dbl2');
+    return out;
+  });
+
+  check(dbl.interval6h === 6 * 3600000, 'an "every 6h" schedule implies a 6h interval', String(dbl.interval6h));
+  check(dbl.intervalDaily === 4 * 3600000, 'set times imply the SMALLEST gap between them, not the average',
+    `(08:00/12:00/20:00 -> ${dbl.intervalDaily / 3600000}h)`);
+  check(dbl.intervalAsNeeded === 0, '"as needed" implies no interval, so no timing is ever invented');
+  check(dbl.lineWhenNever === '', 'a never-dosed medicine claims no last dose');
+  check(/^Last dose /.test(dbl.lineAfterDose), 'once dosed, the row says when', dbl.lineAfterDose);
+  check(dbl.rowShowsIt, 'and that line is actually rendered on the medicine card');
+  check(dbl.askedInside, 'a second dose inside the interval asks first');
+  check(!dbl.wroteBeforeAnswer, 'and writes nothing until the question is answered');
+  check(!/sure|already gave|careful|warning/i.test(dbl.sheetText),
+    'the question is facts, not a telling-off', JSON.stringify(dbl.sheetText.slice(0, 90)));
+  check(!dbl.askedOutside && dbl.wroteOutside, 'outside the interval it just logs, no question');
+  check(!dbl.askedAsNeeded, 'an "as needed" medicine is never questioned');
+
   // ---- harness integrity, re-checked at the end ------------------------------------------------
   const stillSpied = await page.evaluate(() => /__spy/.test(String(window.toast)) && /__spy/.test(String(window.cubbyHaptic)));
   check(stillSpied, 'spies survived the whole run (nothing silently replaced them)');
