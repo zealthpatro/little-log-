@@ -59,7 +59,12 @@ const CONTRAST_STEPS = [
   ['guide: chapter (sleep)', "typeof CubbyGuide!=='undefined' && CubbyGuide.chapter('sleep')"],
   /* The vaccine-card table: its own injected stylesheet, its own overlay, and ~25 rows of small
      secondary text next to native date inputs. Nothing else in this walk renders it. */
-  ['vaccine card: table', "typeof CubbyVaxCard!=='undefined' && (CubbyVaxCard.close(), CubbyVaxCard.begin(false))"]
+  ['vaccine card: table', "typeof CubbyVaxCard!=='undefined' && (CubbyVaxCard.close(), CubbyVaxCard.begin(false))"],
+  /* The story explainers behind the info affordances. Two of them: the step dots and the Next fill
+     are the only accented things in the overlay, and sleep is the one accent dark enough to flip
+     the ink. Each closes the previous overlay first, since these all stack on document.body. */
+  ['story: sharing', "typeof CubbyVaxCard!=='undefined' && CubbyVaxCard.close(); typeof CubbyGuide!=='undefined' && CubbyGuide.story('sharing',0)"],
+  ['story: medicine (dark accent)', "typeof CubbyGuide!=='undefined' && CubbyGuide.story('medicine',1)"]
 ];
 
 /* Runs in the page. One row per element that renders its own text, measured against the real

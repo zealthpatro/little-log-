@@ -572,8 +572,96 @@ async function chapterLabels(page) {
   check(lossKeep.rendered, 'and Kept memories actually shows them');
   await page2.close();
 
-  // ---- 15. NO PAGE ERRORS THROUGHOUT -----------------------------------------------------------
-  console.log('\n15. clean console');
+  // ---- 15. THE IN-APP TEACHING LAYER -----------------------------------------------------------
+  /* Info affordances beside the core journeys, each opening a few-step story that ends in the real
+     action. Same rule as the guide: pull only. If a story ever opens itself it has become the tour
+     ONBOARDING.md rules out, so "never auto-opens" is an assertion, not a comment. */
+  console.log('\n15. info affordances open a short story and end in the real thing');
+  page = await boot(browser, seed(45));
+  const st = await page.evaluate(async () => {
+    const out = { keys: CubbyGuide.stories(), bad: [], steps: {} };
+    // every story ends somewhere real
+    out.keys.forEach(k => {
+      CubbyGuide.story(k, 0);
+      const o = document.getElementById('logGuide');
+      const dots = o ? o.querySelectorAll('.lg-dot').length : 0;
+      out.steps[k] = dots;
+      if (dots < 3 || dots > 4) out.bad.push(k + ' has ' + dots + ' steps');
+      CubbyGuide.close();
+    });
+    // the dot itself
+    const html = CubbyGuide.info('logging');
+    out.dotIsButton = /^<button class="lg-i"/.test(html);
+    out.dotStopsBubbling = /stopPropagation/.test(html);
+    out.dotHasLabel = /aria-label="[^"]+"/.test(html);
+    out.unknownKeyEmpty = CubbyGuide.info('does-not-exist') === '';
+
+    // walking a story
+    CubbyGuide.story('sharing', 0);
+    const first = (document.querySelector('#logGuide .lg-h') || {}).textContent || '';
+    const noBackOnFirst = !document.querySelector('#logGuide .lg-back');
+    document.querySelector('#logGuide .lg-try').click();
+    const second = (document.querySelector('#logGuide .lg-h') || {}).textContent || '';
+    const hasBack = !!document.querySelector('#logGuide .lg-back');
+    document.querySelector('#logGuide .lg-back').click();
+    const backAgain = (document.querySelector('#logGuide .lg-h') || {}).textContent || '';
+    out.advances = first !== second && first !== '';
+    out.backWorks = backAgain === first;
+    out.noBackOnFirst = noBackOnFirst;
+    out.gainsBack = hasBack;
+    // the last step's action closes the overlay and calls the real function
+    CubbyGuide.story('logging', 99);           // clamps to last
+    out.lastCta = (document.querySelector('#logGuide .lg-try') || {}).textContent || '';
+    let opened = false;
+    const realFeed = window.openFeed; window.openFeed = function () { opened = true; };
+    document.querySelector('#logGuide .lg-try').click();
+    await new Promise(r => setTimeout(r, 150));
+    out.ctaRan = opened;
+    out.ctaClosed = !document.getElementById('logGuide');
+    window.openFeed = realFeed;
+    out.noProgressStored = !JSON.stringify(localStorage).match(/story|lg-step/i);
+    return out;
+  });
+  check(st.keys.length >= 5, 'the core journeys each have a story', JSON.stringify(st.keys));
+  check(st.bad.length === 0, 'every story is three or four steps, never a tour', JSON.stringify(st.bad));
+  check(st.dotIsButton && st.dotHasLabel, 'the info affordance is a real labelled button');
+  check(st.dotStopsBubbling, 'and it does not also fire the row it sits inside');
+  check(st.unknownKeyEmpty, 'an unknown key renders nothing rather than a dead dot');
+  check(st.noBackOnFirst && st.advances && st.gainsBack && st.backWorks, 'you can step forward and back',
+    JSON.stringify({ advances: st.advances, back: st.backWorks }));
+  check(st.ctaRan && st.ctaClosed, 'the last step does the real thing and closes', st.lastCta);
+  check(st.noProgressStored, 'no progress or completion state is stored for a story');
+
+  const noPush = await page.evaluate(() => {
+    // nothing may open a story on its own: a render must never mount the overlay
+    CubbyGuide.close(); render();
+    const afterRender = !document.getElementById('logGuide');
+    // and loss safety applies to stories exactly as it does to the guide
+    state.babies = []; window.myLossHolding = function () { return true; };
+    CubbyGuide.story('sharing', 0);
+    return { afterRender: afterRender, refusedInLoss: !document.getElementById('logGuide') };
+  });
+  check(noPush.afterRender, 'a render never opens a story by itself');
+  check(noPush.refusedInLoss, 'and a story refuses to open over the holding screen');
+  await page.close();
+
+  // ---- 16. THE HOME ANSWERS ITS THREE QUESTIONS FIRST ------------------------------------------
+  console.log('\n16. the three answers come before the day surface');
+  page = await boot(browser, seed(45));
+  const order = await page.evaluate(() => {
+    go('home');
+    const html = document.getElementById('scroll').innerHTML;
+    const since = html.indexOf('since-row');
+    const day = html.indexOf('day-surface');
+    const quick = html.indexOf('Quick log');
+    return { since, day, quick, ok: since > -1 && day > -1 && since < day && quick < day };
+  });
+  check(order.ok, 'last feed / sleep / nappy render above the notes day-surface, and Quick log does too',
+    JSON.stringify(order));
+  // deliberately left open: section 17 reads this page's collected errors, then closes it
+
+  // ---- 17. NO PAGE ERRORS THROUGHOUT -----------------------------------------------------------
+  console.log('\n17. clean console');
   check(page.__errs.length === 0, 'no uncaught page errors', page.__errs.join(' | '));
   await page.close();
 

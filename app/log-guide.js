@@ -43,6 +43,9 @@
     + '#logGuide .lg-chev{flex:0 0 auto;color:var(--ink-soft);font-size:15px;font-weight:800}'
     + '#logGuide .lg-more{width:100%;background:none;border:none;color:var(--ink-soft);font-family:inherit;font-size:13.5px;font-weight:800;padding:12px 0;cursor:pointer;text-align:left;min-height:44px}'
     + '#logGuide .lg-hid{display:none}'
+    + '#logGuide .lg-dots{display:flex;gap:5px;margin:2px 0 18px}'
+    + '#logGuide .lg-dot{flex:1;height:4px;border-radius:2px;background:var(--line);max-width:52px}'
+    + '#logGuide .lg-dot.on{background:var(--ink-soft)}'
     + '#logGuide .lg-what{font-size:17px;line-height:1.5;font-weight:700;margin:2px 0 14px}'
     + '#logGuide .lg-get{font-size:16px;line-height:1.55;color:var(--ink-soft);font-weight:600}'
     + '#logGuide .lg-chico{width:56px;height:56px;border-radius:16px;display:grid;place-items:center;font-size:30px;margin-bottom:12px}'
@@ -138,6 +141,61 @@
       line: 'A word for whoever has baby next',
       what: 'A word for whoever has baby next. Everyone, or just one person.',
       get: 'Like "slight cold today, extra cuddles, last fed 8am". It saves a text, and it saves being asked twice.'
+    }
+  };
+
+  /* ---- the story explainers -------------------------------------------------------------------
+     A chapter answers "what is this log for". A story answers "how does this whole thing work, and
+     why would I bother" — three or four steps, one idea each, ending in the real action. Reached
+     from a small info affordance next to the section it explains, never pushed, never auto-opened.
+     Same rule as the guide itself: if it ever opens itself it has become the tour ONBOARDING.md
+     rules out. Steps are deliberately short; this is read one-handed. */
+  var STORIES = {
+    sharing: {
+      title: 'Sharing with your circle', ico: '👨‍👩‍👧', tone: '--feed', soft: '--feed-soft',
+      steps: [
+        { t: 'One log, everyone who helps', b: 'Invite a partner, a grandparent or a nanny. What they log appears on your phone straight away, and what you log appears on theirs.' },
+        { t: 'You always see who did what', b: 'Every entry carries a name. "Bottle 120 ml, by Nana Bear." Nobody has to ask, and nobody has to remember.' },
+        { t: 'Some things stay only yours', b: 'How you are feeling in yourself is never shared with your circle. Not now, not later, not by accident. A note can go to everyone or to one person, and the card always says which.' },
+        { t: 'If someone leaves the circle', b: 'Their access goes, and what they logged stays in your family\'s log. Nothing disappears from the story.' }
+      ],
+      fn: 'openFamily()', cta: 'Invite someone'
+    },
+    logging: {
+      title: 'The three answers', ico: '🍼', tone: '--feed', soft: '--feed-soft',
+      steps: [
+        { t: '"When was the last feed?"', b: 'That is the question at 3am, and it is the first thing on your home screen. The last nap and the last nappy sit beside it.' },
+        { t: 'One tap starts a nap', b: 'The timer runs on every phone in your circle, so nobody wakes a sleeping baby just to check.' },
+        { t: 'Late is fine', b: 'Nothing has to be logged at the moment it happens. Every sheet lets you change the time, so you can catch up when you sit down.' }
+      ],
+      fn: 'openFeed()', cta: 'Log a feed'
+    },
+    medicine: {
+      title: 'Medicine, safely', ico: '💊', tone: '--sleep', soft: '--sleep-soft',
+      steps: [
+        { t: 'The dose and the schedule', b: 'Add a medicine once, with how often or at what times. Cubby keeps the schedule next to it so you are not doing arithmetic at 2am.' },
+        { t: 'Nobody doubles a dose', b: 'The row says when the last dose was given, and by whom. Tap Dose again inside the schedule and Cubby tells you before it writes anything.' },
+        { t: 'The alarm comes from your own phone', b: 'Set times can go into your calendar, so the reminder arrives from something you already trust, and it ends when the course does.' }
+      ],
+      fn: 'openAddMed()', cta: 'Add a medicine'
+    },
+    health: {
+      title: 'Ready for the doctor', ico: '🩺', tone: '--diaper', soft: '--diaper-soft',
+      steps: [
+        { t: 'The vaccine plan is already there', b: 'Cubby filled it in from the schedule where you are, the day you gave a birthday. Tick them off as they happen.' },
+        { t: 'Growth, one dot at a time', b: 'Weight and height whenever you have them. Over a few visits it draws a gentle curve. It is a guide, never a diagnosis.' },
+        { t: 'One page for the appointment', b: 'The things a doctor usually asks, gathered into a summary you can read out or hand over.' }
+      ],
+      fn: 'openVisitSummary()', cta: 'See the summary'
+    },
+    album: {
+      title: 'The album', ico: '📷', tone: '--note', soft: '--note-soft',
+      steps: [
+        { t: 'Photos land where the day happened', b: 'Add a photo to any activity and it shows up in your album, tagged with the day it belongs to.' },
+        { t: 'Keep the ones that matter', b: 'Monthly cards, then and now, and the little moments from the library. Made from photos you already took.' },
+        { t: 'Private unless you say otherwise', b: 'Nothing is public. Sharing is always something you choose, one thing at a time.' }
+      ],
+      fn: 'go(\'album\')', cta: 'Open the album'
     }
   };
 
@@ -327,6 +385,50 @@
     paint(shell(topBack(), body));
   }
 
+  /* One step per screen, with dots for where you are. The last step carries the real action, so the
+     story always ends in the app rather than in more reading. No progress percentage and no
+     completion state is stored: a story you read half of is not an unfinished task. */
+  function story(key, i) {
+    var s = STORIES[key];
+    if (!s) return;
+    i = Math.max(0, Math.min((s.steps.length - 1), i | 0));
+    var step = s.steps[i], last = i === s.steps.length - 1;
+    var dots = s.steps.map(function (_, n) {
+      return '<i class="lg-dot' + (n === i ? ' on' : '') + '"></i>';
+    }).join('');
+    if (!node() && !mount(s.title)) return;      // mount() also carries the loss-safety refusal
+    var body = '<div class="lg-dots">' + dots + '</div>'
+      + swatch({ ico: s.ico, tone: s.tone, soft: s.soft }, 'lg-chico')
+      + '<div class="lg-h">' + esc(step.t) + '</div>'
+      + '<div class="lg-get">' + esc(step.b) + '</div>'
+      + '<div class="lg-acts">'
+      + (last
+        ? '<button class="lg-try" style="background:var(' + s.tone + ',var(--feed));color:var(' + s.tone.replace(/^--/, '--on-') + ',var(--on-accent))" onclick="CubbyGuide.storyDo(\'' + key + '\')">' + esc(s.cta) + '</button>'
+        : '<button class="lg-try" style="background:var(' + s.tone + ',var(--feed));color:var(' + s.tone.replace(/^--/, '--on-') + ',var(--on-accent))" onclick="CubbyGuide.story(\'' + key + '\',' + (i + 1) + ')">Next</button>')
+      + '<button class="lg-read" onclick="CubbyGuide.close()">' + (last ? 'Close' : 'Not now') + '</button>'
+      + '</div>';
+    var top = (i > 0)
+      ? '<button class="lg-back" onclick="CubbyGuide.story(\'' + key + '\',' + (i - 1) + ')">‹ Back</button>' + topClose()
+      : topClose();
+    paint(shell(top, body));
+  }
+
+  function storyDo(key) {
+    var s = STORIES[key];
+    close();
+    if (s && !callFn(s.fn) && typeof window.toast === 'function') window.toast('That one is not available here');
+  }
+
+  // The affordance itself: a quiet circled i, sized for a thumb, that sits beside a section heading
+  // and says nothing until it is asked. Rendered by the app shell, so its style lives in index.html.
+  function info(key, label) {
+    if (!STORIES[key]) return '';
+    var l = label || STORIES[key].title;
+    // stopPropagation so the dot can sit inside a row that is itself tappable (a Settings item, a
+    // card) without also firing that row's action behind the overlay.
+    return '<button class="lg-i" onclick="event.stopPropagation();CubbyGuide.story(\'' + key + '\',0)" aria-label="' + esc('What is this? ' + l) + '">i</button>';
+  }
+
   function tryIt(key) {
     var found = offered(ctx(), key);
     if (!found) return;
@@ -347,10 +449,12 @@
     btn.textContent = open ? 'That is everything ‹' : 'There is more when you need it ›';
   }
 
-  function open() {
+  // Builds the overlay. Shared by the guide and the story explainers so there is one z-index, one
+  // stylesheet injection and one Escape handler rather than two of each.
+  function mount(label) {
     var c = ctx();
     // Loss safety. The holding screen is the whole screen on purpose. Nothing opens on top of it.
-    if (!c || c.lossHolding) return;
+    if (!c || c.lossHolding) return false;
     close();
     if (!document.getElementById('lgCSS')) {
       var st = document.createElement('style');
@@ -362,9 +466,14 @@
     ov.id = 'logGuide';
     ov.setAttribute('role', 'dialog');
     ov.setAttribute('aria-modal', 'true');
-    ov.setAttribute('aria-label', 'What to log, and why');
+    ov.setAttribute('aria-label', label || 'What to log, and why');
     document.body.appendChild(ov);
     document.addEventListener('keydown', onKey);
+    return true;
+  }
+
+  function open() {
+    if (!mount()) return;
     contents();
     // Offered once. Opening it counts the same as dismissing the card: the door in Settings is the
     // one that stays. It must never come back because a chapter went unread.
@@ -410,6 +519,7 @@
   window.CubbyGuide = {
     open: open, close: close, contents: contents, chapter: chapter, tryIt: tryIt, read: read,
     toggleMore: toggleMore, homeCard: homeCard, settingsRow: settingsRow, dismissCard: dismissCard,
+    story: story, storyDo: storyDo, info: info, stories: function () { return Object.keys(STORIES); },
     // exposed for tools/guide_test.js
     _chapters: chapters, _nowKeys: nowKeys, _readSlug: readSlug
   };
