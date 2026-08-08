@@ -11088,6 +11088,11 @@ function normalizeLoadedState(saved){
 <!-- Cloud auth + sharing. Loads after the app so it can wire into state/persist/PhotoStore. -->
 <!-- Signed-out landing must load before store-firebase.js: showSignIn() falls back to a bare card if window.cubbyLanding isn't defined yet. -->
 <script src="landing.js"></script>
+<!-- Ahead of store-firebase.js on purpose. Deferred scripts run in document order, and the boot
+     render happens inside store-firebase; loaded after it, CubbyGuide was still undefined for the
+     first paint, so a new parent's Get started card came up without its guide row and only grew one
+     on the next render. First paint is the one that matters here. -->
+<script defer src="log-guide.js"></script>
 <script defer src="store-firebase.js"></script>
 <script defer src="voice-log.js"></script>
 <!-- Bear avatars + custom time picker. -->
@@ -11100,7 +11105,6 @@ function normalizeLoadedState(saved){
 <script src="reads-data.js"></script>
 <!-- Capacitor native bridge (push + deep links inside the App Store / Play Store wrapper). Inert on the web. -->
 <script defer src="native-bridge.js"></script>
-<script defer src="log-guide.js"></script>
 <script>
 /* Lazy 30-day purge of Recently deleted: once per load, after the cloud sync has had a moment
    to settle. There is no server cron; this on-load sweep IS the purge the trash copy promises. */

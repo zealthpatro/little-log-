@@ -208,7 +208,13 @@ async function chapterLabels(page) {
     out.fresh = CubbyGuide.homeCard(false).length > 0;
     out.whileGetStarted = CubbyGuide.homeCard(true);
     out.getStartedRow = /See what to log, and why/.test(renderGetStarted());
-    out.homeHasOne = (document.getElementById('scroll') || document.body).textContent.split('See what to log, and why').length - 1;
+    /* Counted against the PAINTED #scroll, never document.body: body.textContent also contains the
+       inline app script's own source, so every string literal in this file reads as "rendered".
+       That false positive hid a real ordering bug once already — log-guide.js loaded after
+       store-firebase.js, so the boot paint had no CubbyGuide and the row silently went missing. */
+    var sc = document.getElementById('scroll');
+    out.scrollFound = !!sc;
+    out.offersOnFirstPaint = sc ? sc.textContent.split('See what to log, and why').length - 1 : -1;
     // a busy household: 40 events, a photo, a co-parent
     state.events = Array.from({ length: 40 }, function (_, i) {
       return { id: 'e' + i, babyId: state.activeBabyId, type: 'feed', time: Date.now() - i * 3600000 };
@@ -222,7 +228,9 @@ async function chapterLabels(page) {
   check(card.fresh, 'a new parent is offered the card');
   check(card.getStartedRow, 'Get started carries the guide as one of its rows');
   check(card.whileGetStarted === '', 'and while Get started is up the standalone card stands down, so the offer appears once');
-  check(card.homeHasOne <= 1, 'the home screen offers the guide exactly once', 'occurrences: ' + card.homeHasOne);
+  check(card.scrollFound && card.offersOnFirstPaint === 1,
+    'the guide is on the home screen at FIRST paint, exactly once (not one render later)',
+    'occurrences: ' + card.offersOnFirstPaint);
   check(card.stillThereWhenBusy, '40 logged feeds and a co-parent do not hide it');
   check(card.afterUse === '', 'once opened or dismissed it is gone for good');
 
