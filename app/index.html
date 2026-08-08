@@ -1007,12 +1007,17 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 
 /* ---- vaccines ---- */
 .vx-status{font-size:10px;font-weight:800;padding:5px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0;}
-.vx-status.done{background:var(--diaper-soft);color:var(--diaper);}
-.vx-status.overdue{background:var(--med-soft);color:var(--med);}
-.vx-status.soon{background:var(--feed-soft);color:var(--feed);}
+/* Ink on a soft wash comes from the --*-ink rung, never from the accent itself: the accent is a
+   FILL. These four were the accent, at 10px/800 on its own tint, and "Due soon" measured 1.99:1 in
+   light. They shipped unmeasured because the contrast walk could not reach them: Health always
+   opened on Medicine, so no theme pass ever rendered the vaccine list. Night aliases --*-ink back
+   to the accent by design, so night is unchanged. */
+.vx-status.done{background:var(--diaper-soft);color:var(--diaper-ink);}
+.vx-status.overdue{background:var(--med-soft);color:var(--med-ink);}
+.vx-status.soon{background:var(--feed-soft);color:var(--feed-ink);}
 .vx-status.upcoming{background:var(--surface-2);color:var(--ink-faint);}
 .vx-status.toconfirm{background:var(--surface-2);color:var(--ink-soft);}
-.vx-status.catchup{background:var(--feed-soft);color:var(--feed);}
+.vx-status.catchup{background:var(--feed-soft);color:var(--feed-ink);}
 .vx-est{font-size:10px;font-weight:700;color:var(--ink-faint);text-transform:none;letter-spacing:0;}
 .vx-setup{display:flex;gap:13px;align-items:flex-start;background:linear-gradient(120deg,var(--diaper-soft),var(--sleep-soft));border-radius:var(--radius);padding:15px 16px;margin:0 0 14px;}
 .vx-setup .vs-emoji{font-size:22px;line-height:1.1;flex-shrink:0;}
@@ -1892,8 +1897,21 @@ function runDeepLink(dl){
 function scheduleDeepLink(){
   var raw=null; try{ raw=sessionStorage.getItem('cubby-dl'); }catch(e){}
   if(!raw) return;                                  // nothing to route
-  var tries=0;                                      // poll until the app is booted past sign-in (render() cadence alone can miss it)
-  var iv=setInterval(function(){ tries++; if(_dlRan || tries>80){ clearInterval(iv); return; } maybeRunDeepLink(); if(_dlRan) clearInterval(iv); }, 250);
+  /* Poll until the app is booted past sign-in (render() cadence alone can miss it). The 20-second
+     budget used to start at page load and tick away while the person was still ON the sign-in
+     overlay or typing their name into first-run, so an invite link opened by someone who took half
+     a minute to sign in expired before the app was ever ready to route it. They landed on a generic
+     home with no idea what the link had been for, and the stash was already cleared. Blocked time
+     is now free: the 20 seconds only starts once nothing is in the way. */
+  var tries=0, blockedTicks=0;
+  var iv=setInterval(function(){
+    if(_dlRan){ clearInterval(iv); return; }
+    var blocked=(window.LL && window.LL.needsIdentity) || !!document.getElementById('llAuthOv');
+    if(blocked){ if(++blockedTicks>1200) clearInterval(iv); return; }   // 5 min, so nothing leaks
+    if(++tries>80){ clearInterval(iv); return; }
+    maybeRunDeepLink();
+    if(_dlRan) clearInterval(iv);
+  }, 250);
 }
 try{ stashDeepLink(); scheduleDeepLink(); }catch(e){}   // stash at load (survives the sign-in redirect), fire when ready
 function _renderView(){
@@ -1970,7 +1988,12 @@ const TIPS_RETIRE_AFTER=25;
 function tipsTicker(){
   const b=activeBaby();
   if(hasSeen('tip_ticker')) return '';
-  if((state.events||[]).length>=TIPS_RETIRE_AFTER) return '';
+  /* Counted per PERSON, not per household. The comment above says this measures whether she has
+     learned to log, but state.events is the family's log: an invited grandparent joining a circle
+     with 400 feeds already in it was judged to have learned, and never saw a single tip. Same
+     class of bug as the shared `seen` map that migrateSeenOnce exists to undo. */
+  const _me=myUid();
+  if((state.events||[]).filter(e=>e && e.authorId===_me).length>=TIPS_RETIRE_AFTER) return '';
   const tips=[
     ['😴','Tap <b>Sleep</b> to start a live nap timer, it shows on every phone.'],
     ['🤝','Invite your partner or the nanny, the day gets logged for you.']
@@ -2516,7 +2539,7 @@ function renderHome(){
   return `<div class="fade-in">
     <div class="greeting">${meGreeting()}</div>
     ${away ? '' : `<div class="greeting-sub">${homeNudgeLine()}</div>`}
-    ${away ? '' : tipsTicker()}
+    ${(away||gsCard) ? '' : tipsTicker()}
     ${away}
     ${daySurface()}
     ${gsCard ? '' : coachMark('home','Welcome to Cubby 👋','Your hub. A photo slideshow up top, one-tap logging below. The tabs hold your Log, Album and Health.')}
@@ -2532,7 +2555,7 @@ function renderHome(){
     ${(window.CubbyGuide&&CubbyGuide.homeCard)?CubbyGuide.homeCard(!!gsCard):''}
     <div class="sec-title">Quick log</div>
     <div class="actions stagger">${quickLogActions(ts)}</div>
-    ${renderNudge()}
+    ${gsCard ? '' : renderNudge()}
     ${alerts}
     ${goodReadCard('baby')}
     <div class="today-strip">
@@ -3982,6 +4005,7 @@ function openOnboardInvite(){
     <div class="preg-card"><div class="pc-ico" style="background:var(--feed-soft)">👨‍👩‍👧</div><div><div class="pc-t">They see everything, live</div><div class="pc-b">The last feed, the nap, the next dose, all in sync and private to your family.</div></div></div>
     ${vaxProofLine()?`<div class="sub" style="margin-top:12px;text-align:left">💉 ${vaxProofLine()}</div>`:''}
     <button class="btn-primary" style="background:var(--feed);--accent-ink:var(--on-feed,var(--on-accent));margin-top:14px" onclick="window.openFamily&&window.openFamily()">Invite someone</button>
+    ${vaxProofLine()?`<button class="btn-ghost" onclick="closeSheet();healthTab='vaccines';go('health')">💉 See their vaccine plan</button>`:''}
     <button class="btn-ghost" onclick="openAddBaby({onboarding:true,birth:lastBabyBirth})">＋ Add another little one</button>
     ${(typeof canShowInstall==='function'&&canShowInstall())?`<div class="sub" style="margin-top:14px;font-size:13px">Use Cubby right here, or add it to your home screen to open it like an app, one tap away.</div><button class="btn-ghost" onclick="addToHomeScreen('obInstallMsg')">Add Cubby to your home screen</button><div id="obInstallMsg" class="sub" style="display:none;text-align:left"></div>`:''}
     <button class="btn-ghost" onclick="closeSheet();window.cubbyOpenGuide&&cubbyOpenGuide()">Show me what to log</button>
@@ -5995,6 +6019,7 @@ function renderPlanningHome(){
     <button class="btn-ghost" onclick="openPlanningSetup()" style="margin-top:2px;color:var(--ink-soft)">Cycle details</button>
     ${lookBackCard+rangeCard+doctorCard+obsBlock+reportCard}
     ${goodReadCard('planning')}
+    ${(window.CubbyGuide&&CubbyGuide.homeCard)?CubbyGuide.homeCard(false):''}
     <div class="sec-title">Getting your body ready</div>
     ${items}
     <div class="field" style="margin-top:10px"><label>Add your own</label><input id="pcNew" placeholder="e.g. Dentist check" onkeydown="if(event.key==='Enter')addPrecon()"></div>
@@ -6358,6 +6383,7 @@ function renderPregHome(){
       }
       return tiles.length?`<div class="sec-title">This week</div><div class="actions stagger">${tiles.join('')}</div>`:'';
     })()}
+    ${(window.CubbyGuide&&CubbyGuide.homeCard)?CubbyGuide.homeCard(false):''}
     <button class="btn-ghost" onclick="openDangerSigns()" style="color:var(--danger-ink);margin-top:14px">⚠️ Urgent warning signs, when to seek care</button>
     ${pregIsOwner()?`<button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:8px" onclick="openWelcomeBaby()">🐻 Baby has arrived</button>`:''}
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>
@@ -7969,15 +7995,23 @@ function checkMedReminders(){
 /* ============================================================
    HEALTH TAB  (Medicine | Illness)
    ============================================================ */
-let healthTab='meds';
+/* Null means "nobody has chosen a tab yet", which is not the same as choosing Medicine. Health used
+   to open on an empty Medicine list for everyone, including the parent who had just been told
+   "their vaccine plan is already waiting in Health" on the setup screen. That plan is the only
+   thing this app can show at minute two that no free tracker has: real dates, on their country's
+   schedule, made before they logged anything. Sending them to an empty list instead was the
+   difference between a payoff and a shrug. A parent mid-course of antibiotics still lands on
+   Medicine, because then it is the answer to the question they opened the app with. */
+let healthTab=null;
 function setHealthTab(t){ healthTab=t; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
 function renderHealth(){
   const b=activeBaby();
+  const tab = healthTab || (babyMeds().length ? 'meds' : 'vaccines');
   const seg=`<div class="seg seg-full">
-    <button class="${healthTab==='meds'?'on':''}" onclick="setHealthTab('meds')">Medicine</button>
-    <button class="${healthTab==='vaccines'?'on':''}" onclick="setHealthTab('vaccines')">Vaccines</button>
-    <button class="${healthTab==='illness'?'on':''}" onclick="setHealthTab('illness')">Illness</button></div>`;
-  const body = healthTab==='vaccines'?renderVaccines() : healthTab==='illness'?renderIllness() : renderHomeMeds();
+    <button class="${tab==='meds'?'on':''}" onclick="setHealthTab('meds')">Medicine</button>
+    <button class="${tab==='vaccines'?'on':''}" onclick="setHealthTab('vaccines')">Vaccines</button>
+    <button class="${tab==='illness'?'on':''}" onclick="setHealthTab('illness')">Illness</button></div>`;
+  const body = tab==='vaccines'?renderVaccines() : tab==='illness'?renderIllness() : renderHomeMeds();
   const al=(b.allergies||[]); const diet=b.diet&&b.diet!=='all'?(b.diet==='veg'?'Vegetarian':'Vegan'):'';
   const docCount=(b.doctors||[]).length;
   const care=`<div class="sec-title" style="margin-top:24px">Doctors &amp; allergies</div>
@@ -7986,7 +8020,15 @@ function renderHealth(){
       <div class="prof-card" onclick="openFoodPrefs()"><span class="lead" style="background:var(--med-soft);color:var(--med)">${I.cross}</span><div class="cflex"><div class="a">Allergies &amp; diet</div><div class="b">${al.length?al.map(capWord).join(', '):'None noted'}${diet?' · '+diet:''}</div></div><span class="chev">${I.chev}</span></div>
     </div>
     <div class="csub" style="margin-top:8px">Tap either to update. Changes show on ${escapeHtml(b.name)}'s profile too.</div>`;
-  return `<div class="fade-in">${coachMark('health','This is Health','Regular medicines with reminders, the vaccine schedule, and any illness to manage, all in one place.')}${seg}${body}${care}</div>`;
+  /* The visit summary was reachable from four places and every one of them needed a SICK baby or a
+     doctor record with a date already typed in. A parent with a well baby and a routine Friday
+     check had no path to it at all, which is the one thing an exhausted first-timer said she
+     actually wanted from this app. It is free: only openDoctorReport inside it spends a taste. */
+  const visit=`<div class="prof-card" style="margin-top:14px" onclick="openVisitSummary()">
+      <span class="lead" style="background:var(--sleep-soft);color:var(--sleep)">${I.stetho}</span>
+      <div class="cflex"><div class="a">Going to the doctor?</div><div class="b">A one-tap summary of the last week, ready to read out</div></div>
+      <span class="chev">${I.chev}</span></div>`;
+  return `<div class="fade-in">${coachMark('health','This is Health','Regular medicines with reminders, the vaccine schedule, and any illness to manage, all in one place.')}${seg}${body}${care}${visit}</div>`;
 }
 
 /* ---- illness episodes, temperature & symptoms ---- */

@@ -153,7 +153,11 @@ async function tapText(page, selector, text) {
 
   // ---- 1. THE FOUNDER'S EXACT INPUT: add a medicine, every X hours, and wait ------------------
   console.log('\n1. add a medicine "every 6 hours" through the real sheet, then watch 9 ticks');
-  await page.evaluate(() => { go('health'); });
+  /* Health no longer opens on Medicine for a family with no medicines: with an empty list it opens
+     on Vaccines, because the country-correct schedule is the one thing worth showing at minute two.
+     So the tab has to be chosen explicitly here. Choosing it is also the truer test: it exercises
+     setHealthTab, which is the path a real parent takes to reach this screen. */
+  await page.evaluate(() => { go('health'); setHealthTab('meds'); });
   await sleep(500);
   check(await tapText(page, '.add-row', 'Add a medicine'), 'tapped "Add a medicine"');
   await sleep(450);
