@@ -1560,8 +1560,15 @@
       at: at, day: day || dayKeyOf(at), text: text, audience: audience, pinned: false
     };
     try {
-      var ref = await notesRef.add(note);
-      note.id = ref.id; mergeNote(note); // optimistic; the listener will reconcile
+      // Local first, the way commitEvent has always done it for feeds and naps. This used to await
+      // notesRef.add(), which resolves only on a server ack — so offline, or on the 3am connection
+      // that never quite lands, the promise neither resolved nor rejected: the sheet stayed open
+      // with the note still in it, no toast either way, and the first-note pulse stayed on forever.
+      // The old comment said "optimistic" while the code sat and waited.
+      var ref = notesRef.doc();
+      note.id = ref.id;
+      mergeNote(note);                          // idempotent by id, so the listener reconciles cleanly
+      ref.set(note).catch(function (e) { console.warn('addNote', e); dropNote(note.id); });
       return true;
     } catch (e) { console.warn('addNote', e); return false; }
   };

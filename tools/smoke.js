@@ -18,7 +18,10 @@ const URL = process.argv[2] || 'http://localhost:8080/app/';
 
 // Critical globals that must always be defined for the app to function.
 const MUST = ['render', 'openSettings', 'openBabyProfile', 'openReminders', 'datePicker',
-  'renderLogTab', 'ensureRoutines', 'toast', 'activeBaby', 'persist', 'openFamily'];
+  'renderLogTab', 'ensureRoutines', 'toast', 'activeBaby', 'persist', 'openFamily',
+  // The guide is a separate module wired into home, Settings, first run and ?go=guide. If it fails
+  // to load, all four go quiet rather than erroring, so nothing else here would notice.
+  'cubbyOpenGuide', 'cubbyGuideCtx'];
 
 (async () => {
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });

@@ -47,7 +47,16 @@ const CONTRAST_STEPS = [
      memory (never persisted) for the same reason as the sleep timer above. Last in the list because
      it mutates meds/events and every step after it would inherit the pill. */
   ['home: dose due + dismiss', "closeSheet(); go('home'); state.meds=[{id:'m1',babyId:state.activeBabyId,name:'Calpol',dose:'2.5',unit:'ml',pattern:{type:'everyX',hours:6},remind:true,active:true}]; state.events=[{id:'e1',babyId:state.activeBabyId,type:'medicine',medId:'m1',medName:'Calpol',time:Date.now()-7*3600000}].concat(state.events); render()"],
-  ['sheet: reminders', "closeSheet(); openReminders()"]
+  ['sheet: reminders', "closeSheet(); openReminders()"],
+  /* The guide is a body-level overlay with its own injected stylesheet, so none of the app's own
+     surfaces cover it and nothing else in this walk would ever measure its text. Last in the list
+     because it sits over everything: any step after it would measure the overlay, not the app. */
+  ['guide: contents', "closeSheet(); typeof cubbyOpenGuide==='function' && cubbyOpenGuide()"],
+  /* Two chapters, not one: the "Try it" button takes the log's own accent as its fill, so feed and
+     sleep exercise different ink-on-accent rungs (sleep is the one accent that declares its own
+     --on-sleep). One chapter would only ever measure the fallback. */
+  ['guide: chapter (feed)', "typeof CubbyGuide!=='undefined' && CubbyGuide.chapter('feed')"],
+  ['guide: chapter (sleep)', "typeof CubbyGuide!=='undefined' && CubbyGuide.chapter('sleep')"]
 ];
 
 /* Runs in the page. One row per element that renders its own text, measured against the real

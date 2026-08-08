@@ -1199,11 +1199,18 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .note-card.priv{border-left:3px solid var(--preg);}
 .note-card.pinned{background:linear-gradient(180deg,var(--note-soft),var(--surface));}
 .note-card .nt-pin{position:absolute;top:9px;right:11px;font-size:14px;line-height:1;}
-.note-card .nt-text{font-family:var(--font-display);font-size:15.5px;font-weight:500;color:var(--ink);line-height:1.45;white-space:pre-wrap;word-break:break-word;}
+/* Clamped to four lines on the card. A long note used to push the rest of the home screen off the
+   bottom of the phone; openNoteView still reads it whole. */
+.note-card .nt-text{font-family:var(--font-display);font-size:15.5px;font-weight:500;color:var(--ink);line-height:1.45;white-space:pre-wrap;word-break:break-word;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;}
 .note-card .nt-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:7px;}
 .note-card .nt-by{font-family:'Caveat',cursive;font-size:16px;font-weight:700;color:var(--ink-soft);}
 .note-card .nt-aud{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-faint);}
 .note-empty{text-align:center;padding:16px 10px 8px;}
+/* The lane used to open with nothing but the quote of the day, set in the same display face and the
+   same handwriting byline as a real note — so it read as a note FROM Cubby, and the lane never
+   looked empty or writable. This says what would go here, in plain words, before the quote. */
+.note-empty .qod-none{font-size:14px;font-weight:800;color:var(--ink);}
+.note-empty .qod-hint{font-size:13px;font-weight:600;color:var(--ink-soft);line-height:1.45;max-width:320px;margin:4px auto 14px;}
 .note-empty .qod{font-family:var(--font-display);font-size:17px;font-weight:500;font-style:italic;color:var(--ink);line-height:1.5;max-width:320px;margin:0 auto;}
 .note-empty .qod-by{font-family:'Caveat',cursive;font-size:16px;font-weight:700;color:var(--ink-soft);margin-top:8px;}
 .ds-recap{cursor:pointer;}
@@ -1867,6 +1874,9 @@ function runDeepLink(dl){
   }
   if(dl.go){
     if(dl.go==='reads'){ var rr=_fn('openReadingRoom'); if(rr) rr(hasPreg?'preg':(hasBaby?'baby':'planning')); return; }
+    // The guide guards itself on loss and on who is holding the phone, so a link can be shared
+    // freely without carrying those decisions in the URL.
+    if(dl.go==='guide'){ var lg=_fn('cubbyOpenGuide'); if(lg){ lg(); return; } }
     var PREG_GO={kicks:'openKickCounter',contractions:'openContractions',symptom:'openLogSymptom',weight:'openLogWeight',mood:'openMoodNote',glucose:'openGlucoseTracker',bag:'openBag',birthplan:'openBirthPlan',games:'openGuessGame',doctorreport:'openPregDoctorReport',danger:'openDangerSigns'};
     var BABY_GO={feed:'openFeed',diaper:'openDiaper',sleep:'openSleep',temp:'openTemp'};
     // Mood is owner-only forever. The deep link must respect the same gate as the home card and
@@ -2033,6 +2043,7 @@ function renderGetStarted(){
     <div class="gs-head"><div class="gs-title">Get started 🐻</div><button class="gs-x" onclick="dismissTip('getstarted')">×</button></div>
     ${row(haveBaby,'Add your baby','Name and birthday','')}
     ${row(hasPhoto,'Add a photo','A face for the feed and keepsakes',"go('album')")}
+    ${(window.CubbyGuide&&window.cubbyOpenGuide)?row(hasSeen('tip_logguide'),'See what to log, and why','What each one gives you back','cubbyOpenGuide()'):''}
     ${row(haveLog,'Log your first entry','One tap below, feed, sleep or nappy','openFeed()')}
     ${row(shared,'Invite a co-parent','Share the log live with family',"window.openFamily&&window.openFamily()")}
   </div>`;
@@ -2131,6 +2142,16 @@ function surfaceShift(deltaDays){
 }
 window.surfaceShift = surfaceShift;
 function surfaceIsToday(){ return dayKey(surfaceDayTs)===dayKey(now()); }
+/* surfaceDayTs is stamped once when this script parses and only ever reset by go('home'). A phone
+   left on the home screen overnight therefore woke up still pointing at yesterday: the day header
+   said so, and a note left first thing that morning was filed under the wrong day. Event-driven on
+   purpose, never a timer — nothing in this app sweeps on an interval any more. */
+document.addEventListener('visibilitychange', function(){
+  if(document.hidden) return;
+  if(dayKey(surfaceDayTs)===dayKey(now())) return;
+  surfaceReset();
+  if(typeof renderSoon==='function') renderSoon();
+});
 
 /* ---- deterministic quote-of-the-day (same line for the whole circle that day) ----
    Warm, no-guilt, non-medical. Picked by a stable hash of the date so it does not flicker. */
@@ -2210,7 +2231,10 @@ function noteCard(n){
 function daySurface(){
   const ts=surfaceDayTs;
   const isToday=surfaceIsToday();
-  const dayNotes=notesForDay(ts);
+  // "Pin to today (always shows up top)" has to be true on today as well. A pin filed today sits
+  // inside dayNotes, which is ordered newest-first, so it used to sink under the day's chatter —
+  // the one day the promise mattered most.
+  const dayNotes=notesForDay(ts).slice().sort((a,b)=>(b.pinned?1:0)-(a.pinned?1:0));
   const pin=pinnedNote();
   // The pinned note always shows on today; avoid showing it twice if it also belongs to this day.
   const showPin = pin && isToday && !dayNotes.some(n=>n.id===pin.id);
@@ -2223,7 +2247,10 @@ function daySurface(){
 
   let notesLane='';
   if(notesEmpty){
+    const solo = Object.keys((window.LL&&window.LL.members)||{}).length<2;
     notesLane = `<div class="note-empty">
+      <div class="qod-none">${isToday?'Nothing yet today.':'Nothing was left on this day.'}</div>
+      <div class="qod-hint">${solo?'Leave a word for yourself, or for whoever you invite later.':'Leave a word for whoever has baby next, like "slight cold today, extra cuddles, last fed 8am".'}</div>
       <div class="qod">${escapeHtml(quoteOfDay(ts))}</div>
       <div class="qod-by">Cubby · ${escapeHtml(dayLabel(ts))}</div>
     </div>`;
@@ -2295,31 +2322,39 @@ function renderNoteCompose(){
         return `<button class="aud ${noteDraft.audience===u?'on':''}" onclick="setNoteAudience('${u}')"><span class="aud-i">🔒</span>${escapeHtml(nm)}</button>`;
       }).join('');
   const audSub = noteDraft.audience==='circle'
-    ? 'Everyone in your circle will see this.'
+    // "Everyone in your circle" to a circle of one is a promise about nobody. Say what is true now
+    // and what becomes true later, so nothing is written under the wrong idea of who is reading.
+    ? (others.length ? 'Everyone in your circle will see this.' : 'Only you are in this circle right now. Whoever you invite will see this.')
     : 'Only '+escapeHtml(loggerName(noteDraft.audience)||((info[noteDraft.audience]&&info[noteDraft.audience].name)?info[noteDraft.audience].name.split(' ')[0]:'')||'this person')+' will see this. It stays private.';
   openSheet(`<h2>Leave a note ✍️</h2><div class="sub">A warm word for whoever is with baby ${surfaceIsToday()?'today':'on '+escapeHtml(dayLabel(surfaceDayTs))}.</div>
-    <div class="field"><label>Note</label><textarea id="ntText" placeholder="e.g. Slight cold today, extra cuddles. Last fed 8am."></textarea></div>
+    <div class="field"><label>Note</label><textarea id="ntText" maxlength="1000" placeholder="e.g. Slight cold today, extra cuddles. Last fed 8am."></textarea></div>
     <div class="field"><label>Who can see it</label><div class="aud-row">${chips}</div><div class="aud-sub">${audSub}</div></div>
     <label class="ds-pinrow"><input type="checkbox" id="ntPin"><span class="ds-pinsw"></span><span class="ds-pinlbl">Pin to today (always shows up top)</span></label>
-    <button class="btn-primary" onclick="saveNote()">Leave note</button>`,'note');
+    <button class="btn-primary" id="ntSave" onclick="saveNote()">Leave note</button>`,'note');
 }
+let _savingNote=false;
 async function saveNote(){
+  if(_savingNote) return;                 // three impatient taps used to leave three identical notes
   const t=($('#ntText')?$('#ntText').value:'').trim();
   if(!t){ toast('Type a little something first'); return; }
+  _savingNote=true;
+  const btn=$('#ntSave'); if(btn){ btn.disabled=true; btn.textContent='Leaving note…'; }
   const pin = !!($('#ntPin')&&$('#ntPin').checked);
   const aud = noteDraft.audience||'circle';
   // Audience is bound at create time and never changes afterward.
   const ts = surfaceIsToday() ? now() : surfaceDayTs;
-  const ok = window.LL&&window.LL.addNote ? await window.LL.addNote(t, aud, dayKey(ts), ts) : false;
-  if(!ok){ toast('Could not save the note'); return; }
-  if(pin){
-    // find the note we just created (most recent by us, this day) and pin it
-    const me=myUid();
-    const mine=(state.notes||[]).filter(n=>n.createdBy===me&&n.day===dayKey(ts)).sort((a,b)=>(b.at||0)-(a.at||0))[0];
-    if(mine&&window.LL.setNotePinned) await window.LL.setNotePinned(mine.id, true);
-  }
-  markSeen('tip_leftnote');
-  closeSheet(); render(); toast('Note left 🐻');
+  try{
+    const ok = window.LL&&window.LL.addNote ? await window.LL.addNote(t, aud, dayKey(ts), ts) : false;
+    if(!ok){ toast('Could not save the note'); if(btn){ btn.disabled=false; btn.textContent='Leave note'; } return; }
+    if(pin){
+      // find the note we just created (most recent by us, this day) and pin it
+      const me=myUid();
+      const mine=(state.notes||[]).filter(n=>n.createdBy===me&&n.day===dayKey(ts)).sort((a,b)=>(b.at||0)-(a.at||0))[0];
+      if(mine&&window.LL.setNotePinned) await window.LL.setNotePinned(mine.id, true);
+    }
+    markSeen('tip_leftnote');
+    closeSheet(); render(); toast('Note left 🐻');
+  } finally { _savingNote=false; }
 }
 function openNoteView(id){
   const n=(state.notes||[]).find(x=>x.id===id); if(!n)return;
@@ -2334,8 +2369,11 @@ function openNoteView(id){
 }
 async function toggleNotePin(id){
   const n=(state.notes||[]).find(x=>x.id===id); if(!n)return;
-  if(window.LL.setNotePinned) await window.LL.setNotePinned(id, !n.pinned);
-  closeSheet(); render(); toast(n.pinned?'Unpinned':'Pinned to top');
+  // Read the state BEFORE the await: setNotePinned mutates this very object, so the old line
+  // reported the new value and every pin was announced as an unpin.
+  const wasPinned=!!n.pinned;
+  if(window.LL.setNotePinned) await window.LL.setNotePinned(id, !wasPinned);
+  closeSheet(); render(); toast(wasPinned?'Unpinned':'Pinned to top');
 }
 function deleteNote(id){
   confirmSheet({title:'Delete this note?',body:'It moves to recently deleted, where you can bring it back for 30 days.',confirmLabel:'Delete',cancelLabel:'Keep',danger:true,onConfirm:async function(){
@@ -2470,6 +2508,7 @@ function renderHome(){
       ${sinceCard('diaper','Last diaper', lastDiaper)}
     </div>
     ${gsCard}
+    ${(window.CubbyGuide&&CubbyGuide.homeCard)?CubbyGuide.homeCard(!!gsCard):''}
     <div class="sec-title">Quick log</div>
     <div class="actions stagger">${quickLogActions(ts)}</div>
     ${renderNudge()}
@@ -2674,6 +2713,26 @@ function quickChosen(stage){
 // place that renders one has to resolve it. Interpolating the function itself would print its
 // source into the tile.
 function quickHint(a){ return (typeof a.hint==='function') ? a.hint() : a.hint; }
+/* The one window app/log-guide.js gets onto app state. It lives here because `state` is a
+   top-level binding in this inline script and is unreachable from a separate file, and because the
+   guide has no business knowing how any of these facts are computed. Note `actions` comes from
+   quickAvailable(), so the owner-only gate on Mood is already applied before the guide sees it. */
+window.cubbyGuideCtx = function(){
+  const b=activeBaby(), p=state.pregnancy||null;
+  const members=(window.LL&&window.LL.members)||{};
+  return {
+    stage: quickStage(),
+    planning: !!(p && p.stage==='planning'),
+    week: (p && typeof pregWeek==='function') ? (pregWeek()||0) : 0,
+    lossHolding: !!(typeof myLossHolding==='function' && myLossHolding() && !(state.babies||[]).length),
+    babyName: b?b.name:'',
+    babyAge: (b&&b.birth) ? ageString(b.birth) : '',
+    // null means "no birthday on file", which the guide reads as "make no claim about age"
+    months: (b&&b.birth) ? babyMonths() : null,
+    circleSize: Object.keys(members).length||1,
+    actions: quickAvailable().map(a=>({k:a.k,label:a.label,ico:a.ico(),fn:a.fn,tone:a.tone,soft:a.soft}))
+  };
+};
 function quickBtn(a,ts){
   // Sleep is the one action whose label depends on live state (a running timer means "wake up").
   if(a.k==='sleep'&&ts) return actBtn("stopSleep('"+state.activeBabyId+"')",'var('+a.soft+')','var('+a.tone+')',a.ico(),'Wake up','Stop the timer');
@@ -3875,6 +3934,7 @@ function openOnboardInvite(){
       <div class="preg-card"><div class="pc-ico" style="background:var(--preg-soft)">👨‍👩‍👧</div><div><div class="pc-t">They follow along, live</div><div class="pc-b">Your week, scans and visits, in sync and private to your family.</div></div></div>
       <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:14px" onclick="window.openFamily&&window.openFamily()">Invite someone</button>
       ${(typeof canShowInstall==='function'&&canShowInstall())?`<div class="sub" style="margin-top:14px;font-size:13px">Use Cubby right here, or add it to your home screen to open it like an app, one tap away.</div><button class="btn-ghost" onclick="addToHomeScreen('obInstallMsg')">Add Cubby to your home screen</button><div id="obInstallMsg" class="sub" style="display:none;text-align:left"></div>`:''}
+      <button class="btn-ghost" onclick="closeSheet();window.cubbyOpenGuide&&cubbyOpenGuide()">Show me what to log</button>
       <button class="btn-ghost" onclick="closeSheet()">Maybe later</button>`,'feed');
     return;
   }
@@ -3883,6 +3943,7 @@ function openOnboardInvite(){
     <button class="btn-primary" style="background:var(--feed);--accent-ink:var(--on-feed,var(--on-accent));margin-top:14px" onclick="window.openFamily&&window.openFamily()">Invite someone</button>
     <button class="btn-ghost" onclick="openAddBaby({onboarding:true,birth:lastBabyBirth})">＋ Add another little one</button>
     ${(typeof canShowInstall==='function'&&canShowInstall())?`<div class="sub" style="margin-top:14px;font-size:13px">Use Cubby right here, or add it to your home screen to open it like an app, one tap away.</div><button class="btn-ghost" onclick="addToHomeScreen('obInstallMsg')">Add Cubby to your home screen</button><div id="obInstallMsg" class="sub" style="display:none;text-align:left"></div>`:''}
+    <button class="btn-ghost" onclick="closeSheet();window.cubbyOpenGuide&&cubbyOpenGuide()">Show me what to log</button>
     <button class="btn-ghost" onclick="closeSheet()">Maybe later</button>`,'feed');
 }
 /* Onboarding stage router: two states (expecting / baby) + a quiet planning link.
@@ -4581,6 +4642,7 @@ function openSettings(){
       <div class="si-body"><div class="a">Quick log button</div><div class="b">${quickPrefs().on?'On · '+quickChosen().length+' shortcut'+(quickChosen().length===1?'':'s'):'Off'} · just for you</div></div>
       <span class="chev">${I.chev}</span>
     </div>
+    ${(window.CubbyGuide&&CubbyGuide.settingsRow)?CubbyGuide.settingsRow():''}
     <div class="set-label">Your data &amp; account</div>
     <div class="set-item" onclick="openTrash()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--sleep-soft);color:var(--sleep)">${I.trash}</div>
@@ -11038,6 +11100,7 @@ function normalizeLoadedState(saved){
 <script src="reads-data.js"></script>
 <!-- Capacitor native bridge (push + deep links inside the App Store / Play Store wrapper). Inert on the web. -->
 <script defer src="native-bridge.js"></script>
+<script defer src="log-guide.js"></script>
 <script>
 /* Lazy 30-day purge of Recently deleted: once per load, after the cloud sync has had a moment
    to settle. There is no server cron; this on-load sweep IS the purge the trash copy promises. */

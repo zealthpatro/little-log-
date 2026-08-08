@@ -15,6 +15,7 @@ node tools/validate.js             # JSON-LD parses, sitemap balanced, FAQ schem
 node tools/smoke.js http://localhost:8080/app/   # fails on uncaught error / missing global
 node tools/uitest.js               # authed UI: dead taps + the contrast gate, both themes
 node tools/perf_check.js           # jitter gate: render budgets on a real 4-month history
+node tools/guide_test.js           # the guide + Notes lane: age bands, privacy gates, loss safety
 node tools/shot.js http://localhost:8080/<page>/ /tmp/x.png 390 full   # eyeball any page (see tools/shot.js)
 ```
 `tools/uitest.js` and `tools/perf_check.js` both drive the logged-in app through the localhost-only
@@ -52,5 +53,7 @@ keeps a future backend swap (e.g. to Cloudflare D1) a contained job rather than 
 - `tools/validate.js` — marketing static validation
 - `tools/uitest.js` — authed-UI harness: dead taps + WCAG contrast in both themes (`?e2e=1`)
 - `tools/perf_check.js` — jitter gate: render/tick budgets on a seeded 4-month history (`?e2e=1`)
+- `tools/guide_test.js` — "What to log, and why" + the Notes lane: which chapters each age gets, the
+  owner-only Mood gate, loss safety, and the four Notes bugs (`?e2e=1`)
 - `tools/gen_sitemap.py` — stamps article lastmods
 - `test/` — Firestore rules emulator test (needs Java): `cd test && npm i && npm run test:rules`

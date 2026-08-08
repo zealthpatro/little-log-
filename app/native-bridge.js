@@ -178,6 +178,7 @@
     try {
       P.App && P.App.addListener && P.App.addListener('backButton', function (ev) {
         try {
+          if (typeof cubbyCloseGuide === 'function' && document.getElementById('logGuide')) { cubbyCloseGuide(); return; }
           if (typeof closeReadCarousel === 'function' && document.getElementById('readCarousel')) { closeReadCarousel(); return; }
           var sheet = document.getElementById('sheet');
           if (sheet && sheet.classList.contains('show') && typeof closeSheet === 'function') { closeSheet(); return; }

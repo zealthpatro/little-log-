@@ -74,7 +74,16 @@ How we teach Cubby's value without a tour, a wall of tips, or added complexity.
    (let feedback drive this, don't pre-add).
 
 ## Explicitly NOT building (avoid over-commitment)
-- Multi-screen carousel tour / video walkthrough.
+- Multi-screen carousel tour / video walkthrough — meaning one that is **pushed**: auto-opened,
+  blocking, or standing between a parent and the thing they came to do.
+  **Amended 2026-08-08**, after a real user reported that the Notes card on the home screen did
+  nothing for them and asked instead for something they could go back to that explained what each
+  log is for. A user-initiated reference guide is now in scope and shipped
+  (`app/log-guide.js`, "What to log, and why"). It is not a tour, and the distinction is the whole
+  point: it never opens itself, never blocks, has no progress meter and no completion count, is
+  offered on the home screen exactly once, and lives permanently in Settings so it is still there
+  the week after, when the question actually arrives. Pull, never push. If anything ever makes it
+  open on its own, it has become the tour this line rules out.
 - A heavy public marketing landing page — that's a **growth-phase** task for `little-cubby.com`
   (hero, screenshots, testimonials, CTA). For the 20 close testers, the sign-in value strip is
   enough; they're invited and already trust the sender.
