@@ -899,6 +899,14 @@
   // Fold a category doc's data back into state.pregnancy (private fields live in memory only).
   function applyMatDoc(cat, d) {
     if (!d) return;
+    /* ONLY the maternal categories fold into state.pregnancy. This guard looks redundant today and
+       is not: the mhealth collection is a general owner-private store, this listener is a
+       whole-collection snapshot, and the fold below copies every key it finds. pregJourneyData is a
+       DENY-list keyed on MAT_PRIVATE_KEYS, which is derived from MAT_CATS — so any category NOT in
+       MAT_CATS would be folded into state.pregnancy and then written straight back out into the
+       journey doc, which carries sharedWith. Storing anything owner-private outside MAT_CATS
+       (medicines, next) would publish it to everyone she told she was pregnant. Fail closed. */
+    if (!MAT_CATS[cat]) return;
     matShared[cat] = d.sharedWith || [];
     knownMat[cat] = stableStringify([d.data || {}, matShared[cat]]); // don't immediately re-write what we just received
     if (!state.pregnancy) state.pregnancy = {};

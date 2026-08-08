@@ -7776,7 +7776,12 @@ function deleteDenWeight(id){ const d=ensureDenFields(); d.weights=d.weights.fil
 /* ============================================================
    MEDICINE
    ============================================================ */
-function babyMeds(){ return (state.meds||[]).filter(m=>m.babyId===state.activeBabyId); }
+/* Takes the child explicitly, and that is the whole point of it existing. The old babyMeds() was a
+   parameterless global meaning "whoever is on screen", which is exactly how a clinical report widens
+   by accident: the moment a medicine can belong to an adult, a report that asks for "the current
+   subject's medicines" prints a mother's prescription on her child's doctor summary. A caller that
+   must be baby-only now has to name the baby. */
+function medsForBaby(bid){ return (state.meds||[]).filter(m=>m && m.babyId===bid); }
 /* A medicine by id, whichever child it belongs to. Every action ON a dose alert used to look the
    medicine up through babyMeds(), so widening the alert without this would have put a pill on screen
    whose Log, In 15 min and Not now buttons all silently did nothing. */
@@ -7940,7 +7945,7 @@ function medScheduleText(m){
 }
 
 function renderHomeMeds(){
-  const meds=babyMeds().filter(m=>m.active);
+  const meds=medsForBaby(state.activeBabyId).filter(m=>m.active);
   let rows=meds.map(m=>{
     const due=medNextDue(m);
     let sub;
@@ -7968,7 +7973,11 @@ function openMedManage(id){ openMedSheet(id); }
 
 let medDraft=null;
 function openMedSheet(id){
-  const existing = id ? babyMeds().find(m=>m.id===id) : null;
+  /* medById, not babyMeds(): this looked the medicine up among the ACTIVE baby's only, so opening a
+     sibling's medicine from the (now household-wide) dose alert found nothing, fell through to the
+     "add new" branch, and the Save button called saveMed('') — which is falsy, so it pushed a second
+     copy into the circle's list instead of editing the first. A silent duplicate, not a crash. */
+  const existing = id ? medById(id) : null;
   medDraft = existing ? JSON.parse(JSON.stringify(existing))
     : {name:'',dose:'',unit:'ml',pattern:{type:'everyX',hours:6,times:['08:00','20:00']},remind:true,active:true};
   renderMedSheet(!!existing);
@@ -8216,7 +8225,7 @@ let healthTab=null;
 function setHealthTab(t){ healthTab=t; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
 function renderHealth(){
   const b=activeBaby();
-  const tab = healthTab || (babyMeds().length ? 'meds' : 'vaccines');
+  const tab = healthTab || (medsForBaby(state.activeBabyId).length ? 'meds' : 'vaccines');
   const seg=`<div class="seg seg-full">
     <button class="${tab==='meds'?'on':''}" onclick="setHealthTab('meds')">Medicine</button>
     <button class="${tab==='vaccines'?'on':''}" onclick="setHealthTab('vaccines')">Vaccines</button>
@@ -8392,7 +8401,9 @@ function visitSummary(days){
   let maxTemp=null; temps.forEach(e=>{ if(maxTemp==null||e.temp>maxTemp.temp) maxTemp=e; });
   const symptoms=evs.filter(e=>e.type==='symptom');
   const lw=lastGrowth('weight'), lh=lastGrowth('height');
-  const meds=babyMeds().filter(m=>m.active);
+  // Named baby, never "whoever is on screen". This is a clinical summary read out to a doctor, and
+  // it is the surface that must never widen when a medicine can belong to an adult.
+  const meds=medsForBaby(b.id).filter(m=>m.active);
   const L=[];
   L.push(`Cubby summary, ${b.name} (${ageString(b.birth)})`);
   const sexW=sexWord(b.sex);
@@ -8444,7 +8455,7 @@ function openDoctorReport(){
     vaxLine=given+' of '+plan.length+' doses recorded as given'+(nextV?('  ·  next: '+nextV.name+' ('+nextV.group+')'):'');
   }catch(e){}
   let medsLines='';
-  try{ medsLines=babyMeds().filter(m=>m.active).map(m=>{ const sched=medScheduleText(m); return '- '+m.name+' · '+m.dose+' '+m.unit+(sched?(' · '+sched):''); }).join('\n'); }catch(e){}
+  try{ medsLines=medsForBaby(b.id).filter(m=>m.active).map(m=>{ const sched=medScheduleText(m); return '- '+m.name+' · '+m.dose+' '+m.unit+(sched?(' · '+sched):''); }).join('\n'); }catch(e){}
   const dob=b.birth?new Date(b.birth).toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'}):'';
   openPrintable(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light"><title>${esc(b.name)} · Cubby visit report</title>
     <style>
@@ -11443,6 +11454,11 @@ function normalizeLoadedState(saved){
     if(!state.settings)state.settings={unit:'ml',theme:'light'};
     if(!state.milestones)state.milestones=[];
     if(!state.meds)state.meds=[];
+    /* Every medicine now names its subject. Read-side only: nothing is written to migrate, and
+       babyId keeps being written forever alongside it, so a caregiver still on an older cached
+       bundle (which knows nothing about `subject`) keeps dosing exactly as before. Runs from
+       applyAppBlob on every snapshot, so it has to be idempotent, and it is. */
+    (state.meds||[]).forEach(m=>{ if(m && !m.subject) m.subject={kind:'baby', id:m.babyId}; });
     if(!state.photos)state.photos=[];
     if(!state.vaccines)state.vaccines={};
     if(!state.illnesses)state.illnesses=[];
