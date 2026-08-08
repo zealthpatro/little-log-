@@ -607,6 +607,17 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
   cursor:pointer;padding:0;margin-left:7px;vertical-align:2px;display:inline-grid;place-items:center;}
 .lg-i:active{transform:scale(.9);}
 .sec-title .lg-i{vertical-align:1px;}
+/* The wake-window line. Deliberately not a card: it is a quiet observation under the three answers,
+   not a feature competing with them, and it disappears the moment it cannot say anything true. */
+.ww-line{position:relative;background:var(--surface);border:1.5px solid var(--line);border-radius:14px;
+  padding:12px 34px 12px 14px;margin:-4px 0 16px;}
+.ww-line .ww-t{font-size:14px;font-weight:700;line-height:1.45;color:var(--ink);}
+.ww-line .ww-s{font-size:12.5px;font-weight:600;line-height:1.45;color:var(--ink-soft);margin-top:4px;}
+.ww-line .ww-x{position:absolute;top:6px;right:6px;width:28px;height:28px;border:none;background:none;
+  color:var(--ink-faint);font-size:15px;line-height:1;cursor:pointer;font-family:var(--font-body);border-radius:50%;}
+/* Two small number fields reading as one sentence: "woke [2] times, for about [20] minutes". */
+.wk-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px;font-weight:600;color:var(--ink-soft);}
+.wk-row input{width:66px;flex:0 0 auto;text-align:center;}
 .wwa{margin-top:8px;}
 .wwa-t{display:inline-flex;align-items:center;gap:4px;border:none;background:none;padding:2px 0;cursor:pointer;font-family:var(--font-body);font-weight:700;font-size:12px;color:var(--ink-soft);}
 .wwa-t svg{width:13px;height:13px;transition:transform .2s;opacity:.8;}
@@ -1484,6 +1495,21 @@ const now = () => Date.now();
 const uid = () => Math.random().toString(36).slice(2,10)+now().toString(36);
 
 function babyEvents(){ return state.events.filter(e=>e.babyId===state.activeBabyId && !e.deleted).sort((a,b)=>b.time-a.time); }
+/* How long a sleep actually WAS. A long night is rarely unbroken, and a parent logging "7pm to 6am"
+   was being credited with eleven hours whether the baby woke twice or not — so every sleep total in
+   the app, including the one on the doctor report, was the optimistic number. `wakings` is optional
+   and absent on every entry logged before it existed, in which case this is exactly the old sum.
+   Clamped at zero so a mistyped 900 minutes cannot produce negative sleep. */
+function netSleepMs(e){
+  if(!e||!e.end) return 0;
+  const gross=e.end-e.time;
+  const w=e.wakings, out=w&&w.mins?gross-(w.mins*60000):gross;
+  return Math.max(0,out);
+}
+function wakingsLabel(e){
+  const w=e&&e.wakings; if(!w||!w.n) return '';
+  return 'woke '+(w.n===1?'once':w.n===2?'twice':w.n+' times')+(w.mins?' for about '+fmtDur(w.mins*60000):'');
+}
 /* Log integrity: you can always edit/delete your own entries; editing or deleting someone
    else's is owner-only (mirrors the Firestore events rule). authorId is never reassigned. */
 function canEditEvent(e){ try{ return (window.LL&&window.LL.role==='owner') || !e.authorId || e.authorId===myUid(); }catch(_){ return true; } }
@@ -2063,7 +2089,7 @@ function homeNudgeLine(){
   if(h<5||h>=23) return `The 3am club 🐻, you've got this. Sleep when you can 💛`;
   const evs=babyEvents();
   const recentSleep=evs.filter(e=>e.type==='sleep'&&e.end&&(now()-e.end)<16*3600000);
-  const longest=recentSleep.reduce((m,e)=>Math.max(m,e.end-e.time),0);
+  const longest=recentSleep.reduce((m,e)=>Math.max(m,netSleepMs(e)),0);
   if(longest>=3*3600000){ const hrs=longest/3600000; return `${escapeHtml(b.name)} slept ~${hrs>=10?Math.round(hrs):hrs.toFixed(1)}h recently 💤`; }
   const todayK=dayKey(now());
   const feedsToday=evs.filter(e=>e.type==='feed'&&dayKey(e.time)===todayK).length;
@@ -2124,7 +2150,7 @@ function awayRecap(){
   const others = todays.filter(e=>e.authorId && e.authorId!==me);
   if(others.length<1) return '';
   const feeds = todays.filter(e=>e.type==='feed').length;
-  const napMs = todays.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+(e.end-e.time),0);
+  const napMs = todays.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+netSleepMs(e),0);
   const dia = todays.filter(e=>e.type==='diaper').length;
   const lastFeed = todays.filter(e=>e.type==='feed')[0];
   const names=[...new Set(others.map(e=>loggerName(e.authorId)).filter(Boolean))];
@@ -2152,7 +2178,7 @@ function dayRecapText(){
   const foods=[...new Set(solids.map(e=>e.notes).filter(Boolean))];
   const water=feeds.filter(e=>e.method==='water').length;
   const naps=evs.filter(e=>e.type==='sleep'&&e.end);
-  const napMs=naps.reduce((a,e)=>a+(e.end-e.time),0);
+  const napMs=naps.reduce((a,e)=>a+netSleepMs(e),0);
   const dia=evs.filter(e=>e.type==='diaper');
   const wet=dia.filter(e=>e.kind==='wet'||e.kind==='both').length;
   const dirty=dia.filter(e=>e.kind==='dirty'||e.kind==='both').length;
@@ -2356,7 +2382,7 @@ function daySurfaceRecap(ts){
   const evs=babyEvents().filter(e=>dayKey(e.time)===k);
   if(!evs.length) return '';
   const feeds=evs.filter(e=>e.type==='feed').length;
-  const napMs=evs.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+(e.end-e.time),0);
+  const napMs=evs.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+netSleepMs(e),0);
   const dia=evs.filter(e=>e.type==='diaper').length;
   const parts=[];
   if(feeds) parts.push(feeds+' feed'+(feeds>1?'s':''));
@@ -2574,7 +2600,7 @@ function renderHome(){
   const todayEvs = evs.filter(e=>dayKey(e.time)===today);
   const feedCount = todayEvs.filter(e=>e.type==='feed').length;
   const diaperCount = todayEvs.filter(e=>e.type==='diaper').length;
-  const sleepMs = todayEvs.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+(e.end-e.time),0);
+  const sleepMs = todayEvs.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+netSleepMs(e),0);
 
   return `<div class="fade-in">
     <div class="greeting">${meGreeting()}</div>
@@ -2590,6 +2616,7 @@ function renderHome(){
       ${sinceCard('sleep','Last sleep', lastSleep)}
       ${sinceCard('diaper','Last diaper', lastDiaper)}
     </div>
+    ${wakeWindowLine()}
     ${gsCard ? '' : coachMark('home','Welcome to Cubby 👋','Your hub. A photo slideshow up top, one-tap logging below. The tabs hold your Log, Album and Health.')}
     ${consentBanners()}
     ${renderHero()}
@@ -2615,6 +2642,58 @@ function renderHome(){
 /* ---- home hero carousel ---- */
 let heroIdx=0, heroTimer=null;
 function heroPhotos(){ return (state.photos||[]).filter(p=>p.babyId===state.activeBabyId && !p.deleted); }
+/* ---- wake windows, from this baby's own sleeps and nothing else ------------------------------
+   Permitted by the prediction rule restated 2026-08-08: refuse to predict where the parent cannot
+   check the answer. She finds out within the hour whether this held, which is exactly what an
+   ovulation forecast can never offer. And it is a statement about HER OWN fortnight, not about
+   babies in general: a population wake-window table by age would be new clinical guidance, needing
+   a source and a named reviewer, and we have neither.
+   A wake window is the gap from the end of one sleep to the start of the next. Two filters earn
+   their place. Gaps longer than six hours are the un-logged overnight stretch, not a window. And
+   gaps that BEGIN at night are night wakings — a resettle at 2am is a real gap and a useless
+   answer to "when might she go down this afternoon", so counting it would drag the daytime range
+   down and quietly make the number wrong. */
+const WW_DAYS=14, WW_MIN_GAPS=5, WW_MAX_GAP=6*3600000, WW_MIN_GAP=20*60000, WW_DAY_FROM=6, WW_DAY_TO=20;
+/* One place decides what counts as daytime, for the sample AND for whether to speak at all. Its own
+   function so the gate can pin it: a check that only runs between 6am and 8pm is not a check. */
+function wwIsDaytime(ts){ const h=new Date(ts).getHours(); return h>=WW_DAY_FROM && h<WW_DAY_TO; }
+function wakeWindow(){
+  if(!state.activeBabyId) return null;
+  const since=now()-WW_DAYS*86400000;
+  const sleeps=babyEvents().filter(e=>e.type==='sleep'&&e.end&&e.time>=since).slice().sort((a,b)=>a.time-b.time);
+  const gaps=[];
+  for(let i=1;i<sleeps.length;i++){
+    const from=sleeps[i-1].end, g=sleeps[i].time-from;
+    if(g<WW_MIN_GAP||g>WW_MAX_GAP) continue;
+    if(!wwIsDaytime(from)) continue;               // a night waking is not the question she is asking
+    gaps.push(g);
+  }
+  if(gaps.length<WW_MIN_GAPS) return {enough:false, have:gaps.length, need:WW_MIN_GAPS};
+  gaps.sort((a,b)=>a-b);
+  const q=p=>gaps[Math.min(gaps.length-1,Math.max(0,Math.round((gaps.length-1)*p)))];
+  return {enough:true, lo:q(0.25), hi:q(0.75), n:gaps.length, days:WW_DAYS};
+}
+function wwHiddenKey(){ return 'cubby-ww-hidden-'+quickUid(); }
+function wwHidden(){ try{ return localStorage.getItem(wwHiddenKey())==='1'; }catch(e){ return false; } }
+function hideWakeWindow(){ try{ localStorage.setItem(wwHiddenKey(),'1'); }catch(e){} render(); }
+/* One quiet line under the three answers, and only when it can say something true and useful:
+   she is awake now, it is daytime, there is enough of her own history, and the range is tight
+   enough to mean anything. A range two hours wide is noise dressed as insight, so it stays quiet. */
+function wakeWindowLine(){
+  if(myLossHolding()||wwHidden()) return '';
+  const b=activeBaby(); if(!b) return '';
+  if(timersFor(state.activeBabyId).sleep) return '';        // asleep right now: nothing to say
+  if(!wwIsDaytime(now())) return '';
+  const last=babyEvents().find(e=>e.type==='sleep'&&e.end); if(!last) return '';
+  const awake=now()-last.end; if(awake<WW_MIN_GAP||awake>WW_MAX_GAP) return '';
+  const w=wakeWindow(); if(!w||!w.enough) return '';
+  if(w.hi-w.lo>2*3600000) return '';
+  return `<div class="ww-line">
+    <div class="ww-t">Awake ${fmtDur(awake)}. In the day, ${escapeHtml(b.name)} has usually slept again between ${fmtDur(w.lo)} and ${fmtDur(w.hi)} after waking.</div>
+    <div class="ww-s">From the last ${w.days} days of your own logs, ${w.n} nap${w.n===1?'':'s'}. Every day is different.</div>
+    <button class="ww-x" onclick="hideWakeWindow()" aria-label="Hide this">×</button>
+  </div>`;
+}
 function renderHero(){
   const ph=heroPhotos();
   if(!ph.length){
@@ -2932,7 +3011,7 @@ function tlGroups(){
 }
 function tlGroupHtml(k,list){
   const feeds=list.filter(e=>e.type==='feed').length;
-  const sleepMs=list.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+(e.end-e.time),0);
+  const sleepMs=list.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+netSleepMs(e),0);
   const dia=list.filter(e=>e.type==='diaper').length;
   // data-day is the patch key: it lets a day that has not changed keep its nodes untouched.
   let html=`<div class="day-group" data-day="${escapeHtml(String(k))}"><div class="day-head">${dayLabel(list[0].time)}
@@ -3058,7 +3137,7 @@ function eventDetail(e){
     if(e.method==='solids'){ const a=[]; if(e.notes)a.push(e.notes); if(e.amount)a.push(fmtSolidAmt(e.amount,e.unit)); return a.join(' · '); }
     return '';
   }
-  if(e.type==='sleep'&&e.end) return fmtDur(e.end-e.time);
+  if(e.type==='sleep'&&e.end){ const wk=wakingsLabel(e); return fmtDur(netSleepMs(e))+(wk?' · '+wk:''); }
   if(e.type==='pump') return (e.amount?e.amount+' '+(e.unit||'ml'):'')+(e.side?' · '+e.side:'');
   if(e.type==='note') return e.notes||'';
   if(e.type==='activity'){ const a=[]; if(e.mins)a.push(e.mins+' min'); if(e.notes)a.push(e.notes); return a.join(' · '); }
@@ -3120,7 +3199,7 @@ function renderStats(){
   });
   const sleepData=days.map(d=>{
     const k=dayKey(d.getTime());
-    const ms=evs.filter(e=>e.type==='sleep'&&e.end&&dayKey(e.time)===k).reduce((a,e)=>a+(e.end-e.time),0);
+    const ms=evs.filter(e=>e.type==='sleep'&&e.end&&dayKey(e.time)===k).reduce((a,e)=>a+netSleepMs(e),0);
     return +(ms/3600000).toFixed(1);
   });
   const diaperData=days.map(d=>{
@@ -3831,6 +3910,21 @@ function openEdit(id){
   if(e.type==='diaper') extra=`<div class="field"><label>Kind</label><div class="unit-toggle" id="eKind">
     ${['wet','dirty','both','dry'].map(k=>`<button class="${(e.kind||'wet')===k?'on':''}" data-k="${k}" ${canEd?`onclick="pickEditKind(this)"`:'disabled'}>${k.charAt(0).toUpperCase()+k.slice(1)}</button>`).join('')}
   </div></div>`;
+  /* A long sleep is rarely unbroken, and nobody taps through six sheets at 3am to say so. Record it
+     as a property of the sleep instead: how many times, how long in total. Offered only where it
+     could plausibly matter, always optional, and it makes every sleep total in the app honest
+     including the one on the doctor report. */
+  if(e.type==='sleep'&&e.end&&(e.end-e.time)>=90*60000){
+    const wk=e.wakings||{};
+    extra=`<div class="field"><label>Did they wake during it? (optional)</label>
+      <div class="wk-row">
+        <input type="number" id="eWkN" min="0" max="30" inputmode="numeric" placeholder="0" value="${wk.n||''}"${canEd?'':' disabled'}>
+        <span>times, for about</span>
+        <input type="number" id="eWkM" min="0" max="600" inputmode="numeric" placeholder="0" value="${wk.mins||''}"${canEd?'':' disabled'}>
+        <span>minutes altogether</span>
+      </div>
+      <div class="csub" style="margin-top:6px">Leave it blank if it was a straight through. This keeps the sleep totals honest, and it is one of the first things a doctor asks.</div></div>`;
+  }
   if(e.type==='pump') extra=`<div class="field"><label>Amount (${e.unit||'ml'})</label><input type="number" id="eAmt" value="${e.amount||0}"${canEd?'':' disabled'}></div>`;
   if(e.type==='note') extra=`<div class="field"><label>Note</label><textarea id="eNote"${canEd?'':' disabled'}>${escapeHtml(e.notes||'')}</textarea></div>`;
   if(e.type==='activity') extra=`<div class="field"><label>Minutes</label><input type="number" id="eMins" value="${e.mins||''}"${canEd?'':' disabled'}></div><div class="field"><label>Note</label><textarea id="eNote"${canEd?'':' disabled'}>${escapeHtml(e.notes||'')}</textarea></div>`;
@@ -3866,6 +3960,15 @@ function saveEdit(id){
   if(kb){ const k=kb.getAttribute('data-k'); if(k && k!==e.kind){ chg('kind',e.kind,k); e.kind=k; } }
   if($('#eMins')){ const v=parseInt($('#eMins').value,10)||null; if(v!==(e.mins||null)){ chg('mins',e.mins,v); e.mins=v; } }
   if($('#eNote')){ const v=$('#eNote').value; if(v!==(e.notes||'')){ chg('note',e.notes||'',v); e.notes=v; } }
+  if($('#eWkN')||$('#eWkM')){
+    const n=Math.max(0,parseInt(($('#eWkN')||{}).value,10)||0);
+    // Waking minutes can never exceed the sleep itself, or the total would go negative and the day
+    // would read as less sleep than actually happened.
+    const cap=Math.floor(((e.end||e.time)-e.time)/60000);
+    const mins=Math.min(cap,Math.max(0,parseInt(($('#eWkM')||{}).value,10)||0));
+    const was=e.wakings||null, next=(n||mins)?{n:n,mins:mins}:null;
+    if(JSON.stringify(was)!==JSON.stringify(next)){ chg('wakings',was,next); if(next) e.wakings=next; else delete e.wakings; }
+  }
   if(hist.length){ e.editedBy=u; e.editedAt=t; e.history=(e.history||[]).concat(hist); }
   persist(); closeSheet(); render(); toast(hist.length?'Updated':'No changes');
 }
@@ -8475,7 +8578,7 @@ function visitSummary(days){
   const water=feeds.filter(e=>e.method==='water').length;
   const bottleVol=bottles.reduce((a,e)=>a+(+e.amount||0),0);
   const sleeps=evs.filter(e=>e.type==='sleep'&&e.end);
-  const sleepMs=sleeps.reduce((a,e)=>a+(e.end-e.time),0);
+  const sleepMs=sleeps.reduce((a,e)=>a+netSleepMs(e),0);
   const diapers=evs.filter(e=>e.type==='diaper');
   const wet=diapers.filter(e=>e.kind==='wet'||e.kind==='both').length;
   const dirty=diapers.filter(e=>e.kind==='dirty'||e.kind==='both').length;
@@ -9953,7 +10056,7 @@ function renderHeatmap(){
   const days=heatDays(logRange==='month'?30:7);
   const byDay={};
   days.forEach(d=>{ byDay[dayKey(d.getTime())]={feed:0,sleepMs:0,diaper:0}; });
-  evs.forEach(e=>{ const k=dayKey(e.time); if(!byDay[k])return; if(e.type==='feed')byDay[k].feed++; else if(e.type==='diaper')byDay[k].diaper++; else if(e.type==='sleep'&&e.end)byDay[k].sleepMs+=(e.end-e.time); });
+  evs.forEach(e=>{ const k=dayKey(e.time); if(!byDay[k])return; if(e.type==='feed')byDay[k].feed++; else if(e.type==='diaper')byDay[k].diaper++; else if(e.type==='sleep'&&e.end)byDay[k].sleepMs+=netSleepMs(e); });
   const rows=[
     {label:'Feeds',color:'--feed',val:k=>byDay[k].feed, fmt:v=>v+' feeds'},
     {label:'Sleep',color:'--sleep',val:k=>byDay[k].sleepMs/3600000, fmt:v=>v.toFixed(1)+'h sleep'},
@@ -10967,7 +11070,7 @@ function monthStats(i){
   const evs=babyEvents().filter(x=>x.time>=s&&x.time<e);
   const span=Math.max(1,(Math.min(e,now())-s)/86400000);
   const feeds=evs.filter(x=>x.type==='feed').length;
-  const sleepMs=evs.filter(x=>x.type==='sleep'&&x.end).reduce((a,x)=>a+(x.end-x.time),0);
+  const sleepMs=evs.filter(x=>x.type==='sleep'&&x.end).reduce((a,x)=>a+netSleepMs(x),0);
   const diapers=evs.filter(x=>x.type==='diaper').length;
   const ms=babyMilestones().filter(m=>m.achievedAt>=s&&m.achievedAt<e);
   return { feedsPerDay:(feeds/span).toFixed(1), sleepPerDay:(sleepMs/3600000/span).toFixed(1), diapers, milestones:ms,

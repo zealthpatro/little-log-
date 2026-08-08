@@ -108,6 +108,18 @@ A guardrail is real only when it is blocking, owned, and checked at the moment o
   inside a shared array. A count or a badge is itself a disclosure. This line exists because the
   medicine work found that storing an owner-private category outside `MAT_CATS` would have been
   folded into `state.pregnancy` and republished into a document carrying `sharedWith`.
+- **Prediction:** **refuse to predict where the parent cannot check the answer.** (Restated
+  2026-08-08 by the founder, replacing "refuse to predict where prediction is dishonest", which was
+  unfalsifiable as a rule and so was applied as a blanket ban.) Two questions, both must pass.
+  *Can she find out?* An ovulation forecast resolves in weeks, so a wrong one is indistinguishable
+  from bad luck and the app is never held to account: still banned, and that is the whole reason
+  Cubby is not a fertility tracker. A statement about naps resolves within the hour: permitted.
+  *Is it about her own data, or about babies in general?* Her own logged history is a fact she gave
+  us and can audit. A population table by age is new clinical guidance and needs a source and a
+  named reviewer like any other clinical claim; do not derive one from a blog.
+  A permitted prediction still states a **range, never a time**, names the sample it came from,
+  never counts down, never fires a notification, and never implies the baby *should* be doing
+  anything. Owner: whoever ships it. Blocking check: `node tools/guide_test.js`.
 - **Data integrity:** offline-safe; no data loss; sync conflicts handled.
 - **Tests:** logic tested; verified in preview; SW cache bumped if assets changed.
 - **Notifications:** if added, gentle, capped, loss-aware, mutable.

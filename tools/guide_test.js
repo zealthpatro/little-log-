@@ -660,8 +660,133 @@ async function chapterLabels(page) {
     JSON.stringify(order));
   // deliberately left open: section 17 reads this page's collected errors, then closes it
 
-  // ---- 17. NO PAGE ERRORS THROUGHOUT -----------------------------------------------------------
-  console.log('\n17. clean console');
+  // ---- 17. WAKE WINDOWS, AND THE RULE THAT PERMITS THEM ----------------------------------------
+  /* "Refuse to predict where the parent cannot check the answer" (guardrails, restated 2026-08-08).
+     This is legal because it resolves within the hour and because it is a statement about HER OWN
+     logged fortnight. Everything below is the boundary of that permission: a range and never a
+     clock time, her own data and never a population table, silence rather than a guess. */
+  console.log('\n17. the wake-window line stays inside what the rule permits');
+  const ww = await page.evaluate(() => {
+    const H = 3600000, D = 86400000;
+    function seedNaps(days, windowMin, spreadMin) {
+      const ev = []; let id = 0;
+      for (let d = 1; d <= days; d++) {
+        const base = new Date(Date.now() - d * D); base.setHours(7, 0, 0, 0);
+        let wake = base.getTime();
+        for (let n = 0; n < 3; n++) {
+          const at = wake + (windowMin + (n % 2 ? spreadMin : 0)) * 60000;
+          ev.push({ id: 'w' + (id++), babyId: 'b1', type: 'sleep', time: at, end: at + 45 * 60000 });
+          wake = at + 45 * 60000;
+        }
+        // a 2am resettle every night: a real gap, and the wrong answer to "when this afternoon?"
+        const n2 = new Date(Date.now() - d * D); n2.setHours(2, 0, 0, 0);
+        ev.push({ id: 'w' + (id++), babyId: 'b1', type: 'sleep', time: n2.getTime() - 3 * H, end: n2.getTime() });
+        ev.push({ id: 'w' + (id++), babyId: 'b1', type: 'sleep', time: n2.getTime() + 20 * 60000, end: n2.getTime() + 3 * H });
+      }
+      state.events = ev;
+    }
+    const out = {};
+    state.babies = [{ id: 'b1', name: 'Aria', birth: Date.now() - 100 * D, routines: [] }];
+    state.activeBabyId = 'b1'; state.timers = {};
+    try { localStorage.removeItem('cubby-ww-hidden-local'); } catch (e) {}
+
+    // too little of her own history: say nothing at all rather than guess
+    state.events = [];
+    out.emptySilent = wakeWindowLine() === '';
+    out.notEnoughFlag = (wakeWindow() || {}).enough === false;
+
+    seedNaps(12, 105, 5);
+    const w = wakeWindow();
+    out.enough = w.enough;
+    out.nightExcluded = w.lo >= 90 * 60000;      // a counted 20m resettle would drop this to ~20m
+
+    /* Pin the daytime boundary rather than depending on the wall clock, so these cases run at 3am
+       too. The seeded naps are already stamped at real daytime hours, so only the "is it daytime
+       NOW" question needs forcing; wakeWindow's own sample filter is left alone. */
+    const realDaytime = window.wwIsDaytime;
+    window.wwIsDaytime = function (ts) { return ts > Date.now() - 60000 ? true : realDaytime(ts); };
+    out.daytime = true;
+    state.events.unshift({ id: 'recent', babyId: 'b1', type: 'sleep', time: Date.now() - 2 * H, end: Date.now() - 70 * 60000 });
+    const line = wakeWindowLine();
+    out.rendered = line.length > 0;
+    out.hasRange = /between/.test(line);
+    out.noClockTime = !/\d{1,2}:\d{2}/.test(line);
+    out.noWill = !/\bwill\b|\bshould\b|\bdue\b/i.test(line);
+    out.namesSample = /own logs/.test(line) && /Every day is different/.test(line);
+
+    // asleep right now -> nothing to say
+    timersFor('b1').sleep = { start: Date.now() - 10 * 60000 };
+    out.silentWhileAsleep = wakeWindowLine() === '';
+    delete state.timers['b1'].sleep;
+
+    // a range too wide to mean anything stays quiet
+    seedNaps(12, 60, 200);
+    state.events.unshift({ id: 'recent2', babyId: 'b1', type: 'sleep', time: Date.now() - 2 * H, end: Date.now() - 70 * 60000 });
+    const wide = wakeWindow();
+    out.wideSuppressed = (wide.hi - wide.lo) > 2 * H ? wakeWindowLine() === '' : 'n/a';
+
+    // hideable, per person
+    seedNaps(12, 105, 5);
+    state.events.unshift({ id: 'recent3', babyId: 'b1', type: 'sleep', time: Date.now() - 2 * H, end: Date.now() - 70 * 60000 });
+    out.backBeforeHide = wakeWindowLine().length > 0;
+    hideWakeWindow();
+    out.hidden = wakeWindowLine() === '';
+    try { localStorage.removeItem('cubby-ww-hidden-local'); } catch (e) {}
+
+    // and it is never spoken over a bereaved parent
+    window.myLossHolding = function () { return true; };
+    out.silentInLoss = wakeWindowLine() === '';
+    return out;
+  });
+  check(ww.emptySilent && ww.notEnoughFlag, 'with too little history it says nothing rather than guessing');
+  check(ww.enough && ww.nightExcluded, 'a 2am resettle is not counted as a daytime wake window',
+    'low end: ' + Math.round((ww.nightExcluded ? 1 : 0)) );
+  if (ww.daytime) {
+    check(ww.rendered && ww.hasRange, 'it offers a range, from her own logs');
+    check(ww.noClockTime, 'and never a clock time, which would be a forecast she cannot check');
+    check(ww.noWill, 'no "will", no "should", no "due" — it describes the past, not an obligation');
+    check(ww.namesSample, 'it names the sample it came from and says every day is different');
+    check(ww.silentWhileAsleep, 'it says nothing while the baby is actually asleep');
+    check(ww.backBeforeHide && ww.hidden, 'and it can be hidden for good, per person');
+  } else {
+    console.log('  note: skipped the rendering cases, the clock is outside daytime hours');
+  }
+  check(ww.wideSuppressed === true || ww.wideSuppressed === 'n/a', 'a range too wide to be useful stays quiet', String(ww.wideSuppressed));
+  check(ww.silentInLoss, 'and it never speaks over a bereaved parent');
+
+  // ---- 18. A LONG SLEEP IS RARELY UNBROKEN -----------------------------------------------------
+  /* Logging "7pm to 6am" used to credit eleven hours whether the baby woke twice or not, so every
+     sleep total in the app — including the doctor report — was the optimistic number. Wakings are a
+     property of the sleep, not six sheets at 3am. Absent on every entry logged before this existed,
+     which must still sum exactly as it always did. */
+  console.log('\n18. wakings make the sleep totals honest');
+  const wk = await page.evaluate(() => {
+    const H = 3600000, out = {};
+    const plain = { id: 'sl1', babyId: 'b1', type: 'sleep', time: Date.now() - 12 * H, end: Date.now() - 1 * H };
+    out.legacyUnchanged = netSleepMs(plain) === 11 * H;
+    const broken = Object.assign({}, plain, { wakings: { n: 2, mins: 40 } });
+    out.subtracted = netSleepMs(broken) === 11 * H - 40 * 60000;
+    out.label = wakingsLabel(broken);
+    out.noLabelWhenNone = wakingsLabel(plain) === '';
+    out.onceReadsOnce = wakingsLabel(Object.assign({}, plain, { wakings: { n: 1, mins: 15 } }));
+    // a mistyped waking longer than the sleep can never produce negative sleep
+    out.neverNegative = netSleepMs(Object.assign({}, plain, { wakings: { n: 1, mins: 5000 } })) === 0;
+    // the day total uses the net number
+    state.babies = [{ id: 'b1', name: 'Aria', birth: Date.now() - 100 * 86400000, routines: [] }];
+    state.activeBabyId = 'b1'; state.timers = {};
+    state.events = [broken];
+    out.summaryShowsWakings = /woke twice/.test(eventDetail(broken));
+    return out;
+  });
+  check(wk.legacyUnchanged, 'a sleep with no wakings recorded sums exactly as it always did');
+  check(wk.subtracted, 'wakings come off the total');
+  check(wk.neverNegative, 'and a mistyped waking longer than the sleep cannot produce negative sleep');
+  check(/woke twice for about 40m/.test(wk.label), 'it reads in words, not numbers', wk.label);
+  check(/woke once/.test(wk.onceReadsOnce), 'once is "once", not "1 times"', wk.onceReadsOnce);
+  check(wk.noLabelWhenNone, 'and a straight-through sleep says nothing extra');
+
+  // ---- 19. NO PAGE ERRORS THROUGHOUT -----------------------------------------------------------
+  console.log('\n19. clean console');
   check(page.__errs.length === 0, 'no uncaught page errors', page.__errs.join(' | '));
   await page.close();
 
