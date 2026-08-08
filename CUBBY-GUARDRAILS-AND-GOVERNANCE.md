@@ -96,6 +96,18 @@ A guardrail is real only when it is blocking, owned, and checked at the moment o
   This line exists because the app shipped for months rebuilding its entire shell on every render
   and building every event ever logged into the Log tab — 498ms of frozen phone per repaint, four
   months in, and worse every week a parent kept using it. Nothing was measuring.
+- **Notification chokepoint:** anything that can reach a parent when the app is closed (push, a
+  calendar file, a local notification) is reached through ONE function that takes a medicine id
+  and nothing else. No title parameter, no time parameter, no interruption-level parameter. Push
+  is medicine-critical only, and a chokepoint that cannot express anything else is what keeps it
+  that way: adding a second kind becomes a visible refactor somebody has to justify, rather than
+  a quiet decision. `node tools/dosecal_test.js` is the blocking check.
+- **Privacy is enforced by rules, never by client hiding.** If a member's private data would sit
+  inside a document the circle can read, the design is wrong: Firestore rules can inspect
+  top-level key names but never array contents, so no rule can catch a private record hiding
+  inside a shared array. A count or a badge is itself a disclosure. This line exists because the
+  medicine work found that storing an owner-private category outside `MAT_CATS` would have been
+  folded into `state.pregnancy` and republished into a document carrying `sharedWith`.
 - **Data integrity:** offline-safe; no data loss; sync conflicts handled.
 - **Tests:** logic tested; verified in preview; SW cache bumped if assets changed.
 - **Notifications:** if added, gentle, capped, loss-aware, mutable.

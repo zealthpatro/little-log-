@@ -1,6 +1,6 @@
 # AI image editing: post-beta evaluation
 
-> **Status (June 2026):** Still deferred research, not built; any server-side generative editing would ship as an opt-in, Pro-only feature (Cubby Pro $9/mo or $90/yr, launching ~Aug 2026) and stays subject to the live Privacy Max 1.0 stance. Full current state + go-live plan: HANDOFF.md.
+> **Status (June 2026):** Still deferred research, not built; any server-side generative editing would ship as an opt-in, Pro-only feature (Cubby Pro $9/mo or $90/yr, launching ~Oct 2026) and stays subject to the live Privacy Max 1.0 stance. Full current state + go-live plan: HANDOFF.md.
 
 Decision: **defer. Re-evaluate after the beta closes**, once we know whether users actually want generative/AI photo editing (Precious-style: background swap, dreamy scenes, milestone art, dress-up).
 

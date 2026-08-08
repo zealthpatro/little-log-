@@ -9,7 +9,7 @@
 
 ## 1. What we're measuring (and why it's first-party)
 
-The conversion event isn't a purchase — billing isn't live until Aug 2026 (`MONETIZATION-HANDOFF.md`).
+The conversion event isn't a purchase — billing isn't live until Oct 2026 (`MONETIZATION-HANDOFF.md`).
 The events we attribute are:
 
 1. **Signup** — a brand-new family is created (the real top-of-funnel signal).

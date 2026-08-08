@@ -1,6 +1,6 @@
 # Cubby Pro — monetization research & roadmap
 
-> **Status (June 2026):** Cubby Pro is one tier ($9/mo or $90/yr, 7-day trial); the client-side payment loop is built and the gate is live, with Lemon Squeezy (MoR) go-live targeted ~Aug 2026. Full current state + go-live plan: HANDOFF.md.
+> **Status (June 2026):** Cubby Pro is one tier ($9/mo or $90/yr, 7-day trial); the client-side payment loop is built and the gate is live, with Lemon Squeezy (MoR) go-live targeted ~Oct 2026. Full current state + go-live plan: HANDOFF.md.
 
 > ## ⚑ CURRENT PRICING (authoritative, 2026-06-13)
 > Cubby Pro is **ONE tier: $9/month or $90/year** (save 17%, about $7.50/mo effective), 7-day free
@@ -94,6 +94,11 @@ this is the plan to build against. (Beta stays 100% free.)
   generated client-side, so they cost us nothing per user. See PAYWALL.md.
 - **Held back for a later, higher tier (not Base):** anything with real per-user infra cost —
   **HD photos & cloud backup (R2)**, **push notifications (Blaze)**, **smart routines/insights**.
+  > Push delivery is NOT live (`REMINDERS_LIVE=false` in `app/index.html`) and the policy is
+  > medicine-critical only, never feeds or milestones. Until it is on, the shipping answer is the
+  > dose calendar course, which writes set-time doses into the parent's own calendar and needs no
+  > key, cron or review. Marketing must not promise a notification. See
+  > `docs/plans/2026-08-08-reminders-and-import.md`.
   Those justify a future "Pro/Plus" tier above Base once demand + costs are proven.
 
 ### Tier ladder (ARCHIVED — historical, not the current plan)

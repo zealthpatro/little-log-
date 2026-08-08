@@ -1,6 +1,6 @@
 # Monetization handoff: Cubby Pro payment loop
 
-> **Status (June 2026):** The Cubby Pro payment loop (Lemon Squeezy + Worker + tamper-proof entitlement) is built on `main` but NOT yet charging; Pro is $9/mo or $90/yr, gated to an Aug 2026 launch. Full current state + go-live plan: HANDOFF.md.
+> **Status (June 2026):** The Cubby Pro payment loop (Lemon Squeezy + Worker + tamper-proof entitlement) is built on `main` but NOT yet charging; Pro is $9/mo or $90/yr, gated to an Oct 2026 launch. Full current state + go-live plan: HANDOFF.md.
 
 **Version 1 · 2026-06-13.** Operational handoff for the Pro / payments work. Read this cold and
 you can take the payment loop from "built" to "charging real money".

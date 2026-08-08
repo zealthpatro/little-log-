@@ -109,7 +109,7 @@ newsletter (the article pages carry it), so you capture them either way.
 - **~20–30 min/day:** answer 3–5 questions genuinely; mention Cubby maybe 1–2× per week, only where it fits.
 - **First 50–100 over a few weeks**, not days. It compounds: your old helpful comments keep getting found.
 - **Quality > volume.** One parent you genuinely helped, who then recommends you, beats 100 link drops.
-- **Watch retention, not signups.** Billing's live Aug 2026, so the goal now is a warm, *retained*,
+- **Watch retention, not signups.** Billing's live Oct 2026, so the goal now is a warm, *retained*,
   Pro-waitlisted cohort — that's your PMF proof and your day-one paying customers.
 
 ---

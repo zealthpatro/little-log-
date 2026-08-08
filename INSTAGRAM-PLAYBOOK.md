@@ -15,7 +15,7 @@ Make the free card lovely. Never enlarge the footer.
 
 So we do not optimise posts for reach. We optimise for the **save** (something she returns to at 3am)
 and the **send** (something she texts to one person). Those are the signals that actually grow a warm,
-retained cohort, which is the stage goal (billing is live Aug 2026; we want a retained, Pro-waitlisted
+retained cohort, which is the stage goal (billing is live Oct 2026; we want a retained, Pro-waitlisted
 crowd, not a spike of signups who churn).
 
 ## Locked decisions
@@ -82,7 +82,7 @@ captions are in the appendix.
 - Every marketing example uses a FICTIONAL baby (illustrated bear), never a real user's export.
 - The footer is sacred: never enlarge, brighten, duplicate, or move it. One small quiet line.
 - Verified gating: free users CAN make footer-carrying keepsakes (Then & Now via a few free "tastes",
-  monthly/share cards free-with-footer). Pro (Aug 2026) = watermark-free + unlimited + full studio.
+  monthly/share cards free-with-footer). Pro (Oct 2026) = watermark-free + unlimited + full studio.
 - Honesty rule in captions: "the everyday **logging** is free, always" (not "everyday stuff"), and never
   imply unlimited-free keepsakes.
 
@@ -96,19 +96,19 @@ looks identical everywhere and unmistakably ours, on every keepsake that travels
 ## The honest purchase-intent ladder
 
 "Purchase intent early" means seed genuine desire and a warm waitlist, NOT a hard sell. Pro billing is
-Aug 2026. Seed Pro ONLY at the activated stage, and frame it as a gift arriving, never a gate closing.
+Oct 2026. Seed Pro ONLY at the activated stage, and frame it as a gift arriving, never a gate closing.
 
 1. **Follower** — calm static earns the follow by lowering her heart rate. No Pro mention. Measure save + follow.
 2. **Article reader** — caption links to one of 186 articles (carries app + newsletter). First-party UTM stamps it.
 3. **Free app user** — get families onto free Cubby early. Sell nothing. Bank warmth.
 4. **Activated / PQL** — first doctor summary generated OR first watermarked keepsake exported. The only
    honest moment to seed Pro desire (she has felt the value).
-5. **Warm waitlist** — soft line: "the keepsake studio and doctor report arrive Aug 2026, want a note when
+5. **Warm waitlist** — soft line: "the keepsake studio and doctor report arrive Oct 2026, want a note when
    they do? no card, no rush." Rename the ask "Register for Pro" to **"get told when it's ready"**.
-6. **Day-one buyer (Aug 2026)** — convert only the retained, activated, multi-caregiver cohort.
+6. **Day-one buyer (Oct 2026)** — convert only the retained, activated, multi-caregiver cohort.
 
 **Pro disclosure (permanent, on any Pro-adjacent post):** "the everyday logging is free, always" +
-"keepsake studio + doctor report arrive Aug 2026, no card, no charge until then." Cap Pro-flavoured
+"keepsake studio + doctor report arrive Oct 2026, no card, no charge until then." Cap Pro-flavoured
 posts at ~1 in 4. No countdown, no scarcity, no "limited spots".
 
 ## The card-kit (6 reusable layouts)
@@ -204,7 +204,7 @@ toward what earned saves and sends. Check waitlist 30-day retention and the IG f
 - The "she's been fussy?" doctor framing. Credit her; never shame.
 - Any fear / urgency / comparison hook. Categorical Anxiety-Test failure regardless of performance.
 - The public "47 naps" monthly-stats count. A count implies a target.
-- Firing the `?ref=` referral reward before Aug 2026.
+- Firing the `?ref=` referral reward before Oct 2026.
 - Any Meta/IG pixel or bio-link analytics SDK.
 - Bare "Register for Pro" with no disclosure; any fake scarcity / countdown / user-count / fake testimonial.
 - Enlarging the keepsake footer for reach.

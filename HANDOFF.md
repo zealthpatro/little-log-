@@ -62,7 +62,7 @@ stale; the deploy branch is `main`.
   **deeplinks rebranded to `little-cubby.com`** (no more `little-log-a9caa.firebaseapp.com`). See `EMAIL.md`.
 - **Vaccine catch-up (Phase 0.3)** — calm 5-state badges, no red "OVERDUE wall"; estimated catch-up
   dates tagged.
-- **Pricing unified** — Cubby Pro **$9/mo or $90/yr** (save 17%, 7-day trial), gated to an Aug 2026 launch.
+- **Pricing unified** — Cubby Pro **$9/mo or $90/yr** (save 17%, 7-day trial), gated to an Oct 2026 launch.
 - **Lifecycle marketing close** — "the only app you'll ever need, from two lines to big kid" on the home
   page and reinforced in the sign-in email footer.
 - **Sign in with Apple live (2026-06-16)** — `OAuthProvider('apple.com')` (`window.LL.appleProvider`,
@@ -107,7 +107,7 @@ pregnancy blocks).
 - **Deferred notes audience-immutability rule tweak:** the audience-immutability tightening on
   `households/{hid}/notes/{noteId}` is still queued. **Pending.**
 - **Pro billing go-live** — Worker is built (`workers/pro-billing/`); needs Lemon Squeezy product/secrets/webhook
-  + checkout URLs in the app; targeted Aug 2026. See `MONETIZATION-HANDOFF.md`.
+  + checkout URLs in the app; targeted Oct 2026. See `MONETIZATION-HANDOFF.md`.
 - **Maternal-surface gates** — emulator cross-account denial test for the consent *sharing* path; a
   source-accuracy pass on the GDM/BP thresholds (no credentialed reviewer required, per founder ruling —
   cited summaries + passive logging; keep copy non-diagnostic).

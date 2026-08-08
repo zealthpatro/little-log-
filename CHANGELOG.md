@@ -1,5 +1,69 @@
 # Cubby — Changelog
 
+## v0.16.0 — 2026-08-08 — the jitter is gone, the app explains itself, and reminders finally reach a closed phone
+
+Service worker `little-log-v247` -> `little-log-v262`. All live on little-cubby.com (deploys from `main`).
+The native wrapper remote-loads `/app/`, so every item below reached the iOS app with no new build.
+
+**Performance: the app stopped rebuilding the world.** Every `render()` handed the whole shell to
+`innerHTML`, and the Log tab built every event ever logged, every time. On a real four-month history
+at 4x CPU throttle: Log render **498ms -> 11ms**, DOM nodes 27,570 -> 3,297, markup per repaint
+1.5MB -> 180KB, the one-second tick 18.8ms -> 0.8ms. Four invariants now hold: paint through
+`paintShell` (identical markup is a no-op, and the `#scroll` node always survives, because destroying
+it destroys iOS inertial scroll mid-flick), the timeline is windowed and reveals on approach, network
+repaints coalesce through `renderSoon()`, and nothing sweeps the document on a timer.
+`node tools/perf_check.js` is the blocking gate.
+
+**"What to log, and why"** (`app/log-guide.js`). A short reference sheet that leads with the logs that
+earn their place at this baby's age and says what each one gives you back. Pull only: it never opens
+itself, has no progress meter and no completion count, is offered on home once, and lives permanently
+in Settings. ONBOARDING.md amended to record why that is a guide and not the tour it still rules out.
+
+**The Notes lane keeps its promises.** With nothing logged it rendered only a quote of the day, set
+like a real note, so the lane never looked empty or writable; it now says so in plain words, and the
+quote stays. Under it, six real bugs: an offline save that hung forever, three taps making three
+notes, a pin toast that said the opposite of what happened, a pin that was not actually pinned on
+today, notes filed under yesterday by a phone left open overnight, and a note long enough to push the
+home screen off the bottom. Pins are now per member rather than one per household.
+
+**Reminders that reach a closed phone.** Dose times can be written into the parent's own calendar as
+an `.ics`: no APNs key, no push cron, no server, no App Store review. Set times only (an
+every-few-hours schedule moves each time you log a dose, and an `.ics` cannot be recalled), always
+bounded by a `COUNT`, stable UIDs with a rising `SEQUENCE` so re-adding updates the same entries, and
+a real `METHOD:CANCEL`. Push delivery is still off (`REMINDERS_LIVE=false`).
+
+**Twins were getting no dose alert at all.** Alerts scanned only the baby on screen while the push
+index scanned every baby. Fixing it needed six pieces, because the pill's own buttons resolved
+through the same narrow lookup and `commitDose` stamped whichever child was on screen: a sibling's
+dose could have been filed against the wrong child's health record.
+
+**Photograph the vaccination card** instead of typing twelve dates (`app/vax-card.js`). On device
+only: the photo never leaves the phone. The confirmation screen is the feature, and nothing is
+written unless a date is left on a row.
+
+**Onboarding, honestly.** Health opens on Vaccines rather than an empty Medicine list, so the
+country-correct vaccine plan a parent was just told about is actually there. The free doctor visit
+summary has a permanent door. A new parent met seven teaching surfaces at once and was asked for a
+photo three times; the ticker and the photo nudge now stand down while Get started is up, and the
+ticker retires on your own logs rather than the household's. The microphone no longer starts on open.
+The date picker has year controls (36 taps to back-date a three-year-old, now three). Every "Start
+free" now says an account is needed.
+
+**Cubby Pro moved to October 2026.** August had arrived with `checkoutUrl` still empty.
+
+**Accessibility:** switching the Health default made the contrast gate render the vaccine list for
+the first time and it immediately failed "Due soon" at 1.99:1. Four status badges were using an
+accent as ink on its own tint. `node tools/uitest.js` walks both themes on every ship.
+
+**New blocking gates:** `tools/perf_check.js`, `tools/guide_test.js`, `tools/dosecal_test.js`,
+`tools/vaxcard_test.js`. See OPERATIONS.md.
+
+**Groundwork, not yet a feature:** medicines now carry a subject and the clinical reports name the
+baby they are about, so an adult's own medicines can follow without a report ever widening by
+accident. The private store itself is not built. See `docs/plans/2026-08-08-reminders-and-import.md`.
+
+---
+
 ## v0.15.0 — 2026-06-22 — routines become "rituals" + a Rituals tab in the Log
 
 - **Renamed "routines" to "rituals"** across all user-facing copy in the app (the day card, the manage/add/edit sheets, the Reminders copy) and the app landing Pro note. The warmer frame fits the calm brand. The persisted data key stays `b.routines` for data-compatibility (existing users keep their lists); internal function/class names are unchanged, with a note in `ROUTINES.md`.
