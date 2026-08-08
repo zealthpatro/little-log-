@@ -1946,7 +1946,10 @@ function _renderView(){
   // telling her "your pregnancy is saved as part of their story" — true only in the sense that the
   // rows were still in the database. She could never look at it again.
   if(state.pregnancy && (viewingPreg || (!state.pregnancy.bornBabyId && state.babies.length===0))){ renderPregShell(); return; }
-  if(myLossHolding() && state.babies.length){ clearMyLossHolding(); } // a baby exists now (e.g. added/synced) -> stop holding
+  /* No passive clear. This used to read `if(myLossHolding() && state.babies.length) clearMyLossHolding()`,
+     which meant a surviving twin silently ended the quiet state on the very next paint and dropped a
+     bereaved mother onto "A fresh day with Aria 🌿". Quiet ends when she says so, never because the
+     app noticed a baby. The takeover below is still gated on having none. */
   if(state.babies.length===0 && myLossHolding()){ renderLossHolding(); return; }
   // A caregiver in a family that has no baby yet (expecting, or the pregnancy is owner-private and not
   // shared with them) must NOT see the owner's "Where are you on the journey?" stage picker — tapping
@@ -2013,6 +2016,7 @@ const TIPS_RETIRE_AFTER=25;
 function tipsTicker(){
   const b=activeBaby();
   if(hasSeen('tip_ticker')) return '';
+  if(myLossHolding()) return '';     // nothing animated and unrequested while she is being held
   /* Counted per PERSON, not per household. The comment above says this measures whether she has
      learned to log, but state.events is the family's log: an invited grandparent joining a circle
      with 400 feeds already in it was judged to have learned, and never saw a single tip. Same
@@ -2073,6 +2077,7 @@ function monthiversary(){
 }
 function renderGetStarted(){
   if(hasSeen('tip_getstarted')) return '';
+  if(myLossHolding()) return '';     // a setup checklist is the last thing a bereaved parent needs
   const haveBaby=(state.babies||[]).length>0;
   const haveLog=(state.events||[]).length>0;
   const members=(window.LL&&window.LL.members)||{};
@@ -2566,7 +2571,7 @@ function renderHome(){
 
   return `<div class="fade-in">
     <div class="greeting">${meGreeting()}</div>
-    ${away ? '' : `<div class="greeting-sub">${homeNudgeLine()}</div>`}
+    ${myLossHolding() ? quietLossLine() : (away ? '' : `<div class="greeting-sub">${homeNudgeLine()}</div>`)}
     ${(away||gsCard) ? '' : tipsTicker()}
     ${away}
     ${daySurface()}
@@ -2600,6 +2605,9 @@ function heroPhotos(){ return (state.photos||[]).filter(p=>p.babyId===state.acti
 function renderHero(){
   const ph=heroPhotos();
   if(!ph.length){
+    // An empty state in the quiet-after-loss mode asks for nothing. Her photos still show if she has
+    // any; what goes away is the invitation to add one.
+    if(myLossHolding()) return '';
     return `<div class="hero-invite" onclick="go('album')">
       <div class="hi">${I.camera}</div>
       <div><div class="ht">Add a photo</div><div class="hs">Saved photos appear here as a slideshow</div></div>
@@ -2796,7 +2804,9 @@ window.cubbyGuideCtx = function(){
     stage: quickStage(),
     planning: !!(p && p.stage==='planning'),
     week: (p && typeof pregWeek==='function') ? (pregWeek()||0) : 0,
-    lossHolding: !!(typeof myLossHolding==='function' && myLossHolding() && !(state.babies||[]).length),
+    // Not gated on babies: a bereaved parent with a surviving child is still being held quietly,
+    // and the guide's cheerful home card must stay away from her too.
+    lossHolding: !!(typeof myLossHolding==='function' && myLossHolding()),
     babyName: b?b.name:'',
     babyAge: (b&&b.birth) ? ageString(b.birth) : '',
     // null means "no birthday on file", which the guide reads as "make no claim about age"
@@ -5222,6 +5232,19 @@ function renderLossHolding(){
 function myLossHolding(){ var lh=state.lossHolding; if(!lh) return null;
   if(lh.at){ try{ var m=(window.LL&&window.LL.members)||{}; return m[myUid()]==='owner'?lh:null; }catch(_){ return null; } }
   return lh[myUid()]||null; }
+/* The quiet state, made visible and exitable, for the parent who still has a child to care for and
+   therefore never sees the holding screen. Without this her only signal that Cubby had gone gentle
+   would be the absence of things, and she would have no way back. It replaces the home nudge line,
+   which is where "A fresh day with Aria 🌿" used to greet a mother who had just lost the twin. */
+function quietLossLine(){
+  return `<div class="greeting-sub" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <span>Cubby is keeping things quiet for you. 🤍</span>
+    <button class="btn-ghost" style="width:auto;margin:0;padding:6px 12px;font-size:12.5px" onclick="endQuietAfterLoss()">Everyday view</button>
+  </div>`;
+}
+function endQuietAfterLoss(){
+  confirmSheet({title:'Bring back the everyday view?',body:'Cubby will stop keeping things quiet. Nothing you kept is deleted, and you can look back whenever you want to.',confirmLabel:'Yes, please',cancelLabel:'Not yet',onConfirm:function(){ clearMyLossHolding(); persist(); render(); }});
+}
 function clearMyLossHolding(){ var lh=state.lossHolding; if(!lh) return; if(lh.at){ state.lossHolding=null; return; } delete lh[myUid()]; if(!Object.keys(lh).length) state.lossHolding=null; }
 /* Leaving the holding screen is one-way (it leads back to the start-a-journey chooser), so it says
    where it goes and asks once, calmly. Kept memories stay kept either way. */
@@ -6196,7 +6219,7 @@ function renderPregMoments(lookBack){
     <div class="greeting">${escapeHtml(pregJourneyTitle())}</div>
     <div class="greeting-sub">${lookBack?'The little moments on the way to meeting them, kept.':`Your story before they arrive${togo?', '+escapeHtml(togo):''} — the little moments on the way to meeting them.`}</div>
     ${renderPregLibrary(lookBack)}
-    <div class="preg-card" onclick="openGuessGame()" style="cursor:pointer;border-left:4px solid var(--feed);margin-top:14px"><div class="pc-ico">🎉</div><div style="flex:1;min-width:0"><div class="pc-t">Family games</div><div class="pc-b">${guessSummaryLine()}</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>
+    ${lookBack?'':`<div class="preg-card" onclick="openGuessGame()" style="cursor:pointer;border-left:4px solid var(--feed);margin-top:14px"><div class="pc-ico">🎉</div><div style="flex:1;min-width:0"><div class="pc-t">Family games</div><div class="pc-b">${guessSummaryLine()}</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>`}
     <div class="sec-title" style="margin-top:18px">Bump &amp; scan album</div>
     <div class="greeting-sub" style="margin-bottom:10px">Week-tagged scans and bump photos, with how big your baby was that week.</div>
     ${cards||''}
@@ -6268,6 +6291,20 @@ function savePregnancy(){
     else { lmp=picked; dueDate=dueFromLmp(picked, state.pregnancy&&state.pregnancy.cycleLen); }
   }
   const appts=(((window.PREG&&PREG.antenatal[cc]&&PREG.antenatal[cc].items))||[]).map(it=>({id:uid(),week:it.week,title:it.title,note:it.note,done:false,at:null}));
+  /* A pregnancy that ended in a birth is a keepsake, not a slot to reuse. This assignment is a
+     wholesale replacement, and openAddEntry offers "We're expecting" again the moment bornBabyId is
+     set — so a second pregnancy silently overwrote the first one's scans, journey cards, care team
+     and appointment history, and synced the loss to everyone. No confirm, no undo. The trigger is
+     the single most likely next event in this family's life.
+     Archive it first. The shape is the one endPregnancy already writes, with loss:false — the
+     branch memoryCandidates has always read for and nothing ever wrote. */
+  const prev=state.pregnancy;
+  if(prev && prev.bornBabyId){
+    state.pregnancyArchive=state.pregnancyArchive||[];
+    state.pregnancyArchive.unshift({ id:uid(), endedAt:prev.birthAt||now(), weeks:40, loss:false,
+      bornBabyId:prev.bornBabyId, moments:(prev.moments||[]).slice(),
+      journey:Object.assign({}, (prev.journey&&prev.journey.saved)||{}) });
+  }
   state.pregnancy={ id:uid(), ownerUid:myUid(), stage:'expecting', dueDate, lmp, country:sel,
     careTeam:[], appts, symptoms:[], weights:[], bp:[], kicks:[], contractions:[],
     birthPlan:'', bag:defaultBag(), moments:[],
@@ -7224,7 +7261,12 @@ function endPregnancy(keep){
   closeHubIfAny(p); // a pregnancy that ends without a birth also retires the shared games link
   if(keep){
     state.pregnancyArchive=state.pregnancyArchive||[];
-    state.pregnancyArchive.unshift({ id:uid(), endedAt:now(), weeks:pregWeek(), moments:(p.moments||[]).slice(), loss:true });
+    /* The journey cards go with the moments. `journey.saved` is the pregnancy gentle-library — the
+       cards she WROTE, keyed by cardId — and it was never copied here, so it died with
+       state.pregnancy while the sheet was promising "your scans and photos stay saved in your
+       Cubby". After a loss the thing she wrote is worth more than the thing she photographed. */
+    state.pregnancyArchive.unshift({ id:uid(), endedAt:now(), weeks:pregWeek(), moments:(p.moments||[]).slice(),
+      journey:Object.assign({}, (p.journey&&p.journey.saved)||{}), loss:true });
     /* photos intentionally kept in PhotoStore */
   } else {
     (p.moments||[]).forEach(m=>{ try{ PhotoStore.del(m.photoId); }catch(e){} });
@@ -7236,7 +7278,13 @@ function endPregnancy(keep){
   // chooser seconds after a loss. Only for an actual pregnancy (stage 'expecting'); a planning
   // "stop tracking" is a neutral pause, not a loss, so it must NOT show the bereavement screen.
   // Only when there's no baby to return to; persists across reload + to a following co-parent via the blob.
-  if(!state.babies.length && p.stage!=='planning'){
+  /* Seeded whether or not a baby exists. It used to require `!state.babies.length`, so a second-time
+     parent — and a mother who lost one twin and kept the other — got no gentleness at all: her whole
+     acknowledgement was a three-second toast, and then the checklist, the photo prompt and the
+     cheerful greeting carried on, because every loss suppression in this file keys off this flag.
+     The full-screen takeover still requires no babies (_renderView); you cannot lock a mother out of
+     her living child's feed log. What she gets instead is quiet. */
+  if(p.stage!=='planning'){
     var _lh=(state.lossHolding&&!state.lossHolding.at)?state.lossHolding:{};
     // Seed the holding entry for the carrier AND everyone the journey was shared with. lossHolding is
     // a per-uid map in the shared blob, so each of them restores the calm screen on their own device;
@@ -7258,13 +7306,31 @@ function openKeptMemories(){
       ${m.note?`<div class="mc-note">${escapeHtml(m.note)}</div>`:''}
       <div class="mc-row"><span class="mc-date">${dayLabel(m.at)}</span></div></div></div>`;
   }).join('');
+  /* The journey cards she wrote, kept alongside the scans. These were archived from
+     pregnancy.journey.saved — an object keyed by cardId, not a list — so they are flattened here
+     rather than in the moments sort above, which keys off week. */
+  const jrn=arr.flatMap(a=>Object.keys(a.journey||{}).map(k=>Object.assign({cardId:k}, a.journey[k])))
+    .sort((a,b)=>(b.at||0)-(a.at||0));
+  const jcards=jrn.map(r=>{
+    const src=r.photoId?photoSrc(r.photoId):'';
+    const cap=(typeof pregJCard==='function'&&((pregJCard(r.cardId)||{}).cap))||r.title||'A moment';
+    return `<div class="moment-card">${src?`<img src="${src}" alt="${escapeHtml(cap)}">`:''}
+      <div class="moment-cap"><div class="mc-top"><div class="mc-week">${escapeHtml(cap)}</div></div>
+      ${r.note?`<div class="mc-note">${escapeHtml(r.note)}</div>`:''}
+      <div class="mc-row"><span class="mc-date">${r.date?escapeHtml(r.date):(r.at?dayLabel(r.at):'')}</span></div></div></div>`;
+  }).join('');
   openSheet(`<h2>Kept memories 🤍</h2><div class="sub">Yours to keep, privately, for as long as you like.</div>
-    ${cards||'<div class="sub">Nothing saved here.</div>'}
+    ${cards||''}
+    ${jcards?`${cards?'<div class="sec-title" style="margin-top:16px">The cards you wrote</div>':''}${jcards}`:''}
+    ${(cards||jcards)?'':'<div class="sub">Nothing saved here.</div>'}
     <button class="btn-ghost" style="color:var(--ink-soft);margin-top:10px" onclick="removeKeptMemories()">Remove these memories</button>`,'preg');
 }
 function removeKeptMemories(){
   confirmSheet({title:'Remove these memories?',body:'Your kept photos and notes go for good, and can\'t be brought back. There\'s no rush to decide.',confirmLabel:'Remove them',cancelLabel:'Keep them',danger:true,onConfirm:function(){
-    (state.pregnancyArchive||[]).forEach(a=>(a.moments||[]).forEach(m=>{ try{ PhotoStore.del(m.photoId); }catch(e){} }));
+    (state.pregnancyArchive||[]).forEach(a=>{
+      (a.moments||[]).forEach(m=>{ try{ PhotoStore.del(m.photoId); }catch(e){} });
+      Object.keys(a.journey||{}).forEach(k=>{ try{ if(a.journey[k].photoId) PhotoStore.del(a.journey[k].photoId); }catch(e){} });
+    });
     state.pregnancyArchive=[]; persist(); render(); toast('Removed 🤍');
   }});
 }
@@ -7338,6 +7404,10 @@ function showBirthArrival(b){
   // itself to someone who has been here for months. 'log' is deliberately left: one hint, the first
   // time she opens the Log tab, is orientation rather than noise.
   ['home','health','album'].forEach(markSeen);
+  // And the new-user checklist. It auto-hides on haveBaby && haveLog && hasPhoto; a baby born an
+  // hour ago has neither a log nor a photo, so "Get started 🐻 — Log your first entry · Add a photo"
+  // rendered on the screen she lands on, hours after giving birth.
+  markSeen('tip_getstarted');
   // vaccinePlan() is one row per DOSE, and several doses share a single appointment, so counting
   // rows and calling them "visits" would be a plain untruth to a parent reading it at 3am. Count
   // distinct due-ages instead: that is what she will actually turn up for.

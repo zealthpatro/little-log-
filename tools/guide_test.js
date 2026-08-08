@@ -479,8 +479,101 @@ async function chapterLabels(page) {
   check(carrier.namedPapa === false, 'a named Papa Bear is never the carrier');
   check(carrier.namedMama === true, 'a named Mama Bear always is');
 
-  // ---- 13. NO PAGE ERRORS THROUGHOUT -----------------------------------------------------------
-  console.log('\n13. clean console');
+  // ---- 13. QUIET AFTER A LOSS, FOR A PARENT WHO STILL HAS A CHILD ------------------------------
+  /* The holding screen is the whole screen and it is gated on having no babies, which is right — you
+     cannot lock a mother out of her living child's feed log. But the conclusion drawn from that was
+     "give her nothing": the flag was only ever seeded when babies.length was 0, and cleared on the
+     next paint if a baby appeared. A mother who lost one twin got "A fresh day with Aria 🌿", the
+     Get started checklist and the photo prompt. She gets quiet now, and an exit only she can take. */
+  console.log('\n13. a bereaved parent who still has a child gets quiet, not cheer');
+  const quiet = await page.evaluate(() => {
+    const me = myUid();
+    state.babies = [{ id: 'b1', name: 'Aria', birth: Date.now() - 400 * 86400000, routines: [] }];
+    state.activeBabyId = 'b1'; state.events = []; state.photos = [];
+    markSeen('tip_logguide');
+    state.lossHolding = {}; state.lossHolding[me] = { at: Date.now() };
+    go('home');
+    const held = !!myLossHolding();
+    const txt = document.getElementById('scroll').innerText;
+    return {
+      survives: held,
+      quietLine: /keeping things quiet/.test(txt),
+      hasExit: /Everyday view/.test(txt),
+      noChecklist: !/Get started/.test(txt),
+      noTicker: !/Tap Sleep to start a live nap timer/.test(txt),
+      noPhotoAsk: !/Saved photos appear here/.test(txt),
+      noFreshDay: !/A fresh day with/.test(txt),
+      stillHasLog: /notes/i.test(txt),          // the lane heading renders uppercased
+      getStartedEmpty: renderGetStarted() === '',
+      guideCardEmpty: (window.CubbyGuide ? CubbyGuide.homeCard(false) : '') === ''
+    };
+  });
+  check(quiet.survives, 'the quiet state is not silently cleared by the presence of a baby');
+  check(quiet.noFreshDay && quiet.quietLine, 'the cheerful greeting line is replaced by a quiet one', JSON.stringify(quiet.quietLine));
+  check(quiet.hasExit, 'and she has a way back to the everyday view');
+  check(quiet.noChecklist && quiet.getStartedEmpty, 'no setup checklist');
+  check(quiet.noTicker, 'no animated tips ticker');
+  check(quiet.noPhotoAsk, 'the empty photo state asks for nothing');
+  check(quiet.guideCardEmpty, 'the guide does not offer itself either');
+  check(quiet.stillHasLog, 'she keeps full access to her living child\'s log');
+
+  const takeover = await page.evaluate(() => {
+    state.babies = []; state.activeBabyId = null; render();
+    return { holding: /renderLossHolding|When you're ready|quiet/i.test(document.body.innerHTML) && !document.querySelector('.gs-card') };
+  });
+  check(takeover.holding, 'with no baby at all, the full holding screen still takes over');
+
+  // ---- 14. NOTHING IS DESTROYED AT AN ACT BREAK ------------------------------------------------
+  console.log('\n14. an act break keeps what she gave us');
+  let page2 = await boot(browser, seed(45));
+  const keep = await page2.evaluate(() => {
+    const out = {};
+    // a pregnancy that ended in a birth, with a moment and a written journey card
+    state.pregnancy = { id: 'p1', ownerUid: myUid(), stage: 'expecting', dueDate: Date.now(), lmp: Date.now() - 280 * 86400000,
+      country: 'us', careTeam: [], appts: [], moments: [{ photoId: 'ph1', week: 20, at: Date.now(), note: 'first scan' }],
+      journey: { saved: { card_a: { photoId: null, note: 'the day we told my mother', date: '2026-03-01', at: Date.now() } } },
+      bornBabyId: 'b1', birthAt: Date.now() - 86400000 };
+    state.pregnancyArchive = [];
+    // She starts a second pregnancy. openStartPregnancy resets pregDraft to date mode, so the draft
+    // has to be set AFTER it opens or savePregnancy bails on an empty date field.
+    openStartPregnancy();
+    pregDraft.mode = 'weeks'; pregDraft.weeks = 8; pregDraft.days = 0;
+    var w = document.getElementById('pgWeeks'); if (w) w.value = '8';
+    savePregnancy();
+    const arr = state.pregnancyArchive || [];
+    out.archived = arr.length === 1;
+    out.notLoss = arr.length ? arr[0].loss === false : false;
+    out.keptMoment = arr.length ? (arr[0].moments || []).some(m => m.note === 'first scan') : false;
+    out.keptCard = arr.length ? Object.keys(arr[0].journey || {}).length === 1 : false;
+    out.newPregnancyFresh = !!(state.pregnancy && !state.pregnancy.bornBabyId);
+    if (typeof closeSheet === 'function') closeSheet();
+    return out;
+  });
+  check(keep.archived, 'a second pregnancy archives the first instead of overwriting it');
+  check(keep.notLoss, 'and archives it as a birth, not a loss', String(keep.notLoss));
+  check(keep.keptMoment, 'her scan survives');
+  check(keep.keptCard, 'the card she wrote survives');
+  check(keep.newPregnancyFresh, 'and the new pregnancy starts clean');
+
+  const lossKeep = await page2.evaluate(() => {
+    state.pregnancy = { id: 'p2', ownerUid: myUid(), stage: 'expecting', dueDate: Date.now() + 100 * 86400000,
+      moments: [{ photoId: null, week: 12, at: Date.now(), note: 'twelve weeks' }],
+      journey: { saved: { card_b: { photoId: null, note: 'what I would have called you', date: '', at: Date.now() } } } };
+    state.pregnancyArchive = [];
+    endPregnancy(true);
+    const a = (state.pregnancyArchive || [])[0] || {};
+    openKeptMemories();
+    const sheet = (document.querySelector('#sheet.show') || {}).innerText || '';
+    const out = { archivedCard: Object.keys(a.journey || {}).length === 1, rendered: /what I would have called you/.test(sheet) };
+    if (typeof closeSheet === 'function') closeSheet();
+    return out;
+  });
+  check(lossKeep.archivedCard, 'the journey cards she wrote are archived at a loss, not destroyed');
+  check(lossKeep.rendered, 'and Kept memories actually shows them');
+  await page2.close();
+
+  // ---- 15. NO PAGE ERRORS THROUGHOUT -----------------------------------------------------------
+  console.log('\n15. clean console');
   check(page.__errs.length === 0, 'no uncaught page errors', page.__errs.join(' | '));
   await page.close();
 
