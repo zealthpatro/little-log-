@@ -1600,7 +1600,13 @@ async function persist(){ await Store.save(state); try{ maybeSyncReminders(); }c
 
 /* ---------- Event creation ---------- */
 function addEvent(ev){
-  ev.id = uid(); ev.babyId = state.activeBabyId;
+  ev.id = uid();
+  /* The active baby is the right default for every logging sheet, because a sheet is always open on
+     the baby you are looking at. It is NOT right for a dose alert, which can fire for one twin while
+     you are looking at the other: that dose belongs to the child it was prescribed for, and
+     stamping it with whoever was on screen puts a real medicine in the wrong baby's health record.
+     So a caller may state the baby. Only the dose path does. */
+  if(!ev.babyId) ev.babyId = state.activeBabyId;
   state.events.push(ev);
   persist();
 }
@@ -2481,15 +2487,18 @@ function renderHome(){
 
   // compact, contextual alerts (only appear when relevant)
   let alerts='';
-  babyMeds().filter(m=>m.active).forEach(m=>{
-    const due=medNextDue(m);
+  alertMeds().forEach(x=>{
+    const m=x.m, due=medNextDue(m);
     // Three honest ways out, in the order a parent actually wants them: give it, give it shortly,
     // or skip this one. Before any of them existed the alternatives were logging a dose you didn't
     // give (falsifying a health record) or deleting the medicine.
     if(due!==null && now()>=due && !medDismissed(m,due) && !medSnoozed(m,due)){
+      // Names the child only when it is NOT the one on screen. For a single baby this line is
+      // byte-identical to before; for twins it is the difference between a dose and the wrong dose.
+      const who = x.other ? escapeHtml(x.baby.name)+' · ' : '';
       alerts += `<div class="alert-pill ap-stack" style="border-color:var(--med)">
         <div class="ap-ico" style="background:var(--med-soft);color:var(--med)">${I.pill}</div>
-        <div class="ap-body"><div class="ap-t">${escapeHtml(m.name)} ${now()-due>60000?'overdue':'due'}</div><div class="ap-s">${m.dose} ${m.unit} · <span data-due="${due}">${fmtDue(due-now())}</span></div></div>
+        <div class="ap-body"><div class="ap-t">${escapeHtml(m.name)} ${now()-due>60000?'overdue':'due'}</div><div class="ap-s">${who}${escapeHtml(String(m.dose==null?'':m.dose))} ${escapeHtml(String(m.unit||''))} · <span data-due="${due}">${fmtDue(due-now())}</span></div></div>
         <div class="ap-acts"><button onclick="logDose('${m.id}')">Log</button>
         <button class="ap-soft" onclick="snoozeMedAlert('${m.id}',${due})">In 15 min</button>
         <button class="ap-quiet" onclick="dismissMedAlert('${m.id}',${due})">Not now</button></div></div>`;
@@ -4520,6 +4529,14 @@ const CUBBY_VAPID='BJsMLPFLN5hLbJsdAs2ovSVaRii-sxjaz3bLha7ffXB7Iq4N6vUHKwlH6g9zB
    hear a thing — on the one feature Cubby calls critical. So the toggle is held behind this flag and
    the sheet says, honestly, that reminders are still in testing.
    FLIP TO true ONLY once /api/health reports cronHealthy:true AND the APNs key is uploaded. */
+/* Delivery is NOT live. Two gates remain, and only one of them is the founder's:
+   1. The Worker push cron is healthy again (the missing FIREBASE_SERVICE_ACCOUNT secret was restored
+      2026-08-07; /api/health reports cronHealthy:true), BUT a failed FCM send still advances the
+      sentUpTo cursor as though it had arrived, so a total delivery outage would report green. That
+      is the same shape as the 403 post-mortem, on the other leg.
+   2. iOS additionally needs an APNs .p8 uploaded to Firebase, which has never been done.
+   FLIP TO true ONLY once the send leg reports failures AND the key is uploaded, and only after one
+   real end-to-end delivery has been seen per surface. Inspecting state is not delivery. */
 const REMINDERS_LIVE=false;
 function pushSupported(){ try{ if(isNativeApp()) return true; /* the wrapper registers with APNs/FCM natively, so none of the web gates below apply */ return !!(window.firebase && firebase.messaging && firebase.messaging.isSupported && firebase.messaging.isSupported() && ('Notification' in window) && ('serviceWorker' in navigator)); }catch(e){ return false; } }
 function pushCfg(){ if(!state.settings.push) state.settings.push={enabled:false,quietStart:21,quietEnd:7}; return state.settings.push; }
@@ -5411,6 +5428,112 @@ function addApptToCalendar(id){
   const clean=s=>(s||'').replace(/[,;\\]/g,' ').replace(/\r?\n/g,' ');
   const ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Cubby//Pregnancy//EN','BEGIN:VEVENT','UID:'+uid()+'@little-cubby.com','DTSTART;VALUE=DATE:'+dstr,'SUMMARY:'+clean(a.title||'Antenatal appointment'),'DESCRIPTION:'+clean('Estimated from week '+a.week+'. Confirm the exact date and time with your clinic.'+(a.note?' '+a.note:'')),'BEGIN:VALARM','TRIGGER:-P1D','ACTION:DISPLAY','DESCRIPTION:Appointment tomorrow','END:VALARM','END:VEVENT','END:VCALENDAR'].join('\r\n');
   try{ const url=URL.createObjectURL(new Blob([ics],{type:'text/calendar'})); saveFile(url, (a.title||'appointment').replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.ics', isNativeApp()?'Appointment ready 📅':'Added, check your downloads 📅'); setTimeout(()=>URL.revokeObjectURL(url),1500); }catch(e){ toast('Could not add to calendar'); }
+}
+
+/* ---- dose times in the parent's own calendar ------------------------------------------------
+   The only reminder mechanism Cubby has that ACTUALLY reaches someone with the app closed today.
+   It needs no APNs key, no push cron, no server, no App Store review and no permission prompt: the
+   phone's own calendar does the alerting, which is why this ships while REMINDERS_LIVE is still
+   false. The pattern is addApptToCalendar's, pointed at medicine for the first time.
+
+   Deliberately narrow, and the narrowness IS the safety property. exportDoseCourse takes a
+   medicine id and a number of days, nothing else. There is no title parameter and no time
+   parameter, so it cannot be pointed at a nap, a milestone or a "you haven't logged today". Adding
+   one would be a visible refactor somebody has to justify, not a quiet decision. Push is
+   medicine-critical only; so is this.
+
+   SET TIMES ONLY. An "every few hours" schedule is anchored to the last logged dose (medNextDue),
+   so a calendar written on Monday is wrong by Tuesday, and an .ics already in someone's calendar
+   cannot be recalled by us. Offering it there would be handing a parent a stale alarm we cannot fix.
+
+   Never leaves an orphan, four ways: the RRULE always carries a COUNT so it ends by itself; the UID
+   is stable per medicine and slot and the SEQUENCE only ever goes up, so re-importing UPDATES the
+   same entries instead of duplicating them; a schedule change offers a re-export; and there is a
+   real cancel that publishes METHOD:CANCEL. */
+function _icsClean(s){ return String(s==null?'':s).replace(/[,;\\]/g,' ').replace(/\r?\n/g,' ').trim(); }
+function _icsStamp(d){ const p=n=>String(n).padStart(2,'0');
+  return d.getUTCFullYear()+p(d.getUTCMonth()+1)+p(d.getUTCDate())+'T'+p(d.getUTCHours())+p(d.getUTCMinutes())+p(d.getUTCSeconds())+'Z'; }
+// Floating local time on purpose: no Z, no TZID. "08:00" means eight o'clock wherever the parent is,
+// which is what a dose time means. A UTC stamp would shift the alarm when they travel.
+function _icsLocal(d){ const p=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'T'+p(d.getHours())+p(d.getMinutes())+'00'; }
+
+function doseCourseSlots(m){
+  return ((m.pattern&&m.pattern.times)||[]).slice().sort();
+}
+function openDoseCalendar(medId){
+  const m=medById(medId); if(!m) return;
+  if(!m.pattern || m.pattern.type!=='daily'){ toast('Set times can go in your calendar'); return; }
+  const slots=doseCourseSlots(m);
+  if(!slots.length){ toast('Add a dose time first'); return; }
+  const again=!!(m.ics&&m.ics.seq);
+  const opt=n=>`<button class="aud" onclick="exportDoseCourse('${m.id}',${n})">${n} days</button>`;
+  openSheet(`<h2>Add these times to your calendar</h2>
+    <div class="sub">Your phone will remind you at each dose time, even when Cubby is closed.</div>
+    <div class="field"><label>How long is the course?</label>
+      <div class="aud-row">${[3,5,7,10,14].map(opt).join('')}</div>
+      <div class="aud-sub">${escapeHtml(m.name)} at ${slots.map(t=>escapeHtml(fmtClock(timeToToday(t)))).join(', ')}. One entry per dose time, with an alert at the time. You choose which calendar it goes in.</div>
+    </div>
+    ${again?`<div class="csub">You added this before. Adding it again updates the same entries rather than making new ones.</div>
+      <button class="btn-ghost btn-danger" onclick="cancelDoseCourse('${m.id}')">Take these off my calendar</button>`:''}
+    <button class="btn-ghost" onclick="closeSheet()">Not now</button>`,'med');
+}
+function exportDoseCourse(medId, days){
+  const m=medById(medId); if(!m) return;
+  if(!m.pattern || m.pattern.type!=='daily') return;      // set times only; see the note above
+  const slots=doseCourseSlots(m); if(!slots.length) return;
+  const n=Math.max(1, Math.min(60, parseInt(days,10)||7));
+  const seq=((m.ics&&m.ics.seq)||0)+1;
+  const label=_icsClean(m.name+' '+(m.dose==null?'':m.dose)+(m.unit||''));
+  const stamp=_icsStamp(new Date());
+  const L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Cubby//Medicine//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH'];
+  slots.forEach(function(t,i){
+    const parts=String(t).split(':'), start=new Date();
+    start.setHours(+parts[0]||0, +parts[1]||0, 0, 0);
+    // A slot that has already gone today starts tomorrow, so the first entry is never in the past.
+    if(start.getTime() <= now()) start.setDate(start.getDate()+1);
+    L.push('BEGIN:VEVENT',
+      'UID:cubby-med-'+m.id+'-'+i+'@little-cubby.com',
+      'SEQUENCE:'+seq,
+      'DTSTAMP:'+stamp,
+      'DTSTART:'+_icsLocal(start),
+      'DURATION:PT15M',
+      'RRULE:FREQ=DAILY;COUNT='+n,          // always bounded: no open-ended 8am alarm forever
+      'SUMMARY:'+label,
+      'DESCRIPTION:From Cubby. Log the dose in the app when you give it.',
+      'BEGIN:VALARM','TRIGGER:PT0S','ACTION:DISPLAY','DESCRIPTION:'+label,'END:VALARM',
+      'END:VEVENT');
+  });
+  L.push('END:VCALENDAR');
+  try{
+    const url=URL.createObjectURL(new Blob([L.join('\r\n')],{type:'text/calendar'}));
+    m.ics={seq:seq, days:n, slots:slots.join(','), at:now()};
+    persist();
+    saveFile(url, (m.name||'medicine').replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'-doses.ics',
+             isNativeApp()?'Course ready 📅':'Added, check your calendar 📅');
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+    closeSheet(); render();
+  }catch(e){ toast('Could not add to calendar'); }
+}
+function cancelDoseCourse(medId){
+  const m=medById(medId); if(!m||!m.ics) return;
+  const slots=String(m.ics.slots||'').split(',').filter(Boolean);
+  const seq=(m.ics.seq||0)+1, stamp=_icsStamp(new Date());
+  const L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Cubby//Medicine//EN','CALSCALE:GREGORIAN','METHOD:CANCEL'];
+  slots.forEach(function(t,i){
+    L.push('BEGIN:VEVENT','UID:cubby-med-'+m.id+'-'+i+'@little-cubby.com','SEQUENCE:'+seq,
+      'DTSTAMP:'+stamp,'STATUS:CANCELLED','SUMMARY:'+_icsClean(m.name),'END:VEVENT');
+  });
+  L.push('END:VCALENDAR');
+  try{
+    const url=URL.createObjectURL(new Blob([L.join('\r\n')],{type:'text/calendar'}));
+    delete m.ics; persist();
+    // Honest about the limit: a cancel is a request to the calendar app, not something we can enforce.
+    saveFile(url, (m.name||'medicine').replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'-cancel.ics',
+             'Removed. If they are still showing, delete them in your Calendar app.');
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+    closeSheet(); render();
+  }catch(e){ toast('Could not remove them'); }
 }
 /* Post-visit capture: closes the loop and feeds the doctor report. */
 function markApptDone(id){
@@ -7654,7 +7777,33 @@ function deleteDenWeight(id){ const d=ensureDenFields(); d.weights=d.weights.fil
    MEDICINE
    ============================================================ */
 function babyMeds(){ return (state.meds||[]).filter(m=>m.babyId===state.activeBabyId); }
-function lastDose(medId){ return babyEvents().find(e=>e.type==='medicine'&&e.medId===medId); }
+/* A medicine by id, whichever child it belongs to. Every action ON a dose alert used to look the
+   medicine up through babyMeds(), so widening the alert without this would have put a pill on screen
+   whose Log, In 15 min and Not now buttons all silently did nothing. */
+function medById(id){ return (state.meds||[]).find(m=>m&&m.id===id)||null; }
+/* Dose alerts scan EVERY child in the household, not the one currently on screen.
+   babyMeds() filters by state.activeBabyId, so with twins the other twin's overdue antibiotic
+   produced no pill, no toast and no haptic until you happened to switch babies — while
+   syncReminderIndex has always scanned all of them, so the push index and the screen disagreed.
+   An alert that depends on which child you last looked at is not an alert.
+   The child is carried alongside, because "which twin got the 5ml" is the one question this must
+   never blur. Medicines whose baby no longer exists are dropped rather than alerted about. */
+function alertMeds(){
+  const babies=(state.babies||[]);
+  return (state.meds||[]).filter(m=>m&&m.active).map(function(m){
+    const b=babies.find(x=>x.id===m.babyId);
+    return b ? { m:m, baby:b, other:b.id!==state.activeBabyId } : null;
+  }).filter(Boolean);
+}
+/* Scoped to the medicine's OWN child, not the one on screen. Through babyEvents() this returned
+   nothing for a sibling's medicine, which broke two things quietly: the "a dose is already logged"
+   guard stopped guarding, and an everyX schedule anchored to the last dose never became due at all,
+   so the row sat on "Log the first dose to start the schedule" forever. */
+function lastDose(medId){
+  const m=medById(medId), bid=(m&&m.babyId)||state.activeBabyId;
+  return (state.events||[]).filter(e=>e&&!e.deleted&&e.type==='medicine'&&e.medId===medId&&e.babyId===bid)
+                           .sort((a,b)=>b.time-a.time)[0];
+}
 
 /* ---- dose-alert ledger ---------------------------------------------------------------------
    What this device has already said out loud, and what the parent has waved off. Keyed by the
@@ -7721,11 +7870,11 @@ function setMedAlerts(on){
    and the next dose alerts normally either way. */
 var MED_SNOOZE_MS=15*60000;
 function dismissMedAlert(id,due){
-  const m=babyMeds().find(x=>x.id===id); if(!m) return;
+  const m=medById(id); if(!m) return;
   medLedgerMark(m,+due,'d'); render(); toast('Okay. It stays on the Health tab.');
 }
 function snoozeMedAlert(id,due){
-  const m=babyMeds().find(x=>x.id===id); if(!m) return;
+  const m=medById(id); if(!m) return;
   const back=now()+MED_SNOOZE_MS, l=medLedger(), r=(l[medDueKey(m,+due)]||(l[medDueKey(m,+due)]={}));
   r.s=back; r.a=0;   // clearing `a` is what buys the one further alert when the window runs out
   medLedgerSave(); render();
@@ -7862,6 +8011,9 @@ function renderMedSheet(editing){
     ${schedUI}
     <div class="toggle-row"><div><div class="tr-a">Remind me</div><div class="tr-b">Alert when a dose is due (while app is open)</div></div>
       <div class="sw ${d.remind?'on':''}" onclick="toggleMedRemind(${editing})"></div></div>
+    ${(editing&&p.type==='daily')?`<button class="btn-ghost" onclick="openDoseCalendar('${d.id}')">📅 ${d.ics?'Update these times in my calendar':'Add these times to my calendar'}</button>
+      <div class="csub">Your phone reminds you at each dose time, even when Cubby is closed.</div>`:''}
+    ${(editing&&p.type==='everyX')?`<div class="csub">Doses set to every few hours move each time you log one, so a calendar entry would go stale without us being able to fix it. Set times can go in your calendar.</div>`:''}
     <button class="btn-primary" style="background:var(--med);--accent-ink:var(--on-med,var(--on-accent))" onclick="saveMed('${editing?d.id:''}')">${editing?'Save changes':'Add medicine'}</button>
     ${editing?`<button class="btn-ghost btn-danger" onclick="deleteMed('${d.id}')">${I.trash} Remove medicine</button>`:''}`,'med');
 }
@@ -7875,19 +8027,43 @@ function saveMed(id){
   if(!medDraft.name){ toast('Name the medicine first'); return; }
   medDraft.dose=$('#mDose').value.trim();
   medDraft.unit=$('#mUnit').value;
+  let _icsStale=null;
   if(id){
     const i=state.meds.findIndex(m=>m.id===id);
+    // If these times are already in the parent's calendar and they have just changed, the calendar
+    // is now wrong and we are the only ones who know. Offer the re-export; never do it silently,
+    // because it writes a file and opens a share sheet.
+    const before=state.meds[i], had=before&&before.ics;
+    const oldSlots=had?String(before.ics.slots||''):'';
     state.meds[i]=Object.assign(state.meds[i],medDraft);
+    const newSlots=doseCourseSlots(state.meds[i]).join(',');
+    if(had && (medDraft.pattern.type!=='daily' || newSlots!==oldSlots)) _icsStale=state.meds[i];
   } else {
     medDraft.id=uid(); medDraft.babyId=state.activeBabyId; medDraft.createdAt=now();
     state.meds.push(medDraft);
   }
   if(medDraft.remind) requestNotif();
-  persist(); syncReminderIndex(); closeSheet(); render(); toast('Medicine saved');
+  persist(); syncReminderIndex(); closeSheet(); render();
+  if(_icsStale){
+    const stale=_icsStale;
+    confirmSheet({
+      title:'Update your calendar too?',
+      body:'These dose times are in your calendar from before. Adding them again updates the same entries so they match what you just saved.',
+      confirmLabel:'Update it', cancelLabel:'Leave it',
+      onConfirm:function(){ if(stale.pattern.type==='daily') openDoseCalendar(stale.id); else cancelDoseCourse(stale.id); }
+    });
+    return;
+  }
+  toast('Medicine saved');
 }
 function deleteMed(id){
-  const m=babyMeds().find(x=>x.id===id);
-  confirmSheet({title:'Remove '+((m&&m.name)||'this medicine')+'?',body:'It comes off the list and reminders stop. Doses already logged stay in your log.',confirmLabel:'Remove',cancelLabel:'Keep',danger:true,onConfirm:function(){
+  const m=medById(id);
+  const inCal=!!(m&&m.ics);
+  confirmSheet({title:'Remove '+((m&&m.name)||'this medicine')+'?',
+    body:'It comes off the list and reminders stop. Doses already logged stay in your log.'+(inCal?' The dose times are in your calendar, so we will offer to take those off too.':''),
+    confirmLabel:'Remove',cancelLabel:'Keep',danger:true,onConfirm:function(){
+    // Offer the calendar cancel BEFORE the medicine goes, because cancelDoseCourse needs its UIDs.
+    if(inCal){ cancelDoseCourse(id); }
     state.meds=state.meds.filter(x=>x.id!==id);
     persist(); syncReminderIndex(); render(); toast('Removed');
   }});
@@ -7917,7 +8093,7 @@ function lastDoseLine(m){
   return 'Last dose '+escapeHtml(fmtClock(last.time))+(who?(' · by '+escapeHtml(who)):'');
 }
 function logDose(id){
-  const m=babyMeds().find(x=>x.id===id); if(!m)return;
+  const m=medById(id); if(!m)return;
   const last=lastDose(m.id), iv=medIntervalMs(m);
   // One question, made of facts. Never "are you sure?", never a warning, never a number we invented.
   if(last && iv && (now()-last.time) < iv){
@@ -7933,15 +8109,26 @@ function logDose(id){
   commitDose(m);
 }
 function commitDose(m){
-  addEvent({type:'medicine',medId:m.id,medName:m.name,dose:m.dose,unit:m.unit,time:now()});
+  // babyId stated, never inherited from whoever is on screen: a dose logged from a sibling's alert
+  // must land in that child's record. See addEvent.
+  addEvent({type:'medicine',medId:m.id,medName:m.name,dose:m.dose,unit:m.unit,time:now(),babyId:m.babyId||state.activeBabyId});
   // lastNotified is no longer this build's guard (the device-local ledger is) — a logged dose moves
   // `due` to a brand new timestamp, which is a brand new ledger key. Kept only so a caregiver still
   // on an older cached bundle keeps behaving.
-  m.lastNotified=null; persist(); render(); toast('Dose logged · '+m.name);
+  // The push index is built from medNextDue, and logging a dose MOVES the next due time. Without
+  // this the cron could still fire a reminder naming a time that has already passed, and a
+  // medicine reminder at the wrong time is worse than none at all.
+  m.lastNotified=null; persist(); if(typeof syncReminderIndex==='function') syncReminderIndex(); render(); toast('Dose logged · '+m.name);
 }
 
 /* ---- reminders ---- */
 function requestNotif(){
+  /* Never ask for a permission the app cannot yet honour. enablePush() already refuses while
+     REMINDERS_LIVE is false, but this was still reachable from saving a medicine, so a parent could
+     be shown the OS "Allow notifications?" prompt for a channel that has no delivery behind it. A
+     granted permission that never produces a notification teaches exactly one lesson, and it is the
+     wrong one. Ask on the day we can deliver. */
+  if(!REMINDERS_LIVE) return;
   try{ if('Notification' in window && Notification.permission==='default') Notification.requestPermission(); }catch(e){}
 }
 /* ONE due event = at most ONE alert on this device. Ever.
@@ -7983,21 +8170,25 @@ var _medAlertFloorAt=0;
 function checkMedReminders(){
   if(medAlertsMuted()) return;
   const ready=[];
-  babyMeds().filter(m=>m.active&&m.remind).forEach(m=>{
-    const due=medNextDue(m);
+  alertMeds().filter(x=>x.m.remind).forEach(x=>{
+    const m=x.m, due=medNextDue(m);
     if(due===null||!(now()>=due)) return;
     if(medDismissed(m,due)) return;
     if(medSnoozed(m,due)) return;   // "In 15 min": held until a stated time, not silenced
     if(medAlerted(m,due)) return;
-    ready.push({m:m,due:due});
+    ready.push({m:m,due:due,baby:x.baby});
   });
   if(!ready.length) return;
   if(now()-_medAlertFloorAt<60000) return;
   _medAlertFloorAt=now();
   ready.forEach(x=>medLedgerMark(x.m,x.due,'a'));
-  const one=ready[0].m;
-  const msg=ready.length===1 ? one.name+' · '+one.dose+' '+one.unit+' is due'
-                             : ready.length+' medicines are due';
+  const one=ready[0].m, oneBaby=ready[0].baby;
+  // With more than one child in the house the name goes first, because "Amoxicillin 5ml is due" is
+  // not an answer when two children are on the same antibiotic at different weights.
+  const multi=(state.babies||[]).length>1;
+  const msg=ready.length===1
+    ? (multi&&oneBaby ? oneBaby.name+' · ' : '')+one.name+' · '+one.dose+' '+one.unit+' is due'
+    : ready.length+' medicines are due';
   // tag: without it every repeat stacks a fresh row in the OS notification centre instead of
   // replacing the last one, which is its own version of "I couldn't make it stop".
   try{ if('Notification' in window && Notification.permission==='granted') new Notification('Medicine due', {body:msg,tag:'cubby-med-due'}); }catch(e){}
