@@ -678,7 +678,12 @@
     opts = opts || {};
     var u = {};
     u['members.' + user.uid] = r;
-    u['memberInfo.' + user.uid] = { name: opts.name || user.displayName || '', photoURL: user.photoURL || '', role: r, relationship: opts.relationship || '' };
+    /* joinedAt exists so "did a second caregiver arrive in the first week" is answerable at all —
+       without it the one number this product should be judged on cannot be computed from the data.
+       Safe to write unconditionally: this helper has exactly two callers and both of them ARE the
+       join (the pending-data path and the invite path). There is no profile-update caller that
+       would reset it. A genuine re-join does re-stamp, which is the honest reading anyway. */
+    u['memberInfo.' + user.uid] = { name: opts.name || user.displayName || '', photoURL: user.photoURL || '', role: r, relationship: opts.relationship || '', joinedAt: window.LL.serverTimestamp() };
     return u;
   }
 
@@ -2496,7 +2501,10 @@
           uid: u ? u.uid : null, email: u ? u.email : null, name: u ? u.displayName : null,
           householdId: window.LL.householdId || null,
           version: window.CUBBY_VERSION || '', userAgent: (navigator.userAgent || '').slice(0, 300),
-          at: window.LL.serverTimestamp()
+          // Both readers (tools/ops.js, tools/analytics.js) sort on createdAt, so writing only `at`
+          // meant every note scored 0 and the sort was a silent no-op — the notes from twenty real
+          // testers arrived in arbitrary order. `at` is kept so rows already written stay readable.
+          at: window.LL.serverTimestamp(), createdAt: window.LL.serverTimestamp()
         });
         modal('Thank you 🐻', '<div class="ll-auth-msg" style="margin:0 0 12px">Your feedback was sent, we read every one.</div><button id="llFbDone" class="ll-modal-btn">Close</button>');
         document.getElementById('llFbDone').onclick = closeModal;

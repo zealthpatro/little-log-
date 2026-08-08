@@ -151,7 +151,7 @@ const bar = (n, max, w = 24) => '█'.repeat(Math.round((n / (max || 1)) * w)).p
   });
 
   line('\n── Feedback ──  (' + fbSnap.size + ')');
-  fbSnap.docs.map(d => d.data()).sort((a, b) => ms(b.createdAt) - ms(a.createdAt)).forEach(f => {
+  fbSnap.docs.map(d => d.data()).sort((a, b) => ms(b.createdAt || b.at) - ms(a.createdAt || a.at)).forEach(f => {
     const when = f.createdAt ? new Date(ms(f.createdAt)).toISOString().slice(0, 10) : '';
     line(`  • [${when}] ${String(f.text || '').replace(/\s+/g, ' ').slice(0, 160)}`);
   });

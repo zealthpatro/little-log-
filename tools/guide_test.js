@@ -417,8 +417,33 @@ async function chapterLabels(page) {
   check(list.eventsAfter > 0, 'following it through writes a real entry', 'events: ' + list.eventsAfter);
   check(list.rowNowDone, 'and the row it belongs to is now ticked');
 
-  // ---- 12. NO PAGE ERRORS THROUGHOUT -----------------------------------------------------------
-  console.log('\n12. clean console');
+  // ---- 12. A PARTNER IS NOT ASSUMED TO BE THE CARRIER ------------------------------------------
+  /* Relationship is optional at identity, and an empty one used to fall through the "is he one of
+     the bears that cannot be pregnant" list as carrier — so a father who skipped the dropdown was
+     shown "First day of your last period". Unknown now falls back to who set the journey up. */
+  console.log('\n12. an unnamed relationship does not assume the carrier');
+  const carrier = await page.evaluate(() => {
+    var me = myUid();
+    window.LL = window.LL || {};
+    window.LL.memberInfo = {}; window.LL.memberInfo[me] = { relationship: '' };
+    var out = {};
+    window.LL.matIsOwner = function () { return true; };
+    out.blankOwner = viewerIsCarrier();
+    window.LL.matIsOwner = function () { return false; };
+    out.blankInvited = viewerIsCarrier();
+    window.LL.memberInfo[me] = { relationship: 'Papa Bear' };
+    out.namedPapa = viewerIsCarrier();
+    window.LL.memberInfo[me] = { relationship: 'Mama Bear' };
+    out.namedMama = viewerIsCarrier();
+    return out;
+  });
+  check(carrier.blankOwner === true, 'the person who set the journey up is still treated as the carrier');
+  check(carrier.blankInvited === false, 'someone invited into it, who never named a relationship, is not');
+  check(carrier.namedPapa === false, 'a named Papa Bear is never the carrier');
+  check(carrier.namedMama === true, 'a named Mama Bear always is');
+
+  // ---- 13. NO PAGE ERRORS THROUGHOUT -----------------------------------------------------------
+  console.log('\n13. clean console');
   check(page.__errs.length === 0, 'no uncaught page errors', page.__errs.join(' | '));
   await page.close();
 

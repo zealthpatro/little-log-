@@ -5520,8 +5520,16 @@ function defaultPrecon(){
 /* A non-carrier (e.g. Papa/Grandpa/Uncle Bear) should never be asked about periods or fertility.
    Default to showing; only hide for clearly non-carrier relationship roles. */
 function viewerIsCarrier(){
-  try{ var info=(window.LL&&window.LL.memberInfo)||{}; var rel=((info[myUid()]&&info[myUid()].relationship)||'').toLowerCase();
-    return ['papa bear','grandpa bear','uncle bear'].indexOf(rel)<0; }
+  try{
+    var info=(window.LL&&window.LL.memberInfo)||{}; var rel=((info[myUid()]&&info[myUid()].relationship)||'').toLowerCase();
+    /* Relationship is optional at identity, and an empty one used to fall through this list as
+       "carrier" — so a father who skipped the dropdown was shown "First day of your last period"
+       and "you may be in your fertile window". Fall back to who set the journey up instead: the
+       owner created it, an invited partner did not. That is right far more often than either
+       blanket answer, and it is recoverable by naming a relationship. */
+    if(!rel) return (window.LL && typeof window.LL.matIsOwner==='function') ? !!window.LL.matIsOwner() : true;
+    return ['papa bear','grandpa bear','uncle bear'].indexOf(rel)<0;
+  }
   catch(_){ return true; }
 }
 /* The fertile-window card is opt-out per PERSON, never per household: whether she wants the

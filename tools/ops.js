@@ -91,7 +91,7 @@ async function collect() {
     funnel: lb.funnel, activation: lb.activation, conversions: lb.conversions,
     eventTypes: Object.entries(typeTotals).sort((a, b) => b[1] - a[1]).map(([type, n]) => ({ type, n })),
     households: households.sort((a, b) => b.last - a.last),
-    feedback: fbSnap.docs.map(d => d.data()).sort((a, b) => ms(b.createdAt) - ms(a.createdAt)).slice(0, 50).map(f => ({ when: f.createdAt ? new Date(ms(f.createdAt)).toISOString().slice(0, 10) : '', text: String(f.text || '').replace(/\s+/g, ' ').slice(0, 300) })),
+    feedback: fbSnap.docs.map(d => d.data()).sort((a, b) => ms(b.createdAt || b.at) - ms(a.createdAt || a.at)).slice(0, 50).map(f => ({ when: (f.createdAt || f.at) ? new Date(ms(f.createdAt || f.at)).toISOString().slice(0, 10) : '', text: String(f.text || '').replace(/\s+/g, ' ').slice(0, 300) })),
   };
 }
 
