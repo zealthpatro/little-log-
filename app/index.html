@@ -11282,7 +11282,7 @@ const POSTER_DECO=[
   {k:'stars', label:'Stars'}, {k:'sprig', label:'Sprigs'}, {k:'icons', label:'Little icons'}
 ];
 function posterDefaults(){ return {style:'bear', deco:{garland:1,balloons:1,cloud:1,stars:1,sprig:1,icons:1}}; }
-let _posterArt={}, _posterArtP=null;
+let _posterArt={}, _posterArtP=null, _tintCache={};
 function loadPosterArt(){
   if(_posterArtP) return _posterArtP;
   _posterArtP=Promise.all(POSTER_ART.map(k=>new Promise(res=>{
@@ -11596,7 +11596,7 @@ function renderPosterSheet(hasDetails){
     <div class="sec-title" style="margin-left:0">Decorations</div>
     <div class="chip-row">${POSTER_DECO.map(x=>`<div class="chip ${d.deco[x.k]?'sel':''}" onclick="posterToggleDeco('${x.k}',${hasDetails})">${x.label}</div>`).join('')}</div>
     <div class="csub" style="margin-top:-2px">Tap any of these off if you want it plainer. Everything is on to start with.</div>
-    <div class="toggle-row"><div><div class="tr-a">Include a photo</div><div class="tr-b">Adds a framed photo at the top</div></div>
+    <div class="toggle-row"><div><div class="tr-a">Use a photo instead</div><div class="tr-b">The ${escapeHtml(posterStyle().label.toLowerCase())} is a placeholder. Swap it for a photo of ${escapeHtml((activeBaby()||{}).name||'your baby')} any time.</div></div>
       <div class="sw ${d.withPhoto?'on':''}" onclick="togglePosterPhoto(${hasDetails})"></div></div>
     ${d.withPhoto?`<div class="sec-title" style="margin-left:0">Choose a photo</div>${albumStrip(d.photoId,'posterPhotoFromId',"document.getElementById('posterPhotoInput').click()")}`:''}
     <div id="posterPrevSlot"></div>
@@ -11649,11 +11649,28 @@ function composePoster(canvas,scale,preview){
   // corner motifs
   /* Painted furniture, multiplied onto the paper. The hand-drawn leaf sprigs and vector stars that
      used to sit in the corners were the last thing on this poster that looked drawn by a program. */
+  /* Furniture wears the style it is standing on. The pieces are painted once in warm neutrals, so
+     on the cool papers (elephant, panda) warm pink bunting read as a clash rather than an accent.
+     Tinted with the 'color' blend and not a wash: that keeps each pixel's LUMINOSITY and takes only
+     hue and saturation, so white stays exactly white and the multiply below still keys it out
+     completely. Held at partial alpha so a bunting keeps some of its own variety instead of going
+     monochrome. Cached per piece per style, because the preview redraws on every tap. */
+  const tinted=(im,k)=>{
+    const sk=posterStyle().k, ck=k+'|'+sk;
+    if(_tintCache[ck]) return _tintCache[ck];
+    const c=document.createElement('canvas');
+    c.width=im.naturalWidth; c.height=im.naturalHeight;
+    const x=c.getContext('2d');
+    x.drawImage(im,0,0);
+    x.globalCompositeOperation='color'; x.globalAlpha=0.55;
+    x.fillStyle=posterStyle().pal.accent; x.fillRect(0,0,c.width,c.height);
+    _tintCache[ck]=c; return c;
+  };
   const art=(k,cx,cy,w,alpha)=>{
     const im=_posterArt[k]; if(!im||!im.naturalWidth) return;
     const h=w*(im.naturalHeight/im.naturalWidth);
     ctx.save(); ctx.globalCompositeOperation='multiply'; ctx.globalAlpha=alpha==null?1:alpha;
-    ctx.drawImage(im, cx-w/2, cy-h/2, w, h); ctx.restore();
+    ctx.drawImage(tinted(im,k), cx-w/2, cy-h/2, w, h); ctx.restore();
   };
   const deco=(posterDraft.deco)||{};
   if(deco.garland)  art('garland', W/2, 130*S, W*0.52, 0.95);
