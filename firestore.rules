@@ -71,13 +71,17 @@ service cloud.firestore {
       allow read: if request.auth != null;
 
       // Only the household's own owner mints one, and only ever pointing at their own household.
+      // members.get(uid, '') rather than members[uid] throughout this block: a bare map read of an
+      // absent key THROWS, and while a throw does deny, a rule that is correct only because of its
+      // error behaviour is not a rule anyone should have to reason about later. Say it outright.
       allow create: if request.auth != null
-        && get(/databases/$(database)/documents/households/$(request.resource.data.householdId)).data.members[request.auth.uid] == 'owner'
+        && get(/databases/$(database)/documents/households/$(request.resource.data.householdId)).data.members.get(request.auth.uid, '') == 'owner'
         && request.resource.data.get('role', 'caregiver') in ['owner', 'caregiver']
         // .get() rather than a bare field read: referencing an absent field THROWS in rules, and a
         // throw on create would reject the owner's own legitimate link.
         && request.resource.data.get('usedBy', null) == null
-        && request.resource.data.expiresAt is timestamp;
+        // Same reason: a bare read of an absent expiresAt throws. It would still deny, but say it.
+        && request.resource.data.get('expiresAt', null) is timestamp;
 
       // Exactly two updates are legal.
       // 1. The owner revokes, which can never re-point the link at a different household.
@@ -87,7 +91,7 @@ service cloud.firestore {
       allow update: if request.auth != null
         && request.resource.data.householdId == resource.data.householdId
         && (
-          get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members[request.auth.uid] == 'owner'
+          get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members.get(request.auth.uid, '') == 'owner'
           || (
                resource.data.get('usedBy', null) == null
             && request.resource.data.usedBy == request.auth.uid
@@ -98,7 +102,7 @@ service cloud.firestore {
         );
 
       allow delete: if request.auth != null
-        && get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members[request.auth.uid] == 'owner';
+        && get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members.get(request.auth.uid, '') == 'owner';
     }
 
     match /households/{hid} {
