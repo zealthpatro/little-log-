@@ -1,0 +1,82 @@
+[
+ {
+  "out": "art-src/poster_animal_bear.png",
+  "aspect": "1:1",
+  "prompt": "A baby bear cub with soft cream-white fur, fuzzy rounded ears with dusty-rose inner ears, a soft rounded muzzle. Soft hand-drawn watercolour nursery illustration in a calm children's picture-book hand. Warm muted pastel palette, gentle airbrushed shading, fine delicate linework, subtle paper grain, rosy blush cheeks, calm minimal friendly face, soft rounded baby proportions. Flat 2D, not 3D, not photorealistic, no harsh black outlines. Sitting upright facing forward, full body, centred, with generous empty margin. NO clothes, no outfit, no hat, no bow, no collar, no accessories of any kind. Set on a plain pure white background, no ground shadow, no vignette, no scenery. No text, no letters, no numbers, no border, no frame."
+ },
+ {
+  "out": "art-src/poster_animal_bunny.png",
+  "aspect": "1:1",
+  "prompt": "A baby bunny with soft cream fur and long gently flopped ears, dusty-rose inner ears. Soft hand-drawn watercolour nursery illustration in a calm children's picture-book hand. Warm muted pastel palette, gentle airbrushed shading, fine delicate linework, subtle paper grain, rosy blush cheeks, calm minimal friendly face, soft rounded baby proportions. Flat 2D, not 3D, not photorealistic, no harsh black outlines. Sitting upright facing forward, full body, centred, with generous empty margin. NO clothes, no outfit, no hat, no bow, no collar, no accessories of any kind. Set on a plain pure white background, no ground shadow, no vignette, no scenery. No text, no letters, no numbers, no border, no frame."
+ },
+ {
+  "out": "art-src/poster_animal_fox.png",
+  "aspect": "1:1",
+  "prompt": "A baby fox with soft muted terracotta fur, cream chest and cheeks, small rounded ears. Soft hand-drawn watercolour nursery illustration in a calm children's picture-book hand. Warm muted pastel palette, gentle airbrushed shading, fine delicate linework, subtle paper grain, rosy blush cheeks, calm minimal friendly face, soft rounded baby proportions. Flat 2D, not 3D, not photorealistic, no harsh black outlines. Sitting upright facing forward, full body, centred, with generous empty margin. NO clothes, no outfit, no hat, no bow, no collar, no accessories of any kind. Set on a plain pure white background, no ground shadow, no vignette, no scenery. No text, no letters, no numbers, no border, no frame."
+ },
+ {
+  "out": "art-src/poster_animal_elephant.png",
+  "aspect": "1:1",
+  "prompt": "A baby elephant with soft pale grey-blue skin, large gentle rounded ears and a small curled trunk. Soft hand-drawn watercolour nursery illustration in a calm children's picture-book hand. Warm muted pastel palette, gentle airbrushed shading, fine delicate linework, subtle paper grain, rosy blush cheeks, calm minimal friendly face, soft rounded baby proportions. Flat 2D, not 3D, not photorealistic, no harsh black outlines. Sitting upright facing forward, full body, centred, with generous empty margin. NO clothes, no outfit, no hat, no bow, no collar, no accessories of any kind. Set on a plain pure white background, no ground shadow, no vignette, no scenery. No text, no letters, no numbers, no border, no frame."
+ },
+ {
+  "out": "art-src/poster_animal_deer.png",
+  "aspect": "1:1",
+  "prompt": "A baby deer with soft warm fawn fur and pale cream spots on its back, small rounded ears. Soft hand-drawn watercolour nursery illustration in a calm children's picture-book hand. Warm muted pastel palette, gentle airbrushed shading, fine delicate linework, subtle paper grain, rosy blush cheeks, calm minimal friendly face, soft rounded baby proportions. Flat 2D, not 3D, not photorealistic, no harsh black outlines. Sitting upright facing forward, full body, centred, with generous empty margin. NO clothes, no outfit, no hat, no bow, no collar, no accessories of any kind. Set on a plain pure white background, no ground shadow, no vignette, no scenery. No text, no letters, no numbers, no border, no frame."
+ },
+ {
+  "out": "art-src/poster_animal_panda.png",
+  "aspect": "1:1",
+  "prompt": "A baby panda with soft cream-white fur and gentle warm-grey patches, small rounded ears. Soft hand-drawn watercolour nursery illustration in a calm children's picture-book hand. Warm muted pastel palette, gentle airbrushed shading, fine delicate linework, subtle paper grain, rosy blush cheeks, calm minimal friendly face, soft rounded baby proportions. Flat 2D, not 3D, not photorealistic, no harsh black outlines. Sitting upright facing forward, full body, centred, with generous empty margin. NO clothes, no outfit, no hat, no bow, no collar, no accessories of any kind. Set on a plain pure white background, no ground shadow, no vignette, no scenery. No text, no letters, no numbers, no border, no frame."
+ },
+ {
+  "out": "art-src/poster_animal_lamb.png",
+  "aspect": "1:1",
+  "prompt": "A baby lamb with soft curly cream wool and a gentle warm-grey face, small ears. Soft hand-drawn watercolour nursery illustration in a calm children's picture-book hand. Warm muted pastel palette, gentle airbrushed shading, fine delicate linework, subtle paper grain, rosy blush cheeks, calm minimal friendly face, soft rounded baby proportions. Flat 2D, not 3D, not photorealistic, no harsh black outlines. Sitting upright facing forward, full body, centred, with generous empty margin. NO clothes, no outfit, no hat, no bow, no collar, no accessories of any kind. Set on a plain pure white background, no ground shadow, no vignette, no scenery. No text, no letters, no numbers, no border, no frame."
+ },
+ {
+  "out": "art-src/poster_garland.png",
+  "prompt": "A short horizontal bunting garland: a gently draped string with small triangular pennants in cream, dusty rose, sage and warm beige. Soft hand-drawn watercolour nursery illustration, the style of a calm children's picture book. Warm muted neutral palette: cream, soft beige, dusty rose, warm grey, gentle sage green. Fine delicate linework, soft airbrushed shading, subtle paper grain. Flat 2D, not 3D, not photorealistic, no harsh black outlines, no heavy saturation, no gloss. One isolated object, centred, with generous empty margin. Set on a plain pure white background, no ground shadow, no vignette, no coloured backdrop. No text, no letters, no numbers, no watermark, no border, no frame.",
+  "aspect": "3:2"
+ },
+ {
+  "out": "art-src/poster_balloons.png",
+  "prompt": "A small cluster of four or five party balloons on fine curling strings, gently overlapping, in cream, dusty rose and pale sage. Soft hand-drawn watercolour nursery illustration, the style of a calm children's picture book. Warm muted neutral palette: cream, soft beige, dusty rose, warm grey, gentle sage green. Fine delicate linework, soft airbrushed shading, subtle paper grain. Flat 2D, not 3D, not photorealistic, no harsh black outlines, no heavy saturation, no gloss. One isolated object, centred, with generous empty margin. Set on a plain pure white background, no ground shadow, no vignette, no coloured backdrop. No text, no letters, no numbers, no watermark, no border, no frame.",
+  "aspect": "1:1"
+ },
+ {
+  "out": "art-src/poster_cloud.png",
+  "prompt": "A single small soft fluffy cloud, hand painted, pale cream and the faintest warm grey. Soft hand-drawn watercolour nursery illustration, the style of a calm children's picture book. Warm muted neutral palette: cream, soft beige, dusty rose, warm grey, gentle sage green. Fine delicate linework, soft airbrushed shading, subtle paper grain. Flat 2D, not 3D, not photorealistic, no harsh black outlines, no heavy saturation, no gloss. One isolated object, centred, with generous empty margin. Set on a plain pure white background, no ground shadow, no vignette, no coloured backdrop. No text, no letters, no numbers, no watermark, no border, no frame.",
+  "aspect": "1:1"
+ },
+ {
+  "out": "art-src/poster_stars.png",
+  "aspect": "1:1",
+  "prompt": "A scattered field of about fourteen SMALL individual stars and four-point sparkles spread evenly across the whole square, varying sizes from tiny to small, plenty of empty white space between them. ONLY stars and sparkles. Absolutely no balloon, no hot air balloon, no animal, no plant, no object of any kind, no central subject, nothing in the middle of the frame. Soft hand-drawn watercolour nursery illustration in a calm children's picture-book hand. Warm muted palette: pale gold, cream, warm grey, the faintest dusty rose. Fine delicate painting, soft edges, subtle paper grain. Flat 2D, not 3D, not photorealistic. Set on a plain pure white background, no shadow, no vignette. No text, no letters, no numbers, no border, no frame."
+ },
+ {
+  "out": "art-src/poster_sprig.png",
+  "prompt": "A single delicate eucalyptus sprig with soft rounded sage green leaves along a fine stem. Soft hand-drawn watercolour nursery illustration, the style of a calm children's picture book. Warm muted neutral palette: cream, soft beige, dusty rose, warm grey, gentle sage green. Fine delicate linework, soft airbrushed shading, subtle paper grain. Flat 2D, not 3D, not photorealistic, no harsh black outlines, no heavy saturation, no gloss. One isolated object, centred, with generous empty margin. Set on a plain pure white background, no ground shadow, no vignette, no coloured backdrop. No text, no letters, no numbers, no watermark, no border, no frame.",
+  "aspect": "1:1"
+ },
+ {
+  "out": "art-src/poster_icon_cal.png",
+  "aspect": "1:1",
+  "prompt": "A small hand-painted tear-off desk calendar: one plain page with a soft dusty-rose header bar and a simple grid of faint empty square cells below it, with one single cell marked by a tiny soft heart. Completely blank cells otherwise. Soft hand-drawn watercolour nursery illustration, the style of a calm children's picture book. Warm muted neutral palette: cream, soft beige, dusty rose, warm grey, gentle sage green. Fine delicate linework, soft airbrushed shading, subtle paper grain. Flat 2D, not 3D, not photorealistic, no harsh black outlines, no heavy saturation, no gloss. One isolated object, centred, with generous empty margin. Set on a plain pure white background, no ground shadow, no vignette, no coloured backdrop. Absolutely no text, no letters, no numbers, no numerals, no digits, no dates, no watermark, no border, no frame."
+ },
+ {
+  "out": "art-src/poster_icon_clock.png",
+  "prompt": "A small round vintage alarm clock with two bells on top and simple tick marks on the face instead of numerals. Soft hand-drawn watercolour nursery illustration, the style of a calm children's picture book. Warm muted neutral palette: cream, soft beige, dusty rose, warm grey, gentle sage green. Fine delicate linework, soft airbrushed shading, subtle paper grain. Flat 2D, not 3D, not photorealistic, no harsh black outlines, no heavy saturation, no gloss. One isolated object, centred, with generous empty margin. Set on a plain pure white background, no ground shadow, no vignette, no coloured backdrop. No text, no letters, no numbers, no watermark, no border, no frame.",
+  "aspect": "1:1"
+ },
+ {
+  "out": "art-src/poster_icon_scale.png",
+  "prompt": "A small vintage nursery baby weighing scale with a rounded pan and a simple dial face, tick marks only on the dial. Soft hand-drawn watercolour nursery illustration, the style of a calm children's picture book. Warm muted neutral palette: cream, soft beige, dusty rose, warm grey, gentle sage green. Fine delicate linework, soft airbrushed shading, subtle paper grain. Flat 2D, not 3D, not photorealistic, no harsh black outlines, no heavy saturation, no gloss. One isolated object, centred, with generous empty margin. Set on a plain pure white background, no ground shadow, no vignette, no coloured backdrop. No text, no letters, no numbers, no watermark, no border, no frame.",
+  "aspect": "1:1"
+ },
+ {
+  "out": "art-src/poster_icon_tape.png",
+  "prompt": "A soft measuring tape curled into a gentle loose loop, plain surface with small tick marks only. Soft hand-drawn watercolour nursery illustration, the style of a calm children's picture book. Warm muted neutral palette: cream, soft beige, dusty rose, warm grey, gentle sage green. Fine delicate linework, soft airbrushed shading, subtle paper grain. Flat 2D, not 3D, not photorealistic, no harsh black outlines, no heavy saturation, no gloss. One isolated object, centred, with generous empty margin. Set on a plain pure white background, no ground shadow, no vignette, no coloured backdrop. No text, no letters, no numbers, no watermark, no border, no frame.",
+  "aspect": "1:1"
+ }
+]

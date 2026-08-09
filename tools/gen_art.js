@@ -25,6 +25,10 @@
 //
 // jobs.json = [ { "out": "art-src/001_....png", "prompt": "...", "ref": "art-src/hero-mama.png" }, ... ]
 //
+// The birth poster's own sixteen pieces (seven animals, the furniture, the stat icons) have their
+// prompts tracked as a runnable jobs file: docs/poster-art-jobs.json, with the brief and the rules
+// that must survive an edit in docs/poster-art-brief.md.
+//
 // Style anchors + art-direction rules live in docs/journey-art-brief.md and the skill
 // at .claude/skills/cubby-journey-art/. Keep captions OUT of the image (baked in code),
 // leave the TOP third empty, no border/rounded corners, pregnancy art stays sex-neutral.

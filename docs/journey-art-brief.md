@@ -133,3 +133,12 @@
 - Overlay captions in-app in the empty lower third with the self-hosted script font (crisp; any caption on any card).
 - Wire the manifest; map every journey prompt → its card (pregnancy prompts get expanded to use the monthly/bump/scan set; baby prompts map to month/milestone/relationship cards); a real photo replaces the card once added; SVG bear is the last-resort fallback.
 - Send me your final specs (exact bg hex palette, caption font + size + colour, aspect, band vs no-band) and I'll match them precisely.
+
+---
+
+## Related: the birth poster
+
+The poster's own furniture and its seven animals are a separate, smaller set in the same hand, and
+they have different constraints (square, one isolated object, pure white ground so `multiply` can
+key it out, no numerals). Brief and prompts: [`docs/poster-art-brief.md`](poster-art-brief.md) and
+the runnable [`docs/poster-art-jobs.json`](poster-art-jobs.json).

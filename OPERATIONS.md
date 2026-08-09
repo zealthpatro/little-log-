@@ -70,6 +70,10 @@ keeps a future backend swap (e.g. to Cloudflare D1) a contained job rather than 
 - `tools/noteshome_test.js` — the Notes lane's place on home: bottom on a day with no note, above
   Quick log on a day with one, "new" counted only for what somebody else left, and the read-marker
   per member in localStorage rather than in the shared settings blob (`?e2e=1`)
+- `tools/gen_art.js` — the illustration generator. Prompts for the birth poster's sixteen pieces are
+  tracked and runnable in `docs/poster-art-jobs.json`; `docs/poster-art-brief.md` says which clauses
+  in them are load-bearing (pure white ground, no numerals, generous margin) and why. `art-src/` is
+  gitignored because it holds the API keys, so nothing in it counts as a record.
 - `tools/gen_sitemap.py` — stamps article lastmods
 - `test/` — Firestore rules emulator tests (need Java): `cd test && npm i && npm run test:rules`,
   and `npm run test:invitelink` for the tokenised invite links. **Both must be green before

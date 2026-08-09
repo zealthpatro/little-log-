@@ -11317,7 +11317,9 @@ function viewMonthly(i){
 let _ksArtImg=null;
 /* Poster furniture: the painted balloons, cloud, garland, sprig, sparkles and the three stat icons.
    Generated through tools/gen_art.js in the same hand as the journey library (art-src/poster_*.png,
-   baked to app/poster-art/*.webp). Composited with 'multiply' rather than as cut-outs, because
+   baked to app/poster-art/*.webp). Every prompt is tracked and runnable in docs/poster-art-jobs.json;
+   docs/poster-art-brief.md holds the rules that must survive an edit, and why.
+   Composited with 'multiply' rather than as cut-outs, because
    gpt-image-2 refuses transparent output: on a white ground multiply drops the white entirely and
    tints the marks into whatever the paper is doing underneath, which is also why they sit on the
    gradient without banding. Deliberately NOT in the service worker's precache list: they are only
