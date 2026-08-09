@@ -11271,7 +11271,22 @@ let _ksArtImg=null;
    tints the marks into whatever the paper is doing underneath, which is also why they sit on the
    gradient without banding. Deliberately NOT in the service worker's precache list: they are only
    needed the moment somebody makes a poster, and an offline launch should not carry them. */
-const POSTER_ART=['balloons','cloud','garland','sprig','stars','icon_scale','icon_tape','icon_clock'];
+const POSTER_ART=['balloons','cloud','garland','sprig','stars','icon_scale','icon_tape','icon_clock',
+  'animal_bear','animal_bunny','animal_fox','animal_elephant','animal_deer','animal_panda','animal_lamb'];
+/* Seven animals and four papers, and every piece of furniture can be turned off. The defaults are
+   chosen so a parent who touches nothing still gets a poster worth putting on a wall: the bear,
+   because it is Cubby, on cream, with everything on. Choosing is the point though. A keepsake you
+   picked is one you show people; a keepsake the app issued you is one you close. */
+const POSTER_ANIMALS=[
+  {k:'bear', label:'Bear'},
+  {k:'bunny', label:'Bunny'}, {k:'fox', label:'Fox'}, {k:'elephant', label:'Elephant'},
+  {k:'deer', label:'Deer'}, {k:'panda', label:'Panda'}, {k:'lamb', label:'Lamb'}
+];
+const POSTER_DECO=[
+  {k:'garland', label:'Bunting'}, {k:'balloons', label:'Balloons'}, {k:'cloud', label:'Cloud'},
+  {k:'stars', label:'Stars'}, {k:'sprig', label:'Sprigs'}, {k:'icons', label:'Little icons'}
+];
+function posterDefaults(){ return {animal:'bear', deco:{garland:1,balloons:1,cloud:1,stars:1,sprig:1,icons:1}}; }
 let _posterArt={}, _posterArtP=null;
 function loadPosterArt(){
   if(_posterArtP) return _posterArtP;
@@ -11562,7 +11577,7 @@ const POSTER_THEMES={
 let posterDraft=null;
 function openBirthPoster(){
   const b=activeBaby();
-  posterDraft={theme:'Cream', withPhoto:false, img:null, photoId:null};
+  posterDraft=Object.assign({theme:'Cream', withPhoto:false, img:null, photoId:null}, posterDefaults());
   const hasDetails=b.place||b.birthWeight||b.parents||b.birthLength;
   renderPosterSheet(hasDetails);
 }
@@ -11572,7 +11587,12 @@ function renderPosterSheet(hasDetails){
   openSheet(`<h2>Birth poster</h2><div class="sub">Auto-built from ${escapeHtml(activeBaby().name)}'s birth details.</div>
     ${!hasDetails?`<div class="disclaimer">The dotted lines are waiting for you. Add their weight, length, where they were born and who was there, and they fill themselves in. The dots are only here, never on the poster you save.</div>
       <button class="btn-ghost" style="margin-top:2px" onclick="openBirthDetails()">${I.note} Add the birth details</button>`:''}
-    <div class="sec-title" style="margin-left:0">Theme</div><div class="chip-row">${themeChips}</div>
+    <div class="sec-title" style="margin-left:0">Who's on it</div>
+    <div class="chip-row">${POSTER_ANIMALS.map(a=>`<div class="chip ${d.animal===a.k?'sel':''}" onclick="posterPick('animal','${a.k}',${hasDetails})">${a.label}</div>`).join('')}</div>
+    <div class="sec-title" style="margin-left:0">Paper</div><div class="chip-row">${themeChips}</div>
+    <div class="sec-title" style="margin-left:0">Decorations</div>
+    <div class="chip-row">${POSTER_DECO.map(x=>`<div class="chip ${d.deco[x.k]?'sel':''}" onclick="posterToggleDeco('${x.k}',${hasDetails})">${x.label}</div>`).join('')}</div>
+    <div class="csub" style="margin-top:-2px">Tap any of these off if you want it plainer. Everything is on to start with.</div>
     <div class="toggle-row"><div><div class="tr-a">Include a photo</div><div class="tr-b">Adds a framed photo at the top</div></div>
       <div class="sw ${d.withPhoto?'on':''}" onclick="togglePosterPhoto(${hasDetails})"></div></div>
     ${d.withPhoto?`<div class="sec-title" style="margin-left:0">Choose a photo</div>${albumStrip(d.photoId,'posterPhotoFromId',"document.getElementById('posterPhotoInput').click()")}`:''}
@@ -11582,6 +11602,8 @@ function renderPosterSheet(hasDetails){
     <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="genPoster()">${I.download} Generate poster</button>`,'star');
   drawPosterPrev();
 }
+function posterPick(field,val,hd){ posterDraft[field]=val; renderPosterSheet(hd); drawPosterPrev(); }
+function posterToggleDeco(k,hd){ posterDraft.deco[k]=posterDraft.deco[k]?0:1; renderPosterSheet(hd); drawPosterPrev(); }
 function togglePosterPhoto(hd){
   posterDraft.withPhoto=!posterDraft.withPhoto;
   if(!posterDraft.withPhoto){ posterDraft.img=null; posterDraft.photoId=null; }
@@ -11630,12 +11652,13 @@ function composePoster(canvas,scale,preview){
     ctx.save(); ctx.globalCompositeOperation='multiply'; ctx.globalAlpha=alpha==null?1:alpha;
     ctx.drawImage(im, cx-w/2, cy-h/2, w, h); ctx.restore();
   };
-  art('garland', W/2, 130*S, W*0.52, 0.95);
-  art('cloud', 132*S, 330*S, 190*S, 0.75);
-  art('balloons', W-140*S, 320*S, 170*S, 0.8);
-  art('stars', W*0.5, H*0.52, W*1.02, 0.20);
-  art('sprig', 118*S, H-170*S, 150*S, 0.7);
-  art('sprig', W-118*S, H-250*S, 130*S, 0.55);
+  const deco=(posterDraft.deco)||{};
+  if(deco.garland)  art('garland', W/2, 130*S, W*0.52, 0.95);
+  if(deco.cloud)    art('cloud', 132*S, 330*S, 190*S, 0.75);
+  if(deco.balloons) art('balloons', W-140*S, 320*S, 170*S, 0.8);
+  if(deco.stars)    art('stars', W*0.5, H*0.52, W*1.02, 0.20);
+  if(deco.sprig){   art('sprig', 118*S, H-170*S, 150*S, 0.7);
+                    art('sprig', W-118*S, H-250*S, 130*S, 0.55); }
 
   ctx.textAlign='center';
   ctx.textBaseline='alphabetic';
@@ -11707,23 +11730,28 @@ function composePoster(canvas,scale,preview){
   if(born){
     cap('at', qx[1], qy[0]-58*S, 26*S);
     bigUnit(born.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}).replace(/\s/g,' '), qx[1], qy[0]+46*S, 86*S, 30*S);
-    art('icon_clock', qx[1], qy[0]+126*S, 104*S, 0.95);
+    if(deco.icons) art('icon_clock', qx[1], qy[0]+126*S, 104*S, 0.95);
   }
   // bottom left: weight
   cap('weighing', qx[0], qy[1]-58*S, 26*S, b.birthWeight?1:0.45);
   if(b.birthWeight) bigUnit(b.birthWeight, qx[0], qy[1]+46*S, 92*S, 30*S);
   else if(preview) blank(qx[0], qy[1]+22*S, W*0.20);
-  art('icon_scale', qx[0], qy[1]+128*S, 110*S, b.birthWeight?0.95:0.42);
+  if(deco.icons) art('icon_scale', qx[0], qy[1]+128*S, 110*S, b.birthWeight?0.95:0.42);
   // bottom right: length
   cap('measuring', qx[1], qy[1]-58*S, 26*S, b.birthLength?1:0.45);
   if(b.birthLength) bigUnit(b.birthLength, qx[1], qy[1]+46*S, 92*S, 30*S);
   else if(preview) blank(qx[1], qy[1]+22*S, W*0.20);
-  art('icon_tape', qx[1], qy[1]+128*S, 106*S, b.birthLength?0.95:0.42);
+  if(deco.icons) art('icon_tape', qx[1], qy[1]+128*S, 106*S, b.birthLength?0.95:0.42);
   dot(mL,gBot,mR,gBot);
   y=gBot;
 
   // ---- the painted cub, or the parent's own photo if they chose one ----
-  const slotIm=(posterDraft.withPhoto && posterDraft.img)?posterDraft.img:_ksArtImg;
+  /* The chosen animal, or her own photo if she picked one. The variant animals are painted on pure
+     white so they multiply cleanly onto the paper; the original hero cub is painted on its own cream
+     and still needs the feather, which is why the two draw differently below. */
+  const chosen=_posterArt['animal_'+(posterDraft.animal||'bear')]||null;
+  const slotIm=(posterDraft.withPhoto && posterDraft.img)?posterDraft.img:(chosen||_ksArtImg);
+  const slotMultiply=!!chosen && !(posterDraft.withPhoto && posterDraft.img);
   const footH=(isPro()?70:110)*S;
   const tailRows=[];
   /* Every optional fact the birth-details form collects appears here, and appears as a dashed rule
@@ -11741,6 +11769,9 @@ function composePoster(canvas,scale,preview){
     const awc=Math.min(aw, W*0.58), ahc=awc/(slotIm.naturalWidth/slotIm.naturalHeight||1);
     if(posterDraft.withPhoto && posterDraft.img){
       ctx.save(); roundRect(ctx,(W-awc)/2,y+18*S,awc,ahc,18*S); ctx.clip();
+      ctx.drawImage(slotIm,(W-awc)/2,y+18*S,awc,ahc); ctx.restore();
+    } else if(slotMultiply){
+      ctx.save(); ctx.globalCompositeOperation='multiply';
       ctx.drawImage(slotIm,(W-awc)/2,y+18*S,awc,ahc); ctx.restore();
     } else {
       /* The painted cards are full-bleed paintings on their own cream, so dropping one straight onto
