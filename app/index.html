@@ -11601,105 +11601,134 @@ function composePoster(canvas,scale,preview){
   ctx.globalAlpha=0.5; pLeaf(ctx,70*S,120*S,150*S,0.5,t.motif); pLeaf(ctx,W-70*S,H-120*S,150*S,Math.PI+0.5,t.motif); ctx.globalAlpha=1;
   [[0.12,0.1,10],[0.9,0.16,7],[0.08,0.55,7],[0.93,0.62,9],[0.2,0.93,8],[0.85,0.92,7]].forEach(([px,py,r])=>pStar(ctx,W*px,H*py,r*S,t.motif));
 
-  let y=150*S;
   ctx.textAlign='center';
-  // eyebrow
-  ctx.fillStyle=t.accent; ctx.font=`800 ${22*S}px "Nunito Sans", sans-serif`;
-  ctx.fillText('• WELCOME TO THE WORLD •', W/2, y); y+=20*S;
-  // photo if chosen; else the watercolour hero cub fills the frame slot so the poster is never bare
-  const slotIm=(posterDraft.withPhoto && posterDraft.img)?posterDraft.img:_ksArtImg;
-  if(slotIm){
-    const pw=W*0.46, ph=pw*1.05, px=(W-pw)/2; y+=20*S;
-    ctx.save(); roundRect(ctx,px,y,pw,ph,18*S); ctx.fillStyle='#fff'; ctx.shadowColor='rgba(0,0,0,0.15)'; ctx.shadowBlur=20*S; ctx.shadowOffsetY=8*S; ctx.fill(); ctx.restore();
-    const ipad=10*S; ctx.save(); roundRect(ctx,px+ipad,y+ipad,pw-ipad*2,ph-ipad*2,12*S); ctx.clip();
-    const im=slotIm, r=Math.max((pw-ipad*2)/im.naturalWidth,(ph-ipad*2)/im.naturalHeight), iw=im.naturalWidth*r, ih=im.naturalHeight*r;
-    ctx.drawImage(im, px+ipad+((pw-ipad*2)-iw)/2, coverY(y+ipad,ph-ipad*2,ih), iw, ih); ctx.restore();
-    y+=ph+50*S;
-  } else { y+=40*S; }
-  // name
-  const fullName=b.fullName||b.name;
-  ctx.fillStyle=t.ink; ctx.font=`600 ${84*S}px Fraunces, serif`;
-  ctx.fillText(b.name, W/2, y); y+=54*S;
-  if(fullName && fullName.toLowerCase()!==b.name.toLowerCase()){ ctx.fillStyle=t.accent; ctx.font=`500 ${40*S}px Fraunces, serif`; ctx.fillText(fullName, W/2, y); y+=46*S; }
-  // divider
-  ctx.strokeStyle=t.soft; ctx.lineWidth=2*S; ctx.beginPath(); ctx.moveTo(W*0.35,y); ctx.lineTo(W*0.65,y); ctx.stroke();
-  pHeart(ctx,W/2,y-9*S,10*S,t.accent);
-  y+=60*S;
+  ctx.textBaseline='alphabetic';
 
-  /* Stat rows, fitted to the space that is actually left.
-     This used to walk `y` down the canvas at a fixed pitch and hope, which broke at BOTH ends. With
-     nothing but a birthday filled in, three rows ended around 70% of the way down and the bottom
-     third of a keepsake poster was an empty cream void. With every field filled in, the rows ran
-     off the bottom: "PROUD PARENTS" was cut in half and the Cubby mark sat on top of the last line.
-     So: build the whole block first, measure it, then fit it into the room between the divider and
-     the footer. Surplus is shared out as extra breathing room, shortfall is taken back the same way,
-     and only if that is not enough does the type step down.
+  /* A 2x2 grid, not a stacked column of label/value pairs.
+     The old layout read like a receipt: LABEL over value, seven times, down the middle. Every
+     birth poster people actually buy and frame does the same four things instead, and they are the
+     reason those look like keepsakes and ours looked like a form. The name is set in a hand, not in
+     the body face. The numbers are the hero and their units are whispered beside them. The four
+     facts sit in quadrants divided by a dotted cross, so the eye lands on each one rather than
+     reading a list. And a painted animal carries the warmth, instead of a photo frame doing it. */
+  const dot=(x1,y1,x2,y2)=>{ ctx.save(); ctx.strokeStyle=t.soft; ctx.lineWidth=3*S; ctx.setLineDash([4*S,11*S]);
+    ctx.lineCap='round'; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); ctx.restore(); };
+  // A big number with its unit whispered beside it, which is the move every sample makes.
+  const bigUnit=(txt,cx,cy,big,small)=>{
+    const m=String(txt||'').match(/^\s*([\d.,:]+)\s*(.*)$/);
+    if(!m){ ctx.fillStyle=t.ink; ctx.font=`600 ${small*1.3}px Fraunces, serif`; ctx.fillText(String(txt||''),cx,cy); return; }
+    const num=m[1], unit=m[2].trim();
+    ctx.font=`700 ${big}px Fraunces, serif`; const nw=ctx.measureText(num).width;
+    ctx.font=`600 ${small}px "Nunito Sans", sans-serif`; const uw=unit?ctx.measureText(unit).width+small*0.34:0;
+    const x0=cx-(nw+uw)/2;
+    ctx.textAlign='left';
+    ctx.fillStyle=t.ink; ctx.font=`700 ${big}px Fraunces, serif`; ctx.fillText(num,x0,cy);
+    if(unit){ ctx.fillStyle=t.accent; ctx.font=`600 ${small}px "Nunito Sans", sans-serif`; ctx.fillText(unit,x0+nw+small*0.34,cy-big*0.06); }
+    ctx.textAlign='center';
+  };
+  const cap=(txt,cx,cy,size,alpha)=>{ ctx.save(); ctx.globalAlpha=alpha==null?1:alpha; ctx.fillStyle=t.accent;
+    ctx.font=`800 ${size}px "Nunito Sans", sans-serif`; ctx.fillText(String(txt).toUpperCase(),cx,cy); ctx.restore(); };
+  const blank=(cx,cy,w)=>{ ctx.save(); ctx.strokeStyle=t.soft; ctx.lineWidth=3*S; ctx.setLineDash([9*S,9*S]);
+    ctx.beginPath(); ctx.moveTo(cx-w/2,cy); ctx.lineTo(cx+w/2,cy); ctx.stroke(); ctx.restore(); };
 
-     PLACEHOLDERS ARE PREVIEW-ONLY. In the sheet, a field she has not filled in yet shows its label
-     and a soft rule where the value will go, so an empty poster looks like a poster waiting to be
-     finished rather than a mistake, and she can see exactly what adding the details would buy her.
-     The generated file never contains them: a printed keepsake must not carry a blank we drew. */
+  let y=190*S;
+  // ---- name, in a hand ----
+  ctx.fillStyle=t.ink; ctx.font=`700 ${132*S}px Caveat, cursive`;
+  let nm=b.name||'', nsize=132;
+  while(nsize>60 && ctx.measureText(nm).width>W*0.78){ nsize-=6; ctx.font=`700 ${nsize*S}px Caveat, cursive`; }
+  ctx.fillText(nm, W/2, y); y+=34*S;
+  const fullName=b.fullName||'';
+  if(fullName && fullName.toLowerCase()!==(b.name||'').toLowerCase()){
+    ctx.fillStyle=t.accent; ctx.font=`400 italic ${40*S}px Fraunces, serif`;
+    ctx.fillText(fullName, W/2, y); y+=18*S;
+  }
+  y+=46*S;
+
+  // ---- the four facts, in quadrants ----
   const born=b.birth?new Date(b.birth):null;
-  const rows=[];
+  const gx=W*0.5, gTop=y, gH=560*S, gMid=gTop+gH/2, gBot=gTop+gH;
+  const mL=W*0.10, mR=W-mL;
+  dot(mL,gTop,mR,gTop);
+  dot(mL,gMid,mR,gMid);
+  dot(gx,gTop+14*S,gx,gBot-14*S);
+  const qy=[gTop+gH*0.25, gTop+gH*0.75];
+  const qx=[W*0.30, W*0.70];
+
+  // top left: the date
   if(born){
-    rows.push(['Born on', born.toLocaleDateString(undefined,{weekday:'long', day:'numeric', month:'long', year:'numeric'})]);
-    rows.push(['At', born.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})]);
+    // The day of the week is the half of a birth date people actually repeat out loud ("she came on
+    // a Sunday"), and every printed announcement carries it. It cost one line and it was missing.
+    cap(born.toLocaleDateString(undefined,{weekday:'long'}), qx[0], qy[0]-96*S, 22*S, 0.75);
+    cap(born.toLocaleDateString(undefined,{month:'long'}), qx[0], qy[0]-58*S, 26*S);
+    ctx.fillStyle=t.ink; ctx.font=`700 ${112*S}px Fraunces, serif`;
+    const dayTxt=String(born.getDate());
+    const dw=ctx.measureText(dayTxt).width;
+    ctx.fillText(dayTxt, qx[0]-14*S, qy[0]+52*S);
+    ctx.fillStyle=t.accent; ctx.font=`600 ${30*S}px "Nunito Sans", sans-serif`;
+    ctx.textAlign='left'; ctx.fillText(String(born.getFullYear()), qx[0]-14*S+dw/2+14*S, qy[0]+22*S); ctx.textAlign='center';
   }
-  const opt=(label,val)=>{ if(val) rows.push([label,val]); else if(preview) rows.push([label,null]); };
-  opt('Weight', b.birthWeight);
-  opt('Length', b.birthLength);
-  opt('Place', b.place);
-  opt('Blood group', b.blood);
-  const sign=b.sign||zodiac(b.birth); if(sign) rows.push(['Star sign', sign]);
-  const parents=b.parents||(preview?null:'');
-  const showParents=!!b.parents||(preview&&!b.parents);
+  // top right: the time
+  if(born){
+    cap('at', qx[1], qy[0]-58*S, 26*S);
+    bigUnit(born.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}).replace(/\s/g,' '), qx[1], qy[0]+46*S, 86*S, 30*S);
+  }
+  // bottom left: weight
+  cap('weighing', qx[0], qy[1]-58*S, 26*S, b.birthWeight?1:0.45);
+  if(b.birthWeight) bigUnit(b.birthWeight, qx[0], qy[1]+46*S, 92*S, 30*S);
+  else if(preview) blank(qx[0], qy[1]+22*S, W*0.20);
+  // bottom right: length
+  cap('measuring', qx[1], qy[1]-58*S, 26*S, b.birthLength?1:0.45);
+  if(b.birthLength) bigUnit(b.birthLength, qx[1], qy[1]+46*S, 92*S, 30*S);
+  else if(preview) blank(qx[1], qy[1]+22*S, W*0.20);
+  dot(mL,gBot,mR,gBot);
+  y=gBot;
 
-  // Measure, then fit. The footer keeps its own clear band so nothing can ever collide with it.
-  const LBL=34*S, VAL=58*S, PAR=(10+34+34+44)*S;
-  const footTop=H-(isPro()?70*S:110*S);
-  const need=rows.length*(LBL+VAL)+(showParents?PAR:0);
-  const room=footTop-y;
-  let pad=0, shrink=1;
-  /* Surplus becomes breathing room first, up to a point past which rows just look adrift from one
-     another, and whatever is still left over is spent centring the block in the band. A saved poster
-     for a baby whose parents only ever typed a birthday is inherently sparse; it should read as
-     unhurried and deliberate, not as a page that ran out. */
-  if(need<room){ pad=Math.min((room-need)/(rows.length+1), 40*S); y+=Math.max(0,(room-need-pad*(rows.length+1))/2); }
-  else if(need>room){ shrink=Math.max(room/need, 0.72); }
-  const lblH=LBL*shrink, valH=VAL*shrink;
-
-  rows.forEach(([k,v])=>{
-    ctx.fillStyle=t.accent; ctx.font=`800 ${20*S*Math.max(shrink,0.86)}px "Nunito Sans", sans-serif`;
-    ctx.globalAlpha=v==null?0.45:1;
-    ctx.fillText(k.toUpperCase(), W/2, y); y+=lblH;
-    if(v==null){
-      // the rule where the value will sit: legible as "not filled in", never as words we printed
-      ctx.strokeStyle=t.soft; ctx.lineWidth=2*S; ctx.setLineDash([9*S,9*S]);
-      ctx.beginPath(); ctx.moveTo(W*0.38,y-12*S); ctx.lineTo(W*0.62,y-12*S); ctx.stroke();
-      ctx.setLineDash([]);
+  // ---- the painted cub, or the parent's own photo if they chose one ----
+  const slotIm=(posterDraft.withPhoto && posterDraft.img)?posterDraft.img:_ksArtImg;
+  const footH=(isPro()?70:110)*S;
+  const tailRows=[];
+  /* Every optional fact the birth-details form collects appears here, and appears as a dashed rule
+     when it is empty, so the poster doubles as the list of what she could still add. Blood group was
+     lost in the rebuild; it is on the form, so it belongs on the paper. */
+  if(b.place||preview) tailRows.push(['born at', b.place||null]);
+  if(b.blood||preview) tailRows.push(['blood group', b.blood||null]);
+  const sign=b.sign||zodiac(b.birth); if(sign) tailRows.push(['star sign', sign]);
+  if(b.parents||preview) tailRows.push(['proud parents', b.parents||null]);
+  const tailH=tailRows.length*94*S;
+  const artRoom=(H-footH-tailH-26*S)-y;
+  if(slotIm && artRoom>120*S){
+    const ah=Math.min(artRoom-24*S, 380*S), aw=ah*(slotIm.naturalWidth/slotIm.naturalHeight||1);
+    const awc=Math.min(aw, W*0.58), ahc=awc/(slotIm.naturalWidth/slotIm.naturalHeight||1);
+    if(posterDraft.withPhoto && posterDraft.img){
+      ctx.save(); roundRect(ctx,(W-awc)/2,y+18*S,awc,ahc,18*S); ctx.clip();
+      ctx.drawImage(slotIm,(W-awc)/2,y+18*S,awc,ahc); ctx.restore();
     } else {
-      ctx.fillStyle=t.ink; ctx.font=`600 ${36*S*shrink}px Fraunces, serif`;
-      const maxw=W*0.8;
-      if(ctx.measureText(v).width>maxw) ctx.font=`600 ${28*S*shrink}px Fraunces, serif`;
-      ctx.fillText(v, W/2, y);
+      /* The painted cards are full-bleed paintings on their own cream, so dropping one straight onto
+         the poster reads as a pasted rectangle: you see the edge of somebody else's background before
+         you see the cub. Feathered through an offscreen canvas instead, so it sits ON the paper
+         rather than on top of it. Done with destination-out rather than a wash in the poster's own
+         colour, because the poster's background is a gradient and any single colour would band. */
+      const oc=document.createElement('canvas'); oc.width=Math.max(2,Math.round(awc)); oc.height=Math.max(2,Math.round(ahc));
+      const octx=oc.getContext('2d');
+      octx.drawImage(slotIm,0,0,oc.width,oc.height);
+      const vg=octx.createRadialGradient(oc.width/2,oc.height/2,Math.min(oc.width,oc.height)*0.30,
+                                         oc.width/2,oc.height/2,Math.max(oc.width,oc.height)*0.52);
+      vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(0.72,'rgba(0,0,0,0.55)'); vg.addColorStop(1,'rgba(0,0,0,1)');
+      octx.globalCompositeOperation='destination-out'; octx.fillStyle=vg; octx.fillRect(0,0,oc.width,oc.height);
+      ctx.drawImage(oc,(W-awc)/2,y+18*S,awc,ahc);
     }
-    ctx.globalAlpha=1;
-    y+=valH+pad;
+    y+=ahc+30*S;
+  } else { y+=26*S; }
+
+  // ---- the quieter facts ----
+  y=Math.max(y, H-footH-tailH-8*S);
+  tailRows.forEach(([k,v])=>{
+    cap(k, W/2, y, 24*S, v?1:0.45); y+=44*S;
+    if(v){ ctx.fillStyle=t.ink; ctx.font=`500 ${v.length>26?30*S:38*S}px Fraunces, serif`; ctx.fillText(v, W/2, y); }
+    else blank(W/2, y-13*S, W*0.30);
+    y+=50*S;
   });
-  // proud parents footer
-  if(showParents){
-    y+=10*S; pHeart(ctx,W/2,y-6*S,9*S,t.accent); y+=34*S*shrink;
-    ctx.globalAlpha=parents?1:0.45;
-    ctx.fillStyle=t.accent; ctx.font=`800 ${20*S*Math.max(shrink,0.86)}px "Nunito Sans", sans-serif`;
-    ctx.fillText('PROUD PARENTS', W/2, y); y+=34*S*shrink;
-    if(parents){
-      ctx.fillStyle=t.ink; ctx.font=`500 italic ${34*S*shrink}px Fraunces, serif`; ctx.fillText(parents, W/2, y);
-    } else {
-      ctx.strokeStyle=t.soft; ctx.lineWidth=2*S; ctx.setLineDash([9*S,9*S]);
-      ctx.beginPath(); ctx.moveTo(W*0.34,y-10*S); ctx.lineTo(W*0.66,y-10*S); ctx.stroke(); ctx.setLineDash([]);
-    }
-    ctx.globalAlpha=1;
-  }
+
   // brand: free posters carry the small Cubby mark, Pro is clean
   if(!isPro()){ drawCubbyFooter(ctx, W/2, H-56*S, 18*S, t.motif, 1); }
   ctx.textAlign='left';
