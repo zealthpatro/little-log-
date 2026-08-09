@@ -1269,6 +1269,14 @@
         expiresAt: new Date(Date.now() + INVITE_LINK_HOURS * 3600000)
       });
     } catch (e) { console.warn('createInviteLink', e); return null; }
+    /* Mirror it onto the household document, the way pending email invites already are. Not a
+       convenience: the rules deny LIST on inviteLinks (that is what keeps the token a secret), so
+       there is no query that could rebuild this list. Without the mirror an owner would have no way
+       to see, re-send or revoke a link she made two minutes ago. */
+    try {
+      await hhRef.update(new firebase.firestore.FieldPath('pendingLinks', token),
+        { at: Date.now(), expiresAt: Date.now() + INVITE_LINK_HOURS * 3600000, sentTo: '' });
+    } catch (e) { /* the link still works; only the owner's list of it is poorer */ }
     return { token: token, url: location.origin + '/app/?join=' + token, hours: INVITE_LINK_HOURS };
   };
   /* Read a token WITHOUT joining. Returns null for anything a person should not walk through:
@@ -1300,6 +1308,11 @@
     await db.collection('users').doc(user.uid)
       .set({ householdId: link.householdId, name: user.displayName || '', email: user.email || '' }, { merge: true });
     window.LL.justJoined = { invitedBy: link.invitedBy || null, role: link.role || 'caregiver' };
+    // Clear the owner's pending row: she should see that he arrived, not a link still "waiting".
+    try {
+      await db.collection('households').doc(link.householdId)
+        .update(new firebase.firestore.FieldPath('pendingLinks', link.token), firebase.firestore.FieldValue.delete());
+    } catch (e) {}
     try { sessionStorage.removeItem('cubby-join'); } catch (e) {}
     return true;
   }
@@ -1489,6 +1502,7 @@
       // Pending invites live mirrored on the household doc (owners cannot query /invites: reads
       // there are invitee-only by rule), so the circle screen can show and cancel them.
       window.LL.hhPending = d.pendingInvites || {};
+      window.LL.hhPendingLinks = d.pendingLinks || {};
       window.LL.pro = d.pro || null; // Pro entitlement: written only by the billing Worker
       window.LL.householdId = hid;
       // A bear that is only ever computed would change every time the circle grows, so the first
@@ -2219,6 +2233,26 @@
         + '<button class="ll-rm ll-cancel-inv" data-email="' + esc(em) + '">Cancel</button></div></div>';
     }).join('');
 
+    /* Pending LINKS. Until now an owner could make a link, lose the share sheet, and have no way to
+       tell whether it went — the modal still said "Just you so far". Expired ones are shown as
+       expired rather than hidden, because "I sent that yesterday and heard nothing" deserves an
+       answer on screen instead of silence. */
+    var linkMap = (myRole === 'owner') ? (window.LL.hhPendingLinks || {}) : {};
+    var linkRows = Object.keys(linkMap).sort(function (a, b) {
+      return ((linkMap[b] || {}).at || 0) - ((linkMap[a] || {}).at || 0);
+    }).map(function (tk) {
+      var lv = linkMap[tk] || {};
+      var dead = !lv.expiresAt || lv.expiresAt < Date.now();
+      var when = lv.at ? new Date(lv.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+      var status = dead ? 'Link expired' : (lv.sentTo ? ('Emailed to ' + esc(lv.sentTo)) : 'Link waiting');
+      return '<div class="ll-mem"><div><div class="ll-mem-name">Invite link</div>'
+        + '<div class="ll-mem-email">' + esc(status) + (when ? (' · ' + esc(when)) : '') + '</div></div>'
+        + '<div style="display:flex;align-items:center;gap:8px">'
+        + (dead ? '' : '<button class="ll-rm ll-reshare-link" data-token="' + esc(tk) + '">Send again</button>')
+        + '<button class="ll-rm ll-cancel-link" data-token="' + esc(tk) + '">Cancel</button></div></div>';
+    }).join('');
+    pendRows += linkRows;
+
     var myName = (info[me.uid] && info[me.uid].name) || me.displayName || '';
     var youRow = '<div class="ll-invite" style="border-top:none;padding-top:4px"><label style="font-weight:800;font-size:15px">Your profile</label>'
       + '<label>Your name</label><input id="llMyName" maxlength="40" autocomplete="name" placeholder="Your name" value="' + esc(myName) + '">'
@@ -2247,6 +2281,10 @@
       ? '<div class="ll-invite"><label>Invite link</label>'
         + '<div class="ll-linkrow"><input id="llAppLink" readonly placeholder="Tap to make a one-time link" value=""><button id="llCopyLink" class="ll-modal-btn">Make a link</button></div>'
         + '<div class="ll-auth-msg">One link, for one person, good for a day. Whoever opens it joins your circle, so send it to them and not to a group. You do not need to know which email address they will sign in with.</div>'
+        + '<div id="llLinkMail" style="display:none;margin-top:8px"><label>Or let Cubby email it</label>'
+        + '<input id="llLinkEmail" type="email" placeholder="Their email address" autocomplete="off" autocapitalize="off">'
+        + '<button id="llLinkMailBtn" class="ll-modal-btn ll-ghost" style="margin-top:6px">Email the link</button>'
+        + '<div id="llLinkMailMsg" class="ll-auth-msg"></div></div>'
         + '<div class="ll-auth-msg" style="margin-top:6px">Prefer the stricter way? Add their exact email above instead: that invite only works for that address.</div></div>'
       : '';
 
@@ -2271,7 +2309,60 @@
     Array.prototype.forEach.call(document.querySelectorAll('.ll-cancel-inv'), function (b) {
       b.onclick = function () { cancelInvite(b.getAttribute('data-email')); };
     });
+    Array.prototype.forEach.call(document.querySelectorAll('.ll-reshare-link'), function (b) {
+      b.onclick = function () { reshareLink(b.getAttribute('data-token'), b); };
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.ll-cancel-link'), function (b) {
+      b.onclick = function () { cancelInviteLink(b.getAttribute('data-token')); };
+    });
   }
+
+  /* Send the SAME link again rather than minting a new one. Minting a second link would quietly
+     invalidate nothing (both would work) and double the number of live invites into her household,
+     which is the opposite of what "send again" should mean. */
+  function reshareLink(token, btn) {
+    if (!token) return;
+    var url = location.origin + '/app/?join=' + token;
+    var text = 'Join me on Cubby 🐻\n\n' + url + '\n\nIt works once and only for a day, so it is just for you.';
+    if (navigator.share) { navigator.share({ title: 'Join me on Cubby 🐻', text: text }).catch(function () {}); return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        if (btn) { var t = btn.textContent; btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = t; }, 1500); }
+      }).catch(function () {});
+    }
+  }
+  /* Revoke. Deleting the link document is the real revocation — the mirror is only the visible
+     list, so it goes second and its failure cannot leave a live link behind. */
+  async function cancelInviteLink(token) {
+    if (!token || !hhRef) return;
+    try { await db.collection('inviteLinks').doc(token).delete(); }
+    catch (e) { try { if (window.toast) window.toast('Could not cancel that link'); } catch (e2) {} return; }
+    try { await hhRef.update(new firebase.firestore.FieldPath('pendingLinks', token), firebase.firestore.FieldValue.delete()); } catch (e) {}
+    try { if (window.toast) window.toast('Link cancelled'); } catch (e) {}
+    if (window.openFamily) window.openFamily();
+  }
+  /* Email the link from Cubby, on her behalf. Until now the app sent no invite email at all: she
+     was handed a mailto: or a share sheet and was herself the delivery mechanism, which is silent
+     when she closes it. The endpoint verifies her ID token AND that she owns the household the link
+     points at, so this cannot become a relay for sending Cubby-branded mail to strangers. */
+  window.LL.sendInviteEmail = async function (token, email) {
+    var u = auth.currentUser;
+    if (!u || !token || !email) return { error: 'bad_request' };
+    var idToken;
+    try { idToken = await u.getIdToken(); } catch (e) { return { error: 'unauthorized' }; }
+    var r, out;
+    try {
+      r = await fetch('/api/send-invite', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ idToken: idToken, token: token, email: String(email).trim().toLowerCase() })
+      });
+      out = await r.json().catch(function () { return {}; });
+    } catch (e) { return { error: 'network' }; }
+    if (!r.ok || !out.ok) return { error: (out && out.error) || 'failed' };
+    // Record who it went to, so the pending row can say so instead of just "waiting".
+    try { await hhRef.update(new firebase.firestore.FieldPath('pendingLinks', token, 'sentTo'), String(email).trim().toLowerCase()); } catch (e) {}
+    return { ok: true };
+  };
 
   // Withdraw a pending invite: the invite doc is what grants join rights, so deleting it is the
   // real revocation; the household mirror entry is just the visible list. firestore.rules already
@@ -2560,6 +2651,11 @@
       return;
     }
     if (inp) inp.value = made.url;
+    // Reveal the email option only once a link exists, and remember which token it belongs to.
+    var mailWrap = document.getElementById('llLinkMail');
+    if (mailWrap) { mailWrap.style.display = ''; mailWrap.setAttribute('data-token', made.token); }
+    var mailBtn = document.getElementById('llLinkMailBtn');
+    if (mailBtn) mailBtn.onclick = function () { emailTheLink(made.token); };
     var text = inviteLinkText(made);
     var done = function () { if (btn) { btn.textContent = 'Copied!'; setTimeout(function () { btn.textContent = 'Make another'; }, 1600); } };
     if (navigator.share) {
@@ -2571,6 +2667,29 @@
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done).catch(function () { try { inp.select(); document.execCommand('copy'); done(); } catch (e) {} });
     } else { try { inp.select(); document.execCommand('copy'); done(); } catch (e) {} }
+  }
+  async function emailTheLink(token) {
+    var inp = document.getElementById('llLinkEmail');
+    var btn = document.getElementById('llLinkMailBtn');
+    var msg = document.getElementById('llLinkMailMsg');
+    var email = ((inp && inp.value) || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { if (msg) msg.textContent = 'That does not look like an email address.'; return; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+    var res = await window.LL.sendInviteEmail(token, email);
+    if (btn) { btn.disabled = false; btn.textContent = 'Email the link'; }
+    if (res && res.ok) {
+      if (msg) msg.textContent = 'Sent. It works once and expires in a day.';
+      if (inp) inp.value = '';
+      return;
+    }
+    // Say which thing went wrong, because each one has a different next step.
+    var why = (res && res.error) || 'failed';
+    if (msg) msg.textContent =
+      why === 'link_spent' ? 'Someone has already used that link. Make a new one.'
+      : why === 'link_expired' ? 'That link has expired. Make a new one.'
+      : why === 'rate_limited' ? 'A few too many just now. Try again in a minute.'
+      : why === 'unauthorized' ? 'Only the owner of this circle can send invites.'
+      : 'Could not send just now. You can still share the link yourself.';
   }
   // Stage-aware and honest about what they will actually land on, same as inviteText.
   function inviteLinkText(made) {

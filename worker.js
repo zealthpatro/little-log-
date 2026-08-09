@@ -152,6 +152,98 @@ async function sendSigninLink(request, env) {
   }
 }
 
+/* POST /api/send-invite — email an invite link, from Cubby, on the owner's behalf.
+   {idToken, token, email}
+   Until now Cubby sent no invite email at all: submitInvite handed the owner a mailto: or a share
+   sheet and she was the delivery mechanism. That is fine when she completes the share and silent
+   when she does not, and the recipient never learns anything either way.
+   AUTHENTICATED, deliberately and properly. It would have been easier to treat possession of the
+   token as authorisation — the token is a secret, after all — but that turns this into an open
+   relay: mint one link, then send Cubby-branded mail to any address, repeatedly. So the caller
+   proves who they are with a real Firebase ID token, and we check against Firestore that they own
+   the household the link points at. Three independent gates, then a send. */
+async function sendInviteEmail(request, env, url) {
+  if (env.SIGNIN_RATE_LIMITER) {
+    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    try {
+      const { success } = await env.SIGNIN_RATE_LIMITER.limit({ key: 'inv:' + ip });
+      if (!success) return json({ error: 'rate_limited' }, 429);
+    } catch (e) { /* limiter unavailable: fail open, the auth check below still holds */ }
+  }
+  let body; try { body = await request.json(); } catch (e) { return json({ error: 'bad_request' }, 400); }
+  const email = ((body && body.email) || '').trim().toLowerCase();
+  const token = ((body && body.token) || '').trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254) return json({ error: 'invalid_email' }, 400);
+  if (!/^[A-Za-z0-9]{16,64}$/.test(token)) return json({ error: 'bad_request' }, 400);
+
+  let auth; try { auth = await verifyFirebaseToken((body && body.idToken) || ''); }
+  catch (e) { return json({ error: 'unauthorized' }, 401); }
+  if (!auth || !auth.uid) return json({ error: 'unauthorized' }, 401);
+
+  let sa; try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return json({ error: 'server_config' }, 500); }
+  if (!env.RESEND_API_KEY) return json({ error: 'server_config' }, 500);
+
+  try {
+    const at = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore');
+    const base = 'https://firestore.googleapis.com/v1/projects/' + FS_PROJECT + '/databases/(default)/documents';
+    const hdr = { authorization: 'Bearer ' + at };
+
+    const lr = await fetch(base + '/inviteLinks/' + encodeURIComponent(token), { headers: hdr });
+    if (!lr.ok) return json({ error: 'no_link' }, 404);
+    const lf = ((await lr.json()) || {}).fields || {};
+    const hid = (lf.householdId || {}).stringValue || '';
+    const used = (lf.usedBy || {}).stringValue || null;
+    const expiresAt = (lf.expiresAt || {}).timestampValue || null;
+    const byName = (lf.invitedByName || {}).stringValue || '';
+    // Never email a link that cannot be walked through: the recipient would follow it into a dead
+    // end and blame themselves.
+    if (!hid || used) return json({ error: 'link_spent' }, 409);
+    if (!expiresAt || Date.parse(expiresAt) < Date.now()) return json({ error: 'link_expired' }, 409);
+
+    // The sender must actually own the household this link points at.
+    const hr = await fetch(base + '/households/' + encodeURIComponent(hid), { headers: hdr });
+    if (!hr.ok) return json({ error: 'unauthorized' }, 403);
+    const members = ((((await hr.json()) || {}).fields || {}).members || {}).mapValue || {};
+    const role = (((members.fields || {})[auth.uid] || {}).stringValue) || '';
+    if (role !== 'owner') return json({ error: 'unauthorized' }, 403);
+
+    // One send per token: a token is single-use anyway, so this caps the blast radius of the
+    // endpoint at exactly one email per owner-authored Firestore write.
+    const cache = caches.default;
+    const once = new Request('https://cooldown.cubby.internal/inv/' + encodeURIComponent(token));
+    if (await cache.match(once)) return json({ ok: true, cached: true });
+
+    const link = url.origin + '/app/?join=' + token;
+    // The inviter's name is user-supplied and goes into email HTML, so it is escaped here. There is
+    // no esc() in this worker, and reaching for one that does not exist is how an injection ships.
+    const escHtml = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const who = byName ? (escHtml(byName) + ' has') : 'Someone has';
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + env.RESEND_API_KEY, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        from: env.MAIL_FROM || 'Cubby <noreply@mail.little-cubby.com>',
+        to: email,
+        subject: 'You have been invited to a Cubby',
+        // Deliberately says nothing about the baby: not a name, not a stage, nothing. An invite
+        // lands in an inbox that may not be as private as the person sending it assumes.
+        html: '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:440px;margin:0 auto;padding:28px 22px;color:#3a2f28">'
+          + '<div style="font-size:40px">🐻</div>'
+          + '<h1 style="font-family:Georgia,serif;font-size:23px;margin:12px 0 10px">' + who + ' invited you to their Cubby</h1>'
+          + '<p style="font-size:15px;line-height:1.55;color:#6b615a">Cubby is where they keep the everyday things: feeds, naps, nappies, the next appointment. Opening this link puts you in their circle so you can see it as it happens, and add to it yourself.</p>'
+          + '<p style="margin:22px 0"><a href="' + link + '" style="background:#C97FA0;color:#fff;text-decoration:none;font-weight:700;padding:14px 24px;border-radius:14px;display:inline-block">Join their Cubby</a></p>'
+          + '<p style="font-size:13px;line-height:1.55;color:#8a7a6d">This link works once and only for a day, so it is just for you. If you were not expecting it, you can ignore it and nothing happens.</p>'
+          + '</div>'
+      })
+    });
+    if (!r.ok) return json({ error: 'send_failed' }, 502);
+    await cache.put(once, new Response('1', { headers: { 'cache-control': 'max-age=86400' } }));
+    return json({ ok: true });
+  } catch (e) {
+    return json({ error: 'failed' }, 500);
+  }
+}
+
 function sha256hex(s) {
   return crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)).then(function (buf) {
     return [].map.call(new Uint8Array(buf), function (b) { return b.toString(16).padStart(2, '0'); }).join('');
@@ -846,6 +938,10 @@ export default {
           }]
         }
       }), { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=3600' } });
+    }
+    if (url.pathname === '/api/send-invite') {
+      if (request.method !== 'POST') return new Response('method not allowed', { status: 405 });
+      return sendInviteEmail(request, env, url);
     }
     if (url.pathname === '/api/send-signin-link') {
       if (request.method !== 'POST') return new Response('method not allowed', { status: 405 });
