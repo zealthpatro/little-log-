@@ -1217,6 +1217,12 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .ds-add svg{width:14px;height:14px;}
 .ds-add.pulse{animation:dsPulse 2.2s ease-out infinite;}
 @keyframes dsPulse{0%{box-shadow:0 0 0 0 rgba(154,140,110,.45);}70%{box-shadow:0 0 0 10px rgba(154,140,110,0);}100%{box-shadow:0 0 0 0 rgba(154,140,110,0);}}
+/* A note somebody else left that has not been opened yet. Marked with a rule down the side rather
+   than a colour wash: the lane already sits on warm paper, and a second fill behind the note cards
+   would fight the cards themselves. The badge borrows the compose button's own pair, which is the
+   one note-coloured combination already held to AA in both themes. */
+.ds-notes.ds-new{border-left:3px solid var(--note);padding-left:11px;margin-left:-2px;}
+.ds-badge{display:inline-block;background:var(--note-soft);color:var(--note-ink);font-size:10px;font-weight:800;letter-spacing:.04em;padding:2px 7px;border-radius:999px;margin-left:6px;}
 .note-card{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:8px;cursor:pointer;box-shadow:0 3px 9px var(--shadow);transition:transform .15s;}
 .note-card:active{transform:scale(.99);}
 .note-card.priv{border-left:3px solid var(--preg);}
@@ -2233,7 +2239,13 @@ function surfaceReset(){ surfaceDayTs = now(); }
 function surfaceShift(deltaDays){
   const next = surfaceDayTs + deltaDays*86400000;
   if(next - now() > 86400000) return;  // never step into the future
-  surfaceDayTs = next; render(); $('#scroll')&&$('#scroll').scrollTo(0,0);
+  surfaceDayTs = next; render();
+  /* The card sits at the bottom of home on a day with no notes (see renderHome), so jumping the page
+     to the top would scroll the parent clean away from the arrows they just tapped. Bring the
+     surface into view instead, which is right wherever it happens to be. */
+  const el=document.getElementById('daySurface');
+  if(el && el.scrollIntoView) el.scrollIntoView({block:'center'});
+  else if($('#scroll')) $('#scroll').scrollTo(0,0);
 }
 window.surfaceShift = surfaceShift;
 function surfaceIsToday(){ return dayKey(surfaceDayTs)===dayKey(now()); }
@@ -2304,6 +2316,25 @@ function pinnedNotes(){
   // A pin always shows on today regardless of the day it was left on.
   return visibleNotes().filter(n=>n.pinned).sort((a,b)=>(b.at||0)-(a.at||0));
 }
+/* Is there a note waiting for this member TODAY? Home asks this to decide where the day surface
+   sits, and it asks about today rather than about the day being browsed on purpose: the answer then
+   cannot change while the parent arrows back through empty days, so the card never leaps up and
+   down the page under their finger. */
+function todayNotes(){
+  const dayNotes=notesForDay(now());
+  return dayNotes.concat(pinnedNotes().filter(p=>!dayNotes.some(n=>n.id===p.id)));
+}
+/* "New" means left by somebody else and not opened yet. Per member, because one caregiver reading a
+   note must not clear the mark for the other — that is the whole point of a handoff. Kept in
+   localStorage keyed by uid and NOT in state.settings: that blob is shared with the circle, and a
+   personal read-marker filed there would travel to everybody. */
+function notesSeenKey(){ return 'cubby-notes-seen:'+quickUid(); }
+function notesSeenAt(){ try{ return +localStorage.getItem(notesSeenKey())||0; }catch(e){ return 0; } }
+function unseenNotes(){ const me=myUid(), mark=notesSeenAt(); return todayNotes().filter(n=>n.createdBy!==me && (n.at||0)>mark); }
+function markNotesSeen(){
+  const top=todayNotes().reduce((a,n)=>Math.max(a,n.at||0),0);
+  try{ localStorage.setItem(notesSeenKey(), String(Math.max(top, notesSeenAt()))); }catch(e){}
+}
 function noteAudienceLabel(n){
   if(!n) return '';
   if(n.audience==='circle') return 'Everyone';
@@ -2340,6 +2371,9 @@ function daySurface(){
   const recap=daySurfaceRecap(ts);
 
   const notesEmpty = !dayNotes.length && !pins.length;
+  // The badge only ever counts today's, and only what somebody else left: a note you wrote yourself
+  // is not news to you, and yesterday's is not waiting for you.
+  const unseen = isToday ? unseenNotes().length : 0;
   // First-time soft pulse on the compose button (until the member has left a note).
   const pulse = hasSeen('tip_leftnote') ? '' : ' pulse';
 
@@ -2364,8 +2398,8 @@ function daySurface(){
 
   return `<div class="day-surface" id="daySurface">
     ${nav}
-    <div class="ds-lane ds-notes">
-      <div class="ds-lh"><span class="ds-lt">Notes</span><button class="ds-add${pulse}" onclick="openNoteCompose()">${I.plus}<span>Leave a note</span></button></div>
+    <div class="ds-lane ds-notes${unseen?' ds-new':''}">
+      <div class="ds-lh"><span class="ds-lt">Notes${unseen?` <span class="ds-badge">${unseen} new</span>`:''}</span><button class="ds-add${pulse}" onclick="openNoteCompose()">${I.plus}<span>Leave a note</span></button></div>
       ${notesLane}
     </div>
     ${recap?`<div class="ds-lane ds-recap" onclick="openDayLog(${ts})">
@@ -2464,6 +2498,9 @@ async function saveNote(){
 }
 function openNoteView(id){
   const n=(state.notes||[]).find(x=>x.id===id); if(!n)return;
+  // Opening any note is the only thing that clears the "new" mark. Reading the card in passing does
+  // not, so a handoff keeps its badge until somebody actually goes in.
+  markNotesSeen(); if(typeof renderSoon==='function') renderSoon();
   const me=myUid();
   const mine=n.createdBy===me;
   const by=n.createdByName||loggerName(n.createdBy)||'Someone';
@@ -2605,6 +2642,16 @@ function renderHome(){
   const diaperCount = todayEvs.filter(e=>e.type==='diaper').length;
   const sleepMs = todayEvs.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+netSleepMs(e),0);
 
+  /* The day surface earns its place, it is not given one. On a day when somebody has actually left a
+     note it goes near the top, straight under the three answers, because a note is a handoff from
+     another person and that is the most time-sensitive thing on this screen. On a day when nobody
+     has, it falls to the very bottom: what a parent saw there was a heading, a prompt to write
+     something and a quote of the day, sitting above their own baby's photo and their own logging.
+     Generic filler at the top of a screen teaches people to scroll past that spot, which is the
+     worst thing that could happen to the one place another caregiver can reach them. */
+  const surfaceCard = daySurface();
+  const surfaceUp = todayNotes().length>0;
+
   return `<div class="fade-in">
     <div class="greeting">${meGreeting()}</div>
     ${myLossHolding() ? quietLossLine() : (away ? '' : `<div class="greeting-sub">${homeNudgeLine()}</div>`)}
@@ -2620,6 +2667,7 @@ function renderHome(){
       ${sinceCard('diaper','Last diaper', lastDiaper)}
     </div>
     ${wakeWindowLine()}
+    ${surfaceUp ? surfaceCard : ''}
     ${gsCard ? '' : coachMark('home','Welcome to Cubby 👋','Your hub. A photo slideshow up top, one-tap logging below. The tabs hold your Log, Album and Health.')}
     ${consentBanners()}
     ${renderHero()}
@@ -2629,16 +2677,13 @@ function renderHome(){
     <div class="actions stagger">${quickLogActions(ts)}</div>
     ${gsCard ? '' : renderNudge()}
     ${alerts}
-    ${/* The day surface, demoted off the first fold. It carries the notes lane, and a note is a
-          handoff to another person: valuable when there is one, never the first thing a parent
-          needs from this screen. */''}
-    ${daySurface()}
     ${goodReadCard('baby')}
     <div class="today-strip">
       <div class="cell"><div class="big">${feedCount}</div><div class="cap">Feeds today</div></div>
       <div class="cell"><div class="big">${sleepMs?fmtDur(sleepMs):'0m'}</div><div class="cap">Sleep today</div></div>
       <div class="cell"><div class="big">${diaperCount}</div><div class="cap">Diapers today</div></div>
     </div>
+    ${surfaceUp ? '' : surfaceCard}
   </div>`;
 }
 
@@ -11277,7 +11322,7 @@ let _ksArtImg=null;
    tints the marks into whatever the paper is doing underneath, which is also why they sit on the
    gradient without banding. Deliberately NOT in the service worker's precache list: they are only
    needed the moment somebody makes a poster, and an offline launch should not carry them. */
-const POSTER_ART=['balloons','cloud','garland','sprig','stars','icon_scale','icon_tape','icon_clock',
+const POSTER_ART=['balloons','cloud','garland','sprig','stars','icon_scale','icon_tape','icon_clock','icon_cal',
   'animal_bear','animal_bunny','animal_fox','animal_elephant','animal_deer','animal_panda','animal_lamb'];
 /* Seven animals and four papers, and every piece of furniture can be turned off. The defaults are
    chosen so a parent who touches nothing still gets a poster worth putting on a wall: the bear,
@@ -11756,15 +11801,11 @@ function composePoster(canvas,scale,preview){
     // The day of the week is the half of a birth date people actually repeat out loud ("she came on
     // a Sunday"), and every printed announcement carries it.
     cap(born.toLocaleDateString(undefined,{weekday:'long'})+' · '+born.toLocaleDateString(undefined,{month:'long'}), qx[0], qy[0]-52*S, 24*S);
-    ctx.fillStyle=t.accent; ctx.font=`700 ${104*S}px Fraunces, serif`;
-    const dayTxt=String(born.getDate()), dw=ctx.measureText(dayTxt).width;
-    ctx.font=`600 ${30*S}px "Nunito Sans", sans-serif`; const yw=ctx.measureText(String(born.getFullYear())).width+30*S*0.34;
-    const dx=qx[0]-(dw+yw)/2;
-    ctx.textAlign='left';
-    ctx.fillStyle=t.accent; ctx.font=`700 ${104*S}px Fraunces, serif`; ctx.fillText(dayTxt, dx, qy[0]+42*S);
-    ctx.fillStyle=t.ink; ctx.globalAlpha=0.62; ctx.font=`600 ${30*S}px "Nunito Sans", sans-serif`;
-    ctx.fillText(String(born.getFullYear()), dx+dw+30*S*0.34, qy[0]+14*S); ctx.globalAlpha=1;
-    ctx.textAlign='center';
+    /* Day and year go through bigUnit like every other quadrant, which is also how the date finally
+       gets its icon: it was the one of the four standing without one, so the top-left read quieter
+       than its three neighbours. This used to be a hand-rolled copy of bigUnit's measure-and-centre,
+       which is exactly the kind of duplicate that drifts the moment one of them is adjusted. */
+    bigUnit(born.getDate()+' '+born.getFullYear(), qx[0], qy[0]+42*S, 96*S, 30*S, 'icon_cal');
     // top right: the time
     cap('at', qx[1], qy[0]-52*S, 24*S);
     bigUnit(born.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}).replace(/\s/g,' '), qx[1], qy[0]+42*S, 82*S, 28*S, 'icon_clock');

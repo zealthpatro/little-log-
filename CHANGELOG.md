@@ -1,5 +1,49 @@
 # Cubby — Changelog
 
+## v0.17.0 — 2026-08-10 — the birth poster becomes a keepsake, and home stops shouting about nothing
+
+Service worker `little-log-v262` -> `little-log-v276`. All live on little-cubby.com (deploys from `main`).
+
+**The birth poster was a receipt.** LABEL over value, seven times, down the middle, in the body face,
+with a photo frame doing the warmth. It is now the thing every framed birth print actually does: the
+name in a hand, four facts in quadrants split by a dotted cross, and a painted animal carrying the
+page. Seven curated pairings (bear, bunny, fox, elephant, deer, panda, lamb), each with its own paper
+and accent, and six pieces of furniture (bunting, balloons, cloud, stars, sprigs, little icons) that
+can each be turned off. Defaults are chosen so a parent who touches nothing still gets something
+worth putting on a wall, but choosing is the point: a keepsake you picked is one you show people.
+
+Eleven optional facts now, each shown as a dashed rule in the preview when empty and omitted entirely
+from the saved file: full name, time, weight, length, **head circumference**, hospital, **town or
+city**, blood group, star sign, proud parents. The parent's own photo can replace the animal.
+
+Two layout corrections worth recording. The quadrants stacked label over number over icon, three
+things tall, while the space either side of a short number like "50" sat empty; icon, number and unit
+are now measured together and centred as one row, which took a third off the grid height. And the
+colour was inverted: the small caps shouted in the accent while the numbers sat in dark ink. The
+numbers carry the colour now. That single swap is a large part of why the references read as posters
+and ours read as a form. The date quadrant, the one of the four standing without an icon, has a
+painted calendar; its day-and-year row now goes through the same helper as the other three rather
+than a hand-rolled copy of it.
+
+The furniture is painted in the journey library's hand (`art-src/poster_*.png` -> `app/poster-art/*.webp`)
+and composited with `multiply` rather than as cut-outs, because gpt-image-2 refuses transparent
+output: on white, multiply drops the white and warms the marks into the paper. Tinted per style with
+the `color` blend, which keeps luminosity so white stays white and the multiply still keys it out.
+Deliberately **not** in the service worker precache: they are only needed when somebody makes a
+poster, and an offline launch should not carry 400KB of decoration.
+
+**Notes left the top of home, unless there is one.** The lane sat above the parent's own baby every
+day, and on most days it held a heading, a prompt to write something and a quote of the day. Generic
+filler in a prominent slot teaches people to scroll past that slot, which is the worst thing that
+could happen to the only place a second caregiver can reach them. So the card earns its place now:
+bottom of the page on a day with no note, straight under the three answers on a day with one, marked
+with a rule and a count when somebody else left it and it has not been opened. The read-marker is per
+member in `localStorage` keyed by uid, never in `state.settings` (that blob is shared, and a personal
+marker filed there would travel to the whole circle). Position is decided by **today**, not by the day
+being browsed, so arrowing back through empty days cannot make the card leap around the page.
+
+**New blocking gate:** `tools/noteshome_test.js` (21 assertions). See OPERATIONS.md.
+
 ## v0.16.0 — 2026-08-08 — the jitter is gone, the app explains itself, and reminders finally reach a closed phone
 
 Service worker `little-log-v247` -> `little-log-v262`. All live on little-cubby.com (deploys from `main`).
