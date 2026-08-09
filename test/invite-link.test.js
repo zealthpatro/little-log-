@@ -27,7 +27,7 @@
 const fs = require('fs');
 const path = require('path');
 const { initializeTestEnvironment, assertFails, assertSucceeds } = require('@firebase/rules-unit-testing');
-const { doc, setDoc, updateDoc, getDoc, deleteDoc } = require('firebase/firestore');
+const { doc, setDoc, updateDoc, getDoc, getDocs, collection, deleteDoc } = require('firebase/firestore');
 
 const RULES = fs.readFileSync(path.join(__dirname, '..', 'firestore.rules'), 'utf8');
 const results = { pass: 0, fail: 0 };
@@ -68,6 +68,14 @@ const inHours = h => new Date(Date.now() + h * 3600000);
     assertSucceeds(getDoc(doc(joiner, 'inviteLinks/tok_live'))));
   await check('a signed-out visitor cannot read it, token or not',
     assertFails(getDoc(doc(anon, 'inviteLinks/tok_live'))));
+  /* THE ONE THAT MATTERS, and the one the first version of these rules missed. `allow read` grants
+     get AND list, and a list needs no token — so a signed-in stranger could have enumerated every
+     live invite and joined every household in the database. The whole model rests on the id being
+     a secret, which is only true if nobody can ask for the list. */
+  await check('NOBODY can list the collection, which is what makes the token a secret at all',
+    assertFails(getDocs(collection(stranger, 'inviteLinks'))));
+  await check('not even the household owner (her own pending links come from the household doc)',
+    assertFails(getDocs(collection(owner, 'inviteLinks'))));
 
   console.log('\nminting a link');
   await check('the household owner can mint one for her own household',

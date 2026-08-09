@@ -66,9 +66,17 @@ service cloud.firestore {
        in. The document deliberately holds no baby data: a household id and a role, nothing a
        stranger learns anything from. */
     match /inviteLinks/{token} {
-      // Any signed-in user who holds the token may read it. That IS the token's purpose; the
-      // secrecy of the id is the control. Never make this readable without auth.
-      allow read: if request.auth != null;
+      /* GET, never LIST. This is the whole security model and it is one word wide.
+         The control here is that the document id is a secret, so a reader must already hold the
+         token. `allow read` would have granted list as well — and a list needs no token at all, so
+         any signed-in stranger could have enumerated every live invite in the database and walked
+         into every household. Splitting get from list is what makes "you must know the token"
+         actually true.
+         The owner's own pending-links list is served from a mirror on her household document, the
+         same way pending email invites already are, precisely so that nobody ever needs to query
+         this collection. */
+      allow get: if request.auth != null;
+      allow list: if false;
 
       // Only the household's own owner mints one, and only ever pointing at their own household.
       // members.get(uid, '') rather than members[uid] throughout this block: a bare map read of an
