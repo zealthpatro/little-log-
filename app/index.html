@@ -1895,7 +1895,10 @@ function stashDeepLink(){
     // came from someone's invite link, so that a failure to match can be explained instead of
     // silently handing them a brand-new empty household. Stashed here because it has to survive the
     // sign-in redirect, same as the deep-link keys.
-    if(q.get('join')){ try{ sessionStorage.setItem('cubby-join','1'); }catch(e){} }
+    // Carry the VALUE through, not a flag. Older links say ?join=1 and still mean "I followed an
+    // invite"; a tokenised link says ?join=<token> and also carries which invite. Both survive the
+    // sign-in redirect, and neither contains anything personal.
+    if(q.get('join')){ try{ sessionStorage.setItem('cubby-join', String(q.get('join')).slice(0,120)); }catch(e){} }
     var dl={go:q.get('go'),stage:q.get('stage'),read:q.get('read'),tab:q.get('tab')};
     if(dl.go||dl.stage||dl.read||dl.tab||q.get('join')){
       if(dl.go||dl.stage||dl.read||dl.tab) sessionStorage.setItem('cubby-dl', JSON.stringify(dl));

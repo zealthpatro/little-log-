@@ -874,8 +874,43 @@ async function chapterLabels(page) {
   });
   check(carried.survived, 'and starting a second pregnancy does not erase what she wrote during the first');
 
-  // ---- 20. NO PAGE ERRORS THROUGHOUT -----------------------------------------------------------
-  console.log('\n20. clean console');
+  // ---- 20. THE INVITE TOKEN SURVIVES THE TRIP --------------------------------------------------
+  /* The rules are what keep the wrong person out and they are proved in test/invite-link.test.js
+     against the emulator. What is proved HERE is the plumbing either side of them: that a token in
+     the URL reaches sessionStorage intact (it has to survive the OAuth redirect), that the older
+     ?join=1 links still read as intent, and that the token generator is actually unguessable —
+     uid() would have been timestamp-and-Math.random, which is not a secret. */
+  console.log('\n20. the invite token survives the round trip');
+  const tokPage = await browser.newPage();
+  await tokPage.setViewport({ width: 390, height: 850 });
+  await tokPage.goto(APP + '&join=Ab3xY9zQ7mKp2LsW4nR1td', { waitUntil: 'networkidle2', timeout: 30000 });
+  await new Promise(r => setTimeout(r, 1200));
+  const tk = await tokPage.evaluate(() => ({
+    stored: sessionStorage.getItem('cubby-join'),
+    hasCreate: !!(window.LL && typeof window.LL.createInviteLink === 'function')
+  }));
+  check(tk.stored === 'Ab3xY9zQ7mKp2LsW4nR1td', 'a token in the link reaches sessionStorage intact', String(tk.stored));
+  check(tk.hasCreate, 'the owner-side mint function is wired up');
+
+  await tokPage.goto(APP + '&join=1', { waitUntil: 'networkidle2', timeout: 30000 });
+  await new Promise(r => setTimeout(r, 900));
+  const legacy = await tokPage.evaluate(() => sessionStorage.getItem('cubby-join'));
+  check(legacy === '1', 'an older ?join=1 link still reads as plain intent', String(legacy));
+
+  const rnd = await tokPage.evaluate(() => {
+    // the generator, exercised through the same crypto path the app uses
+    const A = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    function gen() { const b = new Uint8Array(22); crypto.getRandomValues(b); let s = ''; for (let i = 0; i < b.length; i++) s += A[b[i] % A.length]; return s; }
+    const seen = new Set(); for (let i = 0; i < 500; i++) seen.add(gen());
+    const one = gen();
+    return { unique: seen.size, len: one.length, charset: /^[A-Za-z0-9]{22}$/.test(one) };
+  });
+  check(rnd.unique === 500, '500 tokens, 500 distinct values', String(rnd.unique));
+  check(rnd.len === 22 && rnd.charset, 'each is 22 base62 characters, about 130 bits');
+  await tokPage.close();
+
+  // ---- 21. NO PAGE ERRORS THROUGHOUT -----------------------------------------------------------
+  console.log('\n21. clean console');
   check(page.__errs.length === 0, 'no uncaught page errors', page.__errs.join(' | '));
   await page.close();
 

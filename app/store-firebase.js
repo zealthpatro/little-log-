@@ -741,8 +741,30 @@
             window.LL.pendingInvite = Object.assign({ email: em0 }, pend.data());
           }
         }
+        // Same for a token link. Someone who already has a Cubby must never be moved into another
+        // family silently: this only surfaces the offer, and maybePromptPendingInvite asks first,
+        // with the honest copy about losing their own circle.
+        if (!window.LL.pendingInvite) {
+          var lk0 = await readInviteLink(joinToken(), curHid);
+          if (lk0) window.LL.pendingInvite = Object.assign({ viaLink: true }, lk0);
+        }
       } catch (e) {}
       return curHid;
+    }
+
+    /* A token link, for someone with no household of their own. They have nothing to lose by
+       joining, so this matches the email path exactly and joins directly. Claim first: the claim is
+       the single-use gate, enforced in the rules, so the loser of a race never touches the
+       household. Tried BEFORE the email invite because the token is the more specific instruction —
+       she followed this exact link — and because it is the path that works when Hide My Email has
+       already made her address unrecognisable. */
+    var tok = joinToken();
+    if (tok) {
+      var link = await readInviteLink(tok, null);
+      if (link && await claimInviteLink(link, user)) {
+        clearInviteMismatch();
+        return link.householdId;
+      }
     }
 
     // Invited? Invites are keyed by lowercased email (so the rules can authorize the join).
@@ -770,6 +792,9 @@
     // the DEFAULT outcome for a caregiver invited to their real address.
     //
     // So stop, explain, and give them the two ways out. Nothing is written.
+    // A spent or expired token is not an email problem, and the email screen would send her to fix
+    // something that is not broken.
+    if (tok) { showInviteMismatch(email || '', true); return null; }
     if (joinIntent() && email) {
       showInviteMismatch(email);
       return null;
@@ -1209,7 +1234,74 @@
   // Did this open come from someone's invite link? Set by stashDeepLink() in index.html from
   // `?join=1`, which carries no personal data and survives the sign-in redirect.
   function joinIntent() {
-    try { return sessionStorage.getItem('cubby-join') === '1'; } catch (e) { return false; }
+    try { return !!sessionStorage.getItem('cubby-join'); } catch (e) { return false; }
+  }
+  // The token from a ?join=<token> link, or '' for the older ?join=1 links which carry only intent.
+  function joinToken() {
+    try { var v = sessionStorage.getItem('cubby-join') || ''; return (v && v !== '1') ? v : ''; }
+    catch (e) { return ''; }
+  }
+  /* Mint an invite link. The token is the ONLY secret, so it comes from crypto.getRandomValues and
+     never from uid() — a timestamp-and-Math.random id would be guessable by anyone who knows when
+     the invite was made. 22 chars of base62 is ~130 bits. */
+  function newInviteToken() {
+    var A = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', out = '';
+    var b = new Uint8Array(22);
+    (window.crypto || window.msCrypto).getRandomValues(b);
+    for (var i = 0; i < b.length; i++) out += A[b[i] % A.length];
+    return out;
+  }
+  var INVITE_LINK_HOURS = 24;
+  window.LL.createInviteLink = async function (opts) {
+    opts = opts || {};
+    var u = auth.currentUser;
+    if (!u || !hhRef || window.LL.role !== 'owner') return null;
+    var token = newInviteToken();
+    try {
+      await db.collection('inviteLinks').doc(token).set({
+        householdId: window.LL.householdId,
+        role: opts.role === 'owner' ? 'owner' : 'caregiver',
+        relationship: opts.relationship || '',
+        invitedBy: u.uid,
+        invitedByName: nameForUid(u.uid) || (u.displayName || '').split(' ')[0] || '',
+        usedBy: null,
+        createdAt: window.LL.serverTimestamp(),
+        expiresAt: new Date(Date.now() + INVITE_LINK_HOURS * 3600000)
+      });
+    } catch (e) { console.warn('createInviteLink', e); return null; }
+    return { token: token, url: location.origin + '/app/?join=' + token, hours: INVITE_LINK_HOURS };
+  };
+  /* Read a token WITHOUT joining. Returns null for anything a person should not walk through:
+     missing, already claimed, expired, or pointing at the household they are already in. The rules
+     enforce every one of these too — this is so we can say WHY on screen instead of failing. */
+  async function readInviteLink(token, curHid) {
+    if (!token) return null;
+    try {
+      var snap = await db.collection('inviteLinks').doc(token).get();
+      if (!snap.exists) return null;
+      var d = snap.data() || {};
+      if (!d.householdId || d.householdId === curHid) return null;
+      if (d.usedBy) return null;
+      var exp = d.expiresAt && d.expiresAt.toMillis ? d.expiresAt.toMillis() : 0;
+      if (!exp || exp < Date.now()) return null;
+      return Object.assign({ token: token }, d);
+    } catch (e) { console.warn('readInviteLink', e); return null; }
+  }
+  /* Claim first, join second. The claim is the single-use gate and it is enforced in the rules, so
+     if two people race one forwarded link the loser's claim fails here and they never touch the
+     household. Joining before claiming would let both of them in. */
+  async function claimInviteLink(link, user) {
+    try {
+      await db.collection('inviteLinks').doc(link.token).update({ usedBy: user.uid });
+    } catch (e) { console.warn('claimInviteLink', e); return false; }
+    await db.collection('households').doc(link.householdId)
+      .update(memberUpdate(user, link.role || 'caregiver', { relationship: link.relationship, name: link.name }));
+    writeOwnMemberEmail(link.householdId);
+    await db.collection('users').doc(user.uid)
+      .set({ householdId: link.householdId, name: user.displayName || '', email: user.email || '' }, { merge: true });
+    window.LL.justJoined = { invitedBy: link.invitedBy || null, role: link.role || 'caregiver' };
+    try { sessionStorage.removeItem('cubby-join'); } catch (e) {}
+    return true;
   }
   // The invite did not match the address they signed in with. Explain it in their terms and offer
   // the only two things that actually resolve it, rather than silently starting a new family.
@@ -1221,8 +1313,31 @@
     try { var el = document.getElementById('ll-invite-mismatch'); if (el) el.remove(); } catch (e) {}
     inviteMismatchShown = false;
   }
-  function showInviteMismatch(email) {
+  /* deadLink=true when she followed a TOKEN link that no longer works. The email copy below would
+     send her to fix the wrong thing entirely — her address is fine; the link is spent or expired.
+     Links are single-use and last a day, and only the person who sent it can make another. */
+  function showInviteMismatch(email, deadLink) {
     if (inviteMismatchShown) return; inviteMismatchShown = true;
+    if (deadLink) {
+      try { hideOverlay(); } catch (e) {}
+      var ovd = document.createElement('div'); ovd.id = 'll-invite-mismatch';
+      ovd.setAttribute('style', 'position:fixed;inset:0;z-index:3000;background:#FBF5E9;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;overflow-y:auto');
+      ovd.innerHTML = '<div style="max-width:360px;font-family:-apple-system,Segoe UI,Roboto,sans-serif">'
+        + '<div style="font-size:44px">🐻</div>'
+        + '<h2 style="font-family:Georgia,serif;color:#3a2f28;margin:12px 0 8px;font-size:22px">This invite link has expired</h2>'
+        + '<div style="color:#8a7a6d;font-size:15px;line-height:1.55">Invite links last a day and can only be used once, so that a link passed on by accident cannot let anyone in.</div>'
+        + '<div style="color:#8a7a6d;font-size:15px;line-height:1.55;margin-top:12px">Nothing is wrong with your sign in. Ask them to send you a fresh link.</div>'
+        + '<div style="margin-top:22px"><a href="#" id="ll-im-own" style="color:#8a7a6d;font-size:14px;font-weight:700">Start my own Cubby instead</a></div>'
+        + '</div>';
+      document.body.appendChild(ovd);
+      var own0 = document.getElementById('ll-im-own');
+      if (own0) own0.onclick = function (ev) {
+        ev.preventDefault();
+        try { sessionStorage.removeItem('cubby-join'); } catch (e) {}
+        clearInviteMismatch(); try { location.reload(); } catch (e) {}
+      };
+      return;
+    }
     try { hideOverlay(); } catch (e) {}
     // Do NOT clear cubby-join here. If we did, a second wrong sign-in (Apple hands back the SAME relay
     // address every time, so a wrong guess repeats) would no longer count as a join attempt and would
@@ -1300,6 +1415,17 @@
   async function joinPendingInvite(inv) {
     try {
       var user = auth.currentUser; if (!user || !inv || !inv.householdId) return;
+      // A link invite claims first: the claim is the single-use gate. If someone else already walked
+      // through this link between the offer and the tap, stop here rather than joining anyway.
+      if (inv.viaLink) {
+        if (!(await claimInviteLink(inv, user))) {
+          try { if (window.toast) window.toast('That invite link has already been used.'); } catch (e2) {}
+          return;
+        }
+        try { if (window.toast) window.toast('Joined the family 🐻'); } catch (e2) {}
+        setTimeout(function () { try { location.reload(); } catch (e2) {} }, 500);
+        return;
+      }
       await db.collection('households').doc(inv.householdId).update(memberUpdate(user, inv.role || 'caregiver', { relationship: inv.relationship, name: inv.name }));
       writeOwnMemberEmail(inv.householdId); // PRIV-2: email goes to the gated doc, not memberInfo
       await db.collection('users').doc(user.uid).set({ householdId: inv.householdId }, { merge: true });
@@ -2118,9 +2244,10 @@
     // link with, and only an owner can create one. Showing this to a caregiver offered a bare link
     // that could only ever strand the recipient (they have no invite to pair it with).
     var share = (myRole === 'owner')
-      ? '<div class="ll-invite"><label>App link to share</label>'
-        + '<div class="ll-linkrow"><input id="llAppLink" readonly value="' + esc(location.origin + '/app/?join=1') + '"><button id="llCopyLink" class="ll-modal-btn">' + (navigator.share ? 'Share' : 'Copy') + '</button></div>'
-        + '<div class="ll-auth-msg">Create an invite above first. Then Share (or Copy) sends the link <b>together with the exact email address</b> they need to sign in with — that pairing is what actually lets them in. A link on its own is not enough, because Cubby matches invites by email.</div></div>'
+      ? '<div class="ll-invite"><label>Invite link</label>'
+        + '<div class="ll-linkrow"><input id="llAppLink" readonly placeholder="Tap to make a one-time link" value=""><button id="llCopyLink" class="ll-modal-btn">Make a link</button></div>'
+        + '<div class="ll-auth-msg">One link, for one person, good for a day. Whoever opens it joins your circle, so send it to them and not to a group. You do not need to know which email address they will sign in with.</div>'
+        + '<div class="ll-auth-msg" style="margin-top:6px">Prefer the stricter way? Add their exact email above instead: that invite only works for that address.</div></div>'
       : '';
 
     modal('Family & sharing', '<div class="ll-mems">' + rows + '</div>'
@@ -2417,7 +2544,43 @@
       else localStorage.removeItem(lastInviteKey());
     } catch (e) {}
   }
-  function copyAppLink() {
+  /* Mint a fresh single-use link, then share it. Minting on demand rather than showing a standing
+     URL is the whole point: the old row displayed one identical link for every family on earth,
+     which is why the copy underneath had to explain that the link alone was not enough. */
+  async function copyAppLink() {
+    var btn = document.getElementById('llCopyLink');
+    var inp = document.getElementById('llAppLink');
+    var msg = document.getElementById('llInvMsg');
+    if (btn) { btn.disabled = true; btn.textContent = 'Making…'; }
+    var made = await window.LL.createInviteLink({ role: 'caregiver' });
+    if (btn) btn.disabled = false;
+    if (!made) {
+      if (btn) btn.textContent = 'Make a link';
+      if (msg) msg.textContent = 'Could not make a link just now. You can still invite by email above.';
+      return;
+    }
+    if (inp) inp.value = made.url;
+    var text = inviteLinkText(made);
+    var done = function () { if (btn) { btn.textContent = 'Copied!'; setTimeout(function () { btn.textContent = 'Make another'; }, 1600); } };
+    if (navigator.share) {
+      navigator.share({ title: 'Join me on Cubby 🐻', text: text }).then(function () {
+        if (btn) { btn.textContent = 'Shared!'; setTimeout(function () { btn.textContent = 'Make another'; }, 1600); }
+      }).catch(function () { if (btn) btn.textContent = 'Make another'; });
+      return;
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(function () { try { inp.select(); document.execCommand('copy'); done(); } catch (e) {} });
+    } else { try { inp.select(); document.execCommand('copy'); done(); } catch (e) {} }
+  }
+  // Stage-aware and honest about what they will actually land on, same as inviteText.
+  function inviteLinkText(made) {
+    var hasBaby = (typeof state !== 'undefined' && state.babies && state.babies.length);
+    var who = hasBaby ? 'our baby\'s day' : 'our journey';
+    return 'Join me on Cubby 🐻\n\n' + made.url + '\n\n'
+      + 'It opens Cubby and puts you straight into our circle, so you can see ' + who + ' as it happens.\n'
+      + 'The link works once and only for a day, so it is just for you.';
+  }
+  function copyAppLinkLegacy() {
     var btn = document.getElementById('llCopyLink');
     // No invite on record -> we do NOT know which address they should sign in with, so
     // inviteText('') would hand over a bare link with no address: the exact trap that lands the
