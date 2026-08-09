@@ -11277,16 +11277,11 @@ const POSTER_ART=['balloons','cloud','garland','sprig','stars','icon_scale','ico
    chosen so a parent who touches nothing still gets a poster worth putting on a wall: the bear,
    because it is Cubby, on cream, with everything on. Choosing is the point though. A keepsake you
    picked is one you show people; a keepsake the app issued you is one you close. */
-const POSTER_ANIMALS=[
-  {k:'bear', label:'Bear'},
-  {k:'bunny', label:'Bunny'}, {k:'fox', label:'Fox'}, {k:'elephant', label:'Elephant'},
-  {k:'deer', label:'Deer'}, {k:'panda', label:'Panda'}, {k:'lamb', label:'Lamb'}
-];
 const POSTER_DECO=[
   {k:'garland', label:'Bunting'}, {k:'balloons', label:'Balloons'}, {k:'cloud', label:'Cloud'},
   {k:'stars', label:'Stars'}, {k:'sprig', label:'Sprigs'}, {k:'icons', label:'Little icons'}
 ];
-function posterDefaults(){ return {animal:'bear', deco:{garland:1,balloons:1,cloud:1,stars:1,sprig:1,icons:1}}; }
+function posterDefaults(){ return {style:'bear', deco:{garland:1,balloons:1,cloud:1,stars:1,sprig:1,icons:1}}; }
 let _posterArt={}, _posterArtP=null;
 function loadPosterArt(){
   if(_posterArtP) return _posterArtP;
@@ -11568,28 +11563,36 @@ function drawCollage(objs){
 /* ============================================================
    BIRTH ANNOUNCEMENT POSTER  (original artwork & layout)
    ============================================================ */
-const POSTER_THEMES={
-  Cream:{bg1:'#FBF5E9',bg2:'#F1E6CF',ink:'#4A3F2C',accent:'#C99A52',soft:'#E9D9B8',motif:'#D8C49A'},
-  Blush:{bg1:'#FCF1F1',bg2:'#F6DEE2',ink:'#6E4750',accent:'#D08CA0',soft:'#F3D8DE',motif:'#E7B9C4'},
-  Sky:{bg1:'#EFF4F8',bg2:'#DCE8F1',ink:'#3F5266',accent:'#6E9AC0',soft:'#D2E2EE',motif:'#AcC8DD'},
-  Sage:{bg1:'#F1F3EC',bg2:'#E0E7D6',ink:'#465040',accent:'#7B9466',soft:'#D8E2C9',motif:'#B6C5A2'}
-};
+/* Seven curated pairings, not an animal picker crossed with a paper picker. Letting both vary
+   independently produced twenty-eight combinations, and a fox on blush is worse than either choice
+   on its own: it reads as a settings screen someone forgot to finish. Each animal now arrives with
+   the paper painted for it, which is how every printed range in this category is sold, and it makes
+   the chips previewable — the chip IS the poster's colour. Accents are pulled a shade deeper than
+   the wash they sit on so the small-caps labels stay readable on paper and on screen. */
+const POSTER_STYLES=[
+  {k:'bear',     label:'Bear',     pal:{bg1:'#FBF5E9',bg2:'#F1E6CF',ink:'#4A3F2C',accent:'#B0813C',soft:'#E4D2AC',motif:'#D8C49A'}},
+  {k:'bunny',    label:'Bunny',    pal:{bg1:'#FDF3F3',bg2:'#F7DFE3',ink:'#63404A',accent:'#BE7186',soft:'#F0CFD7',motif:'#E7B9C4'}},
+  {k:'fox',      label:'Fox',      pal:{bg1:'#FDF4EC',bg2:'#F6E2D0',ink:'#5A3A2C',accent:'#B96A44',soft:'#EFD3BC',motif:'#E0BFA2'}},
+  {k:'elephant', label:'Elephant', pal:{bg1:'#F0F4F8',bg2:'#DCE7F0',ink:'#394D60',accent:'#5E88AE',soft:'#CFE0EC',motif:'#AFC8DD'}},
+  {k:'deer',     label:'Deer',     pal:{bg1:'#F2F4EC',bg2:'#E1E8D7',ink:'#414B3C',accent:'#6E8759',soft:'#D5E0C6',motif:'#B6C5A2'}},
+  {k:'panda',    label:'Panda',    pal:{bg1:'#F5F5F6',bg2:'#E6E7E9',ink:'#3B3F45',accent:'#6F767F',soft:'#DADCE0',motif:'#C3C7CC'}},
+  {k:'lamb',     label:'Lamb',     pal:{bg1:'#FAF7F1',bg2:'#EDE5D8',ink:'#4C463D',accent:'#9C8460',soft:'#E0D5C2',motif:'#CBBDA6'}}
+];
+function posterStyle(){ return POSTER_STYLES.find(x=>x.k===(posterDraft&&posterDraft.style))||POSTER_STYLES[0]; }
 let posterDraft=null;
 function openBirthPoster(){
   const b=activeBaby();
-  posterDraft=Object.assign({theme:'Cream', withPhoto:false, img:null, photoId:null}, posterDefaults());
+  posterDraft=Object.assign({withPhoto:false, img:null, photoId:null}, posterDefaults());
   const hasDetails=b.place||b.birthWeight||b.parents||b.birthLength;
   renderPosterSheet(hasDetails);
 }
 function renderPosterSheet(hasDetails){
   const d=posterDraft;
-  const themeChips=Object.keys(POSTER_THEMES).map(k=>`<div class="chip ${d.theme===k?'sel':''}" onclick="posterDraft.theme='${k}';renderPosterSheet(${hasDetails});drawPosterPrev()">${k}</div>`).join('');
+  const themeChips=POSTER_STYLES.map(x=>`<div class="chip ${d.style===x.k?'sel':''}" style="background:${x.pal.bg2};border-color:${d.style===x.k?x.pal.accent:x.pal.soft};color:${x.pal.ink}" onclick="posterPick('style','${x.k}',${hasDetails})">${x.label}</div>`).join('');
   openSheet(`<h2>Birth poster</h2><div class="sub">Auto-built from ${escapeHtml(activeBaby().name)}'s birth details.</div>
     ${!hasDetails?`<div class="disclaimer">The dotted lines are waiting for you. Add their weight, length, where they were born and who was there, and they fill themselves in. The dots are only here, never on the poster you save.</div>
       <button class="btn-ghost" style="margin-top:2px" onclick="openBirthDetails()">${I.note} Add the birth details</button>`:''}
-    <div class="sec-title" style="margin-left:0">Who's on it</div>
-    <div class="chip-row">${POSTER_ANIMALS.map(a=>`<div class="chip ${d.animal===a.k?'sel':''}" onclick="posterPick('animal','${a.k}',${hasDetails})">${a.label}</div>`).join('')}</div>
-    <div class="sec-title" style="margin-left:0">Paper</div><div class="chip-row">${themeChips}</div>
+    <div class="sec-title" style="margin-left:0">Choose a style</div><div class="chip-row">${themeChips}</div>
     <div class="sec-title" style="margin-left:0">Decorations</div>
     <div class="chip-row">${POSTER_DECO.map(x=>`<div class="chip ${d.deco[x.k]?'sel':''}" onclick="posterToggleDeco('${x.k}',${hasDetails})">${x.label}</div>`).join('')}</div>
     <div class="csub" style="margin-top:-2px">Tap any of these off if you want it plainer. Everything is on to start with.</div>
@@ -11635,7 +11638,7 @@ function pLeaf(ctx,x,y,len,ang,col){ ctx.save(); ctx.translate(x,y); ctx.rotate(
 function composePoster(canvas,scale,preview){
   const W=Math.round(1200*scale), H=Math.round(1680*scale);
   canvas.width=W; canvas.height=H;
-  const ctx=canvas.getContext('2d'), b=activeBaby(), t=POSTER_THEMES[posterDraft.theme];
+  const ctx=canvas.getContext('2d'), b=activeBaby(), t=posterStyle().pal;
   const S=W/1200; // unit scale relative to design
   // background wash
   const g=ctx.createLinearGradient(0,0,W,H); g.addColorStop(0,t.bg1); g.addColorStop(1,t.bg2);
@@ -11749,7 +11752,7 @@ function composePoster(canvas,scale,preview){
   /* The chosen animal, or her own photo if she picked one. The variant animals are painted on pure
      white so they multiply cleanly onto the paper; the original hero cub is painted on its own cream
      and still needs the feather, which is why the two draw differently below. */
-  const chosen=_posterArt['animal_'+(posterDraft.animal||'bear')]||null;
+  const chosen=_posterArt['animal_'+posterStyle().k]||null;
   const slotIm=(posterDraft.withPhoto && posterDraft.img)?posterDraft.img:(chosen||_ksArtImg);
   const slotMultiply=!!chosen && !(posterDraft.withPhoto && posterDraft.img);
   const footH=(isPro()?70:110)*S;
