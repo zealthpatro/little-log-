@@ -11482,7 +11482,8 @@ function renderPosterSheet(hasDetails){
   const d=posterDraft;
   const themeChips=Object.keys(POSTER_THEMES).map(k=>`<div class="chip ${d.theme===k?'sel':''}" onclick="posterDraft.theme='${k}';renderPosterSheet(${hasDetails});drawPosterPrev()">${k}</div>`).join('');
   openSheet(`<h2>Birth poster</h2><div class="sub">Auto-built from ${escapeHtml(activeBaby().name)}'s birth details.</div>
-    ${!hasDetails?`<div class="disclaimer">Tip: add place of birth, weight, length and parents in <b>Birth details</b> to fill the poster out.</div>`:''}
+    ${!hasDetails?`<div class="disclaimer">The dotted lines are waiting for you. Add their weight, length, where they were born and who was there, and they fill themselves in. The dots are only here, never on the poster you save.</div>
+      <button class="btn-ghost" style="margin-top:2px" onclick="openBirthDetails()">${I.note} Add the birth details</button>`:''}
     <div class="sec-title" style="margin-left:0">Theme</div><div class="chip-row">${themeChips}</div>
     <div class="toggle-row"><div><div class="tr-a">Include a photo</div><div class="tr-b">Adds a framed photo at the top</div></div>
       <div class="sw ${d.withPhoto?'on':''}" onclick="togglePosterPhoto(${hasDetails})"></div></div>
@@ -11510,7 +11511,7 @@ function posterPhotoFromId(pid){
 function drawPosterPrev(){
   const slot=$('#posterPrevSlot'); if(!slot)return;
   const c=document.createElement('canvas');
-  const draw=()=>composePoster(c,0.5);
+  const draw=()=>composePoster(c,0.5,true);   // preview only: placeholders never reach a saved file
   draw();
   const put=()=>{ slot.innerHTML=''; const im=new Image(); im.className='card-prev'; im.src=c.toDataURL('image/jpeg',0.9); slot.appendChild(im); };
   put(); if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>{ draw(); put(); });
@@ -11520,7 +11521,7 @@ function pStar(ctx,x,y,r,col){ ctx.fillStyle=col; ctx.beginPath(); for(let i=0;i
 function pHeart(ctx,x,y,s,col){ ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(x,y+s*0.3); ctx.bezierCurveTo(x,y,x-s,y-s*0.1,x-s,y+s*0.35); ctx.bezierCurveTo(x-s,y+s*0.75,x,y+s,x,y+s*1.1); ctx.bezierCurveTo(x,y+s,x+s,y+s*0.75,x+s,y+s*0.35); ctx.bezierCurveTo(x+s,y-s*0.1,x,y,x,y+s*0.3); ctx.fill(); }
 function pLeaf(ctx,x,y,len,ang,col){ ctx.save(); ctx.translate(x,y); ctx.rotate(ang); ctx.strokeStyle=col; ctx.lineWidth=len*0.05; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(len,0); ctx.stroke();
   ctx.fillStyle=col; for(let i=0.2;i<1;i+=0.18){ ctx.save(); ctx.translate(len*i,0); ctx.beginPath(); ctx.ellipse(0,-len*0.06,len*0.12,len*0.05,-0.5,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.ellipse(0,len*0.06,len*0.12,len*0.05,0.5,0,Math.PI*2); ctx.fill(); ctx.restore(); } ctx.restore(); }
-function composePoster(canvas,scale){
+function composePoster(canvas,scale,preview){
   const W=Math.round(1200*scale), H=Math.round(1680*scale);
   canvas.width=W; canvas.height=H;
   const ctx=canvas.getContext('2d'), b=activeBaby(), t=POSTER_THEMES[posterDraft.theme];
@@ -11560,32 +11561,79 @@ function composePoster(canvas,scale){
   pHeart(ctx,W/2,y-9*S,10*S,t.accent);
   y+=60*S;
 
-  // stat rows
+  /* Stat rows, fitted to the space that is actually left.
+     This used to walk `y` down the canvas at a fixed pitch and hope, which broke at BOTH ends. With
+     nothing but a birthday filled in, three rows ended around 70% of the way down and the bottom
+     third of a keepsake poster was an empty cream void. With every field filled in, the rows ran
+     off the bottom: "PROUD PARENTS" was cut in half and the Cubby mark sat on top of the last line.
+     So: build the whole block first, measure it, then fit it into the room between the divider and
+     the footer. Surplus is shared out as extra breathing room, shortfall is taken back the same way,
+     and only if that is not enough does the type step down.
+
+     PLACEHOLDERS ARE PREVIEW-ONLY. In the sheet, a field she has not filled in yet shows its label
+     and a soft rule where the value will go, so an empty poster looks like a poster waiting to be
+     finished rather than a mistake, and she can see exactly what adding the details would buy her.
+     The generated file never contains them: a printed keepsake must not carry a blank we drew. */
   const born=b.birth?new Date(b.birth):null;
   const rows=[];
   if(born){
     rows.push(['Born on', born.toLocaleDateString(undefined,{weekday:'long', day:'numeric', month:'long', year:'numeric'})]);
     rows.push(['At', born.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})]);
   }
-  if(b.birthWeight) rows.push(['Weight', b.birthWeight]);
-  if(b.birthLength) rows.push(['Length', b.birthLength]);
-  if(b.place) rows.push(['Place', b.place]);
-  if(b.blood) rows.push(['Blood group', b.blood]);
+  const opt=(label,val)=>{ if(val) rows.push([label,val]); else if(preview) rows.push([label,null]); };
+  opt('Weight', b.birthWeight);
+  opt('Length', b.birthLength);
+  opt('Place', b.place);
+  opt('Blood group', b.blood);
   const sign=b.sign||zodiac(b.birth); if(sign) rows.push(['Star sign', sign]);
+  const parents=b.parents||(preview?null:'');
+  const showParents=!!b.parents||(preview&&!b.parents);
+
+  // Measure, then fit. The footer keeps its own clear band so nothing can ever collide with it.
+  const LBL=34*S, VAL=58*S, PAR=(10+34+34+44)*S;
+  const footTop=H-(isPro()?70*S:110*S);
+  const need=rows.length*(LBL+VAL)+(showParents?PAR:0);
+  const room=footTop-y;
+  let pad=0, shrink=1;
+  /* Surplus becomes breathing room first, up to a point past which rows just look adrift from one
+     another, and whatever is still left over is spent centring the block in the band. A saved poster
+     for a baby whose parents only ever typed a birthday is inherently sparse; it should read as
+     unhurried and deliberate, not as a page that ran out. */
+  if(need<room){ pad=Math.min((room-need)/(rows.length+1), 40*S); y+=Math.max(0,(room-need-pad*(rows.length+1))/2); }
+  else if(need>room){ shrink=Math.max(room/need, 0.72); }
+  const lblH=LBL*shrink, valH=VAL*shrink;
+
   rows.forEach(([k,v])=>{
-    ctx.fillStyle=t.accent; ctx.font=`800 ${20*S}px "Nunito Sans", sans-serif`;
-    ctx.fillText(k.toUpperCase(), W/2, y); y+=34*S;
-    ctx.fillStyle=t.ink; ctx.font=`600 ${36*S}px Fraunces, serif`;
-    // wrap long values
-    const maxw=W*0.8; let val=v;
-    if(ctx.measureText(val).width>maxw){ ctx.font=`600 ${28*S}px Fraunces, serif`; }
-    ctx.fillText(val, W/2, y); y+=58*S;
+    ctx.fillStyle=t.accent; ctx.font=`800 ${20*S*Math.max(shrink,0.86)}px "Nunito Sans", sans-serif`;
+    ctx.globalAlpha=v==null?0.45:1;
+    ctx.fillText(k.toUpperCase(), W/2, y); y+=lblH;
+    if(v==null){
+      // the rule where the value will sit: legible as "not filled in", never as words we printed
+      ctx.strokeStyle=t.soft; ctx.lineWidth=2*S; ctx.setLineDash([9*S,9*S]);
+      ctx.beginPath(); ctx.moveTo(W*0.38,y-12*S); ctx.lineTo(W*0.62,y-12*S); ctx.stroke();
+      ctx.setLineDash([]);
+    } else {
+      ctx.fillStyle=t.ink; ctx.font=`600 ${36*S*shrink}px Fraunces, serif`;
+      const maxw=W*0.8;
+      if(ctx.measureText(v).width>maxw) ctx.font=`600 ${28*S*shrink}px Fraunces, serif`;
+      ctx.fillText(v, W/2, y);
+    }
+    ctx.globalAlpha=1;
+    y+=valH+pad;
   });
   // proud parents footer
-  if(b.parents){
-    y+=10*S; pHeart(ctx,W/2,y-6*S,9*S,t.accent); y+=34*S;
-    ctx.fillStyle=t.accent; ctx.font=`800 ${20*S}px "Nunito Sans", sans-serif`; ctx.fillText('PROUD PARENTS', W/2, y); y+=34*S;
-    ctx.fillStyle=t.ink; ctx.font=`500 italic ${34*S}px Fraunces, serif`; ctx.fillText(b.parents, W/2, y);
+  if(showParents){
+    y+=10*S; pHeart(ctx,W/2,y-6*S,9*S,t.accent); y+=34*S*shrink;
+    ctx.globalAlpha=parents?1:0.45;
+    ctx.fillStyle=t.accent; ctx.font=`800 ${20*S*Math.max(shrink,0.86)}px "Nunito Sans", sans-serif`;
+    ctx.fillText('PROUD PARENTS', W/2, y); y+=34*S*shrink;
+    if(parents){
+      ctx.fillStyle=t.ink; ctx.font=`500 italic ${34*S*shrink}px Fraunces, serif`; ctx.fillText(parents, W/2, y);
+    } else {
+      ctx.strokeStyle=t.soft; ctx.lineWidth=2*S; ctx.setLineDash([9*S,9*S]);
+      ctx.beginPath(); ctx.moveTo(W*0.34,y-10*S); ctx.lineTo(W*0.66,y-10*S); ctx.stroke(); ctx.setLineDash([]);
+    }
+    ctx.globalAlpha=1;
   }
   // brand: free posters carry the small Cubby mark, Pro is clean
   if(!isPro()){ drawCubbyFooter(ctx, W/2, H-56*S, 18*S, t.motif, 1); }
