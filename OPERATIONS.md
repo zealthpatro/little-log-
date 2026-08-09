@@ -67,4 +67,8 @@ keeps a future backend swap (e.g. to Cloudflare D1) a contained job rather than 
 - `tools/vaxcard_test.js` — the vaccine-card import: that it patches rows and never creates them,
   never sets `missed`, never writes events, and refuses future / pre-birth dates (`?e2e=1`)
 - `tools/gen_sitemap.py` — stamps article lastmods
-- `test/` — Firestore rules emulator test (needs Java): `cd test && npm i && npm run test:rules`
+- `test/` — Firestore rules emulator tests (need Java): `cd test && npm i && npm run test:rules`,
+  and `npm run test:invitelink` for the tokenised invite links. **Both must be green before
+  publishing rules**, and rules do NOT deploy via `git push` — they are published separately.
+  If `java -version` reports "Unable to locate a Java Runtime", install a JDK first
+  (`brew install --cask temurin`); the macOS `/usr/bin/java` is only a stub.

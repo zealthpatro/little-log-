@@ -53,6 +53,54 @@ service cloud.firestore {
         || get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members[request.auth.uid] == 'owner' );
     }
 
+    /* Invite LINKS, keyed by an unguessable token. Additive: /invites (keyed by email) is untouched
+       and still works exactly as before.
+       The trade, stated plainly because it is real. /invites can only be read by the person whose
+       email it names, which is why "a link on its own is not enough" was true. A token link gives
+       that up: whoever holds the link can join. It exists because the sender otherwise has to type
+       the other adult's exact sign-in address from memory, and Apple's Hide My Email makes a
+       mismatch the DEFAULT for anyone invited at their real address — so the strict version was
+       failing shut on the journey this whole product depends on.
+       Three things carry the weight instead: the token is unguessable, it expires, and it is
+       single-use — claimed here, in the rules, so two people racing the same link cannot both get
+       in. The document deliberately holds no baby data: a household id and a role, nothing a
+       stranger learns anything from. */
+    match /inviteLinks/{token} {
+      // Any signed-in user who holds the token may read it. That IS the token's purpose; the
+      // secrecy of the id is the control. Never make this readable without auth.
+      allow read: if request.auth != null;
+
+      // Only the household's own owner mints one, and only ever pointing at their own household.
+      allow create: if request.auth != null
+        && get(/databases/$(database)/documents/households/$(request.resource.data.householdId)).data.members[request.auth.uid] == 'owner'
+        && request.resource.data.get('role', 'caregiver') in ['owner', 'caregiver']
+        // .get() rather than a bare field read: referencing an absent field THROWS in rules, and a
+        // throw on create would reject the owner's own legitimate link.
+        && request.resource.data.get('usedBy', null) == null
+        && request.resource.data.expiresAt is timestamp;
+
+      // Exactly two updates are legal.
+      // 1. The owner revokes, which can never re-point the link at a different household.
+      // 2. The invitee CLAIMS it: sets usedBy to their own uid, once, before it expires, changing
+      //    nothing else. An unclaimed link is the only kind that can be claimed, so a forwarded
+      //    link is dead the moment the first person walks through it.
+      allow update: if request.auth != null
+        && request.resource.data.householdId == resource.data.householdId
+        && (
+          get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members[request.auth.uid] == 'owner'
+          || (
+               resource.data.get('usedBy', null) == null
+            && request.resource.data.usedBy == request.auth.uid
+            && request.time < resource.data.expiresAt
+            && request.resource.data.role == resource.data.role
+            && request.resource.data.expiresAt == resource.data.expiresAt
+          )
+        );
+
+      allow delete: if request.auth != null
+        && get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members[request.auth.uid] == 'owner';
+    }
+
     match /households/{hid} {
       function isMember() {
         return request.auth != null && request.auth.uid in resource.data.members;
