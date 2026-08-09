@@ -40,6 +40,10 @@ function parseArgs(argv) {
   for (let i = 2; i < argv.length; i++) {
     const k = argv[i];
     if (k === '--dry-run') a.dryRun = true;
+    else if (k === '--transparent') a.transparent = true;   // cut-out PNG. NOTE: gpt-image-2 REJECTS this
+    // (400 "Transparent background is not supported for this model", checked 2026-08-09). For art that has
+    // to sit on a canvas, generate on pure white instead and composite with 'multiply', which drops the
+    // white and warms the marks into the page. Kept for the day a model supports it.
     else if (k === '--check') a.check = true;
     else if (k.startsWith('--')) { a[k.slice(2)] = argv[i + 1]; i++; }
   }
@@ -79,7 +83,7 @@ async function genGemini(key, { prompt, ref, aspect, dryRun }) {
 
 // ---- OpenAI gpt-image-2 ----
 function openaiSize(aspect) { return aspect === '4:5' || aspect === '2:3' || aspect === '3:4' ? '1024x1536' : (aspect === '3:2' || aspect === '16:9' ? '1536x1024' : '1024x1024'); }
-async function genOpenAI(key, { prompt, ref, aspect, dryRun }) {
+async function genOpenAI(key, { prompt, ref, aspect, dryRun, transparent }) {
   const size = openaiSize(aspect);
   if (dryRun) { console.log('[dry-run] POST openai gpt-image-2  size=' + size + (ref ? '  edit(ref=' + ref + ')' : '  generation') + '\n  prompt: ' + prompt.slice(0, 120) + '…'); return null; }
   let r;
@@ -90,7 +94,12 @@ async function genOpenAI(key, { prompt, ref, aspect, dryRun }) {
     fd.append('image', new Blob([fs.readFileSync(ref)], { type: refType }), path.basename(ref));
     r = await fetch('https://api.openai.com/v1/images/edits', { method: 'POST', headers: { Authorization: 'Bearer ' + key }, body: fd });
   } else {
-    r = await fetch('https://api.openai.com/v1/images/generations', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key }, body: JSON.stringify({ model: 'gpt-image-2', prompt, size, n: 1 }) });
+    /* background:'transparent' needs an alpha-capable format. Journey CARDS want their painted
+       cream ground, but anything composited onto a canvas (poster furniture, stat icons) has to be
+       a true cut-out or it lands as a pasted rectangle on somebody else's background. */
+    const body = { model: 'gpt-image-2', prompt, size, n: 1 };
+    if (transparent) { body.background = 'transparent'; body.output_format = 'png'; }
+    r = await fetch('https://api.openai.com/v1/images/generations', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key }, body: JSON.stringify(body) });
   }
   const j = await r.json();
   if (j.error) throw new Error('openai ' + r.status + ': ' + (j.error.message || '').slice(0, 160));
@@ -135,7 +144,7 @@ async function check(engine, key) {
     const out = path.isAbsolute(job.out) ? job.out : path.join(ROOT, job.out);
     const ref = job.ref ? (path.isAbsolute(job.ref) ? job.ref : path.join(ROOT, job.ref)) : null;
     try {
-      const buf = await generate(engine, key, { prompt: job.prompt, ref, aspect: job.aspect || a.aspect, dryRun: a.dryRun });
+      const buf = await generate(engine, key, { prompt: job.prompt, ref, aspect: job.aspect || a.aspect, dryRun: a.dryRun, transparent: job.transparent || a.transparent });
       if (a.dryRun) { ok++; continue; }
       fs.writeFileSync(out, buf);
       console.log('✅ ' + path.relative(ROOT, out) + '  (' + Math.round(buf.length / 1024) + ' KB)');

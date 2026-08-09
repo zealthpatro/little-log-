@@ -11264,6 +11264,25 @@ function viewMonthly(i){
 /* Watercolour hero-cub tile for the auto keepsakes (poster + memory card). Lazy, cached; the
    composers stay sync — they just skip the art if it hasn't arrived yet. */
 let _ksArtImg=null;
+/* Poster furniture: the painted balloons, cloud, garland, sprig, sparkles and the three stat icons.
+   Generated through tools/gen_art.js in the same hand as the journey library (art-src/poster_*.png,
+   baked to app/poster-art/*.webp). Composited with 'multiply' rather than as cut-outs, because
+   gpt-image-2 refuses transparent output: on a white ground multiply drops the white entirely and
+   tints the marks into whatever the paper is doing underneath, which is also why they sit on the
+   gradient without banding. Deliberately NOT in the service worker's precache list: they are only
+   needed the moment somebody makes a poster, and an offline launch should not carry them. */
+const POSTER_ART=['balloons','cloud','garland','sprig','stars','icon_scale','icon_tape','icon_clock'];
+let _posterArt={}, _posterArtP=null;
+function loadPosterArt(){
+  if(_posterArtP) return _posterArtP;
+  _posterArtP=Promise.all(POSTER_ART.map(k=>new Promise(res=>{
+    const im=new Image();
+    im.onload=()=>{ _posterArt[k]=im; res(); };
+    im.onerror=()=>res();                      // a missing piece just means less furniture, never a broken poster
+    im.src='poster-art/poster_'+k+'.webp';
+  })));
+  return _posterArtP;
+}
 function loadKsArt(){ return new Promise(res=>{ if(_ksArtImg){res(_ksArtImg);return;} const im=new Image(); im.onload=()=>{_ksArtImg=im;res(im);}; im.onerror=()=>res(null); im.src='journey-art/ov_hero-cub.webp'; }); }
 
 /* ---- Memory card (data-fused) ---- */
@@ -11391,6 +11410,7 @@ async function genCard(){
   showLoader(['Gathering this month\'s moments','Mixing in the real numbers','Adding a little sparkle']);
   await paintYield();
   await loadKsArt();
+  await loadPosterArt();
   const c=document.createElement('canvas'); composeMemoryCard(c,cardDraft.month,cardDraft.photoData);
   const data=c.toDataURL('image/jpeg',0.92);
   hideLoader();
@@ -11583,6 +11603,7 @@ function drawPosterPrev(){
   draw();
   const put=()=>{ slot.innerHTML=''; const im=new Image(); im.className='card-prev'; im.src=c.toDataURL('image/jpeg',0.9); slot.appendChild(im); };
   put(); if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>{ draw(); put(); });
+  loadPosterArt().then(()=>{ draw(); put(); });   // furniture lands late on a cold cache; repaint when it does
 }
 // decorative motifs
 function pStar(ctx,x,y,r,col){ ctx.fillStyle=col; ctx.beginPath(); for(let i=0;i<10;i++){ const ang=Math.PI/5*i-Math.PI/2, rad=i%2?r*0.45:r; ctx[i?'lineTo':'moveTo'](x+Math.cos(ang)*rad,y+Math.sin(ang)*rad); } ctx.closePath(); ctx.fill(); }
@@ -11601,8 +11622,20 @@ function composePoster(canvas,scale,preview){
   // inner border
   ctx.strokeStyle=t.soft; ctx.lineWidth=3*S; const mb=34*S; ctx.strokeRect(mb,mb,W-mb*2,H-mb*2);
   // corner motifs
-  ctx.globalAlpha=0.5; pLeaf(ctx,70*S,120*S,150*S,0.5,t.motif); pLeaf(ctx,W-70*S,H-120*S,150*S,Math.PI+0.5,t.motif); ctx.globalAlpha=1;
-  [[0.12,0.1,10],[0.9,0.16,7],[0.08,0.55,7],[0.93,0.62,9],[0.2,0.93,8],[0.85,0.92,7]].forEach(([px,py,r])=>pStar(ctx,W*px,H*py,r*S,t.motif));
+  /* Painted furniture, multiplied onto the paper. The hand-drawn leaf sprigs and vector stars that
+     used to sit in the corners were the last thing on this poster that looked drawn by a program. */
+  const art=(k,cx,cy,w,alpha)=>{
+    const im=_posterArt[k]; if(!im||!im.naturalWidth) return;
+    const h=w*(im.naturalHeight/im.naturalWidth);
+    ctx.save(); ctx.globalCompositeOperation='multiply'; ctx.globalAlpha=alpha==null?1:alpha;
+    ctx.drawImage(im, cx-w/2, cy-h/2, w, h); ctx.restore();
+  };
+  art('garland', W/2, 130*S, W*0.52, 0.95);
+  art('cloud', 132*S, 330*S, 190*S, 0.75);
+  art('balloons', W-140*S, 320*S, 170*S, 0.8);
+  art('stars', W*0.5, H*0.52, W*1.02, 0.20);
+  art('sprig', 118*S, H-170*S, 150*S, 0.7);
+  art('sprig', W-118*S, H-250*S, 130*S, 0.55);
 
   ctx.textAlign='center';
   ctx.textBaseline='alphabetic';
@@ -11634,7 +11667,7 @@ function composePoster(canvas,scale,preview){
   const blank=(cx,cy,w)=>{ ctx.save(); ctx.strokeStyle=t.soft; ctx.lineWidth=3*S; ctx.setLineDash([9*S,9*S]);
     ctx.beginPath(); ctx.moveTo(cx-w/2,cy); ctx.lineTo(cx+w/2,cy); ctx.stroke(); ctx.restore(); };
 
-  let y=190*S;
+  let y=268*S;
   // ---- name, in a hand ----
   ctx.fillStyle=t.ink; ctx.font=`700 ${132*S}px Caveat, cursive`;
   let nm=b.name||'', nsize=132;
@@ -11649,7 +11682,7 @@ function composePoster(canvas,scale,preview){
 
   // ---- the four facts, in quadrants ----
   const born=b.birth?new Date(b.birth):null;
-  const gx=W*0.5, gTop=y, gH=560*S, gMid=gTop+gH/2, gBot=gTop+gH;
+  const gx=W*0.5, gTop=y, gH=600*S, gMid=gTop+gH/2, gBot=gTop+gH;
   const mL=W*0.10, mR=W-mL;
   dot(mL,gTop,mR,gTop);
   dot(mL,gMid,mR,gMid);
@@ -11674,15 +11707,18 @@ function composePoster(canvas,scale,preview){
   if(born){
     cap('at', qx[1], qy[0]-58*S, 26*S);
     bigUnit(born.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}).replace(/\s/g,' '), qx[1], qy[0]+46*S, 86*S, 30*S);
+    art('icon_clock', qx[1], qy[0]+126*S, 104*S, 0.95);
   }
   // bottom left: weight
   cap('weighing', qx[0], qy[1]-58*S, 26*S, b.birthWeight?1:0.45);
   if(b.birthWeight) bigUnit(b.birthWeight, qx[0], qy[1]+46*S, 92*S, 30*S);
   else if(preview) blank(qx[0], qy[1]+22*S, W*0.20);
+  art('icon_scale', qx[0], qy[1]+128*S, 110*S, b.birthWeight?0.95:0.42);
   // bottom right: length
   cap('measuring', qx[1], qy[1]-58*S, 26*S, b.birthLength?1:0.45);
   if(b.birthLength) bigUnit(b.birthLength, qx[1], qy[1]+46*S, 92*S, 30*S);
   else if(preview) blank(qx[1], qy[1]+22*S, W*0.20);
+  art('icon_tape', qx[1], qy[1]+128*S, 106*S, b.birthLength?0.95:0.42);
   dot(mL,gBot,mR,gBot);
   y=gBot;
 
@@ -11697,10 +11733,11 @@ function composePoster(canvas,scale,preview){
   if(b.blood||preview) tailRows.push(['blood group', b.blood||null]);
   const sign=b.sign||zodiac(b.birth); if(sign) tailRows.push(['star sign', sign]);
   if(b.parents||preview) tailRows.push(['proud parents', b.parents||null]);
-  const tailH=tailRows.length*94*S;
+  const tailCols=tailRows.length>2?2:1, tailLines=Math.ceil(tailRows.length/tailCols);
+  const tailH=tailLines*100*S;
   const artRoom=(H-footH-tailH-26*S)-y;
   if(slotIm && artRoom>120*S){
-    const ah=Math.min(artRoom-24*S, 380*S), aw=ah*(slotIm.naturalWidth/slotIm.naturalHeight||1);
+    const ah=Math.min(artRoom-18*S, 440*S), aw=ah*(slotIm.naturalWidth/slotIm.naturalHeight||1);
     const awc=Math.min(aw, W*0.58), ahc=awc/(slotIm.naturalWidth/slotIm.naturalHeight||1);
     if(posterDraft.withPhoto && posterDraft.img){
       ctx.save(); roundRect(ctx,(W-awc)/2,y+18*S,awc,ahc,18*S); ctx.clip();
@@ -11725,12 +11762,22 @@ function composePoster(canvas,scale,preview){
 
   // ---- the quieter facts ----
   y=Math.max(y, H-footH-tailH-8*S);
-  tailRows.forEach(([k,v])=>{
-    cap(k, W/2, y, 24*S, v?1:0.45); y+=44*S;
-    if(v){ ctx.fillStyle=t.ink; ctx.font=`500 ${v.length>26?30*S:38*S}px Fraunces, serif`; ctx.fillText(v, W/2, y); }
-    else blank(W/2, y-13*S, W*0.30);
-    y+=50*S;
+  const tailTop=y;
+  tailRows.forEach(([k,v],i)=>{
+    const col=tailCols===1?0:(i%2), line=tailCols===1?i:Math.floor(i/2);
+    const cx=tailCols===1?W/2:(col?W*0.72:W*0.28);
+    const wide=tailCols===1?W*0.72:W*0.40;
+    let ry=tailTop+line*100*S;
+    cap(k, cx, ry, 24*S, v?1:0.45); ry+=42*S;
+    if(v){
+      ctx.fillStyle=t.ink;
+      let fs=v.length>22?27*S:(v.length>15?32*S:38*S);
+      ctx.font=`500 ${fs}px Fraunces, serif`;
+      while(fs>18*S && ctx.measureText(v).width>wide){ fs-=2*S; ctx.font=`500 ${fs}px Fraunces, serif`; }
+      ctx.fillText(v, cx, ry);
+    } else blank(cx, ry-13*S, wide*0.62);
   });
+  y=tailTop+tailLines*100*S;
 
   // brand: free posters carry the small Cubby mark, Pro is clean
   if(!isPro()){ drawCubbyFooter(ctx, W/2, H-56*S, 18*S, t.motif, 1); }
