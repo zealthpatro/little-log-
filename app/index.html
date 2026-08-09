@@ -4869,6 +4869,15 @@ function openSettings(){
       <div class="si-body"><div class="a">Quick log button</div><div class="b">${quickPrefs().on?'On · '+quickChosen().length+' shortcut'+(quickChosen().length===1?'':'s'):'Off'} · just for you</div></div>
       <span class="chev">${I.chev}</span>
     </div>
+    ${/* After a birth the pregnancy shell is a keepsake with no tabs, so her private wellbeing notes
+          were reachable only by a deep link she would never think to type. They are hers and they
+          matter more in the weeks after a birth, not less. Owner-only, and only once there is a
+          record to open. */''}
+    ${(state.pregnancy&&state.pregnancy.bornBabyId&&pregIsOwner())?`<div class="set-item" onclick="openMoodNote()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--note-soft);color:var(--note);font-size:18px">🤍</div>
+      <div class="si-body"><div class="a">How you are, in yourself</div><div class="b">Private to you, always. Never shared with your circle</div></div>
+      <span class="chev">${I.chev}</span>
+    </div>`:''}
     ${(window.CubbyGuide&&CubbyGuide.settingsRow)?CubbyGuide.settingsRow():''}
     <div class="set-label">Your data &amp; account</div>
     <div class="set-item" onclick="openTrash()" style="cursor:pointer">
@@ -5978,6 +5987,7 @@ function savePlanning(){
     persist(); closeSheet(); render();
     return;
   }
+  const _priorMood=(state.pregnancy&&state.pregnancy.moodLog&&state.pregnancy.moodLog.length)?state.pregnancy.moodLog.slice():null;
   state.pregnancy={ id:uid(), ownerUid:myUid(), stage:'planning', dueDate:null, lmp:lmpMs, cycleLen:cyc,
     periods:lmpMs?[lmpMs]:[], tryingSince:since,
     country:detectCountry(), precon:defaultPrecon(),
@@ -5985,6 +5995,9 @@ function savePlanning(){
     birthPlan:'', bag:[], moments:[],
     conditions:{}, glucose:[], urine:[], supplements:[], supplementLog:[], nausea:[],
     glucoseUnit:'mmol', bornBabyId:null, createdAt:now() };
+  // Same reason as savePregnancy: the wellbeing log belongs to her, not to a pregnancy, and the
+  // mhealth category doc is written whole. Starting to try again must not erase what she wrote.
+  if(_priorMood) state.pregnancy.moodLog=_priorMood;
   persist();
   startPregnancyAudit(function(){ closeSheet(); render();
     if(window.LL && window.LL.needsIdentity && typeof window.LL.collectIdentity==='function'){ window.LL.collectIdentity('planning', openOnboardInvite); }
@@ -6415,6 +6428,12 @@ function savePregnancy(){
      Archive it first. The shape is the one endPregnancy already writes, with loss:false — the
      branch memoryCandidates has always read for and nothing ever wrote. */
   const prev=state.pregnancy;
+  /* Her wellbeing notes are HERS, not the pregnancy's. They live in mhealth/{owner}/cat/mood — one
+     document per woman, across every pregnancy — and syncMaternal writes that whole category with
+     .set(), so a fresh pregnancy carrying an empty moodLog would overwrite what she wrote during
+     the last one. Postnatal feeling does not respect a pregnancy boundary either; that is precisely
+     why the document is keyed by owner. Carry it forward. */
+  const keepMood=(prev&&prev.moodLog&&prev.moodLog.length)?prev.moodLog.slice():null;
   if(prev && prev.bornBabyId){
     state.pregnancyArchive=state.pregnancyArchive||[];
     state.pregnancyArchive.unshift({ id:uid(), endedAt:prev.birthAt||now(), weeks:40, loss:false,
@@ -6427,6 +6446,7 @@ function savePregnancy(){
     conditions:{}, glucose:[], urine:[], supplements:[], supplementLog:[], nausea:[],
     glucoseUnit:(cc==='us'||cc==='uae')?'mgdl':'mmol',
     bornBabyId:null, createdAt:now() };
+  if(keepMood) state.pregnancy.moodLog=keepMood;      // hers, and continuous across pregnancies
   try{ localStorage.setItem('cubby-country', VAX_SCHEDULES[cc]?cc:detectCountry()); }catch(e){}
   pregView='week'; persist();
   startPregnancyAudit(function(){ closeSheet(); render();
@@ -6475,7 +6495,10 @@ function renderPregShell(){
         <button class="icon-btn" data-themebtn onclick="toggleTheme()" aria-label="${themeResolved()==='night'?'switch to light':'switch to night'}" title="Appearance: ${themeModeLabel()}">${themeResolved()==='night'?I.sun:I.moon}</button>
         <button class="icon-btn" onclick="openSettings()" aria-label="settings">${I.settings}</button>
       </div>
-      <div class="scroll" id="scroll">${renderPregMoments(true)}</div>`);
+      <div class="scroll" id="scroll">${renderPregMoments(true)}${pregRecordAvailable()?`
+        <div class="set-item" onclick="openPregRecord()" style="cursor:pointer;margin-top:18px">
+          <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">📋</div>
+          <div class="si-body"><div class="a">Your pregnancy record</div><div class="b">Care team, appointments, readings and your birth plan</div></div><span class="chev">${I.chev}</span></div>`:''}</div>`);
     startTick();
     return;
   }
@@ -7174,6 +7197,48 @@ function renderPregCare(){
     <button class="btn-ghost" style="color:var(--ink-soft)" onclick="confirmEndPregnancy()">End this pregnancy</button>`:''}
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>
   </div>`;
+}
+/* ---- the record, after the birth --------------------------------------------------------------
+   Everything in renderPregCare became unreachable the moment bornBabyId was set: care team names
+   and phone numbers, the antenatal record, BP and glucose, the birth plan, the doctor report. All
+   of it still synced; none of it could be opened. Postpartum blood pressure is clinically live —
+   pre-eclampsia presents AFTER delivery — and the doctor-report thesis quietly evaporated a week
+   before her six-week check.
+   A sheet rather than a section, so the look-back screen stays a keepsake and does not become a
+   clinical dashboard. Read-only throughout: no add, no remove, no "baby has arrived", no editing
+   the due date of a pregnancy that is over. Every category obeys the same pregCanSee() gate the
+   live screen used, so nothing becomes visible to a caregiver that was not visible before. */
+function pregRecordAvailable(){
+  const p=state.pregnancy;
+  if(!p||!p.bornBabyId) return false;
+  return pregIsOwner() || pregCanSee('careteam') || pregCanSee('health') || pregCanSee('conditions');
+}
+function openPregRecord(){
+  const p=state.pregnancy; if(!p) return;
+  const amOwner=pregIsOwner();
+  const seeCare=pregCanSee('careteam'), seeHealth=pregCanSee('health')||pregCanSee('conditions');
+  const team=(p.careTeam||[]).map(m=>`<div class="log-list-item"><div class="lli-ico">👩‍⚕️</div><div class="lli-body"><div class="lli-t">${escapeHtml(m.name)}</div><div class="lli-s">${escapeHtml(m.role||'')}${m.phone?' · <a href="tel:'+encodeURIComponent(m.phone)+'" style="color:var(--preg-ink)">'+escapeHtml(m.phone)+'</a>':''}</div></div></div>`).join('');
+  const kept=(p.appts||[]).filter(a=>a.done).sort((a,b)=>(a.week||0)-(b.week||0));
+  const appts=kept.map(a=>`<div class="log-list-item"><div class="lli-ico">📅</div><div class="lli-body"><div class="lli-t">${escapeHtml(a.title||'Appointment')}</div><div class="lli-s">${a.week?('Week '+a.week):''}${a.at?((a.week?' · ':'')+dayLabel(a.at)):''}${a.outcome?(' · '+escapeHtml(a.outcome)):''}</div></div></div>`).join('');
+  const cnt=k=>((p[k]||[]).length);
+  const readings=[['weights','weight'],['bp','blood pressure'],['glucose','glucose'],['urine','urine']]
+    .filter(function(r){ return cnt(r[0]); })
+    .map(function(r){ return cnt(r[0])+' '+r[1]+' reading'+(cnt(r[0])===1?'':'s'); }).join(' · ');
+  openSheet(`<h2>Your pregnancy record</h2><div class="sub">Kept exactly as it was. Nothing here asks anything of you.</div>
+    ${(seeCare&&team)?`<div class="sec-title">Your care team</div>${team}`:''}
+    ${(seeHealth&&appts)?`<div class="sec-title" style="margin-top:16px">Appointments you kept</div>${appts}`:''}
+    ${(seeHealth&&readings)?`<div class="sec-title" style="margin-top:16px">Readings</div><div class="csub">${escapeHtml(readings)}. Worth having to hand: blood pressure still matters in the weeks after a birth.</div>`:''}
+    ${(seeHealth&&p.birthPlan)?`<div class="sec-title" style="margin-top:16px">Your birth plan</div><div class="note-read">${escapeHtml(p.birthPlan)}</div>`:''}
+    ${(amOwner||seeHealth)?`<button class="btn-ghost" onclick="openPregDoctorReport()" style="margin-top:16px;color:var(--preg-ink)">📄 Doctor report</button>`:''}
+    ${amOwner?`<div class="sec-title" style="margin-top:16px">Just for you</div>
+    <div class="set-item" onclick="openMoodNote()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--note-soft);color:var(--note);font-size:18px">🤍</div>
+      <div class="si-body"><div class="a">How you are, in yourself</div><div class="b">Private to you, now as much as before</div></div><span class="chev">${I.chev}</span></div>
+    <div class="set-item" onclick="openGentleMode()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">🤍</div>
+      <div class="si-body"><div class="a">Gentle mode</div><div class="b">Soften milestones, or hide the numbers</div></div><span class="chev">${I.chev}</span></div>`:''}
+    ${(!seeCare&&!seeHealth&&!amOwner)?'<div class="csub">These health details are private to her.</div>':''}
+    <div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
 }
 function openAddCareTeam(){
   openSheet(`<h2>Care team</h2><div class="sub">Add someone who's looking after you.</div>

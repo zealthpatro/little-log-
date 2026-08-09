@@ -785,8 +785,97 @@ async function chapterLabels(page) {
   check(/woke once/.test(wk.onceReadsOnce), 'once is "once", not "1 times"', wk.onceReadsOnce);
   check(wk.noLabelWhenNone, 'and a straight-through sleep says nothing extra');
 
-  // ---- 19. NO PAGE ERRORS THROUGHOUT -----------------------------------------------------------
-  console.log('\n19. clean console');
+  // ---- 19. THE RECORD SURVIVES THE BIRTH, AND KEEPS ITS PRIVACY --------------------------------
+  /* After a birth the pregnancy shell has no tabs, so care team, appointments, readings, birth plan
+     and her private wellbeing notes all became unreachable while still syncing. They are reachable
+     again — and every category obeys the same pregCanSee() gate the live screen used, so nothing
+     becomes visible to a caregiver that was not visible before. Mood is owner-only forever. */
+  console.log('\n19. the pregnancy record is reachable after birth, with its gates intact');
+  const rec = await page.evaluate(() => {
+    const out = {};
+    window.LL = window.LL || {};
+    state.babies = [{ id: 'b1', name: 'Aria', birth: Date.now() - 20 * 86400000, routines: [] }];
+    state.activeBabyId = 'b1';
+    state.pregnancy = {
+      id: 'p1', ownerUid: myUid(), stage: 'expecting', dueDate: Date.now() - 20 * 86400000,
+      careTeam: [{ id: 'c1', name: 'Dr Khan', role: 'Obstetrician', phone: '+971500000000' }],
+      appts: [{ id: 'a1', week: 28, title: 'Glucose test', done: true, at: Date.now() - 60 * 86400000, outcome: 'all clear' }],
+      weights: [{ id: 'w1', at: Date.now(), kg: 68 }], bp: [{ id: 'b1', at: Date.now() }],
+      birthPlan: 'Low lights, my own music.', moodLog: [{ id: 'm1', at: Date.now(), mood: 'Tired', note: 'private' }],
+      bornBabyId: 'b1', birthAt: Date.now() - 20 * 86400000
+    };
+    function asOwner() { window.LL.matIsOwner = () => true; window.LL.matCanRead = () => true; }
+    function asCaregiver(canRead) { window.LL.matIsOwner = () => false; window.LL.matCanRead = c => !!canRead[c]; }
+
+    // before a birth there is no "record" door: the live screen already has everything
+    asOwner();
+    const born = state.pregnancy.bornBabyId; state.pregnancy.bornBabyId = null;
+    out.noRowBeforeBirth = pregRecordAvailable() === false;
+    state.pregnancy.bornBabyId = born;
+    out.rowAfterBirth = pregRecordAvailable() === true;
+
+    function sheetText() { openPregRecord(); const t = (document.querySelector('#sheet.show') || {}).innerText || ''; closeSheet(); return t; }
+    const asHer = sheetText();
+    out.ownerSeesTeam = /Dr Khan/.test(asHer);
+    out.ownerSeesPhone = /\+971500000000/.test(asHer);
+    out.ownerSeesAppt = /Glucose test/.test(asHer) && /all clear/.test(asHer);
+    out.ownerSeesPlan = /Low lights/.test(asHer);
+    out.ownerSeesMood = /How you are, in yourself/.test(asHer);
+    // read-only: none of the live screen's actions come with it
+    out.noAdd = !/Add to care team/.test(asHer);
+    out.noArrived = !/Baby has arrived/.test(asHer);
+    out.noEnd = !/End this pregnancy/.test(asHer);
+    out.noDueEdit = !/Due date/.test(asHer);
+
+    // a caregiver she shared the care team with, and nothing else
+    asCaregiver({ careteam: true });
+    const asHim = sheetText();
+    out.cgSeesTeam = /Dr Khan/.test(asHim);
+    out.cgNoPlan = !/Low lights/.test(asHim);
+    out.cgNoAppt = !/Glucose test/.test(asHim);
+    out.cgNoMood = !/How you are, in yourself/.test(asHim);
+    out.cgNoPrivateNote = !/private/.test(asHim);
+
+    // a caregiver she shared nothing with
+    asCaregiver({});
+    out.cgNothingAvailable = pregRecordAvailable() === false;
+    // and openMoodNote refuses outright, whatever calls it
+    const before = document.querySelector('#sheet.show');
+    openMoodNote();
+    out.moodRefused = document.querySelector('#sheet.show') === before;
+    asOwner();
+    return out;
+  });
+  check(rec.noRowBeforeBirth && rec.rowAfterBirth, 'the record door appears only once the pregnancy is a keepsake');
+  check(rec.ownerSeesTeam && rec.ownerSeesPhone, 'she gets her care team back, phone numbers included');
+  check(rec.ownerSeesAppt, 'and the appointments she kept, with their outcomes');
+  check(rec.ownerSeesPlan, 'and her birth plan');
+  check(rec.ownerSeesMood, 'and her private wellbeing notes, which had no door at all after a birth');
+  check(rec.noAdd && rec.noArrived && rec.noEnd && rec.noDueEdit,
+    'it asks nothing of her: no add, no "baby has arrived", no ending a pregnancy that is over');
+  check(rec.cgSeesTeam, 'a caregiver sees exactly the category she shared');
+  check(rec.cgNoPlan && rec.cgNoAppt, 'and not the ones she did not');
+  check(rec.cgNoMood && rec.cgNoPrivateNote, 'mood never appears for anyone but her, not even as a row');
+  check(rec.cgNothingAvailable, 'and with nothing shared, the door does not exist');
+  check(rec.moodRefused, 'openMoodNote refuses a non-owner outright, whatever reaches it');
+
+  const carried = await page.evaluate(() => {
+    // her wellbeing log is hers, not the pregnancy's: a new pregnancy must not erase it
+    state.pregnancy = { id: 'p1', ownerUid: myUid(), stage: 'expecting', bornBabyId: 'b1', birthAt: Date.now(),
+      moments: [], journey: { saved: {} }, moodLog: [{ id: 'm1', at: Date.now(), mood: 'Tired', note: 'kept' }] };
+    state.pregnancyArchive = [];
+    openStartPregnancy();
+    pregDraft.mode = 'weeks'; pregDraft.weeks = 8; pregDraft.days = 0;
+    const w = document.getElementById('pgWeeks'); if (w) w.value = '8';
+    savePregnancy();
+    const out = { survived: ((state.pregnancy.moodLog) || []).some(m => m.note === 'kept') };
+    if (typeof closeSheet === 'function') closeSheet();
+    return out;
+  });
+  check(carried.survived, 'and starting a second pregnancy does not erase what she wrote during the first');
+
+  // ---- 20. NO PAGE ERRORS THROUGHOUT -----------------------------------------------------------
+  console.log('\n20. clean console');
   check(page.__errs.length === 0, 'no uncaught page errors', page.__errs.join(' | '));
   await page.close();
 
