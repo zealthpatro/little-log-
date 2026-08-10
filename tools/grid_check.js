@@ -200,6 +200,20 @@ CARDS.forEach(sel => {
     (b.match(/text-align:[^;]*/) || [''])[0]);
 }
 
+/* The other tabs. Everything above was found on the home screen; tools/pad_audit.js then walked
+   Log, Album, Health and Settings at full height and found six more cards that had all drifted to
+   the SAME wrong number. 13/15, 15, 15/16 and 20 are 14/16 measured four more times, which is what
+   drift looks like when nobody has named the value. */
+[['.tl-item{', 'Log timeline row'], ['.disclaimer{', 'Health disclaimer'],
+ ['.add-row{', 'Health add row'], ['.set-item{', 'Settings row'],
+ ['.prof-card{', 'Health profile card'], ['.ms-hero{', 'Health milestone hero']].forEach(([sel, what]) => {
+  const b = rule(sel);
+  check(!!b, sel + ' exists (' + what + ')');
+  if (!b) return;
+  check(/padding:var\(--pad-card\)/.test(b), sel + ' uses var(--pad-card)',
+    (b.match(/padding:[^;]*/) || [''])[0]);
+});
+
 const total = passes + fails;
 console.log('\n' + (fails ? 'FAIL' : 'PASS') + ' — ' + passes + '/' + total + ' checks');
 process.exit(fails ? 1 : 0);
