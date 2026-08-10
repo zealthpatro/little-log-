@@ -187,7 +187,82 @@ const SEED = {
   ck(kept.told, 'and she is told quietly, in a line that clears itself');
   await p3.close();
 
-  console.log('\n5. nothing that queues was promoted to an error');
+  console.log('\n5. the guest games page, when the server answers badly');
+  /* Not the same thing as a dead connection, and it used to be treated worse: every one of these
+     paths called msg(), which rewrites the whole body. A 500 during the 20-second poll, or a hub
+     poll that 404s and falls through to the legacy endpoint, wiped a rendered game. */
+  const serve = async (status, body) => {
+    const pg = await b.newPage();
+    await pg.setViewport({ width: 390, height: 850 });
+    await pg.setRequestInterception(true);
+    pg.on('request', r => (/\/api\//.test(r.url())
+      ? r.respond({ status, contentType: 'application/json', body: body || '{}' })
+      : r.continue()));
+    await pg.goto(BASE + '/g/index.html', { waitUntil: 'domcontentloaded' });
+    await new Promise(r => setTimeout(r, 900));
+    return pg;
+  };
+  const HUB = JSON.stringify({
+    title: 'Our baby', closed: false,
+    games: [{ id: 'g1', type: 'sex', prompt: 'Boy or girl?', tally: { F: 2, M: 1 }, guesses: [] }]
+  });
+  const afterPoll = async (status, label) => {
+    const pg = await serve(status);
+    const out = await pg.evaluate(async (hub) => {
+      window.guestGame.renderHub(JSON.parse(hub));
+      const body = document.getElementById('body');
+      const before = body.textContent.replace(/\s+/g, ' ').trim();
+      window.guestGame.loadHub();                    // the API now answers with the failure status
+      await new Promise(r => setTimeout(r, 700));
+      const f = body.querySelector('.mine');
+      const t = body.textContent.replace(/\s+/g, ' ').trim();
+      return {
+        before,
+        kept: (f ? t.replace(f.textContent.replace(/\s+/g, ' ').trim(), '') : t).trim() === before,
+        wiped: /Game not found|Could not reach|Almost ready/.test(t),
+        told: !!f,
+      };
+    }, HUB);
+    await pg.close();
+    ck(out.kept && !out.wiped, label, out.wiped ? 'replaced with a message' : 'kept');
+    ck(out.told, '  and says so quietly instead');
+  };
+  await afterPoll(500, 'a 500 during the poll keeps her game');
+  // The important one: a 404 on the hub endpoint used to fall through to the legacy game, which 404s
+  // too, ending in "Game not found" over the top of a hub that was fine a second ago.
+  await afterPoll(404, 'a 404 during the poll does not probe the legacy game and declare it missing');
+
+  const refused = await (async () => {
+    const pg = await serve(500);
+    const out = await pg.evaluate(async () => {
+      window.guestGame.renderLegacy({ title: 'Our baby', tally: { F: 1, M: 0 } });
+      const body = document.getElementById('body');
+      const nick = document.getElementById('nick'); if (nick) nick.value = 'Nana';
+      const had = !!body.querySelector('.picks');
+      window.guestGame.submitLegacy('F');
+      await new Promise(r => setTimeout(r, 700));
+      return { had, stillHasBoard: !!body.querySelector('.picks'), told: !!body.querySelector('.mine') };
+    });
+    await pg.close();
+    return out;
+  })();
+  ck(refused.had, 'a legacy board renders in this check');
+  ck(refused.stillHasBoard, 'a refused guess leaves the board up rather than replacing it');
+  ck(refused.told, '  and tells her the guess did not save');
+
+  // And the genuine dead end is unchanged: nothing rendered, the game really is gone.
+  const gone = await (async () => {
+    const pg = await serve(404);
+    const out = await pg.evaluate(async () => {
+      await new Promise(r => setTimeout(r, 400));
+      return document.getElementById('body').textContent.replace(/\s+/g, ' ').trim();
+    });
+    await pg.close();
+    return out;
+  })();
+  ck(/Game not found/.test(gone), 'with nothing on screen, a missing game still says so plainly', gone.slice(0, 70));
+
+  console.log('\n6. nothing that queues was promoted to an error');
   const store = fs.readFileSync(path.join(ROOT, 'app/store-firebase.js'), 'utf8');
   ck(/Cubby will sync when you’re back/.test(store),
     'the gentle push-failure toast is untouched: a queued write stays a toast, never a full state');

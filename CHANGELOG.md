@@ -1,5 +1,29 @@
 # Cubby — Changelog
 
+## v0.18.2 — 2026-08-10 — the guest games page stops throwing a guest's game away
+
+No service worker bump: the worker registers from `/app/index.html` so its scope is `/app/`, and
+`g/index.html` is not in the precache. The guest page always comes fresh from the edge.
+
+v0.18.0 stopped the guest games page wiping itself when the **connection** dropped. It was still doing
+it whenever the **server** answered badly, which is the same defect wearing a different hat. Every
+failure path on that page called `msg()`, and `msg()` rewrites the whole body.
+
+Three ways that bit a grandmother who has no app and no service worker. A 500 during the twenty-second
+poll replaced her confirmed guess with a bare line. A refused guess on the legacy board replaced the
+board she was mid-way through. And worst, a 404 on the hub endpoint fell through to the legacy game
+endpoint — first-load discovery logic, running on a poll — which 404s too, so a hub that was fine a
+second earlier was declared "Game not found".
+
+One helper now decides all of it, with the rule written once: something already on screen is never
+replaced, only kept and annotated with a line that clears itself; nothing on screen and a connection
+problem gets the illustrated balloon state with a real retry; nothing on screen and the game genuinely
+gone still says so plainly, unchanged. The legacy fall-through only runs on a first load now, because
+during a poll we already know what the code is.
+
+`tools/offline_gate.js` grew to 40 assertions, including the 404-during-poll case and a check that a
+genuinely missing game still says so.
+
 ## v0.18.1 — 2026-08-10 — the parent decides what home offers, and the Notes lane stops jumping
 
 Service worker `little-log-v281` -> `little-log-v282`.

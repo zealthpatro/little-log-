@@ -111,6 +111,22 @@
      back. Nothing to lose = a real dead end, and the only place on this page that earns a full
      state. Something already rendered = say it quietly and keep what she is looking at. */
   function gotContent(){ return !!(lastHub || body.querySelector('.reveal,.gcard,.mine,.picks')); }
+  /* Every way a request can end badly, and they are NOT the same thing:
+       - something already on screen  -> never replace it. Keep it, say it quietly, let it clear.
+       - nothing on screen, and it is the connection -> the illustrated state, with a real retry.
+       - nothing on screen, and the game is genuinely gone -> say so plainly and take the page.
+     That first rule is the one this page kept breaking. It polls every 20 seconds and every failure
+     path called msg(), which rewrites the whole body, so one blip or one 500 used to swap a
+     grandmother's confirmed guess (or a reveal she was reading) for a bare line with nothing to tap.
+     Re-render BEFORE the quiet line, because renderHub/renderLegacy rewrite innerHTML and would wipe
+     a flash inserted first. */
+  function failSoft(quietLine, hardTitle, hardBody){
+    if(gotContent()){
+      if(lastHub) renderHub(lastHub); else if(lastLegacy) renderLegacy(lastLegacy);
+      flash(quietLine); return;
+    }
+    if(hardTitle) msg(hardTitle, hardBody); else offlineCard();
+  }
   function offlineCard(){
     body.innerHTML='<div class="goff">'
       +'<img src="/app/spot-art/offline_balloon.webp" alt="" width="512" height="512" onerror="this.style.display=\'none\'">'
@@ -213,11 +229,11 @@
         if(!x.ok){
           if(x.d&&x.d.error==='closed'){ flash('The reveal already happened 🤍'); loadHub(); return; } // re-fetch to show the result
           var msgs={full:'This pool is full 🤍',rate_limited:'One moment, then try again 🤍',bad_input:'That guess did not go through, try again.'};
-          if(lastHub) renderHub(lastHub); flash((x.d&&msgs[x.d.error])||'Could not save, please try again.'); return;
+          failSoft((x.d&&msgs[x.d.error])||'Could not save, please try again.'); return;
         }
         var m=hubMine(); m.guesses=m.guesses||{}; m.guesses[gameId]=guess; setHubMine(m); renderHub(x.d);
       })
-      .catch(function(){ if(lastHub) renderHub(lastHub); flash('Offline? We could not save your guess.'); });
+      .catch(function(){ failSoft('Offline? We could not save your guess.'); });
   }
 
   // Pause auto-refresh only while a guest is mid-entry (an input focused, or a date typed but unsubmitted),
@@ -228,8 +244,13 @@
   }
 
   function loadHub(){ apiGet('/api/hub/'+enc(code), function(x){ if(x.ok){ refresh=loadHub; renderHub(x.d); return true; } return false; }, function(x){
-      if(x&&x.d&&x.d.error==='server_config'){ msg('Almost ready','This game space is not switched on yet. Check back soon 🤍'); return; }
-      loadLegacy(); // not a hub -> maybe a legacy single game
+      if(x&&x.d&&x.d.error==='server_config'){ failSoft('Not switched on yet 🤍','Almost ready','This game space is not switched on yet. Check back soon 🤍'); return; }
+      /* Falling through to the legacy game is FIRST-LOAD discovery: "this code is not a hub, so maybe
+         it is an old single game". During the 20-second poll we already know what this code is, and
+         probing the legacy endpoint would 404 and end in "Game not found" over the top of a hub that
+         is perfectly fine. */
+      if(lastHub){ failSoft('Could not refresh just now.'); return; }
+      loadLegacy();
   }); }
 
   // ================= LEGACY MODE (single boy-or-girl game) =================
@@ -255,28 +276,25 @@
     [].forEach.call(document.querySelectorAll('.pick'),function(b){b.disabled=true;});
     fetch('/api/game/'+enc(code)+'/guess',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({nickname:nick,guess:g,note:why})})
       .then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});})
-      .then(function(x){ if(!x.ok){ msg('Could not save','Please try again in a moment.'); return; } try{localStorage.setItem(gkey,JSON.stringify({nickname:nick,guess:g}));}catch(e){} renderLegacy(x.d); })
-      .catch(function(){ if(lastLegacy) renderLegacy(lastLegacy); flash('Offline? We could not save your guess.'); });
+      .then(function(x){ if(!x.ok){ failSoft('Could not save your guess, try again.','Could not save','Please try again in a moment.'); return; } try{localStorage.setItem(gkey,JSON.stringify({nickname:nick,guess:g}));}catch(e){} renderLegacy(x.d); })
+      .catch(function(){ failSoft('Offline? We could not save your guess.'); });
   }
   function loadLegacy(){ apiGet('/api/game/'+enc(code), function(x){ if(x.ok){ refresh=loadLegacy; renderLegacy(x.d); return true; } return false; }, function(x){
-      if(x&&x.d&&x.d.error==='server_config'){ msg('Almost ready','This guessing game is not switched on yet. Check back soon 🤍'); }
-      else { msg('Game not found','This guessing game may have ended, or the link is off by a letter.'); }
+      if(x&&x.d&&x.d.error==='server_config'){ failSoft('Not switched on yet 🤍','Almost ready','This guessing game is not switched on yet. Check back soon 🤍'); }
+      else { failSoft('Could not refresh just now.','Game not found','This guessing game may have ended, or the link is off by a letter.'); }
   }); }
 
   // ---- shared fetch: cb(resultObj) on success (return true if handled), onFail(resultObj) otherwise ----
   function apiGet(path, cb, onFail){
     fetch(path).then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};},function(){return {ok:r.ok,d:null};});})
       .then(function(x){ if(!cb(x) && onFail) onFail(x); })
-      .catch(function(){ if(!gotContent()){ offlineCard(); return; }
-      // Re-render FIRST, then say it: renderHub rewrites body.innerHTML, so a flash inserted before it
-      // is wiped by it and the guest is told nothing at all.
-      if(lastHub) renderHub(lastHub); flash('Offline? We could not refresh just now.'); });
+      .catch(function(){ failSoft('Offline? We could not refresh just now.'); });
   }
 
   function start(){ if(!code){ msg('Hmm','That link looks incomplete.'); return; } loadHub(); }
   // QA/debug hook. loadHub is exposed so tools/offline_gate.js can drive the real failure path with
   // the API blocked, rather than testing a stand-in for it.
-  window.guestGame={renderHub:renderHub,renderLegacy:renderLegacy,loadHub:loadHub,gotContent:gotContent};
+  window.guestGame={renderHub:renderHub,renderLegacy:renderLegacy,loadHub:loadHub,loadLegacy:loadLegacy,submitLegacy:submitLegacy,gotContent:gotContent};
   start();
   setInterval(function(){
     if(refresh===loadHub){ var m=hubMine(); if(m.nickname && lastHub && !pollPaused()) loadHub(); }
