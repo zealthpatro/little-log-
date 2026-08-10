@@ -142,3 +142,39 @@ A guardrail is real only when it is blocking, owned, and checked at the moment o
 - Quarterly guardrail review: anything routinely marked N/A is either wrong (fix it) or being ignored
   (re-enforce it).
 - The charter wins ties: when a guardrail and a deadline conflict, the guardrail holds.
+
+## Visual audits: measure the whole surface, never the viewport
+
+**Added 2026-08-10, after three consecutive padding fixes were made against the top fifth of one
+screen.** The two most visible problems in the whole piece of work were sitting below the fold the
+entire time: a quick-log tile stranded beside a hole exactly its own size, and a notes empty state
+centred inside an otherwise left-aligned card so it read as two cards stacked. Neither is subtle.
+Both were invisible to every audit until somebody said "scroll down".
+
+The root cause is not carelessness, it is instrumentation. **Cubby scrolls inside `#scroll`, not the
+document, so puppeteer's `fullPage: true` silently captures the viewport and nothing else.** Every
+measurement inherited that lie without anyone noticing.
+
+Any visual audit from here follows these, and they are the reason `tools/pad_audit.js` is committed
+rather than thrown away after use:
+
+1. **Render the whole surface.** Set a viewport taller than the content so nothing is below any
+   fold. If you cropped a screenshot in order to look at it, you did not audit it.
+2. **Walk every tab.** Home, Log, Album, Health, Settings. The first full run found six more drifted
+   cards on tabs nobody had ever measured.
+3. **Measure the rendered page, not the stylesheet.** Reading CSS finds declarations; rendering
+   finds what the eye actually compares. Seven different text positions on one screen were invisible
+   in the source.
+4. **Tiles before cards.** A full-width card moving 1-3px is invisible. Tiles sit in grids where the
+   eye compares them directly, which is where drift is legible.
+5. **Price the fix at the narrowest supported width before making it.** `.today-strip` looked like
+   the worst outlier on the page; changing it wrapped "1h 40m" onto two lines at 320px. A metric
+   nobody can see is not worth a wrap everybody can.
+6. **Every exclusion carries a written reason.** A first run flagged twenty-two things, most of them
+   correct. An audit whose output is mostly noise gets skimmed, then ignored.
+7. **The instrument reports, the gate blocks.** `tools/pad_audit.js` reports; `tools/grid_check.js`
+   is the blocking check in CI. Keeping them separate lets the audit stay noisy enough to be useful
+   and the gate strict enough to be trusted.
+
+**Owner:** whoever changes shipped layout. **Blocking check:** `node tools/grid_check.js`, in CI on
+every push and PR.
