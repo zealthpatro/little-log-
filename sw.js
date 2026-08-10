@@ -39,7 +39,7 @@
    filled on install, and install only runs when THIS file's bytes change, so editing offline.html
    alone leaves every browser that already has it holding the old copy indefinitely. Same discipline as
    app/sw.js, for the same reason, and here it is easy to forget because the page lives in another file. */
-const CACHE = 'cubby-site-v1';
+const CACHE = 'cubby-site-v2';
 const PREFIX = 'cubby-site-';
 const OFFLINE = '/offline.html';
 /* Exactly one file, and that is the point. The offline page carries its own picture inline as a data
@@ -48,12 +48,29 @@ const OFFLINE = '/offline.html';
    entry also means there is no second thing that can go stale or go missing. */
 const ASSETS = [OFFLINE];
 
+/* Store a RECONSTRUCTED response, never the one the network handed back.
+   Cloudflare answers /offline.html with a 307 to /offline, so the fetched response carries
+   `redirected: true` — and a navigation request has `redirect: 'manual'`, which makes respondWith() of
+   a redirected response throw. The symptom was the cache being correctly populated and the page still
+   failing with ERR_FAILED, in production ONLY: the local dev server returns 200 with no redirect, so no
+   amount of local testing could see it. Copying the body into a fresh 200 drops the redirect chain and
+   makes the entry safe to serve to a navigation whatever the host does with URLs. */
+function putClean(c, url) {
+  return fetch(new Request(url, { cache: 'reload', redirect: 'follow' }))
+    .then((r) => (r && r.ok
+      ? r.text().then((html) => c.put(url, new Response(html, {
+        status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' }
+      })))
+      : null))
+    .catch(() => { });
+}
+
 self.addEventListener('install', (e) => {
-  // Per-entry catch rather than addAll: with one entry it is the same thing today, but it means adding
-  // a second asset later can never take the offline page down with it on install.
+  // Per-entry rather than addAll: with one entry it is the same thing today, but it means adding a
+  // second asset later can never take the offline page down with it on install.
   e.waitUntil(
     caches.open(CACHE)
-      .then((c) => Promise.all(ASSETS.map((u) => c.add(new Request(u, { cache: 'reload' })).catch(() => { }))))
+      .then((c) => Promise.all(ASSETS.map((u) => putClean(c, u))))
       .then(() => self.skipWaiting())
   );
 });
@@ -78,7 +95,7 @@ function ensureOffline() {
   if (_checked) return;
   _checked = true;
   caches.open(CACHE)
-    .then((c) => c.match(OFFLINE).then((hit) => (hit ? null : c.add(new Request(OFFLINE, { cache: 'reload' })))))
+    .then((c) => c.match(OFFLINE).then((hit) => (hit ? null : putClean(c, OFFLINE))))
     .catch(() => { });
 }
 

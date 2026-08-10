@@ -123,7 +123,22 @@ async function offlineEverywhere(browser, page, off) {
   ck(/saved on your phone/.test(off.text || ''), 'and that her logs are safe', (off.text || '').slice(0, 120));
   ck(off.art === true, 'with the balloon actually rendered from cache', String(off.art));
   ck(off.retry, 'and something to tap');
-  await p.screenshot({ path: '/tmp/site-offline.png' });
+  try { await p.screenshot({ path: '/tmp/site-offline.png' }); } catch (e) { /* the page may be an error page */ }
+
+  /* The cached entry must not be a REDIRECTED response. Cloudflare answers /offline.html with a 307 to
+     /offline, and respondWith() of a redirected response to a navigation (redirect: 'manual') throws —
+     so the cache looked perfect, every local assertion passed, and production failed with ERR_FAILED.
+     This is the assertion that would have caught it, and it is why this gate must also be run against
+     the live host: no local server rewrites URLs, so nothing local can reproduce it. */
+  const stored = await p.evaluate(async () => {
+    const r = await caches.match('/offline.html');
+    if (!r) return { missing: true };
+    return { redirected: r.redirected, type: r.type, status: r.status, url: r.url };
+  });
+  ck(!stored.missing, 'the offline page is in the cache to inspect');
+  ck(stored.redirected === false, 'and it is NOT a redirected response, which a navigation cannot be given',
+    JSON.stringify(stored));
+  ck(stored.status === 200, 'stored as a plain 200', JSON.stringify(stored));
 
   console.log('\n5. offline, the app is untouched by all this');
   const appOff = await p.goto(BASE + '/app/', { waitUntil: 'domcontentloaded' })
