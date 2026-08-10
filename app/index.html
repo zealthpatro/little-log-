@@ -1299,8 +1299,15 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
    looked empty or writable. This says what would go here, in plain words, before the quote. */
 .note-empty .qod-none{font-size:14px;font-weight:800;color:var(--ink);}
 .note-empty .qod-hint{font-size:13px;font-weight:600;color:var(--ink-soft);line-height:1.45;max-width:44ch;margin:4px 0 14px;}
-.note-empty .qod{font-family:var(--font-display);font-size:17px;font-weight:500;font-style:italic;color:var(--ink);line-height:1.5;max-width:44ch;margin:0;}
-.note-empty .qod-by{font-family:'Caveat',cursive;font-size:16px;font-weight:700;color:var(--ink-soft);margin-top:8px;}
+/* And the quote has to keep LOOKING like a quote. It was still carrying both of the signals the comment
+   above calls the original bug: the display face, and a Caveat byline — the same handwriting `.nt-by`
+   uses for the person who actually wrote a note. At 17px it was also the largest text in the card, above
+   the heading. Centring was the only thing left holding the two apart, and when the lane became one
+   left-aligned column that went, so a parent opening an empty lane read the quote as a note somebody
+   had left her. Now: body face, a step DOWN from the heading, quieter ink, and a hairline that makes it
+   a footer inside the empty state rather than its content. The alignment stays as the column wants it. */
+.note-empty .qod{font-family:var(--font-body);font-size:13.5px;font-weight:600;font-style:italic;color:var(--ink-soft);line-height:1.5;max-width:44ch;margin:0;padding-top:12px;border-top:1px solid var(--line);}
+.note-empty .qod-by{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-faint);margin-top:6px;}
 .ds-recap{cursor:pointer;}
 .ds-more{display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:800;color:var(--ink-soft);}
 .ds-more svg{width:13px;height:13px;}

@@ -243,7 +243,39 @@ const where = r => JSON.stringify(r.order);
   ck(scroll.stBefore - scroll.stAfter === scroll.foot, 'the scroll gave back exactly the card footprint', scroll.stBefore + ' -> ' + scroll.stAfter + ', footprint ' + scroll.foot);
   ck(Math.abs(scroll.after - scroll.before) <= 2, 'and Quick log stayed put', Math.round(scroll.before) + ' -> ' + Math.round(scroll.after));
 
-  console.log('\n14. the unread marker takes up no space');
+  console.log('\n14. the quote of the day cannot look like a note');
+  /* This has now regressed once, which is why it is a check and not a comment. The lane used to open
+     with nothing but the quote, in the display face with a Caveat byline, so a parent read it as a note
+     FROM Cubby and the lane never looked writable. Plain words were added above it and it was centred,
+     and the centring was doing more work than anyone realised: when the lane became one left-aligned
+     column the quote was still 17px display italic with a handwriting byline — larger than the heading
+     and, without the centring, indistinguishable from something somebody had left her.
+     A note carries two signals: the display face and the Caveat byline. The quote may have neither. */
+  const qod = await p.evaluate(() => {
+    state.notes = []; view = 'home'; render();
+    const sc = document.getElementById('scroll');
+    const q = sc.querySelector('.note-empty .qod'), h = sc.querySelector('.note-empty .qod-none');
+    const by = sc.querySelector('.note-empty .qod-by');
+    if (!q || !h || !by) return { missing: true };
+    const px = (n) => parseFloat(getComputedStyle(n).fontSize);
+    const fam = (n) => getComputedStyle(n).fontFamily.toLowerCase();
+    const noteBy = sc.querySelector('.note-card .nt-by');
+    return {
+      quoteSize: px(q), headSize: px(h),
+      quoteFam: fam(q), byFam: fam(by),
+      // What a REAL note's byline uses, read from the app rather than hardcoded here.
+      realNoteByFam: noteBy ? fam(noteBy) : 'caveat',
+      separated: getComputedStyle(q).borderTopStyle !== 'none' || parseFloat(getComputedStyle(q).marginTop) >= 12,
+    };
+  });
+  ck(!qod.missing, 'the empty lane renders its three parts');
+  ck(qod.quoteSize < qod.headSize, 'the quote is smaller than the heading above it, not larger',
+    qod.quoteSize + 'px vs ' + qod.headSize + 'px');
+  ck(!/fraunces|caveat/.test(qod.quoteFam), 'and not in the display or handwriting face', qod.quoteFam);
+  ck(!/caveat/.test(qod.byFam), 'its byline is not the handwriting a real note signs with', qod.byFam);
+  ck(qod.separated, 'and it is separated from the words above it, so it reads as a footer');
+
+  console.log('\n15. the unread marker takes up no space');
   // It shipped as a real border plus padding (3 + 11 - 2), which shoved the whole Notes lane 12px
   // right of "The day" and the photos below it — only in the unread state, which is the one a parent
   // is most likely looking at. Drawn as a pseudo-element now, so the lane cannot move.
@@ -273,7 +305,7 @@ const where = r => JSON.stringify(r.order);
   ck(align.unread.notes === align.read.notes, 'and the lane does not move when a note arrives unread',
     align.read.notes + ' -> ' + align.unread.notes);
 
-  console.log('\n15. stepping back a day');
+  console.log('\n16. stepping back a day');
   const nav = await p.evaluate(async () => {
     state.notes = []; render();
     const sc = document.getElementById('scroll'); sc.scrollTo(0, 0);
@@ -284,7 +316,7 @@ const where = r => JSON.stringify(r.order);
   });
   ck(nav.bottom > 0 && nav.top < nav.vh, 'the surface stays on screen — the arrows live inside it', Math.round(nav.top) + 'px of ' + nav.vh);
 
-  console.log('\n16. clean console');
+  console.log('\n17. clean console');
   ck(errs.length === 0, 'no uncaught page errors', errs.join(' | '));
 
   console.log('\n' + (fails ? 'FAIL' : 'PASS') + ' — ' + passes + ' passed, ' + fails + ' failed');
