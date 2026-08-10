@@ -1,6 +1,6 @@
 /* Cubby service worker.
    Bump CACHE on every deploy so old assets are cleared. */
-const CACHE = 'little-log-v280';
+const CACHE = 'little-log-v281';
 const ASSETS = [
   '/app/',
   '/app/index.html',
@@ -30,6 +30,14 @@ const ASSETS = [
   '/app/firebase-messaging-sw.js',
   '/app/landing.js',
   '/app/manifest.webmanifest',
+  /* The ONE illustration in the precache, and the only one that earns it: it is the artwork for the
+     connectivity states, so the moment it is needed is the moment the network is gone. Everything
+     below this handler falls back to `cached || undefined` for a non-HTML miss, which means an image
+     that was never fetched while online does not render at all — a missing picture on the screen whose
+     whole job is to explain a missing network. The other twelve spot illustrations stay out: they
+     belong to screens a parent reaches with a connection, and 250KB on every offline launch to
+     decorate an empty Rituals tab is not a trade worth making. 22KB. */
+  '/app/spot-art/offline_balloon.webp',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/apple-touch-icon.png',

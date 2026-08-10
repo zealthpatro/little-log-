@@ -93,11 +93,20 @@ negatives: *"ONLY stars and sparkles. Absolutely no balloon, no hot air balloon,
 no object of any kind, no central subject, nothing in the middle of the frame."* When a piece is
 meant to be texture rather than a thing, say that it has no centre.
 
-**`app/poster-art/poster_hotair.webp` is that mistake, kept.** It is a genuinely nice painted balloon,
-it ships, and nothing loads it — it is not in `POSTER_ART`. There is deliberately no prompt for it in
-the jobs file, because the prompt that made it asked for stars and recording it would be a lie about
-how to reproduce it. Either place it as furniture or drop the file; do not leave it half-alive
-indefinitely.
+**That mistake is now the app's connectivity illustration.** The balloon was a genuinely nice painting
+that nothing loaded, so it moved out of the poster set entirely: `app/poster-art/poster_hotair.webp` ->
+`app/spot-art/offline_balloon.webp`, cut out of its white ground by `tools/cutout_white.py` and used
+for the offline and network-error states. A balloon is the right picture for "briefly out of reach, and
+coming back down". There is deliberately no prompt for it in the jobs file: the prompt that made it
+asked for a field of stars, and recording that as its recipe would be a lie about how to reproduce it.
+
+Note what that move required, because it applies to any piece taken from here into the app UI. Poster
+art is painted on white and composited with `multiply`, which needs no alpha channel. The app's spot
+illustrations are **cut out**, because `--spot-paper` is a cream disc in Light and *transparent* in
+Night, so a piece still carrying its white ground renders as a glaring white disc on a dark screen.
+`tools/cutout_white.py` does that conversion: a flood fill inwards from the border so enclosed pale
+areas survive, and an un-multiplied edge so the soft watercolour rim is paint rather than paint mixed
+with paper.
 
 ## Do not
 

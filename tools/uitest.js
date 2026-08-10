@@ -38,6 +38,12 @@ const CONTRAST_STEPS = [
      a running timer paints a gradient banner, which is exactly the case the probe used to
      mis-read as 1.0 because it only saw backgroundColor. */
   ['sheet: note', "closeSheet(); openNoteCompose()"],
+  /* The connectivity card, seeded by hand because nothing can drive it: it appears when the network
+     is gone, which is the one condition this harness cannot reach. It carried hardcoded literals for
+     months (#2C2521 heading on a near-black Night background, about 1.1:1) precisely because no theme
+     walk had ever looked at it, and its whole job is to explain itself to somebody at 3am. Painted
+     into #scroll rather than over the body so the steps after it are unaffected. */
+  ['connectivity card', "closeSheet(); go('home'); var _c=document.createElement('div'); _c.innerHTML=window.cubbyConnCard({title:'We can\\u2019t reach your Cubby',body:'You look offline. Anything already saved on this phone is still here, safe. Try again once you have a connection.'}); document.getElementById('scroll').appendChild(_c)"],
   ['rituals', "closeSheet(); go('log'); typeof setLogTab==='function' && setLogTab('rituals')"],
   /* Set in memory rather than via startSleep(): that persists, which kicks off a sync the offline
      test page retries forever, and the next page.goto never reaches networkidle2. */

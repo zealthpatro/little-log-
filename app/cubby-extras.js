@@ -419,7 +419,7 @@
       var done = false;
       function fail(e) {
         if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
-        if (typeof toast === 'function') toast(window.cubbyErrText ? window.cubbyErrText(e, 'Could not save your bear just now. Mind trying again?') : 'Could not save your bear just now. Mind trying again?');
+        if (typeof toast === 'function') toast(window.cubbyErrText ? window.cubbyErrText(e, 'Could not save your bear just now. Mind trying again?', true) : 'Could not save your bear just now. Mind trying again?');
       }
       // Optimistic exit (same 6s pattern as the first-run sheet): the write lands in the local
       // cache immediately and syncs later, so the picker never hangs on a slow or absent network.

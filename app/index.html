@@ -719,10 +719,26 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .rt-empty .es-bear{margin:4px auto 12px;}
 @keyframes esRise{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
 @media(prefers-reduced-motion:reduce){.es-bear{animation:none;}}
+/* The connectivity card (window.cubbyConnCard, defined in firebase-init.js so it exists before the
+   app does). Same family as the spot empty states, so it inherits the theme, the single entrance
+   rise and the reduced-motion rule instead of reinventing them. Centred in the viewport because on
+   the SDK-failure path it IS the whole page: it replaces document.body. */
+.conn-card{max-width:340px;margin:18vh auto 0;}
+.conn-card p{font-family:var(--font-display);font-size:21px;font-weight:600;color:var(--ink);margin-bottom:7px;}
+.conn-card span{display:block;font-size:14px;line-height:1.5;}
+/* No disc behind this one. The cubs sit on a cream --spot-paper because they were painted on a baked
+   ground; the balloon is cut out and comes with its own scattered stars, and a circle would clip them
+   and take the sky away with them. */
+.es-balloon{width:150px;height:150px;border-radius:0;background:none;}
+/* The container animates too, and the es-bear rule above only stills the picture. */
+@media(prefers-reduced-motion:reduce){.conn-card{animation:none;}}
 /* The door lives in the empty state itself (Mobbin punch list #1), not directions to another tab. */
 /* Inverted pill, the same shape as .toast: the fill is the ink colour, so the label has to be the
    page colour. It was a literal cream, which in Night put near-white on a cream fill at 1.2:1. */
-.es-cta{display:inline-flex;align-items:center;gap:6px;margin-top:14px;border:none;cursor:pointer;background:var(--toast-bg);color:var(--on-ink);font-family:var(--font-body);font-weight:800;font-size:13.5px;padding:10px 18px;border-radius:99px;}
+/* min-height because 10px of padding around 13.5px type measured 39px, under the 44px touch target
+   the guardrails require, and no gate checks it. This is the door out of every cold screen and the
+   only affordance on the connectivity card. */
+.es-cta{display:inline-flex;align-items:center;justify-content:center;gap:6px;margin-top:14px;min-height:44px;border:none;cursor:pointer;background:var(--toast-bg);color:var(--on-ink);font-family:var(--font-body);font-weight:800;font-size:13.5px;padding:10px 18px;border-radius:99px;}
 
 .fade-in{animation:rise .45s cubic-bezier(.2,.9,.3,1);}
 @keyframes rise{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}

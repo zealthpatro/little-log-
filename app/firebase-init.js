@@ -2,20 +2,54 @@
    These config values are public by design (Firebase web config is not a secret).
    Security is enforced by Firestore rules, not by hiding this. */
 (function () {
+  /* ---- the connectivity card ----------------------------------------------------------------
+     One illustrated state for the places the network can genuinely strand a parent, built here
+     because this is the earliest precached file in the boot chain: the SDK guard below needs it
+     before a single app helper exists, and store-firebase.js reuses it for "signed in, but we
+     cannot reach your Cubby". Two callers, one card, so the two can never drift apart.
+
+     It is built from the shell's own classes and theme tokens, NOT from hardcoded colours. The
+     <head> <style> survives a body wipe, so `.empty-state` / `.es-bear` / `.es-cta` and every
+     theme variable are available even on this path. The literals this used to carry (#2C2521 on a
+     near-black night background) put the heading at roughly 1.1:1 in the one state whose entire
+     job is to explain itself to somebody at 3am.
+
+     The picture is the painted balloon: briefly out of reach, and coming back down. It is the only
+     illustration in the service worker's precache (app/sw.js) precisely because this is the moment
+     the network is gone; `onerror` still hides it rather than leaving a broken-image box, since a
+     blank or broken screen is itself an anxiety state.
+
+     Copy rules that bind (DESIGN.md A7, and the charter's calm-by-default): second person, sentence
+     case, no em-dash, no red, no exclamation mark, nothing that reads as blame. And the body answers
+     the question a parent actually has, which is whether what she logged is safe, not what her
+     network is doing. role="status" because until now every connectivity message Cubby has ever
+     shown was announced to nobody using a screen reader. */
+  window.cubbyConnCard = function (o) {
+    o = o || {};
+    return '<div class="empty-state conn-card fade-in" role="status" aria-live="polite">'
+      + '<img class="es-bear es-balloon" src="/app/spot-art/offline_balloon.webp" alt=""'
+      + ' width="512" height="512" onerror="this.style.display=\'none\'">'
+      + '<p>' + (o.title || 'Cubby needs a moment') + '</p>'
+      + '<span>' + (o.body || 'We could not finish loading. Check your connection, then try again.') + '</span>'
+      + (o.action === false ? ''
+        : '<br><button class="es-cta" type="button" onclick="' + (o.action || 'location.reload()') + '">'
+          + (o.label || 'Try again') + '</button>')
+      + '</div>';
+  };
+
   /* If the SDK didn't load, say so instead of dying. Without this guard the next line throws
      ReferenceError BEFORE window.LL is assigned, store-firebase.js then throws TypeError reading
      window.LL.auth, and the whole boot state machine dies silently — leaving the parent on the static
      "Loading the app..." fallback forever, with no error and nothing to tap. A parent at 3am needs to
-     be told it's the connection, not left staring at a dead screen. */
-  if (typeof firebase === 'undefined' || !firebase.initializeApp) {
+     be told it's the connection, not left staring at a dead screen.
+     The guard tests auth and firestore too, not just initializeApp. The four SDK files are four
+     separate requests, so a connection that drops midway can land firebase-app and not
+     firebase-firestore: initializeApp exists, this guard used to pass, and then firebase.firestore()
+     below threw OUTSIDE the try. Same dead screen, and this time with no card at all. */
+  if (typeof firebase === 'undefined' || !firebase.initializeApp || !firebase.auth || !firebase.firestore) {
     try {
       var ov = document.getElementById('llAuthOv') || document.body;
-      ov.innerHTML = '<div style="max-width:320px;margin:22vh auto;text-align:center;font-family:\'Nunito Sans\',system-ui,sans-serif;color:#2C2521">'
-        + '<div style="font-size:40px">🐻</div>'
-        + '<h1 style="font-family:Fraunces,Georgia,serif;font-size:22px;margin:10px 0 8px">Cubby needs a moment</h1>'
-        + '<p style="font-size:15px;line-height:1.5;color:#6E635B;margin:0 0 16px">We could not finish loading. Check your connection and try again.</p>'
-        + '<button onclick="location.reload()" style="border:none;background:#C97FA0;color:#fff;font-family:inherit;font-weight:800;font-size:15px;padding:13px 22px;border-radius:14px;cursor:pointer">Try again</button>'
-        + '</div>';
+      ov.innerHTML = window.cubbyConnCard();
     } catch (e) {}
     return;
   }

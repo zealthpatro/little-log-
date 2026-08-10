@@ -1,5 +1,71 @@
 # Cubby — Changelog
 
+## v0.18.0 — 2026-08-10 — the connectivity states get a picture, and stop promising things they cannot do
+
+Service worker `little-log-v280` -> `little-log-v281`.
+
+**A painted hot-air balloon now carries the states where a lost signal actually strands somebody.** It
+started as a mistake: a prompt asking for a field of stars came back as a balloon, and the file shipped
+for weeks with nothing loading it. It is the right picture for briefly out of reach and coming back
+down, so it moved out of the poster set (`app/poster-art/poster_hotair.webp` ->
+`app/spot-art/offline_balloon.webp`).
+
+Moving it needed real surgery, and the reason generalises. Poster art is painted on **white**, because
+the poster canvas composites with `multiply` and gets transparency for free. The app's spot
+illustrations are **cut out**, because `--spot-paper` is a cream disc in Light and *transparent* in
+Night. Dropped in as-is the balloon would have been a glaring white circle on every dark screen, which
+is the "headlight" the existing code comments warn about. `tools/cutout_white.py` does the conversion:
+a flood fill inwards from the border so enclosed pale areas and the scattered stars survive, and an
+un-multiplied edge so the soft watercolour rim reads as paint rather than paint mixed with paper.
+
+It is also **the only illustration in the service worker's precache**, because the moment it is needed
+is the moment the network is gone: the fetch handler resolves an uncached non-HTML miss to nothing, so
+an offline state would have tried to fetch its own artwork over the dead connection and shown a blank
+box. The other thirteen spot cubs stay out; they decorate screens a parent reaches with a connection.
+
+**Where it landed, out of 34 connectivity surfaces mapped.** Most are not errors at all: a feed logged
+offline lands in the local cache and syncs itself, and dressing that up as a problem is the
+alarm-about-nothing the charter forbids. Three places genuinely leave somebody with nothing to look at.
+
+The **SDK-failed-to-load** card (`app/firebase-init.js`) was the only full-screen connectivity state
+Cubby had. It carried a 40px bear emoji and hardcoded colours, which put its heading at roughly **1.1:1
+in Night** — invisible, in the one state whose entire job is to explain itself to somebody at 3am. It
+now uses the shell's own classes and theme tokens (the `<head>` style survives the body wipe), carries
+the balloon, and is the app's first `role="status"` region, because until now every connectivity
+message Cubby has ever shown was announced to nobody using a screen reader. Its guard also tests
+`auth` and `firestore`, not just `initializeApp`: the four SDK files are four separate requests, and a
+connection that dropped midway used to satisfy the old guard and then throw *outside* the try, leaving
+a dead screen with no card at all.
+
+**Signed in, but the household could not be read** used to fall through to the marketing landing, with
+"Continue with Google" on top of a parent who is signed in. To her that reads as "you have been logged
+out and your data is gone" — frightening, and untrue. The connectivity card takes that screen now.
+
+**The guest games page** (`g/index.html`) is where a grandmother lands with no app and no service
+worker, and every failure path there wiped the whole body. One blip during its 20-second poll replaced
+her rendered game and her confirmed guess with a bare "Offline?" line and nothing to tap. Now a failed
+*first* load gets the illustrated state with a real Try again button (this page had no retry control at
+all), and a failed *refresh* keeps every word she was looking at and says so in a line that clears
+itself.
+
+**And the copy stopped over-promising.** `errText` mapped every offline failure to "Cubby will pick this
+up when you're back". That is a guarantee backed by `enablePersistence` and it is true of a queued
+write. It is false of sending a sign-in link, finishing sign-in, or loading your data: nothing is
+queued, no link arrives when you are back, and nobody would ever tell her it had not. The promise is
+now opt-in per call site and the default says what is actually true, following the truthful-copy
+precedent that a claim gets weakened rather than kept.
+
+Also: `.es-cta`, the door out of every cold screen, measured **39px** against the 44px touch target the
+guardrails require, and no gate checked it. It does now.
+
+**New blocking gate:** `tools/offline_gate.js` (32 assertions), plus the connectivity card added to
+`tools/uitest.js`'s contrast walk so it is measured in both themes from here on. See OPERATIONS.md.
+
+**Known limit, deliberately not fixed:** with no connection, a "good read" link gives you the browser's
+own error page. The service worker registers from `/app/index.html`, so its scope is `/app/` and it
+never sees `/articles/*`. Putting our own page there means moving the worker to root scope, which
+changes caching for 661 article pages.
+
 ## v0.17.0 — 2026-08-10 — the birth poster becomes a keepsake, and home stops shouting about nothing
 
 Service worker `little-log-v262` -> `little-log-v276`. All live on little-cubby.com (deploys from `main`).

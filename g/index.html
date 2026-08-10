@@ -68,6 +68,14 @@
   .cta{display:block;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);}
   .cta .t{font-size:14px;font-weight:700;color:var(--soft);line-height:1.5;margin-bottom:10px;}
   .cta a{display:inline-block;background:var(--girl);color:#fff;font-size:15px;font-weight:800;text-decoration:none;padding:12px 22px;border-radius:14px;}
+  /* Offline, on first load. The painted balloon: briefly out of reach, and coming back down. This
+     page registers no service worker, so the picture only arrives if the browser already holds it;
+     onerror hides it and the words carry the state on their own. */
+  .goff{text-align:center;padding:22px 6px 6px;}
+  .goff img{width:140px;height:140px;display:block;margin:0 auto 12px;}
+  .goff .t{font-size:20px;font-weight:800;margin-bottom:6px;}
+  .goff .s{font-size:14px;color:var(--soft);font-weight:600;line-height:1.5;margin-bottom:16px;}
+  .goff button{min-height:44px;border:none;background:var(--girl);color:#fff;font-family:inherit;font-size:15px;font-weight:800;padding:12px 22px;border-radius:14px;cursor:pointer;}
 </style>
 </head>
 <body>
@@ -91,10 +99,29 @@
     if(navigator.share){ navigator.share({title:'Cubby family games',text:'Guess boy or girl, and the day baby arrives 🐻',url:url}).catch(function(){}); }
     else if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(url).then(function(){ gshare.textContent='Link copied 🔗'; setTimeout(function(){ gshare.textContent='🔗 Share this game'; },1600); }).catch(function(){}); } };
   var hkey='cubby-h-'+code, gkey='cubby-g-'+code;
-  var refresh=null, lastHub=null;
+  // lastLegacy mirrors lastHub: the last state we successfully rendered, so a failed guess can put
+  // the game back on screen instead of replacing it with a message.
+  var refresh=null, lastHub=null, lastLegacy=null;
   function enc(s){return encodeURIComponent(s);}
   function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
   function msg(h,s){ body.innerHTML='<h1>'+h+'</h1>'+(s?'<div class="sub">'+s+'</div>':''); }
+  /* Is anything the guest cares about already on screen? The poll below re-fetches every 20 seconds,
+     and every failure path here wipes the whole body, so one blip on a train used to replace a
+     grandmother's rendered game (and her confirmed guess) with a bare "Offline?" line and no way
+     back. Nothing to lose = a real dead end, and the only place on this page that earns a full
+     state. Something already rendered = say it quietly and keep what she is looking at. */
+  function gotContent(){ return !!(lastHub || body.querySelector('.reveal,.gcard,.mine,.picks')); }
+  function offlineCard(){
+    body.innerHTML='<div class="goff">'
+      +'<img src="/app/spot-art/offline_balloon.webp" alt="" width="512" height="512" onerror="this.style.display=\'none\'">'
+      +'<div class="t">We can’t reach the game</div>'
+      +'<div class="s">It looks like the connection dropped. Nothing you have added is lost.</div>'
+      +'<button type="button" id="goffRetry">Try again</button></div>';
+    var r=document.getElementById('goffRetry');
+    // A retry control at all: until now this page said "try again" in words with nothing to tap, and
+    // the 20s poll only runs once something has loaded, so a failed first load never recovered.
+    if(r) r.onclick=function(){ r.disabled=true; r.textContent='Trying…'; start(); };
+  }
 
   // ---- shared (sex game) helpers, also used by the legacy single-game path ----
   function cel(r){ return r==='F'?{b:'🎀✨',h:"It's a girl!"}:r==='M'?{b:'💙✨',h:"It's a boy!"}:r==='MF'?{b:'💙🎀✨',h:"It's twins, one of each!"}:r==='FF'?{b:'🎀🎀✨',h:"It's twins, two girls!"}:r==='MM'?{b:'💙💙✨',h:"It's twins, two boys!"}:null; }
@@ -208,6 +235,7 @@
   // ================= LEGACY MODE (single boy-or-girl game) =================
   function legacyMine(){ try{return JSON.parse(localStorage.getItem(gkey)||'null');}catch(e){return null;} }
   function renderLegacy(st){
+    lastLegacy=st;
     var t=st.tally||{F:0,M:0}, m=legacyMine();
     if(st.result){ var c=cel(st.result)||{b:'🎉',h:'Revealed!'};
       body.innerHTML='<div class="brand" style="margin-bottom:8px">'+esc(st.title||'Our baby')+'</div><div class="reveal"><div class="burst">'+c.b+'</div><h2>'+c.h+'</h2><p>'+rightLine(st.result,t)+'</p></div>'+(m?'<div class="mine">You guessed '+(m.guess==='F'?'a girl 🎀':'a boy 💙')+'</div>':'')+tallyHtml(t);
@@ -228,7 +256,7 @@
     fetch('/api/game/'+enc(code)+'/guess',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({nickname:nick,guess:g,note:why})})
       .then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});})
       .then(function(x){ if(!x.ok){ msg('Could not save','Please try again in a moment.'); return; } try{localStorage.setItem(gkey,JSON.stringify({nickname:nick,guess:g}));}catch(e){} renderLegacy(x.d); })
-      .catch(function(){ msg('Offline?','We could not save your guess. Try again.'); });
+      .catch(function(){ if(lastLegacy) renderLegacy(lastLegacy); flash('Offline? We could not save your guess.'); });
   }
   function loadLegacy(){ apiGet('/api/game/'+enc(code), function(x){ if(x.ok){ refresh=loadLegacy; renderLegacy(x.d); return true; } return false; }, function(x){
       if(x&&x.d&&x.d.error==='server_config'){ msg('Almost ready','This guessing game is not switched on yet. Check back soon 🤍'); }
@@ -239,11 +267,16 @@
   function apiGet(path, cb, onFail){
     fetch(path).then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};},function(){return {ok:r.ok,d:null};});})
       .then(function(x){ if(!cb(x) && onFail) onFail(x); })
-      .catch(function(){ msg('Offline?','We could not reach the game. Check your connection and try again.'); });
+      .catch(function(){ if(!gotContent()){ offlineCard(); return; }
+      // Re-render FIRST, then say it: renderHub rewrites body.innerHTML, so a flash inserted before it
+      // is wiped by it and the guest is told nothing at all.
+      if(lastHub) renderHub(lastHub); flash('Offline? We could not refresh just now.'); });
   }
 
   function start(){ if(!code){ msg('Hmm','That link looks incomplete.'); return; } loadHub(); }
-  window.guestGame={renderHub:renderHub,renderLegacy:renderLegacy}; // QA/debug hook
+  // QA/debug hook. loadHub is exposed so tools/offline_gate.js can drive the real failure path with
+  // the API blocked, rather than testing a stand-in for it.
+  window.guestGame={renderHub:renderHub,renderLegacy:renderLegacy,loadHub:loadHub,gotContent:gotContent};
   start();
   setInterval(function(){
     if(refresh===loadHub){ var m=hubMine(); if(m.nickname && lastHub && !pollPaused()) loadHub(); }

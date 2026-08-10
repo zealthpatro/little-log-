@@ -35,11 +35,26 @@
 
   // Raw SDK errors ("client is offline", "permission-denied", "auth/…") must never reach a
   // parent's eyes. One translator, used by every catch that shows a message.
-  function errText(e, fallback) {
+  function isConnErr(e) {
     var code = (e && e.code) || '';
     var m = String((e && e.message) || '');
-    if (navigator.onLine === false || code === 'unavailable' || code === 'auth/network-request-failed' || /offline|network/i.test(m)) {
-      return 'You look offline. Cubby will pick this up when you’re back.';
+    return navigator.onLine === false || code === 'unavailable' || code === 'auth/network-request-failed' || /offline|network/i.test(m);
+  }
+  window.cubbyIsConnErr = isConnErr;
+  /* `queues` is opt-in, and that is the whole point. "Cubby will pick this up when you're back" is a
+     guarantee, not a hedge: enablePersistence means a Firestore write offline lands in the local cache
+     and the SDK delivers it later. But this one translator serves every catch in the app, and for a
+     server round trip that CANNOT happen offline the same sentence is simply false — nothing is
+     queued, no sign-in link will arrive when she is back, and nobody will ever tell her it did not.
+     The truthful-copy precedent is to weaken the claim rather than keep it, so the default is now the
+     honest weaker line and the promise has to be earned per call site. A call site misclassified this
+     way understates; the old shape over-promised. */
+  function errText(e, fallback, queues) {
+    var code = (e && e.code) || '';
+    if (isConnErr(e)) {
+      return queues
+        ? 'You look offline. Cubby will pick this up when you’re back.'
+        : 'You look offline. This part needs a connection, so give it another go when you have one.';
     }
     if (code === 'permission-denied') return 'Cubby wasn’t allowed to save that. If this keeps happening, sign out and back in.';
     if (code === 'auth/invalid-action-code' || code === 'auth/expired-action-code') return 'That sign-in link has expired or was already used. Send yourself a fresh one.';
@@ -245,6 +260,21 @@
     return ov;
   }
   function hideOverlay() { if (_statusRot) { clearInterval(_statusRot); _statusRot = null; } var ov = document.getElementById('llAuthOv'); if (ov) ov.remove(); }
+
+  /* Signed in, and we still could not reach her Cubby. This used to fall through to showSignIn(),
+     which paints the whole marketing landing with "Continue with Google" on top of a parent who IS
+     signed in. To her that reads as "you have been logged out and everything is gone" — frightening,
+     and untrue: her data is on the device and the session is intact. So the connectivity card takes
+     this screen instead, with the one action that can actually help. Stops the rotating loader lines
+     first, or they keep drifting underneath a message that says the waiting is over. */
+  function showConnTrouble(o) {
+    if (_statusRot) { clearInterval(_statusRot); _statusRot = null; }
+    if (!window.cubbyConnCard) return false;
+    var ov = overlay();
+    ov.classList.remove('landing');
+    ov.innerHTML = window.cubbyConnCard(o);
+    return true;
+  }
 
   /* Sign in with Apple button. variant 'lp' = big landing button; otherwise the
      bordered auth-card style. Uses Apple's official logo + "Continue with Apple". */
@@ -2394,7 +2424,7 @@
             openFamily();
             return;
           }
-          try { window.toast && window.toast(errText(e, 'Could not cancel that invite just now. Mind trying again?')); } catch (e2) {}
+          try { window.toast && window.toast(errText(e, 'Could not cancel that invite just now. Mind trying again?', true)); } catch (e2) {}
         });
     };
     if (window.confirmSheet) {
@@ -2588,7 +2618,7 @@
     }).catch(function (e) {
       if (done) return; done = true; clearTimeout(t);
       if (btn) { btn.disabled = false; btn.textContent = 'Save my profile'; }
-      if (msg) msg.textContent = errText(e, 'Could not save just now. Mind trying again?');
+      if (msg) msg.textContent = errText(e, 'Could not save just now. Mind trying again?', true);
     });
   }
 
@@ -2858,6 +2888,12 @@
       try { if (window.cubbyFlushPendingPush) window.cubbyFlushPendingPush(); } catch (e) {}
     } catch (err) {
       console.error(err);
+      // Losing signal is not a sign-in problem, so it must not send her back to the door. Only a
+      // genuine auth or permission failure does that.
+      if (isConnErr(err) && showConnTrouble({
+        title: 'We can’t reach your Cubby',
+        body: 'You look offline. Anything already saved on this phone is still here, safe. Try again once you have a connection.'
+      })) return;
       showSignIn(errText(err, 'Could not load your data just now. Mind trying again?'));
     }
   });

@@ -19,6 +19,7 @@ node tools/guide_test.js           # the guide + Notes lane: age bands, privacy 
 node tools/dosecal_test.js         # the dose .ics (bounded, cancellable) + multi-baby dose alerts
 node tools/vaxcard_test.js         # vaccine-card import: patch-only, never invents a dose, on-device
 node tools/noteshome_test.js       # the Notes lane: bottom by default, up only for an unread note
+node tools/offline_gate.js         # the connectivity states + which offline messages may promise a queue
 node tools/shot.js http://localhost:8080/<page>/ /tmp/x.png 390 full   # eyeball any page (see tools/shot.js)
 ```
 Working in a git worktree? `serve.js` takes `PORT=8099` and every gate takes the base URL as its
@@ -75,6 +76,14 @@ keeps a future backend swap (e.g. to Cloudflare D1) a contained job rather than 
   tracked and runnable in `docs/poster-art-jobs.json`; `docs/poster-art-brief.md` says which clauses
   in them are load-bearing (pure white ground, no numerals, generous margin) and why. `art-src/` is
   gitignored because it holds the API keys, so nothing in it counts as a record.
+- `tools/offline_gate.js` — the connectivity states: that the SDK-failure card paints (including for a
+  PARTIAL SDK load), that its artwork is precached and cut out, that the guest games page survives a
+  poll blip without wiping a guest's game, and the honesty line on offline copy — "Cubby will pick this
+  up when you're back" is opt-in per call site, because it is a guarantee for a queued write and a lie
+  for a sign-in link (`?e2e=1`)
+- `tools/cutout_white.py` — art painted on white -> a cut-out with an un-multiplied edge. Needed for any
+  piece taken from `art-src/` into the app UI: `--spot-paper` is transparent in Night, so a white ground
+  becomes a glaring disc. See docs/poster-art-brief.md
 - `tools/gen_sitemap.py` — stamps article lastmods
 - `test/` — Firestore rules emulator tests (need Java): `cd test && npm i && npm run test:rules`,
   and `npm run test:invitelink` for the tokenised invite links. **Both must be green before
