@@ -239,9 +239,23 @@
     return 'ok';
   }
 
+  /* Every row this person should be able to SEE, ignoring the budget entirely. The how-to index is
+     a pull surface, so seen, stale and the allowance are all irrelevant to it — but `who` is not.
+     Mood is owner-only and must stay owner-only here too: a caregiver finding it in a browsable
+     list would learn that a private record exists, which is most of the harm already done. */
+  function visible() {
+    var c = ctx(); if (!c) return [];
+    var R = rows(), out = [];
+    for (var id in R) {
+      if (!Object.prototype.hasOwnProperty.call(R, id)) continue;
+      if (fits(c, R[id])) out.push(id);
+    }
+    return out;
+  }
+
   window.CubbyTeach = {
     ask: ask, fire: fire, markSeen: markSeen, hasSeen: hasSeen,
-    eligible: eligible, explain: explain,
+    eligible: eligible, explain: explain, visible: visible,
     // exposed for tools/teach_gate.js
     _allowanceFor: allowanceFor, _value: value, _dayNumber: dayNumber, _now: null
   };

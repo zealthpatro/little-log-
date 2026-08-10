@@ -40,7 +40,23 @@
     + '#logGuide .tp-sk{margin-top:11px}'
     + '#logGuide .tp-sh{font-size:14px;font-weight:800;margin-bottom:2px}'
     + '#logGuide .tp-ss{font-size:13.5px;line-height:1.5;color:var(--ink-soft);font-weight:600}'
-    + '#logGuide .tp-src{font-size:12px;color:var(--ink-soft);font-weight:700;margin-top:12px;opacity:.8}';
+    + '#logGuide .tp-src{font-size:12px;color:var(--ink-soft);font-weight:700;margin-top:12px;opacity:.8}'
+    // the how-to index: native <details>, so open state, keyboard and reduced motion are free
+    + '#logGuide .ht-dh{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);margin:24px 0 9px}'
+    + '#logGuide .ht-i{border:1.5px solid var(--line);background:var(--surface);border-radius:14px;margin-bottom:8px;overflow:hidden}'
+    + '#logGuide .ht-i>summary{list-style:none;cursor:pointer;padding:12px 14px;min-height:44px;display:block}'
+    + '#logGuide .ht-i>summary::-webkit-details-marker{display:none}'
+    + '#logGuide .ht-i>summary::marker{content:""}'
+    + '#logGuide .ht-t{display:flex;align-items:center;gap:8px;font-size:14.5px;font-weight:800}'
+    + '#logGuide .ht-t .ht-c{margin-left:auto;color:var(--ink-soft);font-size:13px;font-weight:800;transition:transform .18s ease}'
+    + '#logGuide .ht-i[open] .ht-t .ht-c{transform:rotate(90deg)}'
+    + '#logGuide .ht-o{font-size:13.5px;line-height:1.45;color:var(--ink-soft);font-weight:600;margin-top:3px}'
+    + '#logGuide .ht-b{padding:0 14px 13px;border-top:1px solid var(--divider,var(--line))}'
+    + '#logGuide .ht-w{font-size:14px;line-height:1.5;font-weight:700;margin:11px 0 6px}'
+    + '#logGuide .ht-g{font-size:14px;line-height:1.5;color:var(--ink-soft);font-weight:600}'
+    + '#logGuide .ht-more{margin-top:11px;border:none;border-radius:11px;padding:9px 15px;font-size:13.5px;font-weight:800;cursor:pointer;font-family:inherit;min-height:44px;background:var(--surface-2);color:var(--ink)}'
+    + '#logGuide .ht-count{font-size:13px;color:var(--ink-soft);font-weight:600;margin:2px 0 0}'
+    + '@media (prefers-reduced-motion: reduce){#logGuide .ht-i[open] .ht-t .ht-c{transition:none}}';
 
   function G() { return window.CubbyGuide; }
   function rows() { return (window.CubbyTeachData && window.CubbyTeachData.rows) || {}; }
@@ -175,9 +191,91 @@
     if (typeof window.render === 'function') window.render();
   }
 
+  /* ---- "How to use Cubby": one browsable index of everything ------------------------------------
+     Everything the app can do, grouped, collapsed, and answerable without leaving the screen. Built
+     on native <details> so the open state, keyboard access and reduced motion all come for free
+     rather than being re-implemented badly in JS.
+
+     PULL ONLY. It never opens itself and costs nothing from the allowance. It does honour `who`,
+     because a caregiver browsing a full list and finding "How are you, in yourself?" would learn
+     that a private record exists, and that is most of the harm already done.
+
+     Opening a row does NOT mark it seen. Reading one line about a feature is not the same as having
+     been taught it, and marking it would silently cancel a nudge that had something more to say. */
+  var DOMAIN_ORDER = ['log', 'health', 'preg', 'trying', 'circle', 'memories', 'account'];
+  var DOMAIN_NAME = {
+    log: 'Everyday logging', health: 'Health and getting ready for the doctor',
+    preg: 'While you are expecting', trying: 'While you are trying',
+    circle: 'Sharing, and what stays private', memories: 'Photos and keepsakes',
+    account: 'Your account and your data'
+  };
+
+  function item(id) {
+    var r = rows()[id];
+    var body;
+    if (r.depth === 'page') {
+      body = '<div class="ht-w">' + esc(r.why) + '</div>'
+        + '<button class="ht-more" onclick="CubbyTeachUI.page(\'' + id + '\')">The whole thing ›</button>';
+    } else if (r.depth === 'chapter') {
+      body = '<div class="ht-w">' + esc(r.what) + '</div><div class="ht-g">' + esc(r.get) + '</div>';
+    } else {
+      return '';   // a one-liner is already fully shown in the summary. An empty drawer is a dead tap.
+    }
+    return '<details class="ht-i"><summary>'
+      + '<span class="ht-t">' + esc(r.label) + '<span class="ht-c" aria-hidden="true">›</span></span>'
+      + '<span class="ht-o">' + esc(r.one) + '</span></summary>'
+      + '<div class="ht-b">' + body + '</div></details>';
+  }
+
+  // A one-liner has nothing behind it, so it renders as a plain row rather than a drawer that opens
+  // onto the same sentence you just read.
+  function flat(id) {
+    var r = rows()[id];
+    return '<div class="ht-i" style="padding:12px 14px">'
+      + '<span class="ht-t">' + esc(r.label) + '</span>'
+      + '<span class="ht-o">' + esc(r.one) + '</span></div>';
+  }
+
+  function howto() {
+    var g = G();
+    if (!g || !g._mount('How to use Cubby')) return;   // carries the loss-safety refusal
+    injectCss();
+    var ids = window.CubbyTeach ? window.CubbyTeach.visible() : Object.keys(rows());
+    var R = rows(), body = '<div class="lg-h">How to use Cubby</div>'
+      + '<div class="lg-sub">Everything Cubby can do, and what each one gives you back. Nothing here will ever open itself.</div>';
+    var shown = 0;
+    DOMAIN_ORDER.forEach(function (dom) {
+      var inDom = ids.filter(function (id) { return R[id].domain === dom; });
+      if (!inDom.length) return;
+      // deepest first: the ones worth explaining lead, the one-liners settle underneath
+      var rank = { page: 0, chapter: 1, one: 2 };
+      inDom.sort(function (a, b) {
+        return (rank[R[a].depth] - rank[R[b].depth]) || (R[a].label < R[b].label ? -1 : 1);
+      });
+      body += '<div class="ht-dh">' + esc(DOMAIN_NAME[dom] || dom) + '</div>'
+        + inDom.map(function (id) {
+            shown++;
+            return R[id].depth === 'one' ? flat(id) : item(id);
+          }).join('');
+    });
+    body += '<div class="ht-count">' + shown + ' things Cubby can do, on this screen.</div>';
+    g._paint(g._shell(g._topClose(), body, 'You can log as much or as little as you like.'));
+  }
+
+  // The permanent door in Settings. Never retires, every stage, every member.
+  function settingsRow() {
+    var chev = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+    return '<div class="set-item" onclick="CubbyTeachUI.howto()" style="cursor:pointer">'
+      + '<div class="si-ico" style="background:var(--feed-soft);color:var(--feed);font-size:18px">📖</div>'
+      + '<div class="si-body"><div class="a">How to use Cubby</div>'
+      + '<div class="b">Every feature, what it is for, and what it gives you back</div></div>'
+      + '<span class="chev">' + chev + '</span></div>';
+  }
+
   window.CubbyTeachUI = {
     page: page, brief: brief, dot: dot, go: go,
     cueCard: cueCard, homeCue: homeCue, dismiss: dismiss,
+    howto: howto, settingsRow: settingsRow,
     _shortVersion: shortVersion
   };
 })();

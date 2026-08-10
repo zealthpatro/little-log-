@@ -5140,6 +5140,7 @@ function openSettings(){
       <div class="si-body"><div class="a">How you are, in yourself</div><div class="b">Private to you, always. Never shared with your circle</div></div>
       <span class="chev">${I.chev}</span>
     </div>`:''}
+    ${(window.CubbyTeachUI&&CubbyTeachUI.settingsRow)?CubbyTeachUI.settingsRow():''}
     ${(window.CubbyGuide&&CubbyGuide.settingsRow)?CubbyGuide.settingsRow():''}
     <div class="set-label">Your data &amp; account</div>
     <div class="set-item" onclick="openTrash()" style="cursor:pointer">

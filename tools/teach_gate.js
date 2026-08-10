@@ -125,9 +125,16 @@ rowIds.forEach(id => {
   Object.keys(r).forEach(k => check(ROW_KEYS.indexOf(k) !== -1,
     id + ' has only known keys', 'unexpected: ' + k));
   check(['one', 'chapter', 'page'].indexOf(r.depth) !== -1, id + ' has a valid depth');
-  // A chapter promises two more fields. Rows without them are one-liners and must say so.
-  if (r.depth === 'chapter' && r.what) voiceCheck(id, 'what', r.what);
-  if (r.depth === 'chapter' && r.get) voiceCheck(id, 'get', r.get);
+  /* A chapter PROMISES two more fields. Declaring the depth and then not carrying the content is
+     the failure mode this whole registry exists to prevent: a dot that opens a screen with a
+     heading and nothing under it is worse than no dot. If it has no what and get, it is a
+     one-liner and the row has to say so. */
+  if (r.depth === 'chapter') {
+    check(!!r.what, id + ' is a chapter and carries `what`');
+    check(!!r.get, id + ' is a chapter and carries `get`');
+    if (r.what) voiceCheck(id, 'what', r.what);
+    if (r.get) voiceCheck(id, 'get', r.get);
+  }
 
   // A page is the deepest tier: it exists for the capabilities whose benefit is not obvious from
   // the button, so it has to actually carry the benefit rather than just more words.
