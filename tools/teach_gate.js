@@ -118,7 +118,7 @@ rowIds.forEach(id => {
      INSIDE who:{...}. That parses, so it showed up only as "missing why" on a few rows rather than
      as the structural break it was. Unknown keys in who are now the loud failure they should be. */
   const WHO_KEYS = ['stage', 'role', 'months', 'circle'];
-  const ROW_KEYS = ['label', 'fn', 'domain', 'depth', 'one', 'what', 'get', 'who', 'earn',
+  const ROW_KEYS = ['label', 'aka', 'fn', 'domain', 'depth', 'one', 'what', 'get', 'who', 'earn',
                     'faq', 'read', 'why', 'matters', 'how', 'payoff'];
   Object.keys(r.who || {}).forEach(k => check(WHO_KEYS.indexOf(k) !== -1,
     id + '.who has only known keys', 'unexpected: ' + k));
@@ -169,6 +169,42 @@ rowIds.forEach(id => {
   linked.forEach(id => check(slugs.has(ROWS[id].read),
     id + '.read points at an article that exists', ROWS[id].read));
   check(slugs.size > 0, 'reads-data.js loaded (' + slugs.size + ' articles)');
+})();
+
+/* Every bottom sheet finds its teaching row by matching its own <h2> against these labels, so two
+   rows normalising to the same string would silently point a sheet at the wrong capability. This is
+   the assertion that whole mechanism rests on. */
+(function () {
+  const norm = s => String(s || '').toLowerCase()
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '')
+    .replace(/&amp;/g, '&').replace(/[^a-z0-9 &]/g, '').replace(/\s+/g, ' ').trim();
+  const seen = {};
+  const clashes = [];
+  rowIds.forEach(id => {
+    const n = norm(ROWS[id].label);
+    check(!!n, id + ' has a label that survives normalising', ROWS[id].label);
+    if (seen[n]) clashes.push(n + ': ' + seen[n] + ' vs ' + id); else seen[n] = id;
+  });
+  check(clashes.length === 0,
+    'no two labels collide once normalised (sheet matching would pick the wrong one)',
+    clashes.join('; '));
+
+  /* `aka` alternates are matched by substring, for sheets whose heading is built from data. That is
+     a looser test than the label match, so it needs a tighter guard: no alternate may appear inside
+     any other row's label or alternate, or adding a row later would silently steal somebody's dot. */
+  const akas = [];
+  rowIds.forEach(id => (ROWS[id].aka || []).forEach(a => akas.push([norm(a), id])));
+  akas.forEach(([a, id]) => {
+    check(a.length >= 4, id + ' alternate is long enough to be specific', a);
+    rowIds.forEach(other => {
+      if (other === id) return;
+      check(norm(ROWS[other].label).indexOf(a) === -1,
+        'alternate "' + a + '" (' + id + ') does not also match ' + other + "'s label");
+      (ROWS[other].aka || []).forEach(b => check(norm(b).indexOf(a) === -1,
+        'alternate "' + a + '" (' + id + ') does not also match ' + other + "'s alternate"));
+    });
+  });
+  check(true, 'alternates checked (' + akas.length + ')');
 })();
 
 // Pro must never read as buyable before October 2026.

@@ -272,8 +272,76 @@
       + '<span class="chev">' + chev + '</span></div>';
   }
 
+  /* ---- an entry point on every bottom sheet ----------------------------------------------------
+     openSheet is the one primitive every sheet in the app goes through, and each sheet renders its
+     own <h2>. So matching that title against the registry gives all of them a contextual answer
+     with no call-site edits at all.
+
+     Matching by normalised label is only safe because no two rows share one: the gate asserts that,
+     so a match can never be ambiguous. Anything unmatched gets NO dot, which is the correct answer
+     for the confirmations ("Delete this entry?", "Log out?", "Stop tracking?") that make up most of
+     the misses. A missing dot costs nothing; a dot onto the wrong capability costs trust.
+
+     It also honours `who`, so a caregiver opening a sheet never gets an affordance pointing at a
+     record that is supposed to be private to the owner. */
+  var _labelMap = null, _akaList = null;
+  function normLabel(s) {
+    return String(s || '').toLowerCase()
+      .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '')
+      .replace(/&amp;/g, '&').replace(/[^a-z0-9 &]/g, '').replace(/\s+/g, ' ').trim();
+  }
+  function labelMap() {
+    if (_labelMap) return _labelMap;
+    _labelMap = {};
+    var R = rows();
+    for (var id in R) {
+      if (!Object.prototype.hasOwnProperty.call(R, id)) continue;
+      var n = normLabel(R[id].label);
+      if (n) _labelMap[n] = id;
+    }
+    return _labelMap;
+  }
+
+  /* Some sheets build their heading from data: "Aanya's stage", "A photo with Nana". Those can
+     never match a fixed label, so a row may declare explicit alternates. Deliberately narrow: only
+     strings a row opted into, only tried after an exact match fails, and the gate asserts no
+     alternate is a substring of any other row's label or alternate, so this cannot quietly start
+     matching the wrong sheet as the registry grows. */
+  function akaMatch(title) {
+    if (!title) return '';
+    if (!_akaList) {
+      _akaList = [];
+      var R = rows();
+      for (var id in R) {
+        if (!Object.prototype.hasOwnProperty.call(R, id)) continue;
+        (R[id].aka || []).forEach(function (a) { _akaList.push([normLabel(a), id]); });
+      }
+    }
+    for (var i = 0; i < _akaList.length; i++) {
+      if (_akaList[i][0] && title.indexOf(_akaList[i][0]) !== -1) return _akaList[i][1];
+    }
+    return '';
+  }
+
+  // Given a sheet's html, return it with a dot inside the first <h2>, or unchanged.
+  function sheetDot(html) {
+    try {
+      if (!html || html.indexOf('<h2') === -1) return html;
+      var m = html.match(/<h2([^>]*)>([\s\S]*?)<\/h2>/);
+      if (!m) return html;
+      if (m[2].indexOf('class="lg-i"') !== -1) return html;        // already carries one
+      var title = normLabel(m[2].replace(/<[^>]*>/g, ''));
+      var id = labelMap()[title] || akaMatch(title);
+      if (!id) return html;
+      if (window.CubbyTeach && window.CubbyTeach.visible().indexOf(id) === -1) return html;
+      var d = dot(id);
+      if (!d) return html;
+      return html.replace(m[0], '<h2' + m[1] + '>' + m[2] + d + '</h2>');
+    } catch (e) { return html; }
+  }
+
   window.CubbyTeachUI = {
-    page: page, brief: brief, dot: dot, go: go,
+    page: page, brief: brief, dot: dot, go: go, sheetDot: sheetDot,
     cueCard: cueCard, homeCue: homeCue, dismiss: dismiss,
     howto: howto, settingsRow: settingsRow,
     _shortVersion: shortVersion

@@ -3705,7 +3705,12 @@ function openSheet(html,accent){
   // Step navigation: if a DIFFERENT sheet is open, remember it so this one can go back to it.
   // Same-title re-renders (toggling a unit, adding a row) replace in place, no phantom back step.
   if(s.classList.contains('show')){
-    var curH=((s.querySelector('h2')||{}).textContent||'').trim();
+    // TEXT NODES ONLY. The teaching layer injects an info dot inside the h2, and counting its
+    // label here would make every title compare unequal to the incoming one, which turns every
+    // same-sheet re-render into a phantom back step.
+    var _h2=s.querySelector('h2'), curH='';
+    if(_h2){ for(var _i=0;_i<_h2.childNodes.length;_i++){ var _n=_h2.childNodes[_i];
+      if(_n.nodeType===3) curH+=_n.textContent; } curH=curH.trim(); }
     var nm=html.match(/<h2[^>]*>([\s\S]*?)<\/h2>/); var newH=nm?nm[1].replace(/<[^>]*>/g,'').trim():'';
     if(curH && newH && curH===newH){ /* same sheet re-render (toggle/add/delete a row): replace in place */ }
     else {
@@ -3717,7 +3722,11 @@ function openSheet(html,accent){
   s.dataset.accent=accent||'';
   _sheetAccent(s,accent);
   var back=_sheetStack.length?'<button class="sheet-back" type="button" onclick="sheetBack()" aria-label="Back">‹</button>':'';
-  s.innerHTML='<div class="grab"></div>'+back+'<button class="sheet-x" type="button" onclick="closeSheet()" aria-label="Close">×</button>'+html;
+  /* Every sheet gets its own "what is this for" affordance, from one place rather than 131 call
+     sites. Injected AFTER the stack logic above, so the title comparison never sees it. Unmatched
+     sheets are left exactly as they were. */
+  var _h=(window.CubbyTeachUI&&CubbyTeachUI.sheetDot)?CubbyTeachUI.sheetDot(html):html;
+  s.innerHTML='<div class="grab"></div>'+back+'<button class="sheet-x" type="button" onclick="closeSheet()" aria-label="Close">×</button>'+_h;
   $('#scrim').classList.add('show'); s.classList.add('show');
   refreshTickTargets();   // a sheet can hold a running timer, and the tick works off this list now
 }
