@@ -23,6 +23,7 @@ node tools/offline_gate.js         # the connectivity states + which offline mes
 node tools/homelogs_gate.js        # what home offers, and that the parent decides it (per person, per stage)
 node tools/sitesw_gate.js          # the ROOT service worker: caches no content, bypasses /app/, offline page
 node tools/sitesw_gate.js https://little-cubby.com   # AND against the live host, AFTER deploying. Not optional.
+node tools/thirdparty_gate.js       # the "no third-party trackers" promise, checked in a real browser
 node tools/shot.js http://localhost:8080/<page>/ /tmp/x.png 390 full   # eyeball any page (see tools/shot.js)
 ```
 Working in a git worktree? `serve.js` takes `PORT=8099` and every gate takes the base URL as its
@@ -79,6 +80,14 @@ keeps a future backend swap (e.g. to Cloudflare D1) a contained job rather than 
   tracked and runnable in `docs/poster-art-jobs.json`; `docs/poster-art-brief.md` says which clauses
   in them are load-bearing (pure white ground, no numerals, generous margin) and why. `art-src/` is
   gitignored because it holds the API keys, so nothing in it counts as a record.
+**OPEN, needs the founder: Cloudflare Web Analytics is injecting a third-party tracker into every page,
+including `/app/`.** `static.cloudflareinsights.com/beacon.min.js` with a per-zone token, added to every
+HTML response served to a browser. Nothing in the repo asks for it, `curl` cannot see it (injection is
+browser-targeted), and it directly contradicts the published promise on `/privacy/`, the home page, the
+FAQ, `app/index.html` and `articles/cubby-privacy/`. It cannot be disabled from `wrangler.toml`: it is
+Cloudflare dashboard -> the `cubby` project -> Settings -> Web Analytics -> turn off automatic setup.
+Until then `tools/thirdparty_gate.js` fails, which is the honest state.
+
 **Run `tools/sitesw_gate.js` against the LIVE host after every deploy that touches `/sw.js` or
 `/offline.html`.** Passing locally is not evidence. Cloudflare answers `/offline.html` with a **307 to
 `/offline`**, and `tools/serve.js` does not, so the first version of this shipped green on 41 local
@@ -106,6 +115,12 @@ enumerate, and caches are per-origin: shipping that version today would take the
 precache with it and leave every installed PWA unable to open offline. Copy the snippet above, not the
 one in the git history.
 
+- `tools/thirdparty_gate.js` — walks six live surfaces in a real browser and fails on any request to an
+  origin the product does not need to function. Cubby publishes "No third-party trackers" on its home
+  page, its privacy page, the FAQ, **inside the app**, and in an article comparing it to a competitor on
+  exactly that point, and a source scan cannot verify it: nothing in the repo loads a tracker, and the
+  promise can still be broken above the code by a host injecting a script into every HTML response.
+  **CURRENTLY RED**, and correctly so — see the open item below.
 - `tools/sitesw_gate.js` — the ROOT service worker (`/sw.js`), which serves `/offline.html` when a page
   on the marketing site or one of the ~661 articles cannot be reached. Mostly assertions about what it
   must REFUSE to do: cache no content (one precache entry, no article), navigations only, `/app/` and

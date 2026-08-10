@@ -219,9 +219,13 @@ async function offlineEverywhere(browser, page, off) {
       linkShown: link?getComputedStyle(link).display!=='none':null,
       btnRatio: ratio(cs.color, cs.backgroundColor),
       btnH: btn.getBoundingClientRect().height,
+      /* Same-origin refs only. This page must not need the network to render ITSELF, which is what is
+         being tested here. Cloudflare injects a cross-origin analytics beacon into every HTML response
+         on the live host, which is a real problem and a much bigger one than this file — it has its own
+         gate, tools/thirdparty_gate.js, rather than making this one red for a zone setting. */
       external: [].slice.call(document.querySelectorAll('link[rel=stylesheet],script[src],img[src]'))
         .map(function(n){ return n.getAttribute('href')||n.getAttribute('src'); })
-        .filter(function(u){ return u && u.indexOf('data:')!==0; })
+        .filter(function(u){ return u && u.indexOf('data:')!==0 && u.indexOf('//')!==0 && !/^https?:/i.test(u); })
     };
   })()`;
 
