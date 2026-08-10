@@ -196,6 +196,8 @@
   --pad-dense:11px 14px; /* alert pills and dense rows. was 11/13 */
   --r-card:16px;
   --r-dense:14px;
+  --pad-tile:13px 14px;  /* stat tiles. was 13/12, tighter than every card beside them */
+  --pad-tap:20px 16px;   /* tap tiles keep their tall target, share the 16px inset */
   --font-display:'Fraunces',Georgia,serif;
   --font-body:'Nunito Sans',-apple-system,sans-serif;
 }
@@ -436,7 +438,7 @@ body{
 .tip-static b{color:var(--ink);font-weight:800;}
 .since-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;}
 .since-card{
-  background:var(--surface);border-radius:var(--radius-sm);padding:13px 12px;
+  background:var(--surface);border-radius:var(--radius-sm);padding:var(--pad-tile);
   box-shadow:0 4px 12px var(--shadow);position:relative;
 }
 .since-card .dot{width:9px;height:9px;border-radius:50%;margin-bottom:7px;}
@@ -460,7 +462,7 @@ body{
 /* ============ ACTION GRID ============ */
 .actions{display:grid;grid-template-columns:1fr 1fr;gap:13px;}
 .action{
-  border:none;cursor:pointer;border-radius:var(--radius);padding:20px 18px;
+  border:none;cursor:pointer;border-radius:var(--radius);padding:var(--pad-tap);
   text-align:left;display:flex;flex-direction:column;gap:14px;min-height:108px;
   background:var(--surface);box-shadow:0 5px 14px var(--shadow);
   transition:transform .14s ease;position:relative;overflow:hidden;

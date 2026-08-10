@@ -93,6 +93,35 @@ CARDS.forEach(sel => {
   }
 }
 
+/* The TILES, which is what the eye actually reads. The first two passes measured full-width cards
+   and moved them by 1-3px, which is invisible. Meanwhile .since-card sat at 12px and .action at
+   18px, stacked on the same screen as cards at 16px: three insets in one scroll, and that is the
+   one a person notices, because tiles sit in grids where the eye compares them directly.
+   .since-card is 14 rather than 16 on purpose. At 110px wide, 16 wraps "Last diaper" onto two
+   lines at 360px, measured against the shipped build rather than guessed. 14 matches the dense
+   inset .tip-static and .alert-pill already share, so it joins a family instead of inventing one. */
+[['.since-card{', '--pad-tile'], ['.action{', '--pad-tap']].forEach(([sel, tok]) => {
+  const b = rule(sel);
+  check(!!b, sel + ' exists');
+  if (!b) return;
+  check(new RegExp('padding:var\\(' + tok + '\\)').test(b), sel + ' uses var(' + tok + ')',
+    (b.match(/padding:[^;]*/) || [''])[0]);
+});
+['--pad-tile', '--pad-tap'].forEach(t => {
+  check(new RegExp('\\' + t + ':').test(SRC), 'token ' + t + ' is defined');
+});
+{
+  // every card and tile shares one horizontal inset family: 14 dense, 16 roomy. Never a third.
+  const insets = [];
+  ['--pad-card', '--pad-dense', '--pad-tile', '--pad-tap'].forEach(t => {
+    const m = SRC.match(new RegExp('\\' + t + ':\\s*([^;]+);'));
+    if (m) insets.push(m[1].trim().split(/\s+/)[1]);
+  });
+  const uniq = [...new Set(insets)];
+  check(uniq.every(v => v === '14px' || v === '16px'),
+    'every card and tile inset is 14px or 16px, never a third value', uniq.join(', '));
+}
+
 const total = passes + fails;
 console.log('\n' + (fails ? 'FAIL' : 'PASS') + ' — ' + passes + '/' + total + ' checks');
 process.exit(fails ? 1 : 0);
