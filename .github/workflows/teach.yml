@@ -35,3 +35,7 @@ jobs:
           node-version: '20'
       - name: Registry, voice and ledger gate
         run: node tools/teach_gate.js
+      # The card grid. Six paddings and four radii had drifted in before anything named them;
+      # this keeps the tokens from being quietly re-hardcoded by the next card somebody adds.
+      - name: Card grid gate
+        run: node tools/grid_check.js

@@ -178,6 +178,24 @@
 
   --radius:26px;
   --radius-sm:16px;
+  /* ---- the card grid ---------------------------------------------------------------------------
+     An audit found six card paddings (11/13, 12/14, 13/16, 14/15, 15/18, 16/8) and four radii
+     across the home screen alone. They are not six decisions: 13, 14 and 15 are the same intent
+     measured three times, and the eye reads the difference as cards that do not quite belong to
+     each other.
+
+     A universal 4px grid was the obvious fix and the wrong one: 510 of 805 spacing values in this
+     stylesheet would move, 343 of them by 2px, which is a redesign of every screen for a shipped
+     app. So this is component tokens instead, set to the value each cluster already sits closest
+     to. Nothing here moves anything by more than 2px.
+
+     --gutter is the page inset every card already uses. Cards align to it; nothing overrides it. */
+  --gutter:20px;
+  --stack:16px;          /* vertical rhythm between cards */
+  --pad-card:14px 16px;  /* coach, nudge, note. was 14/15, 13/16, 12/14 */
+  --pad-dense:11px 14px; /* alert pills and dense rows. was 11/13 */
+  --r-card:16px;
+  --r-dense:14px;
   --font-display:'Fraunces',Georgia,serif;
   --font-body:'Nunito Sans',-apple-system,sans-serif;
 }
@@ -429,7 +447,7 @@ body{
 /* ============ SECTION TITLE ============ */
 .sec-title{
   font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;
-  color:var(--ink-soft);margin:6px 4px 12px;
+  color:var(--ink-soft);margin:6px 0 12px;
 }
 /* A section heading with an action on the right. The Quick log row has been per-person configurable
    for a while and nobody could find it, because the only door was three taps deep in Settings, on a
@@ -1098,7 +1116,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .hero-invite .hs{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:1px;}
 
 /* ---- compact contextual alerts ---- */
-.alert-pill{display:flex;align-items:center;gap:11px;background:var(--surface);border-left:4px solid var(--ink-faint);border-radius:14px;padding:11px 13px;margin-bottom:9px;box-shadow:0 3px 9px var(--shadow);}
+.alert-pill{display:flex;align-items:center;gap:11px;background:var(--surface);border-left:4px solid var(--ink-faint);border-radius:var(--r-dense);padding:var(--pad-dense);margin-bottom:9px;box-shadow:0 3px 9px var(--shadow);}
 .alert-pill .ap-ico{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex-shrink:0;}
 .alert-pill .ap-ico svg{width:17px;height:17px;}
 .alert-pill .ap-body{flex:1;min-width:0;}
@@ -1121,7 +1139,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .alert-pill.ap-stack .ap-acts button{flex:1;padding-left:6px;padding-right:6px;}
 
 /* ---- coach marks (first-visit hints) & nudges ---- */
-.coach{display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1.5px solid var(--line);border-radius:16px;padding:14px 15px;margin-bottom:16px;box-shadow:0 4px 12px var(--shadow);animation:rise .4s ease;}
+.coach{display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1.5px solid var(--line);border-radius:var(--r-card);padding:var(--pad-card);margin-bottom:16px;box-shadow:0 4px 12px var(--shadow);animation:rise .4s ease;}
 .coach .cm-ico{width:34px;height:34px;border-radius:10px;background:var(--feed-soft);color:var(--feed);display:grid;place-items:center;flex-shrink:0;}
 .coach .cm-ico svg{width:18px;height:18px;}
 .coach .cm-body{flex:1;min-width:0;}
@@ -1129,7 +1147,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .coach .cm-s{font-size:13px;color:var(--ink-soft);font-weight:600;margin-top:2px;line-height:1.45;}
 .coach .cm-x{border:none;background:var(--surface-2);color:var(--ink);font-weight:800;border-radius:9px;padding:8px 12px;font-size:12px;cursor:pointer;flex-shrink:0;font-family:var(--font-body);}
 .coach .cm-x:active{transform:scale(.93);}
-.nudge{display:flex;gap:11px;align-items:center;background:linear-gradient(120deg,var(--star-soft),var(--feed-soft));border-radius:16px;padding:13px 16px;margin:16px 0;}
+.nudge{display:flex;gap:11px;align-items:center;background:linear-gradient(120deg,var(--star-soft),var(--feed-soft));border-radius:var(--r-card);padding:var(--pad-card);margin:16px 0;}
 .nudge .nu-ico{font-size:20px;flex-shrink:0;line-height:1;}
 .nudge .nu-t{font-size:13px;font-weight:700;color:var(--ink);line-height:1.45;}
 
@@ -1251,7 +1269,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .ds-notes{position:relative;}
 .ds-notes.ds-new::before{content:'';position:absolute;left:-9px;top:1px;bottom:1px;width:3px;border-radius:2px;background:var(--note);}
 .ds-badge{display:inline-block;background:var(--note-soft);color:var(--note-ink);font-size:10px;font-weight:800;letter-spacing:.04em;padding:2px 7px;border-radius:999px;margin-left:6px;}
-.note-card{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:8px;cursor:pointer;box-shadow:0 3px 9px var(--shadow);transition:transform .15s;}
+.note-card{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);padding:var(--pad-card);margin-bottom:8px;cursor:pointer;box-shadow:0 3px 9px var(--shadow);transition:transform .15s;}
 .note-card:active{transform:scale(.99);}
 .note-card.priv{border-left:3px solid var(--preg);}
 .note-card.pinned{background:linear-gradient(180deg,var(--note-soft),var(--surface));}
