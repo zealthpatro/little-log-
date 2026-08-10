@@ -25,9 +25,16 @@ function check(ok, what, detail) {
   else { fails++; console.log('  FAIL  ' + what + (detail ? '\n        ' + detail : '')); }
 }
 
-// Pull one rule's body by selector.
+/* Pull one rule's body by selector.
+   PREFER THE RULE THAT STARTS A LINE. A bare indexOf('.day-surface{') finds
+   `[data-theme="night"] .pick-item,[data-theme="night"] .day-surface{` first, because that override
+   appears earlier in the file. This helper then reads the dark-mode rule and reports on the wrong
+   one. That is not hypothetical: the same mistake put a margin into the night override during this
+   change, so it applied only in dark mode, and this check read that same rule and could not see it. */
 function rule(sel) {
-  const i = SRC.indexOf(sel);
+  let i = SRC.indexOf('\n' + sel);
+  if (i !== -1) i += 1;
+  else i = SRC.indexOf(sel);
   if (i === -1) return null;
   return SRC.slice(i, SRC.indexOf('}', i));
 }
@@ -213,6 +220,34 @@ CARDS.forEach(sel => {
   check(/padding:var\(--pad-card\)/.test(b), sel + ' uses var(--pad-card)',
     (b.match(/padding:[^;]*/) || [''])[0]);
 });
+
+/* VERTICAL RHYTHM. The horizontal work said nothing about the space BETWEEN cards, and measuring it
+   found six values on home alone: 0, 2, 12, 14, 16, 18. 12, 14, 16 and 18 are not four decisions.
+   --stack already existed and almost nothing pointed at it. Home now reads 2, 12, 16, and each one
+   means something: 16 between independent blocks, 12 from a heading to the content it labels, 2 for
+   a title and its own subtitle. Those last two stay hand-set, like every other sub-10px value. */
+{
+  const m = SRC.match(/--stack:\s*([^;]+);/);
+  check(!!m, 'token --stack is defined');
+  if (m) check(m[1].trim() === '16px', '--stack is 16px', m[1].trim());
+  const users = (SRC.match(/var\(--stack\)/g) || []).length;
+  check(users >= 7, 'the block margins actually point at --stack', users + ' use it');
+  [['.tip-static{', 'margin-bottom'], ['.since-row{', 'margin-bottom'],
+   ['.ms-hero{', 'margin-bottom'], ['.disclaimer{', 'margin-bottom'],
+   ['.day-surface{', 'margin-top'], ['.today-strip{', 'margin-top']].forEach(([sel, prop]) => {
+    const b = rule(sel);
+    check(!!b && new RegExp(prop + ':var\\(--stack\\)').test(b),
+      sel + ' ' + prop + ' uses var(--stack)',
+      (b && (b.match(new RegExp(prop + ':[^;]*')) || [''])[0]) || 'rule not found');
+  });
+  /* The night-theme override sits earlier in the file and matches a naive indexOf('.day-surface{').
+     A margin added there would only apply in dark mode, which is how it went in the first time. */
+  const nightIdx = SRC.indexOf('[data-theme="night"] .pick-item,[data-theme="night"] .day-surface{');
+  if (nightIdx !== -1) {
+    check(!/margin/.test(SRC.slice(nightIdx, SRC.indexOf('}', nightIdx))),
+      'the night-theme .day-surface override carries no margin (it would be dark-mode only)');
+  }
+}
 
 const total = passes + fails;
 console.log('\n' + (fails ? 'FAIL' : 'PASS') + ' — ' + passes + '/' + total + ' checks');

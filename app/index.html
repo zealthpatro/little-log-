@@ -430,14 +430,14 @@ body{
 .ticker b{color:var(--ink);font-weight:800;}
 @keyframes tkroll{0%,13%{transform:translateY(0)}16.6%,30%{transform:translateY(-16.667%)}33.3%,47%{transform:translateY(-33.333%)}50%,63%{transform:translateY(-50%)}66.6%,80%{transform:translateY(-66.667%)}83.3%,100%{transform:translateY(-83.333%)}}
 @media(prefers-reduced-motion:reduce){.ticker .roll{animation:none}}
-.tip-static{display:flex;align-items:center;gap:9px;padding:var(--pad-dense);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-dense);box-shadow:0 3px 9px var(--shadow);margin-bottom:14px;font-size:13px;font-weight:700;color:var(--ink-soft);line-height:1.4;transition:opacity .35s;min-height:24px;}
+.tip-static{display:flex;align-items:center;gap:9px;padding:var(--pad-dense);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-dense);box-shadow:0 3px 9px var(--shadow);margin-bottom:var(--stack);font-size:13px;font-weight:700;color:var(--ink-soft);line-height:1.4;transition:opacity .35s;min-height:24px;}
 .tip-static .tk-ic{font-size:16px;flex:0 0 auto;}
 /* The ticker can now be dismissed, like every other hint. Sits at the end so the tip text keeps
    the full width it needs; the tap target stays 30px even though the glyph is small. */
 .tip-static #tipTxt{flex:1 1 auto;}
 .tip-static .tip-x{flex:0 0 auto;border:none;background:none;color:var(--ink-faint);font-size:19px;line-height:1;width:30px;height:30px;margin:-6px -8px -6px 0;cursor:pointer;font-family:inherit;}
 .tip-static b{color:var(--ink);font-weight:800;}
-.since-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;}
+.since-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:var(--stack);}
 .since-card{
   background:var(--surface);border-radius:var(--radius-sm);padding:var(--pad-tile);
   box-shadow:0 4px 12px var(--shadow);position:relative;
@@ -482,7 +482,7 @@ body{
 
 /* ============ TODAY STRIP ============ */
 .today-strip{
-  background:var(--surface);border-radius:var(--radius);padding:16px 8px;margin-top:18px;
+  background:var(--surface);border-radius:var(--radius);padding:16px 8px;margin-top:var(--stack);
   display:grid;grid-template-columns:repeat(3,1fr);box-shadow:0 5px 14px var(--shadow);
 }
 .today-strip .cell{text-align:center;position:relative;}
@@ -813,7 +813,7 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .add-row svg{width:18px;height:18px;}
 
 /* ---- milestones ---- */
-.ms-hero{background:var(--surface);border-radius:var(--radius);padding:var(--pad-card);margin-bottom:18px;display:flex;align-items:center;gap:18px;box-shadow:0 5px 14px var(--shadow);}
+.ms-hero{background:var(--surface);border-radius:var(--radius);padding:var(--pad-card);margin-bottom:var(--stack);display:flex;align-items:center;gap:18px;box-shadow:0 5px 14px var(--shadow);}
 .ring{position:relative;width:74px;height:74px;flex-shrink:0;}
 .ring svg{transform:rotate(-90deg);}
 .ring .rt{font-family:var(--font-display);font-weight:600;font-size:20px;position:absolute;inset:0;display:grid;place-items:center;}
@@ -1083,7 +1083,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .vx-status.toconfirm{background:var(--surface-2);color:var(--ink-soft);}
 .vx-status.catchup{background:var(--feed-soft);color:var(--feed-ink);}
 .vx-est{font-size:10px;font-weight:700;color:var(--ink-faint);text-transform:none;letter-spacing:0;}
-.vx-setup{display:flex;gap:13px;align-items:flex-start;background:linear-gradient(120deg,var(--diaper-soft),var(--sleep-soft));border-radius:var(--radius);padding:15px 16px;margin:0 0 14px;}
+.vx-setup{display:flex;gap:13px;align-items:flex-start;background:linear-gradient(120deg,var(--diaper-soft),var(--sleep-soft));border-radius:var(--radius);padding:15px 16px;margin:0 0 var(--stack);}
 .vx-setup .vs-emoji{font-size:22px;line-height:1.1;flex-shrink:0;}
 .vx-setup .vs-body{flex:1;min-width:0;}
 .vx-setup .vs-t{font-weight:800;font-size:14px;color:var(--ink);}
@@ -1091,7 +1091,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .vx-setup .vs-btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:11px;}
 .vx-setup .vs-btn{border:none;border-radius:11px;padding:9px 13px;font-family:var(--font-body);font-weight:800;font-size:12.5px;cursor:pointer;background:var(--diaper);color:var(--on-accent);}
 .vx-setup .vs-btn.ghost{background:var(--surface);color:var(--ink-soft);border:1px solid var(--line);}
-.disclaimer{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius);padding:var(--pad-card);font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:18px;line-height:1.5;}
+.disclaimer{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius);padding:var(--pad-card);font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:var(--stack);line-height:1.5;}
 
 /* ---- growth charts ---- */
 .growth-line{width:100%;height:auto;display:block;}
@@ -1248,6 +1248,8 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
   border:1px solid var(--line);border-radius:var(--radius);
   padding:14px 16px 16px;margin-bottom:18px;
   box-shadow:0 8px 22px var(--shadow), inset 0 1px 0 var(--glint-edge);
+
+  margin-top:var(--stack);
 }
 .ds-nav{display:flex;align-items:center;justify-content:space-between;margin:0 0 12px;}
 .ds-day{font-family:var(--font-display);font-size:17px;font-weight:600;color:var(--ink);}
