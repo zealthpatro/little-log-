@@ -1917,6 +1917,10 @@ function render(){
   // layouts for nothing. View/tab changes still scroll to top: they call scrollTo(0,0) after this.
   var _ss=document.getElementById('scroll'); var _sy=_ss?_ss.scrollTop:0;
   migrateSeenOnce();   // no-op after it succeeds once; retries while the role is still unknown
+  /* Must run on EVERY render, not only when a cue is about to be drawn. It lived inside teachCue()
+     which is home-only and was gated behind the welcome mark, so for a brand-new parent no trigger
+     ever fired and the whole earned-cue system was dead until they dismissed a coach mark. */
+  teachScan();
   _renderView();
   if(_sy){ var _ns=document.getElementById('scroll'); if(_ns && _ns!==_ss) _ns.scrollTop=_sy; }
   maybeRunDeepLink();
@@ -2646,6 +2650,10 @@ function deleteNote(id){
 function renderHome(){
   const evs = babyEvents();
   const gsCard = renderGetStarted();
+  /* Computed once, because the earned cue below has to know whether it is up. Orientation outranks
+     a specific tip: somebody who has never been told what any of the logs are for should get that
+     before they get "your doses could go in your calendar". They never stack. */
+  const guideCard = (window.CubbyGuide&&CubbyGuide.homeCard)?CubbyGuide.homeCard(!!gsCard):'';
   const away = awayRecap();
   const lastFeed = evs.find(e=>e.type==='feed');
   const lastSleep = evs.find(e=>e.type==='sleep' && e.end);
@@ -2725,8 +2733,12 @@ function renderHome(){
       <div class="ap-body"><div class="ap-t">${escapeHtml(_cab.name)} is growing up</div><div class="ap-s">Cubby is growing with them. Quick log now leads with the toddler years; the early logs are under More.</div></div>
       <button onclick="ackChild()">Lovely</button></div>`;
   }
-  // One-time gentle nudge: many web users never realise Cubby installs to the home screen.
-  if(typeof canShowInstall==='function' && canShowInstall() && !hasSeen('tip_install')){
+  /* One-time gentle nudge: many web users never realise Cubby installs to the home screen. It is a
+     push like any other, so it takes its turn through the ledger rather than sitting outside it.
+     It loses to every earned cue, which is right: installing matters, but not more than a summary
+     for the doctor on the morning of a second fever. */
+  if(typeof canShowInstall==='function' && canShowInstall() && !hasSeen('tip_install')
+     && !(window.CubbyTeach && !window.CubbyTeach.askMark('firstopen:install'))){
     alerts += `<div class="coach"><div class="cm-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M8 11l4 4 4-4"/><path d="M5 20h14"/></svg></div>
       <div class="cm-body"><div class="cm-t">Use Cubby like an app</div><div class="cm-s">Add it to your home screen for one-tap, full-screen, offline access. No app store.</div>
       <button class="btn-primary" style="margin-top:9px;padding:8px 14px;font-size:13px" onclick="addToHomeScreen('homeInstallMsg')">Add to home screen</button>
@@ -2774,8 +2786,8 @@ function renderHome(){
     ${consentBanners()}
     ${renderHero()}
     ${gsCard}
-    ${(window.CubbyGuide&&CubbyGuide.homeCard)?CubbyGuide.homeCard(!!gsCard):''}
-    ${(gsCard || !hasSeen('home')) ? '' : teachCue()}
+    ${guideCard}
+    ${(gsCard || guideCard) ? '' : teachCue()}
     <div class="sec-title with-act"><span>Quick log${(window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('logging'):''}</span><button class="sec-act" type="button" onclick="openQuickSettings()">Choose</button></div>
     <div class="actions stagger">${quickLogActions(ts)}</div>
     ${gsCard ? '' : renderNudge()}
@@ -2936,8 +2948,15 @@ function migrateSeenOnce(){
 function shareVerb(){ return (navigator.share||window.cubbyNativeSaveFile)?'Share':'Save'; }
 
 /* ---- coach marks (one-time hints) & contextual nudges ---- */
+/* A tab introducing itself, once. It now asks the teaching ledger first, which is what stops four
+   of these firing in one session when somebody taps through four tabs on their first evening. That
+   was the chained tour ONBOARDING.md rules out, and it was live.
+   A mark always loses to an eligible earned cue: a tab saying what it is can never outrank
+   something the parent's own data just made true. hasSeen(tab) still owns "already dismissed", so
+   nobody who dismissed one before this existed gets shown it again. */
 function coachMark(tab,title,text){
   if(hasSeen(tab)) return '';
+  if(window.CubbyTeach && !window.CubbyTeach.askMark('firstopen:'+tab)) return '';
   return `<div class="coach"><div class="cm-ico">${I.star}</div>
     <div class="cm-body"><div class="cm-t">${title}</div><div class="cm-s">${text}</div></div>
     <button class="cm-x" onclick="dismissCoach('${tab}')">Got it</button></div>`;
@@ -3089,7 +3108,11 @@ window.cubbyTeachCtx = function(){
     // Checked before any cue is scored. The holding screen is the whole screen on purpose.
     lossHolding: !!(typeof myLossHolding==='function' && myLossHolding()),
     // Nothing may appear over an open sheet: the parent is mid-task and did not ask us anything.
-    sheetOpen: !!(sh && sh.classList.contains('show')) || !!document.getElementById('logGuide'),
+    // Get started counts as busy for the same reason: one card, one list. Somebody still working
+    // through setup should not also be collecting tab marks on the way. Stated here so it is a
+    // decision the ledger makes rather than a side effect of a cue being suppressed elsewhere.
+    sheetOpen: !!(sh && sh.classList.contains('show')) || !!document.getElementById('logGuide')
+               || (typeof renderGetStarted==='function' && !!renderGetStarted()),
     installedAt: teachSince()
   };
 };
@@ -3103,7 +3126,6 @@ function teachFire(name){ try{ if(window.CubbyTeach) window.CubbyTeach.fire(name
 function teachCue(){
   try{
     if(!window.CubbyTeachUI) return '';
-    teachScan();
     return window.CubbyTeachUI.homeCue()||'';
   }catch(e){ return ''; }
 }

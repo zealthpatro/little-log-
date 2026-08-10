@@ -326,6 +326,44 @@ function baseCtx(over) {
   check(T.explain('openVaccineCountry') === 'not-for-them', 'gated by who, before any scoring');
 }
 
+/* -- first-open coach marks share the one allowance -------------------------------------------
+   Before this, four marks could fire in a single session if somebody tapped through four tabs on
+   their first evening, which is the chained tour ONBOARDING.md rules out. Measured, not assumed:
+   a fresh profile visiting home, log, album and health showed five cues. */
+{
+  const c = baseCtx();
+  const { T, newSession } = makeLedger(c, () => T0);
+  check(T.askMark('firstopen:home') === true, 'the first mark of a session fires');
+  check(T.askMark('firstopen:log') === false, 'a second, different mark in the same session does not');
+  check(T.askMark('firstopen:home') === true,
+    'but re-asking the SAME mark stays true, or it would vanish on the next render');
+}
+{
+  // the property that matters: a tab explaining itself never beats the parent's own data
+  const c = baseCtx();
+  const { T } = makeLedger(c, () => T0);
+  T.fire('fever');
+  check(T.askMark('firstopen:health') === false, 'a mark defers while an earned cue is eligible');
+  check(T.ask('openVisitSummary') === true, 'and the earned cue takes the slot instead');
+}
+{
+  const c = baseCtx();
+  const { T } = makeLedger(c, () => T0);
+  T.fire('fever');
+  check(T.ask('openVisitSummary') === true, 'an earned cue fires');
+  check(T.askMark('firstopen:health') === false, 'and no mark follows it in the same session');
+}
+{
+  const c = baseCtx({ lossHolding: true });
+  const { T } = makeLedger(c, () => T0);
+  check(T.askMark('firstopen:home') === false, 'no mark renders under lossHolding');
+}
+{
+  const c = baseCtx({ sheetOpen: true });
+  const { T } = makeLedger(c, () => T0);
+  check(T.askMark('firstopen:home') === false, 'no mark renders over an open sheet or Get started');
+}
+
 // -- depth ranks in the right order. A page is for the capabilities whose benefit is not obvious,
 //    so it must never sit below a chapter or a one-liner with the same domain and trigger.
 {

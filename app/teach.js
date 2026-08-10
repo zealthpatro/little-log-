@@ -212,6 +212,38 @@
     return true;
   }
 
+  /* A first-open coach mark: a surface introducing itself. It spends from the same allowance as
+     everything else, but it ALWAYS loses to an eligible earned cue, because a tab explaining what
+     it is can never be more urgent than something the parent's own data just made true.
+
+     It does not own its seen state. The shell's own hasSeen(tab) already decides whether a mark has
+     been dismissed, and reusing it means people who dismissed one before this existed do not get
+     shown it again. This answers only the budget-and-ranking question.
+
+     Idempotent within a session: coachMark() is called from inside a template string and render
+     runs many times, so a second ask for the SAME mark has to return the same answer or the mark
+     would appear and then vanish mid-session. */
+  var _markGranted = null;
+  function askMark(id) {
+    if (_markGranted === id) return true;
+    if (_markGranted) return false;                 // one mark per session, whichever got there first
+    var c = ctx(); if (!c) return false;
+    if (c.lossHolding || c.sheetOpen) return false;
+    if (eligible().length) return false;            // an earned cue outranks every mark, always
+    var o = load(c);
+    if (sessionSpent()) return false;
+    if (now() - o.last < COOLDOWN) return false;
+    if (todayBudget(c, o) <= 0) return false;
+    var stamp = dayStamp(now());
+    if (o.day !== stamp) { o.day = stamp; o.spent = 0; }
+    o.spent += 1;
+    o.last = now();
+    save(c, o);
+    markSessionSpent();
+    _markGranted = id;
+    return true;
+  }
+
   // The info dot and the guide call this. Same map as push, on purpose.
   function markSeen(id) {
     var c = ctx(); if (!c) return;
@@ -254,7 +286,7 @@
   }
 
   window.CubbyTeach = {
-    ask: ask, fire: fire, markSeen: markSeen, hasSeen: hasSeen,
+    ask: ask, askMark: askMark, fire: fire, markSeen: markSeen, hasSeen: hasSeen,
     eligible: eligible, explain: explain, visible: visible,
     // exposed for tools/teach_gate.js
     _allowanceFor: allowanceFor, _value: value, _dayNumber: dayNumber, _now: null

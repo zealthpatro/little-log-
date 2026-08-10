@@ -492,6 +492,12 @@
     var c = ctx();
     if (!c || c.lossHolding) return '';
     if (typeof window.hasSeen === 'function' && window.hasSeen('tip_logguide')) return '';
+    /* Deliberately NOT rationed by the teaching ledger, and it outranks the earned cue rather than
+       taking its turn. This card is a person's one and only orientation to what any of the logs
+       are for, and it is offered exactly once, ever. For somebody who has never been oriented,
+       "here is what everything is for" beats "your doses could go in your calendar" — including,
+       especially, for a second caregiver joining a household that already has 400 logged feeds.
+       renderHome holds the earned cue back while this is up, so they never stack. */
     if (c.stage === 'pregnancy' && c.planning) return '';         // nothing to log yet: nothing to offer
     // While Get started is up, the guide rides as a row inside it (renderGetStarted, index.html)
     // rather than as a second card underneath. One card, one list. A new parent reading a
