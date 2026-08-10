@@ -32,17 +32,53 @@ the `color` blend, which keeps luminosity so white stays white and the multiply 
 Deliberately **not** in the service worker precache: they are only needed when somebody makes a
 poster, and an offline launch should not carry 400KB of decoration.
 
-**Notes left the top of home, unless there is one.** The lane sat above the parent's own baby every
-day, and on most days it held a heading, a prompt to write something and a quote of the day. Generic
-filler in a prominent slot teaches people to scroll past that slot, which is the worst thing that
-could happen to the only place a second caregiver can reach them. So the card earns its place now:
-bottom of the page on a day with no note, straight under the three answers on a day with one, marked
-with a rule and a count when somebody else left it and it has not been opened. The read-marker is per
-member in `localStorage` keyed by uid, never in `state.settings` (that blob is shared, and a personal
-marker filed there would travel to the whole circle). Position is decided by **today**, not by the day
-being browsed, so arrowing back through empty days cannot make the card leap around the page.
+**Notes moved to the bottom of home, and comes up only when something is actually waiting.** The lane
+sat above the parent's own baby every day, and on most days it held a heading, a prompt to write
+something and a quote of the day. Generic filler in a prominent slot teaches people to scroll past
+that slot, which is the worst thing that could happen to the only place a second caregiver can reach
+them: the day a real handoff appears there, the eye already skips it.
 
-**New blocking gate:** `tools/noteshome_test.js` (21 assertions). See OPERATIONS.md.
+So the card lives at the bottom now and earns the top of the screen for exactly one reason — another
+member has left something this member has not read, to the whole circle or to them by name. It goes
+back down the moment they read it. The lane carries a count, and each unread card carries a dot, so
+with three notes in the lane the parent can see which one is new instead of opening all three. Your
+own note never lifts the card; it is not news to you. A note private to somebody else cannot lift it
+either, and is never rendered.
+
+Five properties that were each an easy bug to ship, and an adversarial review of the first cut found
+two of them after the gate had already gone green.
+
+The read-marker is **per member**, in `localStorage` keyed by uid and never in `state.settings` (that
+blob is shared with the circle, so a personal marker filed there would travel to everybody, and one
+caregiver reading a handoff would clear it for the other). Accepted consequence: it is therefore per
+*device* too, so reading on the phone leaves the note marked new on the tablet. Following the person
+would cost a document write per note opened.
+
+It is a set of note **ids**, not a high-water timestamp: sync can deliver a note stamped 09:00 after
+this member has read one stamped 10:00, and a timestamp marker swallows it silently, so nobody is ever
+told it arrived.
+
+Those ids are **scoped to a day** and dropped whole when the day turns. The first cut kept a
+fixed-size list evicted by read order, which spent every slot on ids that were already dead and
+eventually discarded a live one, bringing the card back up saying "1 new" about a note read months
+earlier.
+
+**A pin is not news.** The first cut counted any unread pin, and a pin stands on this screen every day
+after it is left, so one pin from a co-parent promoted the card and printed "1 new" every single day
+until somebody happened to tap a note they had already read — exactly the false nudge the change
+exists to remove. Only what was left today can be unread. Pins from earlier days still stand in the
+lane, which is what a pin is for.
+
+And reading the last unread note takes the card's whole footprint out of the page **above where she is
+reading** — 885px measured with six notes in the lane — so the scroll offset gives back exactly that
+footprint and she closes the sheet looking at what she was looking at. Measured from the card's own
+height, not from a landmark further down the page: an alert pill arriving on the same repaint moves the
+landmark without moving the card, and that was worth 91px of error. `surfaceShift` likewise brings the
+surface into view rather than jumping to the top, because the arrows live inside the card and the card
+can be at the bottom. Position is decided by **today**, never by the day being browsed, so arrowing
+back through earlier days cannot make the card leap around the page.
+
+**New blocking gate:** `tools/noteshome_test.js` (45 assertions). See OPERATIONS.md.
 
 ## v0.16.0 — 2026-08-08 — the jitter is gone, the app explains itself, and reminders finally reach a closed phone
 
