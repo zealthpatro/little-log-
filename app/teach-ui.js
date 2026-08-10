@@ -56,7 +56,25 @@
     + '#logGuide .ht-g{font-size:14px;line-height:1.5;color:var(--ink-soft);font-weight:600}'
     + '#logGuide .ht-more{margin-top:11px;border:none;border-radius:11px;padding:9px 15px;font-size:13.5px;font-weight:800;cursor:pointer;font-family:inherit;min-height:44px;background:var(--surface-2);color:var(--ink)}'
     + '#logGuide .ht-count{font-size:13px;color:var(--ink-soft);font-weight:600;margin:2px 0 0}'
-    + '@media (prefers-reduced-motion: reduce){#logGuide .ht-i[open] .ht-t .ht-c{transition:none}}';
+    + '@media (prefers-reduced-motion: reduce){#logGuide .ht-i[open] .ht-t .ht-c{transition:none}}'
+    // search
+    + '#logGuide .ht-s{position:relative;margin:14px 0 2px}'
+    + '#logGuide .ht-s input{width:100%;box-sizing:border-box;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:13px;padding:13px 40px 13px 14px;font-family:inherit;font-size:16px;font-weight:600;min-height:44px}'
+    + '#logGuide .ht-s input::placeholder{color:var(--ink-soft);font-weight:600}'
+    + '#logGuide .ht-s input:focus{outline:2px solid var(--feed);outline-offset:1px}'
+    + '#logGuide .ht-sx{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:34px;height:34px;border:none;background:none;color:var(--ink-soft);font-size:16px;font-weight:800;cursor:pointer;font-family:inherit;display:none}'
+    + '#logGuide .ht-s.has .ht-sx{display:block}'
+    + '#logGuide .ht-none{font-size:14.5px;line-height:1.5;color:var(--ink-soft);font-weight:600;padding:18px 2px;display:none}'
+    + '#logGuide .ht-hide{display:none}'
+    // the monthly door
+    + '#logGuide .md-in{font-size:16px;line-height:1.5;font-weight:650;margin:2px 0 18px;color:var(--ink-soft)}'
+    + '#logGuide .md-r{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--surface);border:1.5px solid var(--line);border-radius:16px;padding:13px 14px;margin-bottom:9px;cursor:pointer;font-family:inherit;color:var(--ink);min-height:44px}'
+    + '#logGuide .md-r:active{transform:scale(.985)}'
+    + '#logGuide .md-m{flex:1;min-width:0}'
+    + '#logGuide .md-t{display:block;font-size:15px;font-weight:800}'
+    + '#logGuide .md-o{display:block;font-size:13px;font-weight:600;color:var(--ink-soft);line-height:1.4;margin-top:2px}'
+    + '#logGuide .md-c{flex:0 0 auto;color:var(--ink-soft);font-size:15px;font-weight:800}'
+    + '@media (prefers-reduced-motion: reduce){#logGuide .md-r:active{transform:none}}';
 
   function G() { return window.CubbyGuide; }
   function rows() { return (window.CubbyTeachData && window.CubbyTeachData.rows) || {}; }
@@ -160,15 +178,66 @@
      side effect, and render() runs many times per session — so asking inside the template would
      let two renders in one frame pick two different cues and flicker between them, and would burn
      the day's allowance on a paint the parent never saw. */
-  var _chosen = null, _decided = false;
+  var _chosen = null, _decided = false, _door = false;
   function homeCue() {
     if (!window.CubbyTeach) return '';
     if (!_decided) {
       var best = window.CubbyTeach.eligible()[0];
       _chosen = (best && window.CubbyTeach.ask(best)) ? best : null;
+      /* The door only gets a look in when nothing the parent's own data earned is waiting. It is
+         the long tail, not the urgent thing, and it can afford to wait another day. */
+      _door = !_chosen && window.CubbyTeach.doorDue()
+        && window.CubbyTeach.askMark('monthly-door');
       _decided = true;
     }
-    return _chosen ? cueCard(_chosen) : '';
+    if (_chosen) return cueCard(_chosen);
+    if (_door) return doorCard();
+    return '';
+  }
+
+  /* ---- the monthly door ------------------------------------------------------------------------
+     One card a month, opening one screen of things this parent has not met. One interruption
+     spent, six to eight taught, which is how the 44 rows that carry no trigger get reached at all
+     without spending 44 more interruptions on them. */
+  function doorCard() {
+    return '<div class="coach"><div class="cm-ico">🐻</div>'
+      + '<div class="cm-body"><div class="cm-t">A few things you have not met yet</div>'
+      + '<div class="cm-s">Cubby can do a little more than you have needed so far. Here is what might be worth knowing now.</div>'
+      + '<button class="btn-primary" style="margin-top:9px;padding:8px 14px;font-size:13px" '
+      + 'onclick="CubbyTeachUI.door()">Have a look</button></div>'
+      + '<button class="cm-x" onclick="CubbyTeachUI.dismissDoor()">Not now</button></div>';
+  }
+
+  function door() {
+    var T = window.CubbyTeach;
+    if (!T) return;
+    var ids = T.unmet(8);
+    if (!ids.length) return;
+    var g = G();
+    if (!g || !g._mount('A few things you have not met yet')) return;
+    injectCss();
+    var R = rows();
+    var body = '<div class="lg-h">A few things you have not met yet</div>'
+      + '<div class="md-in">Nothing here needs doing. It is only that Cubby holds more than the part you have needed so far.</div>'
+      + ids.map(function (id) {
+          var fn = R[id].depth === 'page' ? 'CubbyTeachUI.page' : 'CubbyTeachUI.brief';
+          return '<button class="md-r" onclick="' + fn + '(\'' + id + '\')">'
+            + '<span class="md-m"><span class="md-t">' + esc(R[id].label) + '</span>'
+            + '<span class="md-o">' + esc(R[id].one) + '</span></span>'
+            + '<span class="md-c" aria-hidden="true">›</span></button>';
+        }).join('')
+      + '<div class="lg-acts"><button class="lg-read" onclick="CubbyGuide.close()">Close</button></div>';
+    g._paint(g._shell(g._topClose(), body, 'All of this also lives in Settings, under How to use Cubby.'));
+    /* Marked here rather than when the card was drawn: a card nobody opened has shown nobody
+       anything, and should not cost them a month. */
+    T.markDoor(ids);
+  }
+
+  // Dismissing without opening still costs the month, or the same card returns tomorrow.
+  function dismissDoor() {
+    if (window.CubbyTeach) window.CubbyTeach.markDoor([]);
+    _door = false;
+    if (typeof window.render === 'function') window.render();
   }
 
   function cueCard(id) {
@@ -210,6 +279,51 @@
     account: 'Your account and your data'
   };
 
+  /* Search over everything, so a question does not depend on guessing which group it lives under.
+     Filtering happens in the DOM rather than by re-rendering: a re-render would collapse every open
+     drawer and lose the caret, which is exactly what typing in a search field must not do.
+     It matches the one-line answer and the chapter body too, not just the label, because a parent
+     searches for their problem ("doctor", "nappy count", "who can see") rather than our nouns. */
+  function howtoFilter(q) {
+    var box = document.getElementById('htSearch');
+    if (box) box.parentNode.classList.toggle('has', !!q);
+    var n = String(q || '').toLowerCase().trim();
+    var hits = 0;
+    var items = document.querySelectorAll('#logGuide [data-teach]');
+    for (var i = 0; i < items.length; i++) {
+      var el = items[i];
+      var hit = !n || el.getAttribute('data-teach').indexOf(n) !== -1;
+      el.classList.toggle('ht-hide', !hit);
+      if (hit) hits++;
+      if (n && el.tagName === 'DETAILS') el.open = false;   // a filtered list should start closed
+    }
+    // A group heading with nothing under it is a dead line, so it goes too.
+    var heads = document.querySelectorAll('#logGuide .ht-dh');
+    for (var j = 0; j < heads.length; j++) {
+      var any = false, sib = heads[j].nextElementSibling;
+      while (sib && !sib.classList.contains('ht-dh')) {
+        if (sib.hasAttribute && sib.hasAttribute('data-teach') && !sib.classList.contains('ht-hide')) { any = true; break; }
+        sib = sib.nextElementSibling;
+      }
+      heads[j].classList.toggle('ht-hide', !any);
+    }
+    var none = document.getElementById('htNone');
+    if (none) none.style.display = (n && !hits) ? 'block' : 'none';
+    var count = document.getElementById('htCount');
+    if (count) count.style.display = n ? 'none' : 'block';
+  }
+  function howtoClear() {
+    var box = document.getElementById('htSearch');
+    if (box) { box.value = ''; box.focus(); }
+    howtoFilter('');
+  }
+  // Everything a row can be found by, lowercased once at render time rather than on every keystroke.
+  function haystack(r) {
+    return [r.label, r.one, r.what, r.get, r.why, r.payoff]
+      .concat((r.matters || []).map(function (m) { return m[0] + ' ' + m[1]; }))
+      .filter(Boolean).join(' ').toLowerCase();
+  }
+
   function item(id) {
     var r = rows()[id];
     var body;
@@ -221,7 +335,7 @@
     } else {
       return '';   // a one-liner is already fully shown in the summary. An empty drawer is a dead tap.
     }
-    return '<details class="ht-i"><summary>'
+    return '<details class="ht-i" data-teach="' + esc(haystack(r)) + '"><summary>'
       + '<span class="ht-t">' + esc(r.label) + '<span class="ht-c" aria-hidden="true">›</span></span>'
       + '<span class="ht-o">' + esc(r.one) + '</span></summary>'
       + '<div class="ht-b">' + body + '</div></details>';
@@ -231,7 +345,7 @@
   // onto the same sentence you just read.
   function flat(id) {
     var r = rows()[id];
-    return '<div class="ht-i" style="padding:12px 14px">'
+    return '<div class="ht-i" data-teach="' + esc(haystack(r)) + '" style="padding:12px 14px">'
       + '<span class="ht-t">' + esc(r.label) + '</span>'
       + '<span class="ht-o">' + esc(r.one) + '</span></div>';
   }
@@ -242,7 +356,13 @@
     injectCss();
     var ids = window.CubbyTeach ? window.CubbyTeach.visible() : Object.keys(rows());
     var R = rows(), body = '<div class="lg-h">How to use Cubby</div>'
-      + '<div class="lg-sub">Everything Cubby can do, and what each one gives you back. Nothing here will ever open itself.</div>';
+      + '<div class="lg-sub">Everything Cubby can do, and what each one gives you back. Nothing here will ever open itself.</div>'
+      + '<div class="ht-s"><input id="htSearch" type="search" inputmode="search" autocomplete="off"'
+      + ' placeholder="Search: nappies, doctor, who can see…"'
+      + ' aria-label="Search everything Cubby can do"'
+      + ' oninput="CubbyTeachUI.howtoFilter(this.value)">'
+      + '<button class="ht-sx" type="button" aria-label="Clear search" onclick="CubbyTeachUI.howtoClear()">✕</button></div>'
+      + '<div class="ht-none" id="htNone">Nothing matches that. Try a plainer word: the search looks at what each thing is for, not only its name.</div>';
     var shown = 0;
     DOMAIN_ORDER.forEach(function (dom) {
       var inDom = ids.filter(function (id) { return R[id].domain === dom; });
@@ -258,7 +378,7 @@
             return R[id].depth === 'one' ? flat(id) : item(id);
           }).join('');
     });
-    body += '<div class="ht-count">' + shown + ' things Cubby can do, on this screen.</div>';
+    body += '<div class="ht-count" id="htCount">' + shown + ' things Cubby can do, on this screen.</div>';
     g._paint(g._shell(g._topClose(), body, 'You can log as much or as little as you like.'));
   }
 
@@ -344,6 +464,8 @@
     page: page, brief: brief, dot: dot, go: go, sheetDot: sheetDot,
     cueCard: cueCard, homeCue: homeCue, dismiss: dismiss,
     howto: howto, settingsRow: settingsRow,
-    _shortVersion: shortVersion
+    howtoFilter: howtoFilter, howtoClear: howtoClear,
+    door: door, doorCard: doorCard, dismissDoor: dismissDoor,
+    _shortVersion: shortVersion, _haystack: haystack
   };
 })();

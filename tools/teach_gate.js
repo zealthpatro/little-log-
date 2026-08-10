@@ -400,6 +400,75 @@ function baseCtx(over) {
   check(T.askMark('firstopen:home') === false, 'no mark renders over an open sheet or Get started');
 }
 
+/* -- the monthly door ---------------------------------------------------------------------------
+   The long tail: 44 rows carry no trigger and can never push, so a browse surface is the only way
+   they get reached. One card a month, and the rules that stop it becoming a second nag. */
+{
+  const c = baseCtx();
+  let t = T0;
+  const { T } = makeLedger(c, () => t);
+  check(T.doorDue() === false, 'no door in the first month, when everything is still new');
+  t = T0 + 31 * DAY;
+  check(T.doorDue() === true, 'the door opens after a month');
+  const picked = T.unmet(8);
+  check(picked.length >= 3, 'it only offers when there are at least three things to show');
+  check(picked.every(id => ROWS[id].depth !== 'one'),
+    'it never offers a one-liner, which would open onto nothing');
+  /* Straight value order returned eight health rows, which reads as a health list rather than a
+     look around. Ranking is right for choosing one cue and wrong for choosing a browse set. */
+  const perDom = {};
+  picked.forEach(id => { perDom[ROWS[id].domain] = (perDom[ROWS[id].domain] || 0) + 1; });
+  check(Object.keys(perDom).length >= 3,
+    'the door spans at least three domains, so it reads as a look around',
+    JSON.stringify(perDom));
+  check(Object.values(perDom).every(n => n <= 2), 'and never more than two from one domain',
+    JSON.stringify(perDom));
+  T.markDoor(picked);
+  check(T.doorDue() === false, 'and not again the same month');
+  t += 31 * DAY;
+  check(T.doorDue() === true, 'but yes the month after');
+  check(T.unmet(8).every(id => picked.indexOf(id) === -1),
+    'and it never re-offers what it already showed');
+}
+{
+  /* THE ONE THAT MATTERS. Being listed in a browse screen is not being taught. If the door marked
+     rows seen, it would silently cancel the contextual nudge that had something better to say at a
+     better moment, and the parent would simply never hear about it. */
+  const c = baseCtx();
+  let t = T0 + 31 * DAY;
+  const { T, newSession } = makeLedger(c, () => t);
+  T.markDoor(['openVisitSummary']);
+  T.fire('fever');
+  newSession();
+  check(T.ask('openVisitSummary') === true,
+    'a row shown in the door can still fire its own cue later',
+    'the door must not write to `seen`');
+}
+{
+  // it is the long tail, not the urgent thing
+  const c = baseCtx();
+  let t = T0 + 31 * DAY;
+  const { T } = makeLedger(c, () => t);
+  T.fire('fever');
+  check(T.askMark('monthly-door') === false, 'the door waits while an earned cue is eligible');
+}
+{
+  const c = baseCtx({ lossHolding: true });
+  const { T } = makeLedger(c, () => T0 + 60 * DAY);
+  check(T.doorDue() === false, 'no door under lossHolding');
+  check(T.unmet(8).length === 0, 'and nothing is even offered to it');
+}
+{
+  // the search index has to actually contain what a parent would type
+  const hay = id => [ROWS[id].label, ROWS[id].one, ROWS[id].what, ROWS[id].get, ROWS[id].why,
+                     ROWS[id].payoff].concat((ROWS[id].matters || []).map(m => m[0] + ' ' + m[1]))
+                     .filter(Boolean).join(' ').toLowerCase();
+  check(hay('openDiaper').indexOf('doctor') !== -1, 'searching "doctor" would reach nappies');
+  check(hay('openVisitSummary').indexOf('doctor') !== -1, 'and the visit summary');
+  check(hay('openMoodNote').indexOf('shared') !== -1, 'searching "shared" would reach mood');
+  check(rowIds.every(id => hay(id).length > 20), 'every row has something searchable');
+}
+
 // -- depth ranks in the right order. A page is for the capabilities whose benefit is not obvious,
 //    so it must never sit below a chapter or a one-liner with the same domain and trigger.
 {

@@ -75,6 +75,8 @@
       if (!o || typeof o !== 'object') o = {};
       o.seen = o.seen || {};          // cueId -> 1, permanent, shared by pull and push
       o.fired = o.fired || {};        // trigger name -> ms it first became true
+      o.door = o.door || {};          // offered in a monthly door. NOT the same as seen
+      o.doorAt = o.doorAt || 0;
       o.day = o.day || '';            // yyyy-mm-dd the allowance below belongs to
       o.spent = o.spent || 0;
       o.last = o.last || 0;
@@ -285,9 +287,72 @@
     return out;
   }
 
+  /* ---- the monthly door -------------------------------------------------------------------------
+     The long tail problem: 44 of the 122 rows carry no trigger, so they can never push, and a
+     parent only meets them by going looking. One card a month opening one screen of things they have
+     not met is the answer that costs a single interruption and teaches six or eight.
+
+     Candidates are visible, unseen, and not already offered in a previous door. It deliberately does
+     NOT mark them seen: a row shown in a browse list has not been taught, and marking it would
+     cancel a contextual nudge that had something better to say at a better moment. `door` is
+     therefore its own map, kept apart from `seen`. */
+  function unmet(limit) {
+    var c = ctx(); if (!c) return [];
+    // Local guarantee, not an inherited one. doorDue() and the overlay's mount() both refuse under
+    // lossHolding already, but a list of "things you have not tried yet" should not exist at all
+    // for a bereaved parent, whoever ends up calling this next.
+    if (c.lossHolding) return [];
+    var o = load(c), R = rows(), out = [];
+    for (var id in R) {
+      if (!Object.prototype.hasOwnProperty.call(R, id)) continue;
+      if (o.seen[id] || (o.door || {})[id]) continue;
+      if (!fits(c, R[id])) continue;
+      if (R[id].depth === 'one') continue;          // nothing behind it to open, so nothing to meet
+      out.push({ id: id, v: value(R[id]) });
+    }
+    out.sort(function (a, b) { return b.v - a.v || (a.id < b.id ? -1 : 1); });
+    /* Take at most two per domain, best first. Straight value order returned eight health rows in a
+       row, which reads as a health list rather than "a few things you have not met" and wastes the
+       one interruption a month costs. Ranking is right for choosing ONE cue and wrong for choosing
+       a browse set. */
+    var perDomain = {}, picked = [], R2 = rows();
+    for (var pass = 0; pass < 2; pass++) {
+      for (var i = 0; i < out.length && picked.length < (limit || 8); i++) {
+        var id2 = out[i].id, dom = R2[id2].domain;
+        if (picked.indexOf(id2) !== -1) continue;
+        if ((perDomain[dom] || 0) > pass) continue;
+        perDomain[dom] = (perDomain[dom] || 0) + 1;
+        picked.push(id2);
+      }
+    }
+    return picked;
+  }
+
+  // Once a month at most, never in the first month, and never with too little to show for it.
+  function doorDue() {
+    var c = ctx(); if (!c) return false;
+    if (c.lossHolding || c.sheetOpen) return false;
+    var o = load(c);
+    if (dayNumber(c) < 30) return false;
+    if (o.doorAt && (now() - o.doorAt) < 30 * DAY) return false;
+    return unmet(8).length >= 3;
+  }
+
+  // Called when the door is actually opened, not when the card is drawn: a card that was ignored
+  // has not shown anybody anything, and should not reset the month.
+  function markDoor(ids) {
+    var c = ctx(); if (!c) return;
+    var o = load(c);
+    o.door = o.door || {};
+    (ids || []).forEach(function (id) { o.door[id] = 1; });
+    o.doorAt = now();
+    save(c, o);
+  }
+
   window.CubbyTeach = {
     ask: ask, askMark: askMark, fire: fire, markSeen: markSeen, hasSeen: hasSeen,
     eligible: eligible, explain: explain, visible: visible,
+    unmet: unmet, doorDue: doorDue, markDoor: markDoor,
     // exposed for tools/teach_gate.js
     _allowanceFor: allowanceFor, _value: value, _dayNumber: dayNumber, _now: null
   };
