@@ -122,6 +122,32 @@ CARDS.forEach(sel => {
     'every card and tile inset is 14px or 16px, never a third value', uniq.join(', '));
 }
 
+/* ONE RADIUS, AND ONE STATED EXCEPTION. Cards carried 14, 16 and 26 while sitting next to each
+   other, which reads as three families rather than one. Everything is 16 now; the quick-log tiles
+   keep 26 because they are the app's primary tap targets and the softer corner is doing a job
+   there. That exception has its own token so it is a decision somebody made rather than a leftover.
+   Four tokens still resolve to 16px (--radius, --radius-sm, --r-card, --r-dense). They are not
+   consolidated on purpose: renaming 35 selectors to save three aliases is churn with a real chance
+   of missing one, and this check makes the value single-sourced regardless. */
+{
+  const tokens = ['--radius', '--radius-sm', '--r-card', '--r-dense'];
+  tokens.forEach(t => {
+    const m = SRC.match(new RegExp('\\' + t + ':\\s*([^;]+);'));
+    check(!!m, 'token ' + t + ' is defined');
+    if (m) check(m[1].trim() === '16px', t + ' is 16px', m[1].trim());
+  });
+  const tap = SRC.match(/--r-tap:\s*([^;]+);/);
+  check(!!tap, 'token --r-tap is defined');
+  if (tap) check(tap[1].trim() === '26px', '--r-tap keeps 26px for the quick-log tiles', tap[1].trim());
+  const b = rule('.action{');
+  check(!!b && /border-radius:var\(--r-tap\)/.test(b),
+    '.action is the only thing using the exception',
+    (b && (b.match(/border-radius:[^;]*/) || [''])[0]) || '');
+  // and nothing else may quietly borrow it
+  const users = (SRC.match(/border-radius:var\(--r-tap\)/g) || []).length;
+  check(users === 1, 'exactly one rule uses --r-tap', users + ' rules do');
+}
+
 const total = passes + fails;
 console.log('\n' + (fails ? 'FAIL' : 'PASS') + ' — ' + passes + '/' + total + ' checks');
 process.exit(fails ? 1 : 0);
