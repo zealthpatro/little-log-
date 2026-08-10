@@ -114,6 +114,16 @@ rowIds.forEach(id => {
     voiceCheck(id, 'one', r.one);
   }
   check(!!r.label && r.label.length <= 40, id + ' has a short label');
+  /* Structural. A patch that inserted page fields at the wrong brace once nested the whole page
+     INSIDE who:{...}. That parses, so it showed up only as "missing why" on a few rows rather than
+     as the structural break it was. Unknown keys in who are now the loud failure they should be. */
+  const WHO_KEYS = ['stage', 'role', 'months', 'circle'];
+  const ROW_KEYS = ['label', 'fn', 'domain', 'depth', 'one', 'what', 'get', 'who', 'earn',
+                    'faq', 'read', 'why', 'matters', 'how', 'payoff'];
+  Object.keys(r.who || {}).forEach(k => check(WHO_KEYS.indexOf(k) !== -1,
+    id + '.who has only known keys', 'unexpected: ' + k));
+  Object.keys(r).forEach(k => check(ROW_KEYS.indexOf(k) !== -1,
+    id + ' has only known keys', 'unexpected: ' + k));
   check(['one', 'chapter', 'page'].indexOf(r.depth) !== -1, id + ' has a valid depth');
   // A chapter promises two more fields. Rows without them are one-liners and must say so.
   if (r.depth === 'chapter' && r.what) voiceCheck(id, 'what', r.what);

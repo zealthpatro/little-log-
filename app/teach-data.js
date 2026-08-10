@@ -28,13 +28,45 @@
 
   var TEACH = {
     /* ---- Everyday logging (23) ---- */
-    openFeed: { label: 'Feed', fn: 'openFeed()', domain: 'log', depth: 'chapter',
+    openFeed: { label: 'Feed', fn: 'openFeed()', domain: 'log', depth: 'page',
       one: 'Breast, bottle, water or solids, with a live timer for nursing.',
-      who: { stage: ['baby','child'] } },
-    openSleep: { label: 'Sleep', fn: 'openSleep()', domain: 'log', depth: 'chapter',
+      who: { stage: ['baby','child'] },
+      why: 'When was the last one is the question that starts every handover and every night waking, and it is the one thing nobody holds accurately in their head at four in the morning.',
+      matters: [
+        ['When it happened, not when you logged it', 'Every sheet lets you move the time. The moment you have a free hand is rarely the moment it happened, and an app that insists otherwise just gets fed wrong times.'],
+        ['Which side, or how much', 'Whichever your day is actually measured in. Cubby does not convert one into the other, and it will never suggest a number you ought to be reaching.'],
+        ['The timer runs on every phone', 'Start a nursing timer and everyone in your circle sees it running, so nobody restarts a feed that is already underway.'],
+        ['A quiet day is a day too', 'Nothing is scored, nothing is compared to another baby, and a gap in the record is not a mark against anyone.']
+      ],
+      how: [
+        'One tap from your home row. Breast, bottle, water or solids.',
+        'Start a timer, or write it up afterwards. Both end in the same place.',
+        'Change the time on anything, at any point, including days later.',
+        'The last feed sits at the top of your home screen, so nobody goes looking.'
+      ],
+      payoff: 'Nobody has to ask, guess, or wake someone up to find out when she last fed.',
+      read: 'how-often-to-feed-newborn'
+    },
+    openSleep: { label: 'Sleep', fn: 'openSleep()', domain: 'log', depth: 'page',
       one: 'Start a nap with one tap. The timer shows on every phone in your circle.',
       who: { stage: ['baby','child'] },
-      earn: { on: 'first-log' } },
+      earn: { on: 'first-log' },
+      why: 'Sleep is the thing everyone has an opinion about and nobody has a record of. A timer running on every phone in the circle turns a nightly disagreement into a shared fact.',
+      matters: [
+        ['One tap down, one tap up', 'The moment a baby finally goes down is not the moment to be filling in a form.'],
+        ['Everyone can see it running', 'Nobody opens the door of a dark room to check whether she is still asleep. That on its own earns the log.'],
+        ['A nap that started a while ago', 'If they drifted off half an hour before you got to your phone, say so. Nothing has to be caught live.'],
+        ['Wakings belong to the nap', 'A night broken three times is not the same night as an unbroken one, and a single total would hide exactly that.']
+      ],
+      how: [
+        'Tap Sleep to start it. Tap again when they wake.',
+        'Set an earlier start if it began before you reached your phone.',
+        'Add the disturbances, so the total is the sleep they actually got.',
+        'A finished nap can be written up from scratch afterwards.'
+      ],
+      payoff: 'The day\'s sleep becomes something you can look at, instead of something you are arguing about.',
+      read: 'newborn-sleep-what-is-normal'
+    },
     openDiaper: { label: 'Diaper', fn: 'openDiaper()', domain: 'log', depth: 'page',
       one: 'Wet, dirty, both, or a dry check. The thing a doctor almost always asks about.',
       who: { stage: ['baby','child'] },
@@ -53,20 +85,65 @@
       ],
       payoff: 'When someone asks how many wet nappies today and when the last dirty one was, you read the answer instead of reconstructing it.',
       read: 'bathing-washing-and-nappy-care' },
-    openPump: { label: 'Pump', fn: 'openPump()', domain: 'log', depth: 'chapter',
+    openPump: { label: 'Pump', fn: 'openPump()', domain: 'log', depth: 'page',
       one: 'How much you expressed, which side, and when.',
-      who: { stage: ['baby','child'] } },
+      who: { stage: ['baby','child'] },
+      why: 'Expressing is work that disappears from the day the moment it is done, and the stash is what decides whether anybody else can take a feed tonight.',
+      matters: [
+        ['How much, and which side', 'A week of sessions shows a pattern. The last session on its own shows almost nothing.'],
+        ['The time it happened', 'Pumping is rhythm-sensitive in a way most logs are not, and a session without a time cannot show a rhythm.'],
+        ['Your stash lives in one place', 'Rather than on the back of a receipt, or in a note you will not find again at midnight.'],
+        ['There is no target here', 'Cubby holds no expectation of you and will never suggest one. It shows your own days back to you and stops there.']
+      ],
+      how: [
+        'Log the amount, the side, and the time, in whichever units you already think in.',
+        'Move the time afterwards if you were busy at the point it happened.',
+        'It sits alongside feeds, so the day reads as one story rather than two.',
+        'Anyone in your circle can see the stash without asking you for a number.'
+      ],
+      payoff: 'The person doing the night feed knows what is there, and you did not have to tell them.'
+    },
     openActivity: { label: 'Add to the day', fn: 'openActivity()', domain: 'log', depth: 'chapter',
       one: 'Tummy time, a bath, a walk, or a line about the day. Add a photo if you took one.',
       who: { stage: ['baby','child'] } },
-    openGrowth: { label: 'Measurement', fn: 'openGrowth()', domain: 'log', depth: 'chapter',
+    openGrowth: { label: 'Measurement', fn: 'openGrowth()', domain: 'log', depth: 'page',
       one: 'Weight and height whenever you have them. One of the two is fine.',
       who: { stage: ['baby','child'] },
-      earn: { on: 'growth-2-points' } },
-    openMilestone: { label: 'Milestone', fn: 'openMilestone()', domain: 'log', depth: 'chapter',
+      earn: { on: 'growth-2-points' },
+      why: 'One measurement is a dot. Several over a few months are a line, and the line is the thing a doctor can actually read. It is worth logging the ones you already get at appointments.',
+      matters: [
+        ['One of the two is enough', 'Weight or height. A visit that only produced one number is still worth writing down, and half a record beats none.'],
+        ['The date carries the meaning', 'A weight without a date cannot join a curve, and joining the curve is the entire point of keeping it.'],
+        ['The curve is a guide, never a verdict', 'Cubby draws where the numbers sit against the published charts. It does not interpret them, flag them, or tell you what they mean.'],
+        ['Bring it, do not act on it', 'The chart exists so a conversation with your doctor starts from a record instead of a memory.']
+      ],
+      how: [
+        'Add a weight or a height whenever you have one, usually straight after a visit.',
+        'Pick your units once. Cubby keeps using the ones you think in.',
+        'Two or more measurements start drawing the line.',
+        'It goes into the visit summary automatically, so you do not gather it twice.'
+      ],
+      payoff: 'You arrive at the next appointment with the history already drawn, instead of a number on a scrap of paper.'
+    },
+    openMilestone: { label: 'Milestone', fn: 'openMilestone()', domain: 'log', depth: 'page',
       one: 'The firsts, from a library of ideas or in your own words.',
       who: { stage: ['baby','child'] },
-      earn: { on: 'month-1' } },
+      earn: { on: 'month-1' },
+      why: 'The firsts are the part you will want to read back in a year, and they are also the part that vanishes fastest, because at the time it just feels like a Tuesday.',
+      matters: [
+        ['Your words beat a checklist', 'There is a library of ideas if you want a prompt, but the ones written in your own words are the ones worth rereading.'],
+        ['There is no pass and no fail', 'Every baby arrives at their own time. Cubby does not compare yours to an average and will not tell you anyone is behind.'],
+        ['The date can be approximate', 'Set it to the day you remember. A first noticed three days late is still a first.'],
+        ['A photo makes it a keepsake', 'Add one and the moment turns into something you can put in an album later, rather than a line of text.']
+      ],
+      how: [
+        'Pick from the library, or write your own in a sentence.',
+        'Set the day it happened, not the day you got round to it.',
+        'Add a photo if you took one.',
+        'Everyone in your circle sees it, so grandparents hear about it without a phone call.'
+      ],
+      payoff: 'A year from now there is something to read back that is more than dates and numbers.'
+    },
     openCustomMilestone: { label: 'New moment', fn: 'openCustomMilestone()', domain: 'log', depth: 'one',
       one: 'A first that is not on anybody\'s list but yours.',
       who: { stage: ['baby','child'] } },
@@ -96,10 +173,25 @@
       one: 'They drifted off a while ago. Set when it actually started.',
       who: { stage: ['baby','child'] },
       earn: { on: 'sleep-logged-3' } },
-    openEdit: { label: 'Fix an entry', fn: 'openEdit()', domain: 'log', depth: 'chapter',
+    openEdit: { label: 'Fix an entry', fn: 'openEdit()', domain: 'log', depth: 'page',
       one: 'Wrong day, wrong time, a nap\'s wake time. Mistakes are meant to be fixable.',
       who: { stage: ['baby','child'] },
-      earn: { on: 'first-log' } },
+      earn: { on: 'first-log' },
+      why: 'Every log in this app can be corrected, and knowing that up front changes how you use it. An app you cannot fix is one you start hesitating to write in.',
+      matters: [
+        ['Wrong time is the usual mistake', 'Logged at bedtime for something that happened at lunch. Move it, and the day reads correctly again.'],
+        ['A nap that ran on', 'Wake times get missed. Set the real end and every total that used it updates with it.'],
+        ['Your own entries, always', 'Anyone in the circle can fix what they logged. Nothing is frozen because somebody was in a hurry.'],
+        ['Deleted is not gone', 'Removed entries wait in Recently deleted, so a wrong tap at 3am is not permanent.']
+      ],
+      how: [
+        'Tap any entry in the log to open it.',
+        'Change the time, the day, the amount, or the note.',
+        'Delete it if it should not be there, and recover it from Recently deleted if it should.',
+        'Everyone in the circle sees the corrected version straight away.'
+      ],
+      payoff: 'You can log fast and messily, which is the only way anyone logs at four in the morning.'
+    },
     openTrash: { label: 'Recently deleted', fn: 'openTrash()', domain: 'log', depth: 'one',
       one: 'Deleted entries wait here before they go for good.',
       who: { stage: ['baby','child'] },
@@ -112,10 +204,25 @@
       one: 'How the day went, gathered into one read.',
       who: { stage: ['baby','child'] },
       earn: { on: '7-days-logged' } },
-    openRoutinesEdit: { label: 'Rituals', fn: 'openRoutinesEdit()', domain: 'log', depth: 'chapter',
+    openRoutinesEdit: { label: 'Rituals', fn: 'openRoutinesEdit()', domain: 'log', depth: 'page',
       one: 'The rhythm you are building. A gentle \'four of seven\', never a streak.',
       who: { stage: ['baby','child'] },
-      earn: { on: '7-days-logged' } },
+      earn: { on: '7-days-logged' },
+      why: 'A ritual is the thing you are trying to make ordinary. Seeing it happen four days out of seven is encouraging in a way a perfect run of seven never actually is.',
+      matters: [
+        ['Four of seven is a good week', 'Cubby counts days, not streaks. Nothing resets to zero because of one hard night, because that is not how a real week goes.'],
+        ['You choose what counts', 'Bath, story, walk, tummy time. These are your rituals, not a template somebody else decided was correct.'],
+        ['It is a mirror, not a target', 'There is no goal to hit and no notification if a day passes without one.'],
+        ['Everyone contributes', 'A ritual kept by whoever was on duty is still kept. The rhythm belongs to the household.']
+      ],
+      how: [
+        'Add the few things you want to become ordinary.',
+        'Tick them off on the days they happen.',
+        'The card shows how this week has gone, gently.',
+        'Change or remove any of them whenever the season of life changes.'
+      ],
+      payoff: 'You can see the shape you are building, without being punished on the days it does not happen.'
+    },
     openRoutineItem: { label: 'A ritual', fn: 'openRoutineItem()', domain: 'log', depth: 'one',
       one: 'One ritual, and how this week has gone for it.',
       who: { stage: ['baby','child'] } },
@@ -129,10 +236,25 @@
       earn: { on: 'logs-25' } },
 
     /* ---- Health and guidance (19) ---- */
-    openTemp: { label: 'Temperature', fn: 'openTemp()', domain: 'health', depth: 'chapter',
+    openTemp: { label: 'Temperature', fn: 'openTemp()', domain: 'health', depth: 'page',
       one: 'A reading, with plain guidance beside it. Cubby never diagnoses.',
       who: { stage: ['baby','child'] },
-      earn: { on: 'month-2' } },
+      earn: { on: 'month-2' },
+      why: 'A temperature on its own answers almost nothing. The same reading means one thing at nine in the morning and something else as the third in a row, and that sequence is what you will be asked for.',
+      matters: [
+        ['The time matters as much as the number', 'A direction is what a clinician reads. A single figure with no time cannot show one.'],
+        ['Cubby does not decide what is high', 'It records and orders. Guidance beside a reading comes from published sources and is never Cubby telling you what is happening to your child.'],
+        ['Where you took it', 'Under the arm and in the ear are not interchangeable, and the person you speak to will want to know which.'],
+        ['It gathers itself into the illness', 'If an illness is running, every reading joins its timeline without you filing anything.']
+      ],
+      how: [
+        'Log the reading and the time. Change the time if you took it earlier.',
+        'Keep using whichever unit you already think in.',
+        'Anyone in your circle can add one, so the night shift is in the same record.',
+        'It flows into the visit summary on its own.'
+      ],
+      payoff: 'When someone asks how long and how high, you read out a sequence instead of trying to reconstruct three days.'
+    },
     openSymptom: { label: 'Symptom', fn: 'openSymptom()', domain: 'health', depth: 'chapter',
       one: 'How they are, in your words or from a list.',
       who: { stage: ['baby','child'] },
@@ -165,10 +287,25 @@
       one: 'What you gave, how much, and when. Two people cannot double a written-down dose.',
       who: { stage: ['baby','child'] },
       earn: { on: 'illness-started' } },
-    openMedSheet: { label: 'A medicine', fn: 'openMedSheet()', domain: 'health', depth: 'chapter',
+    openMedSheet: { label: 'A medicine', fn: 'openMedSheet()', domain: 'health', depth: 'page',
       one: 'The dose, the schedule, and when the last one was given, by whom.',
       who: { stage: ['baby','child'] },
-      earn: { on: 'med-added' } },
+      earn: { on: 'med-added' },
+      why: 'Two adults caring for one child cannot double a dose that is written down, and cannot miss one either. This is the log where the cost of a gap is highest and the effort of keeping it is lowest.',
+      matters: [
+        ['The last dose, and who gave it', 'The row says both. That single line is what stops the 2am conversation about whether it has already been done.'],
+        ['Cubby warns before it writes', 'Tap Dose again too soon and it tells you when the last one was, before anything is recorded.'],
+        ['The schedule, not the arithmetic', 'Add how often or at what times once. Nothing has to be worked out again while holding a crying child.'],
+        ['The course ends when it ends', 'Set times can go into your own calendar and stop on their own, so no reminder outlives the prescription.']
+      ],
+      how: [
+        'Add the medicine once, with the dose and how often it is given.',
+        'Tap Dose each time. It records the time, the amount and the person.',
+        'Everyone in the circle sees the same last dose, straight away.',
+        'Put the set times into your calendar if the alarm is easier coming from your own phone.'
+      ],
+      payoff: 'Nobody doubles a dose, nobody misses one, and nobody has to text somebody else to be sure.'
+    },
     openMedManage: { label: 'Manage medicines', fn: 'openMedManage()', domain: 'health', depth: 'one',
       one: 'Everything currently prescribed, in one place.',
       who: { stage: ['baby','child'] } },
@@ -180,10 +317,25 @@
       one: 'One vaccine, when it is due, and whether it has been given.',
       who: { stage: ['baby','child'] },
       earn: { on: 'birthday-set' } },
-    openVaccineCountry: { label: 'Vaccine schedule', fn: 'openVaccineCountry()', domain: 'health', depth: 'chapter',
+    openVaccineCountry: { label: 'Vaccine schedule', fn: 'openVaccineCountry()', domain: 'health', depth: 'page',
       one: 'The schedule for where you are, filled in the day you gave a birthday.',
       who: { stage: ['baby','child'] },
-      earn: { on: 'birthday-set' } },
+      earn: { on: 'birthday-set' },
+      why: 'The schedule was filled in the day you gave a birthday. It is already sitting there, which is worth knowing, because most people find it by accident months later.',
+      matters: [
+        ['It follows where you are', 'Schedules differ by country. Cubby uses the one for your region rather than a single global list that would be wrong for most people.'],
+        ['Ticking off is the whole job', 'Mark each one as it is given. There is nothing else to maintain.'],
+        ['A date you are unsure of', 'An estimated date is marked as estimated rather than quietly presented as fact. You can set the real one whenever you have it.'],
+        ['It is a record, not advice', 'Cubby will not recommend, schedule or advise on any vaccination. It shows the published plan and tracks what has happened.']
+      ],
+      how: [
+        'Set a birthday and the plan appears, already filled in.',
+        'Tick each one off as it happens, adding the date.',
+        'Add anything your schedule does not include.',
+        'It goes with you into the visit summary and the doctor report.'
+      ],
+      payoff: 'The answer to what has she had, and when is on your phone rather than in a folder at home.'
+    },
     openAddVaccine: { label: 'Add a vaccine', fn: 'openAddVaccine()', domain: 'health', depth: 'one',
       one: 'Something your schedule does not include.',
       who: { stage: ['baby','child'] } },
@@ -205,10 +357,25 @@
         'Nothing leaves your phone unless you choose to send it.'
       ],
       payoff: 'The ten minutes get spent on what to do next, instead of on rebuilding what already happened.' },
-    openDoctorReport: { label: 'Last 14 days', fn: 'openDoctorReport()', domain: 'health', depth: 'chapter',
+    openDoctorReport: { label: 'Last 14 days', fn: 'openDoctorReport()', domain: 'health', depth: 'page',
       one: 'A fortnight of the record, ready to hand over.',
       who: { stage: ['baby','child'] },
-      earn: { on: 'appt-added' } },
+      earn: { on: 'appt-added' },
+      why: 'A fortnight of the record on one page, ready to hand over. It exists for the appointments where the useful question is what has been happening rather than what is happening now.',
+      matters: [
+        ['It is built, not filled in', 'Everything in it is already logged. There is no form to complete the night before.'],
+        ['Fourteen days, in order', 'Long enough to show a pattern, short enough to be read in a waiting room.'],
+        ['Numbers and your words, kept apart', 'What you noticed sits beside the figures rather than blended into them, so neither has to be dug out of the other.'],
+        ['Nothing is interpreted', 'Cubby gathers and orders. It draws no conclusion and offers no opinion about any of it.']
+      ],
+      how: [
+        'Open it before the appointment.',
+        'Read it out, hand the phone over, or print it.',
+        'It stays on your phone unless you choose to send it.',
+        'Everything in it came from what you and your circle already logged.'
+      ],
+      payoff: 'The conversation starts from a record, which usually means it starts further along.'
+    },
     openVisit: { label: 'Log a visit', fn: 'openVisit()', domain: 'health', depth: 'one',
       one: 'What was said, while you still remember it.',
       who: { stage: ['baby','child'] },
@@ -373,17 +540,47 @@
       one: 'Who is in the circle, and what each of them can do.',
       who: { stage: null },
       earn: { on: 'second-caregiver' } },
-    openNoteCompose: { label: 'Leave a note', fn: 'openNoteCompose()', domain: 'circle', depth: 'chapter',
+    openNoteCompose: { label: 'Leave a note', fn: 'openNoteCompose()', domain: 'circle', depth: 'page',
       one: 'A word for whoever has baby next. Everyone, or just one person.',
       who: { stage: null },
-      earn: { on: 'second-caregiver' } },
+      earn: { on: 'second-caregiver' },
+      why: 'A note is a handover, not a diary entry. It is the thing you would have texted, kept where the person taking over is already looking.',
+      matters: [
+        ['Everyone, or one person', 'Some things are for the household and some are for one person. The card always says which, so nothing is shared by accident.'],
+        ['It sits where they will see it', 'On the home screen of whoever has the baby next, rather than in a message thread that gets buried by lunchtime.'],
+        ['New is marked as new', 'Reading it clears it for you and nobody else, so one person reading does not hide it from the rest.'],
+        ['It is not an instruction list', 'Slight cold today, extra cuddles, last fed at eight. The tone is a person talking to a person.']
+      ],
+      how: [
+        'Write a line and choose who it is for.',
+        'It appears on their home screen, marked as unread until they read it.',
+        'Pin the ones that should stay up across days.',
+        'Edit or delete your own at any time.'
+      ],
+      payoff: 'The handover happens whether or not the two of you are awake at the same time.'
+    },
     openNoteView: { label: 'A note', fn: 'openNoteView()', domain: 'circle', depth: 'one',
       one: 'The card always says who it went to.',
       who: { stage: null } },
-    openMoodNote: { label: 'How are you, in yourself?', fn: 'openMoodNote()', domain: 'circle', depth: 'chapter',
+    openMoodNote: { label: 'How are you, in yourself?', fn: 'openMoodNote()', domain: 'circle', depth: 'page',
       one: 'Never shared with your circle. Not now, not later, not by accident.',
       who: { stage: null, role: 'owner' },
-      earn: { on: 'postpartum-2w' } },
+      earn: { on: 'postpartum-2w' },
+      why: 'Everything else in Cubby is about the baby. This one is about you, and it is the only record here that nobody else can ever see.',
+      matters: [
+        ['It is never shared', 'Not now, not later, not by accident, and not with the person who shares every other part of this app with you.'],
+        ['There is nothing to keep up', 'No streak, no chart, no reminder if a week goes by. It is here when you want it and silent when you do not.'],
+        ['A few words are enough', 'This is not a journal you have to be good at. One honest line on a hard day is the whole idea.'],
+        ['Looking back is the point', 'Weeks blur completely. Reading your own words from a fortnight ago is often the first sign of what has actually changed.']
+      ],
+      how: [
+        'Write a line about how you are, in your own words.',
+        'It is stored privately to you and is not part of the shared log.',
+        'Read back over previous entries whenever you want to.',
+        'Nobody in your circle is ever told that it exists.'
+      ],
+      payoff: 'Somewhere in an app full of somebody else\'s needs, one page is yours.'
+    },
     openMaternalPrivacy: { label: 'Your private health', fn: 'openMaternalPrivacy()', domain: 'circle', depth: 'chapter',
       one: 'The line around what stays yours, drawn where you can see it.',
       who: { stage: null , role: 'owner' },
@@ -446,10 +643,25 @@
       one: 'Call it what you call it.',
       who: { stage: null },
       earn: { on: 'moments-5' } },
-    openMemoryCard: { label: 'Memory card', fn: 'openMemoryCard()', domain: 'memories', depth: 'chapter',
+    openMemoryCard: { label: 'Memory card', fn: 'openMemoryCard()', domain: 'memories', depth: 'page',
       one: 'A month, a photo and a line, made into something you would actually print.',
       who: { stage: null },
-      earn: { on: '3-photos' } },
+      earn: { on: '3-photos' },
+      why: 'The photos are already on your phone. This is the small amount of effort that turns a few of them into something you would actually print, at the point when doing it properly feels impossible.',
+      matters: [
+        ['It uses what you already took', 'No shoot to arrange, no perfect photo required. The month and a line beside a picture is the whole card.'],
+        ['A line beats a caption', 'What she was like this month, in a sentence. That is the part you will not remember and the part worth keeping.'],
+        ['Private until you decide', 'Nothing is public and nothing is shared until you choose to share that one thing.'],
+        ['It is a keepsake, not a post', 'Made to be kept or printed rather than to be performed for anybody.']
+      ],
+      how: [
+        'Pick a photo from your album.',
+        'Add the month and a line about how they were.',
+        'Save it, and it stays in your kept memories.',
+        'Share or print it only if you want to.'
+      ],
+      payoff: 'A year of months exists as something you can hold, instead of four thousand photos you never sorted.'
+    },
     openBirthPoster: { label: 'Birth poster', fn: 'openBirthPoster()', domain: 'memories', depth: 'chapter',
       one: 'The details of the day, set as something to put on a wall.',
       who: { stage: null },
@@ -549,6 +761,7 @@
     openDateTimePicker: 'The shared date and time picker. One component, reused everywhere, by design.',
     openTimePicker: 'Time half of the same component.',
     openWhenPicker: 'The \'when did this happen\' control inside log sheets.',
+    showConnTrouble: 'A connection-trouble card shown during sign-in. It is an error state, not a capability, and it explains itself on screen.',
     showStatus: 'Inline status text during sign-in.',
     showSent: 'Confirms the magic link went out.',
     openSheet: 'The sheet primitive itself. 131 call sites because it is the frame, not a feature.',
