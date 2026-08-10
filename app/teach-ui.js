@@ -74,7 +74,19 @@
     + '#logGuide .md-t{display:block;font-size:15px;font-weight:800}'
     + '#logGuide .md-o{display:block;font-size:13px;font-weight:600;color:var(--ink-soft);line-height:1.4;margin-top:2px}'
     + '#logGuide .md-c{flex:0 0 auto;color:var(--ink-soft);font-size:15px;font-weight:800}'
-    + '@media (prefers-reduced-motion: reduce){#logGuide .md-r:active{transform:none}}';
+    + '@media (prefers-reduced-motion: reduce){#logGuide .md-r:active{transform:none}}'
+    /* COMPACT. A chapter is two short paragraphs. Given the full screen a page uses, it read as
+       60% empty, which makes the app look like it ran out of things to say about its own feature.
+       Inflating the copy to fill the screen would mean inventing content, so the presentation
+       shrinks to fit the content instead: a centred dialog that ends where the words end. */
+    + '#logGuide.lg-compact{background:rgba(0,0,0,.34);backdrop-filter:blur(2px);display:grid;place-items:center;padding:20px}'
+    + '#logGuide.lg-compact .lg-top{position:absolute;top:0;right:0;left:0}'
+    + '#logGuide.lg-compact .lg-body{flex:0 1 auto;max-width:360px;width:100%;max-height:78vh;background:var(--surface);border-radius:20px;padding:22px 20px 20px;box-shadow:0 18px 44px rgba(0,0,0,.22);animation:lgPop .22s ease}'
+    + '#logGuide.lg-compact .lg-foot{display:none}'
+    + '#logGuide.lg-compact .lg-h{font-size:23px;margin-bottom:10px}'
+    + '#logGuide.lg-compact .lg-acts{margin-top:20px}'
+    + '@keyframes lgPop{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}'
+    + '@media (prefers-reduced-motion: reduce){#logGuide.lg-compact .lg-body{animation:none}}';
 
   function G() { return window.CubbyGuide; }
   function rows() { return (window.CubbyTeachData && window.CubbyTeachData.rows) || {}; }
@@ -159,13 +171,41 @@
   function dot(id, label) {
     var r = rows()[id];
     if (!r) return '';
-    var fn = r.depth === 'page' ? 'CubbyTeachUI.page' : 'CubbyTeachUI.brief';
+    var fn = r.depth === 'page' ? 'CubbyTeachUI.page'
+           : r.depth === 'chapter' ? 'CubbyTeachUI.chapter' : 'CubbyTeachUI.brief';
     return '<button class="lg-i" onclick="event.stopPropagation();' + fn + '(\'' + id + '\')" '
       + 'aria-label="' + esc('What is this? ' + (label || r.label)) + '">i</button>';
   }
 
-  // The shallow answer, for rows that do not warrant a page. A toast, because one line does not
-  // deserve a full screen and taking one over would teach people to stop tapping the dot.
+  /* A chapter: what it is, and what it gives back. Two short paragraphs and the real action.
+     THIS USED TO BE A TOAST. The dot on a chapter row fired brief(), which flashed the one-line
+     answer and vanished, so the what/get written for all 48 of them was reachable only through the
+     How to use Cubby list and never from the thing itself. A parent tapping the dot beside Quick log
+     got a sentence they had already read on the button, which teaches them the dot is not worth
+     tapping. Same overlay as a page, less in it, because a chapter genuinely has less to say. */
+  function chapter(id) {
+    var r = rows()[id];
+    if (!r || !r.what || !r.get) return brief(id);      // no content: do not open an empty screen
+    var g = G();
+    if (!g || !g._mount(r.label)) return;               // carries the loss-safety refusal
+    injectCss();
+    var body = '<div class="lg-h">' + esc(r.label) + '</div>'
+      + '<div class="lg-what">' + esc(r.what) + '</div>'
+      + '<div class="lg-get">' + esc(r.get) + '</div>'
+      + shortVersion(r.read)
+      + '<div class="lg-acts">'
+      + '<button class="lg-try" style="background:var(--feed);color:var(--on-feed,var(--on-accent))" '
+      + 'onclick="CubbyTeachUI.go(\'' + id + '\')">' + esc(actionLabel(r)) + '</button>'
+      + '<button class="lg-read" onclick="CubbyGuide.close()">Close</button>'
+      + '</div>';
+    var ov = document.getElementById('logGuide');
+    if (ov) ov.classList.add('lg-compact');       // shrink the frame to the content, not the reverse
+    g._paint(g._shell(g._topClose(), body, ''));
+    if (window.CubbyTeach) window.CubbyTeach.markSeen(id);
+  }
+
+  // The shallow answer, for a one-liner. There is nothing behind it, so a toast is the honest
+  // shape: taking a whole screen to repeat one sentence teaches people to stop tapping the dot.
   function brief(id) {
     var r = rows()[id];
     if (!r) return;
@@ -220,7 +260,8 @@
     var body = '<div class="lg-h">A few things you have not met yet</div>'
       + '<div class="md-in">Nothing here needs doing. It is only that Cubby holds more than the part you have needed so far.</div>'
       + ids.map(function (id) {
-          var fn = R[id].depth === 'page' ? 'CubbyTeachUI.page' : 'CubbyTeachUI.brief';
+          var fn = R[id].depth === 'page' ? 'CubbyTeachUI.page'
+                 : R[id].depth === 'chapter' ? 'CubbyTeachUI.chapter' : 'CubbyTeachUI.brief';
           return '<button class="md-r" onclick="' + fn + '(\'' + id + '\')">'
             + '<span class="md-m"><span class="md-t">' + esc(R[id].label) + '</span>'
             + '<span class="md-o">' + esc(R[id].one) + '</span></span>'
@@ -461,7 +502,7 @@
   }
 
   window.CubbyTeachUI = {
-    page: page, brief: brief, dot: dot, go: go, sheetDot: sheetDot,
+    page: page, chapter: chapter, brief: brief, dot: dot, go: go, sheetDot: sheetDot,
     cueCard: cueCard, homeCue: homeCue, dismiss: dismiss,
     howto: howto, settingsRow: settingsRow,
     howtoFilter: howtoFilter, howtoClear: howtoClear,

@@ -2813,7 +2813,7 @@ function renderHome(){
     ${gsCard}
     ${guideCard}
     ${(gsCard || guideCard) ? '' : teachCue()}
-    <div class="sec-title with-act"><span>Quick log${(window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('logging'):''}</span><button class="sec-act" type="button" onclick="openQuickSettings()">Choose</button></div>
+    <div class="sec-title with-act"><span>Quick log${(window.CubbyTeachUI)?CubbyTeachUI.dot('openQuickLog','the quick log row'):((window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('logging'):'')}</span><button class="sec-act" type="button" onclick="openQuickSettings()">Choose</button></div>
     <div class="actions stagger">${quickLogActions(ts)}</div>
     ${gsCard ? '' : renderNudge()}
     ${alerts}
@@ -8543,7 +8543,7 @@ function renderHomeMeds(){
       <button class="dose-btn" onclick="logDose('${m.id}')">Dose</button>
     </div>`;
   }).join('');
-  return `<div class="sec-title" style="margin-top:22px">Medicine${(window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('medicine'):''}</div>
+  return `<div class="sec-title" style="margin-top:22px">Medicine${(window.CubbyTeachUI)?CubbyTeachUI.dot('openMedSheet','medicine'):((window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('medicine'):'')}</div>
     ${rows||''}
     <div class="add-row" onclick="openAddMed()">${I.plus} Add a medicine</div>`;
 }
@@ -10437,7 +10437,7 @@ function renderAlbum(){
     <button class="${albumTab==='memories'?'on':''}" onclick="setAlbumTab('memories')">Memories</button>
     <button class="${albumTab==='milestones'?'on':''}" onclick="setAlbumTab('milestones')">Moments</button></div>`;
   const body = albumTab==='memories'?renderMemories() : albumTab==='milestones'?renderJourneyLibrary() : renderPhotos();
-  const info=(window.CubbyGuide&&CubbyGuide.info)?`<div style="text-align:right;margin:-2px 0 8px">${CubbyGuide.info('album')}</div>`:'';
+  const info=(window.CubbyGuide&&CubbyGuide.info)?`<div style="text-align:right;margin:-2px 0 8px">${(window.CubbyTeachUI)?CubbyTeachUI.dot('openMemoryCard','keepsakes'):CubbyGuide.info('album')}</div>`:'';
   return `<div class="fade-in">${coachMark('album','This is your Album','Photos, keepsake cards (birth poster, monthly cards) and milestones, all here. Tap a milestone to mark it: teeth, first steps, the fun stuff.')}${seg}${info}${body}</div>`;
 }
 let logTab='log';
