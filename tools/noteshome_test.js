@@ -243,7 +243,37 @@ const where = r => JSON.stringify(r.order);
   ck(scroll.stBefore - scroll.stAfter === scroll.foot, 'the scroll gave back exactly the card footprint', scroll.stBefore + ' -> ' + scroll.stAfter + ', footprint ' + scroll.foot);
   ck(Math.abs(scroll.after - scroll.before) <= 2, 'and Quick log stayed put', Math.round(scroll.before) + ' -> ' + Math.round(scroll.after));
 
-  console.log('\n14. stepping back a day');
+  console.log('\n14. the unread marker takes up no space');
+  // It shipped as a real border plus padding (3 + 11 - 2), which shoved the whole Notes lane 12px
+  // right of "The day" and the photos below it — only in the unread state, which is the one a parent
+  // is most likely looking at. Drawn as a pseudo-element now, so the lane cannot move.
+  const align = await p.evaluate(async (N) => {
+    const sc = document.getElementById('scroll');
+    const left = s => { const n = sc.querySelector(s); return n ? Math.round(n.getBoundingClientRect().left * 10) / 10 : null; };
+    const shot = () => ({ notes: left('.ds-notes .ds-lt'), recap: left('.ds-recap .ds-lt') });
+    // The recap lane is the neighbour a parent sees the misalignment against, and it only renders when
+    // the day has something logged, so give it one.
+    state.events = [{ id: 'ev1', babyId: state.activeBabyId, type: 'feed', time: now() - 3600000, method: 'bottle', amount: 90 }];
+    // read
+    state.notes = [Object.assign({}, N, { day: dayKey(now()), at: now() - 3600000 })];
+    localStorage.setItem('cubby-notes-seen:' + quickUid(), JSON.stringify({ d: dayKey(now()), ids: [N.id] }));
+    render(); await new Promise(r => setTimeout(r, 60));
+    const read = shot();
+    // unread
+    localStorage.removeItem('cubby-notes-seen:' + quickUid());
+    render(); await new Promise(r => setTimeout(r, 60));
+    const unread = shot();
+    return { read, unread, marked: !!sc.querySelector('.ds-notes.ds-new') };
+  }, THEIRS);
+  ck(align.marked, 'the unread state really is marked in this check');
+  ck(align.read.notes != null && align.read.recap != null, 'both lane headings are measurable',
+    JSON.stringify(align.read));
+  ck(align.read.notes === align.read.recap, 'read: Notes lines up with The day', JSON.stringify(align.read));
+  ck(align.unread.notes === align.unread.recap, 'unread: it still lines up', JSON.stringify(align.unread));
+  ck(align.unread.notes === align.read.notes, 'and the lane does not move when a note arrives unread',
+    align.read.notes + ' -> ' + align.unread.notes);
+
+  console.log('\n15. stepping back a day');
   const nav = await p.evaluate(async () => {
     state.notes = []; render();
     const sc = document.getElementById('scroll'); sc.scrollTo(0, 0);
@@ -254,7 +284,7 @@ const where = r => JSON.stringify(r.order);
   });
   ck(nav.bottom > 0 && nav.top < nav.vh, 'the surface stays on screen — the arrows live inside it', Math.round(nav.top) + 'px of ' + nav.vh);
 
-  console.log('\n15. clean console');
+  console.log('\n16. clean console');
   ck(errs.length === 0, 'no uncaught page errors', errs.join(' | '));
 
   console.log('\n' + (fails ? 'FAIL' : 'PASS') + ' — ' + passes + ' passed, ' + fails + ' failed');

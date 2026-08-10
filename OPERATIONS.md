@@ -20,6 +20,7 @@ node tools/dosecal_test.js         # the dose .ics (bounded, cancellable) + mult
 node tools/vaxcard_test.js         # vaccine-card import: patch-only, never invents a dose, on-device
 node tools/noteshome_test.js       # the Notes lane: bottom by default, up only for an unread note
 node tools/offline_gate.js         # the connectivity states + which offline messages may promise a queue
+node tools/homelogs_gate.js        # what home offers, and that the parent decides it (per person, per stage)
 node tools/shot.js http://localhost:8080/<page>/ /tmp/x.png 390 full   # eyeball any page (see tools/shot.js)
 ```
 Working in a git worktree? `serve.js` takes `PORT=8099` and every gate takes the base URL as its
@@ -76,6 +77,10 @@ keeps a future backend swap (e.g. to Cloudflare D1) a contained job rather than 
   tracked and runnable in `docs/poster-art-jobs.json`; `docs/poster-art-brief.md` says which clauses
   in them are load-bearing (pure white ground, no numerals, generous margin) and why. `art-src/` is
   gitignored because it holds the API keys, so nothing in it counts as a record.
+- `tools/homelogs_gate.js` — the Quick log row on home: that pump is not in the default set, that the
+  picker still offers it and choosing it sticks, that home and the round button read the SAME per-user
+  list so they cannot disagree, that choosing nothing leaves a door rather than a blank space, and that
+  the list is keyed by uid in localStorage rather than the shared blob (`?e2e=1`)
 - `tools/offline_gate.js` — the connectivity states: that the SDK-failure card paints (including for a
   PARTIAL SDK load), that its artwork is precached and cut out, that the guest games page survives a
   poll blip without wiping a guest's game, and the honesty line on offline copy — "Cubby will pick this

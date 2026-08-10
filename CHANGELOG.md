@@ -1,5 +1,34 @@
 # Cubby — Changelog
 
+## v0.18.1 — 2026-08-10 — the parent decides what home offers, and the Notes lane stops jumping
+
+Service worker `little-log-v281` -> `little-log-v282`.
+
+**The Quick log row on home is now the parent's to arrange, and pump is out of the default set.** The
+customisation already existed, per person and per stage, but it governed the floating button only. Home
+was hardcoded, deliberately: a comment said the home tiles are "the main surface, not a shortcut". The
+effect was that the one screen a parent looks at forty times a day was the only one she could not tidy,
+and Pump sat there permanently for every parent who does not express.
+
+One list governs both surfaces now, so removing something removes it from both. Pump has come out of
+the default set (founder call): it is the only entry that depends on how you feed, and it was holding a
+slot for everybody who does not. It is not gone — the picker offers it, one tap puts it back for good,
+and the picker says as much in words. Choosing nothing leaves a door rather than a heading over a blank
+space. The only asymmetry left is voice, which is a permission-gated microphone rather than a tile and
+lives in the round button; the picker now says so on that row instead of implying otherwise.
+
+The setting was never really missing, **the door was**: it sat three taps deep in Settings under a row
+named after the floating button. Home carries its own "Choose" now, and the sheet is called "What you
+log" rather than "Quick log button".
+
+**And the Notes lane stopped jumping 12px.** The unread marker shipped as a real border plus padding
+(3 + 11 − 2), so the whole lane shoved right of "The day" and the photos below it the moment a note
+arrived unread — the one state a parent is most likely looking at. It is drawn beside the lane now and
+takes up no space. Measured: 37px in every state, where it used to be 49px unread.
+
+**New blocking gate:** `tools/homelogs_gate.js` (19 assertions), plus an alignment regression in
+`tools/noteshome_test.js` (now 50).
+
 ## v0.18.0 — 2026-08-10 — the connectivity states get a picture, and stop promising things they cannot do
 
 Service worker `little-log-v280` -> `little-log-v281`.

@@ -431,6 +431,13 @@ body{
   font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;
   color:var(--ink-soft);margin:6px 4px 12px;
 }
+/* A section heading with an action on the right. The Quick log row has been per-person configurable
+   for a while and nobody could find it, because the only door was three taps deep in Settings, on a
+   row named after the floating button. The setting was not missing, the door was. */
+.sec-title.with-act{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.sec-act{border:none;background:none;padding:6px 2px;margin:-6px -2px;font-family:var(--font-body);
+  font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-soft);
+  opacity:.85;cursor:pointer;}
 
 /* ============ ACTION GRID ============ */
 .actions{display:grid;grid-template-columns:1fr 1fr;gap:13px;}
@@ -1237,7 +1244,12 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
    than a colour wash: the lane already sits on warm paper, and a second fill behind the note cards
    would fight the cards themselves. The badge borrows the compose button's own pair, which is the
    one note-coloured combination already held to AA in both themes. */
-.ds-notes.ds-new{border-left:3px solid var(--note);padding-left:11px;margin-left:-2px;}
+/* The unread rule is drawn beside the lane, not inside it. As a real border plus padding it took up
+   space (3 + 11 - 2 = 12px), so the whole Notes lane jumped 12px right of "The day" and the photos
+   below it the moment a note arrived unread — the one state a parent is most likely to be looking at.
+   Absolutely positioned, so nothing moves. */
+.ds-notes{position:relative;}
+.ds-notes.ds-new::before{content:'';position:absolute;left:-9px;top:1px;bottom:1px;width:3px;border-radius:2px;background:var(--note);}
 .ds-badge{display:inline-block;background:var(--note-soft);color:var(--note-ink);font-size:10px;font-weight:800;letter-spacing:.04em;padding:2px 7px;border-radius:999px;margin-left:6px;}
 .note-card{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:8px;cursor:pointer;box-shadow:0 3px 9px var(--shadow);transition:transform .15s;}
 .note-card:active{transform:scale(.99);}
@@ -2764,7 +2776,7 @@ function renderHome(){
     ${gsCard}
     ${(window.CubbyGuide&&CubbyGuide.homeCard)?CubbyGuide.homeCard(!!gsCard):''}
     ${(gsCard || !hasSeen('home')) ? '' : teachCue()}
-    <div class="sec-title">Quick log${(window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('logging'):''}</div>
+    <div class="sec-title with-act"><span>Quick log${(window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('logging'):''}</span><button class="sec-act" type="button" onclick="openQuickSettings()">Choose</button></div>
     <div class="actions stagger">${quickLogActions(ts)}</div>
     ${gsCard ? '' : renderNudge()}
     ${alerts}
@@ -2980,7 +2992,11 @@ const QUICK_ACTIONS=[
 ];
 // Defaults reproduce exactly what each surface showed before, so nobody's button changes under them.
 const QUICK_DEFAULTS={
-  baby:['feed','sleep','diaper','pump','measure','activity','voice'],
+  /* Pump came out of the default set (founder call, 2026-08-10). It is the one entry here that only
+     applies if you express, and it was holding a slot on the main logging surface for every parent who
+     does not, with no way to take it off. It is NOT gone: it is in the picker, one tap puts it on home
+     and in the round button for good, and the picker says so in as many words. */
+  baby:['feed','sleep','diaper','measure','activity','voice'],
   child:['sleep','measure','milestone','activity','voice'],
   pregnancy:['kicks','contractions','symptom']
 };
@@ -3134,12 +3150,31 @@ function quickBtn(a,ts){
   if(a.k==='sleep'&&ts) return actBtn("stopSleep('"+state.activeBabyId+"')",'var('+a.soft+')','var('+a.tone+')',a.ico(),'Wake up','Stop the timer');
   return actBtn(a.fn,'var('+a.soft+')','var('+a.tone+')',a.ico(),a.label,quickHint(a));
 }
+/* Voice is never a home tile, chosen or not: it is a permission-gated microphone with its own door,
+   and it belongs in the round button. This is the ONE asymmetry between the two surfaces, and it has
+   to be the only one — pump was briefly excluded here too, which meant the picker showed Pump ticked
+   while home did not show it, and then an unrelated tap made it appear. Two defaults for one list is
+   the same drift this change exists to remove. Pump came out of QUICK_DEFAULTS instead. */
+const HOME_NEVER={voice:1};
+/* The home row and the floating button now read the SAME per-user list, so removing something
+   removes it from both. They used to disagree on purpose — home carried the full default set because
+   it is "the main surface, not a shortcut" — but the effect was that the one screen a parent looks at
+   forty times a day was the one screen she could not tidy, and pump sat there permanently for
+   everyone. Voice is still filtered out here, because it is not a tile. */
+function quickChosenHome(stage){
+  stage=stage||quickStage();
+  const avail=quickAvailable(stage).map(a=>a.k);
+  const picked=quickPrefs().pick[stage];
+  const keys=Array.isArray(picked)?picked:(QUICK_DEFAULTS[stage]||[]);
+  return keys.filter(k=>!HOME_NEVER[k] && avail.indexOf(k)>=0);
+}
 function quickLogActions(ts){
-  // The home tiles keep the stage's full default set (they are the main surface, not a shortcut),
-  // and child still gets the "More" escape hatch for the early-days logs.
   const stage=quickStage();
   const byKey={}; quickAvailable(stage).forEach(a=>{ byKey[a.k]=a; });
-  const keys=(QUICK_DEFAULTS[stage]||[]).filter(k=>k!=='voice');
+  const keys=quickChosenHome(stage);
+  // Customised down to nothing is a real answer, but a heading with a blank space under it reads as
+  // broken. Offer the way back instead.
+  if(!keys.length) return actBtn('openQuickSettings()','var(--note-soft)','var(--note)',(I.plus||'+'),'Choose your logs','Nothing showing here yet');
   let out=keys.map(k=>byKey[k]?quickBtn(byKey[k],ts):'').join('');
   if(stage==='child') out+=actBtn('openMoreLogs()','var(--feed-soft)','var(--feed)',(I.plus||'+'),'More','Feeds, nappies, pump');
   return out;
@@ -5093,7 +5128,7 @@ function openSettings(){
       <span class="chev">${I.chev}</span></div>
     <div class="set-item" onclick="openQuickSettings()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--feed-soft);color:var(--feed)">${I.plus}</div>
-      <div class="si-body"><div class="a">Quick log button</div><div class="b">${quickPrefs().on?'On · '+quickChosen().length+' shortcut'+(quickChosen().length===1?'':'s'):'Off'} · just for you</div></div>
+      <div class="si-body"><div class="a">What you log</div><div class="b">${quickChosenHome().length} on home${quickPrefs().on?', round button on':', round button off'} · just for you</div></div>
       <span class="chev">${I.chev}</span>
     </div>
     ${/* After a birth the pregnancy shell is a keepsake with no tabs, so her private wellbeing notes
@@ -5123,8 +5158,11 @@ function openSettings(){
     </div>
     <p style="font-size:12px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:14px">Cubby v${CUBBY_VERSION} · ${Date.now()<Date.UTC(2026,6,27)?'beta':'early access'}</p>`,'sleep');
 }
-/* Settings for the floating quick-log button. Everything here is per-user (localStorage under the
-   uid), so one caregiver tidying their own shortcuts never touches anyone else's. */
+/* One list, two places: the Quick log row on home AND the floating button. Everything here is
+   per-user (localStorage under the uid), so one caregiver tidying their own shortcuts never touches
+   anyone else's, and it is per stage, because what a toddler's parent logs is not what a newborn's
+   does. The sheet used to describe itself as settings for the round button alone, which is why
+   nobody realised the home row could be changed at all. */
 function openQuickSettings(){
   const stage=quickStage();
   const p=quickPrefs();
@@ -5134,17 +5172,17 @@ function openQuickSettings(){
     const on=chosen.indexOf(a.k)>=0;
     return `<div class="bag-row ${on?'done':''}" id="qs-${a.k}" onclick="toggleQuickAction('${a.k}')" style="cursor:pointer">
       <div class="bg-tick">${on?I.check:''}</div>
-      <div style="flex:1"><div class="bg-t" style="text-decoration:none">${a.label}</div><div style="font-size:12px;color:var(--ink-soft);font-weight:600;line-height:1.4">${quickHint(a)}</div></div>
+      <div style="flex:1"><div class="bg-t" style="text-decoration:none">${a.label}</div><div style="font-size:12px;color:var(--ink-soft);font-weight:600;line-height:1.4">${quickHint(a)}${HOME_NEVER[a.k]?' · in the round button only':''}</div></div>
     </div>`;
   }).join('');
-  openSheet(`<h2>Quick log button</h2><div class="sub">The round button above the tabs. These choices are yours alone, they do not change what anyone else in your circle sees.</div>
-    <div class="toggle-row"><div><div class="tr-a">Show the button</div><div class="tr-b">On every screen, so logging is always one tap away</div></div>
-      <div class="sw ${p.on?'on':''}" onclick="toggleQuickFab()"></div></div>
-    ${p.on?`<div class="set-label">What shows when you tap it</div>
-    <div class="sub" style="margin:-4px 2px 10px">Right now, for ${stageWord}.</div>
+  openSheet(`<h2>What you log</h2><div class="sub">These are yours alone. Changing them does not change what anyone else in your circle sees.</div>
+    <div class="set-label">Showing on home and in the round button</div>
+    <div class="sub" style="margin:-4px 2px 10px">Right now, for ${stageWord}. Turn off anything you never use, like the pump if you are not expressing.</div>
     ${rows}
-    ${!chosen.length?`<div class="csub" style="margin-top:10px">Pick at least one, or the button stays hidden.</div>`:''}
-    <button class="btn-ghost" onclick="resetQuickActions()">Reset to the usual set</button>`:''}
+    ${!chosen.length?`<div class="csub" style="margin-top:10px">With none chosen, home offers you this list instead and the round button stays hidden.</div>`:''}
+    <button class="btn-ghost" onclick="resetQuickActions()">Reset to the usual set</button>
+    <div class="toggle-row" style="margin-top:16px"><div><div class="tr-a">Show the round button</div><div class="tr-b">Above the tabs on every screen, so logging is always one tap away</div></div>
+      <div class="sw ${p.on?'on':''}" onclick="toggleQuickFab()"></div></div>
     <button class="btn-ghost" onclick="openSettings()">Back to settings</button>`,'feed');
 }
 function toggleQuickFab(){
