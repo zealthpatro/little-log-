@@ -1,6 +1,6 @@
 /* Cubby service worker.
    Bump CACHE on every deploy so old assets are cleared. */
-const CACHE = 'little-log-v277';
+const CACHE = 'little-log-v279';
 const ASSETS = [
   '/app/',
   '/app/index.html',
@@ -14,6 +14,10 @@ const ASSETS = [
   '/app/vendor/firebase/10.12.2/firebase-messaging-compat.js',
   '/app/voice-log.js',
   '/app/log-guide.js',
+  // The teaching registry and its ledger. Precached with the rest so `addAll` stays atomic: an
+  // offline launch never gets a shell whose teaching layer is missing half of itself.
+  '/app/teach-data.js',
+  '/app/teach.js',
   '/app/vax-card.js',
   '/app/cubby-extras.js',
   '/app/growth-data.js',

@@ -1,0 +1,37 @@
+name: Teaching layer guard
+
+# The teaching registry, enforced. Every push and PR re-runs the three checks that keep
+# app/teach-data.js honest:
+#
+#   coverage  every entry point across the shell AND the runtime modules is either taught or
+#             excluded with a written reason. This is the one that matters most: the capability
+#             count was wrong twice during design, because a grep of app/index.html alone misses
+#             openVoiceLog, openFamily, openFirstRun and the pickers, and four entry points are
+#             `window.X = function` assignments no `function open*` pattern catches. Adding a
+#             capability without an answer now fails the build instead of shipping silently.
+#
+#   voice     no em-dashes, no guilt, sentence case, length caps. Mechanical, so quality cannot
+#             sag at entry ninety. Also asserts the two promises the copy must never break:
+#             Pro never reads as buyable before October 2026, and mood stays owner-only.
+#
+#   ledger    simulated against a fixed clock. Nothing fires under lossHolding; two cues cannot
+#             fire in one session; a keepsake can never outrank a fever.
+#
+# The gate uses only the Node standard library and reads the app files directly, so there is
+# nothing to install and no server to start.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  teach-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Registry, voice and ledger gate
+        run: node tools/teach_gate.js
