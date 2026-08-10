@@ -427,7 +427,7 @@ body{
 .ticker b{color:var(--ink);font-weight:800;}
 @keyframes tkroll{0%,13%{transform:translateY(0)}16.6%,30%{transform:translateY(-16.667%)}33.3%,47%{transform:translateY(-33.333%)}50%,63%{transform:translateY(-50%)}66.6%,80%{transform:translateY(-66.667%)}83.3%,100%{transform:translateY(-83.333%)}}
 @media(prefers-reduced-motion:reduce){.ticker .roll{animation:none}}
-.tip-static{display:flex;align-items:center;gap:9px;padding:11px 15px;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 3px 9px var(--shadow);margin-bottom:14px;font-size:13px;font-weight:700;color:var(--ink-soft);line-height:1.4;transition:opacity .35s;min-height:24px;}
+.tip-static{display:flex;align-items:center;gap:9px;padding:var(--pad-dense);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-dense);box-shadow:0 3px 9px var(--shadow);margin-bottom:14px;font-size:13px;font-weight:700;color:var(--ink-soft);line-height:1.4;transition:opacity .35s;min-height:24px;}
 .tip-static .tk-ic{font-size:16px;flex:0 0 auto;}
 /* The ticker can now be dismissed, like every other hint. Sits at the end so the tip text keeps
    the full width it needs; the tap target stays 30px even though the glyph is small. */
@@ -1109,7 +1109,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .hero-dots{position:absolute;right:16px;bottom:18px;display:flex;gap:6px;pointer-events:none;}
 .hero-dots span{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.55);transition:all .35s;}
 .hero-dots span.on{background:#fff;width:18px;border-radius:4px;}
-.hero-invite{display:flex;align-items:center;gap:14px;border-radius:var(--radius);padding:15px 18px;margin:6px 0 16px;background:var(--surface);box-shadow:0 5px 14px var(--shadow);cursor:pointer;}
+.hero-invite{display:flex;align-items:center;gap:14px;border-radius:var(--radius);padding:var(--pad-card);margin:6px 0 16px;background:var(--surface);box-shadow:0 5px 14px var(--shadow);cursor:pointer;}
 .hero-invite .hi{width:44px;height:44px;border-radius:14px;background:var(--feed-soft);color:var(--feed);display:grid;place-items:center;flex-shrink:0;}
 .hero-invite .hi svg{width:22px;height:22px;}
 .hero-invite .ht{font-weight:800;font-size:15px;}
@@ -1164,7 +1164,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .preg-bar{height:9px;border-radius:6px;background:var(--surface-2);overflow:hidden;margin-top:14px;}
 .preg-bar i{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,var(--preg),var(--pump));}
 .preg-cards{display:grid;gap:11px;margin-bottom:6px;}
-.preg-card{display:flex;gap:13px;align-items:flex-start;background:var(--surface);border-radius:var(--radius-sm);padding:15px 16px;box-shadow:0 3px 9px var(--shadow);}
+.preg-card{display:flex;gap:13px;align-items:flex-start;background:var(--surface);border-radius:var(--radius-sm);padding:var(--pad-card);box-shadow:0 3px 9px var(--shadow);}
 .preg-card .pc-ico{width:40px;height:40px;border-radius:13px;display:grid;place-items:center;font-size:20px;flex-shrink:0;background:var(--preg-soft);}
 .preg-card .pc-t{font-weight:800;font-size:15px;color:var(--ink);}
 .preg-card .pc-b{font-size:13px;color:var(--ink-soft);font-weight:600;line-height:1.5;margin-top:3px;}

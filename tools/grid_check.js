@@ -57,6 +57,25 @@ CARDS.forEach(sel => {
   check(!!b && /border-radius:var\(--r-dense\)/.test(b), '.alert-pill uses var(--r-dense)');
 }
 
+/* Three more that the first pass did not reach, found by measuring the rendered page rather than
+   reading the stylesheet: text inside home widgets started at seven different x positions.
+   .tip-static is the same shape as an alert pill and had 11/15 with a 16px radius, which is the
+   same intent measured twice. .hero-invite sat 2px further in than every other card on the screen,
+   and .preg-card was 1px out on top. Two insets are intentional and enough: dense and card. */
+[['.tip-static{', '--pad-dense'], ['.hero-invite{', '--pad-card'], ['.preg-card{', '--pad-card']]
+  .forEach(([sel, tok]) => {
+    const b = rule(sel);
+    check(!!b, sel + ' exists');
+    if (!b) return;
+    check(new RegExp('padding:var\\(' + tok + '\\)').test(b), sel + ' uses var(' + tok + ')',
+      (b.match(/padding:[^;]*/) || [''])[0]);
+  });
+{
+  const b = rule('.tip-static{');
+  check(!!b && /border-radius:var\(--r-dense\)/.test(b),
+    '.tip-static shares the dense radius with .alert-pill');
+}
+
 /* THE ONE THAT WAS ACTUALLY VISIBLE. .sec-title carried margin:6px 4px 12px, so every section
    heading sat 4px inside the cards it labelled. "Quick log" was indented further than the buttons
    underneath it, on every screen. Horizontal margin here must stay zero: the gutter is the page's
