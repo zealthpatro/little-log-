@@ -21,6 +21,7 @@ node tools/vaxcard_test.js         # vaccine-card import: patch-only, never inve
 node tools/noteshome_test.js       # the Notes lane: bottom by default, up only for an unread note
 node tools/offline_gate.js         # the connectivity states + which offline messages may promise a queue
 node tools/homelogs_gate.js        # what home offers, and that the parent decides it (per person, per stage)
+node tools/sitesw_gate.js          # the ROOT service worker: caches no content, bypasses /app/, offline page
 node tools/shot.js http://localhost:8080/<page>/ /tmp/x.png 390 full   # eyeball any page (see tools/shot.js)
 ```
 Working in a git worktree? `serve.js` takes `PORT=8099` and every gate takes the base URL as its
@@ -77,6 +78,33 @@ keeps a future backend swap (e.g. to Cloudflare D1) a contained job rather than 
   tracked and runnable in `docs/poster-art-jobs.json`; `docs/poster-art-brief.md` says which clauses
   in them are load-bearing (pure white ground, no numerals, generous margin) and why. `art-src/` is
   gitignored because it holds the API keys, so nothing in it counts as a record.
+**Rolling back the root service worker.** Reverting `install.js` alone does NOT undo it. A browser that
+already registered `/sw.js` keeps that worker until it is replaced or unregistered; removing the
+registration line only stops NEW visitors picking it up. The rollback has to ship a replacement `/sw.js`
+that unregisters itself:
+
+```js
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (e) => { e.waitUntil(
+  caches.keys()
+    .then((k) => Promise.all(k.filter((n) => n.startsWith('cubby-site-')).map((n) => caches.delete(n))))
+    .then(() => self.registration.unregister())); });
+```
+
+Note the filter. The tombstone that used to live at this path deleted **every** cache it could
+enumerate, and caches are per-origin: shipping that version today would take the app's `little-log-v*`
+precache with it and leave every installed PWA unable to open offline. Copy the snippet above, not the
+one in the git history.
+
+- `tools/sitesw_gate.js` — the ROOT service worker (`/sw.js`), which serves `/offline.html` when a page
+  on the marketing site or one of the ~661 articles cannot be reached. Mostly assertions about what it
+  must REFUSE to do: cache no content (one precache entry, no article), navigations only, `/app/` and
+  `/g/` passed straight through, activate deleting only `cubby-site-*` caches (the stub it replaced
+  deleted every cache on the origin, which from the root would wipe the app's precache), and a 404
+  passed through rather than dressed up as being offline. Takes the WORKER's network target offline over
+  CDP, because `page.setOfflineMode()` only touches the page's session and a worker's `fetch()` sails
+  straight past it — without that the test proves nothing. **Bump `CACHE` in `/sw.js` whenever
+  `offline.html` changes**, or existing browsers keep the old page forever.
 - `tools/homelogs_gate.js` — the Quick log row on home: that pump is not in the default set, that the
   picker still offers it and choosing it sticks, that home and the round button read the SAME per-user
   list so they cannot disagree, that choosing nothing leaves a door rather than a blank space, and that

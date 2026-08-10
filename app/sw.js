@@ -52,7 +52,16 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      /* Only OUR OWN old versions, by prefix. This was `k !== CACHE`, which deleted every cache on the
+         origin — fine while the app was the only thing here, and wrong the moment it was not. Cache
+         storage is per-ORIGIN, not per-worker: little-cubby.com now also has a root-scoped worker
+         holding the site's offline page in `cubby-site-v1`, and a blanket sweep wiped it on this
+         worker's very first activation. Since a precache is only filled during `install`, and install
+         only runs when that worker's own bytes change, the deletion did not heal: the offline page was
+         built, shipped, and then quietly evicted during onboarding for anybody who opened the app.
+         The invariant now is that each worker on this origin owns a name prefix and deletes only its
+         own. If the app's cache is ever renamed away from `little-log-`, migrate the old names here. */
+      .then((keys) => Promise.all(keys.filter((k) => k.indexOf('little-log-') === 0 && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });

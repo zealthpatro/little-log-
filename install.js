@@ -155,4 +155,23 @@
   });
 
   window.cubbyInstallGuide = openGuide; // let any page CTA call it directly if wanted
+
+  /* Register the site's own service worker (/sw.js), whose single job is to show our offline page
+     instead of the browser's error page when a page here cannot be reached. This file is the right
+     home for it: it is already injected into all 660-odd marketing and article pages, so this is one
+     line rather than 660 edits, and making the site behave like an app is what install.js is for.
+
+     Note what is NOT happening. /app/index.html does not load this file, so the app is never the thing
+     that registers a root-scoped worker; the app registers its own at /app/sw.js and keeps its own
+     scope. /sw.js caches no content at all — see the four rules at the top of it.
+
+     After load, so it never competes with first paint, and silent on failure: a site that cannot
+     register a worker should still be a working site. */
+  // isSecureContext rather than a protocol test: it is true on https AND on localhost, which is where
+  // this gets verified. A protocol check would silently skip registration for every local run.
+  if ("serviceWorker" in navigator && window.isSecureContext) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("/sw.js").catch(function () { });
+    });
+  }
 })();
