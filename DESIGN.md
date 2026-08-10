@@ -43,11 +43,66 @@ Marketing uses the same family via `vax.css :root` (`--pink` = pump rose as the 
 - **Display**: `Fraunces` (serif, weights 400/600) for greetings, sheet titles, heroes, numerals
   with feeling (timer readouts).
 - **Body/UI**: `Nunito Sans` (600-800) for everything else.
+- **Handwriting**: `Caveat`. **Reserved. See the type contract below.**
+
+### A3.1 The type contract (enforced by `tools/type_check.js`)
+
+The three faces are not decoration, they are a signal about **who is speaking**, and a parent reads
+that signal before she reads a word. Two rules, both blocking:
+
+**1. The handwriting face means a person wrote this.** `Caveat` is only ever used for content a member
+authored, or the byline that says who authored it. Cubby's own words never use it. In the DOM there is
+currently exactly one rule that qualifies: `.note-card .nt-by`. Canvas keepsakes are outside this rule
+by design — a birth poster sets the baby's name in a hand because it is the parent's keepsake, and the
+memory card lets her pick the face herself.
+
+**2. In a block where Cubby is speaking, its heading is the largest thing in it.** Supporting text
+(hints, quotes, subtitles, bylines) may never out-rank the heading it sits under, and "larger" is
+measured in **cap height**, not in `px`: the three faces have different cap heights at the same size,
+so comparing `font-size` across faces is not a comparison at all.
+
+**Why these two exist, in one paragraph, because the failure is not obvious.** The Notes lane's empty
+state opened with a quote of the day set in the display face at 17px with a `Caveat` byline, under a
+14px body-face heading. It was 21% larger than the heading it supported and signed in handwriting, so
+a parent opening an empty lane read it as a note somebody had left her, and the lane never looked
+writable. It was fixed once by centring the quote, which held the two apart without anybody recording
+that it was the thing holding them apart — so when the lane later became one left-aligned column, for
+a perfectly good reason, the bug came straight back. A rule that lives only in a layout choice is not
+a rule. Hence a gate.
 - **Type ramp (the only sizes to use)** — replaces today's 20 ad-hoc sizes:
   `40 / 30 / 24 / 20 / 17 / 15 / 13 / 12 / 11` px.
   40 hero (marketing 46 desktop → clamp), 30 page titles, 24 sheet titles/timer, 20 card titles,
   17 lede, 15 body, 13 secondary, 12 labels/meta, 11 fine print. **No half-pixel sizes.**
 - Line-height: 1.1 display, 1.45-1.6 body. Letterspacing: -0.01em on big serif only.
+
+### A3.2 The stack contract (enforced by `tools/stack_check.js`)
+
+Vertical space is four values and nothing else. All four are measured on the **rendered** page, because
+this is the rule that keeps breaking in ways CSS review cannot see.
+
+| gap | between | token |
+|---|---|---|
+| **16** | one block and the next block | `--stack` |
+| **12** | a section heading and the content it labels | (in `.sec-title`) |
+| **8** | one row and the next row *inside a single list* | `--row` |
+| **2** | a thing and its own caption or link, which are one unit | declared pair |
+
+**Three traps, each of which produced a real bug:**
+
+**`gap` is not a margin.** `.actions` (the quick-log tile grid) had `gap:13px` and no `margin-bottom`, so
+the grid spaced its own tiles beautifully and then butted into the next card with **0px**. That is the
+"padding" a founder photographed twice.
+
+**Adjacent margins collapse to the larger of the two.** A list's 8px row rhythm beat `.sec-title`'s 6px
+top margin, so on Health five section headings began 8px after the previous list instead of 16 — the page
+read as one undifferentiated run of rows. Hence the explicit `row + .sec-title` rule.
+
+**A token nothing points at is not a system.** `--stack` existed for months while four rules set 18px by
+hand and three different values (8, 9, and nothing) did the row rhythm's job.
+
+Inline `style="margin:…"` on a block is **outside the system by construction** — no token can reach it,
+so no fix can either. The remaining offenders are listed in `tools/stack_check.js` with the tab they are
+on; they need markup edits, not CSS.
 
 ## A4. Spacing & layout
 - **4px base scale**: 4 / 8 / 12 / 16 / 20 / 24 / 32 / 48. Pick from the scale; no 13px/9px/7px gaps.

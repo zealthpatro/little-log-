@@ -191,7 +191,9 @@
 
      --gutter is the page inset every card already uses. Cards align to it; nothing overrides it. */
   --gutter:20px;
-  --stack:16px;          /* vertical rhythm between cards */
+  --stack:16px;          /* vertical rhythm between BLOCKS */
+  --row:8px;             /* and between ROWS inside one list, which is half of it. Was three values
+                            doing this one job: .note-card 8, .ms-row 9, .add-row nothing at all. */
   --pad-card:14px 16px;  /* coach, nudge, note. was 14/15, 13/16, 12/14 */
   --pad-dense:11px 14px; /* alert pills and dense rows. was 11/13 */
   --r-card:16px;
@@ -456,12 +458,22 @@ body{
    for a while and nobody could find it, because the only door was three taps deep in Settings, on a
    row named after the floating button. The setting was not missing, the door was. */
 .sec-title.with-act{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+/* Adjacent siblings' margins COLLAPSE to the larger of the two, so a list's 8px row rhythm was beating
+   .sec-title's 6px top and the next section started at ROW distance from the list above it — measured on
+   Health, where five section headings began 8px after the last row of the previous list. A heading after
+   a row is a new block and takes the block gap. */
+.ms-row + .sec-title, .add-row + .sec-title, .note-card + .sec-title,
+.set-item + .sec-title, .prof-card + .sec-title{margin-top:var(--stack);}
 .sec-act{border:none;background:none;padding:6px 2px;margin:-6px -2px;font-family:var(--font-body);
   font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-soft);
   opacity:.85;cursor:pointer;}
 
 /* ============ ACTION GRID ============ */
-.actions{display:grid;grid-template-columns:1fr 1fr;gap:13px;}
+/* The tile grid carried no bottom margin, so it butted straight into whatever came next: on home the
+   last quick-log tile touched the good-read card with a 0px gap, which is the "padding" that kept being
+   reported. `gap` spaces the tiles INSIDE the grid and says nothing about the block itself. Used on six
+   surfaces (home, Log, Health and two sheets), so one rule settles all of them. */
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:var(--stack);}
 .action{
   border:none;cursor:pointer;border-radius:var(--r-tap);padding:var(--pad-tap);
   text-align:left;display:flex;flex-direction:column;gap:14px;min-height:108px;
@@ -809,7 +821,7 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .med-card .mc-body .b.due{color:var(--med-ink);font-weight:800;}
 .dose-btn{border:none;background:var(--med-soft);color:var(--med-ink);font-weight:800;font-size:13px;border-radius:13px;padding:11px 14px;cursor:pointer;font-family:var(--font-body);flex-shrink:0;transition:transform .15s;}
 .dose-btn:active{transform:scale(.93);}
-.add-row{display:flex;align-items:center;justify-content:center;gap:9px;background:var(--surface);border:2px dashed var(--line);border-radius:var(--radius-sm);padding:var(--pad-card);cursor:pointer;font-weight:800;color:var(--ink-soft);font-size:14px;}
+.add-row{display:flex;align-items:center;justify-content:center;gap:9px;background:var(--surface);border:2px dashed var(--line);border-radius:var(--radius-sm);padding:var(--pad-card);margin-bottom:var(--row);cursor:pointer;font-weight:800;color:var(--ink-soft);font-size:14px;}
 .add-row svg{width:18px;height:18px;}
 
 /* ---- milestones ---- */
@@ -819,7 +831,7 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .ring .rt{font-family:var(--font-display);font-weight:600;font-size:20px;position:absolute;inset:0;display:grid;place-items:center;}
 .ms-hero .mh-body .a{font-family:var(--font-display);font-size:18px;font-weight:600;}
 .ms-hero .mh-body .b{font-size:13px;color:var(--ink-soft);font-weight:600;margin-top:3px;}
-.ms-row{display:flex;align-items:center;gap:13px;background:var(--surface);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:9px;box-shadow:0 3px 9px var(--shadow);cursor:pointer;transition:transform .12s;}
+.ms-row{display:flex;align-items:center;gap:13px;background:var(--surface);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:var(--row);box-shadow:0 3px 9px var(--shadow);cursor:pointer;transition:transform .12s;}
 .ms-row:active{transform:scale(.985);}
 .ms-check{width:30px;height:30px;border-radius:50%;border:2.5px solid var(--line);flex-shrink:0;display:grid;place-items:center;color:var(--on-accent);transition:all .2s;}
 .ms-check svg{width:16px;height:16px;opacity:0;}
@@ -1009,7 +1021,9 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .gal-item .cap{position:absolute;bottom:0;left:0;right:0;padding:18px 10px 8px;background:linear-gradient(transparent,rgba(0,0,0,.55));color:#fff;font-size:11px;font-weight:800;}
 
 /* ---- memories ---- */
-.seg-full{width:100%;margin-bottom:18px;}
+/* 18 was the last hand-set block gap in the shell, and it set the rhythm under the tab switcher on
+   Log, Stats, Rituals and Health — four tabs, 2px off the system, from one rule. */
+.seg-full{width:100%;margin-bottom:var(--stack);}
 .seg-full button{flex:1;padding:11px;font-size:14px;}
 .mem-actions{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:20px;}
 .mem-card{border:none;cursor:pointer;border-radius:var(--radius);padding:18px;text-align:left;display:flex;flex-direction:column;gap:12px;background:var(--surface);box-shadow:0 5px 14px var(--shadow);font-family:var(--font-body);color:var(--ink);transition:transform .14s;}
@@ -1276,7 +1290,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .ds-notes{position:relative;}
 .ds-notes.ds-new::before{content:'';position:absolute;left:-9px;top:1px;bottom:1px;width:3px;border-radius:2px;background:var(--note);}
 .ds-badge{display:inline-block;background:var(--note-soft);color:var(--note-ink);font-size:10px;font-weight:800;letter-spacing:.04em;padding:2px 7px;border-radius:999px;margin-left:6px;}
-.note-card{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);padding:var(--pad-card);margin-bottom:8px;cursor:pointer;box-shadow:0 3px 9px var(--shadow);transition:transform .15s;}
+.note-card{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);padding:var(--pad-card);margin-bottom:var(--row);cursor:pointer;box-shadow:0 3px 9px var(--shadow);transition:transform .15s;}
 .note-card:active{transform:scale(.99);}
 .note-card.priv{border-left:3px solid var(--preg);}
 .note-card.pinned{background:linear-gradient(180deg,var(--note-soft),var(--surface));}

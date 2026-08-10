@@ -21,6 +21,8 @@ node tools/vaxcard_test.js         # vaccine-card import: patch-only, never inve
 node tools/noteshome_test.js       # the Notes lane: bottom by default, up only for an unread note
 node tools/offline_gate.js         # the connectivity states + which offline messages may promise a queue
 node tools/homelogs_gate.js        # what home offers, and that the parent decides it (per person, per stage)
+node tools/stack_check.js          # vertical rhythm: every block gap is 16 / 12 / 8 / 2, both themes
+node tools/type_check.js           # the type contract: who may wear the handwriting face, heading rank
 node tools/sitesw_gate.js          # the ROOT service worker: caches no content, bypasses /app/, offline page
 node tools/sitesw_gate.js https://little-cubby.com   # AND against the live host, AFTER deploying. Not optional.
 node tools/thirdparty_gate.js       # the "no third-party trackers" promise, checked in a real browser
@@ -115,6 +117,19 @@ enumerate, and caches are per-origin: shipping that version today would take the
 precache with it and leave every installed PWA unable to open offline. Copy the snippet above, not the
 one in the git history.
 
+- `tools/stack_check.js` — the stack contract (DESIGN.md A3.2), measured on the RENDERED page across six
+  tabs in both themes: every gap between blocks is 16, a heading to its content 12, a row to the next row
+  in one list 8, a thing to its own caption 2. Exists because none of these bugs are visible in CSS —
+  `gap` is not a margin (the quick-log grid butted into the next card at 0px), adjacent margins collapse
+  to the larger (a list's 8px row rhythm beat a section heading's 6px top on five Health headings), and
+  `--stack` sat unused while four rules set 18 by hand. Carries a dated exception list of inline
+  `style="margin:…"` blocks that no token can reach, and **fails if a listed exception has been fixed**,
+  so the list cannot rot into fiction.
+- `tools/type_check.js` — the type contract (DESIGN.md A3.1): the handwriting face means a person wrote
+  this, so it is allowlisted (one entry, `.note-card .nt-by`), and in a block where Cubby is speaking its
+  heading is the largest thing in it. Sizes are compared in **cap height**, not `px`, because the three
+  faces differ at the same size and that is the blind spot the bug lived in. Both gates put the original
+  bug back and require themselves to catch it.
 - `tools/thirdparty_gate.js` — walks six live surfaces in a real browser and fails on any request to an
   origin the product does not need to function. Cubby publishes "No third-party trackers" on its home
   page, its privacy page, the FAQ, **inside the app**, and in an article comparing it to a competitor on
