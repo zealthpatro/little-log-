@@ -1,5 +1,46 @@
 # Cubby — Changelog
 
+## v0.19.0 — 2026-08-10 — the teaching layer, and one card grid
+
+**sw v279 → v296.** Cubby had built far more than it ever explained: 148 entry points across the
+shell and the runtime modules, 122 of them real capabilities, about 20 with a word written about
+them anywhere. Every one now has an answer.
+
+**The registry.** `app/teach-data.js` carries one row per capability plus 26 exclusions, each with a
+written reason. Depth is a property of the row and decides the frame as well as the words: 56
+one-liners toast, 48 chapters open a compact dialog, 18 pages take the screen. Nothing is padded to
+earn its container.
+
+**The ledger.** `app/teach.js` is two guards doing different jobs, and an earlier draft that
+collapsed them into one number produced a system that was quiet for the wrong reason. The
+*allowance* limits volume on a good day: 3 cues to day 14, 2 to day 60, then 1, one per session, 90
+minute cooldown. The *ranking* limits inappropriateness on a bad one, so a keepsake can never
+outrank a fever at any budget. Hard refusals run before scoring, so `lossHolding` cannot be
+out-argued.
+
+**Six surfaces, three of which can interrupt.** Info dot on every capability, a searchable how-to
+index in Settings, ambient empty states, first-open marks, earned nudges, and a monthly door that
+spends one interruption and teaches eight. 78 rows carry a trigger; the other 44 cannot push at all,
+by construction.
+
+**ONBOARDING.md's "pull, never push" is reversed**, and the measurement is why: a fresh profile
+tapping four tabs was being shown five cues in one session, which is the chained tour that file
+rules out, live, because the rule had no mechanism behind it. It is now one.
+
+**The card grid.** Six paddings and four radii had drifted in across five surfaces. Every card is now
+inset 14 or 16 with a 16px radius, quick-log tiles the one stated exception at 26, and the space
+between blocks is 16 with 12 from a heading to what it labels. `tools/pad_audit.js` exists because
+three earlier fixes were made against the top fifth of one screen: Cubby scrolls inside `#scroll`,
+so puppeteer's `fullPage` silently captures only the viewport.
+
+**Gates.** `tools/teach_gate.js` (4,813 checks) and `tools/grid_check.js` (77), both in CI. Between
+them they caught mood not being owner-gated in the registry, a dose calendar outranking a fever, the
+capability count being wrong twice, 14 pages silently nested inside `who`, the earned-cue system
+being dead for new parents, and an entry point another session added mid-build. Each gate was also
+made to fail on purpose before being trusted.
+
+Design: `docs/plans/2026-08-10-teaching-layer.md`.
+
 ## v0.18.2 — 2026-08-10 — the guest games page stops throwing a guest's game away
 
 No service worker bump: the worker registers from `/app/index.html` so its scope is `/app/`, and
