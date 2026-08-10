@@ -168,6 +168,38 @@ CARDS.forEach(sel => {
   check(!!b && /border-radius:var\(--radius\)/.test(b), '.disclaimer uses the shared radius');
 }
 
+/* Two column-level fixes that are easy to undo by accident.
+
+   .action.wide fills the row when the tile count is odd. Five is the common case, and before this
+   the fifth tile sat beside a hole the size of itself, which reads as a missing tile. The rule was
+   already in the stylesheet but dead: it was written for a .txt wrapper that actBtn does not
+   produce, so its row layout would have put the label and its hint side by side.
+
+   .note-empty was the only centred block inside a left-aligned card, which is what made the notes
+   card look like two cards stacked. */
+{
+  const b = rule('.action.wide{');
+  check(!!b, '.action.wide exists');
+  if (b) {
+    check(/grid-column:1 \/ -1/.test(b), '.action.wide fills the row');
+    check(/padding:var\(--pad-tap\)/.test(b), '.action.wide shares the tap inset',
+      (b.match(/padding:[^;]*/) || [''])[0]);
+    check(!/\.txt/.test(SRC.slice(SRC.indexOf('.action.wide{'), SRC.indexOf('.action.wide{') + 400)),
+      '.action.wide does not target a .txt wrapper that actBtn never renders');
+  }
+  /* Assert the CONDITION, not just the line inside it. The first version of this check only looked
+     for the .replace(), so stubbing the guard to if(false) left it passing happily. */
+  check(/if\(btns\.length%2===1\)\{[\s\S]{0,160}?class="action wide"/.test(SRC),
+    'an odd tile count promotes the last tile to wide');
+}
+{
+  const b = rule('.note-empty{');
+  check(!!b, '.note-empty exists');
+  if (b) check(!/text-align:center/.test(b),
+    '.note-empty is not centred inside a left-aligned card',
+    (b.match(/text-align:[^;]*/) || [''])[0]);
+}
+
 const total = passes + fails;
 console.log('\n' + (fails ? 'FAIL' : 'PASS') + ' — ' + passes + '/' + total + ' checks');
 process.exit(fails ? 1 : 0);

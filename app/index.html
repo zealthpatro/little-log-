@@ -474,9 +474,11 @@ body{
 .action .ico svg{width:25px;height:25px;}
 .action .label{font-weight:800;font-size:17px;letter-spacing:-.01em;}
 .action .hint{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:-9px;}
-.action.wide{grid-column:span 2;flex-direction:row;align-items:center;min-height:auto;padding:16px 20px;gap:16px;}
-.action.wide .txt{flex:1;}
-.action.wide .hint{margin-top:1px;}
+.action.wide{grid-column:1 / -1;display:grid;grid-template-columns:auto 1fr;column-gap:14px;
+  row-gap:4px;align-items:center;min-height:auto;padding:var(--pad-tap);}
+.action.wide .ico{grid-row:1 / span 2;}
+.action.wide .label{grid-column:2;align-self:end;}
+.action.wide .hint{grid-column:2;align-self:start;margin-top:1px;}
 
 /* ============ TODAY STRIP ============ */
 .today-strip{
@@ -1289,13 +1291,13 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .note-card .nt-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:7px;}
 .note-card .nt-by{font-family:'Caveat',cursive;font-size:16px;font-weight:700;color:var(--ink-soft);}
 .note-card .nt-aud{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-faint);}
-.note-empty{text-align:center;padding:16px 10px 8px;}
+.note-empty{text-align:start;padding:16px 0 8px;}
 /* The lane used to open with nothing but the quote of the day, set in the same display face and the
    same handwriting byline as a real note — so it read as a note FROM Cubby, and the lane never
    looked empty or writable. This says what would go here, in plain words, before the quote. */
 .note-empty .qod-none{font-size:14px;font-weight:800;color:var(--ink);}
-.note-empty .qod-hint{font-size:13px;font-weight:600;color:var(--ink-soft);line-height:1.45;max-width:320px;margin:4px auto 14px;}
-.note-empty .qod{font-family:var(--font-display);font-size:17px;font-weight:500;font-style:italic;color:var(--ink);line-height:1.5;max-width:320px;margin:0 auto;}
+.note-empty .qod-hint{font-size:13px;font-weight:600;color:var(--ink-soft);line-height:1.45;max-width:44ch;margin:4px 0 14px;}
+.note-empty .qod{font-family:var(--font-display);font-size:17px;font-weight:500;font-style:italic;color:var(--ink);line-height:1.5;max-width:44ch;margin:0;}
 .note-empty .qod-by{font-family:'Caveat',cursive;font-size:16px;font-weight:700;color:var(--ink-soft);margin-top:8px;}
 .ds-recap{cursor:pointer;}
 .ds-more{display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:800;color:var(--ink-soft);}
@@ -3218,9 +3220,16 @@ function quickLogActions(ts){
   // Customised down to nothing is a real answer, but a heading with a blank space under it reads as
   // broken. Offer the way back instead.
   if(!keys.length) return actBtn('openQuickSettings()','var(--note-soft)','var(--note)',(I.plus||'+'),'Choose your logs','Nothing showing here yet');
-  let out=keys.map(k=>byKey[k]?quickBtn(byKey[k],ts):'').join('');
-  if(stage==='child') out+=actBtn('openMoreLogs()','var(--feed-soft)','var(--feed)',(I.plus||'+'),'More','Feeds, nappies, pump');
-  return out;
+  let btns=keys.map(k=>byKey[k]?quickBtn(byKey[k],ts):'').filter(Boolean);
+  if(stage==='child') btns.push(actBtn('openMoreLogs()','var(--feed-soft)','var(--feed)',(I.plus||'+'),'More','Feeds, nappies, pump'));
+  /* Two columns and an odd number of tiles left the last one stranded beside a hole the size of
+     itself, which reads as a missing tile rather than a deliberate end. The wide variant spans the
+     row instead. Five is the common case: it is the default set for a baby. */
+  if(btns.length%2===1){
+    const i=btns.length-1;
+    btns[i]=btns[i].replace('class="action"','class="action wide"');
+  }
+  return btns.join('');
 }
 /* An empty state should be a door, not directions. "No entries yet ... tap Home to log your first
    feed" sent a brand-new parent to another screen to find a button, which is the moment most of them
