@@ -298,10 +298,13 @@
 
   var FOOT = 'You can log as much or as little as you like. A quiet day is a day too.';
 
-  function shell(top, body) {
+  // `foot` is optional so app/teach-ui.js can reuse this overlay rather than standing up a second
+  // one. Two full-screen teaching overlays would mean two z-indexes, two stylesheets and two
+  // Escape handlers to keep in step, and the repeated-UI rule says build it once.
+  function shell(top, body, foot) {
     return '<div class="lg-top">' + top + '</div>'
       + '<div class="lg-body">' + body + '</div>'
-      + '<div class="lg-foot">' + FOOT + '</div>';
+      + '<div class="lg-foot">' + (foot || FOOT) + '</div>';
   }
   function topClose() {
     return '<div class="lg-spacer"></div><button class="lg-x" onclick="CubbyGuide.close()" aria-label="Close">✕</button>';
@@ -520,6 +523,8 @@
     open: open, close: close, contents: contents, chapter: chapter, tryIt: tryIt, read: read,
     toggleMore: toggleMore, homeCard: homeCard, settingsRow: settingsRow, dismissCard: dismissCard,
     story: story, storyDo: storyDo, info: info, stories: function () { return Object.keys(STORIES); },
+    // The overlay itself, shared with app/teach-ui.js so there is one of it rather than two.
+    _mount: mount, _paint: paint, _shell: shell, _topClose: topClose, _swatch: swatch,
     // exposed for tools/guide_test.js
     _chapters: chapters, _nowKeys: nowKeys, _readSlug: readSlug
   };

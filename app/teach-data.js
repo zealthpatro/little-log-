@@ -35,9 +35,24 @@
       one: 'Start a nap with one tap. The timer shows on every phone in your circle.',
       who: { stage: ['baby','child'] },
       earn: { on: 'first-log' } },
-    openDiaper: { label: 'Diaper', fn: 'openDiaper()', domain: 'log', depth: 'chapter',
+    openDiaper: { label: 'Diaper', fn: 'openDiaper()', domain: 'log', depth: 'page',
       one: 'Wet, dirty, both, or a dry check. The thing a doctor almost always asks about.',
-      who: { stage: ['baby','child'] } },
+      who: { stage: ['baby','child'] },
+      why: 'It is the question a doctor almost always asks, and the one nobody can answer under pressure. Nappies are also the log with the shortest memory: by the evening, the morning has gone.',
+      matters: [
+        ['Wet and dirty, kept apart', 'They answer different questions, so one combined number answers neither. Cubby keeps them separate and never tells you what a count means. That is the conversation you have with your doctor, and this is what you bring to it.'],
+        ['The time, not only the count', '"Six today" and "six today, the last one at four in the morning" are different facts, and only one of them is useful in a waiting room.'],
+        ['A dry check counts', 'The entry that says you looked and there was nothing is real information. It is also the one that goes missing everywhere else, which turns a gap in the record into a guess.'],
+        ['Anything that made you look twice', 'In your own words. Cubby does not interpret it and will never grade it. The person you show it to can.']
+      ],
+      how: [
+        'One tap from your home row. Wet, dirty, both, or a dry check.',
+        'Change the time if it happened earlier. Nothing has to be logged the moment it happens.',
+        'Anyone in your circle can log one, and it appears on every phone straight away.',
+        'The day\'s count sits on your home screen, so nobody is adding up in their head.'
+      ],
+      payoff: 'When someone asks how many wet nappies today and when the last dirty one was, you read the answer instead of reconstructing it.',
+      read: 'bathing-washing-and-nappy-care' },
     openPump: { label: 'Pump', fn: 'openPump()', domain: 'log', depth: 'chapter',
       one: 'How much you expressed, which side, and when.',
       who: { stage: ['baby','child'] } },
@@ -122,10 +137,24 @@
       one: 'How they are, in your words or from a list.',
       who: { stage: ['baby','child'] },
       earn: { on: 'temp-logged' } },
-    openStartIllness: { label: 'Feeling poorly?', fn: 'openStartIllness()', domain: 'health', depth: 'chapter',
+    openStartIllness: { label: 'Feeling poorly?', fn: 'openStartIllness()', domain: 'health', depth: 'page',
       one: 'Start tracking an illness, so the timeline is ready for the call.',
       who: { stage: ['baby','child'] },
-      earn: { on: 'temp-logged' } },
+      earn: { on: 'temp-logged' },
+      why: 'An illness is not a moment, it is a shape over several days. The question at the appointment is almost never how they are right now. It is when this started and what it has done since, and that is the part memory loses first.',
+      matters: [
+        ['When it started', 'The first thing you will be asked and the first thing that blurs. Day three of a fever and day one look identical from the inside.'],
+        ['Every temperature with its time', 'A number on its own cannot show a direction. The same reading means something different at nine in the morning than it does at three in a row.'],
+        ['What you gave, and when', 'So two people cannot double a dose, and so whoever you speak to knows what has already been tried before they suggest it.'],
+        ['What changed, including nothing', 'Better, worse, or the same. Three days of the same is not an empty record. It is the finding.']
+      ],
+      how: [
+        'Start an illness when it begins. Cubby gathers everything logged while it is running.',
+        'Temperatures, medicines, symptoms and notes attach themselves to it by time. You do not file anything.',
+        'Everyone in your circle adds to the same timeline, so the night shift is in it too.',
+        'End it when they are well. It stays in the record as a closed chapter you can look back at.'
+      ],
+      payoff: 'You arrive with a timeline instead of a memory, on the day you have slept the least. Cubby never says whether a temperature is high, and never suggests what any of it means.' },
     openCondition: { label: 'A condition', fn: 'openCondition()', domain: 'health', depth: 'one',
       one: 'Something ongoing, kept where the rest of the health record is.',
       who: { stage: ['baby','child'] } },
@@ -158,10 +187,24 @@
     openAddVaccine: { label: 'Add a vaccine', fn: 'openAddVaccine()', domain: 'health', depth: 'one',
       one: 'Something your schedule does not include.',
       who: { stage: ['baby','child'] } },
-    openVisitSummary: { label: 'Visit summary', fn: 'openVisitSummary()', domain: 'health', depth: 'chapter',
+    openVisitSummary: { label: 'Visit summary', fn: 'openVisitSummary()', domain: 'health', depth: 'page',
       one: 'The things a doctor usually asks, gathered into one page you can read out.',
       who: { stage: ['baby','child'] },
-      earn: { on: 'fever' } },
+      earn: { on: 'fever' },
+      why: 'The appointment is ten minutes long and you are holding a baby who is not having a good day. This is the page that means you are not answering from memory while trying to keep them calm.',
+      matters: [
+        ['It is already written', 'Built from what you have logged. There is no form to fill in beforehand, which matters because the days you need it are the days you have least to give.'],
+        ['The dates and the times are in it', 'Because a few days ago is not an answer, and under pressure it is the only one most of us can give.'],
+        ['Your words stay yours', 'What you noticed is kept beside the numbers, not blended into them. Nobody has to take your account on trust and nobody has to dig for it.'],
+        ['It is a record, never an opinion', 'Cubby gathers, orders and hands over. It does not assess, score or diagnose, and it will not imply anything about what the numbers mean.']
+      ],
+      how: [
+        'Open it before you go. It gathers the last fortnight, or the illness if one is running.',
+        'Feeds, nappies, sleep, temperatures, medicines and your notes, in time order.',
+        'Read it out, hand the phone over, or print it.',
+        'Nothing leaves your phone unless you choose to send it.'
+      ],
+      payoff: 'The ten minutes get spent on what to do next, instead of on rebuilding what already happened.' },
     openDoctorReport: { label: 'Last 14 days', fn: 'openDoctorReport()', domain: 'health', depth: 'chapter',
       one: 'A fortnight of the record, ready to hand over.',
       who: { stage: ['baby','child'] },
@@ -352,10 +395,25 @@
       one: 'Twins, or a second child. One tap between them.',
       who: { stage: null },
       earn: { on: 'second-baby-added' } },
-    openFamily: { label: 'Your circle', fn: 'openFamily()', domain: 'circle', depth: 'chapter',
-      one: 'Who is in it, what each of them can do, and how to add someone. The differentiator, and the least-explained screen in the app.',
+    openFamily: { label: 'Your circle', fn: 'openFamily()', domain: 'circle', depth: 'page',
+      one: 'Everyone who helps, on the same log, live. Every entry says who did it.',
       who: { stage: null },
-      earn: { on: 'first-log' } },
+      earn: { on: 'first-log' },
+      why: 'On your own, the log is a diary. With a second person it becomes a handover, and the mental load of holding it all stops being one person\'s job. This is the part of Cubby that changes the most when somebody else joins.',
+      matters: [
+        ['Nobody has to ask what happened', 'What they log appears on your phone straight away, and what you log appears on theirs. The text message asking whether she has been fed stops being necessary.'],
+        ['Every entry carries a name', 'Bottle 120 ml, by Nana Bear. Not to keep score, but so a question has an obvious person to ask, and so nobody is quietly assumed to have done it.'],
+        ['A running timer is on every phone', 'Start a nap and everyone can see it running. Nobody opens the door of a dark room to check whether the baby is asleep.'],
+        ['Some things stay only yours', 'How you are in yourself is never shared with your circle. Not now, not later, not by accident. A note can go to everyone or to one person, and the card always says which.'],
+        ['Leaving is safe in both directions', 'Remove someone and their access goes, while everything they logged stays in your family\'s record. Nothing disappears from the story because a person did.']
+      ],
+      how: [
+        'Invite by email, or send a link. A link works once and expires, so a forwarded message cannot let a stranger in.',
+        'Two roles only. You own the circle. Caregivers log freely and can edit what they logged themselves.',
+        'You can remove anyone at any time, and see everyone who is currently in.',
+        'Grandparents, a nanny, a night nurse, the other parent. There is no view-only tier, because somebody who is helping is helping.'
+      ],
+      payoff: 'The question "when did she last feed?" gets answered by the phone instead of by whoever is most awake.' },
     openBearPicker: { label: 'Your bear', fn: 'openBearPicker()', domain: 'circle', depth: 'one',
       one: 'Mama Bear, Nana Bear, or a name you choose. It is how your entries are signed.',
       who: { stage: null },
@@ -501,7 +559,6 @@
     openReadCarousel: 'Renders the swipeable reads. Same reason.',
     showCountryList: 'Opens a picker\'s list. Helper inside a form field.',
     showDeletedGoodbye: 'Terminal confirmation screen after deletion. Nothing left to teach.',
-    openNote: 'Dead alias: function openNote(){ openActivity(); } with zero callers. Delete it.',
 
     /* Dormant behind a flag */
     openDenChores: 'FEATURES.den = false.',

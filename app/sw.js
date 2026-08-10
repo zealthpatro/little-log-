@@ -1,6 +1,6 @@
 /* Cubby service worker.
    Bump CACHE on every deploy so old assets are cleared. */
-const CACHE = 'little-log-v279';
+const CACHE = 'little-log-v280';
 const ASSETS = [
   '/app/',
   '/app/index.html',
@@ -18,6 +18,7 @@ const ASSETS = [
   // offline launch never gets a shell whose teaching layer is missing half of itself.
   '/app/teach-data.js',
   '/app/teach.js',
+  '/app/teach-ui.js',
   '/app/vax-card.js',
   '/app/cubby-extras.js',
   '/app/growth-data.js',

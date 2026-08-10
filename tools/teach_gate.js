@@ -114,11 +114,45 @@ rowIds.forEach(id => {
     voiceCheck(id, 'one', r.one);
   }
   check(!!r.label && r.label.length <= 40, id + ' has a short label');
-  check(r.depth === 'chapter' || r.depth === 'one', id + ' has a valid depth');
+  check(['one', 'chapter', 'page'].indexOf(r.depth) !== -1, id + ' has a valid depth');
   // A chapter promises two more fields. Rows without them are one-liners and must say so.
   if (r.depth === 'chapter' && r.what) voiceCheck(id, 'what', r.what);
   if (r.depth === 'chapter' && r.get) voiceCheck(id, 'get', r.get);
+
+  // A page is the deepest tier: it exists for the capabilities whose benefit is not obvious from
+  // the button, so it has to actually carry the benefit rather than just more words.
+  if (r.depth === 'page') {
+    check(!!r.why, id + ' page states why it is worth doing');
+    check(Array.isArray(r.matters) && r.matters.length >= 3,
+      id + ' page has at least three things that matter');
+    check(Array.isArray(r.how) && r.how.length >= 3, id + ' page explains how it works');
+    check(!!r.payoff, id + ' page ends on the payoff');
+    if (r.why) voiceCheck(id, 'why', r.why);
+    if (r.payoff) voiceCheck(id, 'payoff', r.payoff);
+    (r.matters || []).forEach((m, i) => {
+      check(Array.isArray(m) && m.length === 2, id + '.matters[' + i + '] is a heading and a body');
+      if (Array.isArray(m) && m.length === 2) {
+        check(m[0].length <= 46, id + '.matters[' + i + '] heading is short', m[0]);
+        check(!/[.]$/.test(m[0]), id + '.matters[' + i + '] heading is not a sentence', m[0]);
+        voiceCheck(id, 'matters[' + i + ']', m[1]);
+      }
+    });
+    (r.how || []).forEach((h, i) => voiceCheck(id, 'how[' + i + ']', h));
+  }
 });
+
+/* An absent read slug means NO read button, never an invented one. A teaching page that links to
+   an article which does not exist is worse than one that links to nothing. */
+(function () {
+  const w2 = {};
+  new Function('window', fs.readFileSync(path.join(ROOT, 'app/reads-data.js'), 'utf8'))(w2);
+  const slugs = new Set();
+  Object.keys(w2.READS || {}).forEach(g => (w2.READS[g] || []).forEach(r => slugs.add(r.s)));
+  const linked = rowIds.filter(id => ROWS[id].read);
+  linked.forEach(id => check(slugs.has(ROWS[id].read),
+    id + '.read points at an article that exists', ROWS[id].read));
+  check(slugs.size > 0, 'reads-data.js loaded (' + slugs.size + ' articles)');
+})();
 
 // Pro must never read as buyable before October 2026.
 const proRow = ROWS.openPro;
@@ -273,6 +307,19 @@ function baseCtx(over) {
   T.fire('birthday-set');
   check(T.ask('openVaccineCountry') === false, 'a baby-stage cue is not offered while expecting');
   check(T.explain('openVaccineCountry') === 'not-for-them', 'gated by who, before any scoring');
+}
+
+// -- depth ranks in the right order. A page is for the capabilities whose benefit is not obvious,
+//    so it must never sit below a chapter or a one-liner with the same domain and trigger.
+{
+  const c = baseCtx();
+  const { T } = makeLedger(c, () => T0);
+  const mk = (domain, depth) => T._value({ domain: domain, depth: depth });
+  check(mk('health', 'page') > mk('health', 'chapter'), 'a page outranks a chapter');
+  check(mk('health', 'chapter') > mk('health', 'one'), 'a chapter outranks a one-liner');
+  // and the property the whole ranking exists for, stated directly
+  check(T._value(ROWS.openVisitSummary) > T._value(ROWS.openMemoryCard),
+    'the visit summary always outranks a keepsake');
 }
 
 // -- an untriggered row can never push, by construction

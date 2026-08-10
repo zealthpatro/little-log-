@@ -1228,6 +1228,12 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .note-card.priv{border-left:3px solid var(--preg);}
 .note-card.pinned{background:linear-gradient(180deg,var(--note-soft),var(--surface));}
 .note-card .nt-pin{position:absolute;top:9px;right:11px;font-size:14px;line-height:1;}
+/* And WHICH card is the unread one. A dot, not a fill: three notes where one is tinted reads as three
+   kinds of note rather than as one unread note. Declared after the base card so the ring is not
+   relying on specificity alone to beat `border` in the shorthand above. */
+.note-card.nt-unread{border-color:var(--note);}
+.note-card.nt-unread::after{content:'';position:absolute;top:12px;right:12px;width:8px;height:8px;border-radius:50%;background:var(--note);}
+.note-card.nt-unread.pinned::after{top:32px;}   /* clear of the pin */
 /* Clamped to four lines on the card. A long note used to push the rest of the home screen off the
    bottom of the phone; openNoteView still reads it whole. */
 .note-card .nt-text{font-family:var(--font-display);font-size:15.5px;font-weight:500;color:var(--ink);line-height:1.45;white-space:pre-wrap;word-break:break-word;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;}
@@ -2316,24 +2322,58 @@ function pinnedNotes(){
   // A pin always shows on today regardless of the day it was left on.
   return visibleNotes().filter(n=>n.pinned).sort((a,b)=>(b.at||0)-(a.at||0));
 }
-/* Is there a note waiting for this member TODAY? Home asks this to decide where the day surface
-   sits, and it asks about today rather than about the day being browsed on purpose: the answer then
-   cannot change while the parent arrows back through empty days, so the card never leaps up and
-   down the page under their finger. */
-function todayNotes(){
-  const dayNotes=notesForDay(now());
-  return dayNotes.concat(pinnedNotes().filter(p=>!dayNotes.some(n=>n.id===p.id)));
-}
-/* "New" means left by somebody else and not opened yet. Per member, because one caregiver reading a
-   note must not clear the mark for the other — that is the whole point of a handoff. Kept in
-   localStorage keyed by uid and NOT in state.settings: that blob is shared with the circle, and a
-   personal read-marker filed there would travel to everybody. */
+/* ---- unread notes: the ONE thing that lifts the day surface up the page ----
+   The home screen's Notes card lives at the bottom. It comes up only when another member has left
+   something this member has not read yet, and it goes straight back down the moment they read it.
+   Four properties matter, and every one of them is a bug that would be easy to ship:
+
+   Per MEMBER. Papa reading a note must not clear it for Mama. So this is localStorage keyed by uid
+   and never `state.settings`, which is the shared household blob: a personal read-marker filed there
+   would travel to the whole circle. (Consequence, accepted: it is therefore per DEVICE too. Reading
+   a note on the phone leaves it marked new on the tablet. Following the person would mean a
+   `users/{uid}` write on every note opened, which is not worth a document write per read.)
+
+   Per NOTE, by id, not a high-water timestamp. A timestamp is wrong the moment a note arrives out of
+   order — sync delivers a note stamped 09:00 after this member has already read one stamped 10:00,
+   and an "everything before 10:00 is read" marker swallows it silently. Nobody would ever be told it
+   arrived. Ids also let the lane say WHICH note is new when there are three.
+
+   Only what was left TODAY. A pin is NOT news: it is a standing note that has been on this screen
+   every day since it was left, so counting it as unread promoted the card and printed "1 new" every
+   single day until somebody happened to tap a note they had already read — the exact false nudge this
+   whole change exists to remove. `pinnedNotes()` still puts other days' pins in the lane, where they
+   belong; a pin left today is in `notesForDay(now())` anyway, so it can still be the thing that
+   raises the card on the day it lands.
+
+   Only from SOMEBODY ELSE, and only what this member is allowed to see. visibleNotes() already drops
+   notes addressed privately to another member, so a private handoff between two caregivers cannot
+   raise the card for a third. Your own note is never news to you. */
 function notesSeenKey(){ return 'cubby-notes-seen:'+quickUid(); }
-function notesSeenAt(){ try{ return +localStorage.getItem(notesSeenKey())||0; }catch(e){ return 0; } }
-function unseenNotes(){ const me=myUid(), mark=notesSeenAt(); return todayNotes().filter(n=>n.createdBy!==me && (n.at||0)>mark); }
-function markNotesSeen(){
-  const top=todayNotes().reduce((a,n)=>Math.max(a,n.at||0),0);
-  try{ localStorage.setItem(notesSeenKey(), String(Math.max(top, notesSeenAt()))); }catch(e){}
+function notesSeen(){
+  try{
+    const v=JSON.parse(localStorage.getItem(notesSeenKey())||'null');
+    /* Stored as {d, ids} and dropped whole when the day turns. Only a note left today can be unread,
+       so yesterday's ids can never be asked about again — and a fixed-size list of them was actively
+       harmful: `slice(-300)` evicted by READ ORDER, spending every slot on ids that were already dead
+       and eventually discarding a live one, which brought the card back up saying "1 new" about a
+       note the parent read months ago. Scoping to the day is what makes the marker self-pruning.
+       (v276 briefly stored a bare timestamp and v278 a bare array; both read as nothing-read here,
+       which costs one re-announcement on upgrade and never a wrong answer after that.) */
+    if(!v || !Array.isArray(v.ids) || v.d!==dayKey(now())) return [];
+    return v.ids;
+  }catch(e){ return []; }
+}
+function noteIsSeen(id){ return notesSeen().indexOf(id)>-1; }
+function markNoteSeen(id){
+  if(!id || noteIsSeen(id)) return;
+  const s=notesSeen(); s.push(id);
+  // The cap is a backstop against a runaway loop, not against quota: it now takes 200 notes opened
+  // inside one day to reach it, and a day's ids are dropped whole at midnight regardless.
+  try{ localStorage.setItem(notesSeenKey(), JSON.stringify({d:dayKey(now()), ids:s.slice(-200)})); }catch(e){}
+}
+function unseenNotes(){
+  const me=myUid(), seen=notesSeen();
+  return notesForDay(now()).filter(n=>n.createdBy!==me && seen.indexOf(n.id)<0);
 }
 function noteAudienceLabel(n){
   if(!n) return '';
@@ -2343,13 +2383,18 @@ function noteAudienceLabel(n){
   // author viewing a note they sent privately to one member
   return 'Private to '+(loggerName(n.audience)||'one person');
 }
-function noteCard(n){
+function noteCard(n, unread){
   const me=myUid();
   const mine=n.createdBy===me;
   const by=n.createdByName || loggerName(n.createdBy) || 'Someone';
   const priv=n.audience!=='circle';
   const pin=n.pinned?'<span class="nt-pin" title="Pinned">📌</span>':'';
-  return `<div class="note-card${priv?' priv':''}${n.pinned?' pinned':''}" onclick="openNoteView('${n.id}')">
+  // Which one is new, not just that one is. With three notes in the lane a header count alone makes
+  // the parent open all three to find the one they have not read. The list is computed once by the
+  // lane and passed in: working it out per card would re-read localStorage and re-filter every note
+  // in the circle for every card drawn.
+  const isNew=!mine && !!unread && unread.indexOf(n.id)>-1;
+  return `<div class="note-card${priv?' priv':''}${n.pinned?' pinned':''}${isNew?' nt-unread':''}" onclick="openNoteView('${n.id}')">
     ${pin}
     <div class="nt-text">${escapeHtml(n.text)}</div>
     <div class="nt-meta"><span class="nt-by">${escapeHtml(by)}${mine?' (you)':''}</span><span class="nt-aud">${escapeHtml(noteAudienceLabel(n))}</span></div>
@@ -2371,9 +2416,11 @@ function daySurface(){
   const recap=daySurfaceRecap(ts);
 
   const notesEmpty = !dayNotes.length && !pins.length;
-  // The badge only ever counts today's, and only what somebody else left: a note you wrote yourself
-  // is not news to you, and yesterday's is not waiting for you.
-  const unseen = isToday ? unseenNotes().length : 0;
+  // The badge only ever counts what somebody else left and this member has not opened: a note you
+  // wrote yourself is not news to you. Computed once here and handed to the cards, so each one can
+  // show whether IT is the new one without re-deriving the whole list.
+  const unreadIds = isToday ? unseenNotes().map(n=>n.id) : [];
+  const unseen = unreadIds.length;
   // First-time soft pulse on the compose button (until the member has left a note).
   const pulse = hasSeen('tip_leftnote') ? '' : ' pulse';
 
@@ -2387,7 +2434,7 @@ function daySurface(){
       <div class="qod-by">Cubby · ${escapeHtml(dayLabel(ts))}</div>
     </div>`;
   } else {
-    notesLane = pins.map(noteCard).join('') + dayNotes.map(noteCard).join('');
+    notesLane = pins.map(n=>noteCard(n,unreadIds)).join('') + dayNotes.map(n=>noteCard(n,unreadIds)).join('');
   }
 
   const nav = `<div class="ds-nav">
@@ -2498,9 +2545,33 @@ async function saveNote(){
 }
 function openNoteView(id){
   const n=(state.notes||[]).find(x=>x.id===id); if(!n)return;
-  // Opening any note is the only thing that clears the "new" mark. Reading the card in passing does
-  // not, so a handoff keeps its badge until somebody actually goes in.
-  markNotesSeen(); if(typeof renderSoon==='function') renderSoon();
+  /* Opening THIS note is the only thing that marks THIS note read. Two unread notes and one tap
+     leaves one still unread, and the card stays up until both have been opened. Once the last one is
+     read the card drops to the bottom of home behind the sheet — which is the point: it holds the top
+     of the screen only while something is actually waiting.
+
+     But that drop takes the card's whole footprint out of the page ABOVE where she is reading. With a
+     tall lane — several notes, or a pin from an earlier day — that is 600px or more, so everything
+     below the vacated slot slides up while the sheet covers it, and she closes the sheet looking at
+     completely different content. So take the card's own footprint out of the scroll offset when it
+     goes: exactly what left the page above her, and nothing else. Its own height and margin rather
+     than the movement of some landmark further down the page, because anything BETWEEN the two slots
+     that changes size on the same repaint (an alert pill arriving, a coach card going) would corrupt a
+     landmark reading — measured that happening, 91px of it. Clamped at zero, which makes this a no-op
+     at the top of the page: correct there, because nothing above her has moved.
+
+     offsetHeight and computed margin, not getBoundingClientRect: home paints inside a `.fade-in`
+     wrapper whose children run an entry animation, and a rect read mid-translate is a few pixels out. */
+  const sc=$('#scroll'), _ds=sc&&sc.querySelector('#daySurface');
+  const wasUp=!!(view==='home' && sc && _ds && unseenNotes().length);
+  const foot=wasUp?(_ds.offsetHeight+(parseFloat(getComputedStyle(_ds).marginBottom)||0)):0;
+  const prevTop=sc?sc.scrollTop:0;
+  markNoteSeen(id);
+  if(wasUp){
+    render();
+    // Only when it actually went. Another note still unread means the card has not moved.
+    if(!unseenNotes().length) sc.scrollTop=Math.max(0, prevTop-foot);
+  } else if(typeof renderSoon==='function') renderSoon();
   const me=myUid();
   const mine=n.createdBy===me;
   const by=n.createdByName||loggerName(n.createdBy)||'Someone';
@@ -2642,15 +2713,18 @@ function renderHome(){
   const diaperCount = todayEvs.filter(e=>e.type==='diaper').length;
   const sleepMs = todayEvs.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+netSleepMs(e),0);
 
-  /* The day surface earns its place, it is not given one. On a day when somebody has actually left a
-     note it goes near the top, straight under the three answers, because a note is a handoff from
-     another person and that is the most time-sensitive thing on this screen. On a day when nobody
-     has, it falls to the very bottom: what a parent saw there was a heading, a prompt to write
-     something and a quote of the day, sitting above their own baby's photo and their own logging.
-     Generic filler at the top of a screen teaches people to scroll past that spot, which is the
-     worst thing that could happen to the one place another caregiver can reach them. */
+  /* The day surface lives at the BOTTOM of home. It comes up, straight under the three answers, for
+     exactly one reason: another member has left something this parent has not read yet — to the whole
+     circle or to them by name. It goes back down the moment they read it.
+
+     It used to hold the top of the screen every day, and on most days what it held was a heading, a
+     prompt to write something and a quote of the day, sitting above the parent's own baby and their
+     own logging. Generic filler in a prominent slot teaches people to scroll past that slot, which is
+     the worst possible outcome for the one place a second caregiver can reach them: the day a real
+     handoff appears there, the eye already skips it. Nothing generic is allowed up here now, and
+     nothing that has already been read stays up here either. */
   const surfaceCard = daySurface();
-  const surfaceUp = todayNotes().length>0;
+  const surfaceUp = unseenNotes().length>0;
 
   return `<div class="fade-in">
     <div class="greeting">${meGreeting()}</div>
@@ -2673,6 +2747,7 @@ function renderHome(){
     ${renderHero()}
     ${gsCard}
     ${(window.CubbyGuide&&CubbyGuide.homeCard)?CubbyGuide.homeCard(!!gsCard):''}
+    ${(gsCard || !hasSeen('home')) ? '' : teachCue()}
     <div class="sec-title">Quick log${(window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('logging'):''}</div>
     <div class="actions stagger">${quickLogActions(ts)}</div>
     ${gsCard ? '' : renderNudge()}
@@ -2681,7 +2756,7 @@ function renderHome(){
     <div class="today-strip">
       <div class="cell"><div class="big">${feedCount}</div><div class="cap">Feeds today</div></div>
       <div class="cell"><div class="big">${sleepMs?fmtDur(sleepMs):'0m'}</div><div class="cap">Sleep today</div></div>
-      <div class="cell"><div class="big">${diaperCount}</div><div class="cap">Diapers today</div></div>
+      <div class="cell"><div class="big">${diaperCount}</div><div class="cap">Diapers today${(window.CubbyTeachUI)?CubbyTeachUI.dot('openDiaper','nappies'):''}</div></div>
     </div>
     ${surfaceUp ? '' : surfaceCard}
   </div>`;
@@ -2955,6 +3030,89 @@ window.cubbyGuideCtx = function(){
     actions: quickAvailable().map(a=>({k:a.k,label:a.label,ico:a.ico(),fn:a.fn,tone:a.tone,soft:a.soft}))
   };
 };
+/* The teaching ledger's one window onto app state (app/teach.js). Same reasoning as the guide's:
+   `state` is a top-level binding here and unreachable from a module, and the ledger has no business
+   knowing how any of this is derived. It only ever narrows what a parent is offered.
+
+   `installedAt` is when THIS person first met the app, not when the household was created. A
+   caregiver joining on day 400 gets their own first fortnight of higher allowance, because they
+   have never been told what any of it is for either. */
+function teachSince(){
+  const k='cubby-teach-since-'+quickUid();
+  try{
+    const v=+(localStorage.getItem(k)||0);
+    if(v) return v;
+    const t=Date.now(); localStorage.setItem(k,String(t)); return t;
+  }catch(e){ return Date.now(); }
+}
+window.cubbyTeachCtx = function(){
+  const b=activeBaby();
+  const sh=document.getElementById('sheet');
+  return {
+    uid: quickUid(),
+    stage: quickStage(),
+    role: ((window.LL&&window.LL.role)==='owner') ? 'owner' : 'caregiver',
+    months: (b&&b.birth) ? babyMonths() : null,
+    week: (state.pregnancy && typeof pregWeek==='function') ? (pregWeek()||0) : 0,
+    // Checked before any cue is scored. The holding screen is the whole screen on purpose.
+    lossHolding: !!(typeof myLossHolding==='function' && myLossHolding()),
+    // Nothing may appear over an open sheet: the parent is mid-task and did not ask us anything.
+    sheetOpen: !!(sh && sh.classList.contains('show')) || !!document.getElementById('logGuide'),
+    installedAt: teachSince()
+  };
+};
+/* Record that something became true. Safe to call on every render: teach.js keeps only the FIRST
+   time it saw each event, which is what makes staleness mean anything. */
+function teachFire(name){ try{ if(window.CubbyTeach) window.CubbyTeach.fire(name); }catch(e){} }
+/* The home cue: scan for anything newly true, then let the ledger decide whether today can afford
+   to say one thing. Returns '' far more often than not, which is the point.
+   The caller also holds it back while the home coach mark is still up, so a first-time parent never
+   gets a mark and a cue stacked in the same paint. */
+function teachCue(){
+  try{
+    if(!window.CubbyTeachUI) return '';
+    teachScan();
+    return window.CubbyTeachUI.homeCue()||'';
+  }catch(e){ return ''; }
+}
+/* One idempotent sweep instead of twenty scattered call sites. teach.js keeps only the first time
+   it sees an event, so re-firing costs a map lookup and changes nothing. Everything here is derived
+   from state we already hold, and it is deliberately cheap: counts and a bounded tail, never a full
+   scan of every event ever logged (the perf gate exists because we did that once already). */
+function teachScan(){
+  if(!window.CubbyTeach) return;
+  try{
+    const ev=state.events||[], n=ev.length, b=activeBaby();
+    if(n>=1) teachFire('first-log');
+    if(n>=5) teachFire('logs-5');
+    if(n>=10) teachFire('logs-10');
+    if(n>=25) teachFire('logs-25');
+    if(b&&b.birth) teachFire('birthday-set');
+    if((state.meds||[]).length) teachFire('med-added');
+    if((state.photos||[]).length>=1) teachFire('first-photo');
+    if((state.photos||[]).length>=3) teachFire('3-photos');
+    if((state.photos||[]).length>=10) teachFire('photos-10');
+    if((state.illnesses||[]).length) teachFire('illness-started');
+    const members=(window.LL&&window.LL.members)||{};
+    if(Object.keys(members).length>1) teachFire('second-caregiver');
+
+    // Only the tail. A fortnight of entries is enough to answer every question below.
+    const cut=Date.now()-14*86400000;
+    let temps=[], growth=0, days={};
+    for(let i=n-1;i>=0;i--){
+      const e=ev[i]; if(!e||e.time<cut) break;
+      if(e.type==='temperature') temps.push(e.time);
+      if(e.type==='growth') growth++;
+      days[new Date(e.time).toDateString()]=1;
+    }
+    if(temps.length) teachFire('temp-logged');
+    if(growth>=2) teachFire('growth-2-points');
+    if(Object.keys(days).length>=7) teachFire('7-days-logged');
+    // Two readings inside a day is the moment the visit summary has something in it worth reading.
+    // Deliberately NOT a threshold on the number itself: Cubby does not decide what a fever is.
+    if(temps.length>=2 && (temps[0]-temps[temps.length-1])<=86400000) teachFire('fever');
+  }catch(e){}
+}
 function quickBtn(a,ts){
   // Sleep is the one action whose label depends on live state (a running timer means "wake up").
   if(a.k==='sleep'&&ts) return actBtn("stopSleep('"+state.activeBabyId+"')",'var('+a.soft+')','var('+a.tone+')',a.ico(),'Wake up','Stop the timer');
@@ -3931,7 +4089,6 @@ async function saveActivity(){
   closeSheet(); render(); toast((act||'Moment')+' logged');
 }
 /* legacy free-text note still supported for old entries */
-function openNote(){ openActivity(); }
 
 /* ---------- EDIT / DELETE ---------- */
 /* The edit sheet fixes the mistakes people actually make: wrong day, wrong time, a nap's wake
@@ -4898,7 +5055,7 @@ function openSettings(){
     </div>`:''}
     <div class="set-item" onclick="window.openFamily&&window.openFamily()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--feed-soft);color:var(--feed);font-size:18px">👨‍👩‍👧</div>
-      <div class="si-body"><div class="a">Your profile &amp; family${(window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('sharing'):''}</div><div class="b">Your name &amp; relationship, invite people, your bear</div></div>
+      <div class="si-body"><div class="a">Your profile &amp; family${(window.CubbyTeachUI)?CubbyTeachUI.dot('openFamily','your circle'):((window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('sharing'):'')}</div><div class="b">Your name &amp; relationship, invite people, your bear</div></div>
     </div>
     <div class="set-item" onclick="openPro()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">✨</div>
@@ -7752,7 +7909,7 @@ function pregHealthQuick(){
   const on=PREG_CONDS.filter(c=>condOn(c.key));
   if(!on.length) return '';
   const btns=on.map(c=>`<button class="action" onclick="openCondition('${c.key}')"><div class="ico" style="background:var(--preg-soft);color:var(--preg)">${c.emoji}</div><div class="label">${c.short}</div><div class="hint">${condSummary(c.key)}</div></button>`).join('');
-  return `<div class="sec-title">Today's health</div><div class="actions stagger">${btns}</div>`;
+  return `<div class="sec-title">Today's health${(window.CubbyTeachUI)?CubbyTeachUI.dot('openStartIllness','tracking an illness'):''}</div><div class="actions stagger">${btns}</div>`;
 }
 
 /* ---- Gestational diabetes: glucose ---- */
@@ -8550,7 +8707,7 @@ function renderHealth(){
      actually wanted from this app. It is free: only openDoctorReport inside it spends a taste. */
   const visit=`<div class="prof-card" style="margin-top:14px" onclick="openVisitSummary()">
       <span class="lead" style="background:var(--sleep-soft);color:var(--sleep)">${I.stetho}</span>
-      <div class="cflex"><div class="a">Going to the doctor?${(window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('health'):''}</div><div class="b">A one-tap summary of the last week, ready to read out</div></div>
+      <div class="cflex"><div class="a">Going to the doctor?${(window.CubbyTeachUI)?CubbyTeachUI.dot('openVisitSummary','the visit summary'):((window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('health'):'')}</div><div class="b">A one-tap summary of the last week, ready to read out</div></div>
       <span class="chev">${I.chev}</span></div>`;
   return `<div class="fade-in">${coachMark('health','This is Health','Regular medicines with reminders, the vaccine schedule, and any illness to manage, all in one place.')}${seg}${body}${care}${visit}</div>`;
 }
@@ -11979,6 +12136,14 @@ function normalizeLoadedState(saved){
      first paint, so a new parent's Get started card came up without its guide row and only grew one
      on the next render. First paint is the one that matters here. -->
 <script defer src="log-guide.js"></script>
+<!-- The teaching layer, in dependency order: content, then the ledger that rations it, then the
+     only file that draws anything. teach-ui reuses the log-guide overlay, so it must come after it.
+     Deferred and ahead of store-firebase.js for the same reason log-guide.js is: the boot render
+     happens inside store-firebase, and a surface that is undefined at first paint simply does not
+     appear until something else re-renders. -->
+<script defer src="teach-data.js"></script>
+<script defer src="teach.js"></script>
+<script defer src="teach-ui.js"></script>
 <script defer src="vax-card.js"></script>
 <script defer src="store-firebase.js"></script>
 <script defer src="voice-log.js"></script>

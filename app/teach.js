@@ -42,7 +42,9 @@
   var DOMAIN_VALUE = {
     health: 60, circle: 45, preg: 45, log: 35, trying: 30, memories: 15, account: 10
   };
-  var DEPTH_VALUE = { chapter: 6, one: 0 };
+  // A page exists because that capability's benefit is NOT obvious from its button, so it should
+  // never rank below a chapter. Omitting it here scored the deepest tier at zero.
+  var DEPTH_VALUE = { page: 9, chapter: 6, one: 0 };
 
   /* Urgency belongs to the EVENT, not to the capability. Domain alone put a fever and a
      "your doses could go in your calendar" cue on the same score, and the tie broke alphabetically
