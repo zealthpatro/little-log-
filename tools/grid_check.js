@@ -148,6 +148,26 @@ CARDS.forEach(sel => {
   check(users === 1, 'exactly one rule uses --r-tap', users + ' rules do');
 }
 
+/* .today-strip is deliberately NOT in the inset family, and this note exists so the next person
+   measuring the home screen does not "fix" it the way I nearly did.
+   Its 8px looks like the worst outlier on the page: cells start at x=28 while the notes card
+   directly beneath starts at 37. But the strip is a three-up grid of CENTRED content, so its outer
+   padding sets column widths and divider positions rather than a text edge. There is no left edge
+   for it to be ragged against. Raising it to 16 aligned a number nobody sees and wrapped "1h 40m"
+   onto two lines at 320px, which is visible to everybody. Measured, both ways, before reverting. */
+{
+  const b = rule('.today-strip{');
+  check(!!b, '.today-strip exists');
+  if (b) check(/padding:16px 8px/.test(b),
+    '.today-strip keeps its own padding (centred content, not a text edge)',
+    (b.match(/padding:[^;]*/) || [''])[0]);
+}
+{
+  // the disclaimer is card-shaped and joins the one radius
+  const b = rule('.disclaimer{');
+  check(!!b && /border-radius:var\(--radius\)/.test(b), '.disclaimer uses the shared radius');
+}
+
 const total = passes + fails;
 console.log('\n' + (fails ? 'FAIL' : 'PASS') + ' — ' + passes + '/' + total + ' checks');
 process.exit(fails ? 1 : 0);
