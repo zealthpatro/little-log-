@@ -141,6 +141,16 @@ one in the git history.
   It needs `protocolTimeout` raised at launch: the Moments sub-tab builds the 289-card journey library and
   a cold run blew past puppeteer's 180s default, which surfaces as a `ProtocolError` that reads like a
   broken page rather than a slow one.
+
+  **Do not point it at production.** `stack_check`, `uitest`, `perf_check`, `guide_test` and every other
+  authed gate boot the signed-in shell through the local E2E path, which is hostname-guarded to
+  `localhost`/`127.0.0.1` (`app/store-firebase.js:2855`) precisely so a query parameter can never bypass
+  auth on a real host. Run against `https://little-cubby.com` they get the signed-out landing, no
+  `#scroll`, and a `Cannot read properties of null` that looks like a product bug and is not one. If you
+  ever find yourself loosening that hostname guard to make a gate run against prod, stop: the guard is the
+  point. Verify a deploy by confirming the shipped bytes (a string unique to the change, plus the sw
+  version) and trust the measurement taken on the identical committed code locally. The gates that DO run
+  against the live host are `sitesw_gate` and `thirdparty_gate`, because neither needs to be signed in.
 - `tools/type_check.js` — the type contract (DESIGN.md A3.1): the handwriting face means a person wrote
   this, so it is allowlisted (one entry, `.note-card .nt-by`), and in a block where Cubby is speaking its
   heading is the largest thing in it. Sizes are compared in **cap height**, not `px`, because the three
