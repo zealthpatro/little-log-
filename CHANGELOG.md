@@ -1,5 +1,40 @@
 # Cubby — Changelog
 
+## v0.19.1 — 2026-08-11 — the exception list goes to zero, and the gate stops flattering itself
+
+**sw v298 → v299.** The stack contract shipped with eight declared exceptions. All eight are closed,
+and closing them turned up four more violations the gate had never been able to see.
+
+**The two that had survived longest were not what the list said they were.** It described every entry
+as an inline `style="margin:…"` that no token could reach. Two were ordinary CSS rules —
+`.hm{margin-bottom:18px}` and `.tip-line{margin:0 0 12px}` — living in `app/cubby-extras.js` as
+**injected JavaScript strings**. Anyone grepping `index.html` for the 18 they could plainly see on
+screen found nothing, which is why those two outlasted the rest. There are two CSS homes in this app
+and now both are written down.
+
+**Four violations found by looking at more of the app.** The gate walked six tabs. Album and Health
+each render three different trees, so it was measuring one surface in eight and calling it "album".
+Widening it to ten surfaces found a 6px gap under the Illness tab's Mark recovered button, a 22px
+Medicine heading, a 14px medicine-due card and a 9px alert pill. It also found that the gate had been
+lying about which screen it was on: `logTab`/`albumTab`/`healthTab` persist, so `go('log')` after the
+rituals step measured rituals, and the night pass inherited whatever the light pass left behind.
+Every step now states its own sub-tab.
+
+**A structural rule instead of a longer list.** `.ms-row + .sec-title, .add-row + .sec-title, …` has to
+be extended by hand whenever a new kind of element lands above a heading, and it had already missed
+`.btn-primary`. Inside the tab wrapper, any block followed by a heading now takes `--stack`, named by
+structure rather than by component.
+
+**Two gates that could not fail.** The exception list matched on tab and selectors while ignoring the
+recorded pixel value, so a *fixed* exception went on matching and the corrected gap was skipped forever
+rather than asserted — the value is part of the key now. And `health/illness` passed only because the
+fixture had no illness in it; it now seeds one active and one past episode, which is how the 6px gap
+turned up.
+
+**`smoke.js` no longer cries wolf.** Every other gate takes a base URL and appends `/app/` itself. This
+one wanted the full app URL, so handing it a base loaded the marketing page and it reported the app's
+entire critical surface missing — a convincing false P0. It accepts either form now.
+
 ## v0.19.0 — 2026-08-10 — the teaching layer, and one card grid
 
 **sw v279 → v296.** Cubby had built far more than it ever explained: 148 entry points across the

@@ -651,7 +651,7 @@
     + '.ll-fb{width:100%;min-height:120px;border:1px solid #E0D7C7;border-radius:12px;padding:12px;font-size:15px;font-family:inherit;resize:vertical;box-sizing:border-box;margin-bottom:12px;}'
     + '.greeting{font-family:var(--font-display),Georgia,serif;font-size:19px;font-weight:600;color:var(--ink,#2C2521);margin:2px 2px 2px;}'
     + '.greeting-sub{font-size:13px;color:var(--ink-soft,#9a8d80);font-weight:600;margin:0 2px 12px;}'
-    + '.tip-line{display:flex;align-items:center;gap:10px;justify-content:space-between;background:var(--star-soft,#F6E1EC);border:1px solid var(--star,#C97FA0);border-radius:12px;padding:9px 12px;margin:0 0 12px;font-size:13px;color:var(--ink,#2C2521);font-weight:600;line-height:1.35;}'
+    + '.tip-line{display:flex;align-items:center;gap:10px;justify-content:space-between;background:var(--star-soft,#F6E1EC);border:1px solid var(--star,#C97FA0);border-radius:12px;padding:9px 12px;margin:0 0 var(--stack,16px);font-size:13px;color:var(--ink,#2C2521);font-weight:600;line-height:1.35;}'
     + '.tip-line button{border:none;background:rgba(0,0,0,.06);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:800;color:var(--ink,#2C2521);cursor:pointer;font-family:inherit;flex:0 0 auto;}'
     + '.gs-card{background:var(--surface,#fff);border:1px solid var(--line,#E0D7C7);border-radius:16px;padding:14px 16px;margin:0 0 16px;box-shadow:0 5px 14px var(--shadow,rgba(0,0,0,.06));}'
     + '.gs-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}'
@@ -684,7 +684,7 @@
     + '.handoff-card .ho-s{font-size:13px;color:var(--ink-soft,#6E635B);font-weight:600;margin-top:2px;line-height:1.4;}'
     + '.handoff-card.empty .ho-s{font-style:italic;}'
     + '.handoff-card .ho-by{font-size:11px;color:var(--ink-faint,#b3a99d);font-weight:700;margin-top:4px;}'
-    + '.hm{margin-bottom:18px;}'
+    + '.hm{margin-bottom:var(--stack,16px);}'  // block gap. was one of the four hand-set 18s, DESIGN.md A3.2
     + '.hm-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}'
     + '.hm-seg{display:inline-flex;background:var(--surface-2,#FBF7EF);border:1px solid var(--line,#E0D7C7);border-radius:9px;overflow:hidden;}'
     + '.hm-seg button{border:none;background:none;padding:5px 12px;font-size:12px;font-weight:800;color:var(--ink-soft,#9a8d80);cursor:pointer;font-family:inherit;}'

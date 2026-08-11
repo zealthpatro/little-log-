@@ -100,9 +100,32 @@ read as one undifferentiated run of rows. Hence the explicit `row + .sec-title` 
 **A token nothing points at is not a system.** `--stack` existed for months while four rules set 18px by
 hand and three different values (8, 9, and nothing) did the row rhythm's job.
 
-Inline `style="margin:…"` on a block is **outside the system by construction** — no token can reach it,
-so no fix can either. The remaining offenders are listed in `tools/stack_check.js` with the tab they are
-on; they need markup edits, not CSS.
+**There is no exception list any more.** All eight listed offenders were closed on 2026-08-11 and `KNOWN`
+in `tools/stack_check.js` is `[]`. Keep it that way: an entry there is a debt with a date on it, not a
+permission. Two of those eight were the ones that had survived longest, and neither was what the list said
+it was — see below.
+
+**Two things to know before you go looking for a wrong number:**
+
+*The CSS has two homes.* Most of it is the inline `<style>` in `app/index.html`. The rest is **injected as
+JavaScript string concatenation** in `app/cubby-extras.js` (`+ '.hm{margin-bottom:18px;}'`). Grepping
+`index.html` for an 18 you can plainly see on screen finds nothing, which is exactly why `.hm` and
+`.tip-line` outlived every other offender. Search both.
+
+*Prefer a structural rule to a list of selectors.* `.ms-row + .sec-title, .add-row + .sec-title, …` has to
+be extended by hand every time a new kind of element lands above a heading, and it silently missed
+`.btn-primary` — which put the Illness tab's "Past illnesses" heading 6px under the Mark recovered button.
+The rule that actually holds is scoped to the tab wrapper and names no components:
+
+```css
+#scroll > .fade-in > *:not(.sec-title):not(.set-label):not(.greeting-sub) + .sec-title{margin-top:var(--stack);}
+```
+
+Inline `style="margin:…"` on a block is outside the system **only when it carries a number**. A token
+inline — `style="margin-top:var(--stack)"` — is reachable, survives a change to the token, and is the
+right answer where no rule can select the node (a one-off element inside a template literal). It is also
+the *safer* answer where the preceding sibling varies: the Health heading follows a different last element
+on each of the three sub-tabs, so a sibling rule would have landed 16 on one and 6 on another.
 
 ## A4. Spacing & layout
 - **4px base scale**: 4 / 8 / 12 / 16 / 20 / 24 / 32 / 48. Pick from the scale; no 13px/9px/7px gaps.

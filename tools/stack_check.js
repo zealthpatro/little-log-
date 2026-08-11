@@ -40,31 +40,42 @@ const HEADS = ['.sec-title', '.set-label', '.greeting-sub'];
 const PAIRS = [
   ['.greeting', '.greeting-sub', 'a greeting and its own second line are one sentence'],
   ['.preg-card', 'div', 'the good-read card and its own "More good reads" link belong to each other'],
+  ['.prof-cards', '.csub', 'the two care cards and the caption that says "tap either to update" are one unit'],
+  ['.month-grid', 'p', 'the month grid and the caption telling you to tap a month are one unit'],
 ];
 
-/* Still off-system, deliberately listed rather than quietly allowed. Every one is an inline
-   style="margin:…" on a block, which no token can reach, so these need MARKUP edits, not CSS. Flagged
-   2026-08-10; the Log and Health ones are the parallel session's declared in-flight work. Delete an entry
-   when it is fixed — the gate fails if a listed exception has SILENTLY GONE AWAY too, so this list cannot
-   rot into fiction. */
-const KNOWN = [
-  ['log', 'button.btn-ghost', 'div.tip-line', 14, 'inline margin on the tip line'],
-  ['log', 'div.hm', 'div.fade-in', 18, 'the log header wrapper sets its own 18'],
-  ['album', 'div.seg.seg-full', 'div', 14, 'inline margin on the album toolbar row'],
-  ['album', 'div', 'div', 8, 'inline margins on the album toolbar rows'],
-  ['health', 'div.prof-cards', 'div.csub', 8, 'the caption is coupled to the cards above it, but via an inline margin'],
-  ['log', 'div.tip-line', 'div.hm', 12, 'inline margin on the tip line, light theme only'],
-  ['health', 'div.add-row', 'div.sec-title', 24, 'not adjacent siblings, so the row+heading rule cannot reach it'],
-  ['health', 'div.csub', 'div.prof-card', 14, 'inline margin between the caption and the first card'],
-];
+/* EMPTY, and it should stay that way. Every one of the eight original exceptions was closed on
+   2026-08-11: five inline magic numbers became var(--stack) or a declared 2px pair, and two turned out
+   not to be inline at all — `.hm{margin-bottom:18px}` and `.tip-line{margin:0 0 12px}` were CSS rules
+   living in app/cubby-extras.js as INJECTED JAVASCRIPT STRINGS, so nobody grepping index.html for the
+   18 could find it. That second CSS home is the reason this list existed as long as it did.
+   The old header comment claimed "every one is an inline style=margin:". Two were not. If you add an
+   entry here, check both homes before you describe the cause.
 
+   An entry is [tab, fromSelector, toSelector, gap, reason]. The gap is part of the KEY, not a note:
+   see the lookup below for why that matters. Date any entry you add, and delete it the day it is fixed. */
+const KNOWN = [];
+
+/* SUB-TABS COUNT AS TABS. Health renders `${body}${care}${visit}`, where body is the medicine, vaccine
+   or illness list — so the "Doctors & allergies" heading follows a DIFFERENT last element on each of the
+   three, and a fix that lands 16 on vaccines can land 0 on illness. Album is the same shape: one help-icon
+   row is emitted above all three sub-tab bodies. Walking only the default sub-tab checked one of eight
+   surfaces and called it a tab. */
+/* EVERY entry sets its sub-tab EXPLICITLY, even the defaults. logTab/albumTab/healthTab are module-level
+   variables that persist, so `go('log')` after the rituals step rendered RITUALS while the report said
+   "log" — the gate was measuring one surface and naming another, in silence, and the second theme pass got
+   whatever the first pass left behind. A step that does not state its own state is not a test. */
 const TABS = [
   ['home', "go('home')"],
-  ['log', "go('log')"],
+  ['log', "go('log'); typeof setLogTab==='function' && setLogTab('log')"],
   ['stats', "go('log'); typeof setLogTab==='function' && setLogTab('stats')"],
   ['rituals', "go('log'); typeof setLogTab==='function' && setLogTab('rituals')"],
-  ['album', "go('album')"],
-  ['health', "go('health')"],
+  ['album', "go('album'); typeof setAlbumTab==='function' && setAlbumTab('photos')"],
+  ['album/memories', "go('album'); typeof setAlbumTab==='function' && setAlbumTab('memories')"],
+  ['album/milestones', "go('album'); typeof setAlbumTab==='function' && setAlbumTab('milestones')"],
+  ['health', "go('health'); typeof setHealthTab==='function' && setHealthTab('meds')"],
+  ['health/vaccines', "go('health'); typeof setHealthTab==='function' && setHealthTab('vaccines')"],
+  ['health/illness', "go('health'); typeof setHealthTab==='function' && setHealthTab('illness')"],
 ];
 
 const SEED = {
@@ -74,7 +85,14 @@ const SEED = {
   { id: 'e2', type: 'diaper', time: Date.now() - 3600000, babyId: 'b1', kind: 'wet' },
   { id: 'e3', type: 'sleep', time: Date.now() - 6 * 3600000, end: Date.now() - 4 * 3600000, babyId: 'b1' }],
   settings: { unit: 'ml', wUnit: 'kg', hUnit: 'cm', tempUnit: 'C', theme: 'light', seen: { install: 1, home: 1, leftnote: 1, gs: 1 } },
-  timers: {}, milestones: [], meds: [], photos: [], vaccines: {}, illnesses: [], pregnancy: null, notes: []
+  timers: {}, milestones: [], meds: [], photos: [], vaccines: {}, pregnancy: null, notes: [],
+  /* One ACTIVE illness and one past one, because health/illness renders a completely different tree when
+     an episode is open (the "Mark recovered" button, then the "Past illnesses" heading) and the empty
+     state exercises none of it. An empty fixture made this surface look covered while measuring nothing. */
+  illnesses: [
+    { id: 'i1', babyId: 'b1', name: 'Cold', startedAt: Date.now() - 2 * DAY, endedAt: null, notes: '' },
+    { id: 'i2', babyId: 'b1', name: 'Cough', startedAt: Date.now() - 20 * DAY, endedAt: Date.now() - 15 * DAY, notes: '' }
+  ]
 };
 
 let fails = 0, passes = 0;
@@ -105,7 +123,10 @@ const AUDIT = `(function(rows, heads, pairs){
 })(ROWS, HEADS, PAIRS)`;
 
 (async () => {
-  const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });
+  /* protocolTimeout: the Moments sub-tab builds the 289-card journey library, and on a cold run that one
+     evaluate() blew past puppeteer's 180s default and took the whole gate down with a ProtocolError —
+     which reads like a broken page rather than a slow one. */
+  const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'], protocolTimeout: 600000 });
   const p = await b.newPage();
   const errs = [];
   p.on('pageerror', e => errs.push(e.message));
@@ -128,7 +149,7 @@ const AUDIT = `(function(rows, heads, pairs){
   const want = { block: BLOCK, head: HEAD, row: ROW, pair: COUPLED };
 
   console.log('\nthe contract: block ' + BLOCK + ', heading ' + HEAD + ', row ' + ROW + ', coupled ' + COUPLED);
-  console.log('  ' + KNOWN.length + ' known exceptions, all inline margins needing markup edits');
+  console.log(KNOWN.length ? "  " + KNOWN.length + " known exception(s) still listed" : "  0 known exceptions: every gap below is asserted against the contract");
 
   const seen = [], hitKnown = new Set();
   for (const theme of ['light', 'night']) {
@@ -138,7 +159,12 @@ const AUDIT = `(function(rows, heads, pairs){
       await new Promise(r => setTimeout(r, 500));
       const gaps = await p.evaluate(c => eval(c), code);
       for (const g of gaps) {
-        const k = KNOWN.findIndex(x => x[0] === tab && x[1] === g.from && x[2] === g.to);
+        /* The recorded gap is part of the key. It used to match on tab+from+to alone, which meant a
+           listed exception went on matching after somebody FIXED it — the pair still occurred, so it
+           still counted as hit, so the honesty check below stayed quiet and the now-correct gap was
+           skipped forever instead of being asserted. An exception that stops being true has to fall
+           through to the contract, and its stale entry has to show up as stale. */
+        const k = KNOWN.findIndex(x => x[0] === tab && x[1] === g.from && x[2] === g.to && x[3] === g.gap);
         if (k >= 0) { hitKnown.add(k); continue; }
         if (Math.abs(g.gap - want[g.kind]) > SLOP) seen.push({ theme, tab, ...g });
       }

@@ -14,7 +14,11 @@
 // need manual/founder testing or a fuller authed harness.
 const puppeteer = require('puppeteer-core');
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const URL = process.argv[2] || 'http://localhost:8080/app/';
+/* Every OTHER gate takes a BASE url and appends /app/ itself. This one wanted the full app url, so
+   passing it a base loaded the marketing landing page instead and it reported the app's entire critical
+   surface missing — a convincing false P0 that reads exactly like a broken push. Accept either form. */
+const ARG = process.argv[2] || 'http://localhost:8080/app/';
+const URL = /\/app\/?$/.test(ARG) ? ARG.replace(/\/?$/, '/') : ARG.replace(/\/?$/, '/') + 'app/';
 
 // Critical globals that must always be defined for the app to function.
 const MUST = ['render', 'openSettings', 'openBabyProfile', 'openReminders', 'datePicker',

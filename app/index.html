@@ -464,6 +464,14 @@ body{
    a row is a new block and takes the block gap. */
 .ms-row + .sec-title, .add-row + .sec-title, .note-card + .sec-title,
 .set-item + .sec-title, .prof-card + .sec-title{margin-top:var(--stack);}
+/* THE STRUCTURAL VERSION of the rule above, and the reason this particular bug stops coming back. That
+   list has to be extended BY HAND every time a new kind of element happens to land above a heading, and
+   it had already missed one: on the Illness tab the "Past illnesses" heading sat 6px under the Mark
+   recovered button, because .btn-primary was not on the list and nobody thought to add it.
+   Inside the tab wrapper, ANY block followed by a heading is a block boundary and takes --stack. Scoped to
+   `#scroll > .fade-in` so bottom sheets keep their own tighter action rhythm, and the :not() list mirrors
+   HEADS in tools/stack_check.js so a heading under a heading still takes the heading gap. */
+#scroll > .fade-in > *:not(.sec-title):not(.set-label):not(.greeting-sub) + .sec-title{margin-top:var(--stack);}
 .sec-act{border:none;background:none;padding:6px 2px;margin:-6px -2px;font-family:var(--font-body);
   font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-soft);
   opacity:.85;cursor:pointer;}
@@ -806,7 +814,7 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
   --med-ink:var(--med);--star-ink:var(--star);}
 
 /* ---- medicine ---- */
-.med-due{border-radius:var(--radius);padding:16px 18px;margin:8px 0 14px;display:flex;align-items:center;gap:14px;background:var(--med);color:var(--on-accent);box-shadow:0 12px 26px var(--shadow-strong);animation:rise .5s cubic-bezier(.2,.9,.3,1);}
+.med-due{border-radius:var(--radius);padding:16px 18px;margin:var(--row) 0 var(--stack);display:flex;align-items:center;gap:14px;background:var(--med);color:var(--on-accent);box-shadow:0 12px 26px var(--shadow-strong);animation:rise .5s cubic-bezier(.2,.9,.3,1);}
 .med-due .info{flex:1;}
 .med-due .info .lbl{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;}
 .med-due .info .nm{font-family:var(--font-display);font-size:20px;font-weight:600;line-height:1.05;margin-top:2px;}
@@ -1025,10 +1033,10 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
    Log, Stats, Rituals and Health — four tabs, 2px off the system, from one rule. */
 .seg-full{width:100%;margin-bottom:var(--stack);}
 .seg-full button{flex:1;padding:11px;font-size:14px;}
-.mem-actions{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:20px;}
+.mem-actions{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:var(--stack);}
 .mem-card{border:none;cursor:pointer;border-radius:var(--radius);padding:18px;text-align:left;display:flex;flex-direction:column;gap:12px;background:var(--surface);box-shadow:0 5px 14px var(--shadow);font-family:var(--font-body);color:var(--ink);transition:transform .14s;}
 /* Auto-magic memories: a "ready for you" rail of finished cards */
-.mem-rail{display:flex;gap:10px;overflow-x:auto;padding:2px 0 8px;margin-bottom:6px;-webkit-overflow-scrolling:touch;}
+.mem-rail{display:flex;gap:10px;overflow-x:auto;padding:2px 0 8px;margin-bottom:var(--stack);-webkit-overflow-scrolling:touch;}
 .mem-ready{position:relative;flex:0 0 150px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:0 3px 9px var(--shadow);cursor:pointer;transition:transform .14s;}
 .jr-wrap{margin:6px 0 16px}
 .jr-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
@@ -1135,7 +1143,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .hero-invite .hs{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:1px;}
 
 /* ---- compact contextual alerts ---- */
-.alert-pill{display:flex;align-items:center;gap:11px;background:var(--surface);border-left:4px solid var(--ink-faint);border-radius:var(--r-dense);padding:var(--pad-dense);margin-bottom:9px;box-shadow:0 3px 9px var(--shadow);}
+.alert-pill{display:flex;align-items:center;gap:11px;background:var(--surface);border-left:4px solid var(--ink-faint);border-radius:var(--r-dense);padding:var(--pad-dense);margin-bottom:var(--stack);box-shadow:0 3px 9px var(--shadow);}
 .alert-pill .ap-ico{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex-shrink:0;}
 .alert-pill .ap-ico svg{width:17px;height:17px;}
 .alert-pill .ap-body{flex:1;min-width:0;}
@@ -8564,7 +8572,7 @@ function renderHomeMeds(){
       <button class="dose-btn" onclick="logDose('${m.id}')">Dose</button>
     </div>`;
   }).join('');
-  return `<div class="sec-title" style="margin-top:22px">Medicine${(window.CubbyTeachUI)?CubbyTeachUI.dot('openMedSheet','medicine'):((window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('medicine'):'')}</div>
+  return `<div class="sec-title" style="margin-top:var(--stack)">Medicine${(window.CubbyTeachUI)?CubbyTeachUI.dot('openMedSheet','medicine'):((window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('medicine'):'')}</div>
     ${rows||''}
     <div class="add-row" onclick="openAddMed()">${I.plus} Add a medicine</div>`;
 }
@@ -8834,17 +8842,17 @@ function renderHealth(){
   const body = tab==='vaccines'?renderVaccines() : tab==='illness'?renderIllness() : renderHomeMeds();
   const al=(b.allergies||[]); const diet=b.diet&&b.diet!=='all'?(b.diet==='veg'?'Vegetarian':'Vegan'):'';
   const docCount=(b.doctors||[]).length;
-  const care=`<div class="sec-title" style="margin-top:24px">Doctors &amp; allergies</div>
+  const care=`<div class="sec-title" style="margin-top:var(--stack)">Doctors &amp; allergies</div>
     <div class="prof-cards">
       <div class="prof-card" onclick="openDoctor()"><span class="lead" style="background:var(--sleep-soft);color:var(--sleep)">${I.stetho}</span><div class="cflex"><div class="a">Care team</div><div class="b">${docCount?docCount+' doctor'+(docCount===1?'':'s')+' · visit log':'Add a doctor & log visits'}</div></div><span class="chev">${I.chev}</span></div>
       <div class="prof-card" onclick="openFoodPrefs()"><span class="lead" style="background:var(--med-soft);color:var(--med)">${I.cross}</span><div class="cflex"><div class="a">Allergies &amp; diet</div><div class="b">${al.length?al.map(capWord).join(', '):'None noted'}${diet?' · '+diet:''}</div></div><span class="chev">${I.chev}</span></div>
     </div>
-    <div class="csub" style="margin-top:8px">Tap either to update. Changes show on ${escapeHtml(b.name)}'s profile too.</div>`;
+    <div class="csub" style="margin-top:2px">Tap either to update. Changes show on ${escapeHtml(b.name)}'s profile too.</div>`;
   /* The visit summary was reachable from four places and every one of them needed a SICK baby or a
      doctor record with a date already typed in. A parent with a well baby and a routine Friday
      check had no path to it at all, which is the one thing an exhausted first-timer said she
      actually wanted from this app. It is free: only openDoctorReport inside it spends a taste. */
-  const visit=`<div class="prof-card" style="margin-top:14px" onclick="openVisitSummary()">
+  const visit=`<div class="prof-card" style="margin-top:var(--stack)" onclick="openVisitSummary()">
       <span class="lead" style="background:var(--sleep-soft);color:var(--sleep)">${I.stetho}</span>
       <div class="cflex"><div class="a">Going to the doctor?${(window.CubbyTeachUI)?CubbyTeachUI.dot('openVisitSummary','the visit summary'):((window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('health'):'')}</div><div class="b">A one-tap summary of the last week, ready to read out</div></div>
       <span class="chev">${I.chev}</span></div>`;
@@ -10458,7 +10466,7 @@ function renderAlbum(){
     <button class="${albumTab==='memories'?'on':''}" onclick="setAlbumTab('memories')">Memories</button>
     <button class="${albumTab==='milestones'?'on':''}" onclick="setAlbumTab('milestones')">Moments</button></div>`;
   const body = albumTab==='memories'?renderMemories() : albumTab==='milestones'?renderJourneyLibrary() : renderPhotos();
-  const info=(window.CubbyGuide&&CubbyGuide.info)?`<div style="text-align:right;margin:-2px 0 8px">${(window.CubbyTeachUI)?CubbyTeachUI.dot('openMemoryCard','keepsakes'):CubbyGuide.info('album')}</div>`:'';
+  const info=(window.CubbyGuide&&CubbyGuide.info)?`<div style="text-align:right;margin-bottom:var(--stack)">${(window.CubbyTeachUI)?CubbyTeachUI.dot('openMemoryCard','keepsakes'):CubbyGuide.info('album')}</div>`:'';
   return `<div class="fade-in">${coachMark('album','This is your Album','Photos, keepsake cards (birth poster, monthly cards) and milestones, all here. Tap a milestone to mark it: teeth, first steps, the fun stuff.')}${seg}${info}${body}</div>`;
 }
 let logTab='log';
@@ -10778,7 +10786,7 @@ function renderLogTab(){
   let body;
   if(logTab==='stats') body=renderStats();
   else if(logTab==='rituals') body=renderRitualsView();
-  else body=`<button class="btn-ghost" style="margin-bottom:14px" onclick="openDayRecap()">🐻 Today's recap</button>`+tipLine('heat','These strips show your week at a glance, tap Week or Month to switch.')+renderHeatmap()+renderTimeline();
+  else body=`<button class="btn-ghost" style="margin-bottom:var(--stack)" onclick="openDayRecap()">🐻 Today's recap</button>`+tipLine('heat','These strips show your week at a glance, tap Week or Month to switch.')+renderHeatmap()+renderTimeline();
   return `<div class="fade-in">${coachMark('log','Log, Rituals & Stats','Everything you log lands in this timeline. Flip to Rituals for your gentle daily rhythm, or Stats for charts and growth curves.')}${seg}${body}</div>`;
 }
 
@@ -11543,7 +11551,7 @@ function renderMemories(){
     <div class="sec-title">Monthly photos</div>
     <div class="month-grid">${grid}</div>
     <input type="file" id="monthInput" accept="image/*" style="display:none" onchange="handleMonthly(this)">
-    <p style="font-size:12px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:14px">Tap a month to add a photo. It's stamped automatically.</p>`;
+    <p style="font-size:12px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:2px">Tap a month to add a photo. It's stamped automatically.</p>`;
 }
 
 /* ---- monthly slots (one-tap, auto-stamped) ---- */

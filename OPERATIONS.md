@@ -12,7 +12,7 @@ Run these by hand before an **app** push (catches what the hook can't):
 ```sh
 node tools/serve.js &              # serve the repo on :8080
 node tools/validate.js             # JSON-LD parses, sitemap balanced, FAQ schema==visible lockstep
-node tools/smoke.js http://localhost:8080/app/   # fails on uncaught error / missing global
+node tools/smoke.js                # fails on uncaught error / missing global (base url or /app/, both work)
 node tools/uitest.js               # authed UI: dead taps + the contrast gate, both themes
 node tools/perf_check.js           # jitter gate: render budgets on a real 4-month history
 node tools/guide_test.js           # the guide + Notes lane: age bands, privacy gates, loss safety
@@ -21,7 +21,7 @@ node tools/vaxcard_test.js         # vaccine-card import: patch-only, never inve
 node tools/noteshome_test.js       # the Notes lane: bottom by default, up only for an unread note
 node tools/offline_gate.js         # the connectivity states + which offline messages may promise a queue
 node tools/homelogs_gate.js        # what home offers, and that the parent decides it (per person, per stage)
-node tools/stack_check.js          # vertical rhythm: every block gap is 16 / 12 / 8 / 2, both themes
+node tools/stack_check.js          # vertical rhythm: 16 / 12 / 8 / 2 across ten surfaces, both themes
 node tools/type_check.js           # the type contract: who may wear the handwriting face, heading rank
 node tools/sitesw_gate.js          # the ROOT service worker: caches no content, bypasses /app/, offline page
 node tools/sitesw_gate.js https://little-cubby.com   # AND against the live host, AFTER deploying. Not optional.
@@ -117,14 +117,30 @@ enumerate, and caches are per-origin: shipping that version today would take the
 precache with it and leave every installed PWA unable to open offline. Copy the snippet above, not the
 one in the git history.
 
-- `tools/stack_check.js` — the stack contract (DESIGN.md A3.2), measured on the RENDERED page across six
-  tabs in both themes: every gap between blocks is 16, a heading to its content 12, a row to the next row
-  in one list 8, a thing to its own caption 2. Exists because none of these bugs are visible in CSS —
+- `tools/stack_check.js` — the stack contract (DESIGN.md A3.2), measured on the RENDERED page across **ten
+  surfaces** in both themes: every gap between blocks is 16, a heading to its content 12, a row to the next
+  row in one list 8, a thing to its own caption 2. Exists because none of these bugs are visible in CSS —
   `gap` is not a margin (the quick-log grid butted into the next card at 0px), adjacent margins collapse
   to the larger (a list's 8px row rhythm beat a section heading's 6px top on five Health headings), and
-  `--stack` sat unused while four rules set 18 by hand. Carries a dated exception list of inline
-  `style="margin:…"` blocks that no token can reach, and **fails if a listed exception has been fixed**,
-  so the list cannot rot into fiction.
+  `--stack` sat unused while four rules set 18 by hand. `KNOWN` is now **empty** and should stay so.
+
+  Three things it learned on 2026-08-11, each of which had been hiding real violations:
+
+  1. **Sub-tabs are surfaces.** It walked six tabs; Album and Health each render three different trees, so
+     it was measuring one of eight and naming it "album". Widening it to ten immediately found four more
+     violations. Every step now sets its own sub-tab explicitly, because `logTab`/`albumTab`/`healthTab`
+     persist — `go('log')` after the rituals step was rendering rituals while the report said "log", and
+     the second theme pass inherited whatever the first left behind.
+  2. **An empty fixture is not coverage.** `health/illness` passed only because the seed had no illness, so
+     none of the active-episode tree rendered. Seeding one active and one past illness exposed a 6px gap
+     under the Mark recovered button that had shipped.
+  3. **The exception list matched on tab+from+to and ignored the recorded px.** So once somebody *fixed* a
+     listed gap, the entry went on matching, the honesty check stayed quiet, and the now-correct pair was
+     skipped forever instead of being asserted. The gap is part of the key now.
+
+  It needs `protocolTimeout` raised at launch: the Moments sub-tab builds the 289-card journey library and
+  a cold run blew past puppeteer's 180s default, which surfaces as a `ProtocolError` that reads like a
+  broken page rather than a slow one.
 - `tools/type_check.js` — the type contract (DESIGN.md A3.1): the handwriting face means a person wrote
   this, so it is allowlisted (one entry, `.note-card .nt-by`), and in a block where Cubby is speaking its
   heading is the largest thing in it. Sizes are compared in **cap height**, not `px`, because the three
