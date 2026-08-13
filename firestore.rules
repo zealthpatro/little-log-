@@ -65,6 +65,20 @@ service cloud.firestore {
        single-use — claimed here, in the rules, so two people racing the same link cannot both get
        in. The document deliberately holds no baby data: a household id and a role, nothing a
        stranger learns anything from. */
+    /* Push caps and campaigns. Both are DENIED to every client, in every mode, on purpose.
+
+       A cap kept in users/{uid} would not be a cap: that document is blanket self-write (see the
+       users rule above), so the very person being limited to two marketing messages a month could
+       reset the counter. Moving the counter somewhere no client can reach is the whole mechanism.
+       The Worker reaches both with a service account, which bypasses rules entirely.
+
+       pushLedger/{uid} holds {caps:{ym,marketing,feature}, sends:{campaignId:{at}}}. `sends` is what
+       makes a fan-out idempotent, so a campaign resumed after a timeout cannot deliver twice.
+       campaigns/{id} is authored by an operator, never by the app. Nothing in the client reads
+       either one, so denying read costs no feature and keeps the send history out of reach. */
+    match /pushLedger/{uid} { allow read, write: if false; }
+    match /campaigns/{id}   { allow read, write: if false; }
+
     match /inviteLinks/{token} {
       /* GET, never LIST. This is the whole security model and it is one word wide.
          The control here is that the document id is a secret, so a reader must already hold the

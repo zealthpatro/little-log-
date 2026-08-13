@@ -1,6 +1,6 @@
 /* Cubby service worker.
    Bump CACHE on every deploy so old assets are cleared. */
-const CACHE = 'little-log-v300';
+const CACHE = 'little-log-v301';
 const ASSETS = [
   '/app/',
   '/app/index.html',
@@ -63,6 +63,50 @@ self.addEventListener('activate', (e) => {
          own. If the app's cache is ever renamed away from `little-log-`, migrate the old names here. */
       .then((keys) => Promise.all(keys.filter((k) => k.indexOf('little-log-') === 0 && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
+  );
+});
+
+/* ---- Push -------------------------------------------------------------------------------------
+   This file is the ONLY service worker registered at /app/, and that is the whole point.
+   A ServiceWorkerRegistration is keyed by SCOPE, so registering a second script at the same scope
+   REPLACES the first. app/firebase-messaging-sw.js used to be registered here too, from enablePush,
+   while this file was registered on every page load. Whichever ran last won, and since a page load
+   happens far more often than enabling reminders, this file won almost always. It had no push
+   listener at all, so the FCM background handler was evicted and a web push could never be shown.
+   Nobody noticed because REMINDERS_LIVE was false and no token had ever been minted.
+
+   Handled raw rather than through the Firebase SDK: importScripts of firebase-app + firebase-messaging
+   into the precache SW would make install slower and couple offline support to two vendor files. An
+   FCM message addressed to a web push token arrives here as an ordinary Web Push event, so reading it
+   directly is both lighter and one less thing that can fail at install time. Token minting still goes
+   through the SDK in the page; it only needs A registration to subscribe with, not this one's code. */
+self.addEventListener('push', (e) => {
+  let p = {};
+  try { p = e.data ? e.data.json() : {}; }
+  catch (err) { try { p = { notification: { body: e.data && e.data.text() } }; } catch (e2) { p = {}; } }
+  const n = p.notification || {};
+  const d = p.data || {};
+  // Chrome shows its own "this site was updated in the background" if a push event resolves without
+  // showing anything, so always show something, even for a malformed payload.
+  e.waitUntil(self.registration.showNotification(n.title || 'Cubby', {
+    body: n.body || '',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    tag: d.tag || n.tag || 'cubby',   // same tag replaces rather than stacks: a retry cannot pile up
+    data: d
+  }));
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const d = e.notification.data || {};
+  // A campaign carries its own destination; a dose reminder just opens the app.
+  const target = typeof d.url === 'string' && d.url.indexOf('/app') >= 0 ? d.url : '/app/';
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cl) => {
+      for (const c of cl) { if (c.url.indexOf('/app') >= 0 && 'focus' in c) return c.focus(); }
+      if (self.clients.openWindow) return self.clients.openWindow(target);
+    })
   );
 });
 

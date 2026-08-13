@@ -5027,7 +5027,43 @@ const CUBBY_VAPID='BJsMLPFLN5hLbJsdAs2ovSVaRii-sxjaz3bLha7ffXB7Iq4N6vUHKwlH6g9zB
    real end-to-end delivery has been seen per surface. Inspecting state is not delivery. */
 const REMINDERS_LIVE=false;
 function pushSupported(){ try{ if(isNativeApp()) return true; /* the wrapper registers with APNs/FCM natively, so none of the web gates below apply */ return !!(window.firebase && firebase.messaging && firebase.messaging.isSupported && firebase.messaging.isSupported() && ('Notification' in window) && ('serviceWorker' in navigator)); }catch(e){ return false; } }
-function pushCfg(){ if(!state.settings.push) state.settings.push={enabled:false,quietStart:21,quietEnd:7}; return state.settings.push; }
+/* Push preferences are PER DEVICE, not per circle: sharedSettings() strips `push` from the app blob
+   on both write paths (store-firebase.js) and applyAppBlob restores the local copy, the same way
+   theme is handled. So one caregiver turning reminders on can never turn them on for everyone.
+   `allow` is per-category consent and the server reads it from users/{uid}.push.allow before any
+   send. marketing defaults FALSE and can only become true from an explicit tap: App Store 4.5.4
+   requires promotional push to be opted into, never pre-ticked. `tz` is what lets the WORKER apply
+   quiet hours; without it a campaign has no way to know it is 3am where the parent is. */
+const PUSH_CATS=['critical','feature','marketing'];
+function pushCfg(){
+  var c=state.settings.push;
+  if(!c) c=state.settings.push={enabled:false,quietStart:21,quietEnd:7};
+  if(!c.allow) c.allow={critical:true,feature:true,marketing:false};
+  PUSH_CATS.forEach(function(k){ if(typeof c.allow[k]!=='boolean') c.allow[k]=(k!=='marketing'); });
+  if(!c.tz){ try{ c.tz=Intl.DateTimeFormat().resolvedOptions().timeZone||''; }catch(e){ c.tz=''; } }
+  return c;
+}
+/* The server needs consent, quiet hours and timezone even when no token is being minted, so every
+   path that changes them writes the same shape. Never writes `tokens`: that is storePushToken's. */
+async function pushSyncPrefs(){
+  const cfg=pushCfg();
+  const uid=(window.LL&&LL.auth&&LL.auth.currentUser&&LL.auth.currentUser.uid)||null;
+  if(!(window.LL&&LL.db&&uid)) return false;
+  try{
+    await LL.db.collection('users').doc(uid).set({push:{
+      enabled:!!cfg.enabled, quietStart:cfg.quietStart, quietEnd:cfg.quietEnd,
+      tz:cfg.tz||'', allow:{critical:!!cfg.allow.critical, feature:!!cfg.allow.feature, marketing:!!cfg.allow.marketing}
+    }},{merge:true});
+    return true;
+  }catch(e){ console.warn('[cubby] could not save notification choices', e); return false; }
+}
+function setPushAllow(cat,on){
+  const cfg=pushCfg();
+  if(PUSH_CATS.indexOf(cat)<0) return;
+  cfg.allow[cat]=!!on;
+  persist(); pushSyncPrefs(); openReminders();
+  toast(on?'On':'Off');
+}
 function openReminders(){
   const sup=pushSupported(), cfg=pushCfg(), ready=REMINDERS_LIVE&&sup&&(isNativeApp()||!!CUBBY_VAPID);  // VAPID is a web-push concept; the wrapper goes via APNs
   const muted=medAlertsMuted();
@@ -5036,6 +5072,14 @@ function openReminders(){
       <div class="seg"><button class="${!muted?'on':''}" onclick="setMedAlerts(true)">On</button><button class="${muted?'on':''}" onclick="setMedAlerts(false)">Off</button></div></div>
     <div class="csub" style="margin-top:8px">Every alert gives you two ways out. In 15 min hides it and brings it back once, at a time it tells you. Not now ends it for that dose. Neither one logs a dose you did not give.</div>
     <div class="csub" style="margin-top:6px">Off stops every dose alert on this phone, and your medicines and their schedules stay exactly as they are.</div>
+    <div class="sec-title" style="margin-top:18px">What we may send you</div>
+    <div class="csub" style="margin-bottom:8px">These are separate on purpose. Turning one off never touches the others, and a dose reminder is never counted as news.</div>
+    ${[['critical','Dose reminders','A nudge when a medicine is due. No limit, because a missed dose is not marketing.'],
+       ['feature','New in Cubby','An occasional note when we add something. At most five a month.'],
+       ['marketing','Offers','News about Pro and anything we charge for. At most two a month, and never if you are on Pro.']]
+      .map(function(r){ var on=!!cfg.allow[r[0]]; return `<div class="set-item"><div class="si-body"><div class="a">${r[1]}</div><div class="b">${r[2]}</div></div>
+        <div class="seg"><button class="${on?'on':''}" onclick="setPushAllow('${r[0]}',true)">On</button><button class="${!on?'on':''}" onclick="setPushAllow('${r[0]}',false)">Off</button></div></div>`; }).join('')}
+    <div class="csub" style="margin-top:6px">Change any of these whenever you like. Turning one off takes effect straight away.</div>
     ${!ready?`<div class="preg-disclaim">${!REMINDERS_LIVE?'Reminders are still in testing. We’re making sure a nudge always arrives before we switch them on, because we don’t want to be the reason a dose is missed. We’ll let you know the moment they’re ready.':!sup?(isNativeApp()?'Reminders need notification permission for Cubby. You can turn it on in your phone settings.':'Reminders need a browser that supports notifications. On iPhone, add Cubby to your home screen first, then open it from there.'):'Reminders are coming soon.'}</div>`:`
     <div class="set-item"><div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🔔</div><div class="si-body"><div class="a">Gentle reminders</div><div class="b">${cfg.enabled?'On for this device':'Off'}</div></div>
       <div class="seg"><button class="${cfg.enabled?'on':''}" onclick="enablePush()">On</button><button class="${!cfg.enabled?'on':''}" onclick="disablePush()">Off</button></div></div>
@@ -5065,7 +5109,9 @@ async function storePushToken(tok, explicit){
   if(!(window.LL&&LL.db&&uid)){ _pendingPushTok={tok:tok,explicit:!!explicit}; return false; }
   const t={}; t[tok]={ua:(navigator.userAgent||'').slice(0,120),at:Date.now()};
   try{
-    await LL.db.collection('users').doc(uid).set({push:{enabled:true,quietStart:cfg.quietStart,quietEnd:cfg.quietEnd,tokens:t}},{merge:true});
+    await LL.db.collection('users').doc(uid).set({push:{enabled:true,quietStart:cfg.quietStart,quietEnd:cfg.quietEnd,
+      tz:cfg.tz||'', allow:{critical:!!cfg.allow.critical,feature:!!cfg.allow.feature,marketing:!!cfg.allow.marketing},
+      tokens:t}},{merge:true});
   }catch(e){ console.warn('[cubby] could not store the push token', e); return false; }
   persist(); syncReminderIndex();
   return true;
@@ -5098,7 +5144,11 @@ async function enablePush(){
   try{
     const perm=await Notification.requestPermission();
     if(perm!=='granted'){ toast('Notifications are turned off in your browser'); return; }
-    const reg=await navigator.serviceWorker.register('firebase-messaging-sw.js');
+    // Subscribe with the SW ALREADY controlling /app/ (sw.js). Registering firebase-messaging-sw.js
+    // here used to replace it, because a registration is keyed by scope, and since sw.js re-registers
+    // on every page load the FCM handler was evicted again moments later. sw.js now carries the push
+    // listener itself, so one SW does both jobs and there is no ordering to lose.
+    const reg=await navigator.serviceWorker.ready;
     const tok=await firebase.messaging().getToken({vapidKey:CUBBY_VAPID, serviceWorkerRegistration:reg});
     if(!tok){ toast('Could not enable reminders'); return; }
     await storePushToken(tok, true);
@@ -5112,8 +5162,14 @@ function disablePush(){
   _pendingPushTok=null;                                   // don't let a parked token re-enable it
   const uid=(window.LL&&LL.auth&&LL.auth.currentUser&&LL.auth.currentUser.uid)||null;
   if(window.LL&&LL.db&&uid){
-    try{ LL.db.collection('users').doc(uid).set({push:{enabled:false,due:[],tokens:{},
+    /* `tokens:{}` under merge:true merges NOTHING, so every token survived an opt-out and the cron
+       could still deliver to this device. An opt-out that leaves a live token is not an opt-out,
+       under 4.5.4 or under any honest reading. Delete the map outright, and hand the web token back
+       to FCM so the subscription itself is torn down rather than merely forgotten. */
+    try{ LL.db.collection('users').doc(uid).set({push:{enabled:false,due:[],
+      tokens:firebase.firestore.FieldValue.delete(),
       nextAt:firebase.firestore.FieldValue.delete()}},{merge:true}); }catch(e){}
+    try{ if(window.firebase&&firebase.messaging&&firebase.messaging.isSupported&&firebase.messaging.isSupported()) firebase.messaging().deleteToken().catch(function(){}); }catch(e){}
   }
   try{ if(window.cubbyDisableNativePush) window.cubbyDisableNativePush(); }catch(e){}
   persist(); openReminders(); toast('Reminders off');
@@ -5153,7 +5209,7 @@ async function syncReminderIndex(){
     meds.forEach(function(m){
       medFireTimes(m,now,windowEnd).forEach(function(at){
         var fireAt=at-30*60000; if(fireAt<=now) return;
-        due.push({at:fireAt, due:at, title:(m.name||'Medicine')+' soon', body:'Time for '+(m.name||'medicine')+(m.dose?(' '+m.dose+(m.unit||'')):'')+' at '+clock(at), tag:'med-'+m.id+'-'+at});
+        due.push({at:fireAt, due:at, cat:'critical', title:(m.name||'Medicine')+' soon', body:'Time for '+(m.name||'medicine')+(m.dose?(' '+m.dose+(m.unit||'')):'')+' at '+clock(at), tag:'med-'+m.id+'-'+at});
       });
     });
     // (2) one morning digest (9am local) per day that has a medicine due
@@ -5161,7 +5217,7 @@ async function syncReminderIndex(){
       var d0=new Date(); d0.setHours(0,0,0,0); var ds=d0.getTime()+day*86400000, de=ds+86400000;
       var names=[]; meds.forEach(function(m){ var nm=m.name||'Medicine'; if(medFireTimes(m,ds,de).length && names.indexOf(nm)<0) names.push(nm); });
       if(!names.length) continue; var fireAt=ds+9*3600000; if(fireAt<=now) continue;
-      due.push({at:fireAt, title:'Today with '+baby, body:names.length<=3?('Medicines today: '+names.join(', ')):(names.length+' medicines to give today'), tag:'digest-'+ds});
+      due.push({at:fireAt, cat:'critical', title:'Today with '+baby, body:names.length<=3?('Medicines today: '+names.join(', ')):(names.length+' medicines to give today'), tag:'digest-'+ds});
     }
     // Quiet hours applied client-side (the client knows the timezone) so overnight doses never ping.
     var qs=cfg.quietStart, qe=cfg.quietEnd;

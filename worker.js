@@ -309,6 +309,179 @@ const FS_PROJECT = 'little-log-a9caa';
 function _fsNum(v){ if(!v) return null; if(v.integerValue!=null) return +v.integerValue; if(v.doubleValue!=null) return +v.doubleValue; return null; }
 function _fsStr(v){ return (v && v.stringValue!=null) ? v.stringValue : ''; }
 function _inQuiet(hr, qs, qe){ if(qs==null||qe==null||qs===qe) return false; return qs<qe ? (hr>=qs&&hr<qe) : (hr>=qs||hr<qe); }
+/* ---- Categories, caps and campaigns ------------------------------------------------------------
+   Founder policy 2026-08-13: every INTENDED push must arrive; marketing is capped at 2 a month and
+   only for non-paying users; feature nudges at 5 a month. Enforced HERE, in the Worker, because a
+   cap the user can edit is not a cap: firestore.rules grants a signed-in user blanket write over
+   their own users/{uid} document, so a counter kept there could simply be reset. Counters and
+   campaigns therefore live in collections no client may touch (`allow read, write: if false`), and
+   only the service account, which bypasses rules, can move them.
+
+   The client-written push.due queue is trusted for `cat: "critical"` and nothing else, so a modified
+   client cannot promote its own message into an uncapped category or invent a campaign. */
+const PUSH_CAP = { marketing: 2, feature: 5 };   // per calendar month, per user. critical is uncapped.
+
+/* The month key is decided in the USER's timezone. Doing it in UTC would roll someone in Auckland
+   over on the 31st and someone in Honolulu on the 2nd, and "2 a month" should mean their month.
+   Falls back to UTC when we have no tz, which is what an older token without one will have. */
+function _ymFor(tz, now) {
+  const d = new Date(now);
+  if (tz) {
+    try {
+      const p = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit' }).formatToParts(d);
+      const y = p.find(x => x.type === 'year'), m = p.find(x => x.type === 'month');
+      if (y && m) return y.value + '-' + m.value;
+    } catch (e) { /* an unknown tz string must not stop a send; fall through to UTC */ }
+  }
+  return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
+}
+/* Local hour in the user's timezone, so quiet hours can be applied server-side. Until now quiet
+   hours existed only in the client while building its own queue, which was fine when the client
+   authored every message and is useless the moment WE initiate one. A marketing push at 3am to the
+   parent of a newborn is indefensible, so a campaign with no usable tz is deferred, never guessed. */
+function _hourIn(tz, now) {
+  if (!tz) return null;
+  try {
+    const h = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', hour12: false }).format(new Date(now));
+    const n = parseInt(h, 10); return isNaN(n) ? null : n;
+  } catch (e) { return null; }
+}
+
+async function fsGet(base, token, path) {
+  const r = await fetch(base + path, { headers: { authorization: 'Bearer ' + token } });
+  if (!r.ok) return null;
+  return r.json().catch(() => null);
+}
+async function fsPatch(base, token, path, masks, fields) {
+  const qs = masks.map(m => 'updateMask.fieldPaths=' + encodeURIComponent(m)).join('&');
+  return fetch(base + path + '?' + qs, {
+    method: 'PATCH', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+    body: JSON.stringify({ fields })
+  });
+}
+
+/* One user, one campaign. Returns why it did or did not go, so the campaign's own counters can say
+   what happened instead of only how many landed. */
+async function deliverCampaign(base, token, now, camp, uid, userFields) {
+  const push = userFields && userFields.push && userFields.push.mapValue && userFields.push.mapValue.fields;
+  if (!push || !(push.enabled && push.enabled.booleanValue)) return 'off';
+  const tokensMap = push.tokens && push.tokens.mapValue && push.tokens.mapValue.fields;
+  const tokens = tokensMap ? Object.keys(tokensMap) : [];
+  if (!tokens.length) return 'off';
+
+  // Consent, per category. Absent means not granted: nobody is opted in by silence.
+  const allow = push.allow && push.allow.mapValue && push.allow.mapValue.fields;
+  const okCat = allow && allow[camp.cat] && allow[camp.cat].booleanValue === true;
+  if (!okCat) return 'noConsent';
+
+  const tz = _fsStr(push.tz);
+  // Quiet hours, in their time. Deferred, not dropped, and the cap is NOT consumed: a deferred offer
+  // still gets its slot on a later tick rather than being silently spent at 3am.
+  const hr = _hourIn(tz, now);
+  if (hr != null && _inQuiet(hr, _fsNum(push.quietStart), _fsNum(push.quietEnd))) return 'quiet';
+  if (hr == null && camp.cat !== 'critical') return 'quiet';   // no tz: never guess, just wait
+
+  // Paying users are excluded from marketing. Pro lives on the HOUSEHOLD, written only by the billing
+  // Worker, so this is a second read; it happens only for a nonPayingOnly campaign and only for a
+  // user who has already passed consent and caps, which keeps it off the hot path.
+  if (camp.nonPayingOnly) {
+    const hid = _fsStr(userFields.householdId);
+    if (hid) {
+      const hh = await fsGet(base, token, '/households/' + encodeURIComponent(hid));
+      const pro = hh && hh.fields && hh.fields.pro;
+      if (pro && pro.mapValue) return 'paying';
+    }
+  }
+
+  const ledgerPath = '/pushLedger/' + encodeURIComponent(uid);
+  const led = await fsGet(base, token, ledgerPath);
+  const lf = (led && led.fields) || {};
+  const sends = lf.sends && lf.sends.mapValue && lf.sends.mapValue.fields;
+  if (sends && sends[camp.id]) return 'already';     // idempotent: at most once per user, ever
+
+  const caps = lf.caps && lf.caps.mapValue && lf.caps.mapValue.fields;
+  const ym = _ymFor(tz, now);
+  const capYm = caps ? _fsStr(caps.ym) : '';
+  const used = (capYm === ym && caps && _fsNum(caps[camp.cat])) || 0;
+  const limit = PUSH_CAP[camp.cat];
+  if (limit != null && used >= limit) return 'capped';
+
+  let anyOk = false;
+  for (const tk of tokens) {
+    const ok = await fetch('https://fcm.googleapis.com/v1/projects/' + FS_PROJECT + '/messages:send', {
+      method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ message: { token: tk, notification: { title: camp.title, body: camp.body },
+        data: { tag: 'camp-' + camp.id, cat: camp.cat, url: camp.url || '' },
+        webpush: { fcmOptions: { link: camp.url || 'https://little-cubby.com/app/' } } } })
+    }).then(r => r.ok).catch(() => false);
+    if (ok) anyOk = true;
+  }
+  if (!anyOk) return 'failed';   // cap NOT consumed, no send recorded: the next tick tries again
+
+  /* Count only after a real delivery. A crash between the send and this write can let one extra
+     message through this month; counting first could silently swallow one the founder intended to
+     deliver, and "every intended push arrives" outranks a strict ceiling. */
+  const newCaps = { ym: { stringValue: ym } };
+  for (const k of Object.keys(PUSH_CAP)) {
+    const prev = (capYm === ym && caps && _fsNum(caps[k])) || 0;
+    newCaps[k] = { integerValue: String(k === camp.cat ? prev + 1 : prev) };
+  }
+  const newSends = {};
+  if (sends) for (const k of Object.keys(sends)) newSends[k] = sends[k];
+  newSends[camp.id] = { mapValue: { fields: { at: { integerValue: String(now) } } } };
+  await fsPatch(base, token, ledgerPath, ['caps', 'sends'], {
+    caps: { mapValue: { fields: newCaps } },
+    sends: { mapValue: { fields: newSends } }
+  }).catch(e => console.error('push_ledger_fail', (e && e.message) || String(e)));
+  return 'sent';
+}
+
+/* Fan a campaign out across users, resuming from a cursor so a run that hits the Worker's time limit
+   continues on the next tick rather than starting over (and re-reading everyone it already did). */
+async function sendCampaigns(env, base, token, now) {
+  const list = await fsGet(base, token, '/campaigns?pageSize=20');
+  const docs = (list && list.documents) || [];
+  for (const c of docs) {
+    const f = c.fields || {};
+    if (_fsStr(f.state) !== 'sending') continue;
+    const sendAfter = _fsNum(f.sendAfter); if (sendAfter != null && now < sendAfter) continue;
+    const expiresAt = _fsNum(f.expiresAt); if (expiresAt != null && now > expiresAt) continue;
+    const cat = _fsStr(f.cat);
+    if (cat !== 'marketing' && cat !== 'feature') continue;   // campaigns may never be `critical`
+    const camp = {
+      id: c.name.split('/documents/campaigns/')[1], cat,
+      title: _fsStr(f.title) || 'Cubby', body: _fsStr(f.body), url: _fsStr(f.url),
+      /* Marketing is non-paying-only by POLICY, not by operator choice: someone paying for Pro is
+         paying partly to not be marketed at, and an operator must not be able to tick that away.
+         A feature nudge goes to everyone unless the operator deliberately narrows it. */
+      nonPayingOnly: cat === 'marketing' ? true : !!(f.nonPayingOnly && f.nonPayingOnly.booleanValue === true)
+    };
+    const stats = { sent: 0, capped: 0, noConsent: 0, failed: 0, quiet: 0, off: 0, already: 0, paying: 0 };
+    let pageToken = _fsStr(f.cursor) || undefined, processed = 0, done = false;
+    while (processed < 200) {
+      const page = await fsGet(base, token, '/users?pageSize=50' + (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : ''));
+      const users = (page && page.documents) || [];
+      for (const u of users) {
+        const uid = u.name.split('/documents/users/')[1];
+        try {
+          const why = await deliverCampaign(base, token, now, camp, uid, u.fields || {});
+          if (stats[why] != null) stats[why]++;
+        } catch (e) { stats.failed++; console.error('camp_user_fail', (e && e.message) || String(e)); }
+        processed++;
+      }
+      pageToken = (page && page.nextPageToken) || '';
+      if (!pageToken) { done = true; break; }
+    }
+    const upd = { state: { stringValue: done ? 'done' : 'sending' } };
+    if (!done) upd.cursor = { stringValue: pageToken };
+    else upd.cursor = { nullValue: null };
+    await fsPatch(base, token, '/campaigns/' + encodeURIComponent(camp.id), ['state', 'cursor', 'stats'], Object.assign(upd, {
+      stats: { mapValue: { fields: Object.fromEntries(Object.entries(stats).map(([k, v]) => [k, { integerValue: String(v) }])) } }
+    })).catch(e => console.error('camp_stats_fail', (e && e.message) || String(e)));
+    console.log('camp_run', JSON.stringify({ id: camp.id, cat: camp.cat, done, stats }));
+  }
+}
+
 /* Firestore structured query over REST.
    This replaces the list-everything scans both cron jobs used to do. Paging `/users` and
    `/households` in full, 96 times a day, cost (every user + every household) in reads whether or not
@@ -438,7 +611,12 @@ async function sendPushReminders(env){
       // run forever (96 wasted reads/day each) — the exact failure mode this change exists to remove.
       // Only when nextAt is actually SET: on the fallback path `docs` is every user in the project,
       // and an unguarded clear would PATCH every one of them on every tick.
-      if (!push || !(push.enabled && push.enabled.booleanValue) || !tokens.length) {
+      // Category consent for the critical lane. Absent means granted: every token minted before
+      // categories existed opted in by enabling reminders, and a dose alert is the thing they said
+      // yes to. Only an explicit false silences it.
+      const allowF = push && push.allow && push.allow.mapValue && push.allow.mapValue.fields;
+      const criticalOff = !!(allowF && allowF.critical && allowF.critical.booleanValue === false);
+      if (!push || !(push.enabled && push.enabled.booleanValue) || !tokens.length || criticalOff) {
         if (id && _fsNum(push && push.nextAt) != null) await clearPushNextAt(base, token, id);
         continue;
       }
@@ -504,6 +682,12 @@ async function sendPushReminders(env){
     } catch (e) { userErrors++; console.error('push_user_fail', (e && e.message) || String(e)); }
   }
   console.log('push_run', JSON.stringify({ due: docs.length, sent, failed, dropped, userErrors, queryError }));
+  /* Campaigns run AFTER the critical queue, on the same tick and the same token. Ordering is the
+     point: a dose reminder must never wait behind a marketing fan-out. Isolated so a broken campaign
+     cannot take the medicine path down with it. */
+  try { await sendCampaigns(env, base, token, now); }
+  catch (e) { console.error('campaign_cron_fail', (e && e.message) || String(e)); }
+
   await recordCronRun(env, queryError ? { due: docs.length, sent, failed, dropped, userErrors, queryError, fallback: 'scan' }
                                       : { due: docs.length, sent, failed, dropped, userErrors });
 }
