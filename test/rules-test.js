@@ -381,6 +381,26 @@ async function check(name, p) {
   await check('caregiver deletes ANOTHER member\'s email doc (fails)', assertFails(deleteDoc(doc(C, 'households/H/memberEmails/O'))));
   await check('owner deletes a member\'s email doc (removal cleanup)', assertSucceeds(deleteDoc(doc(O, 'households/H/memberEmails/INV'))));
 
+  /* Push caps and campaigns: denied to EVERYONE, which is the entire enforcement mechanism.
+     A cap kept in users/{uid} would not be a cap, because that document is blanket self-write, so
+     the person being limited to two marketing messages a month could simply reset the counter.
+     These two collections are the only reason the limit means anything, and the Worker reaches them
+     with a service account, which bypasses rules entirely. If any of these ever start passing, the
+     caps have quietly become advisory. */
+  console.log('\npush caps + campaigns are unreachable from any client');
+  await check('owner reads their own cap ledger (fails)', assertFails(getDoc(doc(O, 'pushLedger/O'))));
+  await check('owner RESETS their own cap counter (fails, this is the whole point)',
+    assertFails(setDoc(doc(O, 'pushLedger/O'), { caps: { ym: '2026-08', marketing: 0, feature: 0 } })));
+  await check('caregiver writes someone else\'s ledger (fails)',
+    assertFails(setDoc(doc(C, 'pushLedger/O'), { caps: { ym: '2026-08', marketing: 0 } })));
+  await check('stranger reads a ledger (fails)', assertFails(getDoc(doc(S, 'pushLedger/O'))));
+  await check('owner deletes their ledger to clear the count (fails)', assertFails(deleteDoc(doc(O, 'pushLedger/O'))));
+  await check('owner reads a campaign (fails)', assertFails(getDoc(doc(O, 'campaigns/c1'))));
+  await check('owner AUTHORS a campaign (fails: only an operator may, via the service account)',
+    assertFails(setDoc(doc(O, 'campaigns/c1'), { cat: 'marketing', title: 'x', body: 'y', state: 'sending' })));
+  await check('stranger authors a campaign (fails)',
+    assertFails(setDoc(doc(S, 'campaigns/c2'), { cat: 'marketing', title: 'x', body: 'y', state: 'sending' })));
+
   await env.cleanup();
   console.log('\n' + results.pass + ' passed, ' + results.fail + ' failed');
   process.exit(results.fail ? 1 : 0);
