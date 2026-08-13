@@ -5052,6 +5052,15 @@ function nativePushReady(){
   }catch(e){ return false; }
 }
 function remindersLive(){ return isNativeApp() ? nativePushReady() : REMINDERS_LIVE; }
+/* Why the wrapper cannot switch these on, said plainly rather than as one generic "not yet".
+   An install carrying aps-environment=development registers happily and then never receives
+   anything, so the honest thing is to name the version and point at the update, not to leave a
+   parent wondering whether they tapped the wrong thing. */
+function nativePushWhyNot(){
+  const v=String(window.cubbyNativeVersion||'');
+  if(!v) return 'Cubby is still working out which version of the app this is. Close it fully and open it again, and this will sort itself out.';
+  return 'This version of the app ('+escapeHtml(v)+') cannot receive reminders with Cubby closed. Update Cubby in TestFlight and they will switch on by themselves. A due dose still speaks up while Cubby is open.';
+}
 function pushSupported(){ try{ if(isNativeApp()) return true; /* the wrapper registers with APNs/FCM natively, so none of the web gates below apply */ return !!(window.firebase && firebase.messaging && firebase.messaging.isSupported && firebase.messaging.isSupported() && ('Notification' in window) && ('serviceWorker' in navigator)); }catch(e){ return false; } }
 /* Push preferences are PER DEVICE, not per circle: sharedSettings() strips `push` from the app blob
    on both write paths (store-firebase.js) and applyAppBlob restores the local copy, the same way
@@ -5106,7 +5115,7 @@ function openReminders(){
       .map(function(r){ var on=!!cfg.allow[r[0]]; return `<div class="set-item"><div class="si-body"><div class="a">${r[1]}</div><div class="b">${r[2]}</div></div>
         <div class="seg"><button class="${on?'on':''}" onclick="setPushAllow('${r[0]}',true)">On</button><button class="${!on?'on':''}" onclick="setPushAllow('${r[0]}',false)">Off</button></div></div>`; }).join('')}
     <div class="csub" style="margin-top:6px">Change any of these whenever you like. Turning one off takes effect straight away.</div>
-    ${!ready?`<div class="preg-disclaim">${!remindersLive()?'Reminders with the app closed are not switched on in the app yet. We’re making sure a nudge always arrives before we turn them on, because we don’t want to be the reason a dose is missed. A due dose still speaks up while Cubby is open, and you can send a course of set times to your phone’s own calendar.':!sup?(isNativeApp()?'Reminders need notification permission for Cubby. You can turn it on in your phone settings.':'Reminders need a browser that supports notifications. On iPhone, add Cubby to your home screen first, then open it from there.'):'Reminders are coming soon.'}</div>`:`
+    ${!ready?`<div class="preg-disclaim">${!remindersLive()?(isNativeApp()?nativePushWhyNot():'Reminders with the app closed are not switched on in the app yet. We’re making sure a nudge always arrives before we turn them on, because we don’t want to be the reason a dose is missed. A due dose still speaks up while Cubby is open, and you can send a course of set times to your phone’s own calendar.'):!sup?(isNativeApp()?'Reminders need notification permission for Cubby. You can turn it on in your phone settings.':'Reminders need a browser that supports notifications. On iPhone, add Cubby to your home screen first, then open it from there.'):'Reminders are coming soon.'}</div>`:`
     <div class="set-item"><div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🔔</div><div class="si-body"><div class="a">Gentle reminders</div><div class="b">${cfg.enabled?'On for this device':'Off'}</div></div>
       <div class="seg"><button class="${cfg.enabled?'on':''}" onclick="enablePush()">On</button><button class="${!cfg.enabled?'on':''}" onclick="disablePush()">Off</button></div></div>
     <div class="csub" style="margin-top:8px">Quiet hours: no notification between ${cfg.quietStart}:00 and ${cfg.quietEnd}:00. A dose due in those hours still shows inside the app, with a softer buzz, because we would rather you saw it than slept through it.</div>`}
