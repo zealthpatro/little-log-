@@ -8726,7 +8726,7 @@ function renderMedSheet(editing){
       <button class="${p.type==='asNeeded'?'on':''}" onclick="medDraft.pattern.type='asNeeded';renderMedSheet(${editing})">As needed</button>
     </div></div>
     ${schedUI}
-    <div class="toggle-row"><div><div class="tr-a">Remind me</div><div class="tr-b">Alert when a dose is due (while app is open)</div></div>
+    <div class="toggle-row"><div><div class="tr-a">Remind me</div><div class="tr-b">A nudge when this dose is due, and on your phone if reminders are on</div></div>
       <div class="sw ${d.remind?'on':''}" onclick="toggleMedRemind(${editing})"></div></div>
     ${(editing&&p.type==='daily')?`<button class="btn-ghost" onclick="openDoseCalendar('${d.id}')">📅 ${d.ics?'Update these times in my calendar':'Add these times to my calendar'}</button>
       <div class="csub">Your phone reminds you at each dose time, even when Cubby is closed.</div>`:''}
