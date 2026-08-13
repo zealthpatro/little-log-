@@ -5244,7 +5244,15 @@ async function syncReminderIndex(){
     meds.forEach(function(m){
       medFireTimes(m,now,windowEnd).forEach(function(at){
         var fireAt=at-30*60000; if(fireAt<=now) return;
-        due.push({at:fireAt, due:at, cat:'critical', title:(m.name||'Medicine')+' soon', body:'Time for '+(m.name||'medicine')+(m.dose?(' '+m.dose+(m.unit||'')):'')+' at '+clock(at), tag:'med-'+m.id+'-'+at});
+        /* The facts a dose write needs, carried on the entry itself. The Worker signs these into the
+           notification's ticket so tapping "Log it" can record the dose without opening the app.
+           babyId is STATED, never inherited from whoever is on screen: a dose logged from one twin's
+           notification must land in that twin's record, the same invariant commitDose keeps.
+           The digest below deliberately gets none of this. It names several medicines and has no
+           medId, so there is nothing to log and it must never carry a button. */
+        due.push({at:fireAt, due:at, cat:'critical', title:(m.name||'Medicine')+' soon', body:'Time for '+(m.name||'medicine')+(m.dose?(' '+m.dose+(m.unit||'')):'')+' at '+clock(at), tag:'med-'+m.id+'-'+at,
+          medId:m.id, babyId:(m.babyId||state.activeBabyId), medName:(m.name||'Medicine'),
+          dose:String(m.dose||''), unit:(m.unit||''), iv:medIntervalMs(m)});
       });
     });
     // (2) one morning digest (9am local) per day that has a medicine due

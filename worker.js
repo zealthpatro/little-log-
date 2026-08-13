@@ -604,6 +604,9 @@ async function sendPushReminders(env){
   for (const d of docs) {
     try {
       const id = d.name.split('/documents/users/')[1];
+      // Needed to address the dose write at households/{hid}/events. The cron query uses no
+      // `select`, so the whole user doc is already here and this costs nothing extra.
+      const hid = _fsStr(d.fields && d.fields.householdId);
       const push = d.fields && d.fields.push && d.fields.push.mapValue && d.fields.push.mapValue.fields;
       const tokensMap = push && push.tokens && push.tokens.mapValue && push.tokens.mapValue.fields;
       const tokens = tokensMap ? Object.keys(tokensMap) : [];
@@ -641,18 +644,41 @@ async function sendPushReminders(env){
         const at = _fsNum(f.at); if (at == null || at <= sentUpTo || at > now) continue;
         const due = _fsNum(f.due);
         const stale = due != null ? (now > due) : (at < now - 20 * 60000);
-        plan.push({ at, drop: stale, title: _fsStr(f.title) || 'Cubby', body: _fsStr(f.body), tag: _fsStr(f.tag) || 'cubby' });
+        plan.push({ at, drop: stale, title: _fsStr(f.title) || 'Cubby', body: _fsStr(f.body), tag: _fsStr(f.tag) || 'cubby',
+          // Present only on a pre-dose reminder. The digest names several medicines and has no medId,
+          // so it never gets a ticket and never renders a button.
+          due, medId: _fsStr(f.medId), babyId: _fsStr(f.babyId), medName: _fsStr(f.medName),
+          dose: _fsStr(f.dose), unit: _fsStr(f.unit), iv: _fsNum(f.iv) || 0 });
       }
       plan.sort((a, b) => a.at - b.at);
 
       let maxAt = sentUpTo, stuck = false;
       for (const msg of plan) {
         if (msg.drop) { dropped++; if (!stuck) maxAt = msg.at; continue; }
+        /* One ticket per due dose, not per token: it authorises an ACTION, not a device. */
+        const ticket = msg.medId ? await mintDoseTicket(sa, {
+          u: id, h: hid, m: msg.medId, b: msg.babyId || '', mn: msg.medName || '',
+          d: msg.dose || '', n: msg.unit || '', t: msg.due || msg.at, i: msg.iv || 0
+        }) : '';
         let anyOk = false;
         for (const tk of tokens) {
           const fcmOk = await fetch('https://fcm.googleapis.com/v1/projects/' + FS_PROJECT + '/messages:send', {
             method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-            body: JSON.stringify({ message: { token: tk, notification: { title: msg.title, body: msg.body }, data: { tag: msg.tag }, webpush: { fcmOptions: { link: 'https://little-cubby.com/app/' } } } })
+            body: JSON.stringify({ message: Object.assign({
+              token: tk,
+              notification: { title: msg.title, body: msg.body },
+              // FCM v1 requires every data value to be a string.
+              data: Object.assign({ tag: msg.tag }, ticket ? { nonce: ticket, medId: msg.medId, medName: msg.medName || '' } : {}),
+              webpush: { fcmOptions: { link: 'https://little-cubby.com/app/' } }
+            }, ticket ? {
+              /* aps.category is what makes iOS draw the button; the app registers CUBBY_DOSE against
+                 it. An install whose binary has never seen that id simply ignores it and renders the
+                 notification exactly as before, which is what lets this ship ahead of the app build.
+                 collapse-id is the APNs twin of the `tag` the web notification already collapses on,
+                 so a retry replaces rather than stacks. */
+              apns: { headers: { 'apns-priority': '10', 'apns-collapse-id': msg.tag },
+                      payload: { aps: { category: 'CUBBY_DOSE', 'interruption-level': 'time-sensitive' } } }
+            } : {}) })
           }).then(r => r.ok).catch(e => { console.error('push_fcm_fail', (e && e.message) || String(e)); return false; });
           if (fcmOk) { anyOk = true; sent++; }
         }
@@ -948,6 +974,60 @@ async function getFirebaseJWKs() {
 }
 // Verify a Firebase ID token (RS256) the manual way: signature against Google's JWK, then the
 // standard exp/iat/aud/iss/sub claims for our project. Returns { uid, email } or throws.
+/* ---- The dose ticket -------------------------------------------------------------------------
+   A capability, not a credential. It rides inside the push payload, and tapping "Log it" sends it
+   straight back to /api/dose. That shape exists because the device has NO identity to offer: the
+   wrapper sets skipNativeAuth (capacitor.config.json), deliberately, so the JS SDK stays the single
+   source of truth and Auth.auth().currentUser is nil on the Swift side. FirebaseFirestore is not
+   linked either. So neither "write as the user from Swift" nor "send me your ID token" is available,
+   and the only remaining honest option is for the server to state, in advance and under its own
+   signature, exactly one thing it is willing to do.
+
+   What it grants is deliberately tiny: log ONE named dose, for ONE medicine, for ONE baby, at ONE
+   due time, idempotently. The request body carries nothing else, so a stolen ticket cannot be edited
+   into a different write. It expires 6h after the dose.
+
+   No new secret. The key is derived from the service-account private key we already hold, with a
+   domain-separation string. The push-cron-403 lesson was that a MISSING secret killed delivery
+   silently for months; an eighth required binding would be an eighth way to fail that way. */
+const DOSE_TICKET_INFO = 'cubby-dose-ticket-v1';
+async function doseTicketKey(sa) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(sa.private_key || '')),
+    { name: 'HKDF' }, false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: new TextEncoder().encode(DOSE_TICKET_INFO) }, base, 256);
+  return crypto.subtle.importKey('raw', bits, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
+}
+function _b64urlFromBytes(b) {
+  let s = ''; const a = new Uint8Array(b); for (let i = 0; i < a.length; i++) s += String.fromCharCode(a[i]);
+  return btoa(s).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+}
+async function mintDoseTicket(sa, claims) {
+  try {
+    const body = _b64urlFromBytes(new TextEncoder().encode(JSON.stringify(
+      Object.assign({}, claims, { x: (Number(claims.t) || Date.now()) + 6 * 3600000 }))));
+    const key = await doseTicketKey(sa);
+    const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode('v1.' + body));
+    return 'v1.' + body + '.' + _b64urlFromBytes(sig);
+  } catch (e) { console.error('dose_ticket_mint_fail', (e && e.message) || String(e)); return ''; }
+}
+async function readDoseTicket(sa, t) {
+  if (typeof t !== 'string' || t.length > 2048) return null;
+  const p = t.split('.');
+  if (p.length !== 3 || p[0] !== 'v1') return null;
+  const key = await doseTicketKey(sa);
+  // verify() is constant time, unlike comparing the two base64 strings ourselves.
+  const okSig = await crypto.subtle.verify('HMAC', key, _b64urlToBytes(p[2]), new TextEncoder().encode('v1.' + p[1]));
+  if (!okSig) return null;
+  let c; try { c = JSON.parse(_b64urlToStr(p[1])); } catch (e) { return null; }
+  if (!c || typeof c !== 'object') return null;
+  if (!(Number(c.x) > Date.now())) return null;                       // expired
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(String(c.u || ''))) return null;
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(String(c.h || ''))) return null;
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(String(c.m || ''))) return null;
+  return c;
+}
+
 async function verifyFirebaseToken(idToken) {
   if (!idToken || typeof idToken !== 'string') throw new Error('no_token');
   const parts = idToken.split('.');
@@ -1153,6 +1233,52 @@ export default {
       if (request.method !== 'POST') return new Response('method not allowed', { status: 405 });
       return newsletterSignup(request, env);
     }
+    /* Redeem a dose ticket. The whole request body is {"n":"<ticket>"} and nothing else, which is
+       the property the safety argument rests on: the caller cannot choose the medicine, the baby,
+       the household or the time. Everything written comes out of a signature this Worker made.
+
+       Idempotent by construction rather than by checking: the document id is dose-<medId>-<dueTs>,
+       so a duplicate delivery, a retry, a double tap, or two caregivers acting on the same
+       notification all address the SAME document. Firestore's documentId= create returns
+       ALREADY_EXISTS, which is success here, not an error. That matters more than usual: the charter
+       says never auto-log a dose, and the flip side of a button that logs one is that it must never
+       log two. */
+    if (url.pathname === '/api/dose') {
+      if (request.method !== 'POST') return new Response('method not allowed', { status: 405 });
+      if (!env.FIREBASE_SERVICE_ACCOUNT) return json({ error: 'server_config' }, 500);
+      let sa; try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return json({ error: 'server_config' }, 500); }
+      let body = null; try { body = await request.json(); } catch (e) {}
+      const c = await readDoseTicket(sa, (body && body.n) || '');
+      // One message for every rejection: a caller learns whether their ticket worked, never why not.
+      if (!c) return json({ error: 'bad_ticket' }, 401);
+
+      const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore');
+      const base = 'https://firestore.googleapis.com/v1/projects/' + FS_PROJECT + '/databases/(default)/documents';
+      const docId = 'dose-' + c.m + '-' + (Number(c.t) || 0);
+      const now = Date.now();
+      /* `time` is NOW, not the dose time. commitDose() does the same, and it is what a doctor report
+         needs: when the dose was actually given, not when it was scheduled. `id` is set equal to the
+         document id because the client's listener does data.id = doc.id and keys its known-events map
+         off it, so matching them keeps the client's own diff-push a no-op instead of a rewrite. */
+      const fields = {
+        id: { stringValue: docId }, authorId: { stringValue: String(c.u) },
+        type: { stringValue: 'medicine' }, medId: { stringValue: String(c.m) },
+        medName: { stringValue: String(c.mn || 'Medicine') },
+        dose: { stringValue: String(c.d || '') }, unit: { stringValue: String(c.n || '') },
+        time: { integerValue: String(now) }, babyId: { stringValue: String(c.b || '') },
+        via: { stringValue: 'notification' }
+      };
+      const r = await fetch(base + '/households/' + encodeURIComponent(String(c.h)) + '/events?documentId=' + encodeURIComponent(docId), {
+        method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+        body: JSON.stringify({ fields })
+      });
+      if (r.ok) return json({ ok: true, at: now });
+      const txt = await r.text();
+      if (r.status === 409 || /ALREADY_EXISTS/.test(txt)) return json({ ok: true, already: true });
+      console.error('dose_write_fail', r.status, txt.slice(0, 200));
+      return json({ error: 'write_failed' }, 502);
+    }
+
     if (url.pathname === '/api/health') {
       const now = Date.now();
       let cron = null;

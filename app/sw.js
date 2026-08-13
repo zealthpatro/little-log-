@@ -1,6 +1,6 @@
 /* Cubby service worker.
    Bump CACHE on every deploy so old assets are cleared. */
-const CACHE = 'little-log-v305';
+const CACHE = 'little-log-v306';
 const ASSETS = [
   '/app/',
   '/app/index.html',
@@ -88,18 +88,48 @@ self.addEventListener('push', (e) => {
   const d = p.data || {};
   // Chrome shows its own "this site was updated in the background" if a push event resolves without
   // showing anything, so always show something, even for a malformed payload.
-  e.waitUntil(self.registration.showNotification(n.title || 'Cubby', {
+  /* "Log it" straight from the notification, so a dose can be recorded without opening anything.
+     Only offered when the push carried a ticket, i.e. only on a real per-medicine reminder: the
+     morning digest names several medicines and has nothing single to log.
+     `actions` is Chromium-only. WebKit does not implement it at any version, so an iPhone reading
+     this over Web Push simply shows the notification with no button, unchanged. The button reaches
+     iOS through the native wrapper's UNNotificationCategory instead, which is a different client of
+     the same endpoint. Passing an unsupported key is harmless, so there is nothing to feature-detect. */
+  const opts = {
     body: n.body || '',
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
     tag: d.tag || n.tag || 'cubby',   // same tag replaces rather than stacks: a retry cannot pile up
     data: d
-  }));
+  };
+  if (d.nonce) opts.actions = [{ action: 'dose', title: 'Log it' }];
+  e.waitUntil(self.registration.showNotification(n.title || 'Cubby', opts));
 });
 
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const d = e.notification.data || {};
+  /* The action branch deliberately does NOT open a window. The whole point is that a parent holding
+     a baby can record the dose from the lock screen and put the phone down. The ticket is opaque to
+     us: everything written is decided by the signature the Worker made, so there is nothing here to
+     get wrong. Idempotent server-side on dose-<medId>-<dueTs>, so a double tap is one dose. */
+  if (e.action === 'dose' && d.nonce) {
+    e.waitUntil(
+      fetch('/api/dose', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ n: d.nonce }) })
+        .then((r) => self.registration.showNotification(r.ok ? 'Dose logged' : 'Could not log that dose', {
+          body: r.ok ? ((d.medName ? d.medName + ' ' : '') + 'is on the record.')
+                     : 'Open Cubby and log it there, so nothing is missed.',
+          icon: '/icons/icon-192.png', badge: '/icons/icon-192.png',
+          tag: (d.tag || 'cubby') + '-done'
+        }))
+        .catch(() => self.registration.showNotification('Could not log that dose', {
+          body: 'You look offline. Open Cubby and log it there.',
+          icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', tag: (d.tag || 'cubby') + '-done'
+        }))
+    );
+    return;
+  }
   // A campaign carries its own destination; a dose reminder just opens the app.
   const target = typeof d.url === 'string' && d.url.indexOf('/app') >= 0 ? d.url : '/app/';
   e.waitUntil(
