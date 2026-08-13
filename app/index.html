@@ -1577,7 +1577,13 @@ const I = {
 const TYPE_META = {
   feed:{c:'feed',label:'Feed',icon:I.feed},
   sleep:{c:'sleep',label:'Sleep',icon:I.sleep},
-  diaper:{c:'diaper',label:'Diaper',icon:I.diaper},
+  /* The word is "nappy" everywhere it is written down: the meta description, the FAQ JSON-LD that
+     has to stay in lockstep with the marketing site, the onboarding tile, the export, Stats, the
+     day recap. Home was the one screen still saying "Diaper", so a single glance at it could show
+     "Diaper", "Last diaper", "Diapers today" and "1 nappy change" for the same thing. The data key
+     stays `diaper` on purpose (same rule as routines/rituals: renaming a stored type rewrites
+     everyone's history to fix a caption). */
+  diaper:{c:'diaper',label:'Nappy',icon:I.diaper},
   pump:{c:'pump',label:'Pump',icon:I.pump},
   note:{c:'note',label:'Note',icon:I.note},
   activity:{c:'note',label:'Activity',icon:I.note},
@@ -1607,6 +1613,24 @@ function netSleepMs(e){
   const gross=e.end-e.time;
   const w=e.wakings, out=w&&w.mins?gross-(w.mins*60000):gross;
   return Math.max(0,out);
+}
+/* A nap in progress is NOT an event. It lives in state.timers and has no `end`, so every
+   `e.type==='sleep' && e.end` filter in this file is blind to it — and three separate summaries of
+   the day counted sleep exactly that way. During a nap the home screen could therefore show
+   "Sleeping 47:26" in the banner, "0m Sleep today" in the strip and "0.5h sleep" in the day line,
+   all at once, for the same baby. One helper so the three can never drift apart again.
+
+   Attributed to the day the nap STARTED, which is how a finished nap is counted (todayEvs buckets
+   by e.time). A nap begun at 23:50 therefore stays on yesterday's total until it ends. Re-bucketing
+   sleep across midnight is a whole-app decision — Stats and the doctor report bucket by start too —
+   and is deliberately not taken here. */
+function liveNapMs(dk){
+  try{
+    const t=timersFor(state.activeBabyId).sleep;
+    if(!t||!t.start) return 0;
+    if(dk && dayKey(t.start)!==dk) return 0;
+    return Math.max(0, now()-t.start);
+  }catch(_){ return 0; }
 }
 function wakingsLabel(e){
   const w=e&&e.wakings; if(!w||!w.n) return '';
@@ -1664,7 +1688,11 @@ function fmtSince(ts){
   const diff = now()-ts, m=Math.floor(diff/60000), h=Math.floor(m/60);
   if(m<1) return 'just now';
   if(m<60) return m+'m ago';
-  if(h<24) return h+'h '+(m%60)+'m';
+  // "ago" is not optional in this band. Without it the middle of the scale reads as a DURATION, and
+  // under a label like "Last sleep" that is the difference between "she woke 2h 15m ago" and "she
+  // slept for 2h 15m" — two very different facts, on the screen a parent reads at 3am.
+  // "2h 0m ago" for a feed exactly two hours back reads like a machine. Drop the empty half.
+  if(h<24) return h+'h'+((m%60)?' '+(m%60)+'m':'')+' ago';
   return Math.floor(h/24)+'d ago';
 }
 function ageString(birthTs){
@@ -1958,18 +1986,19 @@ window.renderSoon=renderSoon;
 /* The 1s tick used to ask the whole document three separate questions every second — on a real
    four-month timeline that is a 19ms hitch, every second, felt as a permanent shimmer. The
    elements that need ticking are known at paint time, so they're collected once here instead. */
-var _tickTimers=[], _tickSince=[], _tickDue=[];
+var _tickTimers=[], _tickSince=[], _tickDue=[], _tickSum=[];
 function refreshTickTargets(){
   try{
-    _tickTimers=[]; _tickSince=[]; _tickDue=[];
-    var all=document.querySelectorAll('[data-timer],[data-since],[data-due]');
+    _tickTimers=[]; _tickSince=[]; _tickDue=[]; _tickSum=[];
+    var all=document.querySelectorAll('[data-timer],[data-since],[data-due],[data-sum]');
     for(var i=0;i<all.length;i++){
       var el=all[i];
       if(el.hasAttribute('data-timer')) _tickTimers.push(el);
       if(el.hasAttribute('data-since')) _tickSince.push(el);
       if(el.hasAttribute('data-due')) _tickDue.push(el);
+      if(el.hasAttribute('data-sum')) _tickSum.push(el);
     }
-  }catch(e){ _tickTimers=[]; _tickSince=[]; _tickDue=[]; }
+  }catch(e){ _tickTimers=[]; _tickSince=[]; _tickDue=[]; _tickSum=[]; }
 }
 
 function render(){
@@ -2259,7 +2288,7 @@ function awayRecap(){
   const others = todays.filter(e=>e.authorId && e.authorId!==me);
   if(others.length<1) return '';
   const feeds = todays.filter(e=>e.type==='feed').length;
-  const napMs = todays.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+netSleepMs(e),0);
+  const napMs = todays.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+netSleepMs(e),0) + liveNapMs(todayK);
   const dia = todays.filter(e=>e.type==='diaper').length;
   const lastFeed = todays.filter(e=>e.type==='feed')[0];
   const names=[...new Set(others.map(e=>loggerName(e.authorId)).filter(Boolean))];
@@ -2560,7 +2589,7 @@ function daySurfaceRecap(ts){
   const evs=babyEvents().filter(e=>dayKey(e.time)===k);
   if(!evs.length) return '';
   const feeds=evs.filter(e=>e.type==='feed').length;
-  const napMs=evs.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+netSleepMs(e),0);
+  const napMs=evs.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+netSleepMs(e),0) + liveNapMs(k);
   const dia=evs.filter(e=>e.type==='diaper').length;
   const parts=[];
   if(feeds) parts.push(feeds+' feed'+(feeds>1?'s':''));
@@ -2813,7 +2842,15 @@ function renderHome(){
   const todayEvs = evs.filter(e=>dayKey(e.time)===today);
   const feedCount = todayEvs.filter(e=>e.type==='feed').length;
   const diaperCount = todayEvs.filter(e=>e.type==='diaper').length;
-  const sleepMs = todayEvs.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+netSleepMs(e),0);
+  /* A nap in progress has no `end`, so the filter below cannot see it and the strip used to read
+     "0m Sleep today" while the banner at the top of this same screen counted a nap that had been
+     running for 47 minutes. It is counted the way a FINISHED nap is counted: whole elapsed time,
+     attributed to the day it started on. That deliberately leaves a nap begun before midnight on
+     yesterday's total, because `todayEvs` buckets by start and so do awayRecap, daySurfaceRecap,
+     Stats and the doctor report. Re-bucketing sleep across midnight is a whole-app decision, not
+     one to take in the strip alone. */
+  const napNow = liveNapMs(today);
+  const sleepMs = todayEvs.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+netSleepMs(e),0) + napNow;
 
   /* The day surface lives at the BOTTOM of home. It comes up, straight under the three answers, for
      exactly one reason: another member has left something this parent has not read yet — to the whole
@@ -2839,8 +2876,8 @@ function renderHome(){
     ${timers}
     <div class="since-row stagger">
       ${sinceCard('feed','Last feed', lastFeed)}
-      ${sinceCard('sleep','Last sleep', lastSleep)}
-      ${sinceCard('diaper','Last diaper', lastDiaper)}
+      ${sinceCard('sleep','Last sleep', lastSleep, ts?'Asleep now':'')}
+      ${sinceCard('diaper','Last nappy', lastDiaper)}
     </div>
     ${wakeWindowLine()}
     ${surfaceUp ? surfaceCard : ''}
@@ -2855,10 +2892,14 @@ function renderHome(){
     ${gsCard ? '' : renderNudge()}
     ${alerts}
     ${goodReadCard('baby')}
+    ${/* data-sum keeps the sleep figure honest minute by minute while a nap runs. Rendering it once
+          per paint was not enough: leave home open through an hour of nap and the banner would say
+          1:47:30 while the cell below it still said 47m, which is the same contradiction one step
+          further along. It ticks only while a nap is actually running. */''}
     <div class="today-strip">
-      <div class="cell"><div class="big">${feedCount}</div><div class="cap">Feeds today</div></div>
-      <div class="cell"><div class="big">${sleepMs?fmtDur(sleepMs):'0m'}</div><div class="cap">Sleep today</div></div>
-      <div class="cell"><div class="big">${diaperCount}</div><div class="cap">Diapers today${(window.CubbyTeachUI)?CubbyTeachUI.dot('openDiaper','nappies'):''}</div></div>
+      <div class="cell"><div class="big">${feedCount}</div><div class="cap">${feedCount===1?'Feed':'Feeds'} today</div></div>
+      <div class="cell"><div class="big" ${napNow?`data-sum="${sleepMs-napNow}|${ts.start}"`:''}>${sleepMs?fmtDur(sleepMs):'0m'}</div><div class="cap">Sleep today</div></div>
+      <div class="cell"><div class="big">${diaperCount}</div><div class="cap">${diaperCount===1?'Nappy':'Nappies'} today${(window.CubbyTeachUI)?CubbyTeachUI.dot('openDiaper','nappies'):''}</div></div>
     </div>
     ${surfaceUp ? '' : surfaceCard}
   </div>`;
@@ -3046,7 +3087,7 @@ function actBtn(onclick,bg,c,ico,label,hint){ return `<button class="action" onc
 const QUICK_ACTIONS=[
   {k:'feed',        s:['baby','child'],              label:'Feed',        hint:'Breast, bottle, solids', fn:'openFeed()',            soft:'--feed-soft',   tone:'--feed',   ico:()=>I.feed},
   {k:'sleep',       s:['baby','child'],              label:'Sleep',       hint:'Start or stop a nap',    fn:'openSleep()',           soft:'--sleep-soft',  tone:'--sleep',  ico:()=>I.sleep},
-  {k:'diaper',      s:['baby','child'],              label:'Diaper',      hint:'Wet, dirty, both',       fn:'openDiaper()',          soft:'--diaper-soft', tone:'--diaper', ico:()=>I.diaper},
+  {k:'diaper',      s:['baby','child'],              label:'Nappy',       hint:'Wet, dirty, both',       fn:'openDiaper()',          soft:'--diaper-soft', tone:'--diaper', ico:()=>I.diaper},
   {k:'pump',        s:['baby','child'],              label:'Pump',        hint:'Expressed milk',         fn:'openPump()',            soft:'--pump-soft',   tone:'--pump',   ico:()=>I.pump},
   {k:'measure',     s:['baby','child'],              label:'Measure',     hint:'Weight & height',        fn:'openGrowth()',          soft:'--star-soft',   tone:'--star',   ico:()=>I.scale},
   {k:'activity',    s:['baby','child'],              label:'Activity',    hint:'Bath, play, notes',      fn:'openActivity()',        soft:'--note-soft',   tone:'--note',   ico:()=>I.note},
@@ -3303,7 +3344,7 @@ function quickFab(){
   return `<button class="qadd" onclick="openQuickLog()" aria-label="Quick log">${I.plus}</button>`;
 }
 function openMoreLogs(){
-  openSheet(`<h2>More logs</h2><div class="sub">The early-days logs, whenever you need them.</div><div class="actions">${actBtn('openFeed()','var(--feed-soft)','var(--feed)',I.feed,'Feed','Breast, bottle, solids')}${actBtn('openDiaper()','var(--diaper-soft)','var(--diaper)',I.diaper,'Diaper','Wet, dirty, both')}${actBtn('openPump()','var(--pump-soft)','var(--pump)',I.pump,'Pump','Expressed milk')}</div>`,'feed');
+  openSheet(`<h2>More logs</h2><div class="sub">The early-days logs, whenever you need them.</div><div class="actions">${actBtn('openFeed()','var(--feed-soft)','var(--feed)',I.feed,'Feed','Breast, bottle, solids')}${actBtn('openDiaper()','var(--diaper-soft)','var(--diaper)',I.diaper,'Nappy','Wet, dirty, both')}${actBtn('openPump()','var(--pump-soft)','var(--pump)',I.pump,'Pump','Expressed milk')}</div>`,'feed');
 }
 function nudge(ico,text){ return `<div class="nudge"><div class="nu-ico">${ico}</div><div class="nu-t">${text}</div></div>`; }
 function renderNudge(){
@@ -3332,13 +3373,20 @@ function timerBanner(type,label,start,sub,stopFn){
   </div>`;
 }
 
-function sinceCard(type,label,ev){
+/* `nowText` is for the case where the thing this card reports is happening RIGHT NOW, so there is no
+   past event to measure back to. Only sleep can be in progress, and a nap in progress carries no
+   `end`, which is what the caller filters on — so without this the screen said "Sleeping 47:26" in
+   the banner and "Last sleep ·" immediately under it, in the same minute, for the same baby. When
+   it is set the card must NOT carry data-since: the one-second tick would overwrite the words with
+   an elapsed time measured from nothing. */
+function sinceCard(type,label,ev,nowText){
   const m=TYPE_META[type];
-  const since = ev ? fmtSince(type==='sleep'&&ev.end?ev.end:ev.time) : null;
+  const since = nowText || (ev ? fmtSince(type==='sleep'&&ev.end?ev.end:ev.time) : null);
+  const live = !nowText && ev;
   return `<div class="since-card">
     <div class="dot" style="background:var(--${m.c})"></div>
     <div class="k">${label}</div>
-    <div class="v ${since?'':'empty'}" ${ev?`data-since="${type==='sleep'&&ev.end?ev.end:ev.time}"`:''}>${since||'·'}</div>
+    <div class="v ${since?'':'empty'}" ${live?`data-since="${type==='sleep'&&ev.end?ev.end:ev.time}"`:''}>${since||'not yet'}</div>
   </div>`;
 }
 
@@ -3363,7 +3411,7 @@ function tlGroupHtml(k,list){
   const dia=list.filter(e=>e.type==='diaper').length;
   // data-day is the patch key: it lets a day that has not changed keep its nodes untouched.
   let html=`<div class="day-group" data-day="${escapeHtml(String(k))}"><div class="day-head">${dayLabel(list[0].time)}
-      <span class="day-sum">${feeds} feeds · ${sleepMs?fmtDur(sleepMs):'0m'} sleep · ${dia} diapers</span></div>`;
+      <span class="day-sum">${feeds} feed${feeds===1?'':'s'} · ${sleepMs?fmtDur(sleepMs):'0m'} sleep · ${dia} ${dia===1?'nappy':'nappies'}</span></div>`;
   list.forEach(e=>html+=tlItem(e));
   return html+'</div>';
 }
@@ -3464,7 +3512,7 @@ function eventTitle(e){
     return 'Feed';
   }
   if(e.type==='sleep') return e.end?'Slept':'Sleep';
-  if(e.type==='diaper') return 'Diaper · '+(e.kind||'');
+  if(e.type==='diaper') return 'Nappy · '+(e.kind||'');
   if(e.type==='pump') return 'Pumped';
   if(e.type==='note') return e.title||'Note';
   if(e.type==='activity') return e.activity||'Note';
@@ -3609,6 +3657,11 @@ function startTick(){
     for(i=0;i<_tickTimers.length;i++){ el=_tickTimers[i]; if(el.isConnected) el.textContent=fmtDurClock(now()-(+el.dataset.timer)); }
     for(i=0;i<_tickSince.length;i++){ el=_tickSince[i]; if(!el.isConnected) continue; var s=fmtSince(+el.dataset.since); if(s) el.textContent=s; }
     for(i=0;i<_tickDue.length;i++){ el=_tickDue[i]; if(el.isConnected) el.textContent=fmtDue((+el.dataset.due)-now()); }
+    // "<already banked ms>|<start of the session still running>" — a total that is still growing.
+    for(i=0;i<_tickSum.length;i++){ el=_tickSum[i]; if(!el.isConnected) continue;
+      var sp=String(el.dataset.sum).split('|'), sb=+sp[0]||0, sst=+sp[1]||0;
+      if(sst) el.textContent=fmtDur(sb+Math.max(0,now()-sst));
+    }
     // Doses are minutes apart, so looking every five seconds is as instant as a parent can tell,
     // and it keeps a medicine scan from running on top of every single second of every screen.
     if((_tickBeat%5)===0) checkMedReminders();
@@ -4153,7 +4206,7 @@ function timeToToday(str){ const[h,m]=str.split(':').map(Number); const d=new Da
 function openDiaper(){ initTargets(); initLogWhen(); renderDiaperSheet(); }
 function renderDiaperSheet(){
   const t=(kind,icon,color,label,sub)=>`<div class="opt" onclick="saveDiaper('${kind}')"><span style="color:var(--${color})">${icon}</span><span>${label}</span>${sub?`<span class="osub">${sub}</span>`:''}</div>`;
-  openSheet(`<h2>Diaper</h2><div class="sub">Tap to log. Change the time below if it wasn't just now.</div>
+  openSheet(`<h2>Nappy</h2><div class="sub">Tap to log. Change the time below if it wasn't just now.</div>
     ${targetChips('renderDiaperSheet')}
     <div class="opt-grid">
       ${t('wet',I.drop,'sleep','Wet')}
@@ -4165,7 +4218,7 @@ function renderDiaperSheet(){
 }
 function saveDiaper(kind){
   commitEvent({type:'diaper',kind,time:getWhen('when')});
-  closeSheet(); render(); toast('Diaper logged · '+kind);
+  closeSheet(); render(); toast('Nappy logged · '+kind);
 }
 
 /* ---------- PUMP ---------- */
