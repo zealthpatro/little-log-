@@ -5025,7 +5025,19 @@ const CUBBY_VAPID='BJsMLPFLN5hLbJsdAs2ovSVaRii-sxjaz3bLha7ffXB7Iq4N6vUHKwlH6g9zB
    2. iOS additionally needs an APNs .p8 uploaded to Firebase, which has never been done.
    FLIP TO true ONLY once the send leg reports failures AND the key is uploaded, and only after one
    real end-to-end delivery has been seen per surface. Inspecting state is not delivery. */
-const REMINDERS_LIVE=false;
+/* Web push is PROVEN end to end: tools/push_e2e.js mints a real token against live FCM, sends a real
+   message with the service account, and waits for the service worker to show it. That is the bar the
+   old comment set ("we switch it on only once we are sure a reminder always arrives"), and web now
+   clears it.
+
+   Native is a SEPARATE switch and stays off. Not caution: build 9 carries aps-environment=development,
+   which production APNs rejects, so a wrapper user who tapped On would be told reminders were on and
+   then never get one. That is the precise thing this flag exists to prevent. It flips when a build cut
+   by tools/cap_ios_build.sh ships, whose guard now asserts the entitlement VALUE, and when one real
+   push has landed on one real device. */
+const REMINDERS_LIVE=true;
+const REMINDERS_LIVE_NATIVE=false;
+function remindersLive(){ return isNativeApp() ? REMINDERS_LIVE_NATIVE : REMINDERS_LIVE; }
 function pushSupported(){ try{ if(isNativeApp()) return true; /* the wrapper registers with APNs/FCM natively, so none of the web gates below apply */ return !!(window.firebase && firebase.messaging && firebase.messaging.isSupported && firebase.messaging.isSupported() && ('Notification' in window) && ('serviceWorker' in navigator)); }catch(e){ return false; } }
 /* Push preferences are PER DEVICE, not per circle: sharedSettings() strips `push` from the app blob
    on both write paths (store-firebase.js) and applyAppBlob restores the local copy, the same way
@@ -5065,7 +5077,7 @@ function setPushAllow(cat,on){
   toast(on?'On':'Off');
 }
 function openReminders(){
-  const sup=pushSupported(), cfg=pushCfg(), ready=REMINDERS_LIVE&&sup&&(isNativeApp()||!!CUBBY_VAPID);  // VAPID is a web-push concept; the wrapper goes via APNs
+  const sup=pushSupported(), cfg=pushCfg(), ready=remindersLive()&&sup&&(isNativeApp()||!!CUBBY_VAPID);  // VAPID is a web-push concept; the wrapper goes via APNs
   const muted=medAlertsMuted();
   openSheet(`<h2>Reminders 🔔</h2><div class="sub">A gentle nudge when a medicine is due. One nudge per dose, always with a way out, and never for feeds, naps or milestones.</div>
     <div class="set-item"><div class="si-ico" style="background:var(--med-soft);color:var(--med);font-size:18px">⏰</div><div class="si-body"><div class="a">Dose alerts in the app</div><div class="b">${muted?'Off on this device':'One nudge per dose, while Cubby is open'}</div></div>
@@ -5080,7 +5092,7 @@ function openReminders(){
       .map(function(r){ var on=!!cfg.allow[r[0]]; return `<div class="set-item"><div class="si-body"><div class="a">${r[1]}</div><div class="b">${r[2]}</div></div>
         <div class="seg"><button class="${on?'on':''}" onclick="setPushAllow('${r[0]}',true)">On</button><button class="${!on?'on':''}" onclick="setPushAllow('${r[0]}',false)">Off</button></div></div>`; }).join('')}
     <div class="csub" style="margin-top:6px">Change any of these whenever you like. Turning one off takes effect straight away.</div>
-    ${!ready?`<div class="preg-disclaim">${!REMINDERS_LIVE?'Reminders are still in testing. We’re making sure a nudge always arrives before we switch them on, because we don’t want to be the reason a dose is missed. We’ll let you know the moment they’re ready.':!sup?(isNativeApp()?'Reminders need notification permission for Cubby. You can turn it on in your phone settings.':'Reminders need a browser that supports notifications. On iPhone, add Cubby to your home screen first, then open it from there.'):'Reminders are coming soon.'}</div>`:`
+    ${!ready?`<div class="preg-disclaim">${!remindersLive()?'Reminders with the app closed are not switched on in the app yet. We’re making sure a nudge always arrives before we turn them on, because we don’t want to be the reason a dose is missed. A due dose still speaks up while Cubby is open, and you can send a course of set times to your phone’s own calendar.':!sup?(isNativeApp()?'Reminders need notification permission for Cubby. You can turn it on in your phone settings.':'Reminders need a browser that supports notifications. On iPhone, add Cubby to your home screen first, then open it from there.'):'Reminders are coming soon.'}</div>`:`
     <div class="set-item"><div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🔔</div><div class="si-body"><div class="a">Gentle reminders</div><div class="b">${cfg.enabled?'On for this device':'Off'}</div></div>
       <div class="seg"><button class="${cfg.enabled?'on':''}" onclick="enablePush()">On</button><button class="${!cfg.enabled?'on':''}" onclick="disablePush()">Off</button></div></div>
     <div class="csub" style="margin-top:8px">Quiet hours: no notification between ${cfg.quietStart}:00 and ${cfg.quietEnd}:00. A dose due in those hours still shows inside the app, with a softer buzz, because we would rather you saw it than slept through it.</div>`}
@@ -5128,7 +5140,7 @@ window.onNativePushToken=function(tok,_platform,explicit){ storePushToken(tok,ex
 async function enablePush(){
   // Delivery is dead in prod (see REMINDERS_LIVE). Never request OS notification permission for a
   // channel that will never fire — the sheet already shows the honest "still in testing" state.
-  if(!REMINDERS_LIVE){ toast('Reminders are still in testing 🤍'); openReminders(); return; }
+  if(!remindersLive()){ toast('Not switched on in the app yet 🤍'); openReminders(); return; }
   // The wrapper has no VAPID + service-worker path: permission and registration are native, and the
   // token comes back through onNativePushToken above.
   if(isNativeApp()){
@@ -8810,7 +8822,7 @@ function requestNotif(){
      be shown the OS "Allow notifications?" prompt for a channel that has no delivery behind it. A
      granted permission that never produces a notification teaches exactly one lesson, and it is the
      wrong one. Ask on the day we can deliver. */
-  if(!REMINDERS_LIVE) return;
+  if(!remindersLive()) return;
   try{ if('Notification' in window && Notification.permission==='default') Notification.requestPermission(); }catch(e){}
 }
 /* ONE due event = at most ONE alert on this device. Ever.
