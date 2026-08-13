@@ -745,6 +745,14 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
    this stylesheet. The `body.night` selector that used to sit here never matched anything: the
    theme is an ATTRIBUTE, and no code has ever added a `night` class.) */
 .ob-logout{display:block;margin:16px auto 0;border:none;background:none;color:var(--ink-soft);font-family:var(--font-body);font-weight:700;font-size:13px;cursor:pointer;text-decoration:underline;}
+/* The three full-shell screens (stage picker, caregiver waiting, loss holding) replace the entire
+   app including the nav, so this row is the ONLY route their occupant has to Settings, and Settings
+   is the only route to "Delete my account". App Store 5.1.1(v) requires in-app deletion for every
+   signed-in person, and a reviewer's fresh test account lands on the stage picker, so without this
+   the most likely reviewer path is also the one that fails. #sheet is a sibling of #app, not a
+   child, so openSettings() still opens over a screen that has replaced the shell. */
+.ob-foot{display:flex;gap:20px;justify-content:center;align-items:center;margin-top:16px;flex-wrap:wrap}
+.ob-foot .ob-logout{margin:0}
 .onboard{display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;padding:40px 30px;text-align:center;}
 .onboard.ob-card{height:auto;padding:30px 26px;}
 .onboard .logo{font-family:var(--font-display);font-size:40px;font-weight:600;letter-spacing:-.02em;margin-bottom:6px;}
@@ -5666,7 +5674,7 @@ function renderOnboard(){
         <div class="prof-card" onclick="obStage('planning')"><span class="lead" style="background:var(--diaper-soft);font-size:20px">🌱</span><div class="cflex"><div class="a">We're trying</div><div class="b">Getting ready, with a gentle hand if you want it</div></div><span class="chev">${I.chev}</span></div>
       </div>
       <div class="ob-priv">🔒 <a href="/privacy/" target="_blank" rel="noopener">Private to your family</a>. No ads. We never sell your data.</div>
-      <button class="ob-logout" onclick="confirmLogout()">Log out</button>
+      <div class="ob-foot"><button class="ob-logout" onclick="openSettings()">Settings</button><button class="ob-logout" onclick="confirmLogout()">Log out</button></div>
     </div>
   </div>`;
 }
@@ -5686,7 +5694,7 @@ function renderCaregiverWaiting(){
       <div class="logo">Cubby</div>
       <div class="tag" style="font-size:21px;color:var(--ink);font-weight:600;margin:2px 0 6px">You're in 🐻</div>
       <div class="tag">${fam?`You've joined ${escapeHtml(fam)}'s Cubby.`:`You've joined the family's Cubby.`} There's nothing for you to set up. As soon as they log a moment, or their little one arrives, it'll show up right here for you.</div>
-      <button class="ob-logout" onclick="confirmLogout()">Log out</button>
+      <div class="ob-foot"><button class="ob-logout" onclick="openSettings()">Settings</button><button class="ob-logout" onclick="confirmLogout()">Log out</button></div>
     </div>
   </div>`;
 }
@@ -5705,7 +5713,7 @@ function renderLossHolding(){
         <a class="prof-card" href="/articles/miscarriage-early-pregnancy-loss/" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><span class="lead" style="background:var(--feed-soft);font-size:20px">🫂</span><div class="cflex"><div class="a">If you need support</div><div class="b">Gentle reading, and helplines that are there day or night</div></div><span class="chev">${I.chev}</span></a>
       </div>
       <button class="btn-ghost" onclick="endLossHolding()" style="color:var(--ink-soft);margin-top:10px">When you're ready, move on from this screen</button>
-      <button class="ob-logout" onclick="confirmLogout()">Log out</button>
+      <div class="ob-foot"><button class="ob-logout" onclick="openSettings()">Settings</button><button class="ob-logout" onclick="confirmLogout()">Log out</button></div>
     </div>
   </div>`;
 }
