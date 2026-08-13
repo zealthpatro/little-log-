@@ -5036,8 +5036,22 @@ const CUBBY_VAPID='BJsMLPFLN5hLbJsdAs2ovSVaRii-sxjaz3bLha7ffXB7Iq4N6vUHKwlH6g9zB
    by tools/cap_ios_build.sh ships, whose guard now asserts the entitlement VALUE, and when one real
    push has landed on one real device. */
 const REMINDERS_LIVE=true;
-const REMINDERS_LIVE_NATIVE=false;
-function remindersLive(){ return isNativeApp() ? REMINDERS_LIVE_NATIVE : REMINDERS_LIVE; }
+/* Native is gated on the WRAPPER BUILD, not on a boolean somebody has to remember to flip.
+   Build 9 (CalVer 2026.31.x) and everything before it carries aps-environment=development, which
+   production APNs rejects: a user on one of those who tapped On would be told reminders were on and
+   never get one. 2026.33 is the first build cut after cap_ios_build.sh began asserting the
+   entitlement VALUE, so anything at or after it is safe by construction. An old install simply
+   never turns on, without anyone editing this file again. */
+const NATIVE_PUSH_MIN='2026.33';
+function nativePushReady(){
+  try{
+    const v=String(window.cubbyNativeVersion||''); if(!v) return false;   // unknown build: stay off
+    const a=v.split('.').map(Number), b=NATIVE_PUSH_MIN.split('.').map(Number);
+    if(!(a[0]>0)) return false;
+    return a[0]>b[0] || (a[0]===b[0] && a[1]>=b[1]);
+  }catch(e){ return false; }
+}
+function remindersLive(){ return isNativeApp() ? nativePushReady() : REMINDERS_LIVE; }
 function pushSupported(){ try{ if(isNativeApp()) return true; /* the wrapper registers with APNs/FCM natively, so none of the web gates below apply */ return !!(window.firebase && firebase.messaging && firebase.messaging.isSupported && firebase.messaging.isSupported() && ('Notification' in window) && ('serviceWorker' in navigator)); }catch(e){ return false; } }
 /* Push preferences are PER DEVICE, not per circle: sharedSettings() strips `push` from the app blob
    on both write paths (store-firebase.js) and applyAppBlob restores the local copy, the same way

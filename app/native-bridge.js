@@ -244,3 +244,19 @@
   }
   if (document.readyState !== 'loading') boot(); else document.addEventListener('DOMContentLoaded', boot);
 })();
+
+/* The wrapper's own CalVer (year.week.release), published for the web layer.
+   Native push is gated on it: build 9 and earlier shipped aps-environment=development, which
+   production APNs rejects, so those installs must never be told reminders are on. Gating on the
+   BUILD rather than a hand-flipped boolean means an old install can never be promised a push its
+   binary cannot receive, and nobody has to remember to flip anything. */
+try {
+  var _capApp = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+  if (_capApp && _capApp.getInfo) {
+    _capApp.getInfo().then(function (i) {
+      window.cubbyNativeVersion = (i && i.version) || '';
+      // Boot may already have painted the Reminders sheet before this resolved.
+      try { if (typeof window.renderSoon === 'function') window.renderSoon(); } catch (e) {}
+    }).catch(function () {});
+  }
+} catch (e) { /* web, or an older wrapper without @capacitor/app: stays undefined, push stays off */ }

@@ -54,8 +54,21 @@ end
 # Always (re)write, so a changed entitlement can never be left behind by an `unless File.exist?` guard.
 # `aps-environment` is what actually turns on push: without it FirebaseMessaging fails registration with
 # "no valid aps-environment entitlement string found" and no APNs token is ever issued, no matter what
-# key is uploaded to Firebase. `development` is correct even for TestFlight/App Store builds — Apple
-# rewrites it to `production` when it re-signs for distribution.
+# key is uploaded to Firebase.
+#
+# It says `production`, and the reasoning that used to sit here is worth keeping because it is right
+# in general and wrong HERE: "development is fine, Apple rewrites it to production when it re-signs
+# for distribution." That is true of the ordinary Xcode export. It is not true of this build, which
+# deliberately hand-signs the .app with `codesign --entitlements` using this exact file and then lets
+# -exportArchive PRESERVE what it finds (see the header of tools/cap_ios_build.sh for why that dance
+# exists). Nothing rewrites it, so whatever this file says is what ships. `development` therefore
+# shipped in build 9, and production APNs rejects a development token: push was dead on arrival for
+# every TestFlight and App Store install, silently, because the app still reports success locally.
+# cap_ios_build.sh now asserts the VALUE after signing, so this cannot regress unnoticed.
+#
+# Caveat for a future --local install onto a device with a DEVELOPMENT profile: that pairing wants
+# `development`. Both paths this script actually produces (TestFlight upload, and --local export) are
+# signed for distribution, so production is the correct value for both.
 File.write(ENTITLEMENTS, <<~PLIST)
   <?xml version="1.0" encoding="UTF-8"?>
   <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -66,7 +79,7 @@ File.write(ENTITLEMENTS, <<~PLIST)
   		<string>Default</string>
   	</array>
   	<key>aps-environment</key>
-  	<string>development</string>
+  	<string>production</string>
   	<key>com.apple.developer.associated-domains</key>
   	<array>
   		<string>applinks:little-cubby.com</string>
