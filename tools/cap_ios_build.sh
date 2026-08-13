@@ -76,7 +76,16 @@ for KEY in "com.apple.developer.applesignin" "aps-environment"; do
   codesign -d --entitlements :- "$APP" 2>/dev/null | grep -q "$KEY" \
     || { echo "✖ $KEY missing from the archived app — the whole reason this script exists. Stopping."; exit 1; }
 done
-echo "  ✓ applesignin + aps-environment embedded"
+# Presence is not enough. The archive is hand-signed with the literal entitlements file above, which
+# BYPASSES the production substitution Xcode normally does on export, so whatever value sits in that
+# file is what ships. A build carrying aps-environment=development gets a DEVELOPMENT APNs token,
+# which the production APNs servers reject: push then fails silently on every TestFlight and App
+# Store install, with nothing in the app to say so. The loop above only ever proved the KEY was
+# present, which is exactly the hole this closes.
+APS="$(codesign -d --entitlements :- "$APP" 2>/dev/null | tr -d ' \n' | sed -n 's/.*<key>aps-environment<\/key><string>\([a-z]*\)<\/string>.*/\1/p')"
+[ "$APS" = "production" ] \
+  || { echo "✖ aps-environment is '${APS:-unreadable}', not 'production' — push would be dead on TestFlight and the App Store. Stopping."; exit 1; }
+echo "  ✓ applesignin + aps-environment=production embedded"
 
 if [ "$LOCAL" = "--local" ]; then
   cat > /tmp/ExportLocal.plist <<'EOF'

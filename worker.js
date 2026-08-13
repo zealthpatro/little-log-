@@ -413,7 +413,7 @@ async function sendPushReminders(env){
   const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/firebase.messaging');
   const base = 'https://firestore.googleapis.com/v1/projects/' + FS_PROJECT + '/databases/(default)/documents';
   const now = Date.now();
-  let sent = 0, userErrors = 0;
+  let sent = 0, userErrors = 0, failed = 0, dropped = 0;
   await backfillPushNextAt(env, base, token);
   // Only the users with something actually due. `push.nextAt` is the earliest unsent fire time,
   // written by the client alongside push.due and kept honest below. Users who have never enabled
@@ -426,7 +426,7 @@ async function sendPushReminders(env){
     // nothing. Expensive, and deliberately loud: the status shows up at /api/health so a degraded
     // cron cannot sit unnoticed the way a missing reminder would.
     docs = await fsPageAll(base, token, 'users');
-    if (!docs) { await recordCronRun(env, { due: 0, sent: 0, userErrors: 0, queryError, fallback: 'failed' }); return; }
+    if (!docs) { await recordCronRun(env, { due: 0, sent: 0, failed: 0, dropped: 0, userErrors: 0, queryError, fallback: 'failed' }); return; }
   }
   for (const d of docs) {
     try {
@@ -444,28 +444,46 @@ async function sendPushReminders(env){
       }
       const dueArr = (push.due && push.due.arrayValue && push.due.arrayValue.values) || [];
       const sentUpTo = _fsNum(push.sentUpTo) || 0;
-      let maxAt = sentUpTo; const toSend = [];
+      /* Plan first, in fire order, then send. The cursor may only pass a message we are DONE with,
+         and "done" is two things, never three:
+           delivered  - at least one token accepted it
+           dropped    - we deliberately chose not to send it (too late to be useful)
+         A message we TRIED and failed to deliver is not done. It used to be: maxAt advanced here in
+         the planning loop and sentUpTo was PATCHed regardless of what FCM said, so one transient 429
+         or 503 (or the network throw caught below) consumed a dose reminder for good and no retry was
+         possible, because from the cursor's point of view it had been sent. That is the same shape as
+         the fsDeleteAll bug in the purge path: a failure read as "nothing to do".
+         NEVER after still holds: a dose reminder carries its dose time, and once that has passed we
+         drop it rather than nudge someone toward a dose they should no longer take. The digest (no
+         due) is dropped once stale so a long-closed app never bursts. Both are DROPS, which do
+         advance the cursor, and both are now counted so they are visible instead of invisible. */
+      const plan = [];
       for (const v of dueArr) {
         const f = v.mapValue && v.mapValue.fields; if (!f) continue;
         const at = _fsNum(f.at); if (at == null || at <= sentUpTo || at > now) continue;
-        if (at > maxAt) maxAt = at;
-        // NEVER after: a dose reminder carries the dose time (due). If the dose has already passed,
-        // skip it (better no reminder than a late one) -> it only ever fires before or at the dose.
-        // The digest (no due) fires only if fresh, so a long-closed app never bursts stale ones.
-        // Either way sentUpTo still advances, so nothing ever resends.
         const due = _fsNum(f.due);
-        if (due != null) { if (now > due) continue; }
-        else { if (at < now - 20 * 60000) continue; }
-        toSend.push({ title: _fsStr(f.title) || 'Cubby', body: _fsStr(f.body), tag: _fsStr(f.tag) || 'cubby' });
+        const stale = due != null ? (now > due) : (at < now - 20 * 60000);
+        plan.push({ at, drop: stale, title: _fsStr(f.title) || 'Cubby', body: _fsStr(f.body), tag: _fsStr(f.tag) || 'cubby' });
       }
-      for (const msg of toSend) {
+      plan.sort((a, b) => a.at - b.at);
+
+      let maxAt = sentUpTo, stuck = false;
+      for (const msg of plan) {
+        if (msg.drop) { dropped++; if (!stuck) maxAt = msg.at; continue; }
+        let anyOk = false;
         for (const tk of tokens) {
           const fcmOk = await fetch('https://fcm.googleapis.com/v1/projects/' + FS_PROJECT + '/messages:send', {
             method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
             body: JSON.stringify({ message: { token: tk, notification: { title: msg.title, body: msg.body }, data: { tag: msg.tag }, webpush: { fcmOptions: { link: 'https://little-cubby.com/app/' } } } })
           }).then(r => r.ok).catch(e => { console.error('push_fcm_fail', (e && e.message) || String(e)); return false; });
-          if (fcmOk) sent++;
+          if (fcmOk) { anyOk = true; sent++; }
         }
+        if (anyOk) { if (!stuck) maxAt = msg.at; }
+        // Freeze the cursor at the first undelivered message so the next tick retries from exactly
+        // here. Later messages are still attempted (a single bad payload must not block the queue
+        // behind it), but they stay behind the cursor and may repeat once; the FCM `tag` collapses a
+        // repeat in the OS notification centre rather than stacking a second one.
+        else { failed++; stuck = true; }
       }
       // Advance the send cursor and the query key together. nextAt = the earliest fire time still
       // unsent, and it is CLEARED rather than nulled when nothing is left, so the doc drops out of
@@ -485,9 +503,9 @@ async function sendPushReminders(env){
       }
     } catch (e) { userErrors++; console.error('push_user_fail', (e && e.message) || String(e)); }
   }
-  console.log('push_run', JSON.stringify({ due: docs.length, sent, userErrors, queryError }));
-  await recordCronRun(env, queryError ? { due: docs.length, sent, userErrors, queryError, fallback: 'scan' }
-                                      : { due: docs.length, sent, userErrors });
+  console.log('push_run', JSON.stringify({ due: docs.length, sent, failed, dropped, userErrors, queryError }));
+  await recordCronRun(env, queryError ? { due: docs.length, sent, failed, dropped, userErrors, queryError, fallback: 'scan' }
+                                      : { due: docs.length, sent, failed, dropped, userErrors });
 }
 /* ---- Account deletion, second half (App Store 5.1.1(v)).
    When the LAST member deletes their account the client cannot erase the household: it would have to
@@ -967,8 +985,14 @@ export default {
       // "nobody had a reminder due" rather than "we never got to look". A heartbeat that cannot go
       // red is not a heartbeat.
       const cronFresh = cron ? (now - cron.at) < 60 * 60000 : null;
-      const cronHealthy = cron ? !!(cronFresh && !cron.queryError && cron.fallback !== 'failed') : null;
-      return json({ ok: true, time: now, cron, cronHealthy, cronFresh });
+      /* A run that queued reminders and delivered NONE is not healthy, however cleanly it finished.
+         Before this, a tick where every FCM call failed logged {due:40, sent:0, userErrors:0} and
+         still reported cronHealthy:true, which is exactly how the July silent-403 went unnoticed for
+         weeks. `failed` is only present on runs from this version onward, so an older record without
+         it keeps the old meaning rather than reading as a new failure. */
+      const cronDelivering = cron ? !(cron.failed > 0 && cron.sent === 0) : true;
+      const cronHealthy = cron ? !!(cronFresh && !cron.queryError && cron.fallback !== 'failed' && cronDelivering) : null;
+      return json({ ok: true, time: now, cron, cronHealthy, cronFresh, cronDelivering });
     }
     // Account deletion reaches into D1, which Firestore rules cannot govern: the guessing-game hubs
     // are keyed by Firebase uid. The client calls this while still signed in; we verify the token
