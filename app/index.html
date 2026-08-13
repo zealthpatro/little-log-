@@ -1412,6 +1412,26 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 </head>
 <body>
 <div id="app"><!-- Static, crawlable content. The app replaces this on first render(); no-JS crawlers and link previews read it. -->
+<!-- Hidden whenever JS runs. The noscript override below has always forced display:block!important,
+     which only means anything if the default is none, and that default was never written. So this
+     block stayed in the page for everyone.
+
+     It is only invisible while something paints over it. On the sign-in screen nothing does:
+     paintShell never runs, because there is no signed-in parent to paint for, so #app still holds
+     1406px of marketing copy. The auth screen is a position:fixed overlay that scrolls its own
+     content, and the body behind it scrolls too. Two scrollers, one fixed on top of the other, is
+     precisely the case WKWebView handles by shifting the fixed layer during a rubber-band, and the
+     page underneath shows through: "One-thumb logging for feeds, sleep, nappies" above the bear, on
+     a real iPhone.
+
+     Two more things it was costing us. A screen reader on the sign-in screen read the whole
+     marketing page before it reached "Continue with Apple". And the signed-out app had a phantom
+     1406px scroll on a 874px screen.
+
+     Kept rather than deleted so no-JS crawlers and link unfurlers still get it, though note this
+     page is <meta name="robots" content="noindex,follow">, so it was never earning search traffic
+     here in the first place. -->
+<style>#seo-fallback{display:none}</style>
 <noscript><style>#seo-fallback{display:block!important}</style></noscript>
 <main id="seo-fallback" style="max-width:680px;margin:0 auto;padding:40px 22px;font-family:'Nunito Sans',system-ui,sans-serif;color:var(--ink)">
 <img src="/icons/logo-512.png" alt="Cubby logo" width="76" height="76" style="border-radius:18px">
