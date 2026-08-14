@@ -9190,7 +9190,22 @@ function visitSummary(days){
   const b=activeBaby();
   const since=now()-days*86400000;
   const evs=babyEvents().filter(e=>e.time>=since);
-  const perDay=(n)=>days>0?(n/days):n;
+  /* THE DENOMINATOR IS THE WINDOW WE ACTUALLY OBSERVED, NOT THE ONE WE ASKED FOR.
+     This used to divide by `days` flat, which is 14 for the doctor report. A five-day-old has not
+     lived fourteen days, so a textbook-normal newborn on eight feeds and six wet nappies a day
+     printed as 2.9 feeds and 2.1 nappies a day. To a paediatrician that is inadequate intake and
+     dehydration, on the one page in Cubby written to be read by a clinician. The same arithmetic
+     hit any family who installed Cubby recently, whatever the baby's age.
+     The honest denominator is bounded by three things: the window asked for, the baby's life, and
+     when logging actually started. Whichever begins latest is where observation begins. */
+  const firstEv=evs.length?evs[evs.length-1].time:null;   // babyEvents() is newest-first
+  const start=Math.max(since, b.birth||0, firstEv==null?since:firstEv);
+  const obsDays=Math.max(0,(now()-start)/86400000);
+  /* Under a day there is nothing to average. Two hours and one feed is not "12 feeds a day", and
+     extrapolating it would swap the old false alarm for a false reassurance. Totals only. */
+  const canRate=obsDays>=1;
+  const perDay=(n)=>n/Math.max(obsDays,1/24);
+  const rate=(n,dp,unit)=>canRate?` (~${perDay(n).toFixed(dp==null?1:dp)}${unit||''}/day)`:'';
   const feeds=evs.filter(e=>e.type==='feed');
   const nursing=feeds.filter(e=>e.method==='breast').length;
   const bottles=feeds.filter(e=>e.method==='bottle');
@@ -9214,15 +9229,42 @@ function visitSummary(days){
   L.push(`Cubby summary, ${b.name} (${ageString(b.birth)})`);
   const sexW=sexWord(b.sex);
   if(b.birth||sexW) L.push(`${b.birth?'Date of birth: '+new Date(b.birth).toLocaleDateString():''}${(b.birth&&sexW)?' · ':''}${sexW?'Sex: '+sexW:''}`);
-  L.push(`Last ${days} days (through ${new Date().toLocaleDateString()})`);
+  /* Say what the numbers below are actually built from. A clinician reading an average needs to
+     know the window and how much of it was covered, or a patchy fortnight and a diligent fortnight
+     print identically. */
+  const wDays=Math.max(1,Math.ceil(obsDays));
+  /* Distinct calendar days touched can EXCEED the window, because a night feed at 00:30 belongs to
+     a different date than the evening before it. Reporting "logged on 6 of these 5 days" on a
+     clinical page reads as a arithmetic error and costs the whole document its authority. */
+  const covered=Math.min(new Set(evs.map(e=>dayKey(e.time))).size, wDays);
+  const wLabel=obsDays<1?`${Math.max(1,Math.round(obsDays*24))} hours`
+                        :(obsDays<2?`${obsDays.toFixed(1)} days`:`${Math.round(obsDays)} days`);
+  L.push(`Window: the last ${wLabel}, through ${new Date().toLocaleDateString()}`);
+  if(obsDays<days-0.5){
+    // Which constraint bound matters clinically: a newborn with a short window is expected, a
+    // three-month-old with a short window means the app is new, not that the history is thin.
+    const bornIn=b.birth&&b.birth>since;
+    L.push(`  Averages cover ${wLabel}, not ${days} days: ${bornIn?`${b.name} was born inside this window`:'there is no log before that'}.`);
+  }
+  if(evs.length&&canRate) L.push(`  Entries logged on ${covered} of those ${wDays} days.`);
   L.push('');
-  L.push(`Feeds: ${feeds.length} total (~${perDay(feeds.length).toFixed(1)}/day)`);
-  if(nursing) L.push(`  • Nursing: ${nursing}`);
-  if(bottles.length) L.push(`  • Bottles: ${bottles.length}${bottleVol?` (~${Math.round(perDay(bottleVol))} ${bottles[0].unit||'ml'}/day)`:''}`);
-  if(solids) L.push(`  • Solids: ${solids}`);
-  if(water) L.push(`  • Water: ${water}`);
-  L.push(`Sleep: ~${(perDay(sleepMs)/3600000).toFixed(1)} h/day (${sleeps.length} naps logged)`);
-  L.push(`Diapers: ~${perDay(diapers.length).toFixed(1)}/day (wet ${wet}, dirty ${dirty})`);
+  if(!evs.length){
+    // "Feeds: 0 total" on a doctor's page reads as a baby who was never fed. Say the true thing.
+    L.push('No entries were logged in this window, so there is nothing to summarise.');
+    L.push('This is a record of what was written down, not of what happened.');
+  } else {
+    L.push(`Feeds: ${feeds.length} total${rate(feeds.length)}`);
+    if(nursing) L.push(`  • Nursing: ${nursing}`);
+    if(bottles.length) L.push(`  • Bottles: ${bottles.length}${(bottleVol&&canRate)?` (~${Math.round(perDay(bottleVol))} ${bottles[0].unit||'ml'}/day)`:(bottleVol?` (${bottleVol} ${bottles[0].unit||'ml'} total)`:'')}`);
+    if(solids) L.push(`  • Solids: ${solids}`);
+    if(water) L.push(`  • Water: ${water}`);
+    // "Sleep: 0s total" is what fmtDur returns for nothing, and on this page it reads as a claim
+    // that the baby did not sleep rather than that nobody wrote it down.
+    L.push(!sleeps.length?'Sleep: none logged'
+          :canRate?`Sleep: ~${(perDay(sleepMs)/3600000).toFixed(1)} h/day (${sleeps.length} naps logged)`
+                  :`Sleep: ${fmtDur(sleepMs)} total (${sleeps.length} naps logged)`);
+    L.push(`Nappies: ${diapers.length} total${rate(diapers.length)} (wet ${wet}, dirty ${dirty})`);
+  }
   if(lw||lh) L.push(`Latest growth: ${lw?lw.weight+' '+(lw.wUnit||'kg'):''}${lw&&lh?', ':''}${lh?lh.height+' '+(lh.hUnit||'cm'):''}`);
   if(temps.length) L.push(`Temperature: ${temps.length} reading(s), max ${maxTemp.temp}°${maxTemp.unit||'C'}${fevers.length?` · ${fevers.length} fever reading(s)`:''}`);
   if(symptoms.length) L.push(`Symptoms: ${symptoms.map(s=>s.symptom+(s.severity?` (${s.severity})`:'')).join(', ')}`);
