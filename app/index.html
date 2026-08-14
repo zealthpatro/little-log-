@@ -2100,6 +2100,11 @@ function runDeepLink(dl){
     // The guide guards itself on loss and on who is holding the phone, so a link can be shared
     // freely without carrying those decisions in the URL.
     if(dl.go==='guide'){ var lg=_fn('cubbyOpenGuide'); if(lg){ lg(); return; } }
+    /* The one person on the whole site who read the pricing page and decided. "Register for Pro"
+       was a bare href="/app/", so they were dropped on a generic home with no mention of Pro and
+       the waitlist write at the bottom of openPro never got its chance. No stage guard: openPro
+       explains itself at any stage. */
+    if(dl.go==='pro'){ var pr=_fn('openPro'); if(pr){ pr(); return; } }
     var PREG_GO={kicks:'openKickCounter',contractions:'openContractions',symptom:'openLogSymptom',weight:'openLogWeight',mood:'openMoodNote',glucose:'openGlucoseTracker',bag:'openBag',birthplan:'openBirthPlan',games:'openGuessGame',doctorreport:'openPregDoctorReport',danger:'openDangerSigns'};
     var BABY_GO={feed:'openFeed',diaper:'openDiaper',sleep:'openSleep',temp:'openTemp'};
     // Mood is owner-only forever. The deep link must respect the same gate as the home card and
