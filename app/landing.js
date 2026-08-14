@@ -65,6 +65,41 @@
     [ICON.lock, 'Private to your family', 'No ads. We never sell your data.']
   ];
 
+  /* A way out, on the screens where people actually get stuck.
+     appSignIn is what the iOS wrapper and the installed PWA show, and inviteSignIn is where someone
+     lands from an invite. Both ended at "Free · Private to your family" with no outbound link at
+     all: no FAQ, no address, no next step. Sign-in failing, an invite not matching, the wrong email
+     on the Apple relay: every one of those dead-ends here, and the only thing on screen was a
+     button that had just not worked.
+
+     The address is COPYABLE rather than a bare mailto. The wrapper sets
+     limitsNavigationsToAppBoundDomains and a mailto: has never been tested on a device, so a link
+     that silently does nothing would be worse than no link. Copy works everywhere.
+
+     The FAQ link is only offered where there is browser chrome to come back with. Inside the
+     wrapper or an installed PWA, /faq/ is the same app-bound origin, so it would replace the app
+     with a page that has no way back to it. */
+  function supportRow() {
+    var faq = (!isNative() && !isStandalone())
+      ? '<a class="lp-help-link" href="/faq/">Read the FAQ</a> · ' : '';
+    return '<div class="lp-help">Stuck? ' + faq
+      + '<button type="button" class="lp-help-link" onclick="window.cubbyCopySupport&amp;&amp;window.cubbyCopySupport(this)">'
+      + 'support@little-cubby.com</button></div>';
+  }
+  window.cubbyCopySupport = function (el) {
+    var a = 'support@little-cubby.com';
+    var done = function () {
+      if (!el) return;
+      var was = el.textContent; el.textContent = 'Copied ✓';
+      setTimeout(function () { el.textContent = was; }, 1800);
+    };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(a).then(done, done); return; }
+    } catch (e) {}
+    // No clipboard (older WKWebView, or a denied permission): show it so it can be read and typed.
+    try { window.prompt('Email us at', a); } catch (e2) {}
+  };
+
   function appSignIn(msg) {
     var tiles = TILES.map(function (t) {
       return '<div class="ac-tile"><div class="ac-ic">' + t[0] + '</div>'
@@ -89,6 +124,7 @@
       + (msg ? '<div class="lp-msg">' + msg + '</div>' : '')
       + '</div>'
       + '<div class="lp-trust">Free · Private to your family</div>'
+      + supportRow()
       + '</div>';
   }
 
@@ -177,6 +213,7 @@
       + (msg ? '<div class="lp-msg">' + msg + '</div>' : '')
       + '</div>'
       + '<div class="lp-trust">Free · Private to your family</div>'
+      + supportRow()
       + '</div>';
   }
 
@@ -331,6 +368,12 @@
        use, rather than to a new grey. */
     + '.lp-msg{margin-top:12px;color:#944764;font-size:13px;font-weight:700;}'
     + '.lp-trust{margin-top:12px;font-size:13px;color:var(--ink-soft,#6E635B);font-weight:700;}'
+    // Quiet on purpose. It is the thing you only look for once something has gone wrong, so it
+    // should not compete with the sign-in button until you need it.
+    + '.lp-help{margin-top:10px;font-size:12.5px;color:var(--ink-faint,#8B8079);font-weight:600;line-height:1.6;}'
+    + '.lp-help-link{background:none;border:0;padding:0;font:inherit;color:var(--ink-soft,#6E635B);'
+    + 'text-decoration:underline;text-underline-offset:2px;cursor:pointer;}'
+    + '.lp-help-link:focus-visible{outline:2px solid var(--ink-soft,#6E635B);outline-offset:3px;border-radius:3px;}'
     // The invitee's one instruction. Sits where the feature carousel goes on the acquisition screen:
     // they were sold by the person who invited them, so this space is for getting the address right.
     + '.lp-inv{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;min-height:0;'

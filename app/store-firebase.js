@@ -590,7 +590,9 @@
     var code = (err && err.code) ? ' [' + err.code + ']' : '';
     var msg = (err && err.message) || String(err);
     try { console.error('[cubby] native sign-in failed at ' + step + code, err); } catch (e) {}
-    showSignIn('Sign-in failed (' + step + ')' + code + ': ' + msg);
+    // errText exists precisely so raw SDK strings never reach a parent; this catch skipped it and
+    // showed things like "auth/popup-blocked". The code still goes to the console for us.
+    showSignIn(errText(err, 'That sign-in did not go through. Give it another go.'));
   }
 
   /* Busy state for EVERY sign-in surface. The production landing uses id-less .ll-cta buttons
@@ -618,7 +620,7 @@
         || err.code === 'auth/operation-not-supported-in-this-environment')) {
         auth.signInWithRedirect(window.LL.googleProvider); return;
       }
-      showSignIn('Sign-in failed: ' + ((err && err.message) || err));
+      showSignIn(errText(err, 'That sign-in did not go through. Give it another go.'));
     });
   }
 
@@ -632,7 +634,7 @@
         || err.code === 'auth/operation-not-supported-in-this-environment')) {
         auth.signInWithRedirect(window.LL.appleProvider); return;
       }
-      showSignIn('Sign-in failed: ' + ((err && err.message) || err));
+      showSignIn(errText(err, 'That sign-in did not go through. Give it another go.'));
     });
   }
 
