@@ -1,0 +1,49 @@
+name: Gates
+
+# This repo had 24 gates and 2 of them ran anywhere automatically, so the other 22 rotted
+# quietly: the FAB gate had been failing for as long as nobody ran it, against a sessionStorage
+# key the app renamed underneath it, and nothing said so.
+#
+# The Chrome-free subset runs here on every push and PR. The browser gates (perf, home-truth,
+# report-truth, offline, pad, type, and the rest) need a real Chrome and a local server, so they
+# run on the founder's machine via the pre-push hook that tools/install_hooks.sh installs:
+#
+#   node tools/gates.js               everything judged from the checkout
+#   node tools/gates.js --live        also audit what is actually deployed
+#   node tools/gates.js --emulator    also the Firestore rules suites
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Gates (no browser)
+        run: node tools/gates.js --no-browser
+
+  # Production is a separate job on purpose: a failure here means something already deployed, or
+  # a dashboard setting, disagrees with what the repo promises. That is not a reason to fail a PR,
+  # so it does not gate the merge, but it must be visible rather than discovered by a reader.
+  live:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Third-party trackers on live surfaces
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: node tools/thirdparty_gate.js

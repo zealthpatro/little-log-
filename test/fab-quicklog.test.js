@@ -19,7 +19,9 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ok   '+n);} else {fail++;console
 (async()=>{
  const b=await puppeteer.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:'new',args:['--no-sandbox']});
  const p=await b.newPage(); const errs=[]; p.on('pageerror',e=>errs.push(e.message));
- await p.goto('http://localhost:8080/app/?e2e=1',{waitUntil:'networkidle2',timeout:60000});
+ // Base URL first, because a bare 8080 in a shared checkout is another tree's dev server and this
+ // passes cheerfully against code that is not the code under test.
+ await p.goto((process.argv[2]||'http://localhost:8080')+'/app/?e2e=1',{waitUntil:'networkidle2',timeout:60000});
  await new Promise(r=>setTimeout(r,2800));
 
  console.log('REQ 1 — present on all pages, not just baby home:');
@@ -44,11 +46,15 @@ const ok=(n,c,x)=>{ if(c){pass++;console.log('  ok   '+n);} else {fail++;console
    state.pregnancy=null; state.babies=[{id:'b1',name:'Ava',birth:Date.now()-86400000*60,country:'gb'}]; state.activeBabyId='b1';
    view='home'; window.render();
    const before=!!document.querySelector('.qadd');
-   window.hideQuickFab ? window.hideQuickFab() : (function(){ try{ sessionStorage.setItem('cubby-quick-hidden','1'); }catch(e){} })();
+   /* Call the REAL dismiss. This used to try a window.hideQuickFab that has never existed and then
+      fall back to writing 'cubby-quick-hidden', the key from before the hide went per-uid, so the
+      app never saw the flag and this assertion had been failing silently for as long as the gate
+      went unrun. quickHiddenKey() is the source of truth: 'cubby-quick-hidden-'+quickUid(). */
+   hideQuickFabForSession();
    window.render();
    const after=!!document.querySelector('.qadd');
-   const flag=sessionStorage.getItem('cubby-quick-hidden');
-   const persisted=localStorage.getItem('cubby-quick-U1')||'';
+   const flag=sessionStorage.getItem(quickHiddenKey());
+   const persisted=localStorage.getItem('cubby-quick-'+quickUid())||'';
    return {before, after, flag, sessionScoped: flag==='1' && !/hidden/.test(persisted)};
  });
  ok('visible before dismissing', r2.before);

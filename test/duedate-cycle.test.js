@@ -21,7 +21,9 @@ const DAY=86400000;
 (async()=>{
  const b=await puppeteer.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:'new',args:['--no-sandbox']});
  const p=await b.newPage(); const errs=[]; p.on('pageerror',e=>errs.push(e.message));
- await p.goto('http://localhost:8080/app/?e2e=1',{waitUntil:'networkidle2',timeout:60000});
+ // Base URL first, because a bare 8080 in a shared checkout is another tree's dev server and this
+ // passes cheerfully against code that is not the code under test.
+ await p.goto((process.argv[2]||'http://localhost:8080')+'/app/?e2e=1',{waitUntil:'networkidle2',timeout:60000});
  await new Promise(r=>setTimeout(r,2800));
 
  console.log('The arithmetic:');
