@@ -7,7 +7,7 @@ There is **no third-party analytics** in Cubby on purpose, that keeps the "no tr
 ## 1. Traffic (Cloudflare) — visitors, pages, referrers
 Use this for the marketing/SEO side (which vaccine pages get hits, where visitors come from, speed).
 - Cloudflare dashboard → your `cubby` Worker → **Metrics / Analytics**. Shows requests, unique visitors, status codes, and Web Vitals, with **zero extra script** and no cookies.
-- (Optional) For richer per-page numbers, enable **Cloudflare Web Analytics** (Analytics → Web Analytics). It's cookieless and privacy-first. It does add a tiny first-party beacon; skip it if you want to keep "no client analytics at all."
+- **Do not enable Cloudflare Web Analytics.** This line used to call it "a tiny first-party beacon", which is wrong and is how it came to be switched on: it loads from `static.cloudflareinsights.com`, a different origin, so it is third-party by the browser's definition and by the plain meaning of our own promise. Twelve surfaces say "no third-party trackers", including `privacy/index.html` and the App Store privacy label, which is signed under penalty. `_headers` now sets a `script-src` that blocks it in the browser whatever the dashboard says, and `node tools/thirdparty_gate.js https://little-cubby.com` is the check. Run it against the live site, not curl: the beacon is only injected for browser-shaped requests, so curl reports a false pass.
 
 ## 2. Product usage (Firestore) — the real signal
 Every log, household, photo, feedback and waitlist entry is already in Firestore. Two ways to read it:

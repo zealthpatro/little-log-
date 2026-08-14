@@ -4,7 +4,29 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
-  Content-Security-Policy: object-src 'none'; base-uri 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+  Content-Security-Policy: object-src 'none'; base-uri 'self'; frame-ancestors 'none'; upgrade-insecure-requests; script-src 'self' 'unsafe-inline'
+
+# script-src is what keeps the "no third-party trackers" promise TRUE, rather than merely
+# intended. Cloudflare Web Analytics is injected by the zone, after the Worker and after this
+# file, so nothing in the repo could stop it being SENT. A browser-enforced policy can stop it
+# RUNNING, whoever put it there.
+#
+# Verified against the live site before shipping: static.cloudflareinsights.com is the only
+# third-party script origin across 16 pages, and with this policy applied all pages render with
+# zero other CSP violations and zero page errors. Fonts and stylesheets are untouched: they are
+# style-src and font-src, which are deliberately not set here.
+#
+# 'unsafe-inline' is required because app/index.html carries ~838KB of inline script and 761
+# inline handlers. That is not a regression: until this line there was no script-src at all, so
+# inline AND every external host were already allowed. This is strictly narrower.
+#
+# IF YOU ACTUALLY WANT Web Analytics: delete the script-src directive and instead correct the
+# twelve places that promise no third-party trackers, add analytics to the sub-processor list in
+# privacy/index.html, and fix the App Store privacy label. One or the other has to give; today
+# the published claims and the shipped bytes disagree, and the label is signed under penalty.
+#
+# tools/thirdparty_gate.js is the check. Run it against live, not curl: the beacon is only
+# injected for browser-shaped requests, so curl reports a false pass.
 
 # ---------------------------------------------------------------------------
 # Caching.
