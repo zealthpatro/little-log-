@@ -38,14 +38,34 @@ const ck = (ok, what, d) => { ok ? (passes++, console.log('  ok   ' + what)) : (
   const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });
   const p = await b.newPage();
   await p.setViewport({ width: 390, height: 850 });
-  const seen = new Map();   // origin -> Set(pages it appeared on)
-  p.on('request', (r) => {
-    let host;
-    try { host = new URL(r.url()).hostname; } catch (e) { return; }
-    if (host === new URL(BASE).hostname || host === 'localhost') return;
-    if (ALLOWED.some(a => host === a || host.endsWith('.' + a))) return;
-    if (!seen.has(host)) seen.set(host, new Set());
-    seen.get(host).add(p.url());
+  /* The promise is that nothing third-party OBSERVES you, so what matters is whether a request
+     completed, not whether the browser queued one. Chrome fires 'request' first and only then
+     applies the Content-Security-Policy, so a script the CSP refuses looks identical here to one
+     that loaded and ran. This gate used to count both and could therefore never pass, even with
+     the tracker provably dead: measured on live, the beacon reports `requested, FAILED`, defines
+     none of its globals, and logs a CSP refusal.
+     Blocked attempts are still REPORTED, because the zone is still injecting the tag and that is
+     worth seeing. They just do not fail the promise, since a script that never executes cannot
+     watch anybody. */
+  const seen = new Map();      // origin -> Set(pages) where a request actually completed
+  const blocked = new Map();   // origin -> Set(pages) where it was refused before running
+  const third = (u) => {
+    let host; try { host = new URL(u).hostname; } catch (e) { return null; }
+    if (host === new URL(BASE).hostname || host === 'localhost') return null;
+    if (ALLOWED.some(a => host === a || host.endsWith('.' + a))) return null;
+    return host;
+  };
+  const note = (m, host) => { if (!m.has(host)) m.set(host, new Set()); m.get(host).add(p.url()); };
+  p.on('response', (r) => { const h = third(r.url()); if (h && r.status() < 400) note(seen, h); });
+  p.on('requestfailed', (r) => {
+    const h = third(r.url()); if (!h) return;
+    /* A SCRIPT that failed never executed, so it observed nothing, whatever the reason. Note it
+       and move on. Anything else that failed (a fetch, an image pixel, a sendBeacon) may still
+       have carried data out of the browser before dying, so that stays a failure.
+       Deliberately not keyed on errorText: Chrome reports a CSP refusal here with an EMPTY
+       errorText, which is what made the first version of this check silently classify a blocked
+       beacon as a loaded one. */
+    if (r.resourceType() === 'script') note(blocked, h); else note(seen, h);
   });
 
   console.log('\nwalking ' + PAGES.length + ' surfaces on ' + BASE);
@@ -57,7 +77,19 @@ const ck = (ok, what, d) => { ok ? (passes++, console.log('  ok   ' + what)) : (
     } catch (e) { console.log('  (could not load ' + path + ': ' + e.message.split('\n')[0] + ')'); }
   }
 
-  console.log('\nthird-party origins contacted');
+  if (blocked.size) {
+    console.log('\nthird-party scripts REFUSED before running (the promise holds, but note them)');
+    for (const [host, pages] of blocked) {
+      console.log('  --   ' + host + '\n         on: ' + [...pages].map(u => u.replace(BASE, '') || '/').join(', ')
+        + (/cloudflareinsights/.test(host)
+          ? '\n         Cloudflare Web Analytics, injected by the zone. The script-src in _headers stops it'
+          + '\n         executing, so nothing is observed, but the dashboard toggle is still on. Removing that'
+          + '\n         directive would make it live again.'
+          : ''));
+    }
+  }
+
+  console.log('\nthird-party origins that actually loaded');
   if (!seen.size) {
     ck(true, 'none. The promise holds on every surface walked.');
   } else {
