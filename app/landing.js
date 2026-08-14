@@ -135,8 +135,18 @@
      sessionStorage by stashDeepLink() so it survives the sign-in redirect. Carries no personal data. */
   function joinIntent() {
     try {
-      if (/[?&]join=1/.test(location.search || '')) return true;
-      return sessionStorage.getItem('cubby-join') === '1';
+      /* Any VALUE means "I followed an invite". Older links say ?join=1; a tokenised link says
+         ?join=<token> and also carries WHICH invite. Both were being tested for the literal '1'
+         here, in the URL and in the stash, so every link createInviteLink actually mints fell
+         through to the marketing landing instead of the invitee screen. The one sentence that
+         screen exists to say, sign in with the address they invited, is what stops an Apple Hide
+         My Email relay creating a brand-new empty household instead of joining the family, and no
+         real link has ever shown it.
+         app/index.html:2056 already stashes the value rather than a flag and says so, and
+         store-firebase.js:1296 already reads it with a truthy check. This file was the one that
+         never got updated when tokenised links landed. */
+      if (/[?&]join=/.test(location.search || '')) return true;
+      return !!sessionStorage.getItem('cubby-join');
     } catch (e) { return false; }
   }
 
