@@ -58,4 +58,74 @@ function leakyBucket(households, proOwnerUids, invitedHhIds) {
   };
 }
 
-module.exports = { leakyBucket, median };
+/* RETENTION AND THE WEDGE.
+ *
+ * The leaky bucket above is a snapshot: it says how many households ever reached a stage, never
+ * whether anyone came back. There is no time series anywhere in this repo, so "do parents stay"
+ * has never been answerable, and it is the only question that decides whether Cubby works.
+ *
+ * Two things are computed here and they are deliberately different:
+ *
+ *   RETENTION is per household: did anyone log on a day inside the window after they signed up.
+ *   Reported as D1/D7/D14/D30 over households old enough to have HAD that window, because counting
+ *   a household that signed up yesterday as "failed D30" makes every cohort look worse the more
+ *   recently you recruited.
+ *
+ *   THE WEDGE is stricter, and it is the actual product thesis: two DIFFERENT people logging into
+ *   the same household on the same calendar day. Not "invited", not "joined", not "two members".
+ *   A second caregiver who joins and never writes anything has not tested the idea. `joined` in
+ *   the bucket above counts membership; this counts the thing membership was for.
+ *
+ * Takes rows carrying `evs: [{time, authorId}]`. A row without evs is skipped rather than counted
+ * as a failure, so an older caller that does not supply them cannot silently deflate the numbers.
+ */
+function dayOf(ms) { const d = new Date(ms); return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); }
+
+function retention(households, nowMs) {
+  const now = nowMs || Date.now(), DAY = 86400000;
+  const rows = households.filter((h) => Array.isArray(h.evs) && h.created);
+  const windows = [1, 7, 14, 30];
+  const out = windows.map((w) => {
+    // Only households that have existed long enough for this window to have closed.
+    const eligible = rows.filter((h) => now - h.created >= w * DAY);
+    const kept = eligible.filter((h) => h.evs.some((e) => {
+      const t = e.time; return t > h.created && t <= h.created + w * DAY;
+    }));
+    return { window: 'D' + w, eligible: eligible.length, kept: kept.length,
+      pct: eligible.length ? Math.round((kept.length / eligible.length) * 100) : null };
+  });
+  return { windows: out, measurable: rows.length, skipped: households.length - rows.length };
+}
+
+function wedge(households, withinDays) {
+  const DAY = 86400000, within = (withinDays == null ? 7 : withinDays) * DAY;
+  const rows = households.filter((h) => Array.isArray(h.evs) && h.created);
+  const hit = rows.filter((h) => {
+    const byDay = new Map();
+    for (const e of h.evs) {
+      if (!e.authorId) continue;
+      if (h.created && (e.time < h.created || e.time > h.created + within)) continue;
+      const k = dayOf(e.time);
+      if (!byDay.has(k)) byDay.set(k, new Set());
+      byDay.get(k).add(e.authorId);
+    }
+    for (const s of byDay.values()) if (s.size >= 2) return true;
+    return false;
+  });
+  // Also the looser lifetime version, so a household that took three weeks still shows up.
+  const ever = rows.filter((h) => {
+    const byDay = new Map();
+    for (const e of h.evs) {
+      if (!e.authorId) continue;
+      const k = dayOf(e.time);
+      if (!byDay.has(k)) byDay.set(k, new Set());
+      byDay.get(k).add(e.authorId);
+    }
+    for (const s of byDay.values()) if (s.size >= 2) return true;
+    return false;
+  });
+  return { measurable: rows.length, withinDays: withinDays == null ? 7 : withinDays,
+    twoAuthorsSameDayInWindow: hit.length, twoAuthorsSameDayEver: ever.length };
+}
+
+module.exports = { leakyBucket, median, retention, wedge, dayOf };

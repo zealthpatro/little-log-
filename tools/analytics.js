@@ -9,7 +9,7 @@
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 const path = require('path');
-const { leakyBucket } = require('./funnel');
+const { leakyBucket, retention, wedge } = require('./funnel');
 let sa;
 try { sa = require(path.join(__dirname, 'serviceAccountKey.json')); }
 catch (e) { console.error('\nMissing tools/serviceAccountKey.json. See ANALYTICS.md (Firebase console > Project settings > Service accounts > Generate new private key).\n'); process.exit(1); }
@@ -57,6 +57,8 @@ const bar = (n, max, w = 24) => '█'.repeat(Math.round((n / (max || 1)) * w)).p
     Object.values(vx).forEach(list => (list || []).forEach(v => { if (v.given) vxGiven++; }));
     return {
       id: doc.id, ownerId: h.ownerId || '', created: ms(h.createdAt), last,
+      // Day-and-author detail, so retention and the wedge can be computed at all.
+      evs: evs.map(e => ({ time: ms(e.time), authorId: e.authorId || '' })).filter(e => e.time),
       firstLog: times.length ? Math.min(...times) : 0, activeDays: days.size,
       members: members.length, babies, events: evs.length, byType, photos, vxGiven,
       milestones: ((h.app && h.app.milestones) || []).length,
@@ -103,6 +105,28 @@ const bar = (n, max, w = 24) => '█'.repeat(Math.round((n / (max || 1)) * w)).p
   line(`  Invited a caregiver:    ${lb.conversions.invited}  (${pct(lb.conversions.invited, lb.n)})`);
   line(`  Caregiver joined:       ${lb.conversions.joined}  (${pct(lb.conversions.joined, lb.n)})  <- the wedge  ·  invite->join: ${lb.conversions.inviteToJoin}%`);
   line(`  Registered for Pro:     ${lb.conversions.pro}  (${pct(lb.conversions.pro, lb.n)})`);
+
+  /* Retention and the real wedge. The bucket above is a snapshot and says nothing about whether
+     anyone came back, which is the only question that decides whether Cubby works. Households are
+     only counted in a window they have actually LIVED through, or recruiting recently would make
+     every cohort look worse. */
+  const ret = retention(households, now);
+  line('\n── Retention (of households old enough to have had the window) ──');
+  line('  Each row is a DIFFERENT population, so read the % within a row, never across rows:');
+  line('  a household 10 days old counts in D7 and is not eligible for D14 yet.');
+  ret.windows.forEach(w => {
+    if (!w.eligible) { line(`  ${w.window.padEnd(4)} no household is that old yet`); return; }
+    line(`  ${w.window.padEnd(4)} ${String(w.kept).padStart(3)}/${String(w.eligible).padEnd(3)} ${bar(w.kept, w.eligible, 18)} ${String(w.pct + '%').padStart(4)}  logged again inside the window`);
+  });
+
+  /* "Caregiver joined" counts MEMBERSHIP. This counts the thing membership was for: two different
+     people writing into the same household on the same day. A second caregiver who joins and never
+     logs has not tested the idea the whole product rests on. */
+  const wg = wedge(households, 7);
+  line('\n── The wedge, strictly (two different people logging on the SAME day) ──');
+  line(`  within 7 days of signing up: ${wg.twoAuthorsSameDayInWindow}/${wg.measurable}`);
+  line(`  ever:                        ${wg.twoAuthorsSameDayEver}/${wg.measurable}`);
+  if (!wg.twoAuthorsSameDayEver) line('  Not once. Every claim about the second caregiver is still untested.');
 
   // ── Acquisition (first-party UTM attribution; the paid-test scorecard) ──
   const acqOf = (snap) => snap.docs.map(d => d.data().acq).filter(a => a && (a.content || a.campaign || a.source));
