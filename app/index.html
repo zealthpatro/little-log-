@@ -2280,7 +2280,17 @@ function renderGetStarted(){
   // could never complete, so a permanent unfinished checklist sat on the home screen with one row
   // they were structurally unable to tick. The invite row stays offered while the card is up; it
   // just no longer holds the card hostage.
-  if(haveBaby && haveLog && hasPhoto) return ''; // the things she can actually do → auto-hide
+  /* Retires on being STARTED, which is a baby and a first entry. It used to also require a photo,
+     and that is the same trap the invite row was rescued from four lines up: plenty of parents
+     never add a photo, and on a product whose whole promise is privacy that is a deliberate choice
+     rather than an unfinished task. Log every day for a year without one and a five-row setup
+     checklist held the best slot on the home screen forever.
+     It was not only taking the space. renderHome suppresses the tips ticker AND the welcome coach
+     mark while this card is up, so a checklist nobody could finish permanently switched off the
+     contextual teaching layer that was supposed to take over from it.
+     The photo and invite rows stay offered while the card is up. They are good suggestions and they
+     belong in a moment that has earned them, not in a list that refuses to end. */
+  if(haveBaby && haveLog) return '';
   const row=(done,label,sub,action)=>`<div class="gs-row${done?' done':''}"${(action&&!done)?` onclick="${action}"`:''}>
     <span class="gs-check">${done?'✓':''}</span>
     <div class="gs-body"><div class="gs-t">${label}</div><div class="gs-s">${sub}</div></div>
@@ -8140,9 +8150,9 @@ function showBirthArrival(b){
   // itself to someone who has been here for months. 'log' is deliberately left: one hint, the first
   // time she opens the Log tab, is orientation rather than noise.
   ['home','health','album'].forEach(markSeen);
-  // And the new-user checklist. It auto-hides on haveBaby && haveLog && hasPhoto; a baby born an
-  // hour ago has neither a log nor a photo, so "Get started 🐻 — Log your first entry · Add a photo"
-  // rendered on the screen she lands on, hours after giving birth.
+  // And the new-user checklist. It auto-hides once there is a baby and a first entry; a baby born
+  // an hour ago has neither, so "Get started 🐻 · Log your first entry" rendered on the screen she
+  // lands on, hours after giving birth.
   markSeen('tip_getstarted');
   // vaccinePlan() is one row per DOSE, and several doses share a single appointment, so counting
   // rows and calling them "visits" would be a plain untruth to a parent reading it at 3am. Count
