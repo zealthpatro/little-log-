@@ -5621,6 +5621,24 @@ function doLogout(){
    Everyday single-entry corrections stay lightweight and are not gated.
    ============================================================ */
 function myUid(){ try{ const u=window.LL&&window.LL.auth&&window.LL.auth.currentUser; return (u&&u.uid)||'local'; }catch(e){ return 'local'; } }
+/* `relationship` holds the warm bear LABEL the circle actually uses, "Mama Bear" and "Papa Bear",
+   not a bare role: viewerIsCarrier() matches 'papa bear' for exactly that reason. The guardian list
+   used to be compared against the WHOLE string, so 'mama bear' could never equal 'mama' and no
+   household has ever derived a second guardian. Every two-parent family was told it had one
+   guardian, and the consent machinery below it has never run for anyone.
+
+   Matched a WORD at a time, which is what keeps a grandmother out: "grandmother" and "godmother"
+   are single tokens and never equal 'mother'. Substring matching, the convention relKeyFromLabel
+   uses to pick an avatar, would promote both of them to guardian. "Nana Bear" and "Grandpa Bear"
+   correctly do not match. The names cover what the families using Cubby call themselves rather
+   than only the English ones. */
+const GUARDIAN_WORDS=['mother','mom','mommy','mum','mummy','mumma','mama','amma','ammi',
+                      'father','dad','daddy','papa','pappa','baba','appa','abba',
+                      'parent','guardian'];
+function isGuardianRel(rel){
+  return String(rel==null?'':rel).toLowerCase().split(/[^a-z]+/)
+    .some(w=>w&&GUARDIAN_WORDS.indexOf(w)>=0);
+}
 function householdGuardians(){
   const LL=window.LL;
   if(!(LL&&LL.members&&Object.keys(LL.members).length)) return [myUid()];
@@ -5630,8 +5648,7 @@ function householdGuardians(){
   }
   const uids=Object.keys(LL.members);
   const owner=uids.find(u=>LL.members[u]==='owner');
-  const rels=['mother','mom','mama','father','dad','papa','parent','guardian'];
-  const parents=uids.filter(u=>{ const r=(((LL.memberInfo||{})[u]||{}).relationship||'').toLowerCase(); return rels.indexOf(r)>=0; });
+  const parents=uids.filter(u=>isGuardianRel(((LL.memberInfo||{})[u]||{}).relationship));
   const set=[];
   (owner?[owner]:[]).concat(parents).forEach(u=>{ if(set.indexOf(u)<0&&set.length<2) set.push(u); });
   return set.length?set:[myUid()];

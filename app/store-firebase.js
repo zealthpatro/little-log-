@@ -32,6 +32,25 @@
   var pushTimer = null;
   var firstRunShown = false;
   var lastHhSig = null; // signature of the last-applied household doc (dedupes our own write echoes)
+  /* The household `app` blob is ONE Firestore field holding babies, medicines, vaccines, illnesses
+     and milestones, and it used to be written as a whole-object replace from local state. Two
+     consequences, both silent, both losing a family's health record:
+
+       1. A device that had not yet received the household snapshot would push its own (empty or
+          stale) state over the server's. Nothing guarded against it: pushNow checked only that
+          hhRef existed.
+       2. Two phones editing DIFFERENT things still clobbered each other, because each wrote the
+          whole field. Mother adds a penicillin allergy, father's phone (which has not seen it yet)
+          logs a milestone, and the allergy is gone. Both phones show a success toast.
+
+     hhHydrated closes (1): nothing is written until the first snapshot has been applied, so local
+     state is always server-state-plus-our-edits. blobBase closes (2): it records what we believe
+     each sub-field holds, so a push writes only the keys that actually changed, as `app.<key>`
+     field paths. Different areas of the record no longer collide, and a key this build has never
+     heard of (written by a newer client) is left untouched rather than deleted. */
+  var hhHydrated = false;      // has the household snapshot been applied at least once?
+  var pushWhenHydrated = false; // a push was suppressed while unhydrated; run it once we are
+  var blobBase = null;         // key -> stableStringify(value) of what the server is believed to hold
 
   // Raw SDK errors ("client is offline", "permission-denied", "auth/…") must never reach a
   // parent's eyes. One translator, used by every catch that shows a message.
@@ -641,6 +660,9 @@
     if (avatarClaimT) { clearTimeout(avatarClaimT); avatarClaimT = null; } // never claim a bear into the account being left
     window.LL.memberEmails = {}; memberEmailsMigrated = false; ownEmailWritten = false;
     hhRef = eventsRef = photosRef = notesRef = null;
+    // The next account starts unhydrated with no baseline, or this account's blob would be the
+    // thing the next one's first push is diffed against.
+    hhHydrated = false; pushWhenHydrated = false; blobBase = null;
     state.notes = [];
     // Clear in-memory subject data so one account's journey + maternal-private health (applyMatDoc
     // folds mhealth fields into state.pregnancy) can never survive into the next account's session
@@ -949,6 +971,13 @@
     return '{' + Object.keys(o).sort().map(function (k) { return JSON.stringify(k) + ':' + stableStringify(o[k]); }).join(',') + '}';
   }
   function hhSig(app, members, memberInfo) { return stableStringify([app || null, members || null, memberInfo || null]); }
+  // One serialization per top-level blob key, so a push can tell which areas of the shared record
+  // this device actually touched.
+  function snapshotBlobBase() {
+    var b = appBlobFromState(), m = {};
+    Object.keys(b).forEach(function (k) { m[k] = stableStringify(b[k]); });
+    return m;
+  }
 
   /* ---------- maternal-private sync (mhealth subcollection) ---------- */
   // Fold a category doc's data back into state.pregnancy (private fields live in memory only).
@@ -1570,6 +1599,13 @@
       ensureMaternalListeners(user.uid); // (re)subscribe once we know whose pregnancy it is
       migrateHandoffToNote(); // role + handoff are now known; fold any legacy shared note in once
       gotApp = true;
+      /* The blob is now server-state-plus-our-local-overrides, which is exactly what a no-op push
+         would write, so it is the right baseline to diff the next push against. Taken AFTER
+         applyAppBlob rather than from d.app directly, because the round trip legitimately differs:
+         theme and push are per-device and stripped on the way out. */
+      blobBase = snapshotBlobBase();
+      hhHydrated = true;
+      if (pushWhenHydrated) { pushWhenHydrated = false; scheduledPush(); }
       if (booted) rerender(); else maybeBoot();
     }, function (e) {
       console.warn('household listen', e);
@@ -1830,6 +1866,12 @@
   async function pushNow() {
     pushTimer = null;
     if (!hhRef) return;
+    /* Never write the shared record before we have read it. Without this a phone that signed in
+       and pushed before its first household snapshot landed replaced the family's whole blob with
+       whatever it happened to hold. The state stays dirty and the write happens the moment the
+       snapshot arrives, so nothing is dropped, only deferred. Events are unaffected: they are
+       per-document and merge by id. */
+    if (!hhHydrated) { pushWhenHydrated = true; return; }
     var uidNow = auth.currentUser && auth.currentUser.uid;
     // Assign/repair ownership: the household owner on this device owns the pregnancy she holds.
     // (Maternal data is only ever written by its owner; this claims a new or legacy/offline one.)
@@ -1858,10 +1900,24 @@
           .catch(function (e) { if (!cur[id] && !(id in knownEvents)) knownEvents[id] = oldSer; throw e; }));
       }
     });
+    /* Write only the areas of the blob this device changed, as `app.<key>` field paths. A whole
+       `app` replace meant any push clobbered every key, so a phone that had merely started a nap
+       timer could erase medicines and vaccines another caregiver had added in the meantime. Field
+       paths also leave alone any key this build does not know about, instead of deleting it. */
     var appBlob = appBlobFromState();
-    lastHhSig = hhSig(appBlob, window.LL.members, window.LL.memberInfo); // mark our own write so its echo doesn't re-render
-    writes.push(hhRef.update({ app: appBlob, updatedAt: window.LL.serverTimestamp() })
-      .catch(function (e) { lastHhSig = null; throw e; }));
+    var upd = { updatedAt: window.LL.serverTimestamp() }, dirty = [];
+    Object.keys(appBlob).forEach(function (k) {
+      var ser = stableStringify(appBlob[k]);
+      if (!blobBase || blobBase[k] !== ser) { upd['app.' + k] = appBlob[k]; dirty.push([k, ser]); }
+    });
+    if (dirty.length) {
+      lastHhSig = hhSig(appBlob, window.LL.members, window.LL.memberInfo); // mark our own write so its echo doesn't re-render
+      writes.push(hhRef.update(upd).then(function () {
+        // Only now is the server known to hold these. A rejected write leaves the baseline alone
+        // so the next push retries the same keys, matching how knownEvents handles a denial above.
+        if (blobBase) dirty.forEach(function (p) { blobBase[p[0]] = p[1]; });
+      }).catch(function (e) { lastHhSig = null; throw e; }));
+    }
     try {
       await Promise.all(writes);
       pushNow._retryDelay = 0;
