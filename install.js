@@ -144,7 +144,7 @@
         + "<p>Cubby is a free web app, so there is nothing to download from a store. Add it to your home screen for one-tap, full-screen, offline access. No password, no waiting.</p>"
         + '<p class="install-how">' + steps() + "</p>"
         + '<button type="button" class="install-cta js-install">Add to home screen</button> '
-        + '<a href="/app/" class="install-cta install-cta-ghost">Open Cubby</a>'
+        + '<a href="/app/?utm_source=install-band&utm_medium=organic&utm_campaign=open-cubby" class="install-cta install-cta-ghost">Open Cubby</a>'
         + "</div></div>";
       var foot = document.querySelector("footer.foot") || document.querySelector("footer");
       if (foot && foot.parentNode) foot.parentNode.insertBefore(band, foot); else document.body.appendChild(band);
