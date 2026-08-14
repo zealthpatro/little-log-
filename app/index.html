@@ -9840,7 +9840,74 @@ function renderVaccines(){
     <div class="disclaimer">⚕️ Showing the ${vaxCountryName((bb&&bb.country)||detectCountry())} schedule as a starting template. <span class="link-inline" onclick="openVaccineCountry()">Change country</span>. Always follow your doctor and local health authority, and edit any item to match your child's actual plan.</div>
     ${list}
     <div class="add-row" onclick="openAddVaccine()">${I.plus} Add a vaccine</div>
-    ${window.CubbyVaxCard?`<div class="add-row" onclick="CubbyVaxCard.open()">📷 Fill these in from their card</div>`:''}`;
+    ${window.CubbyVaxCard?`<div class="add-row" onclick="CubbyVaxCard.open()">📷 Fill these in from their card</div>`:''}
+    ${vaxCalendarRow(bb,plan)}`;
+}
+/* Six marketing surfaces promise vaccine reminders. syncReminderIndex has only ever iterated
+   state.meds and says so in its own comment ("ONLY medicine is critical enough to push"), so no
+   vaccine has ever been pushed to anyone, and vaccineOverdue only speaks AFTER a parent has
+   confirmed a dose was missed. This is the honest way to keep that promise: the dates go into the
+   parent's own calendar, which needs no APNs key, no cron, no Worker and no App Review, and which
+   works on iOS Safari where web push does not.
+
+   One entry per VISIT, not per dose. Several vaccines share a single appointment, which is why
+   vaxProofLine counts distinct due ages rather than rows, and four separate alarms for one morning
+   at the clinic is exactly the noise this app exists to avoid. */
+/* RFC 5545 says to ESCAPE a comma in a text value, not delete it. The shared _icsClean strips them,
+   which is harmless for "Calpol 5ml" but turns "Hepatitis B (2nd dose, with DTP1)" into a line with
+   holes in it. Escaping here rather than changing _icsClean, because that helper also feeds the
+   medicine and antenatal exports and those are not what this change is about. Worth migrating them
+   to this later. */
+function _icsText(s){
+  return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\r?\n/g,'\\n').trim();
+}
+function vaxUpcomingVisits(plan){
+  const byAge={};
+  (plan||[]).forEach(v=>{ if(v.given) return;
+    const due=vxDueDate(v); if(due<=now()) return;          // past due is the screen's job, not an alarm
+    (byAge[v.dueMonths]=byAge[v.dueMonths]||{due:due,names:[]}).names.push(v.name);
+  });
+  return Object.keys(byAge).map(k=>byAge[k]).sort((a,b)=>a.due-b.due);
+}
+function vaxCalendarRow(b,plan){
+  if(!b||!b.birth) return '';                                // no birthday, no real dates to offer
+  const n=vaxUpcomingVisits(plan).length;
+  if(!n) return '';
+  return `<div class="add-row" onclick="exportVaccineSchedule()">📅 Put ${n===1?'the next visit':'these '+n+' visits'} in my calendar</div>`;
+}
+function exportVaccineSchedule(){
+  const b=activeBaby(); if(!b||!b.birth) return;
+  const visits=vaxUpcomingVisits(vaccinePlan());
+  if(!visits.length){ toast('Nothing coming up to add'); return; }
+  const stamp=_icsStamp(new Date());
+  const where=vaxCountryName(b.country||detectCountry())||'';
+  const L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Cubby//Vaccines//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH'];
+  visits.forEach(function(v,i){
+    const d=new Date(v.due), p=x=>String(x).padStart(2,'0');
+    // All-day, because the date is worked out from the birthday and the clinic sets the hour.
+    // Pretending to know a time would be the same class of untruth as the doctor report dividing
+    // a five-day-old by fourteen days.
+    const day=d.getFullYear()+p(d.getMonth()+1)+p(d.getDate());
+    const nd=new Date(v.due+86400000);
+    const next=nd.getFullYear()+p(nd.getMonth()+1)+p(nd.getDate());
+    L.push('BEGIN:VEVENT',
+      'UID:cubby-vax-'+b.id+'-'+i+'@little-cubby.com',
+      'DTSTAMP:'+stamp,
+      'DTSTART;VALUE=DATE:'+day,
+      'DTEND;VALUE=DATE:'+next,
+      'SUMMARY:'+_icsText(b.name+"'s vaccines: "+v.names.join(', ')),
+      'DESCRIPTION:'+_icsText('From Cubby'+(where?', on the '+where+' schedule':'')+'. Worked out from '+b.name+"'s birthday, so treat it as a guide and book the exact date with your clinic."),
+      // Two days ahead: enough to ring the clinic, not so early it is forgotten.
+      'BEGIN:VALARM','TRIGGER:-P2D','ACTION:DISPLAY','DESCRIPTION:'+_icsText(b.name+"'s vaccines are coming up"),'END:VALARM',
+      'END:VEVENT');
+  });
+  L.push('END:VCALENDAR');
+  try{
+    const url=URL.createObjectURL(new Blob([L.join('\r\n')],{type:'text/calendar'}));
+    saveFile(url,(b.name||'baby').replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'-vaccines.ics',
+             isNativeApp()?'Schedule ready 📅':'Added, check your calendar 📅');
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+  }catch(e){ toast('Could not add to calendar'); }
 }
 /* Catch-up card: turns "what's un-recorded" into a calm two-tap setup, never a wall of red. */
 function vaxSetupCard(b,plan,toConfirm){
