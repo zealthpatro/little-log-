@@ -3244,8 +3244,14 @@ window.cubbyTeachCtx = function(){
     // Get started counts as busy for the same reason: one card, one list. Somebody still working
     // through setup should not also be collecting tab marks on the way. Stated here so it is a
     // decision the ledger makes rather than a side effect of a cue being suppressed elsewhere.
+    /* Busy means a card is ON SCREEN, so ask the document rather than the render function.
+       Calling renderGetStarted() returned non-empty whenever there was no baby, which is every
+       expecting and every trying parent, and their home is renderPregShell so the card was never
+       drawn for them anyway. An invisible card was therefore muting the entire teaching layer for
+       the whole of pregnancy, including the birth plan, the kick counter and the private-pregnancy
+       controls that are the reason to choose Cubby in the first place. */
     sheetOpen: !!(sh && sh.classList.contains('show')) || !!document.getElementById('logGuide')
-               || (typeof renderGetStarted==='function' && !!renderGetStarted()),
+               || !!document.querySelector('.gs-card'),
     installedAt: teachSince()
   };
 };
@@ -5702,7 +5708,20 @@ function submitDeleteRequest(){
     confirmSheet({title:'Delete this data?',body:'This permanently removes '+what+'. It can\'t be undone.',confirmLabel:'Delete',cancelLabel:'Keep',danger:true,onConfirm:go});
   } else go();
 }
-function requestExport(){ requestConsent('export', null, 'Export the household\'s data'); }
+/* Export is a person's own right and never waits for anyone. Deleting the shared record still asks
+   both guardians, because erasing it takes something away from the other parent; taking a COPY
+   takes nothing from anybody.
+
+   It used to route through requestConsent, which meant nothing happened until the other guardian
+   agreed. That was invisible while householdGuardians() could never find a second parent, and the
+   guardian fix is what switched it on. Four surfaces promise export "at any time" and "yourself,
+   anytime", privacy/index.html:120 among them, which makes it a data-portability promise in a legal
+   document. It also bit hardest in the one case where portability matters most, a parent leaving a
+   controlling partner, where the partner became the gate.
+
+   openDeleteAccount already settled this same argument two hundred lines up and says so on screen:
+   "This is yours to do. Nobody else needs to agree." */
+function requestExport(){ exportData(); closeSheet(); }
 function requestConsent(type,scope,label){
   if(!state.consents) state.consents=[];
   const c={ id:uid(), type, scope:scope||null, label, requestedBy:myUid(), requestedByName:myName()||'A family member', at:now(), approvals:[myUid()], status:'pending' };
