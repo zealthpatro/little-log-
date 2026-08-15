@@ -58,11 +58,11 @@
      line is a feature that actually ships (truthful-copy rule), and every line is calm — a signed-out
      parent may be anxious, pregnant, or grieving, so nothing here counts, urges or assumes a baby. */
   var TILES = [
-    [ICON.log, 'Log it in seconds', 'Feeds, sleep and nappies. One thumb, even at 3am.'],
-    [ICON.circle, 'Everyone in sync', 'Parents, grandparents, the nanny. One shared log, live.'],
-    [ICON.health, 'Health, handled', 'Gentle fever guidance, and a tidy summary for the doctor.'],
-    [ICON.keepsake, 'Keep the moments', 'Milestones and memory cards from your own photos.'],
-    [ICON.lock, 'Private to your family', 'No ads. We never sell your data.']
+    [ICON.log, 'At 3am, you already know', 'Last feed, last sleep, last nappy, counting up on their own.'],
+    [ICON.circle, 'You never have to ask', 'The day whoever else had them logged, with their names on it.'],
+    [ICON.health, 'You walk in ready', 'The last seven days written out for the doctor: feeds, sleep, nappies, temperatures.'],
+    [ICON.keepsake, 'The months keep themselves', 'Monthly photos and memory cards, filled in from what you already logged.'],
+    [ICON.lock, 'Shared, and still yours', 'Your circle sees the log, your own health notes stay yours. No ads, ever.']
   ];
 
   /* A way out, on the screens where people actually get stuck.

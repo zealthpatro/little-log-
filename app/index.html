@@ -15,7 +15,7 @@
   }
 }catch(e){}})();</script>
 <title>Cubby: Baby Tracker, Vaccine Schedule &amp; Keepsakes</title>
-<meta name="description" content="Cubby logs feeds, sleep and nappies, follows your baby's vaccine schedule with reminders, and keeps every memory, shared with everyone who cares for your little one. Free to start, no ads, private to your family.">
+<meta name="description" content="At 3am you know when the last feed was, and so does everyone helping. Cubby keeps feeds, sleep, nappies, your country's vaccine schedule and every memory, shared with whoever cares for your little one. Free to start, no ads, private to your family.">
 <link rel="canonical" href="https://little-cubby.com/app/">
 <meta name="robots" content="noindex,follow">
 <meta name="author" content="Cubby">
@@ -4597,7 +4597,7 @@ function openOnboardInvite(){
   // circle-only, no "add another little one".
   if(n===0 && state.pregnancy){
     const planning=state.pregnancy.stage==='planning';
-    openSheet(`<h2>You're all set ${planning?'🌱':'🌸'}</h2><div class="sub">Cubby is for everyone on this journey with you. Invite your partner or a grandparent so they can follow along, privately.</div>
+    openSheet(`<h2>${planning?'They help, and your notes stay yours 🌱':'Nobody sees this until you say so 🌸'}</h2><div class="sub">${planning?'Invite your partner whenever you like. They get the preparation you share and real ways to help, and your cycle details are not on their screen.':'Invite your partner or a grandparent whenever you like. They see your pregnancy only once you add them, in Care under Your private pregnancy.'}</div>
       <div class="preg-card"><div class="pc-ico" style="background:var(--preg-soft)">👨‍👩‍👧</div><div><div class="pc-t">They follow along, live</div><div class="pc-b">Your week, scans and visits, in sync and private to your family.</div></div></div>
       <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:14px" onclick="window.openFamily&&window.openFamily()">Invite someone</button>
       ${(typeof canShowInstall==='function'&&canShowInstall())?`<div class="sub" style="margin-top:14px;font-size:13px">Use Cubby right here, or add it to your home screen to open it like an app, one tap away.</div><button class="btn-ghost" onclick="addToHomeScreen('obInstallMsg')">Add Cubby to your home screen</button><div id="obInstallMsg" class="sub" style="display:none;text-align:left"></div>`:''}
