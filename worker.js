@@ -162,6 +162,67 @@ async function sendSigninLink(request, env) {
    relay: mint one link, then send Cubby-branded mail to any address, repeatedly. So the caller
    proves who they are with a real Firebase ID token, and we check against Firestore that they own
    the household the link points at. Three independent gates, then a send. */
+/* WHO invited you, and to WHAT, before you have signed in.
+ *
+ * The arrival screen said "Someone has added you to their Cubby" while the email that sent them
+ * there said "Meera has invited you to the Patro family". They read a name, tapped, and landed on
+ * "someone", at the highest-intent moment in the entire funnel and for the one behaviour the
+ * product rests on.
+ *
+ * It cannot be read from the client: firestore.rules requires auth to get an inviteLink, quite
+ * rightly. So the Worker does it, with the SAME security model the rules use, stated in their own
+ * comment: the document id is a secret, so a caller must already hold the token. No auth needed
+ * because the token IS the authorisation, exactly as it is when the link is redeemed.
+ *
+ * What it returns is deliberately smaller than the email the invitee has already received: an
+ * inviter's first name, and the family name ONLY if the owner typed one. Never the baby's name,
+ * never the household id, never an email address, never the member list. The computed default
+ * ("Robin's family") is never persisted, so a value here can only be a chosen one.
+ *
+ * A spent or expired link says so, which is worth more than a generic screen: the invitee can go
+ * back and ask for another instead of assuming they did something wrong.
+ */
+async function invitePeek(request, env, url) {
+  const token = (url.searchParams.get('t') || '').trim();
+  if (!/^[A-Za-z0-9]{16,64}$/.test(token)) return json({ error: 'bad_request' }, 400);
+  if (env.SIGNIN_RATE_LIMITER) {
+    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    try {
+      const { success } = await env.SIGNIN_RATE_LIMITER.limit({ key: 'peek:' + ip });
+      if (!success) return json({ error: 'rate_limited' }, 429);
+    } catch (e) { /* limiter unavailable: the token requirement still holds */ }
+  }
+  let sa; try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return json({ ok: true }, 200); }
+  try {
+    const at = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore');
+    const base = 'https://firestore.googleapis.com/v1/projects/' + FS_PROJECT + '/databases/(default)/documents';
+    const hdr = { authorization: 'Bearer ' + at };
+    const lr = await fetch(base + '/inviteLinks/' + encodeURIComponent(token), { headers: hdr });
+    if (!lr.ok) return json({ ok: true, state: 'unknown' }, 200);
+    const lf = ((await lr.json()) || {}).fields || {};
+    const hid = (lf.householdId || {}).stringValue || '';
+    const used = (lf.usedBy || {}).stringValue || null;
+    const expiresAt = (lf.expiresAt || {}).timestampValue || null;
+    const by = String((lf.invitedByName || {}).stringValue || '').slice(0, 40);
+    if (!hid) return json({ ok: true, state: 'unknown' }, 200);
+    if (used) return json({ ok: true, state: 'spent', by }, 200);
+    if (!expiresAt || Date.parse(expiresAt) < Date.now()) return json({ ok: true, state: 'expired', by }, 200);
+    let family = '';
+    try {
+      const hr = await fetch(base + '/households/' + encodeURIComponent(hid) + '?mask.fieldPaths=app', { headers: hdr });
+      if (hr.ok) {
+        const hf = (((await hr.json()) || {}).fields || {});
+        const set = ((((hf.app || {}).mapValue || {}).fields || {}).settings || {}).mapValue;
+        family = String((set && set.fields && set.fields.householdName && set.fields.householdName.stringValue) || '').slice(0, 40);
+      }
+    } catch (e) { family = ''; }
+    return json({ ok: true, state: 'live', by, family }, 200);
+  } catch (e) {
+    // Never block the sign-in screen on this. A silent fall back to the generic wording is fine.
+    return json({ ok: true, state: 'unknown' }, 200);
+  }
+}
+
 async function sendInviteEmail(request, env, url) {
   if (env.SIGNIN_RATE_LIMITER) {
     const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
@@ -1238,6 +1299,10 @@ export default {
           }]
         }
       }), { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=3600' } });
+    }
+    if (url.pathname === '/api/invite-peek') {
+      if (request.method !== 'GET') return new Response('method not allowed', { status: 405 });
+      return invitePeek(request, env, url);
     }
     if (url.pathname === '/api/send-invite') {
       if (request.method !== 'POST') return new Response('method not allowed', { status: 405 });

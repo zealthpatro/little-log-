@@ -201,8 +201,8 @@
     return '<div class="lp lp-app' + (isIOS() ? ' lp-ios' : '') + '">'
       + '<div class="lp-app-top">'
       + '<div class="lp-logo"><img src="/app/spot-art/invite_bears.webp" alt="Cubby"></div>'
-      + '<h1 class="lp-name">You\'re invited</h1>'
-      + '<p class="lp-app-tag">Someone has added you to their Cubby, the calm, private log they keep for their little one.</p>'
+      + '<h1 class="lp-name" id="lpInvTitle">You\'re invited</h1>'
+      + '<p class="lp-app-tag" id="lpInvSub">Someone has added you to their Cubby, the calm, private log they keep for their little one.</p>'
       + '</div>'
       + '<div class="lp-inv">'
       + '<div class="lp-inv-t">Sign in with the email address they invited</div>'
@@ -217,10 +217,55 @@
       + '</div>';
   }
 
+  /* The email said "Meera has invited you to the Patro family". This screen said "Someone".
+     Nobody could fix that from the client: firestore.rules requires auth to read an invite, and the
+     invitee has not signed in yet. /api/invite-peek does it server-side under the same rule the
+     rules themselves state, that holding the token IS the authorisation.
+
+     Written in AFTER paint rather than awaited, so a slow or failed lookup costs nothing: the
+     generic wording is already on screen and simply stays. It never asks for the baby's name and
+     the endpoint would not return it. A spent or expired link says so, because "that link has
+     already been used" sends someone back to ask for another, where a generic screen makes them
+     think they did something wrong. */
+  function fillInviteWho() {
+    var t = '';
+    try {
+      t = (new URLSearchParams(location.search || '')).get('join') || sessionStorage.getItem('cubby-join') || '';
+    } catch (e) { return; }
+    if (!t || t === '1' || !/^[A-Za-z0-9]{16,64}$/.test(t)) return;
+    if (!document.getElementById('lpInvTitle')) return;
+    fetch('/api/invite-peek?t=' + encodeURIComponent(t)).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d || !d.ok) return;
+      /* Re-query INSIDE the callback. The signed-out screen can repaint while this is in flight
+         (showSignIn reassigns the whole overlay), and a reference captured before the fetch would
+         then be a detached node: the write silently lands nowhere and the screen keeps saying
+         "Someone". Checking the document but writing to the old handle is the same bug wearing a
+         disguise, which is exactly how this first went out. */
+      var title = document.getElementById('lpInvTitle');
+      var sub = document.getElementById('lpInvSub');
+      if (!title || !sub) return;                            // they moved on already
+      var who = (d.by || '').trim();
+      if (d.state === 'spent' || d.state === 'expired') {
+        title.textContent = d.state === 'spent' ? 'That link has been used' : 'That link has expired';
+        sub.textContent = who
+          ? ('Ask ' + who + ' for a fresh one and it will work straight away. Nothing is wrong with your account.')
+          : 'Ask whoever invited you for a fresh one. Nothing is wrong with your account.';
+        return;
+      }
+      if (d.state !== 'live') return;
+      if (who) title.textContent = who + ' invited you';
+      var fam = (d.family || '').trim();
+      sub.textContent = fam
+        ? ('Sign in and you are part of ' + fam + ', the calm, private log they keep together.')
+        : (who ? ('Sign in and you are in ' + who + "'s circle, the calm, private log they keep for their little one.")
+               : 'Someone has added you to their Cubby, the calm, private log they keep for their little one.');
+    }).catch(function () { /* leave the generic wording */ });
+  }
+
   window.cubbyLanding = function (msg) {
     // Before the native/web split: an invitee gets the same focused screen either way, including
     // when a universal link opens the invite straight into the installed app.
-    if (joinIntent()) return inviteSignIn(msg);
+    if (joinIntent()) { setTimeout(fillInviteWho, 0); return inviteSignIn(msg); }
     var native = isNative();
     if (native || isStandalone()) {
       // showSignIn assigns this straight into innerHTML, so the nodes exist by the next tick.
