@@ -42,6 +42,8 @@ const TREE = [
   { name: 'perf',           cmd: ['node', 'tools/perf_check.js', 'url'] },
   { name: 'home-truth',     cmd: ['node', 'tools/home_truth_check.js', 'url'] },
   { name: 'report-truth',   cmd: ['node', 'tools/report_truth_check.js', 'url'] },
+  { name: 'support-reach',  cmd: ['node', 'tools/support_reach_check.js', 'url'] },
+  { name: 'vax-calendar',   cmd: ['node', 'tools/vax_calendar_check.js', 'url'] },
   { name: 'homelogs',       cmd: ['node', 'tools/homelogs_gate.js', 'url'] },
   { name: 'offline',        cmd: ['node', 'tools/offline_gate.js', 'url'] },
   { name: 'sitesw',         cmd: ['node', 'tools/sitesw_gate.js', 'url'] },

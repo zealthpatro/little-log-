@@ -31,13 +31,20 @@ jobs:
       - name: Gates (no browser)
         run: node tools/gates.js --no-browser
 
-  # Production is a separate job on purpose: a failure here means something already deployed, or
-  # a dashboard setting, disagrees with what the repo promises. That is not a reason to fail a PR,
-  # so it does not gate the merge, but it must be visible rather than discovered by a reader.
+  # Production is a separate job on purpose, and it BLOCKS.
+  #
+  # It used to be continue-on-error, and that was right at the time: the only way it could fail was
+  # a Cloudflare dashboard toggle that no code in this repo could reach, so failing the build would
+  # have meant a permanently red main nobody could fix by committing.
+  #
+  # That changed when _headers gained a script-src. The beacon is now refused by the browser
+  # whatever the dashboard says, and tools/thirdparty_gate.js passes against live. So from here a
+  # failure means a real regression somebody CAN cause by committing, most obviously by dropping
+  # that directive. Twelve surfaces promise no third-party trackers, privacy/index.html among them,
+  # and the App Store privacy label is signed under penalty. That is worth a red build.
   live:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
