@@ -192,6 +192,14 @@
     + '.ll-modal-head h2{font-family:"Fraunces",Georgia,serif;font-size:22px;margin:0;color:#2C2521;}'
     + '#llModalX{border:none;background:none;font-size:28px;line-height:1;color:#9a8d80;cursor:pointer;}'
     + '.ll-mems{display:flex;flex-direction:column;gap:8px;margin-bottom:18px;}'
+    + '.ll-fp{display:flex;align-items:flex-end;justify-content:center;margin:2px 0 10px;min-height:48px;}'
+    + '.ll-fp-a{display:inline-flex;width:46px;height:46px;border-radius:50%;overflow:hidden;background:#F3EFE7;'
+    + 'box-shadow:0 0 0 3px #FFF;margin-left:-10px;}'
+    + '.ll-fp-a:first-child{margin-left:0;}'
+    + '.ll-fp-a svg,.ll-fp-a img{width:100%;height:100%;object-fit:cover;}'
+    + '.ll-fp-cub{width:40px;height:40px;}'
+    + '.ll-fp-more{display:inline-flex;align-items:center;justify-content:center;width:46px;height:46px;'
+    + 'border-radius:50%;background:#EFE7DA;color:#7a6d60;font-weight:800;font-size:13px;box-shadow:0 0 0 3px #FFF;margin-left:-10px;}'
     + '.ll-hhname{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;'
     + 'background:var(--diaper-soft,#E4EFEA);border-radius:14px;margin-bottom:12px;}'
     + '.ll-hhname-k{font-size:11px;letter-spacing:.05em;text-transform:uppercase;font-weight:700;color:#6f8a80;}'
@@ -2283,6 +2291,43 @@
     return s.value;
   }
 
+  /* The family, drawn as itself. Every member already has a painted bear and every baby has a cub,
+     chosen or claimed, so the portrait is composed from THEIR art rather than a stock illustration
+     of a family that is not theirs. Overlapped like a group photo, grown-ups first then the little
+     ones, which is also the order they joined the story.
+
+     Loss-safe by construction: it draws whoever is actually in state.babies, so after a loss there
+     is no cub to draw and none appears.
+
+     Deliberately NOT a closure inside openFamily. That function starts with `auth.currentUser`, so
+     it cannot run without a live Firebase session and nothing inside it could be driven in a test.
+     Reading its inputs from LL and state instead makes the drawing verifiable on its own. */
+  window.cubbyFamilyPortrait = function () {
+    if (typeof window.memberAvatarSvg !== 'function') return '';
+    var info = (window.LL && window.LL.memberInfo) || {};
+    var uids = Object.keys(info);
+    if (!uids.length) return '';
+    var owner = uids.filter(function (u) { return (info[u] || {}).role === 'owner'; });
+    var rest = uids.filter(function (u) { return (info[u] || {}).role !== 'owner'; });
+    var people = owner.concat(rest).slice(0, 5).map(function (u) {
+      return '<span class="ll-fp-a" title="' + esc((info[u] || {}).name || '') + '">' + window.memberAvatarSvg(u, 46) + '</span>';
+    });
+    var cubs = [];
+    try {
+      if (typeof window.babyBearSvg === 'function') {
+        /* `state`, not `window.state`. app/index.html declares it with `let` at the top level of a
+           classic script, which creates a global LEXICAL binding and no property on window, so
+           window.state is undefined and every baby silently vanished from the portrait. The rest of
+           this file already uses the bare binding. */
+        cubs = ((state && state.babies) || []).slice(0, 3).map(function (bb) {
+          return '<span class="ll-fp-a ll-fp-cub" title="' + esc(bb.name || '') + '">' + window.babyBearSvg(bb, 40) + '</span>';
+        });
+      }
+    } catch (e) { cubs = []; }
+    var more = uids.length > 5 ? '<span class="ll-fp-more">+' + (uids.length - 5) + '</span>' : '';
+    return '<div class="ll-fp">' + people.join('') + cubs.join('') + more + '</div>';
+  };
+
   function openFamily() {
     var me = auth.currentUser; if (!me) return;
     var myRole = window.LL.role || 'caregiver';
@@ -2387,7 +2432,8 @@
     var hhName = (typeof window.householdName === 'function') ? window.householdName() : '';
     var hhSet  = (typeof window.householdNamed === 'function') ? window.householdNamed() : false;
     var nameRow = hhName
-      ? ('<div class="ll-hhname">'
+      ? (window.cubbyFamilyPortrait()
+        + '<div class="ll-hhname">'
           + '<div><div class="ll-hhname-k">Your family</div><div class="ll-hhname-v">' + esc(hhName) + '</div></div>'
           + (myRole === 'owner'
               ? '<button id="llHhName" class="ll-modal-btn ll-ghost" style="margin:0;width:auto;padding:8px 14px">' + (hhSet ? 'Rename' : 'Name it') + '</button>'
