@@ -2195,6 +2195,60 @@ function lastOf(type){ return babyEvents().find(e=>e.type===type); }
 function myName(){
   try{ const u=window.LL&&window.LL.auth&&window.LL.auth.currentUser; const mi=u&&window.LL.memberInfo&&window.LL.memberInfo[u.uid]; return (mi&&(mi.relationship||((mi.name||'').split(' ')[0])))||''; }catch(e){ return ''; }
 }
+/* THE FAMILY HAS A NAME NOW.
+   Until this, a household had no name at all: only an ownerId, a members map and the shared blob.
+   So an invite could only say "Someone has added you to their Cubby", and there was nothing to
+   join TO. For the one thing this whole product rests on, a second person actually turning up,
+   that is a poor sentence to be standing on.
+
+   It lives in state.settings, which IS the shared blob, so it needs no new field on the document
+   and no rules change, and per-key blob writes mean one caregiver renaming the family cannot
+   clobber anything else. It is genuinely shared, unlike theme or push, so settings is the right
+   home rather than a per-uid key.
+
+   The fallback is computed, never written, so a family that never names itself still reads
+   naturally everywhere and starts saying the right thing the moment a baby is added. Loss-safe:
+   it falls back to the person, not the baby, when there is no baby to name. */
+function householdName(){
+  try{
+    const set=(state.settings&&state.settings.householdName||'').trim();
+    if(set) return set;
+    return defaultHouseholdName();
+  }catch(e){ return 'Your family'; }
+}
+function defaultHouseholdName(){
+  try{
+    if(!myLossHolding()){
+      const b=(state.babies||[])[0];
+      if(b&&b.name) return b.name+"'s family";
+    }
+    const mine=myName();                       // bear label or first name
+    if(mine) return mine+"'s family";
+    return 'Your family';
+  }catch(e){ return 'Your family'; }
+}
+// True only when somebody actually chose it, which is what the invite copy keys on: a made-up
+// default should never be presented to an invitee as if the family had picked it.
+function householdNamed(){
+  try{ return !!(state.settings&&(state.settings.householdName||'').trim()); }catch(e){ return false; }
+}
+function setHouseholdName(v){
+  const t=String(v==null?'':v).trim().slice(0,40);
+  if(!state.settings) state.settings={};
+  if(t) state.settings.householdName=t; else delete state.settings.householdName;
+  persist(); render();
+  toast(t?('Now "'+t+'"'):'Back to '+defaultHouseholdName());
+}
+function openHouseholdName(){
+  const cur=(state.settings&&state.settings.householdName)||'';
+  openSheet(`<h2>What shall we call your family?</h2>
+    <div class="sub">This is what someone sees when you invite them, so they know whose Cubby they are joining. Everyone in the circle sees it.</div>
+    <div class="field"><label>Family name</label>
+      <input id="hhName" maxlength="40" value="${escapeHtml(cur)}" placeholder="${escapeHtml(defaultHouseholdName())}"></div>
+    <div class="csub">Leave it empty to use ${escapeHtml(defaultHouseholdName())}.</div>
+    <button class="btn-primary" style="background:var(--diaper)" onclick="setHouseholdName(document.getElementById('hhName').value);closeSheet()">Save</button>
+    <button class="btn-ghost" onclick="closeSheet()">Cancel</button>`,'diaper');
+}
 function meGreeting(){
   const name=myName();
   const h=new Date().getHours();

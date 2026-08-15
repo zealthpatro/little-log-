@@ -192,6 +192,10 @@
     + '.ll-modal-head h2{font-family:"Fraunces",Georgia,serif;font-size:22px;margin:0;color:#2C2521;}'
     + '#llModalX{border:none;background:none;font-size:28px;line-height:1;color:#9a8d80;cursor:pointer;}'
     + '.ll-mems{display:flex;flex-direction:column;gap:8px;margin-bottom:18px;}'
+    + '.ll-hhname{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;'
+    + 'background:var(--diaper-soft,#E4EFEA);border-radius:14px;margin-bottom:12px;}'
+    + '.ll-hhname-k{font-size:11px;letter-spacing:.05em;text-transform:uppercase;font-weight:700;color:#6f8a80;}'
+    + '.ll-hhname-v{font-family:var(--font-display,Georgia),serif;font-size:18px;font-weight:600;color:#2C2521;margin-top:2px;}'
     + '.ll-mem{display:flex;align-items:center;justify-content:space-between;background:#FBF7EF;border-radius:12px;padding:10px 12px;}'
     + '.ll-mem-name{font-weight:700;color:#2C2521;font-size:15px;}.ll-mem-email{color:#9a8d80;font-size:12px;}'
     + '.ll-mem-role{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#C97FA0;font-weight:700;}'
@@ -2376,13 +2380,33 @@
         + '<div class="ll-auth-msg" style="margin-top:6px">Prefer the stricter way? Add their exact email above instead: that invite only works for that address.</div></div>'
       : '';
 
-    modal('Family & sharing', '<div class="ll-mems">' + rows + '</div>'
+    /* The family's own name, at the top, because it is the thing an invited person is told they
+       are joining. Owner-only to change: it is the household's identity, not a personal setting,
+       and a caregiver renaming the family everyone else sees would be the same class of bug as the
+       shared-theme one. Everyone can SEE it. */
+    var hhName = (typeof window.householdName === 'function') ? window.householdName() : '';
+    var hhSet  = (typeof window.householdNamed === 'function') ? window.householdNamed() : false;
+    var nameRow = hhName
+      ? ('<div class="ll-hhname">'
+          + '<div><div class="ll-hhname-k">Your family</div><div class="ll-hhname-v">' + esc(hhName) + '</div></div>'
+          + (myRole === 'owner'
+              ? '<button id="llHhName" class="ll-modal-btn ll-ghost" style="margin:0;width:auto;padding:8px 14px">' + (hhSet ? 'Rename' : 'Name it') + '</button>'
+              : '')
+        + '</div>'
+        + (!hhSet && myRole === 'owner'
+            ? '<div class="ll-auth-msg" style="text-align:left;margin:-4px 0 12px">Naming it means an invite can say what someone is joining, instead of "someone\'s Cubby".</div>'
+            : ''))
+      : '';
+
+    modal('Family & sharing', nameRow + '<div class="ll-mems">' + rows + '</div>'
       + (pendRows ? ('<div class="ll-auth-msg" style="text-align:left;margin:6px 0 2px;font-weight:800">Invited, not joined yet</div><div class="ll-mems">' + pendRows + '</div>') : '')
       + '<div class="ll-auth-msg" style="text-align:left;margin:-2px 0 12px">When you invite people, everyone in your circle can see each other\'s name here, so you know who is who. Email addresses stay between each person and the circle owner. Only you can change your own.</div>'
       + youRow + invite + share
       + '<button id="llSignOut" class="ll-modal-btn ll-ghost">Sign out</button>'
       + '<div class="ll-auth-msg" style="margin-top:10px">Cubby v' + (window.CUBBY_VERSION || '') + ' · made with families like you 🐻</div>');
 
+    var hhBtn = document.getElementById('llHhName');
+    if (hhBtn) hhBtn.onclick = function () { closeModal(); if (window.openHouseholdName) window.openHouseholdName(); };
     document.getElementById('llSignOut').onclick = function () { closeModal(); window.LL.signOut(); };
     document.getElementById('llMyRelBtn').onclick = saveMyRelationship;
     wireRelCustom('llMyRel', 'llMyRelCustom');

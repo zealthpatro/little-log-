@@ -195,6 +195,24 @@ async function sendInviteEmail(request, env, url) {
     const used = (lf.usedBy || {}).stringValue || null;
     const expiresAt = (lf.expiresAt || {}).timestampValue || null;
     const byName = (lf.invitedByName || {}).stringValue || '';
+    /* The family's own name, read SERVER-SIDE so the sender cannot put words in it, and used only
+       when the owner actually chose one. The computed fallback ("Robin's family") is never written
+       to Firestore, so a value being present here means somebody typed it. That distinction is the
+       whole safeguard: the default contains the BABY'S NAME, and an invite lands in an inbox that
+       may not be as private as the person sending it assumes, which is why this email has always
+       said nothing about the baby. */
+    let famName = '';
+    try {
+      if (hid) {
+        const hr = await fetch(base + '/households/' + encodeURIComponent(hid) + '?mask.fieldPaths=app', { headers: hdr });
+        if (hr.ok) {
+          const hf = (((await hr.json()) || {}).fields || {});
+          famName = String((((((hf.app || {}).mapValue || {}).fields || {}).settings || {}).mapValue || {}).fields
+            && hf.app.mapValue.fields.settings.mapValue.fields.householdName
+            && hf.app.mapValue.fields.settings.mapValue.fields.householdName.stringValue || '').slice(0, 40);
+        }
+      }
+    } catch (e) { famName = ''; }
     // Never email a link that cannot be walked through: the recipient would follow it into a dead
     // end and blame themselves.
     if (!hid || used) return json({ error: 'link_spent' }, 409);
@@ -229,9 +247,9 @@ async function sendInviteEmail(request, env, url) {
         // lands in an inbox that may not be as private as the person sending it assumes.
         html: '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:440px;margin:0 auto;padding:28px 22px;color:#3a2f28">'
           + '<div style="font-size:40px">🐻</div>'
-          + '<h1 style="font-family:Georgia,serif;font-size:23px;margin:12px 0 10px">' + who + ' invited you to their Cubby</h1>'
+          + '<h1 style="font-family:Georgia,serif;font-size:23px;margin:12px 0 10px">' + who + ' invited you to ' + (famName ? escHtml(famName) : 'their Cubby') + '</h1>'
           + '<p style="font-size:15px;line-height:1.55;color:#6b615a">Cubby is where they keep the everyday things: feeds, naps, nappies, the next appointment. Opening this link puts you in their circle so you can see it as it happens, and add to it yourself.</p>'
-          + '<p style="margin:22px 0"><a href="' + link + '" style="background:#C97FA0;color:#fff;text-decoration:none;font-weight:700;padding:14px 24px;border-radius:14px;display:inline-block">Join their Cubby</a></p>'
+          + '<p style="margin:22px 0"><a href="' + link + '" style="background:#C97FA0;color:#fff;text-decoration:none;font-weight:700;padding:14px 24px;border-radius:14px;display:inline-block">' + (famName ? 'Join ' + escHtml(famName) : 'Join their Cubby') + '</a></p>'
           + '<p style="font-size:13px;line-height:1.55;color:#8a7a6d">This link works once and only for a day, so it is just for you. If you were not expecting it, you can ignore it and nothing happens.</p>'
           + '</div>'
       })
