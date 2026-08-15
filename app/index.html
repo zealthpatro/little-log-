@@ -12647,6 +12647,17 @@ function normalizeLoadedState(saved){
        bundle (which knows nothing about `subject`) keeps dosing exactly as before. Runs from
        applyAppBlob on every snapshot, so it has to be idempotent, and it is. */
     (state.meds||[]).forEach(m=>{ if(m && !m.subject) m.subject={kind:'baby', id:m.babyId}; });
+    /* A medicine with no pattern crashes four separate code paths that all read m.pattern.type
+       without checking: medNextDue, medScheduleText, the medicine list, and the reminder-index
+       builder that fills the push queue. Two of those run by themselves, medNextDue every five
+       seconds from checkMedReminders, so ONE malformed medicine throws on a timer and silently
+       stops every medicine reminder in the household. That is the most safety-critical thing
+       Cubby does, failing quietly.
+       It should not be reachable from the editor, which always writes a pattern. It is reachable
+       from an older cached bundle, a partial write, or a blob that lost a field back when the whole
+       thing was a last-writer-wins overwrite. Treated as 'as needed', the only honest reading of a
+       medicine with no schedule: it shows in the list, and it never claims a dose is due. */
+    (state.meds||[]).forEach(m=>{ if(m && (!m.pattern || !m.pattern.type)) m.pattern={type:'asNeeded'}; });
     if(!state.photos)state.photos=[];
     if(!state.vaccines)state.vaccines={};
     if(!state.illnesses)state.illnesses=[];

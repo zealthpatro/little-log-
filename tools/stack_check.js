@@ -193,18 +193,24 @@ const AUDIT = `(function(rows, heads, pairs){
     stale.map(([x]) => x[0] + ': ' + x[1] + ' → ' + x[2] + ' (' + x[4] + ') is FIXED — delete it from KNOWN').join('\n         '));
 
   console.log('\nthe gate can fail');
+  /* Sabotage with an OFF-SYSTEM value, not with zero.
+     This used to strip .actions' bottom margin and expect a near-zero gap. That stopped proving
+     anything the day the stack started taking its spacing from the parent instead of that margin:
+     zeroing it left a clean 16px, which is a correct block gap, so the self-test failed while the
+     app was right. The gate exists to catch a gap that is not one of the four, so that is what the
+     sabotage should produce. 21px is deliberately none of 16, 12, 8 or 2. */
   const caught = await p.evaluate((c) => {
-    // Put the original bug back: strip the tile grid's bottom margin and see if the audit notices.
     const st = document.createElement('style');
     st.id = 'stackSelfTest';
-    st.textContent = '.actions{margin-bottom:0!important}';
+    st.textContent = '.actions{margin-bottom:21px!important}';
     document.head.appendChild(st);
     go('home'); render();
     return eval(c);
   }, code);
-  const zero = caught.filter(g => /\.actions/.test(g.from) && g.gap < 4);
-  ck(zero.length > 0, 'it catches the tile grid losing its bottom margin, which is the original bug',
-    JSON.stringify(caught.filter(g => /\.actions/.test(g.from)).map(g => g.from + '=' + g.gap + 'px')));
+  const mine = caught.filter(g => /\.actions/.test(g.from));
+  const offSystem = mine.filter(g => ![BLOCK, HEAD, ROW, COUPLED].some(w => Math.abs(g.gap - w) <= SLOP));
+  ck(offSystem.length > 0, 'it catches the tile grid taking an off-system gap, which is the bug class',
+    JSON.stringify(mine.map(g => g.from + '=' + g.gap + 'px')));
   await p.evaluate(() => { const n = document.getElementById('stackSelfTest'); if (n) n.remove(); });
 
   ck(errs.length === 0, 'no uncaught page errors', errs.join(' | '));

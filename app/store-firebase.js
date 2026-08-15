@@ -3008,7 +3008,20 @@
         ['llAuthOv', 'llModalOv'].forEach(function (id) { var el = document.getElementById(id); if (el) el.remove(); });
       } else {
         window.LL.memberInfo = { local: { name: 'Test Parent', relationship: 'Mama Bear', role: 'owner' } };
-        Store.load().then(function (d) { if (d && typeof state !== 'undefined') { try { Object.assign(state, d); } catch (e) {} } if (typeof render === 'function') render(); ['llAuthOv', 'llModalOv'].forEach(function (id) { var el = document.getElementById(id); if (el) el.remove(); }); });
+        /* normalizeLoadedState, because the cloud path runs it on every snapshot (applyAppBlob) and
+           this one used to skip it. That made ?e2e=1 boot a shape the real app never produces, so
+           every gate in the repo was testing a slightly different product: tools/info_dot_check.js
+           found it by crashing in medNextDue on a medicine with no pattern, which a real signed-in
+           household would have had normalised away before render. A harness that is not the app is
+           a harness that lies in both directions. */
+        Store.load().then(function (d) {
+          if (d && typeof state !== 'undefined') {
+            try { Object.assign(state, d); } catch (e) {}
+            try { if (typeof normalizeLoadedState === 'function') normalizeLoadedState(state); } catch (e) {}
+          }
+          if (typeof render === 'function') render();
+          ['llAuthOv', 'llModalOv'].forEach(function (id) { var el = document.getElementById(id); if (el) el.remove(); });
+        });
       }
     } catch (e) { console.error('e2e boot failed', e); }
     return;

@@ -67,7 +67,12 @@
       payoff: 'The day\'s sleep becomes something you can look at, instead of something you are arguing about.',
       read: 'newborn-sleep-what-is-normal'
     },
-    openDiaper: { label: 'Diaper', fn: 'openDiaper()', domain: 'log', depth: 'page',
+    /* label MUST match the sheet's own <h2> exactly, because CubbyTeachUI.sheetDot finds the sheet
+       by comparing that heading against these labels. Renaming the heading to "Nappy" without this
+       silently removed the info dot from the sheet: sheetDot returns the html untouched when it
+       cannot match, so help disappears with no error anywhere. tools/info_dot_check.js now fails
+       on that drift instead of letting it go quiet. */
+    openDiaper: { label: 'Nappy', aka: ['diaper'], fn: 'openDiaper()', domain: 'log', depth: 'page',
       one: 'Wet, dirty, both, or a dry check. The thing a doctor almost always asks about.',
       who: { stage: ['baby','child'] },
       why: 'It is the question a doctor almost always asks, and the one nobody can answer under pressure. Nappies are also the log with the shortest memory: by the evening, the morning has gone.',
@@ -161,7 +166,7 @@
       one: 'The very first entry, opened straight from the empty home screen.',
       who: { stage: ['baby','child'] } },
     openMoreLogs: { label: 'More logs', fn: 'openMoreLogs()', domain: 'log', depth: 'one',
-      one: 'The early-days logs, whenever you need them: feed, diaper, pump.',
+      one: 'The early-days logs, whenever you need them: feed, nappy, pump.',
       who: { stage: ['baby','child'] },
       earn: { on: 'logs-5' } },
     openAddEntry: { label: 'Add to Cubby', fn: 'openAddEntry()', domain: 'log', depth: 'one',
@@ -833,6 +838,12 @@
       what: 'Move between trying, expecting, baby and child.',
       get: 'Nothing is lost when you move. What you kept in an earlier stage stays exactly where it was.'
     },
+    /* aka, because the sheet asks a question rather than announcing a noun, and sheetDot matches on
+       the heading. label is what the How to use Cubby list shows; aka is what the <h2> actually says. */
+    openHouseholdName: { label: 'Your family\'s name', aka: ['what shall we call your family'],
+      fn: 'openHouseholdName()', domain: 'account', depth: 'one',
+      one: 'What an invited person sees, so they know whose Cubby they are joining. Everyone in the circle sees it.',
+      who: { stage: null } },
     openSettings: { label: 'Settings', fn: 'openSettings()', domain: 'account', depth: 'one',
       one: 'Everything about how Cubby behaves, in one list.',
       who: { stage: null } },
