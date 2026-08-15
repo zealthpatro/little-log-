@@ -375,7 +375,16 @@ svg.mi{width:1em;height:1em;vertical-align:-0.13em}
 .homex .hx-hero-split .hx-copy h1 em{font-style:italic;color:var(--h-accent)}
 .homex .hx-hero-split .hx-lede{text-align:left;margin:0 0 24px;max-width:none;font-family:var(--serif,Fraunces,serif)}
 .homex .hx-hero-split .hx-fineprint{text-align:left}
-@media(max-width:860px){.homex .hx-hero-split{text-align:center;gap:26px}.homex .hx-hero-split .hx-copy h1,.homex .hx-hero-split .hx-lede,.homex .hx-hero-split .hx-fineprint{text-align:center}.homex .hx-hero-split .hx-phone-col{order:1}}
+/* The centring is scoped to the copy column, NOT to the whole split. It used to sit on
+   .hx-hero-split, so it cascaded into the phone mock and centred the event rows inside it:
+   "started 1:40 PM · by Mama Bear" wrapped to two centred lines under a left-hand icon, which
+   reads as broken rather than as an app. The identical .hx-erow in the care-circle section below
+   computes text-align:start, so the hero was the only place it happened, on the one asset that
+   has to look real. */
+@media(max-width:860px){.homex .hx-hero-split{gap:26px}.homex .hx-hero-split .hx-copy{text-align:center}.homex .hx-hero-split .hx-copy h1,.homex .hx-hero-split .hx-lede,.homex .hx-hero-split .hx-fineprint{text-align:center}.homex .hx-hero-split .hx-phone-col{order:1}}
+/* The sign-in reassurance, moved out from between the CTA and the phone. */
+.homex .hx-herofoot{margin-top:18px;text-align:left}
+@media(max-width:860px){.homex .hx-herofoot{text-align:center}}
 
 /* Rituals spotlight mockup bits (Baby page) */
 .homex .hx-seg{display:flex;gap:4px;background:var(--h-cream2);border-radius:11px;padding:3px;margin:2px 2px 13px;font-size:12px;font-weight:700}
@@ -392,9 +401,22 @@ svg.mi{width:1em;height:1em;vertical-align:-0.13em}
 .homex .hx-rhythm .rh-dots i.today{box-shadow:0 0 0 2px var(--h-cream2),0 0 0 3.5px var(--h-accent)}
 
 /* Story as two coherent parts (product pages), instead of one prose wall */
-.homex .hx-twocol{display:grid;grid-template-columns:1fr 1fr;gap:44px;max-width:1000px;margin:0 auto;padding:6px 0}
+/* padding-top/bottom only. The shorthand `padding:6px 0` used to sit here, and because .hx-twocol
+   is itself the .hx-wide element it zeroed .hx-wide's 26px horizontal padding: this section alone
+   ran 0 to 390 on a phone while every other block on the page sat at a 26px inset. */
+.homex .hx-twocol{display:grid;grid-template-columns:1fr 1fr;gap:44px;max-width:1000px;margin:0 auto;padding-top:6px;padding-bottom:6px}
 .homex .hx-twocol .hx-tcol h2{font-size:clamp(20px,2.3vw,27px);line-height:1.22;margin:0 0 10px;color:var(--h-ink);font-family:var(--serif,Fraunces,serif);font-weight:600}
 .homex .hx-twocol .hx-tcol p{font-size:16px;line-height:1.62;color:var(--h-soft);margin:0}
+/* The kicker. A section whose job is belonging gets the felt line as its heading; the concrete
+   moment it used to carry sits here instead, one step down, so neither is lost. Serif to keep it
+   part of the headline rather than part of the body.
+   The .hx-copy p selector is (0,2,1) and would otherwise win on colour and margin, leaving the
+   kicker grey and glued to the body copy, so it is named explicitly here rather than left to
+   source order. */
+.homex .hx-kick,
+.homex .hx-copy p.hx-kick{font-family:var(--serif,Fraunces,serif);font-size:18.5px;line-height:1.4;
+  color:var(--h-ink);margin:0 0 12px;font-weight:500;}
+@media(max-width:640px){.homex .hx-kick,.homex .hx-copy p.hx-kick{font-size:17px;}}
 @media(max-width:760px){.homex .hx-twocol{grid-template-columns:1fr;gap:24px}}
 
 /* Install / "use anywhere" PWA awareness (injected by /install.js on every marketing page) */
@@ -416,11 +438,14 @@ svg.mi{width:1em;height:1em;vertical-align:-0.13em}
 .app-shot img{width:100%;height:auto}
 .app-shot figcaption{font-family:var(--sans);font-size:12px;color:var(--soft);margin-top:8px;line-height:1.4}
 
-/* The "so what do I get" block, directly under the hero. Deliberately dense and quiet: a short
-   bold claim, then one clause of proof. Two columns where there is room, one where there is not,
-   and min-width:0 so it can never repeat the hero's 320px spill. */
+/* The "so what do I get" block, directly under the hero. The felt line leads in the serif, then
+   one clause of proof in the quiet sans. Three across where there is room, one where there is
+   not, and min-width:0 so it can never repeat the hero's 320px spill. Three, not four: on a phone
+   this stacks, and four bare items in the second slot on the page is a wall. */
 .homex .hx-why{padding:6px 0 4px;}
-.homex .hx-whygrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 34px;}
+.homex .hx-why .hx-eyebrow{margin-bottom:14px;}
+.homex .hx-whygrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px 34px;}
+@media(max-width:860px){.homex .hx-whygrid{grid-template-columns:repeat(2,minmax(0,1fr));}}
 .homex .hx-why-i{min-width:0;}
 .homex .hx-why-i b{display:block;font-family:var(--serif,Fraunces,serif);font-size:18px;font-weight:600;
   color:var(--h-ink);margin-bottom:5px;letter-spacing:-.01em;}

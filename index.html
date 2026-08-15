@@ -53,17 +53,16 @@
     <div class="hx-copy">
       <div class="hx-eyebrow">🐻 The calm baby tracker for the whole family</div>
       <h1>At 3am, you already know <em>when the last feed was.</em></h1>
-      <p class="hx-lede">Last feed, last sleep, last nappy, counting up on their own. Nothing to work out, and nobody to wake and ask.</p>
+      <p class="hx-lede">Last feed, last sleep, last nappy, counting up on their own. Nobody to wake and ask, and whoever else is with them today sees the same screen.</p>
       <div><a href="/app/?utm_source=home&utm_medium=organic&utm_campaign=nav-start-free" class="hx-bigcta hero-cta">Start free 🐻</a></div>
       <p class="hx-fineprint">No app store · no ads · we never sell your data &nbsp;·&nbsp; <a href="/pregnancy/">Expecting? Start here</a></p>
-      <p class="hx-fineprint" style="margin-top:6px">You sign in with Apple, Google or an email link. About ten seconds, no password to invent.</p>
     </div>
     <div class="hx-phone-col">
       <div class="hx-phone"><div class="hx-island"></div><div class="hx-screen">
         <div class="hx-statusbar"><span class="time">9:41</span><span class="sys"><span class="hx-sig"><i></i><i></i><i></i><i></i></span><span class="hx-net">5G</span><span class="hx-bat"><i></i></span></span></div>
         <div class="hx-scr">
           <div class="hx-apphead"><span class="b">🐻</span> Today, together</div>
-          <div class="hx-erow"><div class="ic" style="background:var(--h-green-bg)">😴</div><div class="t"><b>Nap · in progress 1h 12m</b><span>started 1:40 PM · by Mama Bear</span></div></div>
+          <div class="hx-erow"><div class="ic" style="background:var(--h-green-bg)">😴</div><div class="t"><b>Nap · in progress 1h 12m</b><span>1:40 PM · by Mama Bear</span></div></div>
           <div class="hx-erow"><div class="ic" style="background:var(--h-blue-bg)">🍼</div><div class="t"><b>Bottle · 120 ml</b><span>2:10 PM · by Nanny</span></div></div>
           <div class="hx-erow"><div class="ic" style="background:var(--h-cream3)">🧷</div><div class="t"><b>Nappy · wet</b><span>2:15 PM · by Nanny</span></div></div>
           <div class="hx-erow"><div class="ic" style="background:var(--h-rose-bg)">💉</div><div class="t"><b>Vaccines · 12 weeks</b><span>on your country's schedule</span></div></div>
@@ -73,31 +72,39 @@
       </div></div>
     </div>
   </div>
+  <!-- The sign-in reassurance sits BELOW the phone, not between the button and it. On a phone the
+       two fineprint blocks together ran six lines and pushed the product mock to y=644, i.e. off
+       the first screen entirely. This line still arrives before anyone taps, and the mock now
+       clears the fold. -->
+  <div class="hx-wide"><p class="hx-fineprint hx-herofoot">You sign in with Apple, Google or an email link. About ten seconds, no password to invent.</p></div>
 </section>
 
 <!-- THE SHIFT (two coherent parts: the overwhelm, then the relief) -->
-<!-- The punchy answer to "so what do I get", straight after the hero and before the long
-     sections. Written for a reader who is quick and allergic to marketing: a claim in three or
-     four words, then the proof in one clause, and nothing that cannot be checked. Every line is
-     verified in code, cited beside it, because this audience is exactly the one that will look. -->
+<!-- The answer to "so what do I get", straight after the hero.
+     Register matters more than density here. The first pass ran four items in the engineer's
+     voice ("Signed, not guessed", "Private by rules, not settings") with no heading above them,
+     which on a phone collapses to four bare bold lines and reads as a spec sheet in the second
+     slot on the page, before a parent has any reason to care. So: the felt line leads and the
+     mechanism follows it, three items rather than four because a scanner reads three, and an
+     eyebrow so the block is framed instead of floating. The offline claim moves to the
+     capability grid, where it already lives.
+     Every proof clause is checked in code: authorId is immutable at firestore.rules:241, mood is
+     unshareable at :329 (sharedWith must be empty), and no-streaks is the charter. -->
 <section class="hx-band hx-why">
   <div class="hx-wide">
+    <div class="hx-eyebrow">What changes</div>
     <div class="hx-whygrid">
       <div class="hx-why-i">
-        <b>Signed, not guessed</b>
-        <span>Every entry carries whoever wrote it. They leave, their access goes, their entries stay.</span>
+        <b>Everyone sees the same day.</b>
+        <span>Partner, grandparent, nanny, on one screen, and every entry carries whoever wrote it.</span>
       </div>
       <div class="hx-why-i">
-        <b>Nothing to keep up</b>
-        <span>No streaks, no targets, no red. A thin week is allowed to be a thin week.</span>
+        <b>Nothing here keeps score.</b>
+        <span>No streaks, no targets, nothing turns red. A thin week is allowed to be a thin week.</span>
       </div>
       <div class="hx-why-i">
-        <b>Private by rules, not settings</b>
-        <span>Mood notes can't be shared with anyone. Not a setting you might leave on: the server refuses the write.</span>
-      </div>
-      <div class="hx-why-i">
-        <b>Works with no signal</b>
-        <span>Log it in a hospital corridor. It syncs when you surface.</span>
+        <b>Some things stay yours alone.</b>
+        <span>Your mood notes can't be shared with anyone. Not a setting you might leave on: the database refuses the write.</span>
       </div>
     </div>
   </div>
@@ -105,11 +112,11 @@
 <section class="hx-band" style="padding-top:0">
   <div class="hx-wide hx-twocol">
     <div class="hx-tcol">
-      <h2>You walk into the six-week check with it already written down.</h2>
+      <h2>The six-week check, already written down.</h2>
       <p>One tap lays out the last seven days in the order a doctor asks for them: feeds and how they were given, sleep, wet and dirty nappies, temperatures, growth, medicines and allergies. The averages only count the days Cubby actually watched, so a five-day-old is never quietly averaged over a fortnight.</p>
     </div>
     <div class="hx-tcol">
-      <h2>You know whether the 2am dose was already given.</h2>
+      <h2>You know if the 2am dose was already given.</h2>
       <p>Tap to log a dose when one is already there inside that medicine's own gap, and Cubby simply tells you: who logged it, at what time, and how long ago. Then it lets you decide, with no warning and no telling off.</p>
     </div>
   </div>
@@ -120,8 +127,9 @@
   <div class="hx-wide hx-split">
     <div class="hx-copy">
       <div class="hx-eyebrow">You're not the only one who knows</div>
-      <h2>You get home at six and the day is already written down.</h2>
-      <p>Feeds, sleep, nappies, when the last feed was, and whose names are on it, waiting on your home screen the moment somebody other than you has logged today. Tap it for the full day, with one button to copy or pass it on to whoever has her next.</p>
+      <h2>Caring for a baby was never meant to be carried alone.</h2>
+      <p class="hx-kick">You get home at six and the day is already written down.</p>
+      <p>Feeds, sleep, nappies, when the last feed was, and whose names are on it, waiting on your home screen the moment somebody other than you has logged today. Tap it for the full day, with one button to copy or pass it on to whoever has them next.</p>
     </div>
     <div class="hx-phone-col">
       <div class="hx-phone"><div class="hx-island"></div><div class="hx-screen">
@@ -167,8 +175,8 @@
   <div class="hx-wide">
     <div class="hx-head">
       <div class="hx-eyebrow">A promise, built into the product</div>
-      <h2>You add the nanny, and she sees the day, and nothing else.</h2>
-      <p>Not written on a page, enforced in how the app is built.</p>
+      <h2>Your family's life is nobody's business but yours.</h2>
+      <p>You add the nanny, and she sees the day, and nothing else. Not written on a page, enforced in how the app is built.</p>
     </div>
     <div class="hx-vow"><div class="x">✕</div><div><div class="b">We will never sell or rent your family's data.</div><div class="s">Not to advertisers, not to brokers, not "anonymised", not ever. Cubby earns from Cubby Pro, never from you being the product.</div></div></div>
     <div class="hx-vow"><div class="x">✕</div><div><div class="b">No ads. No third-party trackers.</div><div class="s">Who can open your family's record is settled by rules on the server, not by a setting on a screen. A mother's health and mood stay hers: mood notes can never be shared, with anyone.</div></div></div>
@@ -179,7 +187,7 @@
 <!-- PRIVACY SNIPPET (item-by-item, kept from the prior homepage) -->
 <section class="hx-band hx-tint">
   <div class="hx-wrap" style="max-width:520px">
-    <div class="hx-section-head" style="margin-bottom:20px"><h2 style="font-size:24px">You choose who sees your blood pressure, and nobody sees your mood.</h2><p style="font-style:normal;font-size:15px;color:var(--h-soft)">Your weight, blood pressure, glucose and care team are shared item by item, with only the people you pick.</p></div>
+    <div class="hx-section-head" style="margin-bottom:20px"><h2 style="font-size:24px">A mother owns her own health.</h2><p style="font-style:normal;font-size:15px;color:var(--h-soft)">You choose who sees your blood pressure. Nobody sees your mood. Weight, glucose and your care team are shared item by item, with only the people you pick.</p></div>
     <div class="lift-sm" style="padding:16px">
       <div class="hx-erow" style="box-shadow:none"><div class="ic" style="background:var(--h-blue-bg)">🩸</div><div class="t"><b>Weight &amp; blood pressure</b><span>shared with Papa Bear</span></div></div>
       <div class="hx-erow" style="box-shadow:none"><div class="ic" style="background:var(--h-cream3)">📊</div><div class="t"><b>Glucose</b><span>just you</span></div></div>
@@ -191,7 +199,7 @@
 <!-- CAPABILITY GRID -->
 <section class="hx-band">
   <div class="hx-wide">
-    <div class="hx-section-head"><h2>The day the rash appears, you are not downloading another app.</h2><p>Vaccines, growth, illnesses, allergies and medicines are already here, and the trackers you have no use for are simply not on your screen.</p></div>
+    <div class="hx-section-head"><h2>The day the rash appears, you're not downloading another app.</h2><p>Vaccines, growth, illnesses, allergies and medicines are already here, and the trackers you have no use for are simply not on your screen.</p></div>
     <div class="hx-cap-grid">
       <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-blue-bg)">👆</div><b>One-thumb logging</b><span>Feeds, sleep and nappies in two taps, with the nap timer running on every phone, even at 3am.</span></div>
       <div class="lift-sm hx-cap"><div class="ic" style="background:var(--h-green-bg)">💉</div><b>Vaccine schedule</b><span>Your country's official schedule, dated from their birthday, and the visits ahead exported to your own phone calendar.</span></div>
@@ -301,8 +309,8 @@
 <!-- CLOSE -->
 <section class="hx-band hx-tint-rose hx-close">
   <div class="hx-wrap">
-    <h2>The next 3am, the answer is already on the screen.</h2>
-    <p>Free to start, private to your family. No app store, and no password to invent.</p>
+    <h2>Come in. Let your hands go free.</h2>
+    <p>The next 3am, the answer is already on the screen. Free to start, private to your family. No app store, and no password to invent.</p>
     <a href="/app/?utm_source=home&utm_medium=organic&utm_campaign=nav-start-free" class="hx-bigcta hero-cta">Start free 🐻</a>
     <p class="hx-fineprint">Cubby is informational and not a substitute for medical advice.</p>
   </div>
