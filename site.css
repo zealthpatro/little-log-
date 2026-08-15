@@ -251,6 +251,13 @@ svg.mi{width:1em;height:1em;vertical-align:-0.13em}
 .homex .hx-pull{font-family:var(--serif,Fraunces,serif);font-size:clamp(24px,4vw,32px);line-height:1.28;text-align:center;margin:8px auto 0;max-width:680px;font-weight:500;}
 .homex .hx-pull em{font-style:italic;color:var(--h-accent);}
 .homex .hx-split{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;}
+/* A grid track of 1fr carries min-width:auto, so an item refuses to shrink below its own
+   min-content width. In the hero that floor is 300px, and 320px of viewport minus the 26px
+   gutters leaves 268px, so every child of the hero, the eyebrow, the headline, the lede, the
+   button and the fineprint, sat 6px past the right edge of an iPhone SE. The whole block was
+   shifted, which is why it read as clipped text rather than as a layout bug.
+   min-width:0 lets the track do what 1fr was always meant to do. Nothing above 352px changes. */
+.homex .hx-split > *{min-width:0;}
 .homex .hx-copy .hx-eyebrow{margin-bottom:12px;}
 .homex .hx-copy h2{font-size:clamp(27px,3.8vw,38px);margin:0 0 14px;}
 .homex .hx-copy p{font-size:17.5px;color:var(--h-soft);margin:0;}
