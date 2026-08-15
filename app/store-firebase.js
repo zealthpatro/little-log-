@@ -1375,8 +1375,23 @@
     try {
       await db.collection('inviteLinks').doc(link.token).update({ usedBy: user.uid });
     } catch (e) { console.warn('claimInviteLink', e); return false; }
-    await db.collection('households').doc(link.householdId)
-      .update(memberUpdate(user, link.role || 'caregiver', { relationship: link.relationship, name: link.name }));
+    /* The household write is INSIDE the try now, and a failure gives the token back.
+       It used to sit outside: the claim succeeded, the join was denied by the rules, and the
+       exception escaped to onAuthStateChanged, which showed a generic sign-in error. The token was
+       spent by then, so the same link could never work again and the invitee was told it had
+       expired. That is how a rules gap turned every invite link into a permanently burnt one.
+       joinToken is carried on the write because the rule has no other way to know WHICH link
+       admitted this person: rules can only read a document whose path they can construct. It is
+       already spent by the time it lands, so it is an audit trail rather than a secret. */
+    try {
+      await db.collection('households').doc(link.householdId)
+        .update(Object.assign({ joinToken: link.token },
+          memberUpdate(user, link.role || 'caregiver', { relationship: link.relationship, name: link.name })));
+    } catch (e) {
+      console.warn('claimInviteLink join', e);
+      try { await db.collection('inviteLinks').doc(link.token).update({ usedBy: null }); } catch (e2) {}
+      return false;
+    }
     writeOwnMemberEmail(link.householdId);
     await db.collection('users').doc(user.uid)
       .set({ householdId: link.householdId, name: user.displayName || '', email: user.email || '' }, { merge: true });

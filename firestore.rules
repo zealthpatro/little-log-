@@ -210,6 +210,23 @@ service cloud.firestore {
              // invites can only be created by an owner). Prevents an invitee self-promoting to
              // 'owner' — hasOnly() above restricts WHICH member key changes, never its value.
              && request.resource.data.members[request.auth.uid] == get(/databases/$(database)/documents/invites/$(request.auth.token.email.lower())).data.get('role', 'caregiver')
+             && onlyOwnMemberInfo() )
+        /* JOINING BY LINK. There was no branch for this at all, so every tokenised invite was
+           denied here and invite links failed 100% of the time. The email path above is keyed on
+           /invites/{email}; a link joiner has no such document, only a token.
+           The gate is the CLAIM the client has already made: claimInviteLink writes usedBy on
+           /inviteLinks/{token} first, and that write is single-use and rules-enforced, so reaching
+           this branch means this uid won the race for a live token pointing at THIS household. The
+           role comes off the link, which only an owner can mint, so an invitee still cannot promote
+           themselves. Same shape as the email branch otherwise: ownerId frozen, exactly one member
+           key added, and it must be their own. */
+        || ( request.auth != null
+             && request.resource.data.ownerId == resource.data.ownerId
+             && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid])
+             && exists(/databases/$(database)/documents/inviteLinks/$(request.resource.data.joinToken))
+             && get(/databases/$(database)/documents/inviteLinks/$(request.resource.data.joinToken)).data.usedBy == request.auth.uid
+             && get(/databases/$(database)/documents/inviteLinks/$(request.resource.data.joinToken)).data.householdId == hid
+             && request.resource.data.members[request.auth.uid] == get(/databases/$(database)/documents/inviteLinks/$(request.resource.data.joinToken)).data.get('role', 'caregiver')
              && onlyOwnMemberInfo() ) );
       allow delete: if request.auth != null && resource.data.members[request.auth.uid] == 'owner';
 
