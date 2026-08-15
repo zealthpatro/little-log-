@@ -2970,7 +2970,7 @@ function renderHome(){
     </div>
     ${wakeWindowLine()}
     ${surfaceUp ? surfaceCard : ''}
-    ${gsCard ? '' : coachMark('home','Welcome to Cubby 👋','Your hub. A photo slideshow up top, one-tap logging below. The tabs hold your Log, Album and Health.')}
+    ${gsCard ? '' : coachMark('home','Last feed, last sleep, last nappy, right where you look first 👋','Log below, and the tabs hold your Log, Album and Health.')}
     ${consentBanners()}
     ${renderHero()}
     ${gsCard}
@@ -4603,7 +4603,7 @@ function openAddBaby(opts){
   /* "Just a name to get started" was not true: saveBaby blocks on the birthday too, so the very
      first form in the product promised one field and then refused on a second. Say what is actually
      needed. Everything below the birthday genuinely is optional, and stays optional. */
-  openSheet(`<h2>Add a baby</h2><div class="sub">Their name and birthday to get started. Everything else can wait, and you can add another little one any time.</div>
+  openSheet(`<h2>Add a baby</h2><div class="sub">Their name and birthday is all it takes for their vaccine plan to be waiting for you, on your country's schedule. You can add another little one any time.</div>
     <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('')}</div>
     <div class="field"><label>Name</label><input id="bName" placeholder="Baby's name" autofocus></div>
     <div class="field"><label>Birthday</label>${datePicker('bDate',addBabyCtx.birth,{max:now(),empty:true})}${wwa('baby.birthday')}</div>
@@ -4652,15 +4652,15 @@ function openOnboardInvite(){
   if(n===0 && state.pregnancy){
     const planning=state.pregnancy.stage==='planning';
     openSheet(`<h2>${planning?'They help, and your notes stay yours 🌱':'Nobody sees this until you say so 🌸'}</h2><div class="sub">${planning?'Invite your partner whenever you like. They get the preparation you share and real ways to help, and your cycle details are not on their screen.':'Invite your partner or a grandparent whenever you like. They see your pregnancy only once you add them, in Care under Your private pregnancy.'}</div>
-      <div class="preg-card"><div class="pc-ico" style="background:var(--preg-soft)">👨‍👩‍👧</div><div><div class="pc-t">They follow along, live</div><div class="pc-b">Your week, scans and visits, in sync and private to your family.</div></div></div>
+      <div class="preg-card"><div class="pc-ico" style="background:var(--preg-soft)">👨‍👩‍👧</div><div><div class="pc-t">The person you tell gets something to do</div><div class="pc-b">Once you add them, they get their own thing to help with, so managing that is not also on you.</div></div></div>
       <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:14px" onclick="window.openFamily&&window.openFamily()">Invite someone</button>
       ${(typeof canShowInstall==='function'&&canShowInstall())?`<div class="sub" style="margin-top:14px;font-size:13px">Use Cubby right here, or add it to your home screen to open it like an app, one tap away.</div><button class="btn-ghost" onclick="addToHomeScreen('obInstallMsg')">Add Cubby to your home screen</button><div id="obInstallMsg" class="sub" style="display:none;text-align:left"></div>`:''}
       <button class="btn-ghost" onclick="closeSheet();window.cubbyOpenGuide&&cubbyOpenGuide()">Show me what to log</button>
       <button class="btn-ghost" onclick="closeSheet()">Maybe later</button>`,'feed');
     return;
   }
-  openSheet(`<h2>${n>1?'Your little ones are in 🐻':"You're all set 🐻"}</h2><div class="sub">Cubby is for everyone who loves ${n>1?'them':'your little one'}. Invite a partner, grandparent or nanny so you're never the only one who knows.</div>
-    <div class="preg-card"><div class="pc-ico" style="background:var(--feed-soft)">👨‍👩‍👧</div><div><div class="pc-t">They see everything, live</div><div class="pc-b">The last feed, the nap, the next dose, all in sync and private to your family.</div></div></div>
+  openSheet(`<h2>Get home, and the day is already there 🐻</h2><div class="sub">You're set up. Invite whoever else has ${n>1?'them':'your little one'}, your partner, a grandparent or the nanny, and what they log shows up on your screen with their name on it.</div>
+    <div class="preg-card"><div class="pc-ico" style="background:var(--feed-soft)">👨‍👩‍👧</div><div><div class="pc-t">Nobody has to remember it for you</div><div class="pc-b">Feeds, sleep and nappies with their names on them, waiting when you get in. Tap it for the whole day.</div></div></div>
     ${vaxProofLine()?`<div class="sub" style="margin-top:12px;text-align:left">💉 ${vaxProofLine()}</div>`:''}
     <button class="btn-primary" style="background:var(--feed);--accent-ink:var(--on-feed,var(--on-accent));margin-top:14px" onclick="window.openFamily&&window.openFamily()">Invite someone</button>
     ${vaxProofLine()?`<button class="btn-ghost" onclick="closeSheet();healthTab='vaccines';go('health')">💉 See their vaccine plan</button>`:''}
@@ -5939,16 +5939,16 @@ function renderOnboard(){
     <div class="ob-bg">${obPreview()}</div>
     <div class="onboard ob-card fade-in">
       <div class="logo">Cubby</div>
-      <div class="ob-hi">Hi, I'm Cubby. Let's set up your den.</div>
-      <div class="tag">Where are you on the journey? Pick what fits today. You can change anything later.</div>
+      <div class="ob-hi">Whichever you pick, Cubby is set up before you log a thing.</div>
+      <div class="tag">It sets up from your dates and the country you are in. Nothing here keeps a streak, and you can change anything later.</div>
       <div class="prof-cards" style="width:100%;text-align:left">
-        <div class="prof-card" onclick="obStage('expecting')"><span class="lead" style="background:var(--preg-soft);font-size:20px">🌸</span><div class="cflex"><div class="a">We're expecting</div><div class="b">A baby (or two) on the way</div></div><span class="chev">${I.chev}</span></div>
-        <div class="prof-card" onclick="obStage('baby')"><span class="lead" style="background:var(--feed-soft);font-size:20px">🐻</span><div class="cflex"><div class="a">Our baby's here</div><div class="b">One or more, track feeds, sleep and growth</div></div><span class="chev">${I.chev}</span></div>
+        <div class="prof-card" onclick="obStage('expecting')"><span class="lead" style="background:var(--preg-soft);font-size:20px">🌸</span><div class="cflex"><div class="a">We're expecting</div><div class="b">Your antenatal visits laid out for where you have your care</div></div><span class="chev">${I.chev}</span></div>
+        <div class="prof-card" onclick="obStage('baby')"><span class="lead" style="background:var(--feed-soft);font-size:20px">🐻</span><div class="cflex"><div class="a">Our baby's here</div><div class="b">The last feed, sleep and nappy on one screen, and their vaccine plan already waiting</div></div><span class="chev">${I.chev}</span></div>
         <!-- Trying is a first-class stage, so its tile has to sit at the same weight as the other two.
              It carried a raw pale green while its siblings used --preg-soft / --feed-soft, which made it
              a near-white square in Night. --diaper-soft is the app's green-family soft, the same token
              every other green tile uses. -->
-        <div class="prof-card" onclick="obStage('planning')"><span class="lead" style="background:var(--diaper-soft);font-size:20px">🌱</span><div class="cflex"><div class="a">We're trying</div><div class="b">Getting ready, with a gentle hand if you want it</div></div><span class="chev">${I.chev}</span></div>
+        <div class="prof-card" onclick="obStage('planning')"><span class="lead" style="background:var(--diaper-soft);font-size:20px">🌱</span><div class="cflex"><div class="a">We're trying</div><div class="b">Your own cycles and the things you noticed, just as they happened</div></div><span class="chev">${I.chev}</span></div>
       </div>
       <div class="ob-priv">🔒 <a href="/privacy/" target="_blank" rel="noopener">Private to your family</a>. No ads. We never sell your data.</div>
       <div class="ob-foot"><button class="ob-logout" onclick="openSettings()">Settings</button><button class="ob-logout" onclick="confirmLogout()">Log out</button></div>
@@ -5969,8 +5969,8 @@ function renderCaregiverWaiting(){
   dropShellCache(); app().innerHTML=`<div class="ob-wrap">
     <div class="onboard ob-card fade-in">
       <div class="logo">Cubby</div>
-      <div class="tag" style="font-size:21px;color:var(--ink);font-weight:600;margin:2px 0 6px">You're in 🐻</div>
-      <div class="tag">${fam?`You've joined ${escapeHtml(fam)}'s Cubby.`:`You've joined the family's Cubby.`} There's nothing for you to set up. As soon as they log a moment, or their little one arrives, it'll show up right here for you.</div>
+      <div class="tag" style="font-size:21px;color:var(--ink);font-weight:600;margin:2px 0 6px">You're in. Nothing for you to set up 🐻</div>
+      <div class="tag">${fam?`You've joined ${escapeHtml(fam)}'s Cubby.`:`You've joined the family's Cubby.`} The moment anything is logged, the last feed, sleep and nappy show up here for you too. Anything you log shows up for them the same way, with your name on it.</div>
       <div class="ob-foot"><button class="ob-logout" onclick="openSettings()">Settings</button><button class="ob-logout" onclick="confirmLogout()">Log out</button></div>
     </div>
   </div>`;
