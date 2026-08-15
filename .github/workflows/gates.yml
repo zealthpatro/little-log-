@@ -50,6 +50,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      # tools/node_modules is gitignored, so a fresh runner has no puppeteer-core and this job
+      # failed on MODULE_NOT_FOUND every run, never once reaching the assertion it exists to make.
+      # A blocking job that cannot pass is worse than no job: it trains everyone to ignore red.
+      - name: Install the gate's dependencies
+        run: npm install --no-save --prefix tools puppeteer-core
       - name: Third-party trackers on live surfaces
         env:
           CHROME_PATH: /usr/bin/google-chrome
