@@ -235,13 +235,27 @@ svg.mi{width:1em;height:1em;vertical-align:-0.13em}
      than the page near the top of the viewport and lighter than it near the bottom: the folds did
      not just look similar, they crossed over as you scrolled. These sit below the gradient's
      darkest stop, so a band always reads as a deeper block whatever the scroll position. */
-  --h-band:#EADCC0;--h-band-rose:#F0DCE3;--h-tan:#D9B382;--h-green:#3E7D5A;--h-green-bg:#E4F0E8;--h-rose:#9C5B6B;--h-rose-bg:#F3E6EA;--h-rose-band:#F7ECEF;--h-blue:#3A6B8C;--h-blue-bg:#DCEAF2;--h-shadow:0 22px 48px -30px rgba(43,38,32,.45);--h-shadow-sm:0 12px 26px -18px rgba(43,38,32,.4);--h-phone-shadow:0 40px 80px -34px rgba(33,26,18,.62);font-size:17px;line-height:1.62;color:var(--h-ink);}
+  --h-page:#FDFBF6;--h-band:#F4EBD9;--h-band-rose:#F7ECEF;--h-band-line:#E9DFCA;--h-tan:#D9B382;--h-green:#3E7D5A;--h-green-bg:#E4F0E8;--h-rose:#9C5B6B;--h-rose-bg:#F3E6EA;--h-rose-band:#F7ECEF;--h-blue:#3A6B8C;--h-blue-bg:#DCEAF2;--h-shadow:0 22px 48px -30px rgba(43,38,32,.45);--h-shadow-sm:0 12px 26px -18px rgba(43,38,32,.4);--h-phone-shadow:0 40px 80px -34px rgba(33,26,18,.62);font-size:17px;line-height:1.62;color:var(--h-ink);}
 .homex h1,.homex h2,.homex h3{font-family:var(--serif,Fraunces,Georgia,serif);font-weight:600;line-height:1.12;letter-spacing:-.4px;color:var(--h-ink);}
 .homex .hx-wrap{max-width:740px;margin:0 auto;padding:0 26px;}
 .homex .hx-wide{max-width:1040px;margin:0 auto;padding:0 26px;}
 .homex .hx-band{padding:62px 0;}
+/* The page itself goes FLAT for the marketing pages. The site-wide body gradient (vax.css
+   --bg1 #FBF5E9 to --bg2 #F1E4CF, background-attachment:fixed) is why the folds kept reading as
+   the same cream: the plain band is not a colour, it is whatever the gradient happens to be at
+   that scroll position, so at the bottom of the viewport it sat 8.2 luminance from the tint. A
+   flat base makes the gap a constant instead of something that changes as you scroll. Scoped
+   with :has so articles and the app keep the gradient; if :has is unsupported the rule is simply
+   dropped and the old gradient shows, which is the previous behaviour rather than a broken one. */
+/* Literal, not var(--h-page): that token is declared on .homex, so on body it resolves to nothing,
+   which makes the whole declaration invalid at computed-value time. That does not fall back to the
+   gradient, it resets background to transparent, i.e. a plain white page. */
+html:has(.homex) body{background:#FDFBF6;}
+/* A hairline as well as a tone step, so a fold is legible even where the tones are close. */
+.homex .hx-tint,.homex .hx-tint-rose{border-top:1px solid var(--h-band-line);border-bottom:1px solid var(--h-band-line);}
 .homex .hx-tint{background:var(--h-band);}
 .homex .hx-tint-rose{background:var(--h-band-rose);}
+.homex .hx-dark{border-top:0;border-bottom:0;}
 .homex .hx-dark{background:var(--h-ink);color:var(--h-cream);}
 .homex .hx-dark h2{color:var(--h-cream);}
 .homex .lift-sm{background:var(--h-card);border:1px solid var(--h-line);border-radius:16px;box-shadow:var(--h-shadow-sm);}
@@ -268,7 +282,7 @@ svg.mi{width:1em;height:1em;vertical-align:-0.13em}
 .homex .hx-split > *{min-width:0;}
 .homex .hx-copy .hx-eyebrow{margin-bottom:12px;}
 .homex .hx-copy h2{font-size:clamp(24px,3.3vw,33px);margin:0 0 14px;}
-.homex .hx-copy p{font-size:16.5px;color:var(--h-soft);margin:0;}
+.homex .hx-copy p{font-size:16px;color:var(--h-soft);margin:0;}
 .homex .hx-copy p.hx-lede{font-size:16px;}
 .homex .hx-phone-col{display:flex;justify-content:center;}
 @media(max-width:860px){.homex .hx-split{grid-template-columns:1fr;gap:30px;}.homex .hx-phone-col{order:-1;}}
@@ -424,11 +438,12 @@ svg.mi{width:1em;height:1em;vertical-align:-0.13em}
    source order. */
 .homex .hx-kick,
 .homex .hx-copy p.hx-kick,
-.homex .hx-twocol .hx-tcol p.hx-kick{font-family:var(--serif,Fraunces,serif);font-size:16.5px;line-height:1.42;
-  color:var(--h-mid);margin:0 0 11px;font-weight:500;}
+.homex .hx-twocol .hx-tcol p.hx-kick{font-family:inherit;font-size:17.5px;line-height:1.45;
+  color:var(--h-mid);margin:0 0 11px;font-weight:700;}
 @media(max-width:640px){.homex .hx-kick,.homex .hx-copy p.hx-kick,
-  .homex .hx-twocol .hx-tcol p.hx-kick{font-size:15.5px;}}
-.homex .hx-hero-split .hx-copy p.hx-kick{font-size:19px;font-weight:600;margin-bottom:14px;}
+  .homex .hx-twocol .hx-tcol p.hx-kick{font-size:16.5px;}}
+.homex .hx-hero-split .hx-copy p.hx-kick{font-family:var(--serif,Fraunces,serif);font-size:19px;
+  font-weight:600;margin-bottom:14px;}
 @media(max-width:640px){.homex .hx-hero-split .hx-copy p.hx-kick{font-size:18px;}}
 @media(max-width:760px){.homex .hx-twocol{grid-template-columns:1fr;gap:24px}}
 
