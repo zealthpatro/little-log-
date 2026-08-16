@@ -284,6 +284,7 @@ html:has(.homex) body{background:#FDFBF6;}
 .homex .hx-copy h2{font-size:clamp(24px,3.3vw,33px);margin:0 0 14px;}
 .homex .hx-copy p{font-size:16px;color:var(--h-soft);margin:0;}
 .homex .hx-copy p.hx-lede{font-size:16px;}
+.homex .hx-copy p.hx-fineprint{font-size:13.5px;color:var(--h-faint);}
 .homex .hx-phone-col{display:flex;justify-content:center;}
 @media(max-width:860px){.homex .hx-split{grid-template-columns:1fr;gap:30px;}.homex .hx-phone-col{order:-1;}}
 .homex .hx-phone{width:300px;background:#141109;border-radius:50px;padding:12px;box-shadow:var(--h-phone-shadow);position:relative;}
@@ -430,6 +431,7 @@ html:has(.homex) body{background:#FDFBF6;}
 .homex .hx-twocol{display:grid;grid-template-columns:1fr 1fr;gap:44px;max-width:1000px;margin:0 auto;padding-top:6px;padding-bottom:6px}
 .homex .hx-twocol .hx-tcol h2{font-size:clamp(19px,2.1vw,24px);line-height:1.22;margin:0 0 10px;color:var(--h-ink);font-family:var(--serif,Fraunces,serif);font-weight:600}
 .homex .hx-twocol .hx-tcol p{font-size:15.5px;line-height:1.62;color:var(--h-soft);margin:0}
+@media(max-width:640px){.homex .hx-copy p{font-size:15px;}.homex .hx-twocol .hx-tcol p{font-size:15px;}}
 /* The kicker. A section whose job is belonging gets the felt line as its heading; the concrete
    moment it used to carry sits here instead, one step down, so neither is lost. Serif to keep it
    part of the headline rather than part of the body.
@@ -438,10 +440,10 @@ html:has(.homex) body{background:#FDFBF6;}
    source order. */
 .homex .hx-kick,
 .homex .hx-copy p.hx-kick,
-.homex .hx-twocol .hx-tcol p.hx-kick{font-family:inherit;font-size:17.5px;line-height:1.45;
+.homex .hx-twocol .hx-tcol p.hx-kick{font-family:inherit;font-size:18px;line-height:1.45;
   color:var(--h-mid);margin:0 0 11px;font-weight:700;}
 @media(max-width:640px){.homex .hx-kick,.homex .hx-copy p.hx-kick,
-  .homex .hx-twocol .hx-tcol p.hx-kick{font-size:16.5px;}}
+  .homex .hx-twocol .hx-tcol p.hx-kick{font-size:17px;}}
 .homex .hx-hero-split .hx-copy p.hx-kick{font-family:var(--serif,Fraunces,serif);font-size:19px;
   font-weight:600;margin-bottom:14px;}
 @media(max-width:640px){.homex .hx-hero-split .hx-copy p.hx-kick{font-size:18px;}}

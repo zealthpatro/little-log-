@@ -12,6 +12,10 @@ design/
 ├── RED-TEAM-REVIEW.md ← Product-Board Pod-15 pre-launch security verdict + scorecards
 ├── firestore.published.rules  ← snapshot of console rules (runtime source of truth)
 ├── BREAKPOINTS.md     ← all responsive breakpoints (app + marketing)
+├── MARKETING-SYSTEM.md ← site.css / .homex: tokens, type ladder, fold model, the CSS traps
+                          that shipped bugs, and the heading-register rule.
+                          READ BEFORE ANY MARKETING SITE CHANGE.
+                          Enforced by tools/marketing_type_check.js
 ├── audit.html         ← open in a browser: dashboard of flow status + gaps
 └── flows/
     ├── 01-auth.md            sign-in (Google/Apple/email link) + auth gate

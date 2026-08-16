@@ -2,6 +2,11 @@
 
 > **Status (June 2026):** This design system is live across the merged, shipped Cubby (one app spanning Trying → Expecting → Baby → Child); the tokens, type ramp, icon language and the audit's shipped fixes are all in production. Full current state + go-live plan: HANDOFF.md.
 
+> **Scope: this document is the APP (`/app/`).** Its tokens live in `app/index.html :root`. The
+> public marketing site is a separate system with its own tokens in `site.css` under `.homex`, and
+> its own anchor: **`design/MARKETING-SYSTEM.md`**. Do not mix the two palettes or type ramps; they
+> share names (`--ink`, `--h-ink`) and different values.
+
 This is the single source of truth for how Cubby looks and feels, in three parts:
 **Part A** the design system as it should be (the anchor), **Part B** the audit of what's right
 and wrong today (10 June 2026, audited at 375/600/768/1280px), **Part C** the recommended
