@@ -21,6 +21,15 @@
       return isStandalone() && /iPhone|iPad|iPod/.test(navigator.userAgent);
     } catch (e) { return false; }
   }
+  /* isIOS() above requires standalone, so it can only recognise an ALREADY-installed app. To stop
+     recommending the install we need to know we are on an iPhone BEFORE they install, in Safari.
+     iPadOS reports itself as a Mac, hence the touch-points arm. */
+  function isIOSDeviceUA() {
+    try {
+      var ua = navigator.userAgent || '';
+      return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && (navigator.maxTouchPoints || 0) > 1);
+    } catch (e) { return false; }
+  }
   /* An installed PWA launched from the home screen. Someone here already chose Cubby - the
      marketing landing (nav, pricing, install pitch) is noise, and a sign-in card popping over
      it feels like a dialog box. They get the same focused full-screen sign-in as the native app. */
@@ -330,7 +339,13 @@
       + '</div>'
       + '<p class="lp-pro-note">Cubby Pro launches October 2026. Free shares carry a small "made with Cubby · little-cubby.com" mark; Pro shares are clean. Rituals, push reminders &amp; insights are on the Pro roadmap for later. Sign in, then register for Pro from Settings, Cubby Pro, to claim your free trial at launch.</p></section>')
       + '<section class="lp-final"><h2>Everyone caring for your baby, in sync.</h2>' + cta + '<div class="lp-trust">Free · Private · made with 🐻</div>'
-      + (native ? '' : '<div class="lp-pwa">No download, no app store. Add Cubby to your home screen for an app-like, offline-ready experience in any browser.</div>') + '</section>'
+      /* Not on iOS, until sign-in survives the home screen. On iOS an installed PWA gets its OWN
+         storage container and the OAuth handler is cross-origin, so sign-in completes in Safari and
+         the installed app stays signed out — this sentence was talking people into the one action
+         that locks them out, and it is the same trap the install button on the sign-in card was.
+         True and harmless on Android and desktop, so it stays there. Restore it for iOS the day the
+         in-container sign-in ships. */
+      + (native || isIOSDeviceUA() ? '' : '<div class="lp-pwa">No download, no app store. Add Cubby to your home screen for an app-like, offline-ready experience in any browser.</div>') + '</section>'
       + (native
         ? '<footer class="lp-foot">Cubby · a warm, private baby tracker 🐻</footer>'
         : '<footer class="lp-foot">Cubby · a warm, private baby tracker 🐻<br><a href="/">little-cubby.com</a> · <a href="/articles/">Articles</a> · <a href="/faq/">FAQ</a></footer>')

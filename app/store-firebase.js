@@ -349,6 +349,13 @@
   // Subtle install affordance at the sign-in gate (the marketing /install.js does not run on /app/).
   // Reuses the app's own canShowInstall/addToHomeScreen helpers (defined in index.html, loaded first).
   function installRowHtml() {
+    /* NEVER on a signed-out screen. Both callers are the sign-in card, and installing to the home
+       screen is the single action that BREAKS sign-in on iOS: the installed app gets its own storage
+       container, and the OAuth handler is cross-origin so it completes in Safari and the session lands
+       in the wrong jar. We were advertising the trap on the very screen it disables, and had been since
+       2026-06-24. Sign in first, then offer the install — by then it costs nothing.
+       Gated on the SESSION rather than at the call sites so a future signed-in surface still gets it. */
+    try { if (!auth.currentUser) return ''; } catch (e) { return ''; }
     try { if (!(window.canShowInstall && window.canShowInstall())) return ''; } catch (e) { return ''; }
     return '<div class="ll-install-row" style="margin:10px auto 0;max-width:340px;text-align:center"><button type="button" id="llInstallBtn" style="border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;color:var(--ink-soft,#6E635B);text-decoration:underline;padding:6px">Or add Cubby to your home screen</button><div id="llInstallMsg" class="ll-auth-msg" style="display:none"></div></div>';
   }
@@ -418,7 +425,11 @@
     var email = null;
     try { email = localStorage.getItem('cubby-email-signin'); } catch (e) {}
     if (!email) email = window.prompt('Confirm your email to finish signing in');
-    if (!email) return;
+    /* This used to `return` in silence. The key is missing whenever the link is opened in a DIFFERENT
+       storage container from the one that asked for it — which on iOS is every time, because Mail opens
+       Safari and the request was made in the home-screen app. So the person is shown a bare prompt with
+       no context, dismisses it, and lands on a sign-in screen that says nothing at all. */
+    if (!email) { showSignIn('To finish signing in, we need the email address you asked for the link with.'); return; }
     auth.signInWithEmailLink(email.trim(), window.location.href)
       .then(function (res) {
         try { localStorage.removeItem('cubby-email-signin'); } catch (e) {}
@@ -433,6 +444,11 @@
   }
 
   function showSignIn(msg) {
+    /* Any re-render of this screen means the attempt is over, one way or another, so the stuck-timer
+       must not outlive it — otherwise backing out of a popup (a deliberate, normal act) gets told 25
+       seconds later that it "did not come back". The timer nulls itself before calling in here, so
+       this is a no-op on that path. */
+    signInIdle();
     var ov = overlay();
     if (typeof window.cubbyLanding === 'function') {
       ov.classList.add('landing');
@@ -612,6 +628,14 @@
      popup wait — inviting the double-tap that cancels the first popup. Disable them all and swap
      the label text node (the Google G / Apple mark stays untouched, per branding rules). Buttons
      come back via showSignIn()'s full re-render on cancel or failure. */
+  /* The buttons come back on their own. They used to come back ONLY via showSignIn()'s re-render on
+     cancel or failure — so when the promise never settled at all, which is exactly what happens to an
+     installed iOS home-screen app whose popup has no opener, every button stayed greyed at "Signing in…"
+     forever with nothing said. A permanently dead button is the worst state in the app: it looks like
+     the app is working on it, so the parent waits, and then blames themselves.
+     Nothing recovers a promise that never settles except a clock. */
+  var _signInTimer = null;
+  function signInIdle() { if (_signInTimer) { clearTimeout(_signInTimer); _signInTimer = null; } }
   function signInBusy() {
     Array.prototype.forEach.call(document.querySelectorAll('.ll-cta, .ll-apple-cta, #llGoogleBtn, #llAppleBtn'), function (b) {
       if (b.disabled) return;
@@ -621,6 +645,24 @@
         if (n.nodeType === 3 && n.textContent.trim()) { n.textContent = 'Signing in…'; break; }
       }
     });
+    signInIdle();
+    _signInTimer = setTimeout(function () {
+      _signInTimer = null;
+      if (auth.currentUser) return;                 // it worked; the app is already moving on
+      showSignIn(stuckSignInMsg());
+    }, 25000);
+  }
+  /* What to say when sign-in did not come back. On an installed iOS home-screen app we KNOW why, so
+     say the true thing and give the route that works today, rather than a generic apology. */
+  function stuckSignInMsg() {
+    var standalone = false, ios = false;
+    try { standalone = (typeof isStandaloneApp === 'function' && isStandaloneApp()); } catch (e) {}
+    try { ios = (typeof isIOSDevice === 'function' && isIOSDevice()); } catch (e) {}
+    if (standalone && ios) {
+      return 'Sign-in cannot finish inside the home-screen app yet. Open <b>little-cubby.com</b> in Safari '
+        + 'and sign in there, and we are fixing this so you do not have to.';
+    }
+    return 'That did not come back. Mind trying again?';
   }
   function signInGoogle() {
     signInBusy();
@@ -2988,7 +3030,15 @@
 
   /* ---------- auth state machine ---------- */
   showStatus('Loading…'); // cover the app until we know whether you're signed in
-  auth.getRedirectResult().catch(function () {});
+  /* An empty catch on the auth path is how a person gets a silent nothing. This swallowed EVERY
+     redirect error, which is the branch an installed iOS app takes: the popup has no opener, Firebase
+     falls through to a redirect, the redirect fails or lands in Safari, and this discarded the reason.
+     Nobody could have reported what went wrong because nothing was ever said. */
+  auth.getRedirectResult().catch(function (err) {
+    signInIdle();
+    if (err && err.code === 'auth/popup-closed-by-user') return;   // backing out is a choice, stay quiet
+    showSignIn(errText(err, 'That sign-in did not come back. Mind trying again?'));
+  });
   maybeFinishEmailLink();
 
   // Local E2E boot — localhost + ?e2e=1 ONLY. The hostname guard means this can NEVER run in
