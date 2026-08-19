@@ -76,6 +76,13 @@ service cloud.firestore {
        makes a fan-out idempotent, so a campaign resumed after a timeout cannot deliver twice.
        campaigns/{id} is authored by an operator, never by the app. Nothing in the client reads
        either one, so denying read costs no feature and keeps the send history out of reach. */
+    /* One-time sign-in codes. Server-only, like pushLedger below: the Worker reaches these with the
+       service account, which bypasses rules entirely, so slamming the door on every client costs
+       nothing and removes the whole surface. A client that could READ this collection could read the
+       MAC of a live code and grind it offline at its leisure; one that could WRITE it could plant a
+       code it knows for somebody else's address and sign in as them. Neither is reachable.
+       Never relax this. There is no client use for it, by construction. */
+    match /signinCodes/{id}  { allow read, write: if false; }
     match /pushLedger/{uid} { allow read, write: if false; }
     match /campaigns/{id}   { allow read, write: if false; }
 

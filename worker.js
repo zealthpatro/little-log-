@@ -152,6 +152,253 @@ async function sendSigninLink(request, env) {
   }
 }
 
+/* ---- Sign-in by CODE, so sign-in never leaves the container -------------------------------------
+
+   WHY A CODE AND NOT A LINK. A link navigates, and on iOS the app does not get to decide where it
+   lands: an installed home-screen PWA has its OWN storage container, the OAuth handler is
+   cross-origin, and a link tapped in Mail opens Safari regardless. So the person signs in
+   successfully, in Safari, and the installed app stays signed out. Every iOS install walked into
+   that (docs/postmortems/2026-08-19-installed-ios-pwa-cannot-sign-in.md). A code does not navigate.
+   You read it in Mail, come back, and type it where you already are — so the session is created in
+   the container that asked for it, which is the whole point and the only property that matters here.
+
+   NO NEW SECRET, for the same reason the dose ticket has none: the push-cron-403 outage was a
+   MISSING secret killing delivery silently for months, and each additional required binding is
+   another way to fail exactly like that. The key is derived from the service-account private key we
+   already hold, under its own domain-separation string so it can never collide with the dose ticket.
+
+   WHAT IS STORED. Never the code. A doc holds the HMAC of it, keyed by a hash of the address, so:
+   one live code per address (a new request replaces the old), and a database dump yields nothing
+   usable. Verification is crypto.subtle.verify, which is constant time — comparing two strings
+   ourselves would leak the answer a character at a time.
+
+   NO ENUMERATION ORACLE. Issuing always answers the same way whether or not the address is known,
+   and verifying creates the account if it is absent, so there is no observable difference between a
+   registered address and a stranger's. That is deliberate: the alternative is a free membership
+   oracle for anyone who can type an email address.
+
+   WHAT IT GRANTS, stated narrowly: proof of control of an inbox, exchanged for a session as the
+   owner of that address. That is the same assurance any password reset gives, and it is the same
+   assurance the existing email LINK already gave, so this adds no new exposure — but it does mean
+   an inbox is enough, which is worth knowing rather than discovering.
+*/
+const SIGNIN_CODE_INFO = 'cubby-signin-code-v1';
+const SIGNIN_CODE_TTL_MS = 10 * 60 * 1000;   // long enough to fetch it from Mail, short enough to be worthless later
+const SIGNIN_CODE_TRIES = 5;                 // 5 guesses against 1,000,000, then the code dies
+
+async function signinCodeKey(sa) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(sa.private_key || '')),
+    { name: 'HKDF' }, false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: new TextEncoder().encode(SIGNIN_CODE_INFO) }, base, 256);
+  return crypto.subtle.importKey('raw', bits, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
+}
+
+/* The document id. A hash rather than the address itself, so the collection is not a list of every
+   email that has ever tried to sign in, and so the id is always a safe path segment. */
+async function signinCodeDocId(sa, email) {
+  const key = await signinCodeKey(sa);
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode('id:' + email));
+  return _b64urlFromBytes(sig).slice(0, 32);
+}
+async function signinCodeMac(sa, email, code) {
+  const key = await signinCodeKey(sa);
+  // The address is inside the MAC, so a code minted for one address cannot be replayed against another.
+  return await crypto.subtle.sign('HMAC', key, new TextEncoder().encode('code:' + email + ':' + code));
+}
+function newSigninCode() {
+  // Uniform over 000000-999999. Rejection sampling, because % 1000000 on a 32-bit draw is biased and
+  // a biased OTP is a smaller keyspace than it looks.
+  const a = new Uint32Array(1);
+  let n;
+  do { crypto.getRandomValues(a); n = a[0]; } while (n >= 4294000000);
+  return String(n % 1000000).padStart(6, '0');
+}
+
+/* Same-origin + per-IP volume, the same guard the link endpoint uses. Written as a helper for the two
+   new endpoints rather than refactored into the existing one: that path works, and an incident is the
+   wrong time to rewrite a working sign-in route. */
+async function signinGuard(request, env) {
+  const url = new URL(request.url);
+  const origin = request.headers.get('Origin'), referer = request.headers.get('Referer');
+  let sameOrigin = false;
+  try {
+    if (origin) sameOrigin = new URL(origin).host === url.host;
+    else if (referer) sameOrigin = new URL(referer).host === url.host;
+  } catch (e) { sameOrigin = false; }
+  if (!sameOrigin) return json({ error: 'forbidden' }, 403);
+  if (env.SIGNIN_RATE_LIMITER) {
+    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    try {
+      const { success } = await env.SIGNIN_RATE_LIMITER.limit({ key: 'code:' + ip });
+      if (!success) return json({ error: 'rate_limited' }, 429);
+    } catch (e) { /* limiter unavailable: fail open, so a config gap cannot block real sign-ins */ }
+  }
+  return null;
+}
+
+/* POST /api/signin-code  {email} -> {ok:true}, always. */
+async function sendSigninCode(request, env) {
+  const bad = await signinGuard(request, env); if (bad) return bad;
+  let body; try { body = await request.json(); } catch (e) { return json({ error: 'bad_request' }, 400); }
+  const email = ((body && body.email) || '').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254) return json({ error: 'invalid_email' }, 400);
+
+  let sa; try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return json({ error: 'server_config' }, 500); }
+  if (!env.RESEND_API_KEY) return json({ error: 'server_config' }, 500);
+
+  // Per-address cooldown, so one address cannot be mailed repeatedly. Same shape as the link path:
+  // armed only after a real send, so a failed send does not lock the person out of retrying.
+  const cache = caches.default;
+  const cooldown = new Request('https://cooldown.cubby.internal/code-' + encodeURIComponent(cooldownKeyFor(email)));
+  if (await cache.match(cooldown)) return json({ ok: true, cached: true });
+
+  try {
+    const code = newSigninCode();
+    const mac = _b64urlFromBytes(await signinCodeMac(sa, email, code));
+    const token = await getAccessToken(sa);
+    const base = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents';
+    const docId = await signinCodeDocId(sa, email);
+    // A plain PATCH with no updateMask replaces the document, which is exactly what we want: issuing a
+    // new code must invalidate the previous one rather than leaving two live.
+    const put = await fetch(base + '/signinCodes/' + docId, {
+      method: 'PATCH',
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ fields: {
+        mac: { stringValue: mac },
+        email: { stringValue: email },
+        exp: { integerValue: String(Date.now() + SIGNIN_CODE_TTL_MS) },
+        tries: { integerValue: String(SIGNIN_CODE_TRIES) }
+      } })
+    });
+    if (!put.ok) return json({ error: 'store_failed' }, 502);
+
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + env.RESEND_API_KEY, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        from: env.MAIL_FROM || 'Cubby <noreply@mail.little-cubby.com>',
+        to: email,
+        subject: 'Your Cubby sign-in code',
+        html: signinCodeHtml(code)
+      })
+    });
+    if (!r.ok) return json({ error: 'send_failed' }, 502);
+    await cache.put(cooldown, new Response('1', { headers: { 'cache-control': 'max-age=60' } }));
+    return json({ ok: true });
+  } catch (e) {
+    return json({ error: 'failed' }, 500);
+  }
+}
+
+/* POST /api/signin-verify  {email, code} -> {token} for signInWithCustomToken. */
+async function verifySigninCode(request, env) {
+  const bad = await signinGuard(request, env); if (bad) return bad;
+  let body; try { body = await request.json(); } catch (e) { return json({ error: 'bad_request' }, 400); }
+  const email = ((body && body.email) || '').trim().toLowerCase();
+  const code = String((body && body.code) || '').trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254) return json({ error: 'invalid_email' }, 400);
+  if (!/^[0-9]{6}$/.test(code)) return json({ error: 'invalid_code' }, 400);
+
+  let sa; try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return json({ error: 'server_config' }, 500); }
+
+  try {
+    const token = await getAccessToken(sa);
+    const base = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents';
+    const docId = await signinCodeDocId(sa, email);
+    const path = base + '/signinCodes/' + docId;
+
+    const got = await fetch(path, { headers: { authorization: 'Bearer ' + token } });
+    if (!got.ok) return json({ error: 'bad_code' }, 400);              // no code outstanding
+    const doc = await got.json();
+    const f = (doc && doc.fields) || {};
+    const exp = Number((f.exp && f.exp.integerValue) || 0);
+    const tries = Number((f.tries && f.tries.integerValue) || 0);
+    const storedMac = String((f.mac && f.mac.stringValue) || '');
+    const storedEmail = String((f.email && f.email.stringValue) || '');
+
+    const dead = async () => { try { await fetch(path, { method: 'DELETE', headers: { authorization: 'Bearer ' + token } }); } catch (e) {} };
+    if (!storedMac || storedEmail !== email || !(exp > Date.now()) || !(tries > 0)) { await dead(); return json({ error: 'bad_code' }, 400); }
+
+    /* Spend the attempt BEFORE checking it. If the compare came first, an attacker who can abandon
+       the request mid-flight (or make it fail) would get unlimited free guesses. */
+    const spend = await fetch(path + '?updateMask.fieldPaths=tries', {
+      method: 'PATCH',
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ fields: { tries: { integerValue: String(tries - 1) } } })
+    });
+    if (!spend.ok) return json({ error: 'failed' }, 500);
+
+    const key = await signinCodeKey(sa);
+    const ok = await crypto.subtle.verify('HMAC', key, _b64urlToBytes(storedMac),
+      new TextEncoder().encode('code:' + email + ':' + code));
+    if (!ok) {
+      if (tries - 1 <= 0) await dead();                                 // out of guesses: burn it
+      return json({ error: 'bad_code' }, 400);
+    }
+
+    await dead();                                                       // single use, always
+    const uid = await getOrCreateUidByEmail(token, sa.project_id, email);
+    if (!uid) return json({ error: 'failed' }, 500);
+    const custom = await mintCustomToken(sa, uid);
+    if (!custom) return json({ error: 'failed' }, 500);
+    return json({ token: custom });
+  } catch (e) {
+    return json({ error: 'failed' }, 500);
+  }
+}
+
+/* The uid behind an address, created if there is none. Creating on verify (not on issue) is what keeps
+   the issue endpoint from being an enumeration oracle, and emailVerified is true because control of
+   the inbox is exactly what was just proven. */
+async function getOrCreateUidByEmail(token, projectId, email) {
+  const api = 'https://identitytoolkit.googleapis.com/v1/projects/' + projectId;
+  const look = await fetch(api + '/accounts:lookup', {
+    method: 'POST',
+    headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+    body: JSON.stringify({ email: [email] })
+  });
+  if (look.ok) {
+    const j = await look.json();
+    if (j && j.users && j.users[0] && j.users[0].localId) return j.users[0].localId;
+  }
+  const made = await fetch(api + '/accounts', {
+    method: 'POST',
+    headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+    body: JSON.stringify({ email: email, emailVerified: true })
+  });
+  if (!made.ok) return '';
+  const j2 = await made.json();
+  return (j2 && j2.localId) || '';
+}
+
+/* A Firebase custom token is just an RS256 JWT signed by the service account, addressed to Identity
+   Toolkit. Deliberately short-lived: it is redeemed by signInWithCustomToken within seconds. */
+async function mintCustomToken(sa, uid) {
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const header = { alg: 'RS256', typ: 'JWT' };
+    const claim = {
+      iss: sa.client_email, sub: sa.client_email,
+      aud: 'https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit',
+      iat: now, exp: now + 300, uid: uid
+    };
+    const unsigned = b64urlStr(JSON.stringify(header)) + '.' + b64urlStr(JSON.stringify(claim));
+    const key = await crypto.subtle.importKey('pkcs8', pemToDer(sa.private_key),
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+    const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(unsigned));
+    return unsigned + '.' + b64url(sig);
+  } catch (e) { console.error('custom_token_mint_fail', (e && e.message) || String(e)); return ''; }
+}
+
+function signinCodeHtml(code) {
+  return '<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;max-width:420px;margin:0 auto;padding:28px 22px;color:#2C2521">'
+    + '<p style="font-size:15px;line-height:1.5;margin:0 0 18px">Here is your Cubby sign-in code. Type it into Cubby on the device you started on.</p>'
+    + '<div style="font-size:34px;font-weight:800;letter-spacing:.16em;text-align:center;padding:18px 0;background:#FBF7EF;border-radius:16px;margin:0 0 18px">' + code + '</div>'
+    + '<p style="font-size:13px;line-height:1.5;color:#6E635B;margin:0">It works for 10 minutes and once only. If you did not ask for it, you can ignore this email and nothing happens.</p>'
+    + '</div>';
+}
+
 /* POST /api/send-invite — email an invite link, from Cubby, on the owner's behalf.
    {idToken, token, email}
    Until now Cubby sent no invite email at all: submitInvite handed the owner a mailto: or a share
@@ -1307,6 +1554,16 @@ export default {
     if (url.pathname === '/api/send-invite') {
       if (request.method !== 'POST') return new Response('method not allowed', { status: 405 });
       return sendInviteEmail(request, env, url);
+    }
+    /* The code path, for containers a link cannot come back to. Kept as its own route rather than a
+       mode on send-signin-link, so the working link path is untouched. */
+    if (url.pathname === '/api/signin-code') {
+      if (request.method !== 'POST') return json({ error: 'method' }, 405);
+      return sendSigninCode(request, env);
+    }
+    if (url.pathname === '/api/signin-verify') {
+      if (request.method !== 'POST') return json({ error: 'method' }, 405);
+      return verifySigninCode(request, env);
     }
     if (url.pathname === '/api/send-signin-link') {
       if (request.method !== 'POST') return new Response('method not allowed', { status: 405 });

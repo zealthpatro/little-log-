@@ -330,13 +330,34 @@
      classes), and an inline style can't be beaten by a [data-theme] rule — but it CAN hold a custom
      property, which resolves per theme like any other. Every token's light value is the literal it
      replaces, so nothing here moves in Light. */
+  /* A LINK cannot come back to an installed iOS app: the container has its own storage, and a link
+     tapped in Mail opens Safari, so the session is created somewhere the app cannot see. A CODE does
+     not navigate — you read it and type it where you already are — so the session lands in the
+     container that asked for it. Used only where the link provably cannot work, so the link path
+     everyone else uses is untouched. */
+  function codeSignin() {
+    try {
+      return (typeof isStandaloneApp === 'function' && isStandaloneApp())
+        && (typeof isIOSDevice === 'function' && isIOSDevice());
+    } catch (e) { return false; }
+  }
   function emailRowHtml() {
+    var code = codeSignin();
     return '<div class="ll-email-row" style="margin:14px auto 0;max-width:340px;text-align:center">'
-      + '<button type="button" class="ll-email-toggle" style="border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;color:var(--ink-soft,#6E635B);text-decoration:underline;padding:6px">Prefer email? Get a sign-in link</button>'
+      + '<button type="button" class="ll-email-toggle" style="border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;color:var(--ink-soft,#6E635B);text-decoration:underline;padding:6px">'
+      + (code ? 'Sign in with an email code' : 'Prefer email? Get a sign-in link') + '</button>'
       + '<form class="ll-email-form" style="display:none;gap:8px;margin-top:8px">'
       + '<input type="email" required placeholder="you@example.com" autocomplete="email" style="flex:1;min-width:0;font-family:inherit;font-size:15px;padding:11px 13px;border:1.5px solid var(--line,#E7DECF);border-radius:11px;background:var(--surface-2,#FBF7EF);color:var(--ink,#2C2521)">'
-      + '<button type="submit" style="border:none;background:var(--note,#9A8C6E);color:var(--on-accent,#2C2521);font-family:inherit;font-weight:800;font-size:14px;padding:11px 14px;border-radius:11px;cursor:pointer;white-space:nowrap">Send link</button>'
-      + '</form><div class="ll-email-note" style="font-size:12px;font-weight:600;color:var(--ink-soft,#6E635B);margin-top:7px"></div></div>';
+      + '<button type="submit" style="border:none;background:var(--note,#9A8C6E);color:var(--on-accent,#2C2521);font-family:inherit;font-weight:800;font-size:14px;padding:11px 14px;border-radius:11px;cursor:pointer;white-space:nowrap">'
+      + (code ? 'Send code' : 'Send link') + '</button>'
+      + '</form>'
+      // inputMode numeric + autocomplete one-time-code, so iOS offers the code from the notification
+      // rather than making them switch to Mail and back.
+      + (code ? '<form class="ll-code-form" style="display:none;gap:8px;margin-top:8px">'
+        + '<input type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required placeholder="6-digit code" style="flex:1;min-width:0;font-family:inherit;font-size:17px;letter-spacing:.18em;text-align:center;padding:11px 13px;border:1.5px solid var(--line,#E7DECF);border-radius:11px;background:var(--surface-2,#FBF7EF);color:var(--ink,#2C2521)">'
+        + '<button type="submit" style="border:none;background:var(--note,#9A8C6E);color:var(--on-accent,#2C2521);font-family:inherit;font-weight:800;font-size:14px;padding:11px 14px;border-radius:11px;cursor:pointer;white-space:nowrap">Sign in</button>'
+        + '</form>' : '')
+      + '<div class="ll-email-note" style="font-size:12px;font-weight:600;color:var(--ink-soft,#6E635B);margin-top:7px"></div></div>';
   }
   /* Privacy reassurance + consent, shown right at the sign-in buttons. Links /privacy/ (live); no Terms
      link until /terms/ ships. */
@@ -372,7 +393,12 @@
     var LINKBTN = 'border:none;background:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:800;color:#6E635B;text-decoration:underline;padding:2px';
     var cdTimer = null;
     // (re)show the email form keeping what's typed, so a wrong or changed address can be corrected and re-sent.
-    function openForm() { if (cdTimer) { clearInterval(cdTimer); cdTimer = null; } note.textContent = ''; toggle.style.display = 'none'; form.style.display = 'flex'; btn.disabled = false; btn.textContent = 'Send link'; input.focus(); input.select(); }
+    /* The submit label is set in THREE places — the markup, here, and the failure path — and this one
+       and the failure one had it hardcoded. So on an installed iOS app the toggle read "Sign in with an
+       email code" and the button underneath it still read "Send link": the mode was right and the button
+       lied about it. One variable, so they cannot disagree again. */
+    var SEND_LABEL = codeSignin() ? 'Send code' : 'Send link';
+    function openForm() { if (cdTimer) { clearInterval(cdTimer); cdTimer = null; } note.textContent = ''; toggle.style.display = 'none'; form.style.display = 'flex'; btn.disabled = false; btn.textContent = SEND_LABEL; input.focus(); input.select(); }
     toggle.onclick = openForm;
 
     // Send (or resend) the sign-in link: our own Worker + Resend first (Firebase's built-in sender
@@ -408,14 +434,54 @@
       };
     }
 
+    /* ---- the code path, for containers a link cannot return to ---- */
+    var codeForm = row.querySelector('.ll-code-form');
+    function sendCode(email) {
+      return fetch('/api/signin-code', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: email }) })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) throw new Error(d.error || 'send_failed'); return d; }); });
+    }
+    function showCodeEntry(email) {
+      form.style.display = 'none';
+      codeForm.style.display = 'flex';
+      note.innerHTML = 'We sent a 6-digit code to <b>' + escHtml(email) + '</b>. Read it in your mail app, then come back here and type it in.'
+        + '<div class="ll-resend-row" style="margin-top:8px"><button type="button" class="ll-changeemail" style="' + LINKBTN + '">Wrong email?</button></div>';
+      note.querySelector('.ll-changeemail').onclick = function () { codeForm.style.display = 'none'; input.value = email; openForm(); };
+      var ci = codeForm.querySelector('input'); ci.value = ''; ci.focus();
+      codeForm.onsubmit = function (ev2) {
+        ev2.preventDefault();
+        var code = (ci.value || '').replace(/\D/g, '');
+        if (code.length !== 6) { note.textContent = 'That code should be six digits.'; ci.focus(); return; }
+        var cb = codeForm.querySelector('button');
+        cb.disabled = true; cb.textContent = 'Signing in…';
+        fetch('/api/signin-verify', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: email, code: code }) })
+          .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok || !d.token) throw new Error(d.error || 'bad_code'); return d; }); })
+          /* The whole point: the session is created HERE, in this container, by this page. No
+             navigation, no popup, no cross-origin handler, nothing for iOS to redirect elsewhere. */
+          .then(function (d) { return auth.signInWithCustomToken(d.token); })
+          .catch(function (err) {
+            cb.disabled = false; cb.textContent = 'Sign in';
+            var m = (err && err.message) === 'bad_code'
+              ? 'That code did not match, or it has expired. Codes last 10 minutes and work once.'
+              : errText(err, 'Could not finish signing in just now. Mind trying again?');
+            note.textContent = m; ci.select();
+          });
+      };
+    }
+
     form.onsubmit = function (ev) {
       ev.preventDefault();
       var email = input.value.trim();
       if (!looksLikeEmail(email)) { note.textContent = 'That email looks a bit off, mind checking it?'; input.focus(); return; }
       btn.disabled = true; btn.textContent = 'Sending…';
+      if (codeSignin() && codeForm) {
+        sendCode(email)
+          .then(function () { btn.disabled = false; btn.textContent = SEND_LABEL; showCodeEntry(email); })
+          .catch(function (err) { btn.disabled = false; btn.textContent = SEND_LABEL; note.textContent = errText(err, 'Could not send the code just now. Mind trying again?'); });
+        return;
+      }
       sendLink(email)
         .then(function () { showSent(email); })
-        .catch(function (err) { btn.disabled = false; btn.textContent = 'Send link'; note.textContent = errText(err, 'Could not send the link just now. Mind trying again?'); });
+        .catch(function (err) { btn.disabled = false; btn.textContent = SEND_LABEL; note.textContent = errText(err, 'Could not send the link just now. Mind trying again?'); });
     };
   }
   function maybeFinishEmailLink() {
