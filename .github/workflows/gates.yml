@@ -59,3 +59,11 @@ jobs:
         env:
           CHROME_PATH: /usr/bin/google-chrome
         run: node tools/thirdparty_gate.js
+      # Runs immediately after the tracker gate ON PURPOSE. The script-src that made that gate green
+      # is the same one that locked every user out of their account for five days, because it also
+      # refused Firebase Auth's apis.google.com. These two constrain each other, so they belong in
+      # the same job: tighten the policy and this fails the moment sign-in stops working.
+      - name: Sign-in actually works on live
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: node tools/signin_gate.js https://little-cubby.com
