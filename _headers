@@ -4,16 +4,30 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
-  Content-Security-Policy: object-src 'none'; base-uri 'self'; frame-ancestors 'none'; upgrade-insecure-requests; script-src 'self' 'unsafe-inline'
+  Content-Security-Policy: object-src 'none'; base-uri 'self'; frame-ancestors 'none'; upgrade-insecure-requests; script-src 'self' 'unsafe-inline' https://apis.google.com
 
 # script-src is what keeps the "no third-party trackers" promise TRUE, rather than merely
 # intended. Cloudflare Web Analytics is injected by the zone, after the Worker and after this
 # file, so nothing in the repo could stop it being SENT. A browser-enforced policy can stop it
 # RUNNING, whoever put it there.
 #
+# https://apis.google.com IS NOT OPTIONAL. Firebase Auth loads apis.google.com/js/api.js at the
+# moment a sign-in starts, to build the OAuth iframe. Without it in script-src the browser refuses
+# the script and EVERY sign-in method dies at once — Google and Apple because they share that
+# iframe, email because the failure strands the sign-in screen before the link path is reached.
+# That is exactly what happened: this policy shipped 2026-08-14 and locked every user out of a
+# working account until 2026-08-19. It is not a tracker; it is Google's own auth loader, and
+# blocking it does nothing for the promise below.
+#
+# THE VERIFICATION THAT MISSED IT, because the next person will be tempted to verify the same way.
+# The original note here said "all pages render with zero other CSP violations and zero page
+# errors", and that was true. Every page was LOADED. No page was SIGNED INTO. apis.google.com is
+# not requested at load; it is requested on the first tap of a sign-in button, so a policy can pass
+# a full crawl of every surface and still be broken for every user. Loading a page is not using it.
+# tools/signin_gate.js now drives the actual button and fails on a CSP violation.
+#
 # Verified against the live site before shipping: static.cloudflareinsights.com is the only
-# third-party script origin across 16 pages, and with this policy applied all pages render with
-# zero other CSP violations and zero page errors. Fonts and stylesheets are untouched: they are
+# third-party script origin across 16 pages. Fonts and stylesheets are untouched: they are
 # style-src and font-src, which are deliberately not set here.
 #
 # 'unsafe-inline' is required because app/index.html carries ~838KB of inline script and 761
