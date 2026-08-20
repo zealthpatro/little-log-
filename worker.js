@@ -152,6 +152,69 @@ async function sendSigninLink(request, env) {
   }
 }
 
+/* ---- Page analytics, first-party and server-side ------------------------------------------------
+
+   WHY THIS EXISTS. A user's sign-in link landed on our 404 page and the only reason we know is that a
+   founder was handed the phone. Asked "how many times has that happened in five days", the honest
+   answer was that nothing anywhere could tell us. That is the third time in a week an outage was found
+   by a person rather than by us, and the sign-in post-mortem's own five-whys had already ended at
+   "there is no telemetry at all", logged as a follow-up after the July outage and never built.
+
+   WHY IT DOES NOT NEED A TRACKER, and why the promise is intact. Twelve surfaces say "no third-party
+   trackers", including the App Store privacy label, which is signed under penalty. That promise is
+   about THIRD PARTIES: a beacon loaded from somebody else's domain, reporting your readers to them.
+   This counts requests we are already serving, in our own Worker, and tells nobody. No client script,
+   nothing to block, nothing to disclose, and it works for users who never run JavaScript at all.
+
+   WHAT IS DELIBERATELY NOT RECORDED, because a health counter must not quietly become a surveillance
+   log. No IP, no user id, no user agent string, no timestamps finer than the day, and above all NO
+   QUERY STRINGS — our own URLs carry sign-in oobCodes, invite tokens and guest codes, so storing a raw
+   URL would put live credentials in a database. Secret-bearing path segments are collapsed too
+   (/g/<code> and /join/<token> name a household to whoever holds them). What is left is: on this day,
+   this route was served this many times, with this status. That is enough to answer the question that
+   started this and not much else, which is the point. */
+function statsKey(pathname) {
+  let p = String(pathname || '/').toLowerCase();
+  if (p.length > 1) p = p.replace(/\/+$/, '');
+  // Collapse anything whose segment IS the secret. These identify a household to whoever holds them.
+  p = p.replace(/^\/g\/[^/]+/, '/g/:code')
+       .replace(/^\/join\/[^/]+/, '/join/:token')
+       .replace(/^\/__\/auth\/[^/]+/, '/__/auth/:action');
+  if (p.length > 180) p = p.slice(0, 180);
+  if (!/^[\w\-./:]*$/.test(p)) return '/:other';        // anything odd collapses rather than being stored
+  return p || '/';
+}
+function statsDocId(day, key) {
+  let h = '';
+  for (let i = 0; i < key.length; i++) h += key.charCodeAt(i).toString(16).padStart(2, '0');
+  return day + '_' + h.slice(0, 300);
+}
+/* Fire-and-forget through waitUntil, so counting never adds a millisecond to anybody's page load, and
+   a Firestore hiccup can never turn into a failed request. Telemetry that can break the thing it
+   watches is worse than none. */
+async function recordPageView(env, url, status) {
+  if (!env.FIREBASE_SERVICE_ACCOUNT) return;
+  let sa; try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return; }
+  const key = statsKey(url.pathname);
+  const day = new Date().toISOString().slice(0, 10);
+  const field = status === 404 ? 'n404' : (status >= 500 ? 'n5xx' : (status >= 400 ? 'n4xx' : 'nOk'));
+  try {
+    const token = await getAccessToken(sa);
+    const base = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents';
+    const name = base.replace('/v1/', '/v1/') + '/pageStats/' + statsDocId(day, key);
+    // One atomic increment. Concurrent edges cannot lose a count the way read-modify-write would.
+    await fetch('https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents:commit', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ writes: [
+        { transform: { document: name, fieldTransforms: [{ fieldPath: field, increment: { integerValue: '1' } }] } },
+        { update: { name: name, fields: { day: { stringValue: day }, path: { stringValue: key } } },
+          updateMask: { fieldPaths: ['day', 'path'] } }
+      ] })
+    });
+  } catch (e) { /* never let counting break serving */ }
+}
+
 /* ---- Sign-in by CODE, so sign-in never leaves the container -------------------------------------
 
    WHY A CODE AND NOT A LINK. A link navigates, and on iOS the app does not get to decide where it
@@ -1525,7 +1588,7 @@ export default {
     // for, and vice versa.
     try { await purgeDeletedHouseholds(env); } catch (e) { console.error('purge_cron_fail', (e && e.message) || String(e)); }
   },
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     // Apple universal links. When Cubby is installed, iOS opens the APP (not Safari) for these paths —
     // so an email sign-in link taps straight into the wrapper (finishing in the webview's own storage
@@ -1665,6 +1728,16 @@ export default {
       const upstream = new URL(url.pathname + url.search, 'https://little-log-a9caa.firebaseapp.com');
       return fetch(new Request(upstream, request));
     }
-    return env.ASSETS.fetch(request);
+    /* The one place every page and every 404 comes out, which is why the counter lives here rather
+       than sprinkled through the routes. HTML navigations only: counting every icon and script would
+       bury the signal we actually want under two orders of magnitude of noise. */
+    const res = await env.ASSETS.fetch(request);
+    try {
+      if (ctx && request.method === 'GET'
+        && /text\/html/i.test(res.headers.get('content-type') || '')) {
+        ctx.waitUntil(recordPageView(env, url, res.status));
+      }
+    } catch (e) { /* never let counting break serving */ }
+    return res;
   }
 };

@@ -82,6 +82,13 @@ service cloud.firestore {
        MAC of a live code and grind it offline at its leisure; one that could WRITE it could plant a
        code it knows for somebody else's address and sign in as them. Neither is reachable.
        Never relax this. There is no client use for it, by construction. */
+    /* Page counts. Server-only for the same reason as everything else here: the Worker writes them
+       with the service account, which bypasses rules, so no client needs an inch of access. Denying
+       read also means the counts cannot be mined by a signed-in stranger to learn which households
+       or guest pages exist. The documents hold no query strings, no ids and no timestamps finer than
+       a day, by construction in recordPageView — but deny it anyway; cheap, and it stays true if the
+       shape ever changes. */
+    match /pageStats/{id}    { allow read, write: if false; }
     match /signinCodes/{id}  { allow read, write: if false; }
     match /pushLedger/{uid} { allow read, write: if false; }
     match /campaigns/{id}   { allow read, write: if false; }
