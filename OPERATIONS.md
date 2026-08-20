@@ -186,6 +186,17 @@ one in the git history.
 - `tools/gen_sitemap.py` — stamps article lastmods
 - `test/` — Firestore rules emulator tests (need Java): `cd test && npm i && npm run test:rules`,
   and `npm run test:invitelink` for the tokenised invite links. **Both must be green before
-  publishing rules**, and rules do NOT deploy via `git push` — they are published separately.
+  publishing rules**, and rules do NOT deploy via `git push` — they are published separately:
+
+  ```sh
+  npx firebase-tools deploy --only firestore:rules
+  ```
+
+  That used to fail with **"No currently active project"** every single time, because `.firebaserc`
+  was never committed — it is not gitignored, it simply was not there, so the CLI had no default and
+  every publish needed `--project little-log-a9caa` typed from memory. It is committed now. A
+  publishing step that fails on a fresh checkout is a publishing step people skip, and these are the
+  rules that keep one family's health record out of another family's hands.
+
   If `java -version` reports "Unable to locate a Java Runtime", install a JDK first
   (`brew install --cask temurin`); the macOS `/usr/bin/java` is only a stub.
