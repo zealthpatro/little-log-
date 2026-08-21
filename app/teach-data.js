@@ -918,6 +918,7 @@
     openWhenPicker: 'The \'when did this happen\' control inside log sheets.',
     showConnTrouble: 'A connection-trouble card shown during sign-in. It is an error state, not a capability, and it explains itself on screen.',
     showStatus: 'Inline status text during sign-in.',
+    showCodeEntry: 'The second panel of the code sign-in: swaps the email field for the six-digit box. A step inside one flow, not a capability of its own, and the panel explains itself on screen.',
     showSent: 'Confirms the magic link went out.',
     openSheet: 'The sheet primitive itself. 131 call sites because it is the frame, not a feature.',
     showLoader: 'A loading spinner. It has no content of its own to explain.',
