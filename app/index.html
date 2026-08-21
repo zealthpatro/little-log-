@@ -7694,7 +7694,55 @@ function openLogBP(){
     <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:8px" onclick="saveBP()">Save</button>
     <div class="preg-disclaim">A high reading with a bad headache, vision changes or sudden swelling can be serious. Contact your midwife or doctor, and seek urgent care if you're worried.</div>`,'preg');
 }
-function saveBP(){ const s=parseInt($('#bpS').value), d=parseInt($('#bpD').value); if(!s||!d){toast('Enter both numbers');return;} state.pregnancy.bp.push({id:uid(),at:getWhen('when'),sys:s,dia:d}); persist(); closeSheet(); render(); toast('Saved'); }
+/* A raised blood pressure used to be answered with toast('Saved'), exactly like a normal one. The
+   thresholds already existed (140/90 raised, 160/110 severe, from pregnancy-data.js) and bpFlag had
+   exactly one caller: a history list she only ever reaches if she had turned a tracker on. So the
+   Care tab's own Blood pressure tile wrote 165/115 and said "Saved".
+
+   Now every reading is read, whatever she came in through, and the answer is proportionate.
+   saveGlucose two hundred lines below already worked this way; this is the same register.
+   Cubby still diagnoses nothing. It repeats her own number back, names the threshold and whose it
+   is, and puts the phone one tap away. */
+function bpMatchedSymptoms(hours){
+  try{
+    const cfg=condCfg('bp'); if(!cfg||!cfg.symptoms) return [];
+    const since=now()-(hours||24)*3600000;
+    // Match on a distinctive stem so "bad headache" logged in her words still finds the guidance row.
+    const stems=cfg.symptoms.map(s=>String(s).toLowerCase().split(/[:,]/)[0].replace(/^(a|sudden|feeling|pain)\s+/,'').slice(0,10));
+    return (state.pregnancy.symptoms||[]).filter(x=>(x.at||0)>=since).map(x=>String(x.kind||'')).
+      filter(k=>stems.some(st=>st&&k.toLowerCase().indexOf(st)>=0));
+  }catch(_){ return []; }
+}
+function careTeamCall(label){
+  const m=(((state.pregnancy||{}).careTeam)||[]).find(x=>x&&x.phone);
+  if(!m) return `<div class="csub" style="margin-top:8px">Your midwife or maternity unit is the number to call. Add it under Care and it will be one tap next time.</div>`;
+  return `<a class="btn-primary" href="tel:${escapeHtml(String(m.phone).replace(/[^0-9+]/g,''))}" style="background:var(--danger);--accent-ink:var(--on-danger,var(--on-accent));display:block;text-align:center;text-decoration:none;margin-top:10px">📞 ${escapeHtml(label||('Call '+(m.name||'your team')))}</a>`;
+}
+function openBPConcern(rec,f){
+  const cfg=condCfg('bp')||{};
+  const withSym=bpMatchedSymptoms(24);
+  const urgent=f.sev||withSym.length>0;
+  const signs=(cfg.symptoms||[]).map(s=>`<div class="danger-row"><span class="dr-dot">●</span><div class="dr-t">${escapeHtml(s)}</div></div>`).join('');
+  openSheet(`<h2>${rec.sys}/${rec.dia}</h2>
+    <div class="sub">${urgent
+      ? (f.sev
+         ? `That is at or above ${cfg.severe.sys}/${cfg.severe.dia}, the reading maternity teams ask to hear about straight away. Please call now, today, even if you feel well.`
+         : `That is at or above ${cfg.raised.sys}/${cfg.raised.dia}, and you have also noted ${escapeHtml(withSym[0])} in the last day. Together those are worth a call now rather than at your next appointment.`)
+      : `That is at or above ${cfg.raised.sys}/${cfg.raised.dia}, which your team would want to know about. It is not an emergency on its own. Ring them today or at your next contact, and keep an eye on the signs below.`}</div>
+    ${urgent?careTeamCall(f.sev?'Call your maternity unit':'Call your team'):''}
+    <div class="sec-title" style="margin-top:14px">Tell them straight away if you notice</div>${signs}
+    ${urgent?'':careTeamCall()}
+    <button class="btn-ghost" onclick="closeSheet()">Close</button>
+    <div class="preg-disclaim">Saved to your record either way. Cubby is not a diagnosis, and one reading at home is not the whole picture. Your team measures it properly.</div>`,'preg');
+}
+function saveBP(){
+  const s=parseInt($('#bpS').value), d=parseInt($('#bpD').value);
+  if(!s||!d){toast('Enter both numbers');return;}
+  const rec={id:uid(),at:getWhen('when'),sys:s,dia:d};
+  state.pregnancy.bp.push(rec); persist(); closeSheet(); render();
+  const f=bpFlag(rec);
+  if(f) openBPConcern(rec,f); else toast('Saved');
+}
 
 /* ---- Phase 4: tools ---- */
 function renderPregTools(){
@@ -7748,18 +7796,29 @@ function contractionStats(){
   const avgGap=gaps.reduce((a,b)=>a+b,0)/gaps.length;
   const avgDur=recent.reduce((a,c)=>a+(c.end-c.start),0)/recent.length;
   const freqMin=avgGap/60000, durSec=avgDur/1000;
-  const fiveoneone = freqMin>=3 && freqMin<=6 && durSec>=45 && recent.length>=6;
+  /* No lower bound on frequency. It used to require freqMin>=3, so the card vanished the moment
+     contractions came closer than three minutes apart, which is later in labour, not earlier. The
+     one screen built to say "call now" went quiet at the point it was most needed. */
+  const fiveoneone = freqMin<=6 && durSec>=45 && recent.length>=6;
   return { freq:freqMin.toFixed(1), dur:fmtDur(avgDur), count:recent.length, fiveoneone };
 }
 function openContractions(){
   const p=state.pregnancy; const running=contractionRunning; const stats=contractionStats();
+  /* 5-1-1 is a term-labour rule and contractionStats applies it with no idea what week it is, so a
+     woman timing tightenings at 30 weeks was being told she had not reached the threshold yet.
+     renderPregHome already withholds this tile before week 36 and says why in its own comment, but
+     the sheet is still reachable from the Care tab side-item and the quick-log button. Before 37
+     weeks the rule is replaced outright rather than softened: the answer there is to call. */
+  const preterm = pregWeek() < 37;
   const list=(p.contractions||[]).filter(c=>c.end).slice(-8).reverse();
   const rows=list.length?list.map(c=>`<div class="log-list-item"><div class="lli-ico">⏱️</div><div class="lli-body"><div class="lli-t">Lasted ${fmtDur(c.end-c.start)}</div><div class="lli-s">${dayLabel(c.start)} ${fmtClock(c.start)}</div></div><button class="lli-x" onclick="deleteContraction('${c.id}')">${I.trash}</button></div>`).join(''):'';
   openSheet(`<h2>Contraction timer</h2><div class="sub">Tap start when one begins and stop when it ends. We'll work out how often they come and how long they last.</div>
     <button class="btn-primary" style="background:${running?'var(--danger)':'var(--preg)'}" onclick="toggleContraction()">${running?'Stop, contraction ending':'Start a contraction'}</button>
     ${running?`<div class="csub" style="text-align:center;margin-top:8px">In progress · ${fmtDur(now()-running.start)}</div>`:''}
     ${stats?`<div class="tool-stat"><div class="ts-cell"><div class="ts-big">${stats.freq}</div><div class="ts-cap">Apart (min)</div></div><div class="ts-cell"><div class="ts-big">${stats.dur}</div><div class="ts-cap">Lasting</div></div><div class="ts-cell"><div class="ts-big">${stats.count}</div><div class="ts-cap">Last hour</div></div></div>`:''}
-    ${stats&&stats.fiveoneone?`<div class="next-appt" style="border-color:var(--danger)"><div class="pc-ico" style="background:var(--med-soft)">📞</div><div class="na-body"><div class="na-t">Around the 5-1-1 mark</div><div class="na-s">Contractions about 5 minutes apart, lasting about a minute, for about an hour. Many providers suggest calling now. Follow your own plan.</div></div></div>`:''}
+    ${preterm
+      ? (stats&&stats.count>=2?`<div class="next-appt" style="border-color:var(--danger)"><div class="pc-ico" style="background:var(--med-soft)">📞</div><div class="na-body"><div class="na-t">Call now, whatever the timing says</div><div class="na-s">You are ${pregWeek()} weeks. Regular tightenings before 37 weeks are worth a call straight away, and the 5-1-1 rule does not apply this early. Your team would rather hear from you and it be nothing.</div>${careTeamCall('Call your maternity unit')}</div></div>`:'')
+      : (stats&&stats.fiveoneone?`<div class="next-appt" style="border-color:var(--danger)"><div class="pc-ico" style="background:var(--med-soft)">📞</div><div class="na-body"><div class="na-t">Around the 5-1-1 mark</div><div class="na-s">Contractions about 5 minutes apart, lasting about a minute, for about an hour. Many providers suggest calling now. Follow your own plan.</div>${careTeamCall()}</div></div>`:'')}
     ${rows?`<div class="sec-title" style="margin-top:14px">Recent</div>${rows}`:''}
     <div class="preg-disclaim">Informational only. Call your midwife or maternity unit if your waters break, you have any bleeding, the baby's movements change, or you're worried, whatever the timer says.</div>`,'preg');
 }

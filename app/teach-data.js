@@ -922,6 +922,7 @@
     openDateTimePicker: 'The shared date and time picker. One component, reused everywhere, by design.',
     openTimePicker: 'Time half of the same component.',
     openWhenPicker: 'The \'when did this happen\' control inside log sheets.',
+    openBPConcern: 'The answer to a raised or severe blood-pressure reading. It is a consequence of saving one, never something a mother navigates to, and it explains itself in full on screen. Teaching it as a capability would file "your reading was high" under things to go and look at.',
     showConnTrouble: 'A connection-trouble card shown during sign-in. It is an error state, not a capability, and it explains itself on screen.',
     showStatus: 'Inline status text during sign-in.',
     showCodeEntry: 'The second panel of the code sign-in: swaps the email field for the six-digit box. A step inside one flow, not a capability of its own, and the panel explains itself on screen.',
