@@ -97,6 +97,33 @@ currently puts it there.
 
 ---
 
+### Four platform facts that change the design, not just the schedule
+
+**iOS 26 does have a scheduled start, and it forces an alert.**
+`Activity.request(...start:)` (iOS 26+) will start an activity with the app backgrounded, which is
+the only local way to do trigger 2. But an `AlertConfiguration` is **mandatory**, so every scheduled
+start makes noise, which collides head-on with the notification you were also going to send. And
+pending activities **count against the system cap on simultaneous Live Activities**, which Apple does
+not publish a number for. So "pre-plan the whole week" cannot mean 7 days x 7 items = 49 pending
+cards. It has to be a rolling window of today's, re-armed each time the app opens, and re-arming
+depends on the app being opened, which is exactly the habit the usage numbers say does not exist.
+
+**Lock Screen buttons do nothing until the phone is unlocked.**
+Apple: on a locked device, buttons and toggles are inactive unless the person authenticates. Face ID
+usually covers a glance, but in the dark, one-handed, with the phone at an angle, it will not. Do not
+sell "tap Complete from the Lock Screen at 3am" as a one-tap feature, because that is the exact
+moment it is least likely to work.
+
+**The Live Activity sandbox has no network access at all.**
+Not throttled, none. This is separate from the App Intent problem and makes it worse: even if the
+button could run, it could not reach Firestore from the extension.
+
+**You never needed push for the ticking clock.**
+`Text(timerInterval:)` and `ProgressView(timerInterval:)` are interpolated by the system frame to
+frame from a single start payload. Server updates are capped at **4KB** combined and subject to an
+undocumented per-hour budget with throttling, so budget them for state changes only: paused,
+completed, ended. A 15-minute cron could never drive a duration anyway.
+
 ## Rejected
 
 **Android, for this cycle.** Not scoped down, struck.
@@ -161,14 +188,30 @@ Specific things that must be fixed first, all in `worker.js` and the ritual code
 
 ## Suggested sequence
 
-| phase | scope | rough effort |
+| phase | scope | effort |
 |---|---|---|
-| 0 | Fix the ritual reminder foundations: recurrence, own cursor, own category and toggle, quiet-hours handling, a cancel path on tick, and the Settings copy | days, not hours |
-| 1 | Live Activity for a manually started feed or pumping timer. iOS only, no buttons, no push, `Text(timerInterval:)` | the smallest real slice |
-| 2 | Sleep, with the 7h50m self-end and its deliberate final state | small, once phase 1 exists |
-| 3 | Notification-tap starts the ritual Live Activity. Still no push-to-start | needs phase 0 |
-| 4 | Dose-logged countdown, the inverted trigger 3 | small |
-| 5 | Reconsider push-to-start, multi-caregiver sync, and buttons | only if 1 to 4 earn it |
+| 0 | Ritual recurrence schema with `notify` defaulting off, the blob-overwrite fix, its own push category and cursor with a medicine-first slot reserve, cancel-on-tick, quiet-hours handling, and the copy decision | **4 to 5 days, zero Swift** |
+| 1 | Widget Extension scripted into `cap_ios_configure.rb`, inside-out signing, SwiftUI Lock Screen and Dynamic Island, manually started feed and sleep, local only, no buttons, `staleDate` on both | **7 to 10 days, iOS only** |
+| 2 | Ritual notification tap starts the Live Activity. No push-to-start, no iOS floor above 16.1 | **3 to 4 days** |
+| 3 | Cross-caregiver freshness, the honest gap in phase 1: if Papa stops the nap, Mama's card keeps counting until she opens the app or the 8-hour ceiling reaps it | **3 to 4 days, iOS 17.2+** |
+| 4+ | Pump timer (stopping it has to ask for millilitres, so it is a sheet), ritual sessions with start/pause/complete, buttons | not this cycle |
+
+### Prerequisites that are not code
+
+- **Clear the version gate.** `app/index.html:5271` refuses to enable push below build 2026.33, and
+  TestFlight is at build 9. Not a rebuild, just a gate to clear.
+- **Register a real device.** The Simulator renders the Lock Screen and Dynamic Island fine, but
+  push-updated activities and the Watch Smart Stack **cannot be verified without hardware**, and the
+  team currently has zero device UDIDs registered.
+- **Extend the signing assertion loop**, not just the signing. `cap_ios_build.sh` inspects only
+  `$APP`, so a mis-signed `.appex` would pass the exact guard that was written to stop this class of
+  failure.
+- **Put Swift string literals into the copy review by hand.** The Live Activity's words compile into
+  the binary and ship through App Review, which inverts how every other word in Cubby ships, and
+  `marketing_type_check.js` cannot see them.
+- **Feature-detect in the remote JS**, so a parent on an older wrapper who taps Start gets a graceful
+  nothing rather than silence. Check `ActivityAuthorizationInfo().areActivitiesEnabled` before
+  offering any of it.
 
 Build-system work that phase 1 cannot skip, because `ios/` is gitignored and regenerated on every
 build: the Widget Extension target has to be created **programmatically** in `cap_ios_configure.rb`
@@ -214,6 +257,11 @@ one that shipped `aps-environment=development` for months, so extend its guard i
 > all of Cubby's logic lives in the web app we load remotely, so the button cannot reach the data
 > without duplicating auth and writes in Swift. Tapping the card to open Cubby is honest and still
 > useful.
+>
+> Two smaller things worth knowing before we scope. Buttons on a Live Activity do nothing on a
+> locked phone until you authenticate, so "tap Complete at 3am without picking the phone up" is not
+> a feature we can promise. And the ticking clock needs no server updates at all, because SwiftUI
+> interpolates it from a single start payload, so pushes are only for state changes.
 >
 > Last thing, and it is the one that will surprise us: the notification half is the bigger project,
 > not the Live Activity half. Rituals have no recurrence, no notify flag and no off switch today,
