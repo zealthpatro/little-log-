@@ -50,6 +50,7 @@ const TREE = [
   { name: 'ritual-flow',    cmd: ['node', 'tools/ritual_flow_check.js', 'url'] },
   { name: 'quality',        cmd: ['node', 'tools/quality_check.js', 'url'] },
   { name: 'undo-away',      cmd: ['node', 'tools/undo_away_check.js', 'url'] },
+  { name: 'birth-weight',   cmd: ['node', 'tools/birth_weight_check.js', 'url'] },
   { name: 'support-reach',  cmd: ['node', 'tools/support_reach_check.js', 'url'] },
   { name: 'vax-calendar',   cmd: ['node', 'tools/vax_calendar_check.js', 'url'] },
   { name: 'homelogs',       cmd: ['node', 'tools/homelogs_gate.js', 'url'] },

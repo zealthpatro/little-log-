@@ -4809,6 +4809,7 @@ function openAddBaby(opts){
     <div class="field"><label>Birthday</label>${datePicker('bDate',addBabyCtx.birth,{max:now(),empty:true})}${wwa('baby.birthday')}</div>
     <div class="field"><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', vaxCountryList(), (state.pregnancy&&state.pregnancy.country)||detectCountry(), 'Search your country…')}</div>
     <div class="field"><label>Sex (optional, for growth charts)</label>${sexSegHtml('bSex','')}</div>
+    ${birthWeightHtml('bWt','bWtU')}
     <button class="btn-primary" onclick="saveBaby()">Add baby</button>`,'diaper');
 }
 function pickColor(c){
@@ -4833,7 +4834,10 @@ function saveBaby(){
   const cc=($('#bCountry')&&$('#bCountry').value)||(state.pregnancy&&state.pregnancy.country)||detectCountry();
   const b={id:uid(),name,color:newBabyColor,birth:bd?new Date(bd+'T08:00').getTime():null,country:(cc||'who')};
   const sx=($('#bSex')&&$('#bSex').value)||''; if(sx) b.sex=sx;
-  state.babies.push(b); state.activeBabyId=b.id; lastBabyBirth=bd; persist();
+  const bw=readBirthWeight('bWt','bWtU');
+  state.babies.push(b); state.activeBabyId=b.id; lastBabyBirth=bd;
+  if(bw) setBirthWeight(b, bw);
+  persist();
   const onb=addBabyCtx.onboarding; addBabyCtx={onboarding:false,birth:''};
   closeSheet(); go('home');
   if(onb){
@@ -5354,6 +5358,9 @@ function saveBabyDetails(id){
   b.fullName=$('#dName').value.trim()||b.name;
   const w=$('#dWhen').value; if(w) b.birth=parseInt(w,10);
   b.birthWeight=$('#dWt').value.trim();
+  // The one place a parent can add the birth weight after setup. Parsed rather than re-asked.
+  const pbw=parseBirthWeight(b.birthWeight);
+  if(pbw) setBirthWeight(b, pbw); else clearBirthWeight(b);
   b.birthLength=$('#dLen').value.trim();
   b.headCirc=$('#dHead')?$('#dHead').value.trim():(b.headCirc||'');
   b.blood=$('#dBlood').value.trim();
@@ -8443,6 +8450,7 @@ function openWelcomeBaby(){
     ${timeStrip('when','Born')}
     <div class="field" style="margin-top:14px"><label>Sex (optional, for growth charts)</label>${sexSegHtml('wbSex', (p.knownSex==='M'||p.knownSex==='F')?p.knownSex:'')}</div>
     <div class="field"><label>Vaccine schedule</label>${searchPickerHtml('wbCountry', vaxCountryList(), cc, 'Search your country…')}</div>
+    ${birthWeightHtml('wbWt','wbWtU')}
     <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:6px" onclick="welcomeBaby()">🎉 Welcome our baby</button>
     <div class="csub" style="text-align:center;margin-top:8px">Your pregnancy is saved as part of their story.</div>`,'preg');
 }
@@ -8454,7 +8462,9 @@ function welcomeBaby(){
   const cc=($('#wbCountry')&&$('#wbCountry').value)||p.country||detectCountry();
   const b={id:uid(),name,color:newBabyColor,birth,country:(cc||'who')};
   const sx=($('#wbSex')&&$('#wbSex').value)||''; if(sx) b.sex=sx;
+  const bw=readBirthWeight('wbWt','wbWtU');
   state.babies.push(b); state.activeBabyId=b.id;
+  if(bw) setBirthWeight(b, bw);
   p.bornBabyId=b.id; p.birthAt=birth;
   view='home';
   persist(); closeSheet(); render();
@@ -9686,6 +9696,8 @@ function visitSummary(days,opts){
                   :`Sleep: ${fmtDur(sleepMs)} total (${sleeps.length} naps logged)`);
     L.push(`Nappies: ${diapers.length} total${rate(diapers.length)} (wet ${wet}, dirty ${dirty})`);
   }
+  const bwe=birthWeightEvent(b.id);
+  if(bwe) L.push(`Birth weight: ${bwe.weight} ${bwe.wUnit||'kg'}`);
   if(lw||lh) L.push(`Latest growth: ${lw?lw.weight+' '+(lw.wUnit||'kg'):''}${lw&&lh?', ':''}${lh?lh.height+' '+(lh.hUnit||'cm'):''}`);
   if(temps.length) L.push(`Temperature: ${temps.length} reading(s), max ${maxTemp.temp}°${maxTemp.unit||'C'}${fevers.length?` · ${fevers.length} fever reading(s)`:''}`);
   if(symptoms.length) L.push(`Symptoms: ${symptoms.map(s=>s.symptom+(s.severity?` (${s.severity})`:'')).join(', ')}`);
@@ -9868,6 +9880,104 @@ function setStageOverride(s){ const b=activeBaby(); if(!b)return; if(s==='auto')
 /* ============================================================
    GROWTH  (weight & height)
    ============================================================ */
+/* BIRTH WEIGHT IS A NUMBER, not a caption.
+   It was a free-text string whose only reader was the poster renderer, so the single figure the
+   first fortnight turns on could not be computed, plotted or reported. svgPercentile plots
+   growthEvents() only, so a newborn's chart had no day-zero point at all, and welcomeBaby, the one
+   moment Cubby is with a mother hours after birth, asked name, time, sex and country and not the
+   weight the midwife will ask about at every visit.
+
+   Stored as a normal growth event AT the birth timestamp, so it is simply the first dot and every
+   existing reader picks it up for free. The free-text b.birthWeight stays exactly as it was for the
+   poster, and is filled from the typed value when there is one. */
+var _bwUnit={};
+function birthWeightHtml(idNum, idUnit, defUnit){
+  const u=defUnit||state.settings.wUnit||'kg';
+  // Reset on every render. Without this, opening the sheet, tapping lb, closing without saving and
+  // reopening leaves a kg toggle on screen and lb in the variable, so 3.4 is stored as 3.4 lb.
+  _bwUnit[idUnit]=u;
+  return `<div class="field"><label>Birth weight (optional)</label>
+    <div style="display:flex;gap:8px">
+      <input id="${idNum}" type="number" step="0.01" inputmode="decimal" placeholder="${u==='kg'?'3.4':'7.5'}" style="flex:1">
+      <div class="unit-toggle" style="flex:0 0 auto">
+        <button type="button" id="${idUnit}kg" class="${u==='kg'?'on':''}" onclick="birthWUnit('${idUnit}','kg')">kg</button>
+        <button type="button" id="${idUnit}lb" class="${u==='lb'?'on':''}" onclick="birthWUnit('${idUnit}','lb')">lb</button>
+      </div>
+    </div>
+    <div class="csub" style="margin-top:6px">Their doctor will ask for this at the early visits, and it starts the growth chart. You can add it later under their details.</div></div>`;
+}
+function birthWUnit(idUnit, u){
+  _bwUnit[idUnit]=u;
+  ['kg','lb'].forEach(x=>{ const el=$('#'+idUnit+x); if(el) el.classList.toggle('on', x===u); });
+  // The example number has to follow the unit, or lb reads as a wildly underweight baby.
+  const num=$('#'+idUnit.replace(/U$/,'')); if(num) num.placeholder = (u==='kg'?'3.4':'7.5');
+}
+function readBirthWeight(idNum, idUnit){
+  const el=$('#'+idNum); if(!el) return null;
+  const v=parseFloat(el.value);
+  if(!(v>0)) return null;
+  return {weight:v, wUnit:_bwUnit[idUnit]||state.settings.wUnit||'kg'};
+}
+/* Written as a growth event at t=birth, and idempotent: re-saving details must not add a second
+   day-zero dot. */
+function setBirthWeight(b, bw){
+  if(!b||!bw||!b.birth) return;
+  const at=b.birth;
+  const existing=(state.events||[]).find(e=>e.type==='growth'&&e.babyId===b.id&&e.birthWeight);
+  // `deleted` is cleared deliberately: typing the number again is her un-deleting it, and leaving
+  // the flag set would store a value that nothing on the chart or the report can see.
+  if(existing){ existing.weight=bw.weight; existing.wUnit=bw.wUnit; existing.time=at; delete existing.deleted; }
+  else state.events.push({id:uid(), type:'growth', babyId:b.id, time:at, weight:bw.weight, wUnit:bw.wUnit, birthWeight:true, authorId:myUid()});
+  // Fill the poster's caption if it is empty, but never rewrite her own wording: somebody who typed
+  // "7 lb 8 oz" should not find it turned into "7.5 lb" because the chart prefers one number.
+  if(!b.birthWeight) b.birthWeight = bw.weight+' '+bw.wUnit;
+}
+function clearBirthWeight(b){
+  if(!b) return;
+  const i=(state.events||[]).findIndex(e=>e.type==='growth'&&e.babyId===b.id&&e.birthWeight);
+  if(i>=0) state.events.splice(i,1);
+}
+/* Reads the free-text caption that already exists on every baby added before this, so an old
+   "3.4 kg" becomes a real day-zero dot the next time details are saved, with nothing retyped.
+   Handles kg, g, lb/lbs/pounds, oz, "7 lb 8 oz", and a bare number in her own unit. */
+function parseBirthWeight(str){
+  const t=String(str||'').toLowerCase().trim(); if(!t) return null;
+  const lb=t.match(/([\d.]+)\s*(?:lbs?|pounds?)/), oz=t.match(/([\d.]+)\s*(?:oz|ounces?)/);
+  if(lb||oz){
+    const v=(lb?parseFloat(lb[1]):0)+(oz?parseFloat(oz[1])/16:0);
+    return v>0 ? {weight:+v.toFixed(2), wUnit:'lb'} : null;
+  }
+  const kg=t.match(/([\d.]+)\s*(?:kgs?|kilos?|kilograms?)/);
+  if(kg){ const v=parseFloat(kg[1]); return v>0?{weight:+v.toFixed(3), wUnit:'kg'}:null; }
+  const gm=t.match(/([\d.]+)\s*(?:g|gm|grams?)\b/);
+  if(gm){ const v=parseFloat(gm[1])/1000; return v>0?{weight:+v.toFixed(3), wUnit:'kg'}:null; }
+  const bare=t.match(/^([\d.]+)$/);
+  if(bare){ const v=parseFloat(bare[1]); return v>0?{weight:v, wUnit:state.settings.wUnit||'kg'}:null; }
+  return null;
+}
+function birthWeightEvent(babyId){
+  return (state.events||[]).find(e=>e.type==='growth'&&e.babyId===(babyId||state.activeBabyId)&&e.birthWeight&&!e.deleted)||null;
+}
+/* "3.31 kg · 90 g below birth weight · day 4".
+   A difference from her OWN baby's starting number, never from a population, with no colour, no
+   target and no verdict. Newborns lose weight in the first days and regain it; saying so is the
+   midwife's job, and Cubby's job is to have the number ready. Shown only while it is the question,
+   which is the first three weeks. */
+function birthWeightLine(){
+  const b=activeBaby(); if(!b||!b.birth) return '';
+  const days=Math.floor((now()-b.birth)/86400000);
+  if(days<0||days>21) return '';
+  const bw=birthWeightEvent(b.id); if(!bw) return '';
+  const latest=lastGrowth('weight'); if(!latest||latest.id===bw.id) return '';
+  const wU=state.settings.wUnit||'kg';
+  const nowKg=convW(latest.weight, latest.wUnit||'kg', 'kg');
+  const bwKg=convW(bw.weight, bw.wUnit||'kg', 'kg');
+  const dg=Math.round((nowKg-bwKg)*1000);
+  const shown=(+convW(latest.weight, latest.wUnit||'kg', wU).toFixed(2))+' '+wU;
+  const rel = dg===0 ? 'back to birth weight'
+    : (dg>0 ? Math.abs(dg)+' g above birth weight' : Math.abs(dg)+' g below birth weight');
+  return `<div class="csub" style="margin:-6px 0 12px">${escapeHtml(shown)} · ${escapeHtml(rel)} · day ${days}</div>`;
+}
 function growthEvents(){ return babyEvents().filter(e=>e.type==='growth').sort((a,b)=>a.time-b.time); }
 function lastGrowth(field){ const g=growthEvents().filter(e=>e[field]); return g.length?g[g.length-1]:null; }
 function convW(v,from,to){ if(from===to)return v; return from==='kg'? v*2.20462 : v/2.20462; }
@@ -9991,6 +10101,7 @@ function renderGrowthSection(){
       <div class="gx-box"><div class="n" style="color:var(--feed-ink)">${lw?(+convW(lw.weight,lw.wUnit||'kg',wU).toFixed(2)):'·'}${lw?' '+wU:''}</div><div class="l">Latest weight</div>${wDelta?`<div class="d" style="color:var(--ink-soft)">${wDelta>0?'+':''}${wDelta} ${wU}</div>`:''}</div>
       <div class="gx-box"><div class="n" style="color:var(--sleep-ink)">${lh?(+convH(lh.height,lh.hUnit||'cm',hU).toFixed(1)):'·'}${lh?' '+hU:''}</div><div class="l">Latest height</div>${hDelta?`<div class="d" style="color:var(--ink-soft)">${hDelta>0?'+':''}${hDelta} ${hU}</div>`:''}</div>
     </div>
+    ${birthWeightLine()}
     ${tipLine('growth','Set Boy/Girl to overlay WHO/CDC percentile curves behind the dots.')}
     ${growthControls(b)}
     ${(b&&b.sex)?'':`<div class="stat-card"><div class="csub" style="margin:0">Choose your baby's sex above to see WHO/CDC percentile curves behind their measurements.</div></div>`}

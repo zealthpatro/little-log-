@@ -78,6 +78,12 @@ The single number the first two weeks turn on cannot be computed, plotted or rep
 
 *Charter: No colour, no target, no verdict. A difference from her own baby's starting number, not from a population.*
 
+**SHIPPED 2026-08-21.** Typed number plus a kg/lb toggle on both `welcomeBaby` and add-baby, stored as an ordinary growth event carrying `birthWeight:true` at `t=b.birth`, so the chart, the deltas and the report all pick it up with no new readers. `birthWeightLine()` prints the comparison under Latest weight for the first three weeks only and says nothing when the newest measurement IS the birth weight. `visitSummary` prints `Birth weight:` above `Latest growth`.
+
+Two things the spec did not ask for and the code needed. The free-text caption is never rewritten: somebody who typed "7 lb 8 oz" keeps that wording, and `setBirthWeight` only fills the caption when it is empty. And `parseBirthWeight` reads the caption every existing baby already has, so `saveBabyDetails` turns an old "3.4 kg" into a real day-zero dot with nothing retyped, handling kg, g, lb/oz, "7 lb 8 oz" and a bare number in her own unit, and refusing to guess at a sentence.
+
+Gate: `node tools/birth_weight_check.js <base>` (40 assertions), wired into `tools/gates.js` as `birth-weight`.
+
 ### 15. Add an "Add to my calendar" row beside the date in openDoctorEdit, reusing _icsText and _icsStamp: an all-day VEVENT with TRIGGER:-P1D, a stable UID of cubby-doc-<docId>@little-cubby.com, a SEQUENCE on the doctor record, and a description carrying a /app/?go=visit deep link. Copy exportVaccineSchedule (:9937) almost line for line.  `hours`
 
 A real appointment typed into Cubby produces nothing that can reach the parent: saveDoctorEntry stores nextVisit and the only consumer is upcomingVisit, an in-app pill visible only if she is already inside the app. The calendar pattern is proven three times in the same file and needs no APNs key, no cron, no server and no permission prompt.
