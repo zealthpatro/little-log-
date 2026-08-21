@@ -448,6 +448,7 @@ body{
 .since-card .k{font-size:11px;color:var(--ink-faint);font-weight:700;text-transform:uppercase;letter-spacing:.05em;}
 .since-card .v{font-family:var(--font-display);font-size:18px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums;}
 .since-card .v.empty{color:var(--ink-faint);font-size:15px;}
+.since-card .w{font-size:12px;color:var(--ink-faint);font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums;}
 
 /* ============ SECTION TITLE ============ */
 .sec-title{
@@ -1815,8 +1816,17 @@ function initTargets(){ logTargets=[state.activeBabyId]; }
 function targetSetOne(id){ logTargets=[id]; }
 function targetSetAll(){ logTargets=state.babies.map(b=>b.id); }
 function targetsResolved(){ return (state.babies.length>1 && logTargets && logTargets.length) ? logTargets : [state.activeBabyId]; }
+/* A fumbled double tap used to write two nappies, or two 120ml bottles. bottleVol sums those into
+   dayRecapText and into visitSummary, so one shaky tap in the dark turned 120ml into 240ml on the
+   page a parent hands a clinician. Guarded here rather than in each sheet, so every current and
+   future log path is covered by one rule: the same shape, twice, inside 900ms, is a slip. */
+var _lastCommit={sig:null, at:0};
 function commitEvent(payload){
   const targets=targetsResolved();
+  const sig=JSON.stringify([payload&&payload.type, payload&&payload.method, payload&&payload.kind,
+    payload&&payload.amount, payload&&payload.activity, payload&&payload.medId, targets.join(',')]);
+  if(_lastCommit.sig===sig && (now()-_lastCommit.at)<900) return;
+  _lastCommit={sig:sig, at:now()};
   targets.forEach(bid=>{ const ev=Object.assign({},payload); ev.id=uid(); ev.babyId=bid; state.events.push(ev); });
   persist();
 }
@@ -3504,17 +3514,34 @@ function timerBanner(type,label,start,sub,stopFn){
    the banner and "Last sleep ·" immediately under it, in the same minute, for the same baby. When
    it is set the card must NOT carry data-since: the one-second tick would overwrite the words with
    an elapsed time measured from nothing. */
+/* When did this last END, not when did it start.
+   A nursing session that began at 00:10 and ran 55 minutes was reported as "2h ago" at 02:10, when
+   the baby actually came off the breast 65 minutes earlier. The error is always in the same
+   direction, towards "she is overdue", on the one question the charter names as the reason this
+   screen exists. Sleep already measured from `end`; feeds carry `dur` and were measured from the
+   start anyway. */
+function sinceAnchor(type, ev){
+  if(!ev) return null;
+  if(type==='sleep' && ev.end) return ev.end;
+  if(type==='feed' && ev.dur>0) return ev.time + ev.dur;
+  return ev.time;
+}
 function sinceCard(type,label,ev,nowText){
   const m=TYPE_META[type];
-  const since = nowText || (ev ? fmtSince(type==='sleep'&&ev.end?ev.end:ev.time) : null);
-  const live = !nowText && ev;
+  const at = sinceAnchor(type, ev);
+  const since = nowText || (at ? fmtSince(at) : null);
+  const live = !nowText && at;
+  /* The clock time as well as the elapsed one. The charter's own example of the answer is "last
+     feed 2:10", and this card has never shown a clock. At 3am "1h 5m ago" and "2:10" are different
+     kinds of useful: one tells her how long, the other tells her which feed she is remembering. */
+  const clock = (!nowText && at) ? fmtClock(at) : '';
   return `<div class="since-card">
     <div class="dot" style="background:var(--${m.c})"></div>
     <div class="k">${label}</div>
-    <div class="v ${since?'':'empty'}" ${live?`data-since="${type==='sleep'&&ev.end?ev.end:ev.time}"`:''}>${since||'not yet'}</div>
+    <div class="v ${since?'':'empty'}" ${live?`data-since="${at}"`:''}>${since||'not yet'}</div>
+    ${clock?`<div class="w">${clock}</div>`:''}
   </div>`;
 }
-
 /* ---------- TIMELINE ---------- */
 /* The timeline is the one screen that grows without any ceiling: every feed, nappy and nap she has
    ever logged, forever. It used to be built in full on every render — four months of logging is
@@ -4051,7 +4078,12 @@ function openFeed(){
   const wAmount=(lastWater&&lastWater.amount)||(unit==='oz'?1:30);
   const def = (feeds[0]&&feeds[0].method) || (solidsStage ? 'solids' : (ft==='formula' ? 'bottle' : 'breast'));
   const content=(lastBottle&&lastBottle.content)||(ft==='formula'?'formula':'breastmilk');
-  feedDraft={method:def, side:'left', amount:amount, unit:unit, notes:'', content:content, wAmount:wAmount, foods:[], solidAmount:'', solidUnit:'tbsp', photoData:null};
+  /* Carry the last side forward, the way this function already does for method, amount, unit and
+     content. It hardcoded 'left', so the most repeated decision of the night opened wrong about
+     half the time and cost a correcting tap at the worst hour. openPump has done this correctly
+     for a while. */
+  const lastBreast=feeds.find(e=>e.method==='breast'&&e.side);
+  feedDraft={method:def, side:(lastBreast&&lastBreast.side)||'left', amount:amount, unit:unit, notes:'', content:content, wAmount:wAmount, foods:[], solidAmount:'', solidUnit:'tbsp', photoData:null};
   initTargets();
   initLogWhen();
   renderFeedSheet();
@@ -4152,6 +4184,18 @@ function renderFeedSheet(){
 }
 function startFeedTimer(){
   const targets=targetsResolved();
+  /* Starting a second nursing timer over a running one used to overwrite it: eighteen minutes gone,
+     no event written, no warning. Sleep has been guarded against this for a while, so the same
+     gesture meant two different things on the same screen. Two honest doors instead. */
+  const running=targets.map(bid=>({bid, t:timersFor(bid).feed})).filter(x=>x.t);
+  if(running.length){
+    const el=running[0].t;
+    confirmSheet({title:'A feed is already running',
+      body:'It started at '+fmtClock(el.start)+', '+fmtDur(now()-el.start)+' ago. Finish that one first, or throw it away and start again.',
+      confirmLabel:'Finish it now', cancelLabel:'Keep it running',
+      onConfirm:()=>{ running.forEach(x=>stopFeed(x.bid)); }});
+    return;
+  }
   targets.forEach(bid=>{ timersFor(bid).feed={start:now(),side:feedDraft.side}; });
   persist(); closeSheet(); go('home'); toast(targets.length>1?'Nursing timers started':'Nursing timer started');
 }
@@ -4739,7 +4783,17 @@ function openOnboardInvite(){
   openSheet(`<h2>Get home, and the day is already there 🐻</h2><div class="sub">You're set up. Invite whoever else has ${n>1?'them':'your little one'}, your partner, a grandparent or the nanny, and what they log shows up on your screen with their name on it.</div>
     <div class="preg-card"><div class="pc-ico" style="background:var(--feed-soft)">👨‍👩‍👧</div><div><div class="pc-t">Nobody has to remember it for you</div><div class="pc-b">Feeds, sleep and nappies with their names on them, waiting when you get in. Tap it for the whole day.</div></div></div>
     ${vaxProofLine()?`<div class="sub" style="margin-top:12px;text-align:left">💉 ${vaxProofLine()}</div>`:''}
-    <button class="btn-primary" style="background:var(--feed);--accent-ink:var(--on-feed,var(--on-accent));margin-top:14px" onclick="window.openFamily&&window.openFamily()">Invite someone</button>
+    ${/* THE FIRST LOG COMES FIRST.
+          This is the last screen of every setup path, and its primary action used to be "Invite
+          someone". The median time from signing in to writing the first entry is 282.6 hours and no
+          household has ever reached a seventh day, and this sheet is where that clock starts. The
+          invite is also the hardest thing in the app, asked before she has any reason to believe
+          the log is worth sharing. So the log leads and the invite becomes the quiet second row.
+          openFirstLog and firstLogLabel already existed and already resolve to the right sheet and
+          verb per stage; openFirstLog had exactly one caller, the empty timeline. */''}
+    <button class="btn-primary" style="background:var(--feed);--accent-ink:var(--on-feed,var(--on-accent));margin-top:14px" onclick="closeSheet();openFirstLog()">${firstLogLabel()}</button>
+    <div class="csub" style="text-align:center;margin-top:8px">Two taps, and today has something in it.</div>
+    <button class="btn-ghost" style="margin-top:10px" onclick="window.openFamily&&window.openFamily()">Invite someone</button>
     ${vaxProofLine()?`<button class="btn-ghost" onclick="closeSheet();healthTab='vaccines';go('health')">💉 See their vaccine plan</button>`:''}
     <button class="btn-ghost" onclick="openAddBaby({onboarding:true,birth:lastBabyBirth})">＋ Add another little one</button>
     ${(typeof canShowInstall==='function'&&canShowInstall())?`<div class="sub" style="margin-top:14px;font-size:13px">Use Cubby right here, or add it to your home screen to open it like an app, one tap away.</div><button class="btn-ghost" onclick="addToHomeScreen('obInstallMsg')">Add Cubby to your home screen</button><div id="obInstallMsg" class="sub" style="display:none;text-align:left"></div>`:''}
@@ -9663,8 +9717,25 @@ function renderSymptomSheet(){
 }
 function saveSymptom(){
   const ill=activeIllness();
-  addEvent({type:'symptom',symptom:symptomDraft.symptom,severity:symptomDraft.severity,notes:$('#symNote')?$('#symNote').value:'',time:now(),illnessId:ill?ill.id:null});
-  persist(); closeSheet(); render(); toast('Logged '+symptomDraft.symptom);
+  const what=symptomDraft.symptom;
+  addEvent({type:'symptom',symptom:what,severity:symptomDraft.severity,notes:$('#symNote')?$('#symNote').value:'',time:now(),illnessId:ill?ill.id:null});
+  persist(); closeSheet(); render();
+  /* "Fever" is the first chip in the list and saving it used to produce toast('Logged Fever') and
+     nothing else. The one sentence in the baby stage that protects a newborn, any fever under three
+     months is worth a prompt call, was reachable only from saveTemp, so a parent who has not got a
+     thermometer to hand got silence. Same calm register as the temperature path, and no reading is
+     invented: it says what she told us. */
+  if(/^fever$/i.test(String(what||'').trim())){ openFeverSymptomNudge(); return; }
+  toast('Logged '+what);
+}
+function openFeverSymptomNudge(){
+  const b=activeBaby();
+  openSheet(`<h2>Noted, a fever</h2>
+    <div class="sub">Saved without a number, which is fine. If you can take a temperature later it is worth adding, because your doctor will ask.</div>
+    <div class="csub" style="margin:-4px 0 16px">${feverGuidance()} This is not medical advice, trust your instincts and your doctor.</div>
+    <button class="btn-primary" style="background:var(--med);--accent-ink:var(--on-med,var(--on-accent))" onclick="closeSheet();openTemp()">${I.thermo} Add a temperature</button>
+    <button class="btn-ghost" onclick="closeSheet();openVisitSummary()">${I.stetho} Prepare a summary for the doctor</button>
+    <button class="btn-ghost" onclick="closeSheet()">Close</button>`,'med');
 }
 
 /* ============================================================

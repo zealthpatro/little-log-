@@ -48,6 +48,7 @@ const TREE = [
   { name: 'preg-safety',    cmd: ['node', 'tools/preg_safety_check.js', 'url'] },
   { name: 'illness-report', cmd: ['node', 'tools/illness_report_check.js', 'url'] },
   { name: 'ritual-flow',    cmd: ['node', 'tools/ritual_flow_check.js', 'url'] },
+  { name: 'quality',        cmd: ['node', 'tools/quality_check.js', 'url'] },
   { name: 'support-reach',  cmd: ['node', 'tools/support_reach_check.js', 'url'] },
   { name: 'vax-calendar',   cmd: ['node', 'tools/vax_calendar_check.js', 'url'] },
   { name: 'homelogs',       cmd: ['node', 'tools/homelogs_gate.js', 'url'] },
