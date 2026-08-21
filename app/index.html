@@ -449,6 +449,7 @@ body{
 .since-card .v{font-family:var(--font-display);font-size:18px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums;}
 .since-card .v.empty{color:var(--ink-faint);font-size:15px;}
 .since-card .w{font-size:12px;color:var(--ink-faint);font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums;}
+.toast-act{background:none;border:none;color:#F5C77E;font:inherit;font-weight:800;padding:0 2px;cursor:pointer;text-decoration:underline;text-underline-offset:3px;}
 
 /* ============ SECTION TITLE ============ */
 .sec-title{
@@ -1736,10 +1737,13 @@ function ageString(birthTs){
   if(!birthTs) return '';
   const diff = now()-birthTs, days = Math.floor(diff/86400000);
   if(days<0) return 'due soon';
-  if(days<14) return days+' days old';
-  if(days<60) return Math.floor(days/7)+' weeks old';
-  if(days<730){ const mo=Math.floor(days/30.44); return mo+' months old'; }
-  return Math.floor(days/365)+' years old';
+  /* Singulars. "1 months old" sat under the baby's name on every screen for a month of her life,
+     and "1 days old" on the first day, which is the single most-looked-at day there is. */
+  const pl=(n,w)=>n+' '+w+(n===1?'':'s')+' old';
+  if(days<14) return pl(days,'day');
+  if(days<60) return pl(Math.floor(days/7),'week');
+  if(days<730) return pl(Math.floor(days/30.44),'month');
+  return pl(Math.floor(days/365),'year');
 }
 function dayKey(ts){ const d=new Date(ts); return d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate(); }
 function dayLabel(ts){
@@ -1770,11 +1774,24 @@ try{ ['pointerdown','keydown','touchstart'].forEach(ev=>window.addEventListener(
 /* opts: {silent} never buzz, {tapToDismiss} one tap ends it, {ms} how long it stays. */
 function toast(msg,opts){
   opts=opts||{};
-  const t=$('#toast'); t.textContent=msg;
+  const t=$('#toast');
+  /* opts.action gives the toast one job it can do. The charter's own law is "forgiving by design:
+     everything editable, backdatable, undoable", and undoable was the part that did not exist.
+     Correcting a 3am mis-tap meant four taps in another tab, and correcting rather than deleting
+     stamps editedBy and leaves "edited by Maya" on a row the whole circle reads forever. */
+  if(opts.action){
+    t.textContent='';
+    t.appendChild(document.createTextNode(msg+'  '));
+    const a=document.createElement('button');
+    a.className='toast-act'; a.type='button'; a.textContent=opts.action.label;
+    a.onclick=function(ev){ ev.stopPropagation(); clearTimeout(t._tm); t.classList.remove('show');
+      try{ opts.action.fn(); }catch(e){} };
+    t.appendChild(a);
+  } else { t.textContent=msg; }
   t.classList.toggle('tappable',!!opts.tapToDismiss);
   t.onclick=opts.tapToDismiss?function(){ clearTimeout(t._tm); t.classList.remove('show'); }:null;
   t.classList.add('show');
-  clearTimeout(t._tm); t._tm=setTimeout(()=>t.classList.remove('show'),opts.ms||1900);
+  clearTimeout(t._tm); t._tm=setTimeout(()=>t.classList.remove('show'),opts.ms||(opts.action?5000:1900));
   // No-op on the web (see native-bridge.js). opts.haptic is the named exception documented above;
   // every other toast gets one light tap, and only when a hand caused it.
   try{
@@ -1809,6 +1826,7 @@ function addEvent(ev){
   if(!ev.babyId) ev.babyId = state.activeBabyId;
   state.events.push(ev);
   persist();
+  return ev.id;
 }
 /* ---- multi-baby logging: single child unaffected; 2+ babies can log for one or all ---- */
 let logTargets=null;
@@ -1821,14 +1839,35 @@ function targetsResolved(){ return (state.babies.length>1 && logTargets && logTa
    page a parent hands a clinician. Guarded here rather than in each sheet, so every current and
    future log path is covered by one rule: the same shape, twice, inside 900ms, is a slip. */
 var _lastCommit={sig:null, at:0};
+/* UNDO. One handle, set by every path that writes a log entry, cleared by the next write or a tab
+   change so it can never undo something the parent has stopped thinking about.
+   It HARD-removes rather than calling the normal delete: a slip should leave no trace at all, so
+   nothing lands in Recently deleted and nothing is stamped editedBy for the circle to read. */
+var _undo=null;
+function markUndo(ids, what){ _undo = (ids&&ids.length) ? {ids:ids.slice(), what:what||'entry', at:now()} : null; }
+function clearUndo(){ _undo=null; }
+function undoLast(){
+  if(!_undo) return;
+  const ids={}; _undo.ids.forEach(i=>{ ids[i]=1; });
+  state.events = (state.events||[]).filter(e=>!ids[e.id]);
+  _undo=null; persist(); render(); toast('Undone', {silent:true});
+}
+// The one toast that offers it, so every logging path gets undo from a single place.
+function loggedToast(msg, ids, what){
+  if(ids&&ids.length){ markUndo(ids, what); toast(msg, {action:{label:'Undo', fn:undoLast}}); }
+  else toast(msg);
+}
 function commitEvent(payload){
   const targets=targetsResolved();
   const sig=JSON.stringify([payload&&payload.type, payload&&payload.method, payload&&payload.kind,
     payload&&payload.amount, payload&&payload.activity, payload&&payload.medId, targets.join(',')]);
   if(_lastCommit.sig===sig && (now()-_lastCommit.at)<900) return;
   _lastCommit={sig:sig, at:now()};
-  targets.forEach(bid=>{ const ev=Object.assign({},payload); ev.id=uid(); ev.babyId=bid; state.events.push(ev); });
+  const written=[];
+  targets.forEach(bid=>{ const ev=Object.assign({},payload); ev.id=uid(); ev.babyId=bid; state.events.push(ev); written.push(ev.id); });
+  markUndo(written, payload&&payload.type);
   persist();
+  return written;
 }
 function targetChips(reRender){
   if(state.babies.length<2) return '';
@@ -2396,16 +2435,48 @@ function renderGetStarted(){
 
 /* ---------- working-parent: while-you-were-away recap, daily recap, handoff ---------- */
 function loggerName(uid){ const info=(window.LL&&window.LL.memberInfo)||{}; const former=(window.LL&&window.LL.formerMemberInfo)||{}; const m=info[uid]||former[uid]; return (m&&(m.relationship||((m.name||'').split(' ')[0])))||''; }
+/* WHILE YOU WERE AWAY, not "today so far".
+   This card exists to reward coming back, and it was filtered by CALENDAR DAY. A mother waking at
+   6am saw nothing about the 2am bottle her partner gave, because 2am is filed under yesterday, and
+   the night shift is exactly the shift a second person covers. What she got instead was "A fresh
+   day with Aria".
+   Anchored on a per-uid last-open stamp now, the same pattern notesSeenKey and wwHiddenKey already
+   use, capped at 24 hours so a week away does not produce a wall. */
+function dayStartMs(t){ const d=new Date(t); d.setHours(0,0,0,0); return d.getTime(); }
+function lastOpenKey(){ return 'cubby-last-open:'+quickUid(); }
+/* "Since you were last looking" has to be a stable anchor, not a fresh read.
+   The first version stamped the clock on every hide and then read it back when the card rendered,
+   which meant a reload, a service-worker update, or simply coming back from the background set the
+   anchor to now and the recap was empty every single time. It was broken in real use, not only in
+   the test, and the test is what said so.
+   So: the anchor lives in memory for the session, is seeded at boot from the last time she left,
+   and only moves when she has genuinely been away. Twenty minutes, because glancing at a message
+   and coming back is not being away, and a night feed is. */
+var _awaySince = 0, _hiddenAt = 0;
+const AWAY_MIN_GAP = 20*60000;
+function lastOpenAt(){
+  try{ const v=+localStorage.getItem(lastOpenKey()); return v>0?v:0; }catch(e){ return 0; }
+}
+function stampLastOpen(){ try{ localStorage.setItem(lastOpenKey(), String(now())); }catch(e){} }
+function initAwayAnchor(){ _awaySince = lastOpenAt(); }
+function noteHidden(){ _hiddenAt = now(); stampLastOpen(); }
+function noteVisible(){
+  if(_hiddenAt && (now()-_hiddenAt) >= AWAY_MIN_GAP) _awaySince = _hiddenAt;
+  _hiddenAt = 0;
+}
+function awaySince(){ return _awaySince; }
 function awayRecap(){
   const me = window.LL && window.LL.auth && window.LL.auth.currentUser && window.LL.auth.currentUser.uid;
-  const todayK = dayKey(now());
-  const todays = babyEvents().filter(e=>dayKey(e.time)===todayK);
-  const others = todays.filter(e=>e.authorId && e.authorId!==me);
+  const seenAt = awaySince();
+  // First ever open has no stamp, so fall back to today rather than showing a whole history.
+  const since = seenAt ? Math.max(seenAt, now()-86400000) : dayStartMs(now());
+  const evs = babyEvents().filter(e=>e.time>=since);
+  const others = evs.filter(e=>e.authorId && e.authorId!==me);
   if(others.length<1) return '';
-  const feeds = todays.filter(e=>e.type==='feed').length;
-  const napMs = todays.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+netSleepMs(e),0) + liveNapMs(todayK);
-  const dia = todays.filter(e=>e.type==='diaper').length;
-  const lastFeed = todays.filter(e=>e.type==='feed')[0];
+  const feeds = evs.filter(e=>e.type==='feed').length;
+  const napMs = evs.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+netSleepMs(e),0);
+  const dia = evs.filter(e=>e.type==='diaper').length;
+  const lastFeed = evs.filter(e=>e.type==='feed')[0];
   const names=[...new Set(others.map(e=>loggerName(e.authorId)).filter(Boolean))];
   const parts=[];
   if(feeds) parts.push(feeds+' feed'+(feeds>1?'s':''));
@@ -2413,10 +2484,14 @@ function awayRecap(){
   if(dia) parts.push(dia+' nappy'+(dia>1?' changes':' change'));
   const summary=parts.join(' · ')||'activity logged';
   const last=lastFeed?(' · last feed '+fmtClock(lastFeed.time)):'';
+  // Say the window out loud, so "3 feeds" is never mistaken for the whole day.
+  const gapH=Math.max(1,Math.round((now()-since)/3600000));
+  const head = seenAt ? ('While you were away 🐻') : ('Today so far 🐻');
+  const when = seenAt ? ('the last '+(gapH>=24?'day':gapH+(gapH===1?' hour':' hours'))) : 'today';
   return `<div class="away-card" onclick="openDayRecap()">
-    <div class="away-h">Today so far 🐻</div>
+    <div class="away-h">${head}</div>
     <div class="away-s">${escapeHtml(summary+last)}</div>
-    ${names.length?`<div class="away-by">logged by ${names.map(escapeHtml).join(', ')} · tap for the full day</div>`:''}
+    <div class="away-by">${names.length?('logged by '+names.map(escapeHtml).join(', ')+' · '):''}${escapeHtml(when)} · tap for the full day</div>
   </div>`;
 }
 function dayRecapText(){
@@ -2497,8 +2572,10 @@ function surfaceIsToday(){ return dayKey(surfaceDayTs)===dayKey(now()); }
    left on the home screen overnight therefore woke up still pointing at yesterday: the day header
    said so, and a note left first thing that morning was filed under the wrong day. Event-driven on
    purpose, never a timer — nothing in this app sweeps on an interval any more. */
+try{ initAwayAnchor(); }catch(e){}
 document.addEventListener('visibilitychange', function(){
-  if(document.hidden) return;
+  if(document.hidden){ noteHidden(); return; }
+  noteVisible();
   if(dayKey(surfaceDayTs)===dayKey(now())) return;
   surfaceReset();
   if(typeof renderSoon==='function') renderSoon();
@@ -3823,7 +3900,7 @@ function startTick(){
 /* ============================================================
    NAV / THEME
    ============================================================ */
-function go(v){ if(typeof closeSheet==='function') closeSheet(); if(v==='home') surfaceReset(); if(v!==view) tlResetReveal(); view=v; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
+function go(v){ clearUndo(); /* she moved on; undo must not reach back past a tab change */ if(typeof closeSheet==='function') closeSheet(); if(v==='home') surfaceReset(); if(v!==view) tlResetReveal(); view=v; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
 /* ---------------- APPEARANCE -------------------------------------------------
    Three modes, System by default, and stored PER PERSON.
 
@@ -4203,12 +4280,13 @@ function stopFeed(babyId){
   babyId=babyId||state.activeBabyId;
   const tt=timersFor(babyId); const t=tt.feed; if(!t)return;
   const dur=now()-t.start;
-  state.events.push({id:uid(),babyId,type:'feed',method:'breast',side:t.side,time:t.start,dur});
-  delete tt.feed; persist(); render(); toast('Feed logged · '+fmtDur(dur));
+  const _fid=uid();
+  state.events.push({id:_fid,babyId,type:'feed',method:'breast',side:t.side,time:t.start,dur});
+  delete tt.feed; persist(); render(); loggedToast('Feed logged · '+fmtDur(dur), [_fid], 'feed');
 }
 function quickFeedNoTimer(){
-  commitEvent({type:'feed',method:'breast',side:feedDraft.side,time:now(),dur:0});
-  closeSheet(); render(); toast('Feed logged');
+  const _ids=commitEvent({type:'feed',method:'breast',side:feedDraft.side,time:now(),dur:0});
+  closeSheet(); render(); loggedToast('Feed logged', _ids, 'feed');
 }
 function openPastFeed(){
   // Chips pick a length, the stepper fine-tunes it, and nothing is logged until the one clear
@@ -4352,8 +4430,9 @@ function stopSleep(babyId){
      would put a day-long sleep into the record a doctor reads, and "undo" is not a thing a parent
      at 3am should have to find. */
   if(end-t.start > SLEEP_MAX_MS){ openSleepCorrect(babyId); return; }
-  state.events.push({id:uid(),babyId,type:'sleep',time:t.start,end});
-  delete tt.sleep; persist(); render(); toast('Sleep logged · '+fmtDur(end-t.start));
+  const _sid=uid();
+  state.events.push({id:_sid,babyId,type:'sleep',time:t.start,end});
+  delete tt.sleep; persist(); render(); loggedToast('Sleep logged · '+fmtDur(end-t.start), [_sid], 'sleep');
 }
 /* "Did the nap end earlier?" Reuses the same time strip as every other log sheet rather than a
    one-off control, so the gesture is one a parent already knows. Pre-filled with a plausible end
@@ -4433,8 +4512,8 @@ function renderDiaperSheet(){
     ${timeStrip('when','Time')}`,'diaper');
 }
 function saveDiaper(kind){
-  commitEvent({type:'diaper',kind,time:getWhen('when')});
-  closeSheet(); render(); toast('Nappy logged · '+kind);
+  const _ids=commitEvent({type:'diaper',kind,time:getWhen('when')});
+  closeSheet(); render(); loggedToast('Nappy logged · '+kind, _ids, 'nappy');
 }
 
 /* ---------- PUMP ---------- */
