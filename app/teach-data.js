@@ -72,6 +72,12 @@
        silently removed the info dot from the sheet: sheetDot returns the html untouched when it
        cannot match, so help disappears with no error anywhere. tools/info_dot_check.js now fails
        on that drift instead of letting it go quiet. */
+    /* aka, because the sheet heading is a question rather than a noun and sheetDot matches on the
+       heading. Reached from the nudge that appears when a nap timer has run over twelve hours. */
+    openSleepCorrect: { label: 'Fix a forgotten timer', aka: ['when did this nap end'],
+      fn: 'openSleepCorrect()', domain: 'log', depth: 'one',
+      one: 'If a nap timer ran all night because Stop never got tapped, say when they actually woke and Cubby logs the real nap.',
+      who: { stage: ['baby', 'child'] } },
     openDiaper: { label: 'Nappy', aka: ['diaper'], fn: 'openDiaper()', domain: 'log', depth: 'page',
       one: 'Wet, dirty, both, or a dry check. The thing a doctor almost always asks about.',
       who: { stage: ['baby','child'] },

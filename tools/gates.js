@@ -44,6 +44,7 @@ const TREE = [
   { name: 'report-truth',   cmd: ['node', 'tools/report_truth_check.js', 'url'] },
   { name: 'info-dot',       cmd: ['node', 'tools/info_dot_check.js', 'url'] },
   { name: 'flow-walk',      cmd: ['node', 'tools/flow_walk.js', 'url'] },
+  { name: 'sleep-timer',    cmd: ['node', 'tools/sleep_timer_check.js', 'url'] },
   { name: 'support-reach',  cmd: ['node', 'tools/support_reach_check.js', 'url'] },
   { name: 'vax-calendar',   cmd: ['node', 'tools/vax_calendar_check.js', 'url'] },
   { name: 'homelogs',       cmd: ['node', 'tools/homelogs_gate.js', 'url'] },

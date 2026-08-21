@@ -1644,12 +1644,25 @@ function netSleepMs(e){
    by e.time). A nap begun at 23:50 therefore stays on yesterday's total until it ends. Re-bucketing
    sleep across midnight is a whole-app decision — Stats and the doctor report bucket by start too —
    and is deliberately not taken here. */
+/* A running nap has no upper bound of its own, so a parent who fell asleep before tapping Stop came
+   back to "SLEEPING 72:00:11" and nothing saying otherwise. Two numbers bound it now.
+
+   NUDGE at 12h: long for a nap, still possible for a night, so this asks rather than assumes.
+   MAX at 24h: past this the timer is certainly wrong, so the count stops climbing and stopSleep
+   refuses to write it silently. Nothing is auto-ended and nothing is discarded: a timer is the
+   parent's own record of something that happened, and only she knows when it really finished. */
+const SLEEP_NUDGE_MS = 12*3600000, SLEEP_MAX_MS = 24*3600000;
+function runningNap(babyId){ try{ return timersFor(babyId||state.activeBabyId).sleep||null; }catch(_){ return null; } }
+function napRunFor(t){ return t&&t.start ? Math.max(0, now()-t.start) : 0; }
+function napOverrun(t){ return napRunFor(t) > SLEEP_NUDGE_MS; }
 function liveNapMs(dk){
   try{
     const t=timersFor(state.activeBabyId).sleep;
     if(!t||!t.start) return 0;
     if(dk && dayKey(t.start)!==dk) return 0;
-    return Math.max(0, now()-t.start);
+    // Capped, so one forgotten timer cannot claim three days of sleep in the day strip, the recaps
+    // or the doctor summary, which all read this.
+    return Math.min(SLEEP_MAX_MS, Math.max(0, now()-t.start));
   }catch(_){ return 0; }
 }
 function wakingsLabel(e){
@@ -1694,7 +1707,8 @@ function fmtClock(ts){
 }
 function fmtDur(ms){
   const s = Math.floor(ms/1000), h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60;
-  if(h>0) return h+'h '+m+'m';
+  // "2h", not "2h 0m". Same reason fmtSince drops it: the empty half reads like a machine talking.
+  if(h>0) return m ? h+'h '+m+'m' : h+'h';
   if(m>0) return m+'m';
   return sec+'s';
 }
@@ -1703,6 +1717,8 @@ function fmtDurClock(ms){
   const pad=n=>String(n).padStart(2,'0');
   return h>0 ? h+':'+pad(m)+':'+pad(sec) : pad(m)+':'+pad(sec);
 }
+// A running clock that admits when it has lost count, instead of reporting 72:00:11 as if it meant it.
+function timerText(ms, cap){ return (cap && ms > cap) ? fmtDurClock(cap)+'+' : fmtDurClock(ms); }
 function fmtSince(ts){
   if(!ts) return null;
   const diff = now()-ts, m=Math.floor(diff/60000), h=Math.floor(m/60);
@@ -2847,6 +2863,16 @@ function renderHome(){
     const t=state.timers[bb.id]||{};
     const pre = multi ? escapeHtml(bb.name)+' · ' : '';
     if(t.sleep) timers += timerBanner('sleep', pre+'Sleeping', t.sleep.start, 'started '+fmtClock(t.sleep.start), `stopSleep('${bb.id}')`);
+    /* Over twelve hours, ask. A forgotten Stop is the commonest way this log goes wrong, and the
+       parent it happens to is the one who was too tired to tap. Asked once and then quiet for six
+       hours if she says they are still asleep, because a night feed is a real answer. */
+    if(t.sleep && napOverrun(t.sleep) && !(t.sleep.ack && now()-t.sleep.ack < 6*3600000)){
+      timers += `<div class="ww-line" style="border-left:4px solid var(--sleep)">
+        <div class="ww-t">${multi?escapeHtml(bb.name)+' has':'This nap has'} been running ${fmtDur(napRunFor(t.sleep))}. Did it end earlier?</div>
+        <div class="ww-s">Tap to say when they woke, and we will log the nap properly.</div>
+        <button class="btn-primary" style="background:var(--sleep);--accent-ink:var(--on-sleep,var(--on-accent));margin-top:10px;padding:9px 14px;font-size:14px" onclick="openSleepCorrect('${bb.id}')">Set when they woke</button>
+      </div>`;
+    }
     if(t.feed) timers += timerBanner('feed', pre+(t.feed.side?('Nursing · '+t.feed.side):'Feeding'), t.feed.start, 'started '+fmtClock(t.feed.start), `stopFeed('${bb.id}')`);
   });
 
@@ -3461,7 +3487,11 @@ function timerBanner(type,label,start,sub,stopFn){
     <div class="pulse"></div>
     <div class="info">
       <div class="lbl">${label}</div>
-      <div class="time" data-timer="${start}">${fmtDurClock(now()-start)}</div>
+      ${/* data-cap stops a forgotten sleep timer climbing past 24h. It reads "24:00:00+" from then
+            on, which is honestly "we have lost count" rather than a precise-looking 72:00:11 that
+            invites belief. Feeds are not capped: nobody nurses for a day, and a long feed timer is
+            corrected by stopping it. */''}
+      <div class="time" data-timer="${start}"${type==='sleep'?' data-cap="'+SLEEP_MAX_MS+'"':''}>${timerText(now()-start, type==='sleep'?SLEEP_MAX_MS:0)}</div>
       <div class="sub">${sub}</div>
     </div>
     <button class="stop-btn" onclick="${stopFn}()">Stop</button>
@@ -3749,7 +3779,7 @@ function startTick(){
     // within ten seconds instead of leaving a running timer frozen for good.
     if((_tickBeat%10)===0) refreshTickTargets();
     var i, el;
-    for(i=0;i<_tickTimers.length;i++){ el=_tickTimers[i]; if(el.isConnected) el.textContent=fmtDurClock(now()-(+el.dataset.timer)); }
+    for(i=0;i<_tickTimers.length;i++){ el=_tickTimers[i]; if(el.isConnected) el.textContent=timerText(now()-(+el.dataset.timer), +el.dataset.cap||0); }
     for(i=0;i<_tickSince.length;i++){ el=_tickSince[i]; if(!el.isConnected) continue; var s=fmtSince(+el.dataset.since); if(s) el.textContent=s; }
     for(i=0;i<_tickDue.length;i++){ el=_tickDue[i]; if(el.isConnected) el.textContent=fmtDue((+el.dataset.due)-now()); }
     // "<already banked ms>|<start of the session still running>" — a total that is still growing.
@@ -4274,8 +4304,55 @@ function stopSleep(babyId){
   babyId=babyId||state.activeBabyId;
   const tt=timersFor(babyId); const t=tt.sleep; if(!t)return;
   const end=now();
+  /* Past 24 hours the timer is wrong, not remarkable, so this asks instead of writing. Writing it
+     would put a day-long sleep into the record a doctor reads, and "undo" is not a thing a parent
+     at 3am should have to find. */
+  if(end-t.start > SLEEP_MAX_MS){ openSleepCorrect(babyId); return; }
   state.events.push({id:uid(),babyId,type:'sleep',time:t.start,end});
   delete tt.sleep; persist(); render(); toast('Sleep logged · '+fmtDur(end-t.start));
+}
+/* "Did the nap end earlier?" Reuses the same time strip as every other log sheet rather than a
+   one-off control, so the gesture is one a parent already knows. Pre-filled with a plausible end
+   rather than now(): if the timer has run 30 hours, "now" is the one answer we are confident is
+   wrong, and an hour after it started is the likeliest nap. */
+function openSleepCorrect(babyId){
+  babyId=babyId||state.activeBabyId;
+  const t=runningNap(babyId); if(!t) return;
+  const b=state.babies.find(x=>x.id===babyId)||activeBaby();
+  const ran=napRunFor(t);
+  logTimes={ end: Math.min(now(), t.start + Math.min(ran, 3600000)) };
+  const nm=b?escapeHtml(b.name):'They';
+  openSheet(`<h2>When did this nap end?</h2>
+    ${/* No "on" before dayLabel: it returns "Today" and "Yesterday" as well as a date, and "on
+          Today" reads badly while lowercasing gives "tuesday, aug 18". A comma carries both. */''}
+    <div class="sub">The timer has been running ${fmtDur(ran)}, since ${fmtClock(t.start)}, ${dayLabel(t.start)}. That is longer than a nap usually goes, so it looks like Stop never got tapped. No hurry, just tell us when ${nm} woke.</div>
+    ${timeStrip('end','Woke up')}
+    <button class="btn-primary" style="background:var(--sleep);--accent-ink:var(--on-sleep,var(--on-accent))" onclick="saveSleepCorrect('${babyId}')">Save this nap</button>
+    <button class="btn-ghost" onclick="keepSleepRunning('${babyId}')">No, they are still asleep</button>
+    <button class="btn-ghost btn-danger" onclick="discardRunningNap('${babyId}')">Forget this timer</button>
+    <div class="csub" style="margin-top:8px">Forgetting it removes the timer and logs nothing.</div>`,'sleep');
+}
+function saveSleepCorrect(babyId){
+  babyId=babyId||state.activeBabyId;
+  const tt=timersFor(babyId); const t=tt.sleep; if(!t)return;
+  const end=getWhen('end');
+  if(!(end>t.start)){ toast('That is before they fell asleep'); return; }
+  if(end>now()){ toast('That is in the future'); return; }
+  state.events.push({id:uid(),babyId,type:'sleep',time:t.start,end});
+  delete tt.sleep; persist(); closeSheet(); render(); toast('Nap logged · '+fmtDur(end-t.start));
+}
+// Genuinely still asleep, e.g. a night feed logged at 4am. Snoozes the nudge for six hours so the
+// same question is not asked again on every render, and never touches the timer itself.
+function keepSleepRunning(babyId){
+  const t=runningNap(babyId); if(t){ t.ack=now(); persist(); }
+  closeSheet(); render(); toast('Left running');
+}
+function discardRunningNap(babyId){
+  babyId=babyId||state.activeBabyId;
+  confirmSheet({title:'Forget this timer?',body:'The timer goes away and no sleep is logged. Nothing else changes.',
+    confirmLabel:'Forget it',cancelLabel:'Keep it',danger:true,onConfirm:()=>{
+      const tt=timersFor(babyId); delete tt.sleep; persist(); closeSheet(); render(); toast('Timer removed');
+    }});
 }
 function openPastSleep(fresh){
   if(fresh){ logTimes={ when: now()-3600000, end: now() }; }
