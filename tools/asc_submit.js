@@ -73,7 +73,10 @@ const ck = (ok, label, extra) => { if (!ok) fail++; console.log('  ' + (ok ? 'ok
     const i = md.indexOf('### Notes text for the reviewer');
     return /```\n([\s\S]*?)```/.exec(md.slice(i))[1].trim();
   })();
-  const attrs = { contactFirstName: 'Saurav', contactLastName: 'Patro', contactEmail: 'saurav.patr@gmail.com',
+  /* The ASC account holder's own address, read from /users, rather than a guess. Apple already
+     writes to this one, so it is the address that will actually be read mid-review. */
+  const attrs = { contactFirstName: 'Saurav', contactLastName: 'Patro',
+    contactEmail: arg('--email') || 'sauravpatro@icloud.com',
     contactPhone: PHONE, notes: notes };
   if (DEMO) { const [u, ...p] = DEMO.split(':'); attrs.demoAccountRequired = true; attrs.demoAccountName = u; attrs.demoAccountPassword = p.join(':'); }
   else { attrs.demoAccountRequired = false; }
