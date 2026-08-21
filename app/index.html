@@ -11149,6 +11149,58 @@ function ensureRoutines(b){
   return b.routines;
 }
 function routineEvType(r){ return (r&&r.evType) || 'activity'; }
+/* A RITUAL IS THE BABY'S DAY, not a to-do list.
+   It is the feeds, naps, medicines and small moments a family chooses and tries to keep, which is
+   why the setup now starts from the shape of a day rather than from a blank text field.
+
+   What was wrong: the sheet asked "What is it" first and then made a parent choose an abstract
+   "Logs as" type from five chips, which is backwards. Nobody thinks "I want a thing that logs as a
+   feed". They think "she has a bottle around seven". So the kind comes first and names itself, and
+   the list is grouped into morning, afternoon, evening and night so it reads as a day. */
+const RITUAL_TYPES=[
+  {k:'feed',     label:'Feed',     ico:'🍼', name:'Feed',         at:'07:00'},
+  {k:'sleep',    label:'Nap',      ico:'🌙', name:'Nap',          at:'12:30'},
+  {k:'diaper',   label:'Nappy',    ico:'🧷', name:'Nappy change', at:'08:00'},
+  {k:'medicine', label:'Medicine', ico:'💊', name:'',             at:'09:00'},
+  {k:'activity', label:'Moment',   ico:'🌿', name:'',             at:'10:00'}
+];
+function ritualType(k){ return RITUAL_TYPES.find(t=>t.k===k)||RITUAL_TYPES[4]; }
+const RITUAL_PARTS=[
+  {k:'morning',   label:'Morning',   from:0,  to:12, hint:'waking up'},
+  {k:'afternoon', label:'Afternoon', from:12, to:17, hint:'the long stretch'},
+  {k:'evening',   label:'Evening',   from:17, to:21, hint:'winding down'},
+  {k:'night',     label:'Night',     from:21, to:24, hint:'the small hours'}
+];
+function ritualPart(hhmm){
+  const h=parseInt(String(hhmm||'').split(':')[0],10);
+  const hh=isNaN(h)?9:h;
+  return RITUAL_PARTS.find(p=>hh>=p.from&&hh<p.to)||RITUAL_PARTS[0];
+}
+/* One-tap starters, so an empty day is never a blank field. Drawn from the same shape as the seeded
+   template, widened a little, and filtered by age: nobody needs a solids ritual for a newborn. */
+function ritualSuggestions(b){
+  const days=b&&b.birth?Math.floor((now()-b.birth)/86400000):120;
+  const base=[
+    {title:'Morning feed', time:'07:00', evType:'feed'},
+    {title:'Tummy time',   time:'10:00', evType:'activity'},
+    {title:'Midday nap',   time:'12:30', evType:'sleep'},
+    {title:'Walk',         time:'15:30', evType:'activity'},
+    {title:'Bath',         time:'18:30', evType:'activity'},
+    {title:'Bedtime feed', time:'19:30', evType:'feed'},
+    {title:'Bedtime',      time:'19:45', evType:'sleep'}
+  ];
+  if(days>=120) base.splice(3,0,{title:'Lunch', time:'12:00', evType:'feed'});
+  if(days>=150) base.push({title:'Story',  time:'19:15', evType:'activity'});
+  const have={}; (b&&b.routines||[]).forEach(r=>{ have[String(r.title||'').toLowerCase()]=1; });
+  return base.filter(s=>!have[s.title.toLowerCase()]);
+}
+function addRitualSuggestion(i){
+  const b=activeBaby(); if(!b) return;
+  const s=ritualSuggestions(b)[i]; if(!s) return;
+  ensureRoutines(b).push({id:uid(), title:s.title, time:s.time, assignee:null, evType:s.evType,
+    activity:s.evType==='activity'?s.title:null, medName:null, done:{}});
+  persist(); render(); closeSheet(); openRoutinesEdit(); toast(s.title+' added');
+}
 /* "When" for the logged event: today's date at the routine's HH:MM. */
 function routineEventTime(r){
   var d=new Date(); var t=String(r.time||'').split(':');
@@ -11264,7 +11316,14 @@ function routinePayload(r){
   // ~1h is a gentle default the parent can adjust by tapping the entry.
   if(ty==='sleep') return Object.assign(base,{type:'sleep',end:t+3600000});
   if(ty==='diaper') return Object.assign(base,{type:'diaper',kind:'wet'});
-  if(ty==='medicine') return Object.assign(base,{type:'medicine',medName:r.medName||r.title});
+  /* Carry medId when the ritual points at a real medicine, so the dose lands against that medicine
+     rather than as a loose entry with a matching string. That is what makes it count in lastDose,
+     in the too-soon guard, and in the "Given during it" line of the doctor report. */
+  if(ty==='medicine'){
+    const m=r.medId?medsForBaby(r.babyId||state.activeBabyId).find(x=>x.id===r.medId):null;
+    return Object.assign(base,{type:'medicine', medName:(m&&m.name)||r.medName||r.title},
+      m?{medId:m.id, dose:m.dose, unit:m.unit}:{});
+  }
   // default: an activity tagged with the routine title (or named activity)
   return Object.assign(base,{type:'activity',activity:r.activity||r.title});
 }
@@ -11272,25 +11331,41 @@ function routinePayload(r){
 function openRoutinesEdit(){
   const b=activeBaby(); if(!b) return;
   const list=ensureRoutines(b).slice().sort((a,c)=>String(a.time).localeCompare(String(c.time)));
-  let rows;
+  /* Grouped into the parts of a day rather than shown as one flat list, because the thing being
+     built IS a day. A parent scanning "Morning / Afternoon / Evening" can see at a glance where the
+     shape is thin, which a time-sorted list never showed her. Empty parts are named too, quietly,
+     for the same reason: the gap is the useful information. */
+  let rows='';
   if(!list.length){
-    rows=`<div class="rt-empty"><img class="es-bear" src="/app/spot-art/rituals_cub.webp" alt="" loading="lazy">No rituals yet. Add the little moments you want to remember, a morning feed, tummy time, a bath.</div>`;
+    rows=`<div class="rt-empty"><img class="es-bear" src="/app/spot-art/rituals_cub.webp" alt="" loading="lazy">Nothing yet. Build ${escapeHtml(b.name)}'s day out of the things you already do.</div>`;
   } else {
-    rows=list.map(r=>{
-      const sub=[routineFmtTime(r.time), r.assignee?(loggerName(r.assignee)||'someone'):''].filter(Boolean).join(' · ');
-      return `<div class="rt-edit-row">
-        <div class="rt-go" onclick="openRoutineItem('${r.id}')">
-          <div class="a">${escapeHtml(r.title)}</div>
-          <div class="b">${escapeHtml(sub)}</div>
-        </div>
-        <button class="rt-rm" onclick="removeRoutine('${r.id}')" aria-label="Remove">${I.trash}</button>
-      </div>`;
+    rows=RITUAL_PARTS.map(part=>{
+      const mine=list.filter(r=>ritualPart(r.time).k===part.k);
+      if(!mine.length) return `<div class="sec-title" style="opacity:.45">${part.label}<span style="font-weight:600;text-transform:none;letter-spacing:0"> · nothing yet</span></div>`;
+      return `<div class="sec-title">${part.label}</div>`+mine.map(r=>{
+        const t=ritualType(routineEvType(r));
+        const sub=[routineFmtTime(r.time), r.assignee?(loggerName(r.assignee)||'someone'):''].filter(Boolean).join(' · ');
+        return `<div class="rt-edit-row">
+          <div class="rt-go" onclick="openRoutineItem('${r.id}')">
+            <div class="a">${t.ico} ${escapeHtml(r.title)}</div>
+            <div class="b">${escapeHtml(sub)}</div>
+          </div>
+          <button class="rt-rm" onclick="removeRoutine('${r.id}')" aria-label="Remove">${I.trash}</button>
+        </div>`;
+      }).join('');
     }).join('');
   }
-  openSheet(`<h2>Rituals 🌿</h2><div class="sub">Gentle moments for the day, never a must-do. Add, change or remove anything, anytime.</div>
+  // One-tap starters, so the answer to an empty day is never a blank text field.
+  const sugg=ritualSuggestions(b);
+  const suggRow=sugg.length?`<div class="sec-title" style="margin-top:14px">Common ones</div>
+    <div class="chip-row" style="flex-wrap:wrap;gap:8px">${sugg.slice(0,7).map((sg,i)=>
+      `<div class="chip" onclick="addRitualSuggestion(${i})">${ritualType(sg.evType).ico} ${escapeHtml(sg.title)}</div>`).join('')}</div>
+    <div class="csub" style="margin-top:6px">Tap to add one. You can change the time after.</div>`:'';
+  openSheet(`<h2>${escapeHtml(b.name)}'s day 🌿</h2><div class="sub">The feeds, naps, medicines and small moments you choose to keep. Nothing here is a must-do, and you can change any of it whenever you like.</div>
     ${rows}
-    <button class="rt-add" style="border-top:1px solid var(--line);margin-top:4px" onclick="openRoutineItem()">${I.plus} Add a ritual</button>
-    <div class="preg-disclaim" style="margin-top:14px">These are gentle rituals, not medical advice, and there's no pressure to follow them. Reminders are coming later, for now nothing will notify you.</div>`,'diaper');
+    <button class="rt-add" style="border-top:1px solid var(--line);margin-top:4px" onclick="openRoutineItem()">${I.plus} Add something</button>
+    ${suggRow}
+    <div class="preg-disclaim" style="margin-top:14px">Gentle rituals, not medical advice, and there is no pressure to follow them. Marking one done writes the matching entry to the log. Cubby does not send reminders for these yet.</div>`,'diaper');
 }
 function routineMemberPairs(){
   var info=(window.LL&&window.LL.memberInfo)||{};
@@ -11311,58 +11386,97 @@ function openRoutineItem(id){
   const list=ensureRoutines(b);
   const existing = id ? list.find(x=>x.id===id) : null;
   routineDraft = existing
-    ? {id:existing.id, title:existing.title, time:existing.time, assignee:existing.assignee||'', evType:routineEvType(existing), activity:existing.activity||null, medName:existing.medName||null}
-    : {id:null, title:'', time:'09:00', assignee:'', evType:'activity', activity:null, medName:null};
+    ? {id:existing.id, title:existing.title, time:existing.time, assignee:existing.assignee||'', evType:routineEvType(existing), activity:existing.activity||null, medId:existing.medId||null, medName:existing.medName||null}
+    : {id:null, title:'', time:'10:00', assignee:'', evType:'activity', activity:null, medId:null, medName:null};
   reopenRoutineItem();
 }
 function routineSetType(t){
   if(!routineDraft) return;
-  // keep whatever the user has typed so far before re-rendering the sheet
+  // Keep whatever has been typed so far before re-rendering.
   var ti=$('#rtTitle'); if(ti) routineDraft.title=ti.value;
   var tm=$('#rtTime'); if(tm) routineDraft.time=tm.value;
   var wh=$('#rtWho'); if(wh) routineDraft.assignee=wh.value;
+  var md=$('#rtMed'); if(md) routineDraft.medId=md.value;
+  var was=ritualType(routineDraft.evType);
   routineDraft.evType=t;
+  var now2=ritualType(t);
+  /* Seed the name and the time from the kind, but ONLY while they are untouched or still hold the
+     previous kind's suggestion. Overwriting something she typed would be worse than a blank field. */
+  if(!routineDraft.title || routineDraft.title===was.name) routineDraft.title=now2.name;
+  if(!routineDraft.time || routineDraft.time===was.at) routineDraft.time=now2.at;
+  if(t!=='medicine') routineDraft.medId=null;
   reopenRoutineItem();
 }
-/* Re-render the add/edit sheet from the live draft (used when toggling type). */
 function reopenRoutineItem(){
   const d=routineDraft; if(!d) return;
+  const b=activeBaby();
   const existing=!!d.id;
-  const TYPES=[['activity','Moment'],['feed','Feed'],['sleep','Nap'],['diaper','Nappy'],['medicine','Vitamins / meds']];
-  const typeChips=TYPES.map(t=>`<div class="chip ${d.evType===t[0]?'sel':''}" onclick="routineSetType('${t[0]}')">${t[1]}</div>`).join('');
+  /* KIND FIRST, and it names itself.
+     The old sheet asked "What is it" and then made her pick an abstract "Logs as" from five chips,
+     which is the wrong way round: nobody thinks "I want a thing that logs as a feed", they think
+     "she has a bottle around seven". Choosing the kind now fills in a sensible name and time, both
+     still editable, so the common case is two taps and the blank field is gone. */
+  const typeChips=RITUAL_TYPES.map(t=>`<div class="chip ${d.evType===t.k?'sel':''}" onclick="routineSetType('${t.k}')">${t.ico} ${t.label}</div>`).join('');
   const pairs=routineMemberPairs();
   const showPicker=pairs.length>1;
-  openSheet(`<h2>${existing?'Edit ritual':'Add a ritual'}</h2><div class="sub">A gentle moment for the day. Change or remove it whenever you like.</div>
-    <div class="field"><label>What is it</label><input id="rtTitle" value="${escapeHtml(d.title)}" placeholder="e.g. Morning feed, tummy time, bath" oninput="routineDraft.title=this.value"></div>
-    <div class="field"><label>Around when</label><input type="time" id="rtTime" value="${escapeHtml(d.time||'09:00')}" onchange="routineDraft.time=this.value"></div>
-    <div class="field"><label>Logs as</label><div class="chip-row" style="flex-wrap:wrap;white-space:normal">${typeChips}</div>
-      <div class="csub" style="margin-top:6px">When you tap it done, it adds this kind of entry to the log.</div></div>
+  const part=ritualPart(d.time);
+  /* A medicine ritual points at a REAL medicine when the household has one, rather than storing a
+     second loose copy of its name. Free text stays for a household with none, so nobody is blocked
+     from writing "Vitamin drops" before they have set the medicine up properly. */
+  const meds=(b?medsForBaby(b.id).filter(m=>m.active):[]);
+  const medField = d.evType!=='medicine' ? '' : (meds.length
+    ? `<div class="field"><label>Which medicine</label>${searchPickerHtml('rtMed', [['','Something else']].concat(meds.map(m=>[m.id, m.name+' · '+m.dose+(m.unit||'')])), d.medId||'', 'Pick one')}
+        <div class="csub" style="margin-top:6px">Marking it done logs a dose against that medicine, so it counts in the doctor summary.</div></div>`
+    : `<div class="csub" style="margin-bottom:10px">You have no medicines saved yet. Add one under Health and this can point at it.</div>`);
+  const nameLabel = d.evType==='feed' ? 'Call it' : d.evType==='sleep' ? 'Call it' : 'What is it';
+  openSheet(`<h2>${existing?'Edit this':'Add to the day'}</h2><div class="sub">${existing?'Change anything, or remove it.':'Pick what kind of thing it is, then when it usually happens.'}</div>
+    <div class="field"><label>What kind</label><div class="chip-row" style="flex-wrap:wrap;white-space:normal;gap:8px">${typeChips}</div>
+      <div class="csub" style="margin-top:6px">Marking it done writes this kind of entry to the log.</div></div>
+    ${medField}
+    <div class="field"><label>${nameLabel}</label><input id="rtTitle" value="${escapeHtml(d.title)}" placeholder="${escapeHtml(ritualType(d.evType).name||'e.g. Tummy time, bath, walk')}" oninput="routineDraft.title=this.value"></div>
+    <div class="field"><label>Around when</label><input type="time" id="rtTime" value="${escapeHtml(d.time||'09:00')}" onchange="routineDraft.time=this.value;routineRefreshPart()">
+      <div class="csub" style="margin-top:6px" id="rtPart">${part.label}, ${part.hint}. Around when, not to the minute.</div></div>
     ${showPicker?`<div class="field"><label>Who usually does it</label>${searchPickerHtml('rtWho',pairs,d.assignee||'','Anyone in your circle')}
-      <div class="csub" style="margin-top:6px">Optional. We'll credit them in the log when it's done.</div></div>`:''}
-    <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent))" onclick="saveRoutineItem()">${existing?'Save':'Add ritual'}</button>
-    ${existing?`<button class="btn-ghost btn-danger" onclick="removeRoutine('${d.id}')">${I.trash} Remove ritual</button>`:''}`,'diaper');
+      <div class="csub" style="margin-top:6px">Optional. We will credit them in the log when it is done.</div></div>`:''}
+    <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent))" onclick="saveRoutineItem()">${existing?'Save':'Add to the day'}</button>
+    ${existing?`<button class="btn-ghost btn-danger" onclick="removeRoutine('${d.id}')">${I.trash} Remove</button>`:''}`,'diaper');
+}
+// Live feedback on which part of the day she just chose, without re-rendering the whole sheet and
+// stealing focus from the field she is in.
+function routineRefreshPart(){
+  const el=$('#rtPart'); if(!el||!routineDraft) return;
+  const p=ritualPart(routineDraft.time);
+  el.textContent=p.label+', '+p.hint+'. Around when, not to the minute.';
 }
 function saveRoutineItem(){
   const b=activeBaby(); if(!b||!routineDraft) return;
   const list=ensureRoutines(b);
-  const title=($('#rtTitle')?$('#rtTitle').value:'').trim();
-  if(!title){ toast('Give it a name'); return; }
-  const time=($('#rtTime')?$('#rtTime').value:'')||routineDraft.time||'09:00';
-  const whoEl=$('#rtWho'); const assignee=whoEl?whoEl.value:(routineDraft.assignee||'');
-  if(routineDraft.id){
-    const r=list.find(x=>x.id===routineDraft.id);
-    if(r){ r.title=title; r.time=time; r.assignee=assignee||null; r.evType=routineDraft.evType;
-      r.activity=(routineDraft.evType==='activity')?title:null;
-      r.medName=(routineDraft.evType==='medicine')?title:null; }
+  const d=routineDraft;
+  const typed=($('#rtTitle')?$('#rtTitle').value:'').trim();
+  const time=($('#rtTime')?$('#rtTime').value:'')||d.time||'10:00';
+  const whoEl=$('#rtWho'); const assignee=whoEl?whoEl.value:(d.assignee||'');
+  const medEl=$('#rtMed'); const medId=(d.evType==='medicine')?((medEl?medEl.value:d.medId)||null):null;
+  /* Resolve the linked medicine BEFORE deciding whether there is a name. A medicine ritual that
+     points at Vitamin D needs no typed title, and the first version of this bailed with "give it a
+     name" on exactly the path the picker exists to make easy. A linked medicine also names itself,
+     so the ritual and the medicine can never drift apart. */
+  const linked=medId?medsForBaby(b.id).find(m=>m.id===medId):null;
+  /* The kind already carries a sensible name, so an empty field is not an error any more: it means
+     "call it what it is". Only a Moment or an un-linked medicine genuinely needs words. */
+  const finalTitle=linked?linked.name:(typed || ritualType(d.evType).name);
+  if(!finalTitle){ toast(d.evType==='medicine'?'Pick a medicine, or give it a name':'Give it a name'); return; }
+  const patch={ title:finalTitle, time:time, assignee:assignee||null, evType:d.evType,
+    activity:(d.evType==='activity')?finalTitle:null,
+    medId:medId, medName:(d.evType==='medicine')?(linked?linked.name:finalTitle):null };
+  if(d.id){
+    const r=list.find(x=>x.id===d.id);
+    if(r) Object.assign(r, patch);
   } else {
-    list.push({id:uid(), title:title, time:time, assignee:assignee||null,
-      evType:routineDraft.evType,
-      activity:(routineDraft.evType==='activity')?title:null,
-      medName:(routineDraft.evType==='medicine')?title:null, done:{}});
+    list.push(Object.assign({id:uid(), done:{}}, patch));
   }
   routineDraft=null;
   persist(); render();
-  closeSheet(); openRoutinesEdit(); toast('Saved');   // fresh stack, back goes to the list
+  closeSheet(); openRoutinesEdit(); toast(finalTitle+' saved');   // fresh stack, back goes to the day
 }
 function removeRoutine(id){
   const b=activeBaby(); if(!b) return;
