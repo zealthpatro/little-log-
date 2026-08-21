@@ -58,6 +58,10 @@ const ck = (ok, label, extra) => { if (!ok) fail++; console.log('  ' + (ok ? 'ok
   ck(!!build, 'build attached', build ? build.id : '');
   const info = get('/apps/' + APP + '/appInfos').data.find((i) => i.attributes.appStoreState === 'PREPARE_FOR_SUBMISSION');
   ck(!!info.attributes.appStoreAgeRating, 'age rating', info.attributes.appStoreAgeRating || '');
+  // Required before submission, easy to miss because it lives on the app rather than the version,
+  // and it is not shown anywhere in the version's own checklist.
+  const appAttrs = get('/apps/' + APP).data.attributes;
+  ck(!!appAttrs.contentRightsDeclaration, 'content rights', appAttrs.contentRightsDeclaration || 'unanswered');
   const il = get('/appInfos/' + info.id + '/appInfoLocalizations').data.find((l) => l.attributes.locale === 'en-US');
   ck(!!il.attributes.privacyPolicyUrl, 'privacy policy URL', il.attributes.privacyPolicyUrl || '');
   ck(!!PHONE, 'review contact phone', PHONE || 'pass --phone "+<country> ..."');
