@@ -1,6 +1,6 @@
 # App Store submission package (paste-ready)
 
-**Date:** 2026-08-04. **App:** Cubby, `com.littlecubby.app`, ASC app id `6791454709`, TestFlight build 9 (VALID).
+**Date:** 2026-08-04. **App:** Cubby, `com.littlecubby.app`, ASC app id `6791454709`, build 2026.33.1 (VALID, uploaded 2026-08-13; this is the one with the production APNs entitlement, build 9 predates the push fix).
 **Sources:** `docs/plans/2026-07-15-native-wrapper-app-store.md` §9, live marketing copy (`index.html`, `features/index.html`, `faq/index.html`), `LAUNCH-PRIVACY-WEDGE.md` honest-claims guardrail, `ANALYTICS.md` (no third-party analytics), truthful-copy + customer-voice rules.
 
 **Ground rules baked into every block below:**
@@ -191,7 +191,7 @@ Rules while shooting: fictional data only (no real children), status bar clean (
 
 - [ ] Name, subtitle, description, keywords pasted from this file, char counts verified in ASC.
 - [ ] Promotional text pasted (optional, editable later without review).
-- [ ] Privacy policy URL `https://little-cubby.com/privacy/`, support URL `https://little-cubby.com/faq/`.
+- [ ] Privacy policy URL `https://little-cubby.com/privacy/`, support URL `https://little-cubby.com/contact/` (/support/ and /faq/ were checked: /support/ is a 404, /contact/ is the real support page).
 - [ ] App Privacy answered exactly as §4, nothing speculative.
 - [ ] Age rating answered as §5, 4+, Health & Fitness + Lifestyle.
 - [ ] Demo account seeded and verified from a clean device (§6), credentials in the review fields.
