@@ -65,15 +65,42 @@ async function generateSignInLink(token, email, continueUrl) {
   return data.oobLink;
 }
 
-function emailHtml(link) {
-  return '<!doctype html><html><body style="margin:0;background:#F7F2E8;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:28px 16px">'
+/* ONE sign-in email, carrying BOTH a code and a link, because which one works depends on a thing we
+   cannot see from here: which storage container she is standing in.
+     - Same phone she asked from, normal tab: the link is one tap and she is in.
+     - A DIFFERENT device (asked on the laptop, reads mail on the phone): the link signs the phone in
+       and leaves the laptop exactly where it was. Only the code finishes the session she started.
+     - Installed iOS app: a link tapped in Mail opens Safari, which has its own storage jar, so she
+       signs in successfully somewhere the app cannot see and the app stays signed out. Every iOS
+       install walked into that (docs/postmortems/2026-08-19-installed-ios-pwa-cannot-sign-in.md).
+       The code does not navigate, so the session lands in the container that asked for it.
+   Sending both means we never have to guess. She picks the one that works from where she is.
+
+   CODE FIRST and largest, because it is the one that always works; the link sits underneath as the
+   shortcut for the common case. Either argument may be empty (a code minted without a link, or a
+   link sent without a code) and the email still renders as the half that survived, which is what
+   lets both senders degrade instead of failing. */
+function signinEmailHtml(code, link) {
+  const codeBlock = !code ? '' : ''
+    + '<tr><td align="center" style="font-size:13px;font-weight:700;color:#6E635B;letter-spacing:.04em;padding:0 0 8px">YOUR SIGN-IN CODE</td></tr>'
+    + '<tr><td align="center"><div style="font-size:34px;font-weight:800;letter-spacing:.16em;color:#2C2521;background:#FBF7EF;border-radius:16px;padding:18px 12px">' + code + '</div></td></tr>'
+    + '<tr><td align="center" style="font-size:14px;color:#6E635B;line-height:1.5;padding:12px 0 0">Type it into Cubby on the device you started on. It works for 10 minutes, once.</td></tr>';
+  // Only draw the divider when there are genuinely two halves to separate.
+  const rule = (code && link)
+    ? '<tr><td style="padding:22px 0"><div style="height:1px;background:#EFE7DA"></div></td></tr>' : '';
+  const linkBlock = !link ? '' : ''
+    + '<tr><td align="center" style="font-size:14px;color:#6E635B;line-height:1.5;padding:0 0 14px">' + (code ? 'Reading this on the phone you started on? Tap instead:' : 'Tap the button to sign in. This link works once and expires soon.') + '</td></tr>'
+    + '<tr><td align="center"><a href="' + link + '" style="display:inline-block;background:#C97FA0;color:#fff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 30px;border-radius:12px">Sign in to Cubby</a></td></tr>'
+    + '<tr><td align="center" style="font-size:12px;color:#9a8d80;padding:16px 0 0;line-height:1.5">Or paste this link into your browser:<br><span style="color:#6E635B;word-break:break-all">' + link + '</span></td></tr>';
+  // Declared, not inherited. Resend sets a MIME charset, but a client that goes by the document wins
+  // on its own terms, and latin-1 turns the bear into "ðŸ»" at the top of a sign-in email.
+  return '<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#F7F2E8;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:28px 16px">'
     + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">'
     + '<table role="presentation" width="100%" style="max-width:440px;background:#fff;border-radius:18px;padding:32px 28px;box-shadow:0 8px 28px rgba(0,0,0,.08)">'
     + '<tr><td align="center" style="font-size:40px">🐻</td></tr>'
-    + '<tr><td align="center" style="font-family:Georgia,serif;font-size:24px;color:#2C2521;padding:6px 0 4px">Sign in to Cubby</td></tr>'
-    + '<tr><td align="center" style="font-size:15px;color:#6E635B;line-height:1.5;padding:0 0 22px">Tap the button to sign in. This link works once and expires soon. If you didn\'t ask for it, you can safely ignore this email.</td></tr>'
-    + '<tr><td align="center"><a href="' + link + '" style="display:inline-block;background:#C97FA0;color:#fff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 30px;border-radius:12px">Sign in to Cubby</a></td></tr>'
-    + '<tr><td align="center" style="font-size:12px;color:#9a8d80;padding:22px 0 0;line-height:1.5">Or paste this link into your browser:<br><span style="color:#6E635B;word-break:break-all">' + link + '</span></td></tr>'
+    + '<tr><td align="center" style="font-family:Georgia,serif;font-size:24px;color:#2C2521;padding:6px 0 18px">Sign in to Cubby</td></tr>'
+    + codeBlock + rule + linkBlock
+    + '<tr><td align="center" style="font-size:12px;color:#9a8d80;padding:22px 0 0;line-height:1.5">If you didn\'t ask to sign in, you can ignore this email and nothing happens.</td></tr>'
     + '</table><div style="font-size:12px;color:#9a8d80;padding:16px 0 0">Cubby · the only app you\'ll ever need, from two lines to big kid</div>'
     + '</td></tr></table></body></html>';
 }
@@ -134,14 +161,20 @@ async function sendSigninLink(request, env) {
     // Rebrand the link onto our own domain (the worker proxies /__/* to Firebase) so the sign-in
     // email never exposes the legacy little-log-a9caa.firebaseapp.com host.
     link = link.replace(/^https:\/\/[^/]+\/__\//, 'https://' + url.host + '/__/');
+    /* Carry a code as well. This is the path every non-iOS-install surface takes, and it is exactly
+       the path where "she asked on the laptop and read the mail on her phone" strands her: the link
+       signs in the phone and the laptop she is sitting at never moves. BEST EFFORT on purpose. This
+       route works today and is the majority of all sign-ins, so a Firestore hiccup must degrade the
+       email to link-only rather than fail the send. The code endpoint makes the opposite trade. */
+    const code = await issueSigninCode(sa, token, email);
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'authorization': 'Bearer ' + env.RESEND_API_KEY, 'content-type': 'application/json' },
       body: JSON.stringify({
         from: env.MAIL_FROM || 'Cubby <noreply@mail.little-cubby.com>',
         to: email,
-        subject: 'Your Cubby sign-in link',
-        html: emailHtml(link)
+        subject: 'Your Cubby sign-in code',
+        html: signinEmailHtml(code, link)
       })
     });
     if (!r.ok) return json({ error: 'send_failed' }, 502);
@@ -278,6 +311,32 @@ function newSigninCode() {
   return String(n % 1000000).padStart(6, '0');
 }
 
+/* Mint ONE live code for an address and store only its MAC. Shared by both senders, so the invariants
+   that make a code safe cannot drift apart between them: the address is inside the MAC, the plaintext
+   is never stored, and the PATCH carries NO updateMask so it REPLACES the document rather than merging
+   into it. That replace is the single-live-code rule: issuing a new code must kill the previous one,
+   never leave two working. Returns '' if the store failed, so each caller can decide whether that is
+   fatal (the code endpoint) or merely means a link-only email (the link endpoint). */
+async function issueSigninCode(sa, token, email) {
+  try {
+    const code = newSigninCode();
+    const mac = _b64urlFromBytes(await signinCodeMac(sa, email, code));
+    const base = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents';
+    const docId = await signinCodeDocId(sa, email);
+    const put = await fetch(base + '/signinCodes/' + docId, {
+      method: 'PATCH',
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ fields: {
+        mac: { stringValue: mac },
+        email: { stringValue: email },
+        exp: { integerValue: String(Date.now() + SIGNIN_CODE_TTL_MS) },
+        tries: { integerValue: String(SIGNIN_CODE_TRIES) }
+      } })
+    });
+    return put.ok ? code : '';
+  } catch (e) { return ''; }
+}
+
 /* Same-origin + per-IP volume, the same guard the link endpoint uses. Written as a helper for the two
    new endpoints rather than refactored into the existing one: that path works, and an incident is the
    wrong time to rewrite a working sign-in route. */
@@ -317,24 +376,20 @@ async function sendSigninCode(request, env) {
   if (await cache.match(cooldown)) return json({ ok: true, cached: true });
 
   try {
-    const code = newSigninCode();
-    const mac = _b64urlFromBytes(await signinCodeMac(sa, email, code));
     const token = await getAccessToken(sa);
-    const base = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents';
-    const docId = await signinCodeDocId(sa, email);
-    // A plain PATCH with no updateMask replaces the document, which is exactly what we want: issuing a
-    // new code must invalidate the previous one rather than leaving two live.
-    const put = await fetch(base + '/signinCodes/' + docId, {
-      method: 'PATCH',
-      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-      body: JSON.stringify({ fields: {
-        mac: { stringValue: mac },
-        email: { stringValue: email },
-        exp: { integerValue: String(Date.now() + SIGNIN_CODE_TTL_MS) },
-        tries: { integerValue: String(SIGNIN_CODE_TRIES) }
-      } })
-    });
-    if (!put.ok) return json({ error: 'store_failed' }, 502);
+    const code = await issueSigninCode(sa, token, email);
+    if (!code) return json({ error: 'store_failed' }, 502);   // the code IS this endpoint; no code, no email
+
+    /* Carry a link as well. This endpoint is asked for by the installed iOS app, where a tapped link
+       lands in Safari's jar and cannot come back — but the same mail gets read on other devices, and
+       on any of those the link is one tap instead of six typed digits. BEST EFFORT, the opposite trade
+       to the link endpoint: Identity Toolkit being slow must not cost her the code she is waiting for. */
+    let link = '';
+    try {
+      const url = new URL(request.url);
+      link = await generateSignInLink(token, email, url.origin + '/app/');
+      link = link.replace(/^https:\/\/[^/]+\/__\//, 'https://' + url.host + '/__/');
+    } catch (e) { link = ''; }
 
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -343,7 +398,7 @@ async function sendSigninCode(request, env) {
         from: env.MAIL_FROM || 'Cubby <noreply@mail.little-cubby.com>',
         to: email,
         subject: 'Your Cubby sign-in code',
-        html: signinCodeHtml(code)
+        html: signinEmailHtml(code, link)
       })
     });
     if (!r.ok) return json({ error: 'send_failed' }, 502);
@@ -454,13 +509,8 @@ async function mintCustomToken(sa, uid) {
   } catch (e) { console.error('custom_token_mint_fail', (e && e.message) || String(e)); return ''; }
 }
 
-function signinCodeHtml(code) {
-  return '<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;max-width:420px;margin:0 auto;padding:28px 22px;color:#2C2521">'
-    + '<p style="font-size:15px;line-height:1.5;margin:0 0 18px">Here is your Cubby sign-in code. Type it into Cubby on the device you started on.</p>'
-    + '<div style="font-size:34px;font-weight:800;letter-spacing:.16em;text-align:center;padding:18px 0;background:#FBF7EF;border-radius:16px;margin:0 0 18px">' + code + '</div>'
-    + '<p style="font-size:13px;line-height:1.5;color:#6E635B;margin:0">It works for 10 minutes and once only. If you did not ask for it, you can ignore this email and nothing happens.</p>'
-    + '</div>';
-}
+/* (signinCodeHtml lived here. Both senders now share signinEmailHtml(code, link) instead, so there is
+   one sign-in email and no way for the two routes to drift into saying different things again.) */
 
 /* POST /api/send-invite — email an invite link, from Cubby, on the owner's behalf.
    {idToken, token, email}

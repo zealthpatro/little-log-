@@ -59,6 +59,7 @@ const TREE = [
   { name: 'blob-clobber',   cmd: ['node', 'test/blob-clobber.test.js'] },
   { name: 'dose-ticket',    cmd: ['node', 'test/dose-ticket.test.js'] },
   { name: 'push-delivery',  cmd: ['node', 'test/push-delivery.test.js'] },
+  { name: 'signin-email',   cmd: ['node', 'test/signin-email.test.js', '--self-test'] },
   { name: 'push-caps',      cmd: ['node', 'test/push-caps.test.js'] },
   { name: 'duedate-cycle',  cmd: ['node', 'test/duedate-cycle.test.js', 'url'] },
   { name: 'fab-quicklog',   cmd: ['node', 'test/fab-quicklog.test.js', 'url'] },
