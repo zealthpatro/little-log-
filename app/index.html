@@ -9285,6 +9285,52 @@ const SYMPTOMS=['Fever','Cough','Runny nose','Congestion','Sore throat','Diarrhe
 function babyIllnesses(){ return (state.illnesses||[]).filter(i=>i.babyId===state.activeBabyId).sort((a,b)=>b.startedAt-a.startedAt); }
 function activeIllness(){ return babyIllnesses().find(i=>!i.endedAt); }
 function isFever(temp,unit){ if(temp==null)return false; return (unit==='F')? temp>=100.4 : temp>=38; }
+/* THE ILLNESS, ON THE PAGE BUILT FOR THE DOCTOR.
+   renderIllness has held the whole story since it was written, the name, the day count, the
+   temperature series, the symptoms tied to that episode and the doses given during it, and neither
+   visitSummary nor openDoctorReport ever touched state.illnesses. So a parent in a waiting room
+   because of a five-day tummy bug handed over a page that listed temperatures and symptoms as loose
+   facts in a flat fortnight and never said there was an illness, when it started, or that it was
+   still going. That is the first thing a clinician asks and the last thing the page answered.
+
+   Everything here is scoped to the EPISODE rather than to the report window, which is the point: a
+   fever on day one of this illness and a fever three weeks ago are different facts. */
+function illnessesOverlapping(since, until){
+  until = until || now();
+  return babyIllnesses().filter(i=>i.startedAt<=until && (!i.endedAt || i.endedAt>=since));
+}
+function illnessSummary(since, until){
+  const list=illnessesOverlapping(since, until);
+  if(!list.length) return '';
+  const tu=state.settings.tempUnit||'C';
+  const d=(t)=>new Date(t).toLocaleDateString(undefined,{day:'numeric',month:'short'});
+  const L=[];
+  list.forEach(ill=>{
+    const ongoing=!ill.endedAt;
+    const end=ill.endedAt||now();
+    const days=Math.max(1,Math.floor((end-ill.startedAt)/86400000)+1);
+    L.push(`Illness: ${ill.name}`);
+    L.push(ongoing ? `  Started ${d(ill.startedAt)}, day ${days}, still going`
+                   : `  ${d(ill.startedAt)} to ${d(ill.endedAt)}, ${days} day${days>1?'s':''}, recovered`);
+    // Temperatures belonging to THIS episode, not to the window.
+    const temps=tempEvents(ill.id).slice().sort((a,b)=>a.time-b.time);
+    if(temps.length){
+      let hi=temps[0]; temps.forEach(e=>{ if(e.temp>hi.temp) hi=e; });
+      const fev=temps.filter(e=>isFever(e.temp,e.unit)).length;
+      L.push(`  Temperature: ${temps.length} reading${temps.length>1?'s':''}, highest ${hi.temp}°${hi.unit||tu} on ${d(hi.time)}${fev?`, ${fev} at or above the fever line`:''}`);
+    }
+    const syms=babyEvents().filter(e=>e.type==='symptom'&&e.illnessId===ill.id).sort((a,b)=>a.time-b.time);
+    if(syms.length) L.push('  Symptoms: '+syms.map(s=>s.symptom+(s.severity?` (${s.severity})`:'')).join(', '));
+    // Doses given DURING the episode, which is what "what have you given them" means in the room.
+    const doses=babyEvents().filter(e=>e.type==='medicine'&&e.time>=ill.startedAt&&e.time<=end);
+    if(doses.length){
+      const by={}; doses.forEach(x=>{ const k=(x.medName||'Medicine')+(x.dose?' '+x.dose+' '+(x.unit||''):''); by[k.trim()]=(by[k.trim()]||0)+1; });
+      L.push('  Given during it: '+Object.keys(by).map(k=>k+(by[k]>1?` x${by[k]}`:'')).join(', '));
+    }
+    if(ill.notes) L.push('  Note: '+ill.notes);
+  });
+  return L.join('\n');
+}
 function tempEvents(illnessId){ return babyEvents().filter(e=>e.type==='temperature'&&(!illnessId||e.illnessId===illnessId)); }
 function lastTemp(illnessId){ const t=tempEvents(illnessId).sort((a,b)=>b.time-a.time); return t.length?t[0]:null; }
 
@@ -9409,8 +9455,11 @@ function upcomingVisit(){
   b.doctors.forEach(dc=>{ if(dc.nextVisit){ const t=new Date(dc.nextVisit+'T12:00').getTime(); const days=(t-now())/86400000; if(days>=-0.5 && days<=3 && (!best||t<best.t)) best={t:t,name:dc.name||dc.role||'Doctor'}; } });
   return best;
 }
-function visitSummary(days){
-  days=days||7;
+/* opts.noIllness: the printed report gives the episode its own heading ABOVE the fortnight, so it
+   asks for the summary without it rather than printing the same block twice. The copyable text
+   summary keeps it inline, because there it is one thing to paste. */
+function visitSummary(days,opts){
+  days=days||7; opts=opts||{};
   const b=activeBaby();
   const since=now()-days*86400000;
   const evs=babyEvents().filter(e=>e.time>=since);
@@ -9441,10 +9490,15 @@ function visitSummary(days){
   const diapers=evs.filter(e=>e.type==='diaper');
   const wet=diapers.filter(e=>e.kind==='wet'||e.kind==='both').length;
   const dirty=diapers.filter(e=>e.kind==='dirty'||e.kind==='both').length;
-  const temps=evs.filter(e=>e.type==='temperature');
+  /* Readings that belong to a reported illness are printed inside that episode, where they mean
+     something, so they are dropped from the flat window lines rather than said twice on a clinical
+     page. Anything attached to no reported episode still shows below as before. */
+  const _reportedIll={}; illnessesOverlapping(since, now()).forEach(i=>{ _reportedIll[i.id]=1; });
+  const _ownedByIllness=(e)=>!!(e.illnessId&&_reportedIll[e.illnessId]);
+  const temps=evs.filter(e=>e.type==='temperature'&&!_ownedByIllness(e));
   const fevers=temps.filter(e=>isFever(e.temp,e.unit));
   let maxTemp=null; temps.forEach(e=>{ if(maxTemp==null||e.temp>maxTemp.temp) maxTemp=e; });
-  const symptoms=evs.filter(e=>e.type==='symptom');
+  const symptoms=evs.filter(e=>e.type==='symptom'&&!_ownedByIllness(e));
   const lw=lastGrowth('weight'), lh=lastGrowth('height');
   // Named baby, never "whoever is on screen". This is a clinical summary read out to a doctor, and
   // it is the surface that must never widen when a medicine can belong to an adult.
@@ -9461,8 +9515,10 @@ function visitSummary(days){
      a different date than the evening before it. Reporting "logged on 6 of these 5 days" on a
      clinical page reads as a arithmetic error and costs the whole document its authority. */
   const covered=Math.min(new Set(evs.map(e=>dayKey(e.time))).size, wDays);
+  /* Same number in both places. wLabel used to round while wDays ceils, so a 4.2 day window read
+     "the last 4 days" and then "5 of those 5 days" two lines below it. */
   const wLabel=obsDays<1?`${Math.max(1,Math.round(obsDays*24))} hours`
-                        :(obsDays<2?`${obsDays.toFixed(1)} days`:`${Math.round(obsDays)} days`);
+                        :(obsDays<2?`${obsDays.toFixed(1)} days`:`${wDays} days`);
   L.push(`Window: the last ${wLabel}, through ${new Date().toLocaleDateString()}`);
   if(obsDays<days-0.5){
     // Which constraint bound matters clinically: a newborn with a short window is expected, a
@@ -9472,9 +9528,17 @@ function visitSummary(days){
   }
   if(evs.length&&canRate) L.push(`  Entries logged on ${covered} of those ${wDays} days.`);
   L.push('');
+  /* The illness goes FIRST, above the feeds and the nappies. It is usually why the appointment
+     exists, so it is the first thing a clinician should read, and it prints even when the window
+     holds nothing else: an episode that started before the window and is still running is exactly
+     the case a flat fourteen-day average hides. */
+  const illBlock=opts.noIllness?'':illnessSummary(since, now());
+  if(illBlock){ L.push(illBlock); L.push(''); }
   if(!evs.length){
     // "Feeds: 0 total" on a doctor's page reads as a baby who was never fed. Say the true thing.
-    L.push('No entries were logged in this window, so there is nothing to summarise.');
+    // And do not say there is nothing to summarise when an illness has just been summarised above.
+    L.push(illBlock ? 'No feeds, sleeps or nappies were logged in this window, so only the illness above is recorded.'
+                    : 'No entries were logged in this window, so there is nothing to summarise.');
     L.push('This is a record of what was written down, not of what happened.');
   } else {
     L.push(`Feeds: ${feeds.length} total${rate(feeds.length)}`);
@@ -9512,7 +9576,8 @@ function openDoctorReport(){
   const b=activeBaby(); if(!b) return;
   if(!useTaste('pdf','Doctor PDF report')) return;
   const esc=escapeHtml;
-  const summary=visitSummary(14);
+  const illBlock=illnessSummary(now()-14*86400000, now());
+  const summary=visitSummary(14,{noIllness:!!illBlock});
   let growthLine='';
   try{
     const g=babyEvents().find(e=>e.type==='growth');
@@ -9542,6 +9607,10 @@ function openDoctorReport(){
     <h1>${esc(b.name)}</h1>
     <div class="meta">${dob?('Born '+esc(dob)+' · '):''}${esc(ageString(b.birth)||'')} · report generated ${new Date().toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'})} with Cubby</div>
     <div class="noprint"><button onclick="window.print()">Print / Save as PDF</button></div>
+    ${/* Above the fortnight on purpose. A clinician reads top-down and the episode is why the
+          family came; burying it under feed averages is how the old report managed to describe a
+          five-day tummy bug without ever naming it. */''}
+    ${illBlock?`<h2>Illness</h2><pre>${esc(illBlock)}</pre>`:''}
     <h2>Last 14 days</h2><pre>${esc(summary)}</pre>
     ${growthLine?`<h2>Latest measurement</h2><pre>${esc(growthLine)}</pre>`:''}
     ${vaxLine?`<h2>Vaccinations</h2><pre>${esc(vaxLine)}</pre>`:''}
