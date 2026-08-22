@@ -462,6 +462,14 @@
       + '<div class="cu-tcol cu-tap"><button class="cu-tcell' + (sel.ap === 'AM' ? ' on' : '') + '" data-ap="AM">AM</button>'
       + '<button class="cu-tcell' + (sel.ap === 'PM' ? ' on' : '') + '" data-ap="PM">PM</button></div></div>';
   }
+  /* scrollIntoView scrolls EVERY scrollable ancestor, so centring the selected hour inside its own
+     200px column also dragged the whole modal card up and carried the date being chosen off the top
+     of the screen, on every single open. Only the column should move. */
+  function centreInCol(col, cell) {
+    if (!col || !cell) return;
+    var cr = col.getBoundingClientRect(), br = cell.getBoundingClientRect();
+    col.scrollTop += (br.top - cr.top) - (cr.height - br.height) / 2;
+  }
   function wireTimeCols(sel, onChange) {
     function wire(colId, key) {
       var c = document.getElementById(colId); if (!c) return;
@@ -470,10 +478,10 @@
         b.onclick = function () {
           Array.prototype.forEach.call(cells, function (x) { x.classList.remove('on'); });
           b.classList.add('on'); sel[key] = +b.getAttribute('data-v');
-          if (onChange) onChange(); b.scrollIntoView({ block: 'center' });
+          if (onChange) onChange(); centreInCol(c, b);
         };
       });
-      var on = c.querySelector('.cu-tcell.on'); if (on) on.scrollIntoView({ block: 'center' });
+      var on = c.querySelector('.cu-tcell.on'); if (on) centreInCol(c, on);
     }
     wire('cuH', 'h'); wire('cuM', 'm');
     Array.prototype.forEach.call(document.querySelectorAll('.cu-tap .cu-tcell'), function (b) {
@@ -515,13 +523,32 @@
     if (diff === 1) return 'Tomorrow';
     return sd.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
   }
-  window.openWhenPicker = function (ms, cb, title) {
+  window.openWhenPicker = function (ms, cb, title, opts) {
+    opts = opts || {};
     var d = ms ? new Date(ms) : new Date();
     var t12 = to12(d.getHours());
     var sel = { y: d.getFullYear(), mo: d.getMonth(), da: d.getDate(), h: t12.h, m: d.getMinutes(), ap: t12.ap };
     var view = { y: sel.y, mo: sel.mo }; // month shown in the inline calendar
     var MN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     function curLabel() { return dayWord(sel.y, sel.mo, sel.da) + ' · ' + sel.h + ':' + pad(sel.m) + ' ' + sel.ap; }
+    /* The thing a parent actually wants to say is "that was about twenty minutes ago", and until now
+       saying it meant scrolling a sixty-cell minute column inside a 200px window. These five do it in
+       one tap. They are all in the past, so they can never write a future time the calendar refuses.
+       Spelled out rather than "15 min ago": five pills read in one glance should not switch between a
+       unit symbol and a word halfway across the row. */
+    var RELS = [{ mins: 0, label: 'Just now' }, { mins: 15, label: '15 minutes ago' }, { mins: 30, label: '30 minutes ago' },
+      { mins: 60, label: '1 hour ago' }, { mins: 120, label: '2 hours ago' }];
+    /* One rule decides both halves of this sheet: is the value handed in a recent one?
+       If it is, the month grid is 357px answering a question that is almost never the one that is
+       wrong, so it folds away and the one-tap shortcuts are what she gets.
+       If it is not, she is already somewhere else in the year (an old entry, a born date months
+       back), so the calendar opens and the shortcuts go away: "Just now" as the first control on a
+       baby's birthday is one tap from silently rewriting it, with nothing to undo it with.
+       opts.rel === false turns them off outright, for a caller that is never logging a moment. */
+    var initWord = dayWord(sel.y, sel.mo, sel.da);
+    var recent = (initWord === 'Today' || initWord === 'Yesterday');
+    var calOpen = !recent;
+    var showRels = recent && opts.rel !== false;
     // Inline calendar (reuses the app's .dp styles) instead of a native date input, so the date is
     // as crafted as the time wheels and handles any date (e.g. a born date months back).
     function calHTML() {
@@ -541,10 +568,21 @@
         + '<div class="dp-g">' + cells + '</div></div>';
     }
     cuModal(
-      '<div class="cu-head"><h2>' + esc(title || 'When?') + '</h2><button id="cuX" class="cu-x">×</button></div>'
-      + '<div class="cu-tdisp" id="cuWDisp">' + curLabel() + '</div>'
-      + '<div class="cu-daterow"><button class="cu-chip" data-day="0">Today</button><button class="cu-chip" data-day="-1">Yesterday</button></div>'
-      + '<div id="cuCalWrap">' + calHTML() + '</div>'
+      /* The heading and the time pin together as one band. Pinning the time alone left the sheet
+         with no title and sliced the chip rows in half against a floating line of type, which reads
+         as a rendering fault rather than as a design. */
+      '<div class="cu-stick"><div class="cu-head"><h2>' + esc(title || 'When?') + '</h2><button id="cuX" class="cu-x">×</button></div>'
+      + '<div class="cu-tdisp" id="cuWDisp">' + curLabel() + '</div></div>'
+      + (showRels ? '<div class="cu-relcap">Set it in one tap</div><div class="cu-relrow">' + RELS.map(function (r) {
+        return '<button type="button" class="cu-chip cu-rel" data-mins="' + r.mins + '">' + r.label + '</button>';
+      }).join('') + '</div>' : '')
+      + '<div class="cu-daterow"><button type="button" class="cu-chip" data-day="0">Today</button><button type="button" class="cu-chip" data-day="-1">Yesterday</button></div>'
+      /* Its own row, not a third pill beside Today and Yesterday: those two are days you can pick,
+         this opens a drawer. Side by side it read, for one beat, as a third day. */
+      + '<button type="button" id="cuCalToggle" class="cu-caltog' + (calOpen ? ' on' : '') + '" aria-expanded="' + calOpen + '">'
+      + '<span>' + (calOpen ? 'Hide the calendar' : 'A different day') + '</span>'
+      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>'
+      + '<div id="cuCalWrap"' + (calOpen ? '' : ' style="display:none"') + '>' + calHTML() + '</div>'
       + timeColsHTML(sel) + '<button id="cuWDone" class="cu-btn">Done</button>'
     );
     function disp() { document.getElementById('cuWDisp').textContent = curLabel(); }
@@ -561,19 +599,45 @@
       });
     }
     function redrawCal() { document.getElementById('cuCalWrap').innerHTML = calHTML(); wireCal(); }
+    // One exit for Done and for the relative chips, so a one-tap "30 minutes ago" and a hand-scrolled
+    // time cannot round differently. Seconds are dropped either way, so "Just now" is never in the future.
+    function commitAt(out) { cuClose(); if (typeof cb === 'function') cb(out); }
+    function commit() { commitAt(new Date(sel.y, sel.mo, sel.da, to24(sel), sel.m, 0, 0).getTime()); }
     wireTimeCols(sel, disp);
-    Array.prototype.forEach.call(document.querySelectorAll('.cu-chip'), function (b) {
+    // Scoped to the day row: the relative chips share .cu-chip for the look and carry no data-day,
+    // and reading data-day off one of them would set the date to NaN.
+    Array.prototype.forEach.call(document.querySelectorAll('.cu-daterow .cu-chip[data-day]'), function (b) {
       b.onclick = function () {
         var off = +b.getAttribute('data-day'); var dt = new Date(); dt.setDate(dt.getDate() + off);
         sel.y = dt.getFullYear(); sel.mo = dt.getMonth(); sel.da = dt.getDate(); view.y = sel.y; view.mo = sel.mo; disp(); redrawCal();
       };
     });
+    Array.prototype.forEach.call(document.querySelectorAll('.cu-relrow .cu-rel'), function (b) {
+      b.onclick = function () {
+        /* Subtracted from the clock and committed as that instant, never rebuilt out of sel's
+           wall-clock parts. Local y/mo/da/h/m is not a bijection: on the night the clocks go back,
+           01:15 happens twice, so the round trip out to components and back in landed on the wrong
+           side of the change and "Just now" filed the moment a full hour in the past, while
+           "30 minutes ago" showed a time half an hour AHEAD of the phone. The seconds come off by
+           arithmetic on the epoch, not with setSeconds: setSeconds keeps the local components and
+           re-resolves them, which is the same round trip wearing a different hat. Offsets are whole
+           minutes everywhere, so a UTC minute boundary is a local one too. */
+        var t = Date.now() - (+b.getAttribute('data-mins')) * 60000;
+        commitAt(t - (t % 60000));
+      };
+    });
+    var calT = document.getElementById('cuCalToggle');
+    if (calT) calT.onclick = function () {
+      calOpen = !calOpen;
+      document.getElementById('cuCalWrap').style.display = calOpen ? '' : 'none';
+      calT.setAttribute('aria-expanded', String(calOpen));
+      calT.classList.toggle('on', calOpen);
+      var lbl = calT.querySelector('span');
+      if (lbl) lbl.textContent = calOpen ? 'Hide the calendar' : 'A different day';
+    };
     wireCal();
     document.getElementById('cuX').onclick = cuClose;
-    document.getElementById('cuWDone').onclick = function () {
-      var out = new Date(sel.y, sel.mo, sel.da, to24(sel), sel.m, 0, 0).getTime();
-      cuClose(); if (typeof cb === 'function') cb(out);
-    };
+    document.getElementById('cuWDone').onclick = commit;
   };
 
   // Native datetime-local -> the custom date+time "When?" picker (openWhenPicker), so the born
@@ -625,13 +689,35 @@
     + '.cu-art img{width:100%;height:100%;display:block;}'
     + '.cu-btn{border:none;border-radius:13px;padding:14px;font-size:16px;font-weight:700;background:#C97FA0;color:#fff;cursor:pointer;font-family:inherit;width:100%;margin-top:20px;}'
     + '.cu-tdisp{text-align:center;font-family:"Fraunces",Georgia,serif;font-size:30px;color:#2C2521;margin:4px 0 12px;}'
+    /* Sticky, because the card scrolls inside itself and the time being chosen is the one thing that
+       must never leave the screen. The whole top of the card pins, heading and all: pinning the 49px
+       time line on its own left the sheet with no title and cut the chip rows through the middle as
+       they slid behind it. The negative margins bleed the band to the card's edges so nothing shows
+       through the gutters, and background:inherit takes the card's own fill, so Night needs no
+       override. The soft bottom edge makes the overlap read as deliberate. */
+    + '.cu-stick{position:sticky;top:-18px;z-index:3;background:inherit;margin:-18px -20px 12px;padding:18px 20px 8px;box-shadow:0 6px 6px -6px rgba(20,15,12,.18);}'
+    + '.cu-stick .cu-tdisp{margin:4px 0 0;}'
     + '.cu-time{display:flex;gap:10px;height:200px;}'
     + '.cu-tcol{flex:1;overflow-y:auto;scroll-behavior:smooth;background:#FBF7EF;border-radius:14px;padding:70px 0;-webkit-overflow-scrolling:touch;}'
     + '.cu-tap{flex:0 0 70px;}'
     + '.cu-tcell{display:block;width:100%;border:none;background:none;padding:11px 0;font-size:19px;color:#9a8d80;cursor:pointer;font-family:inherit;text-align:center;}'
     + '.cu-tcell.on{color:#2C2521;font-weight:800;background:rgba(201,127,160,.16);}'
-    + '.cu-daterow{display:flex;gap:8px;align-items:center;margin:0 0 14px;flex-wrap:wrap;}'
+    + '.cu-daterow{display:flex;gap:8px;align-items:center;margin:0 0 10px;flex-wrap:wrap;}'
+    /* The relative row sits tighter to the day row than the day row does to the calendar, so the two
+       chip rows read as one block of shortcuts rather than as two unrelated controls. */
+    + '.cu-relrow{display:flex;gap:8px;align-items:center;margin:0 0 12px;flex-wrap:wrap;}'
+    /* #6E635B, not the #9a8d80 the other small labels use: at 12.5px this is normal-size text for
+       AA, and the lighter tone came out at 3.23:1 on the white card. */
+    + '.cu-relcap{font-size:12.5px;font-weight:700;color:#6E635B;margin:0 0 6px;}'
     + '.cu-chip{border:1px solid #E0D7C7;background:#FBF7EF;border-radius:999px;padding:9px 14px;font-size:13px;font-weight:700;color:#6E635B;cursor:pointer;font-family:inherit;}'
+    /* Filled, and taller than the outline chips beside them, because these five do something the
+       others do not: they file the time and shut the sheet. Eight identical pills doing three
+       different things is a trap at 3am, and the tap target has to say which family it is in before
+       the tap, not after. */
+    + '.cu-rel{background:rgba(201,127,160,.14);border-color:rgba(201,127,160,.45);color:#2C2521;min-height:44px;}'
+    + '.cu-caltog{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:44px;border:none;background:none;padding:0;margin:0 0 10px;font-family:inherit;font-size:14px;font-weight:700;color:#6E635B;cursor:pointer;text-align:left;}'
+    + '.cu-caltog svg{width:18px;height:18px;flex:0 0 18px;transition:transform .18s ease;}'
+    + '.cu-caltog.on svg{transform:rotate(180deg);}'
     + '.time-strip{display:flex;align-items:center;gap:11px;background:var(--surface-2,#FBF7EF);border:1.5px solid var(--line,#E0D7C7);border-radius:14px;padding:12px 14px;margin:0 0 14px;cursor:pointer;}'
     + '.time-strip .ts-ico{color:var(--ink-soft,#9a8d80);display:flex;}.time-strip .ts-ico svg{width:20px;height:20px;}'
     + '.time-strip .ts-text{flex:1;display:flex;flex-direction:column;line-height:1.25;}'
@@ -718,6 +804,8 @@
     + '[data-theme="night"] .cu-art.on{border-color:var(--ink);}'
     + '[data-theme="night"] .cu-note{color:var(--ink-soft);}'
     + '[data-theme="night"] .cu-chip{background:var(--surface);border-color:var(--line);color:var(--ink-soft);}'
+    + '[data-theme="night"] .cu-rel{background:var(--preg-soft);border-color:var(--preg-soft);color:var(--ink);}'
+    + '[data-theme="night"] .cu-relcap,[data-theme="night"] .cu-caltog{color:var(--ink-soft);}'
     /* The portraits keep their painted cream paper, so in night each one is a warm disc on a
        dark card. That is the same treatment a parent's photo avatar already gets, and the
        same one the old SVG bear gave itself. It is never dimmed or filtered: it is bounded,

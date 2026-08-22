@@ -535,6 +535,17 @@ function probes(page) {
     ok('the owner has spent both of hers', owner.spent === 2, owner.ledger);
     ok('under a key that names her', owner.wwKeys.join(',') === 'cubby-ww-notyet-local', owner.wwKeys);
 
+    /* ARRIVES LATER, and now that has to be made true in the fixture. This section used to pass
+       for the wrong reason: persist() was `scheduledPush()` only, and with no signed-in household
+       pushNow returned early, so a reload DROPPED every event. The partner arrived to an empty log.
+       Item p11's fix made persist fall back to a local save when there is no household, so the
+       owner's naps survive now, and a partner opening the app three seconds after one ended
+       legitimately sees the promise and legitimately spends a turn on it.
+       Age the naps so "later" means later. Otherwise this measures the arrival, not the allowance. */
+    await page.evaluate(() => {
+      state.events.forEach((e) => { if (e.type === 'sleep' && e.end) { e.time -= 3 * 3600000; e.end -= 3 * 3600000; } });
+      persist();
+    });
     await page.evaluate(() => localStorage.setItem('cubby-quick-uid', 'partner'));
     await knowsHome('partner');
     await page.reload({ waitUntil: 'networkidle2' });

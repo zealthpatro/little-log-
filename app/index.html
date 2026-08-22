@@ -417,6 +417,18 @@ body{
 .active-banner .info .lbl{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;}
 .active-banner .info .time{font-family:var(--font-display);font-size:30px;font-weight:600;line-height:1;margin-top:3px;font-variant-numeric:tabular-nums;}
 .active-banner .info .sub{font-size:13px;margin-top:4px;font-weight:600;}
+/* The banner is now a control, not a read-out, so the affordance has to be visible: without this
+   the only tappable-looking thing on it is Stop, and Stop is the one action a parent correcting a
+   mis-tap must NOT take. Underlined rather than a second button, because a banner with two buttons
+   on it makes the wrong one easier to hit at 3am. */
+.active-banner .info .sub .tb-edit{text-decoration:underline;text-underline-offset:2px;}
+/* At 320px this line does not fit and has to wrap, so the only question is where. Left alone it
+   broke after the separator ("started 2:32 AM ·" / "change"), which dangles the one affordance on
+   the banner under a stray dot. Pinning only the dot to "change" then moved the break INSIDE the
+   clock ("started 3:00" / "AM · change"), which is worse: a time split across two lines. Two
+   unbreakable groups, so the only place left to break is between them. */
+.active-banner .info .sub .tb-when,
+.active-banner .info .sub .tb-tap{white-space:nowrap;}
 .stop-btn{
   background:var(--on-accent-fill);border:none;border-radius:18px;
   padding:12px 18px;font-family:var(--font-body);font-weight:800;font-size:14px;
@@ -511,6 +523,15 @@ body{
 .today-strip .cell:not(:last-child)::after{content:"";position:absolute;right:0;top:15%;height:70%;width:1px;background:var(--line);}
 .today-strip .big{font-family:var(--font-display);font-size:24px;font-weight:600;line-height:1;}
 .today-strip .cap{font-size:11px;color:var(--ink-soft);font-weight:700;margin-top:5px;}
+
+/* ============ YESTERDAY CARD (newborn window) ============ */
+/* Deliberately the plainest card in the app: no accent border, no icon, no tap target. It carries
+   the numbers a clinician is about to ask for, and anything that framed them would be a verdict. */
+.yest-card{background:var(--surface);border-radius:var(--radius);padding:14px 16px;margin-bottom:var(--stack);box-shadow:0 5px 14px var(--shadow);}
+.yest-card .yc-h{font-family:var(--font-display);font-size:16px;font-weight:600;}
+.yest-card .yc-f{font-size:14.5px;font-weight:600;color:var(--ink);line-height:1.5;margin-top:5px;}
+.yest-card .yf-g{white-space:nowrap;}
+.yest-card .yc-s{font-size:11.5px;color:var(--ink-soft);font-weight:600;margin-top:6px;}
 
 /* ============ TIMELINE ============ */
 .day-group{margin-bottom:22px;}
@@ -1138,8 +1159,22 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 /* ---- growth charts ---- */
 .growth-line{width:100%;height:auto;display:block;}
 .gx-stat{display:flex;gap:12px;margin-bottom:16px;}
-.gx-box{flex:1;background:var(--surface);border-radius:var(--radius-sm);padding:15px;box-shadow:0 4px 12px var(--shadow);}
-.gx-box .n{font-family:var(--font-display);font-size:24px;font-weight:600;line-height:1;}
+.gx-box{flex:1;min-width:0;background:var(--surface);border-radius:var(--radius-sm);padding:15px;box-shadow:0 4px 12px var(--shadow);}
+.gx-box .n{font-family:var(--font-display);font-size:24px;font-weight:600;line-height:1;white-space:nowrap;}
+/* Head circumference made this row three wide. A number and its unit must never break across two
+   lines, because then one box is taller than its neighbours and the labels stop lining up, so the
+   row is re-priced for three rather than left to wrap: tighter padding and gap, a smaller number.
+   The label is allowed to wrap, but only if it wraps in every box at once. */
+.gx-stat.gx-3{gap:8px;}
+.gx-stat.gx-3 .gx-box{padding:13px 10px;}
+.gx-stat.gx-3 .gx-box .n{font-size:19px;}
+.gx-stat.gx-3 .gx-box .l{font-size:11px;line-height:15px;}
+/* Below 390 "Latest head size" wraps and its two shorter neighbours do not, so one box stands
+   taller than the others. Reserve the second line in all three rather than truncating the label
+   that matters most. The min-height is the line-height doubled, not an em guess, so the boxes
+   come back exactly equal instead of half a pixel apart. */
+@media (max-width:389px){ .gx-stat.gx-3 .gx-box .l{min-height:30px;} }
+@media (max-width:359px){ .gx-stat.gx-3{gap:6px;} .gx-stat.gx-3 .gx-box{padding:12px 8px;} .gx-stat.gx-3 .gx-box .n{font-size:16px;} .gx-stat.gx-3 .gx-box .l{font-size:10px;line-height:14px;min-height:28px;} }
 .gx-box .l{font-size:12px;color:var(--ink-soft);font-weight:700;margin-top:5px;}
 .gx-box .d{font-size:11px;font-weight:800;margin-top:4px;}
 
@@ -1208,6 +1243,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .week-hero .wh-week{font-family:var(--font-display);font-size:30px;font-weight:600;letter-spacing:-.02em;color:var(--ink);line-height:1;}
 .week-hero .wh-tri{font-size:12.5px;font-weight:800;color:var(--preg-ink);text-transform:uppercase;letter-spacing:.04em;}
 .week-hero .wh-count{font-size:13px;color:var(--ink-soft);font-weight:700;margin-top:7px;}
+.week-hero .wh-new{font-size:12.5px;color:var(--preg-ink);font-weight:800;margin-top:9px;}
 .preg-bar{height:9px;border-radius:6px;background:var(--surface-2);overflow:hidden;margin-top:14px;}
 .preg-bar i{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,var(--preg),var(--pump));}
 .preg-cards{display:grid;gap:11px;margin-bottom:6px;}
@@ -1822,6 +1858,10 @@ function toast(msg,opts){
     else if(!opts.silent && (Date.now()-_gestureAt)<1000){ window.cubbyHaptic && window.cubbyHaptic('light'); }
   }catch(e){}
 }
+/* Take a live toast down early. For the one case that matters: the next thing on screen is a
+   confirm that destroys something, and a success pill left over from the previous action lands
+   across the button that does the destroying. */
+function hideToast(){ const t=$('#toast'); if(t){ clearTimeout(t._tm); t.classList.remove('show'); } }
 let _loaderTimer=null;
 function showLoader(msgs){
   hideLoader();
@@ -2002,10 +2042,20 @@ const CAL_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke
 let logTimes = { when:null, end:null };
 function initLogWhen(){ logTimes = { when: now(), end: now() }; }
 function getWhen(slot){ slot=slot||'when'; const v=logTimes[slot]; return v==null?now():v; }
-function setWhen(slot, ms){ logTimes[slot]=ms; document.querySelectorAll('.ts-label[data-slot="'+slot+'"]').forEach(function(el){ el.textContent=whenLabel(ms); }); }
+function setWhen(slot, ms){ logTimes[slot]=ms; document.querySelectorAll('.ts-label[data-slot="'+slot+'"]').forEach(function(el){ el.textContent=whenLabel(ms); }); if(typeof gestSyncFromWhen==='function') gestSyncFromWhen(slot, ms); }
 function whenLabel(ms){ return dayLabel(ms)+' · '+fmtClock(ms); }
-function timeStrip(slot,label){ slot=slot||'when'; label=label||'When'; if(logTimes[slot]==null) logTimes[slot]=now();
-  return `<div class="time-strip" onclick="openWhenPicker(getWhen('${slot}'), function(m){setWhen('${slot}',m);}, '${label}')">
+/* `onPick` is an optional JS statement run instead of the default setWhen, for the one caller whose
+   time is not a draft waiting on a Save button: the running-timer control applies the new start
+   straight away. It lands inside a double-quoted HTML attribute, so it may only use single quotes.
+   `src` is an optional expression the picker OPENS AT, instead of the logTimes draft. logTimes is
+   one shared object with no stack behind it: a child sheet that assigns `logTimes = {end:...}`
+   wipes the parent's slot, and sheetBack restores the parent's cached HTML without restoring its
+   times. The row then still DISPLAYS the true value while getWhen falls back to now(), so Done on
+   a picker she never touched silently writes the present into it. A caller whose time already
+   lives somewhere real reads it from there and cannot be lied to.
+   Everything else passes two arguments and behaves exactly as before. */
+function timeStrip(slot,label,onPick,src){ slot=slot||'when'; label=label||'When'; if(logTimes[slot]==null) logTimes[slot]=now();
+  return `<div class="time-strip" onclick="openWhenPicker(${src||`getWhen('${slot}')`}, function(m){${onPick||`setWhen('${slot}',m);`}}, '${label}')">
     <span class="ts-ico">${CLOCK_SVG}</span>
     <span class="ts-text"><span class="ts-cap">${label}</span><span class="ts-label" data-slot="${slot}">${whenLabel(getWhen(slot))}</span></span>
     <span class="ts-edit">Change</span></div>`;
@@ -3350,6 +3400,11 @@ function renderHome(){
       <div class="ap-body"><div class="ap-t">${escapeHtml(_cab.name)} is growing up</div><div class="ap-s">Cubby is growing with them. Quick log now leads with the toddler years; the early logs are under More.</div></div>
       <button onclick="ackChild()">Lovely</button></div>`;
   }
+  /* The pregnancy is over and the calendar has not noticed. Whether the baby arrived or the
+     pregnancy ended, the week markers she wrote carry on landing, and every route to them lived on
+     a pregnancy screen that no longer renders. This is the only lane on the baby side that can
+     carry it, and it takes itself down once the last marker has passed or she takes them off. */
+  alerts += pregWeeksLeftAlert();
   /* One-time gentle nudge: many web users never realise Cubby installs to the home screen. It is a
      push like any other, so it takes its turn through the ledger rather than sitting outside it.
      It loses to every earned cue, which is right: installing matters, but not more than a summary
@@ -3391,10 +3446,28 @@ function renderHome(){
   const surfaceCard = daySurface();
   const surfaceUp = surfaceIsUp();
 
+  /* Two blocks, two possible homes on the page. In the small hours the quick log row moves above the
+     hero and the tips line moves below it, because between 23:00 and 05:00 the reason she has the
+     phone in her hand is a feed, and a 263px photo plus a generic tip were pushing Feed, Sleep and
+     Nappy onto the bottom edge of a 390x844 screen. Moving the row alone was not enough: with a nap
+     timer banner up, which is the commonest 3am state, Nappy still showed 80 of its 144 pixels with
+     its subtitle behind the nav.
+
+     The photo does go below the fold at night. That is the trade this item asks for, and it is the
+     one the day order already makes in reverse: at 15:00 the Feed tile starts at y=862 on an 844px
+     screen, so the row she came for is fully off it. Nothing is removed in either order, nothing is
+     dimmed, and the top edge of the photo stays on screen so she can see it is still there.
+
+     Both blocks are built once, so the two orders are the same markup and cannot drift apart. */
+  const nightHome = nightHomeOrder();
+  const tipsBlock = (away||gsCard) ? '' : tipsTicker();
+  const quickBlock = `<div class="sec-title with-act"><span>Quick log${(window.CubbyTeachUI)?CubbyTeachUI.dot('openQuickLog','the quick log row'):((window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('logging'):'')}</span><button class="sec-act" type="button" onclick="openQuickSettings()">Choose</button></div>
+    <div class="actions stagger">${quickLogActions(ts)}</div>`;
+
   return `<div class="fade-in">
     <div class="greeting">${meGreeting()}</div>
     ${myLossHolding() ? quietLossLine() : (away ? '' : `<div class="greeting-sub">${homeNudgeLine()}</div>`)}
-    ${(away||gsCard) ? '' : tipsTicker()}
+    ${nightHome ? '' : tipsBlock}
     ${away}
     ${/* The three answers first. "When was the last feed" is the question at 3am and it used to be
           the tenth thing on the screen, under a day-navigator, a notes lane and a photo prompt. A
@@ -3410,12 +3483,13 @@ function renderHome(){
     ${surfaceUp ? surfaceCard : ''}
     ${gsCard ? '' : coachMark('home','Last feed, last sleep, last nappy, right where you look first 👋','Log below, and the tabs hold your Log, Album and Health.')}
     ${consentBanners()}
+    ${nightHome ? quickBlock : ''}
     ${renderHero()}
+    ${nightHome ? tipsBlock : ''}
     ${gsCard}
     ${guideCard}
     ${(gsCard || guideCard) ? '' : teachCue()}
-    <div class="sec-title with-act"><span>Quick log${(window.CubbyTeachUI)?CubbyTeachUI.dot('openQuickLog','the quick log row'):((window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('logging'):'')}</span><button class="sec-act" type="button" onclick="openQuickSettings()">Choose</button></div>
-    <div class="actions stagger">${quickLogActions(ts)}</div>
+    ${nightHome ? '' : quickBlock}
     ${gsCard ? '' : renderNudge()}
     ${alerts}
     ${goodReadCard('baby')}
@@ -3435,6 +3509,34 @@ function renderHome(){
 /* ---- home hero carousel ---- */
 let heroIdx=0, heroTimer=null;
 function heroPhotos(){ return (state.photos||[]).filter(p=>p.babyId===state.activeBabyId && !p.deleted); }
+/* ---- the small hours, on the home screen ------------------------------------------------------
+   The same boundary meGreeting and homeNudgeLine already use, given a name so the layout can share
+   it. Between 23:00 and 05:00 the thing a parent has come here to do is log a feed at arm's length
+   in the dark, and the largest thing on the screen was a full-brightness photo advancing itself
+   every 4.5 seconds while Feed and Sleep sat below the fold. At night the photo holds still and the
+   quick log row comes up above it.
+
+   Nothing is hidden, nothing is dimmed, nothing announces itself: no banner, no "night mode", no
+   suggestion she should be asleep. Her baby's face is still there, still full size, still hers to
+   tap through to the album; it just stops moving on its own, and it sits one short scroll under the
+   row she came for instead of on top of it.
+
+   Decided ONCE per visit to home and then held, for the same reason applyTheme refuses to switch
+   itself on the clock: a screen that rearranges under her hands mid-log fails the Anxiety Test.
+   Reading it live was not that. Home repaints on every save and on every listener burst, so a paint
+   that crossed a boundary reordered the page she was already holding: measured at 390x844, the Feed
+   tile jumped 460px up at 23:00 and 506px down at 05:00, off the screen both times. 05:00 is the
+   ordinary dawn feed. She puts the phone down at 04:55 and picks it back up at 05:02 to log it, and
+   the button she was aiming at is now below the fold.
+
+   So renderHome asks nightHomeOrder(), which answers the same thing for as long as she stays on
+   home, and go('home') releases it: it still reverts by itself the next time she comes back to this
+   screen. initHero keeps reading the clock live, because stopping a carousel moves nothing. */
+const NIGHT_HOME_FROM=23, NIGHT_HOME_TO=5;
+function isNightHome(ts){ const h=new Date(ts==null?now():ts).getHours(); return h>=NIGHT_HOME_FROM || h<NIGHT_HOME_TO; }
+let _nightHomeOrder=null;
+function nightHomeOrder(){ if(_nightHomeOrder===null) _nightHomeOrder=isNightHome(); return _nightHomeOrder; }
+function releaseNightHomeOrder(){ _nightHomeOrder=null; }
 /* ---- wake windows, from this baby's own sleeps and nothing else ------------------------------
    Permitted by the prediction rule restated 2026-08-08: refuse to predict where the parent cannot
    check the answer. She finds out within the hour whether this held, which is exactly what an
@@ -3627,6 +3729,10 @@ var _heroFirst=null;
 function initHero(){
   const slides=document.querySelectorAll('#scroll .hero-slide');
   if(slides.length<2){ if(heroTimer){ clearInterval(heroTimer); heroTimer=null; } _heroFirst=null; return; }
+  /* In the small hours the photo stays, and stays put. Checked before the keep-it-running early
+     return below, so a slideshow already cycling at 22:59 stops the first time home repaints after
+     eleven rather than running until she leaves the tab. */
+  if(isNightHome()){ if(heroTimer){ clearInterval(heroTimer); heroTimer=null; } _heroFirst=null; return; }
   // The slideshow survives a repaint now, so re-arming it every render would snap her back to the
   // first photo and restart the 4.5s clock each time a listener reported in. Same nodes still
   // cycling: leave them cycling.
@@ -3932,7 +4038,13 @@ window.cubbyTeachCtx = function(){
        pregBp is "the blood pressure sheet is a door that exists for you right now": the Care tab
        while the pregnancy is running, exactly as before, and after the birth only while
        pregBpDoor() is open. It narrows nothing that was already offered during pregnancy. */
-    has: { pregBp: !!(state.pregnancy && (!state.pregnancy.bornBabyId || pregBpDoor())) },
+    /* pregArchive is the same rule for item p6's two rows. They were gated on stage baby/child
+       alone, which is precisely the mother who signed up with the baby already here and was never
+       pregnant in Cubby: her guide grew a pregnancy section offering a door to an archive that
+       does not exist. pregArchiveList() is already the predicate the two live entry points use
+       (:5753 and :6863), so the guide now agrees with the screens. */
+    has: { pregBp: !!(state.pregnancy && (!state.pregnancy.bornBabyId || pregBpDoor())),
+           pregArchive: !!(typeof pregArchiveList==='function' && pregArchiveList().length) },
     installedAt: teachSince()
   };
 };
@@ -4083,9 +4195,14 @@ function renderNudge(){
   const recent=babyMilestones().filter(m=>now()-m.achievedAt<3*86400000).sort((a,b)=>b.achievedAt-a.achievedAt)[0];
   if(recent) return `<div class="nudge" style="cursor:pointer" onclick="openMemoryCard()"><div class="nu-ico">🎉</div><div class="nu-t">${escapeHtml(b.name)} just reached &ldquo;${escapeHtml(recent.title)}&rdquo;. Tap to make a keepsake.</div></div>`;
   if(!heroPhotos().length) return nudge('📸', 'Add a photo in Album and it becomes your home slideshow.');
-  const months=babyMonths();
+  /* Corrected age, and said out loud when it is doing anything. A baby born eight weeks early is
+     eight weeks behind this list and always will be, so measuring from the birthday hands a mother
+     of a preterm baby a rolling list of things her child "should" be doing, which is the precise
+     shape of harm the charter's Anxiety Test exists to catch. correctedMonths() is chronological
+     months unchanged for everyone else. */
+  const months=correctedMonths();
   const up=MILESTONES.filter(m=>!achievedOf(m.key)&&msVisible(m,activeBaby())).sort((a,b)=>Math.abs(a.mo-months)-Math.abs(b.mo-months))[0];
-  if(up) return nudge('✨', `Around now, lots of babies are working on "${escapeHtml(up.title)}". Every baby in their own time.`);
+  if(up) return nudge('✨', `Around now, lots of babies are working on "${escapeHtml(up.title)}".${correctionDays(b)?` ${escapeHtml(b.name)} arrived early, so we're counting from their due date.`:''} Every baby in their own time.`);
   const todayN=babyEvents().filter(e=>dayKey(e.time)===dayKey(now())).length;
   if(todayN>0) return nudge('🌿', `${todayN} thing${todayN>1?'s':''} logged today. You've got this.`);
   return '';
@@ -4103,7 +4220,7 @@ function timerBanners(withOverrun){
   state.babies.forEach(bb=>{
     const t=state.timers[bb.id]||{};
     const pre = multi ? escapeHtml(bb.name)+' · ' : '';
-    if(t.sleep) out += timerBanner('sleep', pre+'Sleeping', t.sleep.start, 'started '+fmtClock(t.sleep.start), `stopSleep('${bb.id}')`);
+    if(t.sleep) out += timerBanner('sleep', pre+'Sleeping', t.sleep.start, 'started '+fmtClock(t.sleep.start), `stopSleep('${bb.id}')`, bb.id);
     /* Over twelve hours, ask. A forgotten Stop is the commonest way this log goes wrong, and the
        parent it happens to is the one who was too tired to tap. Asked once and then quiet for six
        hours if she says they are still asleep, because a night feed is a real answer. */
@@ -4117,22 +4234,37 @@ function timerBanners(withOverrun){
     /* "Nursing" either way. A timer saved before sides were recorded has no side, and the old
        fallback made the banner read FEEDING eight pixels above a tile reading Nursing: the same
        running thing under two names. */
-    if(t.feed) out += timerBanner('feed', pre+'Nursing'+(t.feed.side?' · '+t.feed.side:''), t.feed.start, 'started '+fmtClock(t.feed.start), `stopFeed('${bb.id}')`);
+    if(t.feed) out += timerBanner('feed', pre+'Nursing'+(t.feed.side?' · '+t.feed.side:''), t.feed.start, 'started '+fmtClock(t.feed.start), `stopFeed('${bb.id}')`, bb.id);
   });
   return out;
 }
-function timerBanner(type,label,start,sub,stopFn){
+function timerBanner(type,label,start,sub,stopFn,babyId){
   const m=TYPE_META[type];
+  /* The banner used to state a fact and offer exactly one action, and that action always wrote an
+     event. So the two commonest ways a timer goes wrong had no exit that was not itself a wrong
+     record: a Sleep tile hit by mistake could only become a junk nap to find and delete, and a nap
+     noticed an hour after she woke could only be logged an hour too long and then edited, which
+     stamps "edited by Maya" on a row the whole circle reads forever. The banner is the thing on the
+     screen that is about the timer, so it is where the timer's own controls belong. */
+  /* role="button" tabindex="0" with only an onclick is a promise the div does not keep: it takes
+     focus and announces as a button, and then Enter and Space do nothing, which is worse than not
+     claiming to be a button at all. A real <button> gets those keys free; a div has to be handed
+     them. No aria-label on purpose: it would REPLACE the accessible name, and the elapsed count
+     lives nowhere else on the screen, so labelling this "change or stop this timer" would take the
+     one number the banner exists for away from anyone using a screen reader. The name it composes
+     from its own contents already ends in "change". */
+  const openIt = `openTimerControl('${type}','${babyId}')`;
+  const tap = babyId ? ` onclick="${openIt}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${openIt}}" role="button" tabindex="0" style="cursor:pointer"` : '';
   return `<div class="active-banner" style="background:linear-gradient(120deg,var(--${m.c}),var(--${m.c}));--accent-ink:var(--on-${m.c},var(--on-accent))">
     <div class="pulse"></div>
-    <div class="info">
+    <div class="info"${tap}>
       <div class="lbl">${label}</div>
       ${/* data-cap stops a forgotten sleep timer climbing past 24h. It reads "24:00:00+" from then
             on, which is honestly "we have lost count" rather than a precise-looking 72:00:11 that
             invites belief. Feeds are not capped: nobody nurses for a day, and a long feed timer is
             corrected by stopping it. */''}
       <div class="time" data-timer="${start}"${type==='sleep'?' data-cap="'+SLEEP_MAX_MS+'"':''}>${timerText(now()-start, type==='sleep'?SLEEP_MAX_MS:0)}</div>
-      <div class="sub">${sub}</div>
+      <div class="sub"><span class="tb-when">${sub}</span>${babyId?'<span class="tb-tap"> · <span class="tb-edit">change</span></span>':''}</div>
     </div>
     ${/* Every caller passes a whole call expression, "stopFeed('b1')", so the trailing () that used to
           be here made the handler read stopFeed('b1')() — the stop ran and then the browser threw
@@ -4141,6 +4273,82 @@ function timerBanner(type,label,start,sub,stopFn){
           all four. */''}
     <button class="stop-btn" onclick="${stopFn}">Stop</button>
   </div>`;
+}
+
+/* Everything a running timer can be, in one sheet, reachable at minute one.
+   Every action here already existed and every one of them was locked behind a trip wire: the "when
+   did it end" picker only opened once a nap had run twelve hours or a feed four, and Forget this
+   timer was only ever offered inside that same sheet. Before then the timer had exactly one exit
+   and it always wrote an event, which is the whole complaint: correcting a record is not the same
+   as never making one, because a correction stamps editedBy and a whole circle reads it.
+   Deliberately not a fifth door: there is no "log it and start another", because two nursing
+   sessions with no gap between them is a thing this sheet would be inventing, not recording. */
+function openTimerControl(type, babyId){
+  babyId = babyId || state.activeBabyId;
+  const t = (type==='feed') ? runningFeed(babyId) : runningNap(babyId);
+  /* Timers live in the shared blob, so the other parent can stop this one from her own phone while
+     the banner still sits under this thumb. Say so rather than opening a sheet about nothing. */
+  if(!t){ closeSheet(); render(); toast('That timer has already stopped'); return; }
+  const isSleep = type!=='feed';
+  const b = state.babies.find(x=>x.id===babyId) || activeBaby();
+  /* Name the baby only when there is more than one, the rule openFeedCorrect settled on: naming an
+     only child in her own app tells her nothing she does not already know. The start time is NOT
+     repeated here. It sits in the Started row forty pixels below, with its own day word, and a
+     sheet whose job is to offer her a way out should open with the offer rather than read the
+     timer back to her twice. */
+  const lead = (state.babies.length>1 && b && b.name) ? escapeHtml(b.name)+'’s timer, running ' : 'Running ';
+  const ran = isSleep ? napRunFor(t) : feedRunFor(t);
+  const acc = isSleep ? 'sleep' : 'feed';
+  const stopFn = isSleep ? 'stopSleep' : 'stopFeed';
+  const correctFn = isSleep ? 'openSleepCorrect' : 'openFeedCorrect';
+  const forgetFn = isSleep ? 'discardRunningNap' : 'discardRunningFeed';
+  /* The picker opens at the LIVE timer, never at the logTimes draft. This sheet is a parent: "Stop
+     at a different time" pushes a child that reassigns logTimes, and coming back with ‹ restores
+     this HTML but not those times. Read from state and the Started row can never open at a value
+     different from the one it is showing. See timeStrip. */
+  const liveStart = isSleep ? `(runningNap('${babyId}')||{}).start` : `(runningFeed('${babyId}')||{}).start`;
+  logTimes = { tstart: t.start };
+  openSheet(`<h2>${isSleep?'Nap timer':'Nursing timer'}</h2>
+    <div class="sub">${lead}${fmtDur(ran)}. You can move the start, stop it at the right time, or forget it.</div>
+    ${timeStrip('tstart','Started', `setTimerStart('${type}','${babyId}',m);`, liveStart)}
+    <button class="btn-primary" style="background:var(--${acc});--accent-ink:var(--on-${acc},var(--on-accent))" onclick="closeSheet();${stopFn}('${babyId}')">Stop now</button>
+    <button class="btn-ghost" onclick="${correctFn}('${babyId}',1)">Stop at a different time</button>
+    <button class="btn-ghost btn-danger" onclick="${forgetFn}('${babyId}')">Forget this timer</button>
+    ${/* .csub is sized for the inside of a stat card, so in a sheet it lands at 16px full ink and
+          shouts over the buttons it is explaining. Sized here for this sheet only, the way
+          openFeedRunning already does. */''}
+    <div class="csub" style="margin-top:8px;font-size:12px;color:var(--ink-soft);font-weight:600">Forgetting it removes the timer and logs nothing.</div>`, acc);
+}
+/* Moving the start of a timer that is still running: the one correction the app could not make.
+   A parent taps Sleep as she puts the baby down and then spends ten minutes settling her, so the
+   timer is already ten minutes too long before it has stopped, and the only fix on offer was to let
+   it run and edit the event afterwards. Applied the moment she picks rather than behind a Save,
+   because the banner underneath this sheet is the receipt: the count jumps to the new elapsed time
+   and she can see she was heard. */
+function setTimerStart(type, babyId, ms){
+  babyId = babyId || state.activeBabyId;
+  const tt = timersFor(babyId);
+  const t = (type==='feed') ? tt.feed : tt.sleep;
+  if(!t) return;
+  /* Done on the value the picker opened at is not a change. Writing anyway put a "Start time
+     changed" pill over a start that had not moved, and pushed the whole shared blob for nothing.
+     The picker zeroes seconds and startSleep does not, so the comparison has to drop them too or
+     every no-op looks like a move. */
+  if(ms === t.start - (t.start % 60000)) return;
+  if(ms > now()){ toast('That is in the future'); return; }
+  /* The same ceiling the stop path refuses to write past, applied to the start instead. Without it
+     she could hand herself a timer that is already impossible, and Stop now would bounce her into
+     the "this timer looks wrong" question she opened this sheet to avoid.
+     Say whose limit it is. Two lines from here the app already hedges at this exact threshold with
+     "that is longer than a feed usually goes", and a nursing parent who has just lived a four-hour
+     cluster feed does not need Cubby telling her it cannot have happened. This is a product
+     ceiling, so it is stated as one, with the way out in the same breath. */
+  const max = (type==='feed') ? FEED_MAX_MS : SLEEP_MAX_MS;
+  if(now()-ms > max){ toast(type==='feed'
+    ? 'Cubby only tracks a feed up to 4 hours. Pick a later start, or stop the timer and log the feed by hand.'
+    : 'Cubby only tracks a nap up to 24 hours. Pick a later start, or stop the timer and log the nap by hand.', {ms:4500}); return; }
+  t.start = ms;
+  persist(); render(); openTimerControl(type, babyId); toast('Start time changed');
 }
 
 /* `nowText` is for the case where the thing this card reports is happening RIGHT NOW, so there is no
@@ -4325,10 +4533,12 @@ function eventDetail(e){
   if(e.type==='note') return e.notes||'';
   if(e.type==='activity'){ const a=[]; if(e.mins)a.push(e.mins+' min'); if(e.notes)a.push(e.notes); return a.join(' · '); }
   if(e.type==='medicine') return (e.dose?e.dose+' '+(e.unit||''):'')+(e.notes?' · '+e.notes:'');
-  if(e.type==='growth'){ const a=[]; if(e.weight)a.push(e.weight+' '+(e.wUnit||'kg')); if(e.height)a.push(e.height+' '+(e.hUnit||'cm')); return a.join(' · '); }
+  // Head circumference is the only one of the three that has to say what it is: length and head are
+  // both centimetres, so "52 cm · 38 cm" would be two unlabelled numbers a parent has to decode.
+  if(e.type==='growth'){ const a=[]; if(e.weight)a.push(e.weight+' '+(e.wUnit||'kg')); if(e.height)a.push(e.height+' '+(e.hUnit||'cm')); if(e.head)a.push('head '+e.head+' '+(e.hcUnit||'cm')); return a.join(' · '); }
   if(e.type==='vaccine') return e.notes||'';
   if(e.type==='temperature') return (e.temp!=null?e.temp+'°'+(e.unit||'C'):'')+(e.temp!=null&&isFever(e.temp,e.unit)?' · fever':'');
-  if(e.type==='symptom') return (e.severity?e.severity:'')+(e.notes?' · '+e.notes:'');
+  if(e.type==='symptom') return ((e.symptom===JAUNDICE_SYMPTOM&&e.severity)?extentPhrase(e.severity):(e.severity||''))+(e.notes?' · '+e.notes:'');
   if(e.type==='visit'){ const p=[]; if(e.doctorName)p.push(e.doctorName); if(e.notes)p.push(e.notes); return p.join(' · '); }
   if(e.type==='diaper'&&e.notes) return e.notes;
   return '';
@@ -4458,7 +4668,7 @@ function startTick(){
 /* ============================================================
    NAV / THEME
    ============================================================ */
-function go(v){ clearUndo(); /* she moved on; undo must not reach back past a tab change */ retireFirstEntryLine(); if(typeof closeSheet==='function') closeSheet(); if(v==='home') surfaceReset(); if(v!==view) tlResetReveal(); view=v; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
+function go(v){ clearUndo(); /* she moved on; undo must not reach back past a tab change */ retireFirstEntryLine(); if(typeof closeSheet==='function') closeSheet(); if(v==='home'){ surfaceReset(); releaseNightHomeOrder(); } if(v!==view) tlResetReveal(); view=v; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
 /* ---------------- APPEARANCE -------------------------------------------------
    Three modes, System by default, and stored PER PERSON.
 
@@ -4598,7 +4808,7 @@ var WWA={
   "baby.blood":"Handy to keep on file for your own records. It's optional, everyone in your circle can see it, and you can update it anytime.",
   "baby.doctors":"These contacts live with your baby's profile so anyone in your circle can reach the right doctor. A name or a clinic is enough, and you can edit or clear them anytime.",
   "baby.sex":"Adding this overlays the WHO or CDC percentile curves on the growth charts. It's optional, you can skip it, and it's shared with your household.",
-  "growth.measure":"Logging weight and height over time shows a gentle trend you can compare to growth charts. It's shared with everyone in your household. The charts are a guide, not a diagnosis.",
+  "growth.measure":"Logging weight, height and head circumference over time shows a gentle trend you can compare to growth charts. It's shared with everyone in your household. The charts are a guide, not a diagnosis.",
   "preg.edd":"We use this to count your weeks and lay out your care schedule. Only you, and anyone you choose, can see it. You can change it anytime.",
   "preg.lmp":"We use your last period date to work out your weeks and dating. It's private to you, and you can change it anytime.",
   "preg.cycle":"Your cycle length helps estimate your fertile window if you're tracking. It's optional and private to you, and you can change it anytime.",
@@ -4884,12 +5094,18 @@ function openFeedRunning(babyId){
 /* "When did this feed end?" The feed half of openSleepCorrect, same time strip, same three answers.
    Pre-filled half an hour after it started rather than now(): if the timer has run nine hours, now
    is the one answer we are confident is wrong. */
-function openFeedCorrect(babyId){
+/* `voluntary` is the same sheet reached from openTimerControl instead of from the four-hour trip.
+   The copy below diagnoses a forgotten Stop out loud, which is true at four hours and a small lie
+   at twelve minutes, and a parent who just chose "Stop at a different time" does not need to be
+   told her timer looks wrong. Same control, same save, one honest sentence each way. Its default
+   is now() rather than a guess, because she opened this deliberately and the answer she is about
+   to give is a nudge off the present, not a repair of something absurd. */
+function openFeedCorrect(babyId, voluntary){
   babyId=babyId||state.activeBabyId;
   const t=runningFeed(babyId); if(!t) return;
   const b=state.babies.find(x=>x.id===babyId)||activeBaby();
   const ran=feedRunFor(t);
-  logTimes={ end: Math.min(now(), t.start + Math.min(ran, 1800000)) };
+  logTimes={ end: voluntary ? now() : Math.min(now(), t.start + Math.min(ran, 1800000)) };
   /* With twins the banners name both babies and this sheet, which replaces them, named neither
      while saving against babyId out of sight. Worse on the "Finish it now" route, where it arrives
      with no banner above it at all. Same lookup openSleepCorrect does, and the name goes in the
@@ -4898,10 +5114,18 @@ function openFeedCorrect(babyId){
      keeps the exact wording she had: naming an only child tells her nothing she does not know. */
   const nm = (state.babies.length>1 && b && b.name) ? escapeHtml(b.name) : '';
   openSheet(`<h2>When did this feed end?</h2>
-    <div class="sub">${nm?nm+"'s timer":'The timer'} has been running ${fmtDur(ran)}, since ${fmtClock(t.start)}, ${dayLabel(t.start)}. That is longer than a feed usually goes, so it looks like Stop never got tapped. No hurry, just tell us when ${nm||'it'} finished.</div>
+    ${/* "started at 2:54 AM", with the preposition. The banner's terse "started 2:54 AM" is a label
+          and reads fine as one, but lifted into a full sentence it loses its footing. And nothing
+          has been logged yet on this route, so "we will log that instead" pointed at a record that
+          does not exist: say what will actually be written. */''}
+    <div class="sub">${voluntary
+      ? `${nm?nm+"'s timer":'The timer'} started at ${fmtClock(t.start)} and has been running ${fmtDur(ran)}. Tell us when ${nm||'it'} finished and we will log the feed up to then.`
+      : `${nm?nm+"'s timer":'The timer'} has been running ${fmtDur(ran)}, since ${fmtClock(t.start)}, ${dayLabel(t.start)}. That is longer than a feed usually goes, so it looks like Stop never got tapped. No hurry, just tell us when ${nm||'it'} finished.`}</div>
     ${timeStrip('end','Finished')}
     <button class="btn-primary" onclick="saveFeedCorrect('${babyId}')">Save this feed</button>
-    <button class="btn-ghost" onclick="closeSheet()">Keep the timer running</button>
+    ${/* Backing out of a sheet she chose should put her back where she chose it from, not on the
+          home screen. closeSheet on the overrun route is right: nothing sent her there. */''}
+    <button class="btn-ghost" onclick="${voluntary?`openTimerControl('feed','${babyId}')`:'closeSheet()'}">Keep the timer running</button>
     <button class="btn-ghost btn-danger" onclick="discardRunningFeed('${babyId}')">Forget this timer</button>
     <div class="csub" style="margin-top:8px;font-size:12px;color:var(--ink-soft);font-weight:600">Forgetting it removes the timer and logs nothing.</div>`,'feed');
 }
@@ -4918,6 +5142,10 @@ function saveFeedCorrect(babyId){
 }
 function discardRunningFeed(babyId){
   babyId=babyId||state.activeBabyId;
+  /* Measured at 390px: the "Start time changed" pill and the "Forget it" button overlap. Both are
+     now one tap apart on the control sheet, so a parent who moves the start and then decides to
+     drop the timer reads the destructive label through a green success badge. */
+  hideToast();
   confirmSheet({title:'Forget this timer?',body:'The timer goes away and no feed is logged. Nothing else changes.',
     confirmLabel:'Forget it',cancelLabel:'Keep it',danger:true,onConfirm:()=>{
       const tt=timersFor(babyId); delete tt.feed; persist(); closeSheet(); render(); toast('Timer removed');
@@ -5080,20 +5308,31 @@ function stopSleep(babyId){
    one-off control, so the gesture is one a parent already knows. Pre-filled with a plausible end
    rather than now(): if the timer has run 30 hours, "now" is the one answer we are confident is
    wrong, and an hour after it started is the likeliest nap. */
-function openSleepCorrect(babyId){
+/* `voluntary` is this sheet reached from openTimerControl rather than from the overrun nudge. See
+   openFeedCorrect for the whole reasoning; the two must stay twins. The ghost row differs as well
+   as the copy: the overrun route answers a question Cubby asked, so it snoozes that question for
+   six hours, while nothing was asked on the voluntary route and stamping an ack there would quietly
+   suppress the twelve-hour nudge for a parent who only wanted a look. */
+function openSleepCorrect(babyId, voluntary){
   babyId=babyId||state.activeBabyId;
   const t=runningNap(babyId); if(!t) return;
   const b=state.babies.find(x=>x.id===babyId)||activeBaby();
   const ran=napRunFor(t);
-  logTimes={ end: Math.min(now(), t.start + Math.min(ran, 3600000)) };
+  logTimes={ end: voluntary ? now() : Math.min(now(), t.start + Math.min(ran, 3600000)) };
   const nm=b?escapeHtml(b.name):'They';
   openSheet(`<h2>When did this nap end?</h2>
     ${/* No "on" before dayLabel: it returns "Today" and "Yesterday" as well as a date, and "on
           Today" reads badly while lowercasing gives "tuesday, aug 18". A comma carries both. */''}
-    <div class="sub">The timer has been running ${fmtDur(ran)}, since ${fmtClock(t.start)}, ${dayLabel(t.start)}. That is longer than a nap usually goes, so it looks like Stop never got tapped. No hurry, just tell us when ${nm} woke.</div>
+    ${/* See openFeedCorrect: the preposition, and "we will log the nap up to then" because on this
+          route nothing has been written yet, so there is no "that" for the nap to replace. */''}
+    <div class="sub">${voluntary
+      ? `The timer started at ${fmtClock(t.start)} and has been running ${fmtDur(ran)}. Tell us when ${nm} woke and we will log the nap up to then.`
+      : `The timer has been running ${fmtDur(ran)}, since ${fmtClock(t.start)}, ${dayLabel(t.start)}. That is longer than a nap usually goes, so it looks like Stop never got tapped. No hurry, just tell us when ${nm} woke.`}</div>
     ${timeStrip('end','Woke up')}
     <button class="btn-primary" style="background:var(--sleep);--accent-ink:var(--on-sleep,var(--on-accent))" onclick="saveSleepCorrect('${babyId}')">Save this nap</button>
-    <button class="btn-ghost" onclick="keepSleepRunning('${babyId}')">No, they are still asleep</button>
+    ${voluntary
+      ? `<button class="btn-ghost" onclick="openTimerControl('sleep','${babyId}')">Keep the timer running</button>`
+      : `<button class="btn-ghost" onclick="keepSleepRunning('${babyId}')">No, they are still asleep</button>`}
     <button class="btn-ghost btn-danger" onclick="discardRunningNap('${babyId}')">Forget this timer</button>
     <div class="csub" style="margin-top:8px">Forgetting it removes the timer and logs nothing.</div>`,'sleep');
 }
@@ -5115,6 +5354,7 @@ function keepSleepRunning(babyId){
 }
 function discardRunningNap(babyId){
   babyId=babyId||state.activeBabyId;
+  hideToast();   // see discardRunningFeed: the success pill lands across "Forget it" at 390px
   confirmSheet({title:'Forget this timer?',body:'The timer goes away and no sleep is logged. Nothing else changes.',
     confirmLabel:'Forget it',cancelLabel:'Keep it',danger:true,onConfirm:()=>{
       const tt=timersFor(babyId); delete tt.sleep; persist(); closeSheet(); render(); toast('Timer removed');
@@ -5131,7 +5371,10 @@ function openPastSleep(fresh){
 function savePastSleep(){
   let s = getWhen('when');
   let e = getWhen('end');
-  if(e<=s) e+=86400000; // awake after midnight -> next day
+  // Awake after midnight rolls to the next day, but only as far as a nap can actually stretch.
+  // Both strips are one tap from any time now, so "woke up" landing before "fell asleep" is an
+  // ordinary slip; rolling it forward regardless booked a silent 23 hour nap and said well done.
+  if(e<=s){ const roll=e+86400000; if(roll-s<=12*3600000){ e=roll; } else { toast('Woke up is before fell asleep. Have another look at the times?'); return; } }
   commitEvent({type:'sleep',time:s,end:e});
   closeSheet(); render(); toast('Nap logged · '+fmtDur(e-s));
 }
@@ -5328,7 +5571,22 @@ function openEdit(id){
      dose before reading it out in the surgery looks like nothing was ever recorded, and a figure
      typed into that empty box replaces a value she was never shown. */
   if(e.type==='medicine') extra=`<div class="field"><label>Dose${e.unit?' ('+escapeHtml(e.unit)+')':''}</label><input id="eDose" value="${escapeHtml(String(e.dose||''))}" placeholder="2.5"${canEd?'':' disabled'}></div>`;
+  /* A measurement row opened with no value box at all, so a head circumference typed as 415 could
+     only be thrown away and logged again, and while it sat there it rescaled the whole percentile
+     chart. Head circumference makes that a third more likely to happen, so the tap that says it
+     will edit now edits. Units stay the ones the entry was saved with. */
+  if(e.type==='growth') extra=[['eGW','Weight',e.weight,e.wUnit||'kg'],['eGH','Height',e.height,e.hUnit||'cm'],['eGHC','Head circumference',e.head,e.hcUnit||'cm']]
+    .map(f=>`<div class="field"><label>${f[1]} (${escapeHtml(f[3])})</label><input type="number" step="0.01" inputmode="decimal" id="${f[0]}" value="${f[2]!=null?f[2]:''}" placeholder="0.0"${canEd?'':' disabled'}></div>`).join('')
+    +`<div class="csub" style="margin:-4px 0 8px">Clear a box to take that measurement off. Keep at least one.</div>`;
   if(e.type==='note') extra=`<div class="field"><label>Note</label><textarea id="eNote"${canEd?'':' disabled'}>${escapeHtml(e.notes||'')}</textarea></div>`;
+  /* Symptom rows are tappable from the illness card and the timeline, and the sheet offered only
+     "when" and "delete". For the yellow that matters now: `severity` stopped being a soft adjective
+     and became the observation printed on the doctor page, and a mis-tapped "legs" that can only be
+     fixed by deleting and re-logging loses the date the colour was first seen, which is the date a
+     clinician asks about first. Same toggle, same words, as the sheet it was logged in. */
+  if(e.type==='symptom') extra=`<div class="field"><label>${e.symptom===JAUNDICE_SYMPTOM?'How far it reaches':'Severity'}</label><div class="unit-toggle" id="eSev">
+    ${symptomScale(e.symptom).map(v=>`<button class="${e.severity===v?'on':''}" data-k="${v}" ${canEd?`onclick="pickEditKind(this)"`:'disabled'}>${capWord(v)}</button>`).join('')}
+  </div></div>`;
   if(e.type==='activity') extra=`<div class="field"><label>Minutes</label><input type="number" id="eMins" value="${e.mins||''}"${canEd?'':' disabled'}></div><div class="field"><label>Note</label><textarea id="eNote"${canEd?'':' disabled'}>${escapeHtml(e.notes||'')}</textarea></div>`;
   if(e.photoId&&photoSrc(e.photoId)) extra+=`<div class="field"><label>Photo</label><div class="food-preview"><img src="${photoSrc(e.photoId)}">${canEd?`<button class="rm" onclick="removeEventPhoto('${id}')">×</button>`:''}</div></div>`;
   const whenRows=canEd
@@ -5344,6 +5602,12 @@ function openEdit(id){
 function saveEdit(id){
   const e=state.events.find(x=>x.id===id); if(!e)return;
   if(!canEditEvent(e)){ toast('Only the logger or an owner can edit this'); return; }
+  /* Refused before anything is touched, because the when-picker below writes straight onto the
+     event and a return after that leaves a time change applied but never saved. An entry with all
+     three boxes cleared is a deletion, and deletion has its own button that keeps the row
+     recoverable in Recently deleted. */
+  const _gBlank=e.type==='growth'&&$('#eGW')&&['#eGW','#eGH','#eGHC'].every(s=>((($(s)||{}).value)||'').trim()==='');
+  if(_gBlank){ toast('Keep a weight, height or head measurement'); return; }
   const u=myUid(), t=now(), hist=[];
   function chg(field,from,to){ hist.push({field,from:(from===undefined?null:from),to:(to===undefined?null:to),by:u,at:t}); }
   const nw=getWhen('edit');
@@ -5365,6 +5629,8 @@ function saveEdit(id){
   if($('#eDur')){ const mins=parseInt($('#eDur').value,10); const v=(mins>0?mins:0)*60000; if(v!==(e.dur||0)){ chg('duration',e.dur||0,v); e.dur=v; } }
   const kb=document.querySelector('#eKind .on');
   if(kb){ const k=kb.getAttribute('data-k'); if(k && k!==e.kind){ chg('kind',e.kind,k); e.kind=k; } }
+  const sb=document.querySelector('#eSev .on');
+  if(sb){ const v=sb.getAttribute('data-k'); if(v && v!==e.severity){ chg('severity',e.severity,v); e.severity=v; } }
   if($('#eMins')){ const v=parseInt($('#eMins').value,10)||null; if(v!==(e.mins||null)){ chg('mins',e.mins,v); e.mins=v; } }
   // Trimmed, like #eDose above. Untrimmed, a note corrected down to a space stores that space, and
   // eventDetail is truthy on it, so the timeline paints a blank second line under the nappy that
@@ -5378,6 +5644,11 @@ function saveEdit(id){
     const mins=Math.min(cap,Math.max(0,parseInt(($('#eWkM')||{}).value,10)||0));
     const was=e.wakings||null, next=(n||mins)?{n:n,mins:mins}:null;
     if(JSON.stringify(was)!==JSON.stringify(next)){ chg('wakings',was,next); if(next) e.wakings=next; else delete e.wakings; }
+  }
+  if(e.type==='growth'&&$('#eGW')){
+    const F=[['eGW','weight',2],['eGH','height',1],['eGHC','head',1]];
+    const next={}; F.forEach(f=>{ const raw=(($('#'+f[0])||{}).value||'').trim(); const v=parseFloat(raw); next[f[1]]=(raw===''||isNaN(v))?undefined:+v.toFixed(f[2]); });
+    F.forEach(f=>{ const k=f[1]; if(next[k]!==e[k]){ chg(k,e[k],next[k]); if(next[k]===undefined) delete e[k]; else e[k]=next[k]; } });
   }
   if(hist.length){ e.editedBy=u; e.editedAt=t; e.history=(e.history||[]).concat(hist); }
   persist(); closeSheet(); render(); toast(hist.length?'Updated':'No changes');
@@ -5480,7 +5751,13 @@ function openBabySheet(){
   // bornBabyId was set, which is what made "saved as part of their story" untrue.
   const pregBorn=!!(state.pregnancy && state.pregnancy.bornBabyId);
   const pregRow=state.pregnancy?`<div class="baby-item" onclick="viewingPreg=true;closeSheet();render()"><div style="width:38px;height:38px;display:grid;place-items:center;background:var(--preg-soft);border-radius:50%;font-size:18px">${pregBorn?'🤍':'🤰'}</div><div style="flex:1"><div style="font-weight:800">Your pregnancy</div><div style="font-size:12px;color:var(--ink-soft);font-weight:600">${pregBorn?'Look back on the journey':(state.pregnancy.stage==='planning'?'Getting ready':'Week '+pregWeek())}</div></div>${viewingPreg?'<div style="color:var(--preg-ink);font-weight:800;font-size:13px">Active</div>':''}</div>`:'';
-  openSheet(`<h2>Switch</h2><div class="sub">Switch between your little ones.</div>${pregRow}${list}
+  /* The switcher shows the CURRENT pregnancy only, and state.pregnancy holds exactly one. Once a
+     second journey starts, the first one lives in the archive with no way in, which is where the
+     promise that a second pregnancy never writes over the first quietly stopped being checkable.
+     pregArchiveList keeps it to records that are hers, so a partner who archived her pregnancy on
+     his own phone is not offered a row calling it his. */
+  const archRow=pregArchiveList().length?`<div class="baby-item" onclick="openPregArchive()"><div style="width:38px;height:38px;display:grid;place-items:center;background:var(--preg-soft);border-radius:50%;font-size:18px">🤍</div><div style="flex:1"><div style="font-weight:800">${pregArchiveList().length>1?'Your earlier pregnancies':'Your earlier pregnancy'}</div><div style="font-size:12px;color:var(--ink-soft);font-weight:600">Kept, and still yours</div></div></div>`:'';
+  openSheet(`<h2>Switch</h2><div class="sub">Switch between your little ones.</div>${pregRow}${list}${archRow}
     <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="openBabyProfile()">${I.note} ${escapeHtml(activeBaby().name)}'s profile</button>
     <button class="btn-primary" onclick="openAddEntry()">${I.plus} Add to Cubby</button>
     ${trashCount()?`<button class="btn-ghost" onclick="openTrash()">${I.trash} Recently deleted (${trashCount()})</button>`:''}`,'diaper');
@@ -5895,7 +6172,7 @@ function setAvatar(photoId){ const b=activeBaby(); if(!b)return; b.avatarPhotoId
 function clearAvatar(){ const b=activeBaby(); if(!b)return; if(b.avatarPhotoId){ delete b.avatarPhotoId; persist(); } openBabyProfile(); toast('Using bear avatar'); }
 function openBirthDetails(){
   const b=activeBaby(); if(!b)return;
-  openSheet(`${babyIdentity(b)}<div class="sub" style="margin:-8px 0 14px">Birth details for the keepsake poster. All optional.</div>
+  openSheet(`${babyIdentity(b)}<div class="sub" style="margin:-8px 0 14px">Birth details for the keepsake poster, and a few Cubby uses. All optional.</div>
     <div class="field"><label>Full name</label><input id="dName" value="${escapeHtml(b.fullName||b.name)}" placeholder="First Middle Last">${wwa('baby.birth')}</div>
     <div class="field"><label>Born on (date & time)</label>
       <input type="hidden" id="dWhen" value="${b.birth||''}">
@@ -5909,6 +6186,14 @@ function openBirthDetails(){
       <div class="field"><label>Birth length</label><input id="dLen" value="${escapeHtml(b.birthLength||'')}" placeholder="e.g. 50 cm or 20 in"></div>
     </div>
     <div class="field"><label>Head circumference</label><input id="dHead" value="${escapeHtml(b.headCirc||'')}" placeholder="e.g. 35 cm or 13.8 in"></div>
+    ${/* The only door for the commonest path of all: the parent who joins Cubby with her baby
+          already here. She never sees the birth handover, so without this row her preterm baby is
+          plotted, nudged and fever-checked as though they arrived at term, with nothing on any
+          screen she can reach to say otherwise.
+          The households that welcomed a baby BEFORE this shipped are the same problem one step on:
+          Cubby is still holding their due date and their birth date and can answer the question
+          itself, so it does, marked as a guess rather than silently. */''}
+    ${gestAgeHtml('dGw','dGd', (b.gestWeeks!=null)?{weeks:b.gestWeeks,days:b.gestDays||0}:gestFromDue(pregDueFor(b), b.birth), b.gestWeeks==null)}
     <div class="row2">
       <div class="field"><label>Blood group</label><input id="dBlood" value="${escapeHtml(b.blood||'')}" placeholder="e.g. O+">${wwa('baby.blood')}</div>
       <div class="field"><label>Star sign</label><input id="dSign" value="${escapeHtml(b.sign||zodiac(b.birth))}" placeholder="auto"></div>
@@ -6229,6 +6514,7 @@ function saveBabyDetails(id){
   if(pbw) setBirthWeight(b, pbw); else clearBirthWeight(b);
   b.birthLength=$('#dLen').value.trim();
   b.headCirc=$('#dHead')?$('#dHead').value.trim():(b.headCirc||'');
+  if($('#dGw')) setGestAge(b, readGestAge('dGw','dGd'));
   b.blood=$('#dBlood').value.trim();
   b.sign=$('#dSign').value.trim()||zodiac(b.birth);
   b.place=$('#dPlace').value.trim();
@@ -6577,6 +6863,14 @@ function openSettings(){
       <div class="si-ico" style="background:var(--diaper-soft);color:var(--diaper)">${I.home}</div>
       <div class="si-body"><div class="a">Manage babies</div><div class="b">${state.babies.length} added</div></div>
     </div>
+    ${/* The second door to the archive, for the mother who is in the baby stage and never opens the
+          switcher. Present only when there is something to open, and only ever on her own device:
+          state.pregnancyArchive is filled from users/{uid}, which nobody else can read. */''}
+    ${pregArchiveList().length?`<div class="set-item" onclick="openPregArchive()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">🤍</div>
+      <div class="si-body"><div class="a">${pregArchiveList().length>1?'Your earlier pregnancies':'Your earlier pregnancy'}</div><div class="b">Kept, and still yours</div></div>
+      <span class="chev">${I.chev}</span>
+    </div>`:''}
     ${activeBaby()?`<div class="set-item" onclick="openBabyProfile()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--star-soft);color:var(--star)">${I.star}</div>
       <div class="si-body"><div class="a">${escapeHtml(activeBaby().name)}'s profile</div><div class="b">Birth details, food &amp; allergies</div></div>
@@ -7176,6 +7470,12 @@ function renderCaregiverWaiting(){
    cards, no countdown, no "start again" pressure; quiet links to kept memories + real support. */
 function renderLossHolding(){
   const hasMem=(state.pregnancyArchive||[]).some(a=>(a.moments||[]).length);
+  /* If she put her weeks in her calendar, they are still in it, and they will keep arriving every
+     week for months. This screen is the only place she can reach after the pregnancy record is
+     gone, so the take-back has to be offered here or it does not exist. It opens the sheet rather
+     than doing it: every other card on this screen opens something, and this is the one screen in
+     the product where somebody is tapping around numb and not reading. */
+  const hasWeekIcs=pregWeeksStillArriving();
   dropShellCache(); app().innerHTML=`<div class="ob-wrap">
     <div class="onboard ob-card fade-in">
       <div class="logo">Cubby</div>
@@ -7183,6 +7483,7 @@ function renderLossHolding(){
       <div class="tag">Cubby is here whenever you're ready. There's nothing you need to do right now.</div>
       <div class="prof-cards" style="width:100%;text-align:left;margin-top:10px">
         ${hasMem?`<div class="prof-card" onclick="openKeptMemories()"><span class="lead" style="background:var(--preg-soft);font-size:20px">🤍</span><div class="cflex"><div class="a">Your kept memories</div><div class="b">Yours to revisit, privately, whenever you like</div></div><span class="chev">${I.chev}</span></div>`:''}
+        ${hasWeekIcs?`<div class="prof-card" onclick="openWeeksTakeBack()"><span class="lead" style="background:var(--preg-soft);font-size:20px">📅</span><div class="cflex"><div class="a">The week markers in your calendar</div><div class="b">Take them off, whenever you want to</div></div><span class="chev">${I.chev}</span></div>`:''}
         <a class="prof-card" href="/articles/miscarriage-early-pregnancy-loss/" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><span class="lead" style="background:var(--feed-soft);font-size:20px">🫂</span><div class="cflex"><div class="a">If you need support</div><div class="b">Gentle reading, and helplines that are there day or night</div></div><span class="chev">${I.chev}</span></a>
       </div>
       <button class="btn-ghost" onclick="endLossHolding()" style="color:var(--ink-soft);margin-top:10px">When you're ready, move on from this screen</button>
@@ -7213,7 +7514,12 @@ function clearMyLossHolding(){ var lh=state.lossHolding; if(!lh) return; if(lh.a
 /* Leaving the holding screen is one-way (it leads back to the start-a-journey chooser), so it says
    where it goes and asks once, calmly. Kept memories stay kept either way. */
 function endLossHolding(){
-  confirmSheet({title:'Ready to move on?',body:'Cubby will go back to the start screen, for whenever a new chapter begins. This quiet page won\'t show again. Nothing you kept is deleted.',confirmLabel:'I\'m ready',cancelLabel:'Not yet',onConfirm:function(){ clearMyLossHolding(); persist(); render(); }});
+  /* This screen is the last one that can reach the week markers she put in her own calendar, so
+     leaving it closes the only door to them. Said plainly, once, and never done for her: "Not yet"
+     takes her straight back to the card that offers it. */
+  var body='Cubby will go back to the start screen, for whenever a new chapter begins. This quiet page won\'t show again. Nothing you kept is deleted.';
+  if(typeof pregWeeksStillArriving==='function' && pregWeeksStillArriving()) body+=' Your week markers stay in your calendar unless you take them off first.';
+  confirmSheet({title:'Ready to move on?',body:body,confirmLabel:'I\'m ready',cancelLabel:'Not yet',onConfirm:function(){ clearMyLossHolding(); persist(); render(); }});
 }
 
 /* ============================================================
@@ -7425,6 +7731,240 @@ function addApptToCalendar(id){
   const clean=s=>(s||'').replace(/[,;\\]/g,' ').replace(/\r?\n/g,' ');
   const ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Cubby//Pregnancy//EN','BEGIN:VEVENT','UID:'+uid()+'@little-cubby.com','DTSTART;VALUE=DATE:'+dstr,'SUMMARY:'+clean(a.title||'Antenatal appointment'),'DESCRIPTION:'+clean('Estimated from week '+a.week+'. Confirm the exact date and time with your clinic.'+(a.note?' '+a.note:'')),'BEGIN:VALARM','TRIGGER:-P1D','ACTION:DISPLAY','DESCRIPTION:Appointment tomorrow','END:VALARM','END:VEVENT','END:VCALENDAR'].join('\r\n');
   try{ const url=URL.createObjectURL(new Blob([ics],{type:'text/calendar'})); saveFile(url, (a.title||'appointment').replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.ics', isNativeApp()?'Appointment ready 📅':'Added, check your downloads 📅'); setTimeout(()=>URL.revokeObjectURL(url),1500); }catch(e){ toast('Could not add to calendar'); }
+}
+
+/* ---- her weeks in her own calendar ------------------------------------------------------------
+   Pregnancy is the one stage whose logging cadence is close to zero, and the week turning is the
+   only thing in it that recurs. pregWeek() is derived on every render, so the screen simply becomes
+   different at some point during a Tuesday and looks identical to the Monday before: nothing marks
+   it, and nothing reaches her at all with the app shut.
+
+   Same mechanism as the dose course and the vaccine schedule, with two deliberate differences.
+   All-day, because a week does not begin at an hour. And the alert is TRIGGER:PT9H rather than
+   PT0S, because on an all-day event PT0S means midnight, and waking a pregnant woman to tell her
+   the fruit changed is exactly the kind of thing this product exists not to do.
+
+   The UID is stable per week number and the SEQUENCE only ever goes up, so moving her due date and
+   exporting again rewrites the same entries instead of laying a second set beside them. There is no
+   pregnancy id in the UID on purpose: a later pregnancy overwrites the same slots, which is how a
+   set left behind by an earlier one stops being an orphan.
+
+   The take-back matters more here than anywhere else in this file. However this pregnancy ends, the
+   calendar carries on: "Week 30, about the size of a butternut squash", every week, for months. And
+   it ends two ways, not one. endPregnancy nulls state.pregnancy and the holding screen replaces the
+   whole app; welcomeBaby leaves the pregnancy in place but empties pregWeeksAhead() and hands the
+   screen to the baby. Either way a cancel button living on the pregnancy Home is gone at precisely
+   the moment it is needed, and a mother home from NICU was getting "about the size of a cantaloupe"
+   every Saturday with nothing in the app that could stop it.
+
+   So the record of what was written is a per-person localStorage key and not a field on the journey
+   doc: it outlives pregClear(), and it carries its own last date and its own list of weeks so any
+   screen can answer "is anything still coming" and "what were they called" without a pregnancy to
+   derive it from. Three surfaces host the door, and each takes itself down the moment the last
+   marker has passed: the loss holding screen, the baby Home alert lane, and a row on the pregnancy
+   Home for the in-between cases. Per person because the file went into HER calendar, not the
+   household's, and her partner may have put a copy in his. */
+function pregWeeksIcsKey(){ return 'cubby-preg-weeks:'+quickUid(); }
+function pregWeeksIcsRec(){ try{ return JSON.parse(localStorage.getItem(pregWeeksIcsKey())||'null'); }catch(e){ return null; } }
+function pregWeeksIcsSet(r){ try{ if(r) localStorage.setItem(pregWeeksIcsKey(), JSON.stringify(r)); else localStorage.removeItem(pregWeeksIcsKey()); }catch(e){} }
+function pregWeekUid(n){ return 'cubby-pregweek-'+n+'@little-cubby.com'; }
+/* Exactly which weeks were published, named one by one rather than walked from..to. A range is only
+   the same thing while PREG.weeks has no holes in it, and it is silently wrong the moment a due date
+   moves or a second pregnancy publishes a different span: the cancel would name uids that were never
+   written and miss ones that were. from/to are kept for the older shape and for reading. */
+function pregWeeksIcsWeeks(r){
+  if(!r) return [];
+  if(Array.isArray(r.wks)&&r.wks.length) return r.wks.slice();
+  const out=[]; for(let n=r.from; n<=r.to; n++) out.push(n);
+  return out;
+}
+/* Is anything she published still to come? Answered from the record alone, because the person who
+   most needs this no longer has a pregnancy on screen to derive it from. */
+function pregWeeksStillArriving(){ const r=pregWeeksIcsRec(); return !!r && (r.until==null || r.until>now()); }
+/* The record survives pregClear() on purpose, so it outlives the pregnancy that wrote it. That means
+   it can also outlast it: without this check a brand new pregnancy was told "your weeks are in your
+   calendar" when she had added nothing at all. */
+function pregWeeksIcsMine(){ const r=pregWeeksIcsRec(), p=state.pregnancy; return (r&&p&&r.pid&&r.pid===p.id)?r:null; }
+/* Markers still to come that the sheet on the pregnancy Home can no longer reach: after a birth,
+   after the week count ran out, after a loss, or when the record belongs to a pregnancy that is not
+   this one. Exactly the cases where the take-back has to be a door of its own. */
+function pregWeeksStranded(){
+  if(!pregWeeksStillArriving()) return false;
+  return !(state.pregnancy && !pregNoNumbers() && pregWeeksIcsMine() && pregWeeksAhead().length);
+}
+/* The instant pregWeek() first answers n, inverted out of pregWeek() itself rather than guessed at.
+   The due-date branch rounds, so the turn sits half a week away from a naive "due minus 40-n weeks",
+   and a calendar that disagreed with the screen would be worse than no calendar. */
+function pregWeekStart(n){
+  const p=state.pregnancy; if(!p) return null;
+  if(p.dueDate) return p.dueDate - (40.5-n)*PREG_MS_WEEK;
+  if(p.lmp) return p.lmp + n*PREG_MS_WEEK;
+  return null;
+}
+/* Weeks still ahead of her, and only the ones the book has words for: PREG.weeks starts at 4, so a
+   mother at week 2 is not offered two blank markers before the content begins. */
+function pregWeeksAhead(){
+  const p=state.pregnancy;
+  if(!p||p.stage==='planning'||p.bornBabyId) return [];
+  if(!p.dueDate&&!p.lmp) return [];
+  const out=[];
+  for(let n=pregWeek()+1; n<=41; n++){
+    if(!(window.PREG&&PREG.weeks[n])) continue;
+    const t=pregWeekStart(n); if(t==null||t<=now()) continue;
+    out.push(n);
+  }
+  return out;
+}
+function pregWeeksCalendarRow(){
+  // Quiet mode's whole promise is that week counts stay off her screen. A calendar full of "Week 25"
+  // would break it in the one place she cannot take it back with a toggle, so the offer is not made.
+  // The take-back below is not an offer of numbers, it is the way out of one, so it is not gated.
+  const ahead=(state.pregnancy&&!pregNoNumbers())?pregWeeksAhead().length:0;
+  const mine=!!pregWeeksIcsMine();
+  /* Its own row whenever markers are still arriving and the sheet above cannot reach them: the week
+     count ran out, the due date moved, or the record belongs to a pregnancy that is no longer this
+     one. Without it the record is stranded and the markers keep coming with nothing to stop them. */
+  const off=pregWeeksStranded()
+    ? `<div class="add-row" onclick="openWeeksTakeBack()">📅 Take my week markers off my calendar</div>` : '';
+  if(!ahead) return off;
+  return `<div class="add-row" onclick="openWeeksCalendar()">📅 ${mine?'Update my weeks in my calendar':'Put my weeks in my calendar'}</div>`+off;
+}
+/* The same door, in the shape the baby side can carry. After a birth pregWeeksAhead() is empty and
+   the pregnancy Home is gone altogether, so every route to the record disappeared at the exact
+   moment "Week 39 · about the size of a small watermelon" started landing in the calendar of a
+   mother who had already given birth. It takes itself down once the last marker has passed. */
+function pregWeeksLeftAlert(){
+  if(!pregWeeksStranded()) return '';
+  return `<div class="alert-pill" style="border-color:var(--preg)">
+    <div class="ap-ico" style="background:var(--preg-soft);font-size:18px">📅</div>
+    <div class="ap-body"><div class="ap-t">Week markers still in your calendar</div><div class="ap-s">Your pregnancy weeks are still set to show, one a week. Take them off whenever you like.</div></div>
+    <button onclick="openWeeksTakeBack()">Take off</button></div>`;
+}
+/* The way out, wherever she is standing. It is a sheet and not a one-tap row because taking them off
+   cannot be undone from inside Cubby: the record goes and with it the only list of what was written.
+   Offered, never done for her, and never pushed: some people want to keep them. */
+function openWeeksTakeBack(){
+  if(!pregWeeksIcsRec()) return;
+  openSheet(`<h2>The week markers in your calendar</h2>
+    <div class="sub">Your pregnancy weeks are still set to show, one a week. You can take them off now, or leave them. Some people like to keep them.</div>
+    <button class="btn-ghost btn-danger" onclick="cancelPregWeeks()">Take them off my calendar</button>
+    <button class="btn-ghost" onclick="closeSheet()">Leave them for now</button>`,'preg');
+}
+function openWeeksCalendar(){
+  const wks=pregWeeksAhead();
+  if(!wks.length){ toast('Nothing left to add'); return; }
+  const rec=pregWeeksIcsMine(), first=wks[0], d=PREG.weeks[first];
+  openSheet(`<h2>Your weeks in your calendar</h2>
+    <div class="sub">One all-day marker for each week ahead, in the calendar you already look at. Nothing is shared, and nobody else is told.</div>
+    ${/* .sub and not .csub: csub is styled only inside .stat-card, so out here it renders at full
+         body size in full ink and shouts over the sheet's own subtitle. The margin is positive and
+         not the -6px the doctor-visit row uses, because there it follows an add-row that carries a
+         bottom margin of its own, and here it follows a button with none: the negative pulled the
+         footnote up onto the pink. */''}
+    <div class="preg-card"><div class="pc-ico">📅</div><div style="flex:1;min-width:0"><div class="pc-t">Week ${first} · about the size of a ${escapeHtml(d.size)}</div><div class="pc-b">First of ${wks.length}, on ${escapeHtml(new Date(pregWeekStart(first)).toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'}))}. Each one shows in the morning, with a link back to Cubby for that week.</div></div></div>
+    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="exportPregWeeks()">${rec?'Add them again':'Add '+wks.length+' week'+(wks.length===1?'':'s')}</button>
+    ${rec?`<div class="sub" style="margin:10px 0 4px">You added these before. Adding them again updates the same entries rather than making new ones.</div>
+    <button class="btn-ghost btn-danger" onclick="cancelPregWeeks()">Take these off my calendar</button>`:''}
+    <button class="btn-ghost" onclick="closeSheet()">Not now</button>`,'preg');
+}
+function pregWeeksIcsText(wks,seq){
+  const stamp=_icsStamp(new Date()), pad=n=>String(n).padStart(2,'0');
+  const L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Cubby//Pregnancy//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH'];
+  wks.forEach(function(n){
+    const s=new Date(pregWeekStart(n)), e=new Date(pregWeekStart(n)+86400000);
+    const w=PREG.weeks[n]||{}, title='Week '+n+(w.size?' · about the size of a '+w.size:'');
+    L.push('BEGIN:VEVENT',
+      'UID:'+pregWeekUid(n),
+      'SEQUENCE:'+seq,
+      'DTSTAMP:'+stamp,
+      'DTSTART;VALUE=DATE:'+(s.getFullYear()+pad(s.getMonth()+1)+pad(s.getDate())),
+      'DTEND;VALUE=DATE:'+(e.getFullYear()+pad(e.getMonth()+1)+pad(e.getDate())),
+      'TRANSP:TRANSPARENT',                 // a week is not an appointment; it must not make her look busy
+      'SUMMARY:'+_icsText(title),
+      'DESCRIPTION:'+_icsText((w.baby||'')+' https://little-cubby.com/app/?tab=week'),
+      // Nine in the morning, once, on the day itself. Never the night before, never at midnight.
+      'BEGIN:VALARM','TRIGGER:PT9H','ACTION:DISPLAY','DESCRIPTION:'+_icsText(title),'END:VALARM',
+      'END:VEVENT');
+  });
+  L.push('END:VCALENDAR');
+  return L.join('\r\n');
+}
+function exportPregWeeks(){
+  const wks=pregWeeksAhead(); if(!wks.length){ toast('Nothing left to add'); return; }
+  const old=pregWeeksIcsRec(), seq=((old&&old.seq)||0)+1;
+  /* Every week ever published, not only this batch. Move a due date forward, or start a second
+     pregnancy further along than the first one reached, and the earlier markers sit in her calendar
+     at their old dates under uids this batch never names. Keeping the union is what lets the
+     take-back name them, and reusing one uid per week is what stops the new set doubling up. */
+  const all=pregWeeksIcsWeeks(old).concat(wks).filter((n,i,a)=>a.indexOf(n)===i).sort((a,b)=>a-b);
+  const last=pregWeekStart(wks[wks.length-1]);
+  try{
+    const url=URL.createObjectURL(new Blob([pregWeeksIcsText(wks,seq)],{type:'text/calendar'}));
+    saveFile(url,'cubby-pregnancy-weeks.ics', isNativeApp()?'Your weeks are ready 📅':'Added, check your calendar 📅');
+    /* Recorded only once the file is actually in her hands. Writing it first meant a native save
+       that threw left Cubby telling her the weeks were in a calendar that had never seen them. */
+    pregWeeksIcsSet({seq:seq, wks:all, from:all[0], to:all[all.length-1],
+      until:Math.max((old&&old.until)||0, last+86400000), pid:(state.pregnancy||{}).id||null, at:now()});
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+    closeSheet(); render();
+  }catch(e){ toast('Could not add to calendar'); }
+}
+/* Reads nothing but the stored record, so it still works when state.pregnancy has already been
+   cleared. That is the whole point of it: the person most likely to need this no longer has a
+   pregnancy in the app. */
+function cancelPregWeeks(){
+  const rec=pregWeeksIcsRec(); if(!rec) return;
+  const seq=(rec.seq||0)+1, stamp=_icsStamp(new Date());
+  const L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Cubby//Pregnancy//EN','CALSCALE:GREGORIAN','METHOD:CANCEL'];
+  pregWeeksIcsWeeks(rec).forEach(function(n){
+    L.push('BEGIN:VEVENT','UID:'+pregWeekUid(n),'SEQUENCE:'+seq,'DTSTAMP:'+stamp,'STATUS:CANCELLED','SUMMARY:'+_icsText('Week '+n),'END:VEVENT');
+  });
+  L.push('END:VCALENDAR');
+  try{
+    const url=URL.createObjectURL(new Blob([L.join('\r\n')],{type:'text/calendar'}));
+    // Honest about the limit, same as the dose cancel: this is a request to her calendar app, not
+    // something Cubby can reach in and enforce.
+    saveFile(url,'cubby-pregnancy-weeks-off.ics','Removed. If they are still showing, delete them in your Calendar app.');
+    /* Forgotten only after the file is hers. Clearing first meant a save that threw took the door
+       away and left the markers behind it, with nothing left that knew their names. */
+    pregWeeksIcsSet(null);
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+    closeSheet(); render();
+  }catch(e){ toast('Could not remove them'); }
+}
+/* ---- the week turning, marked once ------------------------------------------------------------
+   The other half of the same gap. Until now the hero read Week 25 one afternoon having read Week 24
+   that morning, and nothing said so. One line, once, dismissed by being seen rather than by a
+   control, because a thing you have to close is a thing you have to deal with.
+
+   Per person in localStorage under the uid, the same rule as the fertile-window card: her partner
+   gets his own first sight of the week, and neither of them writes a display preference into the
+   shared blob. Never a countdown: it says a week has arrived, never how many are left. */
+let _pregWeekRoll=null;   // decided once per page load, so a re-render mid-session cannot snatch the line back
+function pregWeekSeenKey(){ return 'cubby-preg-week-seen:'+quickUid(); }
+function pregWeekRolled(){
+  const p=state.pregnancy; if(!p||p.stage==='planning'||p.bornBabyId) return 0;
+  if(pregNoNumbers()) return 0;                      // quiet mode hides week counts, and this is one
+  const wk=pregWeek();
+  /* Keyed by person as well as week. Sign out and back in as her partner without a reload and the
+     cache would otherwise hand him her decision, which is the one thing the per-uid key exists to
+     stop. */
+  const who=quickUid();
+  if(_pregWeekRoll&&_pregWeekRoll.wk===wk&&_pregWeekRoll.uid===who) return _pregWeekRoll.show?wk:0;
+  let seen=0; try{ seen=parseInt(localStorage.getItem(pregWeekSeenKey())||'0',10)||0; }catch(e){}
+  /* Nothing on the very first sight: we have no idea whether this week turned today or six days
+     ago. And seen>wk means the dates moved under us, an edited due date or a different pregnancy
+     entirely, so re-anchor in silence rather than announce a week she has already lived. */
+  const show = seen>0 && seen<wk;
+  try{ localStorage.setItem(pregWeekSeenKey(), String(wk)); }catch(e){}
+  _pregWeekRoll={wk:wk,show:show,uid:who};
+  return show?wk:0;
+}
+/* "Starts today" only when it does. She may not have opened Cubby for three days, and the marker
+   has to survive being read on a Thursday about a Monday. */
+function pregWeekRollLine(n){
+  const t=pregWeekStart(n);
+  return (t!=null&&dayKey(t)===dayKey(now())) ? `Week ${n} starts today` : `Week ${n} has started`;
 }
 
 /* ---- dose times in the parent's own calendar ------------------------------------------------
@@ -7689,6 +8229,14 @@ function openExpectingSetup(mode){
   openSheet(`<h2>${title}</h2><div class="sub">${sub}</div>
     ${entry}
     <div class="field" style="margin-top:14px"><label>Where you'll have your care</label>${countryPickerHtml('pgCountry', pregDraft.country)}${wwa('preg.country')}</div>
+    ${/* Said before she taps, because this is the button that used to destroy the last record. Only
+          where it is true and wanted: a pregnancy that ended in a birth. After a loss the archive
+          holds memories by her choice and the health logs were cleared as promised, so telling her
+          here that an earlier pregnancy "stays saved" would be both wrong and unkind.
+          And only to the person it is true for. A partner tapping this on his own phone archives a
+          keepsake stub, not her record, so promising him it "stays saved" promises something Cubby
+          is deliberately not doing. pregArchiveList and pregIsOwner are both owner reads. */''}
+    ${((state.pregnancy&&state.pregnancy.bornBabyId&&pregIsOwner())||pregArchiveList().some(a=>!a.loss))?`<div class="csub" style="margin:-4px 2px 10px">Your earlier pregnancy stays saved. Starting this one never writes over it.</div>`:''}
     <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="savePregnancy()">Start tracking</button>
     <button class="btn-ghost" style="color:var(--ink-soft)" onclick="openPlanningSetup()">We're trying, not pregnant yet</button>
     ${(state.pregnancyArchive&&state.pregnancyArchive.length)?`<button class="btn-ghost" style="color:var(--ink-soft)" onclick="openKeptMemories()">🤍 View kept memories</button>`:''}
@@ -7855,16 +8403,42 @@ function savePlanning(){
     else { toast('Rooting for you 🌱'); }
   });
 }
+/* Spelled out, because "from your last four cycles" reads like a sentence where "from your last
+   4 cycles" reads like a statistic. cycleLengths() keeps at most six, so the list ends there. */
+function cycleCountWord(n){ return ['','one','two','three','four','five','six'][n]||String(n); }
+/* The window is built from her own recorded cycles as soon as there are two of them, because the
+   number she typed at setup is a month-one guess she may never have revisited while cycleLengths()
+   is her body. Her SHORTEST and LONGEST recorded cycle set both ends: a body that varies gets a
+   wider window rather than a falsely precise one. The 5-days-before / 1-day-after pad stays on top
+   of that spread because it is how long sperm and egg survive, nothing about her, and because
+   without it a woman whose cycles all ran the same length would be handed a single day to circle,
+   which is the one thing this card has always refused to do. cycleLen remains the first-cycle
+   fallback: with fewer than two completed cycles lo = hi = the number she typed.
+
+   The staleness gate is anchored on her LONGEST cycle, never on an average or a median of them.
+   A median sits below her longest by definition, so on an irregular body it would hand her
+   "it's been a while, take a test" days before her own record says a period is even due, off a
+   number derived from evidence that contradicts it. That is the exact harm this card exists to
+   refuse, so the grace period is her longest cycle plus ten days and nothing shorter.
+
+   `from` is the count the card names, 0 on the first-cycle fallback. `span` is the width in whole
+   days, which the card uses to decide whether this is still a window or just a wide stretch. */
 function fertileEstimate(){
   const p=state.pregnancy; if(!p||!p.lmp) return null;
+  const sorted=cycleLengths().slice().sort((a,b)=>a-b);
+  const own=sorted.length>=2;
   const cyc=p.cycleLen||28;
-  const nextPeriod=p.lmp+cyc*86400000;
-  const ovulation=nextPeriod-14*86400000;
-  const start=ovulation-5*86400000, end=ovulation+86400000;
+  const lo=own?sorted[0]:cyc, hi=own?sorted[sorted.length-1]:cyc;
+  const nextPeriod=p.lmp+hi*86400000;
+  // cycleLengths() counts anything from 15 days up, and 15 minus 14 minus 5 lands four days BEFORE
+  // the period she just recorded. A window that opens before her own start date reads as a bug in
+  // her body rather than in our arithmetic, so the opening date never goes back past it.
+  const start=Math.max(p.lmp, p.lmp+(lo-14-5)*86400000), end=p.lmp+(hi-14+1)*86400000;
   if(now()>nextPeriod+10*86400000) return {stale:true};
   const f=ms=>new Date(ms).toLocaleDateString(undefined,{month:'short',day:'numeric'});
   // Deliberately no dated next-period forecast here: a range only, never a day to circle.
-  return {start:f(start), end:f(end), inWindow: now()>=start&&now()<=end};
+  return {start:f(start), end:f(end), inWindow: now()>=start&&now()<=end, from: own?sorted.length:0,
+    span: Math.round((end-start)/86400000)+1};
 }
 function openPeriodUpdate(){
   openSheet(`<h2>Period started</h2><div class="sub">Updating it keeps the estimate honest. And if it's a hard day, be kind to yourself.</div>
@@ -8125,13 +8699,23 @@ function renderPlanningHome(){
   // Cycle details sheet. Copy stays a range with the honest-uncertainty line — never a dated
   // forecast, never a day coloured by chance.
   const hideBtn=`<button class="pc-hide" onclick="event.stopPropagation();hideFertileCard()">Hide this</button>`;
+  /* A body whose cycles range from 24 to 38 days gets a 21-day span, and headlining that with
+     "✨ You may be in your fertile window" would light the card up for two thirds of every month,
+     forever, for exactly the women most anxious about it. Past ten days it is no longer a window,
+     so it keeps the plain 🗓️ heading and says why it is wide. Phrased about the arithmetic, never
+     about her body: "your cycles vary a lot" would be a verdict on a health number. */
+  const feTight = fe&&fe.inWindow&&fe.span<=10;
+  const feWide = fe&&fe.span>10 ? ` That's a wide stretch because it reaches from your shortest cycle to your longest.` : '';
   const feCard = fertileCardHidden() ? ''
     : (!p.lmp ? `<div class="preg-card" onclick="openPeriodUpdate()" style="cursor:pointer"><div class="pc-ico">🗓️</div><div><div class="pc-t">Add your last period</div><div class="pc-b">We'll estimate your fertile window, only if you find it helpful.</div>${hideBtn}</div></div>`
     : (fe&&fe.stale ? `<div class="preg-card" onclick="openPeriodUpdate()" style="cursor:pointer"><div class="pc-ico">🗓️</div><div><div class="pc-t">Update your period</div><div class="pc-b">It's been a while since the last one we know about. Tap to update, or if you think you might be pregnant, take a test 🤍</div>${hideBtn}</div></div>`
-    : `<div class="preg-card"><div class="pc-ico">${fe.inWindow?'✨':'🗓️'}</div><div><div class="pc-t">${fe.inWindow?'You may be in your fertile window':'A rough fertile window'}</div><div class="pc-b">Somewhere around ${fe.start} to ${fe.end}. Even careful estimates pick the wrong day most of the time, so hold it lightly.</div>${hideBtn}</div></div>`));
+    : `<div class="preg-card"><div class="pc-ico">${feTight?'✨':'🗓️'}</div><div><div class="pc-t">${feTight?'You may be in your fertile window':'A rough fertile window'}</div><div class="pc-b">Somewhere around ${fe.start} to ${fe.end}${fe.from?`, from your last ${cycleCountWord(fe.from)} cycles`:''}.${feWide} Even careful estimates pick the wrong day most of the time, so hold it lightly.</div>${hideBtn}</div></div>`));
   // Two-week-wait care (twwEligible): exactly one calm card, only when this cycle is already
   // longer than her own longest recorded one. Static copy, no day counts, dismissible per cycle.
-  const tww=twwEligible();
+  // Never alongside the stale card: both mention taking a test, and two cards on one screen both
+  // telling her to test is the opposite of one calm affordance. The stale card wins because it
+  // carries the door to fix the record; this one comes back next cycle if that's where things land.
+  const tww=(fe&&fe.stale)?null:twwEligible();
   const twwRead=(typeof readBySlug==='function')&&readBySlug('early-pregnancy-test-accuracy');
   const twwCard = tww ? `<div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">If it feels right</div><div class="pc-b">Your period is a little later than your longest recent cycle. If it feels right, a test might tell you more. Whatever it shows, take your time.${twwRead?` <span class="link-inline" onclick="openReadCarousel('early-pregnancy-test-accuracy')">When to test, gently →</span>`:''}</div><button class="pc-hide" onclick="event.stopPropagation();hideTwwCard()">Not now</button></div></div>` : '';
   // Honest look-back, never a forecast: the just-closed cycle (quiet, fades after a week),
@@ -8140,7 +8724,9 @@ function renderPlanningHome(){
   const lookBackCard = closed!=null ? `<div class="preg-card"><div class="pc-ico">🌙</div><div><div class="pc-t">Looking back</div><div class="pc-b">That cycle was ${closed} days.</div></div></div>` : '';
   const cl=cycleLengths();
   const cMin=cl.length?Math.min.apply(null,cl):0, cMax=cl.length?Math.max.apply(null,cl):0;
-  const rangeCard = cl.length>=2 ? `<div class="preg-card"><div class="pc-ico">📖</div><div><div class="pc-t">Your cycles so far</div><div class="pc-b">${cMin===cMax?`Your last ${cl.length} cycles each ran ${cMax} days.`:`Your last ${cl.length} cycles ran ${cMin} to ${cMax} days.`} Just what happened, not a forecast.</div></div></div>` : '';
+  // Spelled out to match the window card directly above it: "from your last four cycles" and
+  // "Your last 4 cycles" were two registers in one screenshot.
+  const rangeCard = cl.length>=2 ? `<div class="preg-card"><div class="pc-ico">📖</div><div><div class="pc-t">Your cycles so far</div><div class="pc-b">${cMin===cMax?`Your last ${cycleCountWord(cl.length)} cycles each ran ${cMax} days.`:`Your last ${cycleCountWord(cl.length)} cycles ran ${cMin} to ${cMax} days.`} Just what happened, not a forecast.</div></div></div>` : '';
   // The one thing "since when?" is for: after a year of trying, quietly surface the kind
   // see-your-doctor guidance that already lives in the disclaimer below.
   const tm=tryingMonths();
@@ -8294,11 +8880,45 @@ function savePregnancy(){
   const keepMood=(prev&&prev.moodLog&&prev.moodLog.length)?prev.moodLog.slice():null;
   if(prev && prev.bornBabyId){
     state.pregnancyArchive=state.pregnancyArchive||[];
-    state.pregnancyArchive.unshift({ id:uid(), endedAt:prev.birthAt||now(), weeks:40, loss:false,
+    /* Those five keys were the whole entry, and openPregRecord — the reader that exists — opens
+       none of them. So "kept exactly as it was" was untrue in the only case that matters: her care
+       team's phone numbers, every appointment outcome the midwife dictated, her blood group, her
+       Rh, her GBS result and her birth plan all went with this assignment. Carry the record, not
+       just the keepsakes.
+       Only when the record is HERS. A partner she shared the careteam or health categories with
+       holds those fields in memory by her consent, and this archive lands in HIS users/{uid} doc,
+       where her consent can never reach them again. He keeps the old keepsake-only shape, and
+       ownerUid is written on every entry so pregArchiveList can keep the new doors off his phone
+       rather than offering him a sheet that calls her record his. */
+    const mine=!prev.ownerUid||prev.ownerUid==='local'||prev.ownerUid===myUid();
+    /* weeks was hardcoded 40, and now that something reads it, printing 40 for a baby born at 36
+       would be Cubby inventing a fact about her birth. Count back from the due date she was
+       actually carrying, and only when there is a real birth time to count to.
+       COMPLETED weeks, the way a gestation is spoken. Math.round turned a baby born 23 days early
+       (36+5, preterm) into "37 weeks", which is the term threshold, so the rounding itself changed
+       her birth story. Floor the days instead. */
+    const bornAt=prev.birthAt||null;
+    const gestDays=(bornAt&&prev.dueDate)?(280-((prev.dueDate-bornAt)/86400000)):0;
+    const wksAtBirth=gestDays?Math.max(20,Math.min(43,Math.floor(gestDays/7))):40;
+    state.pregnancyArchive.unshift(Object.assign({ id:uid(), ownerUid:prev.ownerUid||null,
+      endedAt:bornAt||now(), weeks:wksAtBirth, loss:false,
       bornBabyId:prev.bornBabyId, moments:(prev.moments||[]).slice(),
-      journey:Object.assign({}, (prev.journey&&prev.journey.saved)||{}) });
+      journey:Object.assign({}, (prev.journey&&prev.journey.saved)||{}) },
+      mine?{ birthAt:bornAt, dueDate:prev.dueDate||null, country:prev.country||null,
+        careTeam:(prev.careTeam||[]).slice(), appts:(prev.appts||[]).slice(),
+        bloodGroup:prev.bloodGroup||null, rh:prev.rh||null, gbs:prev.gbs||null,
+        birthPlan:prev.birthPlan||'',
+        weights:(prev.weights||[]).slice(), bp:(prev.bp||[]).slice(),
+        glucose:(prev.glucose||[]).slice(), urine:(prev.urine||[]).slice() }:{}));
   }
+  /* Blood group and Rh do not change between pregnancies, and asking for them again is the app
+     telling her the last one did not happen. Seed from the record just archived. GBS is a swab
+     taken in the last weeks of each pregnancy, so it stays blank and is never carried. A pregnancy
+     that ended in a loss archives no health at all, because the closing sheet promises "your
+     health logs are cleared" — so there is nothing there to carry, and nothing is invented. */
+  const bloods=(state.pregnancyArchive||[]).find(a=>!a.loss&&(a.bloodGroup||a.rh))||{};
   state.pregnancy={ id:uid(), ownerUid:myUid(), stage:'expecting', dueDate, lmp, country:sel,
+    bloodGroup:bloods.bloodGroup||null, rh:bloods.rh||null,
     careTeam:[], appts, symptoms:[], weights:[], bp:[], kicks:[], contractions:[],
     birthPlan:'', bag:defaultBag(), moments:[],
     conditions:{}, glucose:[], urine:[], supplements:[], supplementLog:[], nausea:[],
@@ -8522,6 +9142,7 @@ function renderPregHome(){
   const qCount=(p.visitQs||[]).length;
   const naWhen=na?(na.week<=wk?'this week':`in about ${na.week-wk} week${(na.week-wk)===1?'':'s'}`):'';
   const act=pregNextAction();
+  const roll=pregWeekRolled();   // the one recurring event in this stage, marked once and then let go
   return `<div class="fade-in">
     <div class="greeting">${pregGreeting()}</div>
     ${consentBanners()}
@@ -8529,11 +9150,13 @@ function renderPregHome(){
     <div class="week-hero">
       <div class="wh-top"><div class="wh-week">${nn?triName(tri):('Week '+wk)}</div><div class="wh-tri">${nn?'':triName(tri)}</div></div>
       <div class="wh-count">${heroLine}</div>
+      ${roll?`<div class="wh-new">${pregWeekRollLine(roll)}</div>`:''}
     </div>
     ${data?`<div class="preg-cards">
       <div class="preg-card" onclick="openWeekDetail('baby')" style="cursor:pointer"><div class="pc-ico">👶</div><div style="flex:1;min-width:0"><div class="pc-t">Baby this week</div><div class="pc-b">${escapeHtml(data.baby)}</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>
       ${carrier?`<div class="preg-card" onclick="openWeekDetail('you')" style="cursor:pointer"><div class="pc-ico">🤍</div><div style="flex:1;min-width:0"><div class="pc-t">You this week</div><div class="pc-b">${escapeHtml(data.mum)}</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>`:''}
     </div>`:`<div class="preg-card" onclick="openWeekDetail('early')" style="cursor:pointer"><div class="pc-ico">🤍</div><div style="flex:1;min-width:0"><div class="pc-t">Early days</div><div class="pc-b">Week-by-week guidance appears from week 4. Tap for more.</div></div><span class="chev" style="align-self:center">${I.chev}</span></div>`}
+    ${pregWeeksCalendarRow()}
     ${na?`<div class="next-appt" onclick="openVisitPrep('${na.id}')">
       <div class="pc-ico" style="background:var(--preg-soft)">📅</div>
       <div class="na-body"><div class="na-t">Next: ${escapeHtml(na.title)}</div><div class="na-s">${naWhen} · around week ${na.week}${qCount?` · ${qCount} question${qCount===1?'':'s'} ready`:''}</div></div>
@@ -9556,8 +10179,13 @@ function endPregnancy(keep){
   persist(); closeSheet(); render();
   if(state.babies.length) toast(keep?'Your memories are kept 🤍':'Be gentle with yourself 🤍');
 }
-function openKeptMemories(){
-  const arr=state.pregnancyArchive||[];
+/* id scopes the sheet to ONE archived pregnancy. Without it this flattened every entry, so a
+   mother who opened her miscarriage row from the archive was shown her living daughter's 20-week
+   scan under a heading about what she kept. The two older callers (the loss-holding screen, the
+   expecting setup) have no one entry in mind and still get everything. */
+function openKeptMemories(id){
+  const arr=(state.pregnancyArchive||[]).filter(a=>!id||a.id===id);
+  const scope=id?"'"+id+"'":'';
   const list=arr.flatMap(a=>(a.moments||[])).slice().sort((a,b)=>b.week-a.week||b.at-a.at);
   const cards=list.map(m=>{
     const src=photoSrc(m.photoId), size=momentSize(m.week);
@@ -9583,16 +10211,135 @@ function openKeptMemories(){
     ${cards||''}
     ${jcards?`${cards?'<div class="sec-title" style="margin-top:16px">The cards you wrote</div>':''}${jcards}`:''}
     ${(cards||jcards)?'':'<div class="sub">Nothing saved here.</div>'}
-    <button class="btn-ghost" style="color:var(--ink-soft);margin-top:10px" onclick="removeKeptMemories()">Remove these memories</button>`,'preg');
+    <button class="btn-ghost" style="color:var(--ink-soft);margin-top:10px" onclick="removeKeptMemories(${scope})">Remove these memories</button>`,'preg');
 }
-function removeKeptMemories(){
+/* Two taps from the archive, and it used to do state.pregnancyArchive=[] — which persist() pushes
+   as a whole-field overwrite of users/{uid}, on every device, for good. That was honest when the
+   array held nothing but moments and journey cards. Now it also holds her care team's phone
+   number, every appointment outcome, her blood group, her Rh, her GBS result and her birth plan,
+   and this button never offered to delete any of that. So: the photos and the notes go, exactly as
+   the confirm sheet says, and the record stays. An entry that was only ever keepsakes has nothing
+   left to keep and drops out, which is what she has always seen happen. */
+function removeKeptMemories(id){
   confirmSheet({title:'Remove these memories?',body:'Your kept photos and notes go for good, and can\'t be brought back. There\'s no rush to decide.',confirmLabel:'Remove them',cancelLabel:'Keep them',danger:true,onConfirm:function(){
-    (state.pregnancyArchive||[]).forEach(a=>{
+    const all=state.pregnancyArchive||[];
+    all.filter(a=>!id||a.id===id).forEach(a=>{
       (a.moments||[]).forEach(m=>{ try{ PhotoStore.del(m.photoId); }catch(e){} });
       Object.keys(a.journey||{}).forEach(k=>{ try{ if(a.journey[k].photoId) PhotoStore.del(a.journey[k].photoId); }catch(e){} });
+      a.moments=[]; a.journey={};
     });
-    state.pregnancyArchive=[]; persist(); render(); toast('Removed 🤍');
+    state.pregnancyArchive=all.filter(a=>pregArchiveIsRecord(a)||(a.moments||[]).length||Object.keys(a.journey||{}).length);
+    persist(); render(); toast('Removed 🤍');
   }});
+}
+
+/* ---- the door to an earlier pregnancy ---------------------------------------------------------
+   The archive had no reader a second-time mother could reach. openKeptMemories has exactly two
+   callers, the loss-holding screen and openExpectingSetup, and a woman carrying a second baby can
+   reach neither — so what she kept was saved and unreachable at the same time, while teach-data
+   promised "a second pregnancy never writes over the first". This is the door: one row in the
+   switcher, one in Settings.
+   Owner-gated on the ENTRY, not on the live pregnancy. state.pregnancyArchive is filled from
+   users/{uid}, which nobody else can read (store-firebase.js:126), but a partner who taps "We're
+   expecting" on his own phone writes a keepsake stub of HER pregnancy into HIS doc. Without this
+   filter he got a row headed "Your earlier pregnancy" over a sheet saying "kept exactly as it was"
+   about a record he was deliberately never given. Entries with no ownerUid are the older shapes
+   and stay visible: they are on her device because she put them there. pregIsOwner() would be the
+   wrong test, since it reads the LIVE pregnancy's owner. */
+function pregArchiveWhen(a){
+  return a.endedAt?new Date(a.endedAt).toLocaleDateString(undefined,{month:'long',year:'numeric'}):'';
+}
+/* Her own words for it if the baby is still in the app, otherwise something true and plain. Never
+   the baby's name for a loss entry: bornBabyId is only ever set on the birth path. */
+function pregArchiveWho(a){
+  const b=(state.babies||[]).find(x=>x.id===a.bornBabyId);
+  return b?b.name:'';
+}
+/* Does this entry carry the clinical record? dueDate is written on every record-carrying entry and
+   on nothing else: a loss archives memories only, a partner gets the keepsake stub, and an entry
+   written before this existed never had the key. So it is the shape marker, and it is what keeps
+   "Remove these memories" from taking an antenatal record with the photos. */
+function pregArchiveIsRecord(a){ return !!a && !a.loss && ('dueDate' in a); }
+function pregArchiveList(){
+  const me=myUid();
+  return (state.pregnancyArchive||[]).filter(a=>!a.ownerUid||a.ownerUid==='local'||a.ownerUid===me)
+    .slice().sort((a,b)=>(b.endedAt||0)-(a.endedAt||0));
+}
+function openPregArchive(){
+  const arr=pregArchiveList();
+  const rows=arr.map(a=>{
+    const when=pregArchiveWhen(a), who=pregArchiveWho(a);
+    /* A kept pregnancy that ended in a loss goes to the sheet that was written for it. Its entry
+       holds memories and nothing else, by design, so a record sheet would be an empty room with a
+       heading on it, and inventing bereavement copy is not what this item is for. */
+    if(a.loss) return `<div class="set-item" onclick="openKeptMemories('${a.id}')" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">🤍</div>
+      <div class="si-body"><div class="a">What you kept</div><div class="b">${escapeHtml(when)}${when?' · ':''}yours to revisit, privately</div></div>
+      <span class="chev">${I.chev}</span></div>`;
+    return `<div class="set-item" onclick="openArchivedPregnancy('${a.id}')" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">🤍</div>
+      <div class="si-body"><div class="a">${who?escapeHtml(who)+"'s pregnancy":'Your earlier pregnancy'}</div><div class="b">${when?'Born '+escapeHtml(when):'Kept, and still yours'}</div></div>
+      <span class="chev">${I.chev}</span></div>`;
+  }).join('');
+  /* The second sentence defends a promise that only matters while there is another pregnancy in
+     play. To a woman with one loss entry and nothing current, it is the app raising her next
+     pregnancy while she is looking at the one she lost. */
+  const reassure=(arr.length>1||state.pregnancy)?' Starting a new one never writes over an older one.':'';
+  openSheet(`<h2>${arr.length>1?'Your earlier pregnancies':'Your earlier pregnancy'}</h2><div class="sub">Every pregnancy you have tracked here stays yours.${reassure}</div>
+    ${rows||'<div class="csub">Nothing kept here yet.</div>'}
+    <div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
+}
+/* The record of a pregnancy that is over, read from the archive instead of from state.pregnancy.
+   Same sections and the same read-only stance as openPregRecord, which can only ever show the most
+   recent one. Nothing here writes, so there is no owner branch and no privacy branch: an entry in
+   this list is hers by construction. */
+function openArchivedPregnancy(id){
+  const a=(state.pregnancyArchive||[]).find(x=>x.id===id); if(!a){ openPregArchive(); return; }
+  const who=pregArchiveWho(a);
+  /* endedAt is the fallback because the older writer set it to prev.birthAt, so the day IS on the
+     entry. Reading only birthAt made the list row say "Born June 2026" and the sheet it opened say
+     "born a while ago" one tap later. With no date at all, claim nothing. */
+  const bAt=a.birthAt||a.endedAt||0;
+  const born=bAt?new Date(bAt).toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'}):'';
+  /* Only claim a gestation when both ends of the sum were recorded. Everything else says nothing
+     rather than repeating the old hardcoded 40. */
+  const wk=(a.birthAt&&a.dueDate&&a.weeks)?a.weeks:0;
+  const team=(a.careTeam||[]).map(m=>`<div class="log-list-item"><div class="lli-ico">👩‍⚕️</div><div class="lli-body"><div class="lli-t">${escapeHtml(m.name)}</div><div class="lli-s">${escapeHtml(m.role||'')}${m.phone?' · <a href="tel:'+encodeURIComponent(m.phone)+'" style="color:var(--preg-ink)">'+escapeHtml(m.phone)+'</a>':''}</div></div></div>`).join('');
+  const appts=(a.appts||[]).filter(x=>x.done).sort((x,y)=>(x.week||0)-(y.week||0))
+    .map(x=>`<div class="log-list-item"><div class="lli-ico">📅</div><div class="lli-body"><div class="lli-t">${escapeHtml(x.title||'Appointment')}</div><div class="lli-s">${x.week?('Week '+x.week):''}${x.at?((x.week?' · ':'')+dayLabel(x.at)):''}${x.outcome?(' · '+escapeHtml(x.outcome)):''}</div></div></div>`).join('');
+  /* Counting her readings and then refusing to show them is the opposite of what this sheet is
+     for: the values are sitting in the entry and there is nowhere else left to read them, because
+     the health tab belongs to the CURRENT pregnancy. So show them, read-only, no delete. */
+  const readings=[]
+    .concat((a.weights||[]).map(w=>({at:w.at,ico:'⚖️',t:'Weight',s:w.kg+' '+(w.unit||'kg')})))
+    .concat((a.bp||[]).map(b=>({at:b.at,ico:'🩺',t:'Blood pressure',s:b.sys+'/'+b.dia+' mmHg'})))
+    .concat((a.glucose||[]).map(g=>({at:g.at,ico:'🩸',t:'Glucose',s:g.val+' '+glucoseUnitLabel(g.unit||'mmol')+(g.context?' · '+glucoseCtxLabel(g.context):'')})))
+    .concat((a.urine||[]).map(u=>({at:u.at,ico:'🧪',t:'Urine protein',s:String(u.result||'')})))
+    .sort((x,y)=>(y.at||0)-(x.at||0))
+    .map(r=>`<div class="log-list-item"><div class="lli-ico">${r.ico}</div><div class="lli-body"><div class="lli-t">${escapeHtml(r.t)}: ${escapeHtml(r.s)}</div><div class="lli-s">${r.at?dayLabel(r.at):''}</div></div></div>`).join('');
+  const facts=[a.bloodGroup?('Blood group '+a.bloodGroup):'', a.rh?('Rh '+a.rh):'',
+    (a.gbs&&a.gbs!=='unknown')?('Group B strep '+a.gbs):''].filter(Boolean).join(' · ');
+  const hasMem=((a.moments||[]).length||Object.keys(a.journey||{}).length);
+  /* Gate the apology on the SHAPE, not on whether she happened to log anything. A light tracker
+     with a brand-new entry was being told "Cubby saved this before it saved the whole record",
+     which reads as Cubby having dropped her pregnancy, in the same breath as "kept exactly as it
+     was". Both cannot be true. */
+  const oldShape=!('dueDate' in a);
+  const anything=team||appts||readings||facts||a.birthPlan;
+  const lead=born
+    ?`${who?escapeHtml(who)+', born ':'Born '}${escapeHtml(born)}${wk?' at '+wk+' weeks':''}.`
+    :`${who?escapeHtml(who)+"'s pregnancy":'Your earlier pregnancy'}, kept.`;
+  openSheet(`<h2>Your pregnancy, kept</h2>
+    <div class="sub">${lead} Kept exactly as it was, and nothing here asks anything of you.</div>
+    ${team?`<div class="sec-title">Your care team</div>${team}`:''}
+    ${appts?`<div class="sec-title" style="margin-top:16px">Appointments you kept</div>${appts}`:''}
+    ${readings?`<div class="sec-title" style="margin-top:16px">Readings</div>${readings}`:''}
+    ${facts?`<div class="sec-title" style="margin-top:16px">Your antenatal record</div><div class="csub">${escapeHtml(facts)}.</div>`:''}
+    ${a.birthPlan?`<div class="sec-title" style="margin-top:16px">Your birth plan</div><div class="note-read">${escapeHtml(a.birthPlan)}</div>`:''}
+    ${oldShape?`<div class="csub">This one was kept before Cubby saved the whole record${hasMem?', so what is here is your photos and the cards you wrote':'. The dates are what came with it'}.</div>`
+      :(anything?'':`<div class="csub">Nothing else was logged in this one, and that is fine. The dates are here, kept.</div>`)}
+    ${hasMem?`<button class="btn-ghost" style="color:var(--preg-ink);margin-top:16px" onclick="openKeptMemories('${a.id}')">🤍 Your kept memories</button>`:''}
+    <div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
 }
 
 /* ---- Phase 5: welcoming the baby (the birth transition) ---- */
@@ -9611,6 +10358,7 @@ function openWelcomeBaby(){
     <div class="field" style="margin-top:14px"><label>Sex (optional, for growth charts)</label>${sexSegHtml('wbSex', (p.knownSex==='M'||p.knownSex==='F')?p.knownSex:'')}</div>
     <div class="field"><label>Vaccine schedule</label>${searchPickerHtml('wbCountry', vaxCountryList(), cc, 'Search your country…')}</div>
     ${birthWeightHtml('wbWt','wbWtU')}
+    ${gestAgeHtml('wbGw','wbGd', gestFromDue(p.dueDate, getWhen('when')), true)}
     <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:6px" onclick="welcomeBaby()">🎉 Welcome our baby</button>
     <div class="csub" style="text-align:center;margin-top:8px">Your pregnancy is saved as part of their story.</div>`,'preg');
 }
@@ -9623,8 +10371,14 @@ function welcomeBaby(){
   const b={id:uid(),name,color:newBabyColor,birth,country:(cc||'who')};
   const sx=($('#wbSex')&&$('#wbSex').value)||''; if(sx) b.sex=sx;
   const bw=readBirthWeight('wbWt','wbWtU');
+  /* The sheet pre-fills gestation from the due date and the birth time as it stood when the sheet
+     opened, which is almost always right, because this screen is tapped hours after the birth. It
+     is wrong for the mother who welcomes her baby a fortnight late from the wrong date, so if she
+     never touched either box we re-derive it here against the birth she actually picked. */
+  const ga=gestUntouched('wbGw') ? gestFromDue(p.dueDate, birth) : readGestAge('wbGw','wbGd');
   state.babies.push(b); state.activeBabyId=b.id;
   if(bw) setBirthWeight(b, bw);
+  setGestAge(b, ga);
   p.bornBabyId=b.id; p.birthAt=birth;
   view='home';
   persist(); closeSheet(); render();
@@ -10591,7 +11345,27 @@ function renderHealth(){
 }
 
 /* ---- illness episodes, temperature & symptoms ---- */
-const SYMPTOMS=['Fever','Cough','Runny nose','Congestion','Sore throat','Diarrhea','Vomiting','Rash','Ear pain','Reduced appetite','Fussy / irritable','Low energy','Wheezing','Constipation'];
+/* THE COMMONEST REASON A NEWBORN GOES BACK INTO HOSPITAL HAD NOWHERE TO BE WRITTEN DOWN.
+   The triad a paediatrician acts on is yellowing, plus a sleepy or poorly feeding baby, plus few
+   wet nappies, and Cubby already logged the second and the third. reads-data.js:61 even explains
+   that the yellow spreads face-downward, and then the app had no slot for what she actually saw.
+   It sits second because a parent in the first fortnight is the one most likely to be hunting for
+   it at 3am, and it stays in the list at every age, because yellow later is worth a call too. */
+const JAUNDICE_SYMPTOM='Skin or eyes look yellow';
+const SYMPTOMS=['Fever',JAUNDICE_SYMPTOM,'Cough','Runny nose','Congestion','Sore throat','Diarrhea','Vomiting','Rash','Ear pain','Reduced appetite','Fussy / irritable','Low energy','Wheezing','Constipation'];
+/* For yellowing, mild / moderate / severe asks a parent for a verdict she cannot make and a
+   clinician would not use. How far down the body the colour has reached is the observation that is
+   worth something, so this one symptom asks a different question through the same toggle. It writes
+   the same `severity` field, so the timeline row, the illness card and the report print it with no
+   change at all. */
+const JAUNDICE_EXTENT=['face','chest','tummy','legs'];
+function symptomScale(s){ return s===JAUNDICE_SYMPTOM ? JAUNDICE_EXTENT : ['mild','moderate','severe']; }
+/* mild / moderate / severe carry themselves as bare words on a timeline row. "legs" does not: it
+   does not say whether the colour reached the legs or something happened to the legs, and the
+   second caregiver reading the row was not the one who tapped it. The extent only means anything
+   with its preposition, so every screen that prints `severity` for the yellow says it in words.
+   The face is where the colour starts, so "as far as" would be wrong there. */
+function extentPhrase(w){ return w==='face' ? 'on the face' : 'as far as the '+w; }
 function babyIllnesses(){ return (state.illnesses||[]).filter(i=>i.babyId===state.activeBabyId).sort((a,b)=>b.startedAt-a.startedAt); }
 function activeIllness(){ return babyIllnesses().find(i=>!i.endedAt); }
 function isFever(temp,unit){ if(temp==null)return false; return (unit==='F')? temp>=100.4 : temp>=38; }
@@ -10629,7 +11403,9 @@ function illnessSummary(since, until){
       const fev=temps.filter(e=>isFever(e.temp,e.unit)).length;
       L.push(`  Temperature: ${temps.length} reading${temps.length>1?'s':''}, highest ${hi.temp}°${hi.unit||tu} on ${d(hi.time)}${fev?`, ${fev} at or above the fever line`:''}`);
     }
-    const syms=illnessEvents(ill,'symptom').sort((a,b)=>a.time-b.time);
+    // Yellowing is lifted out here because visitSummary prints it on its own lines with the wet
+    // nappies from the same days, and one page must not say the same observation twice.
+    const syms=illnessEvents(ill,'symptom').filter(e=>e.symptom!==JAUNDICE_SYMPTOM).sort((a,b)=>a.time-b.time);
     if(syms.length) L.push('  Symptoms: '+syms.map(s=>s.symptom+(s.severity?` (${s.severity})`:'')).join(', '));
     // Doses given DURING the episode, which is what "what have you given them" means in the room.
     const doses=illnessEvents(ill,'medicine').filter(e=>e.time<=end);
@@ -10689,7 +11465,7 @@ function renderIllness(){
         ? `<button class="btn-ghost" onclick="openFeverSafetyNet()" style="margin-top:10px">What would make you call sooner</button>` : ''}
       ${pts.length?`<div class="stat-card" style="margin-top:14px"><h3>Temperature</h3><div class="csub">${pts.length} reading${pts.length>1?'s':''} · °${tu} · fever ≥ ${tu==='F'?'100.4':'38'}°</div>${svgLine(pts,'med','°'+tu)}</div>`:''}
       ${temps.length?`<div class="sec-title">Recent readings</div>${temps.slice().reverse().slice(0,6).map(e=>`<div class="tl-item" onclick="openEdit('${e.id}')"><div class="tl-ico" style="background:var(--med-soft);color:var(--med)">${I.thermo}</div><div class="tl-body"><div class="t1">${e.temp}°${e.unit||tu}</div><div class="t2">${new Date(e.time).toLocaleDateString(undefined,{month:'short',day:'numeric'})} ${fmtClock(e.time)}</div></div></div>`).join('')}`:''}
-      ${syms.length?`<div class="sec-title">Recent symptoms</div>${syms.map(s=>`<div class="tl-item" onclick="openEdit('${s.id}')"><div class="tl-ico" style="background:var(--pump-soft);color:var(--pump)">${I.pulse}</div><div class="tl-body"><div class="t1">${escapeHtml(s.symptom)}</div><div class="t2">${s.severity||''} · ${fmtClock(s.time)}</div></div></div>`).join('')}`:''}
+      ${syms.length?`<div class="sec-title">Recent symptoms</div>${syms.map(s=>`<div class="tl-item" onclick="openEdit('${s.id}')"><div class="tl-ico" style="background:var(--pump-soft);color:var(--pump)">${I.pulse}</div><div class="tl-body"><div class="t1">${escapeHtml(s.symptom)}</div><div class="t2">${(s.symptom===JAUNDICE_SYMPTOM&&s.severity)?extentPhrase(s.severity):(s.severity||'')} · ${fmtClock(s.time)}</div></div></div>`).join('')}`:''}
       ${doses.length?`<div class="sec-title">Medicine given this illness</div>${doses.slice(0,6).map(d=>`<div class="tl-item" onclick="openEdit('${d.id}')"><div class="tl-ico" style="background:var(--med-soft);color:var(--med)">${I.pill}</div><div class="tl-body"><div class="t1">${escapeHtml(d.medName||'Medicine')}</div><div class="t2">${d.dose||''} ${d.unit||''} · ${new Date(d.time).toLocaleDateString(undefined,{month:'short',day:'numeric'})} ${fmtClock(d.time)}</div></div></div>`).join('')}`:''}
       <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent));margin-top:16px" onclick="endIllness('${ill.id}')">${I.check} Mark recovered</button>`;
   } else {
@@ -10884,7 +11660,17 @@ const FEVER_SAFETY_NET={
 };
 function feverGuidance(){
   const b=activeBaby(); const mo=b?babyMonths():null;
-  if(mo!=null && mo<3) return 'For a baby under 3 months, any fever is worth a prompt call to your doctor.';
+  /* Corrected age, from item 24: the under-three-months rule is the one clinical line in the baby
+     stage where an age error can cost something real, and a baby born early keeps it LONGER, not
+     shorter. correctionDays() is floored at zero, so this can only widen, never narrow, and a term
+     baby reads exactly what she read before.
+     The second sentence keeps item 27's wording deliberately. The line it replaced named a duration
+     ("lasts more than a day or two"), which is the thing a frightened parent at 3am reads as
+     permission to wait, and item 24 was built before that shipped. Restoring it here would have
+     silently undone a fix that is already live. */
+  const cmo=b?correctedMonths():null;
+  if(cmo!=null && cmo<3) return 'For a baby under 3 months, any fever is worth a prompt call to your doctor.'
+    +((mo!=null&&mo>=3)?` Counting from ${escapeHtml(b.name)}'s due date, they are still under 3 months.`:'');
   return 'A temperature on its own does not say when to call. What matters more is how they seem in themselves.';
 }
 /* The under-3-months line comes with the list too, so the list can never read as permission to
@@ -10964,8 +11750,14 @@ function visitSummary(days,opts){
   const temps=evs.filter(e=>e.type==='temperature'&&!_ownedByIllness(e));
   const fevers=temps.filter(e=>isFever(e.temp,e.unit));
   let maxTemp=null; temps.forEach(e=>{ if(maxTemp==null||e.temp>maxTemp.temp) maxTemp=e; });
-  const symptoms=evs.filter(e=>e.type==='symptom'&&!_ownedByIllness(e));
-  const lw=lastGrowth('weight'), lh=lastGrowth('height');
+  const symptoms=evs.filter(e=>e.type==='symptom'&&!_ownedByIllness(e)&&e.symptom!==JAUNDICE_SYMPTOM);
+  /* Yellowing gets its own two lines below, next to the wet nappies from the same days, because
+     that pairing IS the observation a clinician acts on. Inside a comma-separated Symptoms list it
+     is one word among nine. It is taken out of that line and out of the episode block above, so
+     the page carries it exactly once, and it is NOT filtered by episode ownership: whether or not
+     a parent happened to open an illness that week does not change what the colour means. */
+  const yellows=evs.filter(e=>e.type==='symptom'&&e.symptom===JAUNDICE_SYMPTOM);
+  const lw=lastGrowth('weight'), lh=lastGrowth('height'), lc=lastGrowth('head');
   // Named baby, never "whoever is on screen". This is a clinical summary read out to a doctor, and
   // it is the surface that must never widen when a medicine can belong to an adult.
   const meds=medsForBaby(b.id).filter(m=>m.active);
@@ -11000,6 +11792,21 @@ function visitSummary(days,opts){
      the case a flat fourteen-day average hides. */
   const illBlock=opts.noIllness?'':illnessSummary(since, now());
   if(illBlock){ L.push(illBlock); L.push(''); }
+  /* Yesterday, above the window totals, while the baby is a newborn. A fortnight of averages is the
+     wrong shape for the visit a midwife or health visitor makes in the first weeks: what she is
+     asked in the room is how yesterday went, and averaging it is exactly what hid it. It goes under
+     the illness rather than above it, because the illness is usually why the appointment exists and
+     that ordering is deliberate; it goes above the feeds and nappies it belongs with. */
+  const _yf=(b.birth&&(now()-b.birth)<YEST_SUM_DAYS*86400000)?yesterdayFacts():null;
+  if(_yf){
+    /* The same two caveats the card carries, in one parenthesis so the line stays one line: which
+       kind of row was never written, and whether the day started at birth. Without the first, a day
+       with no feed rows would read on a clinical page as a day with no feeds. */
+    const _n=[]; if(_yf.fromBirth) _n.push('from birth');
+    if(!_yf.feeds) _n.push('no feeds logged'); else if(!_yf.dia) _n.push('no nappies logged');
+    L.push('Yesterday ('+new Date(_yf.dayStart).toLocaleDateString()+'): '+yesterdayFactsText(_yf)+(_n.length?' ('+_n.join(', ')+')':''));
+    L.push('');
+  }
   if(!evs.length){
     // "Feeds: 0 total" on a doctor's page reads as a baby who was never fed. Say the true thing.
     // And do not say there is nothing to summarise when an illness has just been summarised above.
@@ -11036,8 +11843,40 @@ function visitSummary(days,opts){
   }
   const bwe=birthWeightEvent(b.id);
   if(bwe) L.push(`Birth weight: ${bwe.weight} ${bwe.wUnit||'kg'}`);
-  if(lw||lh) L.push(`Latest growth: ${lw?lw.weight+' '+(lw.wUnit||'kg'):''}${lw&&lh?', ':''}${lh?lh.height+' '+(lh.hUnit||'cm'):''}`);
+  /* Each of the three is the latest of ITS OWN kind, not whatever was in the newest entry, because
+     a visit where only the head was measured must not blank out a weight from a fortnight ago on
+     the page a clinician reads. Head is labelled: it and length are both centimetres. */
+  if(lw||lh||lc) L.push(`Latest growth: ${[lw?lw.weight+' '+(lw.wUnit||'kg'):'', lh?lh.height+' '+(lh.hUnit||'cm'):'', lc?'head '+lc.head+' '+(lc.hcUnit||'cm'):''].filter(Boolean).join(', ')}`);
   if(temps.length) L.push(`Temperature: ${temps.length} reading(s), max ${maxTemp.temp}°${maxTemp.unit||'C'}${fevers.length?` · ${fevers.length} fever reading(s)`:''}`);
+  if(yellows.length){
+    const dLbl=(t)=>new Date(t).toLocaleDateString(undefined,{day:'numeric',month:'short'});
+    const byDay={}, order=[];
+    yellows.slice().sort((a,b)=>a.time-b.time).forEach(e=>{
+      const k=dayKey(e.time);
+      if(!byDay[k]){ byDay[k]={t:e.time,where:[]}; order.push(k); }
+      if(e.severity&&byDay[k].where.indexOf(e.severity)<0) byDay[k].where.push(e.severity);
+    });
+    L.push(`Skin or eyes looked yellow: ${order.map(k=>dLbl(byDay[k].t)+(byDay[k].where.length?` (${byDay[k].where.join(', ')})`:'')).join(', ')}`);
+    /* Nothing logged is not zero. "Wet nappies 0" on the one page in Cubby a clinician reads is a
+       dehydration signal, and printing it for a day nobody opened the app would manufacture half
+       of the very triad this line exists to report honestly. Same rule as "Sleep: none logged".
+       A day she DID log nappies on and none of them were wet still prints 0, because that zero is
+       the observation, and hiding it would be the same lie in the other direction.
+       THE DAY, NOT THE TAIL OF THE DAY: `diapers` above is clipped to now()-days*DAY, a clock-time
+       cut, so the oldest calendar day in any window is always a partial day. Counting out of that
+       list printed the day from 13:00 onwards: six wet nappies read as one, and five logged before
+       lunch read as "none logged", while the same record through the 14-day report read correctly.
+       The onset day is the one sitting on the 7-day boundary at the first appointment, and it is
+       the day a clinician asks about first, so the count is read from the unclipped log. */
+    const allNappies=babyEvents().filter(e=>e.type==='diaper');
+    L.push('  Wet nappies on '+(order.length>1?'those days':'that day')+': '+order.map(k=>{
+      const dayNappies=allNappies.filter(e=>dayKey(e.time)===k);
+      const w=dayNappies.filter(e=>e.kind==='wet'||e.kind==='both').length;
+      // "Aug 22 2" is a date followed by a number and reads as a typo on paper. The colon makes it
+      // a label and its value, which is how the rest of this page prints a fact.
+      return dLbl(byDay[k].t)+': '+(dayNappies.length?w:'none logged');
+    }).join(', '));
+  }
   if(symptoms.length) L.push(`Symptoms: ${symptoms.map(s=>s.symptom+(s.severity?` (${s.severity})`:'')).join(', ')}`);
   if(meds.length) L.push(`Medicines: ${meds.map(m=>m.name+' '+m.dose+(m.unit||'')).join(', ')}`);
   if((b.allergies||[]).length) L.push(`Allergies: ${b.allergies.map(capWord).join(', ')}`);
@@ -11063,9 +11902,18 @@ function openDoctorReport(){
   const summary=visitSummary(14,{noIllness:!!illBlock});
   let growthLine='';
   try{
-    const g=babyEvents().find(e=>e.type==='growth');
-    if(g){ const parts=[]; if(g.weight)parts.push(g.weight+' '+(g.wUnit||'kg')); if(g.height)parts.push(g.height+' '+(g.hUnit||'cm'));
-      growthLine=parts.join(' · ')+'  (measured '+new Date(g.time).toLocaleDateString()+')'; }
+    /* Latest of EACH kind, the same rule visitSummary uses, because the two blocks sit on one
+       printed page and must not contradict each other. Reading the newest growth event was safe
+       only while saveGrowth refused an entry without a weight or a height; a head-only visit is
+       now an invited action, and it would have wiped a fortnight-old weight off the page a
+       clinician reads. Each number carries its own date because they no longer share one. */
+    const dt=e=>new Date(e.time).toLocaleDateString();
+    const lw=lastGrowth('weight'), lh=lastGrowth('height'), lc=lastGrowth('head');
+    const parts=[];
+    if(lw)parts.push(lw.weight+' '+(lw.wUnit||'kg')+' ('+dt(lw)+')');
+    if(lh)parts.push(lh.height+' '+(lh.hUnit||'cm')+' ('+dt(lh)+')');
+    if(lc)parts.push('head '+lc.head+' '+(lc.hcUnit||'cm')+' ('+dt(lc)+')');
+    growthLine=parts.join('  ·  ');
   }catch(e){}
   let vaxLine='';
   try{
@@ -11133,20 +11981,25 @@ function openSymptom(){
 }
 function renderSymptomSheet(){
   const d=symptomDraft;
+  /* Normalising the scale here rather than in each chip's onclick covers every route into this
+     sheet: the default, a chip tap, and a second symptom logged without closing. Without it,
+     picking the yellow and then Cough saves "Cough (chest)" into the shared log. */
+  const scale=symptomScale(d.symptom);
+  if(scale.indexOf(d.severity)<0) d.severity=scale[0];
+  const yellow=d.symptom===JAUNDICE_SYMPTOM;
   const chips=SYMPTOMS.map(s=>`<div class="chip ${d.symptom===s?'sel':''}" onclick="symptomDraft.symptom='${s}';renderSymptomSheet()">${s}</div>`).join('');
+  const scaleBtns=scale.map(v=>`<button class="${d.severity===v?'on':''}" onclick="symptomDraft.severity='${v}';renderSymptomSheet()">${capWord(v)}</button>`).join('');
   openSheet(`<h2>Symptom</h2><div class="sub">What are you noticing?</div>
     <div class="chip-row" style="flex-wrap:wrap;white-space:normal">${chips}</div>
-    <div class="field" style="margin-top:6px"><label>Severity</label><div class="unit-toggle">
-      <button class="${d.severity==='mild'?'on':''}" onclick="symptomDraft.severity='mild';renderSymptomSheet()">Mild</button>
-      <button class="${d.severity==='moderate'?'on':''}" onclick="symptomDraft.severity='moderate';renderSymptomSheet()">Moderate</button>
-      <button class="${d.severity==='severe'?'on':''}" onclick="symptomDraft.severity='severe';renderSymptomSheet()">Severe</button>
-    </div></div>
+    <div class="field" style="margin-top:6px"><label>${yellow?'How far it reaches':'Severity'}</label><div class="unit-toggle">${scaleBtns}</div>
+    ${yellow?'<div class="csub" style="margin-top:6px">The yellow usually starts at the face and works its way down. Tap the lowest place you can see it.</div>':''}</div>
     <div class="field"><label>Note (optional)</label><input id="symNote" placeholder="Anything to add"></div>
     <button class="btn-primary" style="background:var(--pump);--accent-ink:var(--on-pump,var(--on-accent))" onclick="saveSymptom()">Log symptom</button>`,'pump');
 }
 function saveSymptom(){
   const ill=activeIllness();
   const what=symptomDraft.symptom;
+  const where=symptomDraft.severity;   // held here because the nudge below runs after closeSheet()
   addEvent({type:'symptom',symptom:what,severity:symptomDraft.severity,notes:$('#symNote')?$('#symNote').value:'',time:now(),illnessId:ill?ill.id:null});
   persist(); closeSheet(); render();
   /* "Fever" is the first chip in the list and saving it used to produce toast('Logged Fever') and
@@ -11155,6 +12008,10 @@ function saveSymptom(){
      thermometer to hand got silence. Same calm register as the temperature path, and no reading is
      invented: it says what she told us. */
   if(/^fever$/i.test(String(what||'').trim())){ openFeverSymptomNudge(); return; }
+  /* The yellow gets the same treatment for the same reason. Writing down the observation that sends
+     more newborns back into hospital than any other and getting a four-word toast back is the app
+     shrugging at the moment it should be most useful. */
+  if(what===JAUNDICE_SYMPTOM){ openJaundiceNudge(where); return; }
   toast('Logged '+what);
 }
 function openFeverSymptomNudge(){
@@ -11165,6 +12022,28 @@ function openFeverSymptomNudge(){
     <button class="btn-primary" style="background:var(--med);--accent-ink:var(--on-med,var(--on-accent))" onclick="closeSheet();openTemp()">${I.thermo} Add a temperature</button>
     <button class="btn-ghost" onclick="openFeverSafetyNet()">What would make you call sooner</button>
     <button class="btn-ghost" onclick="closeSheet();openVisitSummary()">${I.stetho} Prepare a summary for the doctor</button>
+    <button class="btn-ghost" onclick="closeSheet()">Close</button>`,'med');
+}
+/* Two short sentences, in feverGuidance's register: what it usually is, and the person to ask
+   today. The first weeks name the midwife and the health visitor because they are the ones who
+   check a newborn's colour, and the doctor is named alongside them rather than after them: midwife
+   and health visitor are a UK community-postnatal pair, and a family on the India schedule, or a
+   Papa Bear who has no "your midwife", must not be left with nobody to call. No colour, no score,
+   no "urgent": a frightened parent at 3am gets a named next step, not a verdict on her baby. */
+function jaundiceGuidance(){
+  const b=activeBaby(); const mo=b?babyMonths():null;
+  if(mo!=null&&mo<3) return 'Yellowing is common in the early weeks and usually fades on its own. It is worth asking your midwife, health visitor or doctor to look at them today.';
+  // "Yellow skin or eyes at this age is worth" does not agree, and leading on the age quietly makes
+  // the age the worrying part. Same opening word as the branch above, same named next step.
+  return 'Yellowing at this age is worth a call to your doctor or health visitor today.';
+}
+function openJaundiceNudge(where){
+  const w=(JAUNDICE_EXTENT.indexOf(where)>=0)?where:'';
+  openSheet(`<h2>Noted, with the date</h2>
+    <div class="sub">Saved${w?' '+extentPhrase(w):''}. If it looks different tomorrow, log it again, and the dates will show how it moved.</div>
+    <div class="csub" style="margin:-4px 0 16px">${jaundiceGuidance()} This is not medical advice, trust your instincts and your doctor.</div>
+    <button class="btn-primary" style="background:var(--sleep);--accent-ink:var(--on-sleep,var(--on-accent))" onclick="closeSheet();openVisitSummary()">${I.stetho} Prepare a summary for the doctor</button>
+    <button class="btn-ghost" onclick="closeSheet();openReadCarousel('newborn-jaundice')">What the yellowing means</button>
     <button class="btn-ghost" onclick="closeSheet()">Close</button>`,'med');
 }
 
@@ -11219,6 +12098,100 @@ function setStageOverride(s){ const b=activeBaby(); if(!b)return; if(s==='auto')
 /* ============================================================
    GROWTH  (weight & height)
    ============================================================ */
+/* GESTATION AT BIRTH, and the corrected age that hangs off it.
+   welcomeBaby() held the due date and the birth timestamp in the same function and threw the
+   difference between them away, so nothing downstream could tell a baby born at 32 weeks from a
+   baby born at 40. That baby was plotted on term WHO curves, offered milestones measured from the
+   wrong day, and lost the under-three-months fever rule six weeks early, which is the one place it
+   stops being a cosmetic error. Asked once, optional, and pre-filled from the due date she has
+   already given us, because the hour after birth is the worst hour there is to do arithmetic.
+
+   Weeks AND days, not one decimal week: 33 + 4 round-trips through a decimal as 33.571, and a
+   parent who reopens the sheet has to find her own two numbers there, not a rounding of them.
+
+   Correction starts at 37 + 0 and nowhere else. 37 weeks is the line every clinic draws between
+   preterm and term, and correcting below it produced sentences no parent should ever read: a baby
+   born two days early was told her chart counted "from your due date 0 weeks after they arrived",
+   and her fever rule and milestone list were shifted by an amount too small to mean anything. A
+   baby born at 41 + 3 is likewise not aged DOWN by three days: correction only ever widens, never
+   narrows, so a late arrival can never lose a protection a term baby keeps. */
+function gestDaysOf(b){ b=b||activeBaby(); if(!b) return null; const w=+b.gestWeeks; if(!(w>=20&&w<=45)) return null; const d=+b.gestDays; return w*7+((d>=0&&d<=6)?d:0); }
+function correctionDays(b){ const g=gestDaysOf(b); return (g==null||g>=259)?0:280-g; }
+/* The same number babyMonths() returns for a term baby; months since the due date for a baby who
+   came early. Clamped at zero because a three-week-old born at 30 weeks is genuinely
+   seven weeks short of her due date, and no caller downstream has anything to say about a negative
+   age except the growth chart, which handles it with its own arithmetic. */
+function correctedMonths(){ const b=activeBaby(); if(!b||!b.birth) return babyMonths(); return Math.max(0, (now()-b.birth-correctionDays(b)*86400000)/(86400000*30.44)); }
+// The due date belonging to THIS baby's own pregnancy, and never a sibling's or a later one's.
+function pregDueFor(b){ const p=state.pregnancy; return (p&&b&&p.bornBabyId===b.id&&p.dueDate)?p.dueDate:null; }
+/* Gestation implied by her own due date and the birth she just picked. Counted between CALENDAR
+   DAYS, not between instants: the due date is stored at 08:00 local (`new Date(dv+'T08:00')`) while
+   a birth carries the real clock time, so a raw millisecond difference lost a whole day for every
+   baby born after about 20:00 and quietly filed a 39 + 4 arrival as 39 + 3.
+   Bounded either side so a due date typed wrong, or a pregnancy record from a previous journey,
+   pre-fills nothing rather than pre-filling a number a tired parent might simply accept. The upper
+   bound is 42 + 0, the outer edge of a real gestation: past that the due date is stale, not the
+   pregnancy long, and a blank box is honest where "42 weeks + 6 days" is not. Nothing is lost by
+   blanking it, because every gestation over 37 + 0 corrects by zero anyway. */
+function gestDayStart(ms){ const d=new Date(ms); d.setHours(0,0,0,0); return d.getTime(); }
+function gestFromDue(dueMs, birthMs){
+  if(!dueMs||!birthMs) return null;
+  const days=280-Math.round((gestDayStart(dueMs)-gestDayStart(birthMs))/86400000);
+  if(!(days>=140&&days<=294)) return null;
+  return {weeks:Math.floor(days/7), days:days%7};
+}
+/* `autofill` marks the BOX, not the value, as still Cubby's to fill, so the birth handover can
+   re-derive it against the birth date she finally picks. Marking it only when a guess was already
+   in there was the bug that mattered most: a mother welcoming her baby home after eight weeks in
+   NICU opens this sheet weeks past her due date, the opening guess is out of range and blank, so
+   the box carried no mark, so nothing re-derived, so the one number the whole feature exists for
+   was silently dropped for the one family it exists for. A number she typed herself is never
+   marked, and one keystroke in either box clears the mark for good.
+   The helper says out loud when a number in the box is Cubby's guess rather than hers: she is hours
+   postpartum, the field looks exactly like the ones she typed, and it quietly drives the growth
+   chart, the milestone list and the fever rule. It says "the due date", not "your due date",
+   because Papa Bear, Nana Bear and an adoptive parent all reach this row too. */
+function gestAgeHtml(idW, idD, def, autofill){
+  const v=def||{};
+  const auto=autofill?' data-auto="1"':'';
+  return `<div class="field"><label>Born at (optional)</label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input id="${idW}" type="number" min="20" max="45" step="1" inputmode="numeric" placeholder="40" value="${v.weeks!=null?v.weeks:''}"${auto} oninput="gestTouch('${idW}')" style="flex:1;min-width:0">
+      <span class="csub" style="margin:0">weeks</span>
+      <input id="${idD}" type="number" min="0" max="6" step="1" inputmode="numeric" placeholder="0" value="${v.days!=null?v.days:''}" oninput="gestTouch('${idW}')" style="flex:1;min-width:0">
+      <span class="csub" style="margin:0">days</span>
+    </div>
+    <div class="csub" style="margin-top:6px">If they arrived early, Cubby can count their age from the due date, the way a check-up does. A baby born at term is 40 weeks, and nothing changes.${(def&&autofill)?' Filled in from the due date. Change it if that is not right.':''}</div></div>`;
+}
+// Once she has touched either box the pre-fill is hers, and welcomeBaby() must stop re-deriving it.
+function gestTouch(idW){ const e=$('#'+idW); if(e) e.removeAttribute('data-auto'); }
+function gestUntouched(idW){ const e=$('#'+idW); return !!(e && e.getAttribute('data-auto')==='1'); }
+/* The welcome sheet's Born strip and its Born-at boxes are two views of the same fact, and until
+   this ran they could disagree on screen forever: a mother welcoming a 28-weeker three weeks after
+   the birth saw "42 weeks + 6 days" sitting in the box, correct itself nowhere, and get saved as
+   something else entirely. setWhen calls this on every change to the birth date, so an untouched
+   guess follows the date she picks instead of the moment she opened the sheet. */
+function gestSyncFromWhen(slot, ms){
+  if(slot!=='when' || !gestUntouched('wbGw')) return;
+  const p=state.pregnancy; if(!p) return;
+  const g=gestFromDue(p.dueDate, ms)||{};
+  const w=$('#wbGw'), d=$('#wbGd');
+  if(w) w.value=(g.weeks!=null)?g.weeks:'';
+  if(d) d.value=(g.days!=null)?g.days:'';
+}
+function readGestAge(idW, idD){
+  const ew=$('#'+idW); if(!ew) return null;
+  const w=parseInt(ew.value,10); if(!(w>=20&&w<=45)) return null;
+  const ed=$('#'+idD); let d=ed?parseInt(ed.value,10):0; if(!(d>=0&&d<=6)) d=0;
+  return {weeks:w, days:d};
+}
+// Clearing is as real an answer as typing one: a parent who blanks the field is telling us she does
+// not know, and leaving the old number behind would keep correcting her baby's age in silence.
+function setGestAge(b, g){
+  if(!b) return;
+  if(g){ b.gestWeeks=g.weeks; b.gestDays=g.days; }
+  else { delete b.gestWeeks; delete b.gestDays; }
+}
 /* BIRTH WEIGHT IS A NUMBER, not a caption.
    It was a free-text string whose only reader was the poster renderer, so the single figure the
    first fortnight turns on could not be computed, plotted or reported. svgPercentile plots
@@ -11324,13 +12297,16 @@ function convH(v,from,to){ if(from===to)return v; return from==='cm'? v/2.54 : v
 
 let growthDraft=null;
 function openGrowth(){
-  growthDraft={weight:'',wUnit:state.settings.wUnit||'kg',height:'',hUnit:state.settings.hUnit||'cm'};
+  /* Head circumference gets its own remembered unit rather than borrowing hUnit, because the two
+     are read off different instruments, but it opens on the height unit the first time so a family
+     working in inches is not handed a centimetre box on the one field they have never seen. */
+  growthDraft={weight:'',wUnit:state.settings.wUnit||'kg',height:'',hUnit:state.settings.hUnit||'cm',head:'',hcUnit:state.settings.hcUnit||state.settings.hUnit||'cm'};
   initLogWhen();
   renderGrowthSheet();
 }
 function renderGrowthSheet(){
   const d=growthDraft;
-  openSheet(`<h2>Measurement</h2><div class="sub">Log weight, height, or both. Leave one blank if you only have one.</div>
+  openSheet(`<h2>Measurement</h2><div class="sub">Log one, two or all three. Leave the rest blank.</div>
     <div class="field"><label>Weight</label>
       <div style="display:flex;gap:10px">
         <input type="number" id="gW" value="${d.weight}" placeholder="0.0" oninput="growthDraft.weight=this.value" style="flex:1;border:2px solid var(--line);background:var(--surface-2);border-radius:14px;padding:13px 15px;font-weight:700;font-size:16px;font-family:var(--font-body);color:var(--ink)">
@@ -11349,18 +12325,31 @@ function renderGrowthSheet(){
         </div>
       </div>
     </div>
+    <div class="field"><label>Head circumference</label>
+      <div style="display:flex;gap:10px">
+        <input type="number" id="gHC" value="${d.head}" placeholder="0.0" oninput="growthDraft.head=this.value" style="flex:1;border:2px solid var(--line);background:var(--surface-2);border-radius:14px;padding:13px 15px;font-weight:700;font-size:16px;font-family:var(--font-body);color:var(--ink)">
+        <div class="unit-toggle" style="width:130px">
+          <button class="${d.hcUnit==='cm'?'on':''}" onclick="growthDraft.hcUnit='cm';renderGrowthSheet()">cm</button>
+          <button class="${d.hcUnit==='in'?'on':''}" onclick="growthDraft.hcUnit='in';renderGrowthSheet()">in</button>
+        </div>
+      </div>
+      <div class="csub" style="margin-top:6px">The third number taken at a check-up, alongside weight and length. Skip it if nobody measured it.</div>
+    </div>
     ${wwa('growth.measure')}
     ${timeStrip('when','When')}
     <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent))" onclick="saveGrowth()">Save measurement</button>`,'diaper');
 }
 function saveGrowth(){
   const d=growthDraft;
-  const w=parseFloat(d.weight), h=parseFloat(d.height);
-  if(!w && !h){ toast('Enter a weight or height'); return; }
+  const w=parseFloat(d.weight), h=parseFloat(d.height), hc=parseFloat(d.head);
+  if(!w && !h && !hc){ toast('Enter a weight, height or head measurement'); return; }
   const t=getWhen('when');
   const ev={type:'growth',time:t};
   if(w){ ev.weight=+w.toFixed(2); ev.wUnit=d.wUnit; state.settings.wUnit=d.wUnit; }
   if(h){ ev.height=+h.toFixed(1); ev.hUnit=d.hUnit; state.settings.hUnit=d.hUnit; }
+  // hcUnit is remembered separately from hUnit so switching one never silently reinterprets the
+  // other: 46 cm of head and 26 inches of length are both plausible numbers on the same visit.
+  if(hc){ ev.head=+hc.toFixed(1); ev.hcUnit=d.hcUnit; state.settings.hcUnit=d.hcUnit; }
   addEvent(ev); persist(); closeSheet(); render(); toast('Measurement saved');
 }
 
@@ -11375,7 +12364,69 @@ function growthChangeBtn(){ return '<button onclick="toggleGrowthSource()" style
 function setBabySex(s){ const b=activeBaby(); if(!b)return; b.sex=s; persist(); render(); }
 function growthRef(meas){ const b=activeBaby(); let sex=b&&b.sex; if(sex==='male')sex='M'; else if(sex==='female')sex='F'; if(!sex||!window.GROWTH_REF)return null; const src=window.GROWTH_REF[effGrowthSource(b)]; return (src&&src[meas]&&src[meas][sex])||null; }
 function refConv(meas,v,unit){ return meas==='weight'?convW(v,'kg',unit):convH(v,'cm',unit); }
-function babyAgeMonths(t){ const b=activeBaby(); return (b&&b.birth)?((t-b.birth)/2629800000):null; }
+/* WHICH AGE THE DOTS SIT AT.
+   WHO and CDC curves are built from babies who reached 40 weeks, so plotting a 32-weeker's first
+   months against them at chronological age draws a baby far below every band she will ever be
+   compared to, in a product whose charter forbids exactly that kind of unexplained alarm. Corrected
+   age is what her paediatrician plots, so it is what Cubby plots, until 24 months corrected, which
+   is where the convention stops.
+   Whether to correct is decided ONCE from the baby's age today, not per point: deciding per point
+   would leave one chart with its early dots shifted and its later dots not, a bend in the line that
+   is an artefact of arithmetic and nothing to do with the child. */
+/* WHICH AGE *I* AM LOOKING AT IS MINE, and does not belong in the circle-shared blob.
+   state.babies rides out whole in appBlobFromState(), so a mode parked on the baby record meant
+   Papa Bear tapping "show their actual age" silently reflipped Mama Bear's chart on her own phone,
+   with nothing on screen to say why: the same per-user-vs-shared bug that already forced `seen`,
+   `push` and `theme` out of that blob. The gestation itself IS a fact about the baby and stays
+   shared; only the view choice is per person, keyed by uid the way the theme is. */
+function growthAgeKey(b){ return 'cubby-growthage:'+quickUid()+':'+((b&&b.id)||''); }
+function growthAgeMode(b){ b=b||activeBaby(); if(!b) return 'corrected'; let v=null; try{ v=localStorage.getItem(growthAgeKey(b)); }catch(e){} return (v==='actual')?'actual':'corrected'; }
+/* Whether the chart can correct at all. Guarded on the percentile curve too, and not only on the
+   baby's age, so the guard here and the guard on the caption below cannot drift apart: without a
+   sex there is no WHO curve, the chart falls back to a plain time line, and a correction nothing
+   draws and no caption explains is a shift with no way to see it or switch it off. */
+function growthCorrectable(b){ b=b||activeBaby(); if(!b||!b.birth||!b.sex||!growthRef('weight')) return false; const cd=correctionDays(b); if(!cd) return false; return ((now()-b.birth-cd*86400000)/2629800000)<=24; }
+function growthCorrectionMonths(){ const b=activeBaby(); if(!growthCorrectable(b)||growthAgeMode(b)!=='corrected') return 0; return correctionDays(b)*86400000/2629800000; }
+function toggleGrowthAge(){ const b=activeBaby(); if(!b)return; try{ localStorage.setItem(growthAgeKey(b), (growthAgeMode(b)==='corrected')?'actual':'corrected'); }catch(e){} render(); }
+/* A measurement taken before the due date has no place on a term curve, so svgPercentile's own
+   `mo>=0` filter drops it. Silently losing her NICU weigh-ins off a chart she just watched change
+   is the 3am "where did they go" this line exists to answer, so it does not just account for them,
+   it says in the same breath that they are still saved. */
+function growthDroppedPoints(){
+  if(!growthCorrectionMonths()) return 0;
+  return growthEvents().filter(e=>(e.weight||e.height) && babyAgeMonths(e.time)<0).length;
+}
+/* Whole sentences, and the switch is one of them. It used to read
+   "…8 weeks after they arrived. plot their actual age · 1 measurement …", a lowercase fragment
+   starting a new line after a full stop, joined by a bullet to a sentence, in chart jargon a
+   parent does not use. */
+function growthAgeLine(){
+  const b=activeBaby();
+  if(!growthCorrectable(b)) return '';
+  const wk=Math.round(correctionDays(b)/7);
+  const corrected=growthAgeMode(b)==='corrected';
+  const dropped=growthDroppedPoints();
+  const btn=`<button onclick="toggleGrowthAge()" style="background:none;border:none;color:var(--preg-ink,#8C547A);font-weight:700;cursor:pointer;font:inherit;padding:0;text-decoration:underline">${corrected?'Show their actual age instead.':'Show their corrected age instead.'}</button>`;
+  const lost=dropped?(dropped===1
+    ? `1 measurement from before the due date sits off the start of this curve. It is still saved in the log. `
+    : `${dropped} measurements from before the due date sit off the start of this curve. They are still saved in the log. `):'';
+  return `<div class="csub" style="margin:-4px 0 12px">${corrected
+    ? `Plotted at corrected age, counting from ${escapeHtml(b.name)}'s due date, ${wk} week${wk===1?'':'s'} after they arrived. `
+    : `Plotted at actual age, counting from the day ${escapeHtml(b.name)} was born. `}${lost}${btn}</div>`;
+}
+function babyAgeMonths(t){ const b=activeBaby(); return (b&&b.birth)?(((t-b.birth)/2629800000)-growthCorrectionMonths()):null; }
+/* Weight is on ev.weight/ev.wUnit, height on ev.height/ev.hUnit, head circumference on
+   ev.head/ev.hcUnit. Every chart reader asks through here rather than repeating the ternary,
+   because a copy that never learned about the third pair of keys does not throw, it draws a
+   percentile chart with no dots on it and looks exactly like a parent who has logged nothing. */
+const MEAS_UNIT_KEY={weight:'wUnit',height:'hUnit',head:'hcUnit'};
+function measVal(e,meas,unit){
+  return meas==='weight' ? convW(e.weight, e.wUnit||'kg', unit)
+                         : convH(e[meas], e[MEAS_UNIT_KEY[meas]]||'cm', unit);
+}
+/* "latest ~72th" was reading back on all three charts. The head percentile is the one a worried
+   parent is most likely to search, and a number that looks mistyped is not a number she trusts. */
+function pctOrdinal(n){ const t=n%100; if(t>=11&&t<=13)return n+'th'; return n+({1:'st',2:'nd',3:'rd'}[n%10]||'th'); }
 function interpBands(ref,mo){
   if(mo<=ref[0][0]) return ref[0].slice(1);
   if(mo>=ref[ref.length-1][0]) return ref[ref.length-1].slice(1);
@@ -11387,10 +12438,10 @@ function estPercentile(meas,unit){
   const g=growthEvents().filter(e=>e[meas]); if(!g.length)return null;
   const e=g[g.length-1], mo=babyAgeMonths(e.time);
   if(mo==null||mo<0||mo>ref[ref.length-1][0]+0.6)return null;
-  const val=meas==='weight'?convW(e.weight,e.wUnit||'kg',unit):convH(e.height,e.hUnit||'cm',unit);
+  const val=measVal(e,meas,unit);
   const bands=interpBands(ref,mo).map(v=>refConv(meas,v,unit)), ps=[5,25,50,75,95];
   if(val<=bands[0])return '<5th'; if(val>=bands[4])return '>95th';
-  for(let i=1;i<5;i++){ if(val<=bands[i]){ const f=(val-bands[i-1])/((bands[i]-bands[i-1])||1); return Math.round(ps[i-1]+(ps[i]-ps[i-1])*f)+'th'; } }
+  for(let i=1;i<5;i++){ if(val<=bands[i]){ const f=(val-bands[i-1])/((bands[i]-bands[i-1])||1); return pctOrdinal(Math.round(ps[i-1]+(ps[i]-ps[i-1])*f)); } }
   return '50th';
 }
 function pctLabel(meas,unit){ const p=estPercentile(meas,unit); return p?` · latest ~${p}`:''; }
@@ -11404,7 +12455,7 @@ function svgPercentile(meas,unit){
   const ref=growthRef(meas); if(!ref)return '';
   const W=320,H=180,padL=30,padR=12,padT=12,padB=20;
   const XM=ref[ref.length-1][0];
-  const bpts=growthEvents().filter(e=>e[meas]).map(e=>({mo:babyAgeMonths(e.time), v:(meas==='weight'?convW(e.weight,e.wUnit||'kg',unit):convH(e.height,e.hUnit||'cm',unit))})).filter(p=>p.mo!=null&&p.mo>=0).sort((a,b)=>a.mo-b.mo);
+  const bpts=growthEvents().filter(e=>e[meas]).map(e=>({mo:babyAgeMonths(e.time), v:measVal(e,meas,unit)})).filter(p=>p.mo!=null&&p.mo>=0).sort((a,b)=>a.mo-b.mo);
   let lo=Infinity,hi=-Infinity;
   ref.forEach(r=>{ lo=Math.min(lo,refConv(meas,r[1],unit)); hi=Math.max(hi,refConv(meas,r[5],unit)); });
   bpts.forEach(p=>{ if(p.mo<=XM){ lo=Math.min(lo,p.v); hi=Math.max(hi,p.v); } });
@@ -11414,7 +12465,7 @@ function svgPercentile(meas,unit){
   const bandPath=idx=>ref.map((r,i)=>(i?'L':'M')+X(r[0]).toFixed(1)+' '+Y(refConv(meas,r[idx],unit)).toFixed(1)).join(' ');
   const top=ref.map((r,i)=>(i?'L':'M')+X(r[0]).toFixed(1)+' '+Y(refConv(meas,r[5],unit)).toFixed(1)).join(' ');
   const botR=ref.slice().reverse().map(r=>'L'+X(r[0]).toFixed(1)+' '+Y(refConv(meas,r[1],unit)).toFixed(1)).join(' ');
-  const col=meas==='weight'?'var(--feed)':'var(--sleep)';
+  const col=meas==='weight'?'var(--feed)':(meas==='head'?'var(--diaper)':'var(--sleep)');
   const bands=[1,2,3,4,5].map(idx=>`<path d="${bandPath(idx)}" fill="none" stroke="${idx===3?'var(--ink-soft)':'var(--line)'}" stroke-width="${idx===3?1.4:1}" ${idx===3?'':'stroke-dasharray="2 2"'}/>`).join('');
   const bl=bpts.map((p,i)=>(i?'L':'M')+X(p.mo).toFixed(1)+' '+Y(p.v).toFixed(1)).join(' ');
   const dots=bpts.map(p=>`<circle cx="${X(p.mo).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="3.2" fill="${col}" stroke="var(--surface)" stroke-width="1.5"/>`).join('');
@@ -11428,24 +12479,28 @@ function renderGrowthSection(){
   if(!g.length){
     return `<div class="sec-title" style="margin-top:24px">Growth</div>
       <div class="stat-card" style="text-align:center"><div class="csub" style="margin:0">No measurements yet.</div>
-      <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent));margin-top:12px" onclick="openGrowth()">${I.scale} Add weight & height</button></div>`;
+      <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent));margin-top:12px" onclick="openGrowth()">${I.scale} Add a measurement</button></div>`;
   }
-  const wU=state.settings.wUnit||'kg', hU=state.settings.hUnit||'cm';
+  const wU=state.settings.wUnit||'kg', hU=state.settings.hUnit||'cm', cU=state.settings.hcUnit||hU;
   const wPts=g.filter(e=>e.weight).map(e=>({t:e.time, v:+convW(e.weight, e.wUnit||'kg', wU).toFixed(2)}));
   const hPts=g.filter(e=>e.height).map(e=>({t:e.time, v:+convH(e.height, e.hUnit||'cm', hU).toFixed(1)}));
-  const lw=lastGrowth('weight'), lh=lastGrowth('height');
-  const wDelta=growthDelta(wPts), hDelta=growthDelta(hPts);
+  const cPts=g.filter(e=>e.head).map(e=>({t:e.time, v:+convH(e.head, e.hcUnit||'cm', cU).toFixed(1)}));
+  const lw=lastGrowth('weight'), lh=lastGrowth('height'), lc=lastGrowth('head');
+  const wDelta=growthDelta(wPts), hDelta=growthDelta(hPts), cDelta=growthDelta(cPts);
   return `<div class="sec-title" style="margin-top:24px">Growth</div>
-    <div class="gx-stat">
+    <div class="gx-stat${lc?' gx-3':''}">
       <div class="gx-box"><div class="n" style="color:var(--feed-ink)">${lw?(+convW(lw.weight,lw.wUnit||'kg',wU).toFixed(2)):'·'}${lw?' '+wU:''}</div><div class="l">Latest weight</div>${wDelta?`<div class="d" style="color:var(--ink-soft)">${wDelta>0?'+':''}${wDelta} ${wU}</div>`:''}</div>
       <div class="gx-box"><div class="n" style="color:var(--sleep-ink)">${lh?(+convH(lh.height,lh.hUnit||'cm',hU).toFixed(1)):'·'}${lh?' '+hU:''}</div><div class="l">Latest height</div>${hDelta?`<div class="d" style="color:var(--ink-soft)">${hDelta>0?'+':''}${hDelta} ${hU}</div>`:''}</div>
+      ${lc?`<div class="gx-box"><div class="n" style="color:var(--diaper-ink,var(--diaper))">${+convH(lc.head,lc.hcUnit||'cm',cU).toFixed(1)} ${cU}</div><div class="l">Latest head size</div>${cDelta?`<div class="d" style="color:var(--ink-soft)">${cDelta>0?'+':''}${cDelta} ${cU}</div>`:''}</div>`:''}
     </div>
     ${birthWeightLine()}
     ${tipLine('growth','Set Boy/Girl to overlay WHO/CDC percentile curves behind the dots.')}
     ${growthControls(b)}
+    ${growthAgeLine()}
     ${(b&&b.sex)?'':`<div class="stat-card"><div class="csub" style="margin:0">Choose your baby's sex above to see WHO/CDC percentile curves behind their measurements.</div></div>`}
     ${wPts.length?`<div class="stat-card"><h3>Weight</h3><div class="csub">${(b&&b.sex)?'Showing '+effGrowthSource().toUpperCase()+' curves · '+growthChangeBtn()+pctLabel('weight',wU):wPts.length+' measurement'+(wPts.length>1?'s':'')} · ${wU}</div>${(b&&b.sex&&growthRef('weight'))?svgPercentile('weight',wU):svgLine(wPts,'feed',wU)}</div>`:''}
     ${hPts.length?`<div class="stat-card"><h3>Height</h3><div class="csub">${(b&&b.sex)?'Showing '+effGrowthSource().toUpperCase()+' curves · '+growthChangeBtn()+pctLabel('height',hU):hPts.length+' measurement'+(hPts.length>1?'s':'')} · ${hU}</div>${(b&&b.sex&&growthRef('height'))?svgPercentile('height',hU):svgLine(hPts,'sleep',hU)}</div>`:''}
+    ${cPts.length?`<div class="stat-card"><h3>Head circumference</h3><div class="csub">${(b&&b.sex)?'Showing '+effGrowthSource().toUpperCase()+' curves · '+growthChangeBtn()+pctLabel('head',cU):cPts.length+' measurement'+(cPts.length>1?'s':'')} · ${cU}</div>${(b&&b.sex&&growthRef('head'))?svgPercentile('head',cU):svgLine(cPts,'diaper',cU)}</div>`:''}
     <div class="add-row" onclick="openGrowth()">${I.plus} Add a measurement</div>
     <p style="font-size:12px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:12px">${(b&&b.sex)?'Bands: '+(effGrowthSource()==='who'?'WHO Child Growth Standards (0–24 mo)':'CDC growth charts (0–36 mo)')+'. ':''}A guide, not a diagnosis, your pediatrician is the best judge.</p>`;
 }
@@ -13155,6 +14210,97 @@ function removeRoutine(id){
   }});
 }
 
+/* ---------- YESTERDAY, AS THE FACTS THAT WERE WRITTEN DOWN (newborn window only) -------------
+   The question a midwife or health visitor asks at every early visit is how yesterday went: how
+   many feeds, how many wet, how many dirty, and how long the longest stretch between feeds was.
+   Every one of those numbers was already in the log and none of them was ever assembled into that
+   shape. sinceCard answers when the last one was, the today strip answers how many so far, and
+   visitSummary averages a fortnight. None of those is the question she is being asked in the room,
+   and she is being asked it while holding a twelve-day-old.
+   Numbers only, and nothing around them. What a normal count is for a twelve-day-old is a clinical
+   judgement belonging to the person in the room, so there is no target here, no colour and no
+   comparison to any norm. */
+const YEST_CARD_DAYS=21;   // the card sits on the Log surface while the baby is under three weeks
+const YEST_SUM_DAYS=30;    // the same one-line block rides on visitSummary while under a month
+function yesterdayFacts(){
+  const b=activeBaby(); if(!b||!b.birth) return null;
+  /* Midnight to midnight stepped by calendar date rather than by subtracting 86,400,000ms, so the
+     two clock-change nights of the year still bound a real day instead of sliding an hour. */
+  const _d=new Date(now()); _d.setHours(0,0,0,0); const dayEnd=_d.getTime();
+  const _s=new Date(dayEnd); _s.setDate(_s.getDate()-1); _s.setHours(0,0,0,0); const dayStart=_s.getTime();
+  if(b.birth>=dayEnd) return null;              // born today: yesterday is before this baby existed
+  const evs=babyEvents();
+  const inDay=(e)=>e.time>=dayStart&&e.time<dayEnd;
+  const feeds=evs.filter(e=>e.type==='feed'&&inDay(e)).length;
+  const dia=evs.filter(e=>e.type==='diaper'&&inDay(e));
+  const wet=dia.filter(e=>e.kind==='wet'||e.kind==='both').length;
+  const dirty=dia.filter(e=>e.kind==='dirty'||e.kind==='both').length;
+  /* The gap is measured from the END of one feed to the START of the next, through sinceAnchor, the
+     same expression the since card uses: a nursing session that began at 1am and ran 55 minutes did
+     not keep her fed until 3am, it fed her until 1:55.
+     A gap counts when any part of it falls inside yesterday, which deliberately includes the
+     overnight stretch finishing after midnight, because that stretch is usually the longest one and
+     it is the one being asked about. An open gap, with nothing logged since, is not counted at all:
+     we know when it started and not when it ended, and closing it against the clock would print a
+     number that grew while she read it. */
+  const fed=evs.filter(e=>e.type==='feed').slice().sort((x,y)=>x.time-y.time);
+  let gap=0, fedUntil=null;
+  for(const e of fed){
+    /* fedUntil is a high-water mark, not simply the row before. A five-minute top-up logged inside
+       a three-hour nursing session used to drag the anchor backwards and invent a stretch the long
+       feed was covering the whole time: 10:00 for 3h, 11:00, 14:00 printed 3h instead of 1h. */
+    if(fedUntil!==null&&e.time>fedUntil){
+      const from=fedUntil, to=e.time, len=to-from;
+      /* A stretch longer than a day is a hole in the record, not a stretch between feeds. A day has
+         24 hours in it, so "64h" under a heading that says Yesterday contradicts the heading, and
+         the only thing it really reports is that nobody had a hand free to write for two days. It
+         is dropped rather than trimmed to fit: trimming would print an hour count nobody wrote
+         down. The counts beside it are untouched, so yesterday still says what it does know. */
+      if(!(to<=dayStart||from>=dayEnd)&&len<=86400000&&len>gap) gap=len;
+    }
+    const end=sinceAnchor('feed',e);
+    if(fedUntil===null||end>fedUntil) fedUntil=end;
+  }
+  /* Nothing written down is not the same as nothing happening, and "0 feeds · 0 wet · 0 dirty" on
+     the morning after a night nobody had a hand free is a sentence about her, not about the baby. */
+  if(!feeds&&!dia.length) return null;
+  return {dayStart:dayStart, feeds:feeds, dia:dia.length, wet:wet, dirty:dirty, gap:gap,
+          name:b.name, multi:(state.babies||[]).length>1,
+          fromBirth:b.birth>dayStart, ageDays:Math.floor((now()-b.birth)/86400000)};
+}
+/* One place builds the wording, so the card and the summary can never drift into saying the same
+   day two different ways on two screens a parent may well have open at once.
+   A term she never wrote is left out rather than printed as a zero. The same rule already governs
+   the sleep line in visitSummary fifteen lines up: "0 feeds" on a page a mother reads out to a
+   midwife holding a twelve-day-old is the signature of a starving newborn, and it is an artefact of
+   which button got pressed. A zero she DID observe stays: nappies logged and none dirty is "0
+   dirty", and that is a fact about the baby. The nappy total is stated alongside the split so the
+   card reconciles with the "8 nappies" the timeline prints two inches below it. */
+function yesterdayFactParts(f){
+  const terms=[];
+  if(f.feeds) terms.push(f.feeds+' feed'+(f.feeds===1?'':'s'));
+  if(f.dia) terms.push(f.dia+(f.dia===1?' nappy':' nappies')+' ('+f.wet+' wet, '+f.dirty+' dirty)');
+  /* "gap without a feed" doubles the absence, and read at 3am over a twelve-hour number it lands as
+     a deficit rather than a measurement. Same number, no verdict in the wording. */
+  if(f.feeds&&f.gap) terms.push('longest stretch between feeds '+fmtDur(f.gap));
+  return {terms:terms, missing:(!f.feeds?'No feeds were logged.':(!f.dia?'No nappies were logged.':''))};
+}
+function yesterdayFactsText(f){ return yesterdayFactParts(f).terms.join(' · '); }
+function yesterdayCard(){
+  const f=yesterdayFacts(); if(!f||f.ageDays>=YEST_CARD_DAYS) return '';
+  const p=yesterdayFactParts(f);
+  const date=new Date(f.dayStart).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+  /* Each fact is held together as one unit, separator included. At 390px the line wraps, and left
+     to itself it broke after "without a" and after a trailing dot, so a line ended on "·" and the
+     next fact arrived in two halves. Same text either way: only where it may break changes.
+     "from birth" belongs on the heading, next to the day it qualifies. On the sub it read as "this
+     is the record since she was born" when it means "yesterday only started when she was born". */
+  return `<div class="yest-card">
+    <div class="yc-h">Yesterday · ${escapeHtml(date)}${f.fromBirth?', from birth':''}</div>
+    <div class="yc-f">${p.terms.map((s,i)=>`<span class="yf-g">${i?'· ':''}${escapeHtml(s)}</span>`).join(' ')}</div>
+    <div class="yc-s">What was written down${(f.multi&&f.name)?' for '+escapeHtml(f.name):''}${p.missing?'. '+p.missing:''}</div>
+  </div>`;
+}
 function renderLogTab(){
   const seg=`<div class="seg seg-full">
     <button class="${logTab==='log'?'on':''}" onclick="setLogTab('log')">Log</button>
@@ -13163,7 +14309,7 @@ function renderLogTab(){
   let body;
   if(logTab==='stats') body=renderStats();
   else if(logTab==='rituals') body=renderRitualsView();
-  else body=`<button class="btn-ghost" style="margin-bottom:var(--stack)" onclick="openDayRecap()">🐻 Today's recap</button>`+wakeWindowRecap()+tipLine('heat','These strips show your week at a glance, tap Week or Month to switch.')+renderHeatmap()+renderTimeline();
+  else body=yesterdayCard()+`<button class="btn-ghost" style="margin-bottom:var(--stack)" onclick="openDayRecap()">🐻 Today's recap</button>`+wakeWindowRecap()+tipLine('heat','These strips show your week at a glance, tap Week or Month to switch.')+renderHeatmap()+renderTimeline();
   return `<div class="fade-in">${coachMark('log','Log, Rituals & Stats','Everything you log lands in this timeline. Flip to Rituals for your gentle daily rhythm, or Stats for charts and growth curves.')}${seg}${body}</div>`;
 }
 

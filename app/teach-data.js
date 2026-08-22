@@ -78,6 +78,13 @@
       fn: 'openSleepCorrect()', domain: 'log', depth: 'one',
       one: 'If a nap timer ran all night because Stop never got tapped, say when they actually woke and Cubby logs the real nap.',
       who: { stage: ['baby', 'child'] } },
+    /* One row, two headings, because one function paints both: the sheet says Nap timer above a
+       nap and Nursing timer above a feed, and sheetDot matches on the heading. The label carries
+       the first and aka the second, so the dot is on the sheet either way. */
+    openTimerControl: { label: 'Nap timer', aka: ['nursing timer'],
+      fn: 'openTimerControl()', domain: 'log', depth: 'one',
+      one: 'Tap a running timer to move when it started, stop it at the time it really ended, or forget it without logging anything.',
+      who: { stage: ['baby', 'child'] } },
     /* The feed pair of the two rows above, for the same reason: both headings are sentences rather
        than nouns, and both sheets are reached from the state of a running timer rather than from a
        tile a parent goes looking for. */
@@ -139,18 +146,18 @@
       get: 'The photo lands in your album, ready to become something you keep.'
     },
     openGrowth: { label: 'Measurement', fn: 'openGrowth()', domain: 'log', depth: 'page',
-      one: 'Weight and height whenever you have them. One of the two is fine.',
+      one: 'Weight, height and head circumference whenever you have them. Any one of the three is fine.',
       who: { stage: ['baby','child'] },
       earn: { on: 'growth-2-points' },
       why: 'One measurement is a dot. Several over a few months are a line, and the line is the thing a doctor can actually read. It is worth logging the ones you already get at appointments.',
       matters: [
-        ['One of the two is enough', 'Weight or height. A visit that only produced one number is still worth writing down, and half a record beats none.'],
+        ['One of the three is enough', 'Weight, height or head circumference. A visit that only produced one number is still worth writing down, and part of a record beats none.'],
         ['The date carries the meaning', 'A weight without a date cannot join a curve, and joining the curve is the entire point of keeping it.'],
         ['The curve is a guide, never a verdict', 'Cubby draws where the numbers sit against the published charts. It does not interpret them, flag them, or tell you what they mean.'],
         ['Bring it, do not act on it', 'The chart exists so a conversation with your doctor starts from a record instead of a memory.']
       ],
       how: [
-        'Add a weight or a height whenever you have one, usually straight after a visit.',
+        'Add a weight, a height or a head measurement whenever you have one, usually straight after a visit.',
         'Pick your units once. Cubby keeps using the ones you think in.',
         'Two or more measurements start drawing the line.',
         'It goes into the visit summary automatically, so you do not gather it twice.'
@@ -476,6 +483,9 @@
       what: 'What is happening this week, in plain words.',
       get: 'Context without a countdown, because a number of days remaining is not a comfort to everyone.'
     },
+    openWeeksCalendar: { label: 'Your weeks in your calendar', fn: 'openWeeksCalendar()', domain: 'preg', depth: 'one',
+      one: 'Each week ahead as an all-day marker in the calendar you already look at.',
+      who: { stage: ['pregnancy'] } },
     openKickCounter: { label: 'Kick counter', fn: 'openKickCounter()', domain: 'preg', depth: 'chapter',
       one: 'Count the movements in one sitting. You learn what usual looks like for your baby.',
       who: { stage: ['pregnancy'] },
@@ -597,14 +607,14 @@
       get: 'Something you or your partner can hand over, on a day when explaining it out loud is hard.'
     },
     openBirthDetails: { label: 'Birth details', fn: 'openBirthDetails()', domain: 'preg', depth: 'one',
-      one: 'What happened, when, and how much they weighed.',
+      one: 'What happened, when, how much they weighed, and how early they arrived.',
       who: { stage: ['pregnancy'] },
       earn: { on: 'birth' } },
     openWelcomeBaby: { label: 'Welcome to the world', fn: 'openWelcomeBaby()', domain: 'preg', depth: 'chapter',
       one: 'The arrival screen. Pregnancy becomes a baby, and the app follows.',
       who: { stage: ['pregnancy'] },
       earn: { on: 'birth' },
-      what: 'The arrival. Name, date, weight, and the first photo if you have one.',
+      what: 'The arrival. Name, date, weight, how early they arrived, and the first photo if you have one.',
       get: 'The pregnancy closes and the baby side of Cubby opens, with everything you kept still in place.'
     },
     openPregRecord: { label: 'Your pregnancy record', fn: 'openPregRecord()', domain: 'preg', depth: 'chapter',
@@ -614,6 +624,16 @@
       what: 'The whole pregnancy, kept read-only once the baby has arrived.',
       get: 'Nothing was overwritten to make room. A second pregnancy never writes over the first.'
     },
+    openPregArchive: { label: 'Your earlier pregnancies', aka: ['earlier pregnancy'], fn: 'openPregArchive()', domain: 'preg', depth: 'chapter',
+      one: 'Every pregnancy you have tracked here, newest first, still there to open.',
+      who: { stage: ['baby','child'], needs: 'pregArchive' },
+      earn: { on: 'birth' },
+      what: 'The pregnancies that are over, each one still there to open.',
+      get: 'Starting a new pregnancy never writes over an older one, and now you can see that for yourself.'
+    },
+    openArchivedPregnancy: { label: 'Your pregnancy, kept', fn: 'openArchivedPregnancy()', domain: 'preg', depth: 'one',
+      one: 'One earlier pregnancy: your care team, appointments, readings and birth plan.',
+      who: { stage: ['baby','child'], needs: 'pregArchive' } },
     openGentleMode: { label: 'Gentle mode', fn: 'openGentleMode()', domain: 'preg', depth: 'chapter',
       one: 'Turn down everything cheerful, without turning the app off.',
       who: { stage: ['pregnancy'] },
@@ -961,6 +981,7 @@
     openTimePicker: 'Time half of the same component.',
     openWhenPicker: 'The \'when did this happen\' control inside log sheets.',
     openFeverSymptomNudge: 'The answer to logging Fever without a number. Like openBPConcern it is a consequence of saving something, never a place a parent navigates to, and it says everything it has to say on screen.',
+    openJaundiceNudge: 'The answer to logging that skin or eyes look yellow. Same shape as openFeverSymptomNudge: a consequence of saving something, never a place a parent goes looking, and the one sentence it exists for is on screen.',
     openBPConcern: 'The answer to a raised or severe blood-pressure reading. It is a consequence of saving one, never something a mother navigates to, and it explains itself in full on screen. Teaching it as a capability would file "your reading was high" under things to go and look at.',
     showConnTrouble: 'A connection-trouble card shown during sign-in. It is an error state, not a capability, and it explains itself on screen.',
     showStatus: 'Inline status text during sign-in.',
@@ -978,6 +999,7 @@
     showWakeWindow: 'The Undo on "Hidden from home". Reached only from that toast, never navigated to, and the toast is the whole explanation.',
     showWwLog: 'The Undo on "Hidden from your timeline". Same toast, same reason.',
     showWwNotYet: 'The Undo on hiding the not-yet wake-window note. Same toast, same reason.',
+    openWeeksTakeBack: 'The way back out of Your weeks in your calendar, which is the capability and is taught. This is the undo, reachable only from a marker that is still arriving, and one of its two doors is the loss holding screen, where the guide is not offered at all.',
 
     /* Dormant behind a flag */
     openDenChores: 'FEATURES.den = false.',

@@ -304,8 +304,13 @@ const DAILY_MED = { id: 'm1', babyId: 'b1', name: 'Infant paracetamol', dose: '2
       });
       return hit;
     });
-    ok('the pregnancy shell really has no vaccine list, no medicine and no calendar row anywhere',
-      sweep.vaccine === false && sweep.medicine === false && sweep.calendarRow === false, sweep);
+    /* Item p16 shipped "your weeks in your calendar" into the pregnancy stage after this gate was
+       written, so a calendar row in that shell is now correct rather than a broken promise. What
+       this item is about survives untouched: she still has no vaccine list and no medicine list,
+       and the row must not send her looking for either. */
+    ok('the pregnancy shell really has no vaccine list and no medicine anywhere',
+      sweep.vaccine === false && sweep.medicine === false, sweep);
+    ok('and the calendar row she DOES have is her weeks, which p16 gave her', sweep.calendarRow === true, sweep);
     const r = await readRow();
     ok('the reminders row is still reachable while expecting', r.count === 1 && r.title === 'Reminders', r);
     ok('and it does not promise her a vaccine list she does not have', !/vaccine/i.test(r.sub || ''), r);

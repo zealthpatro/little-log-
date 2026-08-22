@@ -2197,7 +2197,16 @@
   }
 
   // Swap the app's persistence + photo storage for the cloud versions.
-  persist = async function () { scheduledPush(); };
+  // With no household there is nowhere to push: pushNow returns on the spot, so before this a woman
+  // tracking on her own before she signs in or joins a circle wrote nothing anywhere and lost every
+  // edit on reload. Her period starts now feed the fertile window and the "update your period"
+  // card, so that loss is not cosmetic. The local blob is the record until a household exists, and
+  // it is the same blob buildMigrationPayload reads at first sign-in. Once hhRef is set the cloud
+  // is the record and nothing is written locally, exactly as before.
+  persist = async function () {
+    if (!hhRef) { try { await Store.save(state); } catch (e) {} }
+    scheduledPush();
+  };
 
   /* ---------- maternal sharing API (consumed by the consent UI in index.html) ---------- */
   // Owner = the subject of the pregnancy. Once an ownerUid is assigned, only that uid is owner.

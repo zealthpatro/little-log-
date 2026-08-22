@@ -89,7 +89,7 @@
     },
     measure: {
       line: 'A gentle curve you can bring to your doctor',
-      what: 'Weight and height, whenever you have them. One of the two is fine.',
+      what: 'Weight, height and head circumference, whenever you have them. Any one of the three is fine.',
       get: 'Over a few visits it draws a gentle curve you can bring to your doctor. It is a guide, never a diagnosis.'
     },
     milestone: {
@@ -183,7 +183,7 @@
       title: 'Ready for the doctor', ico: '🩺', tone: '--diaper', soft: '--diaper-soft',
       steps: [
         { t: 'The vaccine plan is already there', b: 'Cubby filled it in from the schedule where you are, the day you gave a birthday. Tick them off as they happen.' },
-        { t: 'Growth, one dot at a time', b: 'Weight and height whenever you have them. Over a few visits it draws a gentle curve. It is a guide, never a diagnosis.' },
+        { t: 'Growth, one dot at a time', b: 'Weight, height and head circumference whenever you have them. Over a few visits each draws a gentle curve. It is a guide, never a diagnosis.' },
         { t: 'One page for the appointment', b: 'The things a doctor usually asks, gathered into a summary you can read out or hand over.' }
       ],
       fn: 'openVisitSummary()', cta: 'See the summary'
