@@ -48,6 +48,9 @@ openFeed's own comment states the rule, last-used method wins and amounts come f
 
 Tapping Feed while a nursing timer runs destroys it: 18 minutes gone, no event written, no warning. Sleep is already guarded, so the same gesture means two different things on the same screen. And from Log, Album or Health there is no elapsed time and no Stop at all.
 
+
+**SHIPPED 2026-08-22.** Also fixed `${stopFn}()` at the banner, a pre-existing bug. A reviewer found the new sheet made the exact false record it was built to prevent its PRIMARY action: `stopFeed` has no cap where `stopSleep` has one, so a timer left running overnight wrote a 540-minute nursing session silently. It now diverts to `openFeedCorrect`, the feed twin of `openSleepCorrect`, which names the baby when there is more than one. Gate: `tools/feed_tile_guard_check.js`.
+
 ### 8. Add one optional single-line note input to renderDiaperSheet under the four kind buttons, the matching textarea to the diaper branch of openEdit (:4414), and a "Nappy notes" line to visitSummary.  `hours`
 
 teach-data.js:86 promises "anything that made you look twice, in your own words" and the nappy sheet has nowhere to put it. eventDetail already has a branch to render e.notes for a diaper, dead code because nothing can write it. Blood, mucus, a colour change, the first nappy after starting iron: the most-asked-about observation of the first year has no slot.
@@ -60,9 +63,15 @@ The one card built to reward coming back is blind to the night shift, which is t
 
 A handover note left at 10pm stops counting as unread at midnight, so renderHome demotes the day surface and the morning parent finds "Nothing yet today". The comment at :2583 states the assumption out loud, "only a note left today can be unread", and it is false for the one handover every household with a baby performs. The 200-id cap is already the backstop, so a 36-hour window still self-prunes.
 
+
+**SHIPPED 2026-08-22.** Fixing `unseenNotes()` alone left the badge day-keyed, so crossing midnight in one session made the two halves of the same paint disagree. Both now read one clock. The replacement label then had no "today" branch and read the author's day key against the reader's clock, so in a cross-timezone circle a note fifteen minutes old rendered "Two nights ago", and DST fall-back did the same to last night's. Ids stored under the old `{d, ids}` shape are migrated, not dropped. Gate: `tools/notes_unseen_check.js`, plus `tools/noteshome_test.js` updated.
+
 ### 11. Count the haveLog row in renderGetStarted (app/index.html:2348) per author, state.events.filter(e=>e.authorId===myUid()), the way tipsTicker already does at :2270. Branch the copy on role: a non-owner gets two rows, "Log the next thing you do, she sees it straight away with your name on it" and "Say hello" opening openNoteCompose.  `hours`
 
 The checklist is keyed to the household, so a partner who joins on day three lands on a home screen already ticked by somebody else and is never onboarded at all. This is the identical per-person versus household bug the tips ticker diagnosed and fixed for itself four lines above.
+
+
+**SHIPPED 2026-08-22.** Only the JOINER branch is per-person. Making the retire gate per-person for everybody put the five-row checklist back permanently on the home screen of every owner whose partner does the logging, and `renderHome` switches the tips ticker, the coach mark, the teaching cue and the nudge off while it is up. The first latch was worse than the bug: keyed by person and never cleared, and trippable by any unstamped event, so one legacy entry retired the card for that person in every household they would ever join. It is now named for the household and only a stamped entry of their own writes it. Gate: `tools/getstarted_author_check.js`.
 
 ### 12. Prepend an Illness block to visitSummary (app/index.html:9276) when an episode overlaps the window: name, started, day N, ongoing or recovered on date, max temperature and symptoms scoped to that episode. Give it its own h2 in openDoctorReport (:9396). The arithmetic already exists in renderIllness (:9155-9191).  `hours`
 
@@ -71,6 +80,9 @@ The two surfaces built for the doctor never touch state.illnesses. A parent in a
 ### 13. Put a date picker on illness start, reachable from the illness card and from reopenIllness (app/index.html:9212-9217), writing startedAt with a history entry the way saveEdit does. Separately, make the temperature rows and the "Medicine given this illness" rows on the Health screen tappable to openEdit.  `hours`
 
 startedAt is written once at :9205 with no second writer anywhere in the file, and illnesses live in state.illnesses so openEdit cannot reach them. A parent who logs on Thursday a cold that started Tuesday is stuck at "Day 1" forever, and the doses list at :9165 silently drops Tuesday's and Wednesday's because it filters on e.time >= ill.startedAt. The Health-row fix is the cheap half: from that screen the edit path is currently invisible for two of the three record types.
+
+
+**SHIPPED 2026-08-22.** The proposal was wrong twice. There were no temperature rows to make tappable, only a chart, so the list had to be built. And the bug fires on day one, not only on backdating: `startIllness` stamped `now()`, so a cold logged at 2pm hid the Calpol given at 8am that morning. Start is now local midnight. A reviewer then found that backdating recovered the doses but not the temperatures, because both were scoped by `illnessId` and `saveTemp` stamps that from `activeIllness()`, null before the record existed. `inIllness()` now claims an unstamped reading that falls inside the episode's days, and `visitSummary` uses the same predicate so the doctor page cannot print the peak twice or attribute it to nothing. Owner-or-logger permission, a start floor at the previous episode's end, DST-safe day counts, and editable reading and dose fields on the rows the change made tappable. Gate: `tools/illness_start_check.js`, 132 assertions with `--self-test`.
 
 ### 14. Add a typed birth weight (number plus unit) to welcomeBaby (app/index.html:8163) and to add-baby, written as a growth event at t=birth so it is the first dot on the existing chart. One line under Latest weight while the baby is under three weeks: "3.31 kg · 90 g below birth weight · day 4". One line in visitSummary. Keep the free-text field for the poster.  `days`
 
@@ -87,6 +99,9 @@ Gate: `node tools/birth_weight_check.js <base>` (40 assertions), wired into `too
 ### 15. Add an "Add to my calendar" row beside the date in openDoctorEdit, reusing _icsText and _icsStamp: an all-day VEVENT with TRIGGER:-P1D, a stable UID of cubby-doc-<docId>@little-cubby.com, a SEQUENCE on the doctor record, and a description carrying a /app/?go=visit deep link. Copy exportVaccineSchedule (:9937) almost line for line.  `hours`
 
 A real appointment typed into Cubby produces nothing that can reach the parent: saveDoctorEntry stores nextVisit and the only consumer is upcomingVisit, an in-app pill visible only if she is already inside the app. The calendar pattern is proven three times in the same file and needs no APNs key, no cron, no server and no permission prompt.
+
+
+**SHIPPED 2026-08-22.** A reviewer found the export half-trusted the open sheet: the date came from the live field but the name, clinic and phone from the stored record, so changing practice and exporting without saving put the old clinic and its phone number in her calendar, and Cubby committed only the date. All five fields now commit together. `TRIGGER:-P1D` on an all-day event resolves to midnight, not "the morning before", so it is `-PT15H`, and a same-day appointment is no longer offered an alarm that has already passed. Gate: `tools/appt_ics_check.js`.
 
 ### 16. Offer openBirthPoster (app/index.html:12335) as the second beat of the first session, one row in openOnboardInvite right after the first log. Then put it in the alert stack once during the first fortnight, from the slot the month card uses.  `hours`
 
@@ -226,9 +241,15 @@ A shared partner sees the whole pregnancy Care tab and can tap every control in 
 
 *Charter: visitQs carries no health data. It is "is my baby growing on track?", the one pregnancy list that is about the appointment rather than about her body.*
 
+
+**SHIPPED 2026-08-22.** Read-only rather than hidden, so a partner still sees the journey he is part of. The first pass rendered read-only correctly and left the one remaining tappable row, "Due date and schedule", completely unguarded: a caregiver moved the mother's EDD by nine weeks, rewrote her LMP, switched her country and pushed seven appointments into her journey, all of it local-only because `syncPregJourney` returns early for a non-owner, so her next snapshot silently wiped it. Its own gate passed 62/62 by only ever asserting the ABSENCE of buttons. Forking the heading also dropped the sheet out of the teach registry for the one reader who most needs it, fixed with an `aka`. Gate: `tools/preg_log_canwrite_check.js`.
+
 ### 5. Persist kickSession and contractionRunning onto the pregnancy record as p.kickOpen and p.contractionOpen, restore on load, clear on finish or cancel. Render elapsed time through data-timer so startTick's _tickTimers loop drives it. Add the running contraction to the pregnancy shell as a timerBanner. Change tapKick to increment the count node in place instead of calling openKickCounter().  `days`
 
 Both labour tools are module-level variables (:7646, :7664), so a reload, an iOS PWA relaunch or a service-worker update silently discards a session in progress, at the single worst moment in the product. Neither ticks: both render a static fmtDur that freezes until the next tap, and a running contraction disappears entirely when the sheet is dismissed. The machinery is already in the file and the baby shell uses it.
+
+
+**SHIPPED 2026-08-22.** The first gate modelled a reload as a whole-object replace. Production merges per key and never deletes (`store-firebase.js:1214`), and the `p = {}` reset is dead because `PREG_META_KEYS` strips `id` before the compare. On a second device at 39 weeks that left a phantom contraction: the sheet resumed one already filed, one tap wrote a six-minute duplicate, and that flipped `fiveoneone` to true, so Cubby told a woman to call her provider about a contraction that never happened. Resume is now deduplicated against what is already saved, not only aged out. Gate: `tools/preg_session_resume_check.js`.
 
 ### 6. Widen the pregnancyArchive entry in savePregnancy (app/index.html:7080-7085) beyond {id, endedAt, weeks, loss, bornBabyId, moments, journey} to carry at minimum careTeam, appts and their outcomes, bloodGroup, rh, gbs, birthPlan, birthAt. Seed the new pregnancy from bloodGroup and rh rather than asking again. Then give the archive a door: a "Your earlier pregnancies" row in openBabySheet and in Settings, opening a read-only openPregRecord per entry, plus one plain sentence in openExpectingSetup.  `days`
 

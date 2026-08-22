@@ -17,13 +17,14 @@
 //   - two unread, one read -> STAYS up, count drops to one
 //   - private to somebody else -> never counted, never promotes (a third member cannot be nudged by
 //     a handoff that is not theirs to read)
-//   - a PIN left on an earlier day is not news. It is a standing note that has been on this screen
-//     every day since; counting it unread promoted the card and printed "1 new" every single day until
-//     somebody tapped a note they had already read. A pin left TODAY still counts.
-//   - the read-marker is note IDS scoped to a day in localStorage keyed by uid. Never state.settings
-//     (shared with the circle). Never a high-water timestamp (silently swallows a note that syncs in
-//     stamped earlier than one already read). Day-scoped so it is self-pruning: a fixed-size list
-//     evicted by read order spent its slots on dead ids and eventually threw away a live one.
+//   - a PIN left days ago is not news. It is a standing note that has been on this screen every day
+//     since; counting it unread promoted the card and printed "1 new" every single day until somebody
+//     tapped a note they had already read. A pin left TODAY still counts.
+//   - the read-marker is note IDS in localStorage keyed by uid. Never state.settings (shared with the
+//     circle). Never a high-water timestamp (silently swallows a note that syncs in stamped earlier
+//     than one already read). It used to be scoped to a calendar day, which pruned it for free but
+//     also expired the 11pm handover at midnight; the window is 36 hours now and the ids a previous
+//     version stored under {d, ids} are migrated rather than dropped. See tools/notes_unseen_check.js.
 //   - reading the LAST unread note takes the card's footprint out of the page above where she is
 //     reading, so the scroll offset gives back exactly that footprint and she closes the sheet looking
 //     at what she was looking at
@@ -194,21 +195,25 @@ const where = r => JSON.stringify(r.order);
   ck(newPin.unseen === 1 && newPin.badge === '1 new', 'still counts on the day it lands', JSON.stringify(newPin.badge));
   ck(where(newPin) === JSON.stringify(UP), 'and still brings the card up', where(newPin));
 
-  console.log('\n12. the marker is scoped to the day');
+  console.log('\n12. the marker holds ids and no longer expires at midnight');
   const scoped = await p.evaluate(() => {
     const k = 'cubby-notes-seen:' + quickUid();
     openNoteView('p2'); closeSheet();          // section 10 cleared the marker; write one to look at
     const raw = JSON.parse(localStorage.getItem(k) || 'null');
-    // Hand it yesterday's day key: those ids can never be asked about again, so it must read as empty
-    // rather than being carried forward and evicted by read order.
+    // What a previous version left on the phone. Those ids are still answerable inside a 36-hour
+    // window, so they have to be migrated: dropping them re-announces every note read last night.
     localStorage.setItem(k, JSON.stringify({ d: dayKey(now() - 86400000), ids: ['p2'] }));
-    const staleGivesNothing = notesSeen().length === 0;
-    localStorage.setItem(k, JSON.stringify({ d: dayKey(now()), ids: ['p2'] }));
-    return { shape: raw && typeof raw === 'object' && Array.isArray(raw.ids), day: raw && raw.d, staleGivesNothing, todayCounts: noteIsSeen('p2') };
+    const oldShapeMigrates = noteIsSeen('p2');
+    localStorage.setItem(k, JSON.stringify(['p2']));      // and the bare array v278 wrote
+    const bareArrayMigrates = noteIsSeen('p2');
+    localStorage.setItem(k, JSON.stringify({ ids: ['p2'] }));
+    return { shape: raw && typeof raw === 'object' && Array.isArray(raw.ids), noDayKey: !(raw && raw.d), oldShapeMigrates, bareArrayMigrates, counts: noteIsSeen('p2') };
   });
-  ck(scoped.shape, 'is {d, ids}, not a bare list and not a timestamp');
-  ck(scoped.staleGivesNothing, "yesterday's marker reads as nothing read, so it can never evict a live id");
-  ck(scoped.todayCounts, "and today's marker is honoured");
+  ck(scoped.shape, 'holds a list of ids, not a bare list and not a timestamp');
+  ck(scoped.noDayKey, 'and writes no day key, so it cannot expire at midnight');
+  ck(scoped.oldShapeMigrates, "a previous version's {d, ids} is read, not orphaned");
+  ck(scoped.bareArrayMigrates, 'and so is the bare array');
+  ck(scoped.counts, 'the marker is honoured');
 
   console.log('\n13. reading the last note does not move the page under the sheet');
   const scroll = await p.evaluate(async () => {

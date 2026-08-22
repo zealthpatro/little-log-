@@ -78,6 +78,23 @@
       fn: 'openSleepCorrect()', domain: 'log', depth: 'one',
       one: 'If a nap timer ran all night because Stop never got tapped, say when they actually woke and Cubby logs the real nap.',
       who: { stage: ['baby', 'child'] } },
+    /* The feed pair of the two rows above, for the same reason: both headings are sentences rather
+       than nouns, and both sheets are reached from the state of a running timer rather than from a
+       tile a parent goes looking for. */
+    openFeedRunning: { label: 'A feed is running', aka: ['feed timer running'],
+      fn: 'openFeedRunning()', domain: 'log', depth: 'one',
+      one: 'While a nursing timer runs, the Feed tile offers to stop it, or to log a bottle, water or solids without touching it.',
+      who: { stage: ['baby', 'child'] } },
+    /* Same shape as the two timer-correction rows: the heading is a question, and the sheet is
+       reached from a record that is already wrong rather than from a tile anyone goes looking for. */
+    openIllnessStart: { label: 'Correct when an illness started', aka: ['when did it start'],
+      fn: 'openIllnessStart()', domain: 'health', depth: 'one',
+      one: 'Logged a cold on Thursday that started on Tuesday? Set the real first day, and those days of temperatures and medicines join the record.',
+      who: { stage: ['baby', 'child'] } },
+    openFeedCorrect: { label: 'Fix a forgotten feed timer', aka: ['when did this feed end'],
+      fn: 'openFeedCorrect()', domain: 'log', depth: 'one',
+      one: 'If a nursing timer ran for hours because Stop never got tapped, say when the feed really ended and Cubby logs that instead.',
+      who: { stage: ['baby', 'child'] } },
     openDiaper: { label: 'Nappy', aka: ['diaper'], fn: 'openDiaper()', domain: 'log', depth: 'page',
       one: 'Wet, dirty, both, or a dry check. The thing a doctor almost always asks about.',
       who: { stage: ['baby','child'] },
@@ -521,7 +538,12 @@
     openApptEdit: { label: 'An appointment', fn: 'openApptEdit()', domain: 'preg', depth: 'one',
       one: 'Move it, change it, or note what happened.',
       who: { stage: ['pregnancy'] } },
-    openVisitPrep: { label: 'Prep for your visit', fn: 'openVisitPrep()', domain: 'preg', depth: 'chapter',
+    /* aka, because the sheet heading is forked: a shared partner cannot prep the list, so his
+       heading reads "Before the visit", and sheetDot matches on the heading. He is the reader who
+       most needs the chapter, since he reaches this sheet from Home. label is what the How to use
+       Cubby list shows; aka is the other thing the <h2> can actually say. */
+    openVisitPrep: { label: 'Prep for your visit', aka: ['before the visit'],
+      fn: 'openVisitPrep()', domain: 'preg', depth: 'chapter',
       one: 'What to ask, gathered before you go in.',
       who: { stage: ['pregnancy'] },
       earn: { on: 'appt-added' },
