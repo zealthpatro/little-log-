@@ -232,7 +232,12 @@ async function recordPageView(env, url, status) {
   const day = new Date().toISOString().slice(0, 10);
   const field = status === 404 ? 'n404' : (status >= 500 ? 'n5xx' : (status >= 400 ? 'n4xx' : 'nOk'));
   try {
-    const token = await getAccessToken(sa);
+    /* SCOPE MATTERS, and the default is the wrong one. OAUTH_SCOPE is identitytoolkit, because the
+       first caller here was the sign-in link. Every Firestore caller passes datastore explicitly
+       (see sendPushReminders, purgeDeletedHouseholds, /api/dose). This one asked for a bare token,
+       got an auth-API token, and Firestore refused it — the third and final reason the collection
+       stayed empty. */
+    const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore');
     /* A commit write names its document by RESOURCE NAME, not by URL. Passing the https:// form is
        rejected with 400 INVALID_ARGUMENT ("lacks \"projects\" at index 0") — which is exactly what this
        did for its first two days live, on every single request, while the catch below swallowed it and
@@ -241,7 +246,7 @@ async function recordPageView(env, url, status) {
        shows up in `wrangler tail`. */
     const name = 'projects/' + sa.project_id + '/databases/(default)/documents/pageStats/' + statsDocId(day, key);
     // One atomic increment. Concurrent edges cannot lose a count the way read-modify-write would.
-    await fetch('https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents:commit', {
+    const wr = await fetch('https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents:commit', {
       method: 'POST',
       headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
       body: JSON.stringify({ writes: [
@@ -250,6 +255,8 @@ async function recordPageView(env, url, status) {
           updateMask: { fieldPaths: ['day', 'path'] } }
       ] })
     });
+    // An unchecked non-200 is how two of the three bugs here stayed invisible. Look at the answer.
+    if (!wr.ok) console.error('pagestats_write_' + wr.status, (await wr.text()).slice(0, 300));
   } catch (e) { console.error('pagestats_fail', (e && e.message) || String(e)); }
 }
 
@@ -1791,13 +1798,6 @@ export default {
       if (ctx && request.method === 'GET'
         && /text\/html/i.test(res.headers.get('content-type') || '')) {
         ctx.waitUntil(recordPageView(env, url, res.status));
-        /* TEMPORARY diagnostic. pageStats sat at zero for two days and the resource-name bug only
-           explains part of it — the other candidate is that Workers Static Assets serves a matching
-           asset WITHOUT invoking this Worker at all, in which case this line is simply unreachable for
-           most HTML. Guessing has cost enough this week, so: say so on the wire, look, then remove. */
-        const out = new Response(res.body, res);
-        out.headers.set('x-cubby-worker', 'html');
-        return out;
       }
     } catch (e) { console.error('pagecount_wrap_fail', (e && e.message) || String(e)); }
     return res;
