@@ -1211,16 +1211,44 @@
   /* ---------- pregnancy-journey sync (owner-owned pregnancy doc, Item 7) ---------- */
   // Fold an owner's journey doc into state.pregnancy. Maternal-private HEALTH already loaded
   // from the mhealth listener is preserved (the journey doc never carries it).
+  /* THE BUG THIS GUARDS AGAINST, because it destroyed real data and the shape of it is not obvious.
+     A parent ticked an antenatal appointment. It appeared, then un-ticked itself about a second later,
+     and her journey doc ended up with SEVEN appointments and zero ticks — `at` null on every row, so
+     not one tap had ever been saved. She was tapping the same boxes over and over.
+
+     Two lines conspired. This function used to overwrite every field from the snapshot, including the
+     whole `appts` array, AND set knownPregJourney to the server's signature. syncPregJourney then
+     refuses to write when `knownPregJourney === sig` — an echo guard, and a correct one. But once the
+     snapshot had erased the local tick, the local signature MATCHED the server's, so the guard
+     concluded there was nothing to send. The edit was wiped from memory and its write cancelled in the
+     same breath. Any other household activity produces a snapshot, so this fired constantly.
+
+     So: if this device is holding an edit it has not managed to save, keep our appts and do NOT adopt
+     the incoming signature — the pending write has to stay pending. Other fields still take the remote
+     value, so this stays a narrow rule rather than "ignore the server when we feel like it". */
   function applyPregJourney(owner, d) {
     if (!d) return;
     pregShared = d.sharedWith || [];
-    knownPregJourney = stableStringify([d.data || {}, pregShared]); // don't immediately re-write what we just received
     var data = d.data || {};
     var p = state.pregnancy || {};
     if (p.id && data.id && p.id !== data.id) p = {}; // a different pregnancy -> drop stale fields
+
+    var unsaved = false;
+    try {
+      if (knownPregJourney && state.pregnancy) {
+        unsaved = stableStringify([pregJourneyData(state.pregnancy), pregShared]) !== knownPregJourney;
+      }
+    } catch (e) { unsaved = false; }
+    var keepAppts = (unsaved && Array.isArray(p.appts)) ? p.appts : null;
+
     Object.keys(data).forEach(function (k) { p[k] = data[k]; });
+    if (keepAppts) p.appts = keepAppts;
     p.ownerUid = owner; // routing meta lives on the doc, not in data
     state.pregnancy = p;
+
+    // Adopt the server signature ONLY when nothing local is waiting to go out. Doing it
+    // unconditionally is what cancelled the write.
+    if (!unsaved) knownPregJourney = stableStringify([data, pregShared]);
   }
   // Clear the in-memory journey when the doc is gone / never readable (so a non-permitted
   // member never even learns a pregnancy exists, and an owner who ended it sees it cleared).
