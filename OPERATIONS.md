@@ -23,6 +23,7 @@ node tools/offline_gate.js         # the connectivity states + which offline mes
 node tools/homelogs_gate.js        # what home offers, and that the parent decides it (per person, per stage)
 node tools/stack_check.js          # vertical rhythm: 16 / 12 / 8 / 2 across ten surfaces, both themes
 node tools/rerender_gate.js        # entering a screen animates; a background sync repainting it does not
+cd test && node preg-tick-race.test.js   # the antenatal tick survives a snapshot landing mid-push (needs Java)
 node tools/type_check.js           # the type contract: who may wear the handwriting face, heading rank
 node tools/sitesw_gate.js          # the ROOT service worker: caches no content, bypasses /app/, offline page
 node tools/sitesw_gate.js https://little-cubby.com   # AND against the live host, AFTER deploying. Not optional.
