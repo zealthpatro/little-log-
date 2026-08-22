@@ -1791,8 +1791,15 @@ export default {
       if (ctx && request.method === 'GET'
         && /text\/html/i.test(res.headers.get('content-type') || '')) {
         ctx.waitUntil(recordPageView(env, url, res.status));
+        /* TEMPORARY diagnostic. pageStats sat at zero for two days and the resource-name bug only
+           explains part of it — the other candidate is that Workers Static Assets serves a matching
+           asset WITHOUT invoking this Worker at all, in which case this line is simply unreachable for
+           most HTML. Guessing has cost enough this week, so: say so on the wire, look, then remove. */
+        const out = new Response(res.body, res);
+        out.headers.set('x-cubby-worker', 'html');
+        return out;
       }
-    } catch (e) { /* never let counting break serving */ }
+    } catch (e) { console.error('pagecount_wrap_fail', (e && e.message) || String(e)); }
     return res;
   }
 };
