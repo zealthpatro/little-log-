@@ -82,13 +82,23 @@
     if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
       var _emuQ = new URLSearchParams(location.search);
       var _emuPort = parseInt(_emuQ.get('fsemu'), 10);
+      /* ?authemu=<port> — the SIGN-IN sibling of ?fsemu, and the reason it exists: the fsemu hook below
+         REPLACES auth with a stub carrying a fixed currentUser, which is perfect for testing the sync
+         layer and useless for testing sign-in, because it bypasses sign-in entirely. With authemu the
+         REAL Firebase Auth SDK runs, pointed at the Auth emulator, so signInWithCustomToken genuinely
+         creates a session in this browsing context — which is the exact property the installed-iOS bug
+         was about. Same hostname guard, so it can never engage anywhere real. */
+      var _authPort = parseInt(_emuQ.get('authemu'), 10);
+      if (_authPort) {
+        try { auth.useEmulator('http://localhost:' + _authPort, { disableWarnings: true }); } catch (e) {}
+      }
       if (_emuPort) {
         db.useEmulator('localhost', _emuPort);
         var _emuUser = {
           uid: _emuQ.get('fsuid') || 'EMU1', email: (_emuQ.get('fsuid') || 'emu1') + '@emu.test',
           displayName: 'Emu Parent', photoURL: ''
         };
-        auth = {
+        if (!_authPort) auth = {
           currentUser: _emuUser,
           onAuthStateChanged: function (cb) { setTimeout(function () { cb(_emuUser); }, 0); return function () {}; },
           getRedirectResult: function () { return Promise.resolve({}); },
