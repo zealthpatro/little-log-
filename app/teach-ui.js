@@ -319,6 +319,19 @@
     circle: 'Sharing, and what stays private', memories: 'Photos and keepsakes',
     account: 'Your account and your data'
   };
+  /* A group is named for the reader in front of it, not for the stage the rows were written in.
+     Pregnancy rows can outlive the pregnancy: blood pressure still matters in the weeks after a
+     birth, so that row stays browsable, and the fixed heading then told a woman nine days
+     postpartum she was expecting, directly above a line saying she is not. Only the preg group
+     does this, and only once she has had the baby. */
+  function domainName(dom) {
+    if (dom === 'preg') {
+      var st = '';
+      try { st = (typeof window.cubbyTeachCtx === 'function' ? window.cubbyTeachCtx() : {}).stage || ''; } catch (e) {}
+      if (st && st !== 'pregnancy') return 'From your pregnancy, still yours';
+    }
+    return DOMAIN_NAME[dom] || dom;
+  }
 
   /* Search over everything, so a question does not depend on guessing which group it lives under.
      Filtering happens in the DOM rather than by re-rendering: a re-render would collapse every open
@@ -413,7 +426,7 @@
       inDom.sort(function (a, b) {
         return (rank[R[a].depth] - rank[R[b].depth]) || (R[a].label < R[b].label ? -1 : 1);
       });
-      body += '<div class="ht-dh">' + esc(DOMAIN_NAME[dom] || dom) + '</div>'
+      body += '<div class="ht-dh">' + esc(domainName(dom)) + '</div>'
         + inDom.map(function (id) {
             shown++;
             return R[id].depth === 'one' ? flat(id) : item(id);

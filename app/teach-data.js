@@ -108,6 +108,7 @@
       how: [
         'One tap from your home row. Wet, dirty, both, or a dry check.',
         'Change the time if it happened earlier. Nothing has to be logged the moment it happens.',
+        'Add a note if something made you look twice. It saves with the nappy you tap, and you can change it later.',
         'Anyone in your circle can log one, and it appears on every phone straight away.',
         'The day\'s count sits on your home screen, so nobody is adding up in their head.'
       ],
@@ -299,6 +300,12 @@
       what: 'How they are, in your own words or from a list.',
       get: 'Three weeks of small things is impossible to recall at once, and this is what you read from instead.'
     },
+    openFeverSafetyNet: { label: 'When to call sooner', fn: 'openFeverSafetyNet()', domain: 'health', depth: 'chapter',
+      one: 'The signs beside a fever that mean it is time to call, in plain words, from published guidance.',
+      who: { stage: ['baby','child'] },
+      what: 'What would make you call about a fever, taken from the NHS page the sheet links to.',
+      get: 'Something to check against at 3am. It is never a diagnosis, no waiting time here is ours, and calling is always the right answer when you are unsure.'
+    },
     openStartIllness: { label: 'Feeling poorly?', fn: 'openStartIllness()', domain: 'health', depth: 'page',
       one: 'Start tracking an illness, so the timeline is ready for the call.',
       who: { stage: ['baby','child'] },
@@ -381,6 +388,7 @@
         'Set a birthday and the plan appears, already filled in.',
         'Tick each one off as it happens, adding the date.',
         'Add anything your schedule does not include.',
+        'Put the visits still ahead into your own calendar, so they show up when Cubby is closed.',
         'It goes with you into the visit summary and the doctor report.'
       ],
       payoff: 'The answer to what has she had, and when is on your phone rather than in a folder at home.'
@@ -493,9 +501,15 @@
       one: 'Yours, not the baby\'s. Kept private to you.',
       who: { stage: ['pregnancy'] },
       earn: { on: 'week-10' } },
+    /* Reachable in the baby stage too, from the pregnancy record and from Settings, because
+       pre-eclampsia can present after the birth. Narrowing the stage list to pregnancy would hide
+       the row from the answer search for exactly the reader who has just been told to check it.
+       `needs` keeps the widening honest: stage alone put this lone row, under a heading that says
+       "While you are expecting", in front of every baby-stage household including the ones that
+       have never been pregnant in Cubby. */
     openLogBP: { label: 'Blood pressure', fn: 'openLogBP()', domain: 'preg', depth: 'one',
-      one: 'A reading, with the numbers your midwife will want.',
-      who: { stage: ['pregnancy'] },
+      one: 'A reading, with the numbers your midwife will want. It still counts in the weeks after a birth.',
+      who: { stage: ['pregnancy','baby'], needs: 'pregBp' },
       earn: { on: 'week-20' } },
     openBPWatch: { label: 'Blood pressure watch', fn: 'openBPWatch()', domain: 'preg', depth: 'one',
       one: 'When someone has asked you to keep an eye on it.',
@@ -724,7 +738,9 @@
       one: 'Twins, or a second child. One tap between them.',
       who: { stage: null },
       earn: { on: 'second-baby-added' } },
-    openFamily: { label: 'Your circle', fn: 'openFamily()', domain: 'circle', depth: 'page',
+    // Same screen, two doors: openFamily('invite') titles it "Invite someone", so the registry
+    // knows that name for it too.
+    openFamily: { label: 'Your circle', aka: ['invite someone'], fn: 'openFamily()', domain: 'circle', depth: 'page',
       one: 'Everyone who helps, on the same log, live. Every entry says who did it.',
       who: { stage: null },
       earn: { on: 'first-log' },
@@ -959,6 +975,9 @@
     openReadCarousel: 'Renders the swipeable reads. Same reason.',
     showCountryList: 'Opens a picker\'s list. Helper inside a form field.',
     showDeletedGoodbye: 'Terminal confirmation screen after deletion. Nothing left to teach.',
+    showWakeWindow: 'The Undo on "Hidden from home". Reached only from that toast, never navigated to, and the toast is the whole explanation.',
+    showWwLog: 'The Undo on "Hidden from your timeline". Same toast, same reason.',
+    showWwNotYet: 'The Undo on hiding the not-yet wake-window note. Same toast, same reason.',
 
     /* Dormant behind a flag */
     openDenChores: 'FEATURES.den = false.',
@@ -973,6 +992,7 @@
     openFeverNudge: 'Already the earned nudge for the visit summary. Governed by the ledger.',
     openKeepsakeNudge: 'Already the earned nudge for memory cards.',
     openInstall: 'Already a prompt. Competes for the token like any other.',
+    openPosterOffer: 'Retires the birth-poster nudge and opens openBirthPoster, which is taught. No screen of its own.',
     showBirthArrival: 'Arrival prompt. Fires on the birth transition.',
     openOnboardInvite: 'The last screen of first-run. Part of the flow, not a thing to explain.',
   };

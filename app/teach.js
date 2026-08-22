@@ -147,9 +147,14 @@
   /* ---- who a row is for ---------------------------------------------------------------------- */
 
   // May only narrow. A row is never offered to somebody the shell would not open it for.
+  /* `needs` names a door the stage alone cannot see: a capability that lives in a stage but opens
+     for only some of the people in it. The shell publishes those as ctx.has, so the registry stays
+     declarative and never reaches into app state. Missing flag means no, so a row that names one
+     is hidden until the shell says the door is really there. */
   function fits(c, row) {
     var w = row.who || {};
     if (w.stage && w.stage.indexOf(c.stage) === -1) return false;
+    if (w.needs && !((c.has || {})[w.needs])) return false;
     if (w.role && w.role !== 'any' && w.role !== c.role) return false;
     if (w.months && c.months != null) {
       if (w.months[0] != null && c.months < w.months[0]) return false;

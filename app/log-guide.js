@@ -159,7 +159,7 @@
         { t: 'Some things stay only yours', b: 'How you are feeling in yourself is never shared with your circle. Not now, not later, not by accident. A note can go to everyone or to one person, and the card always says which.' },
         { t: 'If someone leaves the circle', b: 'Their access goes, and what they logged stays in your family\'s log. Nothing disappears from the story.' }
       ],
-      fn: 'openFamily()', cta: 'Invite someone'
+      fn: 'openFamily(\'invite\')', cta: 'Invite someone'
     },
     logging: {
       title: 'The three answers', ico: '🍼', tone: '--feed', soft: '--feed-soft',
@@ -241,10 +241,17 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
+  /* Every fn here is a name and its own argument list, written as source. This threw the argument
+     away: `go('album')` arrived as `go(undefined)` and the album story landed on view=undefined,
+     and `openFamily('invite')` would have silently opened the Settings order under a button that
+     says Invite someone. One quoted string is all any of these ever pass, so that is all this
+     reads, and anything more elaborate still falls back to calling it with nothing. */
   function callFn(spec) {
-    var name = String(spec || '').replace(/\(.*$/, '');
-    if (name && typeof window[name] === 'function') { window[name](); return true; }
-    return false;
+    var s = String(spec || ''), name = s.replace(/\(.*$/, '');
+    if (!name || typeof window[name] !== 'function') return false;
+    var m = s.match(/^[^(]*\(\s*'([^']*)'\s*\)\s*$/);
+    if (m) window[name](m[1]); else window[name]();
+    return true;
   }
 
   /* The chapter set for whoever is holding the phone, in two groups.

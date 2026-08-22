@@ -117,7 +117,7 @@ rowIds.forEach(id => {
   /* Structural. A patch that inserted page fields at the wrong brace once nested the whole page
      INSIDE who:{...}. That parses, so it showed up only as "missing why" on a few rows rather than
      as the structural break it was. Unknown keys in who are now the loud failure they should be. */
-  const WHO_KEYS = ['stage', 'role', 'months', 'circle'];
+  const WHO_KEYS = ['stage', 'role', 'months', 'circle', 'needs'];
   const ROW_KEYS = ['label', 'aka', 'fn', 'domain', 'depth', 'one', 'what', 'get', 'who', 'earn',
                     'faq', 'read', 'why', 'matters', 'how', 'payoff'];
   Object.keys(r.who || {}).forEach(k => check(WHO_KEYS.indexOf(k) !== -1,

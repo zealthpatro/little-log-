@@ -217,6 +217,38 @@
     + '.ll-linkrow{display:flex;gap:8px;}'
     + '.ll-linkrow input{flex:1;min-width:0;border:1px solid #E0D7C7;border-radius:10px;padding:11px 12px;font-size:13px;font-family:inherit;background:#FBF7EF;color:#6E635B;}'
     + '.ll-linkrow .ll-modal-btn{width:auto;padding:11px 16px;white-space:nowrap;}'
+    /* The fold, used only by the invite door: one obvious action at the top and the slower ways
+       tucked under a tap. <details> rather than a JS toggle because it opens on tap and on Enter
+       with no script at all, so it can never end up stuck shut on a phone where something else
+       threw. Its body cancels .ll-invite's own top rule, which would otherwise draw a divider
+       immediately under the fold's own border.
+
+       Border only, no fill, in both themes. The ghost buttons that live inside it (Save my
+       profile, Change my bear avatar, Sign out) are #FBF7EF in day and var(--surface) at night,
+       which is exactly the fill a tinted panel would have wanted: shot at 390px in Night with a
+       var(--surface) fold, all three buttons disappeared into the panel they sat on. */
+    + '.ll-fold{border:1px solid #E8DFCF;border-radius:14px;margin-top:12px;background:transparent;}'
+    + '.ll-fold>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 14px;font-weight:700;font-size:14px;color:#2C2521;}'
+    + '.ll-fold>summary::-webkit-details-marker{display:none;}'
+    + '.ll-fold-c{color:#9a8d80;font-weight:800;transform:rotate(90deg);transition:transform .15s;}'
+    + '.ll-fold[open] .ll-fold-c{transform:rotate(-90deg);}'
+    + '.ll-fold-b{padding:0 14px 14px;}'
+    + '.ll-fold-b .ll-invite{border-top:none;padding-top:0;}'
+    + '.ll-fold-b .ll-ghost{margin-top:10px;}'
+    // Nothing has gone wrong yet, so it should take up no room yet.
+    + '#llLinkErr:empty{display:none;}'
+    /* And when something HAS gone wrong it has to look unlike the two helper paragraphs it sits
+       between. Measured before this rule: #9a8d80 on white, 2.9:1, typographically identical to
+       its neighbours, so the one line telling her the link failed read as more small print.
+       --danger-ink is the text-safe rung and already swaps itself at night (6.0:1 day on white,
+       6.2:1 night on --surface), so this needs no night twin. */
+    + '#llLinkErr:not(:empty){color:var(--danger-ink,#9F4C3B);font-weight:700;margin-top:6px;}'
+    /* The one-line prompt above the link, for an owner who has not named the family yet: it is
+       the only advice on this screen that stops being useful the second she taps Make a link. */
+    + '.ll-namefirst{display:flex;align-items:center;justify-content:space-between;gap:10px;'
+    + 'border:1px solid #E8DFCF;border-radius:14px;padding:11px 12px 11px 14px;margin-bottom:12px;'
+    + 'font-size:13px;line-height:1.4;color:#2C2521;}'
+    + '.ll-namefirst .ll-modal-btn{margin:0;width:auto;padding:9px 14px;white-space:nowrap;font-size:14px;}'
     + '.tl-by{font-size:11px;color:var(--ink-soft,#9a8d80);opacity:.85;margin-top:2px;}'
     + '.nap-toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:6px 0 12px;font-size:14px;color:var(--ink,#2C2521);cursor:pointer;}'
     + '.nap-toggle input{position:absolute;opacity:0;width:0;height:0;}'
@@ -282,7 +314,20 @@
     + '[data-theme="night"] .ll-linkrow input{background:var(--surface);border-color:var(--line);color:var(--ink-soft);}'
     + '[data-theme="night"] .ll-ghost{background:var(--surface);color:var(--ink-soft);}'
     + '[data-theme="night"] .ll-check{color:var(--ink-soft);}'
-    + '[data-theme="night"] .ll-modal-btn{color:var(--bg);}';
+    + '[data-theme="night"] .ll-fold{border-color:var(--line);}'
+    + '[data-theme="night"] .ll-fold>summary{color:var(--ink);}'
+    + '[data-theme="night"] .ll-fold-c{color:var(--ink-faint);}'
+    + '[data-theme="night"] .ll-namefirst{border-color:var(--line);color:var(--ink);}'
+    // The family's own name, on the mint panel, was #2C2521 on #1E2F2A at night: 1.5:1, the one
+    // thing on this screen an invited person is told they are joining.
+    + '[data-theme="night"] .ll-hhname-v{color:var(--ink);}'
+    + '[data-theme="night"] .ll-modal-btn{color:var(--bg);}'
+    /* Last, and one class heavier, because the line above it is what broke these. Equal
+       specificity meant `[data-theme="night"] .ll-modal-btn{color:var(--bg)}` won over
+       `.ll-ghost`'s own colour by source order, so Save my profile, Change my bear avatar and
+       Sign out were all #1A1614 on var(--surface): 1.09:1, invisible. The fold now puts three of
+       them one tap away, which is where a parent would have met it. */
+    + '[data-theme="night"] .ll-modal-btn.ll-ghost{color:var(--ink-soft);}';
   document.head.appendChild(st);
 
   function overlay() {
@@ -2459,6 +2504,14 @@
   }
   function closeModal() { var m = document.getElementById('llModalOv'); if (m) m.remove(); }
 
+  /* Fold a block away without taking it out of the DOM. The content is still built and still
+     wired, so every id the caller wires afterwards is there whether the parent opens it or not,
+     and nothing has to be re-rendered when she does. */
+  function llFold(id, label, inner) {
+    return '<details class="ll-fold" id="' + id + '"><summary>' + esc(label)
+      + '<span class="ll-fold-c">›</span></summary><div class="ll-fold-b">' + inner + '</div></details>';
+  }
+
   var RELATIONSHIPS = ['Mama Bear', 'Papa Bear', 'Nana Bear', 'Grandpa Bear', 'Auntie Bear', 'Uncle Bear', 'Nanny', 'Caregiver', 'Other'];
   function relOptions(sel, withCustom) {
     var list = RELATIONSHIPS.slice();
@@ -2520,7 +2573,18 @@
     return '<div class="ll-fp">' + people.join('') + cubs.join('') + more + '</div>';
   };
 
-  function openFamily() {
+  /* Which door the parent came in by, remembered so the modal's own reopens (cancel a link, cancel
+     an invite, remove someone) rebuild the order she is standing in rather than snapping her back
+     to the Settings layout mid-task. Settings passes nothing and therefore clears it. */
+  var familyMode = '';
+  function reopenFamily() { openFamily(familyMode); }
+
+  /* Two doors into one modal. Settings is somewhere you go to look after your circle, so it opens
+     on the circle. Every "Invite someone" button in the app belongs to a parent who has already
+     decided, and it used to land her on the family portrait and her own name field with the
+     one-tap share three blocks further down. openFamily('invite') reorders the SAME blocks: the
+     link leads, and the slower ways are one tap away instead of gone. */
+  function openFamily(mode) {
     var me = auth.currentUser; if (!me) return;
     var myRole = window.LL.role || 'caregiver';
     var info = window.LL.memberInfo || {};
@@ -2582,8 +2646,23 @@
     }).join('');
     pendRows += linkRows;
 
+    /* Only an owner can make a link or write an invite, so for a caregiver the invite door has
+       nothing to lead with: it would put an empty block at the top and fold her own profile away
+       for no reason. She gets the ordinary order, whichever button she pressed. Decided here,
+       above the blocks, because three of them read it while they are being built. */
+    var leadInvite = (mode === 'invite') && (myRole === 'owner');
+    familyMode = leadInvite ? 'invite' : '';
+
+    // Whoever set the circle up, so a caregiver who cannot invite is told a name and not a role.
+    var ownerName = '';
+    Object.keys(info).forEach(function (uid) {
+      if (!ownerName && uid !== me.uid && (info[uid] || {}).role === 'owner') ownerName = (info[uid] || {}).name || '';
+    });
+
     var myName = (info[me.uid] && info[me.uid].name) || me.displayName || '';
-    var youRow = '<div class="ll-invite" style="border-top:none;padding-top:4px"><label style="font-weight:800;font-size:15px">Your profile</label>'
+    // In the invite door this block sits inside a fold already headed "Your profile", and its own
+    // heading was printing the same two words again directly underneath.
+    var youRow = '<div class="ll-invite" style="border-top:none;padding-top:4px">' + (leadInvite ? '' : '<label style="font-weight:800;font-size:15px">Your profile</label>')
       + '<label>Your name</label><input id="llMyName" maxlength="40" autocomplete="name" placeholder="Your name" value="' + esc(myName) + '">'
       + '<label style="margin-top:10px;display:block">Your relationship to baby</label>'
       + '<select id="llMyRel">' + relOptions(myRel, true) + '</select>' + relCustomInput('llMyRelCustom')
@@ -2601,7 +2680,11 @@
         + '<label class="ll-check"><input type="checkbox" id="llInvOwner"><span>Co-owner, full control (can edit everyone\'s entries &amp; invite others)</span></label>'
         + '<button id="llInvBtn" class="ll-modal-btn">Create invite</button>'
         + '<div id="llInvMsg" class="ll-auth-msg"></div></div>'
-      : '<div class="ll-auth-msg">Only an owner can invite new people.</div>';
+      /* Said in people, not in roles, and it names who to ask where it can: "an owner" is a word
+         from the permissions table, not a person a grandmother can go and speak to. No pronoun,
+         because the app is not told anyone's. */
+      : '<div class="ll-auth-msg">Only the person who set up this circle can add people.'
+        + (ownerName ? (' Ask ' + esc(ownerName) + ' to send an invite.') : ' Ask them to send an invite.') + '</div>';
 
     // Owner-only, like the invite form above it: sharing a working invite needs an email to pair the
     // link with, and only an owner can create one. Showing this to a caregiver offered a bare link
@@ -2610,11 +2693,23 @@
       ? '<div class="ll-invite"><label>Invite link</label>'
         + '<div class="ll-linkrow"><input id="llAppLink" readonly placeholder="Tap to make a one-time link" value=""><button id="llCopyLink" class="ll-modal-btn">Make a link</button></div>'
         + '<div class="ll-auth-msg">One link, for one person, good for a day. Whoever opens it joins your circle, so send it to them and not to a group. You do not need to know which email address they will sign in with.</div>'
+        /* The link block's own message line. It used to borrow llInvMsg, which sits inside the
+           email-invite block: in the invite door that block is folded shut, so "could not make a
+           link" was written into something the parent could not see and the button just went
+           quiet on her. */
+        + '<div id="llLinkErr" class="ll-auth-msg" style="text-align:left"></div>'
         + '<div id="llLinkMail" style="display:none;margin-top:8px"><label>Or let Cubby email it</label>'
         + '<input id="llLinkEmail" type="email" placeholder="Their email address" autocomplete="off" autocapitalize="off">'
         + '<button id="llLinkMailBtn" class="ll-modal-btn ll-ghost" style="margin-top:6px">Email the link</button>'
         + '<div id="llLinkMailMsg" class="ll-auth-msg"></div></div>'
-        + '<div class="ll-auth-msg" style="margin-top:6px">Prefer the stricter way? Add their exact email above instead: that invite only works for that address.</div></div>'
+        /* "above" is only true in the Settings order. In the invite door the email form is folded
+           below, so this has to name the fold and ask her to open it: telling her to "add their
+           exact email under X" points at a form that is not on screen yet. */
+        + '<div class="ll-auth-msg" style="margin-top:6px">'
+        + (leadInvite
+            ? 'Prefer the stricter way? Open “Invite by their email address” below, and that invite will only work for the address you type.'
+            : 'Prefer the stricter way? Add their exact email above instead: that invite only works for that address.')
+        + '</div></div>'
       : '';
 
     /* The family's own name, at the top, because it is the thing an invited person is told they
@@ -2631,20 +2726,60 @@
               ? '<button id="llHhName" class="ll-modal-btn ll-ghost" style="margin:0;width:auto;padding:8px 14px">' + (hhSet ? 'Rename' : 'Name it') + '</button>'
               : '')
         + '</div>'
-        + (!hhSet && myRole === 'owner'
+        + (!hhSet && myRole === 'owner' && !leadInvite
             ? '<div class="ll-auth-msg" style="text-align:left;margin:-4px 0 12px">Naming it means an invite can say what someone is joining, instead of "someone\'s Cubby".</div>'
             : ''))
       : '';
 
-    modal('Family & sharing', nameRow + '<div class="ll-mems">' + rows + '</div>'
-      + (pendRows ? ('<div class="ll-auth-msg" style="text-align:left;margin:6px 0 2px;font-weight:800">Invited, not joined yet</div><div class="ll-mems">' + pendRows + '</div>') : '')
-      + '<div class="ll-auth-msg" style="text-align:left;margin:-2px 0 12px">When you invite people, everyone in your circle can see each other\'s name here, so you know who is who. Email addresses stay between each person and the circle owner. Only you can change your own.</div>'
-      + youRow + invite + share
-      + '<button id="llSignOut" class="ll-modal-btn ll-ghost">Sign out</button>'
-      + '<div class="ll-auth-msg" style="margin-top:10px">Cubby v' + (window.CUBBY_VERSION || '') + ' · made with families like you 🐻</div>');
+    /* The one thing on the invite screen that only helps BEFORE the link is sent. In the Settings
+       order it is the second thing she reads; the reorder pushed it five blocks below the button
+       that sends the link, so she was told why the name matters after the invite already said
+       "someone's Cubby". It leads instead, one line, with the same Name it button. The full name
+       row stays where it is under "Who is already here" (its explanatory line is dropped there in
+       this door, so the point is made once). Its own id, because llHhName is still down there and
+       getElementById would only ever find one of them. */
+    var nameFirst = (leadInvite && hhName && !hhSet)
+      ? '<div class="ll-namefirst"><div>Name your family first and the invite can say what they are joining.</div>'
+        + '<button id="llHhNameTop" class="ll-modal-btn ll-ghost">Name it</button></div>'
+      : '';
 
+    /* The same blocks, named once, so the two doors are an ORDER and not a second copy of this
+       screen. Anything added to one of these is in both by construction. */
+    var memsBlock = '<div class="ll-mems">' + rows + '</div>';
+    var pendBlock = pendRows ? ('<div class="ll-auth-msg" style="text-align:left;margin:6px 0 2px;font-weight:800">Invited, not joined yet</div><div class="ll-mems">' + pendRows + '</div>') : '';
+    var seenByAll = '<div class="ll-auth-msg" style="text-align:left;margin:-2px 0 12px">When you invite people, everyone in your circle can see each other\'s name here, so you know who is who. Email addresses stay between each person and the circle owner. Only you can change your own.</div>';
+    var signOutBtn = '<button id="llSignOut" class="ll-modal-btn ll-ghost">Sign out</button>';
+    var versionLine = '<div class="ll-auth-msg" style="margin-top:10px">Cubby v' + (window.CUBBY_VERSION || '') + ' · made with families like you 🐻</div>';
+
+    if (leadInvite) {
+      /* Invite door. The link and its button first; then whoever the last link went to, because
+         "did that one ever arrive" is the question she comes back with; then the two slower
+         things, folded. Sign out lives inside the profile fold here: on a screen she reached by
+         tapping "Invite someone" it is only a mis-tap waiting to happen, and it is a profile
+         action anyway. It stays in the DOM either way, so the wiring below is unchanged. */
+      modal('Invite someone', nameFirst + share + pendBlock
+        + llFold('llFoldEmail', 'Invite by their email address', invite)
+        + '<div class="ll-auth-msg" style="text-align:left;margin:16px 0 2px;font-weight:800">Who is already here</div>'
+        + nameRow + memsBlock + seenByAll
+        + llFold('llFoldProfile', 'Your profile', youRow + signOutBtn)
+        + versionLine);
+    } else {
+      /* She pressed a button that said Invite someone and she cannot invite. Same blocks, same
+         order, with the one sentence that answers her moved to the top: it used to sit in faint
+         grey at the very bottom, under her own profile form, so the answer to "why is there
+         nothing to tap" was the last thing on the screen. */
+      var askedToInvite = (mode === 'invite');
+      modal('Family & sharing', (askedToInvite ? invite : '') + nameRow + memsBlock + pendBlock + seenByAll
+        + youRow + (askedToInvite ? '' : invite) + share + signOutBtn + versionLine);
+    }
+
+    // Naming the family closes this modal, so from the invite door it says which door to come
+    // back through. Settings passes nothing and lands where it always did.
+    var hhOpen = function () { closeModal(); if (window.openHouseholdName) window.openHouseholdName(leadInvite ? 'invite' : ''); };
     var hhBtn = document.getElementById('llHhName');
-    if (hhBtn) hhBtn.onclick = function () { closeModal(); if (window.openHouseholdName) window.openHouseholdName(); };
+    if (hhBtn) hhBtn.onclick = hhOpen;
+    var hhBtnTop = document.getElementById('llHhNameTop');
+    if (hhBtnTop) hhBtnTop.onclick = hhOpen;
     document.getElementById('llSignOut').onclick = function () { closeModal(); window.LL.signOut(); };
     document.getElementById('llMyRelBtn').onclick = saveMyRelationship;
     wireRelCustom('llMyRel', 'llMyRelCustom');
@@ -2689,7 +2824,7 @@
     catch (e) { try { if (window.toast) window.toast('Could not cancel that link'); } catch (e2) {} return; }
     try { await hhRef.update(new firebase.firestore.FieldPath('pendingLinks', token), firebase.firestore.FieldValue.delete()); } catch (e) {}
     try { if (window.toast) window.toast('Link cancelled'); } catch (e) {}
-    if (window.openFamily) window.openFamily();
+    reopenFamily();
   }
   /* Email the link from Cubby, on her behalf. Until now the app sent no invite email at all: she
      was handed a mailto: or a share sheet and was herself the delivery mechanism, which is silent
@@ -2726,7 +2861,7 @@
         if (window.LL.hhPending) delete window.LL.hhPending[email];
         if (getLastInvite() === email) setLastInvite('');
         try { window.toast && window.toast('Invite cancelled.'); } catch (e) {}
-        openFamily();
+        reopenFamily();
       }
       // Same optimistic exit as saves: offline the delete is queued and will land; don't hang.
       var t = setTimeout(function () { if (done) return; done = true; finish(); }, 6000);
@@ -2741,7 +2876,7 @@
             if (window.LL.hhPending) delete window.LL.hhPending[email];
             if (getLastInvite() === email) setLastInvite('');
             try { window.toast && window.toast('That invite was already gone, so it has been tidied away.'); } catch (e2) {}
-            openFamily();
+            reopenFamily();
             return;
           }
           try { window.toast && window.toast(errText(e, 'Could not cancel that invite just now. Mind trying again?', true)); } catch (e2) {}
@@ -2899,7 +3034,7 @@
           // in the "Invited, waiting" list once they're gone from memberInfo.
           try { hhRef.update(new firebase.firestore.FieldPath('pendingInvites', String(email).toLowerCase()), firebase.firestore.FieldValue.delete()).catch(function () {}); } catch (e) {}
         }
-        openFamily();
+        reopenFamily();
       } catch (e) { try { window.toast && window.toast('Could not remove ' + (name || 'this person') + ' just now.'); } catch (e2) {} }
     };
     // Use the app's own confirm sheet (calm, on-brand); native confirm is only a defensive fallback.
@@ -2991,15 +3126,18 @@
   async function copyAppLink() {
     var btn = document.getElementById('llCopyLink');
     var inp = document.getElementById('llAppLink');
-    var msg = document.getElementById('llInvMsg');
+    // The link block's own line first: llInvMsg belongs to the email form, which the invite door
+    // folds shut, and a failure written in there is a failure the parent never sees.
+    var msg = document.getElementById('llLinkErr') || document.getElementById('llInvMsg');
     if (btn) { btn.disabled = true; btn.textContent = 'Making…'; }
     var made = await window.LL.createInviteLink({ role: 'caregiver' });
     if (btn) btn.disabled = false;
     if (!made) {
       if (btn) btn.textContent = 'Make a link';
-      if (msg) msg.textContent = 'Could not make a link just now. You can still invite by email above.';
+      if (msg) msg.textContent = 'Could not make a link just now. You can still invite by email instead.';
       return;
     }
+    if (msg) msg.textContent = '';
     if (inp) inp.value = made.url;
     // Reveal the email option only once a link exists, and remember which token it belongs to.
     var mailWrap = document.getElementById('llLinkMail');

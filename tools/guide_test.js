@@ -163,7 +163,11 @@ async function chapterLabels(page) {
   // The labour tools arrive when they are useful, not at week 12.
   const weeks = await page.evaluate(() => {
     function keys(w) {
-      var c = cubbyGuideCtx(); c.week = w;
+      /* Move the pregnancy rather than the number. ctx.week and ctx.actions both come off the record
+         now that quickAvailable applies the same 28/36 rule the guide does, so faking one and not
+         the other describes a mother who cannot exist. */
+      state.pregnancy.dueDate = Date.now() + (40 - w) * 7 * 86400000;
+      var c = cubbyGuideCtx();
       var ch = CubbyGuide._chapters(c);
       return [].concat(ch.now, ch.more).map(function (x) { return x.k; });
     }

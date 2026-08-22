@@ -667,6 +667,9 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .ww-line .ww-s{font-size:12.5px;font-weight:600;line-height:1.45;color:var(--ink-soft);margin-top:4px;}
 .ww-line .ww-x{position:absolute;top:6px;right:6px;width:28px;height:28px;border:none;background:none;
   color:var(--ink-faint);font-size:15px;line-height:1;cursor:pointer;font-family:var(--font-body);border-radius:50%;}
+/* On the Log surface the same line sits under a button rather than under the three answers, so it
+   keeps the block rhythm instead of the -4px tuck that pulls it up against the since-row. */
+.ww-line.ww-log{margin-top:0;}
 /* Two small number fields reading as one sentence: "woke [2] times, for about [20] minutes". */
 .wk-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px;font-weight:600;color:var(--ink-soft);}
 .wk-row input{width:66px;flex:0 0 auto;text-align:center;}
@@ -844,6 +847,10 @@ input:not([type=time]):not([type=date]),textarea{font-size:16px;}
 .dose-btn:active{transform:scale(.93);}
 .add-row{display:flex;align-items:center;justify-content:center;gap:9px;background:var(--surface);border:2px dashed var(--line);border-radius:var(--radius-sm);padding:var(--pad-card);margin-bottom:var(--row);cursor:pointer;font-weight:800;color:var(--ink-soft);font-size:14px;}
 .add-row svg{width:18px;height:18px;}
+/* The vaccine calendar row leads the vaccines tab and EXPORTS rather than adds, so it borrows the
+   .add-row shape but not the dashed "add something by hand" border, and it takes the 16px block gap
+   into the card below instead of the 8px rhythm between rows in one list. */
+.cal-row{border-style:solid;border-width:1px;margin-bottom:var(--stack);}
 
 /* ---- milestones ---- */
 .ms-hero{background:var(--surface);border-radius:var(--radius);padding:var(--pad-card);margin-bottom:var(--stack);display:flex;align-items:center;gap:18px;box-shadow:0 5px 14px var(--shadow);}
@@ -1866,19 +1873,110 @@ function undoLast(){
   if(!_undo) return;
   const ids={}; _undo.ids.forEach(i=>{ ids[i]=1; });
   state.events = (state.events||[]).filter(e=>!ids[e.id]);
-  _undo=null; persist(); render(); toast('Undone', {silent:true});
+  /* The entry it was announcing is gone, so the announcement goes with it rather than sitting over
+     a home screen that says "not yet" three times. */
+  _undo=null; unspendFirstEntryLine(); persist(); render(); toast('Undone', {silent:true});
 }
 // The one toast that offers it, so every logging path gets undo from a single place.
 function loggedToast(msg, ids, what){
   if(ids&&ids.length){ markUndo(ids, what); toast(msg, {action:{label:'Undo', fn:undoLast}}); }
   else toast(msg);
 }
+/* THE FIRST ENTRY. saveDiaper ends in a two-second toast and renderGetStarted returns '' the moment
+   the household has a baby and a log, so the parent who does exactly what she was asked loses the
+   only structure on the screen and gets nothing back but the word "logged". Nowhere does the product
+   say what her own log will be able to answer once there is a bit of it, and that is the sentence
+   that turns one nappy into a habit.
+   It is a statement of capability, not a task: no count of what she has logged, no next step, no
+   target, and it never comes back. Same quiet shape as the wake-window line it sits beside.
+   Armed at the write door rather than inferred at paint time, because "is this her first" is only
+   knowable at the instant before the entry lands. THREE states, not two: 'armed' waits for her to be
+   looking at Home, 'shown' has been on the screen and retires when she leaves the tab. Without the
+   middle state a first log written from the Log tab would be spent on a screen that never rendered
+   it; without the last one it would come back every time she returned to Home all evening. */
+const FIRST_ENTRY_TIP='tip_firstentry';
+var _firstLine=false, _firstLineBaby=null;
+/* The exact three things the since-row shows, for the baby whose row it is. Read straight off
+   babyEvents() so the test and the row can never disagree: sleep counts only once it has an end,
+   because a nap with no end is not on that row either, and a soft-deleted entry is not on it. */
+function firstEntryRowFilled(bid){
+  return (state.events||[]).some(e=>e && e.babyId===bid && !e.deleted &&
+    (e.type==='feed'||(e.type==='sleep'&&e.end)||e.type==='diaper'));
+}
+/* Only the three types the sentence is about. A first entry that is a temperature or a vaccine leaves
+   all three since-cards reading "not yet", and a line promising she can now see the last feed there
+   would be pointing at nothing. Her first FEED, sleep or nappy is still ahead of her, and that write
+   is the one that arms this.
+   `ids` is who the write actually lands on. It is not optional: with twins the nappy sheet offers
+   Robin / Wren / Both, and a nappy filed against the twin who is NOT on screen leaves this screen
+   reading "not yet" three times. Arming on the household's log alone announced that write in the
+   active twin's name, spent the once-per-person mark on it, and left the real first nappy silent. */
+function armFirstEntryLine(type, ids){
+  _firstLine=false; _firstLineBaby=null;  // a later write retires it, the same way it retires undo
+  if(type!=='feed'&&type!=='sleep'&&type!=='diaper') return;
+  const bid=state.activeBabyId;
+  if(!ids||ids.indexOf(bid)<0) return;   // it is not this screen's row that is about to change
+  if(hasSeen(FIRST_ENTRY_TIP)) return;
+  if(myLossHolding()) return;            // nothing is being started here, so nothing is introduced
+  /* This baby's log, not this person's: the line describes a home screen that is about to stop
+     saying "not yet" for the first time, and it has already stopped saying it for anyone joining a
+     family that logs. This also means nobody with history gets told about a screen they have been
+     reading for months, which is what would happen if the only guard were the seen ledger. Scoped
+     to the baby rather than the household because the row is: a household guard blocked the twin
+     whose own row was still empty. */
+  if(firstEntryRowFilled(bid)) return;
+  _firstLine='armed'; _firstLineBaby=bid;
+}
+/* Called where undo is cleared, on a tab change. Only a line she has actually SEEN is spent; one
+   still waiting survives the walk from Log to Home, which is the whole reason it waits. */
+function retireFirstEntryLine(){ if(_firstLine==='shown'){ _firstLine=false; _firstLineBaby=null; } }
+/* Undo hard-removes the entry, so the sentence it announced is no longer true and the ledger entry
+   claiming she has been told is no longer earned. Giving the mark back is safe on EVERY undo, not
+   just this one: the arming test above still refuses while any feed, sleep or nappy remains, so the
+   only person who can ever see it again is the one whose single entry has just gone. */
+function unspendFirstEntryLine(){
+  _firstLine=false; _firstLineBaby=null;
+  try{ const m=seenMap(); delete m[FIRST_ENTRY_TIP]; localStorage.setItem(seenKey(), JSON.stringify(m)); }catch(e){}
+}
+function dismissFirstEntryLine(){ _firstLine=false; _firstLineBaby=null; render(); }
+/* Recomputed at the top of every paint and read by wakeWindowLine a line later in renderHome, which
+   is the only place either is called and always calls this one first. Two explainers stacked on one
+   home screen is two things to dismiss at the moment the charter is most trying to be calm, and a
+   baby's FIRST NAP is usually also her first entry, so the two lines are built for the same instant. */
+var _firstLineOnScreen=false;
+function firstEntryLine(){
+  _firstLineOnScreen=false;
+  if(!_firstLine) return '';
+  if(myLossHolding()) return '';
+  const b=activeBaby(); if(!b||!b.name) return '';
+  /* She switched babies between logging and looking. The row on screen now belongs to the other
+     one and still says "not yet", so this sentence is not true here. It stays armed, unspent, and
+     comes back if she switches back. */
+  if(_firstLineBaby!==b.id) return '';
+  /* Filed the moment it is really on the screen, in this person's own per-uid ledger. Once per
+     person and not once per household on purpose: a nanny who has already learned what this screen
+     answers does not need telling again in the next family, and a partner joining later never saw
+     the owner's copy of it. */
+  _firstLine='shown'; _firstLineOnScreen=true; markSeen(FIRST_ENTRY_TIP);
+  /* data-tip names it. It borrows .ww-line from the wake-window line on purpose, and without this
+     the two are indistinguishable in the DOM, so a check for "the first-entry line is absent" would
+     be answered by whichever line happened to be there. */
+  return `<div class="ww-line" data-tip="firstentry">
+    <div class="ww-t">That is the first one. From here, when ${escapeHtml(b.name)} last fed, slept and had a nappy is the top of your home screen.</div>
+    <button class="ww-x" onclick="dismissFirstEntryLine()" aria-label="Hide this">×</button>
+  </div>`;
+}
 function commitEvent(payload){
   const targets=targetsResolved();
+  /* notes is part of the shape: two wet nappies half a second apart with the same words is still a
+     slip, but one with "streak of blood" and one without is two different things a parent said, and
+     dropping the second silently while the toast reads "note saved" loses the words that mattered. */
   const sig=JSON.stringify([payload&&payload.type, payload&&payload.method, payload&&payload.kind,
-    payload&&payload.amount, payload&&payload.activity, payload&&payload.medId, targets.join(',')]);
+    payload&&payload.amount, payload&&payload.activity, payload&&payload.medId,
+    payload&&payload.notes, targets.join(',')]);
   if(_lastCommit.sig===sig && (now()-_lastCommit.at)<900) return;
   _lastCommit={sig:sig, at:now()};
+  armFirstEntryLine(payload&&payload.type, targets);   // before the push, while "is this the first" is still true
   const written=[];
   targets.forEach(bid=>{ const ev=Object.assign({},payload); ev.id=uid(); ev.babyId=bid; state.events.push(ev); written.push(ev.id); });
   markUndo(written, payload&&payload.type);
@@ -2338,15 +2436,19 @@ function setHouseholdName(v){
   persist(); render();
   toast(t?('Now "'+t+'"'):'Back to '+defaultHouseholdName());
 }
-function openHouseholdName(){
+/* `back` is the door to return to. Naming the family is a detour: from the invite screen it is
+   offered above the link, so leaving her on the sheet she started from would end the invite she
+   came to send. Passed only by the invite door, so every other caller behaves exactly as before. */
+function openHouseholdName(back){
   const cur=(state.settings&&state.settings.householdName)||'';
+  const ret = back==='invite' ? `;window.openFamily&&window.openFamily('invite')` : '';
   openSheet(`<h2>What shall we call your family?</h2>
     <div class="sub">This is what someone sees when you invite them, so they know whose Cubby they are joining. Everyone in the circle sees it.</div>
     <div class="field"><label>Family name</label>
       <input id="hhName" maxlength="40" value="${escapeHtml(cur)}" placeholder="${escapeHtml(defaultHouseholdName())}"></div>
     <div class="csub">Leave it empty to use ${escapeHtml(defaultHouseholdName())}.</div>
-    <button class="btn-primary" style="background:var(--diaper)" onclick="setHouseholdName(document.getElementById('hhName').value);closeSheet()">Save</button>
-    <button class="btn-ghost" onclick="closeSheet()">Cancel</button>`,'diaper');
+    <button class="btn-primary" style="background:var(--diaper)" onclick="setHouseholdName(document.getElementById('hhName').value);closeSheet()${ret}">Save</button>
+    <button class="btn-ghost" onclick="closeSheet()${ret}">Cancel</button>`,'diaper');
 }
 function meGreeting(){
   const name=myName();
@@ -2538,7 +2640,7 @@ function renderGetStarted(){
           parent did exactly what the app told her and the box stayed empty. A nappy is two taps and
           it always writes an entry, which is the whole promise of the row. */''}
     ${row(haveLog,'Log your first entry','A nappy change is two taps','openDiaper()')}
-    ${row(shared,'Invite a co-parent','Share the log live with family',"window.openFamily&&window.openFamily()")}
+    ${row(shared,'Invite a co-parent','Share the log live with family',"window.openFamily&&window.openFamily('invite')")}
     ${row(hasPhoto,'Add a photo','A face for the feed and keepsakes',"go('album')")}
   </div>`;
 }
@@ -3195,10 +3297,17 @@ function renderHome(){
   }
   const fev=lastFeverEvent();
   if(fev){
-    alerts += `<div class="alert-pill" style="border-color:var(--med)">
+    /* THIS PILL IS THE ONLY FEVER SURFACE THE SECOND PARENT EVER SEES.
+       lastFeverEvent reads every author's events, so the partner who did not hold the thermometer
+       opens Cubby to "Fever logged 38.6°C · 3h ago" and nothing else. openFeverNudge is a
+       consequence sheet: it fires inside saveTemp, in the logger's browser, and is gone on Got it.
+       So "when do I call?" was answerable only by logging a fever of your own. Same rung as
+       Summary, because neither is the obvious one at 3am. */
+    alerts += `<div class="alert-pill ap-stack" style="border-color:var(--med)">
       <div class="ap-ico" style="background:var(--med-soft);color:var(--med)">${I.stetho}</div>
       <div class="ap-body"><div class="ap-t">Fever logged</div><div class="ap-s">${fev.temp}°${fev.unit||'C'} · ${fmtSince(fev.time)}</div></div>
-      <button onclick="openVisitSummary()">Summary</button></div>`;
+      <div class="ap-acts"><button onclick="openFeverSafetyNet()">When to call</button>
+      <button onclick="openVisitSummary()">Summary</button></div></div>`;
   }
   const uv=upcomingVisit();
   if(uv){
@@ -3213,6 +3322,26 @@ function renderHome(){
       <div class="ap-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🎉</div>
       <div class="ap-body"><div class="ap-t">${escapeHtml((activeBaby()||{}).name||'Baby')} is ${mv} month${mv>1?'s':''} 🎉</div><div class="ap-s">Their ${mv}-month card is waiting 🐻</div></div>
       <button onclick="openMemoryCard(${mv},'${memCandPhoto(mv)}');dismissTip('bday${mv}')">See it</button></div>`;
+  }
+  /* The same slot, in the weeks before the month card can use it. posterOfferDue() hands back a
+     baby only while they are under a month old, so this pill and the one above are never both up.
+     It waits for the get-started card to be done with, because while that card is up it is asking
+     for the first log and a keepsake offer stacked under it is just a second thing to ignore.
+     gsCard, not evs.length: state.events is a fact about the FAMILY, and that card retires per
+     PERSON for a joiner. The household test therefore handed the co-parent or the nanny who joins
+     in the first month exactly what this line says it avoids: an unfinished five-row setup
+     checklist with a print-a-keepsake offer stacked underneath, on the screen of the one person in
+     the family who has never logged. renderHome already switches the tips ticker, the coach mark,
+     the teaching cue and the nudge off on this same value; this pill is the fifth, not an
+     exception. gsCard is reused rather than re-called because renderGetStarted latches a seen flag
+     as it goes, and asking it twice per paint would write twice. */
+  const pnb = (!gsCard && evs.length) ? posterOfferDue() : null;
+  if(pnb){
+    alerts += `<div class="alert-pill ap-stack" style="border-color:var(--star)">
+      <div class="ap-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🎀</div>
+      <div class="ap-body"><div class="ap-t">A keepsake from the day ${escapeHtml(pnb.name)} arrived</div><div class="ap-s">Their name and birthday are already on the poster. Add the rest whenever you like.</div></div>
+      <div class="ap-acts"><button onclick="openPosterOffer()">See it</button>
+      <button class="ap-quiet" onclick="dismissPosterOffer()">Not now</button></div></div>`;
   }
   const _cab=activeBaby();
   if(_cab && stageOf(_cab)==='child' && !_cab.childAck){
@@ -3276,6 +3405,7 @@ function renderHome(){
       ${sinceCard('sleep','Last sleep', lastSleep, ts?'Asleep now':'')}
       ${sinceCard('diaper','Last nappy', lastDiaper)}
     </div>
+    ${firstEntryLine()}
     ${wakeWindowLine()}
     ${surfaceUp ? surfaceCard : ''}
     ${gsCard ? '' : coachMark('home','Last feed, last sleep, last nappy, right where you look first 👋','Log below, and the tabs hold your Log, Album and Health.')}
@@ -3336,9 +3466,79 @@ function wakeWindow(){
   const q=p=>gaps[Math.min(gaps.length-1,Math.max(0,Math.round((gaps.length-1)*p)))];
   return {enough:true, lo:q(0.25), hi:q(0.75), n:gaps.length, days:WW_DAYS};
 }
+/* Two surfaces, two × buttons, two keys. One shared key meant a tap on the Log line, where the
+   gesture means "tidy this out of my timeline", also killed the home line for good. Each × now hides
+   only the line it sits on, and each offers Undo, because there is no other way back: nothing else
+   in the app clears these flags. */
 function wwHiddenKey(){ return 'cubby-ww-hidden-'+quickUid(); }
 function wwHidden(){ try{ return localStorage.getItem(wwHiddenKey())==='1'; }catch(e){ return false; } }
-function hideWakeWindow(){ try{ localStorage.setItem(wwHiddenKey(),'1'); }catch(e){} render(); }
+function hideWakeWindow(){ try{ localStorage.setItem(wwHiddenKey(),'1'); }catch(e){} render();
+  toast('Hidden from home', {action:{label:'Undo', fn:showWakeWindow}}); }
+function showWakeWindow(){ try{ localStorage.removeItem(wwHiddenKey()); }catch(e){} render(); }
+function wwLogHiddenKey(){ return 'cubby-ww-log-hidden-'+quickUid(); }
+function wwLogHidden(){ try{ return localStorage.getItem(wwLogHiddenKey())==='1'; }catch(e){ return false; } }
+function hideWwLog(){ try{ localStorage.setItem(wwLogHiddenKey(),'1'); }catch(e){} render();
+  toast('Hidden from your timeline', {action:{label:'Undo', fn:showWwLog}}); }
+function showWwLog(){ try{ localStorage.removeItem(wwLogHiddenKey()); }catch(e){} render(); }
+/* One sentence for the sample, said the same way on both surfaces, so the same fortnight can never
+   sign off two different ways again. It counts GAPS, not naps: w.n is the number of gaps BETWEEN
+   naps, one fewer per day than the naps themselves, and a parent who logged twelve and read "6 naps"
+   would conclude we had lost half her record. And "your family's", not "your own": the phrase is
+   there to say "yours, not a textbook's", and the partner reading it may have logged none of it. */
+function wwSource(w){
+  return `From ${w.n} gap${w.n===1?'':'s'} between naps in your family's last ${w.days} days. Just what happened, not a forecast.`;
+}
+/* The not-yet state used to be computed and thrown away: wakeWindow() returns {enough:false} and no
+   caller read it, so the one forward-looking thing in the baby stage was silent until it was ready
+   and then simply appeared. It gets a voice just after a nap ends, in the exact slot the answer will
+   later fill, because that is the moment she has just fed it the data it needs.
+   Its allowance is counted in NAPS spoken for, not in paints: render() runs many times in those ten
+   minutes and counting paints would spend both turns on the first nap. It is counted PER BABY, so
+   two naps of one twin cannot leave the other twin's promise unsaid. `off` is the × and is
+   deliberately a separate key from wwHiddenKey, so closing a promise she does not want does not
+   also silence the real line she has never seen. */
+const WW_NOTYET_MAX=2, WW_JUST_STOPPED=10*60000;
+function wwNotYetKey(){ return 'cubby-ww-notyet-'+quickUid(); }
+function wwNotYetLedger(){ try{ return JSON.parse(localStorage.getItem(wwNotYetKey())||'{}')||{}; }catch(e){ return {}; } }
+function wwNotYetSave(l){ try{ localStorage.setItem(wwNotYetKey(),JSON.stringify(l)); }catch(e){} }
+function wwNotYetFor(babyId){ const l=wwNotYetLedger(); return (l.b&&l.b[babyId])||{}; }
+/* A turn is spent on a NAP, and a nap that was undone never happened. The entry keeps the ids it
+   spoke for and counts only the ones still in the record, so the Undo on "Sleep logged" costs her
+   nothing: undoLast() hard-removes the event, and so does deleting the nap from the timeline later. */
+function wwNotYetSpent(e){
+  const ids=e.naps||[]; if(!ids.length) return 0;
+  const ev=state.events||[];
+  return ids.filter(id=>ev.some(x=>x.id===id)).length;
+}
+function wwNotYetAllows(babyId, napId){
+  const l=wwNotYetLedger();
+  if(l.off) return false;
+  const e=(l.b&&l.b[babyId])||{};
+  if((e.naps||[]).indexOf(napId)>=0) return true; // the nap already counted: keep the line up for its ten minutes
+  return wwNotYetSpent(e)<WW_NOTYET_MAX;
+}
+/* Armed at Stop, spent at the first home paint that actually shows it. Stop lives on the timer
+   banner on every tab and stopSleep does not send her home, so a window measured from the nap's end
+   alone was simply lost for the parent who stopped from Log and came back eleven minutes later. The
+   arm waits until she looks, bounded by WW_MAX_GAP, past which the moment is gone and it would be a
+   note about a nap she has stopped thinking about. */
+function wwNotYetArm(babyId, napId){
+  if(!wwNotYetAllows(babyId, napId)) return;
+  const l=wwNotYetLedger(); const b=l.b||(l.b={}); const e=b[babyId]||(b[babyId]={});
+  e.arm=napId; wwNotYetSave(l);
+}
+function wwNotYetSpend(babyId, napId){
+  const l=wwNotYetLedger(); const b=l.b||(l.b={}); const e=b[babyId]||(b[babyId]={});
+  const ev=state.events||[];
+  e.naps=(e.naps||[]).filter(id=>ev.some(x=>x.id===id));   // drop undone naps rather than let the list grow
+  if(e.naps.indexOf(napId)>=0) return;
+  e.naps.push(napId); e.at=now(); delete e.arm; wwNotYetSave(l);
+}
+function hideWwNotYet(){
+  const l=wwNotYetLedger(); l.off=1; wwNotYetSave(l); render();
+  toast('Hidden from home', {action:{label:'Undo', fn:showWwNotYet}});
+}
+function showWwNotYet(){ const l=wwNotYetLedger(); delete l.off; wwNotYetSave(l); render(); }
 /* One quiet line under the three answers, and only when it can say something true and useful:
    she is awake now, it is daytime, there is enough of her own history, and the range is tight
    enough to mean anything. A range two hours wide is noise dressed as insight, so it stays quiet. */
@@ -3346,15 +3546,60 @@ function wakeWindowLine(){
   if(myLossHolding()||wwHidden()) return '';
   const b=activeBaby(); if(!b) return '';
   if(timersFor(state.activeBabyId).sleep) return '';        // asleep right now: nothing to say
-  if(!wwIsDaytime(now())) return '';
   const last=babyEvents().find(e=>e.type==='sleep'&&e.end); if(!last) return '';
-  const awake=now()-last.end; if(awake<WW_MIN_GAP||awake>WW_MAX_GAP) return '';
+  const awake=now()-last.end;
+  /* The not-yet branch sits ABOVE the daytime gate and above the awake window, deliberately. The
+     daytime gate belongs to the real line, which makes a live claim about the nap that is coming and
+     at 2am would be a bedtime prediction. The promise claims nothing about now, and the parent it
+     exists for is the one whose baby still naps round the clock, so inheriting that gate silenced it
+     from 20:00 to 06:00 for exactly its own audience. And a nap that ended a minute ago is BELOW
+     WW_MIN_GAP, and a minute ago is exactly when she stopped the timer. The allowance is read before
+     wakeWindow() so the common case, a parent who has already had her two turns, costs one
+     localStorage read and no scan of the fortnight. */
+  const nl=wwNotYetFor(state.activeBabyId);
+  const seen=(nl.naps||[]).indexOf(last.id)>=0;
+  const moment = seen ? (now()-(nl.at||0)<=WW_JUST_STOPPED)
+                      : (awake<=WW_JUST_STOPPED || (nl.arm===last.id && awake<=WW_MAX_GAP));
+  /* The first-entry line is on screen, so this one waits for the next nap. It must not reach
+     wwNotYetSpend below: burning the allowance here would spend a turn on a line nobody saw, and
+     the promise about wake windows would then never be made at all. */
+  if(moment && _firstLineOnScreen) return '';
+  if(moment && wwNotYetAllows(state.activeBabyId, last.id)){
+    const w0=wakeWindow();
+    if(w0&&!w0.enough){
+      wwNotYetSpend(state.activeBabyId, last.id);
+      return `<div class="ww-line">
+        <div class="ww-t">Once there are a few naps to go on, this line will say how long ${escapeHtml(b.name)} usually stays awake between them.</div>
+        <div class="ww-s">From your family's logs. Just what happened, not a forecast.</div>
+        <button class="ww-x" onclick="hideWwNotYet()" aria-label="Hide this note from home">×</button>
+      </div>`;
+    }
+  }
+  if(!wwIsDaytime(now())) return '';
+  if(awake<WW_MIN_GAP||awake>WW_MAX_GAP) return '';
   const w=wakeWindow(); if(!w||!w.enough) return '';
   if(w.hi-w.lo>2*3600000) return '';
   return `<div class="ww-line">
-    <div class="ww-t">Awake ${fmtDur(awake)}. In the day, ${escapeHtml(b.name)} has usually slept again between ${fmtDur(w.lo)} and ${fmtDur(w.hi)} after waking.</div>
-    <div class="ww-s">From the last ${w.days} days of your own logs, ${w.n} nap${w.n===1?'':'s'}. Every day is different.</div>
-    <button class="ww-x" onclick="hideWakeWindow()" aria-label="Hide this">×</button>
+    <div class="ww-t">Awake ${fmtDur(awake)}. During the day, ${escapeHtml(b.name)} has usually slept again between ${fmtDur(w.lo)} and ${fmtDur(w.hi)} after waking.</div>
+    <div class="ww-s">${wwSource(w)}</div>
+    <button class="ww-x" onclick="hideWakeWindow()" aria-label="Hide this note from home">×</button>
+  </div>`;
+}
+/* The same fortnight said once on the Log surface, where a parent goes to look rather than to act.
+   No "awake now" clause and no daytime gate, because this is a description of what already happened
+   and must not become a countdown to the next nap: it reads identically at 3am and at noon. The
+   sample is daytime-only, so the sentence says "during the day" rather than letting her assume
+   nights are in there. Same two-hour noise floor as the home line: a range that wide means nothing.
+   Its own hide flag, so tidying it out of the timeline does not silence home as well. */
+function wakeWindowRecap(){
+  if(myLossHolding()||wwLogHidden()) return '';
+  const b=activeBaby(); if(!b) return '';
+  const w=wakeWindow(); if(!w||!w.enough) return '';
+  if(w.hi-w.lo>2*3600000) return '';
+  return `<div class="ww-line ww-log">
+    <div class="ww-t">During the day, ${escapeHtml(b.name)} has usually slept again between ${fmtDur(w.lo)} and ${fmtDur(w.hi)} after waking.</div>
+    <div class="ww-s">${wwSource(w)}</div>
+    <button class="ww-x" onclick="hideWwLog()" aria-label="Hide this note from your timeline">×</button>
   </div>`;
 }
 function renderHero(){
@@ -3489,8 +3734,11 @@ const QUICK_ACTIONS=[
   {k:'measure',     s:['baby','child'],              label:'Measure',     hint:'Weight & height',        fn:'openGrowth()',          soft:'--star-soft',   tone:'--star',   ico:()=>I.scale},
   {k:'activity',    s:['baby','child'],              label:'Activity',    hint:'Bath, play, notes',      fn:'openActivity()',        soft:'--note-soft',   tone:'--note',   ico:()=>I.note},
   {k:'milestone',   s:['baby','child'],              label:'Milestone',   hint:'A first to remember',    fn:'openCustomMilestone()', soft:'--diaper-soft', tone:'--diaper', ico:()=>(I.star||'🌟')},
-  {k:'kicks',       s:['pregnancy'],                 label:'Kicks',       hint:'Count the movements',    fn:'openKickCounter()',     soft:'--star-soft',   tone:'--star',   ico:()=>'👣'},
-  {k:'contractions',s:['pregnancy'],                 label:'Contractions',hint:'Time them',              fn:'openContractions()',    soft:'--feed-soft',   tone:'--feed',   ico:()=>'⏱️'},
+  // minWeek is the same rule renderPregHome applies to its own "This week" tiles, in one place
+  // instead of two: a count-movements shortcut before 28 weeks only worries, and the 5-1-1 timer is
+  // a labour tool. See quickTooEarly for how it is applied and how she can overrule it.
+  {k:'kicks',       s:['pregnancy'],                 label:'Kicks',       hint:'Count the movements',    fn:'openKickCounter()',     soft:'--star-soft',   tone:'--star',   ico:()=>'👣', minWeek:28},
+  {k:'contractions',s:['pregnancy'],                 label:'Contractions',hint:'Time them',              fn:'openContractions()',    soft:'--feed-soft',   tone:'--feed',   ico:()=>'⏱️', minWeek:36},
   // openSymptom() is the BABY illness tracker (fever/rash, severity, into the shared event log). The
   // pregnancy symptom logger is openLogSymptom() — private to her, into her pregnancy record. Wiring
   // the pregnancy quick-tile to the baby one gave a pregnant woman a sick-baby form and quietly wrote
@@ -3523,10 +3771,50 @@ function quickStage(){
   if(typeof viewingPreg!=='undefined' && state.pregnancy && !state.pregnancy.bornBabyId && (!state.babies.length||viewingPreg)) return 'pregnancy';
   return stageOf()==='child'?'child':'baby';
 }
-function quickAvailable(stage){
+/* Everything this stage HAS, week gate not applied: the customiser lists this, so a mother who has
+   been asked to start counting early can still find the entry and turn it on. */
+function quickCatalog(stage){
   stage=stage||quickStage();
   return QUICK_ACTIONS.filter(a=>a.s.indexOf(stage)>=0)
     .filter(a=>!a.ownerOnly||!(window.LL&&typeof window.LL.matIsOwner==='function')||window.LL.matIsOwner());
+}
+/* The trying stage is quickStage()==='pregnancy' too, and p.lmp there is her last PERIOD, so
+   pregWeek() answers with a cycle length rather than a gestation. Reading it would eventually offer
+   a woman who is still trying a button to count her baby's kicks, so trying counts as before every
+   week there is. */
+function quickPregWeek(){
+  const p=state.pregnancy;
+  if(!p||p.stage==='planning'||p.bornBabyId) return 0;
+  return (typeof pregWeek==='function')?pregWeek():0;
+}
+/* Her own word beats the calendar. quickPrefs().early is set only by tapping a gated entry on in the
+   customiser, which is the one place the week is spelled out, so "my midwife asked me to count from
+   26 weeks" is a tap rather than a dead end. */
+function quickTooEarly(a){
+  if(!a.minWeek) return false;
+  /* Stage first, override second. Trying to conceive is not "early in a pregnancy", it is no
+     pregnancy at all, and nothing she agreed to in an earlier one can overrule that. Read the other
+     way round, a leftover flag handed a woman still trying a counter for a baby who is not there. */
+  const p=state&&state.pregnancy;
+  if(!p||p.stage==='planning'||p.bornBabyId) return true;
+  /* And the override is stamped with the pregnancy it was granted for, so "my midwife asked me to
+     count from 26 weeks" cannot survive a loss and meet her again at seven weeks in the next one. */
+  if(p.id&&quickPrefs().early[a.k]===p.id) return false;
+  return quickPregWeek()<a.minWeek;
+}
+function quickAvailable(stage){
+  stage=stage||quickStage();
+  if(stage!=='pregnancy') return quickCatalog(stage);   // minWeek exists only in the pregnancy stage
+  return quickCatalog(stage).filter(a=>!quickTooEarly(a));
+}
+/* She has chosen things and the only reason none of them is showing is the week. That is a different
+   answer from "I want nothing here" and must not look like it: turning one row off at ten weeks used
+   to take the round button off every screen with no way to tell why. */
+function quickHeldBack(stage){
+  stage=stage||quickStage();
+  if(stage!=='pregnancy'||quickPregWeek()<1) return false;
+  const picked=quickPicked(stage);
+  return quickCatalog(stage).some(a=>picked.indexOf(a.k)>=0 && quickTooEarly(a));
 }
 // The Firebase chain is deferred, so the first paint can run before auth restores. Falling straight
 // to 'local' there meant someone who turned the button off saw it flash back on until the auth
@@ -3540,7 +3828,11 @@ function quickUid(){
 function quickPrefsKey(){ return 'cubby-quick-'+quickUid(); }
 function quickPrefs(){
   let p={}; try{ p=JSON.parse(localStorage.getItem(quickPrefsKey())||'{}')||{}; }catch(e){ p={}; }
-  return { on: p.on!==false, pick: (p.pick&&typeof p.pick==='object')?p.pick:{} };
+  return { on: p.on!==false, pick: (p.pick&&typeof p.pick==='object')?p.pick:{},
+    // Kept apart from pick on purpose: pick is "I want this shortcut", early is "I want it before the
+    // week Cubby would offer it". Folding the second into the first would mean any tidy-up of the
+    // list read as a request for a kick counter at eight weeks.
+    early: (p.early&&typeof p.early==='object')?p.early:{} };
 }
 function saveQuickPrefs(p){ try{ localStorage.setItem(quickPrefsKey(), JSON.stringify(p)); }catch(e){} }
 // The chosen keys for a stage, falling back to that stage's defaults until they customise it.
@@ -3552,6 +3844,16 @@ function quickChosen(stage){
   // answers. Treating an empty pick as "use the defaults" would silently re-add every shortcut
   // someone had just removed, and make the "pick at least one" line untrue.
   const picked=p.pick[stage];
+  const keys=Array.isArray(picked)?picked:(QUICK_DEFAULTS[stage]||[]);
+  return keys.filter(k=>avail.indexOf(k)>=0);
+}
+/* The same list before the week gate. The customiser has to edit THIS one: seeding an edit from the
+   gated list would mean that turning Mood on at eight weeks quietly dropped kicks and contractions
+   out of her saved choice, and they would never come back on their own at 28. */
+function quickPicked(stage){
+  stage=stage||quickStage();
+  const avail=quickCatalog(stage).map(a=>a.k);
+  const picked=quickPrefs().pick[stage];
   const keys=Array.isArray(picked)?picked:(QUICK_DEFAULTS[stage]||[]);
   return keys.filter(k=>avail.indexOf(k)>=0);
 }
@@ -3619,6 +3921,18 @@ window.cubbyTeachCtx = function(){
        controls that are the reason to choose Cubby in the first place. */
     sheetOpen: !!(sh && sh.classList.contains('show')) || !!document.getElementById('logGuide')
                || !!document.querySelector('.gs-card'),
+    /* Doors whose existence the stage cannot see. `who.stage` is the only narrowing the registry
+       had, so a row that lives in one stage but opens for only some of the people in it was
+       advertised to all of them: openLogBP reaches into the baby stage for the postpartum weeks,
+       and on stage alone the how-to index grew a lone "While you are expecting" section about
+       blood pressure for a father, an adoptive parent and a household that has never been pregnant
+       in Cubby. The predicate belongs here, beside the rows that draw the door, not in the
+       registry, which has no business reaching into state.
+
+       pregBp is "the blood pressure sheet is a door that exists for you right now": the Care tab
+       while the pregnancy is running, exactly as before, and after the birth only while
+       pregBpDoor() is open. It narrows nothing that was already offered during pregnancy. */
+    has: { pregBp: !!(state.pregnancy && (!state.pregnancy.bornBabyId || pregBpDoor())) },
     installedAt: teachSince()
   };
 };
@@ -3714,7 +4028,7 @@ function quickLogActions(ts){
   const keys=quickChosenHome(stage);
   // Customised down to nothing is a real answer, but a heading with a blank space under it reads as
   // broken. Offer the way back instead.
-  if(!keys.length) return actBtn('openQuickSettings()','var(--note-soft)','var(--note)',(I.plus||'+'),'Choose your logs','Nothing showing here yet');
+  if(!keys.length) return actBtn('openQuickSettings()','var(--note-soft)','var(--note)',(I.plus||'+'),'Choose your logs',quickHeldBack(stage)?'What you chose arrives later on':'Nothing showing here yet');
   let btns=keys.map(k=>byKey[k]?quickBtn(byKey[k],ts):'').filter(Boolean);
   if(stage==='child') btns.push(actBtn('openMoreLogs()','var(--feed-soft)','var(--feed)',(I.plus||'+'),'More','Feeds, nappies, pump'));
   /* Two columns and an odd number of tiles left the last one stranded beside a hole the size of
@@ -3755,7 +4069,9 @@ function hideQuickFabForSession(){
   toast('Hidden until you reopen Cubby');
 }
 function quickFab(){
-  if(!quickPrefs().on||quickFabHidden()||!quickChosen().length) return '';
+  // "Nothing left to show" must mean she emptied the list herself. A week gate emptying it is not the
+  // same thing, so the button stays and the sheet behind it says when they arrive.
+  if(!quickPrefs().on||quickFabHidden()||(!quickChosen().length&&!quickHeldBack())) return '';
   return `<button class="qadd" onclick="openQuickLog()" aria-label="Quick log">${I.plus}</button>`;
 }
 function openMoreLogs(){
@@ -4142,7 +4458,7 @@ function startTick(){
 /* ============================================================
    NAV / THEME
    ============================================================ */
-function go(v){ clearUndo(); /* she moved on; undo must not reach back past a tab change */ if(typeof closeSheet==='function') closeSheet(); if(v==='home') surfaceReset(); if(v!==view) tlResetReveal(); view=v; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
+function go(v){ clearUndo(); /* she moved on; undo must not reach back past a tab change */ retireFirstEntryLine(); if(typeof closeSheet==='function') closeSheet(); if(v==='home') surfaceReset(); if(v!==view) tlResetReveal(); view=v; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
 /* ---------------- APPEARANCE -------------------------------------------------
    Three modes, System by default, and stored PER PERSON.
 
@@ -4377,8 +4693,13 @@ function openQuickLog(){
   const ts=(stage!=='pregnancy'&&state.activeBabyId)?timersFor(state.activeBabyId).sleep:null;
   const byKey={}; quickAvailable(stage).forEach(a=>{ byKey[a.k]=a; });
   const tiles=quickChosen(stage).map(k=>byKey[k]?quickBtn(byKey[k],stage==='pregnancy'?null:ts):'').join('');
+  /* A heading with a hole under it reads as broken, and this sheet is now reachable while the only
+     things she has chosen are waiting on a week. Give her the same door home gives her, saying which
+     of the two it is, and wide: one half-width tile beside a hole the size of itself reads as a tile
+     that failed to load, which is the rule quickLogActions already applies to its odd last tile. */
+  const body=tiles||actBtn('openQuickSettings()','var(--note-soft)','var(--note)',(I.plus||'+'),'Choose your logs',quickHeldBack(stage)?'What you chose arrives later on':'Nothing showing here yet').replace('class="action"','class="action wide"');
   openSheet(`<h2>Quick log</h2><div class="sub">What happened?</div>
-    <div class="actions">${tiles}</div>
+    <div class="actions">${body}</div>
     <button class="btn-ghost" onclick="openQuickSettings()">Choose what shows here</button>
     <button class="btn-ghost" onclick="hideQuickFabForSession()">Hide the button for now</button>`,'feed');
 }
@@ -4529,6 +4850,7 @@ function stopFeed(babyId){
      thumb on every tab. */
   if(dur > FEED_MAX_MS){ openFeedCorrect(babyId); return; }
   const _fid=uid();
+  armFirstEntryLine('feed',[babyId]);     // this door pushes straight to state.events, so it arms its own
   state.events.push({id:_fid,babyId,type:'feed',method:'breast',side:t.side,time:t.start,dur});
   delete tt.feed; persist(); render(); loggedToast('Feed logged · '+fmtDur(dur), [_fid], 'feed');
 }
@@ -4590,6 +4912,7 @@ function saveFeedCorrect(babyId){
   if(!(end>t.start)){ toast('That is before the feed started'); return; }
   if(end>now()){ toast('That is in the future'); return; }
   const _fid=uid();
+  armFirstEntryLine('feed',[babyId]);     // the correction path is still somebody's first feed
   state.events.push({id:_fid,babyId,type:'feed',method:'breast',side:t.side,time:t.start,dur:end-t.start});
   delete tt.feed; persist(); closeSheet(); render(); toast('Feed logged · '+fmtDur(end-t.start));
 }
@@ -4747,8 +5070,11 @@ function stopSleep(babyId){
      at 3am should have to find. */
   if(end-t.start > SLEEP_MAX_MS){ openSleepCorrect(babyId); return; }
   const _sid=uid();
+  armFirstEntryLine('sleep',[babyId]);    // same: the timer stops bypass commitEvent entirely
   state.events.push({id:_sid,babyId,type:'sleep',time:t.start,end});
-  delete tt.sleep; persist(); render(); loggedToast('Sleep logged · '+fmtDur(end-t.start), [_sid], 'sleep');
+  delete tt.sleep; persist();
+  wwNotYetArm(babyId,_sid);   // Stop is on every tab; hold the promise until she is next on home
+  render(); loggedToast('Sleep logged · '+fmtDur(end-t.start), [_sid], 'sleep');
 }
 /* "Did the nap end earlier?" Reuses the same time strip as every other log sheet rather than a
    one-off control, so the gesture is one a parent already knows. Pre-filled with a plausible end
@@ -4777,6 +5103,7 @@ function saveSleepCorrect(babyId){
   const end=getWhen('end');
   if(!(end>t.start)){ toast('That is before they fell asleep'); return; }
   if(end>now()){ toast('That is in the future'); return; }
+  armFirstEntryLine('sleep',[babyId]);    // and so is the nap somebody forgot to stop
   state.events.push({id:uid(),babyId,type:'sleep',time:t.start,end});
   delete tt.sleep; persist(); closeSheet(); render(); toast('Nap logged · '+fmtDur(end-t.start));
 }
@@ -4814,7 +5141,11 @@ function timeOnDate(dateStr,timeStr){ const[y,mo,da]=dateStr.split('-').map(Numb
 function timeToToday(str){ const[h,m]=str.split(':').map(Number); const d=new Date(); d.setHours(h,m,0,0); return d.getTime(); }
 
 /* ---------- DIAPER ---------- */
-function openDiaper(){ initTargets(); initLogWhen(); renderDiaperSheet(); }
+/* The note lives on a draft rather than only in the input, because targetChips re-renders this whole
+   sheet when a second baby is picked and anything typed would go with it. Same reason pumpDraft and
+   activityDraft exist. */
+let diaperDraft={notes:''};
+function openDiaper(){ diaperDraft={notes:''}; initTargets(); initLogWhen(); renderDiaperSheet(); }
 function renderDiaperSheet(){
   const t=(kind,icon,color,label,sub)=>`<div class="opt" onclick="saveDiaper('${kind}')"><span style="color:var(--${color})">${icon}</span><span>${label}</span>${sub?`<span class="osub">${sub}</span>`:''}</div>`;
   openSheet(`<h2>Nappy</h2><div class="sub">Tap to log. Change the time below if it wasn't just now.</div>
@@ -4825,11 +5156,41 @@ function renderDiaperSheet(){
       ${t('both',I.diaper,'feed','Both')}
       ${t('dry',I.check,'diaper','Dry','Checked, clean')}
     </div>
+    ${/* Blood, mucus, a colour change, the first nappy after starting iron: the most-asked-about
+         observation of the first year, and until now the sheet had nowhere to put it. Cubby stores
+         the words and never interprets them, which is exactly what the teach copy already promised.
+         The four kinds above are the save button, so the field says so rather than leaving a typed
+         note to vanish with the sheet.
+         The field is offered for one baby at a time. commitEvent copies the payload to every target,
+         and "a streak of blood" is a claim about one nappy: copied to a sibling it lands on that
+         sibling's timeline and on that sibling's doctor page as if it happened to her. Wet and the
+         time are true of both twins; the words are not. The draft holds what she typed, so tapping
+         a name again brings it straight back rather than punishing her for trying Both. */''}
+    ${diaperNoteField()}
     ${timeStrip('when','Time')}`,'diaper');
 }
+/* .csub is only styled inside a stat card, so out here it renders at 16px full ink and reads as a
+   second note field sitting under the first. Sized for this sheet, the same way openFeedRunning
+   sizes its own. */
+const D_HINT='class="csub" style="margin-top:6px;font-size:12px;color:var(--ink-soft);font-weight:600"';
+function diaperNoteField(){
+  if(targetsResolved().length>1) return `<div class="field"><label>Note (optional)</label>
+      <div ${D_HINT}>Notes go on one baby at a time. Pick a name above to add one.</div>
+    </div>`;
+  return `<div class="field"><label>Note (optional)</label>
+      <input id="dNote" value="${escapeHtml(diaperDraft.notes)}" placeholder="Anything that made you look twice" oninput="diaperDraft.notes=this.value">
+      <div ${D_HINT}>It saves with the nappy you tap above.</div>
+    </div>`;
+}
 function saveDiaper(kind){
-  const _ids=commitEvent({type:'diaper',kind,time:getWhen('when')});
-  closeSheet(); render(); loggedToast('Nappy logged · '+kind, _ids, 'nappy');
+  // Read the live input first, so the last keystroke before the tap is not lost to a missed oninput.
+  // No input on screen means Both is selected: the kind goes on every target, the words go nowhere.
+  const note=$('#dNote')?String($('#dNote').value||'').trim():'';
+  const payload={type:'diaper',kind,time:getWhen('when')};
+  if(note) payload.notes=note;   // omitted when empty, so a plain nappy keeps the shape it always had
+  const _ids=commitEvent(payload);
+  diaperDraft={notes:''};
+  closeSheet(); render(); loggedToast('Nappy logged · '+kind+(note?' · note saved':''), _ids, 'nappy');
 }
 
 /* ---------- PUMP ---------- */
@@ -4927,9 +5288,19 @@ function openEdit(id){
   if(e.type==='feed'&&e.method==='water') extra=`<div class="field"><label>Amount (${e.unit||'ml'})</label><input type="number" id="eAmt" value="${e.amount||0}"${canEd?'':' disabled'}></div>`;
   if(e.type==='feed'&&e.method==='solids') extra=`<div class="field"><label>Food</label><textarea id="eNote"${canEd?'':' disabled'}>${escapeHtml(e.notes||'')}</textarea></div>`
     +(e.amount!==undefined?`<div class="field"><label>Amount (${escapeHtml(e.unit||'tbsp')})</label><input type="number" id="eAmt" value="${e.amount||0}"${canEd?'':' disabled'}></div>`:'');
+  /* The note is offered here too, and shown even to someone who cannot edit this entry: what her
+     partner wrote about a nappy is the part of it she most needs to read, and read-only is the
+     honest way to show it. saveEdit already picks #eNote up and records the change in history.
+     But only when he actually wrote one. A locked, empty box under a heading saying Note, holding
+     the words "anything that made you look twice" in placeholder grey, reads at a glance like
+     something he wrote and cannot be typed into either. On a partner-logged nappy, which for a
+     second caregiver is most of them, that is a false record and a dead invitation. */
   if(e.type==='diaper') extra=`<div class="field"><label>Kind</label><div class="unit-toggle" id="eKind">
     ${['wet','dirty','both','dry'].map(k=>`<button class="${(e.kind||'wet')===k?'on':''}" data-k="${k}" ${canEd?`onclick="pickEditKind(this)"`:'disabled'}>${k.charAt(0).toUpperCase()+k.slice(1)}</button>`).join('')}
-  </div></div>`;
+  </div></div>`
+  +(canEd
+    ? `<div class="field"><label>Note</label><textarea id="eNote" placeholder="Anything that made you look twice">${escapeHtml(e.notes||'')}</textarea></div>`
+    : (e.notes ? `<div class="field"><label>Note</label><textarea id="eNote" disabled>${escapeHtml(e.notes)}</textarea></div>` : ''));
   /* A long sleep is rarely unbroken, and nobody taps through six sheets at 3am to say so. Record it
      as a property of the sleep instead: how many times, how long in total. Offered only where it
      could plausibly matter, always optional, and it makes every sleep total in the app honest
@@ -4995,7 +5366,10 @@ function saveEdit(id){
   const kb=document.querySelector('#eKind .on');
   if(kb){ const k=kb.getAttribute('data-k'); if(k && k!==e.kind){ chg('kind',e.kind,k); e.kind=k; } }
   if($('#eMins')){ const v=parseInt($('#eMins').value,10)||null; if(v!==(e.mins||null)){ chg('mins',e.mins,v); e.mins=v; } }
-  if($('#eNote')){ const v=$('#eNote').value; if(v!==(e.notes||'')){ chg('note',e.notes||'',v); e.notes=v; } }
+  // Trimmed, like #eDose above. Untrimmed, a note corrected down to a space stores that space, and
+  // eventDetail is truthy on it, so the timeline paints a blank second line under the nappy that
+  // nothing on screen explains and nothing lets her clear.
+  if($('#eNote')){ const v=$('#eNote').value.trim(); if(v!==(e.notes||'')){ chg('note',e.notes||'',v); e.notes=v; } }
   if($('#eWkN')||$('#eWkM')){
     const n=Math.max(0,parseInt(($('#eWkN')||{}).value,10)||0);
     // Waking minutes can never exceed the sleep itself, or the total would go negative and the day
@@ -5189,12 +5563,19 @@ function openOnboardInvite(){
     const planning=state.pregnancy.stage==='planning';
     openSheet(`<h2>${planning?'They help, and your notes stay yours 🌱':'Nobody sees this until you say so 🌸'}</h2><div class="sub">${planning?'Invite your partner whenever you like. They get the preparation you share and real ways to help, and your cycle details are not on their screen.':'Invite your partner or a grandparent whenever you like. They see your pregnancy only once you add them, in Care under Your private pregnancy.'}</div>
       <div class="preg-card"><div class="pc-ico" style="background:var(--preg-soft)">👨‍👩‍👧</div><div><div class="pc-t">The person you tell gets something to do</div><div class="pc-b">Once you add them, they get their own thing to help with, so managing that is not also on you.</div></div></div>
-      <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:14px" onclick="window.openFamily&&window.openFamily()">Invite someone</button>
+      <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:14px" onclick="window.openFamily&&window.openFamily('invite')">Invite someone</button>
       ${(typeof canShowInstall==='function'&&canShowInstall())?`<div class="sub" style="margin-top:14px;font-size:13px">Use Cubby right here, or add it to your home screen to open it like an app, one tap away.</div><button class="btn-ghost" onclick="addToHomeScreen('obInstallMsg')">Add Cubby to your home screen</button><div id="obInstallMsg" class="sub" style="display:none;text-align:left"></div>`:''}
       <button class="btn-ghost" onclick="closeSheet();window.cubbyOpenGuide&&cubbyOpenGuide()">Show me what to log</button>
       <button class="btn-ghost" onclick="closeSheet()">Maybe later</button>`,'feed');
     return;
   }
+  /* The sheet already says the plan is waiting and offers to show it, and then stopped short of the
+     only thing that reaches her when Cubby is closed. Country and birthday are both known for the
+     first time at this exact instant, so the dates are real here and nowhere earlier. The count only
+     decides whether to offer at all: the label prints no number, because vaxProofLine four rows above
+     counts every distinct due age including the ones already behind her, and two numbers that
+     disagree that close together read as a bug. */
+  const vaxN=vaxCalendarCount(activeBaby());
   openSheet(`<h2>Get home, and the day is already there 🐻</h2><div class="sub">You're set up. Invite whoever else has ${n>1?'them':'your little one'}, your partner, a grandparent or the nanny, and what they log shows up on your screen with their name on it.</div>
     <div class="preg-card"><div class="pc-ico" style="background:var(--feed-soft)">👨‍👩‍👧</div><div><div class="pc-t">Nobody has to remember it for you</div><div class="pc-b">Feeds, sleep and nappies with their names on them, waiting when you get in. Tap it for the whole day.</div></div></div>
     ${vaxProofLine()?`<div class="sub" style="margin-top:12px;text-align:left">💉 ${vaxProofLine()}</div>`:''}
@@ -5208,8 +5589,13 @@ function openOnboardInvite(){
           verb per stage; openFirstLog had exactly one caller, the empty timeline. */''}
     <button class="btn-primary" style="background:var(--feed);--accent-ink:var(--on-feed,var(--on-accent));margin-top:14px" onclick="closeSheet();openFirstLog()">${firstLogLabel()}</button>
     <div class="csub" style="text-align:center;margin-top:8px">Two taps, and today has something in it.</div>
-    <button class="btn-ghost" style="margin-top:10px" onclick="window.openFamily&&window.openFamily()">Invite someone</button>
+    ${/* THE SECOND BEAT. The log is the ask; this is the one thing in here that GIVES her something
+          back on the first evening, and it needs only the name and birthday she has just typed.
+          Empty for the pregnancy paths, which return above, and for a parent holding a loss. */''}
+    ${posterOfferRow()}
+    <button class="btn-ghost" style="margin-top:10px" onclick="window.openFamily&&window.openFamily('invite')">Invite someone</button>
     ${vaxProofLine()?`<button class="btn-ghost" onclick="closeSheet();healthTab='vaccines';go('health')">💉 See their vaccine plan</button>`:''}
+    ${vaxN?`<button class="btn-ghost" onclick="exportVaccineSchedule()">${vaxCalendarLabel(vaxN)}</button>`:''}
     <button class="btn-ghost" onclick="openAddBaby({onboarding:true,birth:lastBabyBirth})">＋ Add another little one</button>
     ${(typeof canShowInstall==='function'&&canShowInstall())?`<div class="sub" style="margin-top:14px;font-size:13px">Use Cubby right here, or add it to your home screen to open it like an app, one tap away.</div><button class="btn-ghost" onclick="addToHomeScreen('obInstallMsg')">Add Cubby to your home screen</button><div id="obInstallMsg" class="sub" style="display:none;text-align:left"></div>`:''}
     <button class="btn-ghost" onclick="closeSheet();window.cubbyOpenGuide&&cubbyOpenGuide()">Show me what to log</button>
@@ -5830,7 +6216,13 @@ function saveVisit(){
 function saveBabyDetails(id){
   const b=state.babies.find(x=>x.id===id); if(!b)return;
   b.fullName=$('#dName').value.trim()||b.name;
-  const w=$('#dWhen').value; if(w) b.birth=parseInt(w,10);
+  /* Only a move of the CLOCK half of Born on makes the hour hers. Every baby starts out carrying
+     saveBaby's 8:00 AM placeholder, and a parent correcting the date alone must not be read as
+     having confirmed a time she was never asked for. See birthTimeKnown. */
+  const w=$('#dWhen').value;
+  if(w){ const _w=parseInt(w,10), _o=new Date(b.birth||0), _n=new Date(_w);
+    if(b.birth && (_n.getHours()!==_o.getHours() || _n.getMinutes()!==_o.getMinutes())) b.birthTimeSet=true;
+    b.birth=_w; }
   b.birthWeight=$('#dWt').value.trim();
   // The one place a parent can add the birth weight after setup. Parsed rather than re-asked.
   const pbw=parseBirthWeight(b.birthWeight);
@@ -5938,14 +6330,61 @@ function setPushAllow(cat,on){
   persist(); pushSyncPrefs(); openReminders();
   toast(on?'On':'Off');
 }
+/* Which calendar routes this parent can actually reach right now. Reachability, not stage, because
+   the states where these screens are missing have nothing else in common: a pregnancy has no baby and
+   no vaccine list at all, a five-year-old has a vaccine list whose visits are all behind her, and a
+   mother holding a loss has neither. vaxCalendarRow (:11097) returns '' the moment
+   vaxUpcomingVisits() is empty, and openDoseCalendar's button only renders on a SAVED medicine set to
+   "Set times" (:9804). Naming a screen she cannot find is the same untruth as naming a channel that
+   does not exist, one layer deeper, so ask the same two functions the screens ask. */
+function reminderCalendarRoutes(){
+  var vax=false, dose=false;
+  /* NOT vaccinePlan(): that generates the plan and persist()s it, which would make merely opening
+     Settings write the shared household blob. Read the stored plan, and fall back to a throwaway
+     one built from the same schedule so a baby whose plan has not been generated yet still gets an
+     honest answer. */
+  try{ var b=activeBaby();
+    var plan=(b && state.vaccines && state.vaccines[b.id]) ||
+      (b?scheduleFor(b).map(function(x){ return {name:x[0], group:x[1], dueMonths:x[2], given:false}; }):[]);
+    vax=!!(b && b.birth && vaxUpcomingVisits(plan).length);
+  }catch(e){}
+  // Household-wide, like the sheet itself: with twins the route is real even when the other child is on screen.
+  try{ dose=(state.meds||[]).some(function(m){ return m && m.active && m.pattern && m.pattern.type==='daily'
+    && (state.babies||[]).some(function(b){ return b && b.id===m.babyId; }); }); }catch(e){}
+  return {vax:vax, dose:dose};
+}
+function reminderRowSub(){
+  var r=reminderCalendarRoutes();
+  if(r.vax&&r.dose) return 'Dose alerts, plus vaccine visits and dose times in your own calendar';
+  if(r.vax) return 'Dose alerts, plus vaccine visits in your own calendar';
+  if(r.dose) return 'Dose alerts, plus dose times in your own calendar';
+  return 'Dose alerts, and what Cubby may send you';
+}
+/* The 📅 line, not "the calendar row": on the vaccine list it is an .add-row, but on a medicine it is
+   a ghost button that only appears once the medicine is saved, so "row" sent a parent adding her
+   first medicine hunting for something that was not there yet. */
+function reminderCalendarLine(){
+  var r=reminderCalendarRoutes();
+  if(r.vax&&r.dose) return 'Vaccine visits and set dose times can go into your own calendar, where your phone does the reminding. Look for the 📅 line on the vaccine list, and on a saved medicine with set times.';
+  if(r.vax) return 'Vaccine visits can go into your own calendar, where your phone does the reminding. Look for the 📅 line on the vaccine list.';
+  if(r.dose) return 'Set dose times can go into your own calendar, where your phone does the reminding. Look for the 📅 line on a saved medicine with set times.';
+  return '';
+}
 function openReminders(){
   const sup=pushSupported(), cfg=pushCfg(), ready=remindersLive()&&sup&&(isNativeApp()||!!CUBBY_VAPID);  // VAPID is a web-push concept; the wrapper goes via APNs
   const muted=medAlertsMuted();
-  openSheet(`<h2>Reminders 🔔</h2><div class="sub">A gentle nudge when a medicine is due. One nudge per dose, always with a way out, and never for feeds, naps or milestones.</div>
+  const calLine=reminderCalendarLine();
+  openSheet(`<h2>Reminders 🔔</h2><div class="sub">A gentle nudge when a medicine is due. One nudge per dose, always with a way out, and never for feeds, naps, rituals or milestones.</div>
     <div class="set-item"><div class="si-ico" style="background:var(--med-soft);color:var(--med);font-size:18px">⏰</div><div class="si-body"><div class="a">Dose alerts in the app</div><div class="b">${muted?'Off on this device':'One nudge per dose, while Cubby is open'}</div></div>
       <div class="seg"><button class="${!muted?'on':''}" onclick="setMedAlerts(true)">On</button><button class="${muted?'on':''}" onclick="setMedAlerts(false)">Off</button></div></div>
     <div class="csub" style="margin-top:8px">Every alert gives you two ways out. In 15 min hides it and brings it back once, at a time it tells you. Not now ends it for that dose. Neither one logs a dose you did not give.</div>
     <div class="csub" style="margin-top:6px">Off stops every dose alert on this phone, and your medicines and their schedules stay exactly as they are.</div>
+    ${/* The calendar route was only ever named inside the !ready branch below, so on any device where
+          reminders ARE live the sheet never mentioned it and the settings row now does. Say it once,
+          always, and point at where the lines actually live: exportVaccineSchedule hangs off the
+          vaccine list and openDoseCalendar off a saved medicine with set times, neither of which a
+          parent would think to look for from here. Omitted outright when neither screen exists. */''}
+    ${calLine?`<div class="csub" style="margin-top:6px">${calLine}</div>`:''}
     <div class="sec-title" style="margin-top:18px">What we may send you</div>
     <div class="csub" style="margin-bottom:8px">These are separate on purpose. Turning one off never touches the others, and a dose reminder is never counted as news.</div>
     ${[['critical','Dose reminders','A nudge when a medicine is due. No limit, because a missed dose is not marketing.'],
@@ -5954,7 +6393,7 @@ function openReminders(){
       .map(function(r){ var on=!!cfg.allow[r[0]]; return `<div class="set-item"><div class="si-body"><div class="a">${r[1]}</div><div class="b">${r[2]}</div></div>
         <div class="seg"><button class="${on?'on':''}" onclick="setPushAllow('${r[0]}',true)">On</button><button class="${!on?'on':''}" onclick="setPushAllow('${r[0]}',false)">Off</button></div></div>`; }).join('')}
     <div class="csub" style="margin-top:6px">Change any of these whenever you like. Turning one off takes effect straight away.</div>
-    ${!ready?`<div class="preg-disclaim">${!remindersLive()?(isNativeApp()?nativePushWhyNot():'Reminders with the app closed are not switched on in the app yet. We’re making sure a nudge always arrives before we turn them on, because we don’t want to be the reason a dose is missed. A due dose still speaks up while Cubby is open, and you can send a course of set times to your phone’s own calendar.'):!sup?(isNativeApp()?'Reminders need notification permission for Cubby. You can turn it on in your phone settings.':'Reminders need a browser that supports notifications. On iPhone, add Cubby to your home screen first, then open it from there.'):'Reminders are coming soon.'}</div>`:`
+    ${!ready?`<div class="preg-disclaim">${!remindersLive()?(isNativeApp()?nativePushWhyNot():'Reminders with the app closed are not switched on in the app yet. We’re making sure a nudge always arrives before we turn them on, because we don’t want to be the reason a dose is missed. A due dose still speaks up while Cubby is open.'):/* tail trimmed: calLine above now carries the calendar route for every device, so leaving it here said it twice the moment REMINDERS_LIVE flips, and it promised the dose calendar to a parent with no saved medicine */!sup?(isNativeApp()?'Reminders need notification permission for Cubby. You can turn it on in your phone settings.':'Reminders need a browser that supports notifications. On iPhone, add Cubby to your home screen first, then open it from there.'):'Reminders are coming soon.'}</div>`:`
     <div class="set-item"><div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🔔</div><div class="si-body"><div class="a">Gentle reminders</div><div class="b">${cfg.enabled?'On for this device':'Off'}</div></div>
       <div class="seg"><button class="${cfg.enabled?'on':''}" onclick="enablePush()">On</button><button class="${!cfg.enabled?'on':''}" onclick="disablePush()">Off</button></div></div>
     <div class="csub" style="margin-top:8px">Quiet hours: no notification between ${cfg.quietStart}:00 and ${cfg.quietEnd}:00. A dose due in those hours still shows inside the app, with a softer buzz, because we would rather you saw it than slept through it.</div>`}
@@ -6160,9 +6599,15 @@ function openSettings(){
       <div class="si-body"><div class="a">Tell us how it feels</div><div class="b">Two minutes of your thoughts makes Cubby better for every family.</div></div>
       <span class="chev">${I.chev}</span>
     </div>
+    ${/* This row used to promise "gentle nudges for medicine, vaccines & rituals" and two of those
+          three channels do not exist. syncReminderIndex pushes ONLY medicine and says so in its own
+          comment, vaccines reach a parent through vaxCalendarRow writing an .ics, and the rituals
+          sheet admits outright that Cubby does not send reminders for them. Name the things that are
+          real FOR THIS PARENT, so the row and the sheet it opens tell the same story: reminderRowSub
+          drops each calendar clause wherever that screen does not exist. */''}
     <div class="set-item" onclick="openReminders()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🔔</div>
-      <div class="si-body"><div class="a">Reminders</div><div class="b">Gentle nudges for medicine, vaccines &amp; rituals</div></div>
+      <div class="si-body"><div class="a">Reminders</div><div class="b">${reminderRowSub()}</div></div>
       <span class="chev">${I.chev}</span></div>
     <div class="set-item" onclick="openQuickSettings()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--feed-soft);color:var(--feed)">${I.plus}</div>
@@ -6176,6 +6621,17 @@ function openSettings(){
     ${(state.pregnancy&&state.pregnancy.bornBabyId&&pregIsOwner())?`<div class="set-item" onclick="openMoodNote()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--note-soft);color:var(--note);font-size:18px">🤍</div>
       <div class="si-body"><div class="a">How you are, in yourself</div><div class="b">Private to you, always. Never shared with your circle</div></div>
+      <span class="chev">${I.chev}</span>
+    </div>`:''}
+    ${/* Her wellbeing note was the only maternal thing that survived the handover, and it is the
+          gentler half of the same orphaning. Blood pressure is the clinical half: pre-eclampsia can
+          present after the birth, so a reading in those weeks is worth keeping, and the record
+          sheet is a place she opens to look back rather than a place she thinks to log into. The
+          note above stays for good because a feeling has no end date; this one is pregBpDoor(),
+          which closes twelve weeks after the birth. openLogBP checks it again for itself. */''}
+    ${pregBpDoor()?`<div class="set-item" onclick="openLogBP()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--pump-soft);color:var(--pump);font-size:18px">🩺</div>
+      <div class="si-body"><div class="a">Blood pressure</div><div class="b">${escapeHtml(pregBpRowSub())}</div></div>
       <span class="chev">${I.chev}</span>
     </div>`:''}
     ${(window.CubbyTeachUI&&CubbyTeachUI.settingsRow)?CubbyTeachUI.settingsRow():''}
@@ -6207,18 +6663,39 @@ function openQuickSettings(){
   const p=quickPrefs();
   const chosen=quickChosen(stage);
   const stageWord=stage==='pregnancy'?'your pregnancy':(stage==='child'?'your child':'your baby');
-  const rows=quickAvailable(stage).map(a=>{
+  /* Weeks she does not have. At the trying stage there is no gestation to measure, so a row about
+     week 28 is a row about a baby who is not there yet: those entries drop off this screen until
+     there is a pregnancy. They stay in her saved picks, which is why quickPicked reads the full
+     catalogue and this list does not. */
+  const gest=stage==='pregnancy'?quickPregWeek():0;
+  const listed=quickCatalog(stage).filter(a=>!a.minWeek||gest>0);
+  const rows=listed.map(a=>{
     const on=chosen.indexOf(a.k)>=0;
+    /* A row that is off because of the week gate has to say the week, or the one screen where she
+       can do something about it is the one screen that does not explain itself. The invitation to
+       overrule it is one line under the list rather than on every row: at ten weeks both rows carry
+       this, and the same sentence twice in a column reads like a warning. */
+    const beforeWeek=!!(a.minWeek && gest>0 && gest<a.minWeek);
+    const note = !beforeWeek ? '' : (on ? ` · on now, ahead of the usual week ${a.minWeek}`
+      : ` · usually from week ${a.minWeek}`);
     return `<div class="bag-row ${on?'done':''}" id="qs-${a.k}" onclick="toggleQuickAction('${a.k}')" style="cursor:pointer">
       <div class="bg-tick">${on?I.check:''}</div>
-      <div style="flex:1"><div class="bg-t" style="text-decoration:none">${a.label}</div><div style="font-size:12px;color:var(--ink-soft);font-weight:600;line-height:1.4">${quickHint(a)}${HOME_NEVER[a.k]?' · in the round button only':''}</div></div>
+      <div style="flex:1"><div class="bg-t" style="text-decoration:none">${a.label}</div><div style="font-size:12px;color:var(--ink-soft);font-weight:600;line-height:1.4">${quickHint(a)}${HOME_NEVER[a.k]?' · in the round button only':''}${note}</div></div>
     </div>`;
   }).join('');
+  // Said once, and only while something is actually being held back, so nobody past 36 weeks reads a
+  // line about weeks that no longer apply to her. It sits at the same weight as the sub above it:
+  // it explains 12px row hints, so full-strength 16px ink made it the loudest thing on the sheet.
+  const heldBack=listed.some(a=>a.minWeek && gest>0 && gest<a.minWeek && chosen.indexOf(a.k)<0);
+  // Nothing on her surfaces because the weeks have not come is not the same as nothing because she
+  // asked for nothing, and the second sentence would be untrue told to the first woman.
+  const allHeld=!chosen.length && quickHeldBack(stage);
   openSheet(`<h2>What you log</h2><div class="sub">These are yours alone. Changing them does not change what anyone else in your circle sees.</div>
     <div class="set-label">Showing on home and in the round button</div>
     <div class="sub" style="margin:-4px 2px 10px">Right now, for ${stageWord}. Turn off anything you never use, like the pump if you are not expressing.</div>
     ${rows}
-    ${!chosen.length?`<div class="csub" style="margin-top:10px">With none chosen, home offers you this list instead and the round button stays hidden.</div>`:''}
+    ${heldBack?`<div class="sub" style="margin:10px 2px 0">${allHeld?'Nothing is showing yet. ':''}Some arrive later on. If you have been asked to start sooner, turn one on now.</div>`:''}
+    ${(!chosen.length&&!allHeld)?`<div class="csub" style="margin-top:10px">With none chosen, home offers you this list instead and the round button stays hidden.</div>`:''}
     <button class="btn-ghost" onclick="resetQuickActions()">Reset to the usual set</button>
     <div class="toggle-row" style="margin-top:16px"><div><div class="tr-a">Show the round button</div><div class="tr-b">Above the tabs on every screen, so logging is always one tap away</div></div>
       <div class="sw ${p.on?'on':''}" onclick="toggleQuickFab()"></div></div>
@@ -6233,18 +6710,41 @@ function toggleQuickFab(){
 function toggleQuickAction(k){
   const stage=quickStage();
   const p=quickPrefs();
-  const cur=quickChosen(stage).slice();
+  // The tick means "on my surfaces right now", so that is what a tap flips. The list it edits is the
+  // ungated one, so a week gate never eats a choice she made.
+  const on=quickChosen(stage).indexOf(k)>=0;
+  const cur=quickPicked(stage).slice();
   const i=cur.indexOf(k);
-  if(i>=0) cur.splice(i,1); else {
-    // Keep the registry's order rather than tap order, so the sheet always reads the same way.
-    const order=quickAvailable(stage).map(a=>a.k);
-    cur.push(k); cur.sort((a,b)=>order.indexOf(a)-order.indexOf(b));
+  const a=quickCatalog(stage).filter(x=>x.k===k)[0];
+  const gest=stage==='pregnancy'?quickPregWeek():0;
+  const early=!!(a&&a.minWeek&&gest>0&&gest<a.minWeek);
+  if(on){
+    /* Untapping a row that is only on because she brought it forward undoes exactly that and leaves
+       her saved list where it was. Taking it out as well deleted a default she cannot see, so a tap
+       and a second thought at ten weeks meant no kick counter ever arrived at 28. Once the week is
+       here the row is honest about what it does, and off means off. */
+    if(early&&p.early[k]) delete p.early[k];
+    else { if(i>=0) cur.splice(i,1); delete p.early[k]; }
+  } else {
+    if(i<0){
+      // Keep the registry's order rather than tap order, so the sheet always reads the same way.
+      const order=quickCatalog(stage).map(x=>x.k);
+      cur.push(k); cur.sort((x,y)=>order.indexOf(x)-order.indexOf(y));
+    }
+    // Off only because it is early in THIS pregnancy: turning it on has to mean now, not in ten
+    // weeks, and it is stamped so it does not mean now in the pregnancy after this one.
+    if(early&&state.pregnancy&&state.pregnancy.id) p.early[k]=state.pregnancy.id;
   }
   p.pick[stage]=cur; saveQuickPrefs(p);
   render(); openQuickSettings();
 }
 function resetQuickActions(){
-  const p=quickPrefs(); delete p.pick[quickStage()]; saveQuickPrefs(p);
+  const p=quickPrefs(); const stage=quickStage();
+  delete p.pick[stage];
+  // "The usual set" includes the usual weeks, otherwise reset leaves a kick counter she asked for at
+  // 26 weeks sitting on the button of a pregnancy that has started again from the beginning.
+  quickCatalog(stage).forEach(a=>{ if(a.minWeek) delete p.early[a.k]; });
+  saveQuickPrefs(p);
   render(); openQuickSettings();
 }
 function openDataSheet(){
@@ -6582,8 +7082,13 @@ function openGuardians(){
   const gs=householdGuardians();
   if(!(LL&&LL.members&&Object.keys(LL.members).length>1)){
     openSheet(`<h2>Guardians 🛡️</h2><div class="sub">Guardians are the people (usually mama and papa) who must both agree before the family's data is deleted or exported.</div>
-      <div class="csub">Right now it's just you. Invite your partner in Family &amp; sharing, then come back to make them a guardian.</div>
-      <button class="btn-primary" onclick="window.openFamily&&window.openFamily()">Open Family &amp; sharing</button>
+      ${''/* The button used to say "Open Family & sharing" and the line above it named that screen.
+             The button now opens a modal headed "Invite someone", so the line had to stop naming a
+             screen that no longer appears. It also says someone rather than your partner: the
+             people who most need a second guardian include a parent doing this on their own, and a
+             bereaved one, and the only lit button on the screen should not assume a partner. */}
+      <div class="csub">Right now it's just you. Invite someone to your circle, then come back to make them a guardian.</div>
+      <button class="btn-primary" onclick="window.openFamily&&window.openFamily('invite')">Invite someone</button>
       <button class="btn-ghost" onclick="openDataSheet()">Back</button>`,'star');
     return;
   }
@@ -6905,7 +7410,7 @@ function openVisitPrep(id){
     ${(canWrite||(p.visitQs||[]).length)?`<div class="sec-title" style="margin-top:4px">Questions to ask</div>
     ${qRows}`:''}
     ${canWrite?`<div class="field" style="margin-top:6px"><input id="vqNew" placeholder="Add a question to ask…" onkeydown="if(event.key==='Enter'){addVisitQ();openVisitPrep('${id}');}"></div>
-    <div class="hero-invite" onclick="window.openFamily&&window.openFamily()" style="margin-top:4px;cursor:pointer"><div class="hi" style="font-size:22px">👪</div><div><div class="ht">Who's coming with you?</div><div class="hs">Invite your partner so they have the questions too</div></div></div>`:''}
+    <div class="hero-invite" onclick="window.openFamily&&window.openFamily('invite')" style="margin-top:4px;cursor:pointer"><div class="hi" style="font-size:22px">👪</div><div><div class="ht">Who's coming with you?</div><div class="hs">Invite your partner so they have the questions too</div></div></div>`:''}
     <button class="btn-ghost" onclick="openPregDoctorReport()">📄 Take a report to this visit ${isPro()?'':(tasteLeft('pdf')>0?'· ✨ free':'· Pro ✨')}</button>
     <button class="btn-ghost" onclick="addApptToCalendar('${id}')">📅 Add to my calendar</button>
     ${canWrite?`<button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:4px" onclick="markApptDone('${id}')">${I.check} We've been, mark done</button>`
@@ -8249,7 +8754,7 @@ function renderPregLog(){
     ${qRows}`:''}
     ${canWrite?`<div class="field" style="margin-top:8px"><input id="vqNew" placeholder="Add a question to ask…" onkeydown="if(event.key==='Enter')addVisitQ()"></div>
     ${(p.visitQs||[]).some(q=>q.done)?`<button class="btn-ghost" style="color:var(--ink-soft)" onclick="resetVisitQsDone()">Uncheck all for next visit</button>`:''}
-    <div class="hero-invite" onclick="window.openFamily&&window.openFamily()" style="margin-top:10px;cursor:pointer">
+    <div class="hero-invite" onclick="window.openFamily&&window.openFamily('invite')" style="margin-top:10px;cursor:pointer">
       <div class="hi" style="font-size:22px">👪</div>
       <div><div class="ht">Who's coming with you?</div><div class="hs">Invite your partner so they have the questions and your appointments too</div></div>
     </div>
@@ -8347,7 +8852,59 @@ function openLogWeight(){
     <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:8px" onclick="saveWeightPreg('${unit}')">Save</button>`,'preg');
 }
 function saveWeightPreg(unit){ const v=parseFloat($('#wKg').value); if(!v){toast('Enter a number');return;} state.pregnancy.weights.push({id:uid(),at:getWhen('when'),kg:v,unit}); persist(); closeSheet(); render(); toast('Saved'); }
+/* The sheet outlived the stage it was built for. Pre-eclampsia presents AFTER delivery as well as
+   before it, openPregRecord's own header comment says exactly that, and then the whole maternal
+   surface disappeared at the handover: the look-back shell has no tabs, the Care tab is gone, and
+   the only maternal thing that survived into the baby stage was the private mood note. So a woman
+   whose team asked her to keep an eye on her blood pressure for a fortnight after the birth had
+   nowhere in Cubby to put a reading, while p.bp, this sheet, bpFlag and the mhealth privacy gate
+   all still existed and still synced. Two doors were added rather than a new screen: one in the
+   record she already opens to look back, one in Settings beside her wellbeing note.
+
+   Two guards come with the new doors.
+
+   The owner gate is on the FUNCTION, not only on the rows. syncMaternal writes mhealth for the
+   owner alone, so a partner she shared 'health' with can read her readings, and before this could
+   also open this sheet and save one: it landed in his state.pregnancy, reached no server, and the
+   next snapshot wiped it. That is the read-only Care tab bug in a second place, and a row-only gate
+   would have left the sheet reachable from a stale render or an already-open sheet.
+
+   ensurePregFields does not create p.bp, only savePregnancy and startTrying do. A record that
+   reached this device through the journey doc and the mhealth fold has whatever keys those carried,
+   so postpartum, years after setup, the array can be missing and the push would have thrown. */
+function pregBpLast(){ const b=((state.pregnancy||{}).bp)||[]; return b.length?b.slice().sort((x,y)=>y.at-x.at)[0]:null; }
+// Her own number, stated, with no verdict on it. bpFlag's judgement belongs in the answer to a save.
+// Middot, like every other row sub in these sheets ("Week 36 · Thursday, Jul 23").
+function pregBpRowSub(){ const b=pregBpLast(); return b?('Last reading '+b.sys+'/'+b.dia+' · '+dayLabel(b.at)):'If your team asked you to keep an eye on it'; }
+/* The postpartum door, in one place because three surfaces have to agree about it: the Settings
+   row, the record row, and the teaching layer, which advertises the sheet in the how-to index and
+   puts the "i" on it.
+
+   It CLOSES. Twelve weeks is what every line of copy on these doors already says out loud, "in the
+   weeks after a birth", and an open-ended gate on bornBabyId alone is wrong twice over. A permanent
+   "Blood pressure" row in Settings when the child is three is the same orphaning this change exists
+   to cure, only pointed the other way, and the pregnancy record goes back to being purely something
+   to look back on, which is what its own subtitle promises. It also keeps the teaching layer
+   honest: quickStage() turns 'child' at eighteen months, so a row still on screen after that would
+   have silently lost its explainer.
+
+   No date at all means no, not yes. birthAt and bornBabyId are written together at welcomeBaby, so
+   a record carrying one without the other came from before that field and is years old by
+   definition, which is exactly the case this window is closing. */
+function pregBpDoor(){
+  const p=state.pregnancy;
+  if(!p||!p.bornBabyId||!pregIsOwner()) return false;
+  const at=p.birthAt||((state.babies||[]).find(b=>b.id===p.bornBabyId)||{}).birth||0;
+  return !!at && (Date.now()-at)<=84*86400000;
+}
 function openLogBP(){
+  /* Nothing to write to. pregIsOwner() answers true when state.pregnancy is falsy, by design, so a
+     solo mother offline keeps her own record, which means the ownership guard alone lets a
+     never-pregnant household in here and saveBP then throws on p.bp. Silent because no row ever
+     drew this door for them: there is nothing to explain. */
+  if(!state.pregnancy) return;
+  if(!pregIsOwner()){ toast('Only the person whose health this is can add a reading'); return; }
+  if(!state.pregnancy.bp) state.pregnancy.bp=[];
   initLogWhen();
   openSheet(`<h2>Blood pressure</h2><div class="sub">If your provider has asked you to track it at home.</div>
     <div style="display:flex;gap:10px">
@@ -8401,9 +8958,12 @@ function openBPConcern(rec,f){
     <div class="preg-disclaim">Saved to your record either way. Cubby is not a diagnosis, and one reading at home is not the whole picture. Your team measures it properly.</div>`,'preg');
 }
 function saveBP(){
+  if(!state.pregnancy) return;
+  if(!pregIsOwner()){ toast('Only the person whose health this is can add a reading'); return; }
   const s=parseInt($('#bpS').value), d=parseInt($('#bpD').value);
   if(!s||!d){toast('Enter both numbers');return;}
   const rec={id:uid(),at:getWhen('when'),sys:s,dia:d};
+  if(!state.pregnancy.bp) state.pregnancy.bp=[];
   state.pregnancy.bp.push(rec); persist(); closeSheet(); render();
   const f=bpFlag(rec);
   if(f) openBPConcern(rec,f); else toast('Saved');
@@ -8730,10 +9290,20 @@ function openPregRecord(){
   const readings=[['weights','weight'],['bp','blood pressure'],['glucose','glucose'],['urine','urine']]
     .filter(function(r){ return cnt(r[0]); })
     .map(function(r){ return cnt(r[0])+' '+r[1]+' reading'+(cnt(r[0])===1?'':'s'); }).join(' · ');
-  openSheet(`<h2>Your pregnancy record</h2><div class="sub">Kept exactly as it was. Nothing here asks anything of you.</div>
+  const bpDoor=pregBpDoor();
+  openSheet(`<h2>Your pregnancy record</h2><div class="sub">${bpDoor?'Yours to look back on. Nothing here asks anything of you.':'Kept exactly as it was. Nothing here asks anything of you.'}</div>
     ${(seeCare&&team)?`<div class="sec-title">Your care team</div>${team}`:''}
     ${(seeHealth&&appts)?`<div class="sec-title" style="margin-top:16px">Appointments you kept</div>${appts}`:''}
-    ${(seeHealth&&readings)?`<div class="sec-title" style="margin-top:16px">Readings</div><div class="csub">${escapeHtml(readings)}. Worth having to hand: blood pressure still matters in the weeks after a birth.</div>`:''}
+    ${/* The owner sees this section even with nothing in it while the door is open, because it is
+          the only way to that sheet after the birth and a woman sent home with "check it for a
+          fortnight" has no readings yet by definition. A non-owner still only ever sees it when
+          there is something to see, and never sees the row. Once the door closes the section goes
+          back to appearing only when there is something in it, and "kept exactly as it was" above
+          becomes true again, because by then nothing on this sheet writes. */''}
+    ${(seeHealth&&(readings||bpDoor))?`<div class="sec-title" style="margin-top:16px">Readings</div><div class="csub">${readings?escapeHtml(readings)+'. Worth having to hand: blood pressure still matters in the weeks after a birth.':'Blood pressure still matters in the weeks after a birth. Whatever you add stays here with the rest of your record.'}</div>`:''}
+    ${bpDoor?`<div class="set-item" onclick="openLogBP()" style="cursor:pointer;margin-top:8px">
+      <div class="si-ico" style="background:var(--pump-soft);color:var(--pump);font-size:18px">🩺</div>
+      <div class="si-body"><div class="a">Log a reading</div><div class="b">${escapeHtml(pregBpRowSub())}</div></div><span class="chev">${I.chev}</span></div>`:''}
     ${(seeHealth&&p.birthPlan)?`<div class="sec-title" style="margin-top:16px">Your birth plan</div><div class="note-read">${escapeHtml(p.birthPlan)}</div>`:''}
     ${(amOwner||seeHealth)?`<button class="btn-ghost" onclick="openPregDoctorReport()" style="margin-top:16px;color:var(--preg-ink)">📄 Doctor report</button>`:''}
     ${amOwner?`<div class="sec-title" style="margin-top:16px">Just for you</div>
@@ -10111,6 +10681,12 @@ function renderIllness(){
         <div class="sub">${lt?('last temp '+lt.temp+'°'+(lt.unit||'C')+(isFever(lt.temp,lt.unit)?' · fever':'')):'no temperature logged yet'}</div></div></div>
       <div class="row2"><button class="btn-primary" style="background:var(--med);--accent-ink:var(--on-med,var(--on-accent))" onclick="openTemp()">${I.thermo} Temperature</button>
         <button class="btn-primary" style="background:var(--pump);--accent-ink:var(--on-pump,var(--on-accent))" onclick="openSymptom()">${I.pulse} Symptom</button></div>
+      ${/* The second durable door to the safety net, on the screen a parent is already on while an
+            illness is running, and shown to whoever opens it rather than to whoever logged it. The
+            same shape the pregnancy side uses for warning signs at :8061. Only once a fever is part
+            of this episode: it is a fever list, and offered on a cold it would just be alarming. */
+        (temps.some(e=>isFever(e.temp,e.unit)) || syms.some(s=>/fever/i.test(s.symptom||'')))
+        ? `<button class="btn-ghost" onclick="openFeverSafetyNet()" style="margin-top:10px">What would make you call sooner</button>` : ''}
       ${pts.length?`<div class="stat-card" style="margin-top:14px"><h3>Temperature</h3><div class="csub">${pts.length} reading${pts.length>1?'s':''} · °${tu} · fever ≥ ${tu==='F'?'100.4':'38'}°</div>${svgLine(pts,'med','°'+tu)}</div>`:''}
       ${temps.length?`<div class="sec-title">Recent readings</div>${temps.slice().reverse().slice(0,6).map(e=>`<div class="tl-item" onclick="openEdit('${e.id}')"><div class="tl-ico" style="background:var(--med-soft);color:var(--med)">${I.thermo}</div><div class="tl-body"><div class="t1">${e.temp}°${e.unit||tu}</div><div class="t2">${new Date(e.time).toLocaleDateString(undefined,{month:'short',day:'numeric'})} ${fmtClock(e.time)}</div></div></div>`).join('')}`:''}
       ${syms.length?`<div class="sec-title">Recent symptoms</div>${syms.map(s=>`<div class="tl-item" onclick="openEdit('${s.id}')"><div class="tl-ico" style="background:var(--pump-soft);color:var(--pump)">${I.pulse}</div><div class="tl-body"><div class="t1">${escapeHtml(s.symptom)}</div><div class="t2">${s.severity||''} · ${fmtClock(s.time)}</div></div></div>`).join('')}`:''}
@@ -10265,15 +10841,73 @@ function saveTemp(){
 }
 /* ---------- fever nudge ---------- */
 function lastFeverEvent(){ const e=babyEvents().find(x=>x.type==='temperature'&&isFever(x.temp,x.unit)); return (e && now()-e.time<24*3600000)?e:null; }
+/* THE SECOND SENTENCE OF THIS USED TO BE CARE ADVICE AND A DURATION CUBBY MADE UP.
+   It read "Keep them comfortable and hydrated. Reach out to your doctor if the fever is high,
+   lasts more than a day or two, or they just seem unwell." Three separate things wrong with it for
+   a parent reading it at three in the morning. Keeping a child comfortable and hydrated is care
+   advice, which Cubby does not give. "If the fever is high" is circular on a sheet that only opens
+   because the reading is already at or above the fever line. And "a day or two" is a clinical
+   duration with no source behind it, on a product where openTemp's own teaching row promises that
+   guidance beside a reading "comes from published sources and is never Cubby telling you what is
+   happening to your child".
+   What replaces the duration is a safety net: the things that would mean calling sooner, in the
+   words a parent would use, every one of them taken from the NHS page this sheet links to. The one
+   duration on that list is the NHS's five days, not ours. */
+const FEVER_SAFETY_NET={
+  /* The canonical URL, checked rather than remembered: /conditions/fever-in-children/ 301s here,
+     and a redirect is one more thing to go wrong on a phone at three in the morning. */
+  source:'https://www.nhs.uk/symptoms/fever-in-children/',
+  /* "if you notice", not "if you see": five of the eleven are states rather than sights, and
+     "if you see hard to wake" breaks in the mouth of someone reading it as a checklist at 3am.
+     openBPConcern already settled this wording at :8397. */
+  groups:[
+    {head:'Call for help straight away if you notice', items:[
+      'A rash that does not fade when you press a glass against it',
+      'Hard to wake, floppy, or not responding to you',
+      'A fit, also called a seizure',
+      'A stiff neck, or bright light bothering them',
+      'Breathing that looks hard or fast, or a grunting sound',
+      'Skin, lips or tongue that look pale, blotchy or blue'
+    ]},
+    /* soft:true is the whole clinical point of splitting the list. Both groups used to render the
+       same emergency red dot, so "not wanting to feed" carried the identical alarm signal as a
+       seizure and the two groups flattened into one wall of red exactly when telling them apart
+       matters most. The second group keeps the row, loses the alarm colour. */
+    {head:'Worth a call to your doctor today if you notice', soft:true, items:[
+      'A temperature still there after five days',
+      'Far fewer wet nappies than usual, or no tears when they cry',
+      'Not wanting to feed, eat or drink',
+      'Anything new alongside the temperature, like a rash or a cough',
+      'Not themself, in a way that worries you'
+    ]}
+  ]
+};
 function feverGuidance(){
   const b=activeBaby(); const mo=b?babyMonths():null;
   if(mo!=null && mo<3) return 'For a baby under 3 months, any fever is worth a prompt call to your doctor.';
-  return 'Keep them comfortable and hydrated. Reach out to your doctor if the fever is high, lasts more than a day or two, or they just seem unwell.';
+  return 'A temperature on its own does not say when to call. What matters more is how they seem in themselves.';
+}
+/* The under-3-months line comes with the list too, so the list can never read as permission to
+   wait: on that sheet the first thing she sees is still the prompt call. */
+function openFeverSafetyNet(){
+  const b=activeBaby(); const mo=b?babyMonths():null;
+  const under3=(mo!=null && mo<3);
+  /* Deliberately not .sec-title: that class is uppercase with wide tracking, and
+     "CALL FOR HELP STRAIGHT AWAY" shouts at a parent who is already frightened. */
+  const block=g=>`<div style="font-size:12.5px;font-weight:800;color:var(--ink-soft);margin:16px 0 9px">${escapeHtml(g.head)}</div>`
+    +g.items.map(s=>`<div class="danger-row"><span class="dr-dot"${g.soft?' style="color:var(--ink-soft)"':''}>●</span><div class="dr-t">${escapeHtml(s)}</div></div>`).join('');
+  openSheet(`<h2>When to call sooner</h2>
+    <div class="sub">${under3?'For a baby under 3 months, any fever is worth a prompt call to your doctor, whatever else you see here. ':''}Nothing here is a diagnosis. It is the list someone on a helpline would work through with you.</div>
+    ${FEVER_SAFETY_NET.groups.map(block).join('')}
+    <div class="preg-disclaim">From the NHS page on fever in children. Call whenever something feels wrong to you, even if it is not on this list. You are the one who knows them.</div>
+    <a href="${FEVER_SAFETY_NET.source}" target="_blank" rel="noopener" class="btn-ghost" style="display:flex;text-decoration:none">Open the source</a>
+    <button class="btn-ghost" onclick="closeSheet()">Close</button>`,'med');
 }
 function openFeverNudge(v,unit){
   openSheet(`<h2>That's a fever</h2><div class="sub">${v}°${unit} is at or above the fever line (38°C / 100.4°F).</div>
     <div class="csub" style="margin:-4px 0 16px">${feverGuidance()} This isn't medical advice, trust your instincts and your pediatrician.</div>
     <button class="btn-primary" style="background:var(--sleep);--accent-ink:var(--on-sleep,var(--on-accent))" onclick="openVisitSummary()">${I.stetho} Prepare a summary for the doctor</button>
+    <button class="btn-ghost" onclick="openFeverSafetyNet()">What would make you call sooner</button>
     <button class="btn-ghost" onclick="openSymptom()">Log a symptom</button>
     <button class="btn-ghost" onclick="closeSheet()">Got it</button>`,'med');
 }
@@ -10384,6 +11018,21 @@ function visitSummary(days,opts){
           :canRate?`Sleep: ~${(perDay(sleepMs)/3600000).toFixed(1)} h/day (${sleeps.length} naps logged)`
                   :`Sleep: ${fmtDur(sleepMs)} total (${sleeps.length} naps logged)`);
     L.push(`Nappies: ${diapers.length} total${rate(diapers.length)} (wet ${wet}, dirty ${dirty})`);
+    /* A count answers "how many" and nothing else. The observation that sent the family to this
+       appointment is usually the one nappy that looked wrong, so it prints in her exact words with
+       the date and time beside it, and Cubby adds no reading of its own. Capped so one worrying
+       fortnight cannot push the growth and medicine lines off the page; the count above the list
+       is the honest total either way. */
+    const dNotes=diapers.filter(e=>String(e.notes||'').trim());
+    if(dNotes.length){
+      const NOTE_CAP=6;
+      L.push(`Nappy notes: ${dNotes.length}${dNotes.length>NOTE_CAP?`, the ${NOTE_CAP} most recent below`:''}`);
+      // diapers came off babyEvents(), newest first, so slice takes the most recent and reverse
+      // prints them in the order they happened.
+      dNotes.slice(0,NOTE_CAP).reverse().forEach(e=>{
+        L.push(`  • ${new Date(e.time).toLocaleDateString()} ${fmtClock(e.time)}, ${e.kind||'nappy'}: ${String(e.notes).replace(/\s+/g,' ').trim()}`);
+      });
+    }
   }
   const bwe=birthWeightEvent(b.id);
   if(bwe) L.push(`Birth weight: ${bwe.weight} ${bwe.wUnit||'kg'}`);
@@ -10514,6 +11163,7 @@ function openFeverSymptomNudge(){
     <div class="sub">Saved without a number, which is fine. If you can take a temperature later it is worth adding, because your doctor will ask.</div>
     <div class="csub" style="margin:-4px 0 16px">${feverGuidance()} This is not medical advice, trust your instincts and your doctor.</div>
     <button class="btn-primary" style="background:var(--med);--accent-ink:var(--on-med,var(--on-accent))" onclick="closeSheet();openTemp()">${I.thermo} Add a temperature</button>
+    <button class="btn-ghost" onclick="openFeverSafetyNet()">What would make you call sooner</button>
     <button class="btn-ghost" onclick="closeSheet();openVisitSummary()">${I.stetho} Prepare a summary for the doctor</button>
     <button class="btn-ghost" onclick="closeSheet()">Close</button>`,'med');
 }
@@ -11050,12 +11700,16 @@ function renderVaccines(){
         <div class="rt">${done}</div></div>
       <div class="mh-body"><div class="a">${heroTitle}</div><div class="b">${done} of ${plan.length} recorded · ${heroSub}</div></div>
     </div>
+    ${/* The calendar row used to be the LAST thing on this sub-tab, below the ring, the catch-up
+         card, the disclaimer, twenty-odd vaccine rows and two add-rows. The one action here that
+         survives closing the app was the one action nobody scrolled to. It sits with the ring now,
+         because the ring is the answer to "where are we" and this is the answer to "and when". */''}
+    ${vaxCalendarRow(bb,plan)}
     ${vaxSetupCard(bb,plan,toConfirm)}
     <div class="disclaimer">⚕️ Showing the ${vaxCountryName((bb&&bb.country)||detectCountry())} schedule as a starting template. <span class="link-inline" onclick="openVaccineCountry()">Change country</span>. Always follow your doctor and local health authority, and edit any item to match your child's actual plan.</div>
     ${list}
     <div class="add-row" onclick="openAddVaccine()">${I.plus} Add a vaccine</div>
-    ${window.CubbyVaxCard?`<div class="add-row" onclick="CubbyVaxCard.open()">📷 Fill these in from their card</div>`:''}
-    ${vaxCalendarRow(bb,plan)}`;
+    ${window.CubbyVaxCard?`<div class="add-row" onclick="CubbyVaxCard.open()">📷 Fill these in from their card</div>`:''}`;
 }
 /* Six marketing surfaces promise vaccine reminders. syncReminderIndex has only ever iterated
    state.meds and says so in its own comment ("ONLY medicine is critical enough to push"), so no
@@ -11079,15 +11733,38 @@ function vaxUpcomingVisits(plan){
   const byAge={};
   (plan||[]).forEach(v=>{ if(v.given) return;
     const due=vxDueDate(v); if(due<=now()) return;          // past due is the screen's job, not an alarm
-    (byAge[v.dueMonths]=byAge[v.dueMonths]||{due:due,names:[]}).names.push(v.name);
+    // age travels with the visit: it is what identifies this appointment to a calendar, and unlike
+    // the visit's position in this list it does not move when an earlier visit drops off.
+    (byAge[v.dueMonths]=byAge[v.dueMonths]||{due:due,age:v.dueMonths,names:[]}).names.push(v.name);
   });
   return Object.keys(byAge).map(k=>byAge[k]).sort((a,b)=>a.due-b.due);
 }
+/* How many real appointments there are left to offer. Split out of vaxCalendarRow because the
+   onboarding sheet needs the same number and must not guess it: vaxProofLine counts every distinct
+   due age in the plan, including the ones already behind her, and offering to put a date that has
+   passed into her calendar would be the one thing this feature must never do. */
+function vaxCalendarCount(b,plan){
+  if(!b||!b.birth) return 0;                                 // no birthday, no real dates to offer
+  try{ return vaxUpcomingVisits(plan||vaccinePlan()).length; }catch(e){ return 0; }
+}
+/* One label, both surfaces, and no count in it. Measured on the tab: the ring says "0 of 27 done ·
+   0 of 27 recorded" and this row sat 16px under it saying "these 7 visits", so the only reading
+   available to a parent was that twenty of the twenty-seven were being left out. On the onboarding
+   sheet vaxProofLine says "8 visits" four rows above, and this said 7, because the at-birth visit is
+   already behind her and neither screen says so. "Still ahead" is the fact she needs and it cannot
+   disagree with a number printed somewhere else. "These" also had nothing left to point at once the
+   row moved above the list it used to close. The count now only decides show/hide and singular. */
+function vaxCalendarLabel(n){
+  return '📅 Put '+(n===1?'the next visit':'the visits still ahead')+' in my calendar';
+}
 function vaxCalendarRow(b,plan){
-  if(!b||!b.birth) return '';                                // no birthday, no real dates to offer
-  const n=vaxUpcomingVisits(plan).length;
+  const n=vaxCalendarCount(b,plan);
   if(!n) return '';
-  return `<div class="add-row" onclick="exportVaccineSchedule()">📅 Put ${n===1?'the next visit':'these '+n+' visits'} in my calendar</div>`;
+  /* .cal-row rather than a bare .add-row: this one leads the tab and exports, so it drops the dashed
+     "add something by hand" border and takes the 16px block gap into the card below. tools/stack_check.js
+     measured 8px into the disclaimer where the contract says a block boundary is 16. The two add-rows
+     at the foot of this tab are still rows and still dashed. */
+  return `<div class="add-row cal-row" onclick="exportVaccineSchedule()">${vaxCalendarLabel(n)}</div>`;
 }
 function exportVaccineSchedule(){
   const b=activeBaby(); if(!b||!b.birth) return;
@@ -11095,17 +11772,32 @@ function exportVaccineSchedule(){
   if(!visits.length){ toast('Nothing coming up to add'); return; }
   const stamp=_icsStamp(new Date());
   const where=vaxCountryName(b.country||detectCountry())||'';
+  /* A UID is the calendar's name for one appointment, so it has to name the VISIT and nothing else.
+     It used to be the visit's POSITION in the upcoming list, and that list shrinks: record the six
+     doses of the soonest visit and export again and every UID slides onto the next visit's date, so
+     re-importing rewrites six real appointments to the wrong day and orphans the last one as a
+     duplicate. Measured on a ten-day-old on the UK schedule, all 7 moved. The visit's age in months
+     is what actually identifies it, it is already the grouping key inside vaxUpcomingVisits, and it
+     does not move when an earlier visit drops off.
+     SEQUENCE is the other half of the same bug: with none, every re-import is revision 0 and a
+     calendar is entitled to ignore the newer file. Same shape the medicine course export already
+     keeps in m.ics. */
+  const seq=((b.vaxIcs&&b.vaxIcs.seq)||0)+1;
+  const uid=a=>'cubby-vax-'+b.id+'-a'+String(a).replace(/[^0-9]+/g,'_')+'@little-cubby.com';
+  const p=x=>String(x).padStart(2,'0');
+  const ymd=t=>{ const d=new Date(t); return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate()); };
+  const keys=[];
   const L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Cubby//Vaccines//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH'];
-  visits.forEach(function(v,i){
-    const d=new Date(v.due), p=x=>String(x).padStart(2,'0');
+  visits.forEach(function(v){
     // All-day, because the date is worked out from the birthday and the clinic sets the hour.
     // Pretending to know a time would be the same class of untruth as the doctor report dividing
     // a five-day-old by fourteen days.
-    const day=d.getFullYear()+p(d.getMonth()+1)+p(d.getDate());
-    const nd=new Date(v.due+86400000);
-    const next=nd.getFullYear()+p(nd.getMonth()+1)+p(nd.getDate());
+    const day=ymd(v.due);
+    const next=ymd(v.due+86400000);
+    keys.push({a:v.age,d:day});
     L.push('BEGIN:VEVENT',
-      'UID:cubby-vax-'+b.id+'-'+i+'@little-cubby.com',
+      'UID:'+uid(v.age),
+      'SEQUENCE:'+seq,
       'DTSTAMP:'+stamp,
       'DTSTART;VALUE=DATE:'+day,
       'DTEND;VALUE=DATE:'+next,
@@ -11115,11 +11807,25 @@ function exportVaccineSchedule(){
       'BEGIN:VALARM','TRIGGER:-P2D','ACTION:DISPLAY','DESCRIPTION:'+_icsText(b.name+"'s vaccines are coming up"),'END:VALARM',
       'END:VEVENT');
   });
+  /* A visit she has now been to, or one a country change took out of the plan, is already sitting in
+     her calendar under its own name. Simply leaving it out of the new file leaves it there ringing
+     for something that is not happening, so it goes out cancelled, keeping its real date so the entry
+     stays a valid one. */
+  ((b.vaxIcs&&b.vaxIcs.keys)||[]).forEach(function(k){
+    if(!k||k.a==null||keys.some(x=>x.a===k.a)) return;
+    L.push('BEGIN:VEVENT','UID:'+uid(k.a),'SEQUENCE:'+seq,'DTSTAMP:'+stamp,
+      'DTSTART;VALUE=DATE:'+k.d,'STATUS:CANCELLED',
+      'SUMMARY:'+_icsText(b.name+"'s vaccines"),'END:VEVENT');
+  });
   L.push('END:VCALENDAR');
   try{
     const url=URL.createObjectURL(new Blob([L.join('\r\n')],{type:'text/calendar'}));
+    b.vaxIcs={seq:seq,keys:keys,at:now()};                  // so the next export updates rather than duplicates
+    persist();
+    // Nothing was added yet: a file was saved and she still has to open it. On the vaccines tab that
+    // was survivable; at minute two of setup a parent who has never seen an .ics would believe it.
     saveFile(url,(b.name||'baby').replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'-vaccines.ics',
-             isNativeApp()?'Schedule ready 📅':'Added, check your calendar 📅');
+             isNativeApp()?'Schedule ready 📅':'Saved. Open it to add the visits to your calendar 📅');
     setTimeout(()=>URL.revokeObjectURL(url),1500);
   }catch(e){ toast('Could not add to calendar'); }
 }
@@ -12240,6 +12946,10 @@ function toggleRoutine(id){
     if(ev && !canEditEvent(ev)){ toast('Only '+(loggerName(ev.authorId)||'whoever logged it')+' or an owner can undo this'); return; }
     if(ev){ ev.deleted=true; ev.deletedBy=myUid(); ev.deletedAt=now(); }
     delete r.done[today];
+    /* Same reasoning as undo: the entry the sentence was announcing is off the row again, so the
+       mark claiming she has been told is no longer earned. Safe to give back on every un-tick,
+       because arming still refuses while any feed, sleep or nappy of this baby's remains. */
+    unspendFirstEntryLine();
     persist(); render(); toast('Unticked');
     return;
   }
@@ -12247,6 +12957,10 @@ function toggleRoutine(id){
   const payload=routinePayload(r);
   const evId=uid();
   payload.id=evId; payload.babyId=b.id;
+  /* The fifth write door. RITUAL_TYPES covers feed, sleep and nappy, so a ticked ritual is a real
+     entry on the since-row, and for a parent who set her rituals up in the wizard it is very often
+     the first one. It pushes straight to state.events, so like the timers it arms its own. */
+  armFirstEntryLine(payload.type,[b.id]);
   state.events.push(payload);
   r.done[today]=evId;   // remember the event so un-ticking can undo it
   persist(); render();
@@ -12449,7 +13163,7 @@ function renderLogTab(){
   let body;
   if(logTab==='stats') body=renderStats();
   else if(logTab==='rituals') body=renderRitualsView();
-  else body=`<button class="btn-ghost" style="margin-bottom:var(--stack)" onclick="openDayRecap()">🐻 Today's recap</button>`+tipLine('heat','These strips show your week at a glance, tap Week or Month to switch.')+renderHeatmap()+renderTimeline();
+  else body=`<button class="btn-ghost" style="margin-bottom:var(--stack)" onclick="openDayRecap()">🐻 Today's recap</button>`+wakeWindowRecap()+tipLine('heat','These strips show your week at a glance, tap Week or Month to switch.')+renderHeatmap()+renderTimeline();
   return `<div class="fade-in">${coachMark('log','Log, Rituals & Stats','Everything you log lands in this timeline. Flip to Rituals for your gentle daily rhythm, or Stats for charts and growth curves.')}${seg}${body}</div>`;
 }
 
@@ -13601,6 +14315,47 @@ const POSTER_STYLES=[
 function posterStyle(){ return POSTER_STYLES.find(x=>x.k===(posterDraft&&posterDraft.style))||POSTER_STYLES[0]; }
 function posterDeco(){ return (posterDraft&&posterDraft.deco)||posterDefaults().deco; }
 let posterDraft=null;
+/* THE KEEPSAKE LAYER IS EMPTY FOR A NEWBORN'S FIRST MONTH, which is the month that decides whether
+   a household keeps Cubby at all. monthiversary() returns null while the baby is under one month
+   old, so the month card, the only keepsake Cubby ever offers unprompted, cannot appear yet, and
+   the poster was three navigations deep in Album and offered nowhere else in the product. It asks
+   for nothing the parent has not already given: saveBaby refuses without a name and a birthday,
+   and every detail she has not filled in is drawn as a dotted placeholder that never reaches the
+   saved file. So it fills that gap and then gets out of the way. */
+function posterOfferable(){
+  if(myLossHolding()) return null;              // a bereaved parent is never handed a keepsake to make
+  const b=activeBaby();
+  return (b&&b.birth)?b:null;
+}
+/* Keyed per BABY, not per parent. A second child two years later is a new poster, not a repeat of
+   one this parent already declined, and the month card above it gets this wrong for twins today. */
+function posterOfferKey(b){ return 'tip_poster_'+((b&&b.id)||''); }
+/* The home nudge stops at the exact moment the month card can start, computed with the same
+   setMonth arithmetic monthiversary uses, so the two can never both be up and never both be down.
+   A day count would drift: 30.44 days and one calendar month are not the same boundary. */
+function posterOfferDue(){
+  const b=posterOfferable(); if(!b) return null;
+  if(hasSeen(posterOfferKey(b))) return null;
+  const bd=new Date(b.birth), mark=new Date(b.birth); mark.setMonth(bd.getMonth()+1);
+  return now()<mark.getTime()?b:null;
+}
+// Both ways out retire the offer, because taking it is an answer just as much as declining it is,
+// and a parent who has been handed the poster once should not be handed it again tomorrow.
+function openPosterOffer(){ const b=activeBaby(); if(b) markSeen(posterOfferKey(b)); openBirthPoster(); }
+function dismissPosterOffer(){ const b=activeBaby(); if(b) markSeen(posterOfferKey(b)); render(); }
+/* The first-session row. Not gated on the seen flag: this is a menu she opened, not a nudge that
+   arrived, so it stays offered for as long as the setup sheet is the screen she is standing on.
+   It opens the poster DIRECTLY instead of going through openPosterOffer, which retires the home
+   nudge. Sharing that handler meant a peek cost her the pill: look at an empty poster on the first
+   evening, before there is one log to sit under it, and the offer that was supposed to carry the
+   next four weeks was already spent. A menu she opened is not an answer to a question nobody has
+   asked yet, which is the whole reason this row is not read-gated in the first place.
+   "See", not "Make": drawPosterPrev paints a real poster with her baby's name in it the moment the
+   sheet opens. Every other row here is a chore, and this is the one that gives something back. */
+function posterOfferRow(){
+  const b=posterOfferable(); if(!b) return '';
+  return `<button class="btn-ghost" style="margin-top:10px" onclick="openBirthPoster()">🎀 See ${escapeHtml(b.name)}'s birth poster</button>`;
+}
 function openBirthPoster(){
   const b=activeBaby();
   posterDraft=Object.assign({withPhoto:false, img:null, photoId:null}, posterDefaults());
@@ -13656,6 +14411,20 @@ function pStar(ctx,x,y,r,col){ ctx.fillStyle=col; ctx.beginPath(); for(let i=0;i
 function pHeart(ctx,x,y,s,col){ ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(x,y+s*0.3); ctx.bezierCurveTo(x,y,x-s,y-s*0.1,x-s,y+s*0.35); ctx.bezierCurveTo(x-s,y+s*0.75,x,y+s,x,y+s*1.1); ctx.bezierCurveTo(x,y+s,x+s,y+s*0.75,x+s,y+s*0.35); ctx.bezierCurveTo(x+s,y-s*0.1,x,y,x,y+s*0.3); ctx.fill(); }
 function pLeaf(ctx,x,y,len,ang,col){ ctx.save(); ctx.translate(x,y); ctx.rotate(ang); ctx.strokeStyle=col; ctx.lineWidth=len*0.05; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(len,0); ctx.stroke();
   ctx.fillStyle=col; for(let i=0.2;i<1;i+=0.18){ ctx.save(); ctx.translate(len*i,0); ctx.beginPath(); ctx.ellipse(0,-len*0.06,len*0.12,len*0.05,-0.5,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.ellipse(0,len*0.06,len*0.12,len*0.05,0.5,0,Math.PI*2); ctx.fill(); ctx.restore(); } ctx.restore(); }
+/* An hour on a keepsake has to be one somebody actually gave. saveBaby asks for a name and a
+   birthday and no time at all, then writes new Date(bd+'T08:00'), so every baby added at setup
+   carries an 8:00 AM nobody typed. The poster printed it in the same large numerals as the date,
+   next to seven fields that were honest enough to stay dotted, and this offer now puts that page in
+   front of every new parent twice in the weeks that decide whether she stays. A mother who prints
+   it at 40x60 and frames it finds out from somebody who was in the room. So the hour is drawn only
+   once it is not that placeholder, or once she has moved the clock in Birth details herself, and
+   the quadrant dots like WEIGHING and MEASURING until then. Dotted is recoverable; wrong is not. */
+function birthTimeKnown(b){
+  if(!b||!b.birth) return false;
+  if(b.birthTimeSet) return true;
+  const d=new Date(b.birth);
+  return !(d.getHours()===8 && d.getMinutes()===0 && d.getSeconds()===0 && d.getMilliseconds()===0);
+}
 function composePoster(canvas,scale,preview){
   const W=Math.round(1200*scale), H=Math.round(1680*scale);
   canvas.width=W; canvas.height=H;
@@ -13775,9 +14544,12 @@ function composePoster(canvas,scale,preview){
        than its three neighbours. This used to be a hand-rolled copy of bigUnit's measure-and-centre,
        which is exactly the kind of duplicate that drifts the moment one of them is adjusted. */
     bigUnit(born.getDate()+' '+born.getFullYear(), qx[0], qy[0]+42*S, 96*S, 30*S, 'icon_cal');
-    // top right: the time
-    cap('at', qx[1], qy[0]-52*S, 24*S);
-    bigUnit(born.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}).replace(/\s/g,' '), qx[1], qy[0]+42*S, 82*S, 28*S, 'icon_clock');
+    // top right: the time, when there is one. An hour nobody gave is dotted exactly the way an
+    // empty WEIGHING is, because "we were not told" is the same fact in both cells.
+    const knownT=birthTimeKnown(b);
+    cap('at', qx[1], qy[0]-52*S, 24*S, knownT?1:0.45);
+    if(knownT) bigUnit(born.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}).replace(/\s/g,' '), qx[1], qy[0]+42*S, 82*S, 28*S, 'icon_clock');
+    else { if(preview) blank(qx[1], qy[0]+18*S, W*0.20); if(posterDeco().icons) art('icon_clock', qx[1]-70*S, qy[0]+12*S, 92*S, 0.35); }
   }
   // bottom left: weight
   cap('weighing', qx[0], qy[1]-52*S, 24*S, b.birthWeight?1:0.45);

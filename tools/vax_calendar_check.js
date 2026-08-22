@@ -31,16 +31,21 @@ let pass=0,fail=0; const ok=(n,c,x)=>{c?(pass++,console.log('  ok   '+n)):(fail+
    const realSave=window.saveFile; window.saveFile=function(){};
    exportVaccineSchedule();
    window.Blob=realBlob; window.saveFile=realSave;
+   // This used to read document.body.innerHTML, which on this page CONTAINS the inline script's own
+   // source, so the regex matched the TEMPLATE that renders the row rather than the row. Measured:
+   // with ${vaxCalendarRow(bb,plan)} deleted from renderVaccines it still reported "ok". Read the
+   // element the parent can actually tap.
+   const calRow=[...document.querySelectorAll('.add-row')].filter(e=>/in my calendar/.test(e.textContent||''));
    return {doses:plan.filter(v=>!v.given).length, visits:visits.length,
      firstNames:visits[0]?visits[0].names:[], ics,
-     rowHtml:(document.body.innerHTML.match(/Put [^<]*in my calendar/)||[])[0]||''};
+     rowCount:calRow.length, rowHtml:calRow.length?calRow[0].textContent.trim():''};
  });
 
  console.log('\nA 10-day-old on the UK schedule');
  ok('the plan has many individual doses', r.doses>6, r.doses);
  ok('but they collapse into far fewer VISITS', r.visits>0 && r.visits<r.doses, {doses:r.doses,visits:r.visits});
  ok('the first visit bundles the doses that share it', r.firstNames.length>=1, r.firstNames);
- ok('a control appears on the vaccines screen', /in my calendar/.test(r.rowHtml), r.rowHtml);
+ ok('a control appears on the vaccines screen', r.rowCount===1 && /in my calendar/.test(r.rowHtml), r);
 
  console.log('\nthe calendar file itself');
  const ev=(r.ics.match(/BEGIN:VEVENT/g)||[]).length;
