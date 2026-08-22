@@ -4,13 +4,25 @@
 
 There is **no third-party analytics** in Cubby on purpose, that keeps the "no trackers, we never sell your data" promise true. Instead you read your own two private sources: **Cloudflare** (traffic) and **Firestore** (product usage). Nothing about a tester is shared with anyone.
 
-## 0. Page counts (ours) — which routes were served, and which 404'd
+## 0. 404 counts (ours) — which broken links people are actually hitting
 
 ```sh
 node tools/page_stats.js          # last 5 days
 node tools/page_stats.js 14       # last 14 days
 node tools/page_stats.js 5 404    # only the routes that 404'd
 ```
+
+**Read this first: it counts 404s, not page views.** Workers Static Assets serves any matching asset
+without invoking `worker.js` at all — verified on the wire: `/`, `/app/` and `/articles/` never reach
+the Worker, only unmatched paths do. So `recordPageView` sees broken links and nothing else. That is
+what was asked for, and it is not general web analytics. Making it general needs `run_worker_first`,
+which puts the Worker in front of every asset request including images and scripts.
+
+**It took three bugs and two days to land a single row**, all of them hidden by one `catch` that
+swallowed everything so counting could never break serving: the document was named by URL instead of
+resource name (400), the write result was never checked, and it asked for the default `identitytoolkit`
+OAuth scope instead of `datastore` (403). Fire-and-forget plus swallow-everything is how a subsystem
+runs at a 100% failure rate and looks perfectly healthy. Failed writes now log their status and body.
 
 **Why this exists.** A user's sign-in link landed on our 404 page, and when the founder asked how many
 times that had happened in five days, nothing anywhere could answer. Third outage in a week found by a

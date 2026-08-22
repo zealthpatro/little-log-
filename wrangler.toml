@@ -14,8 +14,14 @@ crons = ["*/15 * * * *"]
 directory = "./"
 binding = "ASSETS"
 # Serve the branded /404.html (with a real 404 status) for any unmatched path,
-# instead of an empty-body 404. worker.js falls through to env.ASSETS.fetch for
-# all non-API routes, so this covers the whole static site.
+# instead of an empty-body 404.
+#
+# NOTE, measured on the wire 2026-08-22 and not what an earlier version of this comment claimed:
+# Workers Static Assets serves any MATCHING asset without invoking worker.js at all. /, /app/ and
+# /articles/ never reach the Worker; only unmatched paths do. So anything in fetch() that expects to
+# see ordinary page traffic will see none of it — which is why recordPageView counts 404s and not page
+# views. Set run_worker_first if that ever needs to change, and price it: it puts the Worker in front
+# of every asset request, images and scripts included.
 not_found_handling = "404-page"
 
 # Non-secret config. Secrets (RESEND_API_KEY, FIREBASE_SERVICE_ACCOUNT) are set with
