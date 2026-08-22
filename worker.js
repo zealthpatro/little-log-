@@ -233,8 +233,13 @@ async function recordPageView(env, url, status) {
   const field = status === 404 ? 'n404' : (status >= 500 ? 'n5xx' : (status >= 400 ? 'n4xx' : 'nOk'));
   try {
     const token = await getAccessToken(sa);
-    const base = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents';
-    const name = base.replace('/v1/', '/v1/') + '/pageStats/' + statsDocId(day, key);
+    /* A commit write names its document by RESOURCE NAME, not by URL. Passing the https:// form is
+       rejected with 400 INVALID_ARGUMENT ("lacks \"projects\" at index 0") — which is exactly what this
+       did for its first two days live, on every single request, while the catch below swallowed it and
+       the collection sat at zero documents. Fire-and-forget plus swallow-everything is how a subsystem
+       can be 100% broken and look completely healthy. Hence the console.error, which costs nothing and
+       shows up in `wrangler tail`. */
+    const name = 'projects/' + sa.project_id + '/databases/(default)/documents/pageStats/' + statsDocId(day, key);
     // One atomic increment. Concurrent edges cannot lose a count the way read-modify-write would.
     await fetch('https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents:commit', {
       method: 'POST',
@@ -245,7 +250,7 @@ async function recordPageView(env, url, status) {
           updateMask: { fieldPaths: ['day', 'path'] } }
       ] })
     });
-  } catch (e) { /* never let counting break serving */ }
+  } catch (e) { console.error('pagestats_fail', (e && e.message) || String(e)); }
 }
 
 /* ---- Sign-in by CODE, so sign-in never leaves the container -------------------------------------

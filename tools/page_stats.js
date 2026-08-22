@@ -30,14 +30,20 @@ function dayKeys(n) {
 }
 
 (async () => {
-  let admin, sa;
-  try { admin = require('firebase-admin'); }
-  catch (e) { console.error('\n  Missing firebase-admin. Run:  npm i firebase-admin\n'); process.exit(1); }
+  /* The MODULAR entry points, not the legacy `admin.credential.cert`. firebase-admin v13+ moved to
+     subpath exports and the old namespaced form is undefined, so the legacy call throws
+     "Cannot read properties of undefined (reading 'cert')". This script shipped with that bug because
+     it was written, committed and documented WITHOUT ever being run once. */
+  let initializeApp, cert, getFirestore, sa;
+  try {
+    ({ initializeApp, cert } = require('firebase-admin/app'));
+    ({ getFirestore } = require('firebase-admin/firestore'));
+  } catch (e) { console.error('\n  Missing firebase-admin. Run:  npm i firebase-admin\n'); process.exit(1); }
   try { sa = require(path.join(__dirname, 'serviceAccountKey.json')); }
   catch (e) { console.error('\n  Missing tools/serviceAccountKey.json (gitignored — ask the founder).\n'); process.exit(1); }
 
-  admin.initializeApp({ credential: admin.credential.cert(sa) });
-  const db = admin.firestore();
+  initializeApp({ credential: cert(sa) });
+  const db = getFirestore();
   const days = dayKeys(DAYS);
 
   const snap = await db.collection('pageStats').where('day', 'in', days.slice(-10)).get()
