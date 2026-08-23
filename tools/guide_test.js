@@ -448,15 +448,25 @@ async function chapterLabels(page) {
     if (opt) opt.click();
     await new Promise(r => setTimeout(r, 350));
     out.eventsAfter = (state.events || []).length;
-    out.rowNowDone = /Log your first entry/.test(renderGetStarted())
-      ? /class="gs-row done"[^>]*>(?:(?!gs-row)[\s\S])*?Log your first entry/.test(renderGetStarted())
-      : false;
+    /* The row must STOP ASKING. It used to have to be ticked in place, and this went red when the
+       card started retiring itself the moment you log — renderGetStarted() now returns '' once a
+       first entry exists, which is the charter working as intended: the card is called "Get started",
+       and once you have started it stops nagging. Demanding a visible tick was demanding the old
+       design back. What must never come back is the bug this section is named for: a parent does
+       exactly what the app told her and it still asks. Ticked in place or gone entirely both satisfy
+       that; still pending does not. */
+    const gsAfter = renderGetStarted();
+    out.gsRetired = gsAfter.trim() === '';
+    out.rowTicked = /class="gs-row done"[^>]*>(?:(?!gs-row)[\s\S])*?Log your first entry/.test(gsAfter);
+    out.stillAsking = /Log your first entry/.test(gsAfter) && !out.rowTicked;
+    out.rowNowDone = !out.stillAsking && (out.gsRetired || out.rowTicked);
     return out;
   });
   check(list.notFeedTimer, 'the row no longer points at the sheet whose button writes a timer', list.action);
   check(list.sheetOpened, 'tapping the row opens a log sheet', list.action);
   check(list.eventsAfter > 0, 'following it through writes a real entry', 'events: ' + list.eventsAfter);
-  check(list.rowNowDone, 'and the row it belongs to is now ticked');
+  check(list.rowNowDone, 'and it stops asking for it — ticked in place, or the card retires',
+    'retired: ' + list.gsRetired + '  ticked: ' + list.rowTicked + '  stillAsking: ' + list.stillAsking);
 
   // ---- 12. A PARTNER IS NOT ASSUMED TO BE THE CARRIER ------------------------------------------
   /* Relationship is optional at identity, and an empty one used to fall through the "is he one of
@@ -716,7 +726,18 @@ async function chapterLabels(page) {
     out.hasRange = /between/.test(line);
     out.noClockTime = !/\d{1,2}:\d{2}/.test(line);
     out.noWill = !/\bwill\b|\bshould\b|\bdue\b/i.test(line);
-    out.namesSample = /own logs/.test(line) && /Every day is different/.test(line);
+    /* PROPERTY, not phrasing. This asserted the literal strings "own logs" and "Every day is
+       different", and went red the day the copy was IMPROVED to
+       "From 12 gaps between naps in your family's last 14 days. Just what happened, not a forecast."
+       — which names the sample far more precisely and disclaims prediction more firmly than the
+       wording it replaced. A gate that fails on a better sentence is worse than no gate: it trains
+       people to ignore it, and it very nearly had a regression reported that never happened.
+       What actually matters is that the line CITES A COUNTABLE SAMPLE (so a parent can see how thin
+       the evidence is) and REFUSES TO PREDICT. Assert those two, and let the words move. */
+    const cites = (line.match(/\d+/g) || []).length >= 2;
+    const refuses = /(not a forecast|every day is different|just what happened|what happened, not)/i.test(line);
+    out.namesSample = cites && refuses;
+    out.sampleLine = line.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
 
     // asleep right now -> nothing to say
     timersFor('b1').sleep = { start: Date.now() - 10 * 60000 };
@@ -749,7 +770,7 @@ async function chapterLabels(page) {
     check(ww.rendered && ww.hasRange, 'it offers a range, from her own logs');
     check(ww.noClockTime, 'and never a clock time, which would be a forecast she cannot check');
     check(ww.noWill, 'no "will", no "should", no "due" — it describes the past, not an obligation');
-    check(ww.namesSample, 'it names the sample it came from and says every day is different');
+    check(ww.namesSample, 'it names the sample it came from and refuses to forecast', ww.sampleLine);
     check(ww.silentWhileAsleep, 'it says nothing while the baby is actually asleep');
     check(ww.backBeforeHide && ww.hidden, 'and it can be hidden for good, per person');
   } else {
