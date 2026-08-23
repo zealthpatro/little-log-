@@ -156,7 +156,11 @@ async function sendSigninLink(request, env) {
   if (await cache.match(cooldown)) return json({ ok: true, cached: true });
 
   try {
-    const token = await getAccessToken(sa);
+    /* BOTH scopes. This request mints a sign-in link (identitytoolkit) AND writes the code document
+       (datastore, via issueSigninCode below). OAUTH_SCOPE defaults to identitytoolkit only, so a bare
+       token silently lost the code half of every email — see the code endpoint for the version of
+       this that returned 502 outright. */
+    const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/identitytoolkit');
     let link = await generateSignInLink(token, email, url.origin + '/app/');
     // Rebrand the link onto our own domain (the worker proxies /__/* to Firebase) so the sign-in
     // email never exposes the legacy little-log-a9caa.firebaseapp.com host.
@@ -388,7 +392,11 @@ async function sendSigninCode(request, env) {
   if (await cache.match(cooldown)) return json({ ok: true, cached: true });
 
   try {
-    const token = await getAccessToken(sa);
+    /* BOTH scopes, and this one was returning 502 store_failed on every single request in production:
+       a bare token carries identitytoolkit, Firestore refuses it, and the code endpoint IS the code,
+       so there was nothing to fall back to. Nobody could get a sign-in code at all. Same defaulted
+       scope that kept the page counter empty for two days; that one was silent, this one was not. */
+    const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/identitytoolkit');
     const code = await issueSigninCode(sa, token, email);
     if (!code) return json({ error: 'store_failed' }, 502);   // the code IS this endpoint; no code, no email
 
@@ -433,7 +441,9 @@ async function verifySigninCode(request, env) {
   let sa; try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return json({ error: 'server_config' }, 500); }
 
   try {
-    const token = await getAccessToken(sa);
+    /* BOTH scopes: reads and burns the code document (datastore), then looks up or creates the
+       account and mints the custom token (identitytoolkit). */
+    const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/identitytoolkit');
     const base = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents';
     const docId = await signinCodeDocId(sa, email);
     const path = base + '/signinCodes/' + docId;
