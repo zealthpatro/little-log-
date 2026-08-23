@@ -477,7 +477,7 @@ body{
    Health, where five section headings began 8px after the last row of the previous list. A heading after
    a row is a new block and takes the block gap. */
 .ms-row + .sec-title, .add-row + .sec-title, .note-card + .sec-title,
-.set-item + .sec-title, .prof-card + .sec-title{margin-top:var(--stack);}
+.set-item + .sec-title, .prof-card + .sec-title, .bag-row + .sec-title{margin-top:var(--stack);}
 /* THE STRUCTURAL VERSION of the rule above, and the reason this particular bug stops coming back. That
    list has to be extended BY HAND every time a new kind of element happens to land above a heading, and
    it had already missed one: on the Illness tab the "Past illnesses" heading sat 6px under the Mark
@@ -2010,10 +2010,13 @@ function commitEvent(payload){
   const targets=targetsResolved();
   /* notes is part of the shape: two wet nappies half a second apart with the same words is still a
      slip, but one with "streak of blood" and one without is two different things a parent said, and
-     dropping the second silently while the toast reads "note saved" loses the words that mattered. */
+     dropping the second silently while the toast reads "note saved" loses the words that mattered.
+     colour is in for exactly the same reason, and the reachable direction is the correction: log a
+     dirty nappy, look at it properly, log it again with the colour. Without it here the second one
+     is swallowed and the parent is told it saved. */
   const sig=JSON.stringify([payload&&payload.type, payload&&payload.method, payload&&payload.kind,
     payload&&payload.amount, payload&&payload.activity, payload&&payload.medId,
-    payload&&payload.notes, targets.join(',')]);
+    payload&&payload.notes, payload&&payload.colour, targets.join(',')]);
   if(_lastCommit.sig===sig && (now()-_lastCommit.at)<900) return;
   _lastCommit={sig:sig, at:now()};
   armFirstEntryLine(payload&&payload.type, targets);   // before the push, while "is this the first" is still true
@@ -4043,8 +4046,15 @@ window.cubbyTeachCtx = function(){
        pregnant in Cubby: her guide grew a pregnancy section offering a door to an archive that
        does not exist. pregArchiveList() is already the predicate the two live entry points use
        (:5753 and :6863), so the guide now agrees with the screens. */
+    /* tryingRecord is "the doctor report has something of YOURS to show". quickStage() never
+       returns 'planning', so who.stage:['planning'] matched nobody and that row was invisible;
+       adding 'pregnancy' made it visible to everyone in the stage, including a shared partner, and
+       its Try it button prints her cycle dates verbatim. Cycle details are the carrier's alone, so
+       the flag carries both halves: she owns the record, and there is one. */
     has: { pregBp: !!(state.pregnancy && (!state.pregnancy.bornBabyId || pregBpDoor())),
-           pregArchive: !!(typeof pregArchiveList==='function' && pregArchiveList().length) },
+           pregArchive: !!(typeof pregArchiveList==='function' && pregArchiveList().length),
+           tryingRecord: !!(state.pregnancy && typeof tryingRecordCount==='function' && tryingRecordCount(state.pregnancy)
+                            && typeof ttcReportMine==='function' && ttcReportMine(state.pregnancy)) },
     installedAt: teachSince()
   };
 };
@@ -4540,7 +4550,9 @@ function eventDetail(e){
   if(e.type==='temperature') return (e.temp!=null?e.temp+'°'+(e.unit||'C'):'')+(e.temp!=null&&isFever(e.temp,e.unit)?' · fever':'');
   if(e.type==='symptom') return ((e.symptom===JAUNDICE_SYMPTOM&&e.severity)?extentPhrase(e.severity):(e.severity||''))+(e.notes?' · '+e.notes:'');
   if(e.type==='visit'){ const p=[]; if(e.doctorName)p.push(e.doctorName); if(e.notes)p.push(e.notes); return p.join(' · '); }
-  if(e.type==='diaper'&&e.notes) return e.notes;
+  // The colour goes ahead of her words, because it is the part the other parent can act on without
+  // having been there. Both are optional and most nappies have neither.
+  if(e.type==='diaper'){ const a=[]; if(e.colour)a.push(nappyColourPhrase(e.colour)); if(e.notes)a.push(e.notes); return a.join(' · '); }
   return '';
 }
 const ACTIVITY_ICONS={'Tummy time':'tummy','Bath':'bath','Massage':'massage','Play':'play','Walk':'walk','Sun time':'sun','Reading':'book','Skin-to-skin':'heart'};
@@ -5387,8 +5399,36 @@ function timeToToday(str){ const[h,m]=str.split(':').map(Number); const d=new Da
 /* The note lives on a draft rather than only in the input, because targetChips re-renders this whole
    sheet when a second baby is picked and anything typed would go with it. Same reason pumpDraft and
    activityDraft exist. */
-let diaperDraft={notes:''};
-function openDiaper(){ diaperDraft={notes:''}; initTargets(); initLogWhen(); renderDiaperSheet(); }
+let diaperDraft={notes:'',colour:''};
+function openDiaper(){ diaperDraft={notes:'',colour:''}; initTargets(); initLogWhen(); renderDiaperSheet(); }
+/* A DIRTY NAPPY WAS ONE UNDIFFERENTIATED BUTTON.
+   The day-five question a midwife asks is what colour it is by now, and there was nowhere to answer
+   it. The fourth chip is the one that earns the other three: a pale or chalky stool is the sign that
+   sends a newborn for a liver check, and the window in which that check is worth most closes at
+   about eight weeks, so a parent who notices one at three weeks and has nowhere to write it down
+   loses the only date anybody will ask her for.
+   `w` is how the word is printed everywhere a sentence is being built, so the sheet, the timeline
+   row and the doctor page all say it the same way. Four is the whole list on purpose: any longer and
+   this stops being a glance and becomes a quiz at 3am. */
+const NAPPY_COLOURS=[{k:'dark',w:'dark'},{k:'green',w:'green'},{k:'yellow',w:'yellow'},{k:'pale',w:'pale or chalky'}];
+function nappyColourWord(k){ const c=NAPPY_COLOURS.find(x=>x.k===k); return c?c.w:''; }
+/* "green" alone on a timeline row does not say whether the nappy was green or something else was,
+   and the person reading the row is usually not the person who tapped it. Same reasoning, and the
+   same fix, as extentPhrase for the yellowing. */
+function nappyColourPhrase(k){ const w=nappyColourWord(k); return w?('looked '+w):''; }
+/* Six weeks, and then the chips go. Colour is the question of the newborn weeks; past them it is
+   noise on a sheet that has to stay a one-tap sheet, and anything already recorded still prints on
+   the timeline and on the doctor page. No birth date means no window: the honest default is to ask
+   for nothing. */
+const NAPPY_COLOUR_DAYS=42;
+/* MEASURED ON THE BABY THE COLOUR WOULD LAND ON, never on whoever happens to be on screen. The
+   "Log for" chips let those be two different children, and a newborn with an older sibling is the
+   ordinary household, not an edge case. Reading activeBaby() here offered the chips for a
+   three-year-old and stamped "pale or chalky" on her doctor page, and hid them for the five-day-old
+   the whole feature exists for. `ids` is who the write is for; the default is the same list
+   commitEvent will use. */
+function inNappyColourWindow(id){ const b=(state.babies||[]).find(x=>x.id===id); return !!(b&&b.birth&&(now()-b.birth)<NAPPY_COLOUR_DAYS*86400000); }
+function nappyColourWindow(ids){ return ((ids&&ids.length)?ids:targetsResolved()).some(inNappyColourWindow); }
 function renderDiaperSheet(){
   const t=(kind,icon,color,label,sub)=>`<div class="opt" onclick="saveDiaper('${kind}')"><span style="color:var(--${color})">${icon}</span><span>${label}</span>${sub?`<span class="osub">${sub}</span>`:''}</div>`;
   openSheet(`<h2>Nappy</h2><div class="sub">Tap to log. Change the time below if it wasn't just now.</div>
@@ -5409,6 +5449,7 @@ function renderDiaperSheet(){
          sibling's timeline and on that sibling's doctor page as if it happened to her. Wet and the
          time are true of both twins; the words are not. The draft holds what she typed, so tapping
          a name again brings it straight back rather than punishing her for trying Both. */''}
+    ${diaperColourField()}
     ${diaperNoteField()}
     ${timeStrip('when','Time')}`,'diaper');
 }
@@ -5425,15 +5466,72 @@ function diaperNoteField(){
       <div ${D_HINT}>It saves with the nappy you tap above.</div>
     </div>`;
 }
+/* The kinds above are the save button, so the colour has to be picked first and the hint has to say
+   which taps it will ride on. Wet and Dry are not a stool and never carry one, which saveDiaper
+   enforces rather than trusting the order she tapped in.
+   One baby at a time, for the same reason the note is: commitEvent copies the payload to every
+   target, and a pale nappy is a fact about one nappy. Copied to a twin it would put the strongest
+   clinical flag Cubby holds onto a baby it was never seen in, on the page a clinician reads. */
+function diaperColourField(){
+  const tg=targetsResolved();
+  if(!nappyColourWindow(tg)) return '';
+  if(tg.length>1) return `<div class="field"><label>Colour (optional)</label>
+      <div ${D_HINT}>A colour goes on one baby at a time. Pick a name above.</div>
+    </div>`;
+  const chips=NAPPY_COLOURS.map(c=>`<div class="chip ${diaperDraft.colour===c.k?'sel':''}" data-c="${c.k}" onclick="pickDiaperColour('${c.k}')">${c.w.charAt(0).toUpperCase()+c.w.slice(1)}</div>`).join('');
+  return `<div class="field"><label>Colour (optional)</label>
+      <div class="chip-row" style="flex-wrap:wrap;white-space:normal">${chips}</div>
+      <div ${D_HINT}>It saves with Dirty or Both above. Tap it again to clear it.</div>
+    </div>`;
+}
+// Tapping the picked one clears it, so a mis-tap costs one tap instead of needing a "none" chip
+// that would sit there asking to be answered on every nappy.
+function pickDiaperColour(k){ diaperDraft.colour=(diaperDraft.colour===k)?'':k; renderDiaperSheet(); }
 function saveDiaper(kind){
   // Read the live input first, so the last keystroke before the tap is not lost to a missed oninput.
   // No input on screen means Both is selected: the kind goes on every target, the words go nowhere.
   const note=$('#dNote')?String($('#dNote').value||'').trim():'';
+  /* Wet and Dry carry no colour whatever is picked above, and neither does a nappy logged for two
+     babies at once. She can pick green and then tap Wet, or pick green and then tap a second name,
+     and the record must not quietly claim something nobody saw. The window is re-checked here
+     because a sheet left open across the six-week line still holds the draft it was opened with. */
+  const tg=targetsResolved();
+  const colour=(tg.length===1 && nappyColourWindow(tg) && (kind==='dirty'||kind==='both'))
+    ? String(diaperDraft.colour||'') : '';
   const payload={type:'diaper',kind,time:getWhen('when')};
   if(note) payload.notes=note;   // omitted when empty, so a plain nappy keeps the shape it always had
+  if(colour) payload.colour=colour;   // same rule: a plain nappy keeps the shape it always had
   const _ids=commitEvent(payload);
-  diaperDraft={notes:''};
-  closeSheet(); render(); loggedToast('Nappy logged · '+kind+(note?' · note saved':''), _ids, 'nappy');
+  diaperDraft={notes:'',colour:''};
+  closeSheet(); render();
+  /* The pale one gets a sentence instead of a pill, the same way logging the yellow does. A four-word
+     toast in answer to the observation that starts a liver check is the app shrugging at the one
+     moment it can be most use, and it says nothing about who to show it to. It comes every time,
+     including the third day running, because that is exactly the run that needs saying out loud.
+     Only on a write that really landed: commitEvent returns nothing when it swallows a double tap,
+     and "Saved with this nappy" over a save that did not happen is the one lie this sheet must
+     never tell. */
+  if(colour==='pale' && _ids && _ids.length){ openPaleNappyNudge(); return; }
+  loggedToast('Nappy logged · '+kind+(colour?' · '+nappyColourWord(colour):'')+(note?' · note saved':''), _ids, 'nappy');
+}
+/* In jaundiceGuidance's register: the normal range, then the person to ask today. Midwife and
+   health visitor are the UK community-postnatal pair and the doctor is named alongside them rather
+   than after them, so a family on another country's schedule is not left with nobody to call.
+   THE REASSURANCE IS ABOUT THE ERRAND, NOT THE FINDING. jaundiceGuidance can say "usually fades on
+   its own" because that is true of the thing she just logged. Here it would not be: "most of it is
+   nothing" reads at 3am as "your pale nappy is probably nothing", which is an implied verdict on the
+   one colour it is not true of, and it is the verdict that could cost her the call. So the opener
+   normalises the category and stops, and the warmth moves onto how small the ask is. No verdict
+   either way, no urgency word, and the condition being ruled out is never named. */
+function paleNappyGuidance(){
+  return 'Nappy colours move around a lot in the early weeks. A pale or chalky one is worth showing to your midwife, health visitor or doctor today. It is quick for them to look at, and they would much rather see it than not.';
+}
+function openPaleNappyNudge(){
+  openSheet(`<h2>Noted, with the date and time</h2>
+    <div class="sub">Saved with this nappy. If you can, take a photo or keep it, it is far easier to show than to describe.</div>
+    <div class="csub" style="margin:-4px 0 16px">${paleNappyGuidance()} This is not medical advice, trust your instincts and your doctor.</div>
+    <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent))" onclick="closeSheet();openVisitSummary()">${I.stetho} Prepare a summary for the doctor</button>
+    <button class="btn-ghost" onclick="closeSheet()">Close</button>`,'diaper');
 }
 
 /* ---------- PUMP ---------- */
@@ -5518,6 +5616,26 @@ function pickEditKind(btn){
   Array.prototype.forEach.call(w.children,function(x){ x.classList.remove('on'); });
   btn.classList.add('on');
 }
+/* The colour is correctable for the same reason the yellowing's extent is: once it prints on the
+   doctor page it is an observation with a date on it, and "pale" tapped by mistake can only be
+   undone here. "Not noted" is a real option and comes first, because the entry it is fixing may be
+   one that should never have carried a colour at all.
+   Shown when this nappy already carries one, whatever the baby's age now, so a colour recorded at
+   three weeks is still editable at three months. Otherwise only where it could have been logged: a
+   dirty nappy inside the newborn window. Somebody who cannot edit this entry still reads it, but
+   only if there is something to read, the same rule the note field above follows. */
+function diaperEditColour(e,canEd){
+  // This entry's baby, not whoever is on screen: an older sibling's nappy must not be offered chips
+  // because a newborn is the active baby, and vice versa.
+  const has=!!e.colour, offer=has||((e.kind==='dirty'||e.kind==='both')&&nappyColourWindow([e.babyId]));
+  if(!offer || (!canEd&&!has)) return '';
+  const btns=[{k:'',w:'not noted'}].concat(NAPPY_COLOURS)
+    .map(c=>`<button class="${(e.colour||'')===c.k?'on':''}" data-k="${c.k}" ${canEd?`onclick="pickEditKind(this)"`:'disabled'}>${c.w.charAt(0).toUpperCase()+c.w.slice(1)}</button>`).join('');
+  // Read-only renders the same row, disabled, exactly as the Kind row above it does. A lone
+  // highlighted button looks like a control somebody forgot to wire up; the full row reads as a
+  // choice that was made.
+  return `<div class="field"><label>Colour</label><div class="unit-toggle" ${canEd?'id="eCol" ':''}style="flex-wrap:wrap">${btns}</div></div>`;
+}
 function openEdit(id){
   const e=state.events.find(x=>x.id===id); if(!e)return;
   const m=TYPE_META[e.type]||{c:'note'};
@@ -5541,6 +5659,7 @@ function openEdit(id){
   if(e.type==='diaper') extra=`<div class="field"><label>Kind</label><div class="unit-toggle" id="eKind">
     ${['wet','dirty','both','dry'].map(k=>`<button class="${(e.kind||'wet')===k?'on':''}" data-k="${k}" ${canEd?`onclick="pickEditKind(this)"`:'disabled'}>${k.charAt(0).toUpperCase()+k.slice(1)}</button>`).join('')}
   </div></div>`
+  +diaperEditColour(e,canEd)
   +(canEd
     ? `<div class="field"><label>Note</label><textarea id="eNote" placeholder="Anything that made you look twice">${escapeHtml(e.notes||'')}</textarea></div>`
     : (e.notes ? `<div class="field"><label>Note</label><textarea id="eNote" disabled>${escapeHtml(e.notes)}</textarea></div>` : ''));
@@ -5629,6 +5748,13 @@ function saveEdit(id){
   if($('#eDur')){ const mins=parseInt($('#eDur').value,10); const v=(mins>0?mins:0)*60000; if(v!==(e.dur||0)){ chg('duration',e.dur||0,v); e.dur=v; } }
   const kb=document.querySelector('#eKind .on');
   if(kb){ const k=kb.getAttribute('data-k'); if(k && k!==e.kind){ chg('kind',e.kind,k); e.kind=k; } }
+  /* Read after the kind above, because the kind decides whether a colour is allowed to survive at
+     all. A nappy corrected from Dirty to Wet is a nappy she is saying had no stool in it, and a
+     "pale or chalky" left riding on it would keep printing on the doctor page. The clear goes
+     through history like any other change, so the circle can see it happened. */
+  const cb=document.querySelector('#eCol .on');
+  if(cb){ const v=cb.getAttribute('data-k')||''; if(v!==(e.colour||'')){ chg('colour',e.colour||'',v); if(v) e.colour=v; else delete e.colour; } }
+  if(e.type==='diaper' && e.colour && e.kind!=='dirty' && e.kind!=='both'){ chg('colour',e.colour,''); delete e.colour; }
   const sb=document.querySelector('#eSev .on');
   if(sb){ const v=sb.getAttribute('data-k'); if(v && v!==e.severity){ chg('severity',e.severity,v); e.severity=v; } }
   if($('#eMins')){ const v=parseInt($('#eMins').value,10)||null; if(v!==(e.mins||null)){ chg('mins',e.mins,v); e.mins=v; } }
@@ -6266,14 +6392,172 @@ function openDoctor(){
   const vlist = visits.length
     ? visits.map(v=>`<div class="tl-item" onclick="openEdit('${v.id}')"><div class="tl-ico" style="background:var(--sleep-soft);color:var(--sleep)">${I.stetho}</div><div class="tl-body"><div class="t1">${escapeHtml(v.reason||'Doctor visit')}</div><div class="t2">${new Date(v.time).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}${v.doctorName?' · '+escapeHtml(v.doctorName):''}${v.notes?' · '+escapeHtml(v.notes):''}</div></div></div>`).join('')
     : '<div class="csub">No visits logged yet.</div>';
+  const bhFacts=birthHistoryLines(b,{noNote:true});
   openSheet(`${babyIdentity(b)}<div class="sub" style="margin:-8px 0 14px">${escapeHtml(b.name)}'s care team and visit history.</div>
     <div class="sec-title">Care team</div>
     <div class="prof-cards" style="margin-bottom:11px">${docList}</div>
     <button class="btn-ghost" onclick="openDoctorEdit(null)">${I.plus} Add a doctor</button>
+    <div class="sec-title" style="margin-top:20px">Things to ask</div>
+    ${/* "they go at the top of the doctor report" was a promise the code broke the moment somebody
+          ticked one in the room: a ticked question is filtered out of both the report and the
+          summary. Say what is actually true, and say that the list is shared BEFORE offering it,
+          because a second person is about to read every word written into it. */''}
+    <div class="csub" style="margin:-2px 0 10px">Jot down what you want to ask, so it doesn't slip your mind in the room. Tick them off as you go. Everyone in your circle sees the same list and can add to it, and anything still unticked goes at the top of the doctor report.</div>
+    <div id="askBlock">${askBlockHtml(b)}</div>
+    <div class="sec-title" style="margin-top:20px">Birth history</div>
+    ${/* The empty state used to describe a thing that did not exist and give no way to make it
+          exist. The weeks at birth and the birth weight both live in one sheet, so the empty state
+          is that sheet's door rather than an instruction the parent has to go and execute. */''}
+    <div class="csub" style="margin:-2px 0 10px">${bhFacts.length?`Built from the birth details already in ${escapeHtml(b.name)}'s profile. It prints near the top of the doctor report, where a clinician looks first.`:'Cubby fills this in from the weeks at birth and the birth weight. Anything else a doctor should know goes below.'}</div>
+    ${bhFacts.length
+      ?`<div class="set-item" style="cursor:default"><div class="si-ico" style="background:var(--sleep-soft);color:var(--sleep);font-size:16px">👶</div><div class="si-body"><div class="a">${escapeHtml(bhFacts[0])}</div>${bhFacts.slice(1).map(l=>`<div class="b">${escapeHtml(l)}</div>`).join('')}</div></div>`
+      :`<button class="set-item" id="bhAdd" style="width:100%;text-align:left;cursor:pointer" onclick="openBirthDetails()"><div class="si-ico" style="background:var(--sleep-soft);color:var(--sleep);font-size:16px">👶</div><div class="si-body"><div class="a">Add ${escapeHtml(b.name)}'s birth details</div><div class="b">Weeks at birth and birth weight</div></div><span class="chev">${I.chev}</span></button>`}
+    ${/* oninput, not onchange. onchange fires on blur and closeSheet hides the sheet without
+          blurring anything, so the X, the scrim and the drag-down each threw away a note she had
+          just typed. This is the one field in the app with no Save button under it. */''}
+    <div class="field" style="margin-top:8px"><input id="bhNote" maxlength="200" value="${escapeHtml(b.birthNote||'')}" placeholder="Anything else a doctor should know" oninput="saveBirthNote(this.value)"></div>
     <div class="sec-title" style="margin-top:20px">Visit log</div>
     <button class="btn-ghost" onclick="openVisitSummary()">${I.stetho} Prepare visit summary</button>
     <button class="btn-ghost" onclick="openVisit()">${I.plus} Log a visit</button>
     <div style="margin-top:10px">${vlist}</div>`,'sleep');
+}
+/* THINGS TO ASK, ON THE BABY SIDE.
+   The pregnancy journey has had visitQs since it was written and the baby stage never got the
+   instrument, so the one thing openDoctorReport could not print was the reason the family came.
+   It lives with the care team rather than in a sheet of its own, because the moment you remember
+   the question is the moment you are looking up the clinic's number.
+
+   IT IS NOT SEEDED ON OPEN, and that is the one deliberate difference from the pregnancy list. The
+   pregnancy journey belongs to one person and seeds her six suggestions; the care team is shared,
+   so seeding here would have let a partner merely opening this sheet write six questions nobody
+   asked into the household blob, and they would then have printed at the top of a clinical page as
+   the family's own words. The suggestions are offered as taps instead, so the list only ever holds
+   what somebody chose. Everything in it is visible to the whole circle, like the doctors above it:
+   the second person is meant to see what is being asked, and to add to it. */
+/* THE SUGGESTIONS CARRY HER NAME. Two inches above this the sheet says "Robin's care team", and
+   the question she types herself will say Robin. A canned chip that says "them" reads like it was
+   written about somebody else's baby, on the one list she is going to read out loud in the room.
+   they/them only as the fallback, for the window before a name has been given. */
+function askSuggestions(b){
+  b=b||activeBaby();
+  const n=b?String(b.name||'').trim():'';
+  return n
+    ? [`Is ${n}'s growth on track?`,'Which vaccines are next?',`How much should ${n} be feeding now?`,`What would make you want to see ${n} sooner?`]
+    : ['Is their growth on track?','Which vaccines are next?','How much should they be feeding now?','What would make you want to see them sooner?'];
+}
+function babyAskQs(b){ b=b||activeBaby(); return (b&&b.askQs)||[]; }
+function askBlockHtml(b){
+  b=b||activeBaby(); if(!b) return '';
+  const asks=babyAskQs(b);
+  /* The tick borrows .bag-row from the pregnancy list, whose checked state is pink because that is
+     the pregnancy accent. This sheet is the sleep accent, so the two colours are reconciled here
+     rather than by adding a second rule to a stylesheet eleven other people are editing. */
+  const rows=asks.map(q=>`<div class="bag-row ${q.done?'done':''}" id="aq-${q.id}">
+      <div class="bg-tick" onclick="toggleAskQ('${q.id}')"${q.done?' style="background:var(--sleep);border-color:var(--sleep)"':''}>${q.done?I.check:''}</div>
+      <div class="bg-t" onclick="toggleAskQ('${q.id}')">${escapeHtml(q.text)}</div>
+      <button class="bg-x" onclick="removeAskQ('${q.id}')">${I.trash}</button></div>`).join('');
+  /* The chip passes its INDEX, never its text. escapeHtml turns an apostrophe into &#39;, which the
+     parser hands back as a plain quote inside the attribute and closes the JS string early, so a
+     suggestion with an apostrophe in it would break the chip silently. Now that the chips are built
+     from the baby's own name, every Rosie's and O'Brien is that case. */
+  const sugg=askSuggestions(b).map((s,i)=>({s:s,i:i})).filter(x=>!asks.some(q=>q.text===x.s)).slice(0,3)
+    .map(x=>`<div class="chip" style="white-space:normal;flex-shrink:1;max-width:100%;text-align:left" onclick="addAskSuggestion(${x.i})">${escapeHtml(x.s)}</div>`).join('');
+  const suggRow=sugg?`<div class="chip-row" style="flex-wrap:wrap;white-space:normal;gap:8px;margin-bottom:4px">${sugg}</div>`:'';
+  /* Enter alone was the whole gesture and nothing on screen said so, so a question typed and left
+     in the box was lost. The Add button is the pattern the allergy row already uses.
+     With an empty list the chips come FIRST: at 320px the blank box and the button filled the fold
+     and the offer sat under it, so the one thing that makes the list easy to start was the one
+     thing she had to scroll to find. */
+  const field=`<div class="field" style="display:flex;gap:10px;align-items:center">
+      <input id="aqNew" maxlength="200" placeholder="Add a question to ask…" onkeydown="if(event.key==='Enter')addAskQ()" style="flex:1;min-width:0">
+      <button class="btn-ghost" id="aqAdd" style="width:auto;margin:0;padding:0 18px;flex:0 0 auto" onclick="addAskQ()">Add</button></div>`;
+  return `${rows}
+    ${rows?field+suggRow:suggRow+field}
+    ${asks.some(q=>q.done)?`<button class="btn-ghost" style="color:var(--ink-soft)" onclick="resetAskQsDone()">Untick all for next visit</button>`:''}`;
+}
+/* THE BLOCK REPAINTS ITSELF, NOT THE WHOLE SHEET, and that is not a nicety.
+   openDoctor renders an identity strip rather than an h2, so openSheet has no title to compare and
+   files every one of its repaints as a forward step: three questions ticked off in the room, three
+   phantom back arrows to press on the way out of a sheet nobody ever left. Repainting one div
+   sidesteps that entirely, and it keeps a half-typed question in the box, which a whole-sheet
+   repaint threw away mid-sentence. Silent when the sheet is not up, so a repaint is never a
+   requirement for a write to land. */
+function paintAskBlock(){
+  const el=$('#askBlock'); if(!el) return;
+  const box=$('#aqNew'); const keep=box?box.value:'';
+  /* Enter destroys and rebuilds the box it was pressed in, so focus landed on BODY and the mobile
+     keyboard dropped: the second question of a run went nowhere. Handed back inside the same user
+     gesture, so the keyboard stays up. */
+  const hadFocus=!!box && document.activeElement===box;
+  el.innerHTML=askBlockHtml();
+  const box2=$('#aqNew'); if(box2){ if(keep) box2.value=keep; if(hadFocus) try{ box2.focus(); }catch(e){} }
+}
+/* Trimmed and capped on the way in, because this text is printed on a page a clinician reads and
+   pasted into the copyable summary. A question is one line there either way. */
+function addAskQ(text){
+  const b=activeBaby(); if(!b) return;
+  const el=$('#aqNew');
+  const v=String(text!=null?text:((el&&el.value)||'')).replace(/\s+/g,' ').trim().slice(0,200);
+  if(!v) return;
+  b.askQs=babyAskQs(b).concat([{id:uid(),text:v,done:false}]);
+  // The box is emptied before the repaint, or paintAskBlock would put the question back into it.
+  if(el) el.value='';
+  persist(); paintAskBlock();
+}
+function addAskSuggestion(i){ const s=askSuggestions()[i]; if(s) addAskQ(s); }
+function toggleAskQ(id){ const b=activeBaby(); if(!b)return; const q=babyAskQs(b).find(x=>x.id===id); if(!q)return; q.done=!q.done; persist(); paintAskBlock(); }
+function removeAskQ(id){ const b=activeBaby(); if(!b)return; b.askQs=babyAskQs(b).filter(x=>x.id!==id); persist(); paintAskBlock(); }
+function resetAskQsDone(){ const b=activeBaby(); if(!b)return; babyAskQs(b).forEach(q=>q.done=false); persist(); paintAskBlock(); }
+/* THE BIRTH, ON THE PAGE BUILT FOR THE DOCTOR.
+   Cubby has held the gestation since item 24 and the typed birth weight since item 14, and neither
+   ever reached the report. A baby born at 33 + 4 handed over a page that read exactly like a term
+   baby's, on the one surface in the app written to be read by a clinician, and the corrected age
+   the growth chart already plots by was nowhere on it.
+   One builder, because the copyable summary and the printed report both print this and a page that
+   said two different things about the same birth would cost the whole document its authority.
+   opts.noNote leaves off the free line for the sheet, which is showing it in its own input. */
+function birthHistoryLines(b,opts){
+  b=b||activeBaby(); if(!b) return [];
+  opts=opts||{};
+  const L=[];
+  const g=gestDaysOf(b);
+  if(g!=null){ const w=Math.floor(g/7), d=g%7; L.push(`Born at ${w} weeks${d?` + ${d} day${d>1?'s':''}`:''}`); }
+  const bwe=birthWeightEvent(b.id);
+  if(bwe) L.push(`Birth weight: ${bwe.weight} ${bwe.wUnit||'kg'}`);
+  /* correctionDays is zero at 37 + 0 and above, so a term baby never sees this line and a late
+     arrival is never aged down. Cubby says what it counted and where it counted from; it does not
+     say preterm, which is a clinical word and the clinician's to use. */
+  /* BEFORE THE DUE DATE THERE IS NO CORRECTED AGE YET, and ageString answers a future timestamp
+     with the literal string "due soon", which it was written to say on the pregnancy side. Fed the
+     corrected timestamp unguarded, this line told the mother of a living ten-day-old born at 28
+     weeks that she was due soon, four lines above "4 weeks old", on the page she hands the
+     neonatologist. That window is 280 minus the gestation: twelve weeks for a 28-weeker, and it is
+     exactly the NICU stay and the first follow-ups this block was built for.
+     So say the due date instead. It is the thing a clinician wants in that window anyway, and it
+     never tells a parent her born baby is unborn. */
+  const cd=correctionDays(b);
+  if(cd && b.birth){
+    const due=b.birth+cd*86400000;
+    if(now()>=due) L.push(`Corrected age today: ${ageString(due)}, counted from the due date`);
+    else L.push(`Due date: ${new Date(due).toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'})}. Corrected age counts from there.`);
+  }
+  const note=String(b.birthNote||'').replace(/\s+/g,' ').trim();
+  if(note && !opts.noNote) L.push(note);
+  return L;
+}
+/* HELD ON EVERY KEYSTROKE, WRITTEN A MOMENT AFTER SHE STOPS. This sheet has no Save button and
+   never had one, so the first version saved on blur; but closeSheet hides the sheet without
+   blurring anything, so the X, the scrim and the drag-down each threw the note away silently.
+   In memory immediately is what makes a dismissal safe. The disk write is coalesced rather than
+   repeated, because persisting the whole household blob once per character is the other way to
+   make a parent lose a sentence.
+   An emptied field is an answer too: it deletes the line rather than printing a blank one. */
+let _bhNoteT=0;
+function saveBirthNote(v){
+  const b=activeBaby(); if(!b) return;
+  const t=String(v||'').replace(/\s+/g,' ').trim().slice(0,200);
+  if(t) b.birthNote=t; else delete b.birthNote;
+  clearTimeout(_bhNoteT); _bhNoteT=setTimeout(function(){ persist(); }, 300);
 }
 function openDoctorEdit(id){
   const b=activeBaby(); if(!b)return;
@@ -7469,21 +7753,31 @@ function renderCaregiverWaiting(){
    the upbeat "Where are you on the journey?" chooser, until the parent chooses to move on. No cheerful
    cards, no countdown, no "start again" pressure; quiet links to kept memories + real support. */
 function renderLossHolding(){
-  const hasMem=(state.pregnancyArchive||[]).some(a=>(a.moments||[]).length);
+  /* This gate asked only about photos, and this screen is the ONLY one she can reach after the
+     record is gone. So a woman who kept the cards she wrote, or the year of dates she kept while
+     trying, and never uploaded a scan, was shown no door to any of it: kept and unreachable at the
+     same time, on the one screen written for the worst day. Ask about everything that was kept. */
+  const _kept=(state.pregnancyArchive||[]);
+  const hasPhotos=_kept.some(a=>(a.moments||[]).length);
+  const hasMem=hasPhotos||_kept.some(a=>Object.keys(a.journey||{}).length||tryingRecordCount(a));
   /* If she put her weeks in her calendar, they are still in it, and they will keep arriving every
      week for months. This screen is the only place she can reach after the pregnancy record is
      gone, so the take-back has to be offered here or it does not exist. It opens the sheet rather
      than doing it: every other card on this screen opens something, and this is the one screen in
      the product where somebody is tapping around numb and not reading. */
   const hasWeekIcs=pregWeeksStillArriving();
+  /* And the same for her appointments. Her calendar was still set to alert her two hours before a
+     scan that is not happening, naming the hospital, and the record it was written from is gone. */
+  const hasApptIcs=(typeof apptIcsStillArriving==='function') && apptIcsStillArriving();
   dropShellCache(); app().innerHTML=`<div class="ob-wrap">
     <div class="onboard ob-card fade-in">
       <div class="logo">Cubby</div>
       <div class="tag" style="font-size:21px;color:var(--ink);font-weight:600;margin:2px 0 6px">Take all the time you need 🤍</div>
       <div class="tag">Cubby is here whenever you're ready. There's nothing you need to do right now.</div>
       <div class="prof-cards" style="width:100%;text-align:left;margin-top:10px">
-        ${hasMem?`<div class="prof-card" onclick="openKeptMemories()"><span class="lead" style="background:var(--preg-soft);font-size:20px">🤍</span><div class="cflex"><div class="a">Your kept memories</div><div class="b">Yours to revisit, privately, whenever you like</div></div><span class="chev">${I.chev}</span></div>`:''}
+        ${hasMem?`<div class="prof-card" onclick="openKeptMemories()"><span class="lead" style="background:var(--preg-soft);font-size:20px">🤍</span><div class="cflex"><div class="a">${hasPhotos?'Your kept memories':'What you kept'}</div><div class="b">Yours to revisit, privately, whenever you like</div></div><span class="chev">${I.chev}</span></div>`:''}
         ${hasWeekIcs?`<div class="prof-card" onclick="openWeeksTakeBack()"><span class="lead" style="background:var(--preg-soft);font-size:20px">📅</span><div class="cflex"><div class="a">The week markers in your calendar</div><div class="b">Take them off, whenever you want to</div></div><span class="chev">${I.chev}</span></div>`:''}
+        ${hasApptIcs?`<div class="prof-card" onclick="openApptTakeBack()"><span class="lead" style="background:var(--preg-soft);font-size:20px">📅</span><div class="cflex"><div class="a">Appointments in your calendar</div><div class="b">Take them off, whenever you want to</div></div><span class="chev">${I.chev}</span></div>`:''}
         <a class="prof-card" href="/articles/miscarriage-early-pregnancy-loss/" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><span class="lead" style="background:var(--feed-soft);font-size:20px">🫂</span><div class="cflex"><div class="a">If you need support</div><div class="b">Gentle reading, and helplines that are there day or night</div></div><span class="chev">${I.chev}</span></a>
       </div>
       <button class="btn-ghost" onclick="endLossHolding()" style="color:var(--ink-soft);margin-top:10px">When you're ready, move on from this screen</button>
@@ -7519,6 +7813,7 @@ function endLossHolding(){
      takes her straight back to the card that offers it. */
   var body='Cubby will go back to the start screen, for whenever a new chapter begins. This quiet page won\'t show again. Nothing you kept is deleted.';
   if(typeof pregWeeksStillArriving==='function' && pregWeeksStillArriving()) body+=' Your week markers stay in your calendar unless you take them off first.';
+  if(typeof apptIcsStillArriving==='function' && apptIcsStillArriving()) body+=' Your appointments stay in your calendar unless you take them off first.';
   confirmSheet({title:'Ready to move on?',body:body,confirmLabel:'I\'m ready',cancelLabel:'Not yet',onConfirm:function(){ clearMyLossHolding(); persist(); render(); }});
 }
 
@@ -7703,7 +7998,6 @@ function openVisitPrep(id){
   const canWrite=pregJourneyIsOwner();
   if(canWrite && !p.visitQs){ p.visitQs=defaultVisitQs(); persist(); }
   const wk=pregWeek();
-  const when = a.week<=wk?'this week':`in about ${a.week-wk} week${(a.week-wk)===1?'':'s'}`;
   /* Same read-only split as the Care tab, because a partner reaches this sheet from the home
      next-appointment card. Guarding the handlers alone would leave him a tick and a bin that only
      ever answer with a toast, which is a dead control rather than an honest one. */
@@ -7712,25 +8006,206 @@ function openVisitPrep(id){
     :`<div class="bag-row ${q.done?'done':''}"><div class="bg-tick" style="cursor:default">${q.done?I.check:''}</div><div class="bg-t">${escapeHtml(q.text)}</div></div>`).join('');
   const carrier=carrierFirstName();
   openSheet(`<h2>${canWrite?'Prep for your visit 🤍':'Before the visit 🤍'}</h2>
-    <div class="sub"><b>${escapeHtml(a.title)}</b> · ${when}${a.note?' · '+escapeHtml(a.note):''}</div>
+    <div class="sub"><b>${escapeHtml(a.title)}</b> · ${escapeHtml(apptWhenLine(a,wk))}${a.note?' · '+escapeHtml(a.note):''}</div>
     ${(canWrite||(p.visitQs||[]).length)?`<div class="sec-title" style="margin-top:4px">Questions to ask</div>
     ${qRows}`:''}
     ${canWrite?`<div class="field" style="margin-top:6px"><input id="vqNew" placeholder="Add a question to ask…" onkeydown="if(event.key==='Enter'){addVisitQ();openVisitPrep('${id}');}"></div>
     <div class="hero-invite" onclick="window.openFamily&&window.openFamily('invite')" style="margin-top:4px;cursor:pointer"><div class="hi" style="font-size:22px">👪</div><div><div class="ht">Who's coming with you?</div><div class="hs">Invite your partner so they have the questions too</div></div></div>`:''}
     <button class="btn-ghost" onclick="openPregDoctorReport()">📄 Take a report to this visit ${isPro()?'':(tasteLeft('pdf')>0?'· ✨ free':'· Pro ✨')}</button>
-    <button class="btn-ghost" onclick="addApptToCalendar('${id}')">📅 Add to my calendar</button>
+    ${apptCalendarRows(a,'prep')}
     ${canWrite?`<button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:4px" onclick="markApptDone('${id}')">${I.check} We've been, mark done</button>`
     :`<div class="csub" style="margin-top:8px">Marking this done stays with ${carrier?escapeHtml(carrier):'her'}.</div>`}
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
 }
-/* Add-to-calendar borrows the phone's own reminders (a real "the day before" alert) without needing push. */
-function addApptToCalendar(id){
+/* Add-to-calendar borrows the phone's own reminders (a real alert before the visit) without needing push.
+
+   Rewritten to the bar exportDoseCourse and exportDoctorVisit already set, because this one broke
+   all three of their rules at once. The UID was a fresh uid() every time, with no SEQUENCE and no
+   cancel, so a woman who exported, then had the clinic move her scan, then exported again, ended up
+   with two entries in her calendar, both wrong, and nothing in Cubby that could take either back.
+
+   Three shapes, in order of how much she actually knows:
+     - a date and a time  ->  a real timed VEVENT, alarm two hours before, so she can travel
+     - a date only        ->  an all-day VEVENT, alarm at nine the morning before (-PT15H off a
+                              midnight DTSTART), the same trick the vaccine and doctor files use
+                              rather than a -P1D that fires at midnight
+     - neither            ->  the old estimate off the due date, still saying so in the description
+   Any alarm already in the past is left out entirely: a banner for a morning that is over is noise.
+
+   The UID is stable per appointment id and the SEQUENCE only ever goes up, so adding it again after
+   a reschedule UPDATES her calendar instead of laying a second date beside the first. */
+/* By id and not by appointment, because the take-back has to keep working once state.pregnancy is
+   null: after a loss there is no appts array left to look an id up in. */
+function apptIcsUidFor(id){ return 'cubby-appt-'+id+'@little-cubby.com'; }
+function apptIcsUid(a){ return apptIcsUidFor(a.id); }
+/* WHOSE calendar this went into is a fact about a PERSON, not about the appointment, so the receipt
+   lives in localStorage under the uid the way quickPrefs and notesSeen already do, and never on the
+   journey record. Writing it onto the appointment the way the medicine exporter writes m.ics looked
+   tidier and would have been wrong twice over here, because this record has an owner. A partner who
+   tapped Add would have mutated a doc he can never sync, and applyPregJourney reads any unsent local
+   edit as a pending write and pins his `appts` array from that moment on, so the mother could move
+   her scan and he would sit on the old list for the rest of the pregnancy. The other way round, the
+   owner's receipt would have offered HIM "Update my calendar" and a take-back for an entry that was
+   never in his calendar. The cost is that her second device does not know she exported from the
+   first, and the SEQUENCE below is what makes that harmless. */
+function apptIcsKey(){ return 'cubby-appt-ics:'+quickUid(); }
+function apptIcsAll(){ try{ const v=JSON.parse(localStorage.getItem(apptIcsKey())||'{}'); return (v&&typeof v==='object')?v:{}; }catch(e){ return {}; } }
+function apptIcsRec(a){ const r=(a&&a.id)?apptIcsAll()[a.id]:null; return (r&&typeof r==='object')?r:null; }
+function apptIcsWrite(id, rec){
+  if(!id) return;
+  const all=apptIcsAll();
+  if(rec) all[id]=rec; else delete all[id];
+  try{ localStorage.setItem(apptIcsKey(), JSON.stringify(all)); }catch(e){}
+}
+/* Is anything she put in her calendar still going to go off? Answered from the receipts ALONE, the
+   same way pregWeeksStillArriving is, and for the same reason: the person who most needs the answer
+   no longer has a pregnancy on screen to derive it from. `start` is the instant the event actually
+   begins, all-day ones included, so a receipt written before this line existed (no `start`) is read
+   as still arriving rather than silently swallowed. */
+function apptIcsStillArriving(){
+  const all=apptIcsAll();
+  return Object.keys(all).some(k=>{ const r=all[k]; return !!r && (r.start==null || r.start>now()); });
+}
+/* She moved it after she added it, so her calendar is holding an hour she is no longer going at.
+   The receipt has recorded `when` since the day it was written and nothing ever read it: the only
+   warning in the system was a toast that fired once, for the owner alone, and was gone on reload.
+   A second caregiver who added her scan got no warning at all. */
+function apptIcsStale(a){
+  const r=apptIcsRec(a); if(!r) return false;
+  return (r.when||null)!==((a&&a.when)||null) || !!r.timed!==!!(a&&a.timed);
+}
+/* SEQUENCE off the clock rather than a stored counter. A calendar ignores an update whose SEQUENCE
+   is not higher than the one it is already holding, and a per-device counter starts again at 1 on
+   her second phone, so the reschedule she exported from there would be dropped and her calendar
+   would keep the old time: exactly the failure this is here to fix. Seconds since 2020 rises on
+   every device she owns and stays inside the 32-bit range RFC 5545 allows until 2088. The floor of
+   "one more than last time" is still there underneath, so two exports inside the same second cannot
+   come out equal and be ignored as a repeat. */
+function apptIcsSeqFor(id){ return Math.max(Math.floor((now()-Date.UTC(2020,0,1))/1000), ((apptIcsAll()[id]||{}).seq||0)+1); }
+function apptIcsSeq(a){ return apptIcsSeqFor(a&&a.id); }
+function addApptToCalendar(id, from){
   const p=state.pregnancy; const a=(p.appts||[]).find(x=>x.id===id); if(!a)return;
-  const dt = p.dueDate ? new Date(p.dueDate-(40-a.week)*7*86400000) : new Date(now()+(a.week-pregWeek())*7*86400000);
-  const pad=n=>String(n).padStart(2,'0'); const dstr=`${dt.getFullYear()}${pad(dt.getMonth()+1)}${pad(dt.getDate())}`;
-  const clean=s=>(s||'').replace(/[,;\\]/g,' ').replace(/\r?\n/g,' ');
-  const ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Cubby//Pregnancy//EN','BEGIN:VEVENT','UID:'+uid()+'@little-cubby.com','DTSTART;VALUE=DATE:'+dstr,'SUMMARY:'+clean(a.title||'Antenatal appointment'),'DESCRIPTION:'+clean('Estimated from week '+a.week+'. Confirm the exact date and time with your clinic.'+(a.note?' '+a.note:'')),'BEGIN:VALARM','TRIGGER:-P1D','ACTION:DISPLAY','DESCRIPTION:Appointment tomorrow','END:VALARM','END:VEVENT','END:VCALENDAR'].join('\r\n');
-  try{ const url=URL.createObjectURL(new Blob([ics],{type:'text/calendar'})); saveFile(url, (a.title||'appointment').replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.ics', isNativeApp()?'Appointment ready 📅':'Added, check your downloads 📅'); setTimeout(()=>URL.revokeObjectURL(url),1500); }catch(e){ toast('Could not add to calendar'); }
+  /* Tapped from the edit sheet, where she may have moved the date seconds ago and not saved yet.
+     Her fields are committed first, or the file her calendar gets carries the very time she just
+     changed away from, which is the failure this whole path exists to end. */
+  if(from==='edit' && $('#apD') && pregJourneyCanWrite()){ apptWriteFields(a); persist(); render(); }
+  const pad=n=>String(n).padStart(2,'0'), ymd=t=>t.getFullYear()+pad(t.getMonth()+1)+pad(t.getDate());
+  const seq=apptIcsSeq(a);
+  const title=_icsText(a.title||'Antenatal appointment');
+  const L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Cubby//Pregnancy//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH',
+    'BEGIN:VEVENT','UID:'+apptIcsUid(a),'SEQUENCE:'+seq,'DTSTAMP:'+_icsStamp(new Date())];
+  let alarmAt, why, startAt;
+  if(a.when && a.timed){
+    const st=new Date(a.when);
+    L.push('DTSTART:'+_icsLocal(st),'DURATION:PT45M');
+    alarmAt=a.when-2*3600000; why='-PT2H'; startAt=a.when;
+  } else {
+    // Her own date if she has one, otherwise the old week estimate off the due date.
+    const dt = a.when ? new Date(a.when)
+             : p.dueDate ? new Date(p.dueDate-(40-a.week)*7*86400000)
+             : new Date(now()+(a.week-pregWeek())*7*86400000);
+    const st=new Date(dt.getFullYear(),dt.getMonth(),dt.getDate());
+    L.push('DTSTART;VALUE=DATE:'+ymd(st),'DTEND;VALUE=DATE:'+ymd(new Date(st.getTime()+86400000)));
+    alarmAt=st.getTime()-15*3600000; why='-PT15H'; startAt=st.getTime();
+  }
+  L.push('SUMMARY:'+title);
+  if(a.place) L.push('LOCATION:'+_icsText(a.place));
+  /* The deep link is the point of the description: an alert on a Tuesday morning turns into the
+     questions she wrote down and would otherwise be trying to remember in the waiting room. */
+  L.push('DESCRIPTION:'+_icsText((a.when?'From Cubby.':'From Cubby, estimated from week '+a.week+'. Confirm the exact date and time with your clinic.')
+    +(a.note?' '+a.note:'')+' Your questions for this visit are in the app: https://little-cubby.com/app/?tab=care'));
+  if(alarmAt>now()) L.push('BEGIN:VALARM','TRIGGER:'+why,'ACTION:DISPLAY','DESCRIPTION:'+title,'END:VALARM');
+  L.push('END:VEVENT','END:VCALENDAR');
+  try{
+    const url=URL.createObjectURL(new Blob([L.map(_icsFold).join('\r\n')],{type:'text/calendar'}));
+    /* `start`, `title` and `uid` ride on the receipt so a cancel can be built from it alone, with
+       no appointment record to read. That is what makes the loss-screen take-back possible. */
+    apptIcsWrite(a.id, {seq:seq, when:a.when||null, timed:!!a.timed, start:startAt,
+                        title:a.title||'Antenatal appointment', uid:apptIcsUid(a), at:now()});
+    saveFile(url, (a.title||'appointment').replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase()+'.ics',
+             isNativeApp()?'Appointment ready 📅':'Added, check your calendar 📅');
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+    // Straight back to the sheet she tapped from, so the take-back row is there the moment there is
+    // something to take back. openSheet pops to a matching heading rather than stacking a copy.
+    if(from==='edit') openApptEdit(id); else openVisitPrep(id);
+  }catch(e){ toast('Could not add to calendar'); }
+}
+/* The take-back. Same UID, a higher SEQUENCE and STATUS:CANCELLED, which is the only thing a
+   calendar app will accept as "remove the one you already have". Honest about its own limit in the
+   toast, because a cancel is a request to her calendar and not something we can enforce. */
+function cancelApptCalendar(id, from){
+  /* Reads the RECEIPT, not the appointment. Written against state.pregnancy it worked everywhere
+     except the one place it was needed most: after a loss the record is null and this threw. */
+  const rec=apptIcsAll()[id]; if(!rec) return false;
+  const a=(((state.pregnancy||{}).appts)||[]).find(x=>x.id===id)||null;
+  const title=(a&&a.title)||rec.title||'Antenatal appointment';
+  const L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Cubby//Pregnancy//EN','CALSCALE:GREGORIAN','METHOD:CANCEL',
+    'BEGIN:VEVENT','UID:'+(rec.uid||apptIcsUidFor(id)),'SEQUENCE:'+apptIcsSeqFor(id),'DTSTAMP:'+_icsStamp(new Date()),
+    'STATUS:CANCELLED','SUMMARY:'+_icsText(title),'END:VEVENT','END:VCALENDAR'];
+  try{
+    const url=URL.createObjectURL(new Blob([L.map(_icsFold).join('\r\n')],{type:'text/calendar'}));
+    apptIcsWrite(id, null);
+    saveFile(url, title.replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase()+'-cancel.ics',
+             'Removed. If it is still showing, delete it in your Calendar app.');
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+    if(from==='edit') openApptEdit(id); else if(from==='prep') openVisitPrep(id);
+    return true;
+  }catch(e){ toast('Could not remove it'); return false; }
+}
+/* Every appointment she ever put in her calendar, taken off in one file, built from the receipts
+   alone. This is the door the loss screen hangs: endPregnancy nulls state.pregnancy and her phone
+   went on alerting her two hours before a scan that is not happening, naming the hospital, with
+   nothing left in Cubby that could reach it. renderLossHolding already wrote the rule down for the
+   week markers, and the same rule was owed here. */
+function cancelAllApptCalendar(){
+  const all=apptIcsAll(), ids=Object.keys(all); if(!ids.length) return;
+  const stamp=_icsStamp(new Date()), base=Math.floor((now()-Date.UTC(2020,0,1))/1000);
+  const L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Cubby//Pregnancy//EN','CALSCALE:GREGORIAN','METHOD:CANCEL'];
+  ids.forEach(function(k){ const r=all[k]||{};
+    L.push('BEGIN:VEVENT','UID:'+(r.uid||apptIcsUidFor(k)),'SEQUENCE:'+Math.max(base,(r.seq||0)+1),'DTSTAMP:'+stamp,
+      'STATUS:CANCELLED','SUMMARY:'+_icsText(r.title||'Antenatal appointment'),'END:VEVENT'); });
+  L.push('END:VCALENDAR');
+  try{
+    const url=URL.createObjectURL(new Blob([L.map(_icsFold).join('\r\n')],{type:'text/calendar'}));
+    /* Forgotten only once the file is hers, the order cancelPregWeeks settled on: clearing first
+       meant a save that threw took the door away and left the entries behind it. */
+    try{ localStorage.removeItem(apptIcsKey()); }catch(e){}
+    saveFile(url,'cubby-appointments-off.ics','Removed. If they are still showing, delete them in your Calendar app.');
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+    closeSheet(); render();
+  }catch(e){ toast('Could not remove them'); }
+}
+/* The way out, on the one screen she can still reach after the pregnancy record is gone. A sheet
+   and not a one-tap row, exactly as openWeeksTakeBack is: taking them off cannot be undone from
+   inside Cubby, and this is the one screen in the product where somebody is tapping around numb. */
+function openApptTakeBack(){
+  if(!apptIcsStillArriving()) return;
+  openSheet(`<h2>The appointments in your calendar</h2>
+    <div class="sub">Your antenatal appointments are still set to remind you. You can take them off now, or leave them. There's no rush.</div>
+    <button class="btn-ghost btn-danger" onclick="cancelAllApptCalendar()">Take them off my calendar</button>
+    <button class="btn-ghost" onclick="closeSheet()">Leave them for now</button>`,'preg');
+}
+/* The calendar controls, in every sheet that can reach an appointment rather than only in the one
+   sheet that happens to be about the NEXT one. openVisitPrep hosted them and is reached from a
+   single control, the home next-appointment card, so the moment a reschedule pushed her scan behind
+   another appointment the "add it again to update your calendar" she had just been told to do had
+   no door left anywhere in the app: the one entry still alerting her at the old hour was the one
+   entry she could no longer reach. The edit sheet is where she reschedules, so it is where the way
+   to put it right belongs. */
+function apptCalendarRows(a, from){
+  const f=(from==='edit')?'edit':'prep';
+  const rec=apptIcsRec(a);
+  const add=`<button class="btn-ghost" onclick="addApptToCalendar('${a.id}','${f}')">📅 ${rec?'Update my calendar':'Add to my calendar'}</button>`;
+  if(!rec) return add;
+  /* `.sub`, and a POSITIVE top margin: this footnote follows a button that carries no bottom
+     margin of its own, so the -6px the doctor-visit row uses would pull it up onto the row
+     above. Same reasoning, and same numbers, as the weeks exporter. */
+  const note=apptIcsStale(a)
+    ? (rec.when?`This moved after you added it. Your calendar still says ${escapeHtml(apptWhenLabel({when:rec.when,timed:rec.timed}))}. Add it again to put that right.`
+              :'This moved after you added it. Your calendar still has the old estimate. Add it again to put that right.')
+    : 'Adding it again updates the same entry rather than making a new one.';
+  return add+`<div class="sub" style="margin:8px 0 4px">${note}</div>
+    <button class="btn-ghost btn-danger" onclick="cancelApptCalendar('${a.id}','${f}')">Take this off my calendar</button>`;
 }
 
 /* ---- her weeks in her own calendar ------------------------------------------------------------
@@ -8100,7 +8575,32 @@ function saveApptOutcome(id){ if(!pregJourneyCanWrite())return; const p=state.pr
     const bp=(($('#avBp')||{}).value||'').trim(); const m=/^(\d{2,3})\s*\/\s*(\d{2,3})$/.exec(bp);
     if(m){ a.bpSys=+m[1]; a.bpDia=+m[2]; } else { a.bpSys=null; a.bpDia=null; }
   } persist(); closeSheet(); render(); toast('Saved 🤍'); }
-function pregNextAppt(){ const p=state.pregnancy; if(!p) return null; const wk=pregWeek(); if(wk>40) return null; const open=(p.appts||[]).filter(a=>!a.done).sort((a,b)=>a.week-b.week); return open.find(a=>a.week>=wk)||null; }
+/* One list, two kinds of appointment. A week is a guess and a date is a fact, so an appointment
+   carrying a date sorts by that date; one that carries only a week sorts by the instant that week
+   begins, which pregWeekStart already answers. Interleaving them like this is the point: sorting
+   dated ones first would put a scan she booked for week 34 above the midwife she is seeing on
+   Thursday. Without a due date or an LMP there is no instant to derive, so those fall back to the
+   week number scaled the same way and simply keep their old order among themselves. */
+function apptSortKey(a){
+  if(a.when) return a.when;
+  const t=(typeof pregWeekStart==='function')?pregWeekStart(a.week):null;
+  return t!=null?t:(a.week||0)*PREG_MS_WEEK;
+}
+/* "Still ahead of her", in one place, because the home card and the printed report were each
+   deciding it on their own. A dated appointment stays ahead until its own day is over rather than
+   until its week number rolls past: a woman who books her 20-week scan for a Monday in week 21 was
+   watching it drop off her home card three days before she went to it, and off the report she was
+   printing to take with her. An appointment with no date keeps the week rule exactly. */
+function apptUpcoming(a, wk){ return a.when ? (a.when>=dayStartMs(now())) : (a.week>=wk); }
+function pregNextAppt(){ const p=state.pregnancy; if(!p) return null; const wk=pregWeek();
+  const open=(p.appts||[]).filter(a=>!a.done).slice().sort((a,b)=>apptSortKey(a)-apptSortKey(b));
+  /* Past 40 weeks Home hands over to "Any day now" rather than counting down to a week that has run
+     out, and a week-numbered guess is exactly what should stop there. A booked date is not a guess:
+     an induction on Tuesday at the labour ward is the one thing she is looking for, and returning
+     null for it left Home saying "Any day now" while the report she prints to take with her named
+     the ward and the hour. Only a real date survives the guard. */
+  if(wk>40) return open.find(a=>a.when&&apptUpcoming(a,wk))||null;
+  return open.find(a=>apptUpcoming(a,wk))||null; }
 /* Fundal-height trend vs gestational week. The dashed guide is SFH(cm) ≈ week, which holds from ~24w;
    points near it are tracking. Purpose-built (weeks on the x-axis, not dates like svgLine). */
 function sfhTrendSvg(pts){
@@ -8154,7 +8654,7 @@ function openWeekDetail(kind){
   if(kind==='baby'){
     title='Baby this week';
     body=`<div class="preg-card"><div class="pc-ico">${emoji}</div><div><div class="pc-t">Week ${wk} · about the size of a ${escapeHtml(data.size)}</div><div class="pc-b">${escapeHtml(data.baby)}</div></div></div>`
-      +(na?`<div class="next-appt" onclick="closeSheet();pregGo('care')"><div class="pc-ico" style="background:var(--preg-soft)">📅</div><div class="na-body"><div class="na-t">Next: ${escapeHtml(na.title)}</div><div class="na-s">Around week ${na.week}</div></div><span class="chev">${I.chev}</span></div>`:'');
+      +(na?`<div class="next-appt" onclick="closeSheet();pregGo('care')"><div class="pc-ico" style="background:var(--preg-soft)">📅</div><div class="na-body"><div class="na-t">Next: ${escapeHtml(na.title)}</div><div class="na-s">${na.when?escapeHtml(apptWhenLine(na,wk)):('Around week '+na.week+(na.place?' · '+escapeHtml(na.place):''))}</div></div><span class="chev">${I.chev}</span></div>`:'');
   } else if(kind==='you'){
     title='You this week';
     body=`<div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">Week ${wk} · ${triName(tri)}</div><div class="pc-b">${escapeHtml(data.mum)}</div></div></div>`
@@ -8293,24 +8793,26 @@ function tryingSincePairs(){
 }
 /* Whole months since tryingSince ('YYYY-MM'), or null when unset. Drives exactly one thing:
    surfacing the kind see-your-doctor line at the right time. Never a percentage, never a compare. */
-function tryingMonths(){
-  var ts=state.pregnancy&&state.pregnancy.tryingSince; if(!ts) return null;
+/* `rec` lets the trying record be read from somewhere other than the live pregnancy: an archived
+   entry after a loss, where state.pregnancy is null. Every existing caller passes nothing. */
+function tryingMonths(rec){
+  var _p=rec||state.pregnancy; var ts=_p&&_p.tryingSince; if(!ts) return null;
   var t=new Date(ts+'-01T08:00').getTime(); if(!isFinite(t)) return null;
   return Math.floor((now()-t)/(30.44*86400000));
 }
 /* Period-start history, ascending. p.periods is the record; the legacy single p.lmp field is
    folded in so households from before the history existed lose nothing, and p.lmp itself stays
    maintained (= latest start) so fertileEstimate and the positive-test flow are untouched. */
-function periodHistory(){
-  var p=state.pregnancy; if(!p) return [];
+function periodHistory(rec){
+  var p=rec||state.pregnancy; if(!p) return [];
   var list=(p.periods||[]).slice();
   if(p.lmp && list.indexOf(p.lmp)<0) list.push(p.lmp);
   return list.sort(function(a,b){return a-b;});
 }
 /* Completed cycle lengths in days, oldest→newest, last 6. A gap under 15 or over 90 days is a
    missed log or a break, not a cycle, so it never pollutes the honest range. */
-function cycleLengths(){
-  var h=periodHistory(), out=[];
+function cycleLengths(rec){
+  var h=periodHistory(rec), out=[];
   for(var i=1;i<h.length;i++){
     var d=Math.round((h[i]-h[i-1])/86400000);
     if(d>=15&&d<=90) out.push(d);
@@ -8386,7 +8888,7 @@ function savePlanning(){
     persist(); closeSheet(); render();
     return;
   }
-  const _priorMood=(state.pregnancy&&state.pregnancy.moodLog&&state.pregnancy.moodLog.length)?state.pregnancy.moodLog.slice():null;
+  const _priorMood=(state.pregnancy&&state.pregnancy.moodLog&&state.pregnancy.moodLog.length)?state.pregnancy.moodLog.slice():keptMoodLog();
   state.pregnancy={ id:uid(), ownerUid:myUid(), stage:'planning', dueDate:null, lmp:lmpMs, cycleLen:cyc,
     periods:lmpMs?[lmpMs]:[], tryingSince:since,
     country:detectCountry(), precon:defaultPrecon(),
@@ -8465,7 +8967,62 @@ function savePeriodUpdate(){
    prompts for one, days without one simply don't exist on screen, and nothing here pushes. */
 const OBS_CHIPS=['Test: positive line','Test: negative','Cramps','Energy'];
 let obsDraft={tags:[],note:''};
-function obsEntries(){ const p=state.pregnancy; return ((p&&p.observations)||[]).slice().sort((a,b)=>b.at-a.at); }
+function obsEntries(rec){ const p=rec||state.pregnancy; return ((p&&p.observations)||[]).slice().sort((a,b)=>b.at-a.at); }
+/* ---- The trying record: what she kept before this pregnancy existed ----
+   periodHistory() and obsEntries() were read only by planning-stage render code and by
+   ttcVisitSummary, so the moment confirmPositiveTest flipped p.stage in place a year of cycle
+   dates and up to two hundred observations became unreachable inside the app while sitting
+   untouched on the record. Then endPregnancy(true) — the branch labelled "Keep my memories" —
+   archived moments and journey cards and deleted the rest, so a woman who tried for a year,
+   conceived and lost the pregnancy lost the whole record of the trying on the keep button.
+   These four keys are that record. Every reader below takes them from a record rather than from
+   state.pregnancy, so an archived entry reads exactly the same as a live one. */
+function tryingRecord(rec){
+  var p=rec||state.pregnancy; if(!p) return null;
+  return { tryingSince:p.tryingSince||null, periods:(p.periods||[]).slice(),
+    observations:(p.observations||[]).slice(), precon:(p.precon||[]).slice() };
+}
+/* Counts only what SHE entered. precon is a six-item default that every planning record is born
+   with, so counting it would offer to "keep" a checklist she never touched, and would put a
+   "before this pregnancy" door in front of a woman who went straight to "We're expecting". */
+function tryingRecordCount(rec){
+  var p=rec||state.pregnancy; if(!p) return 0;
+  return (p.periods||[]).length + (p.observations||[]).length + (p.tryingSince?1:0);
+}
+/* One plain sentence naming what is on the record, so no door and no warning is a mystery. Only
+   the parts that exist are named, and nothing is counted that she did not enter herself. */
+function tryingRecordLine(rec){
+  var p=rec||state.pregnancy; if(!p) return '';
+  var bits=[], np=(p.periods||[]).length, no=(p.observations||[]).length;
+  if(p.tryingSince){ var d=new Date(p.tryingSince+'-01T08:00');
+    if(isFinite(d.getTime())) bits.push('Trying since '+d.toLocaleDateString(undefined,{month:'long',year:'numeric'})); }
+  if(np) bits.push(np+' period date'+(np===1?'':'s'));
+  if(no) bits.push(no+' thing'+(no===1?'':'s')+' you noticed');
+  return bits.length?(bits.join(' · ')+'.'):'';
+}
+/* The same parts, joined to sit inside a sentence. The `·` form above is right for a card row and
+   wrong in running prose: dropped into the stop-tracking sub line it read as a lifted fragment,
+   with a mid-sentence capital and separators the reader could not place. */
+function tryingRecordPhrase(rec){
+  var p=rec||state.pregnancy; if(!p) return '';
+  var bits=[], np=(p.periods||[]).length, no=(p.observations||[]).length;
+  if(p.tryingSince){ var d=new Date(p.tryingSince+'-01T08:00');
+    if(isFinite(d.getTime())) bits.push('your dates since '+d.toLocaleDateString(undefined,{month:'long',year:'numeric'})); }
+  if(np) bits.push(np+' period date'+(np===1?'':'s'));
+  if(no) bits.push(no+' thing'+(no===1?'':'s')+' you noticed');
+  if(!bits.length) return '';
+  return bits.length>1?(bits.slice(0,-1).join(', ')+' and '+bits[bits.length-1]):bits[0];
+}
+/* Her wellbeing notes across a gap. savePregnancy already carries moodLog from the previous
+   record because it is hers and not the pregnancy's, but after a loss there IS no previous
+   record: state.pregnancy is null and pregClear has deleted the owner-only mhealth 'mood' doc.
+   endPregnancy(true) keeps a copy on the archive entry and this is the only thing that ever reads
+   it back. Nothing renders it, on any screen, ever. */
+function keptMoodLog(){
+  var arr=(typeof pregArchiveList==='function')?pregArchiveList():(state.pregnancyArchive||[]);
+  var a=arr.find(function(x){ return x&&x.moodLog&&x.moodLog.length; });
+  return a?a.moodLog.slice():null;
+}
 function obsLine(o){ const bits=(o.tags||[]).slice(); const t=(o.note||'').trim(); if(t) bits.push(t); return bits.join(' · '); }
 function obsRow(o,canDelete){
   return `<div class="log-list-item"><div class="lli-ico" style="background:var(--diaper-soft)">🌿</div>
@@ -8519,17 +9076,17 @@ function ttcCarrierName(){
   try{ const mi=(window.LL&&window.LL.memberInfo)||{}; const me=mi[myUid()];
     return (me&&me.name)?String(me.name).split(' ')[0]:''; }catch(e){ return ''; }
 }
-function ttcVisitSummary(){
-  const p=state.pregnancy; if(!p) return '';
+function ttcVisitSummary(rec){
+  const p=rec||state.pregnancy; if(!p) return '';
   const fd=t=>new Date(t).toLocaleDateString();
   const L=[];
   const ts=p.tryingSince;
   if(ts){
-    const d=new Date(ts+'-01T08:00'); const tm=tryingMonths();
+    const d=new Date(ts+'-01T08:00'); const tm=tryingMonths(p);
     L.push('Trying since '+d.toLocaleDateString(undefined,{month:'long',year:'numeric'})+((tm!=null&&tm>=1)?' (about '+tm+' month'+(tm===1?'':'s')+')':''));
     L.push('');
   }
-  const hist=periodHistory(), cl=cycleLengths();
+  const hist=periodHistory(p), cl=cycleLengths(p);
   if(hist.length){
     L.push('Period start dates ('+hist.length+' recorded):');
     hist.slice(-8).forEach(t=>L.push('  • '+fd(t)));
@@ -8541,7 +9098,7 @@ function ttcVisitSummary(){
     }
     L.push('');
   }
-  const obs=obsEntries();                       // newest first
+  const obs=obsEntries(p);                      // newest first
   if(obs.length){
     L.push('Observation notes ('+obs.length+', newest first):');
     obs.slice(0,20).forEach(o=>L.push('  • '+fd(o.at)+': '+obsLine(o)));
@@ -8568,8 +9125,31 @@ function ttcVisitSummary(){
   return L.join('\n');
 }
 let ttcReportCharged=false;
-function openTtcDoctorReport(){
-  const p=state.pregnancy; if(!p) return;
+/* The record the open report is reading. Null means the live pregnancy, which is every planning
+   caller. After a loss state.pregnancy is null and the trying record lives on the archive entry,
+   so Share and Print have to read from the same place the page was built from. */
+let ttcReportSrc=null;
+function ttcReportRecord(){ return ttcReportSrc||state.pregnancy; }
+/* This page prints her period start dates, her cycle lengths and her observation diary verbatim,
+   and it never asked who was reading. That was survivable while the only door sat on her own
+   planning screen. It stopped being survivable the moment this item put a door in the pregnancy
+   stage and widened the guide entry to match, because a shared partner reaches both, and
+   ttcCarrierName() reads myUid() so his name would sit over her record. Cycle details are the
+   carrier's alone (renderPlanningPartnerHome states it) and periods/observations are NOT in the
+   shareable 'health' category, so the gate belongs on the reader, not on each door.
+   An archived entry needs no test: state.pregnancyArchive is loaded from users/{uid}, the one doc
+   nobody else can read, so anything found there is already hers. */
+function ttcReportMine(p){
+  if(!p) return false;
+  if(p.ownerUid&&p.ownerUid!=='local'&&p.ownerUid!==myUid()) return false;
+  return (typeof pregIsOwner!=='function')||pregIsOwner();
+}
+function openTtcDoctorReport(archiveId,free){
+  const p=archiveId?((state.pregnancyArchive||[]).find(a=>a.id===archiveId)||null):state.pregnancy;
+  if(!p) return;
+  if(!archiveId&&!ttcReportMine(p)) return;
+  ttcReportSrc=archiveId?p:null;
+  ttcReportFree=!!free;
   ttcReportCharged=false;                       // free to open and read; Print / Share is the treat
   closeSheet();
   const esc=escapeHtml, name=ttcCarrierName();
@@ -8587,17 +9167,27 @@ function openTtcDoctorReport(){
     +'<button onclick="closePregReport()" style="font-size:14px;font-weight:700;padding:10px 16px;border-radius:10px;border:1px solid #ddd;background:#fff;cursor:pointer">Close</button>'
     +'</div>'
     +'<h1 style="font-size:24px;margin:0 0 2px">For your appointment</h1>'
-    +'<div style="color:#666;font-size:13px;margin-bottom:14px">Trying to conceive · generated '+gen+' with Cubby</div>'
+    /* The same page reaches an appointment from three different places now, and "Trying to
+       conceive" is only true from one of them. An archived entry has no stage at all. */
+    +'<div style="color:#666;font-size:13px;margin-bottom:14px">'+(p.stage==='planning'?'Trying to conceive':'Before this pregnancy')+' · generated '+gen+' with Cubby</div>'
     +'<div style="font-size:14px;color:#444;margin-bottom:18px;font-style:italic">Notes '+(name?esc(name):'we')+' kept while trying, to make this conversation easier.</div>'
-    +'<pre style="font-family:inherit;white-space:pre-wrap;font-size:14px;line-height:1.55;margin:0">'+esc(ttcVisitSummary())+'</pre>'
+    +'<pre style="font-family:inherit;white-space:pre-wrap;font-size:14px;line-height:1.55;margin:0">'+esc(ttcVisitSummary(p))+'</pre>'
     +'<div style="margin-top:28px;color:#666;font-size:12px;border-top:1px solid #eee;padding-top:10px">Recorded dates and notes only, no predictions. Kept by you in Cubby. Informational only, not medical advice; please verify clinically.</div>'
     +'</div>';
   document.body.appendChild(ov);
 }
 /* Charge the pdf taste once per open, on the delivery action. On a failed charge the Pro sheet
    (z-index 51) would sit invisibly under the report overlay (100000), so lift the overlay first. */
+/* One opening is never charged: the stop-tracking sheet is about to delete this record for good and
+   offers "take your notes with you" as the only way out, so Save and Print both landed her on a
+   price list with the report closing behind her. A woman stopping after a year of trying must not
+   be sold to in the one step between her data and its deletion, and the Pro sheet on that same
+   screen promises "your data and your privacy stay free, always". Set on open, so it never leaks
+   into a report she reached any other way. */
+let ttcReportFree=false;
 function ttcChargeOnce(){
   if(ttcReportCharged) return true;
+  if(ttcReportFree) return true;
   if(!useTaste('pdf','Doctor report')){ closePregReport(); return false; }
   ttcReportCharged=true; return true;
 }
@@ -8613,7 +9203,7 @@ function printTtcReport(){
 }
 function shareTtcReport(){
   if(!ttcChargeOnce()) return;
-  const txt='For your appointment · '+new Date().toLocaleDateString()+'\n\n'+ttcVisitSummary();
+  const txt='For your appointment · '+new Date().toLocaleDateString()+'\n\n'+ttcVisitSummary(ttcReportRecord());
   if(typeof window.cubbyNativeShareText==='function' && window.cubbyNativeShareText('Cubby appointment notes',txt)) return;
   if(navigator.share){ navigator.share({title:'Cubby appointment notes',text:txt}).catch(function(){}); return; }
   if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(function(){toast('Notes copied 🤍');}).catch(function(){toast('Could not copy');}); }
@@ -8827,9 +9417,24 @@ function deleteMoment(id){
   try{ PhotoStore.del(m.photoId); }catch(e){}
   persist(); render();
 }
+/* The bag is packed by one person and unpacked by whoever is standing there, so it is grouped by
+   who each thing belongs to rather than run as one list: hers, the baby's, and the things the
+   person staying with her needs and nobody thinks of until midnight. The two items the teach copy
+   already advertises, a going-home outfit one size up and snacks for the birth partner, are in it.
+   `who` is a new field: a bag saved before this change has none, and openBag draws those exactly as
+   it always did, so nobody's half-packed list is rearranged under them.
+   Her own additions are headed "Yours to add" rather than "Anything else": the sheet invites her to
+   tweak the list, so the things she thought of are not the leftovers bin.
+   Every item reads on its own, with no "for them" leaning on the heading above it, because the
+   doctor report prints these lines with the headings stripped off. */
+const BAG_GROUPS=[['you','For you'],['baby','For the baby'],['partner','For whoever is with you'],['','Yours to add']];
 function defaultBag(){
-  return ['Maternity notes or records','ID and any paperwork','Comfortable going-home clothes','Toiletries and lip balm','Phone and a long charger','Snacks and a water bottle','Nappies and baby vests','Baby blanket and a going-home outfit','Car seat fitted and ready']
-    .map(t=>({id:uid(),text:t,done:false}));
+  const G={ you:['Maternity notes or records','ID and any paperwork','Comfortable going-home clothes, nothing tight','Toiletries and lip balm','Phone and a long charger'],
+    baby:['Nappies and cotton wool','Vests and sleepsuits','A going-home outfit, one size up','Blanket or shawl','Car seat fitted and ready'],
+    partner:['Snacks and a water bottle','Coins or a card for parking','A second phone charger','A pillow or something to sleep on'] };
+  const out=[];
+  Object.keys(G).forEach(w=>G[w].forEach(t=>out.push({id:uid(),text:t,done:false,who:w})));
+  return out;
 }
 /* Every appointment, question and antenatal fact lives in the owner-owned pregnancy doc, which
    firestore.rules lets only that uid update and which syncPregJourney skips for everybody else.
@@ -8877,7 +9482,9 @@ function savePregnancy(){
      .set(), so a fresh pregnancy carrying an empty moodLog would overwrite what she wrote during
      the last one. Postnatal feeling does not respect a pregnancy boundary either; that is precisely
      why the document is keyed by owner. Carry it forward. */
-  const keepMood=(prev&&prev.moodLog&&prev.moodLog.length)?prev.moodLog.slice():null;
+  // ...and after a loss there is no `prev` at all, so the copy endPregnancy(true) kept on the
+  // archive entry is the only place it still exists. Same rule, one gap further back.
+  const keepMood=(prev&&prev.moodLog&&prev.moodLog.length)?prev.moodLog.slice():keptMoodLog();
   if(prev && prev.bornBabyId){
     state.pregnancyArchive=state.pregnancyArchive||[];
     /* Those five keys were the whole entry, and openPregRecord — the reader that exists — opens
@@ -8909,7 +9516,11 @@ function savePregnancy(){
         bloodGroup:prev.bloodGroup||null, rh:prev.rh||null, gbs:prev.gbs||null,
         birthPlan:prev.birthPlan||'',
         weights:(prev.weights||[]).slice(), bp:(prev.bp||[]).slice(),
-        glucose:(prev.glucose||[]).slice(), urine:(prev.urine||[]).slice() }:{}));
+        glucose:(prev.glucose||[]).slice(), urine:(prev.urine||[]).slice() }:{},
+      /* The same hole as the loss path, through the other door. A second-time mother's first
+         pregnancy took her whole trying record with it here, because this assignment replaces
+         state.pregnancy wholesale and periods/observations/tryingSince lived nowhere else. */
+      mine?tryingRecord(prev):{}));
   }
   /* Blood group and Rh do not change between pregnancies, and asking for them again is the app
      telling her the last one did not happen. Seed from the record just archived. GBS is a swab
@@ -9140,7 +9751,10 @@ function renderPregHome(){
   if(pregJourneyIsOwner() && !p.visitQs){ p.visitQs=defaultVisitQs(); persist(); }
   const na=pregNextAppt();
   const qCount=(p.visitQs||[]).length;
-  const naWhen=na?(na.week<=wk?'this week':`in about ${na.week-wk} week${(na.week-wk)===1?'':'s'}`):'';
+  /* The week is dropped once she has a real date, rather than printed beside it. "Tuesday 3:15 PM ·
+     around week 20" reads as two competing answers to the same question, and the estimate is the
+     one that is wrong. Without a date, nothing changes: it is still the only answer there is. */
+  const naWhen=na?(na.when?apptWhenLine(na,wk):(apptWhenLine(na,wk)+' · around week '+na.week)):'';
   const act=pregNextAction();
   const roll=pregWeekRolled();   // the one recurring event in this stage, marked once and then let go
   return `<div class="fade-in">
@@ -9159,7 +9773,7 @@ function renderPregHome(){
     ${pregWeeksCalendarRow()}
     ${na?`<div class="next-appt" onclick="openVisitPrep('${na.id}')">
       <div class="pc-ico" style="background:var(--preg-soft)">📅</div>
-      <div class="na-body"><div class="na-t">Next: ${escapeHtml(na.title)}</div><div class="na-s">${naWhen} · around week ${na.week}${qCount?` · ${qCount} question${qCount===1?'':'s'} ready`:''}</div></div>
+      <div class="na-body"><div class="na-t">Next: ${escapeHtml(na.title)}</div><div class="na-s">${escapeHtml(naWhen)}${qCount?` · ${qCount} question${qCount===1?'':'s'} ready`:''}</div></div>
       <span class="chev">${I.chev}</span></div>`:(pregWeek()>40?`<div class="next-appt">
       <div class="pc-ico" style="background:var(--preg-soft)">🌼</div>
       <div class="na-body"><div class="na-t">Any day now</div><div class="na-s">${carrier?"Your due date is here. Babies keep their own schedule, so rest when you can and follow your midwife or doctor's guidance on monitoring.":"The due date is here. Babies keep their own schedule. Follow your midwife or doctor's guidance on monitoring."}</div></div></div>`:'')}
@@ -9330,7 +9944,8 @@ function renderPregLog(){
   const her=carrier?escapeHtml(carrier):'she';          // subject: "Maya is taking" / "she is taking"
   const herObj=carrier?escapeHtml(carrier):'her';       // object:  "stays with Maya" / "stays with her"
   const herPoss=carrier?escapeHtml(carrier)+"'s":'her'; // possessive: "Maya's visits" / "her visits"
-  const appts=(p.appts||[]).slice().sort((a,b)=>a.week-b.week);
+  // Same key as pregNextAppt, so the row Home calls "next" is the next one down this list too.
+  const appts=(p.appts||[]).slice().sort((a,b)=>apptSortKey(a)-apptSortKey(b));
   const _sk=pregCountryKey(p.country);
   const _src=(window.PREG&&PREG.antenatal[_sk]&&PREG.antenatal[_sk].source)||'';
   const apptIntro = _sk==='custom'
@@ -9339,9 +9954,14 @@ function renderPregLog(){
   const apptRows=appts.length?appts.map(a=>`
     <div class="appt-row ${a.done?'done':''}">
       <div class="ar-tick"${canWrite?` onclick="toggleAppt('${a.id}')"`:' style="cursor:default"'}>${a.done?I.check:''}</div>
-      <div class="ar-body"${canWrite?` onclick="openApptEdit('${a.id}')"`:' style="cursor:default"'}>
-        <div class="ar-wk">Week ${a.week}${a.done&&a.at?' · done '+new Date(a.at).toLocaleDateString(undefined,{month:'short',day:'numeric'}):''}</div>
+      ${/* A partner can read this list and had no way into any appointment on it: the row was dead
+           for him and the home card only ever opens the NEXT one, so every other appointment's
+           calendar controls were unreachable. The read-only prep sheet is the sheet written for
+           him, so the row opens that instead of doing nothing. */''}
+      <div class="ar-body" onclick="${canWrite?`openApptEdit('${a.id}')`:`openVisitPrep('${a.id}')`}">
+        <div class="ar-wk">${(!a.done&&a.when)?escapeHtml(apptWhenLabel(a)):('Week '+a.week)}${a.done&&a.at?' · done '+new Date(a.at).toLocaleDateString(undefined,{month:'short',day:'numeric'}):''}</div>
         <div class="ar-t">${escapeHtml(a.title)}</div>
+        ${(!a.done&&a.place)?`<div class="ar-s">${escapeHtml(a.place)}</div>`:''}
         ${a.note?`<div class="ar-s">${escapeHtml(a.note)}</div>`:''}
         ${a.outcome?`<div class="ar-s" style="color:var(--preg-ink)">🤍 ${escapeHtml(a.outcome)}</div>`:''}
         ${(a.sfh||a.efw||a.hb||a.position||(a.bpSys&&a.bpDia))?`<div class="ar-s" style="color:var(--ink-faint)">${[a.sfh?'SFH '+a.sfh+'cm':'',a.efw?'EFW '+a.efw+'g':'',a.position?escapeHtml(a.position):'',a.hb?'Hb '+a.hb:'',(a.bpSys&&a.bpDia)?'BP '+a.bpSys+'/'+a.bpDia:''].filter(Boolean).join(' · ')}</div>`:''}
@@ -9362,12 +9982,26 @@ function renderPregLog(){
     <div class="csub" style="margin:-2px 0 8px">${canWrite?'The numbers your provider gives you, in one place for your visits and your doctor report.':'The numbers from '+herPoss+' visits, in one place.'}</div>
     ${sfhPts.length>=2?`<div class="preg-card" style="display:block"><div class="pc-t" style="margin-bottom:6px">Fundal height</div>${sfhTrendSvg(sfhPts)}<div class="pc-b" style="margin-top:4px">From about 24 weeks, fundal height in cm often tracks close to ${canWrite?'your':'the'} week number (the dashed guide). ${canWrite?'Your':(carrier?escapeHtml(carrier)+"'s":'Her')} provider watches the trend, not any single reading.</div></div>`:''}
     ${factsRow}`:'';
+  /* Everything she recorded while trying rode into the pregnancy on this same object, and until
+     now nothing after conception read a line of it: a year of cycle dates and her observation
+     diary were saved and unreachable at the same time. This is the door, and the doctor report is
+     the reader, so nothing here writes and nothing asks her to log anything.
+     Owner-gated twice over. canWrite is the journey doc's owner (periods and observations ride
+     that doc); pregIsOwner is the maternal-record owner. Cycle details are the carrier's alone,
+     which is the rule renderPlanningPartnerHome already states in the stage these notes came
+     from, so a shared partner never meets them here. */
+  const beforeN=tryingRecordCount(p);
+  const beforeCard=(beforeN&&canWrite&&((typeof pregIsOwner!=='function')||pregIsOwner()))
+    ?`<div class="sec-title" style="margin-top:18px">Before this pregnancy</div>
+      <div class="preg-card" onclick="openTtcDoctorReport()" style="cursor:pointer"><div class="pc-ico">📄</div><div><div class="pc-t">Your notes from trying</div><div class="pc-b">${escapeHtml(tryingRecordLine(p))} They came with you, and they are still yours.</div></div></div>`
+    :'';
   const qRows=(p.visitQs||[]).map(q=>canWrite
     ?`<div class="bag-row ${q.done?'done':''}"><div class="bg-tick" onclick="toggleVisitQ('${q.id}')">${q.done?I.check:''}</div><div class="bg-t" onclick="toggleVisitQ('${q.id}')">${escapeHtml(q.text)}</div><button class="bg-x" onclick="removeVisitQ('${q.id}')">${I.trash}</button></div>`
     :`<div class="bag-row ${q.done?'done':''}"><div class="bg-tick" style="cursor:default">${q.done?I.check:''}</div><div class="bg-t">${escapeHtml(q.text)}</div></div>`).join('');
   return `<div class="fade-in">
     ${canWrite?'':`<div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">What stays with her</div><div class="pc-b">You can see the appointments and the questions ${her} is taking to them, so you know what's coming and can go with her. Adding and ticking off stays with ${herObj}.</div></div></div>`}
     ${recordCard}
+    ${beforeCard}
     <div class="sec-title" style="margin-top:18px">Appointments</div>
     ${apptIntro}
     ${apptRows}
@@ -9376,7 +10010,9 @@ function renderPregLog(){
     <div class="csub" style="margin:-2px 0 10px">${canWrite?`Jot down what you want to ask, so it doesn't slip your mind in the room. Tick them off as you go; they stay for next time.`:'What '+her+' wants to ask this time. Worth a read before you go.'}</div>
     ${qRows}`:''}
     ${canWrite?`<div class="field" style="margin-top:8px"><input id="vqNew" placeholder="Add a question to ask…" onkeydown="if(event.key==='Enter')addVisitQ()"></div>
-    ${(p.visitQs||[]).some(q=>q.done)?`<button class="btn-ghost" style="color:var(--ink-soft)" onclick="resetVisitQsDone()">Uncheck all for next visit</button>`:''}
+    ${/* "Untick", not "Uncheck": the line three rows up says "Tick them off as you go", and the
+          baby list shares this string. Two verbs for one gesture, in an app that says Nappies. */''}
+    ${(p.visitQs||[]).some(q=>q.done)?`<button class="btn-ghost" style="color:var(--ink-soft)" onclick="resetVisitQsDone()">Untick all for next visit</button>`:''}
     <div class="hero-invite" onclick="window.openFamily&&window.openFamily('invite')" style="margin-top:10px;cursor:pointer">
       <div class="hi" style="font-size:22px">👪</div>
       <div><div class="ht">Who's coming with you?</div><div class="hs">Invite your partner so they have the questions and your appointments too</div></div>
@@ -9410,28 +10046,115 @@ function pregRecentLogs(){
 function deletePregLog(kind,id){ const p=state.pregnancy; if(!p||!p[kind])return; if(!pregIsOwner()){ toast('Only the person whose journey this is can change this'); return; } p[kind]=p[kind].filter(x=>x.id!==id); persist(); render(); }
 /* appointments */
 function toggleAppt(id){ if(!pregJourneyCanWrite())return; const p=state.pregnancy; const a=(p.appts||[]).find(x=>x.id===id); if(!a)return; a.done=!a.done; a.at=a.done?now():null; persist(); render(); }
+/* ---- the date, the time and the place of a real appointment ------------------------------------
+   An appointment used to be {week, title, note} and nothing else, so everything downstream had to
+   estimate: Home said "in about 3 weeks" and the .ics back-computed a day from the due date and
+   asked her to confirm it with the clinic. She has the letter in her hand with "Tuesday 14th,
+   3:15pm, St Mary's" on it and there was nowhere in Cubby to put any of the three.
+
+   `when` is a nullable OVERLAY on `week`, never a replacement for it. Every antenatal plan in
+   PREG.antenatal is written in weeks, the real date arrives from the clinic days or months later,
+   and clearing the date has to put her back on the week rather than leave a hole. `timed` splits
+   "Tuesday" from "Tuesday at 3:15", because a date with no time must not invent one.
+
+   `when` and not `at`: `at` on an appointment already means the moment she ticked it off, and four
+   screens read it that way. Reusing it would have printed "done 14 Sep" beside an appointment she
+   has not been to. */
+function apptWhenFields(a){
+  a=a||{};
+  const pad=n=>String(n).padStart(2,'0');
+  const hm=(a.when&&a.timed)?(d=>pad(d.getHours())+':'+pad(d.getMinutes()))(new Date(a.when)):'';
+  return `<div class="field"><label>Date (optional)</label>${datePicker('apD', a.when||'', {empty:true})}</div>
+    ${/* `.sub` and not `.csub`: csub is only ever styled inside .stat-card, so out here it renders
+         at full body size in full ink and shouts over the fields it is explaining. Four comments in
+         this file already say so, and the doctor-visit calendar row two stages away carries the
+         same footnote in the same class.
+
+         Directly under the DATE, and it says something different once there IS one. It used to sit
+         three fields lower, under "Where (optional)", telling a woman looking at "Tue, Sep 1 · 3:15
+         PM" to add the date she had already added, with "add it here" pointing at the place box. */''}
+    <div class="sub" style="margin:-6px 0 14px">${a.when?'Cubby is going by this date instead of the week.':'Got the date from your clinic? Add it and Cubby will go by that instead of the week.'}</div>
+    <div class="field"><label>Time (optional)</label><input type="time" id="apTm" value="${hm}"></div>
+    <div class="field"><label>Where (optional)</label><input id="apP" value="${escapeHtml(a.place||'')}" placeholder="e.g. St Mary's"></div>`;
+}
+function apptReadWhen(){
+  const dv=$('#apD'), tv=$('#apTm');
+  const day=dv?String(dv.value||'').slice(0,10):'';
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(day)) return {when:null, timed:false};
+  const hm=tv?String(tv.value||'').trim():'';
+  const timed=/^\d{1,2}:\d{2}$/.test(hm);
+  /* Midday anchor when she gave no time, the same reason exportDoctorVisit uses one: a date-only
+     string parsed as UTC lands on the wrong calendar day for anyone west of Greenwich. */
+  const ms=new Date(day+'T'+(timed?(hm.length===4?'0'+hm:hm):'12:00')).getTime();
+  return isFinite(ms)?{when:ms, timed:timed}:{when:null, timed:false};
+}
+/* "Tomorrow · 3:15 PM". Tomorrow is spelled out because dayLabel only names today and yesterday,
+   and an appointment is the one thing in this app that is nearly always ahead of her. */
+function apptWhenLabel(a){
+  if(!a||!a.when) return '';
+  const t=now(), k=dayKey(a.when);
+  const day = k===dayKey(t) ? 'Today'
+            : k===dayKey(t+86400000) ? 'Tomorrow'
+            : new Date(a.when).toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'});
+  return day+(a.timed?' · '+fmtClock(a.when):'');
+}
+// What the card says under the title: her own facts first, and the week only when they are all she has.
+function apptWhenLine(a, wk){
+  const bits=[apptWhenLabel(a)||(a.week<=wk?'this week':`in about ${a.week-wk} week${(a.week-wk)===1?'':'s'}`)];
+  if(a.place) bits.push(a.place);
+  return bits.join(' · ');
+}
 function openApptEdit(id){
   if(!pregJourneyCanWrite())return;
   const a=(state.pregnancy.appts||[]).find(x=>x.id===id); if(!a)return;
   openSheet(`<h2>Appointment</h2><div class="sub">Edit, reschedule or remove this appointment.</div>
     <div class="field"><label>Title</label><input id="apT" value="${escapeHtml(a.title)}"></div>
     <div class="field"><label>Around week</label><input type="number" id="apW" min="1" max="42" value="${a.week}"></div>
+    ${apptWhenFields(a)}
     <div class="field"><label>Note</label><textarea id="apN">${escapeHtml(a.note||'')}</textarea></div>
     <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="saveAppt('${a.id}')">Save</button>
+    ${apptCalendarRows(a,'edit')}
     <button class="btn-ghost" onclick="toggleAppt('${a.id}');closeSheet()">${a.done?'Mark not done':'Mark done'}</button>
     <button class="btn-ghost" style="color:var(--danger-ink)" onclick="deleteAppt('${a.id}')">Remove appointment</button>`,'preg');
 }
-function saveAppt(id){ if(!pregJourneyCanWrite())return; const a=(state.pregnancy.appts||[]).find(x=>x.id===id); if(!a)return; a.title=$('#apT').value.trim()||a.title; a.week=Math.max(1,Math.min(42,parseInt($('#apW').value)||a.week)); a.note=$('#apN').value.trim(); persist(); closeSheet(); render(); toast('Saved'); }
-function deleteAppt(id){ if(!pregJourneyCanWrite())return; state.pregnancy.appts=(state.pregnancy.appts||[]).filter(x=>x.id!==id); persist(); closeSheet(); render(); }
+/* The open sheet's fields, onto the record, without closing anything. Split out of saveAppt because
+   the calendar row now sits inside the same sheet: without this, tapping "Update my calendar" right
+   after moving the date wrote the OLD time into the file. Returns whether the date or time moved. */
+function apptWriteFields(a){
+  if(!a) return false;
+  a.title=$('#apT').value.trim()||a.title;
+  a.week=Math.max(1,Math.min(42,parseInt($('#apW').value)||a.week));
+  a.note=$('#apN').value.trim();
+  const w=apptReadWhen(); const moved=(a.when||null)!==w.when || !!a.timed!==w.timed;
+  a.when=w.when; a.timed=w.timed; a.place=$('#apP')?$('#apP').value.trim():(a.place||'');
+  return moved;
+}
+function saveAppt(id){ if(!pregJourneyCanWrite())return; const a=(state.pregnancy.appts||[]).find(x=>x.id===id); if(!a)return;
+  const moved=apptWriteFields(a);
+  persist(); closeSheet(); render();
+  /* She has moved it, and the entry she already put in her calendar still says the old time. The
+     UID is stable so adding it again rewrites the same entry, but only if she is told to. The toast
+     fires once and is gone on reload, so it is the nudge and not the record: apptIcsStale keeps a
+     standing line on the sheet itself, which is what a second caregiver sees at all. */
+  toast(moved&&apptIcsRec(a)?'Saved. Add it again to update your calendar':'Saved');
+}
+/* Removing the appointment takes its calendar entry with it. Without this the one entry she can no
+   longer reach from anywhere in Cubby is the one still alerting her, which is exactly the orphan
+   the medicine exporter's comment promises never to leave. */
+function deleteAppt(id){ if(!pregJourneyCanWrite())return; const a=(state.pregnancy.appts||[]).find(x=>x.id===id); if(apptIcsRec(a)) cancelApptCalendar(id); state.pregnancy.appts=(state.pregnancy.appts||[]).filter(x=>x.id!==id); persist(); closeSheet(); render(); }
 function openAddAppt(){
   if(!pregJourneyCanWrite())return;
   openSheet(`<h2>Add appointment</h2><div class="sub">Add a custom check, scan or class.</div>
     <div class="field"><label>Title</label><input id="apT" placeholder="e.g. Growth scan" autofocus></div>
     <div class="field"><label>Around week</label><input type="number" id="apW" min="1" max="42" value="${pregWeek()}"></div>
+    ${apptWhenFields(null)}
     <div class="field"><label>Note (optional)</label><textarea id="apN" placeholder="Anything to remember"></textarea></div>
     <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="addAppt()">Add</button>`,'preg');
 }
-function addAppt(){ const t=$('#apT').value.trim(); if(!t){toast('Give it a title');return;} if(!pregJourneyCanWrite())return; state.pregnancy.appts.push({id:uid(),week:Math.max(1,Math.min(42,parseInt($('#apW').value)||pregWeek())),title:t,note:$('#apN').value.trim(),done:false,at:null}); persist(); closeSheet(); render(); toast('Appointment added'); }
+function addAppt(){ const t=$('#apT').value.trim(); if(!t){toast('Give it a title');return;} if(!pregJourneyCanWrite())return;
+  const w=apptReadWhen();
+  state.pregnancy.appts.push({id:uid(),week:Math.max(1,Math.min(42,parseInt($('#apW').value)||pregWeek())),title:t,note:$('#apN').value.trim(),done:false,at:null,when:w.when,timed:w.timed,place:$('#apP')?$('#apP').value.trim():''});
+  persist(); closeSheet(); render(); toast('Appointment added'); }
 /* symptom / weight / blood pressure */
 function openLogSymptom(){
   initLogWhen();
@@ -9668,25 +10391,109 @@ function pregWriteSession(key,sess){
   if(sess) p[key]=sess; else delete p[key];
   persist();
 }
-let kickSession=null, kickResumed=false;
-function kickResume(){ if(!kickSession){ kickSession=pregResumeSession('kickOpen',KICK_GAP_MS,'kicks'); kickResumed=!!kickSession; } return kickSession; }
+let kickSession=null, kickResumed=false, kickGapped=false;
+/* kickResumed answers "is the sheet showing the picked-up wording", and tapKick clears it on the
+   first tap, which is right for the wording and wrong for anything that reasons about elapsed time:
+   the guard would live exactly one tap. kickGapped answers the different, permanent question "did
+   this session start before a stretch where the app was shut". It is set here, where the gap is the
+   only thing we know, and nothing clears it for the life of the session. Ending a session nulls
+   kickSession and deletes kickOpen, so the next kickResume recomputes it as false. */
+function kickResume(){ if(!kickSession){ kickSession=pregResumeSession('kickOpen',KICK_GAP_MS,'kicks'); kickResumed=!!kickSession; kickGapped=kickResumed; } return kickSession; }
+/* The counter is sold, in teach-data and on its own sub line, as the thing that teaches her what
+   usual looks like for her baby, because a change is only worth mentioning against a usual. Until
+   now nothing in the app did the learning: five raw rows were printed and the arithmetic was left
+   to a woman lying in the dark at 3am, who is the least able person in the product to do it. This
+   derives the usual from her own filed sessions and states it in one sentence, past tense.
+
+   Only sessions that actually reached ten count. finishKicks files whatever she has when she taps
+   Stop and save, and the sheet invites exactly that ("your own normal pattern matters most"), so
+   the list is full of counts she ended at three or four because the phone rang. Those measure how
+   long she sat down for, not how long her baby took, and folding them in would drag the range down
+   until every honest full count looked slow. This is the one place the proposal is wrong about the
+   code: "three or more saved sessions" would build a baseline out of sessions that never reached
+   the number the sentence claims.
+
+   Three is the floor because two numbers are a pair and not a usual. Six is the count of the window
+   and twenty eight days is its age, and it needs both: a baby at 38 weeks is not the baby at 28, and
+   six sessions can span five months for someone who counts once a fortnight, so counting alone would
+   let a night from July be read back to her in September as her usual. Out of window means silence,
+   which is the safe half of the trade.
+
+   Gapped sessions are out too. A session picked up after the app was shut is filed start-to-last, so
+   its recorded minutes include the hours the phone was locked; averaging that in would widen her
+   usual until a genuinely slow night looked ordinary, and a usual that is too wide fails in the one
+   direction this sheet cannot afford.
+
+   Rounded to five minutes in both directions so the sentence can honestly say "about". */
+const KICK_BASELINE_MAX_AGE_MS = 28*86400000;
+function kickBaseline(){
+  const cutoff=now()-KICK_BASELINE_MAX_AGE_MS;
+  const done=((state.pregnancy&&state.pregnancy.kicks)||[]).filter(k=>k&&k.count>=10&&k.end>k.start&&!k.gapped&&k.start>=cutoff).sort((a,b)=>a.start-b.start);
+  if(done.length<3) return null;
+  const last=done.slice(-6), mins=last.map(k=>(k.end-k.start)/60000);
+  const r=m=>Math.max(5,Math.round(m/5)*5);
+  return {n:last.length, lo:r(Math.min.apply(null,mins)), hi:r(Math.max.apply(null,mins))};
+}
+const KICK_N_WORD=['','one','two','three','four','five','six'];
+/* "counts that reached 10", not "sessions", because the arithmetic only ever looked at the counts
+   that reached ten and the Recent list four lines below prints the abandoned ones: any wording that
+   says "your last six sessions" is contradicted on her own screen whenever an abandoned count is the
+   more recent. The numeral matches "aim for 10" above it and "10 movements" below it, three
+   renderings of one number in one viewport otherwise. Neutral for a partner reading her journey,
+   who has never had a session of his own for "your last" to be true about. */
+function kickUsualLine(b){
+  return `${pregIsOwner()?'Your':'The'} last ${KICK_N_WORD[b.n]||b.n} counts that reached 10 took about ${b.lo===b.hi?b.lo:b.lo+' to '+b.hi} minutes.`;
+}
+const KICK_WATCH="If your baby's movements slow down or change, do not wait. Contact your midwife or maternity unit straight away, day or night.";
 function openKickCounter(){
   const sess=kickResume();
+  const base=kickBaseline();
+  /* Past her own longest, this stops being a screen she is idly tapping and becomes the reason the
+     sheet has a bottom line at all, so the bottom line moves up next to the count instead of
+     sitting under a scrolling list of old sessions. It is surfaced, not duplicated: the same
+     sentence twice on one sheet reads as a bug, and this is not the sheet to look broken on.
+
+     Nothing is coloured and no verdict is given, because there is no threshold here to cross. Her
+     longest is not a limit, it is the top of the range printed one line above, and the answer is
+     the same answer the sheet always gives: a change is worth a call.
+
+     It carries no number of its own. Her elapsed time is already on screen in the app's own format
+     four lines down, and a second number up here read as her elapsed even though it was the baseline
+     ("past that, about 35 minutes" over "36m so far"), so the sheet appeared to contradict itself at
+     the exact moment she needed to trust it.
+
+     Three guards. A gapped session is excluded, because its elapsed time spans the stretch where she
+     was not using the app: the same reason the resumed sheet refuses to print "3h 40m so far" at
+     all, and inventing a reduced-movement reading out of a lock screen is worse than saying nothing.
+     This is kickGapped and not kickResumed, which tapKick clears on the first tap, so the old guard
+     lasted one tap and then handed her the warning anyway. A count that has already reached ten is
+     excluded, because she got there, and telling a woman who just counted ten movements that she
+     took too long over them is cruelty with no information in it. And a non-owner is excluded: he
+     can tap this button on his own phone, and his idle tapping must not turn into a reading about
+     her baby. Recomputed on every tap, which is when the sheet re-renders; nothing ticks on its own. */
+  const over=!!(sess&&base&&pregIsOwner()&&!kickGapped&&sess.count<10&&(now()-sess.start)/60000>base.hi);
   const recent=(state.pregnancy.kicks||[]).slice(-5).reverse();
   const recentHtml=recent.length?`<div class="sec-title" style="margin-top:6px">Recent sessions</div>${recent.map(k=>`<div class="log-list-item"><div class="lli-ico">👣</div><div class="lli-body"><div class="lli-t">${k.count} movement${k.count===1?'':'s'}</div><div class="lli-s">${dayLabel(k.start)} ${fmtClock(k.start)}${k.end?' · '+fmtDur(k.end-k.start):''}</div></div></div>`).join('')}`:'';
   openSheet(`<h2>Kick counter</h2><div class="sub">Get comfy and count your baby's movements. Many people aim for 10, your own normal pattern matters most.</div>
+    ${/* .sub and not .csub: csub is only styled inside a stat card, so out here it would land at 16px
+          full ink and shout over the count it is quietly describing. */''}
+    ${base?`<div class="sub kick-usual" style="text-align:center;margin:-12px 0 14px">${kickUsualLine(base)}${over?' This one has been going longer than any of those.':''}</div>`:''}
     <button class="kick-big" onclick="tapKick()"><div class="kb-n">${sess?sess.count:0}</div><div class="kb-c">${sess?(sess.count>=10?'All done 🎉':'Tap for each kick'):'Tap to start'}</div></button>
     ${sess?`<div class="csub" style="text-align:center">${kickResumed?`Picked up from ${fmtClock(sess.last||sess.start)}. Tap when you next feel a movement.`:`Started ${fmtClock(sess.start)} · ${fmtDur(now()-sess.start)} so far`}</div>
       ${sess.count>0?`<button class="btn-ghost" style="margin-top:10px" onclick="undoKick()">− Undo last tap</button>`:''}
       <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:10px" onclick="finishKicks()">${sess.count>=10?'Save session':'Stop and save'}</button>
       <button class="btn-ghost" onclick="cancelKicks()">Cancel</button>`:''}
+    ${over?`<div class="preg-disclaim kick-watch">${KICK_WATCH}</div>`:''}
     ${recentHtml}
-    <div class="preg-disclaim">If your baby's movements slow down or change, do not wait. Contact your midwife or maternity unit straight away, day or night.</div>`,'preg');
+    ${over?'':`<div class="preg-disclaim kick-watch">${KICK_WATCH}</div>`}`,'preg');
 }
 function tapKick(){ if(!kickResume()) kickSession={start:now(),count:0}; kickSession.count++; kickSession.last=now(); kickResumed=false; pregWriteSession('kickOpen',kickSession); openKickCounter(); }
 function undoKick(){ if(kickResume()&&kickSession.count>0){ kickSession.count--; pregWriteSession('kickOpen',kickSession); openKickCounter(); } }
-function finishKicks(){ const s=kickResume(); if(!s)return; if(!(state.pregnancy.kicks||[]).some(k=>k.start===s.start)) state.pregnancy.kicks.push({id:uid(),start:s.start,end:s.last||now(),count:s.count}); kickSession=null; kickResumed=false; pregWriteSession('kickOpen',null); persist(); closeSheet(); render(); toast('Session saved'); }
-function cancelKicks(){ kickSession=null; kickResumed=false; pregWriteSession('kickOpen',null); openKickCounter(); }
+/* gapped is written only when true, so nothing changes on the record for the ordinary session. It is
+   filed because start-to-last on a picked-up session measures the phone being locked as well as the
+   baby, so the row is honest as her history but is not a measurement kickBaseline can average. */
+function finishKicks(){ const s=kickResume(); if(!s)return; if(!(state.pregnancy.kicks||[]).some(k=>k.start===s.start)){ const row={id:uid(),start:s.start,end:s.last||now(),count:s.count}; if(kickGapped) row.gapped=true; state.pregnancy.kicks.push(row); } kickSession=null; kickResumed=false; kickGapped=false; pregWriteSession('kickOpen',null); persist(); closeSheet(); render(); toast('Session saved'); }
+function cancelKicks(){ kickSession=null; kickResumed=false; kickGapped=false; pregWriteSession('kickOpen',null); openKickCounter(); }
 let contractionRunning=null, contractionResumed=false;
 function contractionResume(){ if(!contractionRunning){ contractionRunning=pregResumeSession('contractionOpen',CONTRACTION_RESUME_MS,'contractions'); contractionResumed=!!contractionRunning; } return contractionRunning; }
 function contractionStats(){
@@ -9734,21 +10541,59 @@ function toggleContraction(){
 function deleteContraction(id){ state.pregnancy.contractions=(state.pregnancy.contractions||[]).filter(c=>c.id!==id); persist(); openContractions(); }
 function openBirthPlan(){
   openSheet(`<h2>Birth plan</h2><div class="sub">A place for your preferences. There's no right answer, and plans can change on the day.</div>
-    <div class="field"><label>Your notes</label><textarea id="bpTxt" style="min-height:170px" placeholder="Pain relief, who's with you, skin to skin, feeding, anything that matters to you...">${escapeHtml(state.pregnancy.birthPlan||'')}</textarea></div>
-    <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="saveBirthPlan()">Save</button>`,'preg');
+    <div class="field"><label>Your notes</label><textarea id="bpTxt" style="min-height:170px"${pregJourneyCanWrite()?'':' readonly'} placeholder="Pain relief, who's with you, skin to skin, feeding, anything that matters to you...">${escapeHtml(state.pregnancy.birthPlan||'')}</textarea></div>
+    ${pregJourneyCanWrite()?`<button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="saveBirthPlan()">Save</button>`
+      : `<div class="preg-disclaim">Only the person whose journey this is can change this. It is here so you know what they want on the day.</div>`}
+    ${(pregCanSee('health')||pregCanSee('conditions'))?`<button class="btn-ghost" onclick="shareBirthPlan()">Send the plan</button>`:''}`,'preg');
 }
-function saveBirthPlan(){ state.pregnancy.birthPlan=$('#bpTxt').value; persist(); closeSheet(); render(); toast('Birth plan saved'); }
+/* Two things about that row.
+   It is drawn whether or not there is a plan yet, because the sheet HTML is built once at open: if
+   it waited on state.pregnancy.birthPlan then the first time a woman writes her plan there would be
+   no way to send it, and she would have to Save (which closes the sheet), reopen, then send. The
+   first write is the moment the hand-over exists for. shareBirthPlan's own empty check does the
+   rest, so an empty box gets "Write your plan first" instead of a blank message.
+   It rides the same health gate the report uses. A caregiver she never gave health access to can
+   already read this sheet, which is a separate and older hole, but handing him a one-tap outbound
+   export of her plan is a door this change would otherwise have opened. */
+/* The plan is written to be handed over, and the only way out of the app was the doctor report,
+   which spends a Pro taste and carries her whole antenatal record with it. Her partner does not
+   need her blood pressure to know she wants skin to skin. This sends the plan and nothing else.
+   It reads the box she is looking at rather than the last save, so a line typed and then shared is
+   the line that goes, and it only writes that line back when this journey is actually hers: for
+   anyone else the doc is read-only and the next snapshot would take the edit away again. */
+function shareBirthPlan(){
+  const p=state.pregnancy; if(!p) return;
+  const el=$('#bpTxt'); const txt=(el?el.value:(p.birthPlan||''));
+  if(!txt.trim()){ toast('Write your plan first'); return; }
+  if(txt!==p.birthPlan&&pregJourneyIsOwner()){ p.birthPlan=txt; persist(); }
+  // No "Written in Cubby." footer. A birth plan handed to a midwife is the wrong document to sign,
+  // and sharePregReport does not sign the report either.
+  shareTextOut('Birth plan','Birth plan\n\n'+txt.trim(),'Birth plan copied 🤍');
+}
+// The Save was a lie for anybody but her: the journey doc is hers, so a caregiver's save landed in
+// local state and on disk under her plan, said "Birth plan saved", and was taken back by the next
+// snapshot. Same guard every other journey mutator carries.
+function saveBirthPlan(){ if(!pregJourneyCanWrite()) return; state.pregnancy.birthPlan=$('#bpTxt').value; persist(); closeSheet(); render(); toast('Birth plan saved'); }
 function openBag(){
   const p=state.pregnancy;
-  const rows=(p.bag||[]).map(it=>`<div class="bag-row ${it.done?'done':''}"><div class="bg-tick" onclick="toggleBag('${it.id}')">${it.done?I.check:''}</div><div class="bg-t" onclick="toggleBag('${it.id}')">${escapeHtml(it.text)}</div><button class="bg-x" onclick="removeBag('${it.id}')">${I.trash}</button></div>`).join('');
+  const bagRow=it=>`<div class="bag-row ${it.done?'done':''}"><div class="bg-tick" onclick="toggleBag('${it.id}')">${it.done?I.check:''}</div><div class="bg-t" onclick="toggleBag('${it.id}')">${escapeHtml(it.text)}</div><button class="bg-x" onclick="removeBag('${it.id}')">${I.trash}</button></div>`;
+  const all=(p.bag||[]);
+  /* Headings only when the list has groups to head. An older bag, or one she has stripped back to
+     her own items, stays the single flat list she left it as. */
+  const rows=all.some(it=>it.who)
+    ? BAG_GROUPS.map(g=>{ const inG=all.filter(it=>(it.who||'')===g[0]); return inG.length?`<div class="sec-title">${g[1]}</div>`+inG.map(bagRow).join(''):''; }).join('')
+    : all.map(bagRow).join('');
   openSheet(`<h2>Hospital bag</h2><div class="sub">A starter list, tweak it to fit you. Tap to tick things off as you pack.</div>
     ${rows||'<div class="csub">Your bag list is empty.</div>'}
     <div class="field" style="margin-top:12px"><label>Add an item</label><input id="bagNew" placeholder="e.g. Birth ball" onkeydown="if(event.key==='Enter')addBag()"></div>
     <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="addBag()">Add to bag</button>`,'preg');
 }
-function toggleBag(id){ const it=(state.pregnancy.bag||[]).find(x=>x.id===id); if(!it)return; it.done=!it.done; persist(); openBag(); }
-function removeBag(id){ state.pregnancy.bag=(state.pregnancy.bag||[]).filter(x=>x.id!==id); persist(); openBag(); }
-function addBag(){ const el=$('#bagNew'); const v=(el&&el.value.trim())||''; if(!v)return; state.pregnancy.bag.push({id:uid(),text:v,done:false}); persist(); openBag(); }
+/* Guarded like every other journey mutator. It matters more now than it did: what is ticked here
+   decides what prints on the doctor report she hands a clinician, so a caregiver ticking a row was
+   editing her document, and the tick would be wiped by the next snapshot anyway. */
+function toggleBag(id){ if(!pregJourneyCanWrite()) return; const it=(state.pregnancy.bag||[]).find(x=>x.id===id); if(!it)return; it.done=!it.done; persist(); openBag(); }
+function removeBag(id){ if(!pregJourneyCanWrite()) return; state.pregnancy.bag=(state.pregnancy.bag||[]).filter(x=>x.id!==id); persist(); openBag(); }
+function addBag(){ if(!pregJourneyCanWrite()) return; const el=$('#bagNew'); const v=(el&&el.value.trim())||''; if(!v)return; state.pregnancy.bag.push({id:uid(),text:v,done:false}); persist(); openBag(); }
 
 /* Pregnancy doctor report: a clean printable summary of the antenatal record (appointments +
    outcomes, BP/glucose/weight, symptoms, care team) to bring to a visit. On-device, prints/saves
@@ -9764,11 +10609,14 @@ function pregVisitSummary(){
   const care=(p.careTeam||[]).map(m=>m.name+(m.role?' ('+m.role+')':'')+(m.phone?' '+m.phone:'')).join('; ');
   if(care) L.push('Care team: '+care);
   L.push('');
-  const appts=(p.appts||[]).slice().sort((a,b)=>a.week-b.week);
-  const done=appts.filter(a=>a.done), up=appts.filter(a=>!a.done&&a.week>=wk);
+  // Same order and same "upcoming" rule as her home card, so the paper in her hand and the screen
+  // in her pocket name the same next visit, with the date and place on it when she has them.
+  const appts=(p.appts||[]).slice().sort((a,b)=>apptSortKey(a)-apptSortKey(b));
+  const done=appts.filter(a=>a.done), up=appts.filter(a=>!a.done&&apptUpcoming(a,wk));
   L.push('Appointments: '+done.length+' attended, '+up.length+' upcoming');
-  done.slice(-6).forEach(a=>L.push('  • wk '+a.week+' — '+a.title+(a.outcome?': '+a.outcome:'')));
-  if(up[0]) L.push('  • next — wk '+up[0].week+' '+up[0].title);
+  // House voice carries no em-dashes, and this is the page she prints and hands to a clinician.
+  done.slice(-6).forEach(a=>L.push('  • wk '+a.week+' · '+a.title+(a.outcome?': '+a.outcome:'')));
+  if(up[0]) L.push('  • next · '+(up[0].when?apptWhenLabel(up[0]):'wk '+up[0].week)+' · '+up[0].title+(up[0].place?' · '+up[0].place:''));
   const meas=(p.appts||[]).filter(a=>a.sfh||a.efw||a.hb||a.position||(a.bpSys&&a.bpDia)).sort((a,b)=>a.week-b.week);
   if(meas.length){ L.push(''); L.push('Measurements by visit:'); meas.forEach(a=>{ const bits=[]; if(a.sfh)bits.push('SFH '+a.sfh+'cm'); if(a.efw)bits.push('EFW '+a.efw+'g'); if(a.position)bits.push(a.position); if(a.hb)bits.push('Hb '+a.hb); if(a.bpSys&&a.bpDia)bits.push('BP '+a.bpSys+'/'+a.bpDia); L.push('  • wk '+a.week+': '+bits.join(', ')); }); }
   const bp=(p.bp||[]).slice().sort((a,b)=>b.at-a.at);
@@ -9781,6 +10629,46 @@ function pregVisitSummary(){
   if(sy.length){ L.push(''); L.push('Recent notes / symptoms:'); sy.forEach(s=>L.push('  • '+fd(s.at)+': '+(s.kind||''))); }
   const conds=p.conditions?Object.keys(p.conditions).filter(k=>p.conditions[k]):[];
   if(conds.length){ L.push(''); L.push('Flagged: '+conds.join(', ')); }
+  /* The record from before. confirmPositiveTest flips the stage in place, so her period dates and
+     her observation diary are still sitting on this same object, and nothing after conception ever
+     read them: the year of trying that a doctor most wants to hear about vanished from the report
+     the day she conceived. A summary here, the full list in the trying report.
+     Gated harder than everything above it. The trying stage's own boundary is that cycle details
+     are the carrier's alone (renderPlanningPartnerHome states it), and these keys are NOT in the
+     shareable 'health' category, so a partner she gave health consent to must not meet them here
+     by the back door. */
+  if(tryingRecordCount(p)&&((typeof pregIsOwner!=='function')||pregIsOwner())){
+    const th=periodHistory(p), tcl=cycleLengths(p), tobs=obsEntries(p);
+    L.push(''); L.push('Before this pregnancy:');
+    if(p.tryingSince){ const td=new Date(p.tryingSince+'-01T08:00');
+      if(isFinite(td.getTime())) L.push('  • trying since '+td.toLocaleDateString(undefined,{month:'long',year:'numeric'})); }
+    if(th.length) L.push('  • '+th.length+' period start date'+(th.length===1?'':'s')+' recorded'
+      +(tcl.length?', completed cycles '+(Math.min.apply(null,tcl)===Math.max.apply(null,tcl)?('each '+tcl[0]+' days'):(Math.min.apply(null,tcl)+' to '+Math.max.apply(null,tcl)+' days')):''));
+    if(tobs.length) L.push('  • '+tobs.length+' observation note'+(tobs.length===1?'':'s')+', latest '+fd(tobs[0].at)+': '+obsLine(tobs[0]));
+  }
+  /* The birth plan and the bag are the two things written to be read by somebody else on a day she
+     cannot explain them out loud, and the one document built to be handed over carried neither.
+     The plan rides the same health gate openPregRecord uses, so a caregiver who cannot see her
+     health details does not meet it here through the report instead. */
+  if((pregCanSee('health')||pregCanSee('conditions'))&&(p.birthPlan||'').trim()){
+    L.push(''); L.push('Birth plan:');
+    String(p.birthPlan).split('\n').forEach(t=>{ if(t.trim()) L.push('  '+t.trim()); });
+  }
+  /* The bag appears once it is a real question: from week 30, which is the week the app itself
+     first puts the bag on her home screen, or sooner if she has already started ticking. Before
+     that a "0 of 14 packed" line on a report is a job she has not been given yet. After the birth
+     it goes, because by then the bag is a thing that happened. */
+  const bag=(p.bag||[]), packed=bag.filter(b=>b.done);
+  if(!p.bornBabyId&&bag.length&&(wk>=30||packed.length)){
+    L.push(''); L.push('Hospital bag: '+packed.length+' of '+bag.length+' packed');
+    /* The count, and what is done. Not what is left: a woman admitted at 38 weeks for reduced
+       movements prints this to hand to a midwife, and a "Still to pack" run turns her own document
+       into thirteen chores she has not got to, read out by somebody else. What is packed is
+       information. What is not is a to-do list, and it belongs on the sheet where she can act on it.
+       Separated by · and not by a comma: half the list has a comma in it, "a going-home outfit,
+       one size up", and a comma-joined run of those reads as two things. */
+    if(packed.length) L.push('  Packed: '+packed.map(b=>b.text).join(' · '));
+  }
   return L.join('\n');
 }
 /* In-app report overlay. The old version used window.open('','_blank') which returns null inside an
@@ -9835,13 +10723,18 @@ function printPregReport(){
     + '<body style="font-family:Georgia,\'Times New Roman\',serif;background:#fff;color:#1a1a1a;line-height:1.55">'
     + clone.innerHTML + '</body></html>', 'cubby-pregnancy-report');
 }
+/* One way out for any text Cubby hands to another person: the wrapper's share sheet, then the web
+   one, then the clipboard. Lifted out of sharePregReport unchanged so the birth plan can use the
+   same path without also inheriting the Pro taste the whole report charges. */
+function shareTextOut(title,txt,copied){
+  if(typeof window.cubbyNativeShareText==='function' && window.cubbyNativeShareText(title,txt)) return;
+  if(navigator.share){ navigator.share({title:title,text:txt}).catch(function(){}); return; }
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(function(){toast(copied||'Copied 🤍');}).catch(function(){toast('Could not copy');}); }
+  else { toast('Copy not supported here'); }
+}
 function sharePregReport(){ const p=state.pregnancy; if(!p) return;
   if(!pregChargeOnce()) return;
-  const txt=pregVisitSummary();
-  if(typeof window.cubbyNativeShareText==='function' && window.cubbyNativeShareText('Cubby pregnancy report',txt)) return;
-  if(navigator.share){ navigator.share({title:'Cubby pregnancy report',text:txt}).catch(function(){}); return; }
-  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(function(){toast('Report copied 🤍');}).catch(function(){toast('Could not copy');}); }
-  else { toast('Copy not supported here'); } }
+  shareTextOut('Cubby pregnancy report',pregVisitSummary(),'Report copied 🤍'); }
 
 /* ---- Care: team, danger signs, dates, end ---- */
 function renderPregCare(){
@@ -10117,18 +11010,50 @@ function confirmEndPregnancy(){
   // that is fine. The buttons are hidden for non-owners now; this stops a stale render reaching it.
   if(typeof pregIsOwner==='function' && !pregIsOwner()){ closeSheet(); toast('Only the person whose journey this is can close it'); return; }
   if(p.stage==='planning'){
-    openSheet(`<h2>Stop tracking?</h2><div class="sub">This clears your planning checklist and notes. Whenever you're ready, there's no rush.</div>
+    /* "your planning checklist and notes" undersold this button by a mile: it also deletes every
+       period start date and every observation she has kept, sometimes a year of them, and the
+       sheet named neither. Say exactly what goes, and put the way to take it with her ABOVE the
+       button that ends it, because after this there is nowhere left to read it from. */
+    /* Comma-joined, and the gentle close stays. The `·` list read as a lifted fragment, and the
+       branch that drops "there's no rush" is exactly the branch where the reader most needs it.
+       The card promises no more than it can deliver: Save and Share sit behind Pro everywhere
+       else, so this one opening is not charged (ttcChargeOnce) and the line says "opening". */
+    const goes=tryingRecordPhrase(p);
+    openSheet(`<h2>Stop tracking?</h2>
+      <div class="sub">${goes?'This clears everything you kept here: '+escapeHtml(goes)+', and your preparation checklist. It can\'t be brought back. Whenever you\'re ready, there\'s no rush.':'This clears your planning checklist and notes. Whenever you\'re ready, there\'s no rush.'}</div>
+      ${goes?`<div class="preg-card" onclick="openTtcDoctorReport(null,true)" style="cursor:pointer"><div class="pc-ico">📄</div><div><div class="pc-t">Take your notes with you</div><div class="pc-b">Your dates and everything you noticed, gathered on one page. Worth opening before you clear.</div></div></div>`:''}
       <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="endPregnancy(false)">Stop tracking</button>
       <button class="btn-ghost" onclick="closeSheet()">Keep going</button>`,'preg');
     return;
   }
   const moments=(p.moments&&p.moments.length)||0;
+  /* The keep button hung on moments alone, so a woman with no scan photo was offered no choice at
+     all: one button, "Close and clear everything", and with it went the journey cards she had
+     written and every date she kept while trying. The cards were already being archived by
+     endPregnancy(true) where she could not reach the branch; the trying record is archived now
+     too. Offer the choice whenever there is something to choose about, and name the parts, because
+     "memories" does not sound like a year of cycle dates and it is the same button. */
+  const cards=Object.keys((p.journey&&p.journey.saved)||{}).length;
+  const notes=tryingRecordCount(p);
+  const keepBits=[];
+  /* HEAD said "Your scans and photos stay saved", always plural because the list was always
+     photos. Naming the parts made every bit singular-capable, and the verb and the pronouns after
+     it did not follow: one card read "The card you wrote stay saved ... for whenever you want
+     them". Track it while the bits are built, because only the bits know. */
+  let keepPlural=false;
+  if(moments){ keepBits.push(moments===1?'your scan or photo':'your '+moments+' scans and photos'); if(moments>1) keepPlural=true; }
+  if(cards){ keepBits.push(cards===1?'the card you wrote':'the '+cards+' cards you wrote'); if(cards>1) keepPlural=true; }
+  if(notes){ keepBits.push('the dates and notes you kept while trying'); keepPlural=true; }
+  if(keepBits.length>1) keepPlural=true;
+  const keepList=keepBits.length>1?(keepBits.slice(0,-1).join(', ')+' and '+keepBits[keepBits.length-1]):(keepBits[0]||'');
+  const keepable=keepBits.length;
+  const pureMoments=moments&&!cards&&!notes;   // the shape this sheet already had, worded as it was
   openSheet(`<h2>Closing this pregnancy</h2>
     <div class="sub">Whatever brings you here, take it gently and in your own time. If you've experienced a loss, we're so sorry, and you don't have to do anything right now.</div>
-    ${moments?`<div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">Keep your ${moments===1?'memory':moments+' memories'}</div><div class="pc-b">Your scans and photos stay saved in your Cubby, for whenever you want them, until you choose to remove them. Your health logs are cleared either way.</div></div></div>`:''}
-    ${moments?`<button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="endPregnancy(true)">Keep my ${moments===1?'memory':'memories'}</button>`:''}
-    ${moments?`<div class="sub" style="font-size:12px;color:var(--ink-faint);margin:2px 2px 6px">Clearing also deletes those photos for good. This can't be undone.</div>`:''}
-    <button class="${moments?'btn-ghost':'btn-primary'}" style="${moments?'color:var(--ink-soft)':'background:var(--preg)'}" onclick="endPregnancy(false)">Close and clear everything</button>
+    ${keepable?`<div class="preg-card"><div class="pc-ico">🤍</div><div><div class="pc-t">${pureMoments?`Keep your ${moments===1?'memory':moments+' memories'}`:"Keep what you've saved"}</div><div class="pc-b">${escapeHtml(keepList.charAt(0).toUpperCase()+keepList.slice(1))} ${keepPlural?'stay':'stays'} saved in your Cubby, for whenever you want ${keepPlural?'them':'it'}, until you choose to remove ${keepPlural?'them':'it'}. Your health logs are cleared either way.</div></div></div>`:''}
+    ${keepable?`<button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="endPregnancy(true)">${pureMoments?`Keep my ${moments===1?'memory':'memories'}`:"Keep what I've saved"}</button>`:''}
+    ${keepable?`<div class="sub" style="font-size:12px;color:var(--ink-faint);margin:2px 2px 6px">Clearing ${pureMoments?(moments===1?'also deletes that photo':'also deletes those photos'):'deletes all of this'} for good. This can't be undone.</div>`:''}
+    <button class="${keepable?'btn-ghost':'btn-primary'}" style="${keepable?'color:var(--ink-soft)':'background:var(--preg)'}" onclick="endPregnancy(false)">Close and clear everything</button>
     <button class="btn-ghost" onclick="closeSheet()">Not now</button>
     <div class="preg-disclaim">If you're struggling, you're not alone. Your midwife or doctor, or a pregnancy loss support line, can help, day or night. Informational only, not medical advice.</div>`,'preg');
 }
@@ -10148,8 +11073,21 @@ function endPregnancy(keep){
        cards she WROTE, keyed by cardId — and it was never copied here, so it died with
        state.pregnancy while the sheet was promising "your scans and photos stay saved in your
        Cubby". After a loss the thing she wrote is worth more than the thing she photographed. */
-    state.pregnancyArchive.unshift({ id:uid(), endedAt:now(), weeks:pregWeek(), moments:(p.moments||[]).slice(),
-      journey:Object.assign({}, (p.journey&&p.journey.saved)||{}), loss:true });
+    /* The trying record goes with them. periodHistory and obsEntries were read only by
+       planning-stage code, so this branch archived the scans and deleted a year of cycle dates and
+       the whole observation diary underneath them, on the button labelled "Keep my memories".
+       moodLog rides along for the reason savePregnancy already carries it between pregnancies: it
+       is hers and not the pregnancy's, it lives in the owner-only mhealth 'mood' doc that pregClear
+       is about to delete two lines below, and a loss is the worst possible moment to silently bin
+       what a woman wrote for herself. keptMoodLog seeds it back into her next record; nothing
+       renders it anywhere. On the clear-everything branch it goes, exactly as that button says.
+       Only when the record is HERS, the same test savePregnancy applies: this entry lands in the
+       acting user's own users/{uid} doc, where her consent could never reach it again. */
+    const mine=!p.ownerUid||p.ownerUid==='local'||p.ownerUid===myUid();
+    state.pregnancyArchive.unshift(Object.assign({ id:uid(), endedAt:now(), weeks:pregWeek(), moments:(p.moments||[]).slice(),
+      journey:Object.assign({}, (p.journey&&p.journey.saved)||{}), loss:true },
+      mine?tryingRecord(p):{},
+      (mine&&p.moodLog&&p.moodLog.length)?{ moodLog:p.moodLog.slice() }:{}));
     /* photos intentionally kept in PhotoStore */
   } else {
     (p.moments||[]).forEach(m=>{ try{ PhotoStore.del(m.photoId); }catch(e){} });
@@ -10207,11 +11145,35 @@ function openKeptMemories(id){
       ${r.note?`<div class="mc-note">${escapeHtml(r.note)}</div>`:''}
       <div class="mc-row"><span class="mc-date">${r.date?escapeHtml(r.date):(r.at?dayLabel(r.at):'')}</span></div></div></div>`;
   }).join('');
-  openSheet(`<h2>Kept memories 🤍</h2><div class="sub">Yours to keep, privately, for as long as you like.</div>
+  /* The trying record kept alongside the photos. Once the pregnancy is gone this sheet is the only
+     place it can be reached from, and after a loss it is often exactly what the next appointment
+     gets built out of. One row each, no counts pushed at her, nothing that asks anything.
+     This was `trec.length===1`, on the reasoning that two entries make one row a guess about which
+     pregnancy it belonged to. But renderLossHolding opens its door on "is there anything kept at
+     all", so a woman with two losses met a door marked "What you kept" that opened onto "Nothing
+     saved here" — kept and unreachable at the same time, which is the exact bug this item was
+     written to end, reappearing at the second loss. So: a row per entry, and when there is more
+     than one, each says when it was kept, which is the honest way to tell them apart. */
+  const trec=arr.filter(a=>tryingRecordCount(a));
+  const trWhen=a=>{ try{ return a.endedAt?new Date(a.endedAt).toLocaleDateString(undefined,{month:'long',year:'numeric'}):''; }catch(e){ return ''; } };
+  const trRow=trec.map(a=>{ const when=trec.length>1?trWhen(a):'';
+    return `<div class="set-item" onclick="openTtcDoctorReport('${a.id}')" style="cursor:pointer;margin-top:14px">
+      <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">📄</div>
+      <div class="si-body"><div class="a">Your notes from trying</div><div class="b">${escapeHtml(tryingRecordLine(a))}${when?' Kept '+escapeHtml(when)+'.':''} Still yours.</div></div><span class="chev">${I.chev}</span></div>`;
+  }).join('');
+  /* What "Remove these memories" actually removes. When the only kept thing is her trying record
+     (no scan, no cards — the woman this whole item is about) the button was still drawn, the
+     confirm still warned her about photos and cards she does not have, and Cubby still said
+     "Removed 🤍" having removed nothing. A control that lies about a permanent delete, on a loss
+     path. It is offered only when there is something for it to take. The heading follows the same
+     line, so the door that said "What you kept" stops opening a sheet headed "Kept memories". */
+  const removable=arr.some(a=>(a.moments||[]).length||Object.keys(a.journey||{}).length);
+  openSheet(`<h2>${removable?'Kept memories':'What you kept'} 🤍</h2><div class="sub">Yours to keep, privately, for as long as you like.</div>
     ${cards||''}
     ${jcards?`${cards?'<div class="sec-title" style="margin-top:16px">The cards you wrote</div>':''}${jcards}`:''}
-    ${(cards||jcards)?'':'<div class="sub">Nothing saved here.</div>'}
-    <button class="btn-ghost" style="color:var(--ink-soft);margin-top:10px" onclick="removeKeptMemories(${scope})">Remove these memories</button>`,'preg');
+    ${trRow}
+    ${(cards||jcards||trRow)?'':'<div class="sub">Nothing saved here.</div>'}
+    ${removable?`<button class="btn-ghost" style="color:var(--ink-soft);margin-top:10px" onclick="removeKeptMemories(${scope})">Remove these memories</button>`:''}`,'preg');
 }
 /* Two taps from the archive, and it used to do state.pregnancyArchive=[] — which persist() pushes
    as a whole-field overwrite of users/{uid}, on every device, for good. That was honest when the
@@ -10221,14 +11183,32 @@ function openKeptMemories(id){
    the confirm sheet says, and the record stays. An entry that was only ever keepsakes has nothing
    left to keep and drops out, which is what she has always seen happen. */
 function removeKeptMemories(id){
-  confirmSheet({title:'Remove these memories?',body:'Your kept photos and notes go for good, and can\'t be brought back. There\'s no rush to decide.',confirmLabel:'Remove them',cancelLabel:'Keep them',danger:true,onConfirm:function(){
+  /* "photos and notes" was ambiguous the moment the sheet above it started showing a row called
+     "Your notes from trying", which this button does NOT remove. Name the things that go — and
+     only the ones that are actually there. It named photos and cards to a woman who had neither,
+     warned her they could not be brought back, then said "Removed 🤍" having removed nothing.
+     Second line of defence: the sheet no longer draws the button in that case, and this returns
+     rather than asking, so no path can reach the false confirmation. */
+  const _scope=(state.pregnancyArchive||[]).filter(a=>!id||a.id===id);
+  const nPh=_scope.reduce((n,a)=>n+((a.moments||[]).length),0);
+  const nCd=_scope.reduce((n,a)=>n+Object.keys(a.journey||{}).length,0);
+  if(!nPh&&!nCd) return;
+  const _body=(nPh&&nCd)?'Your kept photos and the cards you wrote go for good, and can\'t be brought back. There\'s no rush to decide.'
+    :(nPh?'Your kept photos go for good, and can\'t be brought back. There\'s no rush to decide.'
+         :'The cards you wrote go for good, and can\'t be brought back. There\'s no rush to decide.');
+  confirmSheet({title:'Remove these memories?',body:_body,confirmLabel:'Remove them',cancelLabel:'Keep them',danger:true,onConfirm:function(){
     const all=state.pregnancyArchive||[];
     all.filter(a=>!id||a.id===id).forEach(a=>{
       (a.moments||[]).forEach(m=>{ try{ PhotoStore.del(m.photoId); }catch(e){} });
       Object.keys(a.journey||{}).forEach(k=>{ try{ if(a.journey[k].photoId) PhotoStore.del(a.journey[k].photoId); }catch(e){} });
       a.moments=[]; a.journey={};
     });
-    state.pregnancyArchive=all.filter(a=>pregArchiveIsRecord(a)||(a.moments||[]).length||Object.keys(a.journey||{}).length);
+    /* An entry that was only ever keepsakes drops out, which is what she has always seen happen.
+       A loss entry now also carries her trying record and her private wellbeing notes, and those
+       are not what this button offered to remove, so an entry holding either one stays. Without
+       this test, removing the photos took a year of cycle dates out with them, silently. */
+    state.pregnancyArchive=all.filter(a=>pregArchiveIsRecord(a)||(a.moments||[]).length||Object.keys(a.journey||{}).length
+      ||tryingRecordCount(a)||(a.moodLog&&a.moodLog.length));
     persist(); render(); toast('Removed 🤍');
   }});
 }
@@ -10325,7 +11305,12 @@ function openArchivedPregnancy(id){
      which reads as Cubby having dropped her pregnancy, in the same breath as "kept exactly as it
      was". Both cannot be true. */
   const oldShape=!('dueDate' in a);
-  const anything=team||appts||readings||facts||a.birthPlan;
+  /* The trying record that came before THIS pregnancy, carried on the entry by savePregnancy. Like
+     the readings above it, counting it and then refusing to show it would be the opposite of what
+     this sheet is for: there is nowhere else left to read it, because the live record belongs to
+     whatever pregnancy she is in now. Read-only, and it opens the report she already knows. */
+  const beforeLine=tryingRecordCount(a)?tryingRecordLine(a):'';
+  const anything=team||appts||readings||facts||a.birthPlan||beforeLine;
   const lead=born
     ?`${who?escapeHtml(who)+', born ':'Born '}${escapeHtml(born)}${wk?' at '+wk+' weeks':''}.`
     :`${who?escapeHtml(who)+"'s pregnancy":'Your earlier pregnancy'}, kept.`;
@@ -10336,6 +11321,10 @@ function openArchivedPregnancy(id){
     ${readings?`<div class="sec-title" style="margin-top:16px">Readings</div>${readings}`:''}
     ${facts?`<div class="sec-title" style="margin-top:16px">Your antenatal record</div><div class="csub">${escapeHtml(facts)}.</div>`:''}
     ${a.birthPlan?`<div class="sec-title" style="margin-top:16px">Your birth plan</div><div class="note-read">${escapeHtml(a.birthPlan)}</div>`:''}
+    ${beforeLine?`<div class="sec-title" style="margin-top:16px">Before this pregnancy</div>
+    <div class="set-item" onclick="openTtcDoctorReport('${a.id}')" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">📄</div>
+      <div class="si-body"><div class="a">Your notes from trying</div><div class="b">${escapeHtml(beforeLine)} Still yours.</div></div><span class="chev">${I.chev}</span></div>`:''}
     ${oldShape?`<div class="csub">This one was kept before Cubby saved the whole record${hasMem?', so what is here is your photos and the cards you wrote':'. The dates are what came with it'}.</div>`
       :(anything?'':`<div class="csub">Nothing else was logged in this one, and that is fine. The dates are here, kept.</div>`)}
     ${hasMem?`<button class="btn-ghost" style="color:var(--preg-ink);margin-top:16px" onclick="openKeptMemories('${a.id}')">🤍 Your kept memories</button>`:''}
@@ -11097,6 +12086,26 @@ function renderMedSheet(editing){
       ${p.times.map((t,i)=>`<div style="display:flex;gap:8px;margin-bottom:8px"><input type="time" value="${t}" onchange="medDraft.pattern.times[${i}]=this.value" style="flex:1;border:2px solid var(--line);background:var(--surface-2);border-radius:12px;padding:11px;font-weight:700;font-family:var(--font-body);font-size:15px;color:var(--ink)">
       <button onclick="medDraft.pattern.times.splice(${i},1);renderMedSheet(${editing})" style="border:none;background:var(--med-soft);color:var(--med);border-radius:12px;width:48px;font-size:20px;cursor:pointer">×</button></div>`).join('')}
       <button class="btn-ghost" style="padding:8px" onclick="medDraft.pattern.times.push('12:00');renderMedSheet(${editing})">+ Add a time</button></div>`;
+  } else if(p.type==='asNeeded'){
+    /* The two numbers printed on the bottle she is holding, and nothing else. As needed is where
+       infant paracetamol and ibuprofen actually live, so it is the class two caregivers are most
+       likely to double, and it is the one class medIntervalMs returns 0 for — which means logDose
+       has never asked it a single question. Both boxes are optional and Cubby fills in neither:
+       left empty, nothing about this medicine changes. `.sub` and not `.csub`, because csub is
+       styled only inside .stat-card and out here would render at 16px full ink.
+       No group label above the two fields: it rendered at the same 12px uppercase as the two real
+       field labels under it, so three stacked labels read as three fields and the top one had no
+       box. No placeholders either — "4" and "4" IS the infant paracetamol regimen, and pre-typing a
+       dosing schedule into the one field whose whole job is a safety limit is Cubby inventing a
+       dose. Empty boxes, and the line underneath says what goes in them. */
+    schedUI=`<div class="field">
+      <div class="row2">
+        <div class="field" style="margin-bottom:0"><label>Hours between doses</label>
+          <input id="mMinGap" type="number" inputmode="decimal" min="0.5" step="0.5" value="${p.minGapH!=null?escapeHtml(String(p.minGapH)):''}" oninput="medSetLimit('minGapH',this.value)"></div>
+        <div class="field" style="margin-bottom:0"><label>Most in 24 hours</label>
+          <input id="mMax24" type="number" inputmode="numeric" min="1" step="1" value="${p.max24!=null?escapeHtml(String(p.max24)):''}" oninput="medSetLimit('max24',this.value)"></div>
+      </div>
+      <div class="sub" style="margin-top:10px;margin-bottom:0">Optional. Copy the limits off the bottle and Cubby will show them back to you before a dose goes over.</div></div>`;
   }
   openSheet(`<h2>${editing?'Medicine':'Add medicine'}</h2><div class="sub">Name it, set the dose and a reminder pattern.</div>
     <div class="field"><label>Medicine name</label><input id="mName" value="${escapeHtml(d.name)}" placeholder="e.g. Infant paracetamol" oninput="medDraft.name=this.value"></div>
@@ -11124,6 +12133,16 @@ function toggleMedRemind(editing){
   medDraft.remind=!medDraft.remind;
   if(medDraft.remind) requestNotif();
   renderMedSheet(editing);
+}
+/* Her number, or nothing at all. An empty box is NOT zero: it means she has written nothing down,
+   so the key comes off the pattern entirely and logDose goes back to asking nothing. Stored as a
+   number rather than the input's string, because medLimitBreach compares it arithmetically. This
+   writes straight to the draft instead of re-rendering, so the caret does not jump mid-typing. */
+function medSetLimit(key, v){
+  if(!medDraft || !medDraft.pattern) return;
+  const n=parseFloat(String(v==null?'':v).trim());
+  if(!isFinite(n) || n<=0) delete medDraft.pattern[key];
+  else medDraft.pattern[key]=n;
 }
 function saveMed(id){
   medDraft.name=$('#mName').value.trim();
@@ -11187,6 +12206,63 @@ function medIntervalMs(m){
   }
   return 0;
 }
+/* Every dose of this medicine on record for its OWN child, oldest first. Same scoping rule as
+   lastDose: a sibling's syrup and a different bottle are somebody else's doses and must never count
+   toward this one's total. */
+function medDoses(m){
+  const bid=(m&&m.babyId)||state.activeBabyId;
+  return (state.events||[]).filter(e=>e&&!e.deleted&&e.type==='medicine'&&e.medId===m.id&&e.babyId===bid)
+                           .sort((a,b)=>a.time-b.time);
+}
+function medGapText(h){ return h+(h===1?' hour':' hours'); }
+/* The as-needed answer to the question logDose could not ask. medIntervalMs returns 0 for asNeeded
+   and that is correct — Cubby has no interval of its own for a medicine given as needed, and
+   inventing one would be dosing advice. So the only figure here is the one off the bottle, read
+   back verbatim. Returns null unless a written-down limit would actually be passed by a dose logged
+   right now, and deliberately checks the pattern type as well as the numbers: if this medicine is
+   moved onto a schedule the boxes disappear, so a value left behind in the data must never fire a
+   sheet nobody can see.
+
+   Both comparisons are bounded at BOTH ends, because a medicine dose stamped in the FUTURE is a
+   shipped write door, not a hypothetical: routinePayload stamps a ritual's dose at today at the
+   ritual's set time (routineEventTime), so ticking an 8pm "evening paracetamol" at 3pm writes a
+   dose five hours ahead. Unbounded, `now()-last.time < gapH*3600000` is satisfied by every future
+   dose, and fmtDur of a negative interval printed "-54s ago" inside the medicine-safety sheet. The
+   same skew arrives without rituals whenever two caregivers' phone clocks disagree, which is this
+   feature's whole case. A dose that has not happened yet is not a dose that was given. */
+function medLimitBreach(m){
+  if(!m||!m.pattern||m.pattern.type!=='asNeeded') return null;
+  const gapH=+m.pattern.minGapH||0, max24=+m.pattern.max24||0;
+  if(!gapH && !max24) return null;
+  // A rolling 24 hours, not the calendar day, because the bottle means the last 24 hours and a
+  // midnight reset would hand back a fresh allowance in the middle of a bad night.
+  const given=medDoses(m).filter(e=>e.time<=now());
+  const last=given[given.length-1], since=last?now()-last.time:-1;
+  const gapHit = !!(gapH && last && since < gapH*3600000);
+  const win=given.filter(e=>e.time>now()-86400000);
+  const maxHit = !!(max24 && win.length>=max24);
+  if(!gapHit && !maxHit) return null;
+  const rules=[];
+  if(gapHit) rules.push('at least '+medGapText(gapH)+' between doses');
+  if(maxHit) rules.push('no more than '+max24+' in 24 hours');
+  const facts=[];
+  /* Named, never "the last one": paracetamol and ibuprofen on the same child is the ordinary case
+     and this is the one sheet where which bottle must not be ambiguous. */
+  if(gapHit){
+    const who=loggerName(last.authorId);
+    facts.push(who ? who+' logged '+m.name+' '+fmtDur(since)+' ago, at '+fmtClock(last.time)+'.'
+                   : m.name+' was logged '+fmtDur(since)+' ago, at '+fmtClock(last.time)+'.');
+  }
+  /* No clock anchor on the count. fmtClock is time-only, so at 3am "the 5th since 7:10 AM" points at
+     a time that reads as this morning — four hours in the future — and a frightened parent cannot
+     tell whether Cubby is wrong or she is. The number she needs is how many, in the last 24 hours. */
+  if(maxHit) facts.push('This one would make '+(win.length+1)+' in the last 24 hours.');
+  /* "Written down for this medicine", not "You wrote": the person tapping Dose is very often not the
+     person who typed the numbers, and Cubby must not put one caregiver's limit in the other's mouth
+     or claim the rule as its own. One stem for both rules, so the sentence does not repeat itself. */
+  return {title:'Before you log this',
+          body:'Written down for this medicine: '+rules.join(', and ')+'. '+facts.join(' ')};
+}
 /* "Did someone already give her the Calpol?" is the most frightening recurring question in this
    whole domain, and the medicine row used to say when the NEXT dose was due while never once saying
    when the last one was given, or by whom. Two caregivers and one baby is exactly the case. */
@@ -11204,6 +12280,17 @@ function logDose(id){
     confirmSheet({
       title:'A dose is already logged',
       body:(who||'Someone')+' logged '+m.name+' '+fmtDur(now()-last.time)+' ago, at '+fmtClock(last.time)+'.',
+      confirmLabel:'Log another', cancelLabel:'Not now',
+      onConfirm:function(){ commitDose(m); }
+    });
+    return;
+  }
+  // The as-needed case, which the check above cannot reach because iv is 0 there. Same one calm
+  // question, made of her own figures, and the same way through it.
+  const lim=medLimitBreach(m);
+  if(lim){
+    confirmSheet({
+      title:lim.title, body:lim.body,
       confirmLabel:'Log another', cancelLabel:'Not now',
       onConfirm:function(){ commitDose(m); }
     });
@@ -11706,7 +12793,10 @@ function upcomingVisit(){
 }
 /* opts.noIllness: the printed report gives the episode its own heading ABOVE the fortnight, so it
    asks for the summary without it rather than printing the same block twice. The copyable text
-   summary keeps it inline, because there it is one thing to paste. */
+   summary keeps it inline, because there it is one thing to paste.
+   opts.noBirth and opts.noAsk are the same bargain for the birth history and the family's own
+   questions: the report prints each under its own heading, this text prints them inline, and
+   neither page ever says one of them twice. */
 function visitSummary(days,opts){
   days=days||7; opts=opts||{};
   const b=activeBaby();
@@ -11765,6 +12855,11 @@ function visitSummary(days,opts){
   L.push(`Cubby summary, ${b.name} (${ageString(b.birth)})`);
   const sexW=sexWord(b.sex);
   if(b.birth||sexW) L.push(`${b.birth?'Date of birth: '+new Date(b.birth).toLocaleDateString():''}${(b.birth&&sexW)?' · ':''}${sexW?'Sex: '+sexW:''}`);
+  /* The birth sits with the date of birth, because that is what it is: fixed context, not an event
+     in the window. It used to be one "Birth weight" line stranded between the nappy notes and the
+     latest growth, which is where the number was least useful and where the gestation beside it
+     was missing entirely. */
+  if(!opts.noBirth) birthHistoryLines(b).forEach(l=>L.push(l));
   /* Say what the numbers below are actually built from. A clinician reading an average needs to
      know the window and how much of it was covered, or a patchy fortnight and a diligent fortnight
      print identically. */
@@ -11786,6 +12881,16 @@ function visitSummary(days,opts){
   }
   if(evs.length&&canRate) L.push(`  Entries logged on ${covered} of those ${wDays} days.`);
   L.push('');
+  /* THE FAMILY'S OWN QUESTIONS GO ABOVE EVERYTHING THE APP COUNTED, including the illness, which
+     until now was the first block here on the argument that it is why the appointment exists. It
+     usually is; the questions are why THIS appointment exists, in the family's own words, and no
+     average Cubby computes outranks them. Only the ones still unticked: a question already asked
+     and ticked off at the last visit is spent, and reprinting it costs a clinician the ten minutes
+     this page exists to protect. Nothing prints when the list is empty or all of it is ticked. */
+  if(!opts.noAsk){
+    const _ask=babyAskQs(b).filter(q=>!q.done);
+    if(_ask.length){ L.push('Things to ask:'); _ask.forEach(q=>L.push('  • '+q.text)); L.push(''); }
+  }
   /* The illness goes FIRST, above the feeds and the nappies. It is usually why the appointment
      exists, so it is the first thing a clinician should read, and it prints even when the window
      holds nothing else: an episode that started before the window and is still running is exactly
@@ -11825,6 +12930,30 @@ function visitSummary(days,opts){
           :canRate?`Sleep: ~${(perDay(sleepMs)/3600000).toFixed(1)} h/day (${sleeps.length} naps logged)`
                   :`Sleep: ${fmtDur(sleepMs)} total (${sleeps.length} naps logged)`);
     L.push(`Nappies: ${diapers.length} total${rate(diapers.length)} (wet ${wet}, dirty ${dirty})`);
+    /* THE COLOUR, WHERE IT IS ACTUALLY ASKED FOR. The day-five milk-transfer question and the pale
+       stool are both colour questions, and both are asked in a room, out loud, from memory.
+       Counted off the dirty ones only, and the ones nobody looked at are stated rather than hidden:
+       "yellow 3" out of nine dirty nappies is a different fact from "yellow 3" out of three.
+       NOT GATED ON THE BABY'S AGE TODAY, which is where the proposal was wrong. The chips stop at
+       six weeks, but the six-week check is exactly the appointment where a nappy from week three
+       gets asked about, and a report that hid it the day the chips went would be hiding the one
+       thing this was built to carry. What was recorded, prints. */
+    const coloured=diapers.filter(e=>e.colour&&(e.kind==='dirty'||e.kind==='both'));
+    if(coloured.length){
+      const counts=NAPPY_COLOURS.map(c=>[c.w, coloured.filter(e=>e.colour===c.k).length]).filter(p=>p[1]);
+      const unnoted=dirty-coloured.length;
+      L.push(`  Dirty nappy colours: ${counts.map(p=>p[0]+' '+p[1]).join(', ')}${unnoted>0?`, ${unnoted} not noted`:''}`);
+      /* The pale ones get their dates, the way the yellowing does, because the question a clinician
+         asks next is when, and how many days running. Capped so one bad fortnight cannot push the
+         growth and medicine lines off the page; the count in the line above is the honest total. */
+      const pale=coloured.filter(e=>e.colour==='pale');
+      if(pale.length){
+        const PALE_CAP=8;
+        // diapers came off babyEvents(), newest-first, so slice takes the most recent and reverse
+        // prints them in the order they happened.
+        L.push(`  Pale or chalky${pale.length>PALE_CAP?`, the ${PALE_CAP} most recent`:''}: ${pale.slice(0,PALE_CAP).reverse().map(e=>new Date(e.time).toLocaleDateString(undefined,{day:'numeric',month:'short'})+' '+fmtClock(e.time)).join(', ')}`);
+      }
+    }
     /* A count answers "how many" and nothing else. The observation that sent the family to this
        appointment is usually the one nappy that looked wrong, so it prints in her exact words with
        the date and time beside it, and Cubby adds no reading of its own. Capped so one worrying
@@ -11841,8 +12970,6 @@ function visitSummary(days,opts){
       });
     }
   }
-  const bwe=birthWeightEvent(b.id);
-  if(bwe) L.push(`Birth weight: ${bwe.weight} ${bwe.wUnit||'kg'}`);
   /* Each of the three is the latest of ITS OWN kind, not whatever was in the newest entry, because
      a visit where only the head was measured must not blank out a weight from a fortnight ago on
      the page a clinician reads. Head is labelled: it and length are both centimetres. */
@@ -11899,7 +13026,9 @@ function openDoctorReport(){
   if(!useTaste('pdf','Doctor PDF report')) return;
   const esc=escapeHtml;
   const illBlock=illnessSummary(now()-14*86400000, now());
-  const summary=visitSummary(14,{noIllness:!!illBlock});
+  const askLines=babyAskQs(b).filter(q=>!q.done).map(q=>'- '+q.text);
+  const birthLines=birthHistoryLines(b);
+  const summary=visitSummary(14,{noIllness:!!illBlock, noAsk:askLines.length>0, noBirth:birthLines.length>0});
   let growthLine='';
   try{
     /* Latest of EACH kind, the same rule visitSummary uses, because the two blocks sit on one
@@ -11940,7 +13069,17 @@ function openDoctorReport(){
     <div class="noprint"><button onclick="window.print()">Print / Save as PDF</button></div>
     ${/* Above the fortnight on purpose. A clinician reads top-down and the episode is why the
           family came; burying it under feed averages is how the old report managed to describe a
-          five-day tummy bug without ever naming it. */''}
+          five-day tummy bug without ever naming it.
+          The questions come above even that, because they are the agenda and everything below is
+          evidence. The birth sits between them: it is the lens the illness and the fortnight are
+          both read through, and for a baby born at 33 + 4 it changes the meaning of every average
+          on the page. Neither is repeated inside the fortnight; visitSummary was asked to leave
+          them out. */''}
+    ${/* "in their own words" was a provenance claim Cubby cannot back: four of these can be its
+          own canned chips, tapped in one gesture. On a document whose whole value is that its
+          claims are legible, say only what is true. */''}
+    ${askLines.length?`<h2>Things to ask</h2><div class="meta" style="margin:-4px 0 8px">Written down by the family before this visit.</div><pre>${esc(askLines.join('\n'))}</pre>`:''}
+    ${birthLines.length?`<h2>Birth history</h2><pre>${esc(birthLines.join('\n'))}</pre>`:''}
     ${illBlock?`<h2>Illness</h2><pre>${esc(illBlock)}</pre>`:''}
     <h2>Last 14 days</h2><pre>${esc(summary)}</pre>
     ${growthLine?`<h2>Latest measurement</h2><pre>${esc(growthLine)}</pre>`:''}

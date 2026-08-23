@@ -390,6 +390,7 @@ const seed = (p) => ({
         rowTop: firstRow ? Math.round(firstRow.getBoundingClientRect().top) : null,
         tickCursor: tick ? getComputedStyle(tick).cursor : null,
         bodyCursor: s.querySelector('.appt-row .ar-body') ? getComputedStyle(s.querySelector('.appt-row .ar-body')).cursor : null,
+        bodyOn: s.querySelector('.appt-row .ar-body') ? (s.querySelector('.appt-row .ar-body').getAttribute('onclick') || '') : null,
         overflow: s.scrollWidth - s.clientWidth,
       };
     });
@@ -399,7 +400,11 @@ const seed = (p) => ({
        catches. What actually matters is that he reads whose this is BEFORE he reads her rows. */
     ok('and he reads it before he reaches her appointments', r.rowTop !== null && r.cardTop < r.rowTop, r);
     ok('the dead tick no longer pretends to be a button', r.tickCursor === 'default', r);
-    ok('nor does the row body', r.bodyCursor === 'default', r);
+    /* This used to demand a default cursor, i.e. no tap target at all. Item p8 gave a partner a real
+       one, to the READ-ONLY prep sheet, so "not clickable" now means the door is missing rather
+       than that a write is blocked. What must stay true is where the row takes him. */
+    ok('the row body takes him to prep, never to the editor',
+      /openVisitPrep/.test(r.bodyOn || '') && !/openApptEdit/.test(r.bodyOn || ''), r);
     ok('nothing scrolls sideways', r.overflow <= 0, r); // hygiene; passes on any build
   }
 
@@ -418,6 +423,10 @@ const seed = (p) => ({
     const ALLOW = [
       'openDangerSigns(', 'openFamily', 'openPregDoctorReport(', 'addApptToCalendar(',
       'pregGo(', 'openPregRecord(', 'openCondition(',
+      /* Item p8 forks the appointment row: canWrite gets openApptEdit, a partner gets the prep
+         sheet instead. It reads and never writes, and openApptEdit guards on pregJourneyCanWrite
+         regardless, so this is a read-only door and belongs here. */
+      'openVisitPrep(',
     ];
     await load(seed(preg({ bloodGroup: 'O', rh: 'positive', gbs: 'negative' })));
     const r = await openCare(SAM, 'caregiver', ['health', 'careteam', 'conditions']);

@@ -116,6 +116,7 @@
         'One tap from your home row. Wet, dirty, both, or a dry check.',
         'Change the time if it happened earlier. Nothing has to be logged the moment it happens.',
         'Add a note if something made you look twice. It saves with the nappy you tap, and you can change it later.',
+        'While they are newborn you can note the colour of a dirty one. It is what a midwife or health visitor asks about in the first weeks, and it stops being offered at six weeks.',
         'Anyone in your circle can log one, and it appears on every phone straight away.',
         'The day\'s count sits on your home screen, so nobody is adding up in their head.'
       ],
@@ -351,7 +352,7 @@
       why: 'Two adults caring for one child cannot double a dose that is written down, and cannot miss one either. This is the log where the cost of a gap is highest and the effort of keeping it is lowest.',
       matters: [
         ['The last dose, and who gave it', 'The row says both. That single line is what stops the 2am conversation about whether it has already been done.'],
-        ['Cubby warns before it writes', 'Tap Dose again too soon and it tells you when the last one was, before anything is recorded.'],
+        ['Cubby warns before it writes', 'Tap Dose again too soon and it tells you when the last one was. On an as-needed medicine, once you copy the bottle\'s own limits onto it.'],
         ['The schedule, not the arithmetic', 'Add how often or at what times once. Nothing has to be worked out again while holding a crying child.'],
         ['The course ends when it ends', 'Set times can go into your own calendar and stop on their own, so no reminder outlives the prescription.']
       ],
@@ -445,7 +446,7 @@
       who: { stage: ['baby','child'] },
       earn: { on: 'appt-added' } },
     openDoctor: { label: 'Your doctor', fn: 'openDoctor()', domain: 'health', depth: 'one',
-      one: 'Who you see, and how to reach them.',
+      one: 'Who you see, how to reach them, and the questions you want to ask them.',
       who: { stage: ['baby','child'] },
       earn: { on: 'illness-started' } },
     openDoctorEdit: { label: 'Edit doctor', fn: 'openDoctorEdit()', domain: 'health', depth: 'one',
@@ -559,8 +560,11 @@
       what: 'Scans and checks, with the date and where it is.',
       get: 'The reminder can go into your own calendar, so it arrives from the place you already look.'
     },
-    openApptEdit: { label: 'An appointment', fn: 'openApptEdit()', domain: 'preg', depth: 'one',
-      one: 'Move it, change it, or note what happened.',
+    /* aka, because label is what the How to use Cubby list shows and sheetDot matches the <h2>,
+       which reads "Appointment". Without it the sheet silently loses its "i", and this is the one
+       that grew from two fields to five plus the calendar controls. */
+    openApptEdit: { label: 'Appointment', fn: 'openApptEdit()', domain: 'preg', depth: 'one',
+      one: 'Move it, add the date and where it is, and update your calendar.',
       who: { stage: ['pregnancy'] } },
     /* aka, because the sheet heading is forked: a shared partner cannot prep the list, so his
        heading reads "Before the visit", and sheetDot matches on the heading. He is the reader who
@@ -680,9 +684,17 @@
       what: 'Record the test, and choose whether to move into the expecting stage.',
       get: 'Nothing moves until you say so, and your cycle history stays exactly where it is.'
     },
-    openTtcDoctorReport: { label: 'Doctor report', fn: 'openTtcDoctorReport()', domain: 'trying', depth: 'chapter',
+    /* Reachable from the pregnancy stage too now ("Your notes from trying" on the Care tab) and
+       from the kept-memories sheet after a loss, so the stage list can no longer say planning
+       alone: the reader who most needs to be told this record still exists is the one who has
+       already left the stage it was written in.
+       `needs` is not optional here. quickStage() never answers 'planning', so the old list matched
+       nobody and this row had always been invisible; widening it to 'pregnancy' put it on a shared
+       partner's how-to index, and its Try it button prints her period dates and her observation
+       diary. The shell publishes tryingRecord only for the person whose record it is. */
+    openTtcDoctorReport: { label: 'Doctor report', aka: ['notes from trying'], fn: 'openTtcDoctorReport()', domain: 'trying', depth: 'chapter',
       one: 'Cycles and observations on one page, for the appointment you booked.',
-      who: { stage: ['planning'] },
+      who: { stage: ['planning','pregnancy'], needs: 'tryingRecord' },
       earn: { on: 'trying-12mo' },
       what: 'Your cycles and observations, gathered onto one page.',
       get: 'The appointment starts from a record, which is usually what makes it a shorter conversation.'
@@ -850,7 +862,9 @@
       what: 'Two photos of the same little person, months apart, side by side.',
       get: 'The one that makes people stop scrolling, including you.'
     },
-    openKeptMemories: { label: 'Kept memories', fn: 'openKeptMemories()', domain: 'memories', depth: 'one',
+    /* The loss-holding door reads "What you kept" when there are no photos, and the sheet heading
+       follows it, so the info dot has to resolve from that wording too. */
+    openKeptMemories: { label: 'Kept memories', aka: ['what you kept'], fn: 'openKeptMemories()', domain: 'memories', depth: 'one',
       one: 'What you chose to keep, gathered in one place.',
       who: { stage: null } },
     openRelCapture: { label: 'A photo with someone', aka: ['a photo with'], fn: 'openRelCapture()', domain: 'memories', depth: 'chapter',
@@ -982,6 +996,7 @@
     openWhenPicker: 'The \'when did this happen\' control inside log sheets.',
     openFeverSymptomNudge: 'The answer to logging Fever without a number. Like openBPConcern it is a consequence of saving something, never a place a parent navigates to, and it says everything it has to say on screen.',
     openJaundiceNudge: 'The answer to logging that skin or eyes look yellow. Same shape as openFeverSymptomNudge: a consequence of saving something, never a place a parent goes looking, and the one sentence it exists for is on screen.',
+    openPaleNappyNudge: 'The answer to logging a pale or chalky nappy. Same shape as openJaundiceNudge: a consequence of tapping Dirty with that colour picked, never a place a parent navigates to, and the one sentence it exists for is on screen. Teaching it as a capability would file it under things to go and look at.',
     openBPConcern: 'The answer to a raised or severe blood-pressure reading. It is a consequence of saving one, never something a mother navigates to, and it explains itself in full on screen. Teaching it as a capability would file "your reading was high" under things to go and look at.',
     showConnTrouble: 'A connection-trouble card shown during sign-in. It is an error state, not a capability, and it explains itself on screen.',
     showStatus: 'Inline status text during sign-in.',
@@ -1000,6 +1015,7 @@
     showWwLog: 'The Undo on "Hidden from your timeline". Same toast, same reason.',
     showWwNotYet: 'The Undo on hiding the not-yet wake-window note. Same toast, same reason.',
     openWeeksTakeBack: 'The way back out of Your weeks in your calendar, which is the capability and is taught. This is the undo, reachable only from a marker that is still arriving, and one of its two doors is the loss holding screen, where the guide is not offered at all.',
+    openApptTakeBack: 'The way back out of the appointments she added to her calendar, which is taught on Add appointment and An appointment. This is the undo, reachable only from a receipt that is still arriving, and its only door is the loss holding screen, where the guide is not offered at all.',
 
     /* Dormant behind a flag */
     openDenChores: 'FEATURES.den = false.',
