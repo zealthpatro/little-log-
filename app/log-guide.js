@@ -78,9 +78,9 @@
       get: 'It is the thing a doctor almost always asks about, and it is easier to tap now than to remember later.'
     },
     pump: {
-      line: 'Your stash and your rhythm in one place',
+      line: 'Your own rhythm, in one place',
       what: 'How much you expressed, which side, and when.',
-      get: 'Your stash and your rhythm in one place, instead of on the back of a receipt.'
+      get: 'A week of sessions reads back as your own rhythm, instead of living on the back of a receipt.'
     },
     activity: {
       line: 'Tummy time, baths, walks, and the photos with them',

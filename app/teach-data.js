@@ -125,20 +125,20 @@
     openPump: { label: 'Pump', fn: 'openPump()', domain: 'log', depth: 'page',
       one: 'How much you expressed, which side, and when.',
       who: { stage: ['baby','child'] },
-      why: 'Expressing is work that disappears from the day the moment it is done, and the stash is what decides whether anybody else can take a feed tonight.',
+      why: 'Expressing is work that disappears from the day the moment it is done. Nothing else in a day leaves so little trace of the effort it took.',
       matters: [
         ['How much, and which side', 'A week of sessions shows a pattern. The last session on its own shows almost nothing.'],
         ['The time it happened', 'Pumping is rhythm-sensitive in a way most logs are not, and a session without a time cannot show a rhythm.'],
-        ['Your stash lives in one place', 'Rather than on the back of a receipt, or in a note you will not find again at midnight.'],
+        ['Every session in one place', 'Rather than on the back of a receipt, or in a note you will not find again at midnight.'],
         ['There is no target here', 'Cubby holds no expectation of you and will never suggest one. It shows your own days back to you and stops there.']
       ],
       how: [
         'Log the amount, the side, and the time, in whichever units you already think in.',
         'Move the time afterwards if you were busy at the point it happened.',
         'It sits alongside feeds, so the day reads as one story rather than two.',
-        'Anyone in your circle can see the stash without asking you for a number.'
+        'Anyone in your circle can see what was expressed and when, without asking you.'
       ],
-      payoff: 'The person doing the night feed knows what is there, and you did not have to tell them.'
+      payoff: 'A week of your own sessions reads back in one line, in your own units, with nothing added to it.'
     },
     openActivity: { label: 'Add to the day', fn: 'openActivity()', domain: 'log', depth: 'chapter',
       one: 'Tummy time, a bath, a walk, or a line about the day. Add a photo if you took one.',
@@ -307,6 +307,15 @@
       earn: { on: 'temp-logged' },
       what: 'How they are, in your own words or from a list.',
       get: 'Three weeks of small things is impossible to recall at once, and this is what you read from instead.'
+    },
+    /* aka, because the row is called "Ask a question" everywhere it is offered and the sheet
+       heading is "Ask Cubby". Without it normLabel resolves neither, sheetDot returns the html
+       untouched, and the whole chapter has no "i" on it: verified dead in the DOM before this. */
+    openAskBox: { label: 'Ask a question', aka: ['ask cubby'], fn: 'openAskBox()', domain: 'health', depth: 'chapter',
+      one: 'Ask in your own words, and Cubby quotes the closest answer from its own reads or says it does not have one.',
+      who: { stage: ['baby','child'] },
+      what: 'A search across every article Cubby publishes, showing the answer exactly as it was written.',
+      get: 'The 3am question answered without leaving for a search engine. Cubby never writes an answer of its own, it cannot say anything about your baby, and if a question sounds urgent it gives you the phone instead of a paragraph.'
     },
     openFeverSafetyNet: { label: 'When to call sooner', fn: 'openFeverSafetyNet()', domain: 'health', depth: 'chapter',
       one: 'The signs beside a fever that mean it is time to call, in plain words, from published guidance.',
@@ -486,6 +495,14 @@
     },
     openWeeksCalendar: { label: 'Your weeks in your calendar', fn: 'openWeeksCalendar()', domain: 'preg', depth: 'one',
       one: 'Each week ahead as an all-day marker in the calendar you already look at.',
+      who: { stage: ['pregnancy'] } },
+    /* aka, because the heading is forked: on her partner's screen they are her appointments in his
+       calendar, so the <h2> reads "Maya's appointments in your calendar" (or "her appointments…"
+       before the circle has a name). label is what the How to use Cubby list shows; aka is the part
+       of the heading both forks always share. */
+    openApptsCalendar: { label: 'Your appointments in your calendar', aka: ['appointments in your calendar'],
+      fn: 'openApptsCalendar()', domain: 'preg', depth: 'one',
+      one: 'Every antenatal visit still ahead, as a date in the calendar you already look at.',
       who: { stage: ['pregnancy'] } },
     openKickCounter: { label: 'Kick counter', fn: 'openKickCounter()', domain: 'preg', depth: 'chapter',
       one: 'Count the movements in one sitting. You learn what usual looks like for your baby.',
@@ -950,6 +967,12 @@
       what: 'Where your data lives, who can reach it, and how to take it with you.',
       get: 'The answers in one place, so trusting Cubby is a decision you can actually check.'
     },
+    openImport: { label: 'Bring in old logs', fn: 'openImport()', domain: 'account', depth: 'chapter',
+      one: 'A CSV from your old app. Feeds, sleeps and nappies, at the times they happened.',
+      who: { stage: null },
+      what: 'Reads a CSV export from the app you were using and brings the entries across.',
+      get: 'Your first months come with you, and Cubby counts what it found and what it left behind before it saves anything.'
+    },
     openDeleteRequest: { label: 'Delete data', fn: 'openDeleteRequest()', domain: 'account', depth: 'one',
       one: 'Remove what you no longer want kept.',
       who: { stage: null } },
@@ -1016,6 +1039,7 @@
     showWwNotYet: 'The Undo on hiding the not-yet wake-window note. Same toast, same reason.',
     openWeeksTakeBack: 'The way back out of Your weeks in your calendar, which is the capability and is taught. This is the undo, reachable only from a marker that is still arriving, and one of its two doors is the loss holding screen, where the guide is not offered at all.',
     openApptTakeBack: 'The way back out of the appointments she added to her calendar, which is taught on Add appointment and An appointment. This is the undo, reachable only from a receipt that is still arriving, and its only door is the loss holding screen, where the guide is not offered at all.',
+    openWeeksTakeBack: 'The way back out of Your weeks in your calendar and Your appointments in your calendar, which are the capabilities and are taught. This is the undo, reachable only from a date that is still arriving, and one of its doors is the loss holding screen, where the guide is not offered at all.',
 
     /* Dormant behind a flag */
     openDenChores: 'FEATURES.den = false.',

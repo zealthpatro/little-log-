@@ -355,10 +355,32 @@ service cloud.firestore {
             || ( resource.data.sharedWith is list
                  && request.auth.uid in resource.data.sharedWith )
         );
-        // Only the owner writes her own journey, and only as a member of this household.
-        allow create, update: if request.auth != null && request.auth.uid == owner
+        // Only the owner creates her own journey, and only as a member of this household.
+        allow create: if request.auth != null && request.auth.uid == owner
             && request.auth.uid in pm()
             && request.resource.data.ownerUid == owner;
+        /* THE ONE FIELD A PARTNER MAY WRITE: data.precon, the shared preparation checklist.
+           It is folic acid, a dentist check, easing off alcohol, and it is already rendered to
+           the people she chose to tell — it was simply not tickable by them, so the stage meant
+           to be done by two people contained nothing two people could do. The list stays on THIS
+           document rather than moving to the circle-shared app blob, because that blob is
+           readable by every member (a grandparent, a nanny) and a list that opens with folic acid
+           announces that someone is trying to conceive to people she never told. The audience has
+           to stay exactly the sharedWith[] she picked, which is this document's audience already.
+           Scoped so it can never become a way into the rest of the journey: exactly two top-level
+           keys may move, and inside `data` exactly one. sharedWith and ownerUid sit outside
+           `data`, so hasOnly(['data','updatedAt']) already forbids a partner re-sharing the
+           journey or claiming it. */
+        function preconOnly() {
+          return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['data', 'updatedAt'])
+            && request.resource.data.data.diff(resource.data.data).affectedKeys().hasOnly(['precon']);
+        }
+        allow update: if request.auth != null && request.auth.uid in pm() && (
+            ( request.auth.uid == owner && request.resource.data.ownerUid == owner )
+            || ( resource.data.sharedWith is list
+                 && request.auth.uid in resource.data.sharedWith
+                 && preconOnly() )
+        );
         allow delete: if request.auth != null && request.auth.uid == owner && request.auth.uid in pm();
 
         // The journey's photo BYTES (bump photos, scan moments, journey-card photos).

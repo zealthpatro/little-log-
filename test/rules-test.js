@@ -172,6 +172,53 @@ async function check(name, p) {
   await check('shared member still cannot WRITE the journey (fails)', assertFails(setDoc(doc(C, 'households/H/pregnancy/O'), { ownerUid: 'O', stage: 'expecting', sharedWith: ['C'], tampered: true })));
   await check('stranger reads the journey (fails)', assertFails(getDoc(doc(S, 'households/H/pregnancy/O'))));
 
+  /* THE SHARED PREPARATION CHECKLIST. Folic acid, a dentist check, easing off alcohol: no health
+     data, and already visible to the people she chose to tell. It was not writable by them, so the
+     stage meant to be done by two people contained nothing two people could do. It must NOT move to
+     the circle-shared app blob to fix that (a nanny and a grandmother would learn someone is trying
+     to conceive), so instead a member in sharedWith may write the single field data.precon on this
+     document. These checks exist to prove that is the ONLY thing that widened.
+     Own household so the seeds above are untouched: PC owns the journey, PP is told, PN is not. */
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'households/HPC'), {
+      ownerId: 'PC', members: { PC: 'owner', PP: 'caregiver', PN: 'caregiver' },
+      memberInfo: { PC: { name: 'Mom' }, PP: { name: 'Dad' }, PN: { name: 'Nana' } }, app: cleanApp()
+    });
+    await setDoc(doc(db, 'households/HPC/pregnancy/PC'), {
+      ownerUid: 'PC', sharedWith: ['PP'],
+      data: { stage: 'planning', lmp: 1, precon: [{ id: 'p1', text: 'Folic acid', done: false }] }
+    });
+  });
+  const PC = env.authenticatedContext('PC').firestore();
+  const PP = env.authenticatedContext('PP').firestore();
+  const PN = env.authenticatedContext('PN').firestore();
+  console.log('\nShared preparation checklist (the one field a partner writes):');
+  await check('the partner she told can tick an item',
+    assertSucceeds(updateDoc(doc(PP, 'households/HPC/pregnancy/PC'), { 'data.precon': [{ id: 'p1', text: 'Folic acid', done: true, by: 'PP' }] })));
+  await check('and can add one of his own',
+    assertSucceeds(updateDoc(doc(PP, 'households/HPC/pregnancy/PC'), { 'data.precon': [{ id: 'p1', done: true }, { id: 'p2', text: 'Book the dentist', addedBy: 'PP' }] })));
+  await check('a member she never told cannot tick it (fails)',
+    assertFails(updateDoc(doc(PN, 'households/HPC/pregnancy/PC'), { 'data.precon': [] })));
+  await check('a member she never told cannot even read it (fails)',
+    assertFails(getDoc(doc(PN, 'households/HPC/pregnancy/PC'))));
+  await check('the partner cannot change her stage while ticking (fails)',
+    assertFails(updateDoc(doc(PP, 'households/HPC/pregnancy/PC'), { 'data.precon': [], 'data.stage': 'expecting' })));
+  await check('the partner cannot move her last period (fails)',
+    assertFails(updateDoc(doc(PP, 'households/HPC/pregnancy/PC'), { 'data.lmp': 999 })));
+  await check('the partner cannot re-share the journey with anyone else (fails)',
+    assertFails(updateDoc(doc(PP, 'households/HPC/pregnancy/PC'), { 'data.precon': [], sharedWith: ['PP', 'PN'] })));
+  await check('the partner cannot claim the journey as his (fails)',
+    assertFails(updateDoc(doc(PP, 'households/HPC/pregnancy/PC'), { 'data.precon': [], ownerUid: 'PP' })));
+  await check('the partner cannot replace the whole journey doc (fails)',
+    assertFails(setDoc(doc(PP, 'households/HPC/pregnancy/PC'), { ownerUid: 'PC', sharedWith: ['PP'], data: { precon: [] } })));
+  await check('the partner cannot delete the journey (fails)',
+    assertFails(deleteDoc(doc(PP, 'households/HPC/pregnancy/PC'))));
+  await check('a stranger cannot tick it (fails)',
+    assertFails(updateDoc(doc(S, 'households/HPC/pregnancy/PC'), { 'data.precon': [] })));
+  await check('she can still write her whole journey', assertSucceeds(updateDoc(doc(PC, 'households/HPC/pregnancy/PC'), { 'data.stage': 'expecting', 'data.precon': [] })));
+  await check('and she can still change who is told', assertSucceeds(updateDoc(doc(PC, 'households/HPC/pregnancy/PC'), { sharedWith: ['PP', 'PN'] })));
+
   console.log('\nNotes read scope:');
   await check('member reads a circle note', assertSucceeds(getDoc(doc(C, 'households/H/notes/n-circle'))));
   await check('non-audience member reads a private note (fails)', assertFails(getDoc(doc(C, 'households/H/notes/n-mom-priv'))));

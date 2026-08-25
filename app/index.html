@@ -1300,6 +1300,11 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .country-opt.sel{background:var(--preg-soft);font-weight:800;color:var(--preg);}
 .bag-row .bg-t{flex:1;font-weight:700;font-size:14px;}
 .bag-row.done .bg-t{text-decoration:line-through;color:var(--ink-soft);}
+/* Who ticked it, on a list two people share. A done row is struck through, and a crossed-out
+   person's name reads as the person being cancelled, so this line sits in an inline-block: an
+   ancestor's line-through is not propagated into an atomic inline-level box, whereas a plain
+   text-decoration:none on a block child would be ignored. */
+.bag-row .bg-sub{font-weight:600;font-size:12px;color:var(--ink-faint);margin-top:2px;display:inline-block;}
 .bag-row .bg-x{border:none;background:none;color:var(--ink-faint);cursor:pointer;padding:4px;flex-shrink:0;}
 .welcome-burst{text-align:center;font-size:48px;line-height:1;margin:6px 0 4px;animation:rise .5s cubic-bezier(.2,.9,.3,1);}
 .log-list-item{display:flex;align-items:center;gap:12px;background:var(--surface);border-radius:13px;padding:11px 14px;margin-bottom:8px;box-shadow:0 2px 7px var(--shadow);}
@@ -2736,7 +2741,10 @@ function awayRecap(){
   // First ever open has no stamp, so fall back to today rather than showing a whole history.
   const since = seenAt ? Math.max(seenAt, now()-86400000) : dayStartMs(now());
   const evs = babyEvents().filter(e=>e.time>=since);
-  const others = evs.filter(e=>e.authorId && e.authorId!==me);
+  // Rows brought in from another app are not somebody logging while you were out. On the realistic
+  // switching day they all land inside this window, and without this filter Papa is told Maya
+  // logged this morning's feeds while he was away.
+  const others = evs.filter(e=>e.authorId && e.authorId!==me && !e.imported);
   if(others.length<1) return '';
   const feeds = evs.filter(e=>e.type==='feed').length;
   const napMs = evs.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+netSleepMs(e),0);
@@ -2778,7 +2786,9 @@ function dayRecapText(){
   const temps=evs.filter(e=>e.type==='temperature');
   const fevers=temps.filter(e=>isFever(e.temp,e.unit));
   const acts=evs.filter(e=>e.type==='activity'&&(e.activity||e.notes));
-  const loggers=[...new Set(evs.map(e=>loggerName(e.authorId)).filter(Boolean))];
+  // This text leaves the app: it is copied to a partner or a doctor. A brought-in row must never be
+  // signed with a person's name on a page like that.
+  const loggers=[...new Set(evs.filter(e=>!e.imported).map(e=>loggerName(e.authorId)).filter(Boolean))];
   const L=[];
   L.push(`${b.name}'s day · ${new Date().toLocaleDateString()}`);
   L.push('');
@@ -2789,11 +2799,23 @@ function dayRecapText(){
   if(sub.length) fl+=` (${sub.join(', ')})`;
   L.push(fl);
   if(solids.length) L.push(`Solids: ${solids.length}${foods.length?` (${foods.join('; ')})`:''}`);
+  /* Expressing was in the timeline and in no summary anywhere, so the work vanished from the day the
+     moment it was done. It sits under the milk lines because that is what it is, and it says only
+     what was logged: no balance, for the reasons written above openPump.
+     Her own sessions only, unlike every other line here. This sheet's primary button is a
+     navigator.share, so without the gate a partner or a grandparent could forward her output
+     figures out of the circle without her being in the room. Same ownership rule as canEditEvent,
+     and quickUid for the same reason getStarted uses it: myUid() is 'local' until the deferred
+     Firebase chain lands, which would drop her own sessions out of her own recap on a cold open. */
+  const _mineUid=quickUid();
+  const pumped=pumpSummary(evs.filter(e=>!e.authorId||e.authorId===_mineUid));
+  if(pumped) L.push(`Expressed: ${pumped.sessions} session${pumped.sessions===1?'':'s'} (${pumped.amount})`);
   L.push(`Sleep: ${(napMs/3600000).toFixed(1)}h over ${naps.length} nap${naps.length!==1?'s':''}`);
   L.push(`Nappies: ${dia.length} (wet ${wet}, dirty ${dirty})`);
   if(acts.length) L.push(`Activities: ${acts.map(a=>a.activity||'note').join(', ')}`);
   if(temps.length) L.push(`Temp: ${temps.length} reading${temps.length>1?'s':''}${fevers.length?`, ${fevers.length} fever`:''}`);
   if(loggers.length) L.push(`Logged by: ${loggers.join(', ')}`);
+  else if(evs.some(e=>e.imported)) L.push('Brought in from another app');
   return L.join('\n');
 }
 function openDayRecap(){
@@ -3153,8 +3175,11 @@ function daySurfaceRecap(ts){
   if(napMs>=360000) parts.push((napMs/3600000).toFixed(napMs/3600000>=10?0:1)+'h sleep');
   if(dia) parts.push(dia+' nappy'+(dia>1?' changes':' change'));
   const summary=parts.join(' · ')||'activity logged';
-  const names=[...new Set(evs.map(e=>loggerName(e.authorId)).filter(Boolean))];
-  return summary+(names.length?(' · logged by '+names.join(', ')):'');
+  // A row brought in from another app carries the importer's uid (firestore.rules will not accept
+  // any other author), so it must be kept out of the name set or the card credits her for feeds she
+  // never gave. The counts stay true; only the byline changes.
+  const names=[...new Set(evs.filter(e=>!e.imported).map(e=>loggerName(e.authorId)).filter(Boolean))];
+  return summary+(names.length?(' · logged by '+names.join(', ')):(evs.some(e=>e.imported)?' · brought in from another app':''));
 }
 function openDayLog(ts){
   // Tap-through to the full log. Today opens the daily recap sheet (copy/share); an earlier day
@@ -3495,6 +3520,7 @@ function renderHome(){
     ${nightHome ? '' : quickBlock}
     ${gsCard ? '' : renderNudge()}
     ${alerts}
+    ${askBoxRow()}
     ${goodReadCard('baby')}
     ${/* data-sum keeps the sleep figure honest minute by minute while a nap runs. Rendering it once
           per paint was not enough: leave home open through an hour of nap and the banner would say
@@ -4581,10 +4607,14 @@ function tlItem(e){
   const m=TYPE_META[e.type];
   const det=eventDetail(e);
   const icon = e.type==='activity' ? activityIcon(e.activity) : m.icon;
-  const by = authorTag(e);
+  /* An imported row carries the importer's uid, because firestore.rules will not accept an event
+     authored by anyone else, but nobody in this circle logged it and the line must not say they
+     did. So the flag speaks instead of the name, and the face comes off too. */
+  const by = e.imported ? '' : authorTag(e);
+  const brought = e.imported ? 'brought in from another app' : '';
   return `<div class="tl-item" onclick="openEdit('${e.id}')">
     <div class="tl-ico" style="background:var(--${m.c}-soft);color:var(--${m.c})">${icon}</div>
-    <div class="tl-body"><div class="t1">${escapeHtml(eventTitle(e))}</div>${det?`<div class="t2">${escapeHtml(det)}</div>`:''}${(by||e.editedBy)?`<div class="tl-by">${(e.authorId&&typeof window.memberAvatarSvg==='function')?`<span class="tl-byav">${window.memberAvatarSvg(e.authorId,16)}</span>`:''}${by?'logged by '+escapeHtml(by):''}${e.editedBy?(by?' · ':'')+'edited by '+escapeHtml(loggerName(e.editedBy)||'someone'):''}</div>`:''}</div>
+    <div class="tl-body"><div class="t1">${escapeHtml(eventTitle(e))}</div>${det?`<div class="t2">${escapeHtml(det)}</div>`:''}${(by||brought||e.editedBy)?`<div class="tl-by">${(!e.imported&&e.authorId&&typeof window.memberAvatarSvg==='function')?`<span class="tl-byav">${window.memberAvatarSvg(e.authorId,16)}</span>`:''}${brought||(by?'logged by '+escapeHtml(by):'')}${e.editedBy?((by||brought)?' · ':'')+'edited by '+escapeHtml(loggerName(e.editedBy)||'someone'):''}</div>`:''}</div>
     ${e.photoId&&photoSrc(e.photoId)?`<img class="tl-thumb" src="${photoSrc(e.photoId)}">`:''}
     <div class="tl-time"><div class="clock">${fmtClock(e.time)}</div><div class="ago" data-since="${e.time}">${fmtSince(e.time)}</div></div>
   </div>`;
@@ -4633,6 +4663,7 @@ function renderStats(){
     ${barCard('Feeds','Last 7 days',feedData,labels,'feed','')}
     ${barCard('Sleep','Hours per day',sleepData,labels,'sleep','h')}
     ${barCard('Diapers','Last 7 days',diaperData,labels,'diaper','')}
+    ${pumpStatCard(evs)}
     ${renderGrowthSection()}
   </div>`;
 }
@@ -5209,7 +5240,15 @@ const SOLID_FOODS=[
   {n:'Banana'},{n:'Avocado'},{n:'Sweet potato'},{n:'Oats',a:'gluten'},{n:'Apple'},{n:'Pear'},
   {n:'Carrot'},{n:'Peas'},{n:'Pumpkin'},{n:'Lentils'},{n:'Rice'},{n:'Tofu',a:'soy'},
   {n:'Yogurt',dairy:1,a:'dairy'},{n:'Cheese',dairy:1,a:'dairy'},{n:'Egg',egg:1,a:'egg'},
-  {n:'Chicken',meat:1},{n:'Fish',meat:1,a:'fish'}
+  {n:'Chicken',meat:1},{n:'Fish',meat:1,a:'fish'},
+  /* Peanut, tree nuts and shellfish are three of the nine allergens and no food carried them, so
+     they could not be picked at all: the allergy warning could never fire for a family watching
+     for peanut, and nothing could record that peanut had been tried. Peanut is the one most asked
+     about between six and twelve months and it was the one missing. Sesame had exactly one food,
+     Tahini, and only in the Gulf list, so everywhere else in the world it was unreachable too.
+     dietFoods dedupes by name, so a family in the UAE still sees theirs once. */
+  {n:'Peanut butter',a:'peanut'},{n:'Almond butter',a:'tree nuts'},{n:'Prawn',meat:1,a:'shellfish'},
+  {n:'Tahini',a:'sesame'}
 ];
 const ALLERGENS=['Dairy','Egg','Peanut','Tree nuts','Soy','Gluten','Fish','Shellfish','Sesame'];
 /* Region-aware first foods: prepend locally-familiar foods (by the baby's country) so the
@@ -5238,6 +5277,102 @@ function fmtSolidAmt(amount,unit){
   if(plural[unit] && amount!==1) return amount+' '+plural[unit];
   return amount+' '+unit;
 }
+/* ---- what has been tried, and when ----
+   The allergen tag on each food used to do exactly one thing: draw a warning triangle on a food the
+   family has ALREADY declared an allergy to. The question of months six to twelve runs the other
+   way, "have we introduced egg yet, and when", and nothing could answer it, because saveSolids
+   collapsed the whole selection to notes = foods.join(', '). */
+let _foodIx=null;
+function foodByName(n){
+  if(!_foodIx){
+    /* Every food Cubby knows, region lists included and the diet filter deliberately NOT applied.
+       This reads history rather than offering a menu, so a family who moved country, or who went
+       vegetarian after logging chicken, still resolves what they actually logged. */
+    _foodIx={};
+    Object.keys(REGION_FOODS).forEach(cc=>REGION_FOODS[cc].forEach(f=>{ const k=f.n.toLowerCase(); if(!_foodIx[k])_foodIx[k]=f; }));
+    SOLID_FOODS.forEach(f=>{ const k=f.n.toLowerCase(); if(!_foodIx[k])_foodIx[k]=f; });
+  }
+  return _foodIx[String(n||'').trim().toLowerCase()]||null;
+}
+/* saveSolids builds the notes string as the chip names joined with ", ", with anything typed as one
+   further segment. Splitting on that same separator and matching a segment EXACTLY against a known
+   food is what keeps this honest for every event written before payload.foods existed: "no egg
+   today" is a segment that matches nothing, where a substring search would have read it as egg
+   introduced, and a wrong "already tried" is the dangerous direction to be wrong in. */
+function notesToFoods(notes){
+  return String(notes||'').split(/\s*,\s*/).filter(Boolean).map(s=>{
+    const f=foodByName(s);
+    return (f&&f.a)?{n:f.n,a:f.a}:{n:f?f.n:s};
+  });
+}
+function eventFoods(ev){
+  if(ev&&Array.isArray(ev.foods)) return ev.foods.filter(f=>f&&f.n);
+  return notesToFoods(ev&&ev.notes);
+}
+/* An edit to a solids note is nearly always an annotation, not a retraction: "Egg" becomes
+   "Egg - came out in a rash on her chin" far more often than it becomes "Banana". Re-deriving the
+   selection from scratch turned that annotation into one untagged blob, so the first taste of egg
+   disappeared from the sheet AND from the doctor page, in the very moment a parent was writing down
+   a reaction. So a tag that was already on the entry survives as long as its food is still named in
+   the corrected words, and goes only when the food itself goes.
+   Guessing a food out of prose is still refused on the way IN (notesToFoods), because there a wrong
+   "already tried" would be invented from nothing. Here the tap that tagged it already happened, and
+   the only question is whether the correction took it back. A phrase that negates the food, "no egg
+   today", is read as taking it back. */
+const FOOD_NEGATION=/\b(no|not|never|none|without|skip|skipped|avoid|avoided|didn'?t|did not|wouldn'?t|would not|won'?t|will not|refused)\s+$/i;
+function keepFoodTags(prev,next){
+  const out=next.slice();
+  (prev||[]).forEach(p=>{
+    if(!p||!p.a||out.some(f=>f.a===p.a)) return;
+    const re=new RegExp('\\b'+String(p.n).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i');
+    const still=out.some(f=>{ const m=re.exec(f.n); return m && !FOOD_NEGATION.test(f.n.slice(0,m.index)); });
+    /* Kept as its own entry under the food's OWN name rather than stuck onto her sentence, so it is
+       still findable the next time she edits the line: tagging the sentence made "Egg" become
+       "Egg - came out in a rash", and the edit after that could no longer see an egg in it. Her
+       exact words live in notes and are not touched by any of this. */
+    if(still) out.push({n:p.n,a:p.a});
+  });
+  return out;
+}
+/* One date, two places. The year is carried whenever the taste was not this calendar year, because
+   "Sep 22" on a three-year-old's record reads as four weeks from now rather than two years ago, and
+   always on the clinical page, where somebody acts on it. */
+function firstTasteDate(t,alwaysYear){
+  const d=new Date(t), o={day:'numeric',month:'short'};
+  if(alwaysYear || d.getFullYear()!==new Date().getFullYear()) o.year='numeric';
+  return d.toLocaleDateString(undefined,o);
+}
+/* Signed in, Cubby boots on a recent window of events and fills the rest in behind the first paint.
+   Until that finishes, "not yet" is not a fact about the baby, it is a fact about the download, and
+   a peanut given at seven months is exactly the entry that is still missing. So while history is
+   incomplete neither surface claims anything was never tried. */
+function historyPending(){ return !!window.cubbyHistoryPending; }
+/* And a message that never resolves while she is looking at it is barely better than the wrong
+   answer, because the sheet is built once and nothing rebuilds it. So while she has it open, the
+   panel redraws itself the moment the rest of history lands. Stops the instant she closes the
+   sheet, and gives up after a minute rather than polling forever. */
+let _ftWait=null;
+function ftWaitForHistory(){
+  if(_ftWait) return;
+  const until=Date.now()+60000;
+  _ftWait=setInterval(()=>{
+    const open=!!document.querySelector('#firstTastes');
+    if(open && historyPending() && Date.now()<until) return;
+    clearInterval(_ftWait); _ftWait=null;
+    if(open && !historyPending()) openFoodPrefs();
+  },400);
+}
+/* Deliberately not windowed. The day egg first appeared is the answer whether that was last week or
+   in March, and running this over a fortnight would print "not recorded" for the very foods a
+   family introduced first. */
+function allergenFirstTried(){
+  const first={};
+  babyEvents().forEach(e=>{
+    if(e.type!=='feed'||e.method!=='solids') return;
+    eventFoods(e).forEach(f=>{ if(f.a && (first[f.a]==null || e.time<first[f.a])) first[f.a]=e.time; });
+  });
+  return first;
+}
 function toggleSolidFood(f){
   if(!feedDraft.foods)feedDraft.foods=[];
   const i=feedDraft.foods.indexOf(f);
@@ -5257,6 +5392,11 @@ async function saveSolids(){
   const notes=foods.join(', ');
   const amt=parseFloat(feedDraft.solidAmount);
   const payload={type:'feed',method:'solids',notes,time:getWhen('when')};
+  /* The selection is kept structurally as well as in the notes string. notes stays byte for byte
+     what it was, so every older event, every timeline row and every export keeps reading the same,
+     and nothing has to be migrated. The typed line rides along with no allergen tag unless it names
+     a food Cubby knows: Cubby does not guess what is in a sentence somebody wrote. */
+  payload.foods=notesToFoods(notes);
   if(!isNaN(amt)&&amt>0){ payload.amount=amt; payload.unit=feedDraft.solidUnit||'tbsp'; }
   if(feedDraft.photoData){ const pid=uid(); await PhotoStore.set(pid,feedDraft.photoData); payload.photoId=pid; }
   commitEvent(payload);
@@ -5534,7 +5674,73 @@ function openPaleNappyNudge(){
     <button class="btn-ghost" onclick="closeSheet()">Close</button>`,'diaper');
 }
 
-/* ---------- PUMP ---------- */
+/* ---------- PUMP ----------
+   THE STASH: WHY THERE IS NO RUNNING BALANCE, AND WHY THIS IS NOT AN OVERSIGHT.
+
+   The teaching layer used to promise a stash, in the sense of a number telling whoever is doing the
+   night feed how much milk is there. The obvious build is a balance: credit every pump, debit every
+   bottle logged as breast milk, offer a manual "used some". It was considered and refused, for
+   reasons that are about honesty rather than effort.
+
+     Cubby has never seen the freezer. The balance starts at zero for every mother who already has
+     milk in it, so its very first state is wrong, and the only fix is asking her to count the bags,
+     which is the exact labour the promise said she would be spared.
+
+     The debit side is unknowable. content:'breastmilk' on a bottle does not mean the milk came from
+     a session Cubby holds: it may have been expressed at work and never logged, fed fresh straight
+     from the pump, poured away half drunk, or brought from a bag she never told us about. Each of
+     those errors is silent, and each household errs consistently in one direction, so the number
+     walks further from the freezer every week.
+
+     A drifting balance goes negative. "Stash: -240 ml" is the worst string Cubby could print for a
+     mother whose supply is the thing she is most frightened about, and clamping it at zero only
+     hides the drift.
+
+     A balance is a fuel gauge. It falls every time the baby eats. No target line is needed for a
+     number descending towards empty to read as one, and it would be read at 3am.
+
+   So what is built here is a description of the past and nothing more: what she expressed, when,
+   and how much, carried into the doctor summary and the week at a glance for the whole circle, and
+   into the shareable day recap for the person who logged it and nobody else, in her own
+   unit. The promises that outran that were cut from teach-data.js and log-guide.js in the same
+   change rather than left standing over an empty room. If a stash is ever built, it has to be HER
+   count that Cubby keeps up to date, not Cubby's arithmetic she has to trust. */
+const ML_PER_OZ=29.5735;
+function fmtPumpAmount(v,unit){ return (unit==='oz'?(Math.round(v*10)/10):Math.round(v))+' '+(unit||'ml'); }
+/* One reading of a set of events, in the unit of the most recent session, so a fortnight that mixes
+   ml and oz still adds to one number instead of a nonsense sum of two scales. The latest session is
+   found by time rather than by list position, because not every caller hands this newest-first. */
+function pumpSummary(evs){
+  const pumps=(evs||[]).filter(e=>e.type==='pump');
+  if(!pumps.length) return null;
+  let latest=pumps[0]; pumps.forEach(e=>{ if(e.time>latest.time) latest=e; });
+  /* An entry with no unit at all is legacy or imported, never something savePump wrote. It reads in
+     the household's own unit, not in ml: assuming ml in an oz household turned a 3 oz session into
+     0.1 oz, which is a wrong number on the one screen that must only ever be a record. */
+  const dflt=state.settings.unit||'ml';
+  const unit=latest.unit||dflt;
+  const inUnit=(e)=>{ const a=+e.amount||0; const u=e.unit||dflt; if(u===unit) return a; return unit==='oz'?a/ML_PER_OZ:a*ML_PER_OZ; };
+  const total=pumps.reduce((a,e)=>a+inUnit(e),0);
+  return { sessions:pumps.length, total:total, unit:unit, amount:fmtPumpAmount(total,unit) };
+}
+/* The week at a glance, in the same shape as the three bar cards above it, but as a sentence rather
+   than bars: day-to-day columns invite a comparison against yesterday, and this is the one log where
+   that comparison lands on her body. The second line is not decoration: a volume on its own reads as
+   an inventory, so it names what the number actually is. It does not name the freezer to do that,
+   because introducing the number Cubby does not have is the comparison the whole decision avoids. */
+function pumpStatCard(evs){
+  /* The same seven calendar days the three bar cards above draw, keyed by dayKey rather than by a
+     wall-clock subtraction. A rolling 168 hours under a "Last 7 days" label counts part of an eighth
+     day the bars beside it leave out, and makes the total fall by itself at whatever hour she opens
+     the tab, with nothing logged and nothing edited. That is the drift this card exists to refuse. */
+  const keys=new Set();
+  for(let i=6;i>=0;i--){ const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-i); keys.add(dayKey(d.getTime())); }
+  const p=pumpSummary((evs||[]).filter(e=>keys.has(dayKey(e.time))));
+  if(!p) return '';
+  return `<div class="stat-card"><h3>Expressed</h3><div class="csub">Last 7 days</div>
+    <div style="font-family:var(--font-display);font-size:26px;font-weight:600;line-height:1;color:var(--pump-ink);margin:12px 0 6px">${escapeHtml(p.sessions+' session'+(p.sessions===1?'':'s')+' · '+p.amount)}</div>
+    <div class="csub" style="margin-bottom:0">Just what you wrote down.</div></div>`;
+}
 let pumpDraft={amount:60,unit:'ml',side:'both'};
 function openPump(){
   // Same right-defaults rule as feeds: open on the last pump, in its own unit.
@@ -5712,7 +5918,7 @@ function openEdit(id){
     ? (e.type==='sleep' ? timeStrip('edit','Fell asleep')+timeStrip('editEnd','Woke up') : timeStrip('edit','When'))
     : '';
   const edNote=e.editedBy?`<div class="csub" style="margin:-4px 0 8px">edited by ${escapeHtml(loggerName(e.editedBy)||'someone')} · ${dayLabel(e.editedAt||e.time)}</div>`:'';
-  openSheet(`<h2>${escapeHtml(eventTitle(e))}</h2><div class="sub">${dayLabel(e.time)} at ${fmtClock(e.time)}${(e.authorId&&loggerName(e.authorId))?' · logged by '+escapeHtml(loggerName(e.authorId)):''}</div>${edNote}
+  openSheet(`<h2>${escapeHtml(eventTitle(e))}</h2><div class="sub">${dayLabel(e.time)} at ${fmtClock(e.time)}${e.imported?' · brought in from another app':((e.authorId&&loggerName(e.authorId))?' · logged by '+escapeHtml(loggerName(e.authorId)):'')}</div>${edNote}
     ${whenRows}
     ${extra}
     ${canEd?`<button class="btn-primary" style="background:var(--${m.c});--accent-ink:var(--on-${m.c},var(--on-accent))" onclick="saveEdit('${id}')">Save changes</button>
@@ -5761,7 +5967,17 @@ function saveEdit(id){
   // Trimmed, like #eDose above. Untrimmed, a note corrected down to a space stores that space, and
   // eventDetail is truthy on it, so the timeline paints a blank second line under the nappy that
   // nothing on screen explains and nothing lets her clear.
-  if($('#eNote')){ const v=$('#eNote').value.trim(); if(v!==(e.notes||'')){ chg('note',e.notes||'',v); e.notes=v; } }
+  if($('#eNote')){ const v=$('#eNote').value.trim(); if(v!==(e.notes||'')){
+    /* The structured selection has to follow the correction, or "first tried egg" outlives the edit
+       that took the egg back out. Re-derived from the corrected text by the same exact-segment rule
+       that read it in, then any tag the entry already carried for a food still named in the new
+       words is put back, so writing down what happened after the egg never erases the egg.
+       Read BEFORE e.notes is overwritten: an entry logged before payload.foods existed has its tags
+       only in the old words, and reading it after would derive them from the correction instead. */
+    const wasFoods=(e.type==='feed'&&e.method==='solids')?eventFoods(e):null;
+    chg('note',e.notes||'',v); e.notes=v;
+    if(wasFoods) e.foods=keepFoodTags(wasFoods,notesToFoods(v));
+  } }
   if($('#eWkN')||$('#eWkM')){
     const n=Math.max(0,parseInt(($('#eWkN')||{}).value,10)||0);
     // Waking minutes can never exceed the sleep itself, or the total would go negative and the day
@@ -5964,9 +6180,23 @@ function openOnboardInvite(){
   // circle-only, no "add another little one".
   if(n===0 && state.pregnancy){
     const planning=state.pregnancy.stage==='planning';
+    /* The baby path's proof line has had no pregnancy twin. savePregnancy has just turned one date
+       into a whole named, sourced antenatal plan, which is the one thing Cubby knows about her that
+       she did not type, and this sheet is the only moment in the funnel where it can be said. Empty
+       for the planning stage, which has no appointments at all, and the calendar row appears only
+       when at least one visit is genuinely still ahead of her. */
+    const pregLine=pregProofLine();
+    const apptN=pregApptsAhead().length;
     openSheet(`<h2>${planning?'They help, and your notes stay yours 🌱':'Nobody sees this until you say so 🌸'}</h2><div class="sub">${planning?'Invite your partner whenever you like. They get the preparation you share and real ways to help, and your cycle details are not on their screen.':'Invite your partner or a grandparent whenever you like. They see your pregnancy only once you add them, in Care under Your private pregnancy.'}</div>
       <div class="preg-card"><div class="pc-ico" style="background:var(--preg-soft)">👨‍👩‍👧</div><div><div class="pc-t">The person you tell gets something to do</div><div class="pc-b">Once you add them, they get their own thing to help with, so managing that is not also on you.</div></div></div>
+      ${/* 📅 and not 🩺 on these, even though the stethoscope would vary the column: screenshotted at
+            390px in Night, 🩺 renders as a thin monochrome outline at about the contrast of the
+            background and reads as a rendering fault. The vaccine branch stacks its own glyph three
+            times for the same reason. */''}
+      ${pregLine?`<div class="sub" style="margin-top:12px;text-align:left">📅 ${pregLine}</div>`:''}
       <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:14px" onclick="window.openFamily&&window.openFamily('invite')">Invite someone</button>
+      ${pregLine?`<button class="btn-ghost" onclick="closeSheet();pregGo('care')">📅 See your appointment plan</button>`:''}
+      ${apptN?`<button class="btn-ghost" onclick="exportAntenatalSchedule()">${pregApptCalendarLabel(apptN)}</button>`:''}
       ${(typeof canShowInstall==='function'&&canShowInstall())?`<div class="sub" style="margin-top:14px;font-size:13px">Use Cubby right here, or add it to your home screen to open it like an app, one tap away.</div><button class="btn-ghost" onclick="addToHomeScreen('obInstallMsg')">Add Cubby to your home screen</button><div id="obInstallMsg" class="sub" style="display:none;text-align:left"></div>`:''}
       <button class="btn-ghost" onclick="closeSheet();window.cubbyOpenGuide&&cubbyOpenGuide()">Show me what to log</button>
       <button class="btn-ghost" onclick="closeSheet()">Maybe later</button>`,'feed');
@@ -6362,7 +6592,39 @@ function openFoodPrefs(){
       </div>
       <div class="csub" style="margin-top:6px">So everyone caring for your baby can see what to watch for. Always follow your pediatrician's guidance on introducing allergens.</div>
     </div>
+    ${firstTastesPanel(b)}
     <button class="btn-primary" style="background:var(--feed);--accent-ink:var(--on-feed,var(--on-accent))" onclick="closeSheet();render()">Done</button>`,'feed');
+}
+/* Read-only, and read-only on purpose. It is a record of what happened, never a list of what is
+   outstanding: no count, no progress, no order to keep to, nothing to tick. */
+function firstTastesPanel(b){
+  const first=allergenFirstTried();
+  const tried=ALLERGENS.filter(a=>first[a.toLowerCase()]!=null).length;
+  /* Hidden before solids so a parent of a three-week-old is never shown nine allergens she has not
+     reached. It stays once anything IS recorded, even if the solids switch is turned back off,
+     because history should not vanish when a setting changes. */
+  if(!feedSolidsOn(b) && !tried) return '';
+  const wrap=(inner)=>`<div class="field"><label>First tastes</label>${inner}</div>`;
+  const line=(txt)=>`<div id="firstTastes"><div class="ft-empty csub" style="margin:-2px 0 0">${txt}</div></div>`;
+  /* Nine rows of "not yet" while the download is still catching up is a wrong answer to the one
+     question this panel exists for, and it does not correct itself while she is looking at it. */
+  if(historyPending()){ ftWaitForHistory(); return wrap(line('Still catching up on older entries.')); }
+  /* Nothing logged is not nine things outstanding. A wall of "not yet" directly under the line about
+     following your pediatrician's guidance reads as a scorecard she is losing, so before anything is
+     recorded there are no rows at all, just what the panel will hold. */
+  if(!tried) return wrap(line('Once you log a solid feed, the first time each food appeared shows up here.'));
+  const avoiding=(b.allergies||[]);
+  const rows=ALLERGENS.map(a=>{
+    const t=first[a.toLowerCase()];
+    /* A food the family has already ticked in Allergies one field above must never read as an
+       outstanding item, because the person reading this sheet is often the grandmother. */
+    const when=t?('First tried '+firstTasteDate(t)):(avoiding.includes(a.toLowerCase())?'Avoiding':'Not yet');
+    return `<div class="ft-row" style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)">
+      <span class="ft-name" style="font-weight:700">${a}</span>
+      <span class="ft-when" style="color:var(--ink-soft);font-weight:600;font-size:14px;text-align:right">${when}</span></div>`;
+  }).join('');
+  return wrap(`<div class="csub" style="margin:-2px 0 4px">The first time each of these showed up in your logs.</div>
+    <div id="firstTastes">${rows}</div>`);
 }
 function feedSolidsOn(b){ return (b.solidsStarted!=null)? b.solidsStarted : babyMonths()>=6; }
 function setFeedType(id,ft){ const b=state.babies.find(x=>x.id===id); if(b){ b.feedType=ft; persist(); } openFoodPrefs(); }
@@ -7337,6 +7599,10 @@ function openDataSheet(){
       <div class="si-ico" style="background:var(--note-soft);color:var(--note)">${I.note}</div>
       <div class="si-body"><div class="a">Export data</div><div class="b">Download everything as a JSON file, with consent</div></div>
     </div>
+    ${activeBaby()?`<div class="set-item" onclick="openImport()" style="cursor:pointer">
+      <div class="si-ico" style="background:var(--sleep-soft);color:var(--sleep)">${I.upload}</div>
+      <div class="si-body"><div class="a">Bring in old logs</div><div class="b">Import a CSV from the app you were using</div></div>
+    </div>`:''}
     <div class="set-item" onclick="openDeleteRequest()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--danger);color:#fff">${I.trash}</div>
       <div class="si-body"><div class="a" style="color:var(--danger-ink)">Delete data...</div><div class="b">Choose what to erase, both guardians must agree</div></div>
@@ -7371,6 +7637,381 @@ function exportData(){
   setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(e){} }, 4000);
   toast('Exported'+(nPhotos?(' · '+nPhotos+' photo'+(nPhotos===1?'':'s')+' included'):''));
 }
+
+/* ---------- BRING IN OLD LOGS (CSV import) ----------------------------------------------------
+   Cubby could hand a family every byte back and could not take a single row in, so a mother with
+   nine months of feeds in another app was being asked to abandon them to switch. Everyone she might
+   be leaving exports CSV, which means her history is already sitting in a file on her phone.
+
+   Deliberately NARROW, and the narrowness IS the safety property. Four shapes come across (nursing,
+   bottles, sleeps, nappies), each carrying the time it actually happened, and every row that does
+   not map is COUNTED AND NAMED on screen before anything is written. A broad importer that guesses
+   is worse than none: a blank is obviously a blank, but a feed invented at the wrong hour reads
+   back as fact, and she has no way to tell which rows the app made up. Same reason a date written
+   03/04/2026 is refused unless the file itself proves the order somewhere: guessing day-vs-month
+   moves a whole history by months, silently.
+
+   ATTRIBUTION. The proposal for this said to stamp imported rows with a synthetic "before Cubby"
+   author. That cannot ship. firestore.rules only allows an event create when
+   request.resource.data.authorId == request.auth.uid, so every imported row would be refused
+   forever; store-firebase.js un-marks a denied write so the next push retries it, and the denial
+   toast tells her Cubby "wasn't allowed to save that" and that she may have been removed from her
+   own circle. So authorId stays the real person who did the import, which is true, and a separate
+   `imported` flag carries the rest of the truth: the timeline says "brought in from another app"
+   rather than "logged by Maya", because she did not log these and the row must not claim she did.
+
+   And because this is the one place in Cubby that writes hundreds of entries on a single tap, it
+   is the one place that has to be undoable in a single tap too. */
+const IMPORT_CAP=5000;           // one tap should never write more rows than a person could review
+let importDraft=null;            // the parsed plan, held between the preview and the tap that saves it
+
+/* RFC4180 enough for the real exports: quoted cells, doubled quotes inside them, commas and
+   newlines inside quotes. The delimiter is sniffed off the header line because the same apps ship
+   semicolon files to European phones. */
+function _impRows(text){
+  text=String(text||'').replace(/^\uFEFF/,'');
+  const first=(text.split(/\r?\n/)[0]||''); let d=',';
+  [';','\t','|'].forEach(function(c){ if(first.split(c).length>first.split(d).length) d=c; });
+  const rows=[]; let row=[], cell='', q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){ cell+='"'; i++; } else q=false; } else cell+=c; continue; }
+    if(c==='"'){ q=true; continue; }
+    if(c===d){ row.push(cell); cell=''; continue; }
+    if(c==='\n'){ row.push(cell); rows.push(row); row=[]; cell=''; continue; }
+    if(c==='\r') continue;
+    cell+=c;
+  }
+  if(cell!==''||row.length){ row.push(cell); rows.push(row); }
+  return rows.filter(function(r){ return r.some(function(x){ return String(x).trim()!==''; }); });
+}
+/* Columns are found by role, first match wins, and a column already claimed is never claimed twice
+   (otherwise a file with both "Kind" and "Notes" hands the same cell to two different roles). */
+function _impCols(head){
+  const want=[['start',/^(start|time|date|datetime|when|begin|logged)/i],
+              ['end',/^(end|finish|stop|woke)/i],
+              ['type',/^(type|activity|event|kind|category|entry|what|action)/i],
+              ['dur',/(duration|length|minutes|mins|how long)/i],
+              ['amount',/(amount|quantity|volume|qty|\bml\b|\boz\b|size)/i],
+              ['extra',/(sub.?type|kind|detail|condition|side|note|comment|description|value)/i]];
+  const col={start:-1,end:-1,type:-1,dur:-1,amount:-1,extra:-1,clock:-1}, used={};
+  want.forEach(function(w){
+    for(let i=0;i<head.length;i++){ if(used[i]) continue; if(w[1].test(String(head[i]||'').trim())){ col[w[0]]=i; used[i]=1; return; } }
+  });
+  return col;
+}
+/* Plenty of exports keep the day in one column and the clock in the next one ("Date","Time"). The
+   date column wins the start role, the clock column is then claimed by no role at all, and every
+   feed in nine months would have landed at midnight while looking exactly like the truth. Which is
+   the worst shape of all: a whole history in the middle of the night, and nothing on screen saying
+   so. The clock column is found by its CELLS rather than its header, because a header cannot be
+   trusted to say which of two columns holds the hour, and a date left with no clock anywhere is
+   refused and NAMED like every other row Cubby cannot read. */
+function _impClock(s){
+  const m=String(s||'').trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp])?\.?[Mm]?\.?$/);
+  if(!m) return null;
+  let h=+m[1]; const ap=(m[4]||'').toLowerCase();
+  if(ap==='p'&&h<12) h+=12;
+  if(ap==='a'&&h===12) h=0;
+  if(h>23||+m[2]>59) return null;
+  return {h:h,mi:+m[2],se:+(m[3]||0)};
+}
+function _impHasClock(s){ return /\d{1,2}:\d{2}/.test(String(s||'')); }
+function _impClockCol(head,body,col){
+  const claimed={}; Object.keys(col).forEach(function(k){ if(col[k]>=0) claimed[col[k]]=1; });
+  let wide=0; body.forEach(function(r){ if(r.length>wide) wide=r.length; });
+  for(let i=0;i<wide;i++){
+    if(claimed[i]) continue;
+    // A duration written 0:45 looks exactly like a clock, so a column that calls itself one is never
+    // read as the hour of the day.
+    if(/(duration|length|elapsed|how long|total)/i.test(String(head[i]||''))) continue;
+    let seen=0, hit=0;
+    body.forEach(function(r){ const v=String(r[i]||'').trim(); if(!v) return; seen++; if(_impClock(v)) hit++; });
+    if(seen&&hit===seen) return i;
+  }
+  return -1;
+}
+/* Day-first or month-first is decided by the FILE, never by us. A component above 12 in one column
+   settles it for the whole file; if nothing settles it, every slash date is left behind and said
+   so, because a guess here shifts a baby's first months by weeks and looks exactly like the truth. */
+function _impDayFirst(body,ci){
+  let day=false, mon=false;
+  body.forEach(function(r){
+    const m=String(r[ci]||'').trim().match(/^(\d{1,2})[/.-](\d{1,2})[/.-]\d{4}/);
+    if(m){ if(+m[1]>12) day=true; if(+m[2]>12) mon=true; }
+  });
+  if(day&&!mon) return true;
+  if(mon&&!day) return false;
+  return null;
+}
+function _impIsSlashDate(s){ return /^\d{1,2}[/.-]\d{1,2}[/.-]\d{4}/.test(String(s||'').trim()); }
+/* Year-first strings are built in LOCAL time on purpose (the same rule the date picker follows):
+   Date.parse on a naked "2026-08-01T13:04" reads UTC in some engines, which walks every feed
+   across a day boundary for anyone west of London. A string carrying its own zone is an absolute
+   instant already, so that one is handed to Date.parse untouched. */
+function _impTime(s,dayFirst,clk){
+  s=String(s||'').trim(); if(!s) return null;
+  let m=s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[T ](\d{1,2}):(\d{2})(?::(\d{2}))?(?:[.,]\d+)?)?\s*(Z|[+-]\d{2}:?\d{2})?$/);
+  if(m){
+    if(m[7]){ const p=Date.parse(s.replace(' ','T')); return isNaN(p)?null:p; }
+    if(m[4]==null&&!clk) return null;   // a day with no hour is not a time; midnight is never invented
+    const t=(m[4]!=null?new Date(+m[1],+m[2]-1,+m[3],+m[4],+(m[5]||0),+(m[6]||0))
+                       :new Date(+m[1],+m[2]-1,+m[3],clk.h,clk.mi,clk.se)).getTime();
+    return isNaN(t)?null:t;
+  }
+  m=s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})(?:[T, ]+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:[.,]\d+)?)?\s*([AaPp])?\.?[Mm]?\.?$/);
+  if(m){
+    if(dayFirst==null) return null;
+    const dd=dayFirst?+m[1]:+m[2], mo=dayFirst?+m[2]:+m[1];
+    if(dd<1||dd>31||mo<1||mo>12) return null;
+    if(m[4]==null&&!clk) return null;
+    let h,mi,se;
+    if(m[4]!=null){ h=+m[4]; mi=+(m[5]||0); se=+(m[6]||0);
+      const ap=(m[7]||'').toLowerCase();
+      if(ap==='p'&&h<12) h+=12;
+      if(ap==='a'&&h===12) h=0;
+    } else { h=clk.h; mi=clk.mi; se=clk.se; }
+    const t=new Date(+m[3],mo-1,dd,h,mi,se).getTime();
+    return isNaN(t)?null:t;
+  }
+  return null;
+}
+/* h:mm:ss, or a bare number meaning minutes. Nothing else: "1h20" and "20m" are guesses about the
+   unit, and a nursing session recorded as 20 hours is not a small mistake. */
+function _impDur(s){
+  s=String(s||'').trim(); if(!s) return 0;
+  let m=s.match(/^(\d+):(\d{2}):(\d{2})$/); if(m) return ((+m[1])*3600+(+m[2])*60+(+m[3]))*1000;
+  m=s.match(/^(\d+(?:[.,]\d+)?)$/); if(m) return Math.round(parseFloat(m[1].replace(',','.'))*60000);
+  return 0;
+}
+function _impAmt(cell,head){
+  const s=String(cell||'').trim(); const m=s.match(/(\d+(?:[.,]\d+)?)/); if(!m) return null;
+  const n=parseFloat(m[1].replace(',','.')); if(!(n>0)) return null;
+  return {n:Math.round(n*10)/10, u:(/oz/i.test(s)||/oz/i.test(String(head||'')))?'oz':'ml'};
+}
+function _impKind(t){
+  t=String(t||'').toLowerCase();
+  if(/diaper|nappy/.test(t)) return 'diaper';
+  if(/sleep|\bnap\b/.test(t)) return 'sleep';
+  if(/bottle|formula|expressed/.test(t)) return 'bottle';
+  if(/nurs|breast|latch/.test(t)) return 'breast';
+  if(/feed|milk/.test(t)) return 'feed';
+  return null;
+}
+function _impNappy(t){
+  t=String(t||'').toLowerCase();
+  const wet=/\bwet\b|pee|urine|wee\b/.test(t), dirty=/dirty|poo|\bbm\b|soil|stool/.test(t);
+  if(/\bboth\b|mixed/.test(t)||(wet&&dirty)) return 'both';
+  if(dirty) return 'dirty';
+  if(wet) return 'wet';
+  if(/\bdry\b|clean/.test(t)) return 'dry';
+  return null;
+}
+/* Type plus the minute is enough to recognise the same row again. Deliberately not the whole event:
+   she re-exports from the old app a week later and imports the overlap again, and the second run
+   has to say "already in Cubby" rather than laying a duplicate feed beside the first one. */
+function _impKey(e){ return [e.type,(e.method||e.kind||''),Math.floor(e.time/60000)].join('|'); }
+
+/* Pure, so the whole mapping can be exercised without a file picker. Returns what WOULD be written
+   plus every reason a row was left out; nothing here touches state. */
+function importScan(text){
+  const plan={total:0,take:[],skip:{},names:{},cap:false};
+  const rows=_impRows(text);
+  if(rows.length<2){ plan.empty=true; return plan; }
+  const head=rows[0].map(function(h){ return String(h||'').trim(); });
+  const col=_impCols(head); plan.col=col;
+  if(col.start<0||col.type<0){ plan.noCols=true; return plan; }
+  let body=rows.slice(1);
+  if(body.length>IMPORT_CAP){ plan.cap=body.length; body=body.slice(0,IMPORT_CAP); }
+  plan.total=body.length;
+  col.clock=_impClockCol(head,body,col);
+  const dayFirst=_impDayFirst(body,col.start); plan.dayFirst=dayFirst;
+  const b=activeBaby(), bid=b?b.id:null;
+  const seen={};
+  (state.events||[]).forEach(function(e){ if(e&&e.time&&(!bid||e.babyId===bid)) seen[_impKey(e)]=1; });
+  /* Each reason is stored as "one|many" so the line on screen reads as a sentence rather than as
+     a count glued to a fragment. She is being told what stayed behind, so it has to be readable. */
+  const bump=function(why){ plan.skip[why]=(plan.skip[why]||0)+1; };
+  const cut=now()+3600000;
+  body.forEach(function(r){
+    const typeTxt=String(r[col.type]||'').trim();
+    const extraTxt=col.extra>=0?String(r[col.extra]||'').trim():'';
+    const rowTxt=typeTxt+' '+extraTxt;
+    /* The TYPE cell decides what a row is. These two cells used to be read as one string, and
+       because nappy is tested first, an ordinary note beside a nursing session ("dirty nappy right
+       after") turned the feed into a nappy change that never happened, at the feed's own minute.
+       The note only gets to speak when the type cell said nothing at all, or when it said "feed"
+       without saying which kind. */
+    let kind=_impKind(typeTxt);
+    if(!kind) kind=_impKind(rowTxt);
+    else if(kind==='feed'&&extraTxt){ const ref=_impKind(extraTxt); if(ref==='breast'||ref==='bottle') kind=ref; }
+    if(!kind){ bump('row that is not a feed, sleep or nappy|rows that are not feeds, sleeps or nappies'); if(typeTxt) plan.names[typeTxt]=(plan.names[typeTxt]||0)+1; return; }
+    const raw=String(r[col.start]||'').trim();
+    const clk=col.clock>=0?_impClock(r[col.clock]):null;
+    const t=_impTime(raw,dayFirst,clk);
+    if(t==null){
+      if(dayFirst==null&&_impIsSlashDate(raw)){ plan.ambiguous=true; bump('row dated like 03/04/2026, where the file never says which number is the day|rows dated like 03/04/2026, where the file never says which number is the day'); }
+      else if(!_impHasClock(raw)&&_impTime(raw,dayFirst,{h:0,mi:0,se:0})!=null) bump('row where the file gave the day but not the time|rows where the file gave the day but not the time');
+      else bump('row with no date Cubby could read|rows with no date Cubby could read');
+      return;
+    }
+    if(t>cut){ bump('row dated in the future|rows dated in the future'); return; }
+    let ev=null;
+    if(kind==='sleep'){
+      let end=col.end>=0?_impTime(r[col.end],dayFirst):null;
+      if(end==null){ const d=col.dur>=0?_impDur(r[col.dur]):0; if(d>0) end=t+d; }
+      if(end==null||end<=t){ bump('sleep with no end time Cubby could read|sleeps with no end time Cubby could read'); return; }
+      if(end-t>86400000){ bump('sleep longer than a day|sleeps longer than a day'); return; }
+      ev={type:'sleep',time:t,end:end};
+    } else if(kind==='diaper'){
+      const k=_impNappy(rowTxt);
+      if(!k){ bump('nappy the file never says was wet or dirty|nappies the file never says were wet or dirty'); return; }
+      ev={type:'diaper',kind:k,time:t};
+    } else if(kind==='breast'){
+      ev={type:'feed',method:'breast',time:t,dur:(col.dur>=0?_impDur(r[col.dur]):0)};
+    } else if(kind==='bottle'){
+      ev={type:'feed',method:'bottle',time:t};
+      const a=col.amount>=0?_impAmt(r[col.amount],head[col.amount]):null;
+      if(a){ ev.amount=a.n; ev.unit=a.u; }
+    } else {
+      // The file said "feed" and never said which kind. It comes in as a plain feed, because the
+      // hour it happened is the part she needs back, and inventing a method would be a lie.
+      ev={type:'feed',time:t};
+    }
+    const k=_impKey(ev);
+    if(seen[k]){ bump('row already in Cubby|rows already in Cubby'); return; }
+    seen[k]=1; plan.take.push(ev);
+  });
+  return plan;
+}
+function importCounts(plan){
+  const c={breast:0,bottle:0,feed:0,sleep:0,diaper:0};
+  (plan.take||[]).forEach(function(e){
+    if(e.type==='sleep') c.sleep++;
+    else if(e.type==='diaper') c.diaper++;
+    else if(e.method==='breast') c.breast++;
+    else if(e.method==='bottle') c.bottle++;
+    else c.feed++;
+  });
+  return c;
+}
+/* The imported rows this person is looking at AND is allowed to take back out. Scoped to the baby,
+   because a twin's nine months must not be destroyed from her sister's screen, and scoped by
+   canEditEvent, because firestore.rules only accepts a delete from the owner or the row's own
+   author: a caregiver clearing the owner's import would see it vanish locally and then be refused
+   on every push, landing her in the "Cubby wasn't allowed to save that" retry loop. */
+function importedMine(){
+  const b=activeBaby(); if(!b) return [];
+  return (state.events||[]).filter(function(e){ return e&&e.imported&&!e.deleted&&e.babyId===b.id&&canEditEvent(e); });
+}
+function openImport(){
+  const b=activeBaby();
+  const already=importedMine().length;
+  const pick=b?`<input type="file" id="impFile" accept=".csv,text/csv,text/plain" style="display:none" onchange="importChoose(this)">
+    <div class="add-row" id="impPick" onclick="document.getElementById('impFile').click()">${I.upload} Choose a CSV file</div>
+    <div class="sub" style="margin-top:-4px">Feeds, sleeps and nappies come across with the times they happened, on ${escapeHtml(b.name||'your baby')}'s timeline. Anything else stays behind, and Cubby tells you what stayed behind and why.</div>`
+    :`<div class="preg-disclaim">This brings across feeds, sleeps and nappies, so it waits until there is a baby on the record.</div>`;
+  openSheet(`<h2>Bring in old logs</h2>
+    <div class="sub">Export a CSV from the app you were using, then choose it here. Cubby shows you what it found and waits for your yes before saving anything.</div>
+    ${pick}
+    ${already?`<div class="set-label">Brought in already</div>
+    <div class="sub" style="margin-bottom:12px">${already} entr${already===1?'y':'ies'} on ${escapeHtml((b&&b.name)||'this baby')}'s timeline came from another app. They are marked that way, so nobody here is shown as having logged them.</div>
+    <button class="btn-ghost btn-danger" onclick="importRemoveAll()">Remove everything I brought in</button>`:''}`,'sleep');
+}
+function importChoose(inp){
+  const f=inp&&inp.files&&inp.files[0]; if(!f) return;
+  if(f.size>4194304){ toast('That file is too big for Cubby to read'); return; }
+  const r=new FileReader();
+  r.onerror=function(){ toast('Cubby could not read that file'); };
+  r.onload=function(){ try{ importShowPlan(String(r.result||''),f.name); }catch(err){ toast('Cubby could not read that file'); } };
+  r.readAsText(f);
+}
+/* The preview is the whole promise: a plain count of what is coming and a plain count of what is
+   not, with the reason beside it, and no Save button until she has seen both. */
+function importShowPlan(text,fileName){
+  const plan=importScan(text); importDraft=plan;
+  const b=activeBaby();
+  if(plan.empty||plan.noCols){
+    openSheet(`<h2>Cubby could not read that file</h2>
+      <div class="sub">${escapeHtml(fileName||'That file')} does not have a row of column names with a time and a type in it, so Cubby has nothing safe to go on.</div>
+      <div class="sub">Most apps offer more than one export. The one you want is the plain CSV of your entries.</div>
+      <button class="btn-ghost" onclick="openImport()">Choose a different file</button>`,'sleep');
+    return;
+  }
+  const c=importCounts(plan);
+  const line=function(cn,ico,t,s){ return `<div class="log-list-item"><div class="lli-ico" style="background:var(--${cn}-soft);color:var(--${cn})">${ico}</div>
+    <div class="lli-body"><div class="lli-t">${t}</div><div class="lli-s">${s}</div></div></div>`; };
+  let coming='';
+  if(c.breast) coming+=line('feed',I.heart,c.breast+' nursing feed'+(c.breast===1?'':'s'),'with the length, where the file had one');
+  if(c.bottle) coming+=line('feed',I.bottle,c.bottle+' bottle'+(c.bottle===1?'':'s'),'with the amount, where the file had one');
+  if(c.feed) coming+=line('feed',I.feed,c.feed+' feed'+(c.feed===1?'':'s'),'the file did not say breast or bottle, so neither does Cubby');
+  if(c.sleep) coming+=line('sleep',I.sleep,c.sleep+' sleep'+(c.sleep===1?'':'s'),'start and end as they were recorded');
+  if(c.diaper) coming+=line('diaper',I.diaper,c.diaper+' napp'+(c.diaper===1?'y':'ies'),'wet, dirty, both or dry as the file had it');
+  const kept=Object.keys(plan.names).sort(function(a,z){ return plan.names[z]-plan.names[a]; });
+  const names=kept.slice(0,4);
+  const andList=function(a){ return a.length<2?(a[0]||''):(a.slice(0,-1).join(', ')+' and '+a[a.length-1]); };
+  let left='';
+  Object.keys(plan.skip).forEach(function(why){
+    const n=plan.skip[why], word=why.split('|')[n===1?0:1];
+    // Naming them matters most here: "4 rows that are not feeds, sleeps or nappies" tells her
+    // nothing, and "those were Pumping and Tummy time" tells her whether she has lost anything.
+    const extra=(names.length&&why.indexOf('feed, sleep or nappy')>=0)
+      ? ' Those were '+escapeHtml(kept.length>names.length?andList(names.concat(['more'])):andList(names))+'.' : '';
+    left+=`<div class="sub" style="margin-bottom:8px">${n} ${escapeHtml(word)}.${extra}</div>`;
+  });
+  /* The one refusal she can actually do something about. Without this she is told the dates were the
+     problem and offered nothing but "choose a different file", which cannot help: the same app
+     exports the same format again. */
+  if(plan.ambiguous) left+=`<div class="sub" style="margin-bottom:8px">If your old app can export dates as ${new Date(now()).getFullYear()}-03-04, that export will come straight in. Cubby will not guess which number is the day, because guessing moves a whole history by months.</div>`;
+  if(plan.cap) left+=`<div class="sub" style="margin-bottom:8px">Cubby read the first ${IMPORT_CAP} rows of ${plan.cap}. Bring the rest in with a second file.</div>`;
+  const n=plan.take.length;
+  /* The span, with real clock times, is the only thing on this screen that can show her a file has
+     been read at the wrong hour before it is saved. Counts alone cannot: nine months landing at
+     midnight looks identical to nine months landing correctly. */
+  let span='';
+  if(n){
+    const ts=plan.take.map(function(e){ return e.time; });
+    const a=Math.min.apply(null,ts), z=Math.max.apply(null,ts), yr=new Date(now()).getFullYear();
+    const when=function(t){ const d=new Date(t); return dayLabel(t)+(d.getFullYear()!==yr?(' '+d.getFullYear()):'')+' at '+fmtClock(t); };
+    span=`<div class="sub" style="margin:10px 0 0">${a===z?('That one is '+escapeHtml(when(a))+'.'):('The earliest is '+escapeHtml(when(a))+'. The latest is '+escapeHtml(when(z))+'.')}</div>`;
+  }
+  openSheet(`<h2>What Cubby found</h2>
+    <div class="sub">${escapeHtml(fileName||'That file')} held ${plan.total} row${plan.total===1?'':'s'}.</div>
+    ${coming?`<div class="set-label">Coming in</div>${coming}${span}`:''}
+    ${left?`<div class="set-label">Staying behind</div>${left}`:''}
+    ${n?`<div class="sub" style="margin:14px 0 12px">These go on ${escapeHtml((b&&b.name)||'your baby')}'s timeline at the times they happened in your old app, marked as brought in. You can take them all back out again in one tap.</div>
+    <button class="btn-primary" style="background:var(--sleep);--accent-ink:var(--on-sleep,var(--on-accent))" onclick="importCommit()">Add ${n} entr${n===1?'y':'ies'}</button>`
+    :`<div class="sub" style="margin:14px 0 12px">Nothing in this file was a feed, sleep or nappy Cubby could read, so nothing was saved.</div>`}
+    <button class="btn-ghost" onclick="openImport()">Choose a different file</button>`,'sleep');
+}
+function importCommit(){
+  const plan=importDraft;
+  if(!plan||!plan.take||!plan.take.length){ toast('Nothing to bring in'); return; }
+  const b=activeBaby(); if(!b){ toast('Add a baby first'); return; }
+  const me=myUid(), at=now(), n=plan.take.length;
+  plan.take.forEach(function(ev){
+    state.events.push(Object.assign({},ev,{id:uid(),babyId:b.id,authorId:me,imported:true,importedAt:at}));
+  });
+  importDraft=null;
+  persist(); closeSheet(); render();
+  toast(n+' entr'+(n===1?'y':'ies')+' brought in');
+}
+function importRemoveAll(){
+  const b=activeBaby(), rows=importedMine(), n=rows.length;
+  if(!n){ toast('Nothing here came from another app'); return; }
+  const ids={}; rows.forEach(function(e){ ids[e.id]=1; });
+  confirmSheet({title:'Take these back out?',
+    body:'This removes the '+n+' entr'+(n===1?'y':'ies')+' you brought in for '+((b&&b.name)||'this baby')+'. Everything logged in Cubby stays exactly as it is.',
+    confirmLabel:'Remove them', cancelLabel:'Keep them', danger:true,
+    onConfirm:function(){
+      // Hard removal, not Recently deleted: a bulk import taken back is a slip being undone, and
+      // filling the trash with five hundred rows would bury the entries she meant to keep there.
+      // Only the ids counted on the sheet, so the number in the confirm is the number that goes.
+      state.events=(state.events||[]).filter(function(e){ return !(e&&ids[e.id]); });
+      persist(); closeSheet(); render(); toast(n+' entr'+(n===1?'y':'ies')+' removed');
+    }});
+}
+
 /* Account deletion (App Store 5.1.1(v)). Deliberately NOT routed through requestConsent(): the
    guardian-consent flow is right for erasing the household's shared story, but a person's own
    account is theirs alone, and a second person's approval would be an obstacle Apple rejects. */
@@ -7856,6 +8497,233 @@ const PREG_MORE_COUNTRIES = [
   'au','nz','pg','fj','sb'
 ];
 var _pregDN=null;
+/* Restored at integration, item p15.
+   These five sat inside conflict hunks that ALSO carried a second implementation of p8's
+   appointment-calendar surface. p15 was written before p8 shipped, so both defined
+   addApptToCalendar and the later copy silently won. Resolving those hunks to p8's live
+   version was right, and it took these with it: nothing else in the file provides them,
+   and pregProofLine was left CALLED at :6187 with no definition anywhere.
+   Their original comments were lost with the hunks rather than reconstructed badly. */
+function pregSchedulePhrase(code){
+  const sk=pregCountryKey(code);
+  if(sk==='custom') return '';
+  if(sk==='generic') return 'the WHO-aligned schedule for '+pregCountryName(code);
+  const l=(window.PREG&&PREG.antenatal[sk]&&PREG.antenatal[sk].label)||'';
+  return l?('the '+l+' schedule'):'';
+}
+
+function pregApptsAhead(p){
+  p=p||state.pregnancy;
+  if(!p||p.stage==='planning'||p.bornBabyId) return [];
+  return (p.appts||[]).filter(a=>a&&!a.done)
+    .map(a=>({a:a,t:pregApptDate(a,p)}))
+    .filter(x=>x.t!=null&&x.t>now())
+    .sort((x,y)=>x.t-y.t);
+}
+
+function pregApptsStillArriving(){ const r=pregApptIcsRec(); return !!r && (r.until==null || r.until>now()); }
+/* Dates still arriving that no screen in the app can reach any more: after a birth, after a loss, or
+   when the record belongs to a pregnancy that is not this one. */
+function pregApptsStranded(){
+  if(!pregApptsStillArriving()) return false;
+  return !(state.pregnancy && pregApptIcsMine() && pregApptsAhead().length);
+}
+
+function pregProofLine(p){
+  p=p||state.pregnancy;
+  if(!p||p.stage==='planning'||p.bornBabyId) return '';
+  try{
+    const appts=(p.appts||[]).slice().sort((a,b)=>a.week-b.week);
+    if(!appts.length) return '';
+    const where=pregSchedulePhrase(p.country);
+    const first=appts[0].week, last=appts[appts.length-1].week;
+    /* "waiting" is a claim about the future, and it stops being true the day her last visit goes by.
+       At week 41 with every visit behind her the line was still announcing a plan that was waiting,
+       three rows above an export button that had correctly taken itself away. The plan really is
+       sitting in Care at every week, so say that instead and let "already" carry the newness. */
+    const ahead=pregApptsAhead(p).length;
+    const span=(first===last)?`, at week ${first}`:`, from week ${first} to week ${last}`;
+    return `Your antenatal plan is ${ahead?'already ':''}in Care: ${appts.length} appointment${appts.length===1?'':'s'}${span}${where?', based on '+escapeHtml(where):''}.`;
+  }catch(e){ return ''; }
+}
+
+function pregApptCalendarLabel(n){
+  return '📅 Put my '+(n===1?'next appointment':'appointments')+' in my calendar';
+}
+
+/* Restored at integration, item p15.
+   p15 and p8 both built an appointment-calendar surface, because p15 was written before p8
+   shipped. They both defined addApptToCalendar, and the later copy silently won. Resolving
+   those hunks to p8's live version was right for THAT function and too blunt for the rest:
+   these fourteen are p15's own, nothing else provides them, and without them the file called
+   pregIcsStranded and pregApptCalendarRow with no definitions and every browser gate died on
+   a ReferenceError. Original comments went with the hunks rather than be reconstructed badly. */
+function _icsDay(t,plus){
+  const d=new Date(t); if(plus) d.setDate(d.getDate()+plus);
+  const p=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate());
+}
+
+/* ONE UID PER APPOINTMENT, ACROSS BOTH DOORS. p8's single-visit button and p15's whole-plan export
+   were written independently and each got its own path right, with a stable uid and a SEQUENCE. They
+   disagreed with EACH OTHER: cubby-appt-<id> against cubby-preg-appt-<id>, so a woman who tapped
+   "add this visit" and then "put my appointments in my calendar" got two entries for one scan, and
+   taking one off left the other arriving. p8's scheme wins because it is already in real calendars;
+   changing it now would strand every entry already published under it. The id sanitising stays: a
+   uid() is alphanumeric today, but a UID is a wire format and must not carry whatever an id becomes. */
+function pregApptUid(id){ return apptIcsUidFor(String(id).replace(/[^A-Za-z0-9_-]+/g,'')); }
+
+function pregApptDate(a,p){
+  p=p||state.pregnancy; if(!p||!a) return null;
+  return p.dueDate ? (p.dueDate-(40-a.week)*PREG_MS_WEEK) : (now()+(a.week-pregWeek())*PREG_MS_WEEK);
+}
+
+function pregApptIcsKey(){ return 'cubby-preg-appts:'+quickUid(); }
+
+function pregApptIcsRec(){ try{ return JSON.parse(localStorage.getItem(pregApptIcsKey())||'null'); }catch(e){ return null; } }
+
+function pregApptIcsSet(r){ try{ if(r) localStorage.setItem(pregApptIcsKey(), JSON.stringify(r)); else localStorage.removeItem(pregApptIcsKey()); }catch(e){} }
+
+function pregApptIcsMine(){ const r=pregApptIcsRec(), p=state.pregnancy; return (r&&p&&r.pid&&r.pid===p.id)?r:null; }
+
+function pregApptIcsText(rows,seq,gone){
+  const stamp=_icsStamp(new Date());
+  const p=state.pregnancy||{}, sk=pregCountryKey(p.country);
+  const where=(sk!=='custom'&&window.PREG&&PREG.antenatal[sk]&&PREG.antenatal[sk].label)||'';
+  const L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Cubby//Pregnancy//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH'];
+  (rows||[]).forEach(function(r){
+    const a=r.a, title=a.title||'Antenatal appointment';
+    const d0=new Date(r.t); d0.setHours(0,0,0,0);
+    L.push('BEGIN:VEVENT',
+      'UID:'+pregApptUid(a.id),
+      'SEQUENCE:'+seq,
+      'DTSTAMP:'+stamp,
+      // All-day, because the week is known and the hour is the clinic's to set. Pretending to know
+      // a time would be the same class of untruth as the vaccine file inventing one.
+      'DTSTART;VALUE=DATE:'+_icsDay(r.t),
+      'DTEND;VALUE=DATE:'+_icsDay(r.t,1),
+      'SUMMARY:'+_icsText(title),
+      // "Confirm", and the same verb in the alarm below. On most national plans the midwife books
+      // these, so "book the exact date" handed her a chore she does not have, eleven times over.
+      'DESCRIPTION:'+_icsText('Around week '+a.week+(where?', on the '+where+' plan':'')+'. Worked out from your due date, so treat it as a guide and confirm the exact date with your clinic.'+(a.note?' '+a.note:'')+' https://little-cubby.com/app/?tab=care'));
+    if(d0.getTime()-39*3600000>now())
+      L.push('BEGIN:VALARM','TRIGGER:-PT39H','ACTION:DISPLAY','DESCRIPTION:'+_icsText(title+' is coming up. Confirm the date with your clinic.'),'END:VALARM');
+    L.push('END:VEVENT');
+  });
+  (gone||[]).forEach(function(k){
+    if(!k||!k.id) return;
+    L.push('BEGIN:VEVENT','UID:'+pregApptUid(k.id),'SEQUENCE:'+seq,'DTSTAMP:'+stamp);
+    if(k.d) L.push('DTSTART;VALUE=DATE:'+k.d);
+    // A neutral summary on the way out. The cancel is matched on the UID so nothing is lost by it,
+    // and it keeps the name of a visit from a pregnancy that may have ended out of her file.
+    L.push('STATUS:CANCELLED','SUMMARY:'+_icsText('Antenatal appointment'),'END:VEVENT');
+  });
+  L.push('END:VCALENDAR');
+  return L.join('\r\n');
+}
+
+function pregIcsStranded(){ return pregWeeksStranded()||pregApptsStranded(); }
+
+function pregStrandedLabel(){
+  const w=pregWeeksStranded(), a=pregApptsStranded();
+  // Kept to the length of the shipped week-marker row, which fits a 350px add-row on one line. The
+  // both-case says "pregnancy dates" rather than naming each: the sheet it opens names them both,
+  // and a 58-character row wraps to two lines and a centred orphan.
+  if(w&&a) return 'Take my pregnancy dates off my calendar';
+  return a?'Take my appointments off my calendar':'Take my week markers off my calendar';
+}
+
+function pregApptCalendarRow(){
+  const n=pregApptsAhead().length;
+  if(!n) return '';
+  return `<div class="add-row cal-row" onclick="openApptsCalendar()">${pregApptCalendarLabel(n)}</div>`;
+}
+
+function exportAntenatalSchedule(fromSheet){
+  const p=state.pregnancy; if(!p) return;
+  const rows=pregApptsAhead();
+  if(!rows.length){ toast('Nothing coming up to add'); return; }
+  const old=pregApptIcsRec(), seq=((old&&old.seq)||0)+1;
+  const keys=rows.map(r=>({id:r.a.id,d:_icsDay(r.t)}));
+  /* CANCEL IS NOT THE OPPOSITE OF OFFER. pregApptsAhead() drops a visit once its estimated date has
+     passed, which is the right guard for offering (never put a lived date in her calendar) and the
+     wrong one for cancelling. The 20-week scan is booked anywhere in weeks 18 to 21, this file's own
+     words tell her to confirm the date with her clinic, and Home is still calling it her next
+     appointment. Cancelling on the estimate deleted a scan she had not been to, out of her calendar,
+     on the morning it was due. So only what she has actually dealt with goes out cancelled: ticked
+     off, or gone from the plan. A visit still on the plan and still not done is held: kept out of the
+     cancel list, and kept in the record so the take-back door still knows its name. */
+  const live={}; (p.appts||[]).forEach(a=>{ if(a&&!a.done) live[a.id]=1; });
+  const dropped=((old&&old.keys)||[]).filter(k=>k&&k.id&&!keys.some(x=>x.id===k.id));
+  const held=dropped.filter(k=>live[k.id]);
+  const gone=dropped.filter(k=>!live[k.id]);
+  const last=rows[rows.length-1].t;
+  try{
+    const url=URL.createObjectURL(new Blob([pregApptIcsText(rows,seq,gone)],{type:'text/calendar'}));
+    // Nothing has been added yet: a file was saved and she still has to open it. At minute two of
+    // setup a mother who has never seen an .ics would believe otherwise, which is the correction the
+    // vaccine file already carries.
+    saveFile(url,'cubby-antenatal-appointments.ics', isNativeApp()?'Your appointments are ready 📅':'Saved. Open it to add the visits to your calendar 📅');
+    /* Recorded only once the file is genuinely in her hands. Writing it first meant a native save
+       that threw left Cubby believing a calendar held entries it had never seen. */
+    pregApptIcsSet({seq:seq, keys:keys.concat(held), until:Math.max((old&&old.until)||0, last+86400000), pid:p.id||null, at:now()});
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+    // Only when this was tapped from its own sheet. From the onboarding sheet a close would take the
+    // rest of setup down with it, and a render would pull the sheet out from under her.
+    if(fromSheet){ closeSheet(); render(); }
+  }catch(e){ toast('Could not add to calendar'); }
+}
+
+function cancelPregAppts(){
+  const rec=pregApptIcsRec(); if(!rec) return;
+  const seq=(rec.seq||0)+1;
+  const ics=pregApptIcsText([],seq,rec.keys||[]).replace('METHOD:PUBLISH','METHOD:CANCEL');
+  try{
+    const url=URL.createObjectURL(new Blob([ics],{type:'text/calendar'}));
+    // Honest about the limit, same as the week markers: this is a request to her calendar app, not
+    // something Cubby can reach in and enforce. And when the other half is still arriving, a flat
+    // "Removed." is only half true: it has to say which half, or she has no reason to look again.
+    saveFile(url,'cubby-antenatal-appointments-off.ics',
+      (typeof pregWeeksStillArriving==='function'&&pregWeeksStillArriving())
+        ? 'Your appointment dates are off. Your week markers are still coming, and you can take those off too.'
+        : 'Removed. If they are still showing, delete them in your Calendar app.');
+    /* Forgotten only after the file is hers. Clearing first meant a save that threw took the door
+       away and left the dates behind it, with nothing left that knew their names. */
+    pregApptIcsSet(null);
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+    closeSheet(); render();
+  }catch(e){ toast('Could not remove them'); }
+}
+
+function openApptsCalendar(){
+  const rows=pregApptsAhead(), rec=pregApptIcsMine();
+  if(!rows.length&&!rec){ toast('Nothing coming up to add'); return; }
+  const first=rows[0];
+  /* Her partner reads every one of these too. On his screen they are HER appointments in HIS
+     calendar: he has no due date and no clinic, so "worked out from your due date" is a line that is
+     simply false where he is standing, and "nobody else is told" reads as a promise about her that
+     Cubby cannot make on his behalf. The Care tab three rows above already forks this way. */
+  const mine=pregJourneyIsOwner();
+  const carrier=carrierFirstName();
+  const her=carrier?escapeHtml(carrier):'she';
+  const herPoss=carrier?escapeHtml(carrier)+"'s":'her';
+  /* The entries carry the visit's own name into whichever calendar she picks, and that is often a
+     work or family one. Cubby sharing nothing is true and is not the whole outcome, so say both. */
+  const priv=mine
+    ? 'One all-day entry for each visit still ahead, in the calendar you already look at. Cubby shares nothing, and each entry carries the visit name, so pick a calendar only you see.'
+    : `One all-day entry for each visit still ahead, in your own calendar. Cubby shares nothing, ${her} is not told, and each entry carries the visit name, so pick a calendar only you see.`;
+  const from=mine
+    ? 'Dates are worked out from your due date, so each entry says to check it with your clinic.'
+    : `Dates are worked out from ${herPoss} due date, so each entry says to check it with the clinic.`;
+  openSheet(`<h2>${mine?'Your':herPoss} appointments in your calendar</h2>
+    <div class="sub">${priv}</div>
+    ${first?`<div class="preg-card"><div class="pc-ico">📅</div><div style="flex:1;min-width:0"><div class="pc-t">${escapeHtml(first.a.title||'Antenatal appointment')}</div><div class="pc-b">First of ${rows.length}, around ${escapeHtml(new Date(first.t).toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'}))}. ${from}</div></div></div>`:''}
+    ${rows.length?`<button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent))" onclick="exportAntenatalSchedule(1)">${rec?'Add them again':'Add '+rows.length+' appointment'+(rows.length===1?'':'s')}</button>`:''}
+    ${rec?`<div class="sub" style="margin:10px 0 4px">You added these before. Adding them again updates the same entries rather than making new ones, and takes off anything you have since ticked off or removed.</div>
+    <button class="btn-ghost btn-danger" onclick="cancelPregAppts()">Take these off my calendar</button>`:''}
+    <button class="btn-ghost" onclick="closeSheet()">Not now</button>`,'preg');
+}
+
 function pregCountryName(code){
   if(!code||code==='custom') return 'Custom plan';
   if(code==='generic') return 'General (WHO-aligned)';
@@ -8299,8 +9167,8 @@ function pregWeeksCalendarRow(){
   /* Its own row whenever markers are still arriving and the sheet above cannot reach them: the week
      count ran out, the due date moved, or the record belongs to a pregnancy that is no longer this
      one. Without it the record is stranded and the markers keep coming with nothing to stop them. */
-  const off=pregWeeksStranded()
-    ? `<div class="add-row" onclick="openWeeksTakeBack()">📅 Take my week markers off my calendar</div>` : '';
+  const off=pregIcsStranded()
+    ? `<div class="add-row" onclick="openWeeksTakeBack()">📅 ${pregStrandedLabel()}</div>` : '';
   if(!ahead) return off;
   return `<div class="add-row" onclick="openWeeksCalendar()">📅 ${mine?'Update my weeks in my calendar':'Put my weeks in my calendar'}</div>`+off;
 }
@@ -8309,20 +9177,42 @@ function pregWeeksCalendarRow(){
    moment "Week 39 · about the size of a small watermelon" started landing in the calendar of a
    mother who had already given birth. It takes itself down once the last marker has passed. */
 function pregWeeksLeftAlert(){
-  if(!pregWeeksStranded()) return '';
+  if(!pregIcsStranded()) return '';
+  // The card names what is actually still arriving. A mother home with her baby whose calendar holds
+  // antenatal dates and no week markers must not be told her weeks are the problem.
+  const w=pregWeeksStranded(), a=pregApptsStranded();
+  const t=(w&&a)?'Pregnancy dates still in your calendar':(a?'Appointment dates still in your calendar':'Week markers still in your calendar');
+  const s=(w&&a)?'Your pregnancy weeks and your antenatal dates are still set to show. Take them off whenever you like.'
+    :(a?'Your antenatal appointment dates are still set to show, with an alert on each one. Take them off whenever you like.'
+       :'Your pregnancy weeks are still set to show, one a week. Take them off whenever you like.');
   return `<div class="alert-pill" style="border-color:var(--preg)">
     <div class="ap-ico" style="background:var(--preg-soft);font-size:18px">📅</div>
-    <div class="ap-body"><div class="ap-t">Week markers still in your calendar</div><div class="ap-s">Your pregnancy weeks are still set to show, one a week. Take them off whenever you like.</div></div>
+    <div class="ap-body"><div class="ap-t">${t}</div><div class="ap-s">${s}</div></div>
     <button onclick="openWeeksTakeBack()">Take off</button></div>`;
 }
 /* The way out, wherever she is standing. It is a sheet and not a one-tap row because taking them off
    cannot be undone from inside Cubby: the record goes and with it the only list of what was written.
    Offered, never done for her, and never pushed: some people want to keep them. */
 function openWeeksTakeBack(){
-  if(!pregWeeksIcsRec()) return;
-  openSheet(`<h2>The week markers in your calendar</h2>
-    <div class="sub">Your pregnancy weeks are still set to show, one a week. You can take them off now, or leave them. Some people like to keep them.</div>
-    <button class="btn-ghost btn-danger" onclick="cancelPregWeeks()">Take them off my calendar</button>
+  /* One sheet for both, because two doors on the loss holding screen saying nearly the same thing
+     is two decisions asked of somebody who is tapping around numb. The two files are still separate
+     publishes: a woman who wants the weeks gone and the appointments kept can have exactly that. */
+  const w=pregWeeksIcsRec(), a=pregApptIcsRec();
+  if(!w&&!a) return;
+  /* Two things this sub must not do once appointments are in it. "Some people like to keep them" is
+     true of a week marker, which can be a keepsake, and untrue of eleven alarms named "20-week
+     (anomaly) scan" two days after a loss: nobody keeps those on purpose. And when both sets are
+     live these are two separate taps, on two near-identical red buttons, so saying "take them off"
+     once let a woman tap the first one, watch the sheet close, and be told "Removed" while every
+     appointment alert was still live. */
+  const sub=(w&&a)
+    ? 'Your pregnancy weeks are still set to show, one a week, and your antenatal appointment dates are still set to show, with an alert on each one. These are two separate things, so take off whichever you want to.'
+    : (a ? 'Your antenatal appointment dates are still set to show, with an alert on each one. You can take them off whenever you want to.'
+         : 'Your pregnancy weeks are still set to show, one a week. You can take them off now, or leave them. Some people like to keep them.');
+  openSheet(`<h2>${(w&&a)?'The dates in your calendar':(a?'The appointment dates in your calendar':'The week markers in your calendar')}</h2>
+    <div class="sub">${sub}</div>
+    ${w?`<button class="btn-ghost btn-danger" onclick="cancelPregWeeks()">Take ${a?'the week markers':'them'} off my calendar</button>`:''}
+    ${a?`<button class="btn-ghost btn-danger" onclick="cancelPregAppts()">Take ${w?'the appointment dates':'them'} off my calendar</button>`:''}
     <button class="btn-ghost" onclick="closeSheet()">Leave them for now</button>`,'preg');
 }
 function openWeeksCalendar(){
@@ -8398,8 +9288,12 @@ function cancelPregWeeks(){
   try{
     const url=URL.createObjectURL(new Blob([L.join('\r\n')],{type:'text/calendar'}));
     // Honest about the limit, same as the dose cancel: this is a request to her calendar app, not
-    // something Cubby can reach in and enforce.
-    saveFile(url,'cubby-pregnancy-weeks-off.ics','Removed. If they are still showing, delete them in your Calendar app.');
+    // something Cubby can reach in and enforce. The two sets now share one sheet, and the take-back
+    // is two taps: a flat "Removed." after the first one told her the appointment alerts were gone.
+    saveFile(url,'cubby-pregnancy-weeks-off.ics',
+      (typeof pregApptsStillArriving==='function'&&pregApptsStillArriving())
+        ? 'Your week markers are off. Your appointment dates are still coming, and you can take those off too.'
+        : 'Removed. If they are still showing, delete them in your Calendar app.');
     /* Forgotten only after the file is hers. Clearing first meant a save that threw took the door
        away and left the markers behind it, with nothing left that knew their names. */
     pregWeeksIcsSet(null);
@@ -9209,9 +10103,49 @@ function shareTtcReport(){
   if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(function(){toast('Notes copied 🤍');}).catch(function(){toast('Could not copy');}); }
   else { toast('Copy not supported here'); }
 }
-function togglePrecon(id){ const it=(state.pregnancy.precon||[]).find(x=>x.id===id); if(!it)return; it.done=!it.done; persist(); render(); }
-function removePrecon(id){ state.pregnancy.precon=(state.pregnancy.precon||[]).filter(x=>x.id!==id); persist(); render(); }
-function addPrecon(){ const el=$('#pcNew'); const v=(el&&el.value.trim())||''; if(!v)return; state.pregnancy.precon.push({id:uid(),text:v,done:false}); persist(); render(); }
+/* ---- The shared preparation checklist: the one part of a journey two people write ----
+   Everything else in the trying stage is carrier-gated or owner-gated, so the stage meant to open
+   the funnel used to contain nothing a partner could do. The list itself carries no health data,
+   and the people who can see it are exactly the people she chose to tell, so it is now writable by
+   all of them (firestore.rules allows a non-owner the single field data.precon and nothing else).
+   preconCanWrite() reflects what the store actually managed to save, not what we hope: if the write
+   is refused the list goes read-only rather than offering a tick that will vanish by itself. */
+function preconCanWrite(){ try{ return !window.LL.preconCanWrite || window.LL.preconCanWrite(); }catch(e){ return true; } }
+/* Attribution is only worth drawing when somebody else is on this journey. A woman preparing on her
+   own does not need "ticked by you" on every row, and pregJourneyShared() is empty for exactly her. */
+function preconIsShared(){ return pregJourneyShared().length>0; }
+/* preconCanWrite() is false only after a write was genuinely refused, so this is a save failure and
+   never a permission lecture: nobody reaching it broke a rule. Same clause the rest of the file
+   uses for a failed save ("Could not start checkout, try again"). The list itself says, once, that
+   it has gone read-only; a toast is not the place to say it twice. */
+function preconCanWriteOrToast(){ if(preconCanWrite()) return true; toast('Could not save that, try again'); return false; }
+/* Ticking is shared: that is the whole feature. REMOVING is not. A caregiver must not be able to
+   make a line she wrote vanish for everyone with one tap on an 8px bin, no confirm and no trace, so
+   the bin belongs to whoever put the item there (and to the owner, on her own journey). Items from
+   before this shipped carry no addedBy, so they are hers. On a journey nobody else is on, every
+   item is yours. */
+function preconCanRemove(it){ if(!it) return false; if(!preconIsShared()) return true; return pregJourneyIsOwner()||it.addedBy===myUid(); }
+/* One row template for both homes: hers and his were two near-identical copies before, and only one
+   of them was ever interactive. Who did it comes from loggerName, the pattern the Timeline already
+   uses for a shared record, and degrades to "someone" for a person who has left rather than
+   dropping the line. An addition is named too: a new row appearing on her list unannounced is the
+   more startling of the two events, and it was the silent one. */
+function preconRowsHtml(){
+  const p=state.pregnancy||{}; const canWrite=preconCanWrite(); const shared=preconIsShared(); const me=myUid();
+  return (p.precon||[]).map(it=>{
+    const who=(it.done&&shared&&it.by)?(it.by===me?'you':(loggerName(it.by)||'someone')):'';
+    const added=(shared&&it.addedBy&&it.addedBy!==me)?`added by ${escapeHtml(loggerName(it.addedBy)||'someone')}`:'';
+    const parts=[added, who?`ticked by ${escapeHtml(who)}`:''].filter(Boolean);
+    const sub=parts.length?`<div class="bg-sub">${parts.join(' · ')}</div>`:'';
+    // The tap sits on the text line and the tick, never on the attribution: reading who did a thing
+    // and undoing it must not be the same gesture.
+    const tap=canWrite?` onclick="togglePrecon('${it.id}')"`:'';
+    return `<div class="bag-row ${it.done?'done':''}"><div class="bg-tick"${tap}>${it.done?I.check:''}</div><div class="bg-t"><div${tap}>${escapeHtml(it.text)}</div>${sub}</div>${canWrite&&preconCanRemove(it)?`<button class="bg-x" onclick="removePrecon('${it.id}')">${I.trash}</button>`:''}</div>`;
+  }).join('');
+}
+function togglePrecon(id){ const p=state.pregnancy; if(!p||!preconCanWriteOrToast())return; const it=(p.precon||[]).find(x=>x.id===id); if(!it)return; it.done=!it.done; if(it.done){ it.by=myUid(); it.at=now(); } else { delete it.by; delete it.at; } persist(); render(); }
+function removePrecon(id){ const p=state.pregnancy; if(!p||!preconCanWriteOrToast())return; const it=(p.precon||[]).find(x=>x.id===id); if(!preconCanRemove(it))return; p.precon=(p.precon||[]).filter(x=>x.id!==id); persist(); render(); }
+function addPrecon(){ const el=$('#pcNew'); const v=(el&&el.value.trim())||''; if(!v)return; const p=state.pregnancy; if(!p||!preconCanWriteOrToast())return; p.precon=p.precon||[]; p.precon.push({id:uid(),text:v,done:false,addedBy:myUid()}); persist(); render(); }
 function openPositiveTest(){
   const p=state.pregnancy;
   const dv=p.lmp?new Date(p.lmp).toISOString().slice(0,10):'';
@@ -9246,23 +10180,26 @@ function carrierFirstName(){
 /* ---- The partner's trying-stage home: real, warm, and without her data ----
    What a non-carrier sees. HARD boundary: periods, the fertile window, observations,
    trying-since and the doctor report never render here — cycle details are the carrier's
-   alone. The shared preparation checklist IS visible (it rides the journey doc she shared),
-   but Firestore lets only the journey's OWNER write that doc (firestore.rules
-   /pregnancy/{owner}; syncPregJourney no-ops for everyone else), so a caregiver-partner's
-   tick would sit locally, never sync, then snap back on the next snapshot — a lie dressed
-   as a feature. Honest split: interactive only when pregJourneyIsOwner() (the rare partner
-   who created the record and owns the doc), read-only with supportive copy otherwise. */
+   alone. The shared preparation checklist IS visible (it rides the journey doc she shared) and is
+   now genuinely his to work on: firestore.rules lets a member she shared with write the single
+   field data.precon, so a tick, an added item and a removal all sync. Everything else on that
+   document is still hers to write alone. Read-only copy survives for the one case that is not a
+   permission bug: preconCanWrite() goes false when a write is actually refused, and then we say
+   so rather than offering a control that will not hold. */
 function renderPlanningPartnerHome(p){
   const name=carrierFirstName();
-  const canWrite=(typeof pregJourneyIsOwner==='function')?pregJourneyIsOwner():false;
+  const canWrite=preconCanWrite();
   const items=(p.precon||[]);
   const done=items.filter(it=>it.done).length;
-  const rows=items.map(it=>canWrite
-    ?`<div class="bag-row ${it.done?'done':''}"><div class="bg-tick" onclick="togglePrecon('${it.id}')">${it.done?I.check:''}</div><div class="bg-t" onclick="togglePrecon('${it.id}')">${escapeHtml(it.text)}</div><button class="bg-x" onclick="removePrecon('${it.id}')">${I.trash}</button></div>`
-    :`<div class="bag-row ${it.done?'done':''}"><div class="bg-tick">${it.done?I.check:''}</div><div class="bg-t">${escapeHtml(it.text)}</div></div>`).join('');
+  const rows=preconRowsHtml();
+  /* canWrite is false only when a write was actually refused, so this branch is denial-only now.
+     The old copy ("she keeps this list") was written for a world where he never could write, and
+     saying it while his own tick is on the screen tells him he did nothing while he looks at the
+     thing he did. Say what happened instead. */
+  const readOnlySub='Cubby could not save your last change, so you can see this list but not change it.';
   const listSub = items.length
-    ? (canWrite?'Tick things off as you take care of them together.':`${done} of ${items.length} done so far. ${name?escapeHtml(name):'She'} keeps this list; you'll see it move as things get taken care of.`)
-    : 'The preparation list will appear here as it takes shape.';
+    ? (canWrite?'Tick things off as you take care of them together. You can add your own too.':`${done} of ${items.length} done so far. ${readOnlySub}`)
+    : (canWrite?'Add the first thing you want to take care of together.':readOnlySub);
   // "How to support" reads: only ever linked when they exist in the library, never invented.
   const reads=['male-fertility-sperm-health','fertility-diet-and-lifestyle']
     .map(s=>(typeof readBySlug==='function')?readBySlug(s):null).filter(Boolean).slice(0,2);
@@ -9330,7 +10267,7 @@ function renderPlanningHome(){
   // "For your appointment": the notes she kept, turned into a doctor-friendly summary. Free to
   // open and read; the pdf taste is only spent on Print / Share (charge on delivery, audit rule).
   const reportCard=`<div class="preg-card" onclick="openTtcDoctorReport()" style="cursor:pointer"><div class="pc-ico">📄</div><div><div class="pc-t">For your appointment ${isPro()?'':(tasteLeft('pdf')>0?'· ✨ try one free':'· Pro ✨')}</div><div class="pc-b">Preparing for an appointment? Turn your notes into a doctor-friendly summary.</div></div></div>`;
-  const items=(p.precon||[]).map(it=>`<div class="bag-row ${it.done?'done':''}"><div class="bg-tick" onclick="togglePrecon('${it.id}')">${it.done?I.check:''}</div><div class="bg-t" onclick="togglePrecon('${it.id}')">${escapeHtml(it.text)}</div><button class="bg-x" onclick="removePrecon('${it.id}')">${I.trash}</button></div>`).join('');
+  const items=preconRowsHtml();
   return `<div class="fade-in">
     <div class="greeting">Getting ready 🌱</div>
     <div class="greeting-sub">No pressure, no countdowns. Just gentle preparation for when your little one decides it's time.</div>
@@ -9736,6 +10673,455 @@ function openReadCarousel(slug){
   var track=document.getElementById('rcTrack');
   track.addEventListener('scroll', function(){ var w=track.clientWidth||1; var idx=Math.max(0,Math.min(n-1,Math.round(track.scrollLeft/w))); var ds=ov.querySelectorAll('.rc-dots i'); for(var i=0;i<ds.length;i++) ds[i].classList.toggle('on', i===idx); });
 }
+/* ---- The ask box: "is this normal?", answered only out of Cubby's own reads --------------------
+   THE MOST-REPEATED QUESTION OF THE FIRST YEAR HAD NO ANSWER INSIDE THE APP. Cubby publishes 658
+   articles, every one of them carrying a hand-written FAQ, and the only two search fields in the
+   product (glSearch, pglSearch) filter moments. goodReadCard is pull-only and picks by stage, not by
+   what she asked. So at 3am a parent holding a baby left Cubby, typed the question into Google, and
+   read whatever a forum said. That is the moment Cubby exists for, and it was handing it away.
+
+   THIS RETRIEVES. IT NEVER WRITES. Every word a parent can ever see here already exists in
+   app/ask-data.json, lifted verbatim from those FAQ blocks by tools/build_ask_index.js. There is no
+   model, no summariser, no template that mixes her words into a sentence. The screen shows the
+   closest question Cubby has already published and that question's own answer, word for word, plus
+   the link to the whole read. It cannot be about HER baby, it cannot diagnose and it cannot give a
+   probability, because it can only ever repeat something an editor already wrote and shipped.
+
+   IT SAYS WHEN IT DOES NOT KNOW, and that is a hard rule rather than a fallback. The confidence test
+   is deliberately strict: two of her words have to land, or the query has to be one or two words
+   that are all rare in the corpus AND all of them found. An earlier version asked only that
+   SOMETHING rare landed, and "mortgage rate" came back with grandmother support improving
+   breastfeeding rates. A query made only of worry words ("should i be worried") has no topic in it
+   and is refused too. When nothing clears the bar the screen says so plainly and offers the library,
+   because a made-up answer at 3am is the single worst thing this feature could do.
+
+   RED FLAGS SHORT-CIRCUIT BEFORE ANY RETRIEVAL RUNS. Fixed phrase lists, canonicalised on both
+   sides by askFlagNorm so they match the way a parent types and not only the way an editor writes,
+   are checked first, and a hit returns no answer at all. There are four, because there are four
+   different emergencies: a baby who is floppy or blue goes to the warning-signs sheet the app
+   already has; a mother who is bleeding goes to her maternity team; a mother frightened of her own
+   thoughts gets words and no number at all, because the only number Cubby holds for her is a
+   clinician from a pregnancy that has closed; and a bereaved parent is not handed a search result.
+   The same lists also censor the corpus, so nothing Cubby refuses to answer can be volunteered. */
+
+/* Data loads on the first tap, not at boot, and it is deliberately NOT in the service worker's
+   precache list: it is 836KB of published text (about 290KB over the wire) and most sessions never
+   open this box, so paying for it on every install would slow every launch for a screen most people
+   never reach. The worker's own handler caches every same-origin GET it sees, so the file lands in
+   the cache the first time it is fetched and every ask after that is instant and works with no
+   signal at all. The one cost is the very first ask on a dead connection, which says so plainly. */
+var ASK_INDEX=null, ASK_LOAD='idle';   // idle | loading | ready | failed
+var ASK_HITS=[], ASK_SHOWN=0, ASK_TIMER=null, ASK_Q='';
+
+/* Words that carry no meaning for retrieval. Dropped from the query AND from the corpus, by the same
+   function, so the two sides can never disagree about what a term is. */
+var ASK_STOP={the:1,a:1,an:1,and:1,or:1,but:1,if:1,is:1,are:1,was:1,were:1,be:1,been:1,being:1,am:1,do:1,does:1,did:1,doing:1,to:1,of:1,in:1,on:1,at:1,for:1,with:1,as:1,by:1,it:1,its:1,this:1,that:1,these:1,those:1,i:1,my:1,me:1,mine:1,we:1,our:1,us:1,you:1,your:1,he:1,she:1,they:1,them:1,him:1,his:1,her:1,hers:1,their:1,should:1,would:1,could:1,can:1,cant:1,will:1,wont:1,shall:1,may:1,might:1,must:1,have:1,has:1,had:1,how:1,what:1,when:1,where:1,why:1,who:1,whom:1,which:1,there:1,here:1,not:1,no:1,nor:1,so:1,too:1,very:1,much:1,many:1,any:1,some:1,all:1,get:1,gets:1,got:1,go:1,goes:1,going:1,about:1,from:1,into:1,onto:1,up:1,down:1,out:1,off:1,over:1,under:1,again:1,then:1,than:1,now:1,just:1,also:1,ok:1,okay:1,like:1,want:1,need:1,know:1,tell:1,say:1,thing:1,things:1,anything:1,something:1,nothing:1,during:1,while:1,after:1,before:1,every:1,each:1,one:1,two:1,really:1,ever:1,still:1,mean:1,means:1};
+
+/* The handful of words parents type that the library spells another way. This is query widening, not
+   answering: it only ever adds more places to look, and every word shown still comes out of the
+   corpus. Without it "cosleep" finds nothing at all, because every article writes "co-sleeping". */
+var ASK_ALIAS={cosleep:['co','sleep'],cosleeping:['co','sleep'],bedshare:['bed','share'],bedsharing:['bed','share'],diaper:['nappy'],diapers:['nappy'],poop:['stool','nappy'],poo:['stool','nappy'],pooping:['stool','nappy'],pooped:['stool','nappy'],pooing:['stool','nappy'],dummy:['pacifier'],soother:['pacifier'],binky:['pacifier'],puke:['vomit'],puking:['vomit'],boob:['breast'],nursing:['breastfeed'],winding:['burp'],pee:['wee','urine'],peeing:['wee','urine'],mum:['mother'],mom:['mother']};
+
+/* Whole-word phrases only, matched against the query padded with spaces, so "fit" inside "outfit"
+   and "limp" inside "limpet" cannot fire. Apostrophes are stripped before the match, which is why
+   the list carries "wont wake" rather than "won't wake".
+   Two entries are deliberately narrower than the danger they name. "is choking" and "has choked"
+   rather than "choking", because "what are the choking hazards for a baby" is one of the commonest
+   weaning questions in the library and answering it with a phone number helps nobody; and "having a
+   fit" rather than "fitting", because fitting a car seat is also a question a parent asks here.
+
+   THE PHRASES ARE MATCHED IN A CANONICAL FORM, NOT AGAINST HER RAW WORDS, and that is the whole
+   reason askFlagNorm exists. The first version of this list was written in editorial third person
+   and only ever matched itself: "there is blood in their poo" escalated, and "there is blood in my
+   babys poo" - the way a parent actually types it - fell through to retrieval and came back with
+   "there is a wide range of normal" out of the constipation read. Six of fourteen ordinary
+   first-person phrasings of dangers already named here did not escalate. askFlagNorm rewrites the
+   query AND every phrase below through the same function: possessives all become "their", the
+   possessive form of baby is dropped, every negation collapses to "not", and a fall is a fall
+   however it is conjugated. Write new entries in plain English; the normaliser handles the rest.
+   A phrase still fixes the WORD ORDER, though, which is why ASK_FLAG_BABY_BOTH below exists as
+   well: anything a parent might say back to front belongs there, not here. */
+var ASK_FLAG_SWAP={my:'their',mine:'their',your:'their',yours:'their',our:'their',ours:'their',his:'their',her:'their',hers:'their',its:'their',the:'their',a:'their',an:'their',
+  wont:'not',cant:'not',cannot:'not',dont:'not',doesnt:'not',didnt:'not',isnt:'not',arent:'not',wasnt:'not',werent:'not',hasnt:'not',havent:'not',wouldnt:'not',couldnt:'not',
+  fallen:'fell',falls:'fell',fall:'fell',rolled:'fell',rolls:'fell',
+  vomited:'vomiting',vomits:'vomiting',vomit:'vomiting',threw:'throwing',throws:'throwing',
+  babys:'',babies:'',bubs:'',bub:'',lo:''};
+var ASK_FLAG_BABY=['not breathing','stopped breathing','struggling to breathe','trouble breathing','hard to breathe','cant breathe','laboured breathing','labored breathing','gasping for air','gasping for breath','blue lips','turning blue','went blue','gone blue','blue around the mouth','seizure','seizures','convulsion','convulsions','having a fit','unresponsive','unconscious','wont wake','will not wake','cant wake','cannot wake','floppy','limp','meningitis','stiff neck','rash that does not fade','rash that will not fade','rash that does not go','non blanching','glass test','bulging fontanelle','bulging soft spot','sunken soft spot','head injury','hit their head','fell off the bed','fell off the sofa','fell off the couch','fell off the chair','fell off the table','fell off the changing table','fell out of the cot','fell out of my arms','rolled off the bed','rolled off the sofa','fell down the stairs','fell down the steps','fell off the changing mat','fell off the worktop','fell off the counter','fell out of the pram','fell out of the buggy','fell out of the high chair','fell off the high chair','dropped the baby','not waking up','had a fit','has a fit','took a fit','is choking','has choked','button battery','swallowed a battery','green vomit','vomiting blood','throwing up blood','coughing up blood','blood in the vomit','blood in the sick','blood in their poo','blood in their stool','blood in their nappy','blood in their diaper','bloody stool','bloody nappy','bloody diarrhoea','bloody diarrhea'];
+/* Split in two, because a bleeding mother and a mother frightened of her own thoughts need
+   different words and a different number. See askUrgentHtml. */
+var ASK_FLAG_MIND=['kill myself','end my life','end it all','take my own life','hurt myself','harm myself','harming myself','hurting myself','cut myself','suicidal','suicide','self harm','i want to hurt','i might hurt','i will hurt','i could hurt','i am going to hurt','afraid i will hurt','scared i will hurt','thoughts of hurting','shake my baby','shaking my baby','shook the baby','shaken my baby','better off without me','dont want to be here','do not want to be here','cant do this anymore','cant do this any more'];
+var ASK_FLAG_BODY=['soaking a pad','soaking through a pad','bleeding heavily','heavy bleeding'];
+/* Bereavement. Checked FIRST, because "my baby stopped breathing and died in his sleep" is not a
+   parent who needs telling to call an ambulance. Deliberately NOT "sids" or "cot death" on their
+   own: those two are what a frightened but not bereaved parent types when reading about
+   prevention, and handing that parent a bereavement card would be its own cruelty. */
+var ASK_FLAG_LOSS=['my baby died','my baby has died','the baby died','she died','he died','my baby is dead','my baby passed away','the baby passed away','lost my baby','lost our baby','we lost the baby','stillbirth','stillborn','born sleeping','died in his sleep','died in her sleep','died of sids'];
+
+function askNorm(s){ return ' '+String(s||'').toLowerCase().replace(/['’]/g,'').replace(/[^a-z0-9]+/g,' ').trim()+' '; }
+/* One canonical form for the query and for every flag phrase, so the list can never again be
+   testable only against its own wording. */
+function askFlagNorm(s){
+  var out=[];
+  askNorm(s).trim().split(' ').forEach(function(w){
+    if(!w) return;
+    var sw=ASK_FLAG_SWAP.hasOwnProperty(w)?ASK_FLAG_SWAP[w]:w;
+    if(sw) out.push(sw);
+  });
+  return (' '+out.join(' ')+' ').replace(/ (will|would|does|do|did|can|could|is|are|was|were|has|have|had) not /g,' not ')
+    .replace(/ fell (from|of|down from) /g,' fell off ');
+}
+/* The phrase list can only ever match the word ORDER an editor happened to write. A parent types
+   "my babys soft spot is bulging" and "my babys neck is stiff", and both of those fell through to
+   retrieval: the fontanelle one came back with "What is the soft spot on my baby's head?" and the
+   neck one with a meningitis explainer, neither with a phone on it. Order-free pairs fix that class
+   properly instead of one reversed phrase at a time, and they are what catches "her poo has blood in
+   it" and "my baby was sick and there was blood in it" as well.
+   BOTH halves must be present. Each half is matched with a LEADING SPACE, so " poo" catches poos,
+   pooed and pooing but not shampoo, and both halves are canonicalised by askFlagNorm exactly like
+   the phrases, so they are written here in plain English. */
+var ASK_FLAG_BABY_BOTH=[
+  ['blood','poo'],['blood','stool'],['blood','nappy'],['blood','diaper'],['blood','motion'],
+  ['blood','vomit'],['blood','sick'],['blood','throwing up'],['blood','spit up'],['blood','bowel'],
+  ['bulging','fontanelle'],['bulging','soft spot'],['bulge','fontanelle'],['bulge','soft spot'],
+  ['swollen','fontanelle'],['swollen','soft spot'],['stiff','neck'],['not bend','neck'],
+  ['rash','not fade'],['rash','not blanch'],['rash','not disappear'],['rash','not go away when press'],
+  ['rash','press a glass'],['rash','glass on it'],['rash','glass against'],['rash','tumbler'],
+  ['dropped','on the head'],['dropped','on the floor'],['dropped','head first'],['dropped','onto the floor']
+];
+/* "blood" is also an ordinary, calm word in this library. Every one of these is a routine test or a
+   measurement, and none of them is a reason to put an emergency card in front of a parent, so the
+   word is taken off the table before the pairs are checked. Measured: without this, "does my sick
+   baby need a blood test" escalates. */
+var ASK_BLOOD_CALM=/ blood (test|tests|testing|spot|spots|sugar|sugars|pressure|type|types|group|groups|count|counts|cell|cells|flow|donation|donor|work|result|results|transfusion|bank|banking)/g;
+/* And "dropped" is what happens to a dummy on a bus as well as to a baby on a floor. Measured: with
+   the fall pairs on and this off, "i dropped a dummy on the floor" put an emergency card on the
+   screen. Naming the ordinary objects is safer than narrowing the pair, because "i dropped her on
+   the floor" has to keep working. */
+var ASK_DROP_CALM=/ dropped (their )?(dummy|soother|pacifier|bottle|phone|spoon|fork|toy|plate|cup|blanket|muslin|feed|feeds|nap|naps|milk|centile|percentile|off)/g;
+var ASK_PAIR_CACHE=null;
+function askFlagPairs(){
+  if(!ASK_PAIR_CACHE) ASK_PAIR_CACHE=ASK_FLAG_BABY_BOTH.map(function(p){
+    return [askFlagNorm(p[0]).replace(/ $/,''), askFlagNorm(p[1]).replace(/ $/,'')];
+  });
+  return ASK_PAIR_CACHE;
+}
+var ASK_FLAG_CACHE=null;
+function askFlagLists(){
+  if(!ASK_FLAG_CACHE){
+    var n=function(a){ return a.map(function(p){ return askFlagNorm(p); }); };
+    ASK_FLAG_CACHE=[['loss',n(ASK_FLAG_LOSS)],['parent-mind',n(ASK_FLAG_MIND)],['parent-body',n(ASK_FLAG_BODY)],['baby',n(ASK_FLAG_BABY)]];
+  }
+  return ASK_FLAG_CACHE;
+}
+function askFlag(q){
+  var n=askFlagNorm(q), lists=askFlagLists();
+  for(var i=0;i<lists.length;i++){
+    var ps=lists[i][1];
+    for(var j=0;j<ps.length;j++) if(n.indexOf(ps[j])!==-1) return lists[i][0];
+  }
+  var nb=n.replace(ASK_BLOOD_CALM,' ').replace(ASK_DROP_CALM,' '), pairs=askFlagPairs();
+  for(var k=0;k<pairs.length;k++) if(nb.indexOf(pairs[k][0])!==-1&&nb.indexOf(pairs[k][1])!==-1) return 'baby';
+  return '';
+}
+
+/* A four-rule stemmer, not a real one. It only has to be CONSISTENT, because the same function runs
+   over the query and over the corpus, so an over-merge ("position" and "positioned" both landing on
+   "posit") costs nothing while a mismatch costs the answer. */
+function askStem(w){
+  if(w.length>5&&w.slice(-3)==='ing') w=w.slice(0,-3);
+  else if(w.length>4&&w.slice(-2)==='ed') w=w.slice(0,-2);
+  if(w.length>5&&w.slice(-3)==='ion') w=w.slice(0,-3);
+  if(w.length>4&&w.slice(-3)==='ies') w=w.slice(0,-3)+'y';
+  else if(w.length>3&&w.slice(-1)==='s'&&w.slice(-2)!=='ss') w=w.slice(0,-1);
+  return w;
+}
+function askWords(s){ return askNorm(s).trim().split(' ').filter(Boolean); }
+function askTokens(s){ var out=[]; askWords(s).forEach(function(w){ if(w.length<2||ASK_STOP[w]) return; out.push(askStem(w)); }); return out; }
+/* Her query becomes GROUPS, not terms: one group per word she typed, holding that word and anything
+   the alias table widens it to. Coverage is then counted in her words rather than in ours, which is
+   what makes "two of her words landed" an honest test. */
+function askGroups(s){
+  var g=[], seen={};
+  askWords(s).forEach(function(w){
+    if(w.length<2||ASK_STOP[w]) return;
+    var vs=[askStem(w)];
+    (ASK_ALIAS[w]||[]).forEach(function(a){ vs.push(askStem(a)); });
+    var key=vs.join('|'); if(seen[key]) return; seen[key]=1; g.push(vs);
+  });
+  return g;
+}
+/* Ages named in a piece of text, in months, so a question about a one-month-old is never handed to
+   a parent who said two months. Weeks and years are folded to months. Numbers only, deliberately:
+   "newborn" was in here for one build and it cost more than it saved, because a newborn is nought to
+   three months depending on who is writing, and reading it as nought made every newborn read
+   unreachable to anyone who typed an age at all. Measured: "how many wet nappies should a 6 week old
+   have" lost the wet-nappies answer to an article about a four-week-old sleeping all day.
+   Computed once per chunk at index time, never per keystroke. */
+var ASK_NUM={one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12};
+function askAges(s){
+  var n=askNorm(s), out=[], m, re=/ (\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve) (week|weeks|wk|wks|month|months|mo|mos|year|years|yr|yrs) /g;
+  while((m=re.exec(n))){
+    var v=ASK_NUM[m[1]]!==undefined?ASK_NUM[m[1]]:parseInt(m[1],10);
+    if(!(v>=0)) continue;
+    var u=m[2].charAt(0)==='w'?v/4.345:(m[2].charAt(0)==='y'?v*12:v);
+    out.push(Math.round(u*10)/10);
+    re.lastIndex=m.index+1;   // the trailing space is the next match's leading space
+  }
+  return out;
+}
+/* Field weights: a term in the question itself is worth three times the same term buried in the
+   answer body, because the question is what she is actually matching against.
+   A PAIR WHOSE OWN QUESTION IMPUTES SOMETHING TO HER IS NOT PUT IN THE INDEX AT ALL. "my baby wont
+   stop crying" is the most ordinary sentence in the language and it was retrieving "Is it safe to
+   shake my baby to stop them crying?" under the kicker "the closest question in Cubby's reads" - an
+   accusation nobody asked for, at 3am, to the parent least able to take it. Cubby may not volunteer
+   an act she did not mention or a death she did not mention, so the mind and loss lists censor the
+   corpus as well as short-circuiting the ask.
+   The BABY list deliberately does NOT censor. Those questions describe the baby's state rather than
+   accusing her, they are the library doing its job next to a related question, and censoring them
+   measurably cost real answers: "what should i do if my baby chokes" fell to a refusal. Typing the
+   danger itself still reaches the phone, because the short-circuit runs before any of this. */
+function askBuildIndex(data){
+  var chunks=[], df={}, dropped=0;
+  ((data&&data.d)||[]).forEach(function(doc){
+    (doc.q||[]).forEach(function(p){
+      var pf=askFlag(p[0]);
+      if(pf==='parent-mind'||pf==='loss'){ dropped++; return; }
+      var f={};
+      askTokens(p[0]).forEach(function(t){ f[t]=3; });
+      askTokens(doc.t).forEach(function(t){ if(!f[t]||f[t]<1.6) f[t]=1.6; });
+      askTokens(p[1]).forEach(function(t){ if(!f[t]) f[t]=1; });
+      chunks.push({s:doc.s,t:doc.t,q:p[0],a:p[1],f:f,g:askAges(p[0])});
+      for(var k in f) df[k]=(df[k]||0)+1;
+    });
+  });
+  return {chunks:chunks, df:df, n:chunks.length, dropped:dropped};
+}
+var ASK_FLOOR=10, ASK_RARE=3.5;   // both tuned against the real index, see the header
+/* Words that carry her worry but no topic. A query made only of these has nothing to retrieve
+   against: "should i be worried" was confidently answered with "My baby is 14 months and not
+   walking, should I be worried?" to a parent of a two-month-old. Stemmed forms, because askStem
+   runs first. */
+var ASK_VAGUE={worri:1,worry:1,normal:1,wrong:1,concern:1,fine:1,okay:1,bad:1,seriou:1,dangerou:1,scar:1,scary:1,help:1,problem:1};
+/* Two ages are the same age within a fortnight, which is as fine as this needs to be: six weeks and
+   one month are one answer, one month and two months are not. */
+function askAgeClash(qa,ca){
+  if(!qa.length||!ca.length) return false;
+  for(var i=0;i<qa.length;i++) for(var j=0;j<ca.length;j++) if(Math.abs(qa[i]-ca[j])<=0.5) return false;
+  return true;
+}
+function askSearch(query){
+  var ix=ASK_INDEX, groups=askGroups(query);
+  if(!ix||!groups.length) return {hits:[],groups:groups,confident:false};
+  var N=ix.n, hits=[], qAges=askAges(query);
+  function idfOf(t){ var d=ix.df[t]||0; return d?Math.log(1+N/d):0; }
+  for(var i=0;i<ix.chunks.length;i++){
+    var c=ix.chunks[i], sc=0, m=0, best=0;
+    /* She said two months and this answer is about one-month-olds. A kilogram range in serif
+       headline type, for the wrong age, reads as a verdict on her baby. Drop it outright rather
+       than rank it down, so it cannot come back as one of the "others that came close" either. */
+    if(askAgeClash(qAges,c.g||[])) continue;
+    for(var j=0;j<groups.length;j++){
+      var vs=groups[j], bw=0, bi=0;
+      for(var k=0;k<vs.length;k++){
+        var w=c.f[vs[k]];
+        if(w){ var v=idfOf(vs[k]); if(w*v>bw*bi){ bw=w; bi=v; } }
+      }
+      if(bw){ sc+=bw*bi; m++; if(bi>best) best=bi; }
+    }
+    if(m) hits.push({c:c,score:sc,matched:m,bestIdf:best});
+  }
+  /* Sorted by score, then by the question text, so the same words typed twice can never produce two
+     different answers. Nothing here reads the clock, the baby or the household. */
+  hits.sort(function(a,b){ return b.score-a.score || (a.c.q<b.c.q?-1:1); });
+  var top=hits[0], confident=false, topical=0;
+  for(var g=0;g<groups.length;g++) if(!ASK_VAGUE[groups[g][0]]) topical++;
+  if(top && top.score>=ASK_FLOOR && topical){
+    /* The rare-term branch is what lets one or two unusual words ("cradle cap", "colic") through
+       without a second word to corroborate them, and it used to ask only that SOMETHING rare landed.
+       "mortgage rate" came back with grandmother support and breastfeeding rates, "football scores"
+       with the Apgar score. On a query this short, every word she typed has to land or Cubby has not
+       understood the question. */
+    confident=(top.matched>=2 && top.matched/groups.length>=0.5)
+      || (groups.length<=2 && top.bestIdf>=ASK_RARE && top.matched===groups.length);
+  }
+  // Deduped by article so three near-identical rows from one read cannot fill the whole screen.
+  var seen={}, keep=[];
+  for(var h=0; h<hits.length && keep.length<3; h++){ if(seen[hits[h].c.s]) continue; seen[hits[h].c.s]=1; keep.push(hits[h]); }
+  return {hits:keep, groups:groups, confident:confident};
+}
+
+var ASK_CSS='#askOut .ask-kick{font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--pump-ink);margin-bottom:7px}'
++'#askOut .ask-q{font-family:"Fraunces",Georgia,serif;font-size:19px;line-height:1.26;color:var(--ink);font-weight:700}'
++'#askOut .ask-a{font-size:15.5px;line-height:1.6;color:var(--ink-soft);margin-top:9px}'
++'#askOut .ask-src{display:inline-block;margin-top:12px;font-weight:800;font-size:13.5px;color:var(--pump-ink);text-decoration:none}'
++'#askOut .ask-urgent{border-left:4px solid var(--danger)}'
++'#askOut .ask-urgent .ask-q{color:var(--danger-ink)}';
+function askInjectCss(){ if(document.getElementById('askCSS')) return; var st=document.createElement('style'); st.id='askCSS'; st.textContent=ASK_CSS; document.head.appendChild(st); }
+
+/* The row that opens it. The same shape on Home and on Health, because it is the same question in
+   both places and a parent should not have to learn it twice.
+   The wrapper is not decoration. The stack contract (DESIGN.md A3.2, enforced by tools/stack_check.js)
+   couples a bare .preg-card to whatever div follows it at 2px, because on Home that pair is the
+   good-read card and its own "More good reads" link. This card is its own block on both surfaces and
+   is followed by another card on Home and by a section heading on Health, so it carries the 16px
+   block gap itself rather than inheriting a coupling it is not part of. */
+function askBoxRow(){
+  /* Deliberately NOT the sleep border the good read uses: on Home the two sit one above the other,
+     and two identically-edged cards read as one block, which loses the ask row entirely. */
+  return '<div class="ask-entry" style="margin:var(--stack) 0">'
+    +'<div class="preg-card" onclick="openAskBox()" style="cursor:pointer;border-left:4px solid var(--pump)">'
+    +'<div class="pc-ico">🔎</div>'
+    +'<div style="flex:1;min-width:0"><div class="pc-t">Ask a question</div>'
+    +'<div class="pc-b">Ask in your own words. Cubby answers from what it has already written.</div></div>'
+    +'<span class="chev" style="align-self:center">'+I.chev+'</span></div></div>';
+}
+
+function askCarePhone(){
+  var b=(typeof activeBaby==='function')?activeBaby():null;
+  var d=((b&&b.doctors)||[]).filter(function(x){ return x && x.phone; })[0];
+  return d?{name:(d.name||d.role||'your doctor'), phone:d.phone}:null;
+}
+/* The baby's paediatrician is not HER doctor, so the urgent cards do not share a number. The
+   bleeding card reads the pregnancy care team instead, live or archived, because that is the only
+   place in Cubby where a midwife, an obstetrician or her own doctor is written down, and because a
+   haemorrhage in the weeks after birth belongs to exactly that team. The archive half goes through
+   pregArchiveList so its owner-only scoping comes with it; the live half reads state.pregnancy
+   directly, which matches how every other caller in the app reads it and is no wider than what the
+   pregnancy screens already show. Where there is no number it offers none.
+   THIS IS NOT CALLED FOR THE MIND CARD. A mother typing that she wants to hurt herself was being
+   handed a midwife from a pregnancy that closed months ago; an ex-clinician's number in a
+   mental-health crisis is worse than no button at all. */
+function askParentPhone(){
+  var lists=[];
+  if(state.pregnancy && state.pregnancy.careTeam) lists.push(state.pregnancy.careTeam);
+  (typeof pregArchiveList==='function'?pregArchiveList():[]).forEach(function(a){ if(a&&a.careTeam) lists.push(a.careTeam); });
+  for(var i=0;i<lists.length;i++){
+    for(var j=0;j<lists[i].length;j++){ var m=lists[i][j]; if(m&&m.phone) return {name:(m.name||m.role||'your midwife'), phone:m.phone}; }
+  }
+  return null;
+}
+function askTelBtn(c){
+  return '<a class="btn-primary" href="tel:'+encodeURIComponent(c.phone)+'" style="background:var(--med);--accent-ink:var(--on-med,var(--on-accent));display:flex;justify-content:center;text-decoration:none">📞 Call '+escapeHtml(c.name)+'</a>';
+}
+/* No number saved used to mean a filled red PRIMARY reading "Add your doctor's number": the biggest
+   thing on the screen, asked of a parent holding a floppy baby, was a form. The line already tells
+   her to call her doctor and then the emergency number, so with nothing on file this card now offers
+   no primary at all and the saving link sits at the bottom as a ghost. An offer, not a chore. */
+function askCallRow(kind){
+  if(kind==='parent-body'){ var p=askParentPhone(); return p?askTelBtn(p):''; }
+  if(kind!=='baby') return '';
+  var c=askCarePhone();
+  return c?askTelBtn(c):'';
+}
+
+function openAskBox(){
+  askInjectCss();
+  ASK_HITS=[]; ASK_SHOWN=0; ASK_Q='';
+  openSheet('<h2>Ask Cubby 🔎</h2>'
+    +'<div class="sub">Ask it the way you would say it out loud. Cubby answers only from what it has already written, and tells you when it has nothing.</div>'
+    +'<div class="field"><input id="askQ" type="search" inputmode="search" autocomplete="off" placeholder="Is it normal that…" aria-label="Ask a question" oninput="askType(this.value)"></div>'
+    +'<div id="askOut"></div>'
+    +'<div class="preg-disclaim" id="askDisc">This is general reading, not advice about your baby. Your doctor or health visitor knows them.</div>','pump');
+  askLoad();
+}
+/* Typing is debounced rather than run per keystroke: the index is 1990 pairs and a mid-word pass
+   over it would just make the caret stutter on an older phone. */
+function askType(v){
+  ASK_Q=v;
+  if(ASK_TIMER) clearTimeout(ASK_TIMER);
+  ASK_TIMER=setTimeout(function(){ ASK_TIMER=null; askRun(); }, 180);
+}
+function askLoad(){
+  if(ASK_LOAD==='ready'){ askRun(); return; }
+  if(ASK_LOAD==='loading') return;
+  ASK_LOAD='loading';
+  fetch('ask-data.json').then(function(r){ if(!r.ok) throw new Error('http '+r.status); return r.json(); })
+    .then(function(d){ ASK_INDEX=askBuildIndex(d); ASK_LOAD='ready'; askRun(); })   // the raw JSON is not kept: only the index is ever read again
+    .catch(function(){ ASK_LOAD='failed'; askRun(); });
+}
+function askPaint(html){ var el=document.getElementById('askOut'); if(el) el.innerHTML=html; }
+function askShow(i){ ASK_SHOWN=i; askPaint(askResultHtml()); }
+
+/* Four cards, not two, and every one of them opens with what she should do rather than with what
+   Cubby will not do. The old pair both began "Cubby is not going to answer that one out of an
+   article", which explains the product's policy to someone who has just typed the worst sentence of
+   her life; the mother's line went on to correct her for using a search box at all. */
+var ASK_URGENT={
+  baby: { kick: 'This one needs a person',
+    line: 'Call your doctor now. If you cannot reach them, call your local emergency number.' },
+  'parent-body': { kick: 'This needs someone now',
+    line: 'Heavy bleeding after birth is treated urgently. Call your maternity unit or your local emergency number now. Do not wait to see if it settles.' },
+  'parent-mind': { kick: 'You should not be holding this alone',
+    line: 'Thoughts like these are more common after a baby than anyone says out loud, and they are treatable. Tell your doctor, your health visitor, or someone close to you tonight. If you cannot reach anyone, call your local emergency number.' },
+  loss: { kick: 'This one is not a search',
+    line: 'Cubby is not going to hand you an article for this. If you want to talk to someone, your doctor or midwife can put you in touch with people who do only this. Nothing here needs anything from you tonight.' },
+};
+function askUrgentHtml(kind){
+  var t=ASK_URGENT[kind]||ASK_URGENT.baby, btns='';
+  if(kind==='baby'){
+    btns=askCallRow('baby')
+      +'<button class="btn-ghost" onclick="openFeverSafetyNet()">What would make you call sooner</button>'
+      +(askCarePhone()?'':'<button class="btn-ghost" onclick="openDoctor()">Save your doctor\'s number</button>');
+  } else if(kind==='parent-body'){
+    btns=askCallRow('parent-body');
+  }
+  return '<div class="stat-card ask-urgent"><div class="ask-kick" style="color:var(--danger-ink)">'+t.kick+'</div>'
+    +'<div class="ask-a" style="margin-top:0">'+t.line+'</div>'
+    +(btns?'<div style="margin-top:14px">'+btns+'</div>':'')+'</div>';
+}
+function askResultHtml(){
+  if(!ASK_HITS.length) return '';
+  var h=ASK_HITS[ASK_SHOWN]||ASK_HITS[0];
+  var out='<div class="stat-card"><div class="ask-kick">The closest question in Cubby\'s reads</div>'
+    +'<div class="ask-q">'+escapeHtml(h.c.q)+'</div>'
+    +'<div class="ask-a">'+escapeHtml(h.c.a)+'</div>'
+    +'<a class="ask-src" href="'+readUrl(h.c.s)+'" target="_blank" rel="noopener">Read the whole thing: '+escapeHtml(h.c.t)+' →</a></div>';
+  var others=[];
+  for(var i=0;i<ASK_HITS.length;i++){ if(i!==ASK_SHOWN) others.push(i); }
+  if(others.length){
+    out+='<div class="sec-title">Others that came close</div>'
+      +others.map(function(i){ var o=ASK_HITS[i];
+        return '<div class="set-item" onclick="askShow('+i+')" style="cursor:pointer"><div class="si-body">'
+          +'<div class="a">'+escapeHtml(o.c.q)+'</div><div class="b">'+escapeHtml(o.c.t)+'</div></div><span class="chev">'+I.chev+'</span></div>'; }).join('');
+  }
+  return out;
+}
+function askRun(){
+  var q=ASK_Q;
+  ASK_HITS=[]; ASK_SHOWN=0;
+  if(!String(q||'').trim()){ askPaint(''); return; }
+  /* Red flags are checked BEFORE the corpus is even consulted, and before the data has necessarily
+     loaded, so a question that needs a phone gets one whether or not the network is there. */
+  var flag=askFlag(q);
+  /* The footer is a note about what Cubby publishes. Underneath "i want to hurt myself" it is the
+     product clearing its throat, so on an urgent card it goes away. */
+  var disc=document.getElementById('askDisc');
+  if(disc) disc.style.display=flag?'none':'';
+  if(flag){ askPaint(askUrgentHtml(flag)); return; }
+  if(ASK_LOAD==='loading'){ askPaint('<div class="csub">Looking through the reads…</div>'); return; }
+  if(ASK_LOAD==='failed'){
+    askPaint('<div class="stat-card"><div class="ask-kick">Not right now</div><div class="ask-a" style="margin-top:0">Cubby could not open its reads. That usually means the connection dropped. The library is still there whenever you are back online.</div>'
+      +'<a class="ask-src" href="/articles/" target="_blank" rel="noopener">Browse all reads →</a></div>');
+    return;
+  }
+  if(ASK_LOAD!=='ready'){ askLoad(); return; }
+  var r=askSearch(q);
+  /* Half a typed word is not a question. With nothing but stop words or a single letter in the box
+     there is nothing to be right or wrong about, so the screen stays empty rather than flashing
+     "Cubby does not have this one" between every keystroke. */
+  if(!r.groups.length){ askPaint(''); return; }
+  if(!r.confident){
+    /* The honest answer, and the only one available: nothing in the library is close enough. Cubby
+       does not fill the gap with a sentence of its own. */
+    askPaint('<div class="stat-card"><div class="ask-kick">Cubby does not have this one</div>'
+      +'<div class="ask-a" style="margin-top:0">Nothing in Cubby\'s reads is close enough to be worth showing you. Different words might find it, or you can look through the whole library.</div>'
+      +'<a class="ask-src" href="/articles/" target="_blank" rel="noopener">Browse all reads →</a></div>');
+    return;
+  }
+  ASK_HITS=r.hits;
+  askPaint(askResultHtml());
+}
 /* ---- Phase 2: week view ---- */
 function renderPregHome(){
   const wk=pregWeek(), tri=pregTri(), data=pregWeekData();
@@ -10004,6 +11390,10 @@ function renderPregLog(){
     ${beforeCard}
     <div class="sec-title" style="margin-top:18px">Appointments</div>
     ${apptIntro}
+    ${/* Above the list and not below it, and offered to her partner as well as to her: the record of
+         what he exported is his own localStorage key, so his copy in his calendar writes nothing to
+         hers and cannot touch her sequence. He is the one driving her there. */''}
+    ${pregApptCalendarRow()}
     ${apptRows}
     ${canWrite?`<button class="btn-ghost" onclick="openAddAppt()">${I.plus} Add an appointment</button>`:''}
     ${(canWrite||(p.visitQs||[]).length)?`<div class="sec-title" style="margin-top:18px">${canWrite?'Questions for your visit':'Questions for the visit'}</div>
@@ -12428,7 +13818,7 @@ function renderHealth(){
       <span class="lead" style="background:var(--sleep-soft);color:var(--sleep)">${I.stetho}</span>
       <div class="cflex"><div class="a">Going to the doctor?${(window.CubbyTeachUI)?CubbyTeachUI.dot('openVisitSummary','the visit summary'):((window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('health'):'')}</div><div class="b">A one-tap summary of the last week, ready to read out</div></div>
       <span class="chev">${I.chev}</span></div>`;
-  return `<div class="fade-in">${coachMark('health','This is Health','Regular medicines with reminders, the vaccine schedule, and any illness to manage, all in one place.')}${seg}${body}${care}${visit}</div>`;
+  return `<div class="fade-in">${coachMark('health','This is Health','Regular medicines with reminders, the vaccine schedule, and any illness to manage, all in one place.')}${seg}${body}${askBoxRow()}${care}${visit}</div>`;
 }
 
 /* ---- illness episodes, temperature & symptoms ---- */
@@ -12924,6 +14314,12 @@ function visitSummary(days,opts){
     if(bottles.length) L.push(`  • Bottles: ${bottles.length}${(bottleVol&&canRate)?` (~${Math.round(perDay(bottleVol))} ${bottles[0].unit||'ml'}/day)`:(bottleVol?` (${bottleVol} ${bottles[0].unit||'ml'} total)`:'')}`);
     if(solids) L.push(`  • Solids: ${solids}`);
     if(water) L.push(`  • Water: ${water}`);
+    /* Expressed milk is its own top-level line, not a bullet under Feeds, because it is not a feed
+       the baby took: it is the mother's own work, and a lactation review asks about it directly.
+       Printed only when there are sessions, so a household that never pumps never sees a zero it
+       could read as a shortfall. */
+    const pumped=pumpSummary(evs);
+    if(pumped) L.push(`Expressed: ${pumped.sessions} session${pumped.sessions===1?'':'s'}, ${pumped.amount} total${canRate?` (~${fmtPumpAmount(perDay(pumped.total),pumped.unit)}/day)`:''}`);
     // "Sleep: 0s total" is what fmtDur returns for nothing, and on this page it reads as a claim
     // that the baby did not sleep rather than that nobody wrote it down.
     L.push(!sleeps.length?'Sleep: none logged'
@@ -13006,6 +14402,28 @@ function visitSummary(days,opts){
   }
   if(symptoms.length) L.push(`Symptoms: ${symptoms.map(s=>s.symptom+(s.severity?` (${s.severity})`:'')).join(', ')}`);
   if(meds.length) L.push(`Medicines: ${meds.map(m=>m.name+' '+m.dose+(m.unit||'')).join(', ')}`);
+  /* The same block the Food and allergies sheet shows, on the one page a clinician reads. It is
+     asked at every visit between six and twelve months and the log has always held the answer.
+     "Not recorded in Cubby" rather than "not given": Cubby only ever knows what was logged in it,
+     and on a clinical page that difference decides whether the sentence is safe to act on. It says
+     "all time" and carries the year in brackets because everything else on this page is inside the
+     window, and a taste two years ago printed as "Sep 22" reads as last month. It prints only once
+     something has been introduced, so a family still on milk is never handed a list of nine. */
+  const _firstTried=allergenFirstTried();
+  const _introduced=ALLERGENS.filter(a=>_firstTried[a.toLowerCase()]!=null);
+  const _line=(list)=>`Allergens introduced (all time): ${list.length?list.map(a=>`${a} (${firstTasteDate(_firstTried[a.toLowerCase()],true)})`).join(', '):'none recorded yet'}`;
+  if(historyPending() && babyEvents().some(e=>e.type==='feed'&&e.method==='solids')){
+    // The "not recorded" list is the half that would be wrong, so it is the half that waits.
+    L.push(_line(_introduced));
+    L.push('  Still loading older entries, so this list may be incomplete.');
+  } else if(_introduced.length){
+    L.push(_line(_introduced));
+    /* A food the family has declared an allergy to is not an outstanding item, and it is already
+       named on the Allergies line below. */
+    const _avoid=(b.allergies||[]);
+    const _notYet=ALLERGENS.filter(a=>_firstTried[a.toLowerCase()]==null && !_avoid.includes(a.toLowerCase()));
+    if(_notYet.length) L.push(`  Not recorded in Cubby: ${_notYet.join(', ')}`);
+  }
   if((b.allergies||[]).length) L.push(`Allergies: ${b.allergies.map(capWord).join(', ')}`);
   return L.join('\n');
 }
