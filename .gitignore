@@ -8,7 +8,7 @@ serviceAccountKey.json
 .dev.vars
 .env
 node_modules/
-tools/node_modules/
+tools/node_modules
 tools/package.json
 tools/package-lock.json
 *.log
