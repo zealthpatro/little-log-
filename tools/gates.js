@@ -38,6 +38,7 @@ const TREE = [
   { name: 'seo',            cmd: ['python3', 'tools/seo_check.py'] },
   { name: 'type',           cmd: ['node', 'tools/type_check.js', 'url'] },
   { name: 'grid',           cmd: ['node', 'tools/grid_check.js'] },
+  { name: 'type-scale',     cmd: ['node', 'tools/type_scale_check.js'] },
   { name: 'teach',          cmd: ['node', 'tools/teach_gate.js'] },
   { name: 'perf',           cmd: ['node', 'tools/perf_check.js', 'url'] },
   { name: 'home-truth',     cmd: ['node', 'tools/home_truth_check.js', 'url'] },
