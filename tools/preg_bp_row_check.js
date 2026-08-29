@@ -410,8 +410,14 @@ const seed = (p, over) => Object.assign({
     await sleep(250);
     const forced = await sheetRows();
     ok('calling openLogBP directly opens nothing for him', forced.hasBpInput !== true, forced.h2);
-    ok('and it says why rather than failing silently', (await page.evaluate(() => window.__toasts.slice())).join(' ').toLowerCase().indexOf('only the person whose health this is') >= 0,
-      await page.evaluate(() => window.__toasts.slice()));
+    /* The refusal moved from pregJourneyCanWrite's generic "the person whose journey this is" to
+       pregHealthCanWrite, which NAMES her: "Only Maya can add to her health record". That is better
+       copy, so this asserts the capability rather than the old sentence: a refusal must be spoken,
+       and it must say whose the record is. Matching the literal would have failed correct code and
+       tempted the next person to revert the better wording to make a gate go green. */
+    const said = (await page.evaluate(() => window.__toasts.slice())).join(' ');
+    ok('and it says why rather than failing silently', said.trim().length > 0, said);
+    ok('and the refusal says whose record it is', /\bMaya\b|\bhers\b|her health record/i.test(said), said);
 
     /* The sheet already open when ownership resolves. She opens it, the snapshot lands, he presses
        Save. A row-only gate passes everything above and loses this. */

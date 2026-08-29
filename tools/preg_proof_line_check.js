@@ -358,15 +358,20 @@ const seed = (p, over) => Object.assign({
 
   await section('5. an alarm that has already gone is not written', async () => {
     await wipe();
-    /* Due date pulled back six days: pregWeek() still rounds to 13, and the week-13 appointment now
-       falls TOMORROW. Its 09:00-two-days-before alert was yesterday morning. */
+    /* Due date pulled back six days, so the week-13 appointment falls TOMORROW and its
+       09:00-two-days-before alert was yesterday morning. That is the whole point of the section and
+       it is set by pregApptDate, which is untouched here.
+       She is at 12+6. This line used to assert week 13 and its comment said so out loud ("pregWeek()
+       still rounds to 13"), which is the rounding bug written down as an expectation: Math.round
+       named days 4, 5 and 6 of every week as the next week. pregWeek() now floors completed weeks,
+       so 12+6 answers 12, the way a gestation is actually spoken. */
     await load(seed(preg({
       dueDate: now + 28 * WEEK - 6 * DAY,
       appts: [{ id: 'a-soon', week: 13, title: 'Antenatal check', note: '', done: false, at: null },
         { id: 'a-far', week: 20, title: '20-week (anomaly) scan', note: '', done: false, at: null }],
     })));
     const w = await page.evaluate(() => pregWeek());
-    ok('she is at week 13', w === 13, w);
+    ok('she is at 12+6, which is week 12', w === 12, w);
     const t = await page.evaluate(() => { const a = pregApptsAhead(); return a.map((x) => Math.round((x.t - Date.now()) / 3600000)); });
     ok('one visit is tomorrow and one is weeks out', t.length === 2 && t[0] > 12 && t[0] < 36 && t[1] > 24 * 40, t);
     await page.evaluate(() => exportAntenatalSchedule());
