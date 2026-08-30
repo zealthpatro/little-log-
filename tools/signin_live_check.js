@@ -23,6 +23,17 @@
  *
  * Needs tools/serviceAccountKey.json (gitignored). Uses a reserved-TLD address so no real mailbox is
  * ever written to, and deletes the account it creates.
+ *
+ * DELIBERATELY NOT IN tools/gates.js, INCLUDING ITS LIVE_GATES LIST. Please leave it out. The absence
+ * looks like an oversight and it is not: the two gates already in LIVE_GATES (thirdparty_gate,
+ * claims_audit) only READ production. This one WRITES to it — it issues a real code document, and
+ * creates and deletes a real auth account — and it needs the gitignored service-account key, so on any
+ * machine without that key it fails for a reason that has nothing to do with the app. Wiring it in
+ * would point part of the suite at prod with write access and make `gates.js --live` unrunnable for
+ * anyone who has not been handed a private key.
+ *
+ * Its home is the post-deploy list in OPERATIONS.md, beside `sitesw_gate.js https://little-cubby.com`:
+ * things you run yourself, against the live host, after shipping.
  */
 'use strict';
 const crypto = require('crypto');
