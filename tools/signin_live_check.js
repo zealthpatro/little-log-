@@ -34,6 +34,19 @@
  *
  * Its home is the post-deploy list in OPERATIONS.md, beside `sitesw_gate.js https://little-cubby.com`:
  * things you run yourself, against the live host, after shipping.
+ *
+ * DO NOT PUT THIS ON A SCHEDULE. Every run sends a REAL message through Resend. /api/signin-code writes
+ * the code document, then calls Resend, and only returns 200 if Resend ACCEPTED it — so a 200 here means
+ * a send was attempted. The address is a reserved TLD with no DNS, so no human is ever mailed, but each
+ * run still lands in Resend as a failed send. A canary on a 15-minute cron would be ~96 of those a day
+ * from mail.little-cubby.com, which spends the sender reputation of the exact channel it exists to
+ * protect: sign-in mail that stops arriving because the domain looks like a bouncer is a worse outage
+ * than the one being watched for.
+ *
+ * A few runs around a deploy is fine and is what this is for. If you want a HIGH-FREQUENCY canary,
+ * do not build it on this endpoint — mint and verify a code internally with the service account and
+ * never touch the mail path at all. (Credit: strange-yonath-958608 spotted this before anyone
+ * scheduled it.)
  */
 'use strict';
 const crypto = require('crypto');
