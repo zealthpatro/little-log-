@@ -738,11 +738,17 @@
     + '.greeting{font-family:var(--font-display),Georgia,serif;font-size:19px;font-weight:600;color:var(--ink,#2C2521);margin:2px 2px 2px;}'
     + '.greeting-sub{font-size:13px;color:var(--ink-soft,#9a8d80);font-weight:600;margin:0 2px 12px;}'
     + '.tip-line{display:flex;align-items:center;gap:10px;justify-content:space-between;background:var(--star-soft,#F6E1EC);border:1px solid var(--star,#C97FA0);border-radius:12px;padding:9px 12px;margin:0 0 var(--stack,16px);font-size:13px;color:var(--ink,#2C2521);font-weight:600;line-height:1.35;}'
-    + '.tip-line button{border:none;background:rgba(0,0,0,.06);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:800;color:var(--ink,#2C2521);cursor:pointer;font-family:inherit;flex:0 0 auto;}'
+    // These rules are injected at runtime, so they land AFTER the stylesheet's tap-target block and
+    // would beat it on order. The floor has to be written here, at the rule that sets the padding.
+    // Measured 52x26 before this: the "Got it" that dismisses the tip.
+    + '.tip-line button{border:none;background:rgba(0,0,0,.06);border-radius:8px;padding:5px 10px;min-height:var(--tap-min,44px);display:inline-flex;align-items:center;font-size:12px;font-weight:800;color:var(--ink,#2C2521);cursor:pointer;font-family:inherit;flex:0 0 auto;}'
     + '.gs-card{background:var(--surface,#fff);border:1px solid var(--line,#E0D7C7);border-radius:16px;padding:14px 16px;margin:0 0 16px;box-shadow:0 5px 14px var(--shadow,rgba(0,0,0,.06));}'
     + '.gs-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}'
     + '.gs-title{font-family:var(--font-display),Georgia,serif;font-size:17px;font-weight:600;color:var(--ink,#2C2521);}'
-    + '.gs-x{border:none;background:none;font-size:22px;line-height:1;color:var(--ink-faint,#b3a99d);cursor:pointer;}'
+    // 12.9x22 measured, the smallest control in the app and a dismiss, so a miss costs her the card.
+    // A quiet x should stay quiet, so the glyph keeps its size and the ::after carries the hit area.
+    + '.gs-x{border:none;background:none;font-size:22px;line-height:1;color:var(--ink-faint,#b3a99d);cursor:pointer;position:relative;}'
+    + '.gs-x::after{content:"";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:100%;height:100%;min-width:var(--tap-min,44px);min-height:var(--tap-min,44px);}'
     + '.gs-row{display:flex;align-items:center;gap:11px;padding:9px 0;border-top:1px solid var(--line,#efe6d6);cursor:pointer;}'
     + '.gs-row:first-of-type{border-top:none;}'
     // The tick only shows once .done fills the disc with --diaper, so this is ink on an accent:
@@ -773,7 +779,9 @@
     + '.hm{margin-bottom:var(--stack,16px);}'  // block gap. was one of the four hand-set 18s, DESIGN.md A3.2
     + '.hm-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}'
     + '.hm-seg{display:inline-flex;background:var(--surface-2,#FBF7EF);border:1px solid var(--line,#E0D7C7);border-radius:9px;overflow:hidden;}'
-    + '.hm-seg button{border:none;background:none;padding:5px 12px;font-size:12px;font-weight:800;color:var(--ink-soft,#9a8d80);cursor:pointer;font-family:inherit;}'
+    // Week / Month measured 56x26 and 60x26. A segmented control IS the shape she aims at, so this
+    // one grows for real rather than hiding a bigger target behind a small picture.
+    + '.hm-seg button{border:none;background:none;padding:5px 12px;min-height:var(--tap-min,44px);display:inline-flex;align-items:center;font-size:12px;font-weight:800;color:var(--ink-soft,#9a8d80);cursor:pointer;font-family:inherit;}'
     + '.hm-seg button.on{background:var(--star,#C97FA0);color:var(--on-accent,#2C2521);}'  // see .gx-seg above
     + '.hm-row{display:flex;align-items:center;gap:8px;margin-bottom:5px;}'
     + '.hm-label{width:54px;flex:0 0 54px;font-size:11px;font-weight:700;color:var(--ink-soft,#9a8d80);text-align:right;}'

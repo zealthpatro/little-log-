@@ -12,6 +12,11 @@ design/
 ├── RED-TEAM-REVIEW.md ← Product-Board Pod-15 pre-launch security verdict + scorecards
 ├── firestore.published.rules  ← snapshot of console rules (runtime source of truth)
 ├── BREAKPOINTS.md     ← all responsive breakpoints (app + marketing)
+├── DESIGN-SYSTEM.md   ← the APP's design system: type scale, token groups, the touch/contrast/
+                          motion floors with their numbers, the component vocabulary, and what we
+                          mean by AI slop. Every number in it is re-derived on every run.
+                          READ BEFORE ANY APP UI CHANGE.
+                          Enforced by tools/design_doc_check.js
 ├── MARKETING-SYSTEM.md ← site.css / .homex: tokens, type ladder, fold model, the CSS traps
                           that shipped bugs, and the heading-register rule.
                           READ BEFORE ANY MARKETING SITE CHANGE.
@@ -46,7 +51,7 @@ Each `flows/*.md` has the same shape:
 1. **Every product change PR must touch its flow spec.** If code changes a flow and `design/flows/` doesn't change, the PR description must say why. That one rule keeps the specs alive.
 2. **Weekly: open `audit.html`**, walk the open gaps, close what shipped, add what's new. Update the status line at the top of each flow file.
 3. **Monthly: re-run the drift checks** (below). Anything that fails becomes a GAP-AUDIT entry.
-4. **When a doc and this repo disagree**, this repo wins for *behavior*; `CUBBY-EXPERIENCE-CHARTER.md` wins for *principles*. Retire stale statements from README/HANDOFF instead of letting them contradict.
+4. **When a doc and this repo disagree**, this repo wins for *behavior*; `CUBBY-EXPERIENCE-CHARTER.md` wins for *principles*; `design/DESIGN-SYSTEM.md` wins for any *number* about the app's look, because it is the only one a gate re-derives from the code on every run. Retire stale statements from README/HANDOFF instead of letting them contradict.
 
 ## Drift checks (cheap, repeatable)
 

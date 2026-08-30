@@ -514,7 +514,10 @@
     return '<div class="coach"><div class="cm-ico">🐻</div>'
       + '<div class="cm-body"><div class="cm-t">What to log, and why</div>'
       + '<div class="cm-s">A short guide to the logs that make sense ' + who + ', and what each one gives you back. It stays in Settings if you would rather read it later.</div>'
-      + '<button class="btn-primary" style="margin-top:9px;padding:8px 14px;font-size:13px" onclick="cubbyOpenGuide()">Show me</button></div>'
+      // This was measured at 185x34: a PRIMARY call to action shrunk below the thumb floor by an
+      // inline override that only ever existed to make the card look tidier. The card can be a
+      // little taller. The button is the whole point of the card.
+      + '<button class="btn-primary" style="margin-top:9px" onclick="cubbyOpenGuide()">Show me</button></div>'
       + '<button class="cm-x" onclick="CubbyGuide.dismissCard()">Not now</button></div>';
   }
 

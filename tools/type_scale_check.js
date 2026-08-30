@@ -75,7 +75,9 @@ jsFiles.forEach((f) => collect(fs.readFileSync(path.join(ROOT, 'app', f), 'utf8'
 /* 374 is not a target, it is today's true count, measured 2026-08-28. A ratchet has to START at the
    real number or it fails on the first run and gets deleted. Lower it as inline styles and the
    JS-injected stylesheets migrate onto the tokens; never raise it to make a run go green. */
-const CEILING = Number(process.env.TYPE_CEILING || 374);
+/* 374 -> 373 on 2026-08-30: the tap-target pass deleted the inline `font-size:13px` that was
+   shrinking the "Show me" CTA in app/log-guide.js. One literal gone is one off the ceiling. */
+const CEILING = Number(process.env.TYPE_CEILING || 373);
 const distinct = [...new Set(outside.map((o) => o.px))].sort((a, b) => a - b);
 ok('the ratchet holds: literals outside the stylesheet have not grown', outside.length <= CEILING,
   outside.length + ' literals, ceiling ' + CEILING + '. Lower the ceiling when you migrate some; never raise it.');

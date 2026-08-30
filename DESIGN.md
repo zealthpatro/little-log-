@@ -7,6 +7,12 @@
 > its own anchor: **`design/MARKETING-SYSTEM.md`**. Do not mix the two palettes or type ramps; they
 > share names (`--ink`, `--h-ink`) and different values.
 
+> **The numbers now live in `design/DESIGN-SYSTEM.md`,** which is checked against the code on every
+> run by `tools/design_doc_check.js`. This file keeps what a gate cannot hold: the personality, the
+> icon canon, the voice, and the audit history. Where the two disagree about a number, the checked
+> one wins. The ramp in A3 below is the clearest example. It was proposed, it was never fully
+> shipped, and the app runs thirteen `--fs-*` roles instead.
+
 This is the single source of truth for how Cubby looks and feels, in three parts:
 **Part A** the design system as it should be (the anchor), **Part B** the audit of what's right
 and wrong today (10 June 2026, audited at 375/600/768/1280px), **Part C** the recommended
