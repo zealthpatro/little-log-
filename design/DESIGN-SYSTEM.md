@@ -362,7 +362,7 @@ feed.
 
 ## 4. Component vocabulary: one canonical name per job
 
-**694** distinct class names carry a rule across the eleven stylesheets, **314** of them in the main
+**695** distinct class names carry a rule across the eleven stylesheets, **315** of them in the main
 one. A name that appears only inside a CSS comment is not counted, because it does not carry a rule.
 The component audit walked that vocabulary and found the same job built up to sixteen times under
 sixteen names. The cost is not bytes. It is that a parent taps
@@ -530,4 +530,5 @@ Then look at the rendered app at **390px in both themes**, not at the file.
 | 2026-08-30 | `--bg` `#F4EEE3` is 7/255 from the cream the `frontend-design` skill names as the current AI default. |
 | 2026-08-30 | The gate parsed sentences, so *correcting* the radius paragraph broke eleven assertions and the file shipped unwired. It now reads token-keyed table rows and takes the list of tokens from `:root`, so the doc cannot omit a token the code declares and a rewrite of the prose around a number cannot fail a run. The convention is written at the top of this file. |
 | 2026-08-30 | Component dedupe: six identical-body pairs folded to one rule each, so class names fell 700 to 694 while the main sheet gained 6, elevation uses fell 66 to 64 and font-size token uses rose 255 to 257. Eighteen of eighteen screenshot pairs differ by 0 pixels. |
+| 2026-08-30 | `.csub` split: the treatment moved to the base class and only `margin-bottom` stayed scoped to `.stat-card`, so the class carries a rule outside a card for the first time and the vocabulary went 694 to 695, 314 to 315 in the main sheet. |
 | 2026-08-30 | Reconciled against the merged tree: 13 red assertions, all of them the doc trailing the code. Radius is 7 tokens and not 5. Elevation and motion had no entry at all. The focus ring is fixed and two-tone, so the "one open contrast defect" paragraph was describing a defect that no longer exists, which is the worse direction for a doc to be wrong in. `.chip` is 44 and not 40. The sheet arrives in 350ms, not 360. Class vocabulary recounted with CSS comments stripped, because a name mentioned only in a comment carries no rule: 702 to 700 across the sheets and 314 to 308 in the main one. Literal transition durations 56 to 37, and reduced-motion blocks 11 to 12. |

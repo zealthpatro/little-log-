@@ -49,6 +49,7 @@ const TREE = [
      symptom. */
   { name: 'design-doc',      cmd: ['node', 'tools/design_doc_check.js', 'url'] },
   { name: 'component-dupe',  cmd: ['node', 'tools/component_dupe_check.js', 'url'] },
+  { name: 'csub',           cmd: ['node', 'tools/csub_check.js', 'url'] },
   { name: 'touch-target',    cmd: ['node', 'tools/touch_target_check.js', 'url'] },
   { name: 'contrast',        cmd: ['node', 'tools/contrast_check.js', 'url'] },
   { name: 'motion',          cmd: ['node', 'tools/motion_check.js', 'url'] },

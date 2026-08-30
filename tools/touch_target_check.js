@@ -95,7 +95,8 @@ const PROBE = () => {
     if (cx < 0 || cy < 0 || cx >= vw || cy >= vh) return;
     /* App chrome, meaning the layers that are SUPPOSED to be on top: an open sheet and its scrim, the
        bottom bar, the top bar, the quick-add button, a toast. */
-    const isChrome = (t) => !!(t && t.closest && t.closest('#sheet,.sheet,.scrim,#reportOv,.picker-ov,.ov,.nav,.qadd,.toast,.topbar'))
+    const OVERLAY = '#sheet,.sheet,.scrim,#reportOv,.picker-ov,.ov,.nav,.qadd,.toast,.topbar';
+    const isChrome = (t) => !!(t && t.closest && t.closest(OVERLAY))
       || (() => { for (let n = t; n && n !== document.body; n = n.parentElement) { const p = getComputedStyle(n).position; if (p === 'fixed' || p === 'sticky') return true; } return false; })();
     /* Three answers, not two. true = the point belongs to this control. null = we ran out of screen.
        'chrome' = a bar or a sheet is on top of it, which truncates what she can reach right now but
@@ -122,7 +123,14 @@ const PROBE = () => {
       const t = document.elementFromPoint(cx, cy);
       if (t) {
         const oc = (typeof t.className === 'string' ? t.className : '').split(' ').filter(Boolean);
-        occluder = { cls: oc[0] || t.tagName.toLowerCase(), id: t.id || '', chrome: centre === 'chrome' };
+        /* Same surface or not. An expander only STEALS from a control she can currently reach: both
+           have to be standing in the same layer. A teach dot inside an open sheet landing on a row
+           on the page behind it is not a theft, it is a sheet doing its job, and the row is not
+           tappable at all while it is open. Comparing the nearest overlay ancestor of each keeps the
+           finding for two controls sharing one surface, which is the case that actually hurts. */
+        const surfOf = (n) => (n && n.closest ? n.closest(OVERLAY) : null);
+        occluder = { cls: oc[0] || t.tagName.toLowerCase(), id: t.id || '', chrome: centre === 'chrome',
+          sameSurface: surfOf(el) === surfOf(t) };
       }
     }
     /* A walk that stops because it reached the edge of the screen has not found the edge of the
@@ -257,6 +265,30 @@ const EXPANDERS = ['lg-i', 'link-inline', 'wwa-t', 'sec-act', 'gr-more', 'tip-x'
   const all = raw.filter((c) => c.centreOwned);
   const occluded = raw.filter((c) => !c.centreOwned);
 
+  /* The theft line can only ever report an ABSENCE, so a green one is indistinguishable from a
+     filter that stopped matching. This stages a real theft and makes the same predicate find it: a
+     dot is dropped exactly on the centre of a reachable control with no sheet open, so victim and
+     dot share the page and sameSurface is true. If this comes back empty the detector is broken, not
+     the app, and the line below it is worthless. */
+  await boot('light');
+  await page.evaluate(() => { try { go('health'); } catch (e) {} });
+  await sleep(900);
+  const bait = await page.evaluate(() => {
+    const v = Array.prototype.slice.call(document.querySelectorAll('.add-row,.btn-ghost,.btn-primary'))
+      .find((e) => { const r = e.getBoundingClientRect(); return r.width > 60 && r.height > 20 && r.top > 90 && r.bottom < 700; });
+    if (!v) return '';
+    const r = v.getBoundingClientRect();
+    const d = document.createElement('span');
+    d.className = 'lg-i'; d.textContent = 'i';
+    d.style.cssText = 'position:fixed;z-index:9;width:20px;height:20px;left:' +
+      (r.left + r.width / 2 - 10) + 'px;top:' + (r.top + r.height / 2 - 10) + 'px;';
+    document.body.appendChild(d);
+    return (v.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 30);
+  });
+  const baited = bait ? (await page.evaluate(PROBE)).controls : [];
+  const caught = baited.filter((c) => !c.centreOwned && c.occluder && c.occluder.sameSurface
+    && EXPANDERS.indexOf(c.occluder.cls) >= 0);
+
   console.log('\n1. the floor is declared once, and the browser agrees with the file');
   ok('--tap-min is declared in :root', TAP > 0, declared ? declared[0] : 'not found');
   ok('and it is the 44px a thumb needs', TAP === 44, TAP + 'px');
@@ -322,7 +354,7 @@ const EXPANDERS = ['lg-i', 'link-inline', 'wwa-t', 'sec-act', 'gr-more', 'tip-x'
   ok('and reaches ' + FLOOR + ' in the hand', inline.length > 0 && inline.every((d) => d.hitH >= FLOOR), inline.slice(0, 2).map((d) => d.hitW + 'x' + d.hitH));
   /* The one failure mode this mechanism has. An expanded hit area sitting on a neighbour's centre
      means she aims at one control and taps another, which at 3am is worse than a small target. */
-  const stolen = occluded.filter((c) => c.occluder && EXPANDERS.indexOf(c.occluder.cls) >= 0);
+  const stolen = occluded.filter((c) => c.occluder && c.occluder.sameSurface && EXPANDERS.indexOf(c.occluder.cls) >= 0);
   ok('no expanded hit area has taken a neighbour\'s centre', stolen.length === 0,
     stolen.slice(0, 4).map((s) => '.' + s.occluder.cls + ' is sitting on .' + s.cls + ' "' + s.txt + '" (' + s.theme + '/' + s.surface + ')'));
   /* Paired with the line above so it cannot pass on an empty set: every control that WAS covered was
@@ -330,6 +362,15 @@ const EXPANDERS = ['lg-i', 'link-inline', 'wwa-t', 'sec-act', 'gr-more', 'tip-x'
      here it is a new kind of occlusion and somebody should look at it. */
   ok('and something WAS covered, so the line above is not passing on an empty set',
     occluded.length > 20, occluded.length + ' controls were under a sheet, the bar or the scrim');
+  /* Paired the other way round: the line above has to be capable of going red at all. */
+  ok('and a STAGED theft on the same surface is still caught, so that line can go red',
+    bait !== '' && caught.length > 0,
+    bait === '' ? 'no bait control found' : 'baited "' + bait + '", caught ' + caught.length);
+  /* The false positive this replaced. A dot inside an open sheet landing on a row on the page behind
+     it is the sheet working, and that row is not tappable at all while it is open. */
+  ok('and a dot inside a sheet is not blamed for the page behind it',
+    occluded.some((c) => c.occluder && EXPANDERS.indexOf(c.occluder.cls) >= 0 && !c.occluder.sameSurface),
+    'no cross-surface pair seen, so this exclusion is untested');
   const oddOcclusion = occluded.filter((c) => !c.occluder || !c.occluder.chrome);
   ok('and everything that was covered was covered by app chrome, not by another control',
     oddOcclusion.length === 0,
