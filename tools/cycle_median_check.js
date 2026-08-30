@@ -183,8 +183,19 @@ const seed = (p) => ({ babies: [], activeBabyId: null, events: [],
     const c = await card();
     ok('one fertile-window card', c.n === 1 && /fertile window/i.test(c.title || ''), c);
     ok('the window spans her shortest to her longest cycle', c.body.indexOf('Somewhere around ' + mine.start + ' to ' + mine.end) === 0, { got: c.body, want: mine });
-    ok('the old 28-day start is nowhere in it', c.body.indexOf(stale.start) < 0, { got: c.body, stale: stale });
-    ok('nor the old 28-day end', c.body.indexOf(stale.end) < 0, { got: c.body, stale: stale });
+    /* Whole dates, not substrings. This was `indexOf(stale.start) < 0` and it went red on a CORRECT
+       card: her window read "Sep 6 to Sep 14" and the 28-day start was "Sep 1", which is a substring
+       of "Sep 14". The gate was reporting a fertile-window regression that did not exist, and the
+       matching `end` line passed only by luck, because "Sep 7" happened not to collide. A gate that
+       is red for a reason it does not name teaches people to ignore the suite. */
+    const absent = (d) => !new RegExp('\\b' + String(d).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(c.body);
+    ok('the old 28-day start is nowhere in it', absent(stale.start), { got: c.body, stale: stale });
+    ok('nor the old 28-day end', absent(stale.end), { got: c.body, stale: stale });
+    /* Paired, so the two lines above cannot quietly become no-ops: the same matcher, run against a
+       body that really does carry the 28-day dates, has to find them. */
+    ok('and that matcher would still catch a real 28-day card',
+       new RegExp('\\b' + stale.start + '\\b').test('Somewhere around ' + stale.start + ' to ' + stale.end + ', from your last four cycles.'),
+       'the staleness matcher has stopped matching anything');
     ok('the card says where the dates came from', c.body.indexOf('from your last four cycles') > 0, c.body);
     ok('the honesty line survives word for word', c.body.slice(-HONEST.length) === HONEST, c.body);
     // The app's own two ends, not the gate's: a single circled day is the one thing this card
