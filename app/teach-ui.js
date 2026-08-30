@@ -66,21 +66,16 @@
     + '#logGuide .ht-s.has .ht-sx{display:block}'
     + '#logGuide .ht-none{font-size:14.5px;line-height:1.5;color:var(--ink-soft);font-weight:600;padding:18px 2px;display:none}'
     + '#logGuide .ht-hide{display:none}'
-    // the monthly door
+    /* THE MONTHLY DOOR. Its rows are .ov-row, the shared overlay row in the app stylesheet. They
+       used to be .md-r here, byte-identical to log-guide.js's .lg-row and scoped to the same
+       #logGuide node, which is as close as two components can get to being the same component. */
     + '#logGuide .md-in{font-size:16px;line-height:1.5;font-weight:650;margin:2px 0 18px;color:var(--ink-soft)}'
-    + '#logGuide .md-r{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--surface);border:1.5px solid var(--line);border-radius:16px;padding:13px 14px;margin-bottom:9px;cursor:pointer;font-family:inherit;color:var(--ink);min-height:44px}'
-    + '#logGuide .md-r:active{transform:scale(.985)}'
-    + '#logGuide .md-m{flex:1;min-width:0}'
-    + '#logGuide .md-t{display:block;font-size:15px;font-weight:800}'
-    + '#logGuide .md-o{display:block;font-size:13px;font-weight:600;color:var(--ink-soft);line-height:1.4;margin-top:2px}'
-    + '#logGuide .md-c{flex:0 0 auto;color:var(--ink-soft);font-size:15px;font-weight:800}'
-    + '@media (prefers-reduced-motion: reduce){#logGuide .md-r:active{transform:none}}'
     /* COMPACT. A chapter is two short paragraphs. Given the full screen a page uses, it read as
        60% empty, which makes the app look like it ran out of things to say about its own feature.
        Inflating the copy to fill the screen would mean inventing content, so the presentation
        shrinks to fit the content instead: a centred dialog that ends where the words end. */
     + '#logGuide.lg-compact{background:rgba(0,0,0,.34);backdrop-filter:blur(2px);display:grid;place-items:center;padding:20px}'
-    + '#logGuide.lg-compact .lg-top{position:absolute;top:0;right:0;left:0}'
+    + '#logGuide.lg-compact .ov-bar{position:absolute;top:0;right:0;left:0}'
     + '#logGuide.lg-compact .lg-body{flex:0 1 auto;max-width:360px;width:100%;max-height:78vh;background:var(--surface);border-radius:20px;padding:22px 20px 20px;box-shadow:0 18px 44px rgba(0,0,0,.22);animation:lgPop .22s ease}'
     + '#logGuide.lg-compact .lg-foot{display:none}'
     + '#logGuide.lg-compact .lg-h{font-size:23px;margin-bottom:10px}'
@@ -262,10 +257,10 @@
       + ids.map(function (id) {
           var fn = R[id].depth === 'page' ? 'CubbyTeachUI.page'
                  : R[id].depth === 'chapter' ? 'CubbyTeachUI.chapter' : 'CubbyTeachUI.brief';
-          return '<button class="md-r" onclick="' + fn + '(\'' + id + '\')">'
-            + '<span class="md-m"><span class="md-t">' + esc(R[id].label) + '</span>'
-            + '<span class="md-o">' + esc(R[id].one) + '</span></span>'
-            + '<span class="md-c" aria-hidden="true">›</span></button>';
+          return '<button class="ov-row" onclick="' + fn + '(\'' + id + '\')">'
+            + '<span class="ov-row-mid"><span class="ov-row-t">' + esc(R[id].label) + '</span>'
+            + '<span class="ov-row-s">' + esc(R[id].one) + '</span></span>'
+            + '<span class="ov-row-chev" aria-hidden="true">›</span></button>';
         }).join('')
       + '<div class="lg-acts"><button class="lg-read" onclick="CubbyGuide.close()">Close</button></div>';
     g._paint(g._shell(g._topClose(), body, 'All of this also lives in Settings, under How to use Cubby.'));

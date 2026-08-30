@@ -23,10 +23,10 @@
 (function () {
   'use strict';
 
+  /* The frame, the header bar and the close disc are .ov-screen, .ov-bar and .ov-x in the app
+     stylesheet, shared with the log guide and the monthly door. This file used to declare all
+     three itself, identically, one directory over from the copy in log-guide.js. */
   var CSS = ''
-    + '#vaxCard{position:fixed;inset:0;z-index:100002;background:linear-gradient(160deg,var(--bg-grad-1),var(--bg-grad-2));display:flex;flex-direction:column;font-family:inherit;color:var(--ink)}'
-    + '#vaxCard .vc-top{display:flex;align-items:center;gap:10px;padding:calc(10px + env(safe-area-inset-top)) 14px 6px}'
-    + '#vaxCard .vc-x{width:44px;height:44px;flex:0 0 auto;border:none;background:var(--surface-2);color:var(--ink-soft);border-radius:50%;font-size:15px;cursor:pointer;font-family:inherit}'
     + '#vaxCard .vc-sp{flex:1}'
     + '#vaxCard .vc-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 16px 10px}'
     + '#vaxCard .vc-h{font-family:"Fraunces",Georgia,serif;font-size:25px;line-height:1.2;font-weight:700;margin:4px 0 8px}'
@@ -200,7 +200,7 @@
     }
     var o = node();
     if (!o) {
-      o = document.createElement('div'); o.id = 'vaxCard';
+      o = document.createElement('div'); o.id = 'vaxCard'; o.className = 'ov-screen';
       o.setAttribute('role', 'dialog'); o.setAttribute('aria-modal', 'true');
       o.setAttribute('aria-label', 'Add vaccines from the card');
       document.body.appendChild(o);
@@ -210,7 +210,7 @@
   }
 
   function paint(html) { var o = mount(); o.innerHTML = html; var b = o.querySelector('.vc-body'); if (b) b.scrollTop = 0; }
-  function top() { return '<div class="vc-top"><div class="vc-sp"></div><button class="vc-x" onclick="CubbyVaxCard.close()" aria-label="Close">✕</button></div>'; }
+  function top() { return '<div class="ov-bar"><div class="vc-sp"></div><button class="ov-x" onclick="CubbyVaxCard.close()" aria-label="Close">✕</button></div>'; }
 
   // Native date inputs, deliberately, and this is the one place the custom in-sheet picker is not
   // the right standard: this is a transcription TABLE of up to ~25 rows being copied off a document,

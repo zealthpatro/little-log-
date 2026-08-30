@@ -39,6 +39,15 @@ const TREE = [
   { name: 'type',           cmd: ['node', 'tools/type_check.js', 'url'] },
   { name: 'grid',           cmd: ['node', 'tools/grid_check.js'] },
   { name: 'type-scale',     cmd: ['node', 'tools/type_scale_check.js'] },
+  /* design-doc checks design/DESIGN-SYSTEM.md against the code in both directions, which is the
+     only thing keeping that file from turning into decoration. It was held back when it landed
+     because it matched sentences and the radius consolidation broke it by CORRECTING the prose it
+     was matching; it now reads token-keyed table rows and takes the list of tokens from :root, so
+     rewording is free and a dropped row is a failure. It runs first of the design gates, because
+     when it and one of them both go red, the one below is usually the cause and this is the
+     symptom. */
+  { name: 'design-doc',      cmd: ['node', 'tools/design_doc_check.js', 'url'] },
+  { name: 'component-dupe',  cmd: ['node', 'tools/component_dupe_check.js', 'url'] },
   { name: 'touch-target',    cmd: ['node', 'tools/touch_target_check.js', 'url'] },
   { name: 'contrast',        cmd: ['node', 'tools/contrast_check.js', 'url'] },
   { name: 'motion',          cmd: ['node', 'tools/motion_check.js', 'url'] },

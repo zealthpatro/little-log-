@@ -23,24 +23,20 @@
 (function () {
   'use strict';
 
+  /* The frame, the header bar, the close disc and the chapter row are NOT here. They are .ov-screen,
+     .ov-bar, .ov-x and .ov-row in the app stylesheet, shared with the monthly door in teach-ui.js and
+     the vaccine card in vax-card.js, because all three overlays were carrying private copies of the
+     same declarations and had no way to see each other. Only what is genuinely local to the guide
+     stays below. */
   var CSS = ''
-    + '#logGuide{position:fixed;inset:0;z-index:100002;background:linear-gradient(160deg,var(--bg-grad-1),var(--bg-grad-2));display:flex;flex-direction:column;font-family:inherit;color:var(--ink)}'
-    + '#logGuide .lg-top{display:flex;align-items:center;gap:10px;padding:calc(10px + env(safe-area-inset-top)) 14px 6px}'
     + '#logGuide .lg-back{min-width:44px;height:44px;border:none;background:var(--surface-2);color:var(--ink);border-radius:12px;padding:0 14px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit}'
     + '#logGuide .lg-spacer{flex:1}'
-    + '#logGuide .lg-x{width:44px;height:44px;flex:0 0 auto;border:none;background:var(--surface-2);color:var(--ink-soft);border-radius:50%;font-size:15px;cursor:pointer;font-family:inherit}'
     + '#logGuide .lg-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:6px 20px 10px;animation:lgIn .28s ease}'
     + '#logGuide .lg-h{font-family:"Fraunces",Georgia,serif;font-size:27px;line-height:1.2;font-weight:700;margin:6px 0 8px}'
     + '#logGuide .lg-sub{font-size:15.5px;line-height:1.5;color:var(--ink-soft);font-weight:600;margin-bottom:6px}'
     + '#logGuide .lg-lab{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);margin:20px 0 9px}'
-    + '#logGuide .lg-row{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--surface);border:1.5px solid var(--line);border-radius:16px;padding:13px 14px;margin-bottom:9px;cursor:pointer;font-family:inherit;color:var(--ink);min-height:44px}'
-    + '#logGuide .lg-row:active{transform:scale(.985)}'
     + '#logGuide .lg-ico{width:38px;height:38px;flex:0 0 auto;border-radius:11px;display:grid;place-items:center;font-size:19px}'
     + '#logGuide .lg-ico svg{width:19px;height:19px}'
-    + '#logGuide .lg-rmid{flex:1;min-width:0}'
-    + '#logGuide .lg-rt{display:block;font-size:15px;font-weight:800}'
-    + '#logGuide .lg-rs{display:block;font-size:13px;font-weight:600;color:var(--ink-soft);line-height:1.4;margin-top:2px}'
-    + '#logGuide .lg-chev{flex:0 0 auto;color:var(--ink-soft);font-size:15px;font-weight:800}'
     + '#logGuide .lg-more{width:100%;background:none;border:none;color:var(--ink-soft);font-family:inherit;font-size:13.5px;font-weight:800;padding:12px 0;cursor:pointer;text-align:left;min-height:44px}'
     + '#logGuide .lg-hid{display:none}'
     + '#logGuide .lg-dots{display:flex;gap:5px;margin:2px 0 18px}'
@@ -55,7 +51,7 @@
     + '#logGuide .lg-read{background:var(--surface);color:var(--ink);border:1.5px solid var(--line);border-radius:15px;padding:14px 22px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;min-height:44px}'
     + '#logGuide .lg-foot{padding:12px 20px calc(14px + env(safe-area-inset-bottom));border-top:1px solid var(--divider,var(--line));font-size:13px;font-weight:600;color:var(--ink-soft);text-align:center}'
     + '@keyframes lgIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}'
-    + '@media (prefers-reduced-motion: reduce){#logGuide .lg-body{animation:none}#logGuide .lg-row:active{transform:none}}';
+    + '@media (prefers-reduced-motion: reduce){#logGuide .lg-body{animation:none}}';
 
   /* One chapter per log. `line` is the one-glance benefit on the contents list, `what` is the
      mechanic, `get` is the honest return. Never an obligation, never a target, never a number the
@@ -296,11 +292,11 @@
   }
 
   function row(x) {
-    return '<button class="lg-row" onclick="CubbyGuide.chapter(\'' + x.k + '\')">'
+    return '<button class="ov-row" onclick="CubbyGuide.chapter(\'' + x.k + '\')">'
       + swatch(x, 'lg-ico')
-      + '<span class="lg-rmid"><span class="lg-rt">' + esc(x.label) + '</span>'
-      + '<span class="lg-rs">' + esc(CH[x.k].line) + '</span></span>'
-      + '<span class="lg-chev" aria-hidden="true">›</span></button>';
+      + '<span class="ov-row-mid"><span class="ov-row-t">' + esc(x.label) + '</span>'
+      + '<span class="ov-row-s">' + esc(CH[x.k].line) + '</span></span>'
+      + '<span class="ov-row-chev" aria-hidden="true">›</span></button>';
   }
 
   var FOOT = 'You can log as much or as little as you like. A quiet day is a day too.';
@@ -309,12 +305,12 @@
   // one. Two full-screen teaching overlays would mean two z-indexes, two stylesheets and two
   // Escape handlers to keep in step, and the repeated-UI rule says build it once.
   function shell(top, body, foot) {
-    return '<div class="lg-top">' + top + '</div>'
+    return '<div class="ov-bar">' + top + '</div>'
       + '<div class="lg-body">' + body + '</div>'
       + '<div class="lg-foot">' + (foot || FOOT) + '</div>';
   }
   function topClose() {
-    return '<div class="lg-spacer"></div><button class="lg-x" onclick="CubbyGuide.close()" aria-label="Close">✕</button>';
+    return '<div class="lg-spacer"></div><button class="ov-x" onclick="CubbyGuide.close()" aria-label="Close">✕</button>';
   }
   function topBack() {
     return '<button class="lg-back" onclick="CubbyGuide.contents()">‹ All logs</button>' + topClose();
@@ -474,6 +470,9 @@
     }
     var ov = document.createElement('div');
     ov.id = 'logGuide';
+    // The frame is the shared .ov-screen now, not a rule keyed to this id. The id stays because
+    // teach-ui.js and the rest of this file still address the node by it.
+    ov.className = 'ov-screen';
     ov.setAttribute('role', 'dialog');
     ov.setAttribute('aria-modal', 'true');
     ov.setAttribute('aria-label', label || 'What to log, and why');

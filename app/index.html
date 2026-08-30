@@ -411,11 +411,11 @@
    negative offset draws inside the box, follows border-radius and costs no layout, so this can be
    one rule over the existing components rather than a border added to fifty of them. */
 [data-theme="night"] .icon-btn,[data-theme="night"] .ticker,[data-theme="night"] .tip-static,
-[data-theme="night"] .stat-card,[data-theme="night"] .avg-box,[data-theme="night"] .nav-inner,
+[data-theme="night"] .stat-card,[data-theme="night"] .stat-tile,[data-theme="night"] .nav-inner,
 [data-theme="night"] .set-item,[data-theme="night"] .baby-item,[data-theme="night"] .ob-tile,
 [data-theme="night"] .ob-pcard,[data-theme="night"] .med-card,[data-theme="night"] .ms-hero,
 [data-theme="night"] .ms-row,[data-theme="night"] .rt-card,[data-theme="night"] .toggle-row,
-[data-theme="night"] .mem-card,[data-theme="night"] .gx-box,[data-theme="night"] .hero-invite,
+[data-theme="night"] .mem-card,[data-theme="night"] .hero-invite,
 [data-theme="night"] .alert-pill,[data-theme="night"] .preg-card,[data-theme="night"] .next-appt,
 [data-theme="night"] .danger-row,[data-theme="night"] .sheet,[data-theme="night"] .toast,
 [data-theme="night"] .loader-card,[data-theme="night"] .gal-item,[data-theme="night"] .hero,
@@ -716,10 +716,36 @@ body{
 .bar{width:100%;border-radius:8px 8px 4px 4px;min-height:3px;transition:height var(--mo-cross) var(--ease-out);}
 .bar-val{font-size:var(--fs-caption);font-weight:800;font-variant-numeric:tabular-nums;}
 .bar-day{font-size:var(--fs-caption);color:var(--ink-faint);font-weight:700;}
-.avg-row{display:flex;gap:12px;margin-bottom:16px;}
-.avg-box{flex:1;background:var(--surface);border-radius:var(--r-card);padding:15px;box-shadow:var(--elev-lift);}
-.avg-box .n{font-family:var(--font-display);font-size:var(--fs-stat);font-weight:600;line-height:1;}
-.avg-box .l{font-size:var(--fs-small);color:var(--ink-soft);font-weight:700;margin-top:5px;}
+/* THE STAT TILE. One number, one label, optionally one delta, in a row of two or three. It was
+   written twice: .avg-box for the week averages on Stats and .gx-box for the latest measurements in
+   Growth. Both rows render on the SAME screen, one above the other. The component audit recorded
+   them as two pixels apart in the number as well; the type scale had already closed that (both read
+   --fs-stat), so what was actually left was two declarations, and both belonged in both:
+   min-width:0 lets a flex child shrink instead of pushing the row wide, and white-space:nowrap
+   stops a number wrapping and leaving one tile taller than its neighbours with the labels no longer
+   in line. Adopting them changed nothing on screen -- the two rows measure identically at 390, 375,
+   360 and 320 -- which is the only kind of consolidation worth shipping. */
+.stat-tiles{display:flex;gap:12px;margin-bottom:16px;}
+.stat-tile{flex:1;min-width:0;background:var(--surface);border-radius:var(--r-card);padding:15px;box-shadow:var(--elev-lift);}
+.stat-tile .n{font-family:var(--font-display);font-size:var(--fs-stat);font-weight:600;line-height:1;white-space:nowrap;}
+.stat-tile .l{font-size:var(--fs-small);color:var(--ink-soft);font-weight:700;margin-top:5px;}
+.stat-tile .d{font-size:var(--fs-caption);font-weight:800;margin-top:4px;}
+/* Head circumference made the Growth row three wide. A number and its unit must never break across
+   two lines, because then one tile is taller than its neighbours and the labels stop lining up, so
+   the row is re-priced for three rather than left to wrap: tighter padding and gap, a smaller
+   number. The label is allowed to wrap, but only if it wraps in every tile at once. This is a
+   deliberate difference between a two-up row and a three-up one, which is why it is a modifier on
+   the shared tile and not a second tile. */
+.stat-tiles.tiles-3{gap:8px;}
+.stat-tiles.tiles-3 .stat-tile{padding:13px 10px;}
+.stat-tiles.tiles-3 .stat-tile .n{font-size:var(--fs-title);}
+.stat-tiles.tiles-3 .stat-tile .l{font-size:var(--fs-caption);line-height:15px;}
+/* Below 390 "Latest head size" wraps and its two shorter neighbours do not, so one tile stands
+   taller than the others. Reserve the second line in all three rather than truncating the label
+   that matters most. The min-height is the line-height doubled, not an em guess, so the tiles
+   come back exactly equal instead of half a pixel apart. */
+@media (max-width:389px){ .stat-tiles.tiles-3 .stat-tile .l{min-height:30px;} }
+@media (max-width:359px){ .stat-tiles.tiles-3{gap:6px;} .stat-tiles.tiles-3 .stat-tile{padding:12px 8px;} .stat-tiles.tiles-3 .stat-tile .n{font-size:var(--fs-input);} .stat-tiles.tiles-3 .stat-tile .l{font-size:var(--fs-micro);line-height:14px;min-height:28px;} }
 
 /* ============ BOTTOM NAV ============ */
 .nav{
@@ -743,6 +769,30 @@ body{
 .nav-btn{flex:1;border:none;background:none;cursor:pointer;padding:9px 0;border-radius:var(--r-lg);display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--ink-soft);font-family:var(--font-body);font-weight:700;font-size:var(--fs-caption);transition:color .2s,background .2s;}
 .nav-btn svg{width:22px;height:22px;}
 .nav-btn.active{color:var(--ink);background:var(--surface-2);}
+
+/* ============ FULL-SCREEN OVERLAY SHELL ============ */
+/* Three overlays take the whole screen instead of sliding up as a sheet: the log guide, the monthly
+   door and the vaccine card. They are written in three different files, each of which injects its
+   own stylesheet at runtime, and each had grown a private copy of the same four things. Because the
+   copies lived in different files, nobody could see they were copies: the guide row and the door row
+   were byte-identical, scoped to the same #logGuide node, and rendered on the same screen.
+   They are declared once here because the app stylesheet is the only place all three can reach.
+   Anything genuinely local to one overlay still lives in that overlay's own file. */
+.ov-screen{position:fixed;inset:0;z-index:100002;background:linear-gradient(160deg,var(--bg-grad-1),var(--bg-grad-2));display:flex;flex-direction:column;font-family:inherit;color:var(--ink);}
+.ov-bar{display:flex;align-items:center;gap:10px;padding:calc(10px + env(safe-area-inset-top)) 14px 6px;}
+.ov-x{width:var(--tap-min);height:var(--tap-min);flex:0 0 auto;border:none;background:var(--surface-2);color:var(--ink-soft);border-radius:50%;font-size:var(--fs-lead);cursor:pointer;font-family:inherit;}
+/* The tappable row inside an overlay: an optional icon, a title, a one-line reason, a chevron.
+   --pad-tile is this row's exact 13px/14px; the token's name still says "stat tiles" from the day
+   it was added, which is now one step behind its uses. */
+.ov-row{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--surface);border:1.5px solid var(--line);border-radius:var(--r-card);padding:var(--pad-tile);margin-bottom:9px;cursor:pointer;font-family:inherit;color:var(--ink);min-height:var(--tap-min);}
+.ov-row:active{transform:scale(.985);}
+.ov-row-mid{flex:1;min-width:0;}
+.ov-row-t{display:block;font-size:var(--fs-lead);font-weight:800;}
+.ov-row-s{display:block;font-size:var(--fs-body);font-weight:600;color:var(--ink-soft);line-height:1.4;margin-top:2px;}
+.ov-row-chev{flex:0 0 auto;color:var(--ink-soft);font-size:var(--fs-lead);font-weight:800;}
+/* The global reduced-motion block above shortens transitions, and this is not one: :active applies
+   the transform instantly. It has to be cancelled by hand, the way each overlay used to do it. */
+@media(prefers-reduced-motion:reduce){.ov-row:active{transform:none;}}
 
 /* ============ SHEET / MODAL ============ */
 .scrim{position:fixed;inset:0;background:rgba(38,26,18,.5);opacity:0;pointer-events:none;transition:opacity var(--mo-enter) var(--ease-fade);z-index:50;backdrop-filter:blur(4px) saturate(115%);}
@@ -942,7 +992,12 @@ input,textarea,select,[contenteditable]{caret-color:var(--ink);}
 .apx-sys .apx-half{position:absolute;inset:0;display:flex;flex-direction:column;gap:4px;padding:7px 6px;}
 .apx-sys .apx-clip{clip-path:inset(0 0 0 50%);}
 .apx-note{font-size:var(--fs-small);font-weight:700;color:var(--ink-soft);line-height:1.5;margin-bottom:6px;}
-.baby-item{display:flex;align-items:center;gap:13px;background:var(--surface);border-radius:var(--r-card);padding:13px 15px;margin-bottom:9px;box-shadow:var(--elev-card);}
+/* One rule, two names. A baby in the baby list and a medicine in the medicine list are the same
+   object on the page: an icon square, a title, a sub, in a stack. They had the same thirteen
+   declarations written out twice in two sections of this file, which meant a change to one of them
+   silently made the two lists disagree. The names stay because each list names its own item; the
+   treatment is declared once, here, and .med-card's own children still live in its own section. */
+.baby-item,.med-card{display:flex;align-items:center;gap:13px;background:var(--surface);border-radius:var(--r-card);padding:13px 15px;margin-bottom:9px;box-shadow:var(--elev-card);}
 
 /* onboarding */
 .ob-wrap{position:relative;height:100%;overflow-y:auto;display:flex;align-items:center;justify-content:center;padding:24px 18px;}
@@ -1043,7 +1098,7 @@ input,textarea,select,[contenteditable]{caret-color:var(--ink);}
 .med-due .info .nm{font-family:var(--font-display);font-size:var(--fs-head);font-weight:600;line-height:1.05;margin-top:2px;}
 .med-due .info .sub{font-size:var(--fs-body);margin-top:3px;font-weight:600;}
 .med-due > svg{width:30px;height:30px;flex-shrink:0;}
-.med-card{display:flex;align-items:center;gap:13px;background:var(--surface);border-radius:var(--r-card);padding:13px 15px;margin-bottom:9px;box-shadow:var(--elev-card);}
+/* .med-card's box is declared beside .baby-item, which is the same row. Only its parts are here. */
 .med-card .mc-ico{width:40px;height:40px;border-radius:var(--r-ctl);display:grid;place-items:center;background:var(--med-soft);color:var(--med);flex-shrink:0;}
 .med-card .mc-ico svg{width:21px;height:21px;}
 .med-card .mc-body{flex:1;min-width:0;cursor:pointer;}
@@ -1099,8 +1154,10 @@ input,textarea,select,[contenteditable]{caret-color:var(--ink);}
 .gl-suggest .gl-st{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:9px;}
 .gl-suggest .gl-st .t{font-weight:800;font-size:var(--fs-base);color:var(--ink);}
 .gl-suggest .gl-st .m{font-size:var(--fs-caption);font-weight:800;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.04em;}
-.gl-rail{display:flex;gap:11px;overflow-x:auto;padding:2px 2px 8px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
-.gl-rail::-webkit-scrollbar{display:none;}
+/* The horizontal card rail, used by the gentle library and by the pregnancy journey. Both wrote the
+   same six declarations; one rule so the two rails cannot drift apart. */
+.gl-rail,.jr-rail{display:flex;gap:11px;overflow-x:auto;padding:2px 2px 8px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.gl-rail::-webkit-scrollbar,.jr-rail::-webkit-scrollbar{display:none;}
 .gl-rail .gl-card{flex:0 0 148px;}
 .gl-create{display:flex;align-items:center;gap:10px;width:100%;border:1.5px dashed var(--line);background:var(--surface-2);border-radius:var(--r-card);padding:13px 15px;font-weight:800;font-size:var(--fs-base);color:var(--ink-soft);cursor:pointer;font-family:var(--font-body);margin:0 0 18px;}
 .gl-create .ic{display:grid;place-items:center;}.gl-create .ic svg{width:18px;height:18px;}
@@ -1269,8 +1326,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .jr-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
 .jr-edit{border:none;background:none;color:var(--ink-faint);cursor:pointer;padding:4px;font-size:var(--fs-base);line-height:1;flex-shrink:0}
 .jr-edit svg{width:16px;height:16px}
-.jr-rail{display:flex;gap:11px;overflow-x:auto;padding:2px 2px 8px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
-.jr-rail::-webkit-scrollbar{display:none}
+/* .jr-rail is declared with .gl-rail, which is the same rail. */
 .jr-tile{position:relative;flex:0 0 132px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);padding:13px;box-shadow:var(--elev-card);cursor:pointer;transition:transform .14s}
 .jr-tile:active{transform:scale(.97)}
 .jr-art{width:56px;height:56px;border-radius:14px;overflow:hidden;margin-bottom:8px;display:grid;place-items:center;background:var(--surface-2)}
@@ -1344,25 +1400,8 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 
 /* ---- growth charts ---- */
 .growth-line{width:100%;height:auto;display:block;}
-.gx-stat{display:flex;gap:12px;margin-bottom:16px;}
-.gx-box{flex:1;min-width:0;background:var(--surface);border-radius:var(--r-card);padding:15px;box-shadow:var(--elev-lift);}
-.gx-box .n{font-family:var(--font-display);font-size:var(--fs-stat);font-weight:600;line-height:1;white-space:nowrap;}
-/* Head circumference made this row three wide. A number and its unit must never break across two
-   lines, because then one box is taller than its neighbours and the labels stop lining up, so the
-   row is re-priced for three rather than left to wrap: tighter padding and gap, a smaller number.
-   The label is allowed to wrap, but only if it wraps in every box at once. */
-.gx-stat.gx-3{gap:8px;}
-.gx-stat.gx-3 .gx-box{padding:13px 10px;}
-.gx-stat.gx-3 .gx-box .n{font-size:var(--fs-title);}
-.gx-stat.gx-3 .gx-box .l{font-size:var(--fs-caption);line-height:15px;}
-/* Below 390 "Latest head size" wraps and its two shorter neighbours do not, so one box stands
-   taller than the others. Reserve the second line in all three rather than truncating the label
-   that matters most. The min-height is the line-height doubled, not an em guess, so the boxes
-   come back exactly equal instead of half a pixel apart. */
-@media (max-width:389px){ .gx-stat.gx-3 .gx-box .l{min-height:30px;} }
-@media (max-width:359px){ .gx-stat.gx-3{gap:6px;} .gx-stat.gx-3 .gx-box{padding:12px 8px;} .gx-stat.gx-3 .gx-box .n{font-size:var(--fs-input);} .gx-stat.gx-3 .gx-box .l{font-size:var(--fs-micro);line-height:14px;min-height:28px;} }
-.gx-box .l{font-size:var(--fs-small);color:var(--ink-soft);font-weight:700;margin-top:5px;}
-.gx-box .d{font-size:var(--fs-caption);font-weight:800;margin-top:4px;}
+/* The three tiles above these charts are .stat-tile, declared once beside the Stats row it used to
+   be a copy of. Only the chart itself is local to Growth. */
 
 /* ---- home hero carousel ---- */
 .hero{position:relative;border-radius:var(--r-card);overflow:hidden;aspect-ratio:4/3;margin:6px 0 16px;background:var(--surface-2);box-shadow:var(--elev-float);cursor:pointer;}
@@ -4946,10 +4985,10 @@ function renderStats(){
     :rawLogged<7?`<div class="csub" style="text-align:center;margin:4px 0 10px">Averages over the ${rawLogged===1?'1 day':rawLogged+' days'} logged this week so far</div>`:'';
 
   return `<div class="fade-in">
-    <div class="avg-row">
-      <div class="avg-box"><div class="n" style="color:var(--feed-ink)">${avgFeed}</div><div class="l">Avg feeds / day</div></div>
-      <div class="avg-box"><div class="n" style="color:var(--sleep-ink)">${avgSleep}h</div><div class="l">Avg sleep / day</div></div>
-      <div class="avg-box"><div class="n" style="color:var(--diaper-ink)">${avgDia}</div><div class="l">Avg diapers / day</div></div>
+    <div class="stat-tiles" id="avgTiles">
+      <div class="stat-tile"><div class="n" style="color:var(--feed-ink)">${avgFeed}</div><div class="l">Avg feeds / day</div></div>
+      <div class="stat-tile"><div class="n" style="color:var(--sleep-ink)">${avgSleep}h</div><div class="l">Avg sleep / day</div></div>
+      <div class="stat-tile"><div class="n" style="color:var(--diaper-ink)">${avgDia}</div><div class="l">Avg diapers / day</div></div>
     </div>
     ${avgNote}
     ${barCard('Feeds','Last 7 days',feedData,labels,'feed','')}
@@ -15951,10 +15990,10 @@ function renderGrowthSection(){
   const lw=lastGrowth('weight'), lh=lastGrowth('height'), lc=lastGrowth('head');
   const wDelta=growthDelta(wPts), hDelta=growthDelta(hPts), cDelta=growthDelta(cPts);
   return `<div class="sec-title" style="margin-top:24px">Growth</div>
-    <div class="gx-stat${lc?' gx-3':''}">
-      <div class="gx-box"><div class="n" style="color:var(--feed-ink)">${lw?(+convW(lw.weight,lw.wUnit||'kg',wU).toFixed(2)):'·'}${lw?' '+wU:''}</div><div class="l">Latest weight</div>${wDelta?`<div class="d" style="color:var(--ink-soft)">${wDelta>0?'+':''}${wDelta} ${wU}</div>`:''}</div>
-      <div class="gx-box"><div class="n" style="color:var(--sleep-ink)">${lh?(+convH(lh.height,lh.hUnit||'cm',hU).toFixed(1)):'·'}${lh?' '+hU:''}</div><div class="l">Latest height</div>${hDelta?`<div class="d" style="color:var(--ink-soft)">${hDelta>0?'+':''}${hDelta} ${hU}</div>`:''}</div>
-      ${lc?`<div class="gx-box"><div class="n" style="color:var(--diaper-ink,var(--diaper))">${+convH(lc.head,lc.hcUnit||'cm',cU).toFixed(1)} ${cU}</div><div class="l">Latest head size</div>${cDelta?`<div class="d" style="color:var(--ink-soft)">${cDelta>0?'+':''}${cDelta} ${cU}</div>`:''}</div>`:''}
+    <div class="stat-tiles${lc?' tiles-3':''}" id="gxTiles">
+      <div class="stat-tile"><div class="n" style="color:var(--feed-ink)">${lw?(+convW(lw.weight,lw.wUnit||'kg',wU).toFixed(2)):'·'}${lw?' '+wU:''}</div><div class="l">Latest weight</div>${wDelta?`<div class="d" style="color:var(--ink-soft)">${wDelta>0?'+':''}${wDelta} ${wU}</div>`:''}</div>
+      <div class="stat-tile"><div class="n" style="color:var(--sleep-ink)">${lh?(+convH(lh.height,lh.hUnit||'cm',hU).toFixed(1)):'·'}${lh?' '+hU:''}</div><div class="l">Latest height</div>${hDelta?`<div class="d" style="color:var(--ink-soft)">${hDelta>0?'+':''}${hDelta} ${hU}</div>`:''}</div>
+      ${lc?`<div class="stat-tile"><div class="n" style="color:var(--diaper-ink,var(--diaper))">${+convH(lc.head,lc.hcUnit||'cm',cU).toFixed(1)} ${cU}</div><div class="l">Latest head size</div>${cDelta?`<div class="d" style="color:var(--ink-soft)">${cDelta>0?'+':''}${cDelta} ${cU}</div>`:''}</div>`:''}
     </div>
     ${birthWeightLine()}
     ${tipLine('growth','Set Boy/Girl to overlay WHO/CDC percentile curves behind the dots.')}

@@ -57,7 +57,7 @@ async function chapterLabels(page) {
     var o = document.getElementById('logGuide');
     if (!o) return null;
     function labels(scope) {
-      return [].slice.call(scope.querySelectorAll('.lg-row .lg-rt')).map(function (n) { return n.textContent; });
+      return [].slice.call(scope.querySelectorAll('.ov-row .ov-row-t')).map(function (n) { return n.textContent; });
     }
     var more = document.getElementById('lgMore');
     var all = labels(o), moreLabels = more ? labels(more) : [];
