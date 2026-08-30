@@ -18,8 +18,8 @@
     { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "screenshots": [
-    { "src": "/icons/screenshots/track.png", "sizes": "1080x1920", "type": "image/png", "form_factor": "narrow", "label": "Log feeds, naps, nappies and growth in one calm place" },
-    { "src": "/icons/screenshots/vaccines.png", "sizes": "1080x1920", "type": "image/png", "form_factor": "narrow", "label": "Your country's vaccine schedule with gentle reminders" },
-    { "src": "/icons/screenshots/circle.png", "sizes": "1080x1920", "type": "image/png", "form_factor": "narrow", "label": "Share with your whole care circle in real time" }
+    { "src": "/icons/screenshots/01-two-names.png", "sizes": "1170x2532", "type": "image/png", "form_factor": "narrow", "label": "Two people, one timeline. Every entry says who logged it." },
+    { "src": "/icons/screenshots/02-private-note.png", "sizes": "1170x2532", "type": "image/png", "form_factor": "narrow", "label": "Your private note stays private. Never shared with your circle, ever." },
+    { "src": "/icons/screenshots/03-quiet-after-loss.png", "sizes": "1170x2532", "type": "image/png", "form_factor": "narrow", "label": "After a loss, Cubby goes quiet with you. Your memories stay, the prompts stop." }
   ]
 }

@@ -464,7 +464,21 @@ const baby = () => seed(null, {
     await page.evaluate(() => { window.LL = window.LL || {}; window.LL.matIsOwner = function () { return false; }; render(); });
     await sleep(300);
     r = await page.evaluate(() => quickAvailable('pregnancy').map((a) => a.k));
-    ok('at 30 weeks the kick counter is there for him too, mood is still not', r.indexOf('kicks') >= 0 && r.indexOf('mood') < 0, r);
+    /* This line used to read "at 30 weeks the kick counter is there for him too" and passed. It was
+       asserting the defect: a kick session, a contraction and a symptom all write records only she
+       owns, so his taps moved a number, said "Session saved" or "Logged", reached nothing and came
+       off again on her next snapshot. All three are ownerOnly now, the way mood always was, and the
+       round button disappears for him rather than offering three shortcuts to nowhere. The point of
+       this section is unchanged and still checked below: the week rule is not what is doing this,
+       because at 30 weeks it would have let kicks through. See tools/caregiver_write_check.js. */
+    ok('at 30 weeks nothing on the round button is his to write', r.length === 0, r);
+    ok('and it is ownership doing that, not the week gate', await page.evaluate(() => {
+      const before = quickAvailable('pregnancy').map((a) => a.k);
+      const was = window.LL.matIsOwner; window.LL.matIsOwner = function () { return true; };
+      const after = quickAvailable('pregnancy').map((a) => a.k);
+      window.LL.matIsOwner = was;
+      return before.length === 0 && after.indexOf('kicks') >= 0;
+    }), r);
     await page.evaluate(() => { try { delete window.LL.matIsOwner; } catch (e) {} });
   });
 

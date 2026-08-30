@@ -42,7 +42,7 @@ function rule(sel) {
 console.log('card grid');
 
 // The tokens have to exist before anything can point at them.
-['--gutter', '--stack', '--pad-card', '--pad-dense', '--r-card', '--r-dense'].forEach(t => {
+['--gutter', '--stack', '--pad-card', '--pad-dense', '--r-card'].forEach(t => {
   check(new RegExp('\\' + t + ':').test(SRC), 'token ' + t + ' is defined');
 });
 
@@ -61,7 +61,7 @@ CARDS.forEach(sel => {
 {
   const b = rule('.alert-pill{');
   check(!!b && /padding:var\(--pad-dense\)/.test(b), '.alert-pill uses var(--pad-dense)');
-  check(!!b && /border-radius:var\(--r-dense\)/.test(b), '.alert-pill uses var(--r-dense)');
+  check(!!b && /border-radius:var\(--r-card\)/.test(b), '.alert-pill uses var(--r-card)');
 }
 
 /* Three more that the first pass did not reach, found by measuring the rendered page rather than
@@ -79,8 +79,8 @@ CARDS.forEach(sel => {
   });
 {
   const b = rule('.tip-static{');
-  check(!!b && /border-radius:var\(--r-dense\)/.test(b),
-    '.tip-static shares the dense radius with .alert-pill');
+  check(!!b && /border-radius:var\(--r-card\)/.test(b),
+    '.tip-static shares its radius with .alert-pill');
 }
 
 /* THE ONE THAT WAS ACTUALLY VISIBLE. .sec-title carried margin:6px 4px 12px, so every section
@@ -133,11 +133,19 @@ CARDS.forEach(sel => {
    other, which reads as three families rather than one. Everything is 16 now; the quick-log tiles
    keep 26 because they are the app's primary tap targets and the softer corner is doing a job
    there. That exception has its own token so it is a decision somebody made rather than a leftover.
-   Four tokens still resolve to 16px (--radius, --radius-sm, --r-card, --r-dense). They are not
-   consolidated on purpose: renaming 35 selectors to save three aliases is churn with a real chance
-   of missing one, and this check makes the value single-sourced regardless. */
+   This block used to assert that FOUR tokens all resolved to 16px (--radius, --radius-sm, --r-card,
+   --r-dense) and argued they should stay: renaming 35 selectors to save three aliases looked like
+   churn, and single-sourcing the value seemed like enough. That was wrong, and the argument had the
+   defect inside it. A token's job is not only to single-source a value, it is to tell the next
+   person which choice they are making. Four names for one number told them the choice was
+   meaningless, so the next thirty radii got hand-typed instead. --radius-sm in particular promised
+   a smaller corner and delivered the same one.
+
+   They are consolidated now. --r-card is the single card radius, the rename was done in one pass,
+   and tools/surface_token_check.js asserts on the RENDERED element that no two radius tokens share
+   a value, which is the check that would have caught this in the first place. */
 {
-  const tokens = ['--radius', '--radius-sm', '--r-card', '--r-dense'];
+  const tokens = ['--r-card'];
   tokens.forEach(t => {
     const m = SRC.match(new RegExp('\\' + t + ':\\s*([^;]+);'));
     check(!!m, 'token ' + t + ' is defined');
@@ -172,7 +180,7 @@ CARDS.forEach(sel => {
 {
   // the disclaimer is card-shaped and joins the one radius
   const b = rule('.disclaimer{');
-  check(!!b && /border-radius:var\(--radius\)/.test(b), '.disclaimer uses the shared radius');
+  check(!!b && /border-radius:var\(--r-card\)/.test(b), '.disclaimer uses the shared radius');
 }
 
 /* Two column-level fixes that are easy to undo by accident.

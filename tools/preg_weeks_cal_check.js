@@ -41,12 +41,18 @@ const CLOCK = (() => { const d = new Date(); d.setHours(10, 30, 0, 0); return d.
 const OFFSET = CLOCK - Date.now();
 const now = CLOCK;
 
-/* pregWeek() with a due date is `40 - round((due-now)/WEEK)`, so week n begins at
-   due - (40.5-n)*WEEK. Both helpers below are written from that inverse rather than from a naive
-   "due minus (40-n) weeks", which is half a week out and would grade the wrong day.
+/* pregWeek() with a due date is `floor((280d - (due-now)) / WEEK)`, completed weeks, so week n
+   begins at due - (40-n)*WEEK. Both helpers below are written from that inverse rather than guessed
+   at, and it is the same arithmetic pregApptDate uses for the visits beside these markers.
    `agoMs` pulls the due date EARLIER, which is what puts the turn of week n in the past: she is
-   further along than a due date of today-plus-15-and-a-half-weeks would make her. */
-const dueForWeek = (n, agoMs) => now + (40.5 - n) * WEEK - (agoMs || 0) - 1000;
+   further along than a due date of today-plus-sixteen-weeks would make her. */
+/* A due date that puts "now" one second into week n. This is the inverse of pregWeekStart(n), and it
+   moved when pregWeekStart did: the 40.5 was mirroring pregWeek()'s old Math.round, which named days
+   4, 5 and 6 of every week as the next week and pushed the preterm rule three days early. pregWeek()
+   now floors completed weeks, so the turn is at (40-n) weeks before the due date, which is also what
+   pregApptDate has always used. Left at 40.5 this helper seeds week n-1 and every assertion below
+   grades the wrong week. */
+const dueForWeek = (n, agoMs) => now + (40 - n) * WEEK - (agoMs || 0) - 1000;
 
 const preg = (over) => Object.assign({
   id: 'p1', ownerUid: 'local', stage: 'expecting',

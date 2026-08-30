@@ -120,6 +120,17 @@
   var pregOwner = null;   // uid whose journey we are currently listening to
   var pregShared = [];    // sharedWith[] for the journey (last seen, so a data write keeps consent)
   var knownPregJourney = null; // sig of last-synced {data, sharedWith} (diffing)
+  /* The preparation checklist gets its OWN last-synced signature, and it has to.
+     knownPregJourney is a whole-document signature, and every device latches permanently
+     different from it about a second after boot: applyPregJourney adopts the server's data, then
+     the first render calls ensurePregFields, which adds `gentle` and `guesses` locally. Neither is
+     stripped by pregJourneyData, so `unsaved` below is TRUE forever on every phone, including
+     phones holding no edit at all. Keying "do I owe the cloud a checklist?" off that flag meant a
+     partner's tick was kept locally by BOTH devices and adopted by neither: his tick never reached
+     her, and her next save wrote her stale list back over it. This signature moves only when the
+     checklist itself is adopted from a snapshot or successfully written, so it means exactly what
+     it says. */
+  var knownPrecon = null;      // sig of the precon array we last adopted from / wrote to the cloud
   var legacyBlobPreg = null;   // a journey found in a legacy `app` blob, awaiting one-time relocation
   var pregMigrated = false;    // owner has already relocated the legacy journey this session
 
@@ -858,7 +869,7 @@
     unsub = []; matUnsub = []; pregUnsub = []; booted = false; knownEvents = {};
     _lastInviteEmail = ''; // per-uid cache: never let one account's invite email survive into the next
     matOwner = null; matShared = {}; knownMat = {};
-    pregOwner = null; pregShared = []; knownPregJourney = null; legacyBlobPreg = null; pregMigrated = false;
+    pregOwner = null; pregShared = []; knownPregJourney = null; knownPrecon = null; legacyBlobPreg = null; pregMigrated = false;
     if (pregPhotoUnsubOwn) { try { pregPhotoUnsubOwn(); } catch (e) {} pregPhotoUnsubOwn = null; }
     if (pregPhotoUnsubOther) { try { pregPhotoUnsubOther(); } catch (e) {} pregPhotoUnsubOther = null; }
     pregPhotoOtherOwner = null; circlePhotoIds = {}; pregBytesMigrating = false;
@@ -1276,7 +1287,7 @@
     pregShared = d.sharedWith || [];
     var data = d.data || {};
     var p = state.pregnancy || {};
-    if (p.id && data.id && p.id !== data.id) p = {}; // a different pregnancy -> drop stale fields
+    if (p.id && data.id && p.id !== data.id) { p = {}; knownPrecon = null; } // a different pregnancy -> drop stale fields
 
     var unsaved = false;
     try {
@@ -1285,9 +1296,21 @@
       }
     } catch (e) { unsaved = false; }
     var keepAppts = (unsaved && Array.isArray(p.appts)) ? p.appts : null;
+    /* The checklist needs the identical protection and needs it more, because here the second
+       writer is the normal case rather than the unlucky one. But it must NOT hang off `unsaved`:
+       that flag is latched true on every device (see knownPrecon above), so keying off it kept the
+       local list forever and threw away every checklist the cloud ever sent. Ask the narrow
+       question instead: is THIS device holding a checklist edit it has not managed to save? */
+    var preconDirty = false;
+    try { preconDirty = knownPrecon !== null && stableStringify(p.precon || []) !== knownPrecon; } catch (e) { preconDirty = false; }
+    var keepPrecon = (preconDirty && Array.isArray(p.precon)) ? p.precon : null;
 
     Object.keys(data).forEach(function (k) { p[k] = data[k]; });
     if (keepAppts) p.appts = keepAppts;
+    // Not holding one of our own: adopt theirs, and remember it, so the next snapshot is judged
+    // against what we actually have rather than against a doc-wide signature that never matches.
+    if (keepPrecon) p.precon = keepPrecon;
+    else { try { knownPrecon = stableStringify(data.precon || []); } catch (e) {} }
     p.ownerUid = owner; // routing meta lives on the doc, not in data
     state.pregnancy = p;
 
@@ -1299,6 +1322,7 @@
   // member never even learns a pregnancy exists, and an owner who ended it sees it cleared).
   function clearPregJourneyState() {
     state.pregnancy = null;
+    preconDenied = false; knownPrecon = null; // a refusal belongs to one journey; the next one starts unjudged
     matOwner = null; matShared = {}; knownMat = {};
     matUnsub.forEach(function (u) { try { u(); } catch (e) {} }); matUnsub = [];
     ensureOtherPregPhotoListener(null); // and stop rendering byte we may no longer see
@@ -1389,7 +1413,7 @@
   // a non-owner tries each member's doc (ones not shared with us fail permission and are ignored).
   function ensurePregListeners(uidNow) {
     pregUnsub.forEach(function (u) { try { u(); } catch (e) {} });
-    pregUnsub = []; pregOwner = null; pregShared = []; knownPregJourney = null;
+    pregUnsub = []; pregOwner = null; pregShared = []; knownPregJourney = null; knownPrecon = null;
     if (!hhRef || !uidNow) return;
     var base = hhRef.collection('pregnancy');
     // The owner (or whoever holds her own doc) reads her own journey.
@@ -1421,10 +1445,50 @@
       }));
     });
   }
-  // The owner writes her changed journey doc (data + current sharedWith). No-op for non-owners.
+  /* ---------- the shared preparation checklist (precon), the one field a partner writes ----------
+     Everything else on the journey doc is hers alone. The checklist is not: it is folic acid, a
+     dentist check, easing off alcohol, and it was already rendered to the people she chose to tell,
+     just uninteractively — so the stage meant to be done by two people contained nothing two people
+     could do. It stays on THIS document rather than moving to the circle-shared `app` blob, because
+     that blob is readable by every member (a grandparent, a nanny) and a checklist that opens with
+     folic acid announces that someone is trying to conceive to people she never told. The audience
+     has to stay exactly the sharedWith[] she picked, and that is this document's audience already.
+     So a non-owner writes ONE field path, data.precon, and firestore.rules allows that key alone.
+     If those rules are not deployed the write is refused, and a refusal has to be said out loud
+     rather than left as a tick that quietly disappears on the next snapshot. */
+  var preconDenied = false; // this device asked to write the shared list and was refused
+  async function syncSharedPrecon(uidNow) {
+    var p = state.pregnancy;
+    if (!hhRef || !p || !p.ownerUid || p.ownerUid === uidNow) return;
+    if (preconDenied) return; // the door is closed; index.html has already gone read-only
+    /* Compared on the checklist alone, never on the whole-document signature. That signature never
+       matches on any device (knownPrecon, above), so gating on it fired a Firestore write on every
+       single persist() a partner made, about anything at all. */
+    var sig = stableStringify(p.precon || []);
+    if (knownPrecon === sig) return; // nothing of ours is waiting to go out
+    try {
+      await hhRef.collection('pregnancy').doc(p.ownerUid)
+        .update({ 'data.precon': p.precon || [], updatedAt: window.LL.serverTimestamp() });
+      knownPrecon = sig; // it is the cloud's now, so the echo of our own write is adopted quietly
+    } catch (e) {
+      console.warn('shared precon push', e);
+      /* Dropping the signature is the honest half: nothing is dirty while it is null, so the very
+         next snapshot restores the owner's list over the tick that did not save, instead of this
+         device holding an edit forever that nobody else will ever see. */
+      knownPrecon = null;
+      if (e && e.code === 'permission-denied') {
+        preconDenied = true;
+        try { if (booted) rerender(); } catch (e2) {}
+        try { window.toast && window.toast('Could not save that, try again'); } catch (e2) {}
+      }
+    }
+  }
+  // The owner writes her changed journey doc (data + current sharedWith). A member she shared it
+  // with writes the preparation checklist and nothing else.
   async function syncPregJourney(uidNow) {
     var p = state.pregnancy;
-    if (!hhRef || !p || !p.ownerUid || p.ownerUid !== uidNow) return; // only the owner writes her own journey
+    if (!hhRef || !p || !p.ownerUid) return;
+    if (p.ownerUid !== uidNow) { syncSharedPrecon(uidNow); return; }
     var data = pregJourneyData(p);
     var shared = pregShared || [];
     var sig = stableStringify([data, shared]);
@@ -1433,6 +1497,8 @@
     try {
       await hhRef.collection('pregnancy').doc(uidNow)
         .set({ ownerUid: uidNow, data: data, sharedWith: shared, updatedAt: window.LL.serverTimestamp() });
+      // Her whole-document write carries the checklist too, so it is no longer hers alone to owe.
+      knownPrecon = stableStringify(data.precon || []);
     } catch (e) { console.warn('pregnancy journey push', e); }
   }
 
@@ -1882,6 +1948,10 @@
     // the original unbounded listener so boot can never hang.
     var bootCutoff = Date.now() - 120 * 86400000; // ~4 months
     var hydratedHistory = false;
+    // Anything that answers a question about all of history (first tastes, the allergen block on the
+    // visit summary) has to know that "never" currently means "not in the last four months". Set
+    // here, cleared the moment the full read lands or fails; a local-only account never sets it.
+    window.cubbyHistoryPending = true;
     function hydrateFullHistory() {
       if (hydratedHistory) return; hydratedHistory = true;
       eventsRef.get().then(function (snap) {
@@ -1893,8 +1963,9 @@
           knownEvents[doc.id] = JSON.stringify(stripMeta(data)); added++;
         });
         applyingRemote = false;
-        if (added && booted) rerender();
-      }).catch(function (e) { console.warn('events hydrate', e); });
+        window.cubbyHistoryPending = false;
+        if (booted) rerender(); // even with nothing added: surfaces that were waiting can now answer
+      }).catch(function (e) { window.cubbyHistoryPending = false; console.warn('events hydrate', e); });
     }
     function subscribeEvents(query, isFallback) {
       return query.onSnapshot(function (snap) {
@@ -1912,6 +1983,7 @@
         });
         applyingRemote = false;
         gotEvents = true;
+        if (isFallback) window.cubbyHistoryPending = false; // unbounded listener: this IS all of it
         if (!booted) { maybeBoot(); if (!isFallback) hydrateFullHistory(); }
         else if (!(snap.metadata && snap.metadata.hasPendingWrites)) rerender();
       }, function (e) {
@@ -2270,6 +2342,16 @@
     return window.LL.role === 'owner';
   };
   window.LL.pregJourneyShared = function () { return (pregShared || []).slice(); };
+  /* Can this person tick the shared preparation checklist? True for the owner, true for anyone the
+     journey is shared with until a write is actually refused, and true with no cloud at all (solo
+     on one device). index.html renders the list read-only whenever this is false, so a partner is
+     never handed a control that will not hold. */
+  window.LL.preconCanWrite = function () {
+    var u = auth.currentUser, p = state.pregnancy;
+    if (!u || !p) return true;
+    if (!p.ownerUid || p.ownerUid === 'local' || p.ownerUid === u.uid) return true;
+    return !preconDenied;
+  };
   // Owner sets who in the circle may see the journey. Claiming an unassigned/legacy pregnancy is
   // role-gated to the household owner (mirrors pushNow + matSetShared) so a caregiver can never
   // become owner as a side-effect of toggling a share.
@@ -2283,6 +2365,7 @@
     pregShared = (uids || []).slice();
     var data = pregJourneyData(p);
     knownPregJourney = stableStringify([data, pregShared]);
+    knownPrecon = stableStringify(data.precon || []);
     try {
       await hhRef.collection('pregnancy').doc(u.uid)
         .set({ ownerUid: u.uid, data: data, sharedWith: pregShared, updatedAt: window.LL.serverTimestamp() });
@@ -2296,7 +2379,7 @@
     if (owner !== u.uid) return; // only the owner clears her own
     try { await window.LL.matClear(); } catch (e) {}
     try { await hhRef.collection('pregnancy').doc(u.uid).delete(); } catch (e) {}
-    pregShared = []; knownPregJourney = null; pregOwner = null;
+    pregShared = []; knownPregJourney = null; knownPrecon = null; pregOwner = null;
   };
 
   /* ---------- account deletion (App Store 5.1.1(v)) ---------- */

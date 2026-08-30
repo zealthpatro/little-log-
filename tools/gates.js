@@ -39,6 +39,28 @@ const TREE = [
   { name: 'claude-md',      cmd: ['node', 'tools/claudemd_check.js', '--self-test'] },
   { name: 'type',           cmd: ['node', 'tools/type_check.js', 'url'] },
   { name: 'grid',           cmd: ['node', 'tools/grid_check.js'] },
+  { name: 'type-scale',     cmd: ['node', 'tools/type_scale_check.js'] },
+  /* design-doc checks design/DESIGN-SYSTEM.md against the code in both directions, which is the
+     only thing keeping that file from turning into decoration. It was held back when it landed
+     because it matched sentences and the radius consolidation broke it by CORRECTING the prose it
+     was matching; it now reads token-keyed table rows and takes the list of tokens from :root, so
+     rewording is free and a dropped row is a failure. It runs first of the design gates, because
+     when it and one of them both go red, the one below is usually the cause and this is the
+     symptom. */
+  { name: 'design-doc',      cmd: ['node', 'tools/design_doc_check.js', 'url'] },
+  { name: 'component-dupe',  cmd: ['node', 'tools/component_dupe_check.js', 'url'] },
+  { name: 'touch-target',    cmd: ['node', 'tools/touch_target_check.js', 'url'] },
+  { name: 'contrast',        cmd: ['node', 'tools/contrast_check.js', 'url'] },
+  { name: 'motion',          cmd: ['node', 'tools/motion_check.js', 'url'] },
+  { name: 'surface-token',   cmd: ['node', 'tools/surface_token_check.js', 'url'] },
+  { name: 'ask-emergency',   cmd: ['node', 'tools/ask_emergency_check.js', 'url'] },
+  { name: 'temp-units',      cmd: ['node', 'tools/temp_units_fever_check.js', 'url'] },
+  { name: 'illness-dose',    cmd: ['node', 'tools/illness_dose_integrity_check.js', 'url'] },
+  { name: 'preg-deeplink',   cmd: ['node', 'tools/preg_deeplink_lmp_check.js', 'url'] },
+  { name: 'preg-week',       cmd: ['node', 'tools/preg_week_rounding_check.js', 'url'] },
+  { name: 'caregiver-write', cmd: ['node', 'tools/caregiver_write_check.js', 'url'] },
+  { name: 'caregiver-read',  cmd: ['node', 'tools/caregiver_read_check.js', 'url'] },
+  { name: 'loss-keepsake',   cmd: ['node', 'tools/loss_keepsake_check.js', 'url'] },
   { name: 'teach',          cmd: ['node', 'tools/teach_gate.js'] },
   { name: 'perf',           cmd: ['node', 'tools/perf_check.js', 'url'] },
   { name: 'home-truth',     cmd: ['node', 'tools/home_truth_check.js', 'url'] },
@@ -79,6 +101,13 @@ const TREE = [
   { name: 'nappy-colour',    cmd: ['node', 'tools/nappy_colour_check.js', 'url'] },
   { name: 'med-limits',      cmd: ['node', 'tools/med_limits_check.js', 'url'] },
   { name: 'things-to-ask',   cmd: ['node', 'tools/things_to_ask_check.js', 'url'] },
+  { name: 'pump-stash',      cmd: ['node', 'tools/pump_stash_check.js', 'url'] },
+  { name: 'solids',          cmd: ['node', 'tools/solids_structured_check.js', 'url'] },
+  { name: 'csv-import',      cmd: ['node', 'tools/csv_import_check.js', 'url'] },
+  { name: 'manifest-shots',  cmd: ['node', 'tools/manifest_shots_check.js', 'url'] },
+  { name: 'precon-shared',   cmd: ['node', 'tools/precon_shared_check.js', 'url'] },
+  { name: 'preg-proof',      cmd: ['node', 'tools/preg_proof_line_check.js', 'url'] },
+  { name: 'ask-box',         cmd: ['node', 'tools/ask_box_check.js', 'url'] },
   { name: 'illness-start',  cmd: ['node', 'tools/illness_start_check.js', 'url'] },
   { name: 'appt-ics',       cmd: ['node', 'tools/appt_ics_check.js', 'url'] },
   { name: 'feed-tile',      cmd: ['node', 'tools/feed_tile_guard_check.js', 'url'] },

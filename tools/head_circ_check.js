@@ -147,7 +147,7 @@ const seed = (over) => {
 
   // Everything the growth section actually renders, read off the live DOM.
   const growthDom = () => page.evaluate(() => {
-    const boxes = [...document.querySelectorAll('.gx-stat .gx-box')].map((x) => ({
+    const boxes = [...document.querySelectorAll('#gxTiles .stat-tile')].map((x) => ({
       label: (x.querySelector('.l') || {}).textContent || '',
       num: ((x.querySelector('.n') || {}).textContent || '').trim(),
       delta: ((x.querySelector('.d') || {}).textContent || '').trim(),
@@ -168,9 +168,9 @@ const seed = (over) => {
      twice its font-size, and a number that is merely too wide comes back with scrollWidth past the
      box. Both are the same bug to a parent: the third box stops lining up with the other two. */
   const rowGeom = () => page.evaluate(() => {
-    const row = document.querySelector('.gx-stat');
+    const row = document.querySelector('#gxTiles');
     if (!row) return null;
-    const boxes = [...row.querySelectorAll('.gx-box')].map((b) => {
+    const boxes = [...row.querySelectorAll('.stat-tile')].map((b) => {
       const n = b.querySelector('.n'), l = b.querySelector('.l');
       const cs = getComputedStyle(n), fs = parseFloat(cs.fontSize);
       const nr = n.getBoundingClientRect(), br = b.getBoundingClientRect();
@@ -584,7 +584,7 @@ const seed = (over) => {
 
   console.log('\n14. three boxes still fit on one line');
   {
-    /* .gx-stat is a plain flex row of flex:1 boxes and it was priced for two. At 390 the third box
+    /* .stat-tiles is a plain flex row of flex:1 boxes and it was priced for two. At 390 the third box
        came in at 108.7px and "41.8 cm" broke onto a second line while "6.85 kg" did not, so one
        box stood taller than its neighbours and the labels stopped lining up. */
     /* Two datasets. The first is the one measured on the broken build, where 6.8 and 62 stayed on
