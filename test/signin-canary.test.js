@@ -25,7 +25,7 @@ const DATASTORE = 'https://www.googleapis.com/auth/datastore';
    datastore scope produce a 403 here exactly as it did in production. */
 function makeWorld(opts) {
   opts = opts || {};
-  const world = { docs: new Map(), mail: [], tokenScopes: [], deletes: 0, resendStatus: opts.resendStatus || 200 };
+  const world = { docs: new Map(), mail: [], tokenScopes: [], deletes: 0, beat: opts.beat || null, resendStatus: opts.resendStatus || 200 };
   const scopeOf = new Map();
   let n = 0;
 
@@ -49,6 +49,13 @@ function makeWorld(opts) {
     }
 
     if (url.indexOf('firestore.googleapis.com') >= 0) {
+      if (url.indexOf('/ops/canary') >= 0) {
+        const granted = scopeOf.get(tok) || '';
+        if (granted.indexOf(DATASTORE) < 0) return { ok: false, status: 403, text: async () => 'PERMISSION_DENIED' };
+        if (init.method === 'PATCH') { world.beat = JSON.parse(init.body).fields; return { ok: true, status: 200, json: async () => ({}) }; }
+        if (!world.beat) return { ok: false, status: 404, json: async () => ({}) };
+        return { ok: true, status: 200, json: async () => ({ fields: world.beat }) };
+      }
       const id = url.split('/signinCodes/')[1].split('?')[0];
       const granted = scopeOf.get(tok) || '';
       // THE REGRESSION, modelled: no datastore scope, no write. This is what returned 502 for 4 days.
@@ -160,6 +167,61 @@ const ENV = (extra) => Object.assign({
   w = makeWorld();
   v = await run(w, ENV({ FIREBASE_SERVICE_ACCOUNT: 'not json' }));
   ok('an unparseable service account is reported', v.ok === false && /FIREBASE_SERVICE_ACCOUNT/.test(v.reason), v.reason);
+
+  console.log('\n7. the heartbeat, so silence stops being ambiguous');
+  w = makeWorld();
+  v = await run(w);
+  ok('a healthy run records a heartbeat', !!w.beat, JSON.stringify(w.beat));
+  ok('and it says ok', w.beat && w.beat.ok && w.beat.ok.booleanValue === true);
+  ok('and it carries a timestamp', w.beat && Number(w.beat.at.integerValue) > 0);
+
+  w = makeWorld({ writeStatus: 403 });
+  v = await run(w);
+  /* The case that matters most. A failing run that wrote nothing would read as "not running", which
+     is a different fault with a different fix, and the mail would be arguing with the endpoint. */
+  ok('a FAILING run still records a heartbeat, marked not-ok', !!w.beat && w.beat.ok.booleanValue === false,
+     JSON.stringify(w.beat));
+  ok('and the heartbeat keeps the reason for the operator', /403/.test((w.beat.reason || {}).stringValue || ''));
+
+  console.log('\n8. GET /api/canary turns that record into something a monitor can poll');
+  const worker = mod.default;
+  const hit = async (world, env) => {
+    globalThis.fetch = world.fetch;
+    try { return await worker.fetch(new Request('https://little-cubby.com/api/canary'), env || ENV(), {}); }
+    finally { globalThis.fetch = realFetch; }
+  };
+  const beatDoc = (ageMs, okFlag, reason) => ({
+    at: { integerValue: String(Date.now() - ageMs) },
+    ok: { booleanValue: okFlag },
+    reason: { stringValue: reason || 'fine' }
+  });
+
+  let r = await hit(makeWorld({ beat: beatDoc(60 * 1000, true) }));
+  let b = await r.json();
+  ok('a fresh green heartbeat answers 200', r.status === 200 && b.ok === true, r.status + ' ' + JSON.stringify(b));
+
+  r = await hit(makeWorld({ beat: beatDoc(60 * 1000, false, 'the Firestore write was refused: 403 PERMISSION_DENIED') }));
+  b = await r.json();
+  ok('a fresh RED heartbeat answers 503 failing', r.status === 503 && b.code === 'failing', r.status + ' ' + JSON.stringify(b));
+  /* The endpoint is public. The operator detail belongs in the alert mail, not on the open internet. */
+  ok('and it does NOT leak the Firestore error body to the public',
+     !/PERMISSION_DENIED/.test(JSON.stringify(b)), JSON.stringify(b));
+
+  /* THE WHOLE POINT: the cron stopped, so nothing is failing and nothing is running. Before this,
+     that state was indistinguishable from health. */
+  r = await hit(makeWorld({ beat: beatDoc(50 * 60 * 1000, true) }));
+  b = await r.json();
+  ok('a STALE heartbeat is a failure, even though its last verdict was ok',
+     r.status === 503 && b.code === 'stale', r.status + ' ' + JSON.stringify(b));
+
+  r = await hit(makeWorld());
+  b = await r.json();
+  ok('no heartbeat at all is a failure, not a pass', r.status === 503 && b.code === 'never_run', JSON.stringify(b));
+
+  r = await hit(makeWorld(), ENV({ FIREBASE_SERVICE_ACCOUNT: 'not json' }));
+  b = await r.json();
+  ok('and being unable to read the record is never reported as healthy',
+     r.status === 503 && b.ok === false, r.status + ' ' + JSON.stringify(b));
 
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   console.log('SIGNIN-CANARY: ' + (fail ? 'FAIL' : 'PASS') + '\n');

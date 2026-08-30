@@ -29,6 +29,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+
+    /* The sign-in canary's heartbeat. Server-only: the Worker writes it with admin credentials, which
+       bypass this file, and no client has any business reading when sign-in was last proven working.
+       Deny-by-default already covers an unmatched path; it is written out because this file states its
+       denials rather than relying on them (see /newsletter above). */
+    match /ops/{doc} {
+      allow read, write: if false;
+    }
     // Invites are keyed by the invitee's lowercased email.
     match /invites/{email} {
       allow read: if request.auth != null && request.auth.token.email.lower() == email;

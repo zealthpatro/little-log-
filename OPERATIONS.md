@@ -51,6 +51,29 @@ It mails at most once per six hours, so a long outage does not become 384 identi
 Covers the write path, which is what broke. It does NOT cover routing, `signinGuard`, or the Resend
 send, so `signin_live_check.js` above is still the post-deploy check.
 
+**And it has a pulse, so silence means something.** A healthy canary is silent, so "no alarm" and "no
+canary" used to be the same observation, and a canary cannot report its own death: if the cron stops,
+nothing runs to notice that nothing ran. Every cycle now writes its verdict to `ops/canary` (server
+only, denied to every client in `firestore.rules`), and:
+
+```
+curl -s -o /dev/null -w '%{http_code}\n' https://little-cubby.com/api/canary
+```
+
+`200 {ok:true, ageSeconds}` when sign-in was proven working within the last 45 minutes.
+`503` otherwise, with a `code` saying which: `failing` (the last run could not mint a code),
+`stale` (nothing has run for 45 minutes, three missed crons, so the cron itself is dead),
+`never_run`, or `unavailable`. It is public and deliberately terse: a code and an age, never the
+Firestore error body, which goes only to the alert mail. Cached 60s so polling cannot make the Worker
+mint a token per request.
+
+**Point any uptime monitor at that URL.** That is the whole point of it: a dead man's switch cannot
+live inside the thing it watches, so the last hop has to be somebody else's process. Free tiers of
+UptimeRobot, Better Stack and Cloudflare's own health checks all do a 200-or-page on a URL. With
+`ALERT_EMAIL` set you get the detailed mail when sign-in breaks; with an external monitor on
+`/api/canary` you also get told when the alarm itself stops running, which is the failure `ALERT_EMAIL`
+alone cannot cover.
+
 ```
 node tools/shot.js http://localhost:8080/<page>/ /tmp/x.png 390 full   # eyeball any page (see tools/shot.js)
 ```

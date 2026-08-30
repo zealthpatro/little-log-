@@ -415,24 +415,24 @@ async function signinCanaryProbe(env) {
       if (!probe.ok) why = 'the Firestore write was refused: ' + probe.status + ' ' + (await probe.text()).slice(0, 180);
     } catch (e) { why = 'the Firestore write threw: ' + ((e && e.message) || String(e)); }
     await remove();
-    return { ok: false, reason: why };
+    return { ok: false, reason: why, sa: sa, token: token };
   }
 
   /* Assert the ARTEFACT, never the return value. A canary that only checks "did the function say ok"
      is the same mistake that let the outage ship: the guards were tested and the feature never was. */
   let got;
   try { got = await fetch(path, { headers: { authorization: 'Bearer ' + token } }); }
-  catch (e) { return { ok: false, reason: 'a code was minted but reading it back threw: ' + ((e && e.message) || String(e)) }; }
+  catch (e) { return { ok: false, reason: 'a code was minted but reading it back threw: ' + ((e && e.message) || String(e)), sa: sa, token: token }; }
   if (!got.ok) {
     await remove();
-    return { ok: false, reason: 'a code was minted but no document exists to show for it, read ' + got.status };
+    return { ok: false, reason: 'a code was minted but no document exists to show for it, read ' + got.status, sa: sa, token: token };
   }
   let fields = {};
   try { fields = ((await got.json()) || {}).fields || {}; } catch (e) {}
   const missing = ['mac', 'email', 'exp', 'tries'].filter((k) => !fields[k]);
   await remove();
-  if (missing.length) return { ok: false, reason: 'the document was written but is malformed, missing: ' + missing.join(', ') };
-  return { ok: true, reason: 'code minted, document verified, document removed' };
+  if (missing.length) return { ok: false, reason: 'the document was written but is malformed, missing: ' + missing.join(', '), sa: sa, token: token };
+  return { ok: true, reason: 'code minted, document verified, document removed', sa: sa, token: token };
 }
 
 /* One mail per six hours. The outage ran four days, which at the cron interval would have been 384
@@ -475,8 +475,83 @@ async function signinCanaryAlert(env, reason) {
   return sent;
 }
 
+/* THE HEARTBEAT, and why it is not decoration.
+
+   A healthy canary is SILENT, so "no alarm" and "no canary" are the same observation, and that is the
+   failure this whole thing exists to end, one level up. Worse, a canary cannot report its own death:
+   if the cron stops, nothing runs to notice that nothing ran. So every cycle records its verdict, and
+   GET /api/canary turns that record into an HTTP status in which a STALE record is itself a failure.
+   Point any uptime monitor at that URL and the dead man's switch belongs to somebody else's process,
+   which is the only place it can honestly live. */
+const CANARY_BEAT = '/ops/canary';
+const CANARY_STALE_MS = 45 * 60 * 1000;   // three missed crons, so one slow run is not an alarm
+
+async function signinCanaryBeat(sa, token, verdict) {
+  try {
+    const base = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents';
+    await fetch(base + CANARY_BEAT, {
+      method: 'PATCH',
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ fields: {
+        at: { integerValue: String(Date.now()) },
+        ok: { booleanValue: !!verdict.ok },
+        reason: { stringValue: String(verdict.reason || '').slice(0, 300) }
+      } })
+    });
+  } catch (e) { /* the beat must never be the thing that breaks the cron */ }
+}
+
+/* GET /api/canary. Terse ON PURPOSE: it is public, so it carries a code and an age and never the
+   Firestore error body, which is for the alert mail. Cached for 60s so a poller cannot make the
+   Worker mint an access token per request. */
+async function canaryStatus(env) {
+  const key = new Request('https://cooldown.cubby.internal/canary-status');
+  try {
+    if (typeof caches !== 'undefined' && caches.default) {
+      const hit = await caches.default.match(key);
+      if (hit) return hit;
+    }
+  } catch (e) {}
+
+  const reply = (status, body) => {
+    const r = json(body, status);
+    try { r.headers.set('cache-control', 'public, max-age=60'); } catch (e) {}
+    return r;
+  };
+  let out, status;
+  try {
+    const sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT);
+    const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore');
+    const base = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents';
+    const got = await fetch(base + CANARY_BEAT, { headers: { authorization: 'Bearer ' + token } });
+    if (!got.ok) { status = 503; out = { ok: false, code: 'never_run' }; }
+    else {
+      const f = ((await got.json()) || {}).fields || {};
+      const at = Number((f.at && f.at.integerValue) || 0);
+      const wasOk = !!(f.ok && f.ok.booleanValue);
+      const age = Math.max(0, Math.round((Date.now() - at) / 1000));
+      if (!at) { status = 503; out = { ok: false, code: 'never_run' }; }
+      else if (Date.now() - at > CANARY_STALE_MS) { status = 503; out = { ok: false, code: 'stale', ageSeconds: age }; }
+      else if (!wasOk) { status = 503; out = { ok: false, code: 'failing', ageSeconds: age }; }
+      else { status = 200; out = { ok: true, ageSeconds: age }; }
+    }
+  } catch (e) {
+    /* Cannot reach the record at all, which is not the same as a healthy service and must never be
+       reported as one. */
+    status = 503; out = { ok: false, code: 'unavailable' };
+  }
+  const res = reply(status, out);
+  try {
+    if (typeof caches !== 'undefined' && caches.default) await caches.default.put(key, res.clone());
+  } catch (e) {}
+  return res;
+}
+
 export async function signinCanary(env) {
   const verdict = await signinCanaryProbe(env);
+  /* Recorded on BOTH paths. A failing run that wrote no heartbeat would read as "not running", which
+     is a different fault with a different fix, and the mail would be arguing with the endpoint. */
+  if (verdict.sa && verdict.token) await signinCanaryBeat(verdict.sa, verdict.token, verdict);
   if (!verdict.ok) await signinCanaryAlert(env, verdict.reason);
   return verdict;
 }
@@ -1822,6 +1897,12 @@ export default {
     }
     /* The code path, for containers a link cannot come back to. Kept as its own route rather than a
        mode on send-signin-link, so the working link path is untouched. */
+    /* The dead man's switch. Public and unauthenticated so an external uptime monitor can poll it;
+       it says whether sign-in works and how long ago that was last true, and nothing else. */
+    if (url.pathname === '/api/canary') {
+      if (request.method !== 'GET') return json({ error: 'method' }, 405);
+      return canaryStatus(env);
+    }
     if (url.pathname === '/api/signin-code') {
       if (request.method !== 'POST') return json({ error: 'method' }, 405);
       return sendSigninCode(request, env);
