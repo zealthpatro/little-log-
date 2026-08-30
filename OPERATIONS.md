@@ -29,6 +29,7 @@ node tools/type_check.js           # the type contract: who may wear the handwri
 node tools/sitesw_gate.js          # the ROOT service worker: caches no content, bypasses /app/, offline page
 node tools/sitesw_gate.js https://little-cubby.com   # AND against the live host, AFTER deploying. Not optional.
 node tools/thirdparty_gate.js       # the "no third-party trackers" promise, checked in a real browser
+node tools/signin_live_check.js     # can a person ACTUALLY get a code from prod and sign in with it
 node tools/shot.js http://localhost:8080/<page>/ /tmp/x.png 390 full   # eyeball any page (see tools/shot.js)
 ```
 Working in a git worktree? `serve.js` takes `PORT=8099` and every gate takes the base URL as its
