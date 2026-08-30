@@ -155,21 +155,24 @@ const LINK = 'https://little-cubby.com/__/auth/action?mode=signIn&oobCode=abc123
 
   console.log('\n6. no screen promises a code the inbox does not carry');
   {
-    // Call sites only; the `function showCodeEntry(` declaration is not one of them.
-    ok('the code panel is reachable only from the code endpoint', (STORE.match(/(?<!function )showCodeEntry\(/g) || []).length === 1
-      && /sendCode\(email\)\s*\n\s*\.then\(function \(d\) \{[^}]*showCodeEntry\(email, d && d\.cached\)/.test(STORE));
-    ok('sendCode has no link fallback to fall into', /function sendCode\(email\) \{[\s\S]{0,400}?\}\n/.test(STORE)
-      && !/function sendCode\([\s\S]{0,400}?sendSignInLinkToEmail/.test(STORE));
+    /* The panel is no longer chosen by the client at all: the sender states hasCode/hasLink with the
+       send, and the panel draws that. A screen can only offer a code box because something just put a
+       code in that inbox and said so. */
+    ok('the panel is drawn from what the sender said it sent', /var hasCode = !!res\.hasCode, hasLink = !!res\.hasLink;/.test(STORE));
+    ok('no code box unless a code was actually included', STORE.includes("if (hasCode) showCodeBox(email).focus(); else codeForm.style.display = 'none';"));
+    ok('one panel, so the two routes cannot drift apart', (STORE.match(/function showEmailSent\(/g) || []).length === 1
+      && !/function showSent\(/.test(STORE) && !/function showCodeEntry\(/.test(STORE));
     /* Firebase's own sender mails a bare link. If we ever fall back to it there is no code in her
        inbox, so there must be no code box on her screen — the same bug, wearing the other shoe. */
-    ok('the Firebase fallback is labelled as link-only', STORE.includes('return { fallback: true };'));
-    ok('and that label hides the code box', STORE.includes("if (res.fallback) codeForm.style.display = 'none'; else showCodeBox(email);"));
-    ok('a cooldown that sent NOTHING is not reported as a fresh send', /function sentLine\(email, cached, what\)/.test(STORE) && /We already sent /.test(STORE));
+    ok('the Firebase fallback declares itself link-only in that same shape', STORE.includes('return { fallback: true, hasLink: true, hasCode: false };'));
+    ok('the code sender is tried before the link sender', /return sendCode\(email\)\.catch\(function \(\) \{ return sendLink\(email\); \}\);/.test(STORE));
+    ok('a cooldown that sent NOTHING is not reported as a fresh send', /function sentLine\(email, cached\)/.test(STORE) && /We already sent /.test(STORE));
     ok('the worker response really is passed through to say so', STORE.includes('return d || {};'));
     ok('one code-submit implementation, shared by both panels', (STORE.match(/function showCodeBox\(/g) || []).length === 1
       && (STORE.match(/\/api\/signin-verify/g) || []).length === 1);
     ok('the code box is rendered on every surface now, not only installed iOS', /\+ '<form class="ll-code-form"/.test(STORE)
       && !/code \? '<form class="ll-code-form"/.test(STORE));
+    ok('and no browser-guess picks the route any more', !/function codeSignin\(/.test(STORE));
     ok('the session is still created in THIS container by custom token', STORE.includes('auth.signInWithCustomToken(d.token)'));
   }
 
@@ -187,10 +190,10 @@ const LINK = 'https://little-cubby.com/__/auth/action?mode=signIn&oobCode=abc123
         (s) => { const i = s.slice(s.indexOf('async function issueSigninCode('), s.indexOf('/* Same-origin + per-IP volume')); return !i.includes('updateMask'); }],
       ['the plaintext code gets stored next to its MAC', WORKER.replace('mac: { stringValue: mac },', 'mac: { stringValue: mac }, code: { stringValue: code },'),
         (s) => { const i = s.slice(s.indexOf('async function issueSigninCode('), s.indexOf('/* Same-origin + per-IP volume')); return !/code: \{ stringValue: code \}/.test(i); }],
-      ['the code box is shown over a link-only fallback email', STORE.replace("if (res.fallback) codeForm.style.display = 'none'; else showCodeBox(email);", 'showCodeBox(email);'),
-        (s) => s.includes("if (res.fallback) codeForm.style.display = 'none'; else showCodeBox(email);")],
-      ['a no-send cooldown is reported as a fresh send', STORE.replace('function sentLine(email, cached, what)', 'function sentLineOld(email, cached, what)'),
-        (s) => /function sentLine\(email, cached, what\)/.test(s)],
+      ['the code box is shown over an email with no code in it', STORE.replace("if (hasCode) showCodeBox(email).focus(); else codeForm.style.display = 'none';", 'showCodeBox(email).focus();'),
+        (s) => s.includes("if (hasCode) showCodeBox(email).focus(); else codeForm.style.display = 'none';")],
+      ['a no-send cooldown is reported as a fresh send', STORE.replace('function sentLine(email, cached)', 'function sentLineOld(email, cached)'),
+        (s) => /function sentLine\(email, cached\)/.test(s)],
     ];
     for (const [name, broken, assertion] of mut) {
       ok('catches: ' + name, assertion(broken) === false);

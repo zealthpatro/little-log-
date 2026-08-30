@@ -183,7 +183,10 @@ async function sendSigninLink(request, env) {
     });
     if (!r.ok) return json({ error: 'send_failed' }, 502);
     await cache.put(cooldown, new Response('1', { headers: { 'cache-control': 'max-age=60' } })); // start cooldown only on success
-    return json({ ok: true });
+    /* Say what the email ACTUALLY carries, rather than leaving the client to assume. This is the
+       whole bug class closed at the root: a screen can only offer a code box because the sender just
+       told it there is a code in that inbox, so the two can no longer drift apart. */
+    return json({ ok: true, hasCode: !!code, hasLink: true });
   } catch (e) {
     return json({ error: 'failed' }, 500);
   }
@@ -548,7 +551,7 @@ async function sendSigninCode(request, env) {
     });
     if (!r.ok) return json({ error: 'send_failed' }, 502);
     await cache.put(cooldown, new Response('1', { headers: { 'cache-control': 'max-age=60' } }));
-    return json({ ok: true });
+    return json({ ok: true, hasCode: true, hasLink: !!link });
   } catch (e) {
     return json({ error: 'failed' }, 500);
   }

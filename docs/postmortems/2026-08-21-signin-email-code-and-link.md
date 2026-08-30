@@ -133,3 +133,73 @@ that never failed was a gate nobody had proved could.
   predates the code path and is no longer the best advice available to them.
 - There is still **no sign-in telemetry**. The 2026-08-19 postmortem ended on that and it is still
   true: this report came from the founder, not from an alarm.
+
+---
+
+# Round two: make the code the happy path, and prove the whole flow
+
+**Asked:** "can we validate the full signup with email flow, where the code and the place to enter and
+authenticate it is the happy path, the long winding link is the unhappy path, and both exist in the
+same email sent to the customer."
+
+## What changed
+
+**`codeSignin()` is gone.** It decided from the browser (`isStandaloneApp() && isIOSDevice()`) which
+half of the email would work, and a browser cannot see the thing that decides it. Every surface now
+asks `/api/signin-code` first.
+
+**The link sender is now the fallback, not the default.** `sendEmail()` tries the code sender and
+drops to `/api/send-signin-link` only if it fails. That fallback is not decoration: the code endpoint
+requires a Firestore write, so making it the only route would turn a Firestore blip into every parent
+locked out of their own account. The link endpoint needs only Identity Toolkit.
+
+**The panel stopped guessing too, and this is the part that closes the bug class.** Both senders now
+answer with `hasCode` and `hasLink`, and the screen draws that. A code box can appear only because
+something just put a code in that inbox and said so. `showSent` and `showCodeEntry` became one
+`showEmailSent`; Firebase's own sender (last-resort, link-only) answers in the same shape with
+`hasCode: false`, so it cannot offer a box for a code it did not send. Before, the two panels were
+kept in agreement by hand, which is exactly the arrangement that produced the original report.
+
+## The validation
+
+`node test/signin-flow.test.js --self-test` — 71 assertions, in `tools/gates.js`.
+
+It imports **worker.js itself** and hands it real `Request` objects. Only what lives outside our code
+is stubbed: Resend, Firestore, Identity Toolkit, Google's token endpoint. A real RSA keypair is
+generated, so `getAccessToken` and `mintCustomToken` do real signing.
+
+It follows the parent, not the code:
+
+1. she asks for a code → one email, both halves in it
+2. **the six digits are read out of that email's HTML**, the way she reads them in Mail — never from
+   our own storage, which would prove the store works and say nothing about whether the number she
+   can see opens the door
+3. she types them back → a custom token whose **signature is verified against the public key**, so
+   "signed in" means a token Firebase would accept, not a 200
+4. the code dies on use; a replay is refused
+
+Then the rest of the surface: a re-issue kills the previous code, five wrong guesses burn it, one
+address's code cannot open another's, expiry, the cooldown mailing nothing and saying so, no-Origin
+refused on all three routes, a returning parent landing on the same account, and both half-down cases
+(no link, or no code) still getting her in with the half that survived.
+
+**The stubs model OAuth scope, and that is deliberate.** `OAUTH_SCOPE` defaults to identitytoolkit
+alone, and a sign-in request needs datastore as well. When that was missed, `/api/signin-code`
+returned 502 on **every** request in production for four days while the source read correctly and
+every string-matching gate stayed green — the remedy for a P0 was dead the entire time it was live.
+A stub that returns a valid token whatever was asked for would have been just as green. So the token
+here carries the scope it was minted with and each API refuses a token not minted for it. The
+`--self-test` rewrites the three call sites back to a bare `getAccessToken(sa)` and requires the flow
+to go red.
+
+Verified in the real UI as well: ask → code box focused → a wrong code recovers cleanly → the right
+code reaches `signInWithCustomToken`; and with the code sender forced to 502, the panel falls back to
+the link and offers **no** code box.
+
+## Still not covered by any of this
+
+The one thing neither harness can do is prove an email **arrived and rendered**. Both stub the
+sender. `tools/signin_live_check.js` (another session's, deliberately outside `gates.js` because it
+writes to production) walks the real happy path against the live host without an inbox, by deriving
+the HMAC key. That is the closest thing to a delivery check we have; actually reading the mail still
+needs a person with an inbox.

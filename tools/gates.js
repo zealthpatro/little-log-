@@ -128,6 +128,7 @@ const TREE = [
   { name: 'push-delivery',  cmd: ['node', 'test/push-delivery.test.js'] },
   { name: 'signin-canary',  cmd: ['node', 'test/signin-canary.test.js'] },
   { name: 'signin-email',   cmd: ['node', 'test/signin-email.test.js', '--self-test'] },
+  { name: 'signin-flow',    cmd: ['node', 'test/signin-flow.test.js', '--self-test'] },
   { name: 'push-caps',      cmd: ['node', 'test/push-caps.test.js'] },
   { name: 'duedate-cycle',  cmd: ['node', 'test/duedate-cycle.test.js', 'url'] },
   { name: 'fab-quicklog',   cmd: ['node', 'test/fab-quicklog.test.js', 'url'] },

@@ -362,7 +362,7 @@ feed.
 
 ## 4. Component vocabulary: one canonical name per job
 
-**695** distinct class names carry a rule across the eleven stylesheets, **315** of them in the main
+**693** distinct class names carry a rule across the eleven stylesheets, **315** of them in the main
 one. A name that appears only inside a CSS comment is not counted, because it does not carry a rule.
 The component audit walked that vocabulary and found the same job built up to sixteen times under
 sixteen names. The cost is not bytes. It is that a parent taps

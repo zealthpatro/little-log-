@@ -268,9 +268,15 @@ const SEED = {
     'the gentle push-failure toast is untouched: a queued write stays a toast, never a full state');
   ck(!/cubbyConnCard/.test(store.split('function pushNow')[1] || ''),
     'and the write path does not reach for the connectivity card');
-  const sendLinkCatch = /errText\(err, 'Could not send the link just now[^)]*\)/.exec(store);
-  ck(sendLinkCatch && !/,\s*true\s*\)/.test(sendLinkCatch[0]),
-    'sending a sign-in link does not claim a queue', sendLinkCatch ? sendLinkCatch[0] : 'not found');
+  /* Every failure to SEND a sign-in email must read as a plain failure, never as "queued, we will
+     sync later" — there is no queue behind it and telling a locked-out parent to wait is the cruellest
+     possible wrong answer. Matched on the shape rather than one exact sentence: this used to pin the
+     literal 'Could not send the link just now', which went stale the moment that copy was reworded and
+     then reported 'not found', i.e. it stopped checking anything while still looking like a check. */
+  const sendCatches = [...store.matchAll(/errText\(err, 'Could not send [^']*'[^)]*\)/g)].map((m) => m[0]);
+  ck(sendCatches.length > 0, 'the sign-in send failure path is still findable', sendCatches.length);
+  ck(sendCatches.every((c) => !/,\s*true\s*\)/.test(c)),
+    'sending a sign-in email does not claim a queue', sendCatches.join(' | ') || 'not found');
 
   console.log('\n' + (fails ? 'FAIL' : 'PASS') + ' — ' + passes + ' passed, ' + fails + ' failed');
   await b.close();

@@ -386,34 +386,29 @@
      classes), and an inline style can't be beaten by a [data-theme] rule — but it CAN hold a custom
      property, which resolves per theme like any other. Every token's light value is the literal it
      replaces, so nothing here moves in Light. */
-  /* A LINK cannot come back to an installed iOS app: the container has its own storage, and a link
-     tapped in Mail opens Safari, so the session is created somewhere the app cannot see. A CODE does
-     not navigate — you read it and type it where you already are — so the session lands in the
-     container that asked for it. Used only where the link provably cannot work, so the link path
-     everyone else uses is untouched. */
-  function codeSignin() {
-    try {
-      return (typeof isStandaloneApp === 'function' && isStandaloneApp())
-        && (typeof isIOSDevice === 'function' && isIOSDevice());
-    } catch (e) { return false; }
-  }
+  /* THE CODE IS THE HAPPY PATH, on every surface, and the link is the fallback that happens to be in
+     the same email. It used to be the other way round everywhere except an installed iOS app.
+
+     A code does not navigate. You read it and type it where you already are, so the session is created
+     in the container that asked for it — which is the only property that always holds. A link has to
+     land somewhere, and we do not get to choose where: from an installed iOS app it opens Safari,
+     whose storage jar the app cannot see; read on a different device from the one waiting, it signs in
+     the device holding the mail and leaves the other exactly where it was. It is one tap when it works
+     and a dead end when it does not, so it is offered second. */
+  var SEND_LABEL = 'Send code';
   function emailRowHtml() {
-    var code = codeSignin();
     return '<div class="ll-email-row" style="margin:14px auto 0;max-width:340px;text-align:center">'
       + '<button type="button" class="ll-email-toggle" style="border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;color:var(--ink-soft,#6E635B);text-decoration:underline;padding:6px">'
-      + (code ? 'Sign in with an email code' : 'Prefer email? Get a sign-in link') + '</button>'
+      + 'Prefer email? Get a sign-in code</button>'
       + '<form class="ll-email-form" style="display:none;gap:8px;margin-top:8px">'
       + '<input type="email" required placeholder="you@example.com" autocomplete="email" style="flex:1;min-width:0;font-family:inherit;font-size:15px;padding:11px 13px;border:1.5px solid var(--line,#E7DECF);border-radius:11px;background:var(--surface-2,#FBF7EF);color:var(--ink,#2C2521)">'
       + '<button type="submit" style="border:none;background:var(--note,#9A8C6E);color:var(--on-accent,#2C2521);font-family:inherit;font-weight:800;font-size:14px;padding:11px 14px;border-radius:11px;cursor:pointer;white-space:nowrap">'
-      + (code ? 'Send code' : 'Send link') + '</button>'
+      + SEND_LABEL + '</button>'
       + '</form>'
       // inputMode numeric + autocomplete one-time-code, so iOS offers the code from the notification
       // rather than making them switch to Mail and back.
-      /* Rendered on EVERY surface now, not just the installed iOS app. Every sign-in email carries a
-         code as well as a link (worker.js signinEmailHtml), and the case that needs the code is not
-         iOS-only: ask on the laptop, read the mail on your phone, and the link signs the PHONE in
-         while the laptop you are sitting at never moves. A code in the inbox with nowhere on screen
-         to type it is the same broken promise as a panel that says "code" over a link-only email. */
+      /* The primary control of the email flow, on every surface. Revealed once an email is actually
+         out, and only when the sender told us that email carries a code. */
       + '<form class="ll-code-form" style="display:none;gap:8px;margin-top:8px">'
         + '<input type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required placeholder="6-digit code" style="flex:1;min-width:0;font-family:inherit;font-size:17px;letter-spacing:.18em;text-align:center;padding:11px 13px;border:1.5px solid var(--line,#E7DECF);border-radius:11px;background:var(--surface-2,#FBF7EF);color:var(--ink,#2C2521)">'
         + '<button type="submit" style="border:none;background:var(--note,#9A8C6E);color:var(--on-accent,#2C2521);font-family:inherit;font-weight:800;font-size:14px;padding:11px 14px;border-radius:11px;cursor:pointer;white-space:nowrap">Sign in</button>'
@@ -454,11 +449,9 @@
     var LINKBTN = 'border:none;background:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:800;color:#6E635B;text-decoration:underline;padding:2px';
     var cdTimer = null;
     // (re)show the email form keeping what's typed, so a wrong or changed address can be corrected and re-sent.
-    /* The submit label is set in THREE places — the markup, here, and the failure path — and this one
-       and the failure one had it hardcoded. So on an installed iOS app the toggle read "Sign in with an
-       email code" and the button underneath it still read "Send link": the mode was right and the button
-       lied about it. One variable, so they cannot disagree again. */
-    var SEND_LABEL = codeSignin() ? 'Send code' : 'Send link';
+    /* SEND_LABEL is module-level and used by the markup too: the button label had been hardcoded
+       separately from the mode that chose it, so the toggle once read "Sign in with an email code"
+       over a button reading "Send link". One variable, so they cannot disagree again. */
     function openForm() { if (cdTimer) { clearInterval(cdTimer); cdTimer = null; } note.textContent = ''; toggle.style.display = 'none'; form.style.display = 'flex'; btn.disabled = false; btn.textContent = SEND_LABEL; input.focus(); input.select(); }
     toggle.onclick = openForm;
 
@@ -468,9 +461,10 @@
     function sendLink(email) {
       return fetch('/api/send-signin-link', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: email }) })
         .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) throw new Error(d.error || 'send_failed'); return d; }); })
-        /* Firebase's own sender as the fallback, which can only ever send a LINK. So normalise it to
-           {fallback:true}: the caller must not go on to promise a code that this email does not carry. */
-        .catch(function () { return auth.sendSignInLinkToEmail(email, { url: location.origin + '/app/', handleCodeInApp: true }).then(function () { return { fallback: true }; }); })
+        /* Firebase's own sender, last resort, and it can only ever mail a LINK. So it answers in the
+           same shape the worker does, with hasCode false: the panel must not offer a code box over an
+           email that has no code in it. Same rule, stated by whoever actually did the sending. */
+        .catch(function () { return auth.sendSignInLinkToEmail(email, { url: location.origin + '/app/', handleCodeInApp: true }).then(function () { return { fallback: true, hasLink: true, hasCode: false }; }); })
         // Resolve with what the worker actually said (notably `cached`, which means it sent nothing).
         .then(function (d) { try { localStorage.setItem('cubby-email-signin', email); } catch (e) {} return d || {}; });
     }
@@ -479,56 +473,20 @@
        that answer it sent NOTHING. Saying "we sent you an email" over a request that mailed nobody is
        the same lie in miniature as a code panel over a link-only email, and it costs her the minute
        she spends staring at an inbox nothing is coming to. So say which one it was. */
-    function sentLine(email, cached, what) {
+    function sentLine(email, cached) {
       return cached
-        ? 'We already sent ' + what + ' to <b>' + escHtml(email) + '</b> in the last minute, so check your inbox for that one. If it never turns up, try again in a moment.'
-        : 'Check your inbox: we sent ' + what + ' to <b>' + escHtml(email) + '</b>.';
+        ? 'We already sent an email to <b>' + escHtml(email) + '</b> in the last minute, so use that one. If it never turns up, try again in a moment.'
+        : 'Check your inbox: we just emailed <b>' + escHtml(email) + '</b>.';
     }
 
-    // "Check your inbox" + a Resend control with a 30s cooldown (links get lost/delayed; the cooldown
-    // avoids spamming the sender). Reused after both the first send and each resend.
-    function showSent(email, res) {
-      res = res || {};
-      form.style.display = 'none';
-      /* The same email now carries a code underneath the link, so offer the box for it here too. She
-         may well be reading this mail on a different device from the one she is trying to sign in on,
-         and on that device the link is the one thing that cannot help her.
-         UNLESS we fell back to Firebase's own sender, which mails a bare link. Then there is no code
-         in her inbox, so there must be no code box on her screen. Offering one would be this whole
-         bug wearing the other shoe. */
-      note.innerHTML = sentLine(email, res.cached, 'a sign-in email')
-        // No "below": the code box renders ABOVE this note (emailRowHtml puts the note last), and a
-        // pointer that points the wrong way is worse than none.
-        + (res.fallback ? ' Open it on this device.' : ' Tap the link if you are reading it on this device, or type the 6-digit code from it here.')
-        + '<div class="ll-resend-row" style="margin-top:8px">Not arrived yet? <button type="button" class="ll-resend" style="' + LINKBTN + '">Resend email</button> &middot; <button type="button" class="ll-changeemail" style="' + LINKBTN + '">Wrong email?</button></div>';
-      if (res.fallback) codeForm.style.display = 'none'; else showCodeBox(email);
-      var rb = note.querySelector('.ll-resend');
-      note.querySelector('.ll-changeemail').onclick = function () { codeForm.style.display = 'none'; input.value = email; openForm(); }; // fix a typo or use a different address
-      if (cdTimer) { clearInterval(cdTimer); cdTimer = null; }
-      var left = 30; rb.disabled = true; rb.style.opacity = '.55'; rb.textContent = 'Resend in ' + left + 's';
-      cdTimer = setInterval(function () {
-        left--;
-        if (left <= 0) { clearInterval(cdTimer); cdTimer = null; rb.disabled = false; rb.style.opacity = '1'; rb.textContent = 'Resend email'; }
-        else rb.textContent = 'Resend in ' + left + 's';
-      }, 1000);
-      rb.onclick = function () {
-        rb.disabled = true; rb.style.opacity = '.55'; rb.textContent = 'Sending…';
-        sendLink(email).then(function (d) { showSent(email, d); }).catch(function (err) {
-          var rr = note.querySelector('.ll-resend-row'); if (rr) rr.textContent = errText(err, 'Could not resend just now. Mind trying again?');
-        });
-      };
-    }
-
-    /* ---- the code path, for containers a link cannot return to ---- */
+    /* ---- the code path: the way in, everywhere ---- */
     var codeForm = row.querySelector('.ll-code-form');
     function sendCode(email) {
       return fetch('/api/signin-code', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: email }) })
         .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) throw new Error(d.error || 'send_failed'); return d; }); });
     }
-    /* Reveal the six-digit box and wire it. ONE implementation, used by both panels: the code panel
-       (installed iOS, where it is the only way in) and the link panel (everywhere else, where it is
-       the way in when the mail gets read on a different device from the one waiting to be signed in).
-       Two copies of a sign-in submit is how the two routes drifted apart in the first place. */
+    /* Reveal the six-digit box and wire it. ONE implementation for one control: two copies of a
+       sign-in submit is how the two routes drifted apart in the first place. */
     function showCodeBox(email) {
       codeForm.style.display = 'flex';
       var ci = codeForm.querySelector('input'); ci.value = '';
@@ -553,12 +511,51 @@
       };
       return ci;
     }
-    function showCodeEntry(email, cached) {
+
+    /* ONE panel for "the email is out", drawn from what the SENDER SAID IT CONTAINS — hasCode and
+       hasLink come back from the worker with the send. Not from a guess about the browser, which is
+       how a screen promising a code over a link-only email became possible in the first place. The
+       code box is offered because there is a code in that inbox, full stop.
+       The code leads. The link is mentioned second, and only when one was actually included. */
+    function showEmailSent(email, res) {
+      res = res || {};
+      var hasCode = !!res.hasCode, hasLink = !!res.hasLink;
+      if (res.cached) { hasCode = true; hasLink = true; }   // the earlier email came from this same sender
       form.style.display = 'none';
-      note.innerHTML = sentLine(email, cached, 'a 6-digit code') + ' Read it in your mail app, then come back here and type it in.'
-        + '<div class="ll-resend-row" style="margin-top:8px"><button type="button" class="ll-changeemail" style="' + LINKBTN + '">Wrong email?</button></div>';
-      note.querySelector('.ll-changeemail').onclick = function () { codeForm.style.display = 'none'; input.value = email; openForm(); };
-      showCodeBox(email).focus();
+      var how = hasCode
+        // No "below": the code box renders ABOVE this note (emailRowHtml puts the note last), and a
+        // pointer that points the wrong way is worse than none.
+        ? ' Type the 6-digit code from that email here.'
+          + (hasLink ? ' Or tap the link in it, if you are reading it on this device.' : '')
+        : ' Open the link in it on this device.';
+      note.innerHTML = sentLine(email, res.cached) + how
+        + '<div class="ll-resend-row" style="margin-top:8px">Not arrived yet? <button type="button" class="ll-resend" style="' + LINKBTN + '">Resend email</button> &middot; <button type="button" class="ll-changeemail" style="' + LINKBTN + '">Wrong email?</button></div>';
+      if (hasCode) showCodeBox(email).focus(); else codeForm.style.display = 'none';
+      var rb = note.querySelector('.ll-resend');
+      note.querySelector('.ll-changeemail').onclick = function () { codeForm.style.display = 'none'; input.value = email; openForm(); }; // fix a typo or use a different address
+      if (cdTimer) { clearInterval(cdTimer); cdTimer = null; }
+      var left = 30; rb.disabled = true; rb.style.opacity = '.55'; rb.textContent = 'Resend in ' + left + 's';
+      cdTimer = setInterval(function () {
+        left--;
+        if (left <= 0) { clearInterval(cdTimer); cdTimer = null; rb.disabled = false; rb.style.opacity = '1'; rb.textContent = 'Resend email'; }
+        else rb.textContent = 'Resend in ' + left + 's';
+      }, 1000);
+      rb.onclick = function () {
+        rb.disabled = true; rb.style.opacity = '.55'; rb.textContent = 'Sending…';
+        sendEmail(email).then(function (d) { showEmailSent(email, d); }).catch(function (err) {
+          var rr = note.querySelector('.ll-resend-row'); if (rr) rr.textContent = errText(err, 'Could not resend just now. Mind trying again?');
+        });
+      };
+    }
+
+    /* Ask for a code; fall back to the link sender only if the code sender is down.
+       The fallback is not cosmetic. /api/signin-code REQUIRES a Firestore write (no stored code, no
+       email), so making the code the only route would mean a Firestore blip locks every parent out of
+       their own account. /api/send-signin-link needs only Identity Toolkit, and its email carries a
+       code too whenever it can. Each answer states what it actually put in the inbox, so whichever
+       one ran, the panel tells the truth. */
+    function sendEmail(email) {
+      return sendCode(email).catch(function () { return sendLink(email); });
     }
 
     form.onsubmit = function (ev) {
@@ -566,19 +563,9 @@
       var email = input.value.trim();
       if (!looksLikeEmail(email)) { note.textContent = 'That email looks a bit off, mind checking it?'; input.focus(); return; }
       btn.disabled = true; btn.textContent = 'Sending…';
-      /* The panel we show must match the endpoint we called, always. showCodeEntry is reachable ONLY
-         from sendCode, and sendCode has no link fallback, so "we sent you a code" can never appear
-         over an email that was only a link. (It is now moot either way, since both endpoints send the
-         same both-halves email, but the routing stays honest so it survives the next edit.) */
-      if (codeSignin() && codeForm) {
-        sendCode(email)
-          .then(function (d) { btn.disabled = false; btn.textContent = SEND_LABEL; showCodeEntry(email, d && d.cached); })
-          .catch(function (err) { btn.disabled = false; btn.textContent = SEND_LABEL; note.textContent = errText(err, 'Could not send the code just now. Mind trying again?'); });
-        return;
-      }
-      sendLink(email)
-        .then(function (d) { showSent(email, d); })
-        .catch(function (err) { btn.disabled = false; btn.textContent = SEND_LABEL; note.textContent = errText(err, 'Could not send the link just now. Mind trying again?'); });
+      sendEmail(email)
+        .then(function (d) { btn.disabled = false; btn.textContent = SEND_LABEL; showEmailSent(email, d); })
+        .catch(function (err) { btn.disabled = false; btn.textContent = SEND_LABEL; note.textContent = errText(err, 'Could not send that just now. Mind trying again?'); });
     };
   }
   function maybeFinishEmailLink() {
