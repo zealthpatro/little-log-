@@ -129,6 +129,7 @@ const TREE = [
   { name: 'signin-canary',  cmd: ['node', 'test/signin-canary.test.js'] },
   { name: 'signin-email',   cmd: ['node', 'test/signin-email.test.js', '--self-test'] },
   { name: 'signin-flow',    cmd: ['node', 'test/signin-flow.test.js', '--self-test'] },
+  { name: 'signin-boot',    cmd: ['node', 'test/signin-boot.test.js', '--self-test'] },
   { name: 'push-caps',      cmd: ['node', 'test/push-caps.test.js'] },
   { name: 'duedate-cycle',  cmd: ['node', 'test/duedate-cycle.test.js', 'url'] },
   { name: 'fab-quicklog',   cmd: ['node', 'test/fab-quicklog.test.js', 'url'] },
@@ -147,6 +148,7 @@ const EMU_GATES = [
   { name: 'rules',        emu: 'node rules-test.js' },
   { name: 'invite-link',  emu: 'node invite-link.test.js' },
   { name: 'push-query',   emu: 'node push-query.test.js' },
+  { name: 'claim-rules',  emu: 'node signin-claim-rules.test.js' },
   { name: 'loss-archive', self: ['node', 'test/loss-archive-reload.test.js'] },
 ];
 
