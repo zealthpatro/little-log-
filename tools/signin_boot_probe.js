@@ -23,6 +23,21 @@
  * IT CLEANS UP. Every account, users doc and household it creates is deleted at the end, and it says
  * what it removed. Reserved TLD addresses, so no real mailbox can ever be involved.
  *
+ * WHAT A GREEN RUN HERE DOES NOT PROVE, stated because minting its own token is exactly what makes
+ * this cheap and exactly what makes it partial. It starts at the custom token, so it skips the entire
+ * front door:
+ *     not covered            covered instead by
+ *     ------------------------------------------------------------------------------------
+ *     /api/signin-code, signinGuard, the cooldown   test/signin-flow.test.js (real worker,
+ *                                                   stubbed externals) and, once, by hand:
+ *                                                   tools/signin_live_check.js
+ *     the Resend send and whether mail arrives      nothing automated. A person with an inbox.
+ *     the email's contents, code and link           test/signin-email.test.js (the template)
+ *     the code box -> /api/signin-verify wiring     test/signin-flow.test.js, plus a manual
+ *                                                   front-door run
+ *     CSP, the provider buttons                     tools/signin_gate.js
+ * So "BOOT-PROBE: PASS" means a signed-in parent lands in her Cubby. It does not mean sign-in works.
+ *
  * DELIBERATELY NOT IN tools/gates.js: it writes to production and needs a private key, the same
  * reasons signin_live_check.js is kept out. Its home is the post-deploy list in OPERATIONS.md.
  */
