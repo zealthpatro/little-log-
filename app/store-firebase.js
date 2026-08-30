@@ -980,26 +980,7 @@
     return { app: app, events: events, photos: photos };
   }
 
-  /* A sign-in that arrives on a CUSTOM TOKEN carries only a uid. The ID token Firebase mints from it
-     for a JUST-CREATED account can land without the `email` claim, and firestore.rules gates the
-     invite lookup on `request.auth.token.email.lower()` — which THROWS on a null rather than simply
-     not matching, and Firestore reports a rules error as permission-denied. So the very first read a
-     brand-new parent makes can be refused for a session that is otherwise perfectly valid.
-     The blast radius of that is the whole app: onAuthStateChanged catches the throw and calls
-     showSignIn(), which puts her back on the landing WITH a live session. Signed in, and still looking
-     at the page that will not let her in, which is the exact shape of the P0 the code path exists to
-     fix. Everything here is a rounding error next to that; user.email is already populated from the
-     account record, so this only tops up the TOKEN.
-     Cheap: getIdTokenResult() reads the cached token, and the refresh only happens on the one case
-     that needs it. */
-  async function freshenTokenForEmailReads(user) {
-    try {
-      var tr = await user.getIdTokenResult();
-      if (tr && tr.signInProvider === 'custom' && !(tr.claims && tr.claims.email)) await user.getIdToken(true);
-    } catch (e) { /* never let a token top-up be the thing that blocks a sign-in */ }
-  }
   async function resolveHousehold(user) {
-    await freshenTokenForEmailReads(user);
     var userRef = db.collection('users').doc(user.uid);
     var snap = await userRef.get();
     // Kept-after-loss memories ride this same read (no extra fetch), and this await sits BEFORE
@@ -1047,19 +1028,23 @@
     // Invited? Invites are keyed by lowercased email (so the rules can authorize the join).
     var email = (user.email || '').toLowerCase();
     if (email) {
-      /* GUARDED, and the existing-user branch above has been guarded all along — this one was not,
-         which is why a refused invite lookup stranded new signups only. One retry on a genuinely
-         fresh token, because the refusal we know about is a token missing its email claim.
-         If it still refuses we treat it as "no invite found" rather than an error. That is the safe
-         reading: falling through cannot put anyone in the WRONG family, because the two branches
-         below still stop anyone carrying a join token or a join intent and show the mismatch screen.
-         The worst case is a directly-invited parent starting her own Cubby instead of joining, which
-         her invite still sitting in the collection can repair. Stranding cannot be repaired by her at
-         all. */
+      /* GUARDED, and the existing-user branch above has been guarded all along — this one never was.
+         An unguarded read here is the whole app: onAuthStateChanged catches the throw and calls
+         showSignIn(), which puts a parent WITH A LIVE SESSION back on the landing. She cannot repair
+         that; she will decide sign-in failed and try again.
+         No known bug requires this. It was added while chasing a strand that turned out to be two
+         agent sessions sharing one browser profile, and the mechanism proposed at the time (a custom
+         token arriving without its email claim) was measured and does not exist. It stays because it
+         costs nothing on the happy path and removes a way for one refused read to lock someone out,
+         not because anything is known to refuse it.
+         Falling through cannot put anyone in the WRONG family: the join-token and join-intent
+         branches below still show the mismatch screen. Worst case is a directly-invited parent
+         starting her own Cubby, which her invite still sitting there can repair. */
       var inv = null;
       try {
         inv = await db.collection('invites').doc(email).get();
       } catch (e) {
+        // One retry on a genuinely fresh token, in case the refusal is anything token-shaped.
         try { await user.getIdToken(true); inv = await db.collection('invites').doc(email).get(); }
         catch (e2) { console.warn('invite lookup refused twice; continuing without it', e2 && e2.code); inv = null; }
       }

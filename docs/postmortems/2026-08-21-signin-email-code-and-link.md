@@ -203,3 +203,63 @@ sender. `tools/signin_live_check.js` (another session's, deliberately outside `g
 writes to production) walks the real happy path against the live host without an inbox, by deriving
 the HMAC key. That is the closest thing to a delivery check we have; actually reading the mail still
 needs a person with an inbox.
+
+---
+
+# Round three: a P0 that was not there
+
+**2026-08-31.** A brand-new parent appeared to complete the code sign-in on live v348, hold a valid
+session, and be left on the marketing landing with the overlay up. A reload fixed it. It looked
+intermittent, about half of runs. It has the exact shape of the P0 this whole change set exists to
+fix, which is precisely why it was believed so quickly.
+
+**It was not real.** Two agent sessions were driving ONE shared in-app browser profile against
+production auth, each signing the other out and reading the other's session mid-run. Every strand
+observation came from that profile. The tell, when it finally came, was an unrecognised email address
+in one session's page — `boot-repro-…`, minted by the other.
+
+Under isolated profiles the flow booted **23 times out of 23**: 13 against live v349 and 10 against a
+locally served v348, the build that was supposed to be broken. That controlled comparison is what
+separates "the fix worked" from "there was nothing to fix", and it says the latter.
+
+## What was got wrong on the way, in order
+
+1. **A mechanism was proposed and shipped before it was tested.** The theory: a custom token carries
+   only a uid, so the first ID token might arrive without the `email` claim, and `firestore.rules:34`
+   turns that into permission-denied because `.lower()` on a null *throws* rather than not matching.
+   The rule really does behave that way, and the emulator confirmed it. But the premise was never
+   checked. Minting and exchanging a token server-side for a just-created account gave **6 of 6** first
+   tokens carrying `email` and `email_verified`. The test that killed the theory took four minutes and
+   needed no browser. It should have come before the deploy, not after.
+2. **A "reproduction" that was contamination.** It had every symptom — signed in, overlay up, nothing
+   painted, one permission-denied. Then the user doc turned out to already hold a `householdId`:
+   `resolveHousehold` had *succeeded*. A page that resolved its household does not sit on the landing,
+   unless the resolution happened in a different page.
+3. **Two false verdicts from the probe itself**, each by stopping at a moment that looked final:
+   "the timeline painted" (a brand-new parent lands on the first-run wizard, which has no timeline),
+   then "the sign-in gate is gone" (that happens the instant `showStatus('Setting things up…')`
+   replaces the card, seconds before the household resolves). Both would have reported a false P0.
+
+## What was kept, and why
+
+The token freshener written against the disproved mechanism has been **removed** — a call on every
+sign-in justified by a story that is not true is dead weight.
+
+The **guard on the new-user invites read stays.** `resolveHousehold` reads `invites/{email}` on the
+new-user path, and the existing-user branch has wrapped its equivalent read in try/catch since it was
+written while the new-user branch never did. An unguarded read there is the whole app: the boot handler
+catches the throw and calls `showSignIn()`, handing a parent with a live session back to the door. It
+costs nothing on the happy path. It stays on its own merit, not because anything is known to refuse it,
+and its comment now says exactly that.
+
+## The instrument
+
+`node tools/signin_boot_probe.js https://little-cubby.com 5` — private browser profile per run,
+identity asserted before and after sign-in, no mail, cleans up every account and household it makes.
+An unexpected identity aborts the run rather than being reported.
+
+## The rule that came out of it
+
+**The in-app browser is one profile per machine. If you are driving it against production, you are the
+only one who may be.** Two sessions in it at once cannot produce trustworthy auth results, and the
+failure is not loud — it looks exactly like an intermittent product bug.

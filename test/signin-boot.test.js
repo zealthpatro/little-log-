@@ -1,27 +1,32 @@
 /* Signed in, and still looking at the page that will not let you in.
  *
- * WHY THIS EXISTS. On 2026-08-31 a brand-new parent could complete the email-code sign-in on live
- * production, hold a valid session, and be left sitting on the marketing landing with the sign-in
- * overlay still up. A reload fixed it. Nothing about the sign-in itself was wrong.
+ * WHAT ACTUALLY HAPPENED, told straight because the first version of this file told it wrong.
  *
- * The mechanism, end to end:
- *   1. the code path signs in with a CUSTOM token, which carries only a uid
- *   2. the ID token minted from it for a JUST-CREATED account can arrive with no `email` claim
- *   3. firestore.rules gates the invite lookup on `request.auth.token.email.lower() == email`
- *   4. .lower() on a null THROWS inside rules evaluation, and Firestore reports a rules error as
- *      permission-denied — not as a clean non-match
- *   5. resolveHousehold read invites/{email} UNGUARDED on the new-user path
- *   6. so it rejected, and onAuthStateChanged's catch called showSignIn(), which re-renders the
- *      landing WITH a live session behind it
+ * On 2026-08-31 a brand-new parent appeared to complete the email-code sign-in on live production,
+ * hold a valid session, and be left on the marketing landing with the sign-in overlay still up. It
+ * looked intermittent, roughly half of runs.
  *
- * Step 5 is the defect. The EXISTING-user branch had wrapped its invites read in try/catch since it
- * was written; the new-user branch never did. That asymmetry is exactly why only new signups
- * stranded, and it is the thing this file holds down.
+ * It was not a product bug. TWO AGENT SESSIONS WERE DRIVING ONE SHARED BROWSER PROFILE against
+ * production auth, signing each other out and reading each other's sessions mid-run. Every strand
+ * observation came from that profile. Under isolated profiles the flow booted 23 times out of 23,
+ * on the fixed build AND on the build that was supposed to be broken. tools/signin_boot_probe.js is
+ * the instrument that settled it: one private browser profile per run, and an identity assertion
+ * before and after sign-in so a collision aborts instead of being reported as a result.
  *
- * The shape matters more than the trigger. Whatever refuses that read — a claim that has not landed,
- * a rules publish, an outage — a signed-in parent must never be handed back to the door. She cannot
- * repair that state; she will conclude sign-in failed, try again, and hit the resend cooldown, which
- * makes the second attempt look broken too.
+ * A mechanism WAS proposed at the time and it is worth recording as disproved, so nobody re-proposes
+ * it: that a custom token, which carries only a uid, yields a first ID token without the `email`
+ * claim, and that firestore.rules:34 turns that into permission-denied because `.lower()` on a null
+ * THROWS rather than not matching. The rule really does behave that way — test/signin-claim-rules.js
+ * pins it. But the premise does not hold: minting and exchanging a token server-side for a
+ * just-created account gave 6 out of 6 first tokens carrying email and email_verified. There is no
+ * window. The token freshener written against that theory has been removed.
+ *
+ * WHAT THIS FILE STILL HOLDS, and why it is worth keeping. resolveHousehold reads invites/{email} on
+ * the new-user path. The EXISTING-user branch has wrapped its equivalent read in try/catch since it
+ * was written; the new-user branch never did. An unguarded read there is the whole app, because
+ * onAuthStateChanged catches the throw and calls showSignIn(), handing a parent with a live session
+ * back to the door. That is worth preventing on its own terms, whether or not anything is currently
+ * known to refuse the read.
  *
  *   node test/signin-boot.test.js
  *   node test/signin-boot.test.js --self-test
@@ -69,10 +74,7 @@ function check(store) {
   r.doesNotRethrow = !/catch \(e2\) \{[^}]*throw/.test(newUser);
   r.toleratesNull = /if \(inv && inv\.exists\)/.test(newUser);
 
-  r.hasFreshener = /async function freshenTokenForEmailReads\(user\)/.test(store);
-  r.freshenerChecksCustom = /signInProvider === 'custom'/.test(store) && /!\(tr\.claims && tr\.claims\.email\)/.test(store);
-  r.freshenerRunsFirst = /async function resolveHousehold\(user\) \{\s*await freshenTokenForEmailReads\(user\);/.test(store);
-  r.freshenerCannotThrow = /catch \(e\) \{ \/\* never let a token top-up be the thing that blocks a sign-in \*\/ \}/.test(store);
+  r.noDeadFreshener = !/freshenTokenForEmailReads/.test(store);   // removed with its disproved theory
   return r;
 }
 
@@ -96,13 +98,10 @@ console.log('\n2. a brand-new parent cannot be stranded by a refused invite look
   ok('a null result is treated as "no invite", not dereferenced', r.toleratesNull);
 }
 
-console.log('\n3. and the token is topped up before anything is read by address');
+console.log('\n3. and the theory that was disproved is not left lying around');
 {
   const r = check(STORE);
-  ok('there is a token freshener', r.hasFreshener);
-  ok('it fires only for a custom-token sign-in missing the email claim', r.freshenerChecksCustom);
-  ok('it runs as the FIRST thing resolveHousehold does', r.freshenerRunsFirst);
-  ok('and it can never itself become the thing that blocks sign-in', r.freshenerCannotThrow);
+  ok('the token freshener written against it is gone', r.noDeadFreshener);
 }
 
 console.log('\n4. the boot handler still sends a THROW back to the door, which is why the above matters');
@@ -125,8 +124,7 @@ if (SELF) {
   ok('catches: an UNGUARDED new-user invites read', r.guarded === false);
   ok('catches: no retry on a fresh token', r.retriesOnFreshToken === false);
 
-  const noFresh = STORE.replace('await freshenTokenForEmailReads(user);\n', '');
-  ok('catches: the token freshener no longer runs first', check(noFresh).freshenerRunsFirst === false);
+  ok('catches: a re-added freshener', check(STORE + '\nfreshenTokenForEmailReads').noDeadFreshener === false);
 
   const rethrow = STORE.replace('catch (e2) { console.warn(', 'catch (e2) { throw e2; console.warn(');
   ok('catches: a guard that rethrows is not a guard', check(rethrow).doesNotRethrow === false);

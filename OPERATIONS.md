@@ -30,7 +30,22 @@ node tools/sitesw_gate.js          # the ROOT service worker: caches no content,
 node tools/sitesw_gate.js https://little-cubby.com   # AND against the live host, AFTER deploying. Not optional.
 node tools/thirdparty_gate.js       # the "no third-party trackers" promise, checked in a real browser
 node tools/signin_live_check.js     # can a person ACTUALLY get a code from prod and sign in with it
+node tools/signin_boot_probe.js https://little-cubby.com 5   # and does she LAND IN HER CUBBY afterwards
 ```
+
+**`signin_boot_probe.js` sends no mail.** It mints the custom token itself, exactly as the worker does
+after a correct code, so it exercises the post-verify boot path without touching Resend, the code store
+or the per-address cooldown. Unlike `signin_live_check.js` you can run it as often as you like. It
+creates a throwaway account and household per run on a reserved TLD and deletes both afterwards.
+
+**It brings its own browser, and that is the point.** The strand it was written to investigate turned
+out not to exist: two agent sessions were driving ONE shared in-app browser profile against production
+auth, signing each other out mid-run. Both investigations produced unusable data before anyone noticed.
+So the probe launches a private profile per run and asserts WHO it is signed in as before and after,
+and an unexpected identity aborts the run instead of being reported as a finding.
+
+**If you are driving a browser against production, you are the only one who may be.** The in-app
+browser is one profile per machine. Two sessions in it at once cannot produce trustworthy auth results.
 
 **The sign-in canary runs itself.** `worker.js` mints a code against Firestore every 15 minutes on the
 existing cron, proves the document is really there and well formed, and removes it. It sends no mail on
