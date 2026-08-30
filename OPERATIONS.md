@@ -30,6 +30,28 @@ node tools/sitesw_gate.js          # the ROOT service worker: caches no content,
 node tools/sitesw_gate.js https://little-cubby.com   # AND against the live host, AFTER deploying. Not optional.
 node tools/thirdparty_gate.js       # the "no third-party trackers" promise, checked in a real browser
 node tools/signin_live_check.js     # can a person ACTUALLY get a code from prod and sign in with it
+```
+
+**The sign-in canary runs itself.** `worker.js` mints a code against Firestore every 15 minutes on the
+existing cron, proves the document is really there and well formed, and removes it. It sends no mail on
+the happy path: it deliberately does NOT go through `POST /api/signin-code`, because that would push a
+real message through Resend 96 times a day and a bouncing address spends sender reputation on the same
+domain the sign-in mail leaves from.
+
+It can only wake you if it has somewhere to shout. **One secret, set once:**
+
+```
+npx wrangler secret put ALERT_EMAIL
+```
+
+Without it the canary still runs and still fails loudly into `console.error`, which is exactly the
+stream nobody read for four days in August. Treat an unset `ALERT_EMAIL` as having no alarm at all.
+It mails at most once per six hours, so a long outage does not become 384 identical emails.
+
+Covers the write path, which is what broke. It does NOT cover routing, `signinGuard`, or the Resend
+send, so `signin_live_check.js` above is still the post-deploy check.
+
+```
 node tools/shot.js http://localhost:8080/<page>/ /tmp/x.png 390 full   # eyeball any page (see tools/shot.js)
 ```
 Working in a git worktree? `serve.js` takes `PORT=8099` and every gate takes the base URL as its

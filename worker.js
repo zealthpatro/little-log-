@@ -353,6 +353,131 @@ async function issueSigninCode(sa, token, email) {
   } catch (e) { return ''; }
 }
 
+/* THE ALARM THAT DID NOT EXIST.
+
+   /api/signin-code returned 502 store_failed on EVERY request from 2026-08-19 12:03 to 2026-08-23
+   14:44. Four days, and the remedy for a standing P0 was dead the whole time it was live. Nothing
+   caught it because nothing in this Worker has ever been able to: every failure path here ends at
+   console.error, and nobody reads that stream. So this is the first thing in the repo that can wake
+   a person up, and the alarm, not the check, is the part that was missing.
+
+   It exercises the OPERATION that broke, not the HTTP route. Going through POST /api/signin-code
+   would push a real message through Resend every fifteen minutes, and a bouncing address spends
+   sender reputation on the same domain the sign-in mail itself leaves from, so the monitor would be
+   quietly eating the thing it is meant to protect. Minting against Firestore directly costs no mail,
+   no Resend quota, and does not trip the 60s per-address cooldown.
+
+   What it therefore does NOT cover: routing, signinGuard, and the Resend send. tools/signin_live_check.js
+   walks the whole public path and is the one to run after a deploy. Two tiers on purpose, because
+   detection wants to be cheap and frequent while verification can be slow and thorough.
+   THE ALARM PATH HAS ALREADY TRIED TO FAIL SILENTLY ONCE. The first version of signinCanaryAlert
+   called escapeHtml(), which does not exist at module level here; there is only escHtml, local to
+   sendCampaigns. That call sits inside the try around the Resend send, so it would have thrown, been
+   swallowed by the catch, and the alarm would have reported nothing while looking entirely alive.
+   Exactly the shape of the outage it exists to catch, one layer up. Caught before shipping, by a test
+   that asserts an alert is really SENT rather than that the code merely ran. If you edit the mail
+   body, keep that test honest: assert the artefact, never the absence of a throw. */
+const CANARY_EMAIL = 'canary@cubby.invalid';   // reserved TLD, so it can never be a real person
+
+async function signinCanaryProbe(env) {
+  let sa;
+  try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); }
+  catch (e) { return { ok: false, reason: 'FIREBASE_SERVICE_ACCOUNT missing or unparseable' }; }
+
+  const base = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents';
+  let token;
+  /* The exact call that regressed. A bare getAccessToken(sa) here would reproduce the outage, which
+     is what test/signin-canary.test.js forces it to do. */
+  try { token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/identitytoolkit'); }
+  catch (e) { return { ok: false, reason: 'could not mint an access token: ' + ((e && e.message) || String(e)) }; }
+
+  const docId = await signinCodeDocId(sa, CANARY_EMAIL);
+  const path = base + '/signinCodes/' + docId;
+  const remove = async () => {
+    try { await fetch(path, { method: 'DELETE', headers: { authorization: 'Bearer ' + token } }); } catch (e) {}
+  };
+
+  const code = await issueSigninCode(sa, token, CANARY_EMAIL);
+  if (!code) {
+    /* issueSigninCode swallows its reason and returns '', which is right for the caller and useless
+       in an alert. Ask Firestore directly so the mail can say "403 PERMISSION_DENIED" instead of
+       "it failed", because the first is actionable at 3am and the second is not. */
+    let why = 'the Firestore write was refused and gave no status';
+    try {
+      const probe = await fetch(path, {
+        method: 'PATCH',
+        headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+        body: JSON.stringify({ fields: { canary: { stringValue: '1' } } })
+      });
+      if (!probe.ok) why = 'the Firestore write was refused: ' + probe.status + ' ' + (await probe.text()).slice(0, 180);
+    } catch (e) { why = 'the Firestore write threw: ' + ((e && e.message) || String(e)); }
+    await remove();
+    return { ok: false, reason: why };
+  }
+
+  /* Assert the ARTEFACT, never the return value. A canary that only checks "did the function say ok"
+     is the same mistake that let the outage ship: the guards were tested and the feature never was. */
+  let got;
+  try { got = await fetch(path, { headers: { authorization: 'Bearer ' + token } }); }
+  catch (e) { return { ok: false, reason: 'a code was minted but reading it back threw: ' + ((e && e.message) || String(e)) }; }
+  if (!got.ok) {
+    await remove();
+    return { ok: false, reason: 'a code was minted but no document exists to show for it, read ' + got.status };
+  }
+  let fields = {};
+  try { fields = ((await got.json()) || {}).fields || {}; } catch (e) {}
+  const missing = ['mac', 'email', 'exp', 'tries'].filter((k) => !fields[k]);
+  await remove();
+  if (missing.length) return { ok: false, reason: 'the document was written but is malformed, missing: ' + missing.join(', ') };
+  return { ok: true, reason: 'code minted, document verified, document removed' };
+}
+
+/* One mail per six hours. The outage ran four days, which at the cron interval would have been 384
+   identical emails, and an alarm that floods is an alarm that gets filtered. The cooldown is armed
+   only AFTER a successful send, so a Resend failure does not silence the next attempt. */
+async function signinCanaryAlert(env, reason) {
+  console.error('signin_canary_fail', reason);
+  if (!env.ALERT_EMAIL || !env.RESEND_API_KEY) return false;
+  const key = 'https://cooldown.cubby.internal/canary-alert';
+  try {
+    if (typeof caches !== 'undefined' && caches.default && await caches.default.match(new Request(key))) return false;
+  } catch (e) {}
+  let sent = false;
+  try {
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + env.RESEND_API_KEY, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        from: env.MAIL_FROM || 'Cubby <noreply@mail.little-cubby.com>',
+        to: env.ALERT_EMAIL,
+        subject: 'Cubby: nobody can get a sign-in code',
+        /* Escaped inline: the reason carries a Firestore error body, which is not ours to trust as
+           markup. worker.js has no module-level escaper, only a local one inside sendCampaigns. */
+        html: '<p>The sign-in code path is failing in production.</p>'
+            + '<p><b>' + String(reason).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) + '</b></p>'
+            + '<p>This is the check that did not exist on 19 August, when the same path was dead for '
+            + 'four days. A parent asking for a code right now is not getting one.</p>'
+            + '<p>To confirm by hand: <code>node tools/signin_live_check.js</code></p>'
+      })
+    });
+    sent = r.ok;
+  } catch (e) { sent = false; }
+  if (sent) {
+    try {
+      if (typeof caches !== 'undefined' && caches.default) {
+        await caches.default.put(new Request(key), new Response('1', { headers: { 'cache-control': 'max-age=21600' } }));
+      }
+    } catch (e) {}
+  }
+  return sent;
+}
+
+export async function signinCanary(env) {
+  const verdict = await signinCanaryProbe(env);
+  if (!verdict.ok) await signinCanaryAlert(env, verdict.reason);
+  return verdict;
+}
+
 /* Same-origin + per-IP volume, the same guard the link endpoint uses. Written as a helper for the two
    new endpoints rather than refactored into the existing one: that path works, and an incident is the
    wrong time to rewrite a working sign-in route. */
@@ -1659,6 +1784,8 @@ export default {
     // Independent of push: a failure to send a reminder must never postpone an erasure someone asked
     // for, and vice versa.
     try { await purgeDeletedHouseholds(env); } catch (e) { console.error('purge_cron_fail', (e && e.message) || String(e)); }
+    /* Third and independent: whether a parent can actually get a sign-in code right now. */
+    try { await signinCanary(env); } catch (e) { console.error('signin_canary_fail', (e && e.message) || String(e)); }
   },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
