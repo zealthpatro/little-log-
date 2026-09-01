@@ -58,6 +58,29 @@ is why the one-time code path exists. On Android, without verified App Links, th
 Chrome. The emailed code path already saves this case on both, which is a good argument for keeping
 the code route primary rather than treating it as an iOS workaround.
 
+## The one place remote-loading is genuinely dangerous, on BOTH stores
+
+Everywhere else, one web app serving two wrappers is the strength of this design. Here it is a live
+hazard, and it is the strongest argument in this document for hardening rather than refactoring.
+
+`app/index.html` carries a Pro checkout: `PRO_CFG.checkoutUrl`, a Lemon Squeezy flow via
+`startProCheckout`. **Today it is safe.** The URL is `''` and the function bails on its first line to
+the waitlist, so nothing external is reachable and there is no exposure. It was verified, not assumed.
+
+The hazard is what happens the day somebody sets that one string. Apple's Guideline 3.1.1 requires
+in-app purchase for digital content, and Google Play Billing says the same for Play. Cubby has no
+StoreKit and no IAP entitlement at all, so the moment that URL is set the shipped apps start linking
+out to an external checkout for a digital subscription. **And because both wrappers remote-load
+little-cubby.com/app/, that change reaches installed, already-reviewed phones without passing review.**
+A single web-side config edit can retroactively make a shipped, approved app non-compliant on both
+stores at once, with no build, no submission and no signal.
+
+That is the same family as everything else found this week: a change that looks purely web-side
+silently reaching a surface that has different rules. It needs a native-platform guard so external
+checkout can never render inside either wrapper, plus a gate asserting the guard exists, BEFORE Pro
+opens in October 2026. It is not urgent today and it must not be forgotten, because the day it matters
+there will be no warning.
+
 ## Does the multiplatform system need to be more robust?
 
 Not restructured. **Gated.** Every gap above is a thing that is either present or absent, which is
