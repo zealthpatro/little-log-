@@ -35,7 +35,12 @@ let pass = 0, fail = 0;
 const ok = (n, c, x) => { if (c) { pass++; console.log('  ok   ' + n); } else { fail++; console.log('  FAIL ' + n + (x !== undefined ? '\n         got: ' + JSON.stringify(x) : '')); } };
 
 // 01:20, the hour this control is actually used in, and the hour where "2 hours ago" is yesterday.
-const CLOCK = (() => { const d = new Date(); d.setHours(1, 20, 0, 0); return d.getTime(); })();
+// The DAY is pinned too, and that is not tidiness. It floated before, and on the 1st of the month the
+// grid block below picked "day 2", which is TOMORROW, and the calendar correctly refuses a future date
+// (app/cubby-extras.js:536 says so in as many words). So this gate went red on 1 September against
+// perfectly good code, reporting a broken date picker that was never broken. Mid-month, and the
+// whole class of month-boundary flakes goes with it.
+const CLOCK = (() => { const d = new Date(); d.setDate(15); d.setHours(1, 20, 0, 0); return d.getTime(); })();
 const OFFSET = CLOCK - Date.now();
 const now = CLOCK;
 
@@ -318,7 +323,9 @@ const seed = (over) => Object.assign({
     await load(seed());
     await openViaNappySheet();
     await tap('#cuCalToggle');   // setup, not an assertion: block 7 already owns the toggle
-    const day = await page.evaluate(() => new Date().getDate() > 1 ? 1 : 2);
+    // Strictly in the PAST. The calendar refuses a future date, so a day after today is not a
+    // selection failure, it is the control working.
+    const day = await page.evaluate(() => Math.max(1, new Date().getDate() - 1));
     await page.click('#cuCal .dp-c[data-d="' + day + '"]'); await sleep(120);
     const onDay = await page.evaluate(() => { const on = document.querySelector('#cuCal .dp-c.dp-on'); return on ? +on.getAttribute('data-d') : null; });
     ok('picking a day off the grid selects it', onDay === day, { onDay, day });
