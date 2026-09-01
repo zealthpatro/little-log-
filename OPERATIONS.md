@@ -30,6 +30,7 @@ node tools/sitesw_gate.js          # the ROOT service worker: caches no content,
 node tools/sitesw_gate.js https://little-cubby.com   # AND against the live host, AFTER deploying. Not optional.
 node tools/thirdparty_gate.js       # the "no third-party trackers" promise, checked in a real browser
 node tools/signin_live_check.js     # can a person ACTUALLY get a code from prod and sign in with it
+node tools/android_parity_check.js  # can the Android app WORK, or does it only build (see docs/plans/2026-08-31-*)
 node tools/signin_boot_probe.js https://little-cubby.com 5   # and does she LAND IN HER CUBBY afterwards
 ```
 
