@@ -1,45 +1,50 @@
 #!/bin/sh
-# Install the git hooks. Hooks live in .git/hooks, which is NOT tracked by git, so a fresh clone
-# has none and this has to be run once per checkout:
+# The hooks are TRACKED, in .githooks, and core.hooksPath points git at them. That is the whole
+# installer now: this script only verifies it, because the previous version was the bug.
 #
 #   sh tools/install_hooks.sh
 #
-# pre-push runs the full local gate suite, because in this repo `git push` to main IS the deploy:
-# Cloudflare builds from it. There is no staging step in between where a failure could be caught,
-# so the last honest place to stop a bad change is here.
+# WHAT WENT WRONG BEFORE. This wrote pre-push into .git/hooks, which is untracked, and that worked
+# until core.hooksPath was set to .githooks so the pre-commit hook could travel with a clone. Git
+# then ignores .git/hooks completely. The pre-push hook stayed there, executable, and never ran
+# again, so the full gate suite has not blocked a single push since. A hook that is never invoked
+# cannot tell you it is not being invoked.
 #
-# It is skippable with `git push --no-verify` when you know what you are doing. CI still runs the
-# Chrome-free subset on the other side, so a bypass cannot hide a broken build entirely.
+# pre-push runs the full local suite, because in this repo `git push` to main IS the deploy:
+# Cloudflare builds from it. There is no staging step where a failure could be caught, so the last
+# honest place to stop a bad change is here.
+#
+# Skippable with `git push --no-verify` when you know what you are doing. CI runs the Chrome-free
+# subset on the other side, which is 19 of 100 gates, so a bypass hides most of the suite.
 set -e
 ROOT=$(git rev-parse --show-toplevel)
-HOOKS="$ROOT/.git/hooks"
-mkdir -p "$HOOKS"
+WANT="$ROOT/.githooks"
 
-cat > "$HOOKS/pre-push" <<'HOOK'
-#!/bin/sh
-# Full gate suite before anything reaches main, because pushing to main deploys it.
-ROOT=$(git rev-parse --show-toplevel)
-echo "Running gates before push (skip with --no-verify)..."
-if ! node "$ROOT/tools/gates.js"; then
+# Point git at the tracked directory. Idempotent, and safe to re-run in any worktree.
+git config core.hooksPath "$WANT"
+
+missing=0
+for h in pre-commit pre-push; do
+  path=$(git rev-parse --git-path "hooks/$h")
+  if [ -f "$path" ] && [ -x "$path" ]; then
+    echo "  ok   $h  ->  $path"
+  else
+    echo "  MISSING  $h  ->  $path"
+    missing=1
+  fi
+done
+
+# The dead copies are the trap that caused this. Say so rather than deleting somebody's files.
+for h in pre-commit pre-push; do
+  if [ -f "$ROOT/.git/hooks/$h" ]; then
+    echo "  note: $ROOT/.git/hooks/$h still exists and git will NEVER run it (hooksPath wins)."
+  fi
+done
+
+if [ "$missing" = "1" ]; then
   echo ""
-  echo "Push stopped: a gate failed. Fix it, or push with --no-verify if you have decided"
-  echo "the failure is acceptable and written down why."
+  echo "A hook git resolves to is missing. Push protection is NOT in place."
   exit 1
 fi
-HOOK
-chmod +x "$HOOKS/pre-push"
-
-# The SEO guard is fast and static, so it can afford to run on every commit rather than every push.
-cat > "$HOOKS/pre-commit" <<'HOOK'
-#!/bin/sh
-ROOT=$(git rev-parse --show-toplevel)
-python3 "$ROOT/tools/seo_check.py" || {
-  echo "Commit stopped: the SEO guard failed."
-  exit 1
-}
-HOOK
-chmod +x "$HOOKS/pre-commit"
-
-echo "Installed:"
-echo "  pre-commit  seo_check.py"
-echo "  pre-push    tools/gates.js  (full local suite, browser gates included)"
+echo ""
+echo "Hooks live. node tools/hooks_check.js asserts this in the suite."

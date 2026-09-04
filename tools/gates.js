@@ -37,6 +37,7 @@ const ONLY = (ARGS.find((a) => a.startsWith('--only=')) || '').slice(7);
 const TREE = [
   { name: 'seo',            cmd: ['python3', 'tools/seo_check.py'] },
   { name: 'claude-md',      cmd: ['node', 'tools/claudemd_check.js', '--self-test'] },
+  { name: 'hooks',          cmd: ['node', 'tools/hooks_check.js', '--self-test'] },
   { name: 'type',           cmd: ['node', 'tools/type_check.js', 'url'] },
   { name: 'grid',           cmd: ['node', 'tools/grid_check.js'] },
   { name: 'type-scale',     cmd: ['node', 'tools/type_scale_check.js'] },

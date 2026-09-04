@@ -1,0 +1,36 @@
+#!/bin/sh
+# Run the gates before a push, because on this repo a push to main IS a deploy.
+#
+# WHY THIS FILE EXISTS HERE AND NOT IN .git/hooks. It used to live in .git/hooks, installed by
+# tools/install_hooks.sh. Then core.hooksPath was pointed at .githooks so the pre-commit hook could
+# be tracked and travel with a clone. Git then stops looking in .git/hooks ENTIRELY, so the pre-push
+# hook was still sitting there, still executable, and had not run before a single push since. The
+# full suite has never once gated a deploy automatically. Nothing said so, because a hook that is
+# never invoked cannot report anything.
+#
+#   git rev-parse --git-path hooks/pre-push     <- tells you the ONE path git will use
+#
+# tools/hooks_check.js asserts that path exists and is executable, so this cannot rot again.
+#
+# Bypass with --no-verify when you have decided the failure is acceptable AND written down why.
+
+ROOT=$(git rev-parse --show-toplevel)
+
+# A worktree has no tools/node_modules of its own (it is gitignored), so puppeteer is missing and
+# every browser gate dies. Refuse loudly rather than skip: a green push that ran nothing is the exact
+# failure this hook exists to prevent.
+if [ ! -d "$ROOT/tools/node_modules" ]; then
+  echo "✋ tools/node_modules is missing at $ROOT"
+  echo "   The browser gates cannot run, so this push would be unverified."
+  echo "   → ln -s /Users/m1promax/Downloads/little-log-pwa/tools/node_modules $ROOT/tools/node_modules"
+  echo "     or push with --no-verify if you have decided that is acceptable."
+  exit 1
+fi
+
+echo "Running gates before push (skip with --no-verify)..."
+if ! node "$ROOT/tools/gates.js"; then
+  echo ""
+  echo "Push stopped: a gate failed. Fix it, or push with --no-verify if you have decided"
+  echo "the failure is acceptable and written down why."
+  exit 1
+fi
