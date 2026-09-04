@@ -38,6 +38,7 @@ const TREE = [
   { name: 'seo',            cmd: ['python3', 'tools/seo_check.py'] },
   { name: 'claude-md',      cmd: ['node', 'tools/claudemd_check.js', '--self-test'] },
   { name: 'hooks',          cmd: ['node', 'tools/hooks_check.js', '--self-test'] },
+  { name: 'preg-tick-race', cmd: ['node', 'test/preg-tick-race.test.js', 'url'] },
   { name: 'type',           cmd: ['node', 'tools/type_check.js', 'url'] },
   { name: 'grid',           cmd: ['node', 'tools/grid_check.js'] },
   { name: 'type-scale',     cmd: ['node', 'tools/type_scale_check.js'] },
@@ -150,6 +151,9 @@ const EMU_GATES = [
   { name: 'invite-link',  emu: 'node invite-link.test.js' },
   { name: 'push-query',   emu: 'node push-query.test.js' },
   { name: 'claim-rules',  emu: 'node signin-claim-rules.test.js' },
+  { name: 'consent-blast',emu: 'node consent-blast.test.js' },
+  { name: 'invite-join',  emu: 'node invite-join.test.js' },
+  { name: 'loss-leak',    emu: 'node loss-leak.test.js' },
   { name: 'loss-archive', self: ['node', 'test/loss-archive-reload.test.js'] },
 ];
 
