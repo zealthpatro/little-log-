@@ -39,7 +39,14 @@ let pass = 0, fail = 0;
 const ok = (n, c, x) => { if (c) { pass++; console.log('  ok   ' + n); } else { fail++; console.log('  FAIL ' + n + (x !== undefined ? '\n         got: ' + JSON.stringify(x) : '')); } };
 
 // 13:00, so "logged this afternoon" and "the dose at breakfast" are genuinely the same calendar day.
-const CLOCK = (() => { const d = new Date(); d.setHours(13, 0, 0, 0); return d.getTime(); })();
+// The DAY is pinned too, and it is the same lesson relative_when_check learned on 1 September. This
+// gate's fixture ends an illness at now-5d and asks the calendar about the day after. The clock was
+// pinned to 13:00 but the date floated, so on 5 September the illness ended on 31 August, the day
+// after was 1 September, the grid on screen was August, and pick(1) found AUGUST 1st, which is
+// rightly selectable. "the day after it is not" went red against correct code, and would have for
+// the first five days of every month. Mid-month keeps now-9d, now-5d, now-5d+1 and now+1 inside one
+// calendar page forever, and the premise assertion below says so out loud.
+const CLOCK = (() => { const d = new Date(); d.setDate(15); d.setHours(13, 0, 0, 0); return d.getTime(); })();
 const OFFSET = CLOCK - Date.now();
 const now = CLOCK;
 const dayStart = (ms) => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };
@@ -311,6 +318,10 @@ const cold = (over) => Object.assign({ id: 'i1', babyId: 'b1', name: 'Cold', sta
       return { n: cells.length, endOn: (function (c) { return c ? !c.disabled : null; })(pick(+endYmd.slice(8))),
         afterOff: (function (c) { return c ? c.disabled : null; })(pick(+dayAfter.slice(8))) };
     }, ymd(ended.endedAt), ymd(ended.endedAt + DAY));
+    /* The premise the two lines below rest on, stated so it fails loudly instead of silently: the cells
+       are matched by day-of-month text, so end and day-after must sit on the SAME calendar page. */
+    ok('the fixture keeps the end and the day after in one month, so day numbers are unambiguous',
+      ymd(ended.endedAt).slice(0, 7) === ymd(ended.endedAt + DAY).slice(0, 7), { end: ymd(ended.endedAt), after: ymd(ended.endedAt + DAY) });
     ok('the calendar opened with real day cells', cal.n > 20, cal);
     ok('the day it cleared up is selectable', cal.endOn === true, cal);
     ok('the day after it is not', cal.afterOff === true, cal);
