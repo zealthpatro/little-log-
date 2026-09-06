@@ -54,6 +54,6 @@ until you link it:
   asserts git resolves both — a hook installed elsewhere is a hook that never runs.
 - firestore.rules, storage.rules — security rules; test/ holds their suites.
 
-This file is validated by `node tools/claudemd_check.js` (wired into tools/gates.js):
-every path it names must exist and it stays under 60 lines. Front desk, not filing
-cabinet — details go in the docs above, corrections go where they can block: a gate.
+Validated by `node tools/claudemd_check.js`: every path must exist, 60 lines max. Front
+desk only. The trap catalogue loads with it from .claude/rules/ways-of-working.md; the hooks
+in .claude/settings.json enforce the hard rules for every model; tools/harness_check.js gates both.
