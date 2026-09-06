@@ -14,3 +14,9 @@ package.json
 package-lock.json
 articles-drafts
 worker.js
+.githooks
+.github
+test
+firebase.json
+ios
+android

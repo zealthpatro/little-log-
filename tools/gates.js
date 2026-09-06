@@ -38,6 +38,8 @@ const TREE = [
   { name: 'seo',            cmd: ['python3', 'tools/seo_check.py'] },
   { name: 'claude-md',      cmd: ['node', 'tools/claudemd_check.js', '--self-test'] },
   { name: 'hooks',          cmd: ['node', 'tools/hooks_check.js', '--self-test'] },
+  { name: 'harness',        cmd: ['node', 'tools/harness_check.js', '--self-test'] },
+  { name: 'deploy-excl',    cmd: ['node', 'tools/deploy_exclusion_check.js', '--self-test'] },
   { name: 'preg-tick-race', cmd: ['node', 'test/preg-tick-race.test.js', 'url'] },
   { name: 'two-caregivers', cmd: ['node', 'test/two-caregiver-journey.test.js', 'url'] },
   { name: 'type',           cmd: ['node', 'tools/type_check.js', 'url'] },
@@ -142,6 +144,7 @@ const TREE = [
 const LIVE_GATES = [
   { name: 'thirdparty(live)', cmd: ['node', 'tools/thirdparty_gate.js'] },
   { name: 'claims(live)',     cmd: ['node', 'tools/claims_audit.js', 'url'] },
+  { name: 'deploy-excl(live)',cmd: ['node', 'tools/deploy_exclusion_check.js', 'url'] },
 ];
 /* These need a real Firestore emulator, so they cannot run in the tree tier. loss-archive and
    push-query drive the app or the Worker's query against it rather than testing rules, which is
