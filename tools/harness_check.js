@@ -64,7 +64,12 @@ function check(root, label) {
     const p = cmd.replace('${CLAUDE_PROJECT_DIR}', root);
     ok(ev + ' hook script exists: ' + path.relative(root, p), fs.existsSync(p), p);
     let exe = false; try { exe = (fs.statSync(p).mode & 0o111) !== 0; } catch (e) {}
-    ok('and it is executable', exe, p);
+    ok('and it is executable here', exe, p);
+    /* And committed that way, or every clone gets a hook the harness cannot run (see hooks_check). */
+    const rel = path.relative(root, p).split(path.sep).join('/');
+    let committed = '';
+    try { committed = spawnSync('git', ['ls-tree', 'HEAD', '--', rel], { cwd: root, encoding: 'utf8' }).stdout.split(/\s+/)[0] || ''; } catch (e) {}
+    if (committed) ok('and committed as 100755, so a clone can run it', committed === '100755', rel + ' is ' + committed + ' (fix: git update-index --chmod=+x ' + rel + ')');
   }
   ok('PreToolUse is guarded on Bash', cmds.some((c) => c.ev === 'PreToolUse'));
   ok('SessionStart reports enforcement state', cmds.some((c) => c.ev === 'SessionStart'));

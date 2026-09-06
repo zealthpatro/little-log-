@@ -41,7 +41,15 @@ for (const h of ['pre-commit', 'pre-push']) {
   if (exists) {
     let mode = 0;
     try { mode = fs.statSync(p).mode & 0o111; } catch (e) {}
-    ok('and ' + h + ' is executable, so git can run it', mode !== 0, p + ' mode ' + mode.toString(8));
+    ok('and ' + h + ' is executable here, so git can run it', mode !== 0, p + ' mode ' + mode.toString(8));
+    /* The working tree is the tree you are standing in. The COMMITTED object is what every clone gets.
+       On 2026-09-07 .githooks/pre-push was +x here and 100644 on origin/main, so this Mac was green
+       while every fresh checkout had a hook git could not execute. Ask git, not stat. */
+    const rel = path.relative(git('rev-parse --show-toplevel'), p).split(path.sep).join('/');
+    let committed = '';
+    try { committed = execSync('git ls-tree HEAD -- ' + JSON.stringify(rel), { encoding: 'utf8' }).split(/\s+/)[0] || ''; } catch (e) {}
+    ok('and ' + h + ' is committed as 100755, so a CLONE can run it too', committed === '100755',
+      rel + ' committed as ' + (committed || 'untracked') + ' (fix: git update-index --chmod=+x ' + rel + ')');
   }
 }
 
@@ -84,6 +92,8 @@ if (SELF_TEST) {
   ok('a hook that cannot stop a push is caught', stops === false);
   const deadPath = root + '/.git/hooks/pre-push';
   ok('an untracked hook path is caught', /\.githooks\//.test(deadPath) === false, deadPath);
+  const m644 = execSync('git ls-tree HEAD -- CLAUDE.md', { encoding: 'utf8' }).split(/\s+/)[0];
+  ok('a committed 100644 mode is caught (CLAUDE.md stands in)', m644 !== '100755', m644);
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
