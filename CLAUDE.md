@@ -11,7 +11,9 @@ never reach production.
   itself (`--live` adds production checks, `--emulator` the Firestore rules suites,
   `--only=name` one gate). A browser gate run bare may grade a DIFFERENT checkout —
   always pass an explicit base URL, or let tools/gates.js do it.
-- Local preview: `PORT=8123 node tools/serve.js` (serves the repo root).
+- Local preview: `PORT=8123 node tools/serve.js`. It serves the repo that CONTAINS it
+  (root from __dirname) whatever directory you run it from; a scratch tree must run its
+  OWN copy, and curl the changed string before trusting any verdict from it.
 - Screenshots: `node tools/shot.js`, then actually read the PNG. The app scrolls
   inside `#scroll`, so a full-page screenshot is only the viewport — walk every tab
   and check 320px width before calling a layout fixed.
@@ -36,13 +38,20 @@ until you link it:
 - Customer-facing copy: warm, brief, second person, sentence case, no em-dashes.
   DESIGN.md §A1 Personality and §A7 Voice are the law here.
 - Secrets never enter the repo; Worker secrets go in via `wrangler secret put`.
+- Never delete anything, local included (worktrees, branches, dirs), without a yes; run
+  ListAgents and message live sessions first. A directory name says nothing about who is in it.
+- Clock-pinned gates pin the DAY as well as the hour; two month-boundary flakes in one week.
+- A test not wired into tools/gates.js does not exist: wire it or delete it. Five incident
+  tests were orphaned, one of them red, until someone looked.
 
 ## Where the depth lives
 - DESIGN.md — product design system and voice. design/MARKETING-SYSTEM.md — the
   marketing-site system.
 - HANDOFF.md — master build spec. docs/postmortems/ — every P0 or P1 gets a 5-whys.
-- tools/ — every gate and generator; .githooks/pre-commit guards SW cache bumps,
-  app JS syntax and staged-page SEO.
+- tools/ — every gate and generator. Hooks are TRACKED in .githooks/ (core.hooksPath
+  points there, so .git/hooks is never read): pre-commit guards SW bumps, JS syntax and
+  page SEO; pre-push runs the full suite, because push = deploy. tools/hooks_check.js
+  asserts git resolves both — a hook installed elsewhere is a hook that never runs.
 - firestore.rules, storage.rules — security rules; test/ holds their suites.
 
 This file is validated by `node tools/claudemd_check.js` (wired into tools/gates.js):
