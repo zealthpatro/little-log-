@@ -42,6 +42,7 @@ const TREE = [
   { name: 'deploy-excl',    cmd: ['node', 'tools/deploy_exclusion_check.js', '--self-test'] },
   { name: 'preg-tick-race', cmd: ['node', 'test/preg-tick-race.test.js', 'url'] },
   { name: 'two-caregivers', cmd: ['node', 'test/two-caregiver-journey.test.js', 'url'] },
+  { name: 'mkt-contrast',   cmd: ['node', 'tools/marketing_contrast_check.js', 'url'] },
   { name: 'type',           cmd: ['node', 'tools/type_check.js', 'url'] },
   { name: 'grid',           cmd: ['node', 'tools/grid_check.js'] },
   { name: 'type-scale',     cmd: ['node', 'tools/type_scale_check.js'] },

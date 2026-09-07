@@ -57,10 +57,24 @@ Declared on `.homex` in `site.css`. Two groups, and the split matters.
 | `--h-ink` | `#2B2620` | headings |
 | `--h-mid` | `#443D34` | **subtitles only** |
 | `--h-soft` | `#5C544A` | body |
-| `--h-faint` | `#8A8073` | fineprint |
-| `--h-accent` | `#C97FA0` | eyebrows, CTA |
+| `--h-faint` | `#6B6157` | fineprint (4.76 on the darkest cream; still lighter than `--h-soft`) |
+| `--h-accent` | `#96496C` | eyebrows, links, CTA fill (as text: 4.77 worst; white on it: 6.06) |
 
-Four ink levels, in that order. A subtitle at `--h-ink` reads as a second heading; that is a real
+Four ink levels, in that order. The faint level was `#8A8073` until 2026-09-08 and measured 3.05 to
+3.75 against the creams, under AA at every size it is used at; it is now `#6B6157`, which clears 4.5
+everywhere and keeps its place below `--h-soft` (luminance .124 against .091).
+
+**The accent does two jobs with opposite pressures, and the same value has to clear both.** As
+text on cream it needs 4.5. As a fill under white button text it also needs 4.5 at the 15px nav
+button. `#C97FA0` cleared neither (2.89 and 2.99). Darkening helps both at once, so there is one
+accent, not an "ink" variant and a "fill" variant that drift apart. `--h-green` and `--h-rose`
+moved for the same reason (`#356E4E`, `#8E4F60`). `tools/marketing_contrast_check.js` measures
+every text element on eight pages at two widths against the pixels behind it, and is the reason
+this cannot quietly slide back.
+
+**Literals inside a JS-injected `<style>` do not see tokens.** `news-widget.js` carried its own
+`#C97FA0` and `#9a8d80` and was red after every token had been fixed. If a widget must inline its
+styles, it must inline the current values, and the contrast gate is what catches the drift. A subtitle at `--h-ink` reads as a second heading; that is a real
 bug we shipped, not a preference.
 
 ---
@@ -241,3 +255,4 @@ Then **look at the rendered page** at 320, 390 and 1440. Not the file.
 | 2026-08-16 | `var()` outside a token's scope resets rather than falls back; white-page incident |
 | 2026-08-16 | `.hx-copy p` specificity had silently disabled `.hx-lede`, `.hx-fineprint` and `.hx-kick` |
 | 2026-08-16 | `tools/marketing_type_check.js` added so none of the above can regress |
+| 2026-09-08 | Contrast: every light-band eyebrow and `.hx-more` link measured 2.89, white on the CTAs 2.99, `--h-faint` fineprint 3.05 to 3.75, plus a chip, a lock and a check glyph. One accent `#96496C`, faint `#6B6157`, green `#356E4E`, rose `#8E4F60`, the same literals in `news-widget.js` and `offline.html`. Site-wide worst went 2.35 to 5.0 across 2,520 elements, 8 pages, 2 widths. `tools/marketing_contrast_check.js` added, red-proved against the previous main. |

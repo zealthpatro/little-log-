@@ -153,7 +153,7 @@ svg.mi{width:1em;height:1em;vertical-align:-0.13em}
 .bseg button{border:none;background:transparent;font-family:inherit;font-weight:800;font-size:14px;color:var(--soft);padding:9px 16px;border-radius:9px;cursor:pointer}
 .bseg button.on{background:var(--pink);color:#fff}
 .bseg .save{font-size:10px;background:var(--green);color:#fff;padding:1px 6px;border-radius:999px;margin-left:5px;vertical-align:middle}
-.bseg button.on .save{background:rgba(255,255,255,.28)}
+.bseg button.on .save{background:rgba(0,0,0,.22)}
 #curSel{font-family:inherit;font-weight:700;font-size:14px;padding:9px 12px;border:1.5px solid var(--line);border-radius:11px;background:var(--surface2);color:var(--ink)}
 .pb-price{font-family:var(--serif);font-weight:600;color:var(--ink);font-size:50px;line-height:1;margin:8px 0 4px}
 .pb-price .per{font-family:var(--sans);font-size:17px;font-weight:700;color:var(--soft)}
@@ -227,7 +227,7 @@ svg.mi{width:1em;height:1em;vertical-align:-0.13em}
 /* Homepage editorial structure (hero, story, realistic phone, lifecycle ribbon, dark manifesto,
    capability grid, reviews, pricing) ported into the Cubby brand. Everything is prefixed hx- and
    scoped under .homex so it never clashes with site.css. Chrome (nav/footer) keeps shared classes. */
-.homex{--h-accent:#C97FA0;--h-ink:#2B2620;--h-soft:#5C544A;--h-faint:#8A8073;--h-line:#EADFC8;--h-cream:#FBF5E9;--h-cream2:#F4EBD9;--h-cream3:#EFE3CC;--h-card:#fff;--h-mid:#443D34;
+.homex{--h-accent:#96496C;--h-ink:#2B2620;--h-soft:#5C544A;--h-faint:#6B6157;--h-line:#EADFC8;--h-cream:#FBF5E9;--h-cream2:#F4EBD9;--h-cream3:#EFE3CC;--h-card:#fff;--h-mid:#443D34;
   /* The band tints are their own tokens, separate from --h-cream2 / --h-rose-band, which are also
      used INSIDE the phone mockups and must not move with the page bands.
      Why they are this dark: the page background is a fixed gradient, #FBF5E9 down to #F1E4CF
@@ -235,7 +235,7 @@ svg.mi{width:1em;height:1em;vertical-align:-0.13em}
      than the page near the top of the viewport and lighter than it near the bottom: the folds did
      not just look similar, they crossed over as you scrolled. These sit below the gradient's
      darkest stop, so a band always reads as a deeper block whatever the scroll position. */
-  --h-page:#FDFBF6;--h-band:#F4EBD9;--h-band-rose:#F7ECEF;--h-band-line:#E9DFCA;--h-tan:#D9B382;--h-green:#3E7D5A;--h-green-bg:#E4F0E8;--h-rose:#9C5B6B;--h-rose-bg:#F3E6EA;--h-rose-band:#F7ECEF;--h-blue:#3A6B8C;--h-blue-bg:#DCEAF2;--h-shadow:0 22px 48px -30px rgba(43,38,32,.45);--h-shadow-sm:0 12px 26px -18px rgba(43,38,32,.4);--h-phone-shadow:0 40px 80px -34px rgba(33,26,18,.62);font-size:17px;line-height:1.62;color:var(--h-ink);}
+  --h-page:#FDFBF6;--h-band:#F4EBD9;--h-band-rose:#F7ECEF;--h-band-line:#E9DFCA;--h-tan:#D9B382;--h-green:#356E4E;--h-green-bg:#E4F0E8;--h-rose:#8E4F60;--h-rose-bg:#F3E6EA;--h-rose-band:#F7ECEF;--h-blue:#3A6B8C;--h-blue-bg:#DCEAF2;--h-shadow:0 22px 48px -30px rgba(43,38,32,.45);--h-shadow-sm:0 12px 26px -18px rgba(43,38,32,.4);--h-phone-shadow:0 40px 80px -34px rgba(33,26,18,.62);font-size:17px;line-height:1.62;color:var(--h-ink);}
 .homex h1,.homex h2,.homex h3{font-family:var(--serif,Fraunces,Georgia,serif);font-weight:600;line-height:1.12;letter-spacing:-.4px;color:var(--h-ink);}
 .homex .hx-wrap{max-width:740px;margin:0 auto;padding:0 26px;}
 .homex .hx-wide{max-width:1040px;margin:0 auto;padding:0 26px;}

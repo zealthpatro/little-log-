@@ -43,11 +43,11 @@
       + '.cubby-news form{display:flex;gap:8px;max-width:420px;margin:0 auto;flex-wrap:wrap;}'
       + '.cubby-news input{flex:1 1 200px;min-width:0;border:1.5px solid #E0D7C7;border-radius:12px;padding:13px 14px;'
       + 'font-size:15px;font-family:inherit;color:#2C2521;background:#FBF7EF;}'
-      + '.cubby-news input:focus{outline:none;border-color:#C97FA0;}'
-      + '.cubby-news button{flex:0 0 auto;border:none;background:#C97FA0;color:#fff;font-size:15px;font-weight:800;'
+      + '.cubby-news input:focus{outline:none;border-color:#96496C;}'
+      + '.cubby-news button{flex:0 0 auto;border:none;background:#96496C;color:#fff;font-size:15px;font-weight:800;'
       + 'padding:13px 20px;border-radius:12px;cursor:pointer;font-family:inherit;}'
       + '.cubby-news button:hover{filter:brightness(1.03);}.cubby-news button:disabled{opacity:.6;cursor:default;}'
-      + '.cubby-news .cn-note{font-size:12px;color:#9a8d80;font-weight:700;margin:12px 0 0;}'
+      + '.cubby-news .cn-note{font-size:12px;color:#6B6157;font-weight:700;margin:12px 0 0;}'
       + '.cubby-news .cn-msg{font-size:14px;color:#56A08E;font-weight:800;margin:6px 0 0;}'
       + '.cubby-news .cn-err{color:#b05a7a;}';
     document.head.appendChild(st);

@@ -1,9 +1,9 @@
 /* Cubby vaccination-schedule pages: warm, calm, fast. Shared across all country pages. */
 *{box-sizing:border-box}
 :root{
-  --bg1:#FBF5E9; --bg2:#F1E4CF; --ink:#2C2521; --soft:#6E635B; --faint:#9a8d80;
+  --bg1:#FBF5E9; --bg2:#F1E4CF; --ink:#2C2521; --soft:#6E635B; --faint:#6B6157;
   --line:#E7DECF; --surface:#fff; --surface2:#FBF7EF;
-  --pink:#C97FA0; --pink-d:#b05a7a; --green:#56A08E; --amber:#E29A3B;
+  --pink:#96496C; --pink-d:#96496C; --green:#356E4E; --amber:#E29A3B;
   --serif:"Fraunces",Georgia,serif; --sans:"Nunito Sans",-apple-system,system-ui,sans-serif;
   /* Canonical Cubby tokens (match the app, see DESIGN.md Part A). The names above are legacy aliases. */
   --ink-soft:#6E635B; --ink-faint:#A89C90; --surface-2:#FBF7EF;
