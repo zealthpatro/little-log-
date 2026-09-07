@@ -18,10 +18,11 @@
 # subset on the other side, which is 19 of 100 gates, so a bypass hides most of the suite.
 set -e
 ROOT=$(git rev-parse --show-toplevel)
-WANT="$ROOT/.githooks"
 
-# Point git at the tracked directory. Idempotent, and safe to re-run in any worktree.
-git config core.hooksPath "$WANT"
+# Point git at the tracked directory. RELATIVE on purpose: git resolves a relative core.hooksPath
+# against the repo root, so it survives a moved or copied checkout, and it matches what
+# .claude/hooks/session-start.sh sets for every Claude session. Idempotent, safe in any worktree.
+git config core.hooksPath .githooks
 
 missing=0
 for h in pre-commit pre-push; do

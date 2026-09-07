@@ -77,16 +77,25 @@ function check(root, label) {
   /* Behaviour, not existence. */
   const guard = path.join(root, '.claude', 'hooks', 'guard-bash.sh');
   if (fs.existsSync(guard)) {
+    /* Executing these must be denied. */
     const denyCases = ['git push origin main --no-verify', 'git worktree remove ../x', 'git branch -D claude/foo',
-      'git stash pop', 'git reset --hard origin/main', 'rm -rf .claude/worktrees/abc'];
+      'git stash pop', 'git reset --hard origin/main', 'rm -rf .claude/worktrees/abc', 'rm -rf /', 'rm -rf app',
+      'rm -rf ./tools/node_modules', 'cd /tmp && git stash drop', 'M=/x; cd $M && git clean -fd'];
     for (const c of denyCases) {
       const r = runHook(guard, bashCall(c));
       ok('guard DENIES: ' + c, r.code === 2 && /"permissionDecision":"deny"/.test(r.out), 'exit ' + r.code + ' ' + r.out.slice(0, 80));
     }
-    const allowCases = ['git status', 'node tools/gates.js', 'git commit -o app/index.html -m x', 'git stash list', 'ls -la'];
+    /* MENTIONING them must not be. The first guard blocked a test fixture inside a heredoc and a scratch
+       rm under /tmp, which is how a guard teaches people to route around it. Every case below is a real
+       command this repo's own tooling runs. */
+    const allowCases = ['git status', 'node tools/gates.js', 'git commit -o app/index.html -m x', 'git stash list', 'ls -la',
+      'rm -rf /tmp/fresh-clone', 'rm -rf /private/tmp/claude-501/x/scratch', 'rm -rf node_modules/.cache',
+      'echo "git stash pop is blocked here"', 'grep -c "git reset --hard" tools/harness_check.js',
+      "cat <<'EOF'\nrm -rf app\ngit worktree remove x\nEOF", "python3 - <<'PY'\ns='rm -rf .claude/worktrees/abc'\nPY",
+      'cp .claude/hooks/guard-bash.sh .claude/worktrees/eager/.claude/hooks/guard-bash.sh', 'git push origin main'];
     for (const c of allowCases) {
       const r = runHook(guard, bashCall(c));
-      ok('guard allows: ' + c, r.code === 0 && r.out === '', 'exit ' + r.code + ' ' + r.out.slice(0, 80));
+      ok('guard allows: ' + c.split('\n')[0].slice(0, 60), r.code === 0 && r.out === '', 'exit ' + r.code + ' ' + r.out.slice(0, 80));
     }
     const bad = runHook(guard, 'not json at all');
     ok('guard fails OPEN on malformed input, never blocks by accident', bad.code === 0, 'exit ' + bad.code);

@@ -18,6 +18,7 @@
  */
 const { execSync } = require('child_process');
 const fs = require('fs');
+const path = require('path');
 
 let pass = 0, fail = 0;
 const ok = (name, cond, detail) => {

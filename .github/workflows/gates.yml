@@ -28,6 +28,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
+      # A fresh checkout has no core.hooksPath, so hooks_check would fail on the empty .git/hooks. This
+      # is the same step a new clone must do; running it here makes CI the proof of the clone case
+      # instead of a run that skips it. It went red for exactly this reason on 2026-09-06.
+      - name: Wire the tracked hooks (what a fresh clone must do)
+        run: sh tools/install_hooks.sh
       - name: Gates (no browser)
         run: node tools/gates.js --no-browser
 
