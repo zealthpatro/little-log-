@@ -240,7 +240,7 @@ const EXPANDERS = ['lg-i', 'link-inline', 'wwa-t', 'sec-act', 'gr-more', 'tip-x'
       await page.evaluate(() => { const s = document.getElementById('scroll'); if (s) s.scrollTop = 0; });
       await sleep(300);
     }
-    for (const op of ['openSymptom', 'openActivity', 'openSettings', 'openFeed', 'openDiaper', 'openGrowth', 'openFamily']) {
+    for (const op of ['openQuickLog', 'openSymptom', 'openActivity', 'openSettings', 'openFeed', 'openDiaper', 'openGrowth', 'openFamily']) {
       const opened = await page.evaluate((o) => { try { if (!window[o]) return false; window[o](); return true; } catch (e) { return false; } }, op);
       await sleep(800);
       if (opened) await take(op);
@@ -249,6 +249,12 @@ const EXPANDERS = ['lg-i', 'link-inline', 'wwa-t', 'sec-act', 'gr-more', 'tip-x'
     }
     await page.evaluate(() => { try { go('home'); dismissTip('getstarted'); } catch (e) {} });
     await sleep(900);
+    // Guidance follows logging now; measure its actual hit target after bringing it into view.
+    await page.evaluate(() => {
+      const cta = Array.from(document.querySelectorAll('#scroll .btn-primary')).find(b => b.textContent.trim() === 'Show me');
+      if (cta) cta.scrollIntoView({ block: 'center' });
+    });
+    await sleep(300);
     await take('home:guide');
     return { found, computedTap };
   };

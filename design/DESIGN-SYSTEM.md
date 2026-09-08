@@ -76,19 +76,19 @@ Measured live: the note field in the symptom sheet computes to **16px** and stan
 
 **Where the scale actually reaches.** The app has **11** stylesheets: 4 `<style>` blocks in
 `app/index.html` and 7 injected at runtime from `app/*.js`. The scale governs one of them. In that
-one, `font-size` is written as a token **257** times and as a literal **0** times. Across the other
+one, `font-size` is written as a token **269** times and as a literal **0** times. Across the other
 ten, **373** literals survive at **35** distinct values.
 
 | Ratchet | Today | Held by |
 |---|---|---|
 | font-size literals outside the main stylesheet | 373 | `tools/type_scale_check.js` |
 | half-pixel literals anywhere | 29 | `tools/type_scale_check.js` |
-| off-scale sizes reachable on the Home screen at rest | 1 | this gate |
+| off-scale sizes reachable on the Home screen at rest | 0 | this gate |
 
-That last one is `.greeting` at **19px**, from `app/cubby-extras.js:738`. It is the first line a
-parent reads, "Good afternoon", it is set in the display face, and 19 is not on the scale. It
-survives because it lives in a file the scale only ratchets. Fix it to `--fs-title` (18) and lower
-the ratchet, or add a role and say what the role is for. Do not leave it at 19 and call it a choice.
+The home `.greeting` now renders at **24px** through `--fs-stat`, scoped to `.home-today`.
+The injected 19px base rule still exists for other views; Home overrides it using the scale.
+The home summary uses 14px bold values and 12px labels. Quick-log action labels use the 16px
+input role, and the quick-log sheet uses a 24px title with a 15px subtitle.
 
 ---
 
@@ -215,13 +215,13 @@ Measured live at 390px, in both themes:
 | `.icon-btn` | 44 x 44 | at the floor by design |
 | `.qadd` | 56 x 56 | |
 | `.nav-btn` | 85.5 x 58 | |
-| `.action` | 168.5 x 145 | the quick-log tile |
+| `.action` | 170 x 100 | the home quick-log tile at 390px |
 | `.btn-primary` | 346 x 56 | |
 | `.field input` | 346 x 52 | |
 | `.chip` | 67.5 x 44 | was 40, and it is the picker a worried parent taps at 3am |
 | `.lg-i` | 20 x 20 | **drawn** at 20 and **hit** at 44. See below |
 
-The main stylesheet carries **6** `min-height:44px` rules. Count of `.chip` buttons in the symptom
+The main stylesheet carries **7** `min-height:44px` rules. Count of `.chip` buttons in the symptom
 sheet: **15**, and every one of them now clears the floor.
 
 **The floor is a hit area, not a box.** `tools/touch_target_check.js` walks outward from each
@@ -362,7 +362,7 @@ feed.
 
 ## 4. Component vocabulary: one canonical name per job
 
-**693** distinct class names carry a rule across the eleven stylesheets, **315** of them in the main
+**696** distinct class names carry a rule across the eleven stylesheets, **318** of them in the main
 one. A name that appears only inside a CSS comment is not counted, because it does not carry a rule.
 The component audit walked that vocabulary and found the same job built up to sixteen times under
 sixteen names. The cost is not bytes. It is that a parent taps

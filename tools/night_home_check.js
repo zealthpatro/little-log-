@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+/* September design update: quick logging now precedes the photo all day.
+ * Day/night carousel behavior and clock-boundary stability remain covered below.
+ * The original rationale below describes the earlier night-only layout. */
 /* THE HOME SCREEN AT 3AM.
  *
  * What was wrong for a real parent. Measured at 03:12 on a 390x844 phone, one hand, baby on the
@@ -233,11 +236,11 @@ const TICK = (mins) => {
     }
   }
 
-  console.log('\n3. at 15:00 nothing changed: photo first, and it still moves');
+  console.log('\n3. at 15:00 logging stays first, and the photo still moves');
   {
     await load(day, seed(clockAt(15, 0)), photoBytes(3));
     const r = await day.evaluate(READ);
-    ok('the photo comes first in the day', r.iHero >= 0 && r.iTitle > r.iHero, { iHero: r.iHero, iTitle: r.iTitle });
+    ok('quick logging comes before the photo during the day too', r.iTitle >= 0 && r.iHero > r.iTitle, { iHero: r.iHero, iTitle: r.iTitle });
     ok('the tiles are still under their heading', r.iActions === r.iTitle + 1, { iTitle: r.iTitle, iActions: r.iActions });
     ok('the carousel is armed', r.running === true, r.running);
     ok('it starts on the first photo', r.active === 0, r);
@@ -256,20 +259,20 @@ const TICK = (mins) => {
       const a = byLabel(r.tiles, l), b = byLabel(nightTiles, l);
       return a && b ? a.top - b.top : null;
     });
-    ok('all three tiles are higher up at night, by more than 100px each', moved.length === 3 && moved.filter((m) => m !== null && m > 100).length === 3, moved);
+    ok('all three core actions clear the nav in daylight', threeOf(r.tiles).length === 3 && threeOf(r.tiles).every(t => t.bottom <= r.navTop), r.tiles);
     const wholeDay = r.tiles.filter((t) => t.bottom <= r.navTop).length;
     const wholeNight = nightTiles.filter((t) => t.bottom <= nightNav).length;
-    ok('and more of the row is whole above the nav at night', wholeNight > wholeDay, { wholeNight, wholeDay });
+    ok('both day and night keep the core actions fully visible', wholeNight >= 3 && wholeDay >= 3, { wholeNight, wholeDay });
   }
 
-  console.log('\n4. it says nothing about it: the same blocks, reordered');
+  console.log('\n4. day and night keep the same blocks in the same order');
   {
     const n = await night.evaluate(READ);
     const d = await day.evaluate(READ);
     const sortedN = n.sig.slice().sort(), sortedD = d.sig.slice().sort();
     ok('the night screen has the same number of blocks as the day screen', n.sig.length === d.sig.length && n.sig.length > 5, { night: n.sig.length, day: d.sig.length });
-    ok('and exactly the same blocks, only in a different order', JSON.stringify(sortedN) === JSON.stringify(sortedD), { night: n.sig, day: d.sig });
-    ok('the order really is different', JSON.stringify(n.sig) !== JSON.stringify(d.sig), n.sig);
+    ok('and exactly the same blocks', JSON.stringify(sortedN) === JSON.stringify(sortedD), { night: n.sig, day: d.sig });
+    ok('day and night use the same stable order', JSON.stringify(n.sig) === JSON.stringify(d.sig), n.sig);
     ok('no banner announcing a mode', !/night mode|dark mode|night view|quiet mode|3am mode/i.test(n.words), n.words.slice(0, 200));
     ok('and nothing telling her she should be asleep', !/should be asleep|go to sleep|get some sleep|try to sleep|bedtime for you/i.test(n.words), n.words.slice(0, 200));
   }
@@ -294,7 +297,7 @@ const TICK = (mins) => {
     const late = await openAt(22, 59);
     await load(late, seed(clockAt(22, 59)), photoBytes(3));
     const rl = await late.evaluate(READ);
-    ok('a minute before eleven the page is still the day page', rl.iHero < rl.iTitle && rl.running === true, { iHero: rl.iHero, iTitle: rl.iTitle, running: rl.running });
+    ok('a minute before eleven the page is still the day page', rl.iTitle < rl.iHero && rl.running === true, { iHero: rl.iHero, iTitle: rl.iTitle, running: rl.running });
     await late.close();
 
     const just = await openAt(23, 1);
@@ -306,7 +309,7 @@ const TICK = (mins) => {
     const dawn = await openAt(5, 1);
     await load(dawn, seed(clockAt(5, 1)), photoBytes(3));
     const rd = await dawn.evaluate(READ);
-    ok('at 05:01 it is the day page again, with no reset to do', rd.iHero < rd.iTitle && rd.running === true, { iHero: rd.iHero, iTitle: rd.iTitle, running: rd.running });
+    ok('at 05:01 it is the day page again, with no reset to do', rd.iTitle < rd.iHero && rd.running === true, { iHero: rd.iHero, iTitle: rd.iTitle, running: rd.running });
     await dawn.close();
   }
 
@@ -325,12 +328,12 @@ const TICK = (mins) => {
     await load(evening, seed(clockAt(22, 58)), photoBytes(3));
     const before = await evening.evaluate(READ);
     ok('it is cycling at 22:58', before.running === true, before.running);
-    ok('and it is the day order to begin with', before.iHero >= 0 && before.iTitle > before.iHero, brief(before));
+    ok('and it is the day order to begin with', before.iTitle >= 0 && before.iHero > before.iTitle, brief(before));
     ok('with the Feed tile somewhere real', feedTop(before) !== null, before.tiles);
     await evening.evaluate(TICK, 3);                   // three minutes later: 23:01
     const after = await evening.evaluate(READ);
     ok('the next paint after eleven stops the carousel', after.running === false, brief(after));
-    ok('but the order does NOT change under her hands', after.iHero >= 0 && after.iTitle > after.iHero, brief(after));
+    ok('but the order does NOT change under her hands', after.iTitle >= 0 && after.iHero > after.iTitle, brief(after));
     /* Not "not a pixel": the greeting and the last-feed row are clock-dependent copy on main and
        already rewrap at this boundary, which is 37px measured here and nothing to do with this
        change. What is being caught is the reorder, which threw this tile 531px. A line of copy is
@@ -368,7 +371,7 @@ const TICK = (mins) => {
     await dawn.evaluate(() => go('home'));
     await sleep(400);
     const b2 = await dawn.evaluate(READ);
-    ok('and it goes back to the day order the next time she opens home', b2.iHero >= 0 && b2.iTitle > b2.iHero, brief(b2));
+    ok('and it goes back to the day order the next time she opens home', b2.iTitle >= 0 && b2.iHero > b2.iTitle, brief(b2));
     ok('with the carousel running again', b2.running === true, brief(b2));
     await dawn.close();
   }

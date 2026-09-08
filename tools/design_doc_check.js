@@ -305,10 +305,11 @@ function checkScale(label, section, prefix, unit, docUnitStrip) {
     'doc ceiling ' + dHalf + ', counted ' + halves.length);
 
   const dGreet = D.after(sec(1), '.greeting', 'px');
-  const greetSrc = (jsSrc['cubby-extras.js'] || '').match(/\.greeting\{[^}]*font-size:(\d+)px/);
-  eq('the off-scale greeting is still the size the doc says it is', dGreet, greetSrc ? +greetSrc[1] : null);
-  ok('and it is still off the scale, which is why the doc records it',
-    dGreet !== undefined && !Object.values(declared).includes(dGreet), dGreet + ' vs scale ' + JSON.stringify(Object.values(declared)));
+  const greetRole = MAIN.match(/\.home-today \.greeting\{font-size:var\((--fs-[a-z]+)\)/);
+  const greetSrc = greetRole && MAIN.match(new RegExp(greetRole[1] + ':\\s*(\\d+)px'));
+  eq('the home greeting token is the size the doc says it is', dGreet, greetSrc ? +greetSrc[1] : null);
+  ok('and the home greeting uses a declared step on the scale',
+    dGreet !== undefined && Object.values(declared).includes(dGreet), dGreet + ' vs scale ' + JSON.stringify(Object.values(declared)));
 
   console.log('\n2. the token census in the doc IS the token census in the code');
   const s2 = sec(2);
@@ -629,7 +630,7 @@ function checkScale(label, section, prefix, unit, docUnitStrip) {
 
   eq('the input floor is honoured where it matters: the sheet field computes to 16px',
     '16px', measured.light['.field input'].fs);
-  eq('the off-scale greeting renders at the size the doc says', dGreet + 'px', measured.light['.greeting'].fs);
+  eq('the home greeting renders at the size the doc says', dGreet + 'px', measured.light['.greeting'].fs);
 
   const CEIL = D.num(s3, /\|\s*Ceiling on the logging path\s*\|\s*\*\*(\d+)ms\*\*/);
   const msOf = (td) => Math.max(...String(td).split(',').map((s) => parseFloat(s) * 1000));

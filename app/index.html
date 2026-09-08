@@ -663,6 +663,36 @@ body{
 .action.wide .label{grid-column:2;align-self:end;}
 .action.wide .hint{grid-column:2;align-self:start;margin-top:1px;}
 
+/* Today keeps care controls together; photo and guidance follow the primary task.
+   Scoped roles preserve the density of history, health tables and pregnancy views. */
+.home-today .greeting{font-size:var(--fs-stat);line-height:1.2;margin:2px 0 6px;}
+.home-today .greeting-sub{font-size:var(--fs-base);line-height:1.5;margin-bottom:var(--stack);}
+.home-today .since-row{gap:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);padding:16px 0;box-shadow:none;}
+.home-today .since-card{min-width:0;background:none;border-radius:0;padding:0 12px;box-shadow:none;}
+.home-today .since-card + .since-card{border-left:1px solid var(--line);}
+.home-today .since-card .k{font-size:var(--fs-small);text-transform:none;letter-spacing:0;color:var(--ink-soft);}
+.home-today .since-card .v{font-family:var(--font-body);font-size:var(--fs-base);font-weight:800;line-height:1.4;margin-top:5px;}
+.home-today .since-card .w{font-size:var(--fs-small);color:var(--ink-soft);margin-top:4px;}
+.home-today .sec-title{font-size:var(--fs-title);letter-spacing:0;text-transform:none;color:var(--ink);}
+.home-today .sec-act{font-size:var(--fs-small);letter-spacing:0;text-transform:none;min-height:44px;padding:8px;margin:-8px;}
+.home-today .actions,.quick-log-sheet .actions{gap:10px;}
+.home-today .action,.quick-log-sheet .action{display:grid;grid-template-columns:36px minmax(0,1fr);column-gap:10px;row-gap:6px;align-content:center;align-items:center;min-height:100px;padding:14px;border:1px solid var(--line);border-radius:var(--r-card);box-shadow:none;}
+.home-today .action .ico,.quick-log-sheet .action .ico{width:36px;height:36px;border-radius:var(--r-ctl);grid-row:1;}
+.home-today .action .ico svg,.quick-log-sheet .action .ico svg{width:22px;height:22px;}
+.home-today .action .label,.quick-log-sheet .action .label{font-size:var(--fs-input);grid-column:2;align-self:center;overflow-wrap:anywhere;}
+.home-today .action .hint,.quick-log-sheet .action .hint{grid-column:1 / -1;font-size:var(--fs-small);line-height:1.4;margin:0;}
+.home-today .action.wide{min-height:76px;}
+.home-today .action.wide .ico{grid-row:1 / span 2;}
+.home-today .action.wide .hint{grid-column:2;}
+.quick-log-sheet h2{font-size:var(--fs-stat);}
+.quick-log-sheet .sub{font-size:var(--fs-lead);line-height:1.5;}
+.quick-log-sheet .btn-ghost{font-size:var(--fs-base);}
+.home-today .today-strip{box-shadow:none;border:1px solid var(--line);}
+@media(max-width:350px){
+  .home-today .since-card{padding:0 8px;}
+  .home-today .action,.quick-log-sheet .action{column-gap:8px;padding:12px;}
+}
+
 /* ============ TODAY STRIP ============ */
 .today-strip{
   background:var(--surface);border-radius:var(--r-card);padding:16px 8px;margin-top:var(--stack);
@@ -3789,29 +3819,14 @@ function renderHome(){
   const surfaceCard = daySurface();
   const surfaceUp = surfaceIsUp();
 
-  /* Two blocks, two possible homes on the page. In the small hours the quick log row moves above the
-     hero and the tips line moves below it, because between 23:00 and 05:00 the reason she has the
-     phone in her hand is a feed, and a 263px photo plus a generic tip were pushing Feed, Sleep and
-     Nappy onto the bottom edge of a 390x844 screen. Moving the row alone was not enough: with a nap
-     timer banner up, which is the commonest 3am state, Nappy still showed 80 of its 144 pixels with
-     its subtitle behind the nav.
-
-     The photo does go below the fold at night. That is the trade this item asks for, and it is the
-     one the day order already makes in reverse: at 15:00 the Feed tile starts at y=862 on an 844px
-     screen, so the row she came for is fully off it. Nothing is removed in either order, nothing is
-     dimmed, and the top edge of the photo stays on screen so she can see it is still there.
-
-     Both blocks are built once, so the two orders are the same markup and cannot drift apart. */
-  const nightHome = nightHomeOrder();
+  // Logging keeps the same position all day. Night still pauses the photo carousel.
   const tipsBlock = (away||gsCard) ? '' : tipsTicker();
   const quickBlock = `<div class="sec-title with-act"><span>Quick log${(window.CubbyTeachUI)?CubbyTeachUI.dot('openQuickLog','the quick log row'):((window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('logging'):'')}</span><button class="sec-act" type="button" onclick="openQuickSettings()">Choose</button></div>
     <div class="actions stagger">${quickLogActions(ts)}</div>`;
 
-  return `<div class="fade-in">
+  return `<div class="fade-in home-today">
     <div class="greeting">${meGreeting()}</div>
     ${myLossHolding() ? quietLossLine() : (away ? '' : `<div class="greeting-sub">${homeNudgeLine()}</div>`)}
-    ${nightHome ? '' : tipsBlock}
-    ${away}
     ${/* The three answers first. "When was the last feed" is the question at 3am and it used to be
           the tenth thing on the screen, under a day-navigator, a notes lane and a photo prompt. A
           running timer sits above them because it is the only thing here that is happening now. */''}
@@ -3826,13 +3841,13 @@ function renderHome(){
     ${surfaceUp ? surfaceCard : ''}
     ${gsCard ? '' : coachMark('home','Last feed, last sleep, last nappy, right where you look first 👋','Log below, and the tabs hold your Log, Album and Health.')}
     ${consentBanners()}
-    ${nightHome ? quickBlock : ''}
+    ${quickBlock}
+    ${away}
     ${renderHero()}
-    ${nightHome ? tipsBlock : ''}
+    ${tipsBlock}
     ${gsCard}
     ${guideCard}
     ${(gsCard || guideCard) ? '' : teachCue()}
-    ${nightHome ? '' : quickBlock}
     ${gsCard ? '' : renderNudge()}
     ${alerts}
     ${askBoxRow()}
@@ -3853,34 +3868,10 @@ function renderHome(){
 /* ---- home hero carousel ---- */
 let heroIdx=0, heroTimer=null;
 function heroPhotos(){ return (state.photos||[]).filter(p=>p.babyId===state.activeBabyId && !p.deleted); }
-/* ---- the small hours, on the home screen ------------------------------------------------------
-   The same boundary meGreeting and homeNudgeLine already use, given a name so the layout can share
-   it. Between 23:00 and 05:00 the thing a parent has come here to do is log a feed at arm's length
-   in the dark, and the largest thing on the screen was a full-brightness photo advancing itself
-   every 4.5 seconds while Feed and Sleep sat below the fold. At night the photo holds still and the
-   quick log row comes up above it.
-
-   Nothing is hidden, nothing is dimmed, nothing announces itself: no banner, no "night mode", no
-   suggestion she should be asleep. Her baby's face is still there, still full size, still hers to
-   tap through to the album; it just stops moving on its own, and it sits one short scroll under the
-   row she came for instead of on top of it.
-
-   Decided ONCE per visit to home and then held, for the same reason applyTheme refuses to switch
-   itself on the clock: a screen that rearranges under her hands mid-log fails the Anxiety Test.
-   Reading it live was not that. Home repaints on every save and on every listener burst, so a paint
-   that crossed a boundary reordered the page she was already holding: measured at 390x844, the Feed
-   tile jumped 460px up at 23:00 and 506px down at 05:00, off the screen both times. 05:00 is the
-   ordinary dawn feed. She puts the phone down at 04:55 and picks it back up at 05:02 to log it, and
-   the button she was aiming at is now below the fold.
-
-   So renderHome asks nightHomeOrder(), which answers the same thing for as long as she stays on
-   home, and go('home') releases it: it still reverts by itself the next time she comes back to this
-   screen. initHero keeps reading the clock live, because stopping a carousel moves nothing. */
+/* The photo carousel holds still between 23:00 and 05:00. Logging now stays ahead
+   of the photo all day, so a clock boundary never rearranges the care controls. */
 const NIGHT_HOME_FROM=23, NIGHT_HOME_TO=5;
 function isNightHome(ts){ const h=new Date(ts==null?now():ts).getHours(); return h>=NIGHT_HOME_FROM || h<NIGHT_HOME_TO; }
-let _nightHomeOrder=null;
-function nightHomeOrder(){ if(_nightHomeOrder===null) _nightHomeOrder=isNightHome(); return _nightHomeOrder; }
-function releaseNightHomeOrder(){ _nightHomeOrder=null; }
 /* ---- wake windows, from this baby's own sleeps and nothing else ------------------------------
    Permitted by the prediction rule restated 2026-08-08: refuse to predict where the parent cannot
    check the answer. She finds out within the hour whether this held, which is exactly what an
@@ -5051,7 +5042,7 @@ function startTick(){
 /* ============================================================
    NAV / THEME
    ============================================================ */
-function go(v){ clearUndo(); /* she moved on; undo must not reach back past a tab change */ retireFirstEntryLine(); if(typeof closeSheet==='function') closeSheet(); if(v==='home'){ surfaceReset(); releaseNightHomeOrder(); } if(v!==view) tlResetReveal(); view=v; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
+function go(v){ clearUndo(); /* she moved on; undo must not reach back past a tab change */ retireFirstEntryLine(); if(typeof closeSheet==='function') closeSheet(); if(v==='home'){ surfaceReset(); } if(v!==view) tlResetReveal(); view=v; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
 /* ---------------- APPEARANCE -------------------------------------------------
    Three modes, System by default, and stored PER PERSON.
 
@@ -5291,10 +5282,10 @@ function openQuickLog(){
      of the two it is, and wide: one half-width tile beside a hole the size of itself reads as a tile
      that failed to load, which is the rule quickLogActions already applies to its odd last tile. */
   const body=tiles||actBtn('openQuickSettings()','var(--note-soft)','var(--note)',(I.plus||'+'),'Choose your logs',quickHeldBack(stage)?'What you chose arrives later on':'Nothing showing here yet').replace('class="action"','class="action wide"');
-  openSheet(`<h2>Quick log</h2><div class="sub">What happened?</div>
+  openSheet(`<div class="quick-log-sheet"><h2>Quick log</h2><div class="sub">What happened?</div>
     <div class="actions">${body}</div>
     <button class="btn-ghost" onclick="openQuickSettings()">Choose what shows here</button>
-    <button class="btn-ghost" onclick="hideQuickFabForSession()">Hide the button for now</button>`,'feed');
+    <button class="btn-ghost" onclick="hideQuickFabForSession()">Hide the button for now</button></div>`,'feed');
 }
 function openFeed(){
   const b=activeBaby();

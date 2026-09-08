@@ -2,6 +2,16 @@
 
 **Status: ✅ shipped, rich · 2 P1 interaction bugs (C1, C2)** · Files: `app/index.html` (quick-log 2223–2660), `app/cubby-extras.js` (When pickers 235–330), `app/voice-log.js`
 
+## September 2026 design update
+
+Home places the live timers and last-feed/sleep/nappy summary before Quick log, then the away
+recap, photos and guidance. Quick log precedes photos throughout the day, including across
+23:00 and 05:00. The photo carousel still pauses at night. Unread handoff notes retain their
+priority above logging. Configured actions, child-stage choices and all saving flows remain intact.
+
+The three last-event summaries share one divided panel. Home and the Quick log sheet share
+compact icon-and-label tiles, with wrapping hints, 16px labels and token-based theme colours.
+
 ## Entry points
 - Floating **+** button (home view only — index.html:1326) → `openQuickLog()` grid: Feed / Sleep / Diaper / Pump / Measure / Activity / Say it (voice ✨).
 - Live timer banners on home (`timerBanner`/`sinceCard`, ticks every second).
