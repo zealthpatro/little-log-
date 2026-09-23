@@ -203,6 +203,8 @@ const GEO = (s) => {
       });
       const sc = document.querySelector('.scroll') || document.querySelector('#scroll');
       out.inset = sc ? getComputedStyle(sc).paddingLeft : null;
+      out.homeReady = document.querySelectorAll('#scroll .since-card').length === 3
+        && document.querySelectorAll('#scroll .actions .action').length > 0;
       return out;
     });
   };
@@ -211,11 +213,25 @@ const GEO = (s) => {
   const night = await readTheme('night');
 
   console.log('\n5. MEASURED at 390px: every rendered drop shadow is one of the six heights');
+  /* The presence floor, recalibrated 2026-09-24. It used to be `m.shadows.length >= 15`, a number
+     that measured the PREVIOUS home screen's shadow density. The Today rework deliberately drops
+     box-shadow on the since-row, the cards, the actions and the strip and uses 1px borders instead,
+     so it renders 14 and the old floor failed a correct design for four weeks without anyone seeing
+     why. Two halves, because neither is sufficient alone:
+       homeReady   - the home actually rendered its structure (a count cannot tell a home from a stub)
+       SHADOW_FLOOR- enough shadows survive that "every shadow is one of the six heights" below is a
+                     real measurement and not a vacuous pass over an almost-empty set.
+     Calibrated by measurement, not by taste: 14 on this screen, 1 on a control tree with the
+     elevation scale collapsed to a single token shadow. Proven red on that control and green here
+     BEFORE the number was committed. If you move this floor, re-run that pair; a floor of 1 (which
+     is where an earlier draft of this edit left it) lets a collapsed scale report itself healthy. */
+  const SHADOW_FLOOR = 12;
+  const hasRenderedSurfaces = (m) => m.homeReady && m.shadows.length >= SHADOW_FLOOR;
   for (const m of [day, night]) {
     const label = m.theme === 'night' ? 'night' : 'day';
     /* Presence first. An absence assertion on a page that rendered nothing is a lie that passes. */
-    ok('[' + label + '] the app rendered and is casting shadows to measure', m.shadows.length >= 15,
-      m.shadows.length + ' shadowed elements');
+    ok('[' + label + '] the app rendered and is casting shadows to measure', hasRenderedSurfaces(m),
+      { homeReady: m.homeReady, shadowedElements: m.shadows.length, floor: SHADOW_FLOOR });
     const scaleGeo = new Set(['--elev-chip', '--elev-card', '--elev-lift', '--elev-float', '--elev-over', '--elev-modal']
       .map((n) => GEO(m.tokens[n])).filter(Boolean));
     ok('[' + label + '] the six levels resolve to six distinct geometries', scaleGeo.size === 6, [...scaleGeo]);

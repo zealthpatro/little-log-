@@ -665,8 +665,12 @@ body{
 
 /* Today keeps care controls together; photo and guidance follow the primary task.
    Scoped roles preserve the density of history, health tables and pregnancy views. */
-.home-today .greeting{font-size:var(--fs-stat);line-height:1.2;margin:2px 0 6px;}
-.home-today .greeting-sub{font-size:var(--fs-base);line-height:1.5;margin-bottom:var(--stack);}
+/* The two gaps below are the stack contract (DESIGN.md A3.2), not taste. The greeting and its second
+   line are a declared PAIR in tools/stack_check.js, so 2px, not 6. And .greeting-sub is a HEAD: what
+   follows it is the content it introduces, so 12px, not var(--stack)'s 16. Shipped once at 6/16 and
+   the stack gate caught both. Change these and that gate goes red, correctly. */
+.home-today .greeting{font-size:var(--fs-stat);line-height:1.2;margin:2px 0;}
+.home-today .greeting-sub{font-size:var(--fs-base);line-height:1.5;margin-bottom:12px;}
 .home-today .since-row{gap:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);padding:16px 0;box-shadow:none;}
 .home-today .since-card{min-width:0;background:none;border-radius:0;padding:0 12px;box-shadow:none;}
 .home-today .since-card + .since-card{border-left:1px solid var(--line);}
