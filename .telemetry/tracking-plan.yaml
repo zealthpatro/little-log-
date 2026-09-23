@@ -1,0 +1,362 @@
+# Cubby tracking plan
+#
+# Four rules, in priority order. Every event below was checked against all four.
+#
+#   1. MEASURE HOUSEHOLDS, NOT PEOPLE. The household is the unit the product is built around, and a
+#      person-level trail is exactly what a privacy-first family app must not keep.
+#   2. DERIVE BEFORE EMITTING. If a stored product record already proves a moment happened, the
+#      reporter reads it. Nothing new is collected for it. 13 of the 18 events here are derived.
+#   3. EMIT ONLY WHERE NOTHING IS STORED, AND THEN ANONYMOUSLY. Four moments leave no record at all
+#      (a wizard step abandoned, a sheet opened and closed, an account erased). Those increment an
+#      aggregate counter in D1 with no uid, no household id, no free text and no health value, the
+#      same shape as the pageStats counter that already exists.
+#   4. THERE IS NO LOSS EVENT. The only records of a pregnancy loss are her kept-after-loss archive,
+#      users/{uid}.pregnancyArchive, which store-firebase.js calls "the one doc only she can ever read
+#      or write", and lossHolding, which is circle-shared only because of an open privacy defect. An
+#      analytics job reading either would break a promise the product made to her. See `decisions`.
+
+meta:
+  product: Cubby
+  version: 1
+  created: 2026-09-24
+  updated: 2026-09-24
+  owner: founder
+  implementation: first_party        # no SDK, no CDP, no third party. tools/thirdparty_gate.js enforces it.
+  naming: object.action, snake_case, past tense
+  pii_policy: none                   # no email, name, baby name, health value or free text in any event or snapshot
+  internal_user_policy: by_flag
+  internal_user_detail: >
+    Derived measures exclude households whose ownerId is listed in the Worker env var INTERNAL_UIDS
+    (comma-separated, set with `npx wrangler secret put INTERNAL_UIDS`). Emitted counters are skipped
+    on any device where localStorage 'cubby-internal' is '1', which the founder sets once per device.
+    Five of the thirteen historical accounts are the founder's, so without this every rate is wrong.
+  sources:
+    derived: "computed by the daily snapshot job from records the product already stores; nothing new is collected"
+    emitted: "an atomic increment of D1 funnel_steps(day, key, n) in GAMES_DB; anonymous, aggregate, allowlisted"
+
+entities:
+  user:
+    id_property: uid
+    id_format: "Firebase Auth uid, opaque 28 characters"
+    note: "Never appears in an event, a counter or a snapshot. Used only to join records inside the job."
+    traits:
+      - name: acq_source
+        type: string
+        source: "users/{uid}.acq.source (existing, first touch)"
+        required: false
+      - name: acq_campaign
+        type: string
+        source: "users/{uid}.acq.campaign (existing)"
+        required: false
+      - name: is_referred
+        type: boolean
+        source: "users/{uid}.referredBy present (existing)"
+        required: true
+      - name: role
+        type: string
+        enum: [owner, caregiver]
+        source: "households/{hid}.members"
+        required: true
+
+groups:
+  - type: household
+    id_format: "Firestore auto-id, 20 characters"
+    is_top_level: true
+    note: >
+      Baby, pregnancy and trying are carried as the `stage` property, not as child groups. A household
+      rarely holds more than two babies, and the pregnancy record is owner-owned: a caregiver must not
+      be able to learn about it through any analytics surface.
+    traits:
+      - name: stage
+        type: string
+        enum: [trying, pregnancy, baby]
+        source: "households/{hid}/pregnancy/{owner}.data.stage: 'planning' => trying, 'expecting' with no bornBabyId => pregnancy; any baby or a recorded birth => baby. An active pregnancy wins over an older baby."
+        required: true
+      - name: created_at
+        type: datetime
+        required: true
+      - name: member_count
+        type: integer
+        required: true
+      - name: has_second_caregiver
+        type: boolean
+        required: true
+      - name: first_entry_at
+        type: datetime
+        required: false
+      - name: active_days
+        type: integer
+        required: true
+      - name: pro_waitlisted
+        type: boolean
+        required: true
+      - name: is_internal
+        type: boolean
+        required: true
+
+events:
+  # ── Acquisition ───────────────────────────────────────────────────────────────────────────────
+  - name: visit.landed
+    category: acquisition
+    source: emitted            # existing pageStats counter, named here; storage unchanged
+    group_level: none
+    description: An HTML page was served. App launches count as /app.
+    properties:
+      - { name: path, type: string, required: true, note: "secret segments collapsed by statsKey()" }
+      - { name: status_class, type: string, enum: [ok, "404", 4xx, 5xx], required: true }
+    expected_frequency: high
+
+  - name: user.attributed
+    category: acquisition
+    source: derived            # users/{uid}.acq, existing
+    group_level: household
+    description: A new account arrived carrying a first-touch campaign tag.
+    properties:
+      - { name: source, type: string, required: true }
+      - { name: medium, type: string, required: false }
+      - { name: campaign, type: string, required: false }
+      - { name: content, type: string, required: false }
+    expected_frequency: low
+
+  - name: user.referred
+    category: acquisition
+    source: derived            # users/{uid}.referredBy, existing
+    group_level: household
+    description: A new account arrived through a referral code.
+    properties:
+      - { name: has_referrer, type: boolean, required: true, note: "the code itself is not reported" }
+    expected_frequency: low
+
+  # ── Lifecycle ─────────────────────────────────────────────────────────────────────────────────
+  - name: household.created
+    category: lifecycle
+    source: derived            # households/{hid}.createdAt
+    group_level: household
+    description: A new family signed in and a household was made.
+    properties:
+      - { name: stage, type: string, enum: [trying, pregnancy, baby], required: true }
+      - { name: acq_source, type: string, required: false }
+    expected_frequency: low
+
+  - name: onboarding.step_reached
+    category: lifecycle
+    source: emitted            # no record exists for a step someone reached and then left
+    group_level: none
+    description: A person reached a step of the first-run setup. The count per step is the drop-off curve.
+    properties:
+      - { name: step, type: string, enum: [stage_chosen, details_entered, invite_offered], required: true, note: "the wizard has three steps; all three stages converge on openOnboardInvite, which carries the invite and the first-log button together, and completion is household.activated" }
+      - { name: stage, type: string, enum: [trying, pregnancy, baby, none], required: true }
+    expected_frequency: low
+
+  - name: household.stage_entered
+    category: lifecycle
+    source: derived            # state.pregnancy.stage, bornBabyId, babies[]
+    group_level: household
+    description: A household moved into a stage, including trying to pregnancy and pregnancy to baby.
+    properties:
+      - { name: stage, type: string, enum: [trying, pregnancy, baby], required: true }
+      - { name: from_stage, type: string, enum: [none, trying, pregnancy], required: true }
+    expected_frequency: low
+
+  - name: household.activated
+    category: lifecycle
+    source: derived            # first care entry of ANY stage, not only a baby's
+    group_level: household
+    description: The first entry was logged. The activation moment for every stage.
+    properties:
+      - { name: stage, type: string, enum: [trying, pregnancy, baby], required: true }
+      - { name: entry_type, type: string, required: true }
+      - { name: minutes_to_activate_bucket, type: string, enum: ["<5", "5-60", "1-24h", "1-7d", ">7d"], required: true }
+    expected_frequency: low
+
+  - name: household.returned
+    category: lifecycle
+    source: derived            # 2+ distinct active days
+    group_level: household
+    description: The household logged on a second day.
+    properties:
+      - { name: stage, type: string, enum: [trying, pregnancy, baby], required: true }
+    expected_frequency: low
+
+  - name: household.retained
+    category: lifecycle
+    source: derived
+    group_level: household
+    description: Active on 7 or more distinct days.
+    properties:
+      - { name: stage, type: string, enum: [trying, pregnancy, baby], required: true }
+    expected_frequency: low
+
+  - name: account.deleted
+    category: lifecycle
+    source: emitted            # erasure removes every record, so the Worker counts it at purge time
+    group_level: none
+    description: A household or member was erased. The only surviving trace of explicit churn.
+    properties:
+      - { name: stage, type: string, enum: [trying, pregnancy, baby, unknown], required: true }
+      - { name: role, type: string, enum: [owner, caregiver], required: true }
+    expected_frequency: low
+
+  # ── Core value ────────────────────────────────────────────────────────────────────────────────
+  - name: care_entry.logged
+    category: core_value
+    source: derived            # households/{hid}/events, aggregated per day, never per entry
+    group_level: household
+    description: Care entries logged. Reported only as daily totals by type, stage and author role.
+    properties:
+      - { name: entry_type, type: string, required: true, note: "feed, sleep, diaper, pump, growth, activity, symptom, milestone, and the pregnancy and trying equivalents" }
+      - { name: stage, type: string, enum: [trying, pregnancy, baby], required: true }
+      - { name: author_role, type: string, enum: [owner, caregiver, former], required: true, note: "former = wrote logs, has since left" }
+    expected_frequency: high
+
+  # ── Collaboration: the wedge ──────────────────────────────────────────────────────────────────
+  - name: invite.sheet_opened
+    category: collaboration
+    source: emitted            # opening and closing the sheet stores nothing
+    group_level: none
+    description: >
+      The invite FORM (openFamily('invite')) was opened. Paired with invite.sent it gives invite-intent
+      conversion. openAddSomeone is NOT an invite: it adds a relative to the baby's photo keepsakes.
+    properties:
+      - { name: stage, type: string, enum: [trying, pregnancy, baby, none], required: true }
+      - { name: entry_point, type: string, enum: [home, settings, onboarding, nudge, other], required: true }
+    expected_frequency: low
+
+  - name: invite.sent
+    category: collaboration
+    source: derived            # invites/{email}, inviteLinks/{token}, existing
+    group_level: household
+    description: An invitation went out. The address is never reported.
+    properties:
+      - { name: channel, type: string, enum: [email, link], required: true }
+    expected_frequency: low
+
+  - name: member.joined
+    category: collaboration
+    source: derived            # households/{hid}.members gains a caregiver
+    group_level: household
+    description: A second person joined the household.
+    properties:
+      - { name: days_since_created, type: integer, required: false, note: "NOT computed. joinedAt lives in memberInfo beside the member's name, and the job does not read names." }
+    expected_frequency: low
+
+  - name: household.shared_logging_reached
+    category: collaboration
+    source: derived            # two distinct authorId on one calendar day, as tools/funnel.js wedge()
+    group_level: household
+    description: >
+      THE WEDGE. Two different people logged in this household on the same day. Membership alone is
+      not the outcome; this is. Historically 0 of 11 households reached it.
+    properties:
+      - { name: days_since_created, type: integer, required: true }
+      - { name: within_7_days, type: boolean, required: true }
+      - { name: stage, type: string, enum: [trying, pregnancy, baby], required: true }
+    expected_frequency: low
+
+  # ── Stage outcomes ────────────────────────────────────────────────────────────────────────────
+  - name: pregnancy.birth_recorded
+    category: core_value
+    source: derived            # households/{hid}/pregnancy/{owner}.data.bornBabyId, set by welcomeBaby()
+    group_level: household
+    description: A pregnancy household welcomed a baby in Cubby, carrying the journey across. Counted, not timed.
+    properties: []
+    expected_frequency: low
+
+  # ── Monetization ──────────────────────────────────────────────────────────────────────────────
+  - name: pro.sheet_viewed
+    category: billing
+    source: emitted            # viewing the Pro sheet stores nothing
+    group_level: none
+    description: >
+      The Pro sheet was opened. With pro.waitlist_joined it gives Pro intent conversion. The sheet
+      redrawing itself (after registering, or when checkout is closed) is not a view and is not counted.
+    properties:
+      - { name: stage, type: string, enum: [trying, pregnancy, baby, none], required: true }
+      - { name: entry_point, type: string, enum: [settings, feature_gate, other], required: true }
+    expected_frequency: low
+
+  - name: pro.waitlist_joined
+    category: billing
+    source: derived            # waitlist/{uid}, existing
+    group_level: household
+    description: Registered for Pro. Billing events (subscription.started, subscription.cancelled) join the plan when Lemon Squeezy goes live.
+    properties:
+      - { name: stage, type: string, enum: [trying, pregnancy, baby], required: true }
+      - { name: acq_source, type: string, required: false }
+    expected_frequency: low
+
+# ── Monitoring ────────────────────────────────────────────────────────────────────────────────────
+snapshot_sync:
+  cadence: daily
+  runner: "worker.js scheduled(), first cron tick after 00:00 UTC; up to 3 attempts a day. Not a laptop: the launchd report died silently for three weeks."
+  writes: "D1 funnel_snapshots(day, ok, reason, reads, attempts, body, at) in GAMES_DB. A failed run is written with its reason, never swallowed."
+  scope: "a ROLLING 30-DAY SIGN-UP COHORT, not all of history, with a hard budget of 15,000 Firestore reads. See decisions."
+  contains: "counts only, by stage. No uid, no household id, no name."
+  metrics:
+    - households_created
+    - households_by_stage
+    - activated
+    - returned
+    - retained
+    - member_joined
+    - shared_logging_reached
+    - shared_logging_within_7_days
+    - invite_sent
+    - pro_waitlist_joined
+    - birth_recorded
+    - care_entries_by_type_and_author_role
+    - onboarding_step_reached_by_step    # from funnel_steps
+    - invite_sheet_opened                # from funnel_steps
+    - pro_sheet_viewed                   # from funnel_steps
+    - accounts_deleted                   # from funnel_steps
+  delivery:
+    - "weekly digest mailed to env.ALERT_EMAIL through the existing Resend key, Mondays"
+    - "node tools/funnel_report.js, reading funnel_snapshots from D1 through wrangler"
+
+# ── The App Store privacy label ───────────────────────────────────────────────────────────────────
+privacy_label:
+  planned_answer_before_this_plan: "Usage Data: not collected"
+  finding: >
+    That answer is already inaccurate, independent of this plan. The existing pageStats counter records
+    every HTML navigation, and the iOS app is a remote-loaded wrapper, so each app launch is a counted
+    request to /app. Apple defines Product Interaction as including app launches. An anonymous,
+    aggregate count is still collected data; it is simply Not Linked to You.
+  correct_answer: >
+    Usage Data > Product Interaction > Data Not Linked to You > purpose Analytics. Not used for
+    tracking. Everything else unchanged: nothing is used to track, and the Linked to You categories stay
+    App Functionality only.
+  what_this_plan_adds_to_the_label: >
+    Nothing new. Five events are emitted: pageStats, which exists today, and four new ones of exactly
+    the same shape, anonymous and aggregate. The thirteen derived events read records already declared
+    as App Functionality and collect nothing.
+  must_not_happen: >
+    No event may carry a uid, household id, email, name or health value, because any one of those would
+    move Usage Data into Linked to You, which is the category the product's positioning depends on
+    keeping empty. tools/tracking_plan_check.js enforces this against the running code.
+
+# ── Decisions, written down so they are not undone as oversights ──────────────────────────────────
+decisions:
+  - decision: No loss event.
+    because: >
+      The only records of a pregnancy loss are users/{uid}.pregnancyArchive, which store-firebase.js
+      documents as "the one doc only she can ever read or write", and lossHolding, which is circle-shared
+      only because of an open privacy defect. An admin key can read both. Doing so for a count would break
+      the promise and entrench the defect.
+    cost: >
+      Retention cannot exclude a household that went quiet after a loss, so it is slightly understated.
+      Every snapshot says so in retention_note.
+  - decision: Member join timing is not computed.
+    because: "joinedAt lives in memberInfo beside the member's name. The job reads members (uid to role) and never memberInfo."
+    cost: "member.joined is counted but not timed. The wedge, which matters more, is timed from care-log authorship."
+  - decision: Counters and snapshots live in D1, not Firestore.
+    because: >
+      Firestore here is the free tier: 50,000 reads and 20,000 writes a day for the whole product. POST
+      /api/step is unauthenticated, so in Firestore a loop could burn the write quota and stop families
+      saving a feed. D1's quota is separate, so analytics cannot starve the product.
+  - decision: The snapshot is a rolling 30-day cohort with a read budget, not a scan of history.
+    because: >
+      A full-history scan has a hard ceiling near 40,000 total care entries, past which the analytics
+      job alone would exhaust the read quota and take the app down. Cohort cost grows with sign-ups.
+      Past 15,000 reads the snapshot abandons and records why.
+  - decision: The pregnancy record is households/{hid}/pregnancy/{owner}, a subcollection.
+    because: "The first audit said pregnancy/{owner}. Querying that path would have counted zero pregnancies, silently."

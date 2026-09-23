@@ -13,6 +13,8 @@
    Vars (wrangler.toml): MAIL_FROM - the verified Resend sender, e.g. "Cubby <noreply@mail.little-cubby.com>"
 */
 
+import { snapshot as funnelSnapshotOf, stepKey, dayKey as funnelDay } from './workers/funnel/core.mjs';
+
 const OAUTH_SCOPE = 'https://www.googleapis.com/auth/identitytoolkit';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const OOB_URL = 'https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode';
@@ -546,6 +548,9 @@ async function canaryStatus(env) {
   } catch (e) {}
   return res;
 }
+
+/* The funnel's pieces, exported for test/funnel-worker.test.js only. Workers ignore named exports. */
+export const __funnel = { recordStep: (req, env) => recordStep(req, env), runFunnelSnapshot, countAccountDeleted, maybeSendFunnelDigest, fsPlain, entryTime };
 
 export async function signinCanary(env) {
   const verdict = await signinCanaryProbe(env);
@@ -1440,7 +1445,7 @@ async function purgeDeletedHouseholds(env) {
   {
     // No fallback here on purpose: a 30-day grace window can wait for the next tick, and a full
     // /households scan is the expensive one. A failure is logged and retried, never scanned around.
-    const found = (await fsQuery(base, token, 'households', 'deleteAfter', 'LESS_THAN_OR_EQUAL', now, 50, ['deleteAfter'])).docs;
+    const found = (await fsQuery(base, token, 'households', 'deleteAfter', 'LESS_THAN_OR_EQUAL', now, 50, ['deleteAfter', 'ownerId'])).docs;
     if (!found) return { households: 0, docs: 0 };
     for (const d of found) {
       const hid = d.name.split('/documents/households/')[1];
@@ -1473,7 +1478,12 @@ async function purgeDeletedHouseholds(env) {
         if (!complete) { console.error('purge_hh_incomplete', hid); continue; }
         // The household doc LAST, so an interrupted run retries rather than orphaning subcollections.
         const delHh = await fetch(base + '/households/' + hid, { method: 'DELETE', headers: { authorization: 'Bearer ' + token } });
-        if (delHh.ok) { households++; docs++; } else console.error('purge_hh_del_fail', hid, delHh.status);
+        if (delHh.ok) {
+          households++; docs++;
+          const internal = String(env.INTERNAL_UIDS || '').split(',').map((x) => x.trim());
+          const owner = d.fields && d.fields.ownerId && d.fields.ownerId.stringValue;
+          if (!owner || internal.indexOf(owner) < 0) await countAccountDeleted(env);
+        } else console.error('purge_hh_del_fail', hid, delHh.status);
       } catch (e) { console.error('purge_hh_fail', hid, (e && e.message) || String(e)); }
     }
   }
@@ -1856,6 +1866,316 @@ async function hubRoute(request, env, url) {
   }
 }
 
+
+/* ---- The funnel: a daily snapshot, an anonymous step counter, a Monday digest ------------------
+
+   The plan is .telemetry/tracking-plan.yaml. The derivation is workers/funnel/core.mjs, which
+   tools/funnel_report.js also calls, so the Monday mail and the founder's laptop cannot disagree.
+
+   STORED IN D1, NOT FIRESTORE, AND THAT IS THE MOST IMPORTANT DECISION HERE. Firestore on this project
+   is the free tier: 50,000 reads and 20,000 writes a day for the WHOLE product. POST /api/step is
+   unauthenticated, so anyone can call it in a loop; if each call wrote to Firestore, a flood could burn
+   the write quota and stop real families saving a feed. In D1 it cannot touch the product at all.
+   Same reasoning as the comment on recordPageView: telemetry that can break the thing it watches is
+   worse than none.
+
+   THE SNAPSHOT IS A ROLLING COHORT, NOT A SCAN OF HISTORY. It reads households created in the last
+   FUNNEL_COHORT_DAYS and their logs, so its cost grows with new sign-ups rather than with every entry
+   ever written, and it stops at FUNNEL_READ_BUDGET and records that it stopped, rather than spending
+   the quota the product lives on. A full-history scan would have a hard ceiling around 40,000 total
+   care entries, past which the analytics job alone would take the app down.
+
+   WHAT IT READS, AND WHAT IT REFUSES TO. Care logs with a field mask of time, authorId and type, so
+   no note or value is ever downloaded. The shared pregnancy journey (stage, birth, and the timing of
+   kicks, contractions and cycle entries). Never households/{hid}/mhealth, her private health. Never
+   users/{uid}.pregnancyArchive, her kept-after-loss record. Never memberInfo, which is where names
+   live; that is why member join TIMING is not computed. app.babies is read to count babies; the names
+   in it exist in memory for the length of the job and are never stored or output. */
+const FUNNEL_COHORT_DAYS = 30;
+const FUNNEL_READ_BUDGET = 15000;
+const FUNNEL_MAX_ATTEMPTS = 3;
+const FUNNEL_DAY_MS = 86400000;
+/* Readiness is per DATABASE, not per isolate. A module-wide flag would, once any database was set up,
+   skip creating the tables in every later one: harmless with a single binding, wrong the moment there
+   are two, and exactly how the tests caught it. */
+const funnelReadyDbs = new WeakSet();
+
+async function funnelDb(env) {
+  if (!env.GAMES_DB) return null;
+  if (!funnelReadyDbs.has(env.GAMES_DB)) {
+    await env.GAMES_DB.batch([
+      env.GAMES_DB.prepare('CREATE TABLE IF NOT EXISTS funnel_steps (day TEXT NOT NULL, key TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, key))'),
+      env.GAMES_DB.prepare('CREATE TABLE IF NOT EXISTS funnel_snapshots (day TEXT PRIMARY KEY, ok INTEGER NOT NULL, reason TEXT, reads INTEGER, attempts INTEGER NOT NULL DEFAULT 0, body TEXT, at INTEGER NOT NULL)'),
+      env.GAMES_DB.prepare('CREATE TABLE IF NOT EXISTS funnel_meta (key TEXT PRIMARY KEY, value TEXT, at INTEGER)'),
+    ]);
+    funnelReadyDbs.add(env.GAMES_DB);
+  }
+  return env.GAMES_DB;
+}
+
+/* A Firestore REST value as plain JS. Only what the reader needs. */
+function fsPlain(v) {
+  if (!v || typeof v !== 'object') return null;
+  if ('integerValue' in v) return Number(v.integerValue);
+  if ('doubleValue' in v) return Number(v.doubleValue);
+  if ('stringValue' in v) return v.stringValue;
+  if ('booleanValue' in v) return !!v.booleanValue;
+  if ('timestampValue' in v) return Date.parse(v.timestampValue) || 0;
+  if ('nullValue' in v) return null;
+  if ('arrayValue' in v) return ((v.arrayValue && v.arrayValue.values) || []).map(fsPlain);
+  if ('mapValue' in v) {
+    const o = {}, f = (v.mapValue && v.mapValue.fields) || {};
+    for (const k of Object.keys(f)) o[k] = fsPlain(f[k]);
+    return o;
+  }
+  return null;
+}
+const fsField = (doc, path) => {
+  let cur = doc && doc.fields ? { mapValue: { fields: doc.fields } } : null;
+  for (const k of path.split('.')) cur = cur && cur.mapValue && cur.mapValue.fields ? cur.mapValue.fields[k] : null;
+  return fsPlain(cur);
+};
+
+/* A log entry's moment, whichever name the entry kind uses for it. */
+function entryTime(e) {
+  if (!e || typeof e !== 'object') return 0;
+  for (const k of ['time', 'at', 't', 'ts', 'start', 'startedAt', 'date']) {
+    const v = e[k];
+    if (typeof v === 'number' && v > 0) return v;
+    if (typeof v === 'string') { const n = Date.parse(v); if (n > 0) return n; }
+  }
+  return 0;
+}
+
+/* Page one collection with a multi-field mask. Counts every document against the budget. */
+async function funnelPage(base, token, path, fields, spend) {
+  const out = []; let pageToken = '';
+  const mask = fields.map((f) => 'mask.fieldPaths=' + encodeURIComponent(f)).join('&');
+  do {
+    const r = await fetch(base + '/' + path + '?pageSize=300&' + mask
+      + (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : ''), { headers: { authorization: 'Bearer ' + token } });
+    if (r.status === 404) return out;
+    if (!r.ok) throw new Error('page ' + path.split('/')[0] + ' ' + r.status);
+    const j = await r.json();
+    const docs = j.documents || [];
+    spend(Math.max(1, docs.length));
+    for (const d of docs) out.push(d);
+    pageToken = j.nextPageToken || '';
+  } while (pageToken);
+  return out;
+}
+
+async function funnelInput(env, now) {
+  const sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT);
+  const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore');
+  const base = 'https://firestore.googleapis.com/v1/projects/' + FS_PROJECT + '/databases/(default)/documents';
+  let reads = 0;
+  const spend = (n) => { reads += n; if (reads > FUNNEL_READ_BUDGET) throw new Error('read budget of ' + FUNNEL_READ_BUDGET + ' reached; snapshot abandoned rather than spending the product quota'); };
+  const internal = new Set(String(env.INTERNAL_UIDS || '').split(',').map((x) => x.trim()).filter(Boolean));
+
+  // The cohort. households.createdAt is a server timestamp, so the filter is a timestampValue.
+  const r = await fetch(base + ':runQuery', {
+    method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+    body: JSON.stringify({ structuredQuery: {
+      from: [{ collectionId: 'households' }],
+      where: { fieldFilter: { field: { fieldPath: 'createdAt' }, op: 'GREATER_THAN_OR_EQUAL',
+        value: { timestampValue: new Date(now - FUNNEL_COHORT_DAYS * FUNNEL_DAY_MS).toISOString() } } },
+      select: { fields: ['createdAt', 'ownerId', 'members', 'app.babies'].map((f) => ({ fieldPath: f })) },
+      limit: 2000,
+    } }),
+  });
+  if (!r.ok) throw new Error('cohort query ' + r.status);
+  const hhDocs = ((await r.json()) || []).map((e) => e && e.document).filter(Boolean);
+  spend(Math.max(1, hhDocs.length));
+
+  const households = [], users = {};
+  for (const d of hhDocs) {
+    const id = d.name.split('/documents/households/')[1];
+    if (!id) continue;
+    const ownerId = fsField(d, 'ownerId') || '';
+    const roles = fsField(d, 'members') || {};
+    const members = {};
+    for (const uid of Object.keys(roles)) members[uid] = { role: roles[uid] === 'owner' ? 'owner' : 'caregiver', joinedAt: 0 };
+    const babies = fsField(d, 'app.babies');
+
+    const evDocs = await funnelPage(base, token, 'households/' + id + '/events', ['time', 'authorId', 'type'], spend);
+    const entries = evDocs.map((e) => ({ time: Number(fsField(e, 'time')) || 0, authorId: fsField(e, 'authorId') || '', type: fsField(e, 'type') || '' }));
+
+    const pgDocs = await funnelPage(base, token, 'households/' + id + '/pregnancy',
+      ['data.stage', 'data.bornBabyId', 'data.birthAt', 'data.kicks', 'data.contractions', 'data.observations', 'data.periods'], spend);
+    let preg = null;
+    for (const pd of pgDocs) {
+      if ((pd.name || '').split('/pregnancy/')[1] !== ownerId && pgDocs.length > 1) continue;
+      const tryingLogs = [].concat(fsField(pd, 'data.observations') || [], fsField(pd, 'data.periods') || []);
+      const pregLogs = [].concat(fsField(pd, 'data.kicks') || [], fsField(pd, 'data.contractions') || []);
+      preg = {
+        stage: fsField(pd, 'data.stage') || null,
+        bornAt: fsField(pd, 'data.bornBabyId') ? (Number(fsField(pd, 'data.birthAt')) || 1) : 0,
+        hadTrying: tryingLogs.length > 0,
+        logTimes: tryingLogs.concat(pregLogs).map(entryTime).filter(Boolean),
+      };
+    }
+
+    households.push({
+      id, ownerId, createdAt: Number(fsField(d, 'createdAt')) || 0,
+      isInternal: internal.has(ownerId),
+      members, babyCount: Array.isArray(babies) ? babies.length : 0, entries, preg,
+    });
+
+    if (ownerId && !users[ownerId]) {
+      const u = await fetch(base + '/users/' + encodeURIComponent(ownerId) + '?mask.fieldPaths=acq&mask.fieldPaths=referredBy',
+        { headers: { authorization: 'Bearer ' + token } });
+      spend(1);
+      if (u.ok) { const ud = await u.json(); users[ownerId] = { acq: fsField(ud, 'acq'), referredBy: fsField(ud, 'referredBy') }; }
+    }
+  }
+
+  const cohort = new Set(households.map((h) => h.id));
+  const inv = await funnelPage(base, token, 'invites', ['householdId'], spend);
+  const links = await funnelPage(base, token, 'inviteLinks', ['householdId', 'hid'], spend);
+  const invitedHouseholdIds = inv.concat(links).map((x) => fsField(x, 'householdId') || fsField(x, 'hid')).filter((h) => h && cohort.has(h));
+  const wl = await funnelPage(base, token, 'waitlist', ['uid'], spend);
+  const waitlistUids = wl.map((x) => fsField(x, 'uid') || (x.name || '').split('/waitlist/')[1]).filter(Boolean);
+
+  return { input: { now, households, users, invitedHouseholdIds, waitlistUids }, reads };
+}
+
+async function funnelStepTotals(db, now, days) {
+  const from = funnelDay(now - (days - 1) * FUNNEL_DAY_MS);
+  const rows = await db.prepare('SELECT key, SUM(n) AS n FROM funnel_steps WHERE day >= ? GROUP BY key').bind(from).all();
+  const out = {};
+  for (const row of (rows && rows.results) || []) out[row.key] = Number(row.n) || 0;
+  return out;
+}
+
+/* Once per UTC day, on the first cron tick that finds no good snapshot. A failure is RECORDED with its
+   reason, never swallowed: the launchd report that preceded this died silently for three weeks. */
+async function runFunnelSnapshot(env, nowMs) {
+  if (!env.FIREBASE_SERVICE_ACCOUNT) return;
+  const db = await funnelDb(env); if (!db) return;
+  const now = nowMs || Date.now(), day = funnelDay(now);
+  const prev = await db.prepare('SELECT ok, attempts FROM funnel_snapshots WHERE day = ?').bind(day).first();
+  if (prev && (prev.ok === 1 || prev.attempts >= FUNNEL_MAX_ATTEMPTS)) return;
+  const attempts = (prev ? prev.attempts : 0) + 1;
+  let ok = 0, reason = '', reads = 0, body = null;
+  try {
+    const built = await funnelInput(env, now);
+    reads = built.reads;
+    const snap = funnelSnapshotOf(built.input);
+    snap.cohort_days = FUNNEL_COHORT_DAYS;
+    snap.reads = reads;
+    snap.steps_last_7d = await funnelStepTotals(db, now, 7);
+    body = JSON.stringify(snap);
+    ok = 1;
+  } catch (e) {
+    reason = String((e && e.message) || e).slice(0, 300);
+    console.error('funnel_snapshot_fail', reason);
+  }
+  await db.prepare('INSERT INTO funnel_snapshots (day, ok, reason, reads, attempts, body, at) VALUES (?, ?, ?, ?, ?, ?, ?) '
+    + 'ON CONFLICT(day) DO UPDATE SET ok = excluded.ok, reason = excluded.reason, reads = excluded.reads, '
+    + 'attempts = excluded.attempts, body = excluded.body, at = excluded.at')
+    .bind(day, ok, reason, reads, attempts, body, now).run();
+}
+
+/* POST /api/step {event, props}. Anonymous by construction: no uid, no household, no cookie, no IP
+   stored. Only events and values in core.STEP_EVENTS are accepted; anything else is refused and never
+   written. Rate-limited per IP so a loop cannot fake a funnel. */
+async function recordStep(request, env) {
+  const url = new URL(request.url);
+  const origin = request.headers.get('Origin'), referer = request.headers.get('Referer');
+  let same = false;
+  try { same = origin ? new URL(origin).host === url.host : (referer ? new URL(referer).host === url.host : false); } catch (e) { same = false; }
+  if (!same) return json({ error: 'forbidden' }, 403);
+  if (Number(request.headers.get('content-length') || 0) > 512) return json({ error: 'too_large' }, 413);
+  if (env.STEP_RATE_LIMITER) {
+    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    try { const { success } = await env.STEP_RATE_LIMITER.limit({ key: 'step:' + ip }); if (!success) return json({ error: 'rate' }, 429); } catch (e) {}
+  }
+  let body;
+  try { const raw = await request.text(); if (raw.length > 512) return json({ error: 'too_large' }, 413); body = JSON.parse(raw); }
+  catch (e) { return json({ error: 'bad_request' }, 400); }
+  const key = stepKey(body && body.event, body && body.props);
+  if (!key) return json({ error: 'not_in_plan' }, 400);
+  const db = await funnelDb(env);
+  if (!db) return json({ error: 'unavailable' }, 503);
+  await db.prepare('INSERT INTO funnel_steps (day, key, n) VALUES (?, ?, 1) ON CONFLICT(day, key) DO UPDATE SET n = n + 1')
+    .bind(funnelDay(Date.now()), key).run();
+  return new Response(null, { status: 204 });
+}
+
+/* account.deleted is counted at the moment erasure completes, because erasure removes every record
+   that could otherwise prove it happened. Aggregate only. */
+async function countAccountDeleted(env) {
+  try {
+    const db = await funnelDb(env); if (!db) return;
+    const key = stepKeyUnchecked('account.deleted', { role: 'owner', stage: 'unknown' });
+    await db.prepare('INSERT INTO funnel_steps (day, key, n) VALUES (?, ?, 1) ON CONFLICT(day, key) DO UPDATE SET n = n + 1')
+      .bind(funnelDay(Date.now()), key).run();
+  } catch (e) { console.error('funnel_deleted_count_fail', (e && e.message) || String(e)); }
+}
+/* The Worker's own events are not client input and are not in the /api/step allowlist, so they are
+   keyed directly, in the same canonical form stepKey produces. */
+function stepKeyUnchecked(event, props) {
+  return event + '|' + Object.keys(props).sort().map((k) => k + '=' + props[k]).join('|');
+}
+
+/* Mondays, once per ISO week, after that day's snapshot exists. It reports the snapshot job's own
+   health first: a digest that only ever says good things is the silent failure all over again. */
+async function maybeSendFunnelDigest(env, nowMs) {
+  const now = new Date(nowMs || Date.now());
+  if (now.getUTCDay() !== 1 || !env.ALERT_EMAIL || !env.RESEND_API_KEY) return;
+  const db = await funnelDb(env); if (!db) return;
+  const week = funnelDay(now.getTime());
+  const sent = await db.prepare("SELECT value FROM funnel_meta WHERE key = 'digest_last'").first();
+  if (sent && sent.value === week) return;
+  const rows = ((await db.prepare('SELECT day, ok, reason, body FROM funnel_snapshots ORDER BY day DESC LIMIT 7').all()).results) || [];
+  if (!rows.length || rows[0].day !== week) return;     // wait for today's snapshot
+  const html = funnelDigestHtml(rows);
+  const r = await fetch('https://api.resend.com/emails', {
+    method: 'POST', headers: { authorization: 'Bearer ' + env.RESEND_API_KEY, 'content-type': 'application/json' },
+    body: JSON.stringify({ from: env.MAIL_FROM || 'Cubby <noreply@mail.little-cubby.com>', to: env.ALERT_EMAIL,
+      subject: 'Cubby this week: ' + funnelDigestHeadline(rows), html }),
+  });
+  if (r.ok) {
+    await db.prepare("INSERT INTO funnel_meta (key, value, at) VALUES ('digest_last', ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, at = excluded.at")
+      .bind(week, now.getTime()).run();
+  } else console.error('funnel_digest_send_fail', r.status);
+}
+
+function funnelDigestHeadline(rows) {
+  const s = rows[0] && rows[0].ok ? JSON.parse(rows[0].body) : null;
+  if (!s) return 'the funnel snapshot FAILED today';
+  const f = s.funnel, sum = (k) => ['trying', 'pregnancy', 'baby', 'none'].reduce((a, st) => a + (f[st][k] || 0), 0);
+  return sum('created') + ' new households in 30 days, ' + sum('shared_logging') + ' reached two people logging';
+}
+
+function funnelDigestHtml(rows) {
+  const esc = (x) => String(x).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const failed = rows.filter((r) => !r.ok);
+  let h = '<h2>Cubby, the last 30 days of sign-ups</h2>';
+  h += failed.length
+    ? '<p><b>The snapshot job failed on ' + failed.length + ' of the last ' + rows.length + ' days.</b> '
+      + failed.map((r) => esc(r.day) + ': ' + esc(r.reason || 'no reason')).join('; ') + '</p>'
+    : '<p>Snapshot job healthy: ' + rows.length + ' of ' + rows.length + ' days written.</p>';
+  const s = rows.find((r) => r.ok);
+  if (!s) return h;
+  const snap = JSON.parse(s.body);
+  const stages = ['trying', 'pregnancy', 'baby', 'none'];
+  const cols = ['created', 'activated', 'returned', 'retained', 'member_joined', 'shared_logging', 'shared_logging_within_7d', 'invite_sent', 'pro_waitlisted'];
+  h += '<table border="1" cellpadding="4" style="border-collapse:collapse"><tr><th>stage</th>' + cols.map((c) => '<th>' + esc(c) + '</th>').join('') + '</tr>';
+  for (const st of stages) h += '<tr><td>' + st + '</td>' + cols.map((c) => '<td>' + (snap.funnel[st][c] || 0) + '</td>').join('') + '</tr>';
+  h += '</table>';
+  h += '<p>Care entries in the last 7 days: ' + snap.care_entries_last_7d.total + ' (owner ' + snap.care_entries_last_7d.by_author_role.owner
+    + ', caregiver ' + snap.care_entries_last_7d.by_author_role.caregiver + ').</p>';
+  h += '<p>Pregnancy to baby: ' + snap.transitions.pregnancy_to_baby + '. Trying to pregnancy: ' + snap.transitions.trying_to_pregnancy + '.</p>';
+  const steps = snap.steps_last_7d || {};
+  const keys = Object.keys(steps).sort();
+  if (keys.length) h += '<p>Steps, last 7 days:<br>' + keys.map((k) => esc(k) + ': ' + steps[k]).join('<br>') + '</p>';
+  h += '<p style="color:#777">' + esc(snap.retention_note) + ' Internal households excluded: ' + snap.households.internal_excluded
+    + '. Firestore reads used: ' + snap.reads + ' of a ' + FUNNEL_READ_BUDGET + ' budget.</p>';
+  return h;
+}
+
 export default {
   async scheduled(event, env) {
     try { await sendPushReminders(env); } catch (e) { console.error('push_cron_fail', (e && e.message) || String(e)); }
@@ -1864,6 +2184,10 @@ export default {
     try { await purgeDeletedHouseholds(env); } catch (e) { console.error('purge_cron_fail', (e && e.message) || String(e)); }
     /* Third and independent: whether a parent can actually get a sign-in code right now. */
     try { await signinCanary(env); } catch (e) { console.error('signin_canary_fail', (e && e.message) || String(e)); }
+    /* Fourth and independent: the daily funnel snapshot, then Monday's digest. Last on purpose, so
+       nothing a parent depends on waits behind analytics. */
+    try { await runFunnelSnapshot(env); } catch (e) { console.error('funnel_snapshot_throw', (e && e.message) || String(e)); }
+    try { await maybeSendFunnelDigest(env); } catch (e) { console.error('funnel_digest_throw', (e && e.message) || String(e)); }
   },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -1899,6 +2223,11 @@ export default {
        mode on send-signin-link, so the working link path is untouched. */
     /* The dead man's switch. Public and unauthenticated so an external uptime monitor can poll it;
        it says whether sign-in works and how long ago that was last true, and nothing else. */
+    /* Anonymous funnel steps. See recordStep. */
+    if (url.pathname === '/api/step') {
+      if (request.method !== 'POST') return json({ error: 'method' }, 405);
+      return recordStep(request, env);
+    }
     if (url.pathname === '/api/canary') {
       if (request.method !== 'GET') return json({ error: 'method' }, 405);
       return canaryStatus(env);

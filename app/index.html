@@ -2848,7 +2848,7 @@ function setHouseholdName(v){
    came to send. Passed only by the invite door, so every other caller behaves exactly as before. */
 function openHouseholdName(back){
   const cur=(state.settings&&state.settings.householdName)||'';
-  const ret = back==='invite' ? `;window.openFamily&&window.openFamily('invite')` : '';
+  const ret = back==='invite' ? `;window.openFamily&&window.openFamily('invite','settings')` : '';
   openSheet(`<h2>What shall we call your family?</h2>
     <div class="sub">This is what someone sees when you invite them, so they know whose Cubby they are joining. Everyone in the circle sees it.</div>
     <div class="field"><label>Family name</label>
@@ -3047,7 +3047,7 @@ function renderGetStarted(){
           parent did exactly what the app told her and the box stayed empty. A nappy is two taps and
           it always writes an entry, which is the whole promise of the row. */''}
     ${row(haveLog,'Log your first entry','A nappy change is two taps','openDiaper()')}
-    ${row(shared,'Invite a co-parent','Share the log live with family',"window.openFamily&&window.openFamily('invite')")}
+    ${row(shared,'Invite a co-parent','Share the log live with family',"window.openFamily&&window.openFamily('invite','home')")}
     ${row(hasPhoto,'Add a photo','A face for the feed and keepsakes',"go('album')")}
   </div>`;
 }
@@ -6501,6 +6501,7 @@ function saveBaby(){
   const onb=addBabyCtx.onboarding; addBabyCtx={onboarding:false,birth:''};
   closeSheet(); go('home');
   if(onb){
+    cubbyStep('onboarding.step_reached',{step:'details_entered', stage:'baby'});
     // New-owner wizard: now that the baby exists, collect identity (so "relationship to baby" makes
     // sense), then offer the invite. Returning/secondary adds skip straight to the invite.
     if(window.LL && window.LL.needsIdentity && typeof window.LL.collectIdentity==='function'){ window.LL.collectIdentity('baby', openOnboardInvite); }
@@ -6510,6 +6511,9 @@ function saveBaby(){
 /* The post-setup hub: affirm they're set up, offer the activation (invite), and quietly make it
    clear they can add another little one. We never ASK "are there more?" (loss-safe); we offer. */
 function openOnboardInvite(){
+  /* The offer, counted as the wizard step. Opening the actual invite FORM from here is
+     invite.sheet_opened, counted in openFamily, so one intent is never counted twice. */
+  cubbyStep('onboarding.step_reached',{step:'invite_offered', stage:funnelStage()});
   const n=(state.babies||[]).length;
   // Pregnancy finish: same warm "invite your circle" beat as the baby path (was a silent toast), but
   // circle-only, no "add another little one".
@@ -6529,7 +6533,7 @@ function openOnboardInvite(){
             background and reads as a rendering fault. The vaccine branch stacks its own glyph three
             times for the same reason. */''}
       ${pregLine?`<div class="sub" style="margin-top:12px;text-align:left">📅 ${pregLine}</div>`:''}
-      <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:14px" onclick="window.openFamily&&window.openFamily('invite')">Invite someone</button>
+      <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:14px" onclick="window.openFamily&&window.openFamily('invite','onboarding')">Invite someone</button>
       ${pregLine?`<button class="btn-ghost" onclick="closeSheet();pregGo('care')">📅 See your appointment plan</button>`:''}
       ${apptN?`<button class="btn-ghost" onclick="exportAntenatalSchedule()">${pregApptCalendarLabel(apptN)}</button>`:''}
       ${(typeof canShowInstall==='function'&&canShowInstall())?`<div class="sub" style="margin-top:14px;font-size:13px">Use Cubby right here, or add it to your home screen to open it like an app, one tap away.</div><button class="btn-ghost" onclick="addToHomeScreen('obInstallMsg')">Add Cubby to your home screen</button><div id="obInstallMsg" class="sub" style="display:none;text-align:left"></div>`:''}
@@ -6561,7 +6565,7 @@ function openOnboardInvite(){
           back on the first evening, and it needs only the name and birthday she has just typed.
           Empty for the pregnancy paths, which return above, and for a parent holding a loss. */''}
     ${posterOfferRow()}
-    <button class="btn-ghost" style="margin-top:10px" onclick="window.openFamily&&window.openFamily('invite')">Invite someone</button>
+    <button class="btn-ghost" style="margin-top:10px" onclick="window.openFamily&&window.openFamily('invite','onboarding')">Invite someone</button>
     ${vaxProofLine()?`<button class="btn-ghost" onclick="closeSheet();healthTab='vaccines';go('health')">💉 See their vaccine plan</button>`:''}
     ${vaxN?`<button class="btn-ghost" onclick="exportVaccineSchedule()">${vaxCalendarLabel(vaxN)}</button>`:''}
     <button class="btn-ghost" onclick="openAddBaby({onboarding:true,birth:lastBabyBirth})">＋ Add another little one</button>
@@ -6571,7 +6575,35 @@ function openOnboardInvite(){
 }
 /* Onboarding stage router: two states (expecting / baby) + a quiet planning link.
    "More than one" is a count, not a stage, so twins/siblings are offered after the first baby. */
+/* ---- Funnel steps (.telemetry/tracking-plan.yaml) -------------------------------------------------
+   The moments that leave no stored record: a wizard step reached, the invite form opened, the Pro sheet
+   opened. Everything else the funnel knows is DERIVED from records Cubby already keeps.
+   Anonymous and aggregate by construction: the body is an event name and two enum values, never a uid,
+   a household, or anything a person typed, and POST /api/step refuses whatever is not in the plan.
+   Fire-and-forget: no await, no retry, no error surfaced, so a counter can never cost a parent a tap.
+   Skipped off the production host (previews, localhost, tests) and on any device the founder marks with
+   localStorage cubby-internal = 1, so the founder's own sessions do not become the customers. */
+let obFunnel=false;
+function funnelStage(){
+  const p=state.pregnancy;
+  if(p && p.stage==='expecting' && !p.bornBabyId) return 'pregnancy';
+  if((state.babies||[]).length) return 'baby';
+  if(p && p.stage==='planning') return 'trying';
+  return 'none';
+}
+function cubbyStep(event, props){
+  try{
+    if(localStorage.getItem('cubby-internal')==='1') return;
+    if(location.hostname!=='little-cubby.com' && !window.__cubbyStepTest) return;
+    const body=JSON.stringify({event:event, props:props});
+    if(window.__cubbyStepTest){ window.__cubbyStepTest.push(JSON.parse(body)); return; }
+    fetch('/api/step',{method:'POST',keepalive:true,headers:{'content-type':'application/json'},body:body}).catch(function(){});
+  }catch(e){}
+}
+window.cubbyStep=cubbyStep; window.funnelStage=funnelStage;
 function obStage(kind){
+  obFunnel=true;
+  cubbyStep('onboarding.step_reached',{step:'stage_chosen', stage:kind==='expecting'?'pregnancy':(kind==='planning'?'trying':'baby')});
   if(kind==='expecting'){ pregDraft={mode:'due', date:'', weeks:'', days:0, country:detectCountry()}; openExpectingSetup('due'); }
   else if(kind==='planning'){ openPlanningSetup(); }
   else { openAddBaby({onboarding:true}); }
@@ -6752,7 +6784,10 @@ function useTaste(k,featureName){
 }
 function refundTaste(k){ if(isPro())return; try{ const t=state.settings.proTaste; if(t&&t[k]>0){ t[k]--; persist(); } }catch(e){} }
 function proTag(k){ return isPro()?'':(tasteLeft(k)>0?` · ${tasteLeft(k)} free`:' · Pro ✨'); }
-function openPro(lockedFeature, tastedOut){
+function openPro(lockedFeature, tastedOut, entry){
+  /* 'rerender' is the sheet redrawing itself (after registering, or when checkout is not open yet),
+     which is not a second view and must not be counted as one. */
+  if(entry!=='rerender') cubbyStep('pro.sheet_viewed',{stage:funnelStage(), entry_point:lockedFeature?'feature_gate':(entry||'other')});
   const feats=[
     ['🎙️','Voice logging & notes','Just say it, "fed her 120ml" or a quick note for the circle, and Cubby writes the entry for you. Hands-free for the arms-full, 3am moments.'],
     ['📄','Doctor visit report (PDF)','A clean summary to bring to every appointment: recent days, growth, vaccines, medicines, and your pregnancy health log.'],
@@ -6789,7 +6824,7 @@ function openPro(lockedFeature, tastedOut){
 async function startProCheckout(plan){
   const hid = window.LL && window.LL.householdId;
   if(!hid){ toast('Sign in first'); return; }
-  if(!PRO_CFG.checkoutUrl){ openPro(); return; }
+  if(!PRO_CFG.checkoutUrl){ openPro(undefined,undefined,'rerender'); return; }
   showLoader(['Opening secure checkout']);
   try{
     const r = await fetch(PRO_CFG.checkoutUrl, { method:'POST', headers:{'content-type':'application/json'},
@@ -6827,7 +6862,7 @@ async function joinProWaitlist(){
       },{merge:true});
     }
     try{ localStorage.setItem('cubby-pro-waitlist','1'); }catch(e){}
-    openPro(); toast('🐻 You\'re registered for Cubby Pro!');
+    openPro(undefined,undefined,'rerender'); toast('🐻 You\'re registered for Cubby Pro!');
   }catch(e){ toast('Could not register: '+((e&&e.message)||e)); }
 }
 function openBabyProfile(){
@@ -7764,7 +7799,7 @@ function openSettings(){
       <div class="si-ico" style="background:var(--feed-soft);color:var(--feed);font-size:18px">👨‍👩‍👧</div>
       <div class="si-body"><div class="a">Your profile &amp; family${(window.CubbyTeachUI)?CubbyTeachUI.dot('openFamily','your circle'):((window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('sharing'):'')}</div><div class="b">Your name &amp; relationship, invite people, your bear</div></div>
     </div>
-    <div class="set-item" onclick="openPro()" style="cursor:pointer">
+    <div class="set-item" onclick="openPro(undefined,undefined,'settings')" style="cursor:pointer">
       <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">✨</div>
       <div class="si-body"><div class="a">Cubby Pro</div><div class="b">${isPro()?'Active · thank you 🐻':`Doctor reports, keepsake studio & more · launching ${PRO_LAUNCH}`}</div></div>
     </div>
@@ -8674,7 +8709,7 @@ function openGuardians(){
              people who most need a second guardian include a parent doing this on their own, and a
              bereaved one, and the only lit button on the screen should not assume a partner. */}
       <div class="csub">Right now it's just you. Invite someone to your circle, then come back to make them a guardian.</div>
-      <button class="btn-primary" onclick="window.openFamily&&window.openFamily('invite')">Invite someone</button>
+      <button class="btn-primary" onclick="window.openFamily&&window.openFamily('invite','settings')">Invite someone</button>
       <button class="btn-ghost" onclick="openDataSheet()">Back</button>`,'star');
     return;
   }
@@ -9281,7 +9316,7 @@ function openVisitPrep(id){
     ${(canWrite||(p.visitQs||[]).length)?`<div class="sec-title" style="margin-top:4px">Questions to ask</div>
     ${qRows}`:''}
     ${canWrite?`<div class="field" style="margin-top:6px"><input id="vqNew" placeholder="Add a question to ask…" onkeydown="if(event.key==='Enter'){addVisitQ();openVisitPrep('${id}');}"></div>
-    <div class="hero-invite" onclick="window.openFamily&&window.openFamily('invite')" style="margin-top:4px;cursor:pointer"><div class="hi" style="font-size:22px">👪</div><div><div class="ht">Who's coming with you?</div><div class="hs">Invite your partner so they have the questions too</div></div></div>`:''}
+    <div class="hero-invite" onclick="window.openFamily&&window.openFamily('invite','nudge')" style="margin-top:4px;cursor:pointer"><div class="hi" style="font-size:22px">👪</div><div><div class="ht">Who's coming with you?</div><div class="hs">Invite your partner so they have the questions too</div></div></div>`:''}
     ${/* The Care tab hid its own report button behind the health gate and this sheet drew the same
           button unconditionally, so a partner with no health consent walked in the side door and
           got her blood pressure, her glucose and her symptoms with Share and Print on top. One
@@ -10213,6 +10248,7 @@ function savePlanning(){
   if(_priorMood) state.pregnancy.moodLog=_priorMood;
   persist();
   startPregnancyAudit(function(){ closeSheet(); render();
+    if(obFunnel) cubbyStep('onboarding.step_reached',{step:'details_entered', stage:'trying'});
     if(window.LL && window.LL.needsIdentity && typeof window.LL.collectIdentity==='function'){ window.LL.collectIdentity('planning', openOnboardInvite); }
     else { toast('Rooting for you 🌱'); }
   });
@@ -10973,6 +11009,7 @@ function savePregnancy(){
   try{ localStorage.setItem('cubby-country', VAX_SCHEDULES[cc]?cc:detectCountry()); }catch(e){}
   pregView='week'; persist();
   startPregnancyAudit(function(){ closeSheet(); render();
+    if(obFunnel) cubbyStep('onboarding.step_reached',{step:'details_entered', stage:'pregnancy'});
     if(window.LL && window.LL.needsIdentity && typeof window.LL.collectIdentity==='function'){ window.LL.collectIdentity('expecting', openOnboardInvite); }
     else { toast('Your pregnancy is set up 🤍'); }
   });
@@ -12014,7 +12051,7 @@ function renderPregLog(){
     ${/* "Untick", not "Uncheck": the line three rows up says "Tick them off as you go", and the
           baby list shares this string. Two verbs for one gesture, in an app that says Nappies. */''}
     ${(p.visitQs||[]).some(q=>q.done)?`<button class="btn-ghost" style="color:var(--ink-soft)" onclick="resetVisitQsDone()">Untick all for next visit</button>`:''}
-    <div class="hero-invite" onclick="window.openFamily&&window.openFamily('invite')" style="margin-top:10px;cursor:pointer">
+    <div class="hero-invite" onclick="window.openFamily&&window.openFamily('invite','home')" style="margin-top:10px;cursor:pointer">
       <div class="hi" style="font-size:22px">👪</div>
       <div><div class="ht">Who's coming with you?</div><div class="hs">Invite your partner so they have the questions and your appointments too</div></div>
     </div>

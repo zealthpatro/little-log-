@@ -1,0 +1,133 @@
+# Current State: reverse-engineered from codebase
+# Scanned: 2026-09-24 (origin/main 036bb308, live little-log-v350)
+# SDK: none. No third-party analytics package in package.json (which is untracked) and no SDK call
+#   sites in app/, worker.js or workers/. The only matches for firebase/analytics and logEvent( are
+#   inside the vendored Firebase compat bundles (app/vendor/firebase/10.12.2/), not app code.
+# Tracking model: first-party only. There is no behavioural event stream. Funnel measures are
+#   DERIVED after the fact from records the product already stores for its own function.
+
+events:
+  # --- emitted signals: something is written specifically to measure ---
+  - name: "pageStats increment"
+    status: LIVE
+    source: backend
+    locations:
+      - file: "worker.js"
+        line: 235            # recordPageView()
+      - file: "worker.js"
+        line: 2021           # the only call site, ctx.waitUntil, GET + text/html responses only
+    destination: "Firestore pageStats/{YYYY-MM-DD_hex(path)}"
+    properties: [day, path, nOk, n404, n4xx, n5xx]
+    identity: none           # aggregate counter, no user, no cookie, no IP stored
+    notes: "statsKey() collapses /g/:code, /join/:token, /__/auth/:action and any odd path to /:other"
+    category_inferred: acquisition
+
+  - name: "cubby-acq (first-touch UTM)"
+    status: LIVE
+    source: frontend
+    locations:
+      - file: "app/index.html"
+        line: 10             # inline <script> in <head>, before the app loads
+      - file: "index.html"   # marketing site, same snippet; 4 pages carry it in total
+    destination: "localStorage cubby-acq, then users/{uid}.acq and waitlist/{uid}.acq"
+    properties: [source, medium, campaign, content, term, ts]
+    written_once: "only when no cubby-acq exists (first touch) and only onto a user doc that does not yet exist (store-firebase.js:1109)"
+    category_inferred: acquisition
+
+  - name: "cubby-ref (referral code)"
+    status: LIVE
+    source: frontend
+    locations:
+      - file: "app/index.html"
+        line: 16152          # setItem
+      - file: "index.html"
+        line: 338            # setItem, marketing site
+      - file: "app/store-firebase.js"
+        line: 1100           # read, written as users/{uid}.referredBy, then removed from localStorage
+    properties: [referredBy]
+    validation: "/^[a-z0-9]{4,12}$/, brand-new users only"
+    category_inferred: acquisition
+
+  - name: "waitlist registration"
+    status: LIVE
+    source: frontend
+    locations:
+      - file: "app/index.html"
+        line: 6829
+    destination: "Firestore waitlist/{uid}"
+    properties: [uid, email, name, product, version, acq, at]
+    category_inferred: monetization
+
+  - name: "signin canary heartbeat"
+    status: LIVE
+    source: backend
+    locations:
+      - file: "worker.js"
+        line: 489            # signinCanaryBeat, run from scheduled() every 15 min
+    destination: "Firestore ops/canary, exposed at GET /api/canary"
+    properties: [at, ok, reason]
+    category_inferred: operational
+    notes: "Service health, not user behaviour"
+
+  - name: "pushLedger"
+    status: LIVE
+    source: backend
+    locations:
+      - file: "worker.js"
+        line: 1060
+    destination: "Firestore pushLedger/{uid}"
+    category_inferred: operational
+    notes: "Push delivery caps; client-denied in firestore.rules"
+
+  - name: "campaigns"
+    status: LIVE
+    source: backend
+    locations:
+      - file: "worker.js"
+        line: 976
+    destination: "Firestore campaigns/{id}"
+    category_inferred: lifecycle_messaging
+
+  - name: "console.error operational logs"
+    status: LIVE
+    source: backend
+    locations:
+      - file: "worker.js"
+    destination: "Cloudflare log stream only (wrangler tail); nothing persists them"
+    properties: [pagestats_fail, pagestats_write_<status>, push_cron_fail, purge_cron_fail, signin_canary_fail, games_db_error]
+    category_inferred: operational
+
+# --- derived measures: nothing is emitted; tools/analytics.js reconstructs them from product data ---
+derived_measures:
+  reader: "tools/analytics.js (185 lines) + tools/funnel.js (131 lines), run by hand, needs tools/serviceAccountKey.json"
+  collections_read: [users, households, feedback, waitlist, "events (collectionGroup)", invites]
+  collections_not_read: ["households/{hid}/pregnancy/{owner}", "mhealth/{owner}", photos, notes, pageStats, pushLedger, campaigns, newsletter, "D1 subscribers", "D1 games/guesses/hubs"]
+  per_household:
+    - created        # households.createdAt
+    - firstLog       # min timestamp across that household's care-log events
+    - activeDays     # distinct calendar days carrying a care-log event
+    - members        # Object.keys(households.members)
+    - babies         # households.app.babies
+    - events         # care-log count, plus byType, photos, vxGiven, countries
+  funnel_stages:     # tools/funnel.js leakyBucket(), nested
+    - "Signed in (household created)"
+    - "Added a baby"              # households.app.babies.length > 0
+    - "Logged something (activated)"
+    - "Came back (day 2+)"
+    - "Sticky (7+ active days)"
+  conversions: [invited, joined, inviteToJoin, pro]
+  other: [retention, wedge, time_to_activation]
+  note: "In Cubby's data model 'events' are care logs (feeds, sleep, nappies), stored for the product's own function, not analytics events."
+
+identity:
+  identify_calls: "No identify() calls found. Identity is the Firebase Auth uid; there is no analytics identity layer."
+  group_calls: "No group() calls found. The household ({hid}) is the natural group entity: members map, ownerId, one care log."
+  page_calls: "No client page()/screen() calls. Server-side pageStats counts HTML navigations only; in-app screens are one SPA and are not counted."
+  reset_calls: "Not applicable. Sign-out clears localStorage keys including cubby-acq and cubby-ref (store-firebase.js:2492)."
+
+patterns:
+  naming_style: "mixed: camelCase collections (pageStats, pushLedger), kebab-case localStorage keys (cubby-acq), snake_case log tags (pagestats_fail)"
+  naming_format: "free-form; there is no event naming convention because there are no named events"
+  centralized: false
+  error_handling: "server writes are fire-and-forget via waitUntil with console.error on failure; client writes are try/catch and swallow"
+  scheduling: "tools/weekly_health.sh via launchd com.cubby.weekly-health (Sundays). Newest report ~/cubby-reports/weekly-2026-08-30.md. Every run since logs 'fatal: Unable to read current working directory: Operation not permitted' and exits 0."

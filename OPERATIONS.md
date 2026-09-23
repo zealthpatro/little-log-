@@ -31,6 +31,7 @@ node tools/sitesw_gate.js https://little-cubby.com   # AND against the live host
 node tools/thirdparty_gate.js       # the "no third-party trackers" promise, checked in a real browser
 node tools/signin_live_check.js     # can a person ACTUALLY get a code from prod and sign in with it
 node tools/android_parity_check.js  # can the Android app WORK, or does it only build (see docs/plans/2026-08-31-*)
+node tools/funnel_report.js         # what families are doing: the daily funnel snapshot, and whether the job is alive
 node tools/signin_boot_probe.js https://little-cubby.com 5   # and does she LAND IN HER CUBBY afterwards
 ```
 
@@ -89,6 +90,40 @@ UptimeRobot, Better Stack and Cloudflare's own health checks all do a 200-or-pag
 `ALERT_EMAIL` set you get the detailed mail when sign-in breaks; with an external monitor on
 `/api/canary` you also get told when the alarm itself stops running, which is the failure `ALERT_EMAIL`
 alone cannot cover.
+
+## The funnel: what families are doing in Cubby
+
+Plan: `.telemetry/tracking-plan.yaml` (18 events, 13 derived from records Cubby already keeps, 5
+anonymous counters). Read it before adding anything: `tools/tracking_plan_check.js` fails the suite if
+the code and the plan disagree.
+
+```bash
+node tools/funnel_report.js
+```
+
+It prints whether the snapshot job is alive BEFORE any number, because the report this replaced died
+silently for three weeks. The Worker writes one snapshot a day from its existing cron into D1 (`cubby-games`
+`funnel_snapshots`), and on Mondays mails the week to `ALERT_EMAIL`.
+
+**Two secrets make it honest. Neither is set yet:**
+
+```bash
+npx wrangler secret put INTERNAL_UIDS
+```
+
+Comma-separated uids of the founder's own accounts. Until it is set, those households count as customers,
+and five of the first thirteen accounts were the founder's. Then, once per device you test on, open the
+app and run `localStorage.setItem('cubby-internal','1')` in the console so that device sends no steps.
+
+```bash
+npx wrangler secret put ALERT_EMAIL
+```
+
+Shared with the sign-in canary; without it neither the canary nor the Monday digest can reach anyone.
+
+**Deliberately NOT measured**, each written down in the plan's `decisions` so nobody adds it back as a fix:
+pregnancy loss (her archive is hers alone), member join timing (it sits beside names), in-app page views,
+and any per-entry event (a family's day is not a behavioural trail).
 
 ```
 node tools/shot.js http://localhost:8080/<page>/ /tmp/x.png 390 full   # eyeball any page (see tools/shot.js)

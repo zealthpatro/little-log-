@@ -2682,8 +2682,12 @@
      decided, and it used to land her on the family portrait and her own name field with the
      one-tap share three blocks further down. openFamily('invite') reorders the SAME blocks: the
      link leads, and the slower ways are one tap away instead of gone. */
-  function openFamily(mode) {
+  function openFamily(mode, entry) {
     var me = auth.currentUser; if (!me) return;
+    // The invite FORM opened. Anonymous; see cubbyStep in index.html.
+    if (mode === 'invite' && typeof window.cubbyStep === 'function') {
+      window.cubbyStep('invite.sheet_opened', { stage: window.funnelStage ? window.funnelStage() : 'none', entry_point: entry || 'other' });
+    }
     var myRole = window.LL.role || 'caregiver';
     var info = window.LL.memberInfo || {};
     var myRel = (info[me.uid] && info[me.uid].relationship) || '';

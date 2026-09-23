@@ -133,6 +133,12 @@ const TREE = [
   { name: 'dose-ticket',    cmd: ['node', 'test/dose-ticket.test.js'] },
   { name: 'push-delivery',  cmd: ['node', 'test/push-delivery.test.js'] },
   { name: 'signin-canary',  cmd: ['node', 'test/signin-canary.test.js'] },
+  /* The funnel: derivation, Worker, client, and the plan they all answer to. Each proven red. */
+  { name: 'funnel-core',    cmd: ['node', 'test/funnel-core.test.js'] },
+  { name: 'funnel-worker',  cmd: ['node', 'test/funnel-worker.test.js'] },
+  { name: 'funnel-steps',   cmd: ['node', 'tools/funnel_steps_check.js', 'url'] },
+  { name: 'tracking-plan',  cmd: ['node', 'tools/tracking_plan_check.js'] },
+  { name: 'funnel-report',  cmd: ['node', 'tools/funnel_report.js', '--self-test'] },
   { name: 'signin-email',   cmd: ['node', 'test/signin-email.test.js', '--self-test'] },
   { name: 'signin-flow',    cmd: ['node', 'test/signin-flow.test.js', '--self-test'] },
   { name: 'signin-boot',    cmd: ['node', 'test/signin-boot.test.js', '--self-test'] },

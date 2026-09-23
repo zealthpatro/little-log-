@@ -60,6 +60,14 @@ database_id = "d0ee7337-8acf-4028-80bb-2e99a48db694"
 
 # Per-IP rate limiter for the guessing-game guest writes (worker.js gameRoute). 20/60s/IP so a whole
 # family on one wifi can all guess, but a script can't flood. Falls back to SIGNIN_RATE_LIMITER if absent.
+# POST /api/step, the anonymous funnel counter. A person walking the setup wizard sends five at most;
+# thirty a minute is generous for a human and tight for a loop trying to fake a funnel.
+[[unsafe.bindings]]
+name = "STEP_RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1004"
+simple = { limit = 30, period = 60 }
+
 [[unsafe.bindings]]
 name = "GAMES_RATE_LIMITER"
 type = "ratelimit"
