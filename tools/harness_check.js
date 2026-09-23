@@ -115,7 +115,13 @@ function check(root, label) {
     const text = fs.readFileSync(path.join(rd, f), 'utf8');
     const lines = text.split('\n').length;
     ok(f + ' stays under ' + RULES_MAX_LINES + ' lines (' + lines + ')', lines <= RULES_MAX_LINES);
-    const missing = pathTokens(text).filter((t) => !SKIP.has(t) && !fs.existsSync(path.join(root, t)));
+    /* .git paths resolve against git's COMMON dir. In a worktree .git is a file pointing at the main
+       repository, so ".git/hooks" never exists under root there and this went red in every worktree over
+       a rules file that was correct. Same fix, same reason, as tools/claudemd_check.js. */
+    let gitCommon = null;
+    try { gitCommon = path.resolve(root, require('child_process').execFileSync('git', ['rev-parse', '--git-common-dir'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()); } catch (e) {}
+    const named = (t) => (gitCommon && (t === '.git' || t.indexOf('.git/') === 0)) ? path.join(gitCommon, t.slice(5)) : path.join(root, t);
+    const missing = pathTokens(text).filter((t) => !SKIP.has(t) && !fs.existsSync(named(t)));
     ok(f + ' names only paths that exist', missing.length === 0, 'missing: ' + missing.join(', '));
   }
 }

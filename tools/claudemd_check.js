@@ -23,6 +23,17 @@ const EXT = /\.(md|js|py|rules|toml|css|html|sh|json|xml|txt)$/;
 // Gitignored by design and absent in fresh worktrees and CI checkouts, but still worth naming
 // in CLAUDE.md (the symlink instruction is the whole point of mentioning it).
 const SKIP = new Set(['tools/node_modules']);
+/* In a git worktree .git is a FILE that points at the main repository, so ".git/hooks" never exists under
+   ROOT there, and this gate went red in EVERY worktree over a doc that was correct: a permanently red gate
+   in exactly the place parallel work happens. .git paths resolve against git's COMMON dir, which is the
+   real .git from a checkout and from a worktree alike. Outside git (an archive), it falls back to ROOT. */
+let GIT_COMMON = null;
+try {
+  GIT_COMMON = path.resolve(ROOT, require('child_process').execFileSync('git', ['rev-parse', '--git-common-dir'],
+    { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim());
+} catch (e) { GIT_COMMON = null; }
+const resolveNamed = (t) => (GIT_COMMON && (t === '.git' || t.indexOf('.git/') === 0))
+  ? path.join(GIT_COMMON, t.slice(5)) : path.join(ROOT, t);
 
 // Pull the path-shaped tokens out of prose: anything with a slash, a known file extension, or
 // a dotfile name. Globs, URLs, shell substitutions and relative escapes are prose, not paths.
@@ -47,7 +58,7 @@ function checkDoc(text, assetsignore) {
   }
   for (const t of pathTokens(text)) {
     if (SKIP.has(t)) continue;
-    if (!fs.existsSync(path.join(ROOT, t))) {
+    if (!fs.existsSync(resolveNamed(t))) {
       fails.push(`CLAUDE.md names "${t}" which does not exist in this tree — stale pointers get followed`);
     }
   }
