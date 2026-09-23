@@ -188,6 +188,15 @@ function decodeJwt(t) {
   // as CJS, so it is copied byte for byte to a .mjs and imported from there.
   const src = fs.readFileSync(path.join(__dirname, '..', 'worker.js'), 'utf8');
   const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-worker-'));
+  /* worker.js imports sibling modules (./workers/funnel/core.mjs), and a copy relocated here loses the
+     relative path to them, so this test died with ERR_MODULE_NOT_FOUND the day the first import was
+     added. Every module it imports is copied alongside, keeping the layout. Generic on purpose: the
+     next import added to worker.js must not break this test the same way. */
+  for (const m of src.matchAll(/^import\s[^;]*?from\s+['"](\.\/[^'"]+)['"]/gm)) {
+    const to = path.join(tmpdir, m[1]);
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    fs.copyFileSync(path.join(__dirname, '..', m[1]), to);
+  }
   let loaded = 0;
   async function loadWorker(text) {
     const f = path.join(tmpdir, 'worker' + (loaded++) + '.mjs');
