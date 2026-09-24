@@ -1965,6 +1965,27 @@ async function funnelPage(base, token, path, fields, spend) {
   return out;
 }
 
+/* The shared pregnancy journey, masked to stage, birth and the TIMING of the logs that live there.
+   households/{hid}/pregnancy/{owner} is a subcollection; the first audit had it at the top level, which
+   would have counted zero pregnancies. Maternal-private health is in mhealth and is never read. */
+async function funnelReadPreg(base, token, id, ownerId, spend) {
+  const pgDocs = await funnelPage(base, token, 'households/' + id + '/pregnancy',
+    ['data.stage', 'data.bornBabyId', 'data.birthAt', 'data.kicks', 'data.contractions', 'data.observations', 'data.periods'], spend);
+  let preg = null;
+  for (const pd of pgDocs) {
+    if ((pd.name || '').split('/pregnancy/')[1] !== ownerId && pgDocs.length > 1) continue;
+    const tryingLogs = [].concat(fsField(pd, 'data.observations') || [], fsField(pd, 'data.periods') || []);
+    const pregLogs = [].concat(fsField(pd, 'data.kicks') || [], fsField(pd, 'data.contractions') || []);
+    preg = {
+      stage: fsField(pd, 'data.stage') || null,
+      bornAt: fsField(pd, 'data.bornBabyId') ? (Number(fsField(pd, 'data.birthAt')) || 1) : 0,
+      hadTrying: tryingLogs.length > 0,
+      logTimes: tryingLogs.concat(pregLogs).map(entryTime).filter(Boolean),
+    };
+  }
+  return preg;
+}
+
 async function funnelInput(env, now) {
   const sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT);
   const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore');
@@ -2001,20 +2022,7 @@ async function funnelInput(env, now) {
     const evDocs = await funnelPage(base, token, 'households/' + id + '/events', ['time', 'authorId', 'type'], spend);
     const entries = evDocs.map((e) => ({ time: Number(fsField(e, 'time')) || 0, authorId: fsField(e, 'authorId') || '', type: fsField(e, 'type') || '' }));
 
-    const pgDocs = await funnelPage(base, token, 'households/' + id + '/pregnancy',
-      ['data.stage', 'data.bornBabyId', 'data.birthAt', 'data.kicks', 'data.contractions', 'data.observations', 'data.periods'], spend);
-    let preg = null;
-    for (const pd of pgDocs) {
-      if ((pd.name || '').split('/pregnancy/')[1] !== ownerId && pgDocs.length > 1) continue;
-      const tryingLogs = [].concat(fsField(pd, 'data.observations') || [], fsField(pd, 'data.periods') || []);
-      const pregLogs = [].concat(fsField(pd, 'data.kicks') || [], fsField(pd, 'data.contractions') || []);
-      preg = {
-        stage: fsField(pd, 'data.stage') || null,
-        bornAt: fsField(pd, 'data.bornBabyId') ? (Number(fsField(pd, 'data.birthAt')) || 1) : 0,
-        hadTrying: tryingLogs.length > 0,
-        logTimes: tryingLogs.concat(pregLogs).map(entryTime).filter(Boolean),
-      };
-    }
+    const preg = await funnelReadPreg(base, token, id, ownerId, spend);
 
     households.push({
       id, ownerId, createdAt: Number(fsField(d, 'createdAt')) || 0,
@@ -2066,6 +2074,7 @@ async function funnelInput(env, now) {
     const rows = ((await q.json()) || []).map((e) => e && e.document).filter(Boolean);
     spend(Math.max(1, rows.length));
     activityHouseholds.push({ id, ownerId, isInternal: internal.has(ownerId), members,
+      preg: await funnelReadPreg(base, token, id, ownerId, spend),
       entries: rows.map((e) => ({ time: Number(fsField(e, 'time')) || 0, authorId: fsField(e, 'authorId') || '', type: fsField(e, 'type') || '' })) });
   }
 

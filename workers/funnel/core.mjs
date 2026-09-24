@@ -212,7 +212,13 @@ export function activity(input) {
   for (const h of input.households || []) {
     if (h.isInternal) { out.internal_excluded++; continue; }
     out.households_total++;
-    const recent = (h.entries || []).filter((e) => e && e.time && e.time <= now && now - e.time <= 7 * DAY);
+    /* Journey logs count too. Half the base on the day this was written was expecting, and kicks,
+       contractions and cycle observations live in the shared pregnancy record, not in events, so a
+       count over events alone showed every pregnancy household as inactive whatever it did. They carry
+       no author, so they are attributed to the owner, and cannot on their own show two people logging. */
+    const journey = (h.preg && h.preg.logTimes || []).map((t) => ({ time: t, authorId: h.ownerId,
+      type: h.preg.stage === 'planning' ? 'trying_log' : 'pregnancy_log' }));
+    const recent = (h.entries || []).concat(journey).filter((e) => e && e.time && e.time <= now && now - e.time <= 7 * DAY);
     if (!recent.length) continue;
     out.active_households++;
     if (new Set(recent.map((e) => e.authorId).filter(Boolean)).size >= 2) out.households_two_loggers++;

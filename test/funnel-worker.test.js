@@ -84,6 +84,10 @@ function firestore(opts) {
       return j({ documents: [evDoc(NOW - 4 * DAY, OWNER, 'feed'), evDoc(NOW - 4 * DAY + 3600000, CARE, 'diaper')].concat(many) });
     }
     if (url.indexOf('/households/' + HH2 + '/events') >= 0) return j({ documents: [evDoc(NOW - DAY, FOUNDER, 'feed')] });
+    if (url.indexOf('/households/' + OLD + '/pregnancy') >= 0) {
+      return j({ documents: [{ name: 'x/households/' + OLD + '/pregnancy/' + OLDO, fields: { data: { mapValue: { fields: {
+        stage: str('expecting'), kicks: { arrayValue: { values: [{ mapValue: { fields: { at: int(NOW - 2 * DAY) } } }] } } } } } } }] });
+    }
     if (url.indexOf('/pregnancy') >= 0) return j({});
     if (url.indexOf('/users/') >= 0) return j({ fields: { acq: { mapValue: { fields: { source: str('instagram') } } } } });
     if (url.indexOf('/invites?') >= 0) return j({ documents: [{ name: 'x/invites/a', fields: { householdId: str(HH) } }] });
@@ -175,6 +179,9 @@ function firestore(opts) {
   console.log('\n3b. and it sees EVERY household\'s week, not only new sign-ups');
   ok('an old household outside the cohort is seen as active this week', body.activity && body.activity.active_households === 2, body.activity);
   ok('its two people logging this week are counted', body.activity.households_two_loggers === 2, body.activity);
+  ok('the old household\'s kick this week is counted as a pregnancy log', body.activity.care_entries.by_type.pregnancy_log === 1, body.activity.care_entries.by_type);
+  const pgUrl = fs.seen.find((u) => u.indexOf('/households/' + OLD + '/pregnancy') >= 0) || '';
+  ok('its pregnancy record is read with a mask, never whole', /mask\.fieldPaths=data\.kicks/.test(pgUrl) && !/mhealth/.test(pgUrl), pgUrl.slice(0, 160));
   ok('the founder is excluded from activity too', body.activity.internal_excluded === 1, body.activity);
   ok('the old household\'s FULL history is never fetched, only its week',
      !fs.seen.some((u) => u.indexOf('/households/' + OLD + '/events') >= 0), fs.seen.filter((u) => u.indexOf(OLD) >= 0));

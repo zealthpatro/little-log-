@@ -70,10 +70,16 @@ function loadPlan() {
 
   console.log('\n3. the reader never touches what the plan promises it will not');
   const worker = fs.readFileSync(path.join(ROOT, 'worker.js'), 'utf8');
-  const start = worker.indexOf('async function funnelInput(');
+  /* From the FIRST reader helper, not from funnelInput. When the pregnancy read moved into its own
+     helper above funnelInput, a span starting at funnelInput stopped covering it, and an mhealth read
+     added there would have passed this gate. funnelPage is the first function every read goes through. */
+  const start = worker.indexOf('async function funnelPage(');
   const end = worker.indexOf('async function funnelStepTotals(');
   ok('the funnel reader is found in worker.js', start > 0 && end > start, { start, end });
-  const reader = worker.slice(start, end);
+  /* CODE, not prose. The comments here document the prohibition ("mhealth is never read"), and a raw text
+     search went red over that sentence, which also meant a mutation that ADDED an mhealth read was "caught"
+     for the wrong reason. Comments are stripped first, so only an actual reference in code can fail. */
+  const reader = worker.slice(start, end).replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"])\/\/.*$/gm, '$1');
   for (const [what, why] of [['mhealth', 'her private health'], ['pregnancyArchive', 'her kept-after-loss record'], ['memberInfo', 'where names live']]) {
     ok('the reader never names ' + what + ' (' + why + ')', reader.indexOf(what) < 0);
   }

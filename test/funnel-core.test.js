@@ -158,6 +158,22 @@ function fixture() {
   const aj = JSON.stringify(core.activity({ now: NOW, households: fixture().concat([old]) }));
   ok('activity() leaks no household id or uid either', Object.values(ID).concat([OLD, OLDO, OLDC]).every((id) => aj.indexOf(id) < 0));
   ok('and the cohort snapshot no longer carries a 7-day entry count to be misread', !('care_entries_last_7d' in snap), Object.keys(snap));
+  /* Journey logs. On the day this was written half the base was expecting, and kicks, contractions and
+     cycle observations live in the pregnancy record, not in events. */
+  const PH = 'HHID_PREGOLD_zq91', PO = 'UID_PREGOWNER_kk22';
+  const pregHh = { id: PH, ownerId: PO, isInternal: false, members: { [PO]: { role: 'owner' } }, entries: [],
+    preg: { stage: 'expecting', bornAt: 0, hadTrying: false, logTimes: [NOW - DAY, NOW - DAY + 3600000, NOW - 20 * DAY] } };
+  const tryHh = { id: 'HHID_TRYOLD_zq92', ownerId: 'UID_TRYOWNER_kk23', isInternal: false, members: {}, entries: [],
+    preg: { stage: 'planning', bornAt: 0, hadTrying: true, logTimes: [NOW - 2 * DAY] } };
+  const jw = core.activity({ now: NOW, households: [pregHh, tryHh] });
+  ok('a pregnancy household that logged a kick this week is ACTIVE, not invisible', jw.active_households === 2, jw);
+  ok('its kicks are counted as pregnancy logs, and a cycle entry as a trying log',
+     jw.care_entries.by_type.pregnancy_log === 2 && jw.care_entries.by_type.trying_log === 1, jw.care_entries.by_type);
+  ok('a journey log older than 7 days does not count', jw.care_entries.total === 3, jw.care_entries);
+  /* TWO recent kicks, on purpose. With one, a bug that gave every journey log its own author still produced
+     a single author, so this line could not fail: it passed a mutation that faked a second person. */
+  ok('and two journey logs, having no author, never fake two people logging', jw.households_two_loggers === 0, jw);
+  ok('no id from a journey household leaks', [PH, PO].every((id) => JSON.stringify(jw).indexOf(id) < 0));
 
   console.log('\n7. POST /api/step cannot become a place to write text');
   ok('a valid step is accepted', core.stepKey('onboarding.step_reached', { step: 'invite_offered', stage: 'baby' }) === 'onboarding.step_reached|stage=baby|step=invite_offered');

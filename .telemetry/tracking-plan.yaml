@@ -204,7 +204,10 @@ events:
     group_level: household
     description: >
       Care entries logged by EVERY household in the last 7 days, as totals by type and author role, plus how
-      many households logged at all and how many had two different people logging. This is the whole-base
+      many households logged at all and how many had two different people logging. Includes journey logs
+      (kicks, contractions, cycle observations) from the shared pregnancy record as pregnancy_log and
+      trying_log, attributed to the owner: half the base was expecting when this shipped, and a count over
+      events alone showed every one of them as inactive. This is the whole-base
       scope (core.activity), not the sign-up cohort: see decisions.
     properties:
       - { name: entry_type, type: string, required: true, note: "feed, sleep, diaper, pump, growth, activity, symptom, milestone, and the pregnancy and trying equivalents" }
