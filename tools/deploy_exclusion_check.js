@@ -56,7 +56,10 @@ function checkStatic(text, label) {
     ok('the host is up and serving the app (control, so 404s below mean something)', ctrl.every((s) => s === 200), MUST_200.map((u, i) => u + '=' + ctrl[i]).join(' '));
     for (const u of MUST_404) {
       const s = await status(u);
-      ok('production does NOT serve ' + u + ' (' + s + ')', s === 404 || s === 403, 'got ' + s);
+      /* The HOST goes in the label, not the word "production". This gate was wired to the local
+         server for months and every line still read "production does NOT serve ...", which is how a
+         localhost result got reported as a production exposure. Name what you actually asked. */
+      ok(BASE + ' does NOT serve ' + u + ' (' + s + ')', s === 404 || s === 403, 'got ' + s);
     }
   } else {
     console.log('\n(pass a base URL to also ask production; the pre-push suite runs the static half)');

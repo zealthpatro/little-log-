@@ -148,10 +148,18 @@ const TREE = [
 ];
 // These judge PRODUCTION, not this checkout, so a failure is a deploy problem rather than a code
 // problem. Opt-in, because they need the network and they are the founder's to act on.
+/* The real host, for the gates that must grade what is DEPLOYED rather than what is in the tree. */
+const LIVE_URL = (process.env.CUBBY_LIVE_URL || 'https://little-cubby.com').replace(/\/$/, '');
+
 const LIVE_GATES = [
   { name: 'thirdparty(live)', cmd: ['node', 'tools/thirdparty_gate.js'] },
   { name: 'claims(live)',     cmd: ['node', 'tools/claims_audit.js', 'url'] },
-  { name: 'deploy-excl(live)',cmd: ['node', 'tools/deploy_exclusion_check.js', 'url'] },
+  /* 'liveurl', not 'url'. This is the one gate here that must ask PRODUCTION. Pointed at 'url' it
+     got the local serve.js gates.js spawns over the repo root, which serves every file in the repo,
+     so all 14 internal paths came back 200 and it reported production as wide open. It had never
+     once actually checked production. claims(live) keeps 'url' on purpose — see its header: it needs
+     the seeded ?e2e=1 shell, which is hostname-guarded to localhost. */
+  { name: 'deploy-excl(live)',cmd: ['node', 'tools/deploy_exclusion_check.js', 'liveurl'] },
 ];
 /* These need a real Firestore emulator, so they cannot run in the tree tier. loss-archive and
    push-query drive the app or the Worker's query against it rather than testing rules, which is
@@ -229,7 +237,7 @@ function gist(out, okRun) {
 
   const results = [];
   for (const g of list) {
-    const cmd = g.cmd.map((a) => (a === 'url' ? base : a));
+    const cmd = g.cmd.map((a) => (a === 'url' ? base : a === 'liveurl' ? LIVE_URL : a));
     process.stdout.write('  ' + g.name.padEnd(18));
     const r = await run(cmd);
     const okRun = r.code === 0;
