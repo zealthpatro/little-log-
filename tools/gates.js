@@ -268,7 +268,17 @@ function gist(out, okRun) {
     console.log('\nfull output from what failed:');
     failed.forEach((f) => {
       console.log('\n=== ' + f.name + ' ===');
-      console.log(f.out.split('\n').slice(-25).join('\n'));
+      /* Keep the HEAD of the output as well as the tail. A gate names the host, port or tree it
+         graded in its opening lines; the assertions come last. Tail-only truncation threw away the
+         one line that identified the run and kept 14 that misdescribed it — deploy-excl(live) spent
+         17 days reporting localhost's contents as production's, and the "live, <BASE>" header that
+         would have shown it at a glance was exactly what fell off the top. */
+      const lines = f.out.split('\n');
+      const HEAD = 10, TAIL = 25;
+      if (lines.length <= HEAD + TAIL) console.log(lines.join('\n'));
+      else console.log(lines.slice(0, HEAD)
+        .concat(['  … ' + (lines.length - HEAD - TAIL) + ' lines elided …'], lines.slice(-TAIL))
+        .join('\n'));
     });
   }
   if (failed.some((r) => r.live) && !blocking.length) {
