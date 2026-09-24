@@ -13,7 +13,7 @@
    Vars (wrangler.toml): MAIL_FROM - the verified Resend sender, e.g. "Cubby <noreply@mail.little-cubby.com>"
 */
 
-import { snapshot as funnelSnapshotOf, stepKey, dayKey as funnelDay } from './workers/funnel/core.mjs';
+import { snapshot as funnelSnapshotOf, activity as funnelActivityOf, stepKey, dayKey as funnelDay } from './workers/funnel/core.mjs';
 
 const OAUTH_SCOPE = 'https://www.googleapis.com/auth/identitytoolkit';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -2037,7 +2037,39 @@ async function funnelInput(env, now) {
   const wl = await funnelPage(base, token, 'waitlist', ['uid'], spend);
   const waitlistUids = wl.map((x) => fsField(x, 'uid') || (x.name || '').split('/waitlist/')[1]).filter(Boolean);
 
-  return { input: { now, households, users, invitedHouseholdIds, waitlistUids }, reads };
+  /* The second scope: EVERY household's last 7 days. The cohort alone went blind on its first live run,
+     when nobody had signed up for 36 days and twelve existing households were invisible. Households
+     already in the cohort reuse the logs read above; every other one gets a query for entries from the
+     last 7 days only, with the same field mask, so the cost follows this week's activity, not history.
+     At a much larger base a count aggregation (one read per thousand entries) is the next step. */
+  const since = now - 7 * FUNNEL_DAY_MS;
+  const all = await funnelPage(base, token, 'households', ['ownerId', 'members'], spend);
+  const byId = new Map(households.map((h) => [h.id, h]));
+  const activityHouseholds = [];
+  for (const d of all) {
+    const id = d.name.split('/documents/households/')[1];
+    if (!id) continue;
+    if (byId.has(id)) { activityHouseholds.push(byId.get(id)); continue; }
+    const ownerId = fsField(d, 'ownerId') || '';
+    const roles = fsField(d, 'members') || {};
+    const members = {};
+    for (const uid of Object.keys(roles)) members[uid] = { role: roles[uid] === 'owner' ? 'owner' : 'caregiver', joinedAt: 0 };
+    const q = await fetch(base + '/households/' + id + ':runQuery', {
+      method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ structuredQuery: {
+        from: [{ collectionId: 'events' }],
+        where: { fieldFilter: { field: { fieldPath: 'time' }, op: 'GREATER_THAN_OR_EQUAL', value: { integerValue: String(since) } } },
+        select: { fields: ['time', 'authorId', 'type'].map((f) => ({ fieldPath: f })) },
+      } }),
+    });
+    if (!q.ok) throw new Error('recent events ' + q.status);
+    const rows = ((await q.json()) || []).map((e) => e && e.document).filter(Boolean);
+    spend(Math.max(1, rows.length));
+    activityHouseholds.push({ id, ownerId, isInternal: internal.has(ownerId), members,
+      entries: rows.map((e) => ({ time: Number(fsField(e, 'time')) || 0, authorId: fsField(e, 'authorId') || '', type: fsField(e, 'type') || '' })) });
+  }
+
+  return { input: { now, households, users, invitedHouseholdIds, waitlistUids }, activityInput: { now, households: activityHouseholds }, reads };
 }
 
 async function funnelStepTotals(db, now, days) {
@@ -2062,6 +2094,7 @@ async function runFunnelSnapshot(env, nowMs) {
     const built = await funnelInput(env, now);
     reads = built.reads;
     const snap = funnelSnapshotOf(built.input);
+    snap.activity = funnelActivityOf(built.activityInput);
     snap.cohort_days = FUNNEL_COHORT_DAYS;
     snap.reads = reads;
     snap.steps_last_7d = await funnelStepTotals(db, now, 7);
@@ -2146,13 +2179,15 @@ function funnelDigestHeadline(rows) {
   const s = rows[0] && rows[0].ok ? JSON.parse(rows[0].body) : null;
   if (!s) return 'the funnel snapshot FAILED today';
   const f = s.funnel, sum = (k) => ['trying', 'pregnancy', 'baby', 'none'].reduce((a, st) => a + (f[st][k] || 0), 0);
-  return sum('created') + ' new households in 30 days, ' + sum('shared_logging') + ' reached two people logging';
+  const a = s.activity || {};
+  return (a.active_households || 0) + ' of ' + (a.households_total || 0) + ' households logged this week, '
+    + (a.households_two_loggers || 0) + ' with two people logging; ' + sum('created') + ' new in 30 days';
 }
 
 function funnelDigestHtml(rows) {
   const esc = (x) => String(x).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const failed = rows.filter((r) => !r.ok);
-  let h = '<h2>Cubby, the last 30 days of sign-ups</h2>';
+  let h = '<h2>Cubby this week</h2>';
   h += failed.length
     ? '<p><b>The snapshot job failed on ' + failed.length + ' of the last ' + rows.length + ' days.</b> '
       + failed.map((r) => esc(r.day) + ': ' + esc(r.reason || 'no reason')).join('; ') + '</p>'
@@ -2165,8 +2200,11 @@ function funnelDigestHtml(rows) {
   h += '<table border="1" cellpadding="4" style="border-collapse:collapse"><tr><th>stage</th>' + cols.map((c) => '<th>' + esc(c) + '</th>').join('') + '</tr>';
   for (const st of stages) h += '<tr><td>' + st + '</td>' + cols.map((c) => '<td>' + (snap.funnel[st][c] || 0) + '</td>').join('') + '</tr>';
   h += '</table>';
-  h += '<p>Care entries in the last 7 days: ' + snap.care_entries_last_7d.total + ' (owner ' + snap.care_entries_last_7d.by_author_role.owner
-    + ', caregiver ' + snap.care_entries_last_7d.by_author_role.caregiver + ').</p>';
+  const act = snap.activity || { care_entries: { total: 0, by_author_role: {} } };
+  h += '<h3>Everyone, the last 7 days</h3><p>' + (act.active_households || 0) + ' of ' + (act.households_total || 0)
+    + ' households logged. ' + (act.households_two_loggers || 0) + ' had two different people logging. '
+    + act.care_entries.total + ' entries (owner ' + (act.care_entries.by_author_role.owner || 0)
+    + ', caregiver ' + (act.care_entries.by_author_role.caregiver || 0) + ').</p>';
   h += '<p>Pregnancy to baby: ' + snap.transitions.pregnancy_to_baby + '. Trying to pregnancy: ' + snap.transitions.trying_to_pregnancy + '.</p>';
   const steps = snap.steps_last_7d || {};
   const keys = Object.keys(steps).sort();

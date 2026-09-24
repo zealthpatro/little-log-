@@ -91,8 +91,8 @@ These exist as stages in `tools/funnel.js`. All six are baby-only today because 
 
 | Gate | Assertions | Mutations caught |
 |---|---|---|
-| `test/funnel-core.test.js` | 36 | 7 of 7 |
-| `test/funnel-worker.test.js` | 39 | 8 of 8 |
+| `test/funnel-core.test.js` | 43 | 7 of 7, plus 3 of 3 on the whole-base scope |
+| `test/funnel-worker.test.js` | 46 | 8 of 8, plus 1 of 1 on the bounded read |
 | `tools/funnel_steps_check.js` (browser) | 21 | 6 of 6 |
 | `tools/tracking_plan_check.js` | 27 | 4 of 4, and 7 red on the stale plan |
 

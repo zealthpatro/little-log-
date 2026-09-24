@@ -51,7 +51,22 @@ function render(rows, stepRows, today) {
   if (!good) { L('\n  No successful snapshot in the window, so there are no numbers to show.'); return lines.join('\n'); }
   const s = typeof good.body === 'string' ? JSON.parse(good.body) : good.body;
 
-  L('\n── Sign-ups in the ' + (s.cohort_days || 30) + ' days to ' + s.day + ', by stage ──');
+  /* Everyone first. On its first live run the cohort below was empty (no sign-up in 36 days) and a report
+     that led with it said nothing about the twelve households that already existed. */
+  const a = s.activity;
+  L('\n── Everyone, the last 7 days ──');
+  if (!a) L('  (this snapshot predates the whole-base scope)');
+  else {
+    L('  ' + a.active_households + ' of ' + a.households_total + ' households logged something   '
+      + a.households_two_loggers + ' had two different people logging   <- the wedge, this week');
+    L('  ' + a.care_entries.total + ' entries   owner ' + a.care_entries.by_author_role.owner + '   caregiver '
+      + a.care_entries.by_author_role.caregiver + '   former ' + a.care_entries.by_author_role.former);
+    const at = Object.keys(a.care_entries.by_type).sort((x, y) => a.care_entries.by_type[y] - a.care_entries.by_type[x]);
+    if (at.length) L('  ' + at.map((t) => t + ' ' + a.care_entries.by_type[t]).join('   '));
+  }
+
+  L('\n── New sign-ups: the ' + (s.cohort_days || 30) + ' days to ' + s.day + ', by stage ──');
+  if (!STAGES.some((st) => s.funnel[st].created)) L('  No household was created in this window.');
   L('  stage       created  activated  returned  retained  2nd joined  two logging  within 7d  invited  pro');
   for (const st of STAGES) {
     const f = s.funnel[st];
@@ -71,11 +86,6 @@ function render(rows, stepRows, today) {
   L('\n  Time to first entry: ' + Object.keys(s.activation_buckets).map((b) => b + ' ' + s.activation_buckets[b]).join('   '));
   L('  Pregnancy to baby in Cubby: ' + s.transitions.pregnancy_to_baby + '    Trying to pregnancy: ' + s.transitions.trying_to_pregnancy);
 
-  const c = s.care_entries_last_7d;
-  L('\n── Care entries, last 7 days ──');
-  L('  ' + c.total + ' total   owner ' + c.by_author_role.owner + '   caregiver ' + c.by_author_role.caregiver + '   former ' + c.by_author_role.former);
-  const types = Object.keys(c.by_type).sort((a, b) => c.by_type[b] - c.by_type[a]);
-  if (types.length) L('  ' + types.map((t) => t + ' ' + c.by_type[t]).join('   '));
 
   L('\n── Steps that leave no record, last 7 days ──');
   const steps = {};
@@ -85,8 +95,8 @@ function render(rows, stepRows, today) {
   for (const k of keys) L('  ' + String(steps[k]).padStart(5) + '  ' + k);
 
   L('\n── Acquisition ──');
-  const a = s.acquisition;
-  L('  attributed ' + a.attributed + '   referred ' + a.referred + '   ' + Object.keys(a.by_source).map((k) => k + ' ' + a.by_source[k]).join('   '));
+  const q = s.acquisition;
+  L('  attributed ' + q.attributed + '   referred ' + q.referred + '   ' + Object.keys(q.by_source).map((k) => k + ' ' + q.by_source[k]).join('   '));
 
   L('\n' + s.retention_note);
   L('Internal households excluded: ' + s.households.internal_excluded
@@ -108,15 +118,27 @@ function render(rows, stepRows, today) {
         entries: [{ time: now - 3 * DAY + 60000, authorId: 'o', type: 'feed' }, { time: now - 3 * DAY + 7200000, authorId: 'c', type: 'feed' }], preg: null },
     ] });
     snap.cohort_days = 30; snap.reads = 12;
+    snap.activity = core.activity({ now, households: [{ id: 'z', ownerId: 'o', members: { o: { role: 'owner' }, c: { role: 'caregiver' } },
+      entries: [{ time: now - DAY, authorId: 'o', type: 'feed' }, { time: now - DAY + 60000, authorId: 'c', type: 'feed' }] }] });
     const text = render([{ day: today, ok: 1, attempts: 1, body: snap }, { day: '2026-01-01', ok: 0, attempts: 3, reason: 'cohort query 503' }],
       [{ key: 'onboarding.step_reached|stage=baby|step=stage_chosen', n: 4 }], today);
     const stale = render([{ day: '2026-01-01', ok: 1, attempts: 1, body: snap }], [], today);
     const never = render([], [], today);
     let fail = 0; const ok = (n, c) => { console.log('  ' + (c ? 'ok  ' : 'FAIL') + ' ' + n); if (!c) fail++; };
     console.log('\nfunnel report self-test\n');
-    ok('it leads with whether the job is alive', text.indexOf('Is the snapshot job alive') < text.indexOf('Sign-ups'));
+    /* Every anchor must EXIST before its position means anything: indexOf returns -1 for a renamed heading,
+       and "alive < -1" is false for the wrong reason. The first version compared against "Sign-ups" and went
+       red the moment that heading was renamed, which only looked like a failure of ordering. */
+    const at = (h) => text.indexOf(h);
+    const alive = at('Is the snapshot job alive'), week = at('Everyone, the last 7 days'), cohort = at('New sign-ups');
+    ok('every heading the order check relies on is present', alive >= 0 && week >= 0 && cohort >= 0, { alive, week, cohort });
+    ok('it leads with whether the job is alive, before any number', alive < week && alive < cohort);
     ok('a failed day is printed with its reason', /FAILED 2026-01-01 after 3 attempt\(s\): cohort query 503/.test(text));
     ok('the wedge is on the page', /two people logging: 1 of 1/.test(text));
+    ok('everyone\'s week is reported, and BEFORE new sign-ups', /1 of 1 households logged something/.test(text)
+       && text.indexOf('Everyone, the last 7 days') < text.indexOf('New sign-ups'));
+    const empty = render([{ day: today, ok: 1, attempts: 1, body: Object.assign({}, snap, { funnel: core.snapshot({ now, households: [] }).funnel }) }], [], today);
+    ok('an empty cohort says so in words instead of printing a blank table', /No household was created in this window/.test(empty));
     ok('a stale job is called stale', /STALE: the newest snapshot is 2026-01-01/.test(stale));
     ok('no snapshot at all is said out loud, not rendered as an empty table', /NO SNAPSHOT HAS EVER BEEN WRITTEN/.test(never));
     ok('an unset INTERNAL_UIDS is pointed out', /INTERNAL_UIDS is not set/.test(text));

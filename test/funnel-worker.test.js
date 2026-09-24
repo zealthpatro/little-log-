@@ -36,6 +36,7 @@ function makeD1() {
 const DAY = 86400000;
 const NOW = Date.UTC(2026, 8, 28, 1, 0, 0);          // a Monday, 01:00 UTC
 const HH = 'HHID_live_q1', HH2 = 'HHID_founder_q2', OWNER = 'UID_owner_q3', CARE = 'UID_care_q4', FOUNDER = 'UID_founder_q5';
+const OLD = 'HHID_old_q6', OLDO = 'UID_oldowner_q7', OLDC = 'UID_oldcare_q8';   // signed up long before the cohort window
 
 const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const SA = { project_id: 'little-log-a9caa', client_email: 'x@y.iam.gserviceaccount.com', private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }) };
@@ -56,13 +57,25 @@ const evDoc = (t, author, type) => ({ name: 'x/events/e' + t, fields: { time: in
 /* The Firestore recorder. */
 function firestore(opts) {
   opts = opts || {};
-  const seen = [];
+  const seen = [], bodies = {};
   const fetchImpl = async (url, init) => {
     url = String(url); seen.push(url);
+    if (init && init.body && url.endsWith(':runQuery')) bodies[url] = String(init.body);
     const j = (o, status) => ({ ok: (status || 200) < 300, status: status || 200, json: async () => o, text: async () => JSON.stringify(o) });
     if (url.indexOf('oauth2.googleapis.com') >= 0) return j({ access_token: 'tok' });
     if (url.indexOf('api.resend.com') >= 0) { (opts.mail || []).push(JSON.parse(init.body)); return j({ id: 'm' }); }
     if (opts.failAll) return j({ error: 'down' }, 503);
+    /* The second scope: one time-bounded query per household outside the cohort. */
+    if (url.indexOf('/documents/households/') >= 0 && url.endsWith(':runQuery')) {
+      const id = url.split('/documents/households/')[1].split(':runQuery')[0];
+      if (id === OLD) return j([{ document: evDoc(NOW - DAY, OLDO, 'feed') }, { document: evDoc(NOW - DAY + 60000, OLDC, 'diaper') }]);
+      return j([]);
+    }
+    if (url.indexOf('/documents/households?') >= 0) {
+      return j({ documents: [hhDoc(HH, OWNER, { [OWNER]: 'owner', [CARE]: 'caregiver' }, [1]), hhDoc(HH2, FOUNDER, { [FOUNDER]: 'owner' }, [1, 2]),
+        { name: 'projects/p/databases/(default)/documents/households/' + OLD, fields: { ownerId: str(OLDO),
+          members: { mapValue: { fields: { [OLDO]: str('owner'), [OLDC]: str('caregiver') } } } } }] });
+    }
     if (url.endsWith(':runQuery')) {
       return j([hhDoc(HH, OWNER, { [OWNER]: 'owner', [CARE]: 'caregiver' }, [1]), hhDoc(HH2, FOUNDER, { [FOUNDER]: 'owner' }, [1, 2])].map((d) => ({ document: d })));
     }
@@ -78,7 +91,7 @@ function firestore(opts) {
     if (url.indexOf('/waitlist?') >= 0) return j({ documents: [{ name: 'x/waitlist/' + OWNER, fields: { uid: str(OWNER) } }] });
     return j({}, 404);
   };
-  return { fetchImpl, seen };
+  return { fetchImpl, seen, bodies };
 }
 
 (async () => {
@@ -158,6 +171,17 @@ function firestore(opts) {
   ok('two authors on one day reach the wedge', body.funnel.baby.shared_logging === 1, body.funnel.baby);
   ok('the invite and the waitlist are attributed', body.funnel.baby.invite_sent === 1 && body.funnel.baby.pro_waitlisted === 1, body.funnel.baby);
   ok('it records how many Firestore reads it spent', typeof body.reads === 'number' && body.reads > 0, body.reads);
+
+  console.log('\n3b. and it sees EVERY household\'s week, not only new sign-ups');
+  ok('an old household outside the cohort is seen as active this week', body.activity && body.activity.active_households === 2, body.activity);
+  ok('its two people logging this week are counted', body.activity.households_two_loggers === 2, body.activity);
+  ok('the founder is excluded from activity too', body.activity.internal_excluded === 1, body.activity);
+  ok('the old household\'s FULL history is never fetched, only its week',
+     !fs.seen.some((u) => u.indexOf('/households/' + OLD + '/events') >= 0), fs.seen.filter((u) => u.indexOf(OLD) >= 0));
+  const oq = fs.bodies[Object.keys(fs.bodies).find((u) => u.indexOf('/households/' + OLD + ':runQuery') >= 0)] || '';
+  ok('its query is bounded to the last 7 days', /"fieldPath":"time"/.test(oq) && /GREATER_THAN_OR_EQUAL/.test(oq) && oq.indexOf(String(NOW - 7 * DAY)) >= 0, oq.slice(0, 200));
+  ok('and masked to time, authorId, type', /"select":\{"fields":\[\{"fieldPath":"time"\},\{"fieldPath":"authorId"\},\{"fieldPath":"type"\}\]\}/.test(oq), oq.slice(0, 260));
+  ok('the old household\'s ids never reach the snapshot', [OLD, OLDO, OLDC].every((id) => snap.body.indexOf(id) < 0));
 
   console.log('\n4. once a day, and a failure is recorded, never swallowed');
   fs = firestore();

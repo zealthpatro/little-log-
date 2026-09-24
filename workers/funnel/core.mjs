@@ -144,7 +144,7 @@ export function snapshot(input) {
   const users = input.users || {};
 
   const out = {
-    schema: 1,
+    schema: 2,
     day: dayKey(now),
     households: { total: 0, internal_excluded: 0, by_stage: { trying: 0, pregnancy: 0, baby: 0, none: 0 } },
     funnel: { trying: zeroStage(), pregnancy: zeroStage(), baby: zeroStage(), none: zeroStage() },
@@ -152,7 +152,6 @@ export function snapshot(input) {
     activation_buckets: Object.fromEntries(ACTIVATION_BUCKETS.map((b) => [b, 0])),
     activation_first_type: {},
     transitions: { pregnancy_to_baby: 0, trying_to_pregnancy: 0 },
-    care_entries_last_7d: { total: 0, by_type: {}, by_author_role: { owner: 0, caregiver: 0, former: 0 } },
     acquisition: { attributed: 0, referred: 0, by_source: {} },
     retention_note: 'Households that went quiet after a pregnancy loss are counted as not retained. ' +
       'The only records of a loss are her private archive and lossHolding, and this report reads neither.',
@@ -181,13 +180,6 @@ export function snapshot(input) {
     if (m.birthRecorded) out.transitions.pregnancy_to_baby++;
     if (m.triedFirst && (m.stage === 'pregnancy' || m.stage === 'baby')) out.transitions.trying_to_pregnancy++;
 
-    for (const e of h.entries || []) {
-      if (!e || !e.time || now - e.time > 7 * DAY || e.time > now) continue;
-      const t = safeKey(e.type, 'other');
-      out.care_entries_last_7d.total++;
-      out.care_entries_last_7d.by_type[t] = (out.care_entries_last_7d.by_type[t] || 0) + 1;
-      out.care_entries_last_7d.by_author_role[roleOf(h, e.authorId)]++;
-    }
 
     const u = users[h.ownerId];
     if (u && u.acq && (u.acq.source || u.acq.campaign || u.acq.content)) {
@@ -196,6 +188,40 @@ export function snapshot(input) {
       out.acquisition.by_source[s] = (out.acquisition.by_source[s] || 0) + 1;
     }
     if (u && u.referredBy) out.acquisition.referred++;
+  }
+  return out;
+}
+
+/* WHAT EVERYONE DID THIS WEEK, the second scope.
+   The cohort funnel above only sees households that signed up in the window, so on the day this first
+   ran, with no sign-up for 36 days, it saw nobody, and its "care entries in the last 7 days" read as
+   "no one uses Cubby" while twelve older households were invisible to it. This scope takes EVERY
+   household, bounded by time rather than by sign-up date: the reader passes each one's entries from the
+   last 7 days only. Counts only, same privacy guarantee as snapshot().
+   Input: { now, households: [{ id, ownerId, isInternal, members, entries: [{time, authorId, type}] }] } */
+export function activity(input) {
+  const now = input.now;
+  const out = {
+    window_days: 7,
+    households_total: 0,
+    internal_excluded: 0,
+    active_households: 0,
+    households_two_loggers: 0,
+    care_entries: { total: 0, by_type: {}, by_author_role: { owner: 0, caregiver: 0, former: 0 } },
+  };
+  for (const h of input.households || []) {
+    if (h.isInternal) { out.internal_excluded++; continue; }
+    out.households_total++;
+    const recent = (h.entries || []).filter((e) => e && e.time && e.time <= now && now - e.time <= 7 * DAY);
+    if (!recent.length) continue;
+    out.active_households++;
+    if (new Set(recent.map((e) => e.authorId).filter(Boolean)).size >= 2) out.households_two_loggers++;
+    for (const e of recent) {
+      const t = safeKey(e.type, 'other');
+      out.care_entries.total++;
+      out.care_entries.by_type[t] = (out.care_entries.by_type[t] || 0) + 1;
+      out.care_entries.by_author_role[roleOf(h, e.authorId)]++;
+    }
   }
   return out;
 }

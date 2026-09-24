@@ -108,10 +108,11 @@ function fixture() {
   /* The founder's feed is an hour old, well inside the 7-day window, so this line fails if exclusion
      breaks. An earlier version put it ten days back, where it was outside the window anyway and the
      assertion passed whether or not exclusion worked. */
-  ok('and its recent feed counts nowhere', snap.care_entries_last_7d.total === 1, snap.care_entries_last_7d);
-  const withFounder = core.snapshot({ now: NOW, households: fixture().map((h) => Object.assign({}, h, { isInternal: false })) });
+  const act = core.activity({ now: NOW, households: fixture() });
+  ok('and its recent feed counts nowhere', act.care_entries.total === 1 && act.internal_excluded === 1, act);
+  const withFounder = core.activity({ now: NOW, households: fixture().map((h) => Object.assign({}, h, { isInternal: false })) });
   ok('proved by difference: counting the founder adds exactly their one feed',
-     withFounder.care_entries_last_7d.total === snap.care_entries_last_7d.total + 1, withFounder.care_entries_last_7d);
+     withFounder.care_entries.total === act.care_entries.total + 1, withFounder.care_entries);
 
   console.log('\n3. every stage is visible, which is the point of this change');
   ok('stages counted: 1 trying, 2 pregnancy, 1 baby, 1 none',
@@ -129,7 +130,7 @@ function fixture() {
   ok('and within 7 days of signing up', snap.funnel.baby.shared_logging_within_7d === 1);
   ok('two authors on DIFFERENT days is membership, not the wedge', snap.funnel.pregnancy.shared_logging === 0, snap.funnel.pregnancy);
   ok('but the caregiver still counts as joined', snap.funnel.pregnancy.member_joined === 1);
-  ok('a caregiver who logged is attributed as a caregiver', snap.care_entries_last_7d.by_author_role.caregiver === 1, snap.care_entries_last_7d.by_author_role);
+  ok('a caregiver who logged is attributed as a caregiver', act.care_entries.by_author_role.caregiver === 1, act.care_entries.by_author_role);
 
   console.log('\n5. activation timing and the rest of the funnel');
   ok('first entry 3 minutes after sign-up lands in "<5"', snap.activation_buckets['<5'] === 1, snap.activation_buckets);
@@ -139,7 +140,26 @@ function fixture() {
   ok('the Pro waitlist is attributed by owner', snap.funnel.baby.pro_waitlisted === 1);
   ok('the report says out loud what it cannot see', /loss/.test(snap.retention_note));
 
-  console.log('\n6. POST /api/step cannot become a place to write text');
+  console.log('\n6. the second scope: what EVERY household did this week');
+  /* The case that forced this scope. On its first live run the cohort was empty, because nobody had
+     signed up in 36 days, and the snapshot said nothing about the twelve households that already existed. */
+  const OLD = 'HHID_OLD_zq90', OLDO = 'UID_OLDOWNER_kk20', OLDC = 'UID_OLDCARE_kk21';
+  const old = { id: OLD, ownerId: OLDO, createdAt: NOW - 90 * DAY, isInternal: false,
+    members: { [OLDO]: { role: 'owner' }, [OLDC]: { role: 'caregiver' } }, babyCount: 1, preg: null,
+    entries: [{ time: NOW - DAY, authorId: OLDO, type: 'feed' }, { time: NOW - 2 * DAY, authorId: OLDC, type: 'diaper' }, { time: NOW - 40 * DAY, authorId: OLDO, type: 'feed' }] };
+  const cohortOnly = core.snapshot({ now: NOW, households: [] });
+  const everyone = core.activity({ now: NOW, households: [old] });
+  ok('a household that signed up 90 days ago is invisible to the 30-day cohort', cohortOnly.households.total === 0);
+  ok('but its week is visible to activity()', everyone.active_households === 1 && everyone.care_entries.total === 2, everyone);
+  ok('only entries inside the 7 days count, not its whole history', everyone.care_entries.total === 2);
+  ok('two different people logging this week is counted', everyone.households_two_loggers === 1, everyone);
+  ok('a quiet household is counted as a household but not as active',
+     core.activity({ now: NOW, households: [Object.assign({}, old, { entries: [] })] }).active_households === 0);
+  const aj = JSON.stringify(core.activity({ now: NOW, households: fixture().concat([old]) }));
+  ok('activity() leaks no household id or uid either', Object.values(ID).concat([OLD, OLDO, OLDC]).every((id) => aj.indexOf(id) < 0));
+  ok('and the cohort snapshot no longer carries a 7-day entry count to be misread', !('care_entries_last_7d' in snap), Object.keys(snap));
+
+  console.log('\n7. POST /api/step cannot become a place to write text');
   ok('a valid step is accepted', core.stepKey('onboarding.step_reached', { step: 'invite_offered', stage: 'baby' }) === 'onboarding.step_reached|stage=baby|step=invite_offered');
   ok('a stage of none is accepted, because funnelStage() can return it', core.stepKey('pro.sheet_viewed', { stage: 'none', entry_point: 'settings' }) !== null);
   ok('a step the wizard does not have is refused', core.stepKey('onboarding.step_reached', { step: 'completed', stage: 'baby' }) === null);

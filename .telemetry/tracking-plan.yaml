@@ -200,12 +200,15 @@ events:
   # ── Core value ────────────────────────────────────────────────────────────────────────────────
   - name: care_entry.logged
     category: core_value
-    source: derived            # households/{hid}/events, aggregated per day, never per entry
+    source: derived            # households/{hid}/events, read with a 7-day time bound, never per entry
     group_level: household
-    description: Care entries logged. Reported only as daily totals by type, stage and author role.
+    description: >
+      Care entries logged by EVERY household in the last 7 days, as totals by type and author role, plus how
+      many households logged at all and how many had two different people logging. This is the whole-base
+      scope (core.activity), not the sign-up cohort: see decisions.
     properties:
       - { name: entry_type, type: string, required: true, note: "feed, sleep, diaper, pump, growth, activity, symptom, milestone, and the pregnancy and trying equivalents" }
-      - { name: stage, type: string, enum: [trying, pregnancy, baby], required: true }
+      - { name: stage, type: string, enum: [trying, pregnancy, baby], required: false, note: "NOT computed for the whole base: stage needs each household's pregnancy record, one read more per household" }
       - { name: author_role, type: string, enum: [owner, caregiver, former], required: true, note: "former = wrote logs, has since left" }
     expected_frequency: high
 
@@ -290,7 +293,9 @@ snapshot_sync:
   cadence: daily
   runner: "worker.js scheduled(), first cron tick after 00:00 UTC; up to 3 attempts a day. Not a laptop: the launchd report died silently for three weeks."
   writes: "D1 funnel_snapshots(day, ok, reason, reads, attempts, body, at) in GAMES_DB. A failed run is written with its reason, never swallowed."
-  scope: "a ROLLING 30-DAY SIGN-UP COHORT, not all of history, with a hard budget of 15,000 Firestore reads. See decisions."
+  scope: >
+    TWO scopes under one 15,000-read budget. (1) The funnel, over a rolling 30-day SIGN-UP COHORT.
+    (2) activity, over EVERY household but only its last 7 days of entries. See decisions."
   contains: "counts only, by stage. No uid, no household id, no name."
   metrics:
     - households_created
@@ -304,7 +309,9 @@ snapshot_sync:
     - invite_sent
     - pro_waitlist_joined
     - birth_recorded
-    - care_entries_by_type_and_author_role
+    - activity.active_households           # every household, last 7 days
+    - activity.households_two_loggers      # the wedge, this week, across everyone
+    - activity.care_entries_by_type_and_author_role
     - onboarding_step_reached_by_step    # from funnel_steps
     - invite_sheet_opened                # from funnel_steps
     - pro_sheet_viewed                   # from funnel_steps
@@ -360,3 +367,10 @@ decisions:
       Past 15,000 reads the snapshot abandons and records why.
   - decision: The pregnancy record is households/{hid}/pregnancy/{owner}, a subcollection.
     because: "The first audit said pregnancy/{owner}. Querying that path would have counted zero pregnancies, silently."
+  - decision: Two scopes, because one went blind on its first live run.
+    because: >
+      The first production snapshot (2026-09-25 01:00Z) was honest and useless: no household had been created
+      in 36 days, so the 30-day cohort was empty, and it said nothing about the twelve households that already
+      existed. Worse, its "care entries in the last 7 days: 0" was computed over that empty cohort and read as
+      "nobody uses Cubby". The fix bounds by TIME instead of by sign-up date for activity: every household, its
+      last 7 days only, via a time-filtered query with the same field mask. Cost follows this week's activity.
