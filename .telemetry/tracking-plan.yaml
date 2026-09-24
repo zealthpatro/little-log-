@@ -372,7 +372,7 @@ decisions:
     because: "The first audit said pregnancy/{owner}. Querying that path would have counted zero pregnancies, silently."
   - decision: Two scopes, because one went blind on its first live run.
     because: >
-      The first production snapshot (2026-09-25 01:00Z) was honest and useless: no household had been created
+      The first production snapshot (2026-09-24 01:00Z) was honest and useless: no household had been created
       in 36 days, so the 30-day cohort was empty, and it said nothing about the twelve households that already
       existed. Worse, its "care entries in the last 7 days: 0" was computed over that empty cohort and read as
       "nobody uses Cubby". The fix bounds by TIME instead of by sign-up date for activity: every household, its
