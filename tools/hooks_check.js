@@ -46,7 +46,18 @@ for (const h of ['pre-commit', 'pre-push']) {
     /* The working tree is the tree you are standing in. The COMMITTED object is what every clone gets.
        On 2026-09-07 .githooks/pre-push was +x here and 100644 on origin/main, so this Mac was green
        while every fresh checkout had a hook git could not execute. Ask git, not stat. */
-    const rel = path.relative(git('rev-parse --show-toplevel'), p).split(path.sep).join('/');
+    /* In a git worktree core.hooksPath is an absolute path into the MAIN checkout, so git runs the main
+       checkout's hook and p lies outside this tree. Relative to this worktree it became
+       "../../../.githooks/pre-commit", ls-tree found nothing, and this failed in every worktree, which
+       also blocked every push from one, because pre-push runs this suite. The committed-mode question is
+       about the repository's file, so a path outside this tree is re-based on the main repository root.
+       A hook outside ANY repository still resolves to "../" there and still fails, as it should. */
+    let rel = path.relative(git('rev-parse --show-toplevel'), p);
+    if (rel.startsWith('..')) {
+      const mainRoot = path.dirname(git('rev-parse --path-format=absolute --git-common-dir'));
+      rel = path.relative(mainRoot, p);
+    }
+    rel = rel.split(path.sep).join('/');
     let committed = '';
     try { committed = execSync('git ls-tree HEAD -- ' + JSON.stringify(rel), { encoding: 'utf8' }).split(/\s+/)[0] || ''; } catch (e) {}
     ok('and ' + h + ' is committed as 100755, so a CLONE can run it too', committed === '100755',
