@@ -39,8 +39,19 @@ if [ -n "$seopages" ] && command -v python3 >/dev/null 2>&1; then
   fi
 fi
 
-# Cacheable app assets, excluding sw.js itself.
-cacheable=$(printf '%s\n' "$staged" | grep -E '^app/.*\.(js|html|css)$' | grep -v '^app/sw\.js$')
+# Cacheable assets, DERIVED from app/sw.js's own ASSETS list rather than restated here.
+# This used to be  grep -E '^app/.*\.(js|html|css)$'  , which was not wrong so much as unable to
+# stay right: the service worker also precaches app/manifest.webmanifest, the offline illustration
+# and five PNGs under /icons, and none of those matched. A change to any one of them shipped to new
+# installs and reached nobody who already had Cubby, because their SW had no reason to refetch.
+# Caught on 2026-09-26 by the manifest `shortcuts` change, which would have gone live invisibly.
+# tools/hooks_check.js asserts this hook still calls the guard, and proves the guard both ways.
+if command -v node >/dev/null 2>&1; then
+  cacheable=$(printf '%s\n' "$staged" | node "$(git rev-parse --show-toplevel)/tools/sw_cache_guard.js")
+else
+  # No node: fall back to the old pattern rather than waving the commit through.
+  cacheable=$(printf '%s\n' "$staged" | grep -E '^app/.*\.(js|html|css)$' | grep -v '^app/sw\.js$')
+fi
 [ -z "$cacheable" ] && exit 0
 
 # An app asset changed -> require the staged sw.js CACHE line to differ from HEAD's.

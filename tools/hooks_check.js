@@ -92,6 +92,22 @@ if (strays.length) {
     ' still exist and git will never run them (core.hooksPath wins)');
 }
 
+/* THE CACHE-BUMP GUARD, AND WHY IT IS DERIVED RATHER THAN WRITTEN DOWN.
+   pre-commit stops a commit that changes a precached asset without bumping app/sw.js's CACHE,
+   because the service worker is cache-first for everything but HTML and JS: a missed bump ships to
+   new installs and reaches nobody who already has Cubby. The list of what counts used to be a
+   hand-written pattern, `^app/.*\.(js|html|css)$`, and it had silently fallen behind ASSETS —
+   app/manifest.webmanifest, app/spot-art/offline_balloon.webp and five PNGs under /icons are all
+   precached and none of them matched. Adding `shortcuts` to the manifest on 2026-09-26 was the
+   first change to land in that gap. It is now derived from ASSETS by tools/sw_cache_guard.js, so
+   growing the precache cannot leave the guard behind; these two assertions pin that wiring. */
+const pc = resolved['pre-commit'];
+const pcBody = fs.existsSync(pc) ? fs.readFileSync(pc, 'utf8') : '';
+ok('pre-commit derives the cacheable set from the service worker, not from a pattern',
+  /sw_cache_guard\.js/.test(pcBody), 'the hook still hardcodes which files count as cacheable');
+ok('and tools/sw_cache_guard.js is there to be called',
+  fs.existsSync(root + '/tools/sw_cache_guard.js'), root + '/tools/sw_cache_guard.js');
+
 /* This gate can only ever report an ABSENCE of breakage, so on its own a green line is
    indistinguishable from a check that stopped checking. Stage the real failure and make the same
    predicate catch it. */
@@ -106,6 +122,17 @@ if (SELF_TEST) {
   ok('an untracked hook path is caught', /\.githooks\//.test(deadPath) === false, deadPath);
   const m644 = execSync('git ls-tree HEAD -- CLAUDE.md', { encoding: 'utf8' }).split(/\s+/)[0];
   ok('a committed 100644 mode is caught (CLAUDE.md stands in)', m644 !== '100755', m644);
+
+  /* The cache guard, both ways, against the real ASSETS list. A guard that answered "yes" to
+     everything would pass the line above just as well as one that answers "no" to everything. */
+  const askGuard = (paths) => execSync('node ' + JSON.stringify(root + '/tools/sw_cache_guard.js'),
+    { input: paths.join('\n'), encoding: 'utf8' }).trim().split('\n').filter(Boolean);
+  const flagged = askGuard(['app/manifest.webmanifest', 'app/index.html', 'icons/icon-192.png']);
+  const ignored = askGuard(['README.md', 'icons/screenshots/01-two-names.png', 'tools/gates.js', 'app/sw.js']);
+  ok('the cache guard flags a precached file the old pattern missed',
+    flagged.indexOf('app/manifest.webmanifest') >= 0 && flagged.indexOf('icons/icon-192.png') >= 0, flagged);
+  ok('and it stays quiet on files the service worker does not precache',
+    ignored.length === 0, ignored);
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

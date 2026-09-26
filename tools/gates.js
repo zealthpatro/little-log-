@@ -60,6 +60,7 @@ const TREE = [
   { name: 'contrast',        cmd: ['node', 'tools/contrast_check.js', 'url'] },
   { name: 'motion',          cmd: ['node', 'tools/motion_check.js', 'url'] },
   { name: 'surface-token',   cmd: ['node', 'tools/surface_token_check.js', 'url'] },
+  { name: 'shortcuts',       cmd: ['node', 'tools/shortcuts_check.js', 'url'] },
   { name: 'ask-emergency',   cmd: ['node', 'tools/ask_emergency_check.js', 'url'] },
   { name: 'temp-units',      cmd: ['node', 'tools/temp_units_fever_check.js', 'url'] },
   { name: 'illness-dose',    cmd: ['node', 'tools/illness_dose_integrity_check.js', 'url'] },
