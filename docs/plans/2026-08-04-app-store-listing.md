@@ -135,14 +135,53 @@ Sign-in is required by design and the rules return nothing without it, so review
 ```
 Thank you for reviewing Cubby.
 
-Sign-in is required because Cubby is a private, shared family health log: feeds, sleep, growth, vaccines and pregnancy records synced live between invited caregivers. Server-side security rules key everything to the signed-in account, so there is no meaningful signed-out state; without an account there is no data to show and no circle to share it with.
+Cubby is a private, shared log for a baby or a pregnancy: feeds, sleep, nappies, growth, vaccines and medicines, kept by one parent or by a family circle together. Every entry records who added it.
 
-Please use the demo account provided (Continue with Google). It contains a seeded fictional family: baby "Bo Bear" with a week of feeds, naps and nappies, a vaccine schedule in progress, a medicine course, growth charts and a shared photo album with a second caregiver's entries.
+SIGNING IN
+Sign-in is required. Server-side rules key every record to the signed-in account, so there is no signed-out state that holds data. Please use the demo account in the fields above. It is a seeded, entirely fictional family.
 
-Suggested walk-through: sign in, see today's shared log on Home (one nap is still running with a live timer), log a feed in two taps, open Care for the US immunisation schedule with sources cited, open the growth chart, open Moments for photos and milestones, and check Settings > Family & sharing to see the two-person circle and the item-by-item privacy controls.
+WHAT IS IN THE DEMO ACCOUNT
+Baby "Bo", ten weeks old, United States schedule. Seven days of feeds, naps and nappies, some logged by a second caregiver called Rosa, so entries carry two different names. One nap is running right now, with a live timer on Home. Two growth measurements, so the chart draws. A daily medicine, Vitamin D at 09:00. One milestone, first smile. The immunisation schedule is loaded with nothing marked given yet, so you can mark one. The photo album is empty on purpose: the demo uses no real images of a child.
 
-Notes: the app is free with no in-app purchases. It works offline and syncs on reconnect. Notifications are off by default and the app never requires them. No ads, no third-party analytics and no tracking SDKs are present, which matches the App Privacy answers.
+A WALKTHROUGH, ABOUT TWO MINUTES
+1. Home: today's shared log, with the running nap timer.
+2. Tap Feed on Home and save one. Two taps is the promise.
+3. Log tab: the timeline, with a name against every entry.
+4. Health tab: the United States immunisation schedule with its sources, the growth chart, and the Vitamin D course.
+5. Album tab: milestones.
+6. Settings, then Family and sharing: the two-person circle, the roles, and the per-item privacy controls.
+
+NATIVE FUNCTIONALITY
+Cubby's interface is served from little-cubby.com, but the app is not a web view alone. The binary uses Sign in with Apple, push registration, the camera and photo library for keepsakes, the microphone and on-device speech recognition for voice logging, haptics, universal links so invite and reminder links open in the app, the share sheet, and the file system to write appointment and medicine reminders into the parent's own calendar as .ics files.
+
+PERMISSIONS
+None is requested at launch. Camera and photo library are asked for only when a photo is added, microphone and speech recognition only when voice logging is used, and notifications only if reminders are switched on. Each has a usage string in plain language.
+
+PURCHASES
+There are none. Cubby is free. There is no in-app purchase, no subscription and no external checkout. A Cubby Pro screen exists and registers interest only: it shows no prices, takes no payment and links to no store.
+
+HEALTH CONTENT
+Every health record is entered by the parent. Cubby does not calculate medication doses, does not diagnose and makes no medical claim. Immunisation schedules cite their national sources. A medicine entry is a log and a calendar reminder for a dose already prescribed to that family.
+
+SENSITIVE CONTENT
+Cubby supports pregnancy, including pregnancy loss. If a loss is recorded the app becomes a quiet holding screen and stops its prompts. Nothing is graphic, which is why the rating is 4+.
+
+PRIVACY
+No advertising, no third-party analytics and no tracking SDK is present. The app counts anonymous product events, which are a date, an event name from a fixed list and a counter, with no user id, no household id, no cookie and no stored IP address. Nothing is used to track.
+
+Thank you for your time. The contact above is monitored throughout review.
 ```
+
+**If you submit WITHOUT a demo account**, swap the two paragraphs above for the one below, then put
+the block you want asc_submit to read FIRST: it takes the first fenced block after this heading.
+
+```
+SIGNING IN
+Sign-in is required. Server-side rules key every record to the signed-in account, so there is no signed-out state that holds data. Sign in with Apple creates a working account in one step and needs nothing from us. The app then opens its first-run setup, where adding a baby takes about thirty seconds and Home fills immediately.
+
+Please note there is no seeded data on a fresh account, so the screens described below will be empty until you add a baby and log one entry.
+```
+
 
 ---
 
