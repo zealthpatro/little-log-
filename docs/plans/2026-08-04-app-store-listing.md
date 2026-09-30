@@ -158,7 +158,7 @@ PERMISSIONS
 None is requested at launch. Camera and photo library are asked for only when a photo is added, microphone and speech recognition only when voice logging is used, and notifications only if reminders are switched on. Each has a usage string in plain language.
 
 PURCHASES
-There are none. Cubby is free. There is no in-app purchase, no subscription and no external checkout. A Cubby Pro screen exists and registers interest only: it shows no prices, takes no payment and links to no store.
+Nothing in this version of Cubby can be bought. There is no in-app purchase, no subscription and no external checkout. A Cubby Pro screen describes an optional subscription planned for later, including its intended price, and lets people register their interest by email. It takes no payment and links to no store. A few extras, such as voice logging and the doctor's PDF report, include a small number of free uses; after those they are not available in this version. Logging, sharing with caregivers and everything in the walkthrough stay free.
 
 HEALTH CONTENT
 Every health record is entered by the parent. Cubby does not calculate medication doses, does not diagnose and makes no medical claim. Immunisation schedules cite their national sources. A medicine entry is a log and a calendar reminder for a dose already prescribed to that family.

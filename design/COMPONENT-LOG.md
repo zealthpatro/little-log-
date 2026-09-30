@@ -59,6 +59,9 @@ in the Rejected section of the spec sheet.
 | Streak, daily total or target on the post-birth widget | Fails the Anxiety Test; a streak punishes the night she could not log |
 | A fourth statistic on the medium widget | Halves the number size, and the number is the reason to look |
 | Pregnancy on the lock screen, in any form | A lock screen renders without unlocking |
+| Pro gate on the glance widget, or on any widget or quick-action logging button | Breaks four published promises, e.g. pricing:68 "We'll never paywall logging or caregiver sharing" and how-it-works:156 "The things you reach for at 3am are the free ones". Rejected 2026-09-30 |
+| Pro gate on widgets or quick actions in iOS before In-App Purchase exists | Apple 3.1.1: unlocking a feature inside the app requires IAP, and there is no StoreKit. Deferred, not rejected: see docs/plans/2026-09-30-pro-gating-widgets-verdict.md |
+| "Widget looks" as the Pro element | Costs a picker, storage, a taste counter and lapse rules; palettes are invisible on lock screen, tinted and StandBy. Sells nothing. Rejected 2026-09-30 |
 | A `go('home')` fallback for a wrong-stage deep link | Changed nothing visible: the pregnancy shell ignores `view`, so before and after were identical. Reverted 2026-09-26 |
 
 ---
