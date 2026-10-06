@@ -74,6 +74,15 @@ type = "ratelimit"
 namespace_id = "1003"
 simple = { limit = 20, period = 60 }
 
+# POST /api/dose, the "Log it" button on a medicine reminder (worker.js). A tap is one request; ten a
+# minute per IP covers a family on one wifi clearing a few reminders, and stops a loop replaying
+# tickets. Falls back to SIGNIN_RATE_LIMITER (distinct 'dose:' key prefix) if absent.
+[[unsafe.bindings]]
+name = "DOSE_RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1005"
+simple = { limit = 10, period = 60 }
+
 # Guessing-game store — ISOLATED in its own D1 (cubby-games), never the family Firestore. Holds only
 # the host's public title + {nickname, guess, note}. COMMENTED until the DB exists (an uncommented
 # missing id fails the deploy). The in-circle game works without it; the public /g/<code> link

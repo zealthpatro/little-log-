@@ -1021,6 +1021,104 @@ async function fsGet(base, token, path) {
   if (!r.ok) return null;
   return r.json().catch(() => null);
 }
+/* fsGet answers null for a 404 AND for a 503. Fine for a lookup that may be absent; wrong for a
+   security check, where "could not read the members" must never be mistaken for "no such household",
+   let alone fall through to a write. This one keeps them apart: { ok, status, doc }, and status 0 for
+   a throw or an unreadable body. Masked, so a check pulls only the fields it decides on. */
+async function fsGetStrict(base, token, path, mask) {
+  const qs = (mask || []).map(m => 'mask.fieldPaths=' + encodeURIComponent(m)).join('&');
+  let r;
+  try { r = await fetch(base + path + (qs ? '?' + qs : ''), { headers: { authorization: 'Bearer ' + token } }); }
+  catch (e) { console.error('fs_get_throw', (e && e.message) || String(e)); return { ok: false, status: 0, doc: null }; }
+  if (r.status === 404) return { ok: false, status: 404, doc: null };
+  if (!r.ok) { console.error('fs_get_fail', r.status); return { ok: false, status: r.status, doc: null }; }
+  const doc = await r.json().catch(() => null);
+  if (!doc || typeof doc !== 'object') return { ok: false, status: 0, doc: null };
+  return { ok: true, status: r.status, doc };
+}
+
+/* ---- Who may hear about, and log, this family's medicines ---------------------------------------
+   users/{uid} is its owner's to write (firestore.rules), so users/{uid}.householdId is a CLAIM, not
+   a membership. The cron used to mint a dose ticket for whatever household a user doc named, and
+   /api/dose wrote whatever the ticket said, so a stranger who set their own householdId to someone
+   else's family could write a medicine event into it as themselves, and a removed caregiver kept
+   hearing the child's medicines named. Both halves now ask Firestore, fresh, the question the events
+   rule asks: is this uid an owner or caregiver of THIS household, and is the household still live?
+   docs/postmortems/2026-10-06-dose-ticket-membership.md. */
+const _HID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+function _isCarer(hhFields, uid) {
+  const mem = hhFields && hhFields.members && hhFields.members.mapValue && hhFields.members.mapValue.fields;
+  // Own-property only: a uid of "__proto__" passes the ticket's charset check.
+  const role = mem && Object.prototype.hasOwnProperty.call(mem, uid) ? _fsStr(mem[uid]) : '';
+  return role === 'owner' || role === 'caregiver';
+}
+/* For the cron, before anything that names this family's medicines is sent. Masked to the two fields
+   it decides on, so the app blob is never pulled for it.
+   'member' send | 'no' refuse, a deliberate drop | 'error' could not tell, so send nothing and retry. */
+async function pushGate(base, token, hid, uid) {
+  if (!_HID_RE.test(hid || '')) return 'no';
+  const r = await fsGetStrict(base, token, '/households/' + encodeURIComponent(hid), ['members', 'deleteAfter']);
+  if (!r.ok) return r.status === 404 ? 'no' : 'error';
+  const f = r.doc.fields || {};
+  if (f.deleteAfter) return 'no';
+  return _isCarer(f, uid) ? 'member' : 'no';
+}
+/* Values as the app wrote them. A dose may be "5" or 2.5, hours may be 6 or "6". */
+function _fsScalar(v) {
+  if (!v) return '';
+  if (v.stringValue != null) return v.stringValue;
+  if (v.integerValue != null) return String(v.integerValue);
+  if (v.doubleValue != null) return String(v.doubleValue);
+  return '';
+}
+function _fsMaps(v) {
+  const vals = (v && v.arrayValue && v.arrayValue.values) || [];
+  return vals.map(x => (x && x.mapValue && x.mapValue.fields) || null).filter(Boolean);
+}
+/* app/index.html medIntervalMs, on the Firestore shape. It must agree with the app, because it is the
+   same question logDose asks before a second dose: everyX is its hours, daily is the shortest gap
+   between its slots (wrapping past midnight), one slot a day is a day, anything else has no interval. */
+function _medIntervalMs(medFields) {
+  const p = medFields && medFields.pattern && medFields.pattern.mapValue && medFields.pattern.mapValue.fields;
+  if (!p) return 0;
+  const type = _fsStr(p.type);
+  if (type === 'everyX') { const h = Number(_fsScalar(p.hours)) || 0; return Math.max(0, h) * 3600000; }
+  if (type === 'daily') {
+    const t = ((p.times && p.times.arrayValue && p.times.arrayValue.values) || [])
+      .map(v => { const q = String(_fsScalar(v)).split(':').map(Number); return q[0] * 60 + q[1]; }).sort((a, b) => a - b);
+    if (t.length < 2) return 86400000;
+    let gap = Infinity;
+    for (let i = 1; i < t.length; i++) gap = Math.min(gap, t[i] - t[i - 1]);
+    gap = Math.min(gap, (t[0] + 1440) - t[t.length - 1]);
+    return Number.isFinite(gap) && gap > 0 ? gap * 60000 : 0;
+  }
+  return 0;
+}
+/* Every event in one household at or after `since`, newest first, projected to the fields the
+   already-logged check reads. A range on `time` alone is served by the automatic single-field index;
+   adding `type ==` would need a composite index this repo does not deploy (firebase.json has rules
+   only), and a FAILED_PRECONDITION here would block every tap. So the medicine filter runs below. */
+const DOSE_RECENT_LIMIT = 500;
+async function fsRecentEvents(base, token, hid, since) {
+  const sq = {
+    from: [{ collectionId: 'events' }],
+    where: { fieldFilter: { field: { fieldPath: 'time' }, op: 'GREATER_THAN_OR_EQUAL', value: { integerValue: String(Math.floor(since)) } } },
+    orderBy: [{ field: { fieldPath: 'time' }, direction: 'DESCENDING' }],
+    select: { fields: ['type', 'medId', 'babyId', 'time', 'deleted'].map(f => ({ fieldPath: f })) },
+    limit: DOSE_RECENT_LIMIT
+  };
+  let r;
+  try {
+    r = await fetch(base + '/households/' + encodeURIComponent(hid) + ':runQuery', {
+      method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ structuredQuery: sq })
+    });
+  } catch (e) { console.error('dose_recent_throw', (e && e.message) || String(e)); return { ok: false, docs: null }; }
+  if (!r.ok) { console.error('dose_recent_fail', r.status, (await r.text().catch(() => '')).slice(0, 300)); return { ok: false, docs: null }; }
+  const j = await r.json().catch(() => null);
+  if (!Array.isArray(j)) return { ok: false, docs: null };
+  return { ok: true, docs: j.map(e => e && e.document).filter(Boolean) };
+}
 async function fsPatch(base, token, path, masks, fields) {
   const qs = masks.map(m => 'updateMask.fieldPaths=' + encodeURIComponent(m)).join('&');
   return fetch(base + path + '?' + qs, {
@@ -1255,7 +1353,9 @@ async function sendPushReminders(env){
   const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/firebase.messaging');
   const base = 'https://firestore.googleapis.com/v1/projects/' + FS_PROJECT + '/databases/(default)/documents';
   const now = Date.now();
-  let sent = 0, userErrors = 0, failed = 0, dropped = 0;
+  /* refused = entries held back because the uid is not an owner or caregiver of the household it names.
+     Logged, never put in the /api/health summary: that endpoint is public. */
+  let sent = 0, userErrors = 0, failed = 0, dropped = 0, refused = 0;
   await backfillPushNextAt(env, base, token);
   // Only the users with something actually due. `push.nextAt` is the earliest unsent fire time,
   // written by the client alongside push.due and kept honest below. Users who have never enabled
@@ -1274,7 +1374,8 @@ async function sendPushReminders(env){
     try {
       const id = d.name.split('/documents/users/')[1];
       // Needed to address the dose write at households/{hid}/events. The cron query uses no
-      // `select`, so the whole user doc is already here and this costs nothing extra.
+      // `select`, so the whole user doc is already here and this costs nothing extra. It is the
+      // user's own claim (they can write it), so pushGate checks it before anything is sent.
       const hid = _fsStr(d.fields && d.fields.householdId);
       const push = d.fields && d.fields.push && d.fields.push.mapValue && d.fields.push.mapValue.fields;
       const tokensMap = push && push.tokens && push.tokens.mapValue && push.tokens.mapValue.fields;
@@ -1321,9 +1422,17 @@ async function sendPushReminders(env){
       }
       plan.sort((a, b) => a.at - b.at);
 
-      let maxAt = sentUpTo, stuck = false;
+      let maxAt = sentUpTo, stuck = false, gate = null;
       for (const msg of plan) {
         if (msg.drop) { dropped++; if (!stuck) maxAt = msg.at; continue; }
+        /* Every entry here names this family's medicines (the digest lists them too), so nothing goes
+           out until Firestore says this uid is an owner or caregiver of the household its own user
+           doc points at. Asked once per user per tick, and only when something is live to send. */
+        if (gate == null) gate = await pushGate(base, token, hid, id);
+        // Could not tell: send nothing and hold the cursor here, so the next tick asks again.
+        if (gate === 'error') { failed++; stuck = true; continue; }
+        // Not theirs to hear: refused for good, which moves the cursor like any other drop.
+        if (gate !== 'member') { refused++; if (!stuck) maxAt = msg.at; continue; }
         /* One ticket per due dose, not per token: it authorises an ACTION, not a device. */
         const ticket = msg.medId ? await mintDoseTicket(sa, {
           u: id, h: hid, m: msg.medId, b: msg.babyId || '', mn: msg.medName || '',
@@ -1376,7 +1485,7 @@ async function sendPushReminders(env){
       }
     } catch (e) { userErrors++; console.error('push_user_fail', (e && e.message) || String(e)); }
   }
-  console.log('push_run', JSON.stringify({ due: docs.length, sent, failed, dropped, userErrors, queryError }));
+  console.log('push_run', JSON.stringify({ due: docs.length, sent, failed, dropped, refused, userErrors, queryError }));
   /* Campaigns run AFTER the critical queue, on the same tick and the same token. Ordering is the
      point: a dose reminder must never wait behind a marketing fan-out. Isolated so a broken campaign
      cannot take the medicine path down with it. */
@@ -1701,6 +1810,9 @@ async function readDoseTicket(sa, t) {
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(String(c.m || ''))) return null;
   return c;
 }
+/* The cron and the minter, exported for test/dose-membership.test.js only. Workers ignore named
+   exports; the redeem half is driven through the real fetch handler. */
+export const __dose = { sendPushReminders: (env) => sendPushReminders(env), mintDoseTicket };
 
 async function verifyFirebaseToken(idToken) {
   if (!idToken || typeof idToken !== 'string') throw new Error('no_token');
@@ -2297,16 +2409,31 @@ export default {
     }
     /* Redeem a dose ticket. The whole request body is {"n":"<ticket>"} and nothing else, which is
        the property the safety argument rests on: the caller cannot choose the medicine, the baby,
-       the household or the time. Everything written comes out of a signature this Worker made.
+       the household or the time. Who, where, which medicine and which dose time come out of a
+       signature this Worker made; what the medicine IS comes out of the family's own record.
+
+       A signature is not a membership. The service account writes past the events rule (uid in
+       members), so this route has to ask that rule's question itself, fresh, on every redeem: a
+       ticket minted before someone was removed, or minted for a stranger before the cron checked,
+       stays valid for six hours after its dose. Every refusal is the same 401; a read that fails is
+       a 503 and writes nothing.
 
        Idempotent by construction rather than by checking: the document id is dose-<medId>-<dueTs>,
        so a duplicate delivery, a retry, a double tap, or two caregivers acting on the same
        notification all address the SAME document. Firestore's documentId= create returns
        ALREADY_EXISTS, which is success here, not an error. That matters more than usual: the charter
        says never auto-log a dose, and the flip side of a button that logs one is that it must never
-       log two. */
+       log two. A dose logged in the app has a random id, so that case is a CHECK: the one logDose
+       makes before a second dose inside the medicine's interval. */
     if (url.pathname === '/api/dose') {
       if (request.method !== 'POST') return new Response('method not allowed', { status: 405 });
+      /* Per IP, before anything costs a token or a read. A tap is one request. Fails open if the
+         limiter itself is unavailable, like every other limiter here; the checks below still hold. */
+      const limiter = env.DOSE_RATE_LIMITER || env.SIGNIN_RATE_LIMITER;
+      if (limiter) {
+        const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+        try { const { success } = await limiter.limit({ key: 'dose:' + ip }); if (!success) return json({ error: 'rate' }, 429); } catch (e) {}
+      }
       if (!env.FIREBASE_SERVICE_ACCOUNT) return json({ error: 'server_config' }, 500);
       let sa; try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return json({ error: 'server_config' }, 500); }
       let body = null; try { body = await request.json(); } catch (e) {}
@@ -2316,18 +2443,59 @@ export default {
 
       const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore');
       const base = 'https://firestore.googleapis.com/v1/projects/' + FS_PROJECT + '/databases/(default)/documents';
-      const docId = 'dose-' + c.m + '-' + (Number(c.t) || 0);
+
+      const hh = await fsGetStrict(base, token, '/households/' + encodeURIComponent(String(c.h)),
+        ['members', 'deleteAfter', 'app.meds', 'app.babies']);
+      if (!hh.ok) {
+        if (hh.status !== 404) return json({ error: 'unavailable' }, 503);
+        return json({ error: 'bad_ticket' }, 401);
+      }
+      const hf = hh.doc.fields || {};
+      if (hf.deleteAfter) return json({ error: 'bad_ticket' }, 401);
+      if (!_isCarer(hf, c.u)) return json({ error: 'bad_ticket' }, 401);
+      const appF = (hf.app && hf.app.mapValue && hf.app.mapValue.fields) || {};
+      const med = _fsMaps(appF.meds).find(m => _fsStr(m.id) === String(c.m));
+      if (!med) return json({ error: 'bad_ticket' }, 401);
+      if (!_fsMaps(appF.babies).some(b => _fsStr(b.id) === String(c.b))) return json({ error: 'bad_ticket' }, 401);
+      // A medicine pinned to one child is that child's (commitDose: m.babyId || activeBabyId).
+      const medBaby = _fsStr(med.babyId);
+      if (medBaby && medBaby !== String(c.b)) return json({ error: 'bad_ticket' }, 401);
+
       const now = Date.now();
+      /* Already given? lastDose's rule: same medicine, same child, not deleted, not in the future,
+         and less than one interval ago. A notification cannot show logDose's "Log another" sheet, so
+         the Worker refuses the second write and reports the dose that is already there. */
+      const iv = _medIntervalMs(med);
+      if (iv > 0) {
+        const recent = await fsRecentEvents(base, token, String(c.h), now - iv);
+        if (!recent.ok) return json({ error: 'unavailable' }, 503);
+        let prior = 0;
+        for (const d of recent.docs) {
+          const f = d.fields || {};
+          const t = _fsNum(f.time);
+          if (_fsStr(f.type) === 'medicine' && _fsStr(f.medId) === String(c.m)
+            && _fsStr(f.babyId) === String(c.b)
+            && !(f.deleted && f.deleted.booleanValue === true)
+            && t != null && t <= now && now - t < iv && t > prior) prior = t;
+        }
+        if (prior) return json({ ok: true, already: true, at: prior });
+        // A full page with no match cannot prove there is none further back. Not knowing is not "no".
+        if (recent.docs.length >= DOSE_RECENT_LIMIT) return json({ error: 'unavailable' }, 503);
+      }
+
+      const docId = 'dose-' + c.m + '-' + (Number(c.t) || 0);
       /* `time` is NOW, not the dose time. commitDose() does the same, and it is what a doctor report
          needs: when the dose was actually given, not when it was scheduled. `id` is set equal to the
          document id because the client's listener does data.id = doc.id and keys its known-events map
-         off it, so matching them keeps the client's own diff-push a no-op instead of a rewrite. */
+         off it, so matching them keeps the client's own diff-push a no-op instead of a rewrite.
+         Name, dose and unit are the family's (app.meds), never the ticket's, which carried whatever
+         the user doc it was minted from said. */
       const fields = {
         id: { stringValue: docId }, authorId: { stringValue: String(c.u) },
         type: { stringValue: 'medicine' }, medId: { stringValue: String(c.m) },
-        medName: { stringValue: String(c.mn || 'Medicine') },
-        dose: { stringValue: String(c.d || '') }, unit: { stringValue: String(c.n || '') },
-        time: { integerValue: String(now) }, babyId: { stringValue: String(c.b || '') },
+        medName: { stringValue: _fsScalar(med.name) || 'Medicine' },
+        dose: { stringValue: _fsScalar(med.dose) }, unit: { stringValue: _fsScalar(med.unit) },
+        time: { integerValue: String(now) }, babyId: { stringValue: String(c.b) },
         via: { stringValue: 'notification' }
       };
       const r = await fetch(base + '/households/' + encodeURIComponent(String(c.h)) + '/events?documentId=' + encodeURIComponent(docId), {
