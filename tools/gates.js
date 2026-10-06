@@ -23,6 +23,8 @@ const { spawn } = require('child_process');
 const net = require('net');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+const dl = require('./gate_downloads');
 
 const ROOT = path.join(__dirname, '..');
 const ARGS = process.argv.slice(2);
@@ -40,6 +42,9 @@ const TREE = [
   { name: 'hooks',          cmd: ['node', 'tools/hooks_check.js', '--self-test'] },
   { name: 'harness',        cmd: ['node', 'tools/harness_check.js', '--self-test'] },
   { name: 'deploy-excl',    cmd: ['node', 'tools/deploy_exclusion_check.js', '--self-test'] },
+  /* The guard that keeps gates out of ~/Downloads, and the helper that sends their files elsewhere. */
+  { name: 'downloads-guard', cmd: ['node', 'tools/gates.js', '--self-test-downloads'] },
+  { name: 'gate-downloads',  cmd: ['node', 'tools/gate_downloads.js', '--self-test', 'url'] },
   { name: 'preg-tick-race', cmd: ['node', 'test/preg-tick-race.test.js', 'url'] },
   { name: 'two-caregivers', cmd: ['node', 'test/two-caregiver-journey.test.js', 'url'] },
   { name: 'mkt-contrast',   cmd: ['node', 'tools/marketing_contrast_check.js', 'url'] },
@@ -206,6 +211,22 @@ function run(cmd, cwd) {
     p.on('error', (e) => res({ code: 127, out: String(e.message), ms: Date.now() - t0 }));
   });
 }
+/* Every gate runs through here, so every gate is watched. Headless Chrome saves an <a download> into
+   the real ~/Downloads, and by 2026-09-24 the suite had left 223 calendar files there, a pair a run.
+   A gate that adds an entry to the watched folder FAILS, whatever its own exit code, and the failure
+   names the files and the fix (tools/gate_downloads.js). `watch` is null where there is no ~/Downloads
+   (CI is Linux), and then nothing is checked. */
+async function runGate(name, cmd, cwd, watch) {
+  const before = dl.snapshot(watch);
+  const r = await run(cmd, cwd);
+  const left = dl.added(before, dl.snapshot(watch));
+  if (left.length) {
+    r.code = r.code || 1;
+    r.downloads = dl.guardMessage(name, left, watch);
+    r.out += '\n' + r.downloads + '\n';
+  }
+  return r;
+}
 // The one line worth keeping from a gate that passed, or the first real failure from one that did not.
 function gist(out, okRun) {
   const lines = out.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -217,7 +238,54 @@ function gist(out, okRun) {
   return (bad || lines[lines.length - 1] || 'no output').slice(0, 96);
 }
 
+/* node tools/gates.js --self-test-downloads. Real gates, run through the real runGate(), against a
+   temp folder standing in for ~/Downloads, so proving the guard never writes to the real one. */
+async function selfTestDownloads() {
+  let pass = 0, fail = 0;
+  const ok = (n, c, x) => { if (c) { pass++; console.log('  ok   ' + n); } else { fail++; console.log('  FAIL ' + n + (x !== undefined ? '\n         ' + String(x).slice(0, 400) : '')); } };
+  const fake = fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-downloads-guard-'));
+  const plant = (name) => ['node', '-e', 'require("fs").writeFileSync(' + JSON.stringify(path.join(fake, name)) + ', "BEGIN:VCALENDAR")'];
+  console.log('\ndownloads guard: a gate that saves into ~/Downloads fails, by name');
+
+  const a = await runGate('vax-calendar', plant('robin-vaccines (7).ics'), ROOT, fake);
+  ok('a gate that exits 0 but saves a file there FAILS', a.code !== 0, a.code);
+  ok('naming the file it left', /robin-vaccines \(7\)\.ics/.test(a.out), a.out);
+  ok('and the gate', /vax-calendar left 1 new entry/.test(a.out), a.out);
+  ok('pointing at the helper', /downloadBehavior from tools\/gate_downloads\.js/.test(a.out), a.out);
+  ok('and saying a download the human made trips it too', /A download you made yourself/.test(a.out), a.out);
+  ok('in a line the summary row shows', /^FAIL downloads guard/.test(a.downloads || ''), a.downloads);
+
+  const b = await runGate('quiet', ['node', '-e', '0'], ROOT, fake);
+  ok('a gate that saves nothing passes, although the folder already holds files', b.code === 0 && !b.downloads, b.out);
+  const c = await runGate('broken', ['node', '-e', 'process.exit(3)'], ROOT, fake);
+  ok('a gate that fails on its own keeps its own exit code', c.code === 3, c.code);
+  const d = await runGate('finder', plant('.DS_Store'), ROOT, fake);
+  ok('Finder\'s .DS_Store is not a download', d.code === 0, d.out);
+  if (process.platform === 'darwin') {
+    /* A real download carries the app that saved it, which is how the founder tells a gate's file
+       from one of their own. Stamp a planted file the way macOS stamps one, and read it back. */
+    const stamp = path.join(fake, 'LEARNINGS.md');
+    const q = await runGate('stamped', ['sh', '-c', 'printf x > "$0" && xattr -w com.apple.quarantine "0081;00000000;Claude;" "$0"', stamp], ROOT, fake);
+    ok('a stamped download says which app saved it', /LEARNINGS\.md \(saved by Claude\)/.test(q.out), q.out);
+    ok('an unstamped one claims no app', /robin-vaccines \(7\)\.ics(,|\n|$)/.test(a.out), a.out);
+  }
+
+  const noHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-no-downloads-'));
+  ok('a machine with no ~/Downloads has nothing to watch', dl.userDownloads(noHome) === null, dl.userDownloads(noHome));
+  const e = await runGate('ci', plant('anything.ics'), ROOT, dl.userDownloads(noHome));
+  ok('and there the guard skips instead of failing', e.code === 0, e.out);
+
+  /* runGate() is only worth something if the suite cannot run a gate around it. */
+  const src = fs.readFileSync(__filename, 'utf8');
+  ok('every gate the suite runs goes through runGate()', (src.match(/await run\(/g) || []).length === 1, (src.match(/await run\(/g) || []).length);
+
+  console.log('\n' + pass + ' passed, ' + fail + ' failed');
+  console.log('DOWNLOADS-GUARD: ' + (fail ? 'FAIL' : 'PASS') + '\n');
+  return fail ? 1 : 0;
+}
+
 (async () => {
+  if (ARGS.includes('--self-test-downloads')) process.exit(await selfTestDownloads());
   const port = await freePort();
   const base = 'http://127.0.0.1:' + port;
   console.log('\nCubby gates');
@@ -236,14 +304,19 @@ function gist(out, okRun) {
   if (NO_BROWSER) list = list.filter((g) => !g.cmd.includes('url'));
   if (ONLY) list = list.filter((g) => g.name.includes(ONLY));
 
+  const WATCH = dl.userDownloads();
+  console.log(WATCH
+    ? 'watching ' + WATCH + ': a gate that saves a file there fails, and so does one running while you download something.\n'
+    : '(no ~/Downloads on this machine, so the downloads guard has nothing to watch.)\n');
+
   const results = [];
   for (const g of list) {
     const cmd = g.cmd.map((a) => (a === 'url' ? base : a === 'liveurl' ? LIVE_URL : a));
     process.stdout.write('  ' + g.name.padEnd(18));
-    const r = await run(cmd);
+    const r = await runGate(g.name, cmd, ROOT, WATCH);
     const okRun = r.code === 0;
     results.push({ name: g.name, ok: okRun, live: g.name.includes('(live)'), ms: r.ms, out: r.out });
-    console.log((okRun ? 'ok  ' : 'FAIL') + '  ' + String((r.ms / 1000).toFixed(1) + 's').padStart(7) + '  ' + gist(r.out, okRun));
+    console.log((okRun ? 'ok  ' : 'FAIL') + '  ' + String((r.ms / 1000).toFixed(1) + 's').padStart(7) + '  ' + (r.downloads ? r.downloads.split('\n')[0] : gist(r.out, okRun)));
   }
 
   if (EMU) {
@@ -252,10 +325,10 @@ function gist(out, okRun) {
       process.stdout.write('  ' + g.name.padEnd(18));
       // A self-hosting suite starts its own emulator and web server; the rest run inside one.
       const r = g.self
-        ? await run(g.self)
-        : await run(['npx', 'firebase-tools', 'emulators:exec', '--only', 'firestore', '--project', 'demo-cubby', g.emu], path.join(ROOT, 'test'));
+        ? await runGate(g.name, g.self, ROOT, WATCH)
+        : await runGate(g.name, ['npx', 'firebase-tools', 'emulators:exec', '--only', 'firestore', '--project', 'demo-cubby', g.emu], path.join(ROOT, 'test'), WATCH);
       results.push({ name: g.name, ok: r.code === 0, ms: r.ms, out: r.out });
-      console.log((r.code === 0 ? 'ok  ' : 'FAIL') + '  ' + String((r.ms / 1000).toFixed(1) + 's').padStart(7) + '  ' + gist(r.out, r.code === 0));
+      console.log((r.code === 0 ? 'ok  ' : 'FAIL') + '  ' + String((r.ms / 1000).toFixed(1) + 's').padStart(7) + '  ' + (r.downloads ? r.downloads.split('\n')[0] : gist(r.out, r.code === 0)));
     }
   }
 

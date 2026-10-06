@@ -82,7 +82,11 @@ const EMPTY = { babies: [], activeBabyId: null, events: [], settings: { unit: 'm
   timers: {}, milestones: [], meds: [], photos: [], vaccines: {}, illnesses: [], pregnancy: null, notes: [] };
 
 (async () => {
-  const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });
+  /* This walk taps every entry point, the calendar exports included, and each one is a real
+     download. Redirected into a temp dir, not stubbed: those exports are flows like any other. Before
+     this it left a pregnancy-weeks and a vaccines .ics in ~/Downloads on every run. */
+  const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'],
+    downloadBehavior: require('./gate_downloads').downloadBehavior() });
   const page = await browser.newPage();
   const pageErrs = [];
   page.on('pageerror', (e) => pageErrs.push(e.message));

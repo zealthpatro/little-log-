@@ -26,6 +26,11 @@ catalogue behind it. Each rule below cost real time in Aug-Sep 2026 and each has
   rewrites blamed a correct product before one dump read the anchor back as "now".
 
 ## Enforcement is code too
+- A gate's Chrome saves every `<a download>` into the real Downloads folder unless it is launched with
+  `downloadBehavior` from `tools/gate_downloads.js`, and each `createBrowserContext()` needs it again.
+  223 calendar files piled up before `tools/gates.js` started failing any gate that adds to that folder.
+- A manual `npx wrangler deploy` uploads the FOLDER, gitignored keys included; only `.assetsignore`
+  fences them. `tools/deploy_exclusion_check.js` walks for key-shaped files and fails any it misses.
 - Hooks are tracked in `.githooks/` and `core.hooksPath` points there; `.git/hooks` is never read.
   `tools/hooks_check.js` asserts what git resolves. `tools/harness_check.js` asserts the same for
   `.claude/settings.json`, `.claude/hooks/` and this file.
