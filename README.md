@@ -264,6 +264,9 @@ git add -A && git commit -m "..." && git push
 ```bash
 npx wrangler deploy        # uses wrangler.toml (main = "worker.js" + [assets] directory="./")
 ```
+This uploads the FOLDER, not the git tree, so gitignored files (credentials/, art-src/ keys) go too
+unless `.assetsignore` names them. Run `node tools/deploy_exclusion_check.js` first: it fails on any
+key-shaped file `.assetsignore` does not cover.
 
 ### Required when the live domain changes
 Add the domain under **Firebase Console → Authentication → Settings → Authorized domains**

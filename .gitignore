@@ -38,3 +38,6 @@ credentials/
 
 # Question-gap analysis embedding cache (tools/rag/question_gaps.js) — local, cheap to rebuild
 tools/rag/.embedding-cache.json
+
+# Local-only scratch (test downloads, samples). Never committed; .assetsignore keeps it off the site too.
+_local/

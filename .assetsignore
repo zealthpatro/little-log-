@@ -21,3 +21,8 @@ firebase.json
 ios
 android
 .telemetry
+# Gitignored, so only a manual `npx wrangler deploy` of the folder could ship these. It reads this file, not .gitignore.
+credentials
+art-src
+native-build
+_local
