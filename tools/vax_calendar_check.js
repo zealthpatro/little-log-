@@ -1,5 +1,7 @@
 /* Vaccine dates must reach the parent's own calendar, one entry per VISIT, honestly labelled. */
-const p=require('/Users/m1promax/Downloads/little-log-pwa/tools/node_modules/puppeteer-core');
+// Relative to this file, never an absolute path into one checkout: the weekly job runs from a copy
+// outside ~/Downloads, where macOS denies a background job any read of that folder.
+const p=require(require('path').join(__dirname,'node_modules','puppeteer-core'));
 const C='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const s=ms=>new Promise(r=>setTimeout(r,ms));
 // Base URL first: a hardcoded port grades whatever server happens to be listening, which in a
