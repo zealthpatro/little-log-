@@ -983,10 +983,10 @@
       get: 'It is always yours to do and never needs anyone else to agree. The shared log stays with the circle, with your name taken off it.'
     },
     openPro: { label: 'Cubby Pro', fn: 'openPro()', domain: 'account', depth: 'chapter',
-      one: 'What Pro adds. Registration only until October 2026, and the copy has to say so.',
+      one: 'What Pro adds. You can register now, and it opens in January 2027.',
       who: { stage: null },
       what: 'What Pro adds, and how to register your interest in it.',
-      get: 'You can register now. Nothing is charged, and Pro does not go on sale until later this year.'
+      get: 'You can register now. Nothing is charged, and Pro does not go on sale until January 2027.'
     },
     openProPortal: { label: 'Manage Pro', fn: 'openProPortal()', domain: 'account', depth: 'one',
       one: 'Your subscription, when there is one to manage.',

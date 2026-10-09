@@ -12,7 +12,7 @@ name: Teaching layer guard
 #
 #   voice     no em-dashes, no guilt, sentence case, length caps. Mechanical, so quality cannot
 #             sag at entry ninety. Also asserts the two promises the copy must never break:
-#             Pro never reads as buyable before October 2026, and mood stays owner-only.
+#             Pro never reads as buyable before January 2027, and mood stays owner-only.
 #
 #   ledger    simulated against a fixed clock. Nothing fires under lossHolding; two cues cannot
 #             fire in one session; a keepsake can never outrank a fever.

@@ -9,7 +9,7 @@
    auto-scrolling reminder of what they came for, and the buttons in the first fold.
    The wrapper also can't show the marketing page safely: it has no back button, so the nav/footer links
    would strand the user off /app/; an installed app must not sell itself an install; and App Review 3.1.1
-   forbids pointing at a subscription bought outside Apple's IAP (Pro is register-interest until Oct 2026).
+   forbids pointing at a subscription bought outside Apple's IAP (Pro is register-interest until Jan 2027).
    Email sign-in is hidden natively too (store-firebase.js) because its link opens in Safari. */
 (function () {
   function isNative() {
@@ -328,7 +328,7 @@
       + '<li>Photos, memory cards &amp; milestones</li>'
       + '<li>Private, and no ads</li>'
       + '</ul></div>'
-      + '<div class="lp-col lp-col-pro"><div class="lp-col-h">Pro <span class="lp-soon">Oct 2026</span></div><ul>'
+      + '<div class="lp-col lp-col-pro"><div class="lp-col-h">Pro <span class="lp-soon">Jan 2027</span></div><ul>'
       + '<li>The full keepsake studio: every template, font &amp; format</li>'
       + '<li>Watermark-free shares</li>'
       + '<li>Auto-enhance &amp; background cutout, on your device</li>'
@@ -337,7 +337,7 @@
       + '<li>A few free tastes of every treat</li>'
       + '</ul></div>'
       + '</div>'
-      + '<p class="lp-pro-note">Cubby Pro launches October 2026. Free shares carry a small "made with Cubby · little-cubby.com" mark; Pro shares are clean. Rituals, push reminders &amp; insights are on the Pro roadmap for later. Sign in, then register for Pro from Settings, Cubby Pro, to claim your free trial at launch.</p></section>')
+      + '<p class="lp-pro-note">Cubby Pro launches January 2027. Free shares carry a small "made with Cubby · little-cubby.com" mark; Pro shares are clean. Rituals, push reminders &amp; insights are on the Pro roadmap for later. Sign in, then register for Pro from Settings, Cubby Pro, to claim your free trial at launch.</p></section>')
       + '<section class="lp-final"><h2>Everyone caring for your baby, in sync.</h2>' + cta + '<div class="lp-trust">Free · Private · made with 🐻</div>'
       /* Not on iOS, until sign-in survives the home screen. On iOS an installed PWA gets its OWN
          storage container and the OAuth handler is cross-origin, so sign-in completes in Safari and

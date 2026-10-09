@@ -207,7 +207,7 @@ rowIds.forEach(id => {
   check(true, 'alternates checked (' + akas.length + ')');
 })();
 
-// Pro must never read as buyable before October 2026.
+// Pro must never read as buyable before January 2027.
 const proRow = ROWS.openPro;
 check(!!proRow && !/\bbuy\b|\bsubscribe\b|\bpurchase\b/i.test(proRow.one),
   'Pro copy does not imply it is buyable', proRow && proRow.one);

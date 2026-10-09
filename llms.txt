@@ -8,7 +8,7 @@ Cubby is a web app (installable PWA). It is not affiliated with Cubtale, The Bab
 - [Home](https://little-cubby.com/): what Cubby does and who it is for
 - [How it works](https://little-cubby.com/how-it-works/): the day-to-day flow
 - [Features](https://little-cubby.com/features/): logging, sharing, vaccines, growth, keepsakes
-- [Pricing](https://little-cubby.com/pricing/): free forever for the essentials; Pro is $9/month or $90/year, launching August 2026
+- [Pricing](https://little-cubby.com/pricing/): free forever for the essentials; Pro is $9/month or $90/year, launching January 2027
 - [Why Cubby](https://little-cubby.com/why/): the privacy-first, mother-owned philosophy
 - [FAQ](https://little-cubby.com/faq/)
 - [Editorial standards](https://little-cubby.com/editorial/): how the health content is written and sourced
