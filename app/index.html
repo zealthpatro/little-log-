@@ -2792,7 +2792,9 @@ function _renderView(){
   if(view==='home') initHero(); else if(heroTimer){ clearInterval(heroTimer); heroTimer=null; }
 }
 
-function escapeHtml(s){ return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// Total: a truthy non-string (a dose typed as a number, a unit saved by an older build) is escaped
+// rather than throwing on .replace. Every falsy value still comes back as '', exactly as before.
+function escapeHtml(s){ return (s?String(s):'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 /* ---------- HOME ---------- */
 function lastOf(type){ return babyEvents().find(e=>e.type===type); }
@@ -3732,7 +3734,7 @@ function renderHome(){
        Summary, because neither is the obvious one at 3am. */
     alerts += `<div class="alert-pill ap-stack" style="border-color:var(--med)">
       <div class="ap-ico" style="background:var(--med-soft);color:var(--med)">${I.stetho}</div>
-      <div class="ap-body"><div class="ap-t">Fever logged</div><div class="ap-s">${fev.temp}°${fev.unit||'C'} · ${fmtSince(fev.time)}</div></div>
+      <div class="ap-body"><div class="ap-t">Fever logged</div><div class="ap-s">${escapeHtml(String(fev.temp))}°${escapeHtml(fev.unit||'C')} · ${fmtSince(fev.time)}</div></div>
       <div class="ap-acts"><button onclick="openFeverSafetyNet()">When to call</button>
       <button onclick="openVisitSummary()">Summary</button></div></div>`;
   }
@@ -6185,9 +6187,9 @@ function openEdit(id){
   logTimes.edit=e.time;
   if(e.type==='sleep') logTimes.editEnd=e.end||e.time;
   let extra='';
-  if(e.type==='feed'&&e.method==='bottle') extra=`<div class="field"><label>Amount (${e.unit||'ml'})</label><input type="number" id="eAmt" value="${e.amount||0}"${canEd?'':' disabled'}></div>`;
+  if(e.type==='feed'&&e.method==='bottle') extra=`<div class="field"><label>Amount (${escapeHtml(e.unit||'ml')})</label><input type="number" id="eAmt" value="${e.amount||0}"${canEd?'':' disabled'}></div>`;
   if(e.type==='feed'&&e.method==='breast') extra=`<div class="field"><label>How long (minutes)</label><input type="number" id="eDur" value="${Math.round((e.dur||0)/60000)}"${canEd?'':' disabled'}></div>`;
-  if(e.type==='feed'&&e.method==='water') extra=`<div class="field"><label>Amount (${e.unit||'ml'})</label><input type="number" id="eAmt" value="${e.amount||0}"${canEd?'':' disabled'}></div>`;
+  if(e.type==='feed'&&e.method==='water') extra=`<div class="field"><label>Amount (${escapeHtml(e.unit||'ml')})</label><input type="number" id="eAmt" value="${e.amount||0}"${canEd?'':' disabled'}></div>`;
   if(e.type==='feed'&&e.method==='solids') extra=`<div class="field"><label>Food</label><textarea id="eNote"${canEd?'':' disabled'}>${escapeHtml(e.notes||'')}</textarea></div>`
     +(e.amount!==undefined?`<div class="field"><label>Amount (${escapeHtml(e.unit||'tbsp')})</label><input type="number" id="eAmt" value="${e.amount||0}"${canEd?'':' disabled'}></div>`:'');
   /* The note is offered here too, and shown even to someone who cannot edit this entry: what her
@@ -6219,11 +6221,11 @@ function openEdit(id){
       </div>
       <div class="csub" style="margin-top:6px">Leave it blank if it was a straight through. This keeps the sleep totals honest, and it is one of the first things a doctor asks.</div></div>`;
   }
-  if(e.type==='pump') extra=`<div class="field"><label>Amount (${e.unit||'ml'})</label><input type="number" id="eAmt" value="${e.amount||0}"${canEd?'':' disabled'}></div>`;
+  if(e.type==='pump') extra=`<div class="field"><label>Amount (${escapeHtml(e.unit||'ml')})</label><input type="number" id="eAmt" value="${e.amount||0}"${canEd?'':' disabled'}></div>`;
   /* Temperature and medicine rows are tappable on the illness card now, and a sheet that offers
      only "when" and "delete" on a mistyped 3.78° leaves the wrong number sitting on the doctor
      page with nowhere to correct it. The tap has to deliver the edit it promises. */
-  if(e.type==='temperature') extra=`<div class="field"><label>Reading (°${escapeHtml(e.unit||'C')})</label><input type="number" step="0.1" inputmode="decimal" id="eTemp" value="${e.temp}"${canEd?'':' disabled'}></div>`;
+  if(e.type==='temperature') extra=`<div class="field"><label>Reading (°${escapeHtml(e.unit||'C')})</label><input type="number" step="0.1" inputmode="decimal" id="eTemp" value="${escapeHtml(String(e.temp))}"${canEd?'':' disabled'}></div>`;
   /* A dose is words, not a number, and the field has to be the same one it was typed into: mDose
      (:9190) has no type, saveMed stores the trimmed string, and the unit list offers tablet, drops
      and tsp. A number box throws away "half tablet", "1/2", "0.5-1" and the comma decimal much of
@@ -14097,10 +14099,10 @@ function openDenWeights(){
     const delta=prev?(last.kg-prev.kg):null;
     const dtxt=delta==null?'first entry':(Math.abs(delta)<0.05?'steady':(delta>0?'+':'')+(Math.round(delta*10)/10)+' '+(last.unit||unit)+' since last');
     return `<div class="log-list-item"><div class="lli-ico" style="background:var(--pump-soft)">⚖️</div>
-      <div class="lli-body"><div class="lli-t">${escapeHtml(n)} · ${last.kg} ${last.unit||unit}</div><div class="lli-s">${dtxt} · ${dayLabel(last.at)}</div></div></div>`; }).join('');
+      <div class="lli-body"><div class="lli-t">${escapeHtml(n)} · ${escapeHtml(String(last.kg))} ${escapeHtml(last.unit||unit)}</div><div class="lli-s">${dtxt} · ${dayLabel(last.at)}</div></div></div>`; }).join('');
   const recent=d.weights.slice().sort((a,b)=>b.at-a.at).slice(0,8).map(w=>`<div class="log-list-item">
       <div class="lli-ico" style="background:var(--pump-soft)">⚖️</div>
-      <div class="lli-body"><div class="lli-t">${escapeHtml(w.who)} · ${w.kg} ${w.unit||unit}</div><div class="lli-s">${dayLabel(w.at)} ${fmtClock(w.at)}</div></div>
+      <div class="lli-body"><div class="lli-t">${escapeHtml(w.who)} · ${escapeHtml(String(w.kg))} ${escapeHtml(w.unit||unit)}</div><div class="lli-s">${dayLabel(w.at)} ${fmtClock(w.at)}</div></div>
       <button class="lli-x" onclick="deleteDenWeight('${w.id}')">${I.trash}</button></div>`).join('');
   openSheet(`<h2>Weights</h2><div class="sub">A gentle trend for the grown-ups, only if it's useful to you. No targets, no judgement.</div>
     ${summary?`<div class="sec-title" style="margin-top:2px">Latest</div>${summary}`:''}
@@ -14318,7 +14320,7 @@ function renderHomeMeds(){
     else sub=`Next ${fmtClock(due)} · <span data-due="${due}">${fmtDue(due-now())}</span>`;
     return `<div class="med-card">
       <div class="mc-ico">${I.pill}</div>
-      <div class="mc-body" onclick="openMedManage('${m.id}')"><div class="a">${escapeHtml(m.name)}</div><div class="b">${m.dose} ${m.unit} · ${sub}</div>${lastDoseLine(m)?`<div class="b">${lastDoseLine(m)}</div>`:''}</div>
+      <div class="mc-body" onclick="openMedManage('${m.id}')"><div class="a">${escapeHtml(m.name)}</div><div class="b">${escapeHtml(String(m.dose))} ${escapeHtml(String(m.unit))} · ${sub}</div>${lastDoseLine(m)?`<div class="b">${lastDoseLine(m)}</div>`:''}</div>
       <button class="dose-btn" onclick="logDose('${m.id}')">Dose</button>
     </div>`;
   }).join('');
@@ -14849,9 +14851,9 @@ function renderIllness(){
         (temps.some(e=>isFever(e.temp,e.unit)) || syms.some(s=>/fever/i.test(s.symptom||'')))
         ? `<button class="btn-ghost" onclick="openFeverSafetyNet()" style="margin-top:10px">What would make you call sooner</button>` : ''}
       ${pts.length?`<div class="stat-card" style="margin-top:14px"><h3>Temperature</h3><div class="csub">${pts.length} reading${pts.length>1?'s':''} · °${tu} · fever ≥ ${tu==='F'?'100.4':'38'}°</div>${svgLine(pts,'med','°'+tu)}</div>`:''}
-      ${temps.length?`<div class="sec-title">Recent readings</div>${temps.slice().reverse().slice(0,6).map(e=>`<div class="tl-item" onclick="openEdit('${e.id}')"><div class="tl-ico" style="background:var(--med-soft);color:var(--med)">${I.thermo}</div><div class="tl-body"><div class="t1">${e.temp}°${e.unit||tu}</div><div class="t2">${new Date(e.time).toLocaleDateString(undefined,{month:'short',day:'numeric'})} ${fmtClock(e.time)}</div></div></div>`).join('')}`:''}
-      ${syms.length?`<div class="sec-title">Recent symptoms</div>${syms.map(s=>`<div class="tl-item" onclick="openEdit('${s.id}')"><div class="tl-ico" style="background:var(--pump-soft);color:var(--pump)">${I.pulse}</div><div class="tl-body"><div class="t1">${escapeHtml(s.symptom)}</div><div class="t2">${(s.symptom===JAUNDICE_SYMPTOM&&s.severity)?extentPhrase(s.severity):(s.severity||'')} · ${fmtClock(s.time)}</div></div></div>`).join('')}`:''}
-      ${doses.length?`<div class="sec-title">Medicine given this illness</div>${doses.slice(0,6).map(d=>`<div class="tl-item" onclick="openEdit('${d.id}')"><div class="tl-ico" style="background:var(--med-soft);color:var(--med)">${I.pill}</div><div class="tl-body"><div class="t1">${escapeHtml(d.medName||'Medicine')}</div><div class="t2">${d.dose||''} ${d.unit||''} · ${new Date(d.time).toLocaleDateString(undefined,{month:'short',day:'numeric'})} ${fmtClock(d.time)}</div></div></div>`).join('')}`:''}
+      ${temps.length?`<div class="sec-title">Recent readings</div>${temps.slice().reverse().slice(0,6).map(e=>`<div class="tl-item" onclick="openEdit('${e.id}')"><div class="tl-ico" style="background:var(--med-soft);color:var(--med)">${I.thermo}</div><div class="tl-body"><div class="t1">${escapeHtml(String(e.temp))}°${escapeHtml(e.unit||tu)}</div><div class="t2">${new Date(e.time).toLocaleDateString(undefined,{month:'short',day:'numeric'})} ${fmtClock(e.time)}</div></div></div>`).join('')}`:''}
+      ${syms.length?`<div class="sec-title">Recent symptoms</div>${syms.map(s=>`<div class="tl-item" onclick="openEdit('${s.id}')"><div class="tl-ico" style="background:var(--pump-soft);color:var(--pump)">${I.pulse}</div><div class="tl-body"><div class="t1">${escapeHtml(s.symptom)}</div><div class="t2">${escapeHtml((s.symptom===JAUNDICE_SYMPTOM&&s.severity)?extentPhrase(s.severity):(s.severity||''))} · ${fmtClock(s.time)}</div></div></div>`).join('')}`:''}
+      ${doses.length?`<div class="sec-title">Medicine given this illness</div>${doses.slice(0,6).map(d=>`<div class="tl-item" onclick="openEdit('${d.id}')"><div class="tl-ico" style="background:var(--med-soft);color:var(--med)">${I.pill}</div><div class="tl-body"><div class="t1">${escapeHtml(d.medName||'Medicine')}</div><div class="t2">${escapeHtml(String(d.dose||''))} ${escapeHtml(String(d.unit||''))} · ${new Date(d.time).toLocaleDateString(undefined,{month:'short',day:'numeric'})} ${fmtClock(d.time)}</div></div></div>`).join('')}`:''}
       <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent));margin-top:16px" onclick="endIllness('${ill.id}')">${I.check} Mark recovered</button>`;
   } else {
     head=`<div class="stat-card" style="text-align:center"><h3>Everyone's well 🌿</h3><div class="csub" style="margin-bottom:14px">When they're under the weather, log it here to keep track of temperature, symptoms and the medicine you give.</div>
@@ -15040,7 +15042,7 @@ function renderTempSheet(){
   openSheet(`<h2>Temperature</h2><div class="sub">Fever is ≥ 38°C (100.4°F).</div>
     <div class="field"><label>Reading</label>
       <div style="display:flex;gap:10px">
-        <input type="number" step="0.1" id="tVal" value="${d.temp}" placeholder="${d.unit==='C'?'37.5':'99.5'}" oninput="tempDraft.temp=this.value" style="flex:1;border:2px solid var(--line);background:var(--surface-2);border-radius:14px;padding:13px 15px;font-weight:700;font-size:16px;font-family:var(--font-body);color:var(--ink)">
+        <input type="number" step="0.1" id="tVal" value="${escapeHtml(String(d.temp))}" placeholder="${d.unit==='C'?'37.5':'99.5'}" oninput="tempDraft.temp=this.value" style="flex:1;border:2px solid var(--line);background:var(--surface-2);border-radius:14px;padding:13px 15px;font-weight:700;font-size:16px;font-family:var(--font-body);color:var(--ink)">
         <div class="unit-toggle" style="width:120px">
           <button class="${d.unit==='C'?'on':''}" onclick="tempDraft.unit='C';renderTempSheet()">°C</button>
           <button class="${d.unit==='F'?'on':''}" onclick="tempDraft.unit='F';renderTempSheet()">°F</button>
