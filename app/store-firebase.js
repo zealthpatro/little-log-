@@ -161,6 +161,7 @@
   var pregBytesMigrating = false;   // one in-flight migration pass at a time
   window.LL.memberEmails = {};      // PRIV-2: owner-only mirror of /memberEmails (uid -> email)
   var memberEmailsUnsub = null;     // owner-only listener on /memberEmails
+  var configUnsub = null;           // the one read-only remote config document, config/app
   var avatarClaimT = null;          // debounce: write down which bear is ours once the roster settles
   var memberEmailsMigrated = false; // one owner migration attempt per session
   var ownEmailWritten = false;      // wrote my own memberEmails doc this session
@@ -863,6 +864,8 @@
     ownPregPhotoIds = {}; otherPregPhotoIds = {};
     PhotoStore.privIds = {}; PhotoStore.map = {}; // one account's photo bytes never survive into the next session
     if (memberEmailsUnsub) { try { memberEmailsUnsub(); } catch (e) {} memberEmailsUnsub = null; }
+    // Config is the same for everyone, so its last value stays applied; only the listener goes.
+    if (configUnsub) { try { configUnsub(); } catch (e) {} configUnsub = null; }
     if (avatarClaimT) { clearTimeout(avatarClaimT); avatarClaimT = null; } // never claim a bear into the account being left
     window.LL.memberEmails = {}; memberEmailsMigrated = false; ownEmailWritten = false;
     hhRef = eventsRef = photosRef = notesRef = null;
@@ -880,6 +883,22 @@
     knownPregArchive = null; pregArchiveLoaded = false; pregArchiveStamp = 0; pregArchCacheSig = null;
     state.handoff = null;
     handoffMigrated = false;
+  }
+
+  /* ---------- remote config (config/app) ----------
+     Read-only for every client (firestore.rules); written only by an operator with the admin key.
+     Kept out of the boot path on purpose: it is never part of maybeBoot's condition, never writes,
+     and never touches state, so a slow, denied or missing document can only ever leave the app on the
+     defaults compiled into index.html. A denied read is the normal case until the rules that allow it
+     are deployed (they ship separately from a push). */
+  function ensureConfigListener() {
+    if (configUnsub || !db || typeof window.cubbyApplyConfig !== 'function') return;
+    try {
+      configUnsub = db.collection('config').doc('app').onSnapshot(function (doc) {
+        window.cubbyApplyConfig(doc.exists ? doc.data() : null);
+        if (booted) rerender();
+      }, function (e) { /* denied, offline or missing: the defaults stand */ });
+    } catch (e) { configUnsub = null; }
   }
 
   /* ---------- per-device prefs ---------- */
@@ -3456,6 +3475,7 @@
     try { localStorage.setItem('cubby-member', '1'); } catch (e) {}
     try {
       showStatus('Setting things up…');
+      ensureConfigListener(); // runs beside the household read, never in front of it
       var hid = await resolveHousehold(user);
       // null means resolveHousehold deliberately declined to place this user: they followed an
       // invite link but no invite matches the address they signed in with, and showInviteMismatch()

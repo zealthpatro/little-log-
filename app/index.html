@@ -1926,11 +1926,85 @@ const ROLLOUT = {
   // 'journeyBook': 'native',   ← example: app-only until you're happy, then flip to 'all'
 };
 function rolloutOn(key){
-  const stage = ROLLOUT[key];
+  const stage = (key in CFG.rollout) ? CFG.rollout[key] : ROLLOUT[key];
   if(stage === undefined) return true;           // not gated = fully shipped
   if(stage === 'off') return false;
   if(stage === 'native') return isNativeApp();
   return stage === 'all';
+}
+
+/* ---------- Remote config -------------------------------------------------------------------------
+   ONE read-only Firestore document, config/app, so the founder can change a handful of words,
+   switches and orderings without a deploy (a push runs a 45-minute suite on a main that several
+   sessions share). Layer 1 of docs/plans/2026-10-09-ADR-001-sdui.md (accepted 12 Oct).
+
+   What it can change, and nothing else:
+     pro.launch, pro.priceLine        the launch month and the price line the Pro sheet prints
+     pro.checkoutUrl, pro.portalUrl   flip the sheet from register to sell (https, known hosts only)
+     pro.taste.<treat>                how many free tastes each Pro treat gives (0 to 20)
+     rollout.<key>                    'native' | 'all' | 'off', overriding ROLLOUT above
+     home.hide                        home widgets to leave out (a locked widget cannot be hidden)
+     home.order.<anchor>              display order inside one home anchor
+
+   Config chooses, orders and words. It never carries markup or code: every string must match a
+   plain-text pattern, every widget id must be in HOME_WIDGETS, every URL must be https on a known
+   host, and anything that fails is dropped in favour of the value compiled into this file. So no
+   document, a denied read (the rules deploy separately), offline with nothing cached, and a broken
+   document all render exactly what this file says. FEATURES.den stays out on purpose: Den is
+   parked, and teach-data.js hard-codes it as off. */
+const CONFIG_KEY = 'cubby-config-v1';
+const CONFIG_TEXT = /^[^<>"'`\\&\u0000-\u001f]{1,160}$/;
+const CONFIG_URL = /^https:\/\/([a-z0-9-]+\.)*(little-cubby\.com|workers\.dev|lemonsqueezy\.com)(\/[A-Za-z0-9._~\/-]*)?$/;
+/* Every home widget config may refer to, by anchor, in default order. [id, locked]. A locked widget
+   can be reordered inside its anchor but never hidden: due doses, fever, illness, vaccines, visits,
+   pregnancy dates after the journey ended, and the consent banners. 'alerts' is itself one slot of
+   'feed', so the alert pills move as a group unless their own anchor is reordered. */
+const HOME_WIDGETS = {
+  top:    [['coach',0],['consent',1]],
+  feed:   [['away',0],['hero',0],['tips',0],['get-started',0],['guide',0],['teach',0],['nudge',0],['alerts',1],['ask',0],['good-read',0]],
+  alerts: [['dose',1],['vaccine',1],['illness',1],['fever',1],['visit',1],['month',0],['poster',0],['child',0],['preg-weeks',1],['install',0]]
+};
+function cubbyConfigClean(raw){
+  const out={ pro:{ taste:{} }, rollout:{}, home:{ hide:[], order:{} } };
+  if(!raw || typeof raw!=='object') return out;
+  const obj=v=>v && typeof v==='object' && !Array.isArray(v);
+  const pro=obj(raw.pro)?raw.pro:{};
+  ['launch','priceLine'].forEach(k=>{ if(typeof pro[k]==='string' && CONFIG_TEXT.test(pro[k])) out.pro[k]=pro[k]; });
+  ['checkoutUrl','portalUrl'].forEach(k=>{ if(pro[k]==='' || (typeof pro[k]==='string' && CONFIG_URL.test(pro[k]))) out.pro[k]=pro[k]; });
+  if(obj(pro.taste)) Object.keys(PRO_TASTE).forEach(k=>{
+    const n=pro.taste[k]; if(Number.isInteger(n) && n>=0 && n<=20) out.pro.taste[k]=n; });
+  if(obj(raw.rollout)) Object.keys(raw.rollout).slice(0,50).forEach(k=>{
+    if(/^[A-Za-z0-9_]{1,40}$/.test(k) && ['native','all','off'].indexOf(raw.rollout[k])>=0) out.rollout[k]=raw.rollout[k]; });
+  const home=obj(raw.home)?raw.home:{};
+  const locked={}, anchorOf={};
+  Object.keys(HOME_WIDGETS).forEach(a=>HOME_WIDGETS[a].forEach(([id,l])=>{ anchorOf[id]=a; if(l) locked[id]=1; }));
+  if(Array.isArray(home.hide)) home.hide.forEach(id=>{
+    if(typeof id==='string' && anchorOf[id] && !locked[id] && out.home.hide.indexOf(id)<0) out.home.hide.push(id); });
+  if(obj(home.order)) Object.keys(HOME_WIDGETS).forEach(a=>{
+    const list=home.order[a]; if(!Array.isArray(list)) return;
+    const seen=[]; list.forEach(id=>{ if(anchorOf[id]===a && seen.indexOf(id)<0) seen.push(id); });
+    if(seen.length) out.home.order[a]=seen; });
+  return out;
+}
+let CFG = cubbyConfigClean(null);
+/* raw is the document as stored; it is re-validated on every load because this file may have
+   tightened since it was cached. fromCache: the boot-time read of the last good copy, which must not
+   write itself back. */
+function cubbyApplyConfig(raw, fromCache){
+  CFG = cubbyConfigClean(raw);
+  if(!fromCache){ try{ if(raw) localStorage.setItem(CONFIG_KEY, JSON.stringify(raw)); else localStorage.removeItem(CONFIG_KEY); }catch(e){} }
+  return CFG;
+}
+window.cubbyApplyConfig = cubbyApplyConfig;
+function proLaunch(){ return ('launch' in CFG.pro) ? CFG.pro.launch : PRO_LAUNCH; }
+function proCfg(k){ return (k in CFG.pro) ? CFG.pro[k] : PRO_CFG[k]; }
+function proTasteMax(k){ return (k in CFG.pro.taste) ? CFG.pro.taste[k] : (PRO_TASTE[k]||0); }
+function homeHidden(id){ return CFG.home.hide.indexOf(id)>=0; }
+/* An anchor's ids in display order: the configured ones first, in the configured order, then every
+   other id in its default order, so a short list can never drop a widget. */
+function homeOrder(anchor){
+  const ids=HOME_WIDGETS[anchor].map(w=>w[0]); const first=CFG.home.order[anchor]||[];
+  return first.concat(ids.filter(id=>first.indexOf(id)<0));
 }
 
 const AVATAR_COLORS = ['#E29A3B','#5E6AA8','#56A08E','#C97FA0','#D2654E','#7B9E5B'];
@@ -3671,14 +3745,24 @@ function deleteNote(id){
     x0=y0=null;
   },{passive:true});
 })();
+/* ---- Home anchors ----
+   Home is a fixed frame (greeting, timers, the three answers, quick log, today strip) with three
+   named anchors whose widgets remote config may hide or reorder: 'top', 'feed' and 'alerts' (see
+   HOME_WIDGETS beside the config). Two rules make that safe.
+   1. A hidden widget is skipped BEFORE its producer runs, never filtered after. Several producers
+      spend something as they render: renderGetStarted latches a seen flag, coach marks and the
+      install pill spend the session's one teaching mark. A widget nobody sees must spend nothing.
+   2. Every producer is still called in the order this function always called them, whatever
+      order config DISPLAYS them in. Display order is assembled afterwards from finished strings.
+   With no config the output is byte-identical to the hand-ordered version this replaced. */
 function renderHome(){
   const evs = babyEvents();
-  const gsCard = renderGetStarted();
+  const gsCard = homeHidden('get-started') ? '' : renderGetStarted();
   /* Computed once, because the earned cue below has to know whether it is up. Orientation outranks
      a specific tip: somebody who has never been told what any of the logs are for should get that
      before they get "your doses could go in your calendar". They never stack. */
-  const guideCard = (window.CubbyGuide&&CubbyGuide.homeCard)?CubbyGuide.homeCard(!!gsCard):'';
-  const away = awayRecap();
+  const guideCard = (!homeHidden('guide')&&window.CubbyGuide&&CubbyGuide.homeCard)?CubbyGuide.homeCard(!!gsCard):'';
+  const away = homeHidden('away') ? '' : awayRecap();
   const lastFeed = evs.find(e=>e.type==='feed');
   const lastSleep = evs.find(e=>e.type==='sleep' && e.end);
   const lastDiaper = evs.find(e=>e.type==='diaper');
@@ -3689,8 +3773,9 @@ function renderHome(){
   let timers=timerBanners(true);
   const ts = timersFor(state.activeBabyId).sleep; // for the quick-log tile state below
 
-  // compact, contextual alerts (only appear when relevant)
-  let alerts='';
+  // compact, contextual alerts (only appear when relevant). One slot per widget in the 'alerts'
+  // anchor; homeOrder('alerts') puts them back together below.
+  const al={dose:'',vaccine:'',illness:'',fever:'',visit:'',month:'',poster:'',child:'','preg-weeks':'',install:''};
   alertMeds().forEach(x=>{
     const m=x.m, due=medNextDue(m);
     // Three honest ways out, in the order a parent actually wants them: give it, give it shortly,
@@ -3700,7 +3785,7 @@ function renderHome(){
       // Names the child only when it is NOT the one on screen. For a single baby this line is
       // byte-identical to before; for twins it is the difference between a dose and the wrong dose.
       const who = x.other ? escapeHtml(x.baby.name)+' · ' : '';
-      alerts += `<div class="alert-pill ap-stack" style="border-color:var(--med)">
+      al.dose += `<div class="alert-pill ap-stack" style="border-color:var(--med)">
         <div class="ap-ico" style="background:var(--med-soft);color:var(--med)">${I.pill}</div>
         <div class="ap-body"><div class="ap-t">${escapeHtml(m.name)} ${now()-due>60000?'overdue':'due'}</div><div class="ap-s">${who}${escapeHtml(String(m.dose==null?'':m.dose))} ${escapeHtml(String(m.unit||''))} · <span data-due="${due}">${fmtDue(due-now())}</span></div></div>
         <div class="ap-acts"><button onclick="logDose('${m.id}')">Log</button>
@@ -3710,7 +3795,7 @@ function renderHome(){
   });
   const odv=vaccineOverdue();
   if(odv){
-    alerts += `<div class="alert-pill" style="border-color:var(--sleep)">
+    al.vaccine += `<div class="alert-pill" style="border-color:var(--sleep)">
       <div class="ap-ico" style="background:var(--sleep-soft);color:var(--sleep)">${I.syringe}</div>
       <div class="ap-body"><div class="ap-t">Vaccine overdue</div><div class="ap-s">${escapeHtml(odv.name)} · due ${fmtSince(odv._due)}</div></div>
       <button onclick="go('health');healthTab='vaccines';render()">Open</button></div>`;
@@ -3719,7 +3804,7 @@ function renderHome(){
   if(ill){
     const lt=lastTemp(ill.id);
     const days=illnessDays(ill);
-    alerts += `<div class="alert-pill" style="border-color:var(--pump)">
+    al.illness += `<div class="alert-pill" style="border-color:var(--pump)">
       <div class="ap-ico" style="background:var(--pump-soft);color:var(--pump)">${illnessIcon(ill.name)}</div>
       <div class="ap-body"><div class="ap-t">${escapeHtml(ill.name)} · day ${days}</div><div class="ap-s">${lt?('last temp '+lt.temp+'°'+(lt.unit||'C')+(isFever(lt.temp,lt.unit)?' · fever':'')):'tap to manage'}</div></div>
       <button onclick="openTemp()">Temp</button></div>`;
@@ -3732,7 +3817,7 @@ function renderHome(){
        consequence sheet: it fires inside saveTemp, in the logger's browser, and is gone on Got it.
        So "when do I call?" was answerable only by logging a fever of your own. Same rung as
        Summary, because neither is the obvious one at 3am. */
-    alerts += `<div class="alert-pill ap-stack" style="border-color:var(--med)">
+    al.fever += `<div class="alert-pill ap-stack" style="border-color:var(--med)">
       <div class="ap-ico" style="background:var(--med-soft);color:var(--med)">${I.stetho}</div>
       <div class="ap-body"><div class="ap-t">Fever logged</div><div class="ap-s">${escapeHtml(String(fev.temp))}°${escapeHtml(fev.unit||'C')} · ${fmtSince(fev.time)}</div></div>
       <div class="ap-acts"><button onclick="openFeverSafetyNet()">When to call</button>
@@ -3740,14 +3825,14 @@ function renderHome(){
   }
   const uv=upcomingVisit();
   if(uv){
-    alerts += `<div class="alert-pill" style="border-color:var(--sleep)">
+    al.visit += `<div class="alert-pill" style="border-color:var(--sleep)">
       <div class="ap-ico" style="background:var(--sleep-soft);color:var(--sleep)">${I.stetho}</div>
       <div class="ap-body"><div class="ap-t">Appointment soon</div><div class="ap-s">${escapeHtml(uv.name)} · ${new Date(uv.t).toLocaleDateString(undefined,{month:'short',day:'numeric'})}</div></div>
       <button onclick="openVisitSummary()">Summary</button></div>`;
   }
   const mv=monthiversary();
-  if(mv && !hasSeen('tip_bday'+mv)){
-    alerts += `<div class="alert-pill" style="border-color:var(--star)">
+  if(mv && !homeHidden('month') && !hasSeen('tip_bday'+mv)){
+    al.month += `<div class="alert-pill" style="border-color:var(--star)">
       <div class="ap-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🎉</div>
       <div class="ap-body"><div class="ap-t">${escapeHtml((activeBaby()||{}).name||'Baby')} is ${mv} month${mv>1?'s':''} 🎉</div><div class="ap-s">Their ${mv}-month card is waiting 🐻</div></div>
       <button onclick="openMemoryCard(${mv},'${memCandPhoto(mv)}');dismissTip('bday${mv}')">See it</button></div>`;
@@ -3764,17 +3849,17 @@ function renderHome(){
      the teaching cue and the nudge off on this same value; this pill is the fifth, not an
      exception. gsCard is reused rather than re-called because renderGetStarted latches a seen flag
      as it goes, and asking it twice per paint would write twice. */
-  const pnb = (!gsCard && evs.length) ? posterOfferDue() : null;
+  const pnb = (!gsCard && evs.length && !homeHidden('poster')) ? posterOfferDue() : null;
   if(pnb){
-    alerts += `<div class="alert-pill ap-stack" style="border-color:var(--star)">
+    al.poster += `<div class="alert-pill ap-stack" style="border-color:var(--star)">
       <div class="ap-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🎀</div>
       <div class="ap-body"><div class="ap-t">A keepsake from the day ${escapeHtml(pnb.name)} arrived</div><div class="ap-s">Their name and birthday are already on the poster. Add the rest whenever you like.</div></div>
       <div class="ap-acts"><button onclick="openPosterOffer()">See it</button>
       <button class="ap-quiet" onclick="dismissPosterOffer()">Not now</button></div></div>`;
   }
   const _cab=activeBaby();
-  if(_cab && stageOf(_cab)==='child' && !_cab.childAck){
-    alerts += `<div class="alert-pill" style="border-color:var(--star)">
+  if(_cab && !homeHidden('child') && stageOf(_cab)==='child' && !_cab.childAck){
+    al.child += `<div class="alert-pill" style="border-color:var(--star)">
       <div class="ap-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🌱</div>
       <div class="ap-body"><div class="ap-t">${escapeHtml(_cab.name)} is growing up</div><div class="ap-s">Cubby is growing with them. Quick log now leads with the toddler years; the early logs are under More.</div></div>
       <button onclick="ackChild()">Lovely</button></div>`;
@@ -3783,14 +3868,14 @@ function renderHome(){
      pregnancy ended, the week markers she wrote carry on landing, and every route to them lived on
      a pregnancy screen that no longer renders. This is the only lane on the baby side that can
      carry it, and it takes itself down once the last marker has passed or she takes them off. */
-  alerts += pregWeeksLeftAlert();
+  al['preg-weeks'] += pregWeeksLeftAlert();
   /* One-time gentle nudge: many web users never realise Cubby installs to the home screen. It is a
      push like any other, so it takes its turn through the ledger rather than sitting outside it.
      It loses to every earned cue, which is right: installing matters, but not more than a summary
      for the doctor on the morning of a second fever. */
-  if(typeof canShowInstall==='function' && canShowInstall() && !hasSeen('tip_install')
+  if(!homeHidden('install') && typeof canShowInstall==='function' && canShowInstall() && !hasSeen('tip_install')
      && !(window.CubbyTeach && !window.CubbyTeach.askMark('firstopen:install'))){
-    alerts += `<div class="coach"><div class="cm-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M8 11l4 4 4-4"/><path d="M5 20h14"/></svg></div>
+    al.install += `<div class="coach"><div class="cm-ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="M8 11l4 4 4-4"/><path d="M5 20h14"/></svg></div>
       <div class="cm-body"><div class="cm-t">Use Cubby like an app</div><div class="cm-s">Add it to your home screen for one-tap, full-screen, offline access. No app store.</div>
       <button class="btn-primary" style="margin-top:9px;padding:8px 14px;font-size:13px" onclick="addToHomeScreen('homeInstallMsg')">Add to home screen</button>
       <div id="homeInstallMsg" class="cm-s" style="display:none;margin-top:6px"></div></div>
@@ -3826,38 +3911,51 @@ function renderHome(){
   const surfaceUp = surfaceIsUp();
 
   // Logging keeps the same position all day. Night still pauses the photo carousel.
-  const tipsBlock = (away||gsCard) ? '' : tipsTicker();
+  const tipsBlock = (away||gsCard||homeHidden('tips')) ? '' : tipsTicker();
   const quickBlock = `<div class="sec-title with-act"><span>Quick log${(window.CubbyTeachUI)?CubbyTeachUI.dot('openQuickLog','the quick log row'):((window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('logging'):'')}</span><button class="sec-act" type="button" onclick="openQuickSettings()">Choose</button></div>
     <div class="actions stagger">${quickLogActions(ts)}</div>`;
 
+  /* Everything the old template called inline, called here in the same order (rule 2 above). */
+  const greet = meGreeting();
+  const subLine = myLossHolding() ? quietLossLine() : (away ? '' : `<div class="greeting-sub">${homeNudgeLine()}</div>`);
+  const sinceFeed = sinceCard('feed','Last feed', lastFeed);
+  const sinceSleep = sinceCard('sleep','Last sleep', lastSleep, ts?'Asleep now':'');
+  const sinceNappy = sinceCard('diaper','Last nappy', lastDiaper);
+  const firstLine = firstEntryLine();
+  const wwLine = wakeWindowLine();
+  const w = {};
+  w.coach = (gsCard || homeHidden('coach')) ? '' : coachMark('home','Last feed, last sleep, last nappy, right where you look first 👋','Log below, and the tabs hold your Log, Album and Health.');
+  w.consent = consentBanners();
+  w.away = away;
+  w.hero = homeHidden('hero') ? '' : renderHero();
+  w.tips = tipsBlock;
+  w['get-started'] = gsCard;
+  w.guide = guideCard;
+  w.teach = (gsCard || guideCard || homeHidden('teach')) ? '' : teachCue();
+  w.nudge = (gsCard || homeHidden('nudge')) ? '' : renderNudge();
+  w.alerts = homeOrder('alerts').filter(id=>!homeHidden(id)).map(id=>al[id]).join('');
+  w.ask = homeHidden('ask') ? '' : askBoxRow();
+  w['good-read'] = homeHidden('good-read') ? '' : goodReadCard('baby');
+  const slot = a => homeOrder(a).filter(id=>!homeHidden(id)).map(id=>w[id]).join('\n    ');
+
   return `<div class="fade-in home-today">
-    <div class="greeting">${meGreeting()}</div>
-    ${myLossHolding() ? quietLossLine() : (away ? '' : `<div class="greeting-sub">${homeNudgeLine()}</div>`)}
+    <div class="greeting">${greet}</div>
+    ${subLine}
     ${/* The three answers first. "When was the last feed" is the question at 3am and it used to be
           the tenth thing on the screen, under a day-navigator, a notes lane and a photo prompt. A
           running timer sits above them because it is the only thing here that is happening now. */''}
     ${timers}
     <div class="since-row stagger">
-      ${sinceCard('feed','Last feed', lastFeed)}
-      ${sinceCard('sleep','Last sleep', lastSleep, ts?'Asleep now':'')}
-      ${sinceCard('diaper','Last nappy', lastDiaper)}
+      ${sinceFeed}
+      ${sinceSleep}
+      ${sinceNappy}
     </div>
-    ${firstEntryLine()}
-    ${wakeWindowLine()}
+    ${firstLine}
+    ${wwLine}
     ${surfaceUp ? surfaceCard : ''}
-    ${gsCard ? '' : coachMark('home','Last feed, last sleep, last nappy, right where you look first 👋','Log below, and the tabs hold your Log, Album and Health.')}
-    ${consentBanners()}
+    ${slot('top')}
     ${quickBlock}
-    ${away}
-    ${renderHero()}
-    ${tipsBlock}
-    ${gsCard}
-    ${guideCard}
-    ${(gsCard || guideCard) ? '' : teachCue()}
-    ${gsCard ? '' : renderNudge()}
-    ${alerts}
-    ${askBoxRow()}
-    ${goodReadCard('baby')}
+    ${slot('feed')}
     ${/* data-sum keeps the sleep figure honest minute by minute while a nap runs. Rendering it once
           per paint was not enough: leave home open through an hour of nap and the banner would say
           1:47:30 while the cell below it still said 47m, which is the same contradiction one step
@@ -6774,7 +6872,7 @@ function requirePro(featureName){ if(isPro()) return true; openPro(featureName);
    small Cubby mark). Counts sync with the household via state.settings.proTaste. */
 const PRO_TASTE={styles:3,enhance:3,cutout:3,thennow:1,pdf:1,voice:5};
 function tasteUsed(k){ return ((state.settings||{}).proTaste||{})[k]||0; }
-function tasteLeft(k){ return Math.max(0,(PRO_TASTE[k]||0)-tasteUsed(k)); }
+function tasteLeft(k){ return Math.max(0,proTasteMax(k)-tasteUsed(k)); }
 function useTaste(k,featureName){
   if(isPro()) return true;
   if(tasteLeft(k)<=0){ openPro(featureName,true); return false; }
@@ -6797,14 +6895,14 @@ function openPro(lockedFeature, tastedOut, entry){
     ['🎨','The full keepsake studio','Every template, font and palette, portrait and story formats, the whole sticker set.'],
     ['✨','Auto-enhance & background cutout','One-tap polish and sticker-style cutouts, all on your device.']
   ].map(f=>`<div class="pro-feat"><span class="pf-ico">${f[0]}</span><div><div class="pf-t">${f[1]}</div><div class="pf-s">${f[2]}</div></div></div>`).join('');
-  const canBuy = !!PRO_CFG.checkoutUrl;
+  const canBuy = !!proCfg('checkoutUrl');
   const joined = (()=>{ try{ return localStorage.getItem('cubby-pro-waitlist')==='1'; }catch(e){ return false; } })();
   if(isPro()){
     const p=window.LL&&window.LL.pro||{};
     openSheet(`<h2>Cubby Pro ✨</h2><div class="sub">You're on Pro. Thank you for supporting Cubby, it keeps the essentials free for everyone.</div>
       <div class="pro-list">${feats}</div>
       ${p.until?`<div class="csub" style="text-align:center">Renews ${new Date(+p.until).toLocaleDateString(undefined,{month:'long',day:'numeric',year:'numeric'})}</div>`:''}
-      ${PRO_CFG.portalUrl?`<button class="btn-ghost" onclick="openProPortal()">Manage subscription</button>`:''}`,'star');
+      ${proCfg('portalUrl')?`<button class="btn-ghost" onclick="openProPortal()">Manage subscription</button>`:''}`,'star');
     return;
   }
   openSheet(`<h2>Cubby Pro ✨</h2>
@@ -6816,9 +6914,9 @@ function openPro(lockedFeature, tastedOut, entry){
          <button class="btn-ghost" onclick="startProCheckout('monthly')">Or pay $9 a month</button>
          <div class="csub" style="text-align:center;margin-top:8px">Cancel anytime in the trial and pay nothing. One plan covers your whole family.</div>`
       : (joined
-        ? `<div class="pro-joined">✅ You're registered for Pro. We'll email you the moment it opens, ${PRO_LAUNCH} 🐻</div>`
+        ? `<div class="pro-joined">✅ You're registered for Pro. We'll email you the moment it opens, ${escapeHtml(proLaunch())} 🐻</div>`
         : `<button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="joinProWaitlist()">Register for Pro</button>
-           <div class="csub" style="text-align:center;margin-top:8px">Cubby Pro arrives ${PRO_LAUNCH}. Register now to claim your 7-day free trial at launch, ${PRO_CFG.priceLine}. No charge today.</div>`)}`,'star');
+           <div class="csub" style="text-align:center;margin-top:8px">Cubby Pro arrives ${escapeHtml(proLaunch())}. Register now to claim your 7-day free trial at launch, ${escapeHtml(proCfg('priceLine'))}. No charge today.</div>`)}`,'star');
 }
 /* `plan` is required: the billing Worker picks the variant with
    `plan === 'monthly' ? LS_VARIANT_MONTHLY : LS_VARIANT_ANNUAL`, so omitting it silently sold
@@ -6826,10 +6924,10 @@ function openPro(lockedFeature, tastedOut, entry){
 async function startProCheckout(plan){
   const hid = window.LL && window.LL.householdId;
   if(!hid){ toast('Sign in first'); return; }
-  if(!PRO_CFG.checkoutUrl){ openPro(undefined,undefined,'rerender'); return; }
+  if(!proCfg('checkoutUrl')){ openPro(undefined,undefined,'rerender'); return; }
   showLoader(['Opening secure checkout']);
   try{
-    const r = await fetch(PRO_CFG.checkoutUrl, { method:'POST', headers:{'content-type':'application/json'},
+    const r = await fetch(proCfg('checkoutUrl'), { method:'POST', headers:{'content-type':'application/json'},
       body: JSON.stringify({ hid, origin: location.origin, plan: plan==='monthly'?'monthly':'annual',
         email: (window.LL.auth&&window.LL.auth.currentUser&&window.LL.auth.currentUser.email)||'' }) });
     const d = await r.json(); hideLoader();
@@ -6838,10 +6936,10 @@ async function startProCheckout(plan){
 }
 async function openProPortal(){
   const p = window.LL && window.LL.pro;
-  if(!PRO_CFG.portalUrl || !p || !p.customer){ toast('Manage your plan from the purchase email'); return; }
+  if(!proCfg('portalUrl') || !p || !p.customer){ toast('Manage your plan from the purchase email'); return; }
   showLoader(['Opening your billing portal']);
   try{
-    const r = await fetch(PRO_CFG.portalUrl, { method:'POST', headers:{'content-type':'application/json'},
+    const r = await fetch(proCfg('portalUrl'), { method:'POST', headers:{'content-type':'application/json'},
       body: JSON.stringify({ customer: p.customer, origin: location.origin }) });
     const d = await r.json(); hideLoader();
     if(d && d.url) location.href = d.url; else toast('Could not open the portal');
@@ -7803,7 +7901,7 @@ function openSettings(){
     </div>
     <div class="set-item" onclick="openPro(undefined,undefined,'settings')" style="cursor:pointer">
       <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">✨</div>
-      <div class="si-body"><div class="a">Cubby Pro</div><div class="b">${isPro()?'Active · thank you 🐻':`Doctor reports, keepsake studio & more · launching ${PRO_LAUNCH}`}</div></div>
+      <div class="si-body"><div class="a">Cubby Pro</div><div class="b">${isPro()?'Active · thank you 🐻':`Doctor reports, keepsake studio & more · launching ${escapeHtml(proLaunch())}`}</div></div>
     </div>
     <div class="set-item" onclick="shareCubby()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--pump-soft);color:var(--pump)">${I.heart}</div>
@@ -19432,6 +19530,17 @@ function normalizeLoadedState(saved){
     try{ applyTheme(); }catch(e){}
   }
 }
+/* The last remote config this device saw, applied before the first paint so a hidden widget does not
+   flash up and then vanish when the live document arrives. Here, at the very end of the script,
+   because validating it reads PRO_TASTE and HOME_WIDGETS, which must already exist. Never in the
+   localhost test boots (?e2e, ?fsemu): a gate must render what the code says, not what this browser
+   once cached. */
+try{
+  if(!/[?&](e2e|fsemu)=/.test(location.search)){
+    const c=localStorage.getItem(CONFIG_KEY);
+    if(c) cubbyApplyConfig(JSON.parse(c), true);
+  }
+}catch(e){}
 </script>
 <!-- Cloud auth + sharing. Loads after the app so it can wire into state/persist/PhotoStore. -->
 <!-- Signed-out landing must load before store-firebase.js: showSignIn() falls back to a bare card if window.cubbyLanding isn't defined yet. -->

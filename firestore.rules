@@ -101,6 +101,18 @@ service cloud.firestore {
     match /pushLedger/{uid} { allow read, write: if false; }
     match /campaigns/{id}   { allow read, write: if false; }
 
+    /* Remote config: the words, switches and home ordering the app reads instead of a deploy
+       (app/index.html, "Remote config"). Every signed-in client may GET it; nobody may list it, and
+       no client may write it, ever. Only an operator with the admin key writes it, and the admin SDK
+       bypasses these rules. It holds nothing private: the same document goes to every family. The
+       client validates every value against a fixed schema and falls back to the compiled defaults, so
+       even a bad write by the operator can only reorder, hide or reword what the code already allows. */
+    match /config/{doc} {
+      allow get: if request.auth != null;
+      allow list: if false;
+      allow write: if false;
+    }
+
     match /inviteLinks/{token} {
       /* GET, never LIST. This is the whole security model and it is one word wide.
          The control here is that the document id is a secret, so a reader must already hold the

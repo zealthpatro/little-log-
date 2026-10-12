@@ -34,17 +34,21 @@ Main at the time of writing: acd61c21 (Pro date). This file ships in the same pu
    `claude/charming-chatterjee-dd4a40`: a signed-in stranger could log a dose into another family.
    Related gates green (dose-membership 86/86); full suite not yet run. **Needs the founder's yes**
    because it deploys to the live Worker, then a read-only production audit of whether the hole was used.
-4. **Remote config and anchored home widgets.** UNCOMMITTED in `~/cubby-worktrees/config-anchors`.
-   One read-only Firestore document (config/app) for Pro dates and prices, rollout switches and home
-   widget order; locked safety widgets cannot be hidden. 24 of 105 gates passed before the run was
-   paused. Missing: full suite, a config gate, an operator writer, CACHE bump. Rules deploy separately.
-   Decision record: `docs/plans/2026-10-09-ADR-001-sdui.md`.
+4. **Remote config and anchored home widgets (layer 1 of the accepted "config + SDUI" decision).**
+   Ported onto current main on branch `claude/config-sdui` (12 Oct), CACHE v358, nine home gates
+   green, config validation checked in the real page. Merges after the full pre-push suite. Still to
+   do after it lands: deploy the firestore.rules change by hand (until then every client keeps the
+   defaults), an operator script to write config/app, a committed config gate. The old copy in
+   `~/cubby-worktrees/config-anchors` is superseded. The onclick-id fix (2.2) is set aside, unfinished,
+   on branch `claude/dazzling-moore-1db738` (local commit bb7778e9).
+   Decision record (accepted): `docs/plans/2026-10-09-ADR-001-sdui.md`.
 
 ## 3. Branches not merged into main
 
 | Branch | Verdict |
 |---|---|
-| `claude/weekly-report-fix` | This push: the weekly fix, the spec merge, the dose escaping and these docs |
+| `claude/weekly-report-fix` | Landed 10 Oct as e5aa05e5 (weekly fix, spec merge, dose escaping, these docs) |
+| `claude/config-sdui` | Layer 1 of config + SDUI; merges after the full suite (see 2.4) |
 | `claude/cubby-mode-app-build-effc9f` | Merged in this push (474c0024; only the design spec was new), founder said yes on 10 Oct |
 | `claude/charming-chatterjee-dd4a40` | Dose-ticket fix, see 2.3, waits on the founder |
 | `marketing-three-surfaces` (+ two `mig/` copies) | June articles-hub edit; the hub has changed heavily since. Superseded unless the founder says otherwise |
