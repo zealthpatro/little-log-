@@ -48,6 +48,20 @@ Spec: `design/components/cubby-components.html`.
 
 ---
 
+## Code components and server-driven content (config + SDUI)
+
+Accepted by the founder on 2026-10-12. Plan: `design/DESIGN-SYSTEM.md` §4, "From vocabulary to code".
+Decision: `docs/plans/2026-10-09-ADR-001-sdui.md`.
+
+| Component | Render | Approved | Figma | Built |
+|---|---|---|---|---|
+| `Home / Anchors` (top, feed, alerts) with remote config | not needed: no visible change | 2026-10-12 | n/a | branch `claude/config-sdui` (c3fc199b), merges after the full suite |
+| `Code / AlertPill` | not needed while it reproduces today's pills | 2026-10-12 (plan) | waiting on a team | next |
+| `Code / SetItemRow`, `Card`, `ChipRow`, `Seg`, `Button`, `SheetHeader` | as above | 2026-10-12 (plan) | waiting on a team | November to December |
+| `SDUI / ProSheet` and `SDUI / NudgeCard` from registry components | **mockup due before build** | — | waiting on a team | mid-December, for the January Pro launch |
+
+---
+
 ## Rejected, with the reason kept
 
 Recorded so the same idea does not arrive again in six months as a fresh suggestion. Full reasoning

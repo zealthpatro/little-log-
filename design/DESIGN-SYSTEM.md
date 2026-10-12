@@ -413,6 +413,32 @@ it outnumbers the primary 1.25 to 1. That is not automatically wrong, but only 2
 a bare `closeSheet()`. The rest carry forward actions, so "ghost means cancel" is not a rule you can
 rely on when you are reading a screen you did not write.
 
+### From vocabulary to code: config + SDUI (accepted 12 October 2026)
+
+The table above names one canonical component per job, but nothing in the code renders it one way:
+every use is a hand-written template string, and its handler is a hand-built `onclick` string. That
+is how two script-injection holes reached production in October (member-chosen ids and free-text doses
+interpolated raw). The decision record `docs/plans/2026-10-09-ADR-001-sdui.md` turns the vocabulary
+into code in three layers.
+
+1. **Anchored home widgets with remote config (layer 1).** Home is a fixed frame with three named
+   anchors whose widgets a read-only config document may hide or reorder, never add. Safety widgets
+   are locked. Built on branch `claude/config-sdui`.
+2. **Code components for the canonical names.** In this order: alert pill, set-item row, card, chip
+   row, segmented control, primary and ghost buttons, sheet header. Each takes props and returns
+   markup that escapes its own text, passes ids through `safeId`, and names its action instead of
+   building an `onclick` string. One delegated listener maps action names to functions from a single
+   registry, so no member-supplied value is ever parsed as script.
+3. **Server-driven content (layer 2).** The Pro sheet, nudge and promo cards, onboarding tips and
+   "what's new" render from a small validated layout that may only name registry components and
+   registry actions. Logging, doses, fever, illness, loss holding and privacy are never server-driven.
+
+Two rules for the migration. Several gates find buttons by their `onclick` text (the ask box, the fever
+safety net, the pregnancy weeks alert, reopening an illness, leaving loss holding), so each migration
+moves those selectors to the action name in the same commit, or the gate goes blind without failing.
+And a migration that changes nothing a parent sees is recorded in `design/COMPONENT-LOG.md` as shipped
+without a widget stage; anything new a parent would see is rendered and approved first.
+
 ---
 
 ## 5. What we mean by AI slop, and how each rule above prevents it
