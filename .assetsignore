@@ -26,3 +26,14 @@ credentials
 art-src
 native-build
 _local
+
+# Internal working material that was being served from the public site. Found 2026-10-22: /design/audit
+# (an internal security dashboard that still called a fixed finding "LIVE NOW"), the published rules, the
+# SQL schemas and the planning data under /docs were all readable by anyone. Nothing shipped fetches from
+# these folders; the only references are comments pointing at postmortems. /mockups/ is NOT here on
+# purpose: twelve articles use its SVGs as images.
+design
+docs
+schema
+social
+storage.rules

@@ -33,6 +33,8 @@ const BASE = (process.argv.slice(2).find((a) => /^https?:\/\//.test(a)) || '').r
 const INTERNAL = ['.git', '.claude', '.githooks', '.github', 'tools', 'test', 'workers', 'worker.js',
   'wrangler.toml', 'firestore.rules', 'firebase.json', '.assetsignore', '.gitignore', 'package.json',
   'package-lock.json', 'node_modules', 'serviceAccountKey.json', 'articles-drafts', 'ios', 'android',
+  // Internal material that was publicly served until 2026-10-22, including a security dashboard.
+  'design', 'docs', 'schema', 'social', 'storage.rules',
   /* Gitignored, so a git-based deploy never sees them, and that is the only reason they were safe. The
      README documents a manual `npx wrangler deploy`, which uploads the FOLDER and reads .assetsignore,
      never .gitignore. On the founder's Mac, credentials/ holds the App Store .p8 keys and a Firebase
@@ -43,7 +45,9 @@ const INTERNAL = ['.git', '.claude', '.githooks', '.github', 'tools', 'test', 'w
 /* One concrete public URL per excluded class, asked of production. */
 const MUST_404 = ['.githooks/pre-push', '.githooks/pre-commit', '.github/workflows/gates.yml', 'test/rules-test.js',
   'firebase.json', 'tools/gates.js', 'wrangler.toml', 'worker.js', 'firestore.rules', '.assetsignore', 'CLAUDE.md',
-  'ios/App/App/capacitor.config.json', 'android/app/build.gradle', '.claude/settings.json'];
+  'ios/App/App/capacitor.config.json', 'android/app/build.gradle', '.claude/settings.json',
+  // Was 200 until 2026-10-22: an internal security dashboard, the published rules, and the storage rules.
+  'design/audit', 'design/firestore.published.rules', 'storage.rules'];
 const MUST_200 = ['/', '/app/'];
 
 let pass = 0, fail = 0;
