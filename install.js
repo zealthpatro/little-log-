@@ -85,10 +85,16 @@
     } else if (ios) {
       cls = "sheet";
       body = '<h3 class="cbi-h">Add Cubby to your home screen</h3>'
-        + '<p class="cbi-p">Two taps and Cubby sits on your home screen like any app — full-screen, offline, no password each time.</p>'
+        + '<p class="cbi-p">Two taps and Cubby sits on your home screen like any app, full screen and ready offline.</p>'
         + '<div class="cbi-step"><span class="cbi-n">1</span><span>Tap <b>Share</b>' + SHARE + 'at the bottom of Safari</span></div>'
         + '<div class="cbi-step"><span class="cbi-n">2</span><span>Scroll down and tap <b>Add to Home Screen</b></span></div>'
-        + '<div class="cbi-step"><span class="cbi-n">3</span><span>Tap <b>Add</b> — that’s it 🐻</span></div>'
+        + '<div class="cbi-step"><span class="cbi-n">3</span><span>Tap <b>Add</b></span></div>'
+        /* Step 4 exists because the old step 3 said "that’s it", and it was not. A home-screen app on
+           iPhone has its own storage, separate from Safari, so Google and Apple sign-in finish in Safari
+           and leave the installed app signed out (docs/postmortems/2026-08-19-installed-ios-pwa-cannot-
+           sign-in.md). The emailed code is the one route that completes inside the installed app. */
+        + '<div class="cbi-step"><span class="cbi-n">4</span><span>Open Cubby from your home screen and sign in with the <b>code we email you</b> 🐻</span></div>'
+        + '<p class="cbi-p">Inside the home screen app, use the emailed code rather than Google or Apple.</p>'
         + '<div class="cbi-point">Find ' + SHARE + " below ⌄</div>";
     } else {
       var android = /android/i.test(navigator.userAgent || "");
