@@ -127,6 +127,9 @@ const TREE = [
   { name: 'getstarted',     cmd: ['node', 'tools/getstarted_author_check.js', 'url'] },
   { name: 'notes-unseen',   cmd: ['node', 'tools/notes_unseen_check.js', 'url'] },
   { name: 'preg-canwrite',  cmd: ['node', 'tools/preg_log_canwrite_check.js', 'url'] },
+  /* Who is pregnant comes from the journey's ownerUid, never a relationship label. Plants the old
+     label rule into the page on every run and fails if that stops going red. */
+  { name: 'carrier-view',   cmd: ['node', 'tools/carrier_view_check.js', 'url'] },
   { name: 'preg-session',   cmd: ['node', 'tools/preg_session_resume_check.js', 'url'] },
   { name: 'support-reach',  cmd: ['node', 'tools/support_reach_check.js', 'url'] },
   { name: 'vax-calendar',   cmd: ['node', 'tools/vax_calendar_check.js', 'url'] },

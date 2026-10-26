@@ -332,9 +332,20 @@ const seed = (p) => ({ babies: [], activeBabyId: null, events: [],
     await load(seed(withCycles([33, 34, 33, 35], 8, 28)));
     const before = await card();
     ok('she sees the card', before.n === 1, before);
+    /* He is a partner because the journey is hers by uid, not because of his label: this section
+       used to make him one with "Papa Bear" alone, which is the label rule carrier_view_check retired.
+       The ownership predicate is store-firebase.js's own. */
     const r = await page.evaluate(() => {
-      window.LL = { auth: { currentUser: { uid: 'local' } }, members: { local: 'owner' },
-        memberInfo: { local: { name: 'Sam', relationship: 'Papa Bear' } } };
+      state.pregnancy.ownerUid = 'uidMaya';
+      window.LL = { auth: { currentUser: { uid: 'uidSam' } }, role: 'caregiver', members: { uidMaya: 'owner', uidSam: 'caregiver' },
+        memberInfo: { uidMaya: { name: 'Maya', relationship: 'Mama Bear' }, uidSam: { name: 'Sam', relationship: 'Dad' } } };
+      window.LL.pregIsOwner = function () {
+        var u = window.LL.auth.currentUser; if (!u) return true;
+        var p = state.pregnancy; if (!p) return true;
+        if (p.ownerUid && p.ownerUid !== 'local') return p.ownerUid === u.uid;
+        return window.LL.role === 'owner';
+      };
+      window.LL.matIsOwner = window.LL.pregIsOwner;
       render();
       const titles = Array.from(document.querySelectorAll('.pc-t')).map((e) => (e.textContent || '').trim());
       const bodies = Array.from(document.querySelectorAll('.pc-b')).map((e) => (e.textContent || '').trim());

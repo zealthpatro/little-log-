@@ -8609,7 +8609,8 @@ function doLogout(){
    ============================================================ */
 function myUid(){ try{ const u=window.LL&&window.LL.auth&&window.LL.auth.currentUser; return (u&&u.uid)||'local'; }catch(e){ return 'local'; } }
 /* `relationship` holds the warm bear LABEL the circle actually uses, "Mama Bear" and "Papa Bear",
-   not a bare role: viewerIsCarrier() matches 'papa bear' for exactly that reason. The guardian list
+   not a bare role (viewerIsCarrier() once matched 'papa bear' for exactly that reason, and no longer
+   reads labels at all). The guardian list
    used to be compared against the WHOLE string, so 'mama bear' could never equal 'mama' and no
    household has ever derived a second guardian. Every two-parent family was told it had one
    guardian, and the consent machinery below it has never run for anyone.
@@ -10135,10 +10136,10 @@ function openExpectingSetup(mode){
   pregDraft.mode=mode||pregDraft.mode;
   const m=pregDraft.mode; // 'due' | 'weeks' | 'lmp'
   // Pronoun-neutral on purpose. This setup sheet runs during first-run BEFORE identity is collected
-  // (stage -> details -> identity, a deliberate order), so viewerIsCarrier() has no relationship to
-  // read yet and always returned true — which meant a partner setting Cubby up was addressed as the
-  // pregnant person ("your last period"). Neutral wording reads correctly for whoever is holding the
-  // phone; the ongoing home/week screens reword by carrier later, once identity is known (T4).
+  // (stage -> details -> identity, a deliberate order), and whoever is holding the phone here is
+  // about to create the journey, so viewerIsCarrier() says yes to them — which meant a partner setting
+  // Cubby up was addressed as the pregnant person ("your last period"). Neutral wording reads correctly
+  // for whoever is holding the phone; the ongoing home/week screens reword by carrier later (T4).
   const lmpLabel='First day of the last period';
   let entry, title, sub;
   if(m==='weeks'){
@@ -10185,20 +10186,17 @@ function defaultPrecon(){
   return ['Take folic acid, 400 micrograms daily','Check your vitamin D','Review any medicines with your GP or pharmacist','Book a preconception chat if you have a health condition','Ease off smoking and alcohol','Gentle movement most days']
     .map(t=>({id:uid(),text:t,done:false}));
 }
-/* A non-carrier (e.g. Papa/Grandpa/Uncle Bear) should never be asked about periods or fertility.
-   Default to showing; only hide for clearly non-carrier relationship roles. */
+/* Is the person looking at this pregnancy the person carrying it? Answered from the DATA: the
+   journey's ownerUid against the signed-in uid (the household owner for a legacy record with none),
+   which is what both ownership predicates read. A relationship label never decides it. Labels are
+   free text, and this used to treat only Papa, Grandpa and Uncle Bear as not pregnant, so a partner
+   labelled "Dad", "Nanny" or "Nana Bear" got her home: her fertile window, her cycle lengths and her
+   "Today I noticed" notes, read straight off the journey doc she had shared with him. And a pregnant
+   owner labelled "Papa Bear" lost her own. Both predicates must say yes, the safe direction, as in
+   quickOwnerOnlyOk; no cloud at all means a solo mother, and she is the carrier.
+   tools/carrier_view_check.js is the gate. */
 function viewerIsCarrier(){
-  try{
-    var info=(window.LL&&window.LL.memberInfo)||{}; var rel=((info[myUid()]&&info[myUid()].relationship)||'').toLowerCase();
-    /* Relationship is optional at identity, and an empty one used to fall through this list as
-       "carrier" — so a father who skipped the dropdown was shown "First day of your last period"
-       and "you may be in your fertile window". Fall back to who set the journey up instead: the
-       owner created it, an invited partner did not. That is right far more often than either
-       blanket answer, and it is recoverable by naming a relationship. */
-    if(!rel) return (window.LL && typeof window.LL.matIsOwner==='function') ? !!window.LL.matIsOwner() : true;
-    return ['papa bear','grandpa bear','uncle bear'].indexOf(rel)<0;
-  }
-  catch(_){ return true; }
+  return pregIsOwner() && pregJourneyIsOwner();
 }
 /* The fertile-window card is opt-out per PERSON, never per household: whether she wants the
    estimate in her face is her call alone, so the choice lives in localStorage under the uid
