@@ -572,7 +572,11 @@ const HUGE = put('huge.csv', ['Type,Start,Notes'].concat(
     ok('a genuine entry is still credited on the day card', /logged by papa/i.test(r2.day), r2.day);
     ok('and in the shareable recap', /logged by: papa/i.test(r2.txt), r2.txt.slice(0, 400));
     ok('and the away card comes back for it', /logged by papa/i.test(r2.away), r2.away.slice(0, 300));
-    ok('the away card counts every nappy, imported or not', /2 nappy changes/i.test(r2.away), r2.away.slice(0, 300));
+    /* Until 2026-10-26 this asserted "2 nappy changes", the imported one included, under a line that
+       says "logged by Papa": exactly the signing this section exists to forbid. The away card counts
+       only what somebody actually logged while she was out; the day card is where imports are told. */
+    ok('the away card counts only what Papa really logged, not the brought-in nappy as well',
+      /\b1 nappy change\b/i.test(r2.away) && !/2 nappy changes/i.test(r2.away), r2.away.slice(0, 300));
   }
 
   console.log('\n23. the chapter that explains this sheet is actually reachable from it');
