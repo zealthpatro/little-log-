@@ -7,7 +7,7 @@
 - **Duration:** 2026-06-17 (85b36829, the label list) until this fix reaches production. The cycle-data
   half dates from 2026-08-04 (141b5102 and 9fef5abc), when the trying stage put her period history and
   her "Today I noticed" notes on the journey doc and gave the partner a home of his own.
-- **Status:** RESOLVED in the tree (`viewerIsCarrier()`, gate `carrier-view`), shipping in sw v359.
+- **Status:** RESOLVED. 90b98736, live in sw v360 (0898be20) on little-cubby.com at 2026-10-26 16:17Z.
 - **Author:** Claude (Opus 5.5), for the founder
 
 > Policy: **every breakage gets a documented, blameless 5-Whys post-mortem.** Blameless = focus on
