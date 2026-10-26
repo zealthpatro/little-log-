@@ -172,6 +172,95 @@ const seed = (over) => Object.assign({
     ok('and says so', /last day/i.test(r), r);
   }
 
+  console.log('\n7. it never credits my own entry to somebody else');
+  {
+    /* Papa gave a bottle at 02:00 while she slept; she gave one herself at 05:00 and changed a nappy.
+       The card counted EVERY entry since she left but named only other people, so it read "2 feeds ·
+       1 nappy change · last feed 5:00 AM · logged by Papa Bear": her own feed and her own nappy,
+       credited to him. Seen from his side in the real two-phone capture on 2026-10-26: right after his
+       own 3:02 AM bottle his card said "2 feeds · last feed 3:02 AM · logged by Mum". */
+    const evs = [
+      { id: 'f2', type: 'feed', babyId: 'b1', method: 'bottle', amount: 90, unit: 'ml', time: now - 1 * HOUR, authorId: 'local' },
+      { id: 'd2', type: 'diaper', babyId: 'b1', kind: 'dirty', time: now - 1.5 * HOUR, authorId: 'local' },
+      { id: 'f1', type: 'feed', babyId: 'b1', method: 'bottle', amount: 120, unit: 'ml', time: now - 4 * HOUR, authorId: 'uidPapa' },
+    ];
+    await load(seed({ events: evs }), { lastOpen: now - 8 * HOUR });
+    const r = await page.evaluate((papaAt, mineAt) => {
+      window.LL = { auth: { currentUser: { uid: 'local' } }, members: { local: 'owner', uidPapa: 'caregiver' },
+        memberInfo: { local: { name: 'Maya', relationship: 'Mama Bear' }, uidPapa: { name: 'Sam', relationship: 'Papa Bear' } } };
+      const txt = awayRecap().replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      return { txt, papaClock: fmtClock(papaAt), myClock: fmtClock(mineAt) };
+    }, now - 4 * HOUR, now - 1 * HOUR);
+    // Positive first: the card must still exist and still be about Papa, or every absence below passes for free.
+    ok('the card still appears, because Papa logged something', /while you were away/i.test(r.txt), r.txt);
+    ok('and it is his name on it', /Papa Bear/.test(r.txt), r.txt);
+    ok('it counts his one feed, not hers as well', /\b1 feed\b/.test(r.txt) && !/2 feeds/.test(r.txt), r.txt);
+    /* She fed after him, so his 2:00 is not the baby's last feed. Naming it would contradict the Last
+       feed tile above the card, which counts everyone's; naming hers would credit it to him. */
+    ok('it gives no "last feed" at all, because his (' + r.papaClock + ') is not the newest and hers (' + r.myClock + ') is not his',
+      !/last feed/.test(r.txt), r);
+    ok('her own nappy is not counted as something he did', !/nappy/.test(r.txt), r.txt);
+    ok('and she is not named as somebody who logged while she was away', !/Mama Bear/.test(r.txt), r.txt);
+  }
+
+  console.log('\n7b. when his IS the newest feed, the card says when it was');
+  {
+    // The positive companion for the absence above: the clause must still appear when it is true.
+    const evs = [
+      { id: 'f1', type: 'feed', babyId: 'b1', method: 'bottle', amount: 120, unit: 'ml', time: now - 1 * HOUR, authorId: 'uidPapa' },
+      { id: 'f2', type: 'feed', babyId: 'b1', method: 'bottle', amount: 90, unit: 'ml', time: now - 5 * HOUR, authorId: 'local' },
+    ];
+    await load(seed({ events: evs }), { lastOpen: now - 8 * HOUR });
+    const r = await page.evaluate((papaAt) => {
+      window.LL = { auth: { currentUser: { uid: 'local' } }, members: { local: 'owner', uidPapa: 'caregiver' },
+        memberInfo: { local: { name: 'Maya', relationship: 'Mama Bear' }, uidPapa: { name: 'Sam', relationship: 'Papa Bear' } } };
+      return { txt: awayRecap().replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(), papaClock: fmtClock(papaAt) };
+    }, now - 1 * HOUR);
+    ok('it reports his feed as the last one (' + r.papaClock + ')', r.txt.indexOf('last feed ' + r.papaClock) >= 0, r);
+    ok('still counting only his', /\b1 feed\b/.test(r.txt) && !/2 feeds/.test(r.txt), r.txt);
+  }
+
+  console.log('\n8. with no currentUser yet, she is still herself');
+  {
+    /* Reading "me" from LL.auth alone made every stamped entry somebody else's in any render with no
+       currentUser, and her own feed came back to her as "logged by Mama Bear". quickUid() is the
+       identity the rest of Home uses. A real Firebase-shaped uid, not 'local': 'local' is also what
+       a wrong fix such as myUid() returns by default, and this must tell the two apart. */
+    const evs = [
+      { id: 'f1', type: 'feed', babyId: 'b1', method: 'bottle', amount: 120, unit: 'ml', time: now - 2 * HOUR, authorId: 'uidMaya' },
+      { id: 'p1', type: 'feed', babyId: 'b1', method: 'bottle', amount: 90, unit: 'ml', time: now - 4 * HOUR, authorId: 'uidPapa' },
+    ];
+    await load(seed({ events: evs }), { lastOpen: now - 8 * HOUR });
+    const r = await page.evaluate(() => {
+      localStorage.setItem('cubby-quick-uid', 'uidMaya');
+      window.LL = { members: { uidMaya: 'owner', uidPapa: 'caregiver' },
+        memberInfo: { uidMaya: { name: 'Maya', relationship: 'Mama Bear' }, uidPapa: { name: 'Sam', relationship: 'Papa Bear' } } };
+      const txt = awayRecap().replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      localStorage.setItem('cubby-quick-uid', 'local');
+      return txt;
+    });
+    // Positive first, so an empty card cannot pass the absences.
+    ok('the card appears for Papa\'s feed', /while you were away/i.test(r) && /Papa Bear/.test(r), r);
+    ok('it counts his one feed, not hers as well', /\b1 feed\b/.test(r) && !/2 feeds/.test(r), r);
+    ok('and her own feed is not credited back to her as somebody else\'s', !/Mama Bear/.test(r), r);
+  }
+
+  console.log('\n9. the first open says whose entries it is counting');
+  {
+    /* No away anchor yet, so the card covers today. "Today so far · 1 feed" read as the day's total
+       while she had logged four herself, which looks like her entries were lost. */
+    const evs = [{ id: 'p1', type: 'feed', babyId: 'b1', method: 'bottle', amount: 120, unit: 'ml', time: now - 5 * HOUR, authorId: 'uidPapa' }];
+    for (let i = 0; i < 4; i++) evs.push({ id: 'm' + i, type: 'feed', babyId: 'b1', method: 'bottle', amount: 90, unit: 'ml', time: now - (i + 0.5) * HOUR, authorId: 'local' });
+    await load(seed({ events: evs }));
+    const r = await page.evaluate(() => {
+      window.LL = { auth: { currentUser: { uid: 'local' } }, members: { local: 'owner', uidPapa: 'caregiver' },
+        memberInfo: { local: { name: 'Maya', relationship: 'Mama Bear' }, uidPapa: { name: 'Sam', relationship: 'Papa Bear' } } };
+      return awayRecap().replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    });
+    ok('the card appears, credited to Papa', /Papa Bear/.test(r) && /\b1 feed\b/.test(r), r);
+    ok('and its heading does not promise the whole day', /from your circle/i.test(r) && !/today so far/i.test(r), r);
+  }
+
   ok('no page errors throughout', errs.length === 0, errs.slice(0, 3));
   await browser.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');

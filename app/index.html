@@ -3161,7 +3161,10 @@ function noteVisible(){
 }
 function awaySince(){ return _awaySince; }
 function awayRecap(){
-  const me = window.LL && window.LL.auth && window.LL.auth.currentUser && window.LL.auth.currentUser.uid;
+  /* quickUid, the identity the rest of Home uses. It returns the signed-in uid whenever there is one,
+     so once signed in this is the same "me" as before; in any render with no currentUser it still
+     means her, where LL.auth alone made every stamped entry somebody else's. */
+  const me = quickUid();
   const seenAt = awaySince();
   // First ever open has no stamp, so fall back to today rather than showing a whole history.
   const since = seenAt ? Math.max(seenAt, now()-86400000) : dayStartMs(now());
@@ -3171,20 +3174,29 @@ function awayRecap(){
   // logged this morning's feeds while he was away.
   const others = evs.filter(e=>e.authorId && e.authorId!==me && !e.imported);
   if(others.length<1) return '';
-  const feeds = evs.filter(e=>e.type==='feed').length;
-  const napMs = evs.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+netSleepMs(e),0);
-  const dia = evs.filter(e=>e.type==='diaper').length;
-  const lastFeed = evs.filter(e=>e.type==='feed')[0];
+  /* Counted from OTHER people's entries only, because the line under it says "logged by" and names
+     only them. Counting everything since she left credited her own entries to whoever else logged:
+     right after Papa's own 3am bottle his card read "2 feeds · last feed 3:02 AM · logged by Mum".
+     Her own entries are not news to her, and the Today cards above already show them. */
+  const feeds = others.filter(e=>e.type==='feed').length;
+  const napMs = others.filter(e=>e.type==='sleep'&&e.end).reduce((a,e)=>a+netSleepMs(e),0);
+  const dia = others.filter(e=>e.type==='diaper').length;
+  const lastFeed = others.filter(e=>e.type==='feed')[0];
   const names=[...new Set(others.map(e=>loggerName(e.authorId)).filter(Boolean))];
   const parts=[];
   if(feeds) parts.push(feeds+' feed'+(feeds>1?'s':''));
   if(napMs>=360000) parts.push((napMs/3600000).toFixed(napMs/3600000>=10?0:1)+'h sleep');
   if(dia) parts.push(dia+' nappy'+(dia>1?' changes':' change'));
   const summary=parts.join(' · ')||'activity logged';
-  const last=lastFeed?(' · last feed '+fmtClock(lastFeed.time)):'';
+  /* Only when it IS the baby's last feed. If she fed since, "last feed 2:00 AM" would contradict the
+     Last feed tile above it, which counts everyone's. */
+  const newestFeed = evs.find(e=>e.type==='feed');
+  const last=(lastFeed && lastFeed===newestFeed)?(' · last feed '+fmtClock(lastFeed.time)):'';
   // Say the window out loud, so "3 feeds" is never mistaken for the whole day.
   const gapH=Math.max(1,Math.round((now()-since)/3600000));
-  const head = seenAt ? ('While you were away 🐻') : ('Today so far 🐻');
+  /* The first open has no away anchor, and "Today so far" promised day totals the counts no longer
+     are: she logs four feeds, Papa one, and the card said "Today so far · 1 feed". So it says whose. */
+  const head = seenAt ? ('While you were away 🐻') : ('Today, from your circle 🐻');
   const when = seenAt ? ('the last '+(gapH>=24?'day':gapH+(gapH===1?' hour':' hours'))) : 'today';
   return `<div class="away-card" onclick="openDayRecap()">
     <div class="away-h">${head}</div>
