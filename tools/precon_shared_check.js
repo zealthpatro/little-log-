@@ -425,6 +425,12 @@ const seed = (over) => Object.assign({
       syncSharedPrecon: fnSrc(storeSrc, 'async function syncSharedPrecon(uidNow)'),
       syncPregJourney: fnSrc(storeSrc, 'async function syncPregJourney(uidNow)'),
       ensurePregFields: fnSrc(idxSrc, 'function ensurePregFields(p)'),
+      /* applyPregJourney runs every snapshot through ing().blob(), store-firebase's handle on
+         window.cubbyIngest. Both come in verbatim too, so this run grades the ingest the real
+         client runs (a scrub that ate data.precon would fail here), not a pass-through. */
+      ing: fnSrc(storeSrc, 'function ing()'),
+      pass: (storeSrc.match(/^\s*var PASS = \{[^\n]*\};$/m) || [null])[0],
+      ingest: (() => { const a = idxSrc.indexOf('const SAFE_ID='), b = idxSrc.indexOf('window.cubbyIngest={'); const body = b > a && a >= 0 ? fnSrc(idxSrc.slice(b), 'window.cubbyIngest=') : null; return body ? idxSrc.slice(a, b) + body + ';' : null; })(),
     };
     const cats = storeSrc.slice(storeSrc.indexOf('var MAT_CATS = {'), storeSrc.indexOf('var matUnsub'));
     const meta = (storeSrc.match(/var PREG_META_KEYS = [^\n]*/) || [''])[0];
@@ -469,6 +475,9 @@ const seed = (over) => Object.assign({
             update: function (o) { return net.update(uid, o); },
             set: function (o) { return net.set(uid, o); }
           }; } }; } };
+          ${need.ingest}
+          ${need.pass}
+          ${need.ing}
           ${cats}
           ${meta}
           ${need.stableStringify}
