@@ -13,8 +13,9 @@ Scanned 2026-09-24, origin/main `036bb308`.
   that need them. Server-side page counting routes through the single `env.ASSETS.fetch` choke point,
   so it covers every HTML response without per-route code.
 - **Identity:** Firebase Auth uid. The household id `{hid}` groups members, babies and care logs.
-- **Storage:** Firestore (`pageStats`, `users.acq`, `users.referredBy`, `waitlist`, `ops`,
-  `pushLedger`, `campaigns`). D1 holds newsletter subscribers and the gender game. Cloudflare's log
+- **Storage:** Firestore (`users.acq`, `users.referredBy`, `waitlist`, `ops`, `pushLedger`,
+  `campaigns`; `pageStats` is read-only history now). D1 holds the page counter (`cubby-games`
+  tables `page_stats` and `page_stats_total`), newsletter subscribers and the gender game. Cloudflare's log
   stream holds `console.error` output transiently.
 - **Environment:** `FIREBASE_SERVICE_ACCOUNT` (Worker secret). The analytics tools need
   `tools/serviceAccountKey.json` (gitignored).
@@ -29,10 +30,13 @@ Scanned 2026-09-24, origin/main `036bb308`.
 ## Patterns worth preserving
 
 - **The single choke point for page counting.** One call covers every page and every 404.
-- **Fire-and-forget with a visible failure.** The comment at `worker.js:232-234` states the rule: a
-  counter must never add latency or turn a Firestore error into a failed request, but it must log.
-- **Collapsing secrets out of paths before storage** (`statsKey`), so the counter cannot become a
-  directory of invite tokens.
+- **Fire-and-forget with a visible failure.** The comment above `recordPageView` in `worker.js` states
+  the rule: a counter must never add latency or turn a D1 error into a failed request, but it must log.
+- **Collapsing paths into a fixed set of buckets before storage** (`statsKey`), so the counter cannot
+  become a directory of invite tokens, and random paths cannot grow the table.
+- **Bounded anonymous writes.** The counter is throttled per address (per /48 on IPv6) and stops for
+  the UTC day at `PAGE_STATS_DAILY_CAP` (default 5000), so a flood cannot spend the D1 that also holds
+  account-deletion cleanup and the guest game. It never touches the family Firestore.
 - **Deriving the funnel from records the product already keeps**, so measuring activation costs no
   new collection.
 - **Attribution owned by the user**, written onto their own document rather than a separate store.

@@ -20,8 +20,8 @@ binding = "ASSETS"
 # Workers Static Assets serves any MATCHING asset without invoking worker.js at all. /, /app/ and
 # /articles/ never reach the Worker; only unmatched paths do. So anything in fetch() that expects to
 # see ordinary page traffic will see none of it — which is why recordPageView counts 404s and not page
-# views. Set run_worker_first if that ever needs to change, and price it: it puts the Worker in front
-# of every asset request, images and scripts included.
+# views (into D1, never the family Firestore). Set run_worker_first if that ever needs to change, and
+# price it: it puts the Worker in front of every asset request, images and scripts included.
 not_found_handling = "404-page"
 
 # Non-secret config. Secrets (RESEND_API_KEY, FIREBASE_SERVICE_ACCOUNT) are set with
@@ -82,6 +82,17 @@ name = "DOSE_RATE_LIMITER"
 type = "ratelimit"
 namespace_id = "1005"
 simple = { limit = 10, period = 60 }
+
+# The 404 counter (worker.js recordPageView). Every unmatched GET reaches it with no account, so it is
+# throttled per IP (per /48 on IPv6) before it may write a row to D1. Thirty a minute is far more broken
+# links than a person hits; a loop gets thirty counts and no more. No binding means no counting.
+# Many addresses still add up, so there is also a hard ceiling per UTC day: PAGE_STATS_DAILY_CAP
+# (default 5000 in worker.js; add it under [vars] to change it).
+[[unsafe.bindings]]
+name = "PAGE_RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1006"
+simple = { limit = 30, period = 60 }
 
 # Guessing-game store — ISOLATED in its own D1 (cubby-games), never the family Firestore. Holds only
 # the host's public title + {nickname, guess, note}. COMMENTED until the DB exists (an uncommented

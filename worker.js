@@ -117,6 +117,30 @@ function cooldownKeyFor(email) {
   return local + '@' + domain;
 }
 
+/* The client address every per-IP limiter keys on. IPv6 is cut to its /64: one subscriber is handed
+   a whole /64, so the full address gave a single connection 2^64 separate buckets. A household shares
+   one /64 anyway, so a family's limit is unchanged. IPv4 (and IPv4-mapped IPv6) stays per address.
+   v6Groups widens the cut: 3 keys on the /48, for a counter where a free tunnel's 65,536 /64s must
+   not each get their own allowance. The address is fully expanded first, so where '::' falls never
+   changes the key (2001:0:0:5::1 and 2001::5:a:b:c:d are the same /64). */
+function clientIpKey(request, v6Groups = 4) {
+  const ip = String(request.headers.get('CF-Connecting-IP') || '').trim().toLowerCase().split('%')[0];
+  if (!ip) return 'unknown';
+  if (ip.indexOf(':') < 0) return ip;
+  const mapped = ip.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
+  if (mapped) return mapped[1];
+  let s = ip;
+  const v4 = s.match(/^(.*:)(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);   // embedded IPv4 tail
+  if (v4) s = v4[1] + ((+v4[2] << 8) | +v4[3]).toString(16) + ':' + ((+v4[4] << 8) | +v4[5]).toString(16);
+  const halves = s.split('::');
+  if (halves.length > 2) return ip;
+  const head = halves[0] ? halves[0].split(':') : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+  const groups = halves.length === 2 ? head.concat(new Array(Math.max(0, 8 - head.length - tail.length)).fill('0'), tail) : head;
+  if (groups.length !== 8 || !groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return ip;   // odd input: key as given
+  return groups.slice(0, v6Groups).map((g) => parseInt(g, 16).toString(16)).join(':') + '::/' + (v6Groups * 16);
+}
+
 async function sendSigninLink(request, env) {
   // Same-origin only. Require an Origin OR Referer matching our host, else reject — this closes
   // the no-Origin bypass (scripted clients that omit the header). Per-IP volume is then capped by
@@ -214,58 +238,79 @@ async function sendSigninLink(request, env) {
    URL would put live credentials in a database. Secret-bearing path segments are collapsed too
    (/g/<code> and /join/<token> name a household to whoever holds them). What is left is: on this day,
    this route was served this many times, with this status. That is enough to answer the question that
-   started this and not much else, which is the point. */
+   started this and not much else, which is the point.
+
+   WHERE IT IS STORED, AND WHY NOT FIRESTORE ANY MORE. Only unmatched paths reach this code, so every
+   count is an anonymous GET that anyone can send in a loop. It used to be one Firestore commit per
+   request, under the master service account, on the free plan whose ~20k writes a day are shared with
+   every family's feeds and doses: a stranger could spend the quota and stop a second caregiver seeing
+   a dose. It now lives in D1 (cubby-games, table page_stats), like the funnel, where a flood cannot
+   touch family data. The old Firestore pageStats documents are kept and still readable
+   (tools/page_stats.js --firestore); nothing writes them now.
+
+   BOUNDED THREE TIMES. The key is one of a small fixed set of buckets, so random paths cannot grow the
+   table (they used to make one document each). Counting is throttled per address (per /48 on IPv6), so
+   one client cannot grow a row's writes without limit. And there is a hard ceiling per UTC day
+   (PAGE_STATS_DAILY_CAP, default 5000), because a per-address throttle multiplies by the number of
+   addresses: a few IPv4s or one tunnel /48 could otherwise spend the D1's daily writes, and that D1
+   also holds account-deletion cleanup, the guest guessing game and the cron heartbeat. */
+const STATS_SECTIONS = new Set(['app', 'articles', 'about', 'contact', 'de', 'faq', 'features', 'how-it-works',
+  'pregnancy', 'pricing', 'privacy', 'refund', 'terms', 'vaccination-schedule', 'why', 'g', 'join', 'api', '__',
+  '.well-known', 'icons', 'og', 'mockups']);
 function statsKey(pathname) {
-  let p = String(pathname || '/').toLowerCase();
-  if (p.length > 1) p = p.replace(/\/+$/, '');
-  // Collapse anything whose segment IS the secret. These identify a household to whoever holds them.
-  p = p.replace(/^\/g\/[^/]+/, '/g/:code')
-       .replace(/^\/join\/[^/]+/, '/join/:token')
-       .replace(/^\/__\/auth\/[^/]+/, '/__/auth/:action');
-  if (p.length > 180) p = p.slice(0, 180);
-  if (!/^[\w\-./:]*$/.test(p)) return '/:other';        // anything odd collapses rather than being stored
-  return p || '/';
+  const p = String(pathname || '/').toLowerCase();
+  if (p === '/' || p === '') return '/';
+  // Scanner probes first, so /app/x.php is a probe and not a broken app link.
+  if (/\.(php\d?|asp|aspx|jsp|cgi|env|ini|sql|bak|git)(\/|$)|\/(wp-|wordpress|cgi-bin|phpmyadmin)|\/\.(?!well-known)/.test(p)) return '/:probe';
+  const segs = p.split('/').filter(Boolean);
+  // Section names only, never what follows them: /g/<code> and /join/<token> name a household.
+  if (STATS_SECTIONS.has(segs[0])) return '/' + segs[0] + (segs.length > 1 ? '/*' : '');
+  if (/\.[a-z0-9]{1,5}$/.test(p) && !/\.html?$/.test(p)) return '/:asset';
+  return '/:other';
 }
-function statsDocId(day, key) {
-  let h = '';
-  for (let i = 0; i < key.length; i++) h += key.charCodeAt(i).toString(16).padStart(2, '0');
-  return day + '_' + h.slice(0, 300);
-}
+/* Readiness per database, as with funnelReadyDbs: the CREATE runs once per isolate, not per request. */
+const pageStatsReadyDbs = new WeakSet();
+/* The UTC day this isolate saw the daily ceiling reached. Until that day ends it does not call D1 for
+   page stats at all, so a flood past the cap costs D1 nothing, not even a read. */
+let pageStatsFullDay = '';
 /* Fire-and-forget through waitUntil, so counting never adds a millisecond to anybody's page load, and
-   a Firestore hiccup can never turn into a failed request. Telemetry that can break the thing it
-   watches is worse than none. */
-async function recordPageView(env, url, status) {
-  if (!env.FIREBASE_SERVICE_ACCOUNT) return;
-  let sa; try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return; }
-  const key = statsKey(url.pathname);
+   a D1 hiccup can never turn into a failed request. Telemetry that can break the thing it watches is
+   worse than none. */
+async function recordPageView(env, request, url, status) {
+  const db = env.GAMES_DB;
+  if (!db) return;
   const day = new Date().toISOString().slice(0, 10);
-  const field = status === 404 ? 'n404' : (status >= 500 ? 'n5xx' : (status >= 400 ? 'n4xx' : 'nOk'));
+  if (pageStatsFullDay === day) return;
+  const capRaw = parseInt(env.PAGE_STATS_DAILY_CAP, 10);
+  const cap = Number.isFinite(capRaw) && capRaw >= 0 ? capRaw : 5000;
+  if (cap < 1) return;
+  /* No limiter, a refusal, or a limiter error all mean no count. Losing a count costs nothing; an
+     unthrottled counter is the hole this replaced. Distinct 'pv' key prefix if it borrows SIGNIN's. */
+  const limiter = env.PAGE_RATE_LIMITER || env.SIGNIN_RATE_LIMITER;
+  if (!limiter) return;
+  try { const { success } = await limiter.limit({ key: 'pv:' + clientIpKey(request, 3) }); if (!success) return; }
+  catch (e) { return; }
+  const key = statsKey(url.pathname);
+  const cls = status === 404 ? 'n404' : (status >= 500 ? 'n5xx' : (status >= 400 ? 'n4xx' : 'ok'));
   try {
-    /* SCOPE MATTERS, and the default is the wrong one. OAUTH_SCOPE is identitytoolkit, because the
-       first caller here was the sign-in link. Every Firestore caller passes datastore explicitly
-       (see sendPushReminders, purgeDeletedHouseholds, /api/dose). This one asked for a bare token,
-       got an auth-API token, and Firestore refused it — the third and final reason the collection
-       stayed empty. */
-    const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore');
-    /* A commit write names its document by RESOURCE NAME, not by URL. Passing the https:// form is
-       rejected with 400 INVALID_ARGUMENT ("lacks \"projects\" at index 0") — which is exactly what this
-       did for its first two days live, on every single request, while the catch below swallowed it and
-       the collection sat at zero documents. Fire-and-forget plus swallow-everything is how a subsystem
-       can be 100% broken and look completely healthy. Hence the console.error, which costs nothing and
-       shows up in `wrangler tail`. */
-    const name = 'projects/' + sa.project_id + '/databases/(default)/documents/pageStats/' + statsDocId(day, key);
-    // One atomic increment. Concurrent edges cannot lose a count the way read-modify-write would.
-    const wr = await fetch('https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents:commit', {
-      method: 'POST',
-      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-      body: JSON.stringify({ writes: [
-        { transform: { document: name, fieldTransforms: [{ fieldPath: field, increment: { integerValue: '1' } }] } },
-        { update: { name: name, fields: { day: { stringValue: day }, path: { stringValue: key } } },
-          updateMask: { fieldPaths: ['day', 'path'] } }
-      ] })
-    });
-    // An unchecked non-200 is how two of the three bugs here stayed invisible. Look at the answer.
-    if (!wr.ok) console.error('pagestats_write_' + wr.status, (await wr.text()).slice(0, 300));
+    if (!pageStatsReadyDbs.has(db)) {
+      await db.prepare('CREATE TABLE IF NOT EXISTS page_stats (day TEXT NOT NULL, path TEXT NOT NULL, cls TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, path, cls))').run();
+      await db.prepare('CREATE TABLE IF NOT EXISTS page_stats_total (day TEXT PRIMARY KEY, n INTEGER NOT NULL DEFAULT 0)').run();
+      pageStatsReadyDbs.add(db);
+    }
+    /* The ceiling first, in one atomic statement: the day's total goes up only while it is under the
+       cap, and RETURNING gives no row once it is not. Concurrent isolates cannot overshoot it, and
+       past the cap nothing is written at all. */
+    const slot = await db.prepare('INSERT INTO page_stats_total (day, n) VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET n = n + 1 WHERE n < ? RETURNING n')
+      .bind(day, cap).first();
+    if (!slot) {
+      pageStatsFullDay = day;
+      console.log('pagestats_cap_reached', day, cap);
+      return;
+    }
+    // One atomic upsert. Concurrent edges cannot lose a count the way read-modify-write would.
+    await db.prepare('INSERT INTO page_stats (day, path, cls, n) VALUES (?, ?, ?, 1) ON CONFLICT(day, path, cls) DO UPDATE SET n = n + 1')
+      .bind(day, key, cls).run();
   } catch (e) { console.error('pagestats_fail', (e && e.message) || String(e)); }
 }
 
@@ -2562,7 +2607,7 @@ export default {
     try {
       if (ctx && request.method === 'GET'
         && /text\/html/i.test(res.headers.get('content-type') || '')) {
-        ctx.waitUntil(recordPageView(env, url, res.status));
+        ctx.waitUntil(recordPageView(env, request, url, res.status));
       }
     } catch (e) { console.error('pagecount_wrap_fail', (e && e.message) || String(e)); }
     return res;
