@@ -68,9 +68,12 @@ function makeWorld() {
       w.deleted.push(url.replace(/^https:\/\/firestore\.googleapis\.com\/v1\/(projects\/[^/]+\/databases\/\(default\)\/documents)?/, '').replace(/^\//, ''));
       return reply(200, {});
     }
-    if (method === 'PATCH' && url.startsWith(DOCS + '/households/')) {
-      w.patches.push({ url: url.slice(DOCS.length), body: init.body ? JSON.parse(init.body) : null });
-      return reply(200, {});
+    // The unflag is a documents:commit (precondition in the JSON body; the query-string form is
+    // refused by a real Firestore, see test/purge-unflag-emulator.test.js). One write per commit.
+    if (url === DOCS + ':commit' && method === 'POST') {
+      const wr = ((JSON.parse(init.body || '{}').writes) || [])[0] || {};
+      w.patches.push({ name: String((wr.update && wr.update.name) || '').split('/documents')[1] || '', write: wr });
+      return reply(200, { writeResults: [{ updateTime: UPDATED }] });
     }
     w.unexpected.push(method + ' ' + url);
     return reply(404, {});
@@ -103,13 +106,15 @@ function makeWorld() {
   ok('and not one of its records is deleted', touched('hhAttacked').length === 0, touched('hhAttacked'));
   ok('its records are not even listed', !w.listed.some((u) => u.indexOf('/households/hhAttacked/') === 0), w.listed);
   ok('the refusal is logged with the household id', w.logs.some((l) => /purge_refused_members/.test(l) && /hhAttacked/.test(l)), w.logs);
-  const p = w.patches.find((x) => x.url.indexOf('/households/hhAttacked?') === 0) || null;
+  const p = w.patches.find((x) => x.name === '/households/hhAttacked') || null;
   ok('the bogus flag is cleared, so the family\'s medicine reminders start again', !!p, w.patches);
+  const mask = (p && p.write.updateMask && p.write.updateMask.fieldPaths) || [];
   ok('clearing exactly deleteAfter and deletionRequestedBy, nothing else',
-    !!p && /updateMask\.fieldPaths=deleteAfter/.test(p.url) && /updateMask\.fieldPaths=deletionRequestedBy/.test(p.url)
-      && (p.url.match(/updateMask\.fieldPaths=/g) || []).length === 2 && p.body && Object.keys(p.body.fields || {}).length === 0, p);
-  ok('only if the household has not changed since it was read', !!p && p.url.includes('currentDocument.updateTime=' + encodeURIComponent(UPDATED)), p && p.url);
-  ok('no other household is patched', w.patches.every((x) => x.url.indexOf('/households/hhAttacked?') === 0), w.patches);
+    !!p && mask.length === 2 && mask.includes('deleteAfter') && mask.includes('deletionRequestedBy')
+      && p.write.update && Object.keys(p.write.update.fields || {}).length === 0, p);
+  ok('only if the household has not changed since it was read, as a JSON precondition',
+    !!p && p.write.currentDocument && p.write.currentDocument.updateTime === UPDATED, p && p.write);
+  ok('no other household is patched', w.patches.every((x) => x.name === '/households/hhAttacked'), w.patches);
   ok('the run reports two households purged', res && res.households === 2, res);
   ok('nothing unexpected was fetched', w.unexpected.length === 0, w.unexpected);
 

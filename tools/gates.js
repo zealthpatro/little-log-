@@ -161,6 +161,14 @@ const TREE = [
      page-stats: a stranger looping 404s must make zero Firestore writes and stay under the D1 cap. */
   { name: 'page-stats',     cmd: ['node', 'test/page-stats.test.js'] },
   { name: 'page-stats-tool', cmd: ['node', 'tools/page_stats.js', '--self-test'] },
+  /* purge-guard: the purge cron never erases a household that still has people in it. */
+  { name: 'purge-guard',    cmd: ['node', 'test/purge-guard.test.js'] },
+  /* signin-budget: a reissue never resets an address's guesses, and every limiter keys an IPv6 /64. */
+  { name: 'signin-budget',  cmd: ['node', 'test/signin-code-budget.test.js'] },
+  /* xss-sink: markup in anything a circle member can write is drawn as text, in every view. It runs
+     xss_leaf_check.js as its last section (each leaf field, each sink, mutants included). */
+  { name: 'xss-sink',       cmd: ['node', 'tools/xss_sink_check.js', 'url'] },
+  { name: 'xss-leaf-static', cmd: ['node', 'tools/xss_leaf_check.js', '--static-only'] },
 ];
 // These judge PRODUCTION, not this checkout, so a failure is a deploy problem rather than a code
 // problem. Opt-in, because they need the network and they are the founder's to act on.
@@ -190,6 +198,12 @@ const EMU_GATES = [
   { name: 'invite-join',  emu: 'node invite-join.test.js' },
   { name: 'loss-leak',    emu: 'node loss-leak.test.js' },
   { name: 'loss-archive', self: ['node', 'test/loss-archive-reload.test.js'] },
+  /* The November 2026 security fixes that need a real Firestore to judge them. */
+  { name: 'household-guard', emu: 'node household-guard.test.js' },        // caregiver cannot flag, rejoin or self-promote
+  { name: 'signin-code-emu', emu: 'node signin-code-emulator.test.js' },   // the real conditional spend, race and burn
+  { name: 'purge-unflag-emu', emu: 'node purge-unflag-emulator.test.js' }, // the bogus flag really clears
+  { name: 'invite-consent', self: ['node', 'test/invite-consent.test.js'] },  // a newcomer is asked before joining
+  { name: 'invite-cleanup', self: ['node', 'test/invite-cleanup.test.js'] },  // the one-off cleanup closes every lingering way back in
 ];
 
 function freePort() {

@@ -751,7 +751,9 @@ async function sendSigninCode(request, env) {
   // Per-address cooldown, so one address cannot be mailed repeatedly. Same shape as the link path:
   // armed only after a real send, so a failed send does not lock the person out of retrying.
   const cache = caches.default;
-  const cooldown = new Request('https://cooldown.cubby.internal/code-' + encodeURIComponent(cooldownKeyFor(email)));
+  /* 'code/' and not 'code-': encodeURIComponent always escapes '/', so no address the link sender
+     keys on can spell this one. With '-', a link asked for code-alice@... armed alice's code cooldown. */
+  const cooldown = new Request('https://cooldown.cubby.internal/code/' + encodeURIComponent(cooldownKeyFor(email)));
   const armed = await cache.match(cooldown);
   if (armed) return cooldownReply(armed);
 
@@ -1759,9 +1761,17 @@ async function purgeDeletedHouseholds(env) {
       if (mem && Object.keys(mem).length) {
         console.error('purge_refused_members', hid, Object.keys(mem).length);
         if (d.updateTime) {
-          const un = await fetch(base + '/households/' + hid + '?updateMask.fieldPaths=deleteAfter&updateMask.fieldPaths=deletionRequestedBy'
-            + '&currentDocument.updateTime=' + encodeURIComponent(d.updateTime), {
-            method: 'PATCH', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' }, body: JSON.stringify({ fields: {} })
+          /* documents:commit, with the precondition in the JSON body. The query-string form
+             (?currentDocument.updateTime=) is read by the emulator as base version 0 and refused,
+             the same trap the sign-in code fell into, so the flag was never cleared.
+             test/purge-unflag-emulator.test.js drives this against a real Firestore. */
+          const un = await fetch(base + ':commit', {
+            method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+            body: JSON.stringify({ writes: [{
+              update: { name: d.name, fields: {} },
+              updateMask: { fieldPaths: ['deleteAfter', 'deletionRequestedBy'] },
+              currentDocument: { updateTime: d.updateTime }
+            }] })
           }).catch(() => null);
           if (!un || !un.ok) console.error('purge_unflag_fail', hid, un ? un.status : 'throw');
         }

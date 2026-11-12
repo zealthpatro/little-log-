@@ -353,6 +353,21 @@ async function listCodes() {
     }
   }
 
+  console.log('\n8. one address cannot arm the cooldown of another');
+  {
+    /* The link sender's key for "code-<x>" used to be the code sender's key for "<x>", so a stranger
+       who asked for a link to code-alice@... silenced alice's code email for a minute, again and again. */
+    const e = fresh('victim');
+    cache.clear();
+    const decoy = await post(w, '/api/send-signin-link', { email: 'code-' + e });
+    ok('the stranger\'s link request to the look-alike address goes through', decoy.status === 200, decoy.status);
+    const mailed = mail.length;
+    const r = await post(w, '/api/signin-code', { email: e });
+    const body = await r.json().catch(() => ({}));
+    ok('her own code request right after is not answered from his cooldown', r.status === 200 && body.cached !== true && body.hasCode === true, body);
+    ok('and her code email really goes out', mail.length === mailed + 1, mail.length - mailed);
+  }
+
   console.log('\nFirestore write statuses:', JSON.stringify(writes));
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) {}
   done();

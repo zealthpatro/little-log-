@@ -238,6 +238,11 @@ function linkJoinBatch(db, hid, uid, token, role, mutate, linkPatch) {
   await check('owner leaves with an heir and no flag', assertSucceeds(O.doc('households/H3').update({ 'members.O': del(), 'memberInfo.O': del(), 'members.C': 'owner', ownerId: 'C', 'formerMemberInfo.O': { name: '', relationship: 'Mama Bear', avatar: null } })));
   await seed((db) => db.doc('households/H4').set(household()));
   await check('caregiver deletes their account (departingSelf)', assertSucceeds(C.doc('households/H4').update({ 'members.C': del(), 'memberInfo.C': del(), 'formerMemberInfo.C': { name: '', relationship: 'Papa Bear', avatar: null } })));
+  /* Leaving with no tombstone. The app always writes one (deleteAccount, since July 2026), and the
+     one-off invite cleanup reads it to tell a past member from a genuine invitee. A hand-made leave
+     without it hid a caregiver from the cleanup, and his lingering invite let him back in once. */
+  await seed((db) => db.doc('households/H5').set(household()));
+  await check('a caregiver leaves without the tombstone', assertFails(C.doc('households/H5').update({ 'members.C': del(), 'memberInfo.C': del() })));
 
   /* ---------------------------------------------------------------------------------------------
      3. Joining by email. The invite is deleted in the same batch, so the grant is spent the moment
