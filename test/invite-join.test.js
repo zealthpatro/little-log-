@@ -18,7 +18,9 @@ const ok = (n, c) => { c ? (pass++, console.log('  ok   ' + n)) : (fail++, conso
 (async () => {
   const env = await initializeTestEnvironment({
     projectId: 'demo-cubby',
-    firestore: { rules: fs.readFileSync(path.join(__dirname, '..', 'firestore.rules'), 'utf8'), host: '127.0.0.1', port: 8080 },
+    // Host and port come from FIRESTORE_EMULATOR_HOST, which emulators:exec sets, so the suite runs
+    // on whatever port the emulator was given instead of assuming 8080.
+    firestore: { rules: fs.readFileSync(path.join(__dirname, '..', 'firestore.rules'), 'utf8') },
   });
 
   const HID = 'hhLink', TOK = 'Tok123456789012345678';
@@ -34,14 +36,24 @@ const ok = (n, c) => { c ? (pass++, console.log('  ok   ' + n)) : (fail++, conso
     });
   };
 
+  /* Claim, consume and join are ONE batch now (claimInviteLink): the household rule requires the
+     link to flip to consumed in the same write, so a removed member's old token is dead. */
+  const joinBatch = (db, uid, role, tok, hid) => {
+    const b = db.batch();
+    b.update(db.doc('inviteLinks/' + (tok || TOK)), { usedBy: uid, consumed: true });
+    b.update(db.doc('households/' + (hid || HID)), {
+      joinToken: tok || TOK, ['members.' + uid]: role, ['memberInfo.' + uid]: { name: 'J', role },
+    });
+    return b.commit();
+  };
   console.log('\n1. the whole journey a real link takes');
   await seed();
   const jdb = joiner.firestore();
-  ok('the joiner can claim the token', await assertSucceeds(jdb.doc('inviteLinks/' + TOK).update({ usedBy: 'uidJoiner' })).then(() => true, () => false));
-  ok('and can now JOIN the household (this is what was denied)',
-    await assertSucceeds(jdb.doc('households/' + HID).update({
-      joinToken: TOK, ['members.uidJoiner']: 'caregiver', ['memberInfo.uidJoiner']: { name: 'J', role: 'caregiver' },
-    })).then(() => true, () => false));
+  ok('the joiner claims the token and JOINS the household, in one batch',
+    await assertSucceeds(joinBatch(jdb, 'uidJoiner', 'caregiver')).then(() => true, () => false));
+  let spent = null;
+  await env.withSecurityRulesDisabled(async (c) => { spent = (await c.firestore().doc('inviteLinks/' + TOK).get()).data(); });
+  ok('and the link is consumed', !!spent && spent.consumed === true && spent.usedBy === 'uidJoiner');
 
   console.log('\n2. it stays a single-use gate');
   await seed();
@@ -53,23 +65,21 @@ const ok = (n, c) => { c ? (pass++, console.log('  ok   ' + n)) : (fail++, conso
 
   console.log('\n3. no self-promotion');
   await seed();
-  await jdb.doc('inviteLinks/' + TOK).update({ usedBy: 'uidJoiner' });
-  ok('the joiner cannot make themselves owner', await assertFails(jdb.doc('households/' + HID).update({
-    joinToken: TOK, ['members.uidJoiner']: 'owner', ['memberInfo.uidJoiner']: { name: 'J', role: 'owner' },
-  })).then(() => true, () => false));
-  ok('and cannot add anybody else', await assertFails(jdb.doc('households/' + HID).update({
-    joinToken: TOK, ['members.uidStranger']: 'caregiver', ['memberInfo.uidStranger']: { name: 'X', role: 'caregiver' },
-  })).then(() => true, () => false));
+  ok('the joiner cannot make themselves owner', await assertFails(joinBatch(jdb, 'uidJoiner', 'owner')).then(() => true, () => false));
+  await seed();
+  ok('and cannot add anybody else', await assertFails((() => {
+    const b = jdb.batch();
+    b.update(jdb.doc('inviteLinks/' + TOK), { usedBy: 'uidJoiner', consumed: true });
+    b.update(jdb.doc('households/' + HID), { joinToken: TOK, ['members.uidStranger']: 'caregiver', ['memberInfo.uidStranger']: { name: 'X', role: 'caregiver' } });
+    return b.commit();
+  })()).then(() => true, () => false));
 
   console.log('\n4. the token must point at THIS household');
   await seed();
   await env.withSecurityRulesDisabled(async (c) => {
     await c.firestore().doc('households/hhOther').set({ ownerId: 'uidOther', members: { uidOther: 'owner' }, memberInfo: {}, app: {} });
   });
-  await jdb.doc('inviteLinks/' + TOK).update({ usedBy: 'uidJoiner' });
-  ok('a token for one family cannot open another', await assertFails(jdb.doc('households/hhOther').update({
-    joinToken: TOK, ['members.uidJoiner']: 'caregiver', ['memberInfo.uidJoiner']: { name: 'J', role: 'caregiver' },
-  })).then(() => true, () => false));
+  ok('a token for one family cannot open another', await assertFails(joinBatch(jdb, 'uidJoiner', 'caregiver', TOK, 'hhOther')).then(() => true, () => false));
 
   console.log('\n5. a made-up token is worthless');
   await seed();
@@ -83,8 +93,9 @@ const ok = (n, c) => { c ? (pass++, console.log('  ok   ' + n)) : (fail++, conso
   console.log('\n6. the client gives the token back when the join fails');
   {
     const src = fs.readFileSync(path.join(__dirname, '..', 'app', 'store-firebase.js'), 'utf8');
-    ok('the household write is inside the try', /catch \(e\) \{\s*console\.warn\('claimInviteLink join'/.test(src));
-    ok('and a failure unclaims the token', src.includes("update({ usedBy: null })"));
+    ok('claim, consume and join go in one batch', /b\.update\(linkRef, \{ usedBy: user\.uid, consumed: true \}\);\s*b\.update\(hh, upd\);/.test(src));
+    ok('the fallback household write is inside the try', /catch \(e\) \{\s*console\.warn\('claimInviteLink join'/.test(src));
+    ok('and a failure there unclaims the token', src.includes("update({ usedBy: null })"));
     ok('the token is carried so the rule can find the link', src.includes("Object.assign({ joinToken: link.token }"));
   }
 

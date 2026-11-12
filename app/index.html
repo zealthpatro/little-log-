@@ -5340,21 +5340,26 @@ function openSheet(html,accent){
   refreshTickTargets();   // a sheet can hold a running timer, and the tick works off this list now
 }
 function sheetBack(){ var prev=_sheetStack.pop(); var s=$('#sheet'); if(!prev){ closeSheet(); return; } s.dataset.accent=prev.accent; _sheetAccent(s,prev.accent); s.innerHTML=prev.html; refreshTickTargets(); }
-function closeSheet(){ _sheetStack=[]; var s=document.getElementById('sheet'); if(s){ s.style.transition=''; s.style.transform=''; } var sc=document.getElementById('scrim'); if(sc)sc.classList.remove('show'); if(s)s.classList.remove('show'); refreshTickTargets(); }
+function closeSheet(){ var _no=__confirmNo; __confirmNo=null; if(_no) setTimeout(function(){ _no('dismiss'); },50); _sheetStack=[]; var s=document.getElementById('sheet'); if(s){ s.style.transition=''; s.style.transform=''; } var sc=document.getElementById('scrim'); if(sc)sc.classList.remove('show'); if(s)s.classList.remove('show'); refreshTickTargets(); }
 /* One calm confirm sheet, reused everywhere instead of the native window.confirm (which is jarring
    and off-brand). Stands alone (closes any trigger sheet first, so no stray back button). */
-var __confirmCb=null;
+var __confirmCb=null, __confirmNo=null;
 function confirmSheet(opts){
   opts=opts||{};
   closeSheet();
   __confirmCb=typeof opts.onConfirm==='function'?opts.onConfirm:null;
+  /* Optional, for a question that needs an answer either way (the newcomer's "join this family?").
+     Called with 'cancel' for the cancel button and 'dismiss' for any other close (a scrim tap, a
+     pull-down, another screen closing it), so the caller can tell a choice from an accident. */
+  __confirmNo=typeof opts.onCancel==='function'?opts.onCancel:null;
   var body=opts.body?('<div class="sub">'+escapeHtml(opts.body)+'</div>'):'';
   var bg=opts.danger?'var(--diaper)':'var(--feed)';
   openSheet('<h2>'+escapeHtml(opts.title||'Are you sure?')+'</h2>'+body
     +'<button class="btn-primary" style="background:'+bg+'" onclick="__confirmYes()">'+escapeHtml(opts.confirmLabel||'Confirm')+'</button>'
-    +'<button class="btn-ghost" onclick="closeSheet()">'+escapeHtml(opts.cancelLabel||'Cancel')+'</button>','note');
+    +'<button class="btn-ghost" onclick="__confirmCancel()">'+escapeHtml(opts.cancelLabel||'Cancel')+'</button>','note');
 }
-function __confirmYes(){ var cb=__confirmCb; __confirmCb=null; closeSheet(); if(cb) setTimeout(cb,50); }
+function __confirmYes(){ var cb=__confirmCb; __confirmCb=null; __confirmNo=null; closeSheet(); if(cb) setTimeout(cb,50); }
+function __confirmCancel(){ var no=__confirmNo; __confirmNo=null; __confirmCb=null; closeSheet(); if(no) setTimeout(function(){ no('cancel'); },50); }
 if(typeof window!=='undefined'){ window.confirmSheet=confirmSheet; }
 /* Drag-to-dismiss: grab the handle (or the top strip of the sheet) and pull down to close. */
 (function(){

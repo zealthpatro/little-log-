@@ -143,7 +143,9 @@ service cloud.firestore {
       // 1. The owner revokes, which can never re-point the link at a different household.
       // 2. The invitee CLAIMS it: sets usedBy to their own uid, once, before it expires, changing
       //    nothing else. An unclaimed link is the only kind that can be claimed, so a forwarded
-      //    link is dead the moment the first person walks through it.
+      //    link is dead the moment the first person walks through it. The client also sets
+      //    consumed: true in the same write, batched with the join; the household rule requires
+      //    that, which is what makes the link single-use for the join and not just for the claim.
       allow update: if request.auth != null
         && request.resource.data.householdId == resource.data.householdId
         && (
@@ -194,6 +196,57 @@ service cloud.firestore {
         return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['memberInfo'])
           || request.resource.data.memberInfo.diff(resource.data.memberInfo).affectedKeys().hasOnly([request.auth.uid]);
       }
+      // The top-level keys this write touches. Every non-owner branch below is an ALLOW-LIST of
+      // these, so a key nobody legitimately writes (deleteAfter, pendingLinks, formerMemberInfo...)
+      // can never ride along on a caregiver save or a join.
+      function changedKeys() {
+        return request.resource.data.diff(resource.data).affectedKeys();
+      }
+      /* Deletion is the purge cron's trigger, and the cron erases the whole family with nothing to
+         restore from. So it may be scheduled only the way the app does it (deleteAccount, last one
+         out): by an owner, whose write leaves nobody in members, naming themselves, and at least 29
+         days ahead. The client writes 30 days; one day of slack covers a phone whose clock is off.
+         isOwner() reads the state BEFORE the write, so the owner still counts while leaving.
+         Removing both fields stays open to an owner: it only ever cancels a deletion. */
+      function deletionScheduledProperly() {
+        return !changedKeys().hasAny(['deleteAfter', 'deletionRequestedBy'])
+          || ( !('deleteAfter' in request.resource.data) && !('deletionRequestedBy' in request.resource.data) )
+          || ( request.resource.data.get('members', {}).size() == 0
+               && request.resource.data.get('deletionRequestedBy', null) == request.auth.uid
+               && request.resource.data.get('deleteAfter', null) is number
+               && request.resource.data.deleteAfter >= request.time.toMillis() + 29 * 24 * 60 * 60 * 1000 );
+      }
+      /* A member who stays in members keeps their circle entry, and its role label cannot drift
+         from what they joined as. Without this a caregiver could delete their own memberInfo entry
+         and vanish from the circle screen (and its Remove button) while keeping full access, or
+         relabel themselves "owner" on everyone's screen. Absent-before stays allowed so a legacy
+         member with no entry can still save a name or a bear. */
+      function ownMemberInfoKept() {
+        let before = resource.data.get('memberInfo', {});
+        let after = request.resource.data.get('memberInfo', {});
+        return ( !(request.auth.uid in before) || (request.auth.uid in after) )
+          && before.get(request.auth.uid, {}).get('role', null) == after.get(request.auth.uid, {}).get('role', null);
+      }
+      // A joiner must arrive WITH a circle entry carrying the role they joined as, so nobody joins
+      // invisibly and nobody shows as owner who is not one.
+      function joinsVisibly() {
+        return request.auth.uid in request.resource.data.get('memberInfo', {})
+          && request.resource.data.memberInfo[request.auth.uid].get('role', null) == request.resource.data.members[request.auth.uid];
+      }
+      /* The join branches are doors for people NOT in the family yet. Nobody legitimately rejoins a
+         household they are in (the client skips your own household for links and invites alike), so
+         a member coming through one is borrowing a newcomer's door: to spend the owner's link and
+         delete its pending row, to replace their own circle entry, or to come out of it as owner. */
+      function notYetMember() {
+        return !(request.auth.uid in resource.data.get('members', {}));
+      }
+      // A joiner may clear THEIR OWN row from one of the owner's pending lists, and nothing else in it.
+      function onlyClearsOwnPending(field, key) {
+        return !changedKeys().hasAny([field])
+          || ( request.resource.data.get(field, {}).diff(resource.data.get(field, {})).affectedKeys().hasOnly([key])
+               && !(key in request.resource.data.get(field, {})) );
+      }
+
       // Account deletion: a member removes THEMSELVES. Without this a caregiver could not delete
       // their own account, because the isMember() branch below freezes the members map — and
       // App Store 5.1.1(v) forbids gating deletion on an owner's cooperation.
@@ -223,45 +276,67 @@ service cloud.firestore {
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.members[request.auth.uid] == 'owner'
         && request.resource.data.get('pro', null) == null
+        // Never born flagged for deletion: only the last one out sets the flag (deletionScheduledProperly).
+        // Flagged creates would otherwise fill the purge cron's 50-a-tick page and starve real deletions.
+        && !('deleteAfter' in request.resource.data)
+        && !('deletionRequestedBy' in request.resource.data)
         // Maternal-private data must never be seeded into the circle-shared blob, at CREATE too
         // (appBlobClean() only runs on update, so the invariant is enforced here for a fresh doc).
         && ( !('app' in request.resource.data)
              || !request.resource.data.app.keys().hasAny(['pregnancy', 'mhealth', 'maternalHealth']) );
-      // Owner can change anything (except pro, and never maternal data into the blob). A caregiver may
-      // edit shared data but NOT membership/owner (no privilege escalation) and only their OWN
-      // memberInfo. An invitee may join (adds themselves). No one may inject maternal-private data.
+      // Owner can change anything (except pro, never maternal data into the blob, and the deletion
+      // flag only as the last one out). A caregiver may edit shared data and their OWN memberInfo,
+      // nothing else. An invitee may join (adds themselves). No one may inject maternal-private data.
       allow update: if proUnchanged() && appBlobClean() && (
-           isOwner()
+           ( isOwner() && deletionScheduledProperly() )
         || departingSelf()
+        /* A caregiver: the app blob, updatedAt and their own circle entry, nothing else. Those are
+           the only keys a caregiver's client writes (persist, the first-run sheet, the profile, the
+           bear). The allow-list is what keeps deleteAfter, the owner's pending lists, tombstones,
+           members and ownerId out of reach. */
         || ( isMember()
-             && request.resource.data.ownerId == resource.data.ownerId
-             && request.resource.data.members == resource.data.members
-             && onlyOwnMemberInfo() )
+             && changedKeys().hasOnly(['app', 'updatedAt', 'memberInfo'])
+             && onlyOwnMemberInfo()
+             && ownMemberInfoKept() )
+        /* JOINING BY EMAIL. The invite must be deleted in the same batch (existsAfter), so it is
+           spent the moment it is used: an invite that outlived the join was a standing way back in
+           for anyone later removed. get() reads the invite as it was before the batch, which is
+           what still proves it was addressed to this household with this role. */
         || ( invitedHere()
-             && request.resource.data.ownerId == resource.data.ownerId
+             && notYetMember()
+             && !('deleteAfter' in resource.data)
+             && changedKeys().hasOnly(['members', 'memberInfo', 'pendingInvites'])
              && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid])
              // The joined role must equal the role the OWNER set on the invite (owner-controlled:
              // invites can only be created by an owner). Prevents an invitee self-promoting to
              // 'owner' — hasOnly() above restricts WHICH member key changes, never its value.
              && request.resource.data.members[request.auth.uid] == get(/databases/$(database)/documents/invites/$(request.auth.token.email.lower())).data.get('role', 'caregiver')
-             && onlyOwnMemberInfo() )
-        /* JOINING BY LINK. There was no branch for this at all, so every tokenised invite was
-           denied here and invite links failed 100% of the time. The email path above is keyed on
-           /invites/{email}; a link joiner has no such document, only a token.
-           The gate is the CLAIM the client has already made: claimInviteLink writes usedBy on
-           /inviteLinks/{token} first, and that write is single-use and rules-enforced, so reaching
-           this branch means this uid won the race for a live token pointing at THIS household. The
-           role comes off the link, which only an owner can mint, so an invitee still cannot promote
-           themselves. Same shape as the email branch otherwise: ownerId frozen, exactly one member
-           key added, and it must be their own. */
+             && !existsAfter(/databases/$(database)/documents/invites/$(request.auth.token.email.lower()))
+             && onlyOwnMemberInfo()
+             && joinsVisibly()
+             && onlyClearsOwnPending('pendingInvites', request.auth.token.email.lower()) )
+        /* JOINING BY LINK. The role comes off the link, which only an owner can mint, so an invitee
+           cannot promote themselves. Single use is enforced HERE, not by the claim alone: the link
+           must go from not consumed (get, before this batch) to consumed by this uid (getAfter) in
+           this very write, so claim and join are one atomic act. A removed member's old token is
+           already consumed and can never pass again, and a link claimed by an older build (usedBy
+           set, never consumed) cannot be consumed now, because the claim rule only lets an
+           UNCLAIMED link be claimed. The expiry is checked again here as a second lock. */
         || ( request.auth != null
-             && request.resource.data.ownerId == resource.data.ownerId
+             && notYetMember()
+             && !('deleteAfter' in resource.data)
+             && changedKeys().hasOnly(['members', 'memberInfo', 'joinToken', 'pendingLinks'])
              && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid])
              && exists(/databases/$(database)/documents/inviteLinks/$(request.resource.data.joinToken))
-             && get(/databases/$(database)/documents/inviteLinks/$(request.resource.data.joinToken)).data.usedBy == request.auth.uid
+             && get(/databases/$(database)/documents/inviteLinks/$(request.resource.data.joinToken)).data.get('consumed', false) != true
+             && getAfter(/databases/$(database)/documents/inviteLinks/$(request.resource.data.joinToken)).data.get('consumed', false) == true
+             && getAfter(/databases/$(database)/documents/inviteLinks/$(request.resource.data.joinToken)).data.usedBy == request.auth.uid
              && get(/databases/$(database)/documents/inviteLinks/$(request.resource.data.joinToken)).data.householdId == hid
+             && request.time < get(/databases/$(database)/documents/inviteLinks/$(request.resource.data.joinToken)).data.expiresAt
              && request.resource.data.members[request.auth.uid] == get(/databases/$(database)/documents/inviteLinks/$(request.resource.data.joinToken)).data.get('role', 'caregiver')
-             && onlyOwnMemberInfo() ) );
+             && onlyOwnMemberInfo()
+             && joinsVisibly()
+             && onlyClearsOwnPending('pendingLinks', request.resource.data.joinToken) ) );
       allow delete: if request.auth != null && resource.data.members[request.auth.uid] == 'owner';
 
       // Members of THIS household (resolved fresh each check).
