@@ -149,6 +149,7 @@ const TREE = [
   { name: 'funnel-core',    cmd: ['node', 'test/funnel-core.test.js'] },
   { name: 'funnel-worker',  cmd: ['node', 'test/funnel-worker.test.js'] },
   { name: 'native-deeplink', cmd: ['node', 'test/native-deeplink.test.js'] },   // the native wrapper keeps a token invite link
+  { name: 'sender-name', cmd: ['node', 'test/sender-name.test.js'] },   // a sender's own name never reads as an address or a claim
   { name: 'funnel-steps',   cmd: ['node', 'tools/funnel_steps_check.js', 'url'] },
   { name: 'tracking-plan',  cmd: ['node', 'tools/tracking_plan_check.js'] },
   { name: 'funnel-report',  cmd: ['node', 'tools/funnel_report.js', '--self-test'] },
@@ -166,6 +167,7 @@ const TREE = [
   { name: 'purge-guard',    cmd: ['node', 'test/purge-guard.test.js'] },
   /* signin-budget: a reissue never resets an address's guesses, and every limiter keys an IPv6 /64. */
   { name: 'signin-budget',  cmd: ['node', 'test/signin-code-budget.test.js'] },
+  { name: 'worker-routes',  cmd: ['node', 'test/worker-routes.test.js'] },   // invite mail caps, newsletter consent, game ceilings, no throws
   /* xss-sink: markup in anything a circle member can write is drawn as text, in every view. It runs
      xss_leaf_check.js as its last section (each leaf field, each sink, mutants included). */
   { name: 'xss-sink',       cmd: ['node', 'tools/xss_sink_check.js', 'url'] },
@@ -203,9 +205,12 @@ const EMU_GATES = [
   { name: 'household-guard', emu: 'node household-guard.test.js' },        // caregiver cannot flag, rejoin or self-promote
   { name: 'signin-code-emu', emu: 'node signin-code-emulator.test.js' },   // the real conditional spend, race and burn
   { name: 'purge-unflag-emu', emu: 'node purge-unflag-emulator.test.js' }, // the bogus flag really clears
+  { name: 'purge-erase-emu', emu: 'node purge-erase-emulator.test.js' },   // mhealth, pregnancy photos and memberEmails really go
   { name: 'invite-consent', self: ['node', 'test/invite-consent.test.js'] },  // a newcomer is asked before joining
   { name: 'invite-cleanup', self: ['node', 'test/invite-cleanup.test.js'] },  // the one-off cleanup closes every lingering way back in
   { name: 'ios-signin', self: ['node', 'test/ios-signin-code.test.js'] },       // the installed iOS app signs in by code, in its own container
+  { name: 'circle-manage', self: ['node', 'test/circle-manage.test.js'] },    // remove/cancel tap through, a removal closes every live link
+  { name: 'signin-claim-auth', self: ['node', 'test/signin-claim-auth-emu.test.js'] }, // claiming an unproven account keeps HER one account (real Auth emulator)
 ];
 
 function freePort() {

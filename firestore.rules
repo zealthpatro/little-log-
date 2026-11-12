@@ -37,6 +37,18 @@ service cloud.firestore {
     match /ops/{doc} {
       allow read, write: if false;
     }
+    /* The sign-in address counts only once it is PROVEN. The token's email claim is whatever the
+       account says, and an account made with a password, or by any provider that never checks the
+       inbox, can say any address it likes. Wherever the address decides who gets in (an invite, the
+       email join) or whose name is shown (an invite's sender, a member's own address), it must come
+       with email_verified. Every sign-in Cubby offers sets it: Google, Apple, the emailed link, and
+       the emailed code (the Worker makes those accounts verified). A November 2026 count of every
+       production account found all of them verified, so nobody real is shut out by this.
+       .get() with a default, because a token with no claim at all must deny, not throw. */
+    function emailProven() {
+      return request.auth != null && request.auth.token.get('email_verified', false) == true;
+    }
+
     // Invites are keyed by the invitee's lowercased email.
     match /invites/{email} {
       /* WHO SENT IT, in a form the sender cannot make up. A newcomer is asked before she joins,
@@ -47,11 +59,12 @@ service cloud.firestore {
          proving the address is refused, and the sheet treats an invite with neither as unsigned. */
       function senderProven() {
         return ( !('fromEmail' in request.resource.data) && !('invitedByName' in request.resource.data) )
-          || ( request.resource.data.get('fromEmail', '') is string
+          || ( emailProven()
+               && request.resource.data.get('fromEmail', '') is string
                && request.resource.data.get('fromEmail', '') != ''
                && request.resource.data.fromEmail == request.auth.token.email.lower() );
       }
-      allow read: if request.auth != null && request.auth.token.email.lower() == email;
+      allow read: if emailProven() && request.auth.token.email.lower() == email;
       allow create: if request.auth != null
         && get(/databases/$(database)/documents/households/$(request.resource.data.householdId)).data.members[request.auth.uid] == 'owner'
         // Role is owner-set here and later enforced at join (SEC-3); constrain it to the two valid
@@ -71,7 +84,7 @@ service cloud.firestore {
       // every trace of themselves without an owner's help (App Store 5.1.1(v): deletion can never be
       // gated on another person). The email is the doc id, so this grants nothing beyond their own.
       allow delete: if request.auth != null && (
-           request.auth.token.email.lower() == email
+           ( emailProven() && request.auth.token.email.lower() == email )
         || get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members[request.auth.uid] == 'owner' );
     }
 
@@ -140,13 +153,15 @@ service cloud.firestore {
       allow get: if request.auth != null;
       allow list: if false;
 
-      // Only the household's own owner mints one, and only ever pointing at their own household.
+      // Only the household's own owner mints one, and only ever pointing at their own household, and
+      // only ever as a CAREGIVER link: the app has never minted any other kind (copyAppLink), and an
+      // owner-role link handed whoever held its token the power to remove the owner.
       // members.get(uid, '') rather than members[uid] throughout this block: a bare map read of an
       // absent key THROWS, and while a throw does deny, a rule that is correct only because of its
       // error behaviour is not a rule anyone should have to reason about later. Say it outright.
       allow create: if request.auth != null
         && get(/databases/$(database)/documents/households/$(request.resource.data.householdId)).data.members.get(request.auth.uid, '') == 'owner'
-        && request.resource.data.get('role', 'caregiver') in ['owner', 'caregiver']
+        && request.resource.data.get('role', 'caregiver') == 'caregiver'
         // .get() rather than a bare field read: referencing an absent field THROWS in rules, and a
         // throw on create would reject the owner's own legitimate link.
         && request.resource.data.get('usedBy', null) == null
@@ -156,20 +171,29 @@ service cloud.firestore {
         // without it is still accepted, because older builds never wrote it; the sheet then shows
         // no sender name for it.
         && ( !('fromEmail' in request.resource.data)
-             || request.resource.data.fromEmail == request.auth.token.email.lower() );
+             || ( emailProven() && request.resource.data.fromEmail == request.auth.token.email.lower() ) );
 
       // Exactly two updates are legal.
-      // 1. The owner revokes, which can never re-point the link at a different household.
+      // 1. The owner edits it, which can never re-point the link at a different household, and can
+      //    never change who it says sent it or what role it grants. Revoking is a delete, and no
+      //    client updates a link as its owner, so this costs nothing; it stops an owner writing
+      //    "Your midwife" over her own address after the rules checked it at create.
       // 2. The invitee CLAIMS it: sets usedBy to their own uid and consumed: true, once, before it
       //    expires, changing nothing else, AND in the same batch that adds them to the household
       //    (getAfter). The household rule checks the same thing from its side. A claim on its own
       //    is refused, so a link can never be spent by someone who did not get in. That used to
       //    happen to an older cached build after the rules changed: it claimed first and joined
       //    second, the join was refused, and the owner's link was gone for good with nobody in.
+      //    The claimer must also be NEW to the family (get, before the batch). getAfter alone was
+      //    already true for someone in it, so a caregiver could burn any of the owner's links with a
+      //    lone claim, and the person it was meant for was shut out.
       allow update: if request.auth != null
         && request.resource.data.householdId == resource.data.householdId
         && (
-          get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members.get(request.auth.uid, '') == 'owner'
+          ( get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members.get(request.auth.uid, '') == 'owner'
+            && request.resource.data.get('fromEmail', null) == resource.data.get('fromEmail', null)
+            && request.resource.data.get('invitedByName', null) == resource.data.get('invitedByName', null)
+            && request.resource.data.get('role', 'caregiver') == resource.data.get('role', 'caregiver') )
           || (
                resource.data.get('usedBy', null) == null
             && request.resource.data.usedBy == request.auth.uid
@@ -177,6 +201,8 @@ service cloud.firestore {
             && request.time < resource.data.expiresAt
             && request.resource.data.get('role', 'caregiver') == resource.data.get('role', 'caregiver')
             && request.resource.data.expiresAt == resource.data.expiresAt
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy', 'consumed'])
+            && get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.get('members', {}).get(request.auth.uid, '') == ''
             && getAfter(/databases/$(database)/documents/households/$(resource.data.householdId)).data.get('members', {}).get(request.auth.uid, '') == resource.data.get('role', 'caregiver')
           )
         );
@@ -193,7 +219,7 @@ service cloud.firestore {
         return request.auth != null && resource.data.members[request.auth.uid] == 'owner';
       }
       function invitedHere() {
-        return request.auth != null
+        return emailProven()
           && exists(/databases/$(database)/documents/invites/$(request.auth.token.email.lower()))
           && get(/databases/$(database)/documents/invites/$(request.auth.token.email.lower())).data.householdId == hid;
       }
@@ -366,7 +392,12 @@ service cloud.firestore {
              && onlyOwnMemberInfo()
              && joinsVisibly()
              && onlyClearsOwnPending('pendingLinks', request.resource.data.joinToken) ) );
-      allow delete: if request.auth != null && resource.data.members[request.auth.uid] == 'owner';
+      /* No client deletes a family, owner included. Nothing in the app ever has: a family closes by
+         the last one out flagging it (deletionScheduledProperly), and the purge cron erases it with
+         the service account, which bypasses this file. A deleted id could be CREATED again by anyone
+         who knew it (every past member, invitee and link holder does), and the new "owner" could
+         then read the events, photos, notes and addresses still sitting underneath it. */
+      allow delete: if false;
 
       // Members of THIS household (resolved fresh each check).
       function pm() { return get(/databases/$(database)/documents/households/$(hid)).data.members; }
@@ -440,6 +471,7 @@ service cloud.firestore {
             && ( request.auth.uid == uid || pm()[request.auth.uid] == 'owner' );
         allow create, update: if request.auth != null && request.auth.uid in pm() && (
             ( request.auth.uid == uid
+              && emailProven()
               && request.resource.data.email == request.auth.token.email.lower() )
             || pm()[request.auth.uid] == 'owner' );
         allow delete: if request.auth != null && (

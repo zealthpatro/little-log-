@@ -116,6 +116,14 @@ function cooldownKeyFor(email) {
   if (domain === 'gmail.com' || domain === 'googlemail.com') local = local.replace(/\./g, '');
   return local + '@' + domain;
 }
+/* The address check the three public sign-in endpoints share. '.invalid' is a reserved TLD (RFC
+   2606), so no person has one, and the canary's address is one (CANARY_EMAIL, in a public repo).
+   Before this, three networks asking for canary@cubby.invalid could cap it and raise a false
+   "Firestore write was refused" alarm every six hours (round-4 review, signin-4). Refused exactly
+   like any other malformed address. */
+function signinEmailOk(email) {
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) && email.length <= 254 && !/\.invalid$/.test(email);
+}
 
 /* The per-address cooldown REMEMBERS what the email it was armed by carried, and answers from that.
    It used to hold '1' and answer {ok:true, cached:true}, and every client reads cached as "that
@@ -126,13 +134,34 @@ function cooldownKeyFor(email) {
    Send and Resend. The fix lives here, not in app/, so the clients already cached on phones are
    right too: when the earlier email was not a full code-and-link one, answer with what it DID hold
    and leave cached off. That email went out inside the last minute, so "we just emailed" is true. */
-function cooldownArmed(hasCode, hasLink) {
-  return new Response(JSON.stringify({ hasCode: !!hasCode, hasLink: !!hasLink }), { headers: { 'cache-control': 'max-age=60' } });
+function cooldownArmed(hasCode, hasLink, who) {
+  return new Response(JSON.stringify({ hasCode: !!hasCode, hasLink: !!hasLink, who: String(who || '') }), { headers: { 'cache-control': 'max-age=60' } });
 }
-async function cooldownReply(hit) {
+/* WHICH EXACT ADDRESS armed the cooldown (round-4 review, signin-1). The key is the normalised
+   address, so jane+k1@ and jane@ share one bucket, but the code, its document and its ceilings are
+   all keyed on the EXACT address. So a stranger asking for jane+k1@ once a minute armed jane@'s
+   cooldown every minute, and every one of her own requests was answered "cached": no code was
+   minted for her address, and the code in her inbox was jane+k1@'s, a different account. She could
+   not sign in for as long as he kept it up. Now the value records a short hash of the exact address
+   that armed it, and "cached" is only ever the answer to that same address. A different exact
+   address goes on to a real send and re-arms the bucket with its own. The cost, stated plainly: a
+   stranger alternating variants is no longer held to one email a minute per inbox by anything. Each
+   variant is a fresh exact address with fresh ceilings, so only the per-IP limiter bounds him, and it
+   keys IPv6 per /64 (round-5 review measured 10 a minute from one IPv4 and far more from one /48).
+   That is nuisance mail she can ignore, and Cubby's own sending reputation, against a cooldown that
+   answers for the wrong address and locks her out. Lockout loses. Keying the limiter per /48 would
+   bound it, but would also put unrelated phones on one mobile carrier's /48 into one bucket, so it is
+   left per /64. Never the plaintext: the cache is not ours to fill with addresses. */
+async function cooldownWho(email) {
+  return (await sha256hex('cubby-cooldown:' + email)).slice(0, 16);
+}
+/* null: no cooldown applies to this exact address, so go on and send. Otherwise the answer to give. */
+async function cooldownReply(hit, who) {
+  if (!hit) return null;
   let was = null;
   try { was = JSON.parse(await hit.text()); } catch (e) { was = null; }
-  // Armed by the worker before this one (its value is '1'): give the answer it always gave.
+  if (was && typeof was === 'object' && typeof was.who === 'string' && was.who && was.who !== who) return null;
+  // Armed by the worker before this one (its value is '1', or carries no address hash): give the answer it always gave.
   if (!was || typeof was.hasCode !== 'boolean' || typeof was.hasLink !== 'boolean') return json({ ok: true, cached: true });
   if (was.hasCode && was.hasLink) return json({ ok: true, cached: true, hasCode: true, hasLink: true });
   return json({ ok: true, hasCode: was.hasCode, hasLink: was.hasLink });
@@ -195,17 +224,19 @@ async function sendSigninLink(request, env) {
   let body;
   try { body = await request.json(); } catch (e) { return json({ error: 'bad_request' }, 400); }
   const email = ((body && body.email) || '').trim().toLowerCase();
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254) return json({ error: 'invalid_email' }, 400);
+  if (!signinEmailOk(email)) return json({ error: 'invalid_email' }, 400);
 
   let sa;
   try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return json({ error: 'server_config' }, 500); }
   if (!env.RESEND_API_KEY) return json({ error: 'server_config' }, 500);
 
   // Light per-email cooldown (normalized key) to absorb rapid re-sends; set only AFTER a real send.
+  // It answers only for the exact address that armed it (cooldownReply).
   const cache = caches.default;
   const cooldown = new Request('https://cooldown.cubby.internal/' + encodeURIComponent(cooldownKeyFor(email)));
-  const armed = await cache.match(cooldown);
-  if (armed) return cooldownReply(armed);
+  const who = await cooldownWho(email);
+  const held = await cooldownReply(await cache.match(cooldown), who);
+  if (held) return held;
 
   try {
     /* BOTH scopes. This request mints a sign-in link (identitytoolkit) AND writes the code document
@@ -222,7 +253,7 @@ async function sendSigninLink(request, env) {
        signs in the phone and the laptop she is sitting at never moves. BEST EFFORT on purpose. This
        route works today and is the majority of all sign-ins, so a Firestore hiccup must degrade the
        email to link-only rather than fail the send. The code endpoint makes the opposite trade. */
-    const code = await issueSigninCode(sa, token, email, await signinNetTag(sa, request));
+    const code = await issueSigninCode(sa, token, email, clientIpKey(request, 3));
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'authorization': 'Bearer ' + env.RESEND_API_KEY, 'content-type': 'application/json' },
@@ -234,7 +265,7 @@ async function sendSigninLink(request, env) {
       })
     });
     if (!r.ok) return json({ error: 'send_failed' }, 502);
-    await cache.put(cooldown, cooldownArmed(!!code, true)); // start cooldown only on success, and remember what this email holds
+    await cache.put(cooldown, cooldownArmed(!!code, true, who)); // start cooldown only on success, and remember what this email holds, and for whom
     /* Say what the email ACTUALLY carries, rather than leaving the client to assume. This is the
        whole bug class closed at the root: a screen can only offer a code box because the sender just
        told it there is a code in that inbox, so the two can no longer drift apart. */
@@ -378,17 +409,24 @@ const SIGNIN_CODE_TRIES = 5;                 // 5 guesses against 1,000,000, the
    SPLIT BY NETWORK, as well as per address (final review, 2026-11-12). With one ceiling per address,
    anyone who knew a parent's email could spend it from one laptop in about three minutes, and she was
    locked out of code sign-in for an hour; on the installed iOS app a code is the only way in. Now
-   each network gets its own share, and the per-address total stays the guessing bound. One network
-   can only spend its own share, so her phone, on another network, still gets a code and still signs
-   in. Two networks together (14 of 15) still leave her a guess; locking her out needs three at once,
-   each mailing her codes she did not ask for. Her own allowance is 7 misses an hour per network, a
-   stale code typed after a Resend included, which a real parent does not reach.
-   A network is the client's IPv4 address or IPv6 /48 (a free tunnel hands out a /48, so a /64 is
-   one machine's spare change), stored only as a keyed hash, never the address. */
+   each network gets its own share, and the per-address total stays the guessing bound.
+   THE THREAT MODEL, honestly (round-4 review, signin-3). A network is the client's IPv4 address or
+   its IPv6 /48 (a free tunnel hands out a /48, so a /64 is one machine's spare change). That makes
+   ONE ordinary dual-stack home connection TWO networks, not one: a single laptop gets two shares.
+   So a share is 5 misses: two networks spend 10 of the 15 and still leave her 5, the full tries of
+   one code, from her own phone. Three networks (any spare IPv4, or another /48, are cheap) CAN still
+   spend all 15 and pause code sign-in for her address for up to an hour. What they cannot do is get
+   in: 15 guesses an hour against a million codes. Every code they ask for is mailed to her, so she
+   sees it happening, and her email link still works. Her own allowance, 5 misses an hour from her
+   network, a stale code typed after a Resend included, is more than a real parent reaches.
+   Codes minted are split the same way, 5 per network (a reissue never resets the guess budget, so a
+   higher issue share costs nothing in guesses) and 12 per address in all.
+   The network is stored only as a keyed hash, never the address, and the hash is keyed per document
+   too (signinNetTag), so two addresses asked for from one network carry unrelated tags. */
 const SIGNIN_WINDOW_MS = 60 * 60 * 1000;
-const SIGNIN_GUESSES_PER_NET = 7;            // misses compared per address per network per rolling hour
+const SIGNIN_GUESSES_PER_NET = 5;            // misses compared per address per network per rolling hour
 const SIGNIN_GUESSES_PER_WINDOW = 15;        // and per address from every network together
-const SIGNIN_ISSUES_PER_NET = 4;             // codes minted per address per network per rolling hour
+const SIGNIN_ISSUES_PER_NET = 5;             // codes minted per address per network per rolling hour
 const SIGNIN_ISSUES_PER_WINDOW = 12;         // and per address in all
 
 /* The rolling window, as entries {t, net}. Stored as "t:net" strings in `spends`/`issues`, in the
@@ -421,11 +459,17 @@ function signinOver(list, net, perNet, perAll, now) {
   if (list.length >= perAll) return { over: true, retryAfter: wait(list[list.length - perAll]) };
   return { over: false, retryAfter: 0 };
 }
-/* The network's keyed hash. Same key as the code MACs, its own label, 12 characters. */
-async function signinNetTag(sa, request) {
+/* The network's keyed hash. Same key as the code MACs, its own label, 12 characters.
+   PER DOCUMENT (round-4 review, signin-8): the document id is inside the HMAC, so one network's tag
+   differs from one address to the next. Tags are only ever compared inside one document, so nothing
+   is lost, and whoever can read signinCodes can no longer tell which addresses were asked for from
+   the same network. ip is clientIpKey(request, 3); an empty ip is the Worker's own caller (the
+   canary), which keeps the fixed tag 'srv'. */
+async function signinNetTag(sa, docId, ip) {
+  if (!ip) return 'srv';
   try {
     const key = await signinCodeKey(sa);
-    const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode('net:' + clientIpKey(request, 3)));
+    const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode('net:' + docId + ':' + ip));
     return _b64urlFromBytes(sig).slice(0, 12);
   } catch (e) { return 'unknown'; }
 }
@@ -493,14 +537,25 @@ function newSigninCode() {
    endpoint names it rate_limited instead of store_failed, so the logs can tell them apart, and puts
    the wait in out.retryAfter for the app to show). The write is conditional on the version just
    read, so a verify racing it cannot have its spend erased.
-   net is the requester's signinNetTag. 'srv' for the Worker's own callers (the canary). */
-async function issueSigninCode(sa, token, email, net, out) {
-  net = net || 'srv';
+   AT AN ISSUE CEILING WITH HER CODE STILL LIVE (round-4 review, signin-2), out.liveCode is set and
+   out.liveFor says for how many seconds the code in her newest email still works. A reissue never
+   resets the guess budget, so the issue ceiling only stops new mail; the code already in her inbox
+   is as good as ever, and the app keeps its box open instead of sending her to a link. Never at a
+   GUESS ceiling: there, this network could not use the code anyway.
+   ip is the requester's clientIpKey(request, 3), hashed per document by signinNetTag; empty for the
+   Worker's own callers (the canary), whose tag is 'srv'.
+   A refused conditional write means somebody else wrote first (a verify's spend, usually), so it is
+   re-read and tried again, up to SIGNIN_CODE_TRIES + 1 times as spendSigninCode does. Two goes made
+   a few concurrent spends turn her code request into 502 store_failed (round-4 review, signin-9);
+   every write that beats this one is a landed spend that counts against the budget, so the loop is
+   bounded by the budget, not by luck. */
+async function issueSigninCode(sa, token, email, ip, out) {
   try {
     const base = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents';
     const docId = await signinCodeDocId(sa, email);
     const path = base + '/signinCodes/' + docId;
-    for (let attempt = 0; attempt < 2; attempt++) {           // one re-read if a verify wrote in between
+    const net = await signinNetTag(sa, docId, ip);
+    for (let attempt = 0; attempt < SIGNIN_CODE_TRIES + 1; attempt++) {   // re-read whenever a verify wrote in between
       const got = await fetch(path, { headers: { authorization: 'Bearer ' + token } });
       if (!got.ok && got.status !== 404) return '';
       const prev = got.ok ? await got.json() : null;
@@ -510,10 +565,20 @@ async function issueSigninCode(sa, token, email, net, out) {
       const spends = signinEntries(pf, 'spends', 'spentAt', now), issues = signinEntries(pf, 'issues', 'issuedAt', now);
       /* No new code where this network could not use it (its guesses are spent, or the address's
          are), and none past the issue ceilings. */
-      const capped = [signinOver(spends, net, SIGNIN_GUESSES_PER_NET, SIGNIN_GUESSES_PER_WINDOW, now),
-        signinOver(issues, net, SIGNIN_ISSUES_PER_NET, SIGNIN_ISSUES_PER_WINDOW, now)].filter((c) => c.over);
+      const guessCap = signinOver(spends, net, SIGNIN_GUESSES_PER_NET, SIGNIN_GUESSES_PER_WINDOW, now);
+      const issueCap = signinOver(issues, net, SIGNIN_ISSUES_PER_NET, SIGNIN_ISSUES_PER_WINDOW, now);
+      const capped = [guessCap, issueCap].filter((c) => c.over);
       if (capped.length) {
-        if (out) out.retryAfter = Math.max.apply(null, capped.map((c) => c.retryAfter));
+        if (out) {
+          out.retryAfter = Math.max.apply(null, capped.map((c) => c.retryAfter));
+          const exp = Number((pf.exp && pf.exp.integerValue) || 0);
+          const tries = Number((pf.tries && pf.tries.integerValue) || 0);
+          const mac = String((pf.mac && pf.mac.stringValue) || '');
+          if (!guessCap.over && mac && exp > now && tries > 0) {
+            out.liveCode = true;
+            out.liveFor = Math.max(1, Math.floor((exp - now) / 1000));
+          }
+        }
         return null;
       }
       issues.push({ t: now, net });
@@ -584,7 +649,16 @@ async function signinCanaryProbe(env) {
     try { await fetch(path, { method: 'DELETE', headers: { authorization: 'Bearer ' + token } }); } catch (e) {}
   };
 
-  const first = await issueSigninCode(sa, token, CANARY_EMAIL);
+  const capOut = {};
+  const first = await issueSigninCode(sa, token, CANARY_EMAIL, '', capOut);
+  if (first === null) {
+    /* null is a CEILING, not a refused write (round-4 review, signin-4). Said as what it is, so the
+       alert does not send someone to check Firestore permissions at 3am. The public endpoints refuse
+       this address now, so this should never happen; if it does, something wrote the canary's own
+       document. Removed, so the next run tests the path again. */
+    await remove();
+    return { ok: false, reason: 'capped: the canary address is at its hourly code ceiling (a slot frees in ' + (capOut.retryAfter || 0) + 's), so this run could not test the path', sa: sa, token: token };
+  }
   if (!first) {
     /* issueSigninCode swallows its reason and returns '', which is right for the caller and useless
        in an alert. Ask Firestore directly so the mail can say "403 PERMISSION_DENIED" instead of
@@ -792,7 +866,7 @@ async function sendSigninCode(request, env) {
   const bad = await signinGuard(request, env); if (bad) return bad;
   let body; try { body = await request.json(); } catch (e) { return json({ error: 'bad_request' }, 400); }
   const email = ((body && body.email) || '').trim().toLowerCase();
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254) return json({ error: 'invalid_email' }, 400);
+  if (!signinEmailOk(email)) return json({ error: 'invalid_email' }, 400);
 
   let sa; try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return json({ error: 'server_config' }, 500); }
   if (!env.RESEND_API_KEY) return json({ error: 'server_config' }, 500);
@@ -801,10 +875,12 @@ async function sendSigninCode(request, env) {
   // armed only after a real send, so a failed send does not lock the person out of retrying.
   const cache = caches.default;
   /* 'code/' and not 'code-': encodeURIComponent always escapes '/', so no address the link sender
-     keys on can spell this one. With '-', a link asked for code-alice@... armed alice's code cooldown. */
+     keys on can spell this one. With '-', a link asked for code-alice@... armed alice's code cooldown.
+     It answers only for the exact address that armed it (cooldownReply). */
   const cooldown = new Request('https://cooldown.cubby.internal/code/' + encodeURIComponent(cooldownKeyFor(email)));
-  const armed = await cache.match(cooldown);
-  if (armed) return cooldownReply(armed);
+  const who = await cooldownWho(email);
+  const held = await cooldownReply(await cache.match(cooldown), who);
+  if (held) return held;
 
   try {
     /* BOTH scopes, and this one was returning 502 store_failed on every single request in production:
@@ -813,9 +889,11 @@ async function sendSigninCode(request, env) {
        scope that kept the page counter empty for two days; that one was silent, this one was not. */
     const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/identitytoolkit');
     const capOut = {};
-    const code = await issueSigninCode(sa, token, email, await signinNetTag(sa, request), capOut);
-    // Capped for now; the client falls back to a link, and says how long codes are paused for.
-    if (code === null) return json({ error: 'rate_limited', retryAfter: capOut.retryAfter || 0 }, 429);
+    const code = await issueSigninCode(sa, token, email, clientIpKey(request, 3), capOut);
+    /* Capped for now: the client falls back to a link, and says how long codes are paused for. Unless
+       her newest code is still live (liveCode): then the app keeps its box open and says so. */
+    if (code === null) return json(Object.assign({ error: 'rate_limited', retryAfter: capOut.retryAfter || 0 },
+      capOut.liveCode ? { liveCode: true, liveFor: capOut.liveFor } : {}), 429);
     if (!code) return json({ error: 'store_failed' }, 502);   // the code IS this endpoint; no code, no email
 
     /* Carry a link as well. This endpoint is asked for by the installed iOS app, where a tapped link
@@ -840,7 +918,7 @@ async function sendSigninCode(request, env) {
       })
     });
     if (!r.ok) return json({ error: 'send_failed' }, 502);
-    await cache.put(cooldown, cooldownArmed(true, !!link));
+    await cache.put(cooldown, cooldownArmed(true, !!link, who));
     return json({ ok: true, hasCode: true, hasLink: !!link });
   } catch (e) {
     return json({ error: 'failed' }, 500);
@@ -862,12 +940,12 @@ async function sendSigninCode(request, env) {
    only ever compared against the version its own committed spend paid for. Nothing is deleted on
    a miss, because the document also carries the per-address window that a reissue must not reset;
    the last try removes the mac instead, which is what kills the code. */
-async function spendSigninCode(sa, token, email, code, net, out) {
-  net = net || 'srv';
+async function spendSigninCode(sa, token, email, code, ip, out) {
   const base = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents';
   const docId = await signinCodeDocId(sa, email);
   const path = base + '/signinCodes/' + docId;
   const name = signinDocName(sa, docId);
+  const net = await signinNetTag(sa, docId, ip);
   const read = async () => {
     const got = await fetch(path, { headers: { authorization: 'Bearer ' + token } });
     return got.ok ? await got.json() : null;                         // null: no code outstanding
@@ -887,8 +965,10 @@ async function spendSigninCode(sa, token, email, code, net, out) {
     if (over.over) { if (out) out.retryAfter = over.retryAfter; return 'capped'; }
     spends.push({ t: now, net });
     // spentAt is masked with no value, so Firestore drops the previous build's integer array: its
-    // entries are carried into spends above.
-    const mask = ['tries', 'spends', 'spentAt'];
+    // entries are carried into spends above. email likewise: a document minted by the production
+    // build before this one kept the plaintext address, and the first spend now drops it (round-4
+    // review, signin-5). Nothing here reads it; the address is inside the mac.
+    const mask = ['tries', 'spends', 'spentAt', 'email'];
     if (tries - 1 <= 0) mask.push('mac');                             // masked but absent: Firestore deletes it
     const spend = await signinCommit(sa, token, {
       update: { name, fields: { tries: { integerValue: String(tries - 1) }, spends: signinEntriesValue(spends) } },
@@ -922,7 +1002,7 @@ async function verifySigninCode(request, env) {
   let body; try { body = await request.json(); } catch (e) { return json({ error: 'bad_request' }, 400); }
   const email = ((body && body.email) || '').trim().toLowerCase();
   const code = String((body && body.code) || '').trim();
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254) return json({ error: 'invalid_email' }, 400);
+  if (!signinEmailOk(email)) return json({ error: 'invalid_email' }, 400);
   if (!/^[0-9]{6}$/.test(code)) return json({ error: 'invalid_code' }, 400);
 
   let sa; try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return json({ error: 'server_config' }, 500); }
@@ -932,7 +1012,7 @@ async function verifySigninCode(request, env) {
        account and mints the custom token (identitytoolkit). */
     const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/identitytoolkit');
     const capOut = {};
-    const spent = await spendSigninCode(sa, token, email, code, await signinNetTag(sa, request), capOut);
+    const spent = await spendSigninCode(sa, token, email, code, clientIpKey(request, 3), capOut);
     // The limiter's own answer, plus how long until this address can try again from here.
     if (spent === 'capped') return json({ error: 'rate_limited', retryAfter: capOut.retryAfter || 0 }, 429);
     if (spent === 'failed') return json({ error: 'failed' }, 500);
@@ -949,7 +1029,21 @@ async function verifySigninCode(request, env) {
 
 /* The uid behind an address, created if there is none. Creating on verify (not on issue) is what keeps
    the issue endpoint from being an enumeration oracle, and emailVerified is true because control of
-   the inbox is exactly what was just proven. */
+   the inbox is exactly what was just proven.
+   AN UNVERIFIED ACCOUNT IS NOT HERS YET (round-4 review, NP-1). Anyone can try to register an address
+   they do not own with a password, and that account sits there unverified. Handing her session to it
+   would put her family's data in an account whose password a stranger chose. So before minting, an
+   account whose email is not verified is claimed for the person who just proved the inbox: marked
+   verified, its password removed, and every session issued before now revoked (validSince), which
+   signs out whoever set that password. The same thing Firebase itself does when a verified sign-in
+   meets an unverified password account. If that update fails, no session: never mint into an
+   account someone else may hold. emailVerified absent counts as false, because a JSON API drops a
+   false boolean. A verified account is never touched.
+   deleteAttribute:['PASSWORD'], NEVER deleteProvider:['password']. The provider call unlinks email
+   sign-in and clears the account's EMAIL with it, so her session carries no email and her next code
+   sign-in finds no account for her address and makes a second one: her family on one uid, her
+   session on another (round-5 review, proven on the real Auth emulator;
+   test/signin-claim-auth-emu.test.js is the gate). */
 async function getOrCreateUidByEmail(token, projectId, email) {
   const api = 'https://identitytoolkit.googleapis.com/v1/projects/' + projectId;
   const look = await fetch(api + '/accounts:lookup', {
@@ -959,7 +1053,19 @@ async function getOrCreateUidByEmail(token, projectId, email) {
   });
   if (look.ok) {
     const j = await look.json();
-    if (j && j.users && j.users[0] && j.users[0].localId) return j.users[0].localId;
+    const u = j && j.users && j.users[0];
+    if (u && u.localId) {
+      if (u.emailVerified === true) return u.localId;
+      const providers = ((u.providerUserInfo || []).map((p) => p && p.providerId).filter(Boolean)).join(',') || 'none';
+      console.error('signin_unverified_account_claimed', u.localId, 'providers=' + providers);
+      const upd = await fetch(api + '/accounts:update', {
+        method: 'POST',
+        headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+        body: JSON.stringify({ localId: u.localId, emailVerified: true, deleteAttribute: ['PASSWORD'], validSince: String(Math.floor(Date.now() / 1000)) })
+      });
+      if (!upd.ok) { console.error('signin_unverified_claim_fail', u.localId, upd.status); return ''; }
+      return u.localId;
+    }
   }
   const made = await fetch(api + '/accounts', {
     method: 'POST',
@@ -992,6 +1098,44 @@ async function mintCustomToken(sa, uid) {
 
 /* (signinCodeHtml lived here. Both senders now share signinEmailHtml(code, link) instead, so there is
    one sign-in email and no way for the two routes to drift into saying different things again.) */
+
+/* The inviter's name, as an invite may show it (round-4 review, NP-7). It is free text the inviter
+   typed, so two limits. Only when the link also carries fromEmail, which the rules check against the
+   creator's own sign-in address: a name travels with a proven address, the rule the in-app invite
+   sheet already follows. And never more than 40 characters, so a link cannot turn the headline of a
+   Cubby-branded email into a paragraph of somebody else's words ("Your midwife. Urgent: call..."). */
+const INVITE_NAME_MAX = 40;
+function inviteNameCap(s) { return Array.from(String(s || '').trim()).slice(0, INVITE_NAME_MAX).join('').trim(); }
+function inviteSenderName(lf) {
+  const from = String(((lf && lf.fromEmail) || {}).stringValue || '').trim();
+  if (!from) return '';
+  return inviteNameCap(((lf && lf.invitedByName) || {}).stringValue);
+}
+/* A day ceiling on invite emails per account, in D1 (SEND_INVITE_DAILY_CAP, default 30), with the
+   page counter's atomic pattern: the count goes up only while it is under the cap, and RETURNING gives
+   no row once it is not, so concurrent sends cannot overshoot it. Any account can own a household and
+   mint links, and each link was worth one branded email to any address, so this is what bounds an
+   account, not the per-IP limiter, which fails open. Fails OPEN itself (no D1, or a D1 error), like
+   that limiter: the sign-in proof, the owner check and one send per link still hold, and a database
+   hiccup must not stop a parent inviting her partner. */
+const inviteSendReadyDbs = new WeakSet();
+async function inviteSendSlot(env, uid) {
+  const db = env.GAMES_DB;
+  if (!db) return true;
+  const capRaw = parseInt(env.SEND_INVITE_DAILY_CAP, 10);
+  const cap = Number.isFinite(capRaw) && capRaw >= 0 ? capRaw : 30;
+  if (cap < 1) return false;
+  try {
+    if (!inviteSendReadyDbs.has(db)) {
+      await db.prepare('CREATE TABLE IF NOT EXISTS invite_sends (day TEXT NOT NULL, uid TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, uid))').run();
+      inviteSendReadyDbs.add(db);
+    }
+    const slot = await db.prepare('INSERT INTO invite_sends (day, uid, n) VALUES (?, ?, 1) ON CONFLICT(day, uid) DO UPDATE SET n = n + 1 WHERE n < ? RETURNING n')
+      .bind(new Date().toISOString().slice(0, 10), String(uid), cap).first();
+    if (!slot) console.log('invite_send_cap_reached', cap);
+    return !!slot;
+  } catch (e) { console.error('invite_send_count_fail', (e && e.message) || String(e)); return true; }
+}
 
 /* POST /api/send-invite — email an invite link, from Cubby, on the owner's behalf.
    {idToken, token, email}
@@ -1044,7 +1188,7 @@ async function invitePeek(request, env, url) {
     const hid = (lf.householdId || {}).stringValue || '';
     const used = (lf.usedBy || {}).stringValue || null;
     const expiresAt = (lf.expiresAt || {}).timestampValue || null;
-    const by = String((lf.invitedByName || {}).stringValue || '').slice(0, 40);
+    const by = inviteSenderName(lf);
     if (!hid) return json({ ok: true, state: 'unknown' }, 200);
     if (used) return json({ ok: true, state: 'spent', by }, 200);
     if (!expiresAt || Date.parse(expiresAt) < Date.now()) return json({ ok: true, state: 'expired', by }, 200);
@@ -1096,7 +1240,7 @@ async function sendInviteEmail(request, env, url) {
     const hid = (lf.householdId || {}).stringValue || '';
     const used = (lf.usedBy || {}).stringValue || null;
     const expiresAt = (lf.expiresAt || {}).timestampValue || null;
-    const byName = (lf.invitedByName || {}).stringValue || '';
+    const byName = inviteSenderName(lf);   // only with a proven sender, and capped
     /* The family's own name, read SERVER-SIDE so the sender cannot put words in it, and used only
        when the owner actually chose one. The computed fallback ("Robin's family") is never written
        to Firestore, so a value being present here means somebody typed it. That distinction is the
@@ -1109,9 +1253,9 @@ async function sendInviteEmail(request, env, url) {
         const hr = await fetch(base + '/households/' + encodeURIComponent(hid) + '?mask.fieldPaths=app', { headers: hdr });
         if (hr.ok) {
           const hf = (((await hr.json()) || {}).fields || {});
-          famName = String((((((hf.app || {}).mapValue || {}).fields || {}).settings || {}).mapValue || {}).fields
+          famName = inviteNameCap((((((hf.app || {}).mapValue || {}).fields || {}).settings || {}).mapValue || {}).fields
             && hf.app.mapValue.fields.settings.mapValue.fields.householdName
-            && hf.app.mapValue.fields.settings.mapValue.fields.householdName.stringValue || '').slice(0, 40);
+            && hf.app.mapValue.fields.settings.mapValue.fields.householdName.stringValue || '');
         }
       }
     } catch (e) { famName = ''; }
@@ -1132,6 +1276,8 @@ async function sendInviteEmail(request, env, url) {
     const cache = caches.default;
     const once = new Request('https://cooldown.cubby.internal/inv/' + encodeURIComponent(token));
     if (await cache.match(once)) return json({ ok: true, cached: true });
+    // And a day ceiling per account, counted only for an email that is really about to go out.
+    if (!(await inviteSendSlot(env, auth.uid))) return json({ error: 'daily_cap' }, 429);
 
     const link = url.origin + '/app/?join=' + token;
     // The inviter's name is user-supplied and goes into email HTML, so it is escaped here. There is
@@ -1206,13 +1352,19 @@ async function newsletterSignup(request, env) {
   try {
     const emailHash = await sha256hex(email);
     const nowIso = new Date().toISOString();
-    // Upsert: a new subscriber inserts; a re-subscribe refreshes the mutable fields but KEEPS the
-    // original created_at + unsub_token, so any unsubscribe link already in someone's inbox stays valid.
+    /* Upsert: a new subscriber inserts; a repeat signup of a SUBSCRIBED address refreshes the mutable
+       fields but KEEPS the original created_at, unsub_token and consent_at, so any unsubscribe link
+       already in someone's inbox stays valid and the consent record stays the one she gave.
+       An UNSUBSCRIBED row is never touched (round-4 review, NP-9). This endpoint proves nothing about
+       who typed the address, so it used to let anyone flip her "unsubscribed" back to "subscribed" and
+       overwrite her consent time with theirs. Coming back after an unsubscribe needs a confirmed
+       opt-in, which is Phase 2 with the send stream. The answer is the same {ok:true} either way, so
+       this cannot be asked whether an address ever unsubscribed. */
     await env.NEWSLETTER_DB.prepare(
       'INSERT INTO subscribers (email_hash,email,stage,source,utm_source,utm_campaign,status,unsub_token,consent_at,created_at) '
       + "VALUES (?,?,?,?,?,?,'subscribed',?,?,?) "
       + 'ON CONFLICT(email_hash) DO UPDATE SET stage=excluded.stage, source=excluded.source, '
-      + "utm_source=excluded.utm_source, utm_campaign=excluded.utm_campaign, status='subscribed', consent_at=excluded.consent_at"
+      + "utm_source=excluded.utm_source, utm_campaign=excluded.utm_campaign WHERE subscribers.status = 'subscribed'"
     ).bind(emailHash, email, stage || 'unknown', source, utmSource, utmCampaign, crypto.randomUUID(), nowIso, nowIso).run();
     return json({ ok: true });
   } catch (e) {
@@ -1756,7 +1908,17 @@ async function sendPushReminders(env){
    privacy/index.html states it. Once it lapses the household goes completely: every subcollection
    first, then the doc itself, so a crash mid-purge can never leave a household doc that looks alive
    but has been gutted. ---- */
-const HH_SUBCOLLECTIONS = ['events', 'photos', 'notes', 'pregnancy'];
+/* Every collection directly under a household whose documents have no children of their own.
+   memberEmails was missing until the round-4 review (NP-4): each member's sign-in address outlived
+   the purge that reported the household erased. */
+const HH_SUBCOLLECTIONS = ['events', 'photos', 'notes', 'memberEmails'];
+/* And the two whose documents DO have children: pregnancy/{owner}/photos/{photo} (the journey photo
+   bytes) and mhealth/{owner}/cat/{category} (her private health). Both used to survive (NP-4). The
+   app never writes the mhealth/{owner} document itself, only its cat children, so a plain listing of
+   mhealth is always empty and the purge never found a single record to erase; a pregnancy doc went
+   while its photos stayed. fsDeleteNested lists with showMissing, which returns a parent that does
+   not exist but has children, and deletes the children before the parent. */
+const HH_NESTED = [['pregnancy', 'photos'], ['mhealth', 'cat']];
 /* Returns the number deleted, or NULL if anything at all went wrong.
    Null matters: the caller deletes the household doc only after every subcollection is gone. This
    used to return the running count on a failed listing and merely log a failed DELETE, so a 403 or a
@@ -1792,6 +1954,51 @@ async function fsDeleteAll(base, token, path) {
   } while (pageToken);
   return n;
 }
+/* Like fsDeleteAll, for a collection whose documents carry a subcollection (HH_NESTED). Lists with
+   showMissing=true, so a parent that was never written (or is already gone) but still has children is
+   found; each parent's children go first and the parent after them, so a failure part-way leaves the
+   parent, and with it the way back to its children, for the next tick. A missing parent has no
+   createTime and nothing to delete. NULL on any failure, the same contract as fsDeleteAll. */
+async function fsDeleteNested(base, token, path, child) {
+  let n = 0, pageToken = '';
+  do {
+    const url = base + '/' + path + '?pageSize=300&showMissing=true&mask.fieldPaths=__name__'
+      + (pageToken ? ('&pageToken=' + encodeURIComponent(pageToken)) : '');
+    const r = await fetch(url, { headers: { authorization: 'Bearer ' + token } });
+    if (!r.ok) {
+      if (r.status === 404) return n;
+      console.error('purge_list_fail', path, r.status);
+      return null;
+    }
+    const j = await r.json().catch(() => null);
+    if (!j) { console.error('purge_list_shape', path); return null; }
+    for (const d of (j.documents || [])) {
+      const rel = String((d && d.name) || '').split('/databases/(default)/documents/')[1];
+      if (!rel) { console.error('purge_list_shape', path); return null; }
+      const kids = await fsDeleteAll(base, token, rel + '/' + child);
+      if (kids === null) return null;
+      n += kids;
+      if (!d.createTime) continue;
+      const del = await fetch('https://firestore.googleapis.com/v1/' + d.name, {
+        method: 'DELETE', headers: { authorization: 'Bearer ' + token }
+      });
+      if (!del.ok) { console.error('purge_del_fail', d.name, del.status); return null; }
+      n++;
+    }
+    pageToken = j.nextPageToken || '';
+  } while (pageToken);
+  return n;
+}
+/* How many people a members value holds, for the purge's second lock (round-4 review, SB-4). Only an
+   empty map, an empty list or no field at all is nobody. Anything else (a list with entries, a string,
+   a number, null) is not a shape the app writes, so it counts as people and the family is kept: a lock
+   that only understands a map waved an array of members straight through to the purge. */
+function purgeMembersCount(v) {
+  if (!v) return 0;                       // no members field at all: an old flag, nobody to protect
+  if (v.mapValue) return Object.keys(v.mapValue.fields || {}).length;
+  if (v.arrayValue) return (v.arrayValue.values || []).length;
+  return 1;
+}
 async function purgeDeletedHouseholds(env) {
   if (!env.FIREBASE_SERVICE_ACCOUNT) return { households: 0, docs: 0 };
   let sa; try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return { households: 0, docs: 0 }; }
@@ -1815,9 +2022,9 @@ async function purgeDeletedHouseholds(env) {
          exceeding their role. Never purge it. Clear the flag instead, because pushGate and
          /api/dose refuse a flagged household and its medicine reminders would stay dead, and log
          it. The updateTime precondition leaves alone a household that changed since it was read. */
-      const mem = d.fields && d.fields.members && d.fields.members.mapValue && d.fields.members.mapValue.fields;
-      if (mem && Object.keys(mem).length) {
-        console.error('purge_refused_members', hid, Object.keys(mem).length);
+      const people = purgeMembersCount(d.fields && d.fields.members);
+      if (people) {
+        console.error('purge_refused_members', hid, people);
         if (d.updateTime) {
           /* documents:commit, with the precondition in the JSON body. The query-string form
              (?currentDocument.updateTime=) is read by the emulator as base version 0 and refused,
@@ -1845,20 +2052,11 @@ async function purgeDeletedHouseholds(env) {
           if (n === null) { complete = false; break; }
           docs += n;
         }
-        // mhealth is nested one level deeper: mhealth/{uid}/cat/{category}.
-        if (complete) {
-          const mh = await fetch(base + '/households/' + hid + '/mhealth?pageSize=300&mask.fieldPaths=__name__', { headers: { authorization: 'Bearer ' + token } });
-          if (mh.ok) {
-            const mj = await mh.json().catch(() => null);
-            if (!mj) complete = false;
-            for (const owner of ((mj && mj.documents) || [])) {
-              const ouid = owner.name.split('/mhealth/')[1];
-              if (!ouid) continue;
-              const n = await fsDeleteAll(base, token, 'households/' + hid + '/mhealth/' + ouid + '/cat');
-              if (n === null) { complete = false; break; }
-              docs += n;
-            }
-          } else if (mh.status !== 404) { console.error('purge_mhealth_list_fail', hid, mh.status); complete = false; }
+        // pregnancy/{owner}/photos and mhealth/{owner}/cat: children first, then each parent.
+        for (const [sub, child] of (complete ? HH_NESTED : [])) {
+          const n = await fsDeleteNested(base, token, 'households/' + hid + '/' + sub, child);
+          if (n === null) { complete = false; break; }
+          docs += n;
         }
         if (!complete) { console.error('purge_hh_incomplete', hid); continue; }
         // The household doc LAST, so an interrupted run retries rather than orphaning subcollections.
@@ -1942,17 +2140,61 @@ async function gameRateLimited(request, env, bucket) {
   try { const { success } = await limiter.limit({ key: bucket + ':' + ip }); return !success; }
   catch (e) { return false; }
 }
+/* Our own pages are the only legitimate callers of the anonymous game WRITES: the guest page is
+   /g/<code> on this origin, and the host's reveal comes from the app (the native wrapper loads it from
+   this origin too). So a write must carry an Origin, or failing that a Referer, naming this host. A
+   browser always sends Origin on a POST, so this costs a guest nothing and a script one header; what
+   it buys is that a page somewhere else cannot drive these routes from its visitors' browsers.
+   Reads are left open: a same-origin GET carries no Origin, and a read writes nothing. */
+function sameOriginWrite(request) {
+  const host = new URL(request.url).host;
+  const origin = request.headers.get('Origin'), referer = request.headers.get('Referer');
+  try {
+    if (origin) return new URL(origin).host === host;
+    if (referer) return new URL(referer).host === host;
+  } catch (e) { return false; }
+  return false;
+}
+/* A DAY CEILING on every anonymous game and hub write (round-4 review, SB-1/NP-8), recordStep's
+   pattern: one atomic statement raises the day's total only while it is under GAMES_DAILY_CAP
+   (default 5000), RETURNING gives no row once it is not, and the isolate then remembers the full day
+   so a flood past the cap costs D1 nothing at all. The per-IP limiter multiplies by the number of
+   addresses, and this D1 also holds account-deletion cleanup, the funnel and the cron heartbeat. A
+   refused write is a 429, which the guest page already shows as "one moment". A D1 error here is
+   thrown into the route's own try, which answers 500; it never escapes the handler. */
+const gamesTotalReadyDbs = new WeakSet();
+let gamesFullDay = '';
+/* Checked first in every anonymous write, before any read, so a flood past the ceiling costs D1 nothing. */
+function gamesDayFull() { return gamesFullDay === new Date().toISOString().slice(0, 10); }
+async function gamesDaySlot(env) {
+  const day = new Date().toISOString().slice(0, 10);
+  if (gamesFullDay === day) return false;
+  const capRaw = parseInt(env.GAMES_DAILY_CAP, 10);
+  const cap = Number.isFinite(capRaw) && capRaw >= 0 ? capRaw : 5000;
+  if (cap < 1) return false;
+  const db = env.GAMES_DB;
+  if (!gamesTotalReadyDbs.has(db)) {
+    await db.prepare('CREATE TABLE IF NOT EXISTS games_writes_total (day TEXT PRIMARY KEY, n INTEGER NOT NULL DEFAULT 0)').run();
+    gamesTotalReadyDbs.add(db);
+  }
+  const slot = await db.prepare('INSERT INTO games_writes_total (day, n) VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET n = n + 1 WHERE n < ? RETURNING n')
+    .bind(day, cap).first();
+  if (!slot) { gamesFullDay = day; console.log('games_cap_reached', day, cap); return false; }
+  return true;
+}
 async function gameRoute(request, env, url) {
   if (!env.GAMES_DB) return json({ error: 'server_config' }, 500);   // dormant until the D1 is provisioned
   try {
   const parts = url.pathname.split('/').filter(Boolean); // ['api','game',code?,action?]
   const method = request.method;
+  if (method === 'POST' && !sameOriginWrite(request)) return json({ error: 'forbidden' }, 403);
   if (parts.length === 3 && parts[2] === 'create' && method === 'POST') {
-    if (await gameRateLimited(request, env, 'gcreate')) return json({ error: 'rate_limited' }, 429);
+    if (gamesDayFull() || await gameRateLimited(request, env, 'gcreate')) return json({ error: 'rate_limited' }, 429);
     await ensureGamesSchema(env);
     const b = await request.json().catch(() => ({}));
     const title = (b.title || 'Our baby').toString().trim().slice(0, 40) || 'Our baby';
     const code = gameCode(8), hostKey = gameCode(20), at = Date.now();
+    if (!(await gamesDaySlot(env))) return json({ error: 'rate_limited' }, 429);
     await env.GAMES_DB.prepare('INSERT INTO games(code,title,host_key,result,status,created_at) VALUES(?,?,?,?,?,?)').bind(code, title, hostKey, '', 'open', at).run();
     return json({ code, hostKey, title });
   }
@@ -1960,6 +2202,7 @@ async function gameRoute(request, env, url) {
   if (!code || !/^[a-z0-9]{4,16}$/.test(code)) return json({ error: 'bad_code' }, 400);
   const action = parts[3];
   if (action === 'guess' && method === 'POST') {
+    if (gamesDayFull()) return json({ error: 'rate_limited' }, 429);
     const ip = clientIpKey(request);
     const limiter = env.GAMES_RATE_LIMITER || env.SIGNIN_RATE_LIMITER;
     if (limiter) { try { const { success } = await limiter.limit({ key: 'game:' + ip }); if (!success) return json({ error: 'rate_limited' }, 429); } catch (e) {} }
@@ -1973,10 +2216,17 @@ async function gameRoute(request, env, url) {
     if (!nickname || (guess !== 'F' && guess !== 'M')) return json({ error: 'bad_input' }, 400);
     const c = await env.GAMES_DB.prepare('SELECT COUNT(*) n FROM guesses WHERE code=?').bind(code).first();
     if (c && c.n >= 300) return json({ error: 'full' }, 409);
+    if (!(await gamesDaySlot(env))) return json({ error: 'rate_limited' }, 429);
     await env.GAMES_DB.prepare('INSERT INTO guesses(id,code,nickname,guess,note,created_at) VALUES(?,?,?,?,?,?)').bind(gameCode(12), code, nickname, guess, note, Date.now()).run();
-    return gameState(code, env);
+    return await gameState(code, env);
   }
   if (action === 'reveal' && method === 'POST') {
+    // Rate-limited like every other game route; it had no limit at all (round-4 review, SB-1).
+    /* But NOT under the day ceiling. The reveal is the host's own act, proven by her hostKey, one write
+       per game, and games themselves are counted at create. Under the shared ceiling, a flood of
+       anonymous guesses could switch off every family's reveal for the rest of the UTC day, and the
+       app fires its reveal once and never retries (round-5 review NF-games-cap). */
+    if (await gameRateLimited(request, env, 'greveal')) return json({ error: 'rate_limited' }, 429);
     const b = await request.json().catch(() => ({}));
     const g = await env.GAMES_DB.prepare('SELECT host_key FROM games WHERE code=?').bind(code).first();
     if (!g) return json({ error: 'not_found' }, 404);
@@ -1984,11 +2234,14 @@ async function gameRoute(request, env, url) {
     const result = (b.result || '').toString();
     if (['F', 'M', 'MF', 'FF', 'MM', ''].indexOf(result) < 0) return json({ error: 'bad_result' }, 400);
     await env.GAMES_DB.prepare('UPDATE games SET result=?, status=? WHERE code=?').bind(result, result ? 'revealed' : 'open', code).run();
-    return gameState(code, env);
+    return await gameState(code, env);
   }
   if (!action && method === 'GET') {
     if (await gameRateLimited(request, env, 'gget')) return json({ error: 'rate_limited' }, 429);
-    return gameState(code, env);
+    /* AWAITED inside the try. A bare `return gameState(...)` hands back the promise, so a D1 error
+       (a fresh database with no games table, say) rejected outside this try/catch and escaped the
+       handler as an uncaught exception (round-4 review, NP-11). */
+    return await gameState(code, env);
   }
   return json({ error: 'not_found' }, 404);
   } catch (e) {
@@ -2076,9 +2329,15 @@ async function readDoseTicket(sa, t) {
   if (typeof t !== 'string' || t.length > 2048) return null;
   const p = t.split('.');
   if (p.length !== 3 || p[0] !== 'v1') return null;
-  const key = await doseTicketKey(sa);
-  // verify() is constant time, unlike comparing the two base64 strings ourselves.
-  const okSig = await crypto.subtle.verify('HMAC', key, _b64urlToBytes(p[2]), new TextEncoder().encode('v1.' + p[1]));
+  /* Garbage is a refusal like any other, never a throw (round-4 review, NP-11): atob() throws on a
+     character outside base64, and that used to escape the route as an uncaught exception instead of
+     the one 401 the route promises for every refusal. */
+  let okSig = false;
+  try {
+    const key = await doseTicketKey(sa);
+    // verify() is constant time, unlike comparing the two base64 strings ourselves.
+    okSig = await crypto.subtle.verify('HMAC', key, _b64urlToBytes(p[2]), new TextEncoder().encode('v1.' + p[1]));
+  } catch (e) { return null; }
   if (!okSig) return null;
   let c; try { c = JSON.parse(_b64urlToStr(p[1])); } catch (e) { return null; }
   if (!c || typeof c !== 'object') return null;
@@ -2196,12 +2455,14 @@ async function hubRoute(request, env, url) {
     // GET /api/hub/:code -> public hub state
     if (parts.length === 3 && method === 'GET') {
       if (await gameRateLimited(request, env, 'hget')) return json({ error: 'rate_limited' }, 429);
-      return hubState(code, env);
+      return await hubState(code, env);
     }
 
     // POST /api/hub/:code/guess -> a guest submits a guess (open, no account)
     if (parts.length === 4 && parts[3] === 'guess' && method === 'POST') {
-      if (await gameRateLimited(request, env, 'hguess')) return json({ error: 'rate_limited' }, 429);
+      // Anonymous, and only ever sent by the guest page on this origin (sameOriginWrite).
+      if (!sameOriginWrite(request)) return json({ error: 'forbidden' }, 403);
+      if (gamesDayFull() || await gameRateLimited(request, env, 'hguess')) return json({ error: 'rate_limited' }, 429);
       const b = await request.json().catch(() => ({}));
       const gameId = (b.gameId || '').toString();
       const nickname = (b.nickname || '').toString().trim().slice(0, 30);
@@ -2215,8 +2476,9 @@ async function hubRoute(request, env, url) {
       const relation = (b.relation || '').toString().trim().slice(0, 24);
       const c = await env.GAMES_DB.prepare('SELECT COUNT(*) n FROM hub_guesses WHERE game_id=?').bind(gameId).first();
       if (c && c.n >= 300) return json({ error: 'full' }, 409);
+      if (!(await gamesDaySlot(env))) return json({ error: 'rate_limited' }, 429);
       await env.GAMES_DB.prepare('INSERT INTO hub_guesses(id,game_id,hub_code,nickname,guess,note,relation,created_at) VALUES(?,?,?,?,?,?,?,?)').bind(gameCode(12), gameId, code, nickname, guess, note, relation, Date.now()).run();
-      return hubState(code, env);
+      return await hubState(code, env);
     }
 
     // POST /api/hub/:code/game/:id/reveal  (auth, owner only)
@@ -2233,7 +2495,7 @@ async function hubRoute(request, env, url) {
       const result = normalizeResult(g.type, b.result);
       if (result == null) return json({ error: 'bad_result' }, 400);
       await env.GAMES_DB.prepare('UPDATE hub_games SET result=?, status=? WHERE id=? AND hub_code=?').bind(result, result ? 'revealed' : 'open', gameId, code).run();
-      return hubState(code, env);
+      return await hubState(code, env);
     }
 
     // POST /api/hub/:code/close  (auth, owner only) -> retire the hub on a pregnancy loss/end or data delete

@@ -186,6 +186,13 @@ function fixture() {
   ok('a missing property is rejected', core.stepKey('pro.sheet_viewed', { stage: 'baby' }) === null);
   ok('a non-string value is rejected', core.stepKey('pro.sheet_viewed', { stage: ['baby'], entry_point: 'home' }) === null);
   ok('an array body is rejected', core.stepKey('pro.sheet_viewed', ['baby', 'home']) === null);
+  /* SB-2 (round-4 review): STEP_EVENTS is a plain object, so its inherited names looked like events
+     with no properties, and 'constructor' with {} was stored as the funnel key 'constructor|'. */
+  for (const name of ['constructor', 'toString', '__proto__', 'hasOwnProperty', 'valueOf', 'isPrototypeOf', 'propertyIsEnumerable', 'toLocaleString']) {
+    ok('an inherited name, ' + name + ', is not an event', core.stepKey(name, {}) === null, core.stepKey(name, {}));
+  }
+  ok('the companion: those props ARE a valid pro.sheet_viewed', core.stepKey('pro.sheet_viewed', { stage: 'baby', entry_point: 'settings' }) !== null);
+  ok('but not from a non-string event that only spells one', core.stepKey({ toString: () => 'pro.sheet_viewed' }, { stage: 'baby', entry_point: 'settings' }) === null);
 
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   console.log('FUNNEL-CORE: ' + (fail ? 'FAIL' : 'PASS') + '\n');

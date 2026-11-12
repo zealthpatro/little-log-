@@ -91,7 +91,12 @@ function linkJoinBatch(db, hid, uid, token, role, mutate, linkPatch) {
 (async () => {
   const env = await initializeTestEnvironment({ projectId: 'demo-cubby', firestore: { rules: RULES } });
   await env.clearFirestore();
-  const as = (uid, email) => env.authenticatedContext(uid, { email: email || (uid.toLowerCase() + '@x.com') }).firestore();
+  /* Every sign-in Cubby offers (Google, Apple, the emailed link, the emailed code) gives a token with
+     email_verified true, so that is what a real person looks like here. The rules refuse an address
+     that is not proven (section 7), so a token without it is a different person, made on purpose. */
+  const as = (uid, email) => env.authenticatedContext(uid, { email: email || (uid.toLowerCase() + '@x.com'), email_verified: true }).firestore();
+  const asUnverified = (uid, email) => env.authenticatedContext(uid, { email: email || (uid.toLowerCase() + '@x.com'), email_verified: false }).firestore();
+  const asNoClaim = (uid, email) => env.authenticatedContext(uid, { email: email || (uid.toLowerCase() + '@x.com') }).firestore();
   const seed = (fn) => env.withSecurityRulesDisabled((ctx) => fn(ctx.firestore()));
   const readAdmin = async (p) => { let d; await seed(async (db) => { d = (await db.doc(p).get()); }); return d; };
 
@@ -384,6 +389,92 @@ function linkJoinBatch(db, hid, uid, token, role, mutate, linkPatch) {
   await check('a link with her own address (must SUCCEED)', assertSucceeds(M.doc('inviteLinks/tokS1').set(lk({ fromEmail: 'mal@x.com' }))));
   await check('a link from an older build, no address (must SUCCEED)', assertSucceeds(M.doc('inviteLinks/tokS2').set(lk())));
   await check('a link claiming someone else\'s address (must FAIL)', assertFails(M.doc('inviteLinks/tokS3').set(lk({ fromEmail: 'olive@x.com' }))));
+
+  /* ---------------------------------------------------------------------------------------------
+     7. An address counts only once it is PROVEN. The token's email claim is whatever the account
+        says, and an account made with a password (or any provider that does not check the inbox)
+        can say any address it likes. So everywhere the address decides who gets in, or whose name
+        is shown, the rules also need email_verified. Every real sign-in Cubby offers sets it. */
+  console.log('\n7. an unproven address opens nothing (email_verified)');
+  const verSeed = () => seed(async (db) => {
+    await db.doc('households/HV').set(household({ ownerId: 'O', members: { O: 'owner', C: 'caregiver' },
+      pendingInvites: { 'una@x.com': { name: 'Una', role: 'caregiver', at: 1 }, 'vee@x.com': { name: 'Vee', role: 'owner', at: 1 } } }));
+    await db.doc('invites/una@x.com').set({ householdId: 'HV', role: 'caregiver', invitedBy: 'O', invitedByName: 'Olive', fromEmail: 'o@x.com' });
+    await db.doc('invites/vee@x.com').set({ householdId: 'HV', role: 'owner', invitedBy: 'O', invitedByName: 'Olive', fromEmail: 'o@x.com' });
+  });
+  await checkOn(verSeed, 'an UNVERIFIED account with the invited address reads the invite (must FAIL)', () => assertFails(asUnverified('U1', 'una@x.com').doc('invites/una@x.com').get()));
+  await checkOn(verSeed, 'a token with no email_verified claim at all reads the invite (must FAIL)', () => assertFails(asNoClaim('U1', 'una@x.com').doc('invites/una@x.com').get()));
+  await checkOn(verSeed, 'the same address, verified, reads it (must SUCCEED)', () => assertSucceeds(as('U1', 'una@x.com').doc('invites/una@x.com').get()));
+  await checkOn(verSeed, 'an UNVERIFIED account joins by email (must FAIL)', () => assertFails(emailJoinBatch(asUnverified('U1', 'una@x.com'), 'HV', 'U1', 'una@x.com')));
+  await checkOn(verSeed, 'an UNVERIFIED account joins AS OWNER with a co-owner invite (must FAIL)', () => assertFails(emailJoinBatch(asUnverified('U2', 'vee@x.com'), 'HV', 'U2', 'vee@x.com', 'owner')));
+  await checkOn(verSeed, 'the same join, verified (must SUCCEED)', () => assertSucceeds(emailJoinBatch(as('U1', 'una@x.com'), 'HV', 'U1', 'una@x.com')));
+  await checkOn(verSeed, 'an UNVERIFIED account deletes the invite addressed to that address (must FAIL)', () => assertFails(asUnverified('U1', 'una@x.com').doc('invites/una@x.com').delete()));
+  await checkOn(verSeed, 'verified, she declines and deletes it (must SUCCEED)', () => assertSucceeds(as('U1', 'una@x.com').doc('invites/una@x.com').delete()));
+  await checkOn(verSeed, 'a member, UNVERIFIED, writes her own email doc (must FAIL)', () => assertFails(asUnverified('C', 'c@x.com').doc('households/HV/memberEmails/C').set({ email: 'c@x.com' })));
+  await checkOn(verSeed, 'the same member, verified (must SUCCEED)', () => assertSucceeds(as('C', 'c@x.com').doc('households/HV/memberEmails/C').set({ email: 'c@x.com' })));
+  const invFrom = (from) => ({ householdId: 'HV', role: 'caregiver', relationship: 'Auntie', name: 'W', invitedBy: 'O', status: 'pending', fromEmail: from, invitedByName: 'Olive' });
+  await checkOn(verSeed, 'an UNVERIFIED owner signs an invite with her token address (must FAIL)', () => assertFails(asUnverified('O', 'o@x.com').doc('invites/w1@x.com').set(invFrom('o@x.com'))));
+  await checkOn(verSeed, 'the same owner, verified (must SUCCEED)', () => assertSucceeds(as('O', 'o@x.com').doc('invites/w1@x.com').set(invFrom('o@x.com'))));
+  const lkFrom = (extra) => Object.assign({ householdId: 'HV', role: 'caregiver', relationship: '', invitedBy: 'O', invitedByName: 'Olive', usedBy: null, expiresAt: inHours(24) }, extra || {});
+  await checkOn(verSeed, 'an UNVERIFIED owner signs a link with her token address (must FAIL)', () => assertFails(asUnverified('O', 'o@x.com').doc('inviteLinks/tokV1').set(lkFrom({ fromEmail: 'o@x.com' }))));
+  await checkOn(verSeed, 'the same owner, verified (must SUCCEED)', () => assertSucceeds(as('O', 'o@x.com').doc('inviteLinks/tokV1').set(lkFrom({ fromEmail: 'o@x.com' }))));
+
+  /* ---------------------------------------------------------------------------------------------
+     8. Links: what is on one stays what the owner minted, and only a newcomer can spend it. */
+  console.log('\n8. invite links: sender fixed, caregiver only, spent only by someone getting in');
+  const lk8Seed = () => seed(async (db) => {
+    await db.doc('households/H8').set(household({ ownerId: 'O', members: { O: 'owner', C: 'caregiver', CO: 'owner' },
+      memberInfo: { O: { name: 'Olive', role: 'owner' }, C: { name: 'Carl', role: 'caregiver' }, CO: { name: 'Cora', role: 'owner' } },
+      pendingLinks: { tok8: { at: 1 }, tok8o: { at: 1 } } }));
+    await db.doc('inviteLinks/tok8').set({ householdId: 'H8', role: 'caregiver', relationship: 'Nanny', usedBy: null, expiresAt: inHours(20), invitedBy: 'O', invitedByName: 'Olive', fromEmail: 'o@x.com' });
+    await db.doc('inviteLinks/tok8o').set({ householdId: 'H8', role: 'owner', usedBy: null, expiresAt: inHours(20), invitedBy: 'O' });
+  });
+  const O8 = as('O', 'o@x.com');
+  await checkOn(lk8Seed, 'the owner rewrites the sender address on her own link (must FAIL)', () => assertFails(O8.doc('inviteLinks/tok8').update({ fromEmail: 'midwife@nhs.test' })));
+  await checkOn(lk8Seed, 'the owner rewrites the sender name on her own link (must FAIL)', () => assertFails(O8.doc('inviteLinks/tok8').update({ invitedByName: 'Your midwife' })));
+  await checkOn(lk8Seed, 'the owner drops the sender address, keeping the name (must FAIL)', () => assertFails(O8.doc('inviteLinks/tok8').update({ fromEmail: FV.delete() })));
+  await checkOn(lk8Seed, 'the owner turns her caregiver link into an owner link (must FAIL)', () => assertFails(O8.doc('inviteLinks/tok8').update({ role: 'owner' })));
+  await checkOn(lk8Seed, 'the owner changes nothing about who sent it (must SUCCEED)', () => assertSucceeds(O8.doc('inviteLinks/tok8').update({ relationship: 'Granny' })));
+  await checkOn(lk8Seed, 'the owner mints an OWNER-role link (must FAIL: the app only mints caregiver links)',
+    () => assertFails(O8.doc('inviteLinks/tok8n').set({ householdId: 'H8', role: 'owner', relationship: '', invitedBy: 'O', usedBy: null, expiresAt: inHours(24) })));
+  await checkOn(lk8Seed, 'the owner mints a caregiver link (must SUCCEED)',
+    () => assertSucceeds(O8.doc('inviteLinks/tok8c').set({ householdId: 'H8', role: 'caregiver', relationship: '', invitedBy: 'O', usedBy: null, expiresAt: inHours(24) })));
+  await checkOn(lk8Seed, 'a link with no role at all is a caregiver link (must SUCCEED)',
+    () => assertSucceeds(O8.doc('inviteLinks/tok8r').set({ householdId: 'H8', relationship: '', invitedBy: 'O', usedBy: null, expiresAt: inHours(24) })));
+  // A caregiver who is already in the family burns the owner's link: the person it was for is shut out.
+  const C8 = as('C', 'c@x.com');
+  await checkOn(lk8Seed, 'a caregiver ALREADY in the family spends the owner\'s link alone (must FAIL)', () => assertFails(C8.doc('inviteLinks/tok8').update({ usedBy: 'C', consumed: true })));
+  await checkOn(lk8Seed, 'and the link is still unspent afterwards', async () => {
+    await assertFails(C8.doc('inviteLinks/tok8').update({ usedBy: 'C', consumed: true }));
+    const d = (await readAdmin('inviteLinks/tok8')).data();
+    if (d.usedBy != null || d.consumed === true) throw new Error('spent: ' + JSON.stringify(d));
+  });
+  await checkOn(lk8Seed, 'the same caregiver spends it alongside a save of her own name (must FAIL)', () => {
+    const b = C8.batch();
+    b.update(C8.doc('inviteLinks/tok8'), { usedBy: 'C', consumed: true });
+    b.update(C8.doc('households/H8'), { 'memberInfo.C.name': 'Carl B' });
+    return assertFails(b.commit());
+  });
+  // Not a case: a co-owner IS an owner, and an owner may revoke (delete) any of the family's links, so
+  // spending one through the owner branch gives her nothing she does not already have.
+  await checkOn(lk8Seed, 'a newcomer joins and rewrites the sender on the link while claiming it (must FAIL)',
+    () => assertFails(linkJoinBatch(as('J8', 'j8@x.com'), 'H8', 'J8', 'tok8', 'caregiver', null, { usedBy: 'J8', consumed: true, fromEmail: 'j8@x.com', invitedByName: 'Cubby' })));
+  await checkOn(lk8Seed, 'a newcomer joins and changes the relationship while claiming it (must FAIL)',
+    () => assertFails(linkJoinBatch(as('J8', 'j8@x.com'), 'H8', 'J8', 'tok8', 'caregiver', null, { usedBy: 'J8', consumed: true, relationship: 'Owner' })));
+  await checkOn(lk8Seed, 'a newcomer joins honestly through the same link (must SUCCEED)', () => assertSucceeds(linkJoinBatch(as('J8', 'j8@x.com'), 'H8', 'J8', 'tok8')));
+
+  /* ---------------------------------------------------------------------------------------------
+     9. No client deletes a family. The purge erases flagged households with the service account,
+        which bypasses rules, so nothing in the app needs this, and a deleted id could be created
+        again by anyone who knew it, with the old events, photos and notes still underneath. */
+  console.log('\n9. no client deletes a household document');
+  await checkOn(lk8Seed, 'the owner deletes the household document (must FAIL)', () => assertFails(O8.doc('households/H8').delete()));
+  await checkOn(lk8Seed, 'a co-owner deletes it (must FAIL)', () => assertFails(as('CO', 'co@x.com').doc('households/H8').delete()));
+  await checkOn(lk8Seed, 'a caregiver deletes it (must FAIL)', () => assertFails(C8.doc('households/H8').delete()));
+  await checkOn(lk8Seed, 'the owner can still read it afterwards (it was never deleted)', async () => {
+    await assertFails(O8.doc('households/H8').delete());
+    await assertSucceeds(O8.doc('households/H8').get());
+  });
 
   await env.cleanup();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');

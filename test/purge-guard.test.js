@@ -37,7 +37,15 @@ const HH = {
     members: { mapValue: { fields: { uMum: { stringValue: 'owner' }, uNanny: { stringValue: 'caregiver' } } } } },
   // An old flag with no members field at all: nobody to protect, so it is purged as before.
   hhNoField: { deleteAfter: { integerValue: String(PAST) }, ownerId: { stringValue: 'uOld' } },
+  /* SB-4 (round-4 review): members in a shape the app never writes. The lock used to read only a map,
+     so these were erased on the first tick. Any value but an empty map or list now counts as people. */
+  hhList: { deleteAfter: { integerValue: String(PAST) }, ownerId: { stringValue: 'uL' }, members: { arrayValue: { values: [{ stringValue: 'uL' }] } } },
+  hhString: { deleteAfter: { integerValue: String(PAST) }, ownerId: { stringValue: 'uS' }, members: { stringValue: 'uS' } },
+  hhNull: { deleteAfter: { integerValue: String(PAST) }, ownerId: { stringValue: 'uN' }, members: { nullValue: null } },
+  // An empty list holds nobody, like an empty map: purged.
+  hhEmptyList: { deleteAfter: { integerValue: String(PAST) }, ownerId: { stringValue: 'uE' }, members: { arrayValue: {} } },
 };
+const ODD = ['hhList', 'hhString', 'hhNull'];
 
 function makeWorld() {
   const w = { deleted: [], patches: [], listed: [], logs: [], selects: null, unexpected: [] };
@@ -114,8 +122,15 @@ function makeWorld() {
       && p.write.update && Object.keys(p.write.update.fields || {}).length === 0, p);
   ok('only if the household has not changed since it was read, as a JSON precondition',
     !!p && p.write.currentDocument && p.write.currentDocument.updateTime === UPDATED, p && p.write);
-  ok('no other household is patched', w.patches.every((x) => x.name === '/households/hhAttacked'), w.patches);
-  ok('the run reports two households purged', res && res.households === 2, res);
+  for (const hid of ODD) {
+    ok(hid + ': members in a shape the app never writes is NOT purged', touched(hid).length === 0, touched(hid));
+    ok(hid + ': its records are not even listed', !w.listed.some((u) => u.indexOf('/households/' + hid + '/') === 0), w.listed);
+    ok(hid + ': the refusal is logged', w.logs.some((l) => /purge_refused_members/.test(l) && l.indexOf(hid) > -1), w.logs);
+    ok(hid + ': and its flag is cleared like any other refusal', w.patches.some((x) => x.name === '/households/' + hid), w.patches.map((x) => x.name));
+  }
+  ok('an empty members list holds nobody, so that household IS purged', touched('hhEmptyList').includes('households/hhEmptyList'), w.deleted);
+  ok('no other household is patched', w.patches.every((x) => x.name === '/households/hhAttacked' || ODD.some((h) => x.name === '/households/' + h)), w.patches);
+  ok('the run reports three households purged', res && res.households === 3, res);
   ok('nothing unexpected was fetched', w.unexpected.length === 0, w.unexpected);
 
   console.log('\n' + pass + ' passed, ' + fail + ' failed');

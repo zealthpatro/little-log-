@@ -34,6 +34,7 @@ const { execFileSync, spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..');
 const FS_PORT = Number(process.env.FS_PORT) || 8667;
 const AUTH_PORT = Number(process.env.AUTH_PORT) || 9667;
+const HUB_PORT = Number(process.env.HUB_PORT) || 0, LOG_PORT = Number(process.env.LOG_PORT) || 0, WS_PORT = Number(process.env.WS_PORT) || 0;
 const PROJECT = 'demo-cubby-cleanup';
 const TOOL = path.join(ROOT, 'tools', 'invite_cleanup.js');
 
@@ -43,7 +44,8 @@ if (!process.env.INVITE_CLEANUP_INNER) {
   fs.copyFileSync(path.join(ROOT, 'firestore.rules'), path.join(scratch, 'firestore.rules'));
   fs.writeFileSync(path.join(scratch, 'firebase.json'), JSON.stringify({
     firestore: { rules: 'firestore.rules' },
-    emulators: { firestore: { port: FS_PORT }, auth: { port: AUTH_PORT }, ui: { enabled: false } }
+    emulators: Object.assign({ firestore: Object.assign({ port: FS_PORT }, WS_PORT ? { websocketPort: WS_PORT } : {}), auth: { port: AUTH_PORT }, ui: { enabled: false } },
+      HUB_PORT ? { hub: { port: HUB_PORT } } : {}, LOG_PORT ? { logging: { port: LOG_PORT } } : {})
   }));
   const firebaseBin = path.join(__dirname, 'node_modules', '.bin', 'firebase');
   const javaBin = process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin') : '/opt/homebrew/opt/openjdk/bin';
@@ -204,7 +206,7 @@ const count = (out, label) => { const m = out.split('\n').find((l) => l.includes
 
   // Rex's way back in: one batch, the join plus deleting his own invite (what the rules require).
   const rexRejoins = () => {
-    const db = env.authenticatedContext(UID.removed, { email: EM.removed }).firestore();
+    const db = env.authenticatedContext(UID.removed, { email: EM.removed, email_verified: true }).firestore();
     const b = db.batch();
     b.update(db.doc('households/' + HID), new FP('pendingInvites', EM.removed), FV.delete(),
       'members.' + UID.removed, 'owner', 'memberInfo.' + UID.removed, { name: 'Rex', role: 'owner', relationship: 'Uncle' });
@@ -214,7 +216,7 @@ const count = (out, label) => { const m = out.split('\n').find((l) => l.includes
 
   // The same way back in for anyone, with whatever uid his current sign-up has.
   const rejoin = (uid, email, hid, role, name) => {
-    const db = env.authenticatedContext(uid, { email }).firestore();
+    const db = env.authenticatedContext(uid, { email, email_verified: true }).firestore();
     const b = db.batch();
     b.update(db.doc('households/' + hid), new FP('pendingInvites', email), FV.delete(),
       new FP('members', uid), role, new FP('memberInfo', uid), { name, role, relationship: 'Family' });

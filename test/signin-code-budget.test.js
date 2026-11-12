@@ -44,9 +44,12 @@ const SA = { project_id: 'little-log-a9caa', client_email: 'cubby@little-log-a9c
 const ENV = { FIREBASE_SERVICE_ACCOUNT: JSON.stringify(SA), RESEND_API_KEY: 're_test_key' };
 
 // ---- the world outside our code -----------------------------------------------------------------
-const world = { docs: new Map(), users: new Map(), mail: [], clock: 0, spends: 0, refused: 0 };
+/* world.users: address -> { uid, verified, providers }. verified undefined is an account whose lookup
+   carries no emailVerified at all, which is how a JSON API answers for false. world.updates records
+   every accounts:update body, so section 9 can read exactly what the worker asked for. */
+const world = { docs: new Map(), users: new Map(), updates: [], mail: [], clock: 0, spends: 0, refused: 0 };
 const cacheStore = new Map();
-function resetWorld() { world.docs.clear(); world.users.clear(); world.mail.length = 0; world.spends = 0; world.refused = 0; world.holdBurns = 0; world.invalidSpend = false; cacheStore.clear(); }
+function resetWorld() { world.docs.clear(); world.users.clear(); world.updates.length = 0; world.failUpdate = false; world.mail.length = 0; world.spends = 0; world.refused = 0; world.holdBurns = 0; world.invalidSpend = false; world.raceIssues = 0; cacheStore.clear(); }
 globalThis.caches = { default: {
   async match(req) { const v = cacheStore.get(String(req.url)); return v === undefined ? undefined : new Response(v); },
   async put(req, res) { cacheStore.set(String(req.url), await res.text()); },
@@ -83,10 +86,29 @@ globalThis.fetch = async function (input, init) {
   }
   if (/accounts:lookup$/.test(url)) {
     const e = (JSON.parse(body || '{}').email || [])[0];
-    return world.users.has(e) ? J({ users: [{ localId: world.users.get(e) }] }) : J({});
+    const u = world.users.get(e);
+    if (!u) return J({});
+    const rec = { localId: u.uid, email: e };
+    if (typeof u.verified === 'boolean') rec.emailVerified = u.verified;   // undefined: the field is absent
+    if (u.providers) rec.providerUserInfo = u.providers.map((p) => ({ providerId: p }));
+    return J({ users: [rec] });
+  }
+  if (/accounts:update$/.test(url) && method === 'POST') {
+    const b = JSON.parse(body || '{}');
+    world.updates.push(b);
+    if (world.failUpdate) return J({ error: { code: 500, message: 'INTERNAL' } }, 500);
+    for (const u of world.users.values()) if (u.uid === b.localId) {
+      if (b.emailVerified === true) u.verified = true;
+      /* deleteAttribute PASSWORD removes the password and keeps the email. deleteProvider would unlink
+         email sign-in and clear the email too (the real Auth emulator does; signin-claim-auth-emu gates
+         it), so this stub records an email wipe for it rather than pretending it is harmless. */
+      if (u.providers && Array.isArray(b.deleteAttribute) && b.deleteAttribute.indexOf('PASSWORD') > -1) u.providers = u.providers.filter((p) => p !== 'password');
+      if (Array.isArray(b.deleteProvider) && b.deleteProvider.indexOf('password') > -1) { u.providers = (u.providers || []).filter((p) => p !== 'password'); u.emailWiped = true; }
+    }
+    return J({ localId: b.localId });
   }
   if (/\/accounts$/.test(url) && method === 'POST') {
-    const b = JSON.parse(body || '{}'); const uid = 'uid_' + (world.users.size + 1); world.users.set(b.email, uid); return J({ localId: uid });
+    const b = JSON.parse(body || '{}'); const uid = 'uid_' + (world.users.size + 1); world.users.set(b.email, { uid, verified: b.emailVerified === true }); return J({ localId: uid });
   }
 
   /* documents:commit, one write per call, preconditions in the JSON body. Same semantics as below. */
@@ -98,6 +120,13 @@ globalThis.fetch = async function (input, init) {
     if (!mm) return J({ error: { code: 400, status: 'INVALID_ARGUMENT', message: 'bad document name' } }, 400);
     const id = mm[1];
     if (wr.delete) await heldBurn();
+    /* world.raceIssues: a reissue (a whole-document replace) loses its race to a spend that lands in
+       between its read and its write, this many times. The spend moves the version, so the replace's
+       precondition is refused exactly as Firestore would refuse it. */
+    if (!wr.delete && !wr.updateMask && world.raceIssues > 0 && world.docs.get(id)) {
+      world.raceIssues--;
+      world.docs.get(id).updateTime = stamp();
+    }
     const cur = world.docs.get(id);
     const pre = wr.currentDocument || {};
     const refuse = () => { world.refused++; return J({ error: { code: 400, status: 'FAILED_PRECONDITION', message: 'precondition failed' } }, 400); };
@@ -203,21 +232,22 @@ const liveMacs = () => [...world.docs.values()].filter((d) => d.fields && d.fiel
     resetWorld();
     evaluated = 0;
     await issueFrom(1); let c = lastCode();
-    for (let i = 0; i < 4; i++) await verifyFrom(1, wrongFor(c, i));
-    const second = await issueFrom(1);
-    ok('a second code can be sent after 4 misses', second.status === 200 && second.body.hasCode === true, second);
-    c = lastCode();
     for (let i = 0; i < 3; i++) await verifyFrom(1, wrongFor(c, i));
-    ok('seven guesses compared across two codes', evaluated === 7, evaluated);
+    const second = await issueFrom(1);
+    ok('a second code can be sent after 3 misses', second.status === 200 && second.body.hasCode === true, second);
+    c = lastCode();
+    for (let i = 0; i < 2; i++) await verifyFrom(1, wrongFor(c, i));
+    ok('five guesses compared across two codes', evaluated === 5, evaluated);
     const right = await verifyFrom(1, c);
-    ok('the right code, as that network\'s 8th guess this hour, does not sign in', right.status !== 200, right.status);
+    ok('the right code, as that network\'s 6th guess this hour, does not sign in', right.status !== 200, right.status);
     const rb = await right.json();
     ok('it gets the try-later answer, with how long to wait', right.status === 429 && rb.error === 'rate_limited' && rb.retryAfter > 60 && rb.retryAfter <= 3600, rb);
-    ok('and the 8th guess was never compared', evaluated === 7, evaluated);
+    ok('and the 6th guess was never compared', evaluated === 5, evaluated);
     const mailed = world.mail.length;
     const third = await issueFrom(1);
     ok('no further code is minted for that network this hour', third.status === 429 && world.mail.length === mailed, [third, world.mail.length - mailed]);
     ok('and it says how long codes are paused for', third.body.error === 'rate_limited' && third.body.retryAfter > 60, third.body);
+    ok('at a GUESS ceiling it never says a code is still live: this network could not use one', third.body.liveCode !== true, third.body);
     cacheStore.clear();
     const link = await post(worker, '/api/send-signin-link', { email: EMAIL }, ENV, NET(1));
     const lb = await link.json();
@@ -255,35 +285,56 @@ const liveMacs = () => [...world.docs.values()].filter((d) => d.fields && d.fiel
     resetWorld();
     evaluated = 0;
     for (const n of [1, 2]) {
-      await issueFrom(n); let c = lastCode();
+      await issueFrom(n); const c = lastCode();
       for (let i = 0; i < 5; i++) await verifyFrom(n, wrongFor(c, i));
-      await issueFrom(n); c = lastCode();
-      for (let i = 0; i < 2; i++) await verifyFrom(n, wrongFor(c, i));
     }
-    ok('two networks at their share: fourteen guesses compared', evaluated === 14, evaluated);
-    await issueFrom(3);
+    ok('two networks at their share: ten guesses compared', evaluated === 10, evaluated);
+    await issueFrom(3); let c3 = lastCode();
+    for (let i = 0; i < 4; i++) await verifyFrom(3, wrongFor(c3, i));
+    ok('a third network spends four more', evaluated === 14, evaluated);
+    const fifth = await issueFrom(5);
+    ok('a fifth network can still be sent a code, with one guess left on the address', fifth.status === 200, fifth);
     const lastGo = lastCode();
-    await verifyFrom(3, wrongFor(lastGo, 0));
-    ok('a third network spends the fifteenth', evaluated === 15, evaluated);
+    await verifyFrom(5, wrongFor(lastGo, 0));
+    ok('and spends the fifteenth', evaluated === 15, evaluated);
     const d = await issueFrom(4);
     ok('a fourth network gets no code: the address has had its guesses', d.status === 429 && d.body.retryAfter > 0, d);
+    ok('and is not told a code is live (a guess ceiling)', d.body.liveCode !== true, d.body);
     const r = await verifyFrom(4, '000000');
     ok('a guess from a fourth network is refused without a compare', r.status === 429 && evaluated === 15, [r.status, evaluated]);
-    const r3 = await verifyFrom(3, lastGo);
-    ok('and even the right code, from the third network, is not compared past the address total', r3.status === 429 && evaluated === 15, [r3.status, evaluated]);
+    const r5 = await verifyFrom(5, lastGo);
+    ok('and even the right code, from a network with share left, is not compared past the address total', r5.status === 429 && evaluated === 15, [r5.status, evaluated]);
   }
 
-  console.log('\n3. codes minted per address per hour: four per network, twelve in all');
+  console.log('\n3. codes minted per address per hour: five per network, twelve in all');
   {
     resetWorld();
     const a = [];
-    for (let i = 0; i < 5; i++) a.push((await issueFrom(1)).status);
-    ok('one network: four sends mint four codes', a.slice(0, 4).every((s) => s === 200) && world.mail.length === 4, [a, world.mail.length]);
-    ok('the fifth from there mints none and mails nothing', a[4] === 429 && world.mail.length === 4, [a, world.mail.length]);
-    ok('the fourth code still works', (await verifyFrom(1, lastCode())).status === 200);
+    let sixth = null;
+    for (let i = 0; i < 6; i++) { const r = await issueFrom(1); a.push(r.status); if (i === 5) sixth = r.body; }
+    ok('one network: five sends mint five codes', a.slice(0, 5).every((s) => s === 200) && world.mail.length === 5, [a, world.mail.length]);
+    ok('the sixth from there mints none and mails nothing', a[5] === 429 && world.mail.length === 5, [a, world.mail.length]);
+    /* signin-2: at an ISSUE ceiling her newest code still works, so the answer says so, and for how
+       long, and the app keeps its code box open instead of sending her to a link. */
+    ok('and it says the code in her newest email is still live, and for how long', sixth && sixth.liveCode === true && sixth.liveFor > 500 && sixth.liveFor <= 600 && sixth.retryAfter > 60, sixth);
+    ok('the fifth code still works', (await verifyFrom(1, lastCode())).status === 200);
+    // The companions: at the same ceiling with no live code, liveCode is never claimed.
+    resetWorld();
+    for (let i = 0; i < 5; i++) await issueFrom(1);
+    const dead = lastCode();
+    for (let i = 0; i < 5; i++) await verifyFrom(7, wrongFor(dead, i));   // another network kills it
+    const afterKill = await issueFrom(1);
+    ok('at the issue ceiling with her code used up, a 429 that claims no live code', afterKill.status === 429 && afterKill.body.liveCode !== true, afterKill);
+    resetWorld();
+    for (let i = 0; i < 5; i++) await issueFrom(1);
+    const realNow = Date.now;
+    Date.now = () => realNow() + 11 * 60 * 1000;   // past the code's ten minutes, inside the hour
+    let expired;
+    try { expired = await issueFrom(1); } finally { Date.now = realNow; }
+    ok('and with her code expired, none either', expired.status === 429 && expired.body.liveCode !== true, expired);
     resetWorld();
     const all = [];
-    for (const n of [1, 2, 3]) for (let i = 0; i < 4; i++) all.push((await issueFrom(n)).status);
+    for (const n of [1, 2, 3]) for (let i = 0; i < 4; i++) all.push((await issueFrom(n)).status);   // under five each, so the total binds
     ok('three networks mint twelve between them', all.every((s) => s === 200) && world.mail.length === 12, [all, world.mail.length]);
     const thirteenth = await issueFrom(4);
     ok('the thirteenth, from a fourth network, mints none', thirteenth.status === 429 && world.mail.length === 12, [thirteenth.status, world.mail.length]);
@@ -293,7 +344,7 @@ const liveMacs = () => [...world.docs.values()].filter((d) => d.fields && d.fiel
   console.log('\n4. the issue endpoint still says nothing about whether an account exists');
   {
     resetWorld();
-    world.users.set('known@example.com', 'uid_known');
+    world.users.set('known@example.com', { uid: 'uid_known', verified: true });
     cacheStore.clear();
     const a = await post(worker, '/api/signin-code', { email: 'known@example.com' });
     const b = await post(worker, '/api/signin-code', { email: 'nobody@example.com' });
@@ -312,11 +363,10 @@ const liveMacs = () => [...world.docs.values()].filter((d) => d.fields && d.fiel
     }
     resetWorld();
     await issue(worker); const first = lastCode();
-    for (let i = 0; i < 4; i++) await verify(worker, wrongFor(first, i));
+    for (let i = 0; i < 3; i++) await verify(worker, wrongFor(first, i));
     await issue(worker); const second = lastCode();
     ok('after a resend the old code is dead', (await verify(worker, first)).status === 400);
-    for (let i = 0; i < 1; i++) await verify(worker, wrongFor(second, i));
-    ok('and the new one still works after six misses in all, a stale code among them', (await verify(worker, second)).status === 200);
+    ok('and the new one still works after four misses in all, a stale code among them', (await verify(worker, second)).status === 200);
     await issue(worker);
     ok('signing in again the same hour works: success clears the slate', (await verify(worker, lastCode())).status === 200);
 
@@ -410,6 +460,66 @@ const liveMacs = () => [...world.docs.values()].filter((d) => d.fields && d.fiel
     ok('2001:0:0:5::1 and 2001::5:a:b:c:d share a /64', k('2001:0:0:5::1') === k('2001::5:a:b:c:d'));
     ok('but 2001:0:0:6::1 is a different /64', k('2001:0:0:6::1') !== k('2001:0:0:5::1'), k('2001:0:0:6::1'));
     ok('and at /48 it is the same bucket again', k('2001:0:0:6::1', 3) === k('2001:0:0:5::1', 3), k('2001:0:0:6::1', 3));
+  }
+
+  /* signin-9. A reissue is a conditional replace, and every spend that lands between its read and its
+     write refuses it. Two goes turned a few concurrent spends into 502 store_failed, and her code
+     request fell back to a link. It now re-reads up to SIGNIN_CODE_TRIES + 1 times, as the spend does. */
+  console.log('\n8. a code request survives spends landing in between its read and its write');
+  {
+    resetWorld();
+    await issue(worker);
+    world.raceIssues = 3;
+    const r = await issue(worker);
+    ok('three spends land in between, and she still gets a code', r.status === 200 && r.body.hasCode === true, r);
+    ok('the races really happened (all three refused a write)', world.raceIssues === 0, world.raceIssues);
+    ok('and the code she got works', (await verify(worker, lastCode())).status === 200);
+    resetWorld();
+    await issue(worker);
+    world.raceIssues = 6;
+    const r6 = await issue(worker);
+    ok('the retry is bounded: six refusals in a row still end in store_failed, not a loop', r6.status === 502 && r6.body.error === 'store_failed', r6);
+  }
+
+  /* NP-1, the Worker half. A code proves the inbox, so it must land in an account the inbox owns. An
+     account somebody pre-registered with her address and a password (emailVerified false) is claimed
+     for her first: verified, its password removed, every earlier session revoked. */
+  console.log('\n9. an unverified account for her address is claimed for her before she gets its session');
+  {
+    const uidOf = (tok) => JSON.parse(Buffer.from(String(tok).split('.')[1], 'base64url').toString()).uid;
+    const logs = [];
+    const realErr = console.error;
+    const signIn = async () => {
+      await issue(worker);
+      console.error = (...a) => logs.push(a.join(' '));
+      try { const r = await verify(worker, lastCode()); return { status: r.status, body: await r.json().catch(() => ({})) }; }
+      finally { console.error = realErr; }
+    };
+    for (const shape of ['absent', 'false']) {
+      resetWorld(); logs.length = 0;
+      world.users.set(EMAIL, { uid: 'uid_squatter', verified: shape === 'false' ? false : undefined, providers: ['password'] });
+      const t0 = Math.floor(Date.now() / 1000);
+      const v = await signIn();
+      ok('emailVerified ' + shape + ': she signs in to the account that holds her address', v.status === 200 && uidOf(v.body.token) === 'uid_squatter', v);
+      const u = world.updates[0] || {};
+      ok('emailVerified ' + shape + ': one accounts:update, made before the session', world.updates.length === 1 && u.localId === 'uid_squatter', world.updates);
+      ok('emailVerified ' + shape + ': marking it verified, removing the password, revoking earlier sessions',
+        u.emailVerified === true && Array.isArray(u.deleteAttribute) && u.deleteAttribute.indexOf('PASSWORD') > -1
+          && Math.abs(Number(u.validSince) - t0) <= 5, u);
+      ok('emailVerified ' + shape + ': the password is really gone', world.users.get(EMAIL).providers.length === 0, world.users.get(EMAIL));
+      ok('emailVerified ' + shape + ': and the claim never unlinks email sign-in, which would erase her address', !('deleteProvider' in u) && !world.users.get(EMAIL).emailWiped, u);
+      ok('emailVerified ' + shape + ': and it is logged', logs.some((l) => /signin_unverified_account_claimed/.test(l) && /uid_squatter/.test(l)), logs);
+    }
+    resetWorld(); logs.length = 0;
+    world.users.set(EMAIL, { uid: 'uid_real', verified: true, providers: ['google.com'] });
+    const mine = await signIn();
+    ok('a verified account signs in as before', mine.status === 200 && uidOf(mine.body.token) === 'uid_real', mine);
+    ok('and is never touched: no accounts:update', world.updates.length === 0, world.updates);
+    resetWorld(); logs.length = 0;
+    world.users.set(EMAIL, { uid: 'uid_squatter', providers: ['password'] });
+    world.failUpdate = true;
+    const refused = await signIn();
+    ok('if the claim is refused, no session is minted into that account', refused.status === 500 && !refused.body.token, refused);
   }
 
   try { fs.rmSync(tmpdir, { recursive: true, force: true }); } catch (e) {}

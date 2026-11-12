@@ -58,10 +58,10 @@ async function check(name, p) {
     await setDoc(doc(db, 'households/H/photos/p-keep'), { data: 'x', authorId: 'C' });  // for the keep-authorId update test
   });
 
-  const C = env.authenticatedContext('C', { email: 'c@x.com' }).firestore(); // caregiver
-  const O = env.authenticatedContext('O', { email: 'o@x.com' }).firestore(); // owner
-  const S = env.authenticatedContext('S', { email: 's@x.com' }).firestore(); // stranger
-  const INV = env.authenticatedContext('INV', { email: 'inv@x.com' }).firestore(); // invited, not yet a member
+  const C = env.authenticatedContext('C', { email: 'c@x.com', email_verified: true }).firestore(); // caregiver
+  const O = env.authenticatedContext('O', { email: 'o@x.com', email_verified: true }).firestore(); // owner
+  const S = env.authenticatedContext('S', { email: 's@x.com', email_verified: true }).firestore(); // stranger
+  const INV = env.authenticatedContext('INV', { email: 'inv@x.com', email_verified: true }).firestore(); // invited, not yet a member
 
   console.log('\nLegit writes (must SUCCEED):');
   await check('caregiver writes app blob (normal persist)', assertSucceeds(updateDoc(doc(C, 'households/H'), { app: cleanApp() })));
@@ -89,7 +89,7 @@ async function check(name, p) {
   // SEC-3: an invitee may only join with the role the OWNER set on the invite — no self-promotion.
   await check('invitee joins as OWNER — self-promote (SEC-3, fails)', assertFails(updateDoc(doc(INV, 'households/H'), { 'members.INV': 'owner', 'memberInfo.INV': { name: 'Invitee', role: 'owner' } })));
 
-  const ATT = env.authenticatedContext('ATT', { email: 'att@x.com' }).firestore(); // owner of HA, attacker
+  const ATT = env.authenticatedContext('ATT', { email: 'att@x.com', email_verified: true }).firestore(); // owner of HA, attacker
 
   console.log('\nInvite redirect / hijack (must FAIL):');
   await check('attacker re-points OWN invite at victim household', assertFails(updateDoc(doc(ATT, 'invites/att@x.com'), { householdId: 'H' })));
@@ -136,7 +136,7 @@ async function check(name, p) {
   };
   await check('invitee joins by adding only themselves', assertSucceeds(joinBatch(INV, 'INV', 'inv@x.com', { 'members.INV': 'caregiver', 'memberInfo.INV': { name: 'Invitee', email: 'inv@x.com', role: 'caregiver', relationship: 'Auntie Bear' } })));
   // SEC-3 positive: a co-owner invite (owner set role='owner') must still let the invitee join as owner.
-  const CO = env.authenticatedContext('CO', { email: 'co@x.com' }).firestore();
+  const CO = env.authenticatedContext('CO', { email: 'co@x.com', email_verified: true }).firestore();
   await check('co-owner invitee joins as OWNER (invite role=owner, succeeds)', assertSucceeds(joinBatch(CO, 'CO', 'co@x.com', { 'members.CO': 'owner', 'memberInfo.CO': { name: 'CoOwner', email: 'co@x.com', role: 'owner', relationship: 'Papa Bear' } })));
 
   // ==========================================================================
@@ -288,9 +288,9 @@ async function check(name, p) {
     });
     await setDoc(doc(db, 'invites/c2@x.com'), { householdId: 'HD', role: 'caregiver' });
   });
-  const C2 = env.authenticatedContext('C2', { email: 'c2@x.com' }).firestore();
-  const C3 = env.authenticatedContext('C3', { email: 'c3@x.com' }).firestore();
-  const O2 = env.authenticatedContext('O2', { email: 'o2@x.com' }).firestore();
+  const C2 = env.authenticatedContext('C2', { email: 'c2@x.com', email_verified: true }).firestore();
+  const C3 = env.authenticatedContext('C3', { email: 'c3@x.com', email_verified: true }).firestore();
+  const O2 = env.authenticatedContext('O2', { email: 'o2@x.com', email_verified: true }).firestore();
   const gone = require('firebase/firestore').deleteField;
 
   await check('caregiver removes ONLY themselves + own tombstone (succeeds)', assertSucceeds(updateDoc(doc(C2, 'households/HD'), {
@@ -336,7 +336,7 @@ async function check(name, p) {
       ownerId: 'S2', members: { S2: 'owner' }, memberInfo: { S2: { name: 'Solo' } }, app: cleanApp()
     });
   });
-  const S2 = env.authenticatedContext('S2', { email: 's2@x.com' }).firestore();
+  const S2 = env.authenticatedContext('S2', { email: 's2@x.com', email_verified: true }).firestore();
   await check('sole owner sets deleteAfter and removes themselves (succeeds)', assertSucceeds(updateDoc(doc(S2, 'households/HSOLO'), {
     // The real client value (deleteAccount): 30 days out. The rule refuses anything under 29.
     'members.S2': gone(), 'memberInfo.S2': gone(), deleteAfter: Date.now() + 30 * 24 * 60 * 60 * 1000, deletionRequestedBy: 'S2'
@@ -366,9 +366,9 @@ async function check(name, p) {
     await setDoc(doc(db, 'households/HPB/photos/legacy-bump'), { data: 'PRIVATE-BYTES', authorId: 'PO' }); // pre-fix circle copy, for the migration shape
     await setDoc(doc(db, 'households/HPB/photos/baby1'), { data: 'CIRCLE-BYTES', authorId: 'HO' });        // an ordinary baby photo
   });
-  const HO = env.authenticatedContext('HO', { email: 'ho@x.com' }).firestore();
-  const PO = env.authenticatedContext('PO', { email: 'po@x.com' }).firestore();
-  const CG = env.authenticatedContext('CG', { email: 'cg@x.com' }).firestore();
+  const HO = env.authenticatedContext('HO', { email: 'ho@x.com', email_verified: true }).firestore();
+  const PO = env.authenticatedContext('PO', { email: 'po@x.com', email_verified: true }).firestore();
+  const CG = env.authenticatedContext('CG', { email: 'cg@x.com', email_verified: true }).firestore();
 
   await check('journey owner reads her own photo bytes', assertSucceeds(getDoc(doc(PO, 'households/HPB/pregnancy/PO/photos/bump1'))));
   await check('caregiver in the circle reads her bytes (fails)', assertFails(getDoc(doc(CG, 'households/HPB/pregnancy/PO/photos/bump1'))));

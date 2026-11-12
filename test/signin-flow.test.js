@@ -55,6 +55,7 @@ const world = {
   times: new Map(),         // and each document's updateTime, which conditional writes are checked against
   clock: 0,
   users: new Map(),         // Identity Toolkit accounts, by email
+  verified: new Set(),      // and which of them have a verified email
   mail: [],                 // everything Resend was asked to send
   oobSerial: 0,
   scopesAsked: [],
@@ -63,7 +64,7 @@ const world = {
   failResend: false,
 };
 function resetWorld() {
-  world.docs.clear(); world.times.clear(); world.users.clear(); world.mail.length = 0; world.scopesAsked.length = 0;
+  world.docs.clear(); world.times.clear(); world.users.clear(); world.verified.clear(); world.mail.length = 0; world.scopesAsked.length = 0;
   world.failFirestoreWrite = false; world.failOob = false; world.failResend = false;
   cacheStore.clear();
 }
@@ -121,13 +122,16 @@ globalThis.fetch = async function (input, init) {
     const b = JSON.parse(body || '{}');
     const e = (b.email || [])[0];
     const uid = world.users.get(e);
-    return uid ? J({ users: [{ localId: uid, email: e }] }) : J({});
+    // Every account here is one the worker made, verified. (An unverified one is claimed for her
+    // before any session is minted: test/signin-code-budget.test.js section 9.)
+    return uid ? J({ users: [{ localId: uid, email: e, emailVerified: world.verified.has(e) }] }) : J({});
   }
   if (/identitytoolkit\.googleapis\.com\/v1\/projects\/[^/]+\/accounts$/.test(url) && method === 'POST') {
     if (scope.indexOf('identitytoolkit') < 0) return DENIED();
     const b = JSON.parse(body || '{}');
     const uid = 'uid_' + (world.users.size + 1);
     world.users.set(b.email, uid);
+    if (b.emailVerified === true) world.verified.add(b.email);
     return J({ localId: uid, email: b.email, emailVerified: !!b.emailVerified });
   }
 

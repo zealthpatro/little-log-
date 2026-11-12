@@ -142,7 +142,7 @@ const inHours = h => new Date(Date.now() + h * 3600000);
   await env.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(doc(ctx.firestore(), 'invites/her@example.com'), { householdId: 'H', role: 'caregiver' });
   });
-  const her = env.authenticatedContext('uid_her', { email: 'her@example.com' }).firestore();
+  const her = env.authenticatedContext('uid_her', { email: 'her@example.com', email_verified: true }).firestore();
   await check('the addressee can still read the invite addressed to her',
     assertSucceeds(getDoc(doc(her, 'invites/her@example.com'))));
   await check('and somebody else still cannot',

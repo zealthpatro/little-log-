@@ -5507,7 +5507,7 @@ function openSheet(html,accent){
   refreshTickTargets();   // a sheet can hold a running timer, and the tick works off this list now
 }
 function sheetBack(){ var prev=_sheetStack.pop(); var s=$('#sheet'); if(!prev){ closeSheet(); return; } s.dataset.accent=prev.accent; _sheetAccent(s,prev.accent); s.innerHTML=prev.html; refreshTickTargets(); }
-function closeSheet(){ var _no=__confirmNo; __confirmNo=null; if(_no) setTimeout(function(){ _no('dismiss'); },50); _sheetStack=[]; var s=document.getElementById('sheet'); if(s){ s.style.transition=''; s.style.transform=''; } var sc=document.getElementById('scrim'); if(sc)sc.classList.remove('show'); if(s)s.classList.remove('show'); refreshTickTargets(); }
+function closeSheet(){ var _no=__confirmNo; __confirmNo=null; if(_no) setTimeout(function(){ _no('dismiss'); },50); _sheetStack=[]; var s=document.getElementById('sheet'); if(s){ s.style.transition=''; s.style.transform=''; s.style.zIndex=''; } var sc=document.getElementById('scrim'); if(sc){ sc.classList.remove('show'); sc.style.zIndex=''; } if(s)s.classList.remove('show'); refreshTickTargets(); }
 /* One calm confirm sheet, reused everywhere instead of the native window.confirm (which is jarring
    and off-brand). Stands alone (closes any trigger sheet first, so no stray back button). */
 var __confirmCb=null, __confirmNo=null;
@@ -5534,13 +5534,23 @@ function confirmSheet(opts){
   openSheet('<h2>'+escapeHtml(opts.title||'Are you sure?')+'</h2>'+lead+facts+body
     +'<button class="btn-primary" style="background:'+bg+'" onclick="__confirmYes()">'+escapeHtml(opts.confirmLabel||'Confirm')+'</button>'
     +'<button class="btn-ghost" onclick="__confirmCancel()">'+escapeHtml(opts.cancelLabel||'Cancel')+'</button>','note');
+  /* A confirm asked from inside a store sheet (Family & sharing is #llModalOv, z-index 99998) used to open
+     BEHIND it, at the sheet's own 51, so tapping Remove or Cancel invite looked like nothing happened.
+     Lift the confirm and its scrim above that sheet while it is open; closeSheet() puts both back. */
+  if(document.getElementById('llModalOv')){
+    var _cs=document.getElementById('scrim'), _csh=document.getElementById('sheet');
+    if(_cs) _cs.style.zIndex='99999';
+    if(_csh) _csh.style.zIndex='100000';
+  }
   /* mustAnswer: a question that needs a yes or a no. The × read "Close" but could only ever bring the
      question back, so it goes, and focus starts on the question itself, for VoiceOver and keyboards. */
   if(opts.mustAnswer){
     var sh=document.getElementById('sheet');
     if(sh){
       var sx=sh.querySelector('.sheet-x'); if(sx) sx.remove();
-      var h2=sh.querySelector('h2'); if(h2){ h2.setAttribute('tabindex','-1'); try{ h2.focus({preventScroll:true}); }catch(e){} }
+      /* Inline outline:none, not a class: the focus is for VoiceOver and keyboards, and a 2px ring round
+         the title of a question she has to answer only looks like something went wrong. */
+      var h2=sh.querySelector('h2'); if(h2){ h2.setAttribute('tabindex','-1'); h2.style.outline='none'; try{ h2.focus({preventScroll:true}); }catch(e){} }
     }
   }
 }

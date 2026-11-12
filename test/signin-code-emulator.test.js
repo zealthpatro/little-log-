@@ -45,7 +45,10 @@ const SA = { project_id: PROJECT, client_email: 'cubby@demo-cubby.iam.gserviceac
 const ENV = { FIREBASE_SERVICE_ACCOUNT: JSON.stringify(SA), RESEND_API_KEY: 're_test' };   // no ALERT_EMAIL: the canary mails nobody
 const DOCS = 'http://' + EMU + '/v1/projects/' + PROJECT + '/databases/(default)/documents';
 
-const mail = [], cache = new Map(), users = new Map();
+/* users: address -> { uid, verified }. Accounts are made by the worker, verified; an account whose
+   lookup came back unverified would be claimed with accounts:update (worker.js getOrCreateUidByEmail),
+   recorded in updates. */
+const mail = [], cache = new Map(), users = new Map(), updates = [];
 globalThis.caches = { default: {
   async match(r) { const v = cache.get(String(r.url)); return v === undefined ? undefined : new Response(v); },
   async put(r, res) { cache.set(String(r.url), await res.text()); },
@@ -78,8 +81,9 @@ globalThis.fetch = async (input, init) => {
   if (url.startsWith('https://oauth2.googleapis.com/token')) return J({ access_token: 't', expires_in: 3600 });
   if (url.includes('accounts:sendOobCode') && oobDown) return J({ error: { message: 'UNAVAILABLE' } }, 503);
   if (url.includes('accounts:sendOobCode')) return J({ oobLink: 'https://x.firebaseapp.com/__/auth/action?mode=signIn&oobCode=O&apiKey=k' });
-  if (/accounts:lookup$/.test(url)) { const e = (JSON.parse(body || '{}').email || [])[0]; return users.has(e) ? J({ users: [{ localId: users.get(e) }] }) : J({}); }
-  if (/\/accounts$/.test(url) && method === 'POST') { const b = JSON.parse(body); const u = 'uid' + (users.size + 1); users.set(b.email, u); return J({ localId: u }); }
+  if (/accounts:lookup$/.test(url)) { const e = (JSON.parse(body || '{}').email || [])[0]; const u = users.get(e); return u ? J({ users: [Object.assign({ localId: u.uid, email: e }, u.verified ? { emailVerified: true } : {})] }) : J({}); }
+  if (/accounts:update$/.test(url) && method === 'POST') { const b = JSON.parse(body); updates.push(b); for (const u of users.values()) if (u.uid === b.localId && b.emailVerified) u.verified = true; return J({ localId: b.localId }); }
+  if (/\/accounts$/.test(url) && method === 'POST') { const b = JSON.parse(body); const u = 'uid' + (users.size + 1); users.set(b.email, { uid: u, verified: b.emailVerified === true }); return J({ localId: u }); }
   if (url === 'https://api.resend.com/emails') { mail.push(JSON.parse(body)); return J({ id: 'm' + mail.length }); }
   if (url.startsWith('https://firestore.googleapis.com/')) {
     url = url.replace('https://firestore.googleapis.com/', 'http://' + EMU + '/');
@@ -99,7 +103,7 @@ globalThis.fetch = async (input, init) => {
 };
 
 /* ip, when given, is the client's network (CF-Connecting-IP): the hourly ceilings are split by it. */
-const post = (w, p, b, ip) => w.fetch(new Request(HOST + p, { method: 'POST', headers: Object.assign({ 'content-type': 'application/json', Origin: HOST }, ip ? { 'CF-Connecting-IP': ip } : {}), body: JSON.stringify(b) }), ENV, { waitUntil() {}, passThroughOnException() {} });
+const post = (w, p, b, ip, env) => w.fetch(new Request(HOST + p, { method: 'POST', headers: Object.assign({ 'content-type': 'application/json', Origin: HOST }, ip ? { 'CF-Connecting-IP': ip } : {}), body: JSON.stringify(b) }), env || ENV, { waitUntil() {}, passThroughOnException() {} });
 const lastCode = () => { const m = String(mail[mail.length - 1].html).match(/>(\d{6})</g); return m ? m[m.length - 1].replace(/\D/g, '') : null; };
 const wrong = (c, k) => String((Number(c) + 1 + (k || 0)) % 1e6).padStart(6, '0');
 let serial = 0;
@@ -107,6 +111,16 @@ const fresh = (tag) => tag + '-' + process.pid + '-' + (++serial) + '@example.co
 async function issue(w, email, ip) { cache.clear(); const r = await post(w, '/api/signin-code', { email }, ip); return { status: r.status, body: await r.json().catch(() => ({})) }; }
 async function verify(w, email, code, ip) { const r = await post(w, '/api/signin-verify', { email, code }, ip); return { status: r.status, body: await r.json().catch(() => ({})) }; }
 const signedIn = (v) => v.status === 200 && !!v.body.token;
+/* The worker's document id for an address, derived here the way worker.js derives it (HKDF of the
+   service-account key, then an HMAC), so a section can read one address's document and nobody
+   else's. Every section that uses it first checks the document it names really exists. */
+const SIGNIN_KEY = Buffer.from(nodeCrypto.hkdfSync('sha256', Buffer.from(privateKey), Buffer.alloc(0), Buffer.from('cubby-signin-code-v1'), 32));
+const docIdFor = (email) => nodeCrypto.createHmac('sha256', SIGNIN_KEY).update('id:' + email).digest('base64url').slice(0, 32);
+async function codeFields(email) {
+  const r = await realFetch(DOCS + '/signinCodes/' + docIdFor(email), { headers: { authorization: 'Bearer owner' } });
+  return r.ok ? ((await r.json()).fields || {}) : null;
+}
+const tagsIn = (f) => (((f && f.issues && f.issues.arrayValue && f.issues.arrayValue.values) || []).map((v) => String(v.stringValue).split(':')[1]));
 async function listCodes() {
   const r = await realFetch(DOCS + '/signinCodes?pageSize=300', { headers: { authorization: 'Bearer owner' } });
   return r.ok ? ((await r.json()).documents || []) : [];
@@ -181,16 +195,16 @@ async function listCodes() {
     const A = '198.51.100.7', B = '2001:db8:aa:1::5';
     evaluated = 0;
     await issue(w, e, A); let c = lastCode();
-    for (let i = 0; i < 4; i++) await verify(w, e, wrong(c, i), A);
-    const second = await issue(w, e, A);
-    ok('a second code can still be sent after 4 misses', second.status === 200 && second.body.hasCode === true, second);
-    c = lastCode();
     for (let i = 0; i < 3; i++) await verify(w, e, wrong(c, i), A);
-    ok('seven guesses compared across two codes', evaluated === 7, evaluated);
+    const second = await issue(w, e, A);
+    ok('a second code can still be sent after 3 misses', second.status === 200 && second.body.hasCode === true, second);
+    c = lastCode();
+    for (let i = 0; i < 2; i++) await verify(w, e, wrong(c, i), A);
+    ok('five guesses compared across two codes', evaluated === 5, evaluated);
     const right = await verify(w, e, c, A);
-    ok('the right code as that network\'s 8th guess in an hour does not sign in', right.status !== 200, right.status);
+    ok('the right code as that network\'s 6th guess in an hour does not sign in', right.status !== 200, right.status);
     ok('it gets the try-later answer, with how long to wait', right.status === 429 && right.body.error === 'rate_limited' && right.body.retryAfter > 60, right);
-    ok('and the 8th guess was never compared', evaluated === 7, evaluated);
+    ok('and the 6th guess was never compared', evaluated === 5, evaluated);
     const mailed = mail.length;
     const third = await issue(w, e, A);
     ok('no further code is minted for that network this hour', third.status === 429 && mail.length === mailed && third.body.retryAfter > 60, [third, mail.length - mailed]);
@@ -212,15 +226,15 @@ async function listCodes() {
     const e = fresh('many');
     evaluated = 0;
     for (const ip of ['192.0.2.1', '192.0.2.2']) {
-      await issue(w, e, ip); let c = lastCode();
+      await issue(w, e, ip); const c = lastCode();
       for (let i = 0; i < 5; i++) await verify(w, e, wrong(c, i), ip);
-      await issue(w, e, ip); c = lastCode();
-      for (let i = 0; i < 2; i++) await verify(w, e, wrong(c, i), ip);
     }
-    await issue(w, e, '192.0.2.3'); const live = lastCode();
-    await verify(w, e, wrong(live, 0), '192.0.2.3');
-    ok('fifteen guesses compared across three networks', evaluated === 15, evaluated);
-    const r = await verify(w, e, live, '192.0.2.3');
+    await issue(w, e, '192.0.2.3'); const c3 = lastCode();
+    for (let i = 0; i < 4; i++) await verify(w, e, wrong(c3, i), '192.0.2.3');
+    await issue(w, e, '192.0.2.5'); const live = lastCode();
+    await verify(w, e, wrong(live, 0), '192.0.2.5');
+    ok('fifteen guesses compared across four networks', evaluated === 15, evaluated);
+    const r = await verify(w, e, live, '192.0.2.5');
     ok('the right code past the address total is refused without a compare', r.status === 429 && evaluated === 15, [r.status, evaluated]);
     const d = await issue(w, e, '192.0.2.4');
     ok('and a fourth network gets no code', d.status === 429, d);
@@ -316,12 +330,12 @@ async function listCodes() {
       const cfetch = async (p, init) => {
         inflight++;
         try {
-          const r = await post(w, p, JSON.parse(init.body));
+          const r = await post(w, p, JSON.parse(init.body), undefined, opts.env);
           calls.push(p + ' ' + r.status);
           return r;
         } finally { inflight--; }
       };
-      const fbAuth = { sendSignInLinkToEmail: async () => { calls.push('firebase-sender'); }, signInWithCustomToken: async () => ({}) };
+      const fbAuth = { sendSignInLinkToEmail: async () => { calls.push('firebase-sender'); }, signInWithCustomToken: async () => { calls.push('signed-in'); return {}; } };
       const inApp = opts.inApp ? () => true : undefined;   // the installed iPhone app: standalone AND iOS
       wire('Send code', (e, fb) => fb, fbAuth, { origin: HOST }, { setItem() {}, getItem() { return null; } }, cfetch, () => 1, () => {}, inApp, inApp)({ querySelector: (s) => (s === '.ll-email-row' ? row : null) });
       const settle = async () => {
@@ -334,15 +348,20 @@ async function listCodes() {
         async send(email) { input.value = email; form.onsubmit({ preventDefault() {} }); await settle(); },
         async resend() { const rb = note.querySelector('.ll-resend'); if (!rb || !rb.onclick) throw new Error('no Resend button on the panel'); rb.onclick(); await settle(); },
         seen() { return { codeBox: codeForm.style.display !== 'none' && codeForm.style.display !== undefined, text: note.textContent }; },
-        async submitCode(code) { ci.value = code; codeForm.onsubmit({ preventDefault() {} }); await settle(); },
+        // No box wired means nothing to type into: say so in the calls, so the section goes red instead of throwing.
+        async submitCode(code) { if (typeof codeForm.onsubmit !== 'function') { calls.push('no-code-box'); return; } ci.value = code; codeForm.onsubmit({ preventDefault() {} }); await settle(); },
       };
     }
     const asksForCode = (s) => s.codeBox || /6-digit code/.test(s.text);
 
-    // 7a. The cap, reached the ordinary way: five codes in an hour, each a minute or more apart.
+    // 7a. The cap, reached the ordinary way: five codes in an hour, each a minute or more apart, and
+    // the newest of them used up (here by five wrong guesses from another network), so no code in her
+    // inbox still works. With one that does, the panel keeps its code box (7e).
     {
       const e = fresh('capped');
       for (let i = 0; i < 5; i++) await issue(w, e);
+      const used = lastCode();
+      for (let i = 0; i < 5; i++) await verify(w, e, wrong(used, i), '192.0.2.50');
       cache.clear();   // and a minute after the fifth
       const p = panel();
       const mailed = mail.length;
@@ -363,7 +382,9 @@ async function listCodes() {
     // 7a2. The same cap in the installed iPhone app: a link cannot sign THIS app in, so never say so.
     {
       const e = fresh('cappedapp');
-      for (let i = 0; i < 4; i++) await issue(w, e);
+      for (let i = 0; i < 5; i++) await issue(w, e);
+      const used = lastCode();
+      for (let i = 0; i < 5; i++) await verify(w, e, wrong(used, i), '192.0.2.51');
       cache.clear();
       const p = panel({ inApp: true });
       await p.send(e);
@@ -430,6 +451,57 @@ async function listCodes() {
     }
   }
 
+  /* 7e. signin-2. The issue ceiling with her newest code STILL LIVE: the panel must not send her to a
+     link (in the installed app a link cannot sign her in), and must say the code she has still works. */
+  console.log('\n7e. at the issue ceiling, with the code in her newest email still live');
+  {
+    const e = fresh('cappedlive');
+    for (let i = 0; i < 5; i++) await issue(w, e);
+    const live = lastCode();
+    const sixth = await issue(w, e);
+    ok('the sixth ask is refused, saying her newest code is live and for how long', sixth.status === 429 && sixth.body.liveCode === true && sixth.body.liveFor > 500 && sixth.body.liveFor <= 600 && sixth.body.retryAfter > 60, sixth);
+    for (const inApp of [false, true]) {
+      const where = inApp ? 'in the installed iPhone app' : 'in a browser';
+      cache.clear();
+      const p = panel({ inApp });
+      const mailed = mail.length;
+      await p.send(e);
+      const s = p.seen();
+      ok(where + ': Send asks no link sender, and mails nothing', p.calls.join(',') === '/api/signin-code 429' && mail.length === mailed, [p.calls, mail.length - mailed]);
+      ok(where + ': the code box stays open', s.codeBox, s);
+      ok(where + ': it says new codes are paused but the code in her most recent email still works, and to type it here',
+        /^New codes are paused for (about an hour|about \d+ minutes|a minute or so), but the code in your most recent email still works for about \d+ more minutes\. Type it here\./.test(s.text), s.text);
+      ok(where + ': and never points her at a link', !/link/i.test(s.text), s.text);
+      ok(where + ': in plain words, with no em-dash', !/\u2014/.test(s.text), s.text);
+      if (inApp) {
+        await p.submitCode(live);
+        ok('typing that code there signs her in', p.calls.includes('signed-in'), p.calls);
+      }
+    }
+  }
+
+  /* 7f. signin-7. A verify 429 with no retryAfter is the per-IP limiter counting THIS DEVICE, not the
+     hourly ceiling on the address, so it must not say codes for this email are paused. */
+  console.log('\n7f. a pause from the per-device limiter says so in device words');
+  {
+    let limitVerify = false;
+    const env = Object.assign({}, ENV, { SIGNIN_RATE_LIMITER: { async limit(o) { return { success: !(limitVerify && /^code:/.test(o.key)) }; } } });
+    const e = fresh('device');
+    cache.clear();
+    const p = panel({ env });
+    await p.send(e);
+    const c = lastCode();
+    limitVerify = true;
+    await p.submitCode(c);
+    const s = p.seen();
+    ok('the limiter really answered: a 429 with no retryAfter', p.calls.includes('/api/signin-verify 429'), p.calls);
+    ok('the panel says it was a lot of tries in a minute, and to type the code again', /^That was a lot of tries in a minute\. Wait a moment, then type your code again\.$/.test(s.text), s.text);
+    ok('and never that codes for this email are paused', !/for this email/.test(s.text) && !/paused/.test(s.text), s.text);
+    limitVerify = false;
+    await p.submitCode(c);
+    ok('a moment later the same code signs her in', p.calls.includes('signed-in'), p.calls);
+  }
+
   console.log('\n8. one address cannot arm the cooldown of another');
   {
     /* The link sender's key for "code-<x>" used to be the code sender's key for "<x>", so a stranger
@@ -443,6 +515,153 @@ async function listCodes() {
     const body = await r.json().catch(() => ({}));
     ok('her own code request right after is not answered from his cooldown', r.status === 200 && body.cached !== true && body.hasCode === true, body);
     ok('and her code email really goes out', mail.length === mailed + 1, mail.length - mailed);
+  }
+
+  /* 9. signin-1. The cooldown is keyed on the normalised address (no +tags, no Gmail dots), the code on
+     the exact one. A stranger asking for jane+k1@ armed jane@'s cooldown, and every one of her own
+     requests in that minute was answered "cached": no code for her address, ever, for as long as he
+     kept asking. The cache is NOT cleared inside this section, so everything here is one minute. */
+  console.log('\n9. a stranger asking for a variant of her address every minute cannot keep her out');
+  {
+    const ATT = '203.0.113.5', HER = '198.51.100.20';
+    const jane = fresh('jane'), [local, domain] = jane.split('@');
+    cache.clear();
+    let hisOk = 0, hers = 0, cachedForHer = 0, signedInHer = 0;
+    for (let k = 1; k <= 6; k++) {
+      const a = await post(w, '/api/signin-code', { email: local + '+k' + k + '@' + domain }, ATT);
+      if (a.status === 200) hisOk++;
+      const mailed = mail.length;
+      const r = await post(w, '/api/signin-code', { email: jane }, HER);
+      const b = await r.json().catch(() => ({}));
+      if (b.cached) cachedForHer++;
+      if (r.status === 200 && b.hasCode === true && !b.cached && mail.length === mailed + 1 && mail[mail.length - 1].to === jane) hers++;
+      if (signedIn(await verify(w, jane, lastCode(), HER))) signedInHer++;
+    }
+    ok('his six variant requests go through', hisOk === 6, hisOk);
+    ok('every one of her own requests in the same minute mints and mails HER a code', hers === 6 && cachedForHer === 0, { hers, cachedForHer });
+    ok('and every one of those codes signs her in', signedInHer === 6, signedInHer);
+
+    const g = 'jane' + process.pid + 'x' + (++serial) + '@gmail.com';
+    await post(w, '/api/signin-code', { email: g.slice(0, 1) + '.' + g.slice(1) }, ATT);
+    const gr = await post(w, '/api/signin-code', { email: g }, HER);
+    const gb = await gr.json().catch(() => ({}));
+    ok('the same with a Gmail dot variant', gr.status === 200 && gb.hasCode === true && !gb.cached, gb);
+    ok('and that code signs her in', signedIn(await verify(w, g, lastCode(), HER)));
+
+    const lv = fresh('janelink'), [ll, ld] = lv.split('@');
+    await post(w, '/api/send-signin-link', { email: ll + '+k1@' + ld }, ATT);
+    const lmailed = mail.length;
+    const lr = await post(w, '/api/send-signin-link', { email: lv }, HER);
+    const lb = await lr.json().catch(() => ({}));
+    ok('and on the link sender: his variant does not silence her email', lr.status === 200 && !lb.cached && mail.length === lmailed + 1 && mail[mail.length - 1].to === lv, [lb, mail.length - lmailed]);
+
+    // Companions: the cooldown still does its job for the exact address that armed it.
+    const mailed = mail.length;
+    const again = await post(w, '/api/signin-code', { email: g }, HER);
+    const ab = await again.json().catch(() => ({}));
+    ok('a repeat of her OWN address inside the minute is still answered from her cooldown, and mails nothing', ab.cached === true && mail.length === mailed, [ab, mail.length - mailed]);
+    const old = fresh('oldcool');
+    const ckey = new Request('https://cooldown.cubby.internal/code/' + encodeURIComponent(old)).url;
+    for (const legacy of ['1', JSON.stringify({ hasCode: true, hasLink: true })]) {
+      cache.set(ckey, legacy);
+      const r = await post(w, '/api/signin-code', { email: old }, HER);
+      const b = await r.json().catch(() => ({}));
+      ok('a cooldown from the previous worker (' + (legacy === '1' ? "'1'" : 'no address hash') + ') still gives its old answer', b.cached === true && mail.length === mailed, b);
+    }
+    const leftOver = JSON.stringify([...cache.values()]);
+    ok('no cooldown value holds an address in plain text', !/@/.test(leftOver), leftOver.slice(0, 200));
+  }
+
+  /* 10. signin-3. One dual-stack home connection is two networks (its IPv4 and its IPv6 /48). He waits
+     for her to ask, then burns each code she is sent, from each half of his connection in turn. */
+  console.log('\n10. a stranger on one dual-stack connection cannot keep her out');
+  {
+    const e = fresh('dual');
+    const V4 = '203.0.113.9', V6 = '2001:db8:99::1', HER = '198.51.100.20';
+    evaluated = 0;
+    await issue(w, e, HER); const c1 = lastCode();
+    for (let i = 0; i < 5; i++) await verify(w, e, wrong(c1, i), V4);
+    ok('his IPv4 burns her first code', (await verify(w, e, c1, HER)).status === 400);
+    await issue(w, e, HER); const c2 = lastCode();
+    for (let i = 0; i < 5; i++) await verify(w, e, wrong(c2, i), V6);
+    ok('his IPv6 burns her second', (await verify(w, e, c2, HER)).status === 400);
+    const third = await issue(w, e, HER);
+    ok('she is still sent a third code', third.status === 200 && third.body.hasCode === true, third);
+    const c3 = lastCode();
+    const his = [];
+    for (let i = 0; i < 4; i++) his.push((await verify(w, e, wrong(c3, i), i % 2 ? V4 : V6)).status);
+    ok('both halves of his connection are now out of guesses, and none was compared', his.every((s) => s === 429) && evaluated === 10, [his, evaluated]);
+    ok('she makes a typo', (await verify(w, e, wrong(c3, 9), HER)).status === 400);
+    const v = await verify(w, e, c3, HER);
+    ok('and her right code still signs her in', signedIn(v), [v.status, v.body]);
+  }
+
+  /* 11. signin-8. The network tag is keyed per document, so two addresses asked for from the same
+     networks share no tag, while inside one document a network keeps one tag (what the ceilings count). */
+  console.log('\n11. the same networks leave unrelated tags in two people\'s documents');
+  {
+    const alice = fresh('alice'), bob = fresh('bob');
+    const nets = ['203.0.113.77', '2001:db8:abcd:12::99', '::ffff:198.51.100.88'];
+    for (const ip of nets) { await issue(w, alice, ip); await issue(w, bob, ip); }
+    const af = await codeFields(alice), bf = await codeFields(bob);
+    ok('the document ids derived here are the worker\'s (both documents exist)', !!af && !!bf, [!!af, !!bf]);
+    const at = tagsIn(af), bt = tagsIn(bf);
+    ok('each document holds one tag per network', new Set(at).size === 3 && new Set(bt).size === 3, [at, bt]);
+    ok('and alice and bob share none of them', !at.some((t) => bt.includes(t)), [at, bt]);
+    await issue(w, alice, nets[0]);
+    const at2 = tagsIn(await codeFields(alice));
+    ok('the companion: inside one document the same network repeats its tag', at2.length === 4 && at2.filter((t) => t === at[0]).length === 2, at2);
+  }
+
+  /* 12. signin-4. The canary's address is public (it is in this repo), so the public endpoints refuse
+     every .invalid address; and a canary that does find itself capped says so. */
+  console.log('\n12. nobody else can ask for the canary\'s address, and a capped canary says it is capped');
+  {
+    const mailed = mail.length;
+    for (const [route, body] of [['/api/signin-code', {}], ['/api/send-signin-link', {}], ['/api/signin-verify', { code: '123456' }]]) {
+      for (const addr of ['canary@cubby.invalid', 'someone@example.invalid']) {
+        cache.clear();
+        const r = await post(w, route, Object.assign({ email: addr }, body), '192.0.2.91');
+        const b = await r.json().catch(() => ({}));
+        ok(route + ' refuses ' + addr + ' like any malformed address', r.status === 400 && b.error === 'invalid_email', [r.status, b]);
+      }
+    }
+    ok('and nothing was mailed', mail.length === mailed, mail.length - mailed);
+    ok('nor any code document written for it', (await codeFields('canary@cubby.invalid')) === null);
+    cache.clear();
+    const fine = await post(w, '/api/signin-code', { email: fresh('invalidish').replace('@', '@invalid.') }, '192.0.2.91');
+    ok('the companion: an ordinary address that only contains "invalid" is fine', fine.status === 200, fine.status);
+    // Cap the canary's own document directly (twelve codes this hour), as nothing public can now.
+    const now = Date.now();
+    const seed = await realFetch(DOCS + '/signinCodes/' + docIdFor('canary@cubby.invalid'), {
+      method: 'PATCH', headers: { authorization: 'Bearer owner', 'content-type': 'application/json' },
+      body: JSON.stringify({ fields: { issues: { arrayValue: { values: Array.from({ length: 12 }, (_, i) => ({ stringValue: (now - 1000 * (i + 1)) + ':zzzzzzzzzzzz' })) } } } })
+    });
+    ok('the canary\'s document is seeded at its ceiling', seed.ok, seed.status);
+    const v = await mod.signinCanary(ENV);
+    ok('the canary reports a capped run as capped', v.ok === false && /^capped/.test(String(v.reason)), v.reason);
+    ok('and never as a refused Firestore write', !/refused/.test(String(v.reason)), v.reason);
+    const next = await mod.signinCanary(ENV);
+    ok('the next run is green again', next.ok === true, next.reason);
+  }
+
+  /* 13. signin-5. A document minted by the production build carries her plaintext address. The first
+     spend now masks it out. */
+  console.log('\n13. a production-era code document loses its plaintext address on the first spend');
+  {
+    const e = fresh('prodera');
+    const ip = '192.0.2.77';
+    await issue(w, e, ip); const c = lastCode();
+    const add = await realFetch(DOCS + '/signinCodes/' + docIdFor(e) + '?updateMask.fieldPaths=email', {
+      method: 'PATCH', headers: { authorization: 'Bearer owner', 'content-type': 'application/json' },
+      body: JSON.stringify({ fields: { email: { stringValue: e } } })
+    });
+    const before = await codeFields(e);
+    ok('the production-era shape is staged: the document holds her address', add.ok && before && before.email && before.email.stringValue === e, before && Object.keys(before));
+    await verify(w, e, wrong(c, 0), ip);
+    const after = await codeFields(e);
+    ok('one miss later the address is gone', !!after && !after.email && !!after.mac, after && Object.keys(after));
+    ok('and her code still signs her in', signedIn(await verify(w, e, c, ip)));
   }
 
   console.log('\nFirestore write statuses:', JSON.stringify(writes));

@@ -86,6 +86,8 @@ const LINK = 'https://little-cubby.com/__/auth/action?mode=signIn&oobCode=abc123
     ok('neither half: still valid HTML, no half-drawn furniture', neither.includes('</html>') && !neither.includes('href=""'));
   }
 
+  const LINK_THEN_CODE = /let link = await generateSignInLink[\s\S]{0,1500}?const code = await issueSigninCode\(sa, token, email\b/;
+  const CODE_THEN_LINK = /const code = await issueSigninCode\(sa, token, email\b[^;]*;[\s\S]{0,1500}?link = await generateSignInLink/;
   console.log('\n3. BOTH senders use that one template, under one subject');
   {
     const subjects = WORKER.match(/subject: 'Your Cubby sign-in[^']*'/g) || [];
@@ -97,8 +99,11 @@ const LINK = 'https://little-cubby.com/__/auth/action?mode=signIn&oobCode=abc123
     ok('the old link-only template is gone', !/function emailHtml\(link\)/.test(WORKER));
     ok('the old code-only template is gone', !/function signinCodeHtml\(/.test(WORKER));
 
-    ok('the LINK endpoint now also mints a code', /let link = await generateSignInLink[\s\S]{0,900}?const code = await issueSigninCode\(sa, token, email\b/.test(WORKER));
-    ok('the CODE endpoint now also mints a link', /const code = await issueSigninCode\(sa, token, email\b[^;]*;[\s\S]{0,900}?link = await generateSignInLink/.test(WORKER));
+    /* Order, not distance: a code then a link in the code endpoint, a link then a code in the link
+       endpoint. The window is wide enough for the comments that explain each step (it was 900, and
+       the code endpoint's sat at 896 before its 429 learned to say a code is still live). */
+    ok('the LINK endpoint now also mints a code', LINK_THEN_CODE.test(WORKER));
+    ok('the CODE endpoint now also mints a link', CODE_THEN_LINK.test(WORKER));
     /* Each endpoint keeps the half it is named for as the hard requirement and treats the other as a
        bonus, so one slow dependency degrades the email instead of costing her the sign-in. */
     ok('no code means no email from the CODE endpoint', WORKER.includes("if (!code) return json({ error: 'store_failed' }, 502);"));
@@ -198,6 +203,10 @@ const LINK = 'https://little-cubby.com/__/auth/action?mode=signIn&oobCode=abc123
         (s) => { const i = s.slice(s.indexOf('async function issueSigninCode('), s.indexOf('/* Same-origin + per-IP volume')); return !/code: \{ stringValue: code \}/.test(i); }],
       ['the code box is shown over an email with no code in it', STORE.replace("if (hasCode) showCodeBox(email).focus(); else codeForm.style.display = 'none';", 'showCodeBox(email).focus();'),
         (s) => s.includes("if (hasCode) showCodeBox(email).focus(); else codeForm.style.display = 'none';")],
+      ['the code endpoint stops minting a link', WORKER.replace("      link = await generateSignInLink(token, email, url.origin + '/app/');\n      link = link.replace", "      link = '';\n      link = link.replace"),
+        (s) => CODE_THEN_LINK.test(s)],
+      ['the link endpoint stops minting a code', WORKER.replace('const code = await issueSigninCode(sa, token, email, clientIpKey(request, 3));', "const code = '';"),
+        (s) => LINK_THEN_CODE.test(s)],
       ['a no-send cooldown is reported as a fresh send', STORE.replace('function sentLine(email, cached)', 'function sentLineOld(email, cached)'),
         (s) => /function sentLine\(email, cached\)/.test(s)],
     ];

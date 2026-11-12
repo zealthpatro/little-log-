@@ -21,7 +21,17 @@
  *       the deploy window: the NEW client against the OLD rules (the legitimate joins must still
  *       work there; the attack checks are skipped, because the old rules are the hole)
  *
- * Ports are overridable so it never collides with another suite: FS_PORT, AUTH_PORT, WEB_PORT.
+ * Ports are overridable so it never collides with another suite: FS_PORT, AUTH_PORT, WEB_PORT, and
+ * the emulator's own HUB_PORT, LOG_PORT and WS_PORT (left to the CLI's defaults when unset).
+ *
+ * THE ACCOUNTS ARE VERIFIED, like every real one. The rules only trust an address with
+ * email_verified (firestore.rules, emailProven), and an account made in the page with a password
+ * is unverified, which no Cubby sign-in ever produces. So each person is made through the Auth
+ * emulator's admin endpoint with emailVerified: true and then signs in in the page. Uma (section
+ * 2b) is the one unverified account, on purpose.
+ *
+ * Chrome is launched with downloads redirected (tools/gate_downloads.js) and every host but
+ * localhost unresolvable, so nothing here can reach a real service.
  */
 'use strict';
 const fs = require('fs');
@@ -34,6 +44,7 @@ const ROOT = path.join(__dirname, '..');
 const FS_PORT = Number(process.env.FS_PORT) || 8697;
 const AUTH_PORT = Number(process.env.AUTH_PORT) || 9697;
 const WEB_PORT = Number(process.env.WEB_PORT) || 8698;
+const HUB_PORT = Number(process.env.HUB_PORT) || 0, LOG_PORT = Number(process.env.LOG_PORT) || 0, WS_PORT = Number(process.env.WS_PORT) || 0;
 const EXEC_PROJECT = 'demo-cubby-consent';
 const RULES_FILE = process.env.RULES_FILE || path.join(ROOT, 'firestore.rules');
 const OLD_MODE = !!process.env.RULES_FILE;
@@ -56,7 +67,8 @@ if (!process.env.INVITE_CONSENT_INNER) {
   fs.copyFileSync(RULES_FILE, path.join(scratch, 'firestore.rules'));
   fs.writeFileSync(path.join(scratch, 'firebase.json'), JSON.stringify({
     firestore: { rules: 'firestore.rules' },
-    emulators: { firestore: { port: FS_PORT }, auth: { port: AUTH_PORT }, ui: { enabled: false } }
+    emulators: Object.assign({ firestore: Object.assign({ port: FS_PORT }, WS_PORT ? { websocketPort: WS_PORT } : {}), auth: { port: AUTH_PORT }, ui: { enabled: false } },
+      HUB_PORT ? { hub: { port: HUB_PORT } } : {}, LOG_PORT ? { logging: { port: LOG_PORT } } : {})
   }));
   const firebaseBin = path.join(__dirname, 'node_modules', '.bin', 'firebase');
   const javaBin = process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin') : '/opt/homebrew/opt/openjdk/bin';
@@ -79,25 +91,50 @@ if (!process.env.INVITE_CONSENT_INNER) {
     { stdio: 'ignore', env: Object.assign({}, process.env, { PORT: String(WEB_PORT) }) });
   for (let i = 0; i < 40 && (await get(`http://localhost:${WEB_PORT}/app/`)).status !== 200; i++) await sleep(250);
   ok('the static server is serving this checkout', (await get(`http://localhost:${WEB_PORT}/app/`)).status === 200);
+  // And it is THIS checkout's code, byte for byte, not some other tree's server on the same port.
+  const servedStore = await fetch(`http://localhost:${WEB_PORT}/app/store-firebase.js`).then((r) => r.text()).catch(() => '');
+  ok('its store-firebase.js is the one on disk here', servedStore === fs.readFileSync(path.join(ROOT, 'app', 'store-firebase.js'), 'utf8'));
 
   const puppeteer = require(path.join(ROOT, 'tools', 'node_modules', 'puppeteer-core'));
-  const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });
+  const dl = require(path.join(ROOT, 'tools', 'gate_downloads.js'));
+  const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', downloadBehavior: dl.downloadBehavior(),
+    args: ['--no-sandbox', '--disable-gpu', '--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE localhost , EXCLUDE 127.0.0.1'] });
   const errs = [];
+  const offHost = [], offHostAnswered = [];
 
-  // One isolated browser context per person, signed up in the page against the Auth emulator.
-  // before(page), when given, runs in the page after load and before she signs up.
-  const person = async (email, extraQuery, before) => {
-    const ctx = await browser.createBrowserContext();
+  /* A verified account, the way every real sign-in makes one (see the header). The emulator's admin
+     endpoint takes the project the emulators were started with; GCLOUD_PROJECT is what exec sets. */
+  const AUTH_PROJECT = process.env.GCLOUD_PROJECT || EXEC_PROJECT;
+  const makeAccount = async (email, verified) => {
+    const r = await fetch(`http://localhost:${AUTH_PORT}/identitytoolkit.googleapis.com/v1/projects/${AUTH_PROJECT}/accounts`, {
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer owner' },
+      body: JSON.stringify({ email, password: PW, emailVerified: verified !== false }) });
+    const j = await r.json().catch(() => ({}));
+    if (!j.localId) throw new Error('could not make the emulator account for ' + email + ': ' + JSON.stringify(j).slice(0, 200));
+    return j.localId;
+  };
+  // One isolated browser context per person, signed in in the page against the Auth emulator.
+  // before(page), when given, runs in the page after load and before she signs in. unverified makes
+  // the account the way a password sign-up would, with no proof of the address.
+  const person = async (email, extraQuery, before, unverified) => {
+    const ctx = await browser.createBrowserContext({ downloadBehavior: dl.downloadBehavior() });
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errs.push(email + ': ' + e.message));
+    page.on('request', (rq) => { try { const h = new URL(rq.url()).hostname; if (h && h !== 'localhost' && h !== '127.0.0.1') offHost.push(h); } catch (e) {} });
+    page.on('response', (rs) => { try { const h = new URL(rs.url()).hostname; if (h && h !== 'localhost' && h !== '127.0.0.1') offHostAnswered.push(h); } catch (e) {} });
     await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
     await page.goto(`http://localhost:${WEB_PORT}/app/?fsemu=${FS_PORT}&authemu=${AUTH_PORT}${extraQuery || ''}`,
       { waitUntil: 'networkidle2', timeout: 45000 });
-    await page.waitForFunction(() => !!(window.LL && window.LL.auth && window.LL.auth.createUserWithEmailAndPassword), { timeout: 20000 });
+    await page.waitForFunction(() => !!(window.LL && window.LL.auth && window.LL.auth.signInWithEmailAndPassword), { timeout: 20000 });
     if (before) await page.evaluate(before);
-    await page.evaluate((e, p) => window.LL.auth.createUserWithEmailAndPassword(e, p).then(() => true), email, PW);
+    if (unverified) await page.evaluate((e, p) => window.LL.auth.createUserWithEmailAndPassword(e, p).then(() => true), email, PW);
+    else {
+      await makeAccount(email);
+      await page.evaluate((e, p) => window.LL.auth.signInWithEmailAndPassword(e, p).then(() => true), email, PW);
+    }
     return page;
   };
+  const tokenVerified = (page) => page.evaluate(() => window.LL.auth.currentUser.getIdTokenResult().then((t) => t.claims.email_verified === true));
   const overlayText = (page) => page.evaluate(() => { const o = document.getElementById('ll-invite-mismatch'); return o ? o.innerText : ''; });
   const onLanding = (page) => page.evaluate(() => { const o = document.getElementById('llAuthOv'); return !!(o && /Continue with Google/.test(o.innerText)); });
   const booted = async (page, ms) => {
@@ -135,22 +172,23 @@ if (!process.env.INVITE_CONSENT_INNER) {
   /* ---- 1. the owner ---- */
   console.log('1. the owner and her invitations');
   const A = await person('olive@cubby.test');
+  ok('(harness) her token carries email_verified, as every real sign-in\'s does', await tokenVerified(A));
   ok('Olive boots into a family of her own', await booted(A));
   const a = await who(A);
   ok('as its owner', a.role === 'owner', a);
   await A.evaluate(() => window.LL.db.doc('households/' + window.LL.householdId).update({ ['memberInfo.' + window.LL.auth.currentUser.uid + '.name']: 'Olive' }));
   // The invite exactly as submitInvite() writes it (store-firebase.js), plus the owner's mirror row.
   // signed=false writes the shape an older build left: no sender name and no sender address.
-  const inviteFor = (email, rel, signed) => A.evaluate((email, rel, signed) => {
+  const inviteFor = (email, rel, signed, byName) => A.evaluate((email, rel, signed, byName) => {
     const u = window.LL.auth.currentUser;
     const doc = { householdId: window.LL.householdId, role: 'caregiver', relationship: rel, name: '',
       invitedBy: u.uid, status: 'pending', createdAt: firebase.firestore.FieldValue.serverTimestamp() };
-    if (signed !== false) { doc.fromEmail = u.email.toLowerCase(); doc.invitedByName = 'Olive'; }
+    if (signed !== false) { doc.fromEmail = u.email.toLowerCase(); doc.invitedByName = byName || 'Olive'; }
     return Promise.all([
       window.LL.db.collection('invites').doc(email).set(doc),
       window.LL.db.doc('households/' + window.LL.householdId).update(new firebase.firestore.FieldPath('pendingInvites', email), { name: '', relationship: rel, role: 'caregiver', at: Date.now() }),
     ]).then(() => 'ok', (e) => e && e.code);
-  }, email, rel, signed);
+  }, email, rel, signed, byName);
   ok('she invites Nina by email', (await inviteFor('nina@cubby.test', 'Auntie')) === 'ok');
   ok('and Paul', (await inviteFor('paul@cubby.test', 'Uncle')) === 'ok');
   ok('and Dora', (await inviteFor('dora@cubby.test', 'Granny')) === 'ok');
@@ -162,12 +200,16 @@ if (!process.env.INVITE_CONSENT_INNER) {
   const N = await person('nina@cubby.test');
   ok('she is shown the question', await waitSheet(N));
   const nt = await sheetText(N);
-  ok('naming who invited her, with the address the rules proved', /From\s*Olive \(olive@cubby\.test\)/.test(nt), nt);
+  // The address the rules proved comes first; the name the sender typed follows, in brackets.
+  ok('naming who invited her: the address the rules proved, then the name', /From\s*olive@cubby\.test \(Olive\)/.test(nt), nt);
   ok('and what she would join as, as a label', /You’d join as\s*Auntie/.test(nt), nt);
   ok('with a way to start her own instead', /Start my own Cubby/.test(nt), nt);
-  const a11y = await N.evaluate(() => { const s = document.getElementById('sheet'); return { x: !!s.querySelector('.sheet-x'), focus: document.activeElement && document.activeElement.tagName }; });
+  const a11y = await N.evaluate(() => { const s = document.getElementById('sheet'); const h = s.querySelector('h2');
+    return { x: !!s.querySelector('.sheet-x'), focus: document.activeElement && document.activeElement.tagName,
+      ring: h ? getComputedStyle(h).outlineStyle : null, ringW: h ? getComputedStyle(h).outlineWidth : null }; });
   ok('a question that needs an answer has no × that only brings it back', a11y.x === false, a11y);
   ok('and focus starts on the question', a11y.focus === 'H2', a11y);
+  ok('without a focus ring drawn round the title', a11y.focus === 'H2' && a11y.ring === 'none', a11y);
   if (process.env.SHOT_DIR) { await sleep(900); await N.screenshot({ path: path.join(process.env.SHOT_DIR, 'newcomer-sheet.png') }); }
   ok('and nothing is written while she decides', (await read(A, 'households/' + a.hid)).data.members[(await who(N)).uid] === undefined);
   ok('she taps Join the family', await tap(N, 'Join the family'));
@@ -194,6 +236,37 @@ if (!process.env.INVITE_CONSENT_INNER) {
   await sleep(2000);
   const hhN = (await read(A, 'households/' + a.hid)).data;
   ok('and her blob save (a medicine) reaches Olive', ((hhN.app || {}).meds || []).some((m) => m.id === 'medN1'), (hhN.app || {}).meds);
+
+  /* ---- 2b. an address nobody proved opens nothing ---- */
+  if (!OLD_MODE) {
+    console.log('\n2b. Uma: an account that never proved its address, with an invite waiting for it');
+    ok('Olive invites uma@cubby.test', (await inviteFor('uma@cubby.test', 'Auntie')) === 'ok');
+    const U = await person('uma@cubby.test', '', null, true);
+    ok('(companion) her token really is unverified', !(await tokenVerified(U)));
+    ok('she boots into a Cubby of her own', (await booted(U, 45000)) && !!(await who(U)).hid && (await who(U)).hid !== a.hid, await who(U));
+    ok('she is never shown the invite', !/invited/i.test(await sheetText(U)), await sheetText(U));
+    ok('the rules refuse her the invite', (await read(U, 'invites/uma@cubby.test')).denied === 'permission-denied');
+    ok('she is not in Olive\'s family', !((await read(A, 'households/' + a.hid)).data.members || {})[(await who(U)).uid]);
+    await U.browserContext().close();
+  }
+
+  /* ---- 2c. the sender's name is a label beside the address, never a second address or a sentence ---- */
+  console.log('\n2c. what the sender typed as her own name');
+  ok('Olive signs an invite to Ivy with "midwife@nhs.test" as her name', (await inviteFor('ivy@cubby.test', 'Auntie', true, 'midwife@nhs.test')) === 'ok');
+  const I = await person('ivy@cubby.test');
+  ok('Ivy is shown the question', await waitSheet(I));
+  const it = await sheetText(I);
+  ok('it names the proven address only', /From\s*olive@cubby\.test(?!\s*\()/.test(it), it);
+  ok('and not the address typed as a name', !/midwife/.test(it), it);
+  await I.browserContext().close();
+  ok('Olive signs an invite to Gia with "Cubby. Verified family" as her name', (await inviteFor('gia@cubby.test', 'Auntie', true, 'Cubby. Verified family')) === 'ok');
+  // An older page draws no facts, so they are folded into the body as text (factsAsText).
+  const G = await person('gia@cubby.test', '', () => { window.confirmSheet.drawsFacts = false; });
+  ok('Gia, on a page that folds the facts into the text, is shown the question', await waitSheet(G));
+  const gt = await sheetText(G);
+  ok('the name is cut to its first words, after the address', /From: olive@cubby\.test \(Cubby\)\./.test(gt), gt);
+  ok('and the rest of the sentence the sender wrote is not on screen', !/Verified family/.test(gt), gt);
+  await G.browserContext().close();
 
   /* ---- 3. a newcomer says no ---- */
   console.log('\n3. Paul, new, invited by email: says no');
@@ -305,6 +378,11 @@ if (!process.env.INVITE_CONSENT_INNER) {
       ['members.' + uid]: firebase.firestore.FieldValue.delete(), ['memberInfo.' + uid]: firebase.firestore.FieldValue.delete(),
       ['formerMemberInfo.' + uid]: { name: '', relationship: 'Nanny', avatar: null } }).then(() => 'ok', (e) => e && e.code), r.uid);
     ok('Olive removes Rosa', removed === 'ok', removed);
+    let rGone = false;
+    for (let i = 0; i < 40 && !rGone; i++) { await sleep(250); rGone = await R.evaluate(() => { const o = document.getElementById('ll-access-lost'); return !!(o && /You’re no longer in this family/.test(o.innerText)); }); }
+    ok('Rosa\'s phone tells her she is no longer in this family', rGone);
+    const nGone = await N.evaluate(() => !!document.getElementById('ll-access-lost'));
+    ok('(companion) Nina, still in it, is told nothing of the kind', !nGone && (await who(N)).hid === a.hid, { nGone, n: await who(N) });
     const back1 = await write(R, `(db, firebase) => db.doc('households/${a.hid}').update({ joinToken: '${link.token}',
       'members.${r.uid}': 'caregiver', 'memberInfo.${r.uid}': { name: 'Rosa', role: 'caregiver', relationship: 'Nanny' } })`);
     ok('Rosa cannot write herself back in with her old token', back1 === 'permission-denied', back1);
@@ -344,6 +422,10 @@ if (!process.env.INVITE_CONSENT_INNER) {
   ok('Sam\'s invite to her went with him', (await read(W, 'invites/wren@cubby.test')).exists === false);
   ok('and so did his link', (await read(W, 'inviteLinks/' + samLink.token)).exists === false);
   ok('no page errors on any phone', errs.length === 0, errs.slice(0, 3));
+  /* Every other host is unresolvable (--host-resolver-rules), so anything off localhost can be tried but
+     never answered. The Firebase SDK's own offline probe tries www.google.com when the page goes offline. */
+  ok('nothing off localhost was ever answered', offHostAnswered.length === 0, [...new Set(offHostAnswered)]);
+  if (offHost.length) console.log('  ..   tried and refused by the host rules: ' + JSON.stringify([...new Set(offHost)]));
 
   await browser.close();
   serveProc.kill();

@@ -257,6 +257,10 @@ export const STEP_EVENTS = {
    declares is REQUIRED, and an unknown property is a rejection, not something quietly dropped:
    a caller sending extra fields is a caller who has misunderstood what this is for. */
 export function stepKey(event, props) {
+  /* An OWN property only. STEP_EVENTS is a plain object, so STEP_EVENTS['constructor'] is Object
+     itself, whose keys are none, and 'constructor' with {} props came out as the key 'constructor|'
+     and was stored as a funnel step (round-4 review, SB-2). Same for toString, __proto__ and the rest. */
+  if (typeof event !== 'string' || !Object.prototype.hasOwnProperty.call(STEP_EVENTS, event)) return null;
   const spec = STEP_EVENTS[event];
   if (!spec || !props || typeof props !== 'object' || Array.isArray(props)) return null;
   const keys = Object.keys(props);

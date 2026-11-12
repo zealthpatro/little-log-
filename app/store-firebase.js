@@ -496,7 +496,7 @@
     var codeForm = row.querySelector('.ll-code-form');
     function sendCode(email) {
       return fetch('/api/signin-code', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: email }) })
-        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) { var er = new Error(d.error || 'send_failed'); er.retryAfter = Number(d.retryAfter) || 0; throw er; } return d; }); });
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) { var er = new Error(d.error || 'send_failed'); er.retryAfter = Number(d.retryAfter) || 0; er.liveCode = d.liveCode === true; er.liveFor = Number(d.liveFor) || 0; throw er; } return d; }); });
     }
     /* How long codes are paused, in words. The worker's hourly ceilings say when a slot frees
        (retryAfter, seconds); a pause from the per-IP limiter carries none and lasts about a minute. */
@@ -505,6 +505,14 @@
       if (m <= 1) return 'a minute or so';
       if (m >= 55) return 'about an hour';
       return 'about ' + m + ' minutes';
+    }
+    /* How much longer the code in her newest email works, in words. Rounded DOWN, so it never
+       promises a minute the code does not have. */
+    function liveWords(secs) {
+      var m = Math.floor((Number(secs) || 0) / 60);
+      if (m < 1) return 'under a minute';
+      if (m === 1) return 'about a minute more';
+      return 'about ' + m + ' more minutes';
     }
     /* The installed iPhone app: a link tapped in Mail opens Safari, whose storage is separate, so a
        link can never sign THIS app in. Copy that says "open the link" there is a dead end. */
@@ -534,10 +542,15 @@
             /* rate_limited is a pause, not a failure, and "mind trying again?" over a pause that can
                last most of an hour sent her round in circles at 3am. Say it is paused, for how long,
                and that nothing is wrong. Usually it is somebody else's guesses, not hers. */
+            /* A 429 WITHOUT retryAfter is the per-IP limiter counting this device's requests in the
+               last minute, not the hourly ceiling on the address, and her code is still live. So it
+               says so in device words, never "codes for this email are paused". */
             var m = msg === 'bad_code'
               ? 'That code did not match, or it has expired. Codes last 10 minutes and work once.'
               : msg === 'rate_limited'
-                ? 'There have been a lot of tries for this email, so codes are paused for ' + pauseWords(err.retryAfter) + '. Nothing is wrong with your account. Try again then.'
+                ? (err.retryAfter > 0
+                  ? 'There have been a lot of tries for this email, so codes are paused for ' + pauseWords(err.retryAfter) + '. Nothing is wrong with your account. Try again then.'
+                  : 'That was a lot of tries in a minute. Wait a moment, then type your code again.')
                 : errText(err, 'Could not finish signing in just now. Mind trying again?');
             note.textContent = m; ci.select();
           });
@@ -554,6 +567,10 @@
       res = res || {};
       var hasCode = !!res.hasCode, hasLink = !!res.hasLink;
       if (res.cached) { hasCode = true; hasLink = true; }   // the earlier email came from this same sender
+      /* No new email went out (new codes are paused for this address), but the code in her newest
+         email still works: keep the box open and say so. Never a link here: in the installed app a
+         link cannot sign this app in, and nothing new is in her inbox to tap anyway. */
+      if (res.liveCode) { hasCode = true; hasLink = false; }
       form.style.display = 'none';
       var inApp = inInstalledIOS();
       var how = hasCode
@@ -568,7 +585,10 @@
           ? ' Codes for this email are paused for ' + pauseWords(res.retryAfter) + ', after a lot of tries.'
             + (inApp ? ' The email has a link, which signs you in to Cubby in Safari. To sign in to this app, ask for a code again then.' : ' Tap the link in that email to sign in.')
           : (inApp ? ' It has a link, which opens Cubby in Safari rather than this app. To sign in here, ask again in a minute for a code.' : ' Open the link in it on this device.');
-      note.innerHTML = sentLine(email, res.cached) + how
+      var lead = res.liveCode
+        ? 'New codes are paused for ' + pauseWords(res.retryAfter) + ', but the code in your most recent email still works for ' + liveWords(res.liveFor) + '. Type it here.'
+        : sentLine(email, res.cached) + how;
+      note.innerHTML = lead
         + '<div class="ll-resend-row" style="margin-top:8px">Not arrived yet? <button type="button" class="ll-resend" style="' + LINKBTN + '">Resend email</button> &middot; <button type="button" class="ll-changeemail" style="' + LINKBTN + '">Wrong email?</button></div>';
       if (hasCode) showCodeBox(email).focus(); else codeForm.style.display = 'none';
       var rb = note.querySelector('.ll-resend');
@@ -596,6 +616,9 @@
        one ran, the panel tells the truth. */
     function sendEmail(email) {
       return sendCode(email).catch(function (err) {
+        /* New codes are paused, but her newest code still works: no fallback. The link sender would
+           mail a link-only email the installed app cannot use, and send her to it for an hour. */
+        if (err && err.message === 'rate_limited' && err.liveCode) return { liveCode: true, liveFor: err.liveFor, retryAfter: err.retryAfter };
         var paused = !!(err && err.message === 'rate_limited' && err.retryAfter > 0);
         return sendLink(email).then(function (d) {
           // The code endpoint's pause rides along, so the panel can say so instead of "open the link".
@@ -1734,7 +1757,9 @@
     var token = newInviteToken();
     var linkDoc = {
       householdId: window.LL.householdId,
-      role: opts.role === 'owner' ? 'owner' : 'caregiver',
+      // Always a caregiver link: the rules refuse any other kind. A link admits whoever holds it, and an
+      // owner-role one would have handed a forwarded message the power to remove the owner.
+      role: 'caregiver',
       relationship: opts.relationship || '',
       invitedBy: u.uid,
       invitedByName: nameForUid(u.uid) || (u.displayName || '').split(' ')[0] || '',
@@ -1867,11 +1892,26 @@
     // A label, not a sentence: stop at the first sentence break, squash whitespace, cap the length.
     return String(s == null ? '' : s).split(/[.!?;:\n\r]/)[0].replace(/\s+/g, ' ').trim().slice(0, max);
   }
+  /* The name the sender typed for herself, as a short label. It sits beside an address the rules
+     proved, so it must never read as one: a name that is itself an address ("midwife@nhs.test") or
+     a path is dropped, and a name that runs on into a sentence ("Cubby. Verified family") is cut at
+     its first break. The proven address leads the row, so the name can only ever be the aside.
+     Look-alikes count (round-5 review VJ-2): NFKC first, so a full-width or small @ becomes the @ it
+     imitates; invisible direction and joiner marks go, since they can reorder or hide what is drawn;
+     a domain-shaped run ("nhs.test", "Cubby.Verified") or a spelled-out "(at)" drops the name too;
+     and brackets go, so a name cannot close the parentheses it is drawn in and open a claim of its own. */
+  function senderName(s) {
+    var raw = String(s == null ? '' : s);
+    try { raw = raw.normalize('NFKC'); } catch (e) {}
+    raw = raw.replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g, '');
+    if (/[@\/\\]/.test(raw) || /[^\s.]\.[^\s.]/.test(raw) || /[(\[]\s*at\s*[)\]]/i.test(raw)) return '';
+    return raw.split(/[!?;:\n\r\u3002\uFF61]|\. /)[0].replace(/[()\[\]{}<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 30);
+  }
   function inviteFacts(inv) {
     var factRows = [];
     var from = String((inv && inv.fromEmail) || '').trim().toLowerCase().slice(0, 120);
-    var who = from ? String((inv && inv.invitedByName) || '').replace(/\s+/g, ' ').trim().slice(0, 30) : '';
-    if (from) factRows.push({ label: 'From', value: who ? (who + ' (' + from + ')') : from });
+    var who = from ? senderName(inv && inv.invitedByName) : '';
+    if (from) factRows.push({ label: 'From', value: who ? (from + ' (' + who + ')') : from });
     var rel = inviteLabel(inv && inv.relationship, 24);
     if (rel) factRows.push({ label: 'You’d join as', value: rel });
     /* camelCase on purpose: tools/design_doc_check.js counts any dotted lowercase name in a file that makes a
@@ -1932,6 +1972,8 @@
      used to hard-code the light palette, so at 3am in Night she got a bright cream screen. The
      fallbacks are the light values, for a page whose tokens have not loaded. */
   var OV_BG = 'var(--bg,#FBF5E9)', OV_INK = 'var(--ink,#3a2f28)', OV_SOFT = 'var(--ink-soft,#8a7a6d)';
+  /* Their pink button carries dark text, the same as the goodbye screen: white on #C97FA0 is 2.99:1,
+     and #1A1614 on it is about 6:1, in light and in Night alike (the pink does not change). */
   /* deadLink is set when the invite she is acting on no longer works, and says which kind:
      true for a TOKEN link (spent, expired, or into a family that has closed), 'gone' for an email
      invite whose join was refused after she said yes (withdrawn while she read it, or the family has
@@ -1939,6 +1981,8 @@
      fine. Only the person who invited her can make another. */
   function showInviteMismatch(email, deadLink) {
     if (inviteMismatchShown) return; inviteMismatchShown = true;
+    // Any open store sheet (z-index 99998) would otherwise sit on top of this note (3000).
+    try { closeModal(); } catch (e) {}
     if (deadLink) {
       try { hideOverlay(); } catch (e) {}
       var isLink = deadLink !== 'gone';
@@ -1983,7 +2027,7 @@
       + '<div style="color:' + OV_SOFT + ';font-size:15px;line-height:1.55">You signed in as <b>' + esc(email) + '</b>, and there is no invite waiting for that address.</div>'
       + '<div style="color:' + OV_SOFT + ';font-size:15px;line-height:1.55;margin-top:12px">Invites are matched by email. If you signed in with Apple and chose to hide your address, Cubby sees the hidden one instead of yours.</div>'
       + '<div style="color:' + OV_SOFT + ';font-size:15px;line-height:1.55;margin-top:12px">Sign in again with the address they sent it to, or ask them to re-send it to <b>' + esc(email) + '</b>.</div>'
-      + '<button id="ll-im-btn" style="margin-top:22px;border:none;border-radius:16px;padding:15px 24px;background:#C97FA0;color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Try a different sign in</button>'
+      + '<button id="ll-im-btn" style="margin-top:22px;border:none;border-radius:16px;padding:15px 24px;background:#C97FA0;color:#1A1614;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Try a different sign in</button>'
       + '<div style="margin-top:10px"><a href="#" id="ll-im-own" style="display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 14px;color:' + OV_SOFT + ';font-size:15px;font-weight:700">Start my own Cubby instead</a></div>'
       + '</div>';
     document.body.appendChild(ov);
@@ -2011,6 +2055,9 @@
     // deletion flow owns the screen until it finishes.
     if (typeof deletingAccount !== 'undefined' && deletingAccount) return;
     accessLostShown = true;
+    // Family & sharing, or the first-run sheet, is a store sheet at z-index 99998, and this note is 3000:
+    // left open, it hid the one thing she needs to read.
+    try { closeModal(); } catch (e) {}
     try { hideOverlay(); } catch (e) {}
     try { var u = auth.currentUser; if (u) db.collection('users').doc(u.uid).set({ householdId: null }, { merge: true }); } catch (e) {}
     var ov = document.createElement('div'); ov.id = 'll-access-lost';
@@ -2019,7 +2066,7 @@
       + '<div style="font-size:44px">🐻</div>'
       + '<h2 style="font-family:Georgia,serif;color:' + OV_INK + ';margin:12px 0 8px;font-size:22px">You’re no longer in this family</h2>'
       + '<div style="color:' + OV_SOFT + ';font-size:15px;line-height:1.55">Your access to this Cubby was removed, or the family was closed. Everything you logged stays part of their story.</div>'
-      + '<button id="ll-al-btn" style="margin-top:22px;border:none;border-radius:16px;padding:15px 24px;background:#C97FA0;color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Back to sign in</button></div>';
+      + '<button id="ll-al-btn" style="margin-top:22px;border:none;border-radius:16px;padding:15px 24px;background:#C97FA0;color:#1A1614;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Back to sign in</button></div>';
     document.body.appendChild(ov);
     var btn = document.getElementById('ll-al-btn');
     if (btn) btn.onclick = function () { if (window.LL && typeof window.LL.signOut === 'function') window.LL.signOut(); else { try { location.reload(); } catch (e) {} } };
@@ -2074,6 +2121,16 @@
       console.warn('join invite', e);
       // Refused by the rules: the invite was withdrawn, or the family has closed. Trying again won't help.
       var gone = e && e.code === 'permission-denied';
+      /* And the invite is dead. Kept, it was offered on every launch and refused every time. It is hers
+         to throw away (the rules let you delete the one addressed to you), as the newcomer's "Start my
+         own Cubby" already does. Bounded, so a bad connection cannot hold the message back. */
+      if (gone && inv && !inv.viaLink) {
+        var mine = ((auth.currentUser && auth.currentUser.email) || '').toLowerCase();
+        if (mine) {
+          await Promise.race([db.collection('invites').doc(mine).delete().catch(function () {}),
+            new Promise(function (r) { setTimeout(r, 3000); })]);
+        }
+      }
       try { if (window.toast) window.toast(gone ? 'That invite is no longer open. If you were expecting it, ask them to invite you again.' : 'Couldn’t join just now. Mind trying again?'); } catch (e2) {}
     }
   }
@@ -2714,7 +2771,8 @@
         if (others.length) {
           if (members[uid] === 'owner') {
             var heir = pickHeir(others);
-            upd['members.' + heir] = 'owner';
+            // A co-owner is already in charge: she only becomes ownerId, and nobody is promoted.
+            if (members[heir] !== 'owner') upd['members.' + heir] = 'owner';
             upd.ownerId = heir;
           }
         } else {
@@ -2739,7 +2797,19 @@
             } catch (e) { console.warn('withdraw invites', e && e.code); }
           }
         }
-        await hhRef.update(upd);
+        try {
+          await hhRef.update(upd);
+        } catch (e) {
+          /* Refused as the last one out. The rules want deleteAfter at least a week past the SERVER's
+             clock, and this was 30 days past the phone's, so a phone more than about 23 days slow lands
+             under the floor, after her private records are already gone. Ask the server the time once,
+             and try again from that. Anything else, or a second refusal, goes to the caller as before. */
+          if (!(e && e.code === 'permission-denied' && upd.deleteAfter)) throw e;
+          var serverNow = await serverClockMs(uid);
+          if (!serverNow) throw e;
+          upd.deleteAfter = serverNow + 30 * 24 * 60 * 60 * 1000;
+          await hhRef.update(upd);
+        }
       }
 
       // 3. Everything keyed to them outside the household.
@@ -2789,12 +2859,30 @@
   // the same deletion cannot promote two different people.
   function pickHeir(others) {
     var info = window.LL.memberInfo || {};
-    var parent = ['mother', 'mom', 'mama', 'father', 'dad', 'papa', 'parent', 'guardian'];
+    var members = window.LL.members || {};
     var sorted = others.slice().sort();
+    /* Someone who is ALREADY an owner stays in charge. Promoting a caregiver beside a co-owner gave the
+       caregiver the power to remove her, the very person the family had chosen to share control with. */
+    var owners = sorted.filter(function (m) { return members[m] === 'owner'; });
+    if (owners.length) return owners[0];
+    // The app's own labels count: nobody picked "mother" from the list, they picked "Mama Bear".
+    var parent = ['mother', 'mom', 'mama', 'father', 'dad', 'papa', 'parent', 'guardian', 'mama bear', 'papa bear'];
     var coParent = sorted.filter(function (m) {
       return parent.indexOf((((info[m] || {}).relationship) || '').toLowerCase()) >= 0;
     });
     return coParent.length ? coParent[0] : sorted[0];
+  }
+
+  /* The server's clock, in ms, or 0. Written as a server timestamp on her own users doc (self-only by
+     rule, and deleted with the account a moment later), then read back from the server itself. */
+  async function serverClockMs(uid) {
+    try {
+      var ref = db.collection('users').doc(uid);
+      await ref.set({ clockProbe: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      var snap = await ref.get({ source: 'server' });
+      var t = snap.exists ? snap.get('clockProbe') : null;
+      return (t && typeof t.toMillis === 'function') ? t.toMillis() : 0;
+    } catch (e) { return 0; }
   }
 
   PhotoStore.set = async function (id, dataUrl, opts) {
@@ -3393,6 +3481,7 @@
 
   function removeMember(uid, email, name) {
     if (!hhRef) return;
+    var linkTokens = function () { return Object.keys(window.LL.hhPendingLinks || {}); };
     var doRemove = async function () {
       try {
         var del = firebase.firestore.FieldValue.delete();
@@ -3400,22 +3489,50 @@
         // Keep a tombstone so their past entries stay attributed by name forever.
         var mi = (window.LL.memberInfo || {})[uid] || {};
         u['formerMemberInfo.' + uid] = { name: mi.name || name || '', relationship: mi.relationship || '', avatar: mi.avatar || null };
-        await hhRef.update(u);
+        /* Every member can read this document, and the owner's list of pending links on it is keyed by
+           each link's secret token. So the person being removed may have copied a live token while she
+           was in, and could walk straight back in with it. Every unused link is cancelled in the same
+           action: the link documents first (deleting one is the real revocation), then the write that
+           removes her, which clears their rows.
+           NOTHING IS AWAITED BETWEEN THEM. Firestore queues writes in the order they are made, applies
+           each to this phone at once, and sends them in that order when it can, so the deletes still
+           land ahead of the removal. Waiting for the deletes first meant that offline the removal was
+           never even issued: her Remove did nothing, and was lost if she closed Cubby before the
+           connection came back (round-5 review VJ-1; circle-manage section A2 is the gate). */
+        var pending = window.LL.hhPendingLinks || {};
+        var linkDeletes = linkTokens().map(function (tk) {
+          u['pendingLinks.' + tk] = del;
+          return db.collection('inviteLinks').doc(tk).delete().then(function () { return null; }, function (e) {
+            // Refused means it no longer exists (the rules cannot read a missing link's family).
+            return (e && (e.code === 'permission-denied' || e.code === 'not-found')) ? null : tk;
+          });
+        });
+        var removal = hhRef.update(u);
         // PRIV-2: drop the removed member's gated email doc too (owner may, by rule). Their
         // address should not linger in a circle they are no longer part of.
         try { hhRef.collection('memberEmails').doc(uid).delete().catch(function () {}); } catch (e) {}
         if (email) {
-          try { await db.collection('invites').doc(email).delete(); } catch (e) {}
+          try { db.collection('invites').doc(email).delete().catch(function () {}); } catch (e) {}
           // Drop any pending-invite mirror entry too, so a removed member's email doesn't linger
           // in the "Invited, waiting" list once they're gone from memberInfo.
           try { hhRef.update(new firebase.firestore.FieldPath('pendingInvites', String(email).toLowerCase()), firebase.firestore.FieldValue.delete()).catch(function () {}); } catch (e) {}
         }
+        // A link that could not be cancelled gets its row back, so the owner still sees it and can
+        // cancel it herself.
+        Promise.all(linkDeletes).then(function (left) {
+          var back = {}; left.forEach(function (tk) { if (tk && pending[tk]) back['pendingLinks.' + tk] = pending[tk]; });
+          if (Object.keys(back).length) hhRef.update(back).catch(function () {});
+        });
+        await removal;
         reopenFamily();
       } catch (e) { try { window.toast && window.toast('Could not remove ' + (name || 'this person') + ' just now.'); } catch (e2) {} }
     };
     // Use the app's own confirm sheet (calm, on-brand); native confirm is only a defensive fallback.
     if (window.confirmSheet) {
-      window.confirmSheet({ title: 'Remove ' + (name || 'this person') + '?', body: 'They’ll lose access, but everything they logged stays part of the baby’s story.', confirmLabel: 'Remove', cancelLabel: 'Keep', danger: true, onConfirm: doRemove });
+      window.confirmSheet({ title: 'Remove ' + (name || 'this person') + '?',
+        body: 'They’ll lose access, but everything they logged stays part of the baby’s story.'
+          + (linkTokens().length ? ' Any unused invite links are cancelled too, so you can send fresh ones.' : ''),
+        confirmLabel: 'Remove', cancelLabel: 'Keep', danger: true, onConfirm: doRemove });
     } else if (window.confirm('Remove ' + (name || 'this person') + ' from your family?')) {
       doRemove();
     }
@@ -3636,17 +3753,24 @@
        with it, so the sheet can show her something the sender could not have made up. */
     var fromEmail = ((auth.currentUser && auth.currentUser.email) || '').toLowerCase();
     if (fromEmail) { invDoc.fromEmail = fromEmail; invDoc.invitedByName = inviterName(); }
+    /* Mirror the pending invite onto the household doc so the circle screen can list and cancel it
+       (owners cannot query /invites: reads there are invitee-only by rule). FieldPath keeps the dots
+       in the email from being read as a nested path. Written NOW, queued alongside the invite, so an
+       invite made offline is on her list when she opens Cubby again: a mirror written only once the
+       server answered never was, and she had a live invite she could neither see nor cancel. If the
+       rules refuse the invite, its row comes off again below, so nobody shows as "Invited, waiting"
+       who was never invited. */
+    var pendingRow = new firebase.firestore.FieldPath('pendingInvites', email);
+    try {
+      if (hhRef) hhRef.update(pendingRow, { name: name, relationship: rel, role: owner ? 'owner' : 'caregiver', at: Date.now() }).catch(function () {});
+    } catch (e) {}
     db.collection('invites').doc(email).set(invDoc).then(function () {
-      /* Mirror the pending invite onto the household doc so the circle screen can list and cancel
-         it (owners cannot query /invites: reads there are invitee-only by rule). FieldPath keeps the
-         dots in the email from being read as a nested path. Only once the invite itself has landed:
-         written up front, a refused invite still showed as "Invited, waiting" for someone nobody
-         had invited. */
-      try {
-        if (hhRef) hhRef.update(new firebase.firestore.FieldPath('pendingInvites', email), { name: name, relationship: rel, role: owner ? 'owner' : 'caregiver', at: Date.now() }).catch(function () {});
-      } catch (e) {}
       if (done) return; done = true; clearTimeout(t); showReady();
     }).catch(function (e) {
+        // Before the done check: a refusal that arrives after the optimistic exit still takes the row.
+        if (e && e.code === 'permission-denied') {
+          try { if (hhRef) hhRef.update(pendingRow, firebase.firestore.FieldValue.delete()).catch(function () {}); } catch (e2) {}
+        }
         if (done) return; done = true; clearTimeout(t);
         /* Refused, most often because that address already has an invite from another family
            (only that family's owner may change it). Saying so would tell anyone with a Cubby who

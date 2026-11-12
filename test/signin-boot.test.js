@@ -81,9 +81,12 @@ function check(store) {
 console.log('\n1. the rule that turns a missing claim into a refusal is still written that way');
 {
   // Not a demand that it change — it is correct as a permission check. It is here so the next person
-  // to read this file knows WHY the client has to be defensive: .lower() on a null throws.
-  ok('invites are still read via request.auth.token.email.lower()',
-    /allow read: if request\.auth != null && request\.auth\.token\.email\.lower\(\) == email;/.test(RULES));
+  // to read this file knows WHY the client has to be defensive: .lower() on a null throws. Since
+  // November 2026 the read also needs email_verified (emailProven), so an account that never proved
+  // its address is refused here BY DESIGN, and the guard below is what lets her boot regardless
+  // (test/invite-consent.test.js, section 2b, drives exactly that).
+  ok('invites are still read via request.auth.token.email.lower(), and only for a proven address',
+    /allow read: if emailProven\(\) && request\.auth\.token\.email\.lower\(\) == email;/.test(RULES));
 }
 
 console.log('\n2. a brand-new parent cannot be stranded by a refused invite lookup');

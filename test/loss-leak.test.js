@@ -21,7 +21,9 @@ const no = (m) => { fail++; console.log('  FAIL ' + m); };
 (async () => {
   const env = await initializeTestEnvironment({
     projectId: 'demo-cubby',
-    firestore: { rules: fs.readFileSync(path.join(__dirname, '..', 'firestore.rules'), 'utf8'), host: '127.0.0.1', port: 8080 },
+    // Host and port come from FIRESTORE_EMULATOR_HOST, which emulators:exec sets. A hard-coded 8080
+    // graded (and cleared) whichever emulator another session had running there.
+    firestore: { rules: fs.readFileSync(path.join(__dirname, '..', 'firestore.rules'), 'utf8') },
   });
   await env.clearFirestore();
 
