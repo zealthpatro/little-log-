@@ -157,6 +157,10 @@ const TREE = [
   { name: 'push-caps',      cmd: ['node', 'test/push-caps.test.js'] },
   { name: 'duedate-cycle',  cmd: ['node', 'test/duedate-cycle.test.js', 'url'] },
   { name: 'fab-quicklog',   cmd: ['node', 'test/fab-quicklog.test.js', 'url'] },
+  /* The November 2026 security fixes. Each was watched failing on the live code (1a6df125) first.
+     page-stats: a stranger looping 404s must make zero Firestore writes and stay under the D1 cap. */
+  { name: 'page-stats',     cmd: ['node', 'test/page-stats.test.js'] },
+  { name: 'page-stats-tool', cmd: ['node', 'tools/page_stats.js', '--self-test'] },
 ];
 // These judge PRODUCTION, not this checkout, so a failure is a deploy problem rather than a code
 // problem. Opt-in, because they need the network and they are the founder's to act on.
