@@ -25,7 +25,9 @@ catalogue behind it. Each rule below cost real time in Aug-Sep 2026 and each has
 - A Firestore REST write is proven against the emulator, never only a stubbed `fetch`. The query-string
   precondition (`?currentDocument.updateTime=`) is refused by Firestore; a stub passed it twice in Nov
   2026 (sign-in spend, purge unflag). Send preconditions in a `documents:commit` body
-  (`test/purge-unflag-emulator.test.js`, `test/signin-code-emulator.test.js`).
+  (`test/purge-unflag-emulator.test.js`, `test/signin-code-emulator.test.js`). The same for Identity
+  Toolkit: `deleteProvider:['password']` passed a stub and erased the account's email on the real Auth
+  emulator, forking a parent into two accounts (`test/signin-claim-auth-emu.test.js`).
 - A server job that destroys data re-checks its own premise (the purge reads `members` before deleting),
   whatever the rules above it promise. Rules list what each role MAY write, never what it may not.
 - A limit keyed only on what a stranger can know (an email address) is a lockout lever. The first
