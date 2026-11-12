@@ -477,7 +477,7 @@ function pageSetup(tags) {
   ok('store-firebase: ing() really is window.cubbyIngest', /function ing\(\) \{ return window\.cubbyIngest \|\| PASS; \}/.test(sf));
   // Her readings reach her partner through applyMatDoc, not the journey doc, so it needs its own call.
   const matFold = (sf.match(/function applyMatDoc\(cat, d\) \{[^]*?\n  \}/) || [''])[0];
-  ok('store-firebase: her health readings (applyMatDoc) run the ingest check before they reach state', /var data = \(ing\(\)\.mat \|\| PASS\.mat\)\(d\.data/.test(matFold) && !/Object\.keys\(d\.data/.test(matFold), matFold.slice(-400));
+  ok('store-firebase: her health readings (applyMatDoc) run the ingest check before they reach state', /var I = ing\(\), data = \('mat' in I \? I : PASS\)\.mat\(d\.data/.test(matFold) && !/Object\.keys\(d\.data/.test(matFold), matFold.slice(-400));
   const idx = fs.readFileSync(path.join(ROOT, 'app/index.html'), 'utf8');
   const load = (idx.match(/async load\(\)\{[^]*?\n  \},/) || [''])[0];
   ok('index.html: Store.load hands back what was cached through the ingest check', /cubbyIngest\.loaded\(d\)/.test(load), load.slice(0, 400));

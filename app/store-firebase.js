@@ -1253,7 +1253,7 @@
        (numbers stay numbers, units on their list, lists stay lists). And a doc sets only the keys
        its own category owns: a health doc can never rewrite the visits, the stage, or who owns the
        pregnancy. An older index.html without mat() passes them through as before. */
-    var data = (ing().mat || PASS.mat)(d.data || {});
+    var I = ing(), data = ('mat' in I ? I : PASS).mat(d.data || {});
     var own = {};
     MAT_CATS[cat].forEach(function (k) { if (data[k] !== undefined) own[k] = data[k]; });
     knownMat[cat] = stableStringify([own, matShared[cat]]); // don't immediately re-write what we just received
