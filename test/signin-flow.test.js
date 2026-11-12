@@ -52,6 +52,8 @@ const ENV = { FIREBASE_SERVICE_ACCOUNT: JSON.stringify(SA), RESEND_API_KEY: 're_
 // ---- the world outside our code -----------------------------------------------------------------
 const world = {
   docs: new Map(),          // Firestore signinCodes/<id>
+  times: new Map(),         // and each document's updateTime, which conditional writes are checked against
+  clock: 0,
   users: new Map(),         // Identity Toolkit accounts, by email
   mail: [],                 // everything Resend was asked to send
   oobSerial: 0,
@@ -61,7 +63,7 @@ const world = {
   failResend: false,
 };
 function resetWorld() {
-  world.docs.clear(); world.users.clear(); world.mail.length = 0; world.scopesAsked.length = 0;
+  world.docs.clear(); world.times.clear(); world.users.clear(); world.mail.length = 0; world.scopesAsked.length = 0;
   world.failFirestoreWrite = false; world.failOob = false; world.failResend = false;
   cacheStore.clear();
 }
@@ -133,21 +135,33 @@ globalThis.fetch = async function (input, init) {
   if (m) {
     const id = m[1];
     if (scope.indexOf('datastore') < 0) return DENIED();   // the 2026-08-19 outage, exactly
+    /* Preconditions, as the REST API enforces them: a write conditional on a version that is no
+       longer current is refused, so a stale read can never land a write. */
+    const q = new URLSearchParams(url.split('?')[1] || '');
+    const wantTime = q.get('currentDocument.updateTime'), wantExists = q.get('currentDocument.exists');
+    if (method === 'PATCH' || method === 'DELETE') {
+      if (wantTime !== null && world.times.get(id) !== wantTime) return J({ error: { code: 400, status: 'FAILED_PRECONDITION' } }, 400);
+      if (wantExists === 'false' && world.docs.has(id)) return J({ error: { code: 400, status: 'FAILED_PRECONDITION' } }, 400);
+    }
     if (method === 'PATCH') {
       if (world.failFirestoreWrite) return J({ error: 'unavailable' }, 503);
       const incoming = JSON.parse(body || '{}').fields || {};
-      // An updateMask MERGES; no updateMask REPLACES. Model both, so the difference is observable.
-      if (/updateMask\.fieldPaths=/.test(url)) {
-        const prev = world.docs.get(id) || {};
-        world.docs.set(id, Object.assign({}, prev, incoming));
+      // An updateMask MERGES (a masked field absent from the body is deleted); no updateMask REPLACES.
+      // Model both, so the difference is observable.
+      const mask = q.getAll('updateMask.fieldPaths');
+      if (mask.length) {
+        const next = Object.assign({}, world.docs.get(id) || {});
+        for (const k of mask) { if (k in incoming) next[k] = incoming[k]; else delete next[k]; }
+        world.docs.set(id, next);
       } else {
         world.docs.set(id, incoming);
       }
-      return J({ name: 'documents/signinCodes/' + id });
+      world.times.set(id, new Date(Date.UTC(2026, 10, 12) + (++world.clock)).toISOString());
+      return J({ name: 'documents/signinCodes/' + id, fields: world.docs.get(id), updateTime: world.times.get(id) });
     }
-    if (method === 'DELETE') { world.docs.delete(id); return J({}); }
+    if (method === 'DELETE') { world.docs.delete(id); world.times.delete(id); return J({}); }
     const doc = world.docs.get(id);
-    return doc ? J({ fields: doc }) : J({ error: { status: 'NOT_FOUND' } }, 404);
+    return doc ? J({ name: 'documents/signinCodes/' + id, fields: doc, updateTime: world.times.get(id) }) : J({ error: { status: 'NOT_FOUND' } }, 404);
   }
 
   if (url === 'https://api.resend.com/emails') {
@@ -321,7 +335,9 @@ function decodeJwt(t) {
     for (let i = 0; i < 5; i++) await post(worker, '/api/signin-verify', { email: EMAIL, code: wrong });
     const after = await post(worker, '/api/signin-verify', { email: EMAIL, code: good });
     ok('five wrong guesses burn the code, so the right one no longer works', after.status === 400, after.status);
-    ok('and nothing is left to guess against', world.docs.size === 0);
+    /* The document itself stays, holding only the per-address guess window that a reissue must not
+       reset (audit server-1). What must be gone is anything to guess against. */
+    ok('and nothing is left to guess against', [...world.docs.values()].every((d) => !d.mac));
 
     resetWorld();
     await post(worker, '/api/signin-code', { email: EMAIL });

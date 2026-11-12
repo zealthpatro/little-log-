@@ -117,6 +117,27 @@ function cooldownKeyFor(email) {
   return local + '@' + domain;
 }
 
+/* The client address every per-IP limiter keys on. IPv6 is cut to its /64: one subscriber is handed
+   a whole /64, so the full address gave a single connection 2^64 separate buckets. A household shares
+   one /64 anyway, so a family's limit is unchanged. IPv4 (and IPv4-mapped IPv6) stays per address. */
+function clientIpKey(request) {
+  const ip = String(request.headers.get('CF-Connecting-IP') || '').trim().toLowerCase().split('%')[0];
+  if (!ip) return 'unknown';
+  if (ip.indexOf(':') < 0) return ip;
+  const mapped = ip.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
+  if (mapped) return mapped[1];
+  let s = ip;
+  const v4 = s.match(/^(.*:)(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);   // embedded IPv4 tail
+  if (v4) s = v4[1] + ((+v4[2] << 8) | +v4[3]).toString(16) + ':' + ((+v4[4] << 8) | +v4[5]).toString(16);
+  const halves = s.split('::');
+  if (halves.length > 2) return ip;
+  const head = halves[0] ? halves[0].split(':') : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+  const groups = halves.length === 2 ? head.concat(new Array(Math.max(0, 8 - head.length - tail.length)).fill('0'), tail) : head;
+  if (groups.length !== 8 || !groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return ip;   // odd input: key as given
+  return groups.slice(0, 4).map((g) => parseInt(g, 16).toString(16)).join(':') + '::/64';
+}
+
 async function sendSigninLink(request, env) {
   // Same-origin only. Require an Origin OR Referer matching our host, else reject — this closes
   // the no-Origin bypass (scripted clients that omit the header). Per-IP volume is then capped by
@@ -136,7 +157,7 @@ async function sendSigninLink(request, env) {
   // so garbage floods consume the budget too. Fail open if the binding is missing so a config gap
   // can never block real sign-ins; same-origin + the per-email cooldown still apply.
   if (env.SIGNIN_RATE_LIMITER) {
-    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const ip = clientIpKey(request);
     try {
       const { success } = await env.SIGNIN_RATE_LIMITER.limit({ key: ip });
       if (!success) return new Response(JSON.stringify({ error: 'rate_limited' }), { status: 429, headers: { 'content-type': 'application/json', 'retry-after': '60' } });
@@ -302,6 +323,24 @@ async function recordPageView(env, url, status) {
 const SIGNIN_CODE_INFO = 'cubby-signin-code-v1';
 const SIGNIN_CODE_TTL_MS = 10 * 60 * 1000;   // long enough to fetch it from Mail, short enough to be worthless later
 const SIGNIN_CODE_TRIES = 5;                 // 5 guesses against 1,000,000, then the code dies
+/* Per-address ceilings that a reissue cannot reset (audit server-1). Without them every new code was
+   a fresh 5 guesses, so "5 per code" had no ceiling per address. A real parent types one code a couple
+   of times and resends once or twice; these only ever bite someone guessing at another person's mail. */
+const SIGNIN_WINDOW_MS = 60 * 60 * 1000;
+const SIGNIN_GUESSES_PER_WINDOW = 10;        // guesses compared per address per rolling hour, across all codes
+const SIGNIN_ISSUES_PER_WINDOW = 5;          // codes minted per address per rolling hour
+
+/* Timestamps in the rolling window, read from (and written back as) a Firestore array field. They
+   live in the code's own document, so a spend and its record commit in one write. */
+function signinRecent(field, now) {
+  const vals = (field && field.arrayValue && field.arrayValue.values) || [];
+  return vals.map((v) => Number(v && v.integerValue)).filter((t) => t > now - SIGNIN_WINDOW_MS && t <= now + 60000).slice(-20);
+}
+function signinTimes(list) {
+  return { arrayValue: list.length ? { values: list.map((t) => ({ integerValue: String(t) })) } : {} };
+}
+// A refused precondition: somebody else wrote this document since we read it.
+function signinRaced(status) { return status === 400 || status === 404 || status === 409 || status === 412; }
 
 async function signinCodeKey(sa) {
   const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(sa.private_key || '')),
@@ -337,24 +376,45 @@ function newSigninCode() {
    is never stored, and the PATCH carries NO updateMask so it REPLACES the document rather than merging
    into it. That replace is the single-live-code rule: issuing a new code must kill the previous one,
    never leave two working. Returns '' if the store failed, so each caller can decide whether that is
-   fatal (the code endpoint) or merely means a link-only email (the link endpoint). */
+   fatal (the code endpoint) or merely means a link-only email (the link endpoint).
+   The replace CARRIES the per-address window (spentAt, issuedAt) across, so a reissue gets a new code
+   but never a new guess budget. Past either ceiling it mints nothing and returns '', which already
+   degrades to a link-only email that still signs a real parent in. The write is conditional on the
+   version just read, so a verify racing it cannot have its spend erased. */
 async function issueSigninCode(sa, token, email) {
   try {
-    const code = newSigninCode();
-    const mac = _b64urlFromBytes(await signinCodeMac(sa, email, code));
     const base = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents';
     const docId = await signinCodeDocId(sa, email);
-    const put = await fetch(base + '/signinCodes/' + docId, {
-      method: 'PATCH',
-      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-      body: JSON.stringify({ fields: {
-        mac: { stringValue: mac },
-        email: { stringValue: email },
-        exp: { integerValue: String(Date.now() + SIGNIN_CODE_TTL_MS) },
-        tries: { integerValue: String(SIGNIN_CODE_TRIES) }
-      } })
-    });
-    return put.ok ? code : '';
+    const path = base + '/signinCodes/' + docId;
+    for (let attempt = 0; attempt < 2; attempt++) {           // one re-read if a verify wrote in between
+      const got = await fetch(path, { headers: { authorization: 'Bearer ' + token } });
+      if (!got.ok && got.status !== 404) return '';
+      const prev = got.ok ? await got.json() : null;
+      if (prev && !prev.updateTime) return '';                  // cannot write conditionally: refuse, never guess
+      const pf = (prev && prev.fields) || {};
+      const now = Date.now();
+      const spentAt = signinRecent(pf.spentAt, now), issuedAt = signinRecent(pf.issuedAt, now);
+      if (spentAt.length >= SIGNIN_GUESSES_PER_WINDOW || issuedAt.length >= SIGNIN_ISSUES_PER_WINDOW) return '';
+      issuedAt.push(now);
+      const code = newSigninCode();
+      const mac = _b64urlFromBytes(await signinCodeMac(sa, email, code));
+      const pre = prev ? 'currentDocument.updateTime=' + encodeURIComponent(prev.updateTime) : 'currentDocument.exists=false';
+      const put = await fetch(path + '?' + pre, {
+        method: 'PATCH',
+        headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+        body: JSON.stringify({ fields: {
+          mac: { stringValue: mac },
+          email: { stringValue: email },
+          exp: { integerValue: String(now + SIGNIN_CODE_TTL_MS) },
+          tries: { integerValue: String(SIGNIN_CODE_TRIES) },
+          spentAt: signinTimes(spentAt),
+          issuedAt: signinTimes(issuedAt)
+        } })
+      });
+      if (put.ok) return code;
+      if (!signinRaced(put.status)) return '';
+    }
+    return '';
   } catch (e) { return ''; }
 }
 
@@ -574,7 +634,7 @@ async function signinGuard(request, env) {
   } catch (e) { sameOrigin = false; }
   if (!sameOrigin) return json({ error: 'forbidden' }, 403);
   if (env.SIGNIN_RATE_LIMITER) {
-    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const ip = clientIpKey(request);
     try {
       const { success } = await env.SIGNIN_RATE_LIMITER.limit({ key: 'code:' + ip });
       if (!success) return json({ error: 'rate_limited' }, 429);
@@ -656,34 +716,52 @@ async function verifySigninCode(request, env) {
     const docId = await signinCodeDocId(sa, email);
     const path = base + '/signinCodes/' + docId;
 
-    const got = await fetch(path, { headers: { authorization: 'Bearer ' + token } });
-    if (!got.ok) return json({ error: 'bad_code' }, 400);              // no code outstanding
-    const doc = await got.json();
-    const f = (doc && doc.fields) || {};
-    const exp = Number((f.exp && f.exp.integerValue) || 0);
-    const tries = Number((f.tries && f.tries.integerValue) || 0);
-    const storedMac = String((f.mac && f.mac.stringValue) || '');
-    const storedEmail = String((f.email && f.email.stringValue) || '');
-
+    const read = async () => {
+      const got = await fetch(path, { headers: { authorization: 'Bearer ' + token } });
+      return got.ok ? await got.json() : null;                         // null: no code outstanding
+    };
     const dead = async () => { try { await fetch(path, { method: 'DELETE', headers: { authorization: 'Bearer ' + token } }); } catch (e) {} };
-    if (!storedMac || storedEmail !== email || !(exp > Date.now()) || !(tries > 0)) { await dead(); return json({ error: 'bad_code' }, 400); }
 
     /* Spend the attempt BEFORE checking it. If the compare came first, an attacker who can abandon
-       the request mid-flight (or make it fail) would get unlimited free guesses. */
-    const spend = await fetch(path + '?updateMask.fieldPaths=tries', {
-      method: 'PATCH',
-      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-      body: JSON.stringify({ fields: { tries: { integerValue: String(tries - 1) } } })
-    });
-    if (!spend.ok) return json({ error: 'failed' }, 500);
+       the request mid-flight (or make it fail) would get unlimited free guesses.
+       The spend is CONDITIONAL on the version we read (currentDocument.updateTime), so fifty requests
+       that all read tries=5 cannot all spend it: one write lands and the rest are refused. A refused
+       spend re-reads and pays again, at most SIGNIN_CODE_TRIES times; each refusal means another write
+       landed, so a request that runs out of goes has watched the code run out of tries. A guess is
+       only ever compared against the version its own committed spend paid for. Nothing is deleted on
+       a miss, because the document also carries the per-address window that a reissue must not reset;
+       the last try removes the mac instead, which is what kills the code. */
+    let doc = await read(), storedMac = '', paid = false;
+    for (let attempt = 0; attempt < SIGNIN_CODE_TRIES && doc && !paid; attempt++) {
+      const f = doc.fields || {};
+      const now = Date.now();
+      const exp = Number((f.exp && f.exp.integerValue) || 0);
+      const tries = Number((f.tries && f.tries.integerValue) || 0);
+      const storedEmail = String((f.email && f.email.stringValue) || '');
+      const spentAt = signinRecent(f.spentAt, now);
+      storedMac = String((f.mac && f.mac.stringValue) || '');
+      // Out of budget for this hour answers exactly like a wrong code, and is never compared.
+      if (!storedMac || storedEmail !== email || !(exp > now) || !(tries > 0)
+          || spentAt.length >= SIGNIN_GUESSES_PER_WINDOW || !doc.updateTime) break;
+      spentAt.push(now);
+      const last = tries - 1 <= 0;
+      const spend = await fetch(path + '?updateMask.fieldPaths=tries&updateMask.fieldPaths=spentAt'
+        + (last ? '&updateMask.fieldPaths=mac' : '')                   // masked but absent: Firestore deletes it
+        + '&currentDocument.updateTime=' + encodeURIComponent(doc.updateTime), {
+        method: 'PATCH',
+        headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+        body: JSON.stringify({ fields: { tries: { integerValue: String(tries - 1) }, spentAt: signinTimes(spentAt) } })
+      });
+      if (spend.ok) { paid = true; break; }
+      if (!signinRaced(spend.status)) return json({ error: 'failed' }, 500);
+      doc = await read();                                               // someone wrote first: re-read
+    }
+    if (!paid) return json({ error: 'bad_code' }, 400);
 
     const key = await signinCodeKey(sa);
     const ok = await crypto.subtle.verify('HMAC', key, _b64urlToBytes(storedMac),
       new TextEncoder().encode('code:' + email + ':' + code));
-    if (!ok) {
-      if (tries - 1 <= 0) await dead();                                 // out of guesses: burn it
-      return json({ error: 'bad_code' }, 400);
-    }
+    if (!ok) return json({ error: 'bad_code' }, 400);
 
     await dead();                                                       // single use, always
     const uid = await getOrCreateUidByEmail(token, sa.project_id, email);
@@ -776,7 +854,7 @@ async function invitePeek(request, env, url) {
   const token = (url.searchParams.get('t') || '').trim();
   if (!/^[A-Za-z0-9]{16,64}$/.test(token)) return json({ error: 'bad_request' }, 400);
   if (env.SIGNIN_RATE_LIMITER) {
-    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const ip = clientIpKey(request);
     try {
       const { success } = await env.SIGNIN_RATE_LIMITER.limit({ key: 'peek:' + ip });
       if (!success) return json({ error: 'rate_limited' }, 429);
@@ -815,7 +893,7 @@ async function invitePeek(request, env, url) {
 
 async function sendInviteEmail(request, env, url) {
   if (env.SIGNIN_RATE_LIMITER) {
-    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const ip = clientIpKey(request);
     try {
       const { success } = await env.SIGNIN_RATE_LIMITER.limit({ key: 'inv:' + ip });
       if (!success) return json({ error: 'rate_limited' }, 429);
@@ -937,7 +1015,7 @@ async function newsletterSignup(request, env) {
 
   const limiter = env.NEWSLETTER_RATE_LIMITER || env.SIGNIN_RATE_LIMITER;
   if (limiter) {
-    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const ip = clientIpKey(request);
     try { const { success } = await limiter.limit({ key: 'news:' + ip }); if (!success) return json({ error: 'rate_limited' }, 429); }
     catch (e) { /* limiter unavailable: fail open */ }
   }
@@ -1660,7 +1738,7 @@ async function ensureGamesSchema(env) {
 async function gameRateLimited(request, env, bucket) {
   const limiter = env.GAMES_RATE_LIMITER || env.SIGNIN_RATE_LIMITER;
   if (!limiter) return false;
-  const ip = request.headers.get('cf-connecting-ip') || '?';
+  const ip = clientIpKey(request);
   try { const { success } = await limiter.limit({ key: bucket + ':' + ip }); return !success; }
   catch (e) { return false; }
 }
@@ -1682,7 +1760,7 @@ async function gameRoute(request, env, url) {
   if (!code || !/^[a-z0-9]{4,16}$/.test(code)) return json({ error: 'bad_code' }, 400);
   const action = parts[3];
   if (action === 'guess' && method === 'POST') {
-    const ip = request.headers.get('cf-connecting-ip') || '?';
+    const ip = clientIpKey(request);
     const limiter = env.GAMES_RATE_LIMITER || env.SIGNIN_RATE_LIMITER;
     if (limiter) { try { const { success } = await limiter.limit({ key: 'game:' + ip }); if (!success) return json({ error: 'rate_limited' }, 429); } catch (e) {} }
     const g = await env.GAMES_DB.prepare('SELECT status FROM games WHERE code=?').bind(code).first();
@@ -2242,7 +2320,7 @@ async function recordStep(request, env) {
   if (!same) return json({ error: 'forbidden' }, 403);
   if (Number(request.headers.get('content-length') || 0) > 512) return json({ error: 'too_large' }, 413);
   if (env.STEP_RATE_LIMITER) {
-    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const ip = clientIpKey(request);
     try { const { success } = await env.STEP_RATE_LIMITER.limit({ key: 'step:' + ip }); if (!success) return json({ error: 'rate' }, 429); } catch (e) {}
   }
   let body;
@@ -2431,7 +2509,7 @@ export default {
          limiter itself is unavailable, like every other limiter here; the checks below still hold. */
       const limiter = env.DOSE_RATE_LIMITER || env.SIGNIN_RATE_LIMITER;
       if (limiter) {
-        const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+        const ip = clientIpKey(request);
         try { const { success } = await limiter.limit({ key: 'dose:' + ip }); if (!success) return json({ error: 'rate' }, 429); } catch (e) {}
       }
       if (!env.FIREBASE_SERVICE_ACCOUNT) return json({ error: 'server_config' }, 500);

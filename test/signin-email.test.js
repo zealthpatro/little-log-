@@ -186,7 +186,7 @@ const LINK = 'https://little-cubby.com/__/auth/action?mode=signIn&oobCode=abc123
         (s) => (s.match(/html: signinEmailHtml\(code, link\)/g) || []).length === 2],
       ['the two subjects drift apart again', WORKER.replace("subject: 'Your Cubby sign-in code',", "subject: 'Your Cubby sign-in link',"),
         (s) => { const x = s.match(/subject: 'Your Cubby sign-in[^']*'/g) || []; return x.length === 2 && x[0] === x[1]; }],
-      ['an updateMask sneaks onto the issue PATCH', WORKER.replace("'/signinCodes/' + docId, {\n      method: 'PATCH',", "'/signinCodes/' + docId + '?updateMask.fieldPaths=mac', {\n      method: 'PATCH',"),
+      ['an updateMask sneaks onto the issue PATCH', WORKER.replace("fetch(path + '?' + pre, {\n        method: 'PATCH',", "fetch(path + '?updateMask.fieldPaths=mac&' + pre, {\n        method: 'PATCH',"),
         (s) => { const i = s.slice(s.indexOf('async function issueSigninCode('), s.indexOf('/* Same-origin + per-IP volume')); return !i.includes('updateMask'); }],
       ['the plaintext code gets stored next to its MAC', WORKER.replace('mac: { stringValue: mac },', 'mac: { stringValue: mac }, code: { stringValue: code },'),
         (s) => { const i = s.slice(s.indexOf('async function issueSigninCode('), s.indexOf('/* Same-origin + per-IP volume')); return !/code: \{ stringValue: code \}/.test(i); }],
