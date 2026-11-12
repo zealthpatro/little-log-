@@ -214,58 +214,66 @@ async function sendSigninLink(request, env) {
    URL would put live credentials in a database. Secret-bearing path segments are collapsed too
    (/g/<code> and /join/<token> name a household to whoever holds them). What is left is: on this day,
    this route was served this many times, with this status. That is enough to answer the question that
-   started this and not much else, which is the point. */
+   started this and not much else, which is the point.
+
+   WHERE IT IS STORED, AND WHY NOT FIRESTORE ANY MORE. Only unmatched paths reach this code, so every
+   count is an anonymous GET that anyone can send in a loop. It used to be one Firestore commit per
+   request, under the master service account, on the free plan whose ~20k writes a day are shared with
+   every family's feeds and doses: a stranger could spend the quota and stop a second caregiver seeing
+   a dose. It now lives in D1 (cubby-games, table page_stats), like the funnel, where a flood cannot
+   touch family data. The old Firestore pageStats documents are kept and still readable
+   (tools/page_stats.js --firestore); nothing writes them now.
+
+   BOUNDED TWICE. The key is one of a small fixed set of buckets, so random paths cannot grow the table
+   (they used to make one document each). And counting is throttled per address, so one client cannot
+   grow a row's writes without limit either. */
+const STATS_SECTIONS = new Set(['app', 'articles', 'about', 'contact', 'de', 'faq', 'features', 'how-it-works',
+  'pregnancy', 'pricing', 'privacy', 'refund', 'terms', 'vaccination-schedule', 'why', 'g', 'join', 'api', '__',
+  '.well-known', 'icons', 'og', 'mockups']);
 function statsKey(pathname) {
-  let p = String(pathname || '/').toLowerCase();
-  if (p.length > 1) p = p.replace(/\/+$/, '');
-  // Collapse anything whose segment IS the secret. These identify a household to whoever holds them.
-  p = p.replace(/^\/g\/[^/]+/, '/g/:code')
-       .replace(/^\/join\/[^/]+/, '/join/:token')
-       .replace(/^\/__\/auth\/[^/]+/, '/__/auth/:action');
-  if (p.length > 180) p = p.slice(0, 180);
-  if (!/^[\w\-./:]*$/.test(p)) return '/:other';        // anything odd collapses rather than being stored
-  return p || '/';
+  const p = String(pathname || '/').toLowerCase();
+  if (p === '/' || p === '') return '/';
+  // Scanner probes first, so /app/x.php is a probe and not a broken app link.
+  if (/\.(php\d?|asp|aspx|jsp|cgi|env|ini|sql|bak|git)(\/|$)|\/(wp-|wordpress|cgi-bin|phpmyadmin)|\/\.(?!well-known)/.test(p)) return '/:probe';
+  const segs = p.split('/').filter(Boolean);
+  // Section names only, never what follows them: /g/<code> and /join/<token> name a household.
+  if (STATS_SECTIONS.has(segs[0])) return '/' + segs[0] + (segs.length > 1 ? '/*' : '');
+  if (/\.[a-z0-9]{1,5}$/.test(p) && !/\.html?$/.test(p)) return '/:asset';
+  return '/:other';
 }
-function statsDocId(day, key) {
-  let h = '';
-  for (let i = 0; i < key.length; i++) h += key.charCodeAt(i).toString(16).padStart(2, '0');
-  return day + '_' + h.slice(0, 300);
+/* Readiness per database, as with funnelReadyDbs: the CREATE runs once per isolate, not per request. */
+const pageStatsReadyDbs = new WeakSet();
+/* The throttle key. IPv6 keys on the /64, because one household holds a whole /64 and can rotate
+   through it for free; a full-address key would not throttle anyone on IPv6. */
+function pageStatsClientKey(request) {
+  const ip = String(request.headers.get('CF-Connecting-IP') || 'unknown');
+  if (ip.indexOf(':') < 0) return 'pv:' + ip;
+  const head = ip.split('::')[0].split(':');
+  return 'pv6:' + head.concat(['0', '0', '0', '0']).slice(0, 4).join(':');
 }
 /* Fire-and-forget through waitUntil, so counting never adds a millisecond to anybody's page load, and
-   a Firestore hiccup can never turn into a failed request. Telemetry that can break the thing it
-   watches is worse than none. */
-async function recordPageView(env, url, status) {
-  if (!env.FIREBASE_SERVICE_ACCOUNT) return;
-  let sa; try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return; }
+   a D1 hiccup can never turn into a failed request. Telemetry that can break the thing it watches is
+   worse than none. */
+async function recordPageView(env, request, url, status) {
+  const db = env.GAMES_DB;
+  if (!db) return;
+  /* No limiter, a refusal, or a limiter error all mean no count. Losing a count costs nothing; an
+     unthrottled counter is the hole this replaced. Distinct 'pv' key prefix if it borrows SIGNIN's. */
+  const limiter = env.PAGE_RATE_LIMITER || env.SIGNIN_RATE_LIMITER;
+  if (!limiter) return;
+  try { const { success } = await limiter.limit({ key: pageStatsClientKey(request) }); if (!success) return; }
+  catch (e) { return; }
   const key = statsKey(url.pathname);
   const day = new Date().toISOString().slice(0, 10);
-  const field = status === 404 ? 'n404' : (status >= 500 ? 'n5xx' : (status >= 400 ? 'n4xx' : 'nOk'));
+  const cls = status === 404 ? 'n404' : (status >= 500 ? 'n5xx' : (status >= 400 ? 'n4xx' : 'ok'));
   try {
-    /* SCOPE MATTERS, and the default is the wrong one. OAUTH_SCOPE is identitytoolkit, because the
-       first caller here was the sign-in link. Every Firestore caller passes datastore explicitly
-       (see sendPushReminders, purgeDeletedHouseholds, /api/dose). This one asked for a bare token,
-       got an auth-API token, and Firestore refused it — the third and final reason the collection
-       stayed empty. */
-    const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore');
-    /* A commit write names its document by RESOURCE NAME, not by URL. Passing the https:// form is
-       rejected with 400 INVALID_ARGUMENT ("lacks \"projects\" at index 0") — which is exactly what this
-       did for its first two days live, on every single request, while the catch below swallowed it and
-       the collection sat at zero documents. Fire-and-forget plus swallow-everything is how a subsystem
-       can be 100% broken and look completely healthy. Hence the console.error, which costs nothing and
-       shows up in `wrangler tail`. */
-    const name = 'projects/' + sa.project_id + '/databases/(default)/documents/pageStats/' + statsDocId(day, key);
-    // One atomic increment. Concurrent edges cannot lose a count the way read-modify-write would.
-    const wr = await fetch('https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents:commit', {
-      method: 'POST',
-      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-      body: JSON.stringify({ writes: [
-        { transform: { document: name, fieldTransforms: [{ fieldPath: field, increment: { integerValue: '1' } }] } },
-        { update: { name: name, fields: { day: { stringValue: day }, path: { stringValue: key } } },
-          updateMask: { fieldPaths: ['day', 'path'] } }
-      ] })
-    });
-    // An unchecked non-200 is how two of the three bugs here stayed invisible. Look at the answer.
-    if (!wr.ok) console.error('pagestats_write_' + wr.status, (await wr.text()).slice(0, 300));
+    if (!pageStatsReadyDbs.has(db)) {
+      await db.prepare('CREATE TABLE IF NOT EXISTS page_stats (day TEXT NOT NULL, path TEXT NOT NULL, cls TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, path, cls))').run();
+      pageStatsReadyDbs.add(db);
+    }
+    // One atomic upsert. Concurrent edges cannot lose a count the way read-modify-write would.
+    await db.prepare('INSERT INTO page_stats (day, path, cls, n) VALUES (?, ?, ?, 1) ON CONFLICT(day, path, cls) DO UPDATE SET n = n + 1')
+      .bind(day, key, cls).run();
   } catch (e) { console.error('pagestats_fail', (e && e.message) || String(e)); }
 }
 
@@ -2562,7 +2570,7 @@ export default {
     try {
       if (ctx && request.method === 'GET'
         && /text\/html/i.test(res.headers.get('content-type') || '')) {
-        ctx.waitUntil(recordPageView(env, url, res.status));
+        ctx.waitUntil(recordPageView(env, request, url, res.status));
       }
     } catch (e) { console.error('pagecount_wrap_fail', (e && e.message) || String(e)); }
     return res;

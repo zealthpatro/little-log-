@@ -10,7 +10,25 @@ There is **no third-party analytics** in Cubby on purpose, that keeps the "no tr
 node tools/page_stats.js          # last 5 days
 node tools/page_stats.js 14       # last 14 days
 node tools/page_stats.js 5 404    # only the routes that 404'd
+node tools/page_stats.js 30 --firestore   # the old history, kept in Firestore pageStats
+node tools/page_stats.js --self-test      # no credentials needed
 ```
+
+**Where the counts live (since 2026-11).** In D1, the `cubby-games` database, table `page_stats`:
+one row per (day, bucket, status class) with a count `n`. The script reads it through
+`npx wrangler d1 execute cubby-games --remote --json`, on the Cloudflare login already on this machine,
+the same way `tools/funnel_report.js` does. Before that, every count was a Firestore commit under the
+master service account, one per anonymous 404, on the free plan whose ~20k writes a day are shared with
+every family. A stranger looping random URLs could spend that quota and stop families saving a feed or
+a dose. Nothing writes Firestore `pageStats` now; the old documents stay, `--firestore` reads them, and
+the rules still deny every client.
+
+**A route is now a bucket, not a path.** Random paths used to make one document each, so the store
+could be grown without limit. Now a path lands in one of a small fixed set: `/`, a real top-level
+section (`/app`, `/articles/*`, `/pricing`, ...), `/:probe` (scanners: `.php`, `wp-`, `/.env`),
+`/:asset` (a missing file with an extension) or `/:other`. Counting is also throttled per IP (per /64
+on IPv6) by `PAGE_RATE_LIMITER`, 30 a minute; past that a request is still served, just not counted.
+For the exact broken path, run `npx wrangler tail cubby` while reproducing it.
 
 **Read this first: it counts 404s, not page views.** Workers Static Assets serves any matching asset
 without invoking `worker.js` at all — verified on the wire: `/`, `/app/` and `/articles/` never reach
@@ -41,9 +59,9 @@ credentials in a database. Secret-bearing path segments collapse too: `/g/<code>
 `/join/<token>` → `/join/:token`, `/__/auth/<action>` → `/__/auth/:action`. There is no way to follow a
 person through the site, and that is a feature.
 
-Counts are written by the Worker under the service account and **denied to every client** in
-`firestore.rules` (`pageStats`), which is why the reader is a local script and not an endpoint.
-**Nothing exists before 2026-08-20** — history cannot be backfilled.
+Counts are written by the Worker into D1, which no client can reach, which is why the reader is a
+local script and not an endpoint. **Nothing exists before 2026-08-20**, and history from 2026-08-20 to
+the move is in Firestore only (`--firestore`); it is not copied into D1.
 
 ## 1. Traffic (Cloudflare) — visitors, pages, referrers
 Use this for the marketing/SEO side (which vaccine pages get hits, where visitors come from, speed).
