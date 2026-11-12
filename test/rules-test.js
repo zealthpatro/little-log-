@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { initializeTestEnvironment, assertFails, assertSucceeds } = require('@firebase/rules-unit-testing');
-const { doc, setDoc, updateDoc, getDoc, deleteDoc } = require('firebase/firestore');
+const { doc, setDoc, updateDoc, getDoc, deleteDoc, writeBatch } = require('firebase/firestore');
 
 const RULES = fs.readFileSync(path.join(__dirname, '..', 'firestore.rules'), 'utf8');
 
@@ -126,10 +126,18 @@ async function check(name, p) {
   await check('author re-attributes note (fails)', assertFails(updateDoc(doc(C, 'households/H/notes/n-priv'), { createdBy: 'O' })));
 
   console.log('\nInvitee join (must SUCCEED — adds only themselves):');
-  await check('invitee joins by adding only themselves', assertSucceeds(updateDoc(doc(INV, 'households/H'), { 'members.INV': 'caregiver', 'memberInfo.INV': { name: 'Invitee', email: 'inv@x.com', role: 'caregiver', relationship: 'Auntie Bear' } })));
+  // The join deletes the invite in the same batch (the rule requires it, so a grant is spent once
+  // used). See test/household-guard.test.js for the full join matrix.
+  const joinBatch = (db, uid, email, data) => {
+    const b = writeBatch(db);
+    b.update(doc(db, 'households/H'), data);
+    b.delete(doc(db, 'invites/' + email));
+    return b.commit();
+  };
+  await check('invitee joins by adding only themselves', assertSucceeds(joinBatch(INV, 'INV', 'inv@x.com', { 'members.INV': 'caregiver', 'memberInfo.INV': { name: 'Invitee', email: 'inv@x.com', role: 'caregiver', relationship: 'Auntie Bear' } })));
   // SEC-3 positive: a co-owner invite (owner set role='owner') must still let the invitee join as owner.
   const CO = env.authenticatedContext('CO', { email: 'co@x.com' }).firestore();
-  await check('co-owner invitee joins as OWNER (invite role=owner, succeeds)', assertSucceeds(updateDoc(doc(CO, 'households/H'), { 'members.CO': 'owner', 'memberInfo.CO': { name: 'CoOwner', email: 'co@x.com', role: 'owner', relationship: 'Papa Bear' } })));
+  await check('co-owner invitee joins as OWNER (invite role=owner, succeeds)', assertSucceeds(joinBatch(CO, 'CO', 'co@x.com', { 'members.CO': 'owner', 'memberInfo.CO': { name: 'CoOwner', email: 'co@x.com', role: 'owner', relationship: 'Papa Bear' } })));
 
   // ==========================================================================
   // PART 2 — the marketed privacy promises + entitlement + lifecycle.
@@ -330,7 +338,8 @@ async function check(name, p) {
   });
   const S2 = env.authenticatedContext('S2', { email: 's2@x.com' }).firestore();
   await check('sole owner sets deleteAfter and removes themselves (succeeds)', assertSucceeds(updateDoc(doc(S2, 'households/HSOLO'), {
-    'members.S2': gone(), 'memberInfo.S2': gone(), deleteAfter: 1, deletionRequestedBy: 'S2'
+    // The real client value (deleteAccount): 30 days out. The rule refuses anything under 29.
+    'members.S2': gone(), 'memberInfo.S2': gone(), deleteAfter: Date.now() + 30 * 24 * 60 * 60 * 1000, deletionRequestedBy: 'S2'
   })));
   await check('a stranger cannot flag someone else\'s household for deletion (fails)', assertFails(updateDoc(doc(S, 'households/H'), { deleteAfter: 1 })));
 

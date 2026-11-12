@@ -1046,6 +1046,7 @@
 
     // Invited? Invites are keyed by lowercased email (so the rules can authorize the join).
     var email = (user.email || '').toLowerCase();
+    var declinedInvite = false;
     if (email) {
       /* GUARDED, and the existing-user branch above has been guarded all along — this one never was.
          An unguarded read here is the whole app: onAuthStateChanged catches the throw and calls
@@ -1069,15 +1070,37 @@
       }
       if (inv && inv.exists) {
         var data = inv.data();
-        await db.collection('households').doc(data.householdId).update(memberUpdate(user, data.role || 'caregiver', { relationship: data.relationship, name: data.name }));
-        writeOwnMemberEmail(data.householdId); // PRIV-2: email goes to the gated doc, not memberInfo
-        await userRef.set({ householdId: data.householdId, name: user.displayName || '', email: user.email || '' }, { merge: true });
-        // Remember that this session is a JOIN, not a return, so the first-run screen can say whose
-        // circle they have walked into. Read once by openFirstRun and never persisted.
-        window.LL.justJoined = { invitedBy: data.invitedBy || null, role: data.role || 'caregiver' };
-        try { sessionStorage.removeItem('cubby-join'); } catch (e) {}
-        clearInviteMismatch(); // a corrected address joined for real: never leave the mismatch screen on top
-        return data.householdId;
+        /* ASK FIRST, the way an existing user has always been asked (maybePromptPendingInvite).
+           Anyone with an account can write an invite for any address, so joining here without a
+           word let a stranger pull a new parent into the stranger's family, where everything she
+           logged was theirs to read. One tap, naming who invited her. */
+        var answer = await askNewcomerToJoin(data);
+        if (answer === true) {
+          await joinByEmailInvite(user, data);
+          writeOwnMemberEmail(data.householdId); // PRIV-2: email goes to the gated doc, not memberInfo
+          await userRef.set({ householdId: data.householdId, name: user.displayName || '', email: user.email || '' }, { merge: true });
+          // Remember that this session is a JOIN, not a return, so the first-run screen can say whose
+          // circle they have walked into. Read once by openFirstRun and never persisted.
+          window.LL.justJoined = { invitedBy: data.invitedBy || null, role: data.role || 'caregiver' };
+          try { sessionStorage.removeItem('cubby-join'); } catch (e) {}
+          clearInviteMismatch(); // a corrected address joined for real: never leave the mismatch screen on top
+          return data.householdId;
+        }
+        if (answer === false) {
+          // She said no. The invite is hers to throw away (rules allow deleting the one addressed to
+          // you), and the join intent goes with it, so she lands in her own new Cubby rather than on
+          // a "we could not find your invite" screen.
+          // Not awaited: on a bad connection she should not wait on it. If it never lands, the
+          // invite is simply offered again later, the way it is to anyone with a Cubby.
+          try { db.collection('invites').doc(email).delete().catch(function (e) { console.warn('decline invite', e && e.code); }); } catch (e) {}
+          try { sessionStorage.removeItem('cubby-join'); } catch (e) {}
+          declinedInvite = true;
+        } else {
+          // Could not ask (no sheet on this screen). Never join silently: she gets her own Cubby,
+          // and the invite is offered after boot, as it is to anyone who already has one.
+          window.LL.pendingInvite = Object.assign({ email: email }, data);
+          declinedInvite = true;
+        }
       }
     }
 
@@ -1090,8 +1113,8 @@
     // So stop, explain, and give them the two ways out. Nothing is written.
     // A spent or expired token is not an email problem, and the email screen would send her to fix
     // something that is not broken.
-    if (tok) { showInviteMismatch(email || '', true); return null; }
-    if (joinIntent() && email) {
+    if (tok && !declinedInvite) { showInviteMismatch(email || '', true); return null; }
+    if (joinIntent() && email && !declinedInvite) {
       showInviteMismatch(email);
       return null;
     }
@@ -1681,41 +1704,109 @@
       return Object.assign({ token: token }, d);
     } catch (e) { console.warn('readInviteLink', e); return null; }
   }
-  /* Claim first, join second. The claim is the single-use gate and it is enforced in the rules, so
-     if two people race one forwarded link the loser's claim fails here and they never touch the
-     household. Joining before claiming would let both of them in. */
+  /* Claim, consume and join in ONE batch. The household rule requires the link to go from not
+     consumed to consumed by this uid in the very write that adds them, so a link admits one person
+     once, and a member removed later cannot walk back in with the token from their old invite URL.
+     If two people race one forwarded link, the loser's batch is refused as a whole and they never
+     touch the household.
+     The rules published before this change refuse the batch (they read the claim as it was before
+     it), so a refusal falls back to the old two steps: claim, then join. The claim sets consumed
+     too, so links used during the deploy window are closed once the new rules go live.
+     joinToken is carried on the write because the rule has no other way to know WHICH link
+     admitted this person: rules can only read a document whose path they can construct. It is
+     spent by the time it lands, so it is an audit trail rather than a secret. The owner's pending
+     row for this link is cleared in the same write: a caregiver may not edit that list later. */
   async function claimInviteLink(link, user) {
+    var linkRef = db.collection('inviteLinks').doc(link.token);
+    var hh = db.collection('households').doc(link.householdId);
+    var upd = Object.assign({ joinToken: link.token },
+      memberUpdate(user, link.role || 'caregiver', { relationship: link.relationship, name: link.name }));
+    upd['pendingLinks.' + link.token] = firebase.firestore.FieldValue.delete();
+    var joined = false;
     try {
-      await db.collection('inviteLinks').doc(link.token).update({ usedBy: user.uid });
-    } catch (e) { console.warn('claimInviteLink', e); return false; }
-    /* The household write is INSIDE the try now, and a failure gives the token back.
-       It used to sit outside: the claim succeeded, the join was denied by the rules, and the
-       exception escaped to onAuthStateChanged, which showed a generic sign-in error. The token was
-       spent by then, so the same link could never work again and the invitee was told it had
-       expired. That is how a rules gap turned every invite link into a permanently burnt one.
-       joinToken is carried on the write because the rule has no other way to know WHICH link
-       admitted this person: rules can only read a document whose path they can construct. It is
-       already spent by the time it lands, so it is an audit trail rather than a secret. */
-    try {
-      await db.collection('households').doc(link.householdId)
-        .update(Object.assign({ joinToken: link.token },
-          memberUpdate(user, link.role || 'caregiver', { relationship: link.relationship, name: link.name })));
+      var b = db.batch();
+      b.update(linkRef, { usedBy: user.uid, consumed: true });
+      b.update(hh, upd);
+      await b.commit();
+      joined = true;
     } catch (e) {
-      console.warn('claimInviteLink join', e);
-      try { await db.collection('inviteLinks').doc(link.token).update({ usedBy: null }); } catch (e2) {}
-      return false;
+      if (!e || e.code !== 'permission-denied') { console.warn('claimInviteLink', e); return false; }
+    }
+    if (!joined) {
+      try {
+        await linkRef.update({ usedBy: user.uid, consumed: true });
+      } catch (e) { console.warn('claimInviteLink', e); return false; }
+      /* The household write is INSIDE the try, and a failure gives the token back. It used to sit
+         outside: the claim succeeded, the join was denied by the rules, and the exception escaped to
+         onAuthStateChanged, which showed a generic sign-in error. */
+      try {
+        await hh.update(upd);
+      } catch (e) {
+        console.warn('claimInviteLink join', e);
+        try { await linkRef.update({ usedBy: null }); } catch (e2) {}
+        return false;
+      }
     }
     writeOwnMemberEmail(link.householdId);
     await db.collection('users').doc(user.uid)
       .set({ householdId: link.householdId, name: user.displayName || '', email: user.email || '' }, { merge: true });
     window.LL.justJoined = { invitedBy: link.invitedBy || null, role: link.role || 'caregiver' };
-    // Clear the owner's pending row: she should see that he arrived, not a link still "waiting".
-    try {
-      await db.collection('households').doc(link.householdId)
-        .update(new firebase.firestore.FieldPath('pendingLinks', link.token), firebase.firestore.FieldValue.delete());
-    } catch (e) {}
     try { sessionStorage.removeItem('cubby-join'); } catch (e) {}
     return true;
+  }
+  /* Joining by email invite: the join and the deletion of the invite in ONE batch, so the grant is
+     spent the moment it is used. An invite left behind after a join was a standing way back in for
+     anyone the owner later removed. The joiner's own row in the owner's pending list goes in the
+     same write, so her address stops sitting on a document the whole circle can read.
+     The rules before this change accept the batch as well. The single write is kept only for a
+     refusal the batch meets and the old shape might not. */
+  async function joinByEmailInvite(user, inv) {
+    var email = (user.email || '').toLowerCase();
+    var hh = db.collection('households').doc(inv.householdId);
+    var upd = memberUpdate(user, inv.role || 'caregiver', { relationship: inv.relationship, name: inv.name });
+    // update() with field/value pairs, because the email key has dots a string path would split on.
+    var args = [hh, new firebase.firestore.FieldPath('pendingInvites', email), firebase.firestore.FieldValue.delete()];
+    Object.keys(upd).forEach(function (k) { args.push(k, upd[k]); });
+    try {
+      var b = db.batch();
+      b.update.apply(b, args);
+      b.delete(db.collection('invites').doc(email));
+      await b.commit();
+    } catch (e) {
+      if (!e || e.code !== 'permission-denied') throw e;
+      await hh.update(upd);
+    }
+  }
+  /* A newcomer whose address has an invite waiting: ask, on the app's own confirm sheet, naming who
+     sent it. Resolves true (join), false (she chose her own Cubby) or null (no sheet to ask with).
+     Pulling the sheet down or tapping outside is not an answer, so it simply asks again: deciding
+     for her either way would be wrong at 3am. The inviter's name comes from the invite itself, so
+     it is escaped by confirmSheet and the copy never claims more than "invited you". */
+  function askNewcomerToJoin(inv) {
+    if (typeof window.confirmSheet !== 'function' || !document.getElementById('sheet')) return Promise.resolve(null);
+    try { hideOverlay(); } catch (e) {}
+    var who = String(inv.invitedByName || '').trim().slice(0, 40);
+    var body = (who ? (who + ' invited you to join their family on Cubby') : 'You’ve been invited to join a family on Cubby')
+      + (inv.relationship ? (', as ' + String(inv.relationship).slice(0, 40)) : '') + '. '
+      + 'If you join, what you log is shared with their family circle, and what they log is shared with you. '
+      + 'If you don’t know who this is, start your own Cubby instead.';
+    return new Promise(function (resolve) {
+      var ask = function () {
+        window.confirmSheet({
+          title: 'You’ve been invited 🐻',
+          body: body,
+          confirmLabel: 'Join the family',
+          cancelLabel: 'Start my own Cubby',
+          onConfirm: function () { try { showStatus('Setting things up…'); } catch (e) {} resolve(true); },
+          onCancel: function (how) {
+            if (how !== 'cancel') { setTimeout(ask, 250); return; }
+            try { showStatus('Setting things up…'); } catch (e) {}
+            resolve(false);
+          }
+        });
+      };
+      ask();
+    });
   }
   // The invite did not match the address they signed in with. Explain it in their terms and offer
   // the only two things that actually resolve it, rather than silently starting a new family.
@@ -1840,7 +1931,7 @@
         setTimeout(function () { try { location.reload(); } catch (e2) {} }, 500);
         return;
       }
-      await db.collection('households').doc(inv.householdId).update(memberUpdate(user, inv.role || 'caregiver', { relationship: inv.relationship, name: inv.name }));
+      await joinByEmailInvite(user, inv);
       writeOwnMemberEmail(inv.householdId); // PRIV-2: email goes to the gated doc, not memberInfo
       await db.collection('users').doc(user.uid).set({ householdId: inv.householdId }, { merge: true });
       try { if (window.toast) window.toast('Joined the family 🐻'); } catch (e) {}
@@ -2108,6 +2199,12 @@
     }).catch(function (e) { handoffMigrated = false; console.warn('handoff migrate', e); });
   }
   function dayKeyOf(ts) { var d = new Date(ts); return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); }
+  // The inviter as a newcomer would know them: first name, else the sign-in name, else the bear label.
+  function inviterName() {
+    var u = auth.currentUser; if (!u) return '';
+    var m = ((window.LL && window.LL.memberInfo) || {})[u.uid] || {};
+    return (m.name ? String(m.name).split(' ')[0] : '') || (u.displayName || '').split(' ')[0] || m.relationship || '';
+  }
   function nameForUid(uid) {
     var info = (window.LL && window.LL.memberInfo) || {};
     var m = info[uid]; if (!m) return '';
@@ -3373,7 +3470,9 @@
     db.collection('invites').doc(email).set({
       householdId: window.LL.householdId, role: owner ? 'owner' : 'caregiver',
       relationship: rel, name: name,
-      invitedBy: auth.currentUser.uid, status: 'pending', createdAt: window.LL.serverTimestamp()
+      // Shown to a newcomer on the sheet that asks whether to join (askNewcomerToJoin): she cannot
+      // read the household before joining, so the invite has to carry who sent it.
+      invitedBy: auth.currentUser.uid, invitedByName: inviterName(), status: 'pending', createdAt: window.LL.serverTimestamp()
     }).then(function () { if (done) return; done = true; clearTimeout(t); showReady(); })
       .catch(function (e) {
         if (done) return; done = true; clearTimeout(t);
