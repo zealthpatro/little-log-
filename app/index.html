@@ -2916,12 +2916,74 @@ function scrubIds(o, depth){
 }
 // Ids someone else wrote as a bare list (guardians, approvals).
 function scrubIdList(a){ return Array.isArray(a) ? a.map(x=>typeof x==='string'?safeId(x):x) : a; }
+/* NUMBERS STAY NUMBERS, ENUMS STAY ON THEIR LIST.
+   Every key below is one Cubby only ever writes as a number: a clock, a count, a reading. Someone
+   else can put a string there instead, and a string in a number's place is drawn where nobody
+   escapes a number, or lands unquoted in handler code: f(${x}) with x = "1);anything();//" is a
+   script. So a string that spells a number becomes that number, and anything else is dropped as if
+   it had never been logged. Units and the other enums fall back to their default. Free text (names,
+   notes, places, allergies) is left exactly as typed: it is escaped where it is drawn. */
+const NUM_KEYS=new Set(['at','birth','createdAt','deletedAt','importedAt','givenAt','achievedAt','startedAt','endedAt','start','end','last',
+  'dueDate','lmp','cycleLen','week','when','dueMonths','slot','gestWeeks','gestDays','hours',
+  'sys','dia','count','val','vomits','water','sfh','efw','hb','bpSys','bpDia','kg','amount']);
+// An event is its own doc with its own numbers; routines keep time:'08:00', so `time` is event-only.
+const EV_NUM_KEYS=new Set(['time','end','start','dur','amount','weight','height','head','temp']);
+function numField(o,k){
+  const v=o[k];
+  if(v==null || v==='') return;
+  if(typeof v==='number'){ if(!isFinite(v)) delete o[k]; return; }
+  if(typeof v==='string' && /^\s*-?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?\s*$/i.test(v)){ o[k]=+v; return; }
+  if(typeof v==='string' || Array.isArray(v)) delete o[k];   // booleans and objects print harmlessly
+}
+function scrubNums(o, keys, depth){
+  if(!o || typeof o!=='object' || (depth||0)>8) return;
+  if(Array.isArray(o)){ o.forEach(v=>scrubNums(v,keys,(depth||0)+1)); return; }
+  for(const k in o){
+    if(!Object.prototype.hasOwnProperty.call(o,k)) continue;
+    if(keys.has(k)) numField(o,k);
+    if(o[k] && typeof o[k]==='object') scrubNums(o[k],keys,(depth||0)+1);
+  }
+}
+function oneOf(o,k,list,dflt){ if(o && o[k]!=null && list.indexOf(o[k])<0){ if(dflt==null) delete o[k]; else o[k]=dflt; } }
+const UNIT_ENUMS={unit:[['ml','oz'],'ml'], wUnit:[['kg','lb'],'kg'], hUnit:[['cm','in'],'cm'], hcUnit:[['cm','in'],null], tempUnit:[['C','F'],'C']};
+function scrubEnums(app){
+  const s=app.settings;
+  if(s && typeof s==='object') Object.keys(UNIT_ENUMS).forEach(k=>oneOf(s,k,UNIT_ENUMS[k][0],UNIT_ENUMS[k][1]));
+  (Array.isArray(app.babies)?app.babies:[]).forEach(b=>{
+    if(!b || typeof b!=='object') return;
+    oneOf(b,'growthSource',['who','cdc']);
+    oneOf(b,'sex',['F','M','male','female','']);
+    oneOf(b,'diet',['veg','vegan','']);
+    oneOf(b,'stageOverride',['baby','child','']);
+    if(b.allergies!=null && !Array.isArray(b.allergies)) delete b.allergies;
+  });
+  // A pregnancy journey (applyPregJourney hands its data here) or a legacy one inside the blob.
+  [app.pregnancy, (app.stage||app.dueDate||app.lmp||app.appts)?app:null].forEach(p=>{
+    if(!p || typeof p!=='object') return;
+    oneOf(p,'glucoseUnit',['mmol','mgdl']);
+    (Array.isArray(p.glucose)?p.glucose:[]).forEach(g=>oneOf(g,'unit',['mmol','mgdl']));
+    (Array.isArray(p.weights)?p.weights:[]).forEach(w=>oneOf(w,'unit',['kg','lb']));
+  });
+}
+// Map keys that are ids (a baby's timers, vaccines, journey captures): a key is drawn and joined like an id.
+function scrubKeys(m){
+  if(!m || typeof m!=='object' || Array.isArray(m)) return;
+  Object.keys(m).forEach(k=>{ const s=safeId(k); if(s!==k){ m[s]=m[k]; delete m[k]; } });
+}
 window.cubbyIngest={
   id: safeId, color: safeColor, photo: safeImgSrc,
   // One event or note doc: `docId` is the Firestore key, which the author picked.
   // `time` lands in attributes (data-since) and handler code as a number; a string there is not one.
-  event(d, docId){ d=d||{}; scrubIds(d); d.id=safeId(docId!=null?docId:d.id); if(typeof d.time==='string') d.time=(d.time!==''&&isFinite(+d.time))?+d.time:null; return d; },
-  note(d, docId){ d=d||{}; scrubIds(d); d.id=safeId(docId!=null?docId:d.id); return d; },
+  event(d, docId){
+    d=d||{}; scrubIds(d); d.id=safeId(docId!=null?docId:d.id);
+    if(typeof d.time==='string') d.time=(d.time!==''&&isFinite(+d.time))?+d.time:null;
+    EV_NUM_KEYS.forEach(k=>numField(d,k));
+    oneOf(d,'wUnit',['kg','lb'],'kg'); oneOf(d,'hUnit',['cm','in'],'cm'); oneOf(d,'hcUnit',['cm','in'],'cm');
+    if(d.type==='temperature') oneOf(d,'unit',['C','F'],'C');
+    if(d.type==='feed' && d.method!=='solids') oneOf(d,'unit',['ml','oz'],'ml');
+    return d;
+  },
+  note(d, docId){ d=d||{}; scrubIds(d); d.id=safeId(docId!=null?docId:d.id); scrubNums(d,NUM_KEYS); return d; },
   // The shared app blob, in place. Lists of uids are scrubbed as lists.
   blob(app){
     if(!app || typeof app!=='object') return app;
@@ -2929,6 +2991,10 @@ window.cubbyIngest={
     if(Array.isArray(app.guardians)) app.guardians=scrubIdList(app.guardians);
     (Array.isArray(app.consents)?app.consents:[]).forEach(c=>{ if(c&&Array.isArray(c.approvals)) c.approvals=scrubIdList(c.approvals); });
     if(app.activeBabyId!=null) app.activeBabyId=safeId(app.activeBabyId);
+    scrubNums(app,NUM_KEYS);
+    scrubEnums(app);
+    [app.timers, app.vaccines, app.lossHolding].forEach(scrubKeys);
+    if(app.journey && typeof app.journey==='object') ['titles','saved','rel'].forEach(k=>scrubKeys(app.journey[k]));
     return app;
   },
   // A photo map {id: bytes}: ids made safe, bytes that are not a raster data URL dropped.
@@ -3657,7 +3723,7 @@ function daySurface(){
       <div class="ds-lh"><span class="ds-lt">Notes${unseen?` <span class="ds-badge">${unseen} new</span>`:''}</span><button class="ds-add${pulse}" onclick="openNoteCompose()">${I.plus}<span>Leave a note</span></button></div>
       ${notesLane}
     </div>
-    ${recap?`<div class="ds-lane ds-recap" onclick="openDayLog(${ts})">
+    ${recap?`<div class="ds-lane ds-recap" onclick="openDayLog(${hNum(ts)})">
       <div class="ds-lh"><span class="ds-lt">The day</span><span class="ds-more">Full log ${I.chev}</span></div>
       <div class="ds-recap-s">${escapeHtml(recap)}</div>
     </div>`:''}
@@ -4653,7 +4719,7 @@ function teachScan(){
 }
 function quickBtn(a,ts){
   // Sleep is the one action whose label depends on live state (a running timer means "wake up").
-  if(a.k==='sleep'&&ts) return actBtn("stopSleep('"+state.activeBabyId+"')",'var('+a.soft+')','var('+a.tone+')',a.ico(),'Wake up','Stop the timer');
+  if(a.k==='sleep'&&ts) return actBtn("stopSleep('"+hArg(state.activeBabyId)+"')",'var('+a.soft+')','var('+a.tone+')',a.ico(),'Wake up','Stop the timer');
   /* Feed needs the same honesty and must NOT take the same action. While a nursing timer ran this
      tile still read "Feed · breast, bottle, solids", so one screen showed a timer counting up beside
      a door that pretended it was not there, and the same gesture meant two different things next to
@@ -5569,7 +5635,7 @@ function renderFeedSheet(){
       const flagged=f.a && allergies.includes(f.a);
       return `<div class="chip ${sel?'sel':''} ${flagged?'allergen':''}" onclick="toggleSolidFood('${hArg(f.n)}')">${flagged?'⚠ ':''}${f.n}</div>`;
     }).join('');
-    const allergyNote = allergies.length ? `<div class="csub" style="margin:-2px 0 10px">Allergy watch: ${allergies.map(capWord).join(', ')}</div>` : '';
+    const allergyNote = allergies.length ? `<div class="csub" style="margin:-2px 0 10px">Allergy watch: ${escapeHtml(allergies.map(capWord).join(', '))}</div>` : '';
     body+=`<div class="field"><label>What did they try?</label>
       ${allergyNote}
       <div class="chip-row" style="flex-wrap:wrap;white-space:normal;gap:8px">${foodChips}</div></div>
@@ -6662,7 +6728,7 @@ function pickColor(c){
 /* One reusable optional-sex control (for the growth charts), used everywhere a baby is added or
    edited. Writes 'M' / 'F' / '' to a hidden #id; read that value on save. Keeps Prefer-not-to-say. */
 function sexSegHtml(id, current){ current=current||'';
-  return '<input type="hidden" id="'+id+'" value="'+current+'">'
+  return '<input type="hidden" id="'+id+'" value="'+escapeHtml(current)+'">'
     +'<div class="seg">'+[['','Prefer not to say'],['F','Girl'],['M','Boy']].map(function(o){
       return '<button type="button" class="'+(current===o[0]?'on':'')+'" onclick="pickSex(\''+id+'\',\''+o[0]+'\',this)">'+o[1]+'</button>';
     }).join('')+'</div>';
@@ -6837,6 +6903,9 @@ function jArg(s){ return escapeHtml(String(s==null?'':s).replace(/\\/g,'\\\\').r
 // (undefined stays 'undefined', 0 stays '0'), it just cannot break out. tools/xss_sink_check.js
 // fails the build on any ${} in a quoted handler argument that skips jArg or hArg.
 function hArg(v){ return jArg(String(v)); }
+// For an UNQUOTED ${} in a handler, where a string is code, not data: the number, or null.
+// tools/xss_leaf_check.js fails the build on an unquoted ${} that is not this, Number() or a literal.
+function hNum(v){ const n=(typeof v==='number'||(typeof v==='string'&&v.trim()!==''))?Number(v):NaN; return isFinite(n)?String(n):'null'; }
 function renderJourneySection(prompts, scope, titleText){
   if(myLossHolding()) return '';                 // loss-safe: nothing guided
   if(!prompts || !prompts.length) return '';
@@ -6896,7 +6965,7 @@ function openRelView(id){
   const r=journeyRel(b.id).find(x=>x.id===id); if(!r||!r.photoId) return;
   openSheet(`<h2>With ${escapeHtml(r.label)}</h2><div class="sub">${glDateLabel(r.at)}</div>
     <img class="card-prev" src="${photoSrc(r.photoId)}" alt="${escapeHtml(r.label)}">
-    <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="closeSheet();makeMomentFromPhoto(photoSrc('${hArg(r.photoId)}'),'With ${jArg(r.label)}',${r.at||'null'})">✨ Make a keepsake</button>
+    <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="closeSheet();makeMomentFromPhoto(photoSrc('${hArg(r.photoId)}'),'With ${jArg(r.label)}',${hNum(r.at)})">✨ Make a keepsake</button>
     <button class="btn-ghost" style="margin-top:8px" onclick="openRelCapture('${jArg(r.relation)}','${jArg(r.label)}','${hArg(r.id)}')">${I.camera} New photo together</button>
     <button class="btn-ghost" style="margin-top:8px;color:var(--ink-soft)" onclick="removeRelMoment('${hArg(r.id)}')">Remove</button>`,'star');
 }
@@ -7146,7 +7215,7 @@ function openFoodPrefs(){
     </div></div>
     <div class="field"><label>Allergies</label>
       <div class="chip-row" style="flex-wrap:wrap;gap:8px">${ALLERGENS.map(a=>{const t=a.toLowerCase();const on=(b.allergies||[]).includes(t);return `<div class="chip ${on?'sel':''}" onclick="toggleAllergy('${hArg(b.id)}','${hArg(t)}')">${a}</div>`;}).join('')}</div>
-      ${(b.allergies||[]).filter(t=>!ALLERGENS.map(x=>x.toLowerCase()).includes(t)).map(t=>`<div class="chip sel" style="margin-top:8px" onclick="toggleAllergy('${hArg(b.id)}','${hArg(t)}')">${capWord(t)} ✕</div>`).join('')}
+      ${(b.allergies||[]).filter(t=>!ALLERGENS.map(x=>x.toLowerCase()).includes(t)).map(t=>`<div class="chip sel" style="margin-top:8px" onclick="toggleAllergy('${hArg(b.id)}','${hArg(t)}')">${escapeHtml(capWord(t))} ✕</div>`).join('')}
       <div style="display:flex;gap:10px;margin-top:8px">
         <input id="customAllergy" placeholder="Add another allergy" value="${escapeHtml(customAllergyDraft||'')}" oninput="customAllergyDraft=this.value" style="flex:1;border:2px solid var(--line);background:var(--surface-2);border-radius:14px;padding:12px 14px;font-weight:600;font-size:16px;font-family:var(--font-body);color:var(--ink)">
         <button class="btn-ghost" style="width:auto;padding:0 18px" onclick="addCustomAllergy('${hArg(b.id)}')">Add</button>
@@ -12185,7 +12254,7 @@ function renderPregLog(){
         ${(!a.done&&a.place)?`<div class="ar-s">${escapeHtml(a.place)}</div>`:''}
         ${a.note?`<div class="ar-s">${escapeHtml(a.note)}</div>`:''}
         ${a.outcome?`<div class="ar-s" style="color:var(--preg-ink)">🤍 ${escapeHtml(a.outcome)}</div>`:''}
-        ${(a.sfh||a.efw||a.hb||a.position||(a.bpSys&&a.bpDia))?`<div class="ar-s" style="color:var(--ink-faint)">${[a.sfh?'SFH '+a.sfh+'cm':'',a.efw?'EFW '+a.efw+'g':'',a.position?escapeHtml(a.position):'',a.hb?'Hb '+a.hb:'',(a.bpSys&&a.bpDia)?'BP '+a.bpSys+'/'+a.bpDia:''].filter(Boolean).join(' · ')}</div>`:''}
+        ${(a.sfh||a.efw||a.hb||a.position||(a.bpSys&&a.bpDia))?`<div class="ar-s" style="color:var(--ink-faint)">${escapeHtml([a.sfh?'SFH '+a.sfh+'cm':'',a.efw?'EFW '+a.efw+'g':'',a.position||'',a.hb?'Hb '+a.hb:'',(a.bpSys&&a.bpDia)?'BP '+a.bpSys+'/'+a.bpDia:''].filter(Boolean).join(' · '))}</div>`:''}
       </div>
     </div>`).join(''):`<div class="csub">${canWrite?'No appointments yet. Add your first below.':'No appointments on the plan yet.'}</div>`;
   const logs=pregRecentLogs();
@@ -12530,7 +12599,7 @@ function openBPConcern(rec,f){
   const withSym=bpMatchedSymptoms(24);
   const urgent=f.sev||withSym.length>0;
   const signs=(cfg.symptoms||[]).map(s=>`<div class="danger-row"><span class="dr-dot">●</span><div class="dr-t">${escapeHtml(s)}</div></div>`).join('');
-  openSheet(`<h2>${rec.sys}/${rec.dia}</h2>
+  openSheet(`<h2>${escapeHtml(rec.sys+'/'+rec.dia)}</h2>
     <div class="sub">${urgent
       ? (f.sev
          ? `That is at or above ${cfg.severe.sys}/${cfg.severe.dia}, the reading maternity teams ask to hear about straight away. Please call now, today, even if you feel well.`
@@ -12712,7 +12781,7 @@ function openKickCounter(){
      her baby. Recomputed on every tap, which is when the sheet re-renders; nothing ticks on its own. */
   const over=!!(sess&&base&&pregIsOwner()&&!kickGapped&&sess.count<10&&(now()-sess.start)/60000>base.hi);
   const recent=(state.pregnancy.kicks||[]).slice(-5).reverse();
-  const recentHtml=recent.length?`<div class="sec-title" style="margin-top:6px">Recent sessions</div>${recent.map(k=>`<div class="log-list-item"><div class="lli-ico">👣</div><div class="lli-body"><div class="lli-t">${k.count} movement${k.count===1?'':'s'}</div><div class="lli-s">${dayLabel(k.start)} ${fmtClock(k.start)}${k.end?' · '+fmtDur(k.end-k.start):''}</div></div></div>`).join('')}`:'';
+  const recentHtml=recent.length?`<div class="sec-title" style="margin-top:6px">Recent sessions</div>${recent.map(k=>`<div class="log-list-item"><div class="lli-ico">👣</div><div class="lli-body"><div class="lli-t">${escapeHtml(String(k.count))} movement${k.count===1?'':'s'}</div><div class="lli-s">${dayLabel(k.start)} ${fmtClock(k.start)}${k.end?' · '+fmtDur(k.end-k.start):''}</div></div></div>`).join('')}`:'';
   /* A shared partner got the whole live counter. pregWriteSession already refused to put his session
      on the record, so his count lived in one module variable on his phone, and finishKicks then
      pushed a row into her kicks, persisted it and told him "Session saved". It reached nothing, her
@@ -12733,7 +12802,7 @@ function openKickCounter(){
     ${/* .sub and not .csub: csub is only styled inside a stat card, so out here it would land at 16px
           full ink and shout over the count it is quietly describing. */''}
     ${base?`<div class="sub kick-usual" style="text-align:center;margin:-12px 0 14px">${kickUsualLine(base)}${over?' This one has been going longer than any of those.':''}</div>`:''}
-    <button class="kick-big" onclick="tapKick()"><div class="kb-n">${sess?sess.count:0}</div><div class="kb-c">${sess?(sess.count>=10?'All done 🎉':'Tap for each kick'):'Tap to start'}</div></button>
+    <button class="kick-big" onclick="tapKick()"><div class="kb-n">${escapeHtml(String(sess?sess.count:0))}</div><div class="kb-c">${sess?(sess.count>=10?'All done 🎉':'Tap for each kick'):'Tap to start'}</div></button>
     ${sess?`<div class="csub" style="text-align:center">${kickResumed?`Picked up from ${fmtClock(sess.last||sess.start)}. Tap when you next feel a movement.`:`Started ${fmtClock(sess.start)} · ${fmtDur(now()-sess.start)} so far`}</div>
       ${sess.count>0?`<button class="btn-ghost" style="margin-top:10px" onclick="undoKick()">− Undo last tap</button>`:''}
       <button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:10px" onclick="finishKicks()">${sess.count>=10?'Save session':'Stop and save'}</button>
@@ -13577,7 +13646,7 @@ function openKeptMemories(id){
      one's too, for good, in two taps, over a confirm that never mentioned a second pregnancy.
      With more than one, each group carries its own button above. With exactly one, this one names
      it explicitly rather than relying on "everything" happening to mean the same thing. */
-  const scope=withMem.length===1?("'"+withMem[0].id+"'"):'';
+  const scope=withMem.length===1?("'"+hArg(withMem[0].id)+"'"):'';
   openSheet(`<h2>${removable?'Kept memories':'What you kept'} 🤍</h2><div class="sub">Yours to keep, privately, for as long as you like.</div>
     ${blocks}
     ${trRow}
@@ -14011,7 +14080,7 @@ function openGlucoseTracker(){
      snapshot: a number that came and went out of a record she takes to a midwife. */
   const mine=pregHealthIsOwner();
   const rows=list.length?list.map(g=>{ const over=glucoseOver(g.val,g.context,g.unit);
-    return `<div class="log-list-item"><div class="lli-ico" style="${over?'background:var(--med-soft)':''}">🩸</div><div class="lli-body"><div class="lli-t">${g.val} ${glucoseUnitLabel(g.unit)}${over?' · above target':''}</div><div class="lli-s">${glucoseCtxLabel(g.context)} · ${dayLabel(g.at)} ${fmtClock(g.at)}</div></div>${mine?`<button class="lli-x" onclick="deleteGlucose('${hArg(g.id)}')">${I.trash}</button>`:''}</div>`; }).join(''):'<div class="csub">No readings yet.</div>';
+    return `<div class="log-list-item"><div class="lli-ico" style="${over?'background:var(--med-soft)':''}">🩸</div><div class="lli-body"><div class="lli-t">${escapeHtml(String(g.val))} ${glucoseUnitLabel(g.unit)}${over?' · above target':''}</div><div class="lli-s">${glucoseCtxLabel(g.context)} · ${dayLabel(g.at)} ${fmtClock(g.at)}</div></div>${mine?`<button class="lli-x" onclick="deleteGlucose('${hArg(g.id)}')">${I.trash}</button>`:''}</div>`; }).join(''):'<div class="csub">No readings yet.</div>';
   const t=(condCfg('gdm')||{}).targets&&condCfg('gdm').targets[unit];
   openSheet(`<h2>Gestational diabetes</h2><div class="sub">Your blood glucose readings, in ${ul}.</div>
     ${pctIn!=null?`<div class="tool-stat"><div class="ts-cell"><div class="ts-big">${pctIn}%</div><div class="ts-cap">In target</div></div><div class="ts-cell"><div class="ts-big">${rated.length}</div><div class="ts-cap">Readings</div></div></div>`:''}
@@ -14033,7 +14102,7 @@ function openBPWatch(){
   const mine=pregHealthIsOwner();
   const bps=(p.bp||[]).slice().sort((a,b)=>b.at-a.at).slice(0,12);
   const rows=bps.length?bps.map(b=>{ const f=bpFlag(b);
-    return `<div class="log-list-item"><div class="lli-ico" style="${f?'background:var(--med-soft)':''}">🩺</div><div class="lli-body"><div class="lli-t">${b.sys}/${b.dia} mmHg${f?' · '+f.t:''}</div><div class="lli-s">${dayLabel(b.at)} ${fmtClock(b.at)}</div></div>${mine?`<button class="lli-x" onclick="deletePregLog('bp','${hArg(b.id)}')">${I.trash}</button>`:''}</div>`; }).join(''):'<div class="csub">No BP readings yet.</div>';
+    return `<div class="log-list-item"><div class="lli-ico" style="${f?'background:var(--med-soft)':''}">🩺</div><div class="lli-body"><div class="lli-t">${escapeHtml(b.sys+'/'+b.dia)} mmHg${f?' · '+f.t:''}</div><div class="lli-s">${dayLabel(b.at)} ${fmtClock(b.at)}</div></div>${mine?`<button class="lli-x" onclick="deletePregLog('bp','${hArg(b.id)}')">${I.trash}</button>`:''}</div>`; }).join(''):'<div class="csub">No BP readings yet.</div>';
   const urines=(p.urine||[]).slice().sort((a,b)=>b.at-a.at).slice(0,5);
   const urows=urines.map(u=>`<div class="log-list-item"><div class="lli-ico">🧪</div><div class="lli-body"><div class="lli-t">Urine protein: ${escapeHtml(u.result)}</div><div class="lli-s">${dayLabel(u.at)} ${fmtClock(u.at)}</div></div>${mine?`<button class="lli-x" onclick="deleteUrine('${hArg(u.id)}')">${I.trash}</button>`:''}</div>`).join('');
   const sym=cfg?cfg.symptoms.map(s=>`<div class="danger-row"><span class="dr-dot">●</span><div class="dr-t">${escapeHtml(s)}</div></div>`).join(''):'';
@@ -14095,7 +14164,7 @@ function openNausea(){
   // shows whether things are getting worse.
   const mine=pregHealthIsOwner();
   const list=(p.nausea||[]).slice().sort((a,b)=>b.at-a.at).slice(0,10);
-  const rows=list.map(n=>`<div class="log-list-item"><div class="lli-ico">🤢</div><div class="lli-body"><div class="lli-t">Sick ${n.vomits}×${n.keptFluids?', kept fluids down':', could not keep fluids down'}</div><div class="lli-s">${n.water?n.water+' glasses · ':''}${dayLabel(n.at)} ${fmtClock(n.at)}</div></div>${mine?`<button class="lli-x" onclick="deleteNausea('${hArg(n.id)}')">${I.trash}</button>`:''}</div>`).join('');
+  const rows=list.map(n=>`<div class="log-list-item"><div class="lli-ico">🤢</div><div class="lli-body"><div class="lli-t">Sick ${escapeHtml(String(n.vomits))}×${n.keptFluids?', kept fluids down':', could not keep fluids down'}</div><div class="lli-s">${n.water?escapeHtml(n.water+' glasses · '):''}${dayLabel(n.at)} ${fmtClock(n.at)}</div></div>${mine?`<button class="lli-x" onclick="deleteNausea('${hArg(n.id)}')">${I.trash}</button>`:''}</div>`).join('');
   openSheet(`<h2>Nausea & hydration</h2><div class="sub">${mine?'A quick check-in. Handy for spotting if things are getting worse.':'Her check-ins, so you can see whether things are getting worse.'}</div>
     ${mine?`<div class="field"><label>Times you were sick today</label><input type="number" inputmode="numeric" id="nzV" placeholder="0" value="0"></div>
     <div class="field"><label>Could you keep fluids down?</label><div class="seg"><button id="nzFy" class="on" onclick="setNzFluids(true)">Yes</button><button id="nzFn" onclick="setNzFluids(false)">No</button></div></div>
@@ -14880,7 +14949,7 @@ function renderHealth(){
   const care=`<div class="sec-title" style="margin-top:var(--stack)">Doctors &amp; allergies</div>
     <div class="prof-cards">
       <div class="prof-card" onclick="openDoctor()"><span class="lead" style="background:var(--sleep-soft);color:var(--sleep)">${I.stetho}</span><div class="cflex"><div class="a">Care team</div><div class="b">${docCount?docCount+' doctor'+(docCount===1?'':'s')+' · visit log':'Add a doctor & log visits'}</div></div><span class="chev">${I.chev}</span></div>
-      <div class="prof-card" onclick="openFoodPrefs()"><span class="lead" style="background:var(--med-soft);color:var(--med)">${I.cross}</span><div class="cflex"><div class="a">Allergies &amp; diet</div><div class="b">${al.length?al.map(capWord).join(', '):'None noted'}${diet?' · '+diet:''}</div></div><span class="chev">${I.chev}</span></div>
+      <div class="prof-card" onclick="openFoodPrefs()"><span class="lead" style="background:var(--med-soft);color:var(--med)">${I.cross}</span><div class="cflex"><div class="a">Allergies &amp; diet</div><div class="b">${al.length?escapeHtml(al.map(capWord).join(', ')):'None noted'}${diet?' · '+diet:''}</div></div><span class="chev">${I.chev}</span></div>
     </div>
     <div class="csub" style="margin-top:2px">Tap either to update. Changes show on ${escapeHtml(b.name)}'s profile too.</div>`;
   /* The visit summary was reachable from four places and every one of them needed a SICK baby or a
@@ -16087,7 +16156,8 @@ function saveGrowth(){
 /* Growth standard derives from the baby's country (US -> CDC, everyone else -> WHO),
    with a per-baby override stored on the baby. Country is already set at add-baby; never asked twice. */
 function defaultGrowthSource(c){ return c==='us'?'cdc':'who'; }
-function effGrowthSource(b){ b=b||activeBaby(); return (b&&b.growthSource)||defaultGrowthSource(b&&b.country)||'who'; }
+// Only the two chart sets Cubby has: it is uppercased into the Stats copy, and entities survive that.
+function effGrowthSource(b){ b=b||activeBaby(); const s=b&&b.growthSource; return (s==='who'||s==='cdc')?s:(defaultGrowthSource(b&&b.country)||'who'); }
 function setGrowthSource(s){ const b=activeBaby(); if(b){ b.growthSource=s; persist(); } render(); }
 function toggleGrowthSource(){ const b=activeBaby(); if(!b)return; b.growthSource=(effGrowthSource(b)==='who')?'cdc':'who'; persist(); render(); }
 function growthChangeBtn(){ return '<button onclick="toggleGrowthSource()" style="background:none;border:none;color:var(--preg-ink,#8C547A);font-weight:700;cursor:pointer;font:inherit;padding:0;text-decoration:underline">change</button>'; }
@@ -16211,7 +16281,8 @@ function renderGrowthSection(){
       <div class="stat-card" style="text-align:center"><div class="csub" style="margin:0">No measurements yet.</div>
       <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent));margin-top:12px" onclick="openGrowth()">${I.scale} Add a measurement</button></div>`;
   }
-  const wU=state.settings.wUnit||'kg', hU=state.settings.hUnit||'cm', cU=state.settings.hcUnit||hU;
+  // Units are shared settings anyone in the circle can write, and they are drawn raw below: only the real ones.
+  const wU=state.settings.wUnit==='lb'?'lb':'kg', hU=state.settings.hUnit==='in'?'in':'cm', cU=(state.settings.hcUnit||hU)==='in'?'in':'cm';
   const wPts=g.filter(e=>e.weight).map(e=>({t:e.time, v:+convW(e.weight, e.wUnit||'kg', wU).toFixed(2)}));
   const hPts=g.filter(e=>e.height).map(e=>({t:e.time, v:+convH(e.height, e.hUnit||'cm', hU).toFixed(1)}));
   const cPts=g.filter(e=>e.head).map(e=>({t:e.time, v:+convH(e.head, e.hcUnit||'cm', cU).toFixed(1)}));
@@ -17093,7 +17164,7 @@ function openKeepsakeNudge(cap, photoId, date){
   const when=date?new Date(String(date)+'T08:00').getTime():null;
   openSheet(`<h2>Saved 🤍</h2><div class="sub">Tucked into ${escapeHtml(b.name||'your baby')}’s scrapbook.</div>
     <img class="card-prev" src="${photoSrc(photoId)}" alt="">
-    <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="closeSheet();makeMomentFromPhoto(photoSrc('${hArg(photoId)}'),'${jArg(cap)}',${when&&!isNaN(when)?when:'null'})">✨ Make a keepsake of it</button>
+    <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="closeSheet();makeMomentFromPhoto(photoSrc('${hArg(photoId)}'),'${jArg(cap)}',${hNum(when)})">✨ Make a keepsake of it</button>
     <button class="btn-ghost" style="margin-top:8px" onclick="closeSheet()">Done for now</button>`,'star');
 }
 function removeJourneyMoment(id){ const isPreg=glDraft&&glDraft.scope==='preg'; if(isPreg&&!pregJourneyCanWrite()) return; const m=isPreg?pregJSaved():journeySaved(); const pid=(m[id]||{}).photoId; delete m[id]; glDraft=null; persist(); closeSheet(); render(); toast('Removed'); if(pid) maybeDelPhoto(pid); }
@@ -18792,7 +18863,7 @@ function memoryCandidates(){
   var b=activeBaby(); if(!b) return [];
   var out=[], months=Math.floor(babyMonths());
   if(months>=1 && !memDismissed('m'+months)){
-    out.push({key:'m'+months, icon:'🗓️', title:slotLabel(months)+' recap', sub:'This month’s moments, ready to share', onclick:"openMemoryCard("+months+",'"+memCandPhoto(months)+"')"});
+    out.push({key:'m'+months, icon:'🗓️', title:slotLabel(months)+' recap', sub:'This month’s moments, ready to share', onclick:"openMemoryCard("+hNum(months)+",'"+hArg(memCandPhoto(months))+"')"});
   }
   var hasBump=(state.pregnancy&&(state.pregnancy.moments||[]).some(function(m){return m.photoId;})) || ((state.pregnancyArchive||[]).some(function(a){return !a.loss && (a.moments||[]).some(function(m){return m.photoId;});}));
   var hasBabyPhoto=(state.photos||[]).some(function(p){return p.babyId===b.id&&p.photoId&&!p.deleted;});
@@ -19260,25 +19331,26 @@ function posterOfferRow(){
 function openBirthPoster(){
   const b=activeBaby();
   posterDraft=Object.assign({withPhoto:false, img:null, photoId:null}, posterDefaults());
-  const hasDetails=b.place||b.birthWeight||b.parents||b.birthLength||b.town||b.headCirc;
+  // A flag, passed into handler code below: never the place itself, which is free text.
+  const hasDetails=!!(b.place||b.birthWeight||b.parents||b.birthLength||b.town||b.headCirc);
   renderPosterSheet(hasDetails);
 }
 function renderPosterSheet(hasDetails){
   const d=posterDraft;
-  const themeChips=POSTER_STYLES.map(x=>`<div class="chip ${d.style===x.k?'sel':''}" style="background:${x.pal.bg2};border-color:${d.style===x.k?x.pal.accent:x.pal.soft};color:${x.pal.ink}" onclick="posterPick('style','${hArg(x.k)}',${hasDetails})">${x.label}</div>`).join('');
+  const themeChips=POSTER_STYLES.map(x=>`<div class="chip ${d.style===x.k?'sel':''}" style="background:${x.pal.bg2};border-color:${d.style===x.k?x.pal.accent:x.pal.soft};color:${x.pal.ink}" onclick="posterPick('style','${hArg(x.k)}',${hasDetails?1:0})">${x.label}</div>`).join('');
   openSheet(`<h2>Birth poster</h2><div class="sub">Auto-built from ${escapeHtml(activeBaby().name)}'s birth details.</div>
     ${!hasDetails?`<div class="disclaimer">The dotted lines are waiting for you. Add their weight, length, where they were born and who was there, and they fill themselves in. The dots are only here, never on the poster you save.</div>
       <button class="btn-ghost" style="margin-top:2px" onclick="openBirthDetails()">${I.note} Add the birth details</button>`:''}
     <div class="sec-title" style="margin-left:0">Choose a style</div><div class="chip-row">${themeChips}</div>
     <div class="sec-title" style="margin-left:0">Decorations</div>
-    <div class="chip-row">${POSTER_DECO.map(x=>`<div class="chip ${d.deco[x.k]?'sel':''}" onclick="posterToggleDeco('${hArg(x.k)}',${hasDetails})">${x.label}</div>`).join('')}</div>
+    <div class="chip-row">${POSTER_DECO.map(x=>`<div class="chip ${d.deco[x.k]?'sel':''}" onclick="posterToggleDeco('${hArg(x.k)}',${hasDetails?1:0})">${x.label}</div>`).join('')}</div>
     <div class="csub" style="margin-top:-2px">Tap any of these off if you want it plainer. Everything is on to start with.</div>
     <div class="toggle-row"><div><div class="tr-a">Use a photo instead</div><div class="tr-b">The ${escapeHtml(posterStyle().label.toLowerCase())} is a placeholder. Swap it for a photo of ${escapeHtml((activeBaby()||{}).name||'your baby')} any time.</div></div>
-      <div class="sw ${d.withPhoto?'on':''}" onclick="togglePosterPhoto(${hasDetails})"></div></div>
+      <div class="sw ${d.withPhoto?'on':''}" onclick="togglePosterPhoto(${hasDetails?1:0})"></div></div>
     ${d.withPhoto?`<div class="sec-title" style="margin-left:0">Choose a photo</div>${albumStrip(d.photoId,'posterPhotoFromId',"document.getElementById('posterPhotoInput').click()")}`:''}
     <div id="posterPrevSlot"></div>
     <button class="btn-ghost" onclick="openBirthDetails()">${I.note} Edit birth details</button>
-    <input type="file" id="posterPhotoInput" accept="image/*" style="display:none" onchange="posterPhoto(this,${hasDetails})">
+    <input type="file" id="posterPhotoInput" accept="image/*" style="display:none" onchange="posterPhoto(this,${hasDetails?1:0})">
     <button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="genPoster()">${I.download} Generate poster</button>`,'star');
   drawPosterPrev();
 }

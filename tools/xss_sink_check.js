@@ -31,6 +31,7 @@
  *   3. The INGEST helpers store-firebase.js calls where Firestore snapshots land: ids, colours and
  *      photo bytes are neutralised and the entry itself is kept. Plus a static check that every
  *      listener actually calls them.
+ *   4. tools/xss_leaf_check.js, run from here: no field list at all, every leaf hostile.
  *
  *   node tools/xss_sink_check.js http://localhost:9745
  *
@@ -310,7 +311,9 @@ function pageSetup(tags) {
     { label: 'the family list', open: "var d=document.getElementById('xssProbe')||document.body.appendChild(Object.assign(document.createElement('div'),{id:'xssProbe'})); d.innerHTML=window.cubbyFamilyPortrait();", must: [] },
     { label: 'the timeline, every entry opened', open: "go('log'); state.events.forEach(function(e){ try{ openEdit(e.id); }catch(x){} });", must: [] },
     { label: 'the medicine entry, opened', open: "openEdit(state.events.find(function(e){return e.type==='medicine';}).id);", must: [], val: { '#eDose': P('dose') } },
-    { label: 'the bottle entry, opened', open: "openEdit(state.events.find(function(e){return e.method==='bottle';}).id);", must: ['PWN-evunit'] },   // #eAmt is type=number: the browser empties a non-number, which is fine
+    // A feed's unit is ml or oz: on the load path the ingest puts a hostile one back to ml, so only
+    // the sink phase (past the ingest) still has it to show, escaped.
+    { label: 'the bottle entry, opened', open: "openEdit(state.events.find(function(e){return e.method==='bottle';}).id);", must: [], sinkMust: ['PWN-evunit'] },   // #eAmt is type=number: the browser empties a non-number, which is fine
     { label: 'the nappy entry, opened', open: "openEdit('e2');", must: [] },
     { label: 'a medicine, managed', open: 'openMedManage(state.meds[0].id);', must: [], val: { '#mName': P('medname') } },
     { label: 'the baby profile (care team, questions)', open: 'openBabyProfile();', must: [] },
@@ -330,7 +333,7 @@ function pageSetup(tags) {
       const r = await visit(s.label, s.open);
       ok(phase + ': ' + s.label + ' opens', !r.err, r.err);
       ok(phase + ': ' + s.label + ': nothing injected, nothing ran', r.found.length === 0, r.found.slice(0, 8).join('\n         '));
-      s.must.forEach((t) => ok(phase + ': ' + s.label + ' shows the hostile ' + t.slice(4) + ' as text', r.text.indexOf(t) >= 0, r.text.slice(0, 200)));
+      s.must.concat(phase === 'sink' ? (s.sinkMust || []) : []).forEach((t) => ok(phase + ': ' + s.label + ' shows the hostile ' + t.slice(4) + ' as text', r.text.indexOf(t) >= 0, r.text.slice(0, 200)));
       // An input carries the value as written, byte for byte: escaped on the way in, not mangled.
       for (const [sel, want] of Object.entries(s.val || {})) {
         const got = await page.evaluate((q) => { const el = document.querySelector(q); return el ? el.value : null; }, sel);
@@ -421,6 +424,16 @@ function pageSetup(tags) {
     r.nt = { id: nt.id, keptText: nt.text === p };
     var blob = { babies: [{ id: p, name: p, color: color }], photos: [{ id: p, photoId: p, babyId: p, caption: p }], meds: [{ id: p, babyId: p, name: p }] };
     I.blob(blob);
+    // Round 2: numbers stay numbers, enums stay on their list, free text stays exactly as typed.
+    var nb = { babies: [{ id: 'b1', place: "1);x();//", allergies: [p], growthSource: p, sex: p, birth: '1700000000000', gestWeeks: p }],
+      settings: { unit: p, wUnit: 'lb', hUnit: p, hcUnit: p, tempUnit: 'F' }, journey: { rel: { b1: [{ id: 'r1', at: "1);x();//", label: p }] } } };
+    I.blob(nb);
+    var np = I.blob({ stage: 'expecting', glucoseUnit: p, appts: [{ id: 'a1', sfh: '30', efw: p, week: ' 31 ' }], kicks: [{ id: 'k', count: p }], glucose: [{ id: 'g', val: '5.4', unit: p }] });
+    var ne = I.event({ type: 'growth', time: '1700000000000', weight: p, wUnit: p, hUnit: 'in', note: p }, 'e1');
+    r.norm = { place: nb.babies[0].place, allergy: nb.babies[0].allergies[0] === p, gs: nb.babies[0].growthSource, sex: nb.babies[0].sex, birth: nb.babies[0].birth, gw: nb.babies[0].gestWeeks,
+      set: nb.settings, relAt: nb.journey.rel.b1[0].at, relLabel: nb.journey.rel.b1[0].label === p,
+      gu: np.glucoseUnit, sfh: np.appts[0].sfh, efw: np.appts[0].efw, week: np.appts[0].week, count: np.kicks[0].count, val: np.glucose[0].val, gunit: np.glucose[0].unit,
+      evTime: ne.time, evW: ne.weight, evWU: ne.wUnit, evHU: ne.hUnit, evNote: ne.note === p };
     r.blob = { babyId: blob.babies[0].id, babyName: blob.babies[0].name === p, color: blob.babies[0].color, photoId: blob.photos[0].photoId, caption: blob.photos[0].caption === p, medId: blob.meds[0].id, medBaby: blob.meds[0].babyId, linked: blob.meds[0].babyId === blob.babies[0].id };
     return r;
   }, P('x'), COLOR, SRC, PNG);
@@ -445,6 +458,12 @@ function pageSetup(tags) {
     ok('the blob: baby keeps its name, its id and colour are made safe', SAFE.test(ing.blob.babyId) && ing.blob.babyName && !/PWN|"/.test(ing.blob.color || ''), ing.blob);
     ok('the blob: a photo keeps its caption, its photoId is made safe', SAFE.test(ing.blob.photoId) && ing.blob.caption, ing.blob);
     ok('the blob: a medicine still points at its baby', ing.blob.linked && SAFE.test(ing.blob.medId), ing.blob);
+    const n = ing.norm;
+    ok('free text stays exactly as typed: a birth place, an allergy, a relationship label, an entry note', n.place === "1);x();//" && n.allergy && n.relLabel && n.evNote, n);
+    ok('a number written as a string becomes that number (birth, a visit SFH, a week with spaces, a glucose reading, an entry time)', n.birth === 1700000000000 && n.sfh === 30 && n.week === 31 && n.val === 5.4 && n.evTime === 1700000000000, n);
+    ok('anything else in a number field is dropped (gestWeeks, rel.at, EFW, a kick count, a weight)', [n.gw, n.relAt, n.efw, n.count, n.evW].every((v) => v === undefined), n);
+    ok('a unit off the list falls back to its default, a real one is kept', n.set.unit === 'ml' && n.set.wUnit === 'lb' && n.set.hUnit === 'cm' && !('hcUnit' in n.set) && n.set.tempUnit === 'F' && n.evWU === 'kg' && n.evHU === 'in', n);
+    ok('growthSource, sex and the glucose units off their lists are dropped or reset', n.gs === undefined && n.sex === undefined && n.gu === undefined && n.gunit === undefined, n);
   }
   const sf = fs.readFileSync(path.join(ROOT, 'app/store-firebase.js'), 'utf8');
   ok('store-firebase: no listener sets an id straight from a doc', !/\.id\s*=\s*(ch\.)?doc\.id\b/.test(sf), (sf.match(/.*\.id\s*=\s*(ch\.)?doc\.id\b.*/g) || []).join('\n         '));
@@ -461,6 +480,17 @@ function pageSetup(tags) {
   ok('no page errors along the way', own.length === 0, own.slice(0, 5));
 
   await browser.close();
+
+  /* The fields above are the ones someone thought of, and round 1 passed them with six holes left in
+     fields nobody listed. So this gate also runs its companion, which lists none: every string and
+     number leaf of a realistic household, hostile one class at a time, through the real ingest,
+     on every screen and sheet (tools/xss_leaf_check.js). */
+  console.log('\n4. the companion: every leaf, hostile, through the real ingest');
+  const leaf = require('child_process').spawnSync(process.execPath, [path.join(__dirname, 'xss_leaf_check.js'), BASE], { encoding: 'utf8', timeout: 1200000, maxBuffer: 64 * 1024 * 1024 });
+  process.stdout.write((leaf.stdout || '').replace(/^/gm, '  | '));
+  if (leaf.stderr) process.stdout.write(leaf.stderr.replace(/^/gm, '  ! '));
+  ok('tools/xss_leaf_check.js passes', leaf.status === 0 && /XSS-LEAF: PASS/.test(leaf.stdout || ''), 'exit ' + leaf.status);
+
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   console.log('XSS-SINK: ' + (fail ? 'FAIL' : 'PASS'));
   process.exit(fail ? 1 : 0);
