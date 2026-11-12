@@ -133,6 +133,9 @@ function linkJoinBatch(db, hid, uid, token, role, mutate, linkPatch) {
     await check('the sole owner\'s deletion flag (now + 30 days) still lands',
       assertSucceeds(as('S').doc('households/HS').update({ 'members.S': del(), 'memberInfo.S': del(),
         'formerMemberInfo.S': { name: '', relationship: '', avatar: null }, deleteAfter: Date.now() + 30 * DAY, deletionRequestedBy: 'S' })));
+    await check('a new family is still created (the real client shape)',
+      assertSucceeds(as('NEWU', 'newu@x.com').doc('households/HNEW').set({ ownerId: 'NEWU', members: { NEWU: 'owner' },
+        memberInfo: { NEWU: { name: 'Newt', photoURL: '', role: 'owner', relationship: '' } }, app: cleanApp(), createdAt: ts() })));
     await env.cleanup();
     console.log('\n' + pass + ' passed, ' + fail + ' failed');
     console.log(fail ? 'HOUSEHOLD-GUARD (old rules): FAIL' : 'HOUSEHOLD-GUARD (old rules): PASS');
@@ -172,6 +175,30 @@ function linkJoinBatch(db, hid, uid, token, role, mutate, linkPatch) {
   await checkOn(hSeed, 'rewrites a former member tombstone', () => assertFails(C.doc('households/H').update({ 'formerMemberInfo.X.name': 'someone else' })));
   await checkOn(hSeed, 'rewrites joinToken', () => assertFails(C.doc('households/H').update({ joinToken: 'tokEvil' })));
   await checkOn(hSeed, 'adds a top-level key nobody writes', () => assertFails(C.doc('households/H').update({ foo: 1 })));
+
+  /* A member already in the family going through a JOIN branch. Nobody legitimately rejoins a
+     household they are in (readInviteLink and the existing-user prompt both skip your own
+     household), so each of these is a caregiver borrowing a newcomer's door: to spend the owner's
+     link for someone else, to replace her own circle entry, or to come out of it as owner. */
+  const joinAsMemberSeed = (inviteRole) => seed(async (db) => {
+    await db.doc('households/H').set(household({ pendingInvites: { 'pend@x.com': { name: 'Pen', role: 'caregiver', at: 1 }, 'c@x.com': { name: 'Carl', role: inviteRole || 'owner', at: 1 } } }));
+    await db.doc('inviteLinks/tokPend').set({ householdId: 'H', role: 'caregiver', usedBy: null, expiresAt: inHours(20), invitedBy: 'O' });
+    await db.doc('inviteLinks/tokOwner').set({ householdId: 'H', role: 'owner', usedBy: null, expiresAt: inHours(20), invitedBy: 'O' });
+    await db.doc('invites/c@x.com').set({ householdId: 'H', role: inviteRole || 'owner', invitedBy: 'O', invitedByName: 'Olive' });
+  });
+  const keepPending = (u) => { delete u['pendingLinks.tokPend']; };
+  await checkOn(() => joinAsMemberSeed(), 'link-join branch: spends the owner\'s live link and deletes its pending row',
+    () => assertFails(linkJoinBatch(C, 'H', 'C', 'tokPend', 'caregiver')));
+  await checkOn(() => joinAsMemberSeed(), 'link-join branch: replaces her own circle entry wholesale',
+    () => assertFails(linkJoinBatch(C, 'H', 'C', 'tokPend', 'caregiver', (u) => { keepPending(u); u['memberInfo.C'] = { role: 'caregiver', name: '' }; })));
+  await checkOn(() => joinAsMemberSeed(), 'link-join branch: promotes herself to owner with an owner-role link',
+    () => assertFails(linkJoinBatch(C, 'H', 'C', 'tokOwner', 'owner')));
+  await checkOn(() => joinAsMemberSeed('owner'), 'email-join branch: promotes herself to owner with a co-owner invite',
+    () => assertFails(emailJoinBatch(C, 'H', 'C', 'c@x.com', 'owner')));
+  await checkOn(() => joinAsMemberSeed('caregiver'), 'email-join branch: replaces her own circle entry wholesale',
+    () => assertFails(emailJoinBatch(C, 'H', 'C', 'c@x.com', 'caregiver', (u) => { u['memberInfo.C'] = { role: 'caregiver', name: '' }; })));
+  await checkOn(() => joinAsMemberSeed('caregiver'), 'email-join branch: clears a row from the owner\'s pending list, staying caregiver',
+    () => assertFails(emailJoinBatch(C, 'H', 'C', 'c@x.com', 'caregiver')));
 
   /* ---------------------------------------------------------------------------------------------
      2. The owner. Unchanged except deletion: only the last one out may flag the household, naming
@@ -296,6 +323,21 @@ function linkJoinBatch(db, hid, uid, token, role, mutate, linkPatch) {
   await checkOn(() => linkSeed(), 'join batch that marks the link consumed but claims it for someone else', () => assertFails(linkJoinBatch(J, 'HK', 'J', 'tokA', null, null, { usedBy: 'Z', consumed: true })));
   const flaggedLinkSeed = () => linkSeed({ deleteAfter: Date.now() + 30 * DAY, deletionRequestedBy: 'O', members: {}, memberInfo: {} });
   await checkOn(flaggedLinkSeed, 'join a household already flagged for deletion', () => assertFails(linkJoinBatch(J, 'HK', 'J', 'tokA')));
+
+  /* ---------------------------------------------------------------------------------------------
+     5. Creating a household. A new family is never born flagged: the flag is set only by the last
+        one out (section 2). A household made with deleteAfter = 1 is not a wipe any more (the cron
+        refuses a family with people in it), but over 50 of them would hold every slot of the cron's
+        page and push real account deletions past the 30 days the privacy page promises. */
+  console.log('\n5. household create');
+  const NEW = as('NEWU', 'newu@x.com');
+  // resolveHousehold's create in app/store-firebase.js, field for field.
+  const realCreate = (extra) => Object.assign({ ownerId: 'NEWU', members: { NEWU: 'owner' },
+    memberInfo: { NEWU: { name: 'Newt', photoURL: '', role: 'owner', relationship: '' } }, app: cleanApp(), createdAt: ts() }, extra || {});
+  await check('a new family, the real client shape (must SUCCEED)', assertSucceeds(NEW.doc('households/HNEW').set(realCreate())));
+  await check('create carrying deleteAfter = 1 (must FAIL)', assertFails(NEW.doc('households/HNEW2').set(realCreate({ deleteAfter: 1, deletionRequestedBy: 'NEWU' }))));
+  await check('create carrying only deleteAfter, a month out (must FAIL)', assertFails(NEW.doc('households/HNEW3').set(realCreate({ deleteAfter: Date.now() + 30 * DAY }))));
+  await check('create carrying only deletionRequestedBy (must FAIL)', assertFails(NEW.doc('households/HNEW4').set(realCreate({ deletionRequestedBy: 'NEWU' }))));
 
   await env.cleanup();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');

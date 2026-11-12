@@ -233,6 +233,13 @@ service cloud.firestore {
         return request.auth.uid in request.resource.data.get('memberInfo', {})
           && request.resource.data.memberInfo[request.auth.uid].get('role', null) == request.resource.data.members[request.auth.uid];
       }
+      /* The join branches are doors for people NOT in the family yet. Nobody legitimately rejoins a
+         household they are in (the client skips your own household for links and invites alike), so
+         a member coming through one is borrowing a newcomer's door: to spend the owner's link and
+         delete its pending row, to replace their own circle entry, or to come out of it as owner. */
+      function notYetMember() {
+        return !(request.auth.uid in resource.data.get('members', {}));
+      }
       // A joiner may clear THEIR OWN row from one of the owner's pending lists, and nothing else in it.
       function onlyClearsOwnPending(field, key) {
         return !changedKeys().hasAny([field])
@@ -269,6 +276,10 @@ service cloud.firestore {
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.members[request.auth.uid] == 'owner'
         && request.resource.data.get('pro', null) == null
+        // Never born flagged for deletion: only the last one out sets the flag (deletionScheduledProperly).
+        // Flagged creates would otherwise fill the purge cron's 50-a-tick page and starve real deletions.
+        && !('deleteAfter' in request.resource.data)
+        && !('deletionRequestedBy' in request.resource.data)
         // Maternal-private data must never be seeded into the circle-shared blob, at CREATE too
         // (appBlobClean() only runs on update, so the invariant is enforced here for a fresh doc).
         && ( !('app' in request.resource.data)
@@ -292,6 +303,7 @@ service cloud.firestore {
            for anyone later removed. get() reads the invite as it was before the batch, which is
            what still proves it was addressed to this household with this role. */
         || ( invitedHere()
+             && notYetMember()
              && !('deleteAfter' in resource.data)
              && changedKeys().hasOnly(['members', 'memberInfo', 'pendingInvites'])
              && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid])
@@ -311,6 +323,7 @@ service cloud.firestore {
            set, never consumed) cannot be consumed now, because the claim rule only lets an
            UNCLAIMED link be claimed. The expiry is checked again here as a second lock. */
         || ( request.auth != null
+             && notYetMember()
              && !('deleteAfter' in resource.data)
              && changedKeys().hasOnly(['members', 'memberInfo', 'joinToken', 'pendingLinks'])
              && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid])
