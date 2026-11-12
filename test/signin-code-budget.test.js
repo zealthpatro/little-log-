@@ -13,6 +13,13 @@
  * refused write), applies updateMask as a merge where masked-but-absent fields are deleted, and adds
  * network latency so concurrent requests really do interleave. "Evaluated" is counted at the HMAC
  * compare itself, not inferred from a status code: every wrong guess answers 400 either way.
+ * It accepts writes both as documents:commit (the shape the worker sends now) and as per-document
+ * PATCH/DELETE (the shape it sent before), so it still grades the older worker honestly. Which write
+ * shapes REAL Firestore accepts is not something a stub can say: test/signin-code-emulator.test.js
+ * asks the emulator.
+ * DETERMINISTIC. The latency comes from a fixed-seed generator, and the double-tap case does not
+ * hope for the dangerous interleaving, it forces it: the first burn is held until the second spend
+ * has landed. Round 1 of this file left both to Math.random and went red in 2 runs of 31.
  *
  *   node test/signin-code-budget.test.js
  */
@@ -39,7 +46,7 @@ const ENV = { FIREBASE_SERVICE_ACCOUNT: JSON.stringify(SA), RESEND_API_KEY: 're_
 // ---- the world outside our code -----------------------------------------------------------------
 const world = { docs: new Map(), users: new Map(), mail: [], clock: 0, spends: 0, refused: 0 };
 const cacheStore = new Map();
-function resetWorld() { world.docs.clear(); world.users.clear(); world.mail.length = 0; world.spends = 0; world.refused = 0; cacheStore.clear(); }
+function resetWorld() { world.docs.clear(); world.users.clear(); world.mail.length = 0; world.spends = 0; world.refused = 0; world.holdBurns = 0; world.invalidSpend = false; cacheStore.clear(); }
 globalThis.caches = { default: {
   async match(req) { const v = cacheStore.get(String(req.url)); return v === undefined ? undefined : new Response(v); },
   async put(req, res) { cacheStore.set(String(req.url), await res.text()); },
@@ -55,7 +62,14 @@ subtle.verify = function (alg) {
 };
 
 const J = (o, s) => new Response(JSON.stringify(o), { status: s || 200, headers: { 'content-type': 'application/json' } });
-const latency = () => new Promise((r) => setTimeout(r, Math.floor(Math.random() * 4)));
+let seed = 0x5eed;   // mulberry32: the same interleavings every run
+function rand() { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }
+const latency = () => new Promise((r) => setTimeout(r, Math.floor(rand() * 4)));
+/* world.holdBurns: a delete waits until this many spends have landed (with a bound, so a worker that
+   never makes a second spend cannot hang the test). */
+async function heldBurn() {
+  for (let i = 0; world.holdBurns && world.spends < world.holdBurns && i < 500; i++) await new Promise((r) => setTimeout(r, 1));
+}
 function stamp() { world.clock++; return new Date(Date.UTC(2026, 10, 12, 3, 0, 0) + world.clock).toISOString().replace('Z', String(world.clock % 1000).padStart(3, '0') + 'Z'); }
 
 globalThis.fetch = async function (input, init) {
@@ -73,6 +87,36 @@ globalThis.fetch = async function (input, init) {
   }
   if (/\/accounts$/.test(url) && method === 'POST') {
     const b = JSON.parse(body || '{}'); const uid = 'uid_' + (world.users.size + 1); world.users.set(b.email, uid); return J({ localId: uid });
+  }
+
+  /* documents:commit, one write per call, preconditions in the JSON body. Same semantics as below. */
+  if (/\/documents:commit$/.test(url) && method === 'POST') {
+    await latency();
+    const wr = (JSON.parse(body || '{}').writes || [])[0] || {};
+    const name = wr.update ? wr.update.name : wr.delete;
+    const mm = /\/documents\/signinCodes\/([^/]+)$/.exec(String(name || ''));
+    if (!mm) return J({ error: { code: 400, status: 'INVALID_ARGUMENT', message: 'bad document name' } }, 400);
+    const id = mm[1];
+    if (wr.delete) await heldBurn();
+    const cur = world.docs.get(id);
+    const pre = wr.currentDocument || {};
+    const refuse = () => { world.refused++; return J({ error: { code: 400, status: 'FAILED_PRECONDITION', message: 'precondition failed' } }, 400); };
+    if (pre.updateTime !== undefined && (!cur || cur.updateTime !== pre.updateTime)) return refuse();
+    if (pre.exists === false && cur) { world.refused++; return J({ error: { code: 409, status: 'ALREADY_EXISTS' } }, 409); }
+    if (pre.exists === true && !cur) return J({ error: { code: 404, status: 'NOT_FOUND' } }, 404);
+    if (wr.delete) { world.docs.delete(id); const t = stamp(); return J({ writeResults: [{}], commitTime: t }); }
+    const incoming = wr.update.fields || {};
+    const mask = (wr.updateMask && wr.updateMask.fieldPaths) || [];
+    let fields;
+    if (mask.length) {
+      fields = Object.assign({}, cur ? cur.fields : {});
+      for (const k of mask) { if (k in incoming) fields[k] = incoming[k]; else delete fields[k]; }
+    } else fields = incoming;
+    if (mask.indexOf('tries') > -1 && world.invalidSpend) return J({ error: { code: 400, status: 'INVALID_ARGUMENT', message: 'bad write' } }, 400);
+    if (mask.indexOf('tries') > -1) world.spends++;
+    const doc = { name: 'documents/signinCodes/' + id, fields, updateTime: stamp() };
+    world.docs.set(id, doc);
+    return J({ writeResults: [{ updateTime: doc.updateTime }], commitTime: doc.updateTime });
   }
 
   const m = url.match(/\/documents\/signinCodes\/([^?]+)(?:\?(.*))?$/);
@@ -103,7 +147,7 @@ globalThis.fetch = async function (input, init) {
       world.docs.set(id, doc);
       return J(doc);
     }
-    if (method === 'DELETE') { world.docs.delete(id); return J({}); }
+    if (method === 'DELETE') { await heldBurn(); world.docs.delete(id); return J({}); }
     return cur ? J(cur) : J({ error: { status: 'NOT_FOUND' } }, 404);
   }
 
@@ -161,8 +205,10 @@ const liveMacs = () => [...world.docs.values()].filter((d) => d.fields && d.fiel
     for (let i = 0; i < 2; i++) await verify(worker, wrongFor(c, i));
     ok('ten guesses compared across three codes', evaluated === 10, evaluated);
     const right = await verify(worker, c);
-    ok('the right code, on the 11th guess in an hour, is refused like a wrong one', right.status === 400, right.status);
-    ok('with exactly the wrong-code answer', right.status === 400 && (await right.json()).error === 'bad_code');
+    ok('the right code, on the 11th guess in an hour, does not sign in', right.status !== 200, right.status);
+    /* Not "did not match": she may have typed it right. The per-IP limiter's own 429 answer, which
+       the client already turns into "Could not finish signing in just now. Mind trying again?" */
+    ok('it gets the polite try-later answer the limiter already gives', right.status === 429 && (await right.json()).error === 'rate_limited', right.status);
     ok('and the 11th guess was never compared', evaluated === 10, evaluated);
     const mailed = world.mail.length;
     const fourth = await issue(worker);
@@ -214,10 +260,29 @@ const liveMacs = () => [...world.docs.values()].filter((d) => d.fields && d.fiel
     await issue(worker);
     ok('signing in again the same hour works: success clears the slate', (await verify(worker, lastCode())).status === 200);
 
+    /* The interleaving that signed her in twice, forced every time: both taps pay and match, and the
+       first one's burn only lands after the second one's spend. */
     resetWorld();
     await issue(worker); const dbl = lastCode();
+    world.holdBurns = 2;
     const both = await Promise.all([verify(worker, dbl), verify(worker, dbl)]);
+    ok('the race really happened: both taps spent a try', world.spends === 2, world.spends);
     ok('a double-tapped submit still signs her in once', both.filter((r) => r.status === 200).length === 1, both.map((r) => r.status));
+    ok('and the other tap is a plain bad_code, not an error', both.filter((r) => r.status === 400).length === 1, both.map((r) => r.status));
+  }
+
+  console.log('\n5b. a write Firestore rejects as malformed is a failure, never a wrong code');
+  {
+    /* A refused precondition means "somebody wrote first, re-read". A malformed write means our write
+       shape is wrong, and treating that as a race is how round 1 would have answered every correct
+       code with "did not match" in silence. */
+    resetWorld();
+    await issue(worker); const c = lastCode();
+    world.invalidSpend = true;
+    evaluated = 0;
+    const r = await verify(worker, c);
+    ok('the right code against a write Firestore calls malformed answers 500, not bad_code', r.status === 500, r.status);
+    ok('and nothing was compared', evaluated === 0, evaluated);
   }
 
   console.log('\n6. per-IP limits key an IPv6 client on its /64');
@@ -256,6 +321,35 @@ const liveMacs = () => [...world.docs.values()].filter((d) => d.fields && d.fiel
     const mapped = await keyFor('POST', '/api/signin-code', { email: EMAIL }, '::ffff:203.0.113.7');
     ok('an IPv4-mapped address counts as that IPv4 address', mapped.key === v4.key, [mapped.key, v4.key]);
     ok('no limiter reads CF-Connecting-IP on its own any more', (src.match(/headers\.get\(['"]cf-connecting-ip['"]\)/gi) || []).length === 1);
+  }
+
+  console.log('\n7. clientIpKey expands compressed zeros right, and can bucket at /48');
+  {
+    const mod = await import(pathToFileURL(path.join(tmpdir, 'worker.mjs')).href);
+    const key = (mod.__signin && mod.__signin.clientIpKey) || null;
+    ok('clientIpKey is exported for this test', typeof key === 'function');
+    const k = (ip, g) => { const r = new Request(HOST, { headers: ip ? { 'CF-Connecting-IP': ip } : {} }); return key ? (g === undefined ? key(r) : key(r, g)) : null; };
+    const cases = [
+      ['2001:0:0:5::1', undefined, '2001:0:0:5::/64'],
+      ['2001::5:a:b:c:d', undefined, '2001:0:0:5::/64'],
+      ['2001:0:0:5:ffff:1:2:3', undefined, '2001:0:0:5::/64'],
+      ['2001:db8::', undefined, '2001:db8:0:0::/64'],
+      ['::1', undefined, '0:0:0:0::/64'],
+      ['2001:db8:1:2:aaaa::1', 4, '2001:db8:1:2::/64'],
+      ['2001:0:0:5::1', 3, '2001:0:0::/48'],
+      ['2001::5:a:b:c:d', 3, '2001:0:0::/48'],
+      ['2001:db8:1:2:aaaa::1', 3, '2001:db8:1::/48'],
+      ['2001:DB8:0001:ffff::9', 3, '2001:db8:1::/48'],
+      ['2001:db8::1', 3, '2001:db8:0::/48'],
+      ['203.0.113.7', 3, '203.0.113.7'],
+      ['::ffff:203.0.113.7', 3, '203.0.113.7'],
+      ['1:2:3:4::5:6:7:8', undefined, '1:2:3:4::5:6:7:8'],   // '::' standing for no group is not an address
+      ['', undefined, 'unknown'],
+    ];
+    for (const [ip, g, want] of cases) ok('clientIpKey(' + (ip || "''") + (g === undefined ? '' : ', ' + g) + ') is ' + want, k(ip, g) === want, k(ip, g));
+    ok('2001:0:0:5::1 and 2001::5:a:b:c:d share a /64', k('2001:0:0:5::1') === k('2001::5:a:b:c:d'));
+    ok('but 2001:0:0:6::1 is a different /64', k('2001:0:0:6::1') !== k('2001:0:0:5::1'), k('2001:0:0:6::1'));
+    ok('and at /48 it is the same bucket again', k('2001:0:0:6::1', 3) === k('2001:0:0:5::1', 3), k('2001:0:0:6::1', 3));
   }
 
   try { fs.rmSync(tmpdir, { recursive: true, force: true }); } catch (e) {}

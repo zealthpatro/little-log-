@@ -119,13 +119,16 @@ function cooldownKeyFor(email) {
 
 /* The client address every per-IP limiter keys on. IPv6 is cut to its /64: one subscriber is handed
    a whole /64, so the full address gave a single connection 2^64 separate buckets. A household shares
-   one /64 anyway, so a family's limit is unchanged. IPv4 (and IPv4-mapped IPv6) stays per address. */
-function clientIpKey(request) {
+   one /64 anyway, so a family's limit is unchanged. IPv4 (and IPv4-mapped IPv6) stays per address.
+   v6Groups is how many 16-bit groups to keep (4 = /64, 3 = /48), so a counter that wants a coarser
+   bucket shares this one expansion instead of writing its own. */
+function clientIpKey(request, v6Groups = 4) {
   const ip = String(request.headers.get('CF-Connecting-IP') || '').trim().toLowerCase().split('%')[0];
   if (!ip) return 'unknown';
   if (ip.indexOf(':') < 0) return ip;
   const mapped = ip.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
   if (mapped) return mapped[1];
+  const keep = Math.min(8, Math.max(1, Math.floor(Number(v6Groups)) || 4));
   let s = ip;
   const v4 = s.match(/^(.*:)(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);   // embedded IPv4 tail
   if (v4) s = v4[1] + ((+v4[2] << 8) | +v4[3]).toString(16) + ':' + ((+v4[4] << 8) | +v4[5]).toString(16);
@@ -133,9 +136,10 @@ function clientIpKey(request) {
   if (halves.length > 2) return ip;
   const head = halves[0] ? halves[0].split(':') : [];
   const tail = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
-  const groups = halves.length === 2 ? head.concat(new Array(Math.max(0, 8 - head.length - tail.length)).fill('0'), tail) : head;
+  if (halves.length === 2 && head.length + tail.length > 7) return ip;      // '::' must stand for at least one group
+  const groups = halves.length === 2 ? head.concat(new Array(8 - head.length - tail.length).fill('0'), tail) : head;
   if (groups.length !== 8 || !groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return ip;   // odd input: key as given
-  return groups.slice(0, 4).map((g) => parseInt(g, 16).toString(16)).join(':') + '::/64';
+  return groups.slice(0, keep).map((g) => parseInt(g, 16).toString(16)).join(':') + '::/' + (keep * 16);
 }
 
 async function sendSigninLink(request, env) {
@@ -339,8 +343,28 @@ function signinRecent(field, now) {
 function signinTimes(list) {
   return { arrayValue: list.length ? { values: list.map((t) => ({ integerValue: String(t) })) } : {} };
 }
-// A refused precondition: somebody else wrote this document since we read it.
-function signinRaced(status) { return status === 400 || status === 404 || status === 409 || status === 412; }
+/* Every write to a signinCodes document goes through documents:commit, so its precondition travels
+   in the JSON body, which is the form the API documents. The query-string form used before
+   (?currentDocument.updateTime=<RFC3339>) is read by the Firestore emulator as base version 0, which
+   refused every spend and every reissue: each correct code answered bad_code (round-1 review).
+   Returns {ok, updateTime} on success. raced means the precondition itself was refused (somebody
+   wrote first, so re-read); anything else, a malformed write included, is a real failure and must
+   never be mistaken for a race, or a broken write shape reads as "wrong code" again. */
+function signinDocName(sa, docId) { return 'projects/' + sa.project_id + '/databases/(default)/documents/signinCodes/' + docId; }
+async function signinCommit(sa, token, write) {
+  const r = await fetch('https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents:commit', {
+    method: 'POST',
+    headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+    body: JSON.stringify({ writes: [write] })
+  });
+  let j = null; try { j = await r.json(); } catch (e) {}
+  if (r.ok) {
+    const res = (j && j.writeResults && j.writeResults[0]) || {};
+    return { ok: true, updateTime: String(res.updateTime || (j && j.commitTime) || '') };
+  }
+  const st = String((j && j.error && j.error.status) || '');
+  return { ok: false, raced: /^(FAILED_PRECONDITION|ALREADY_EXISTS|NOT_FOUND|ABORTED)$/.test(st), status: r.status };
+}
 
 async function signinCodeKey(sa) {
   const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(sa.private_key || '')),
@@ -373,14 +397,16 @@ function newSigninCode() {
 
 /* Mint ONE live code for an address and store only its MAC. Shared by both senders, so the invariants
    that make a code safe cannot drift apart between them: the address is inside the MAC, the plaintext
-   is never stored, and the PATCH carries NO updateMask so it REPLACES the document rather than merging
+   is never stored, and the write carries NO updateMask so it REPLACES the document rather than merging
    into it. That replace is the single-live-code rule: issuing a new code must kill the previous one,
    never leave two working. Returns '' if the store failed, so each caller can decide whether that is
    fatal (the code endpoint) or merely means a link-only email (the link endpoint).
    The replace CARRIES the per-address window (spentAt, issuedAt) across, so a reissue gets a new code
-   but never a new guess budget. Past either ceiling it mints nothing and returns '', which already
-   degrades to a link-only email that still signs a real parent in. The write is conditional on the
-   version just read, so a verify racing it cannot have its spend erased. */
+   but never a new guess budget. Past either ceiling it mints nothing and returns null (falsy like '',
+   so every caller degrades the same way, to a link-only email that still signs a real parent in; the
+   code endpoint just names it rate_limited instead of store_failed, so the logs can tell them apart).
+   The write is conditional on the version just read, so a verify racing it cannot have its spend
+   erased. */
 async function issueSigninCode(sa, token, email) {
   try {
     const base = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents';
@@ -394,25 +420,24 @@ async function issueSigninCode(sa, token, email) {
       const pf = (prev && prev.fields) || {};
       const now = Date.now();
       const spentAt = signinRecent(pf.spentAt, now), issuedAt = signinRecent(pf.issuedAt, now);
-      if (spentAt.length >= SIGNIN_GUESSES_PER_WINDOW || issuedAt.length >= SIGNIN_ISSUES_PER_WINDOW) return '';
+      if (spentAt.length >= SIGNIN_GUESSES_PER_WINDOW || issuedAt.length >= SIGNIN_ISSUES_PER_WINDOW) return null;   // capped
       issuedAt.push(now);
       const code = newSigninCode();
       const mac = _b64urlFromBytes(await signinCodeMac(sa, email, code));
-      const pre = prev ? 'currentDocument.updateTime=' + encodeURIComponent(prev.updateTime) : 'currentDocument.exists=false';
-      const put = await fetch(path + '?' + pre, {
-        method: 'PATCH',
-        headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-        body: JSON.stringify({ fields: {
+      /* No plaintext address in the document. The id is already an HMAC of it and the address is
+         inside the mac, so verify never needs it back; storing it only kept an email at rest. */
+      const put = await signinCommit(sa, token, {
+        update: { name: signinDocName(sa, docId), fields: {
           mac: { stringValue: mac },
-          email: { stringValue: email },
           exp: { integerValue: String(now + SIGNIN_CODE_TTL_MS) },
           tries: { integerValue: String(SIGNIN_CODE_TRIES) },
           spentAt: signinTimes(spentAt),
           issuedAt: signinTimes(issuedAt)
-        } })
+        } },
+        currentDocument: prev ? { updateTime: prev.updateTime } : { exists: false }
       });
       if (put.ok) return code;
-      if (!signinRaced(put.status)) return '';
+      if (!put.raced) return '';
     }
     return '';
   } catch (e) { return ''; }
@@ -432,7 +457,9 @@ async function issueSigninCode(sa, token, email) {
    quietly eating the thing it is meant to protect. Minting against Firestore directly costs no mail,
    no Resend quota, and does not trip the 60s per-address cooldown.
 
-   What it therefore does NOT cover: routing, signinGuard, and the Resend send. tools/signin_live_check.js
+   It does SPEND, through spendSigninCode, the function a parent's verify runs: a mint alone once stayed
+   green on a Firestore that refused every spend. What it therefore does NOT cover: routing,
+   signinGuard, the account lookup and token mint after a match, and the Resend send. tools/signin_live_check.js
    walks the whole public path and is the one to run after a deploy. Two tiers on purpose, because
    detection wants to be cheap and frequent while verification can be slow and thorough.
    THE ALARM PATH HAS ALREADY TRIED TO FAIL SILENTLY ONCE. The first version of signinCanaryAlert
@@ -462,8 +489,8 @@ async function signinCanaryProbe(env) {
     try { await fetch(path, { method: 'DELETE', headers: { authorization: 'Bearer ' + token } }); } catch (e) {}
   };
 
-  const code = await issueSigninCode(sa, token, CANARY_EMAIL);
-  if (!code) {
+  const first = await issueSigninCode(sa, token, CANARY_EMAIL);
+  if (!first) {
     /* issueSigninCode swallows its reason and returns '', which is right for the caller and useless
        in an alert. Ask Firestore directly so the mail can say "403 PERMISSION_DENIED" instead of
        "it failed", because the first is actionable at 3am and the second is not. */
@@ -482,19 +509,39 @@ async function signinCanaryProbe(env) {
 
   /* Assert the ARTEFACT, never the return value. A canary that only checks "did the function say ok"
      is the same mistake that let the outage ship: the guards were tested and the feature never was. */
-  let got;
-  try { got = await fetch(path, { headers: { authorization: 'Bearer ' + token } }); }
-  catch (e) { return { ok: false, reason: 'a code was minted but reading it back threw: ' + ((e && e.message) || String(e)), sa: sa, token: token }; }
-  if (!got.ok) {
-    await remove();
-    return { ok: false, reason: 'a code was minted but no document exists to show for it, read ' + got.status, sa: sa, token: token };
-  }
-  let fields = {};
-  try { fields = ((await got.json()) || {}).fields || {}; } catch (e) {}
-  const missing = ['mac', 'email', 'exp', 'tries'].filter((k) => !fields[k]);
-  await remove();
-  if (missing.length) return { ok: false, reason: 'the document was written but is malformed, missing: ' + missing.join(', '), sa: sa, token: token };
-  return { ok: true, reason: 'code minted, document verified, document removed', sa: sa, token: token };
+  const readBack = async () => {
+    const got = await fetch(path, { headers: { authorization: 'Bearer ' + token } });
+    if (got.status === 404) return null;
+    if (!got.ok) throw new Error('read ' + got.status);
+    return ((await got.json()) || {}).fields || {};
+  };
+  const fail = async (reason) => { await remove(); return { ok: false, reason: reason, sa: sa, token: token }; };
+  let fields;
+  try { fields = await readBack(); }
+  catch (e) { return fail('a code was minted but reading it back threw: ' + ((e && e.message) || String(e))); }
+  if (!fields) return fail('a code was minted but no document exists to show for it, read 404');
+  const missing = ['mac', 'exp', 'tries'].filter((k) => !fields[k]);
+  if (missing.length) return fail('the document was written but is malformed, missing: ' + missing.join(', '));
+
+  /* Then SPEND, through the very function a parent's sign-in runs. Minting alone never touched the
+     conditional writes, so a Firestore that refused their shape left this canary green while every
+     correct code a parent typed was answered "did not match" (round-1 review, on the emulator). A
+     reissue over the live code takes the updateTime path, a wrong guess must spend exactly one try,
+     and the right code must then be accepted once and burned. Every write here is a write she makes. */
+  const code = await issueSigninCode(sa, token, CANARY_EMAIL);
+  if (!code) return fail('a second code could not replace the first: the conditional reissue was refused');
+  const miss = await spendSigninCode(sa, token, CANARY_EMAIL, String((Number(code) + 1) % 1000000).padStart(6, '0'));
+  if (miss !== 'bad_code') return fail('a wrong guess was answered ' + miss + ', not bad_code');
+  try { fields = await readBack(); }
+  catch (e) { return fail('reading the code back after a wrong guess threw: ' + ((e && e.message) || String(e))); }
+  const left = Number((fields && fields.tries && fields.tries.integerValue) || 0);
+  if (left !== SIGNIN_CODE_TRIES - 1) return fail('a wrong guess did not spend exactly one try: ' + left + ' left');
+  const hit = await spendSigninCode(sa, token, CANARY_EMAIL, code);
+  if (hit !== 'ok') return fail('the right code was answered ' + hit + ': a parent typing her code cannot sign in');
+  try { fields = await readBack(); }
+  catch (e) { return fail('reading the code back after it was used threw: ' + ((e && e.message) || String(e))); }
+  if (fields) return fail('the right code was accepted but not burned: it would work twice');
+  return { ok: true, reason: 'code minted and reissued, a miss spent one try, the right code was accepted once and burned', sa: sa, token: token };
 }
 
 /* One mail per six hours. The outage ran four days, which at the cron interval would have been 384
@@ -609,6 +656,8 @@ async function canaryStatus(env) {
   return res;
 }
 
+/* The per-IP key, exported for test/signin-code-budget.test.js only. Workers ignore named exports. */
+export const __signin = { clientIpKey };
 /* The funnel's pieces, exported for test/funnel-worker.test.js only. Workers ignore named exports. */
 export const __funnel = { recordStep: (req, env) => recordStep(req, env), runFunnelSnapshot, countAccountDeleted, maybeSendFunnelDigest, fsPlain, entryTime };
 
@@ -666,6 +715,7 @@ async function sendSigninCode(request, env) {
        scope that kept the page counter empty for two days; that one was silent, this one was not. */
     const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/identitytoolkit');
     const code = await issueSigninCode(sa, token, email);
+    if (code === null) return json({ error: 'rate_limited' }, 429);   // capped for the hour; the client falls back to a link
     if (!code) return json({ error: 'store_failed' }, 502);   // the code IS this endpoint; no code, no email
 
     /* Carry a link as well. This endpoint is asked for by the installed iOS app, where a tapped link
@@ -697,6 +747,70 @@ async function sendSigninCode(request, env) {
   }
 }
 
+/* Spend one try on the address's live code, compare, and burn it on a match. The whole of what
+   /api/signin-verify does before it touches an account, and shared with the canary so the canary
+   drives the very writes a parent's sign-in makes. Answers 'ok', 'bad_code', 'capped' (this
+   address has had its guesses for the hour) or 'failed' (Firestore refused for a reason that is
+   not a race; nothing was compared).
+
+   Spend the attempt BEFORE checking it. If the compare came first, an attacker who can abandon
+   the request mid-flight (or make it fail) would get unlimited free guesses.
+   The spend is CONDITIONAL on the version we read (currentDocument.updateTime), so fifty requests
+   that all read tries=5 cannot all spend it: one write lands and the rest are refused. A refused
+   spend re-reads and pays again, at most SIGNIN_CODE_TRIES times; each refusal means another write
+   landed, so a request that runs out of goes has watched the code run out of tries. A guess is
+   only ever compared against the version its own committed spend paid for. Nothing is deleted on
+   a miss, because the document also carries the per-address window that a reissue must not reset;
+   the last try removes the mac instead, which is what kills the code. */
+async function spendSigninCode(sa, token, email, code) {
+  const base = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents';
+  const docId = await signinCodeDocId(sa, email);
+  const path = base + '/signinCodes/' + docId;
+  const name = signinDocName(sa, docId);
+  const read = async () => {
+    const got = await fetch(path, { headers: { authorization: 'Bearer ' + token } });
+    return got.ok ? await got.json() : null;                         // null: no code outstanding
+  };
+  let doc = await read(), storedMac = '', paidAt = '';
+  for (let attempt = 0; attempt < SIGNIN_CODE_TRIES && doc; attempt++) {
+    const f = doc.fields || {};
+    const now = Date.now();
+    const exp = Number((f.exp && f.exp.integerValue) || 0);
+    const tries = Number((f.tries && f.tries.integerValue) || 0);
+    const spentAt = signinRecent(f.spentAt, now);
+    storedMac = String((f.mac && f.mac.stringValue) || '');
+    if (!storedMac || !(exp > now) || !(tries > 0) || !doc.updateTime) return 'bad_code';
+    // Out of budget for this hour: never compared, and answered the way the per-IP limiter answers.
+    if (spentAt.length >= SIGNIN_GUESSES_PER_WINDOW) return 'capped';
+    spentAt.push(now);
+    const mask = ['tries', 'spentAt'];
+    if (tries - 1 <= 0) mask.push('mac');                             // masked but absent: Firestore deletes it
+    const spend = await signinCommit(sa, token, {
+      update: { name, fields: { tries: { integerValue: String(tries - 1) }, spentAt: signinTimes(spentAt) } },
+      updateMask: { fieldPaths: mask },
+      currentDocument: { updateTime: doc.updateTime }
+    });
+    if (spend.ok) { if (!spend.updateTime) return 'failed'; paidAt = spend.updateTime; break; }   // no version, no safe burn
+    if (!spend.raced) return 'failed';
+    doc = await read();                                               // someone wrote first: re-read
+  }
+  if (!paidAt) return 'bad_code';                                     // no code, or others spent every go first
+
+  const key = await signinCodeKey(sa);
+  const ok = await crypto.subtle.verify('HMAC', key, _b64urlToBytes(storedMac),
+    new TextEncoder().encode('code:' + email + ':' + code));
+  if (!ok) return 'bad_code';
+
+  /* Single use, and only for THIS request's spend: the delete is conditional on the version our own
+     spend wrote. A double-tapped correct code has two requests that both paid and both matched; the
+     second one's spend moved the version, so the first one's delete is refused and only one of them
+     signs in. A refused delete means somebody wrote after us (another spend, or a reissue), so this
+     request does not get a session. */
+  const burn = await signinCommit(sa, token, { delete: name, currentDocument: { updateTime: paidAt } });
+  if (burn.ok) return 'ok';
+  return burn.raced ? 'bad_code' : 'failed';
+}
+
 /* POST /api/signin-verify  {email, code} -> {token} for signInWithCustomToken. */
 async function verifySigninCode(request, env) {
   const bad = await signinGuard(request, env); if (bad) return bad;
@@ -712,58 +826,10 @@ async function verifySigninCode(request, env) {
     /* BOTH scopes: reads and burns the code document (datastore), then looks up or creates the
        account and mints the custom token (identitytoolkit). */
     const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/identitytoolkit');
-    const base = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents';
-    const docId = await signinCodeDocId(sa, email);
-    const path = base + '/signinCodes/' + docId;
-
-    const read = async () => {
-      const got = await fetch(path, { headers: { authorization: 'Bearer ' + token } });
-      return got.ok ? await got.json() : null;                         // null: no code outstanding
-    };
-    const dead = async () => { try { await fetch(path, { method: 'DELETE', headers: { authorization: 'Bearer ' + token } }); } catch (e) {} };
-
-    /* Spend the attempt BEFORE checking it. If the compare came first, an attacker who can abandon
-       the request mid-flight (or make it fail) would get unlimited free guesses.
-       The spend is CONDITIONAL on the version we read (currentDocument.updateTime), so fifty requests
-       that all read tries=5 cannot all spend it: one write lands and the rest are refused. A refused
-       spend re-reads and pays again, at most SIGNIN_CODE_TRIES times; each refusal means another write
-       landed, so a request that runs out of goes has watched the code run out of tries. A guess is
-       only ever compared against the version its own committed spend paid for. Nothing is deleted on
-       a miss, because the document also carries the per-address window that a reissue must not reset;
-       the last try removes the mac instead, which is what kills the code. */
-    let doc = await read(), storedMac = '', paid = false;
-    for (let attempt = 0; attempt < SIGNIN_CODE_TRIES && doc && !paid; attempt++) {
-      const f = doc.fields || {};
-      const now = Date.now();
-      const exp = Number((f.exp && f.exp.integerValue) || 0);
-      const tries = Number((f.tries && f.tries.integerValue) || 0);
-      const storedEmail = String((f.email && f.email.stringValue) || '');
-      const spentAt = signinRecent(f.spentAt, now);
-      storedMac = String((f.mac && f.mac.stringValue) || '');
-      // Out of budget for this hour answers exactly like a wrong code, and is never compared.
-      if (!storedMac || storedEmail !== email || !(exp > now) || !(tries > 0)
-          || spentAt.length >= SIGNIN_GUESSES_PER_WINDOW || !doc.updateTime) break;
-      spentAt.push(now);
-      const last = tries - 1 <= 0;
-      const spend = await fetch(path + '?updateMask.fieldPaths=tries&updateMask.fieldPaths=spentAt'
-        + (last ? '&updateMask.fieldPaths=mac' : '')                   // masked but absent: Firestore deletes it
-        + '&currentDocument.updateTime=' + encodeURIComponent(doc.updateTime), {
-        method: 'PATCH',
-        headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-        body: JSON.stringify({ fields: { tries: { integerValue: String(tries - 1) }, spentAt: signinTimes(spentAt) } })
-      });
-      if (spend.ok) { paid = true; break; }
-      if (!signinRaced(spend.status)) return json({ error: 'failed' }, 500);
-      doc = await read();                                               // someone wrote first: re-read
-    }
-    if (!paid) return json({ error: 'bad_code' }, 400);
-
-    const key = await signinCodeKey(sa);
-    const ok = await crypto.subtle.verify('HMAC', key, _b64urlToBytes(storedMac),
-      new TextEncoder().encode('code:' + email + ':' + code));
-    if (!ok) return json({ error: 'bad_code' }, 400);
-
-    await dead();                                                       // single use, always
+    const spent = await spendSigninCode(sa, token, email, code);
+    if (spent === 'capped') return json({ error: 'rate_limited' }, 429);   // the limiter's own answer
+    if (spent === 'failed') return json({ error: 'failed' }, 500);
+    if (spent !== 'ok') return json({ error: 'bad_code' }, 400);
     const uid = await getOrCreateUidByEmail(token, sa.project_id, email);
     if (!uid) return json({ error: 'failed' }, 500);
     const custom = await mintCustomToken(sa, uid);

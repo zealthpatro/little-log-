@@ -7,6 +7,12 @@
  * so that mistake cannot repeat in this file: the fake token endpoint records the scope it was asked
  * for, and the fake Firestore refuses any write whose token was not minted with datastore. So a bare
  * getAccessToken(sa) makes these tests go RED, which is the whole point of having them.
+ *
+ * The canary also SPENDS now (a reissue, a wrong guess, then the right code), because minting alone
+ * stayed green on a Firestore that refused every spend: the round-1 guess-budget fix sent its
+ * precondition in a shape the emulator reads as base version 0, and every correct code a parent typed
+ * would have answered "did not match". Section 9 reproduces that refusal and requires a red canary.
+ * test/signin-code-emulator.test.js runs the same canary against the real emulator.
  */
 const assert = require('assert');
 const path = require('path');
@@ -25,7 +31,7 @@ const DATASTORE = 'https://www.googleapis.com/auth/datastore';
    datastore scope produce a 403 here exactly as it did in production. */
 function makeWorld(opts) {
   opts = opts || {};
-  const world = { docs: new Map(), mail: [], tokenScopes: [], deletes: 0, beat: opts.beat || null, resendStatus: opts.resendStatus || 200 };
+  const world = { docs: new Map(), clock: 0, mail: [], tokenScopes: [], deletes: 0, beat: opts.beat || null, resendStatus: opts.resendStatus || 200 };
   const scopeOf = new Map();
   let n = 0;
 
@@ -56,24 +62,51 @@ function makeWorld(opts) {
         if (!world.beat) return { ok: false, status: 404, json: async () => ({}) };
         return { ok: true, status: 200, json: async () => ({ fields: world.beat }) };
       }
-      const id = url.split('/signinCodes/')[1].split('?')[0];
       const granted = scopeOf.get(tok) || '';
       // THE REGRESSION, modelled: no datastore scope, no write. This is what returned 502 for 4 days.
       if (granted.indexOf(DATASTORE) < 0) {
-        return { ok: false, status: 403, text: async () => 'PERMISSION_DENIED: Missing or insufficient permissions.' };
+        return { ok: false, status: 403, text: async () => 'PERMISSION_DENIED: Missing or insufficient permissions.', json: async () => ({ error: { status: 'PERMISSION_DENIED' } }) };
       }
-      if (opts.writeStatus && init.method === 'PATCH') {
-        return { ok: false, status: opts.writeStatus, text: async () => 'boom' };
+      const stamp = () => new Date(Date.UTC(2026, 10, 12) + (++world.clock)).toISOString();
+      const refused = (status, code, msg) => ({ ok: false, status: code, text: async () => msg, json: async () => ({ error: { code, status, message: msg } }) });
+      /* documents:commit: how every code write goes now, preconditions in the JSON body, enforced. */
+      if (/\/documents:commit$/.test(url)) {
+        const wr = (JSON.parse(init.body).writes || [])[0] || {};
+        const id = String((wr.update && wr.update.name) || wr.delete || '').split('/signinCodes/')[1];
+        if (opts.writeStatus) return refused('PERMISSION_DENIED', opts.writeStatus, 'boom');
+        const mask = (wr.updateMask && wr.updateMask.fieldPaths) || [];
+        const pre = wr.currentDocument || {};
+        // The emulator's answer to round 1's query-string precondition, aimed at the spend alone.
+        if (opts.refuseSpend && mask.indexOf('tries') > -1) return refused('FAILED_PRECONDITION', 400, 'the stored version (0) does not match the required base version');
+        if (opts.refuseReissue && wr.update && pre.updateTime) return refused('FAILED_PRECONDITION', 400, 'the stored version (0) does not match the required base version');
+        const cur = world.docs.get(id);
+        if (pre.updateTime !== undefined && (!cur || cur.updateTime !== pre.updateTime)) return refused('FAILED_PRECONDITION', 400, 'stale');
+        if (pre.exists === false && cur) return refused('ALREADY_EXISTS', 409, 'exists');
+        const t = stamp();
+        if (wr.delete) {
+          if (!opts.burnIgnored) { world.deletes++; world.docs.delete(id); }
+          return { ok: true, status: 200, json: async () => ({ writeResults: [{}], commitTime: t }) };
+        }
+        let fields = wr.update.fields || {};
+        if (mask.length) {
+          fields = Object.assign({}, cur ? cur.fields : {});
+          for (const k of mask) { if (k in wr.update.fields) fields[k] = wr.update.fields[k]; else delete fields[k]; }
+        } else if (opts.malformed) fields = { mac: fields.mac };
+        if (opts.spendIgnored && mask.length && cur) fields = cur.fields;   // "accepted", changed nothing
+        world.docs.set(id, { fields, updateTime: t });
+        return { ok: true, status: 200, json: async () => ({ writeResults: [{ updateTime: t }], commitTime: t }) };
       }
-      if (init.method === 'PATCH') {
-        const fields = JSON.parse(init.body).fields;
-        world.docs.set(id, opts.malformed ? { mac: fields.mac, email: fields.email } : fields);
-        return { ok: true, status: 200, json: async () => ({ fields: world.docs.get(id) }) };
+      const id = url.split('/signinCodes/')[1].split('?')[0];
+      if (init.method === 'PATCH') {   // the canary's diagnostic write (and how an older worker wrote codes)
+        if (opts.writeStatus) return { ok: false, status: opts.writeStatus, text: async () => 'boom' };
+        const pf = JSON.parse(init.body).fields;
+        world.docs.set(id, { fields: opts.malformed && pf.mac ? { mac: pf.mac } : pf, updateTime: stamp() });
+        return { ok: true, status: 200, json: async () => ({}) };
       }
       if (init.method === 'DELETE') { world.deletes++; world.docs.delete(id); return { ok: true, status: 200 }; }
       const doc = world.docs.get(id);
       if (!doc) return { ok: false, status: 404, json: async () => ({}) };
-      return { ok: true, status: 200, json: async () => ({ fields: doc }) };
+      return { ok: true, status: 200, json: async () => ({ fields: doc.fields, updateTime: doc.updateTime }) };
     }
 
     if (url.indexOf('api.resend.com') >= 0) {
@@ -115,6 +148,7 @@ const ENV = (extra) => Object.assign({
   let w = makeWorld();
   let v = await run(w);
   ok('a healthy sign-in path reports ok', v.ok === true, JSON.stringify(v));
+  ok('and it got there by spending, not just minting', /miss spent one try/.test(v.reason) && /burned/.test(v.reason), v.reason);
   ok('and it asked for the datastore scope', (w.tokenScopes[0] || '').indexOf(DATASTORE) >= 0, w.tokenScopes[0]);
   ok('and it cleaned up after itself, leaving no document behind', w.docs.size === 0 && w.deletes > 0,
      'docs ' + w.docs.size + ', deletes ' + w.deletes);
@@ -222,6 +256,25 @@ const ENV = (extra) => Object.assign({
   b = await r.json();
   ok('and being unable to read the record is never reported as healthy',
      r.status === 503 && b.ok === false, r.status + ' ' + JSON.stringify(b));
+
+  console.log('\n9. a Firestore that will mint but not let her SPEND turns the canary red');
+  /* Round 1's failure, exactly: the mint (exists=false) was accepted, every conditional spend was
+     refused as base version 0, and every correct code answered bad_code. The old canary only minted,
+     so it would have stayed green through it. */
+  for (const [label, o, want] of [
+    ['every spend is refused, as the emulator refused round 1', { refuseSpend: true }, /wrong guess did not spend exactly one try: 5 left/],
+    ['a reissue over a live code is refused', { refuseReissue: true }, /conditional reissue was refused/],
+    ['a spend is "accepted" but changes nothing', { spendIgnored: true }, /did not spend exactly one try/],
+    ['the right code is accepted but never burned', { burnIgnored: true }, /not burned/],
+  ]) {
+    w = makeWorld(o);
+    v = await run(w);
+    ok(label + ': the canary goes RED', v.ok === false, JSON.stringify(v && v.reason));
+    ok(label + ': and the reason says which step', want.test(String(v.reason)), v.reason);
+    ok(label + ': it mails the alert', w.mail.length === 1 && /sign-in code/i.test(w.mail[0].subject), w.mail.length);
+    ok(label + ': and the heartbeat is marked not-ok', !!w.beat && w.beat.ok.booleanValue === false, JSON.stringify(w.beat));
+    ok(label + ': and leaves no code document behind', w.docs.size === 0, w.docs.size);
+  }
 
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   console.log('SIGNIN-CANARY: ' + (fail ? 'FAIL' : 'PASS') + '\n');

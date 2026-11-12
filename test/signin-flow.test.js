@@ -131,6 +131,33 @@ globalThis.fetch = async function (input, init) {
     return J({ localId: uid, email: b.email, emailVerified: !!b.emailVerified });
   }
 
+  /* documents:commit, which is how the worker writes a code now: the precondition rides in the JSON
+     body. Same semantics as the per-document form below, which stays so an older worker is still
+     graded honestly. */
+  if (/firestore\.googleapis\.com\/v1\/projects\/[^/]+\/databases\/\(default\)\/documents:commit$/.test(url) && method === 'POST') {
+    if (scope.indexOf('datastore') < 0) return DENIED();
+    const wr = (JSON.parse(body || '{}').writes || [])[0] || {};
+    const mm = /\/documents\/signinCodes\/([^/]+)$/.exec(String((wr.update && wr.update.name) || wr.delete || ''));
+    if (!mm) return J({ error: { code: 400, status: 'INVALID_ARGUMENT' } }, 400);
+    const id = mm[1], pre = wr.currentDocument || {};
+    if (pre.updateTime !== undefined && world.times.get(id) !== pre.updateTime) return J({ error: { code: 400, status: 'FAILED_PRECONDITION' } }, 400);
+    if (pre.exists === false && world.docs.has(id)) return J({ error: { code: 409, status: 'ALREADY_EXISTS' } }, 409);
+    const t = new Date(Date.UTC(2026, 10, 12) + (++world.clock)).toISOString();
+    if (wr.delete) { world.docs.delete(id); world.times.delete(id); return J({ writeResults: [{}], commitTime: t }); }
+    if (world.failFirestoreWrite) return J({ error: { code: 503, status: 'UNAVAILABLE' } }, 503);
+    const incoming = wr.update.fields || {};
+    const mask = (wr.updateMask && wr.updateMask.fieldPaths) || [];
+    if (mask.length) {
+      const next = Object.assign({}, world.docs.get(id) || {});
+      for (const k of mask) { if (k in incoming) next[k] = incoming[k]; else delete next[k]; }
+      world.docs.set(id, next);
+    } else {
+      world.docs.set(id, incoming);
+    }
+    world.times.set(id, t);
+    return J({ writeResults: [{ updateTime: t }], commitTime: t });
+  }
+
   const m = url.match(/firestore\.googleapis\.com\/v1\/projects\/[^/]+\/databases\/\(default\)\/documents\/signinCodes\/([^?]+)/);
   if (m) {
     const id = m[1];
