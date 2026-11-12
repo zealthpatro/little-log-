@@ -16,8 +16,15 @@
  *     removeMember and deleteAccount delete that doc, so the removed member, the dangerous case,
  *     would be invisible there. If that uid is in members (the invite was used) or in
  *     formerMemberInfo (removed, or left), delete the invite and that address's pendingInvites row.
- *   - no account yet, or an account that was never in that household: keep. That is a real,
- *     still-pending invitation.
+ *   - nobody has joined with it yet (no account, or an account that was never in that household):
+ *     keep it ONLY when it is a caregiver invite into a family nobody has left (formerMemberInfo
+ *     empty). A co-owner invite, or any invite into a family someone has left, is deleted with its
+ *     pendingInvites row, and the owner may need to re-send it. WHY: a removed member can delete his
+ *     own Auth account with one call and his own token (skipping the app's deleteAccount, which
+ *     would delete the invite), so at cleanup time he looks like "no account yet". Signing up again
+ *     gives him a new uid that is in no tombstone, before or after the cleanup, so he looks like a
+ *     stranger. Either way he could come back in after --apply, as owner with a co-owner invite, and
+ *     remove the original owner. Re-sending a genuine invite is a small, one-time cost.
  * And per household: deleteAfter or deletionRequestedBy set while members is not empty is a flag
  * nobody legitimately sets (only the last one out may), so both fields are cleared.
  * A household with a bogus flag is unflagged, so its invites are judged as a live family's.
@@ -65,6 +72,8 @@ const auth = getAuth(app);
 const has = (o, k) => !!o && typeof o === 'object' && Object.prototype.hasOwnProperty.call(o, k);
 const size = (o) => (o && typeof o === 'object') ? Object.keys(o).length : 0;
 const flagged = (d) => has(d, 'deleteAfter') || has(d, 'deletionRequestedBy');
+// The rules join with the invite's role, missing meaning caregiver. Anything else counts as co-owner.
+const isCaregiverInvite = (inv) => { const r = (inv || {}).role; return r === undefined || r === null || r === 'caregiver'; };
 
 // Errors are reported by code only: a message can carry a document path, and the path is an address.
 const errCode = (e) => String((e && e.code) || 'error');
@@ -73,7 +82,8 @@ const changedSinceRead = (e) => errCode(e) === '9' || errCode(e) === 'failed-pre
 
 (async () => {
   const n = {
-    invites: 0, keptPending: 0, keptNoAccount: 0,
+    invites: 0, keptPending: 0, keptNoAccount: 0, keptCaregiver: 0, keptOwner: 0,
+    notJoinedNoAccount: 0, notJoinedHasAccount: 0,
     goneHousehold: 0, flaggedHousehold: 0, usedByMember: 0, usedByFormerMember: 0, pendingRows: 0,
     households: 0, bogusFlags: 0, skippedChanged: 0, errors: 0
   };
@@ -88,7 +98,8 @@ const changedSinceRead = (e) => errCode(e) === '9' || errCode(e) === 'failed-pre
   for (const inv of invites.docs) {
     n.invites++;
     const email = inv.id;
-    const hid = (inv.data() || {}).householdId;
+    const invData = inv.data() || {};
+    const hid = invData.householdId;
     let hh = null;
     try { if (typeof hid === 'string' && hid) hh = await readHousehold(hid); } catch (e) { n.errors++; console.log('  read failed: ' + errCode(e)); continue; }
     const d = hh && hh.exists ? (hh.data() || {}) : null;
@@ -103,10 +114,17 @@ const changedSinceRead = (e) => errCode(e) === '9' || errCode(e) === 'failed-pre
         // An id that is not a valid address can never match a sign-in token: as good as no account.
         if (errCode(e) !== 'auth/user-not-found' && errCode(e) !== 'auth/invalid-email') { n.errors++; console.log('  account lookup failed: ' + errCode(e)); continue; }
       }
-      if (!uid) { n.keptNoAccount++; continue; }
-      if (has(d.members, uid)) reason = 'usedByMember';
-      else if (has(d.formerMemberInfo, uid)) reason = 'usedByFormerMember';
-      else { n.keptPending++; continue; }
+      if (uid && has(d.members, uid)) reason = 'usedByMember';
+      else if (uid && has(d.formerMemberInfo, uid)) reason = 'usedByFormerMember';
+      // Nobody has joined with it. Keep only a caregiver invite into a family nobody has left.
+      else if (!isCaregiverInvite(invData) || size(d.formerMemberInfo) > 0) reason = uid ? 'notJoinedHasAccount' : 'notJoinedNoAccount';
+      else {
+        if (uid) n.keptPending++; else n.keptNoAccount++;
+        // keptOwner stays 0 under the rule above; it is counted from the invite itself, not assumed,
+        // so the dry run shows the founder that no co-owner invite survives.
+        if (isCaregiverInvite(invData)) n.keptCaregiver++; else n.keptOwner++;
+        continue;
+      }
       clearRow = has(d.pendingInvites, email);
     }
 
@@ -151,9 +169,14 @@ const changedSinceRead = (e) => errCode(e) === '9' || errCode(e) === 'failed-pre
   console.log('  ' + verb + ', household being deleted: ' + n.flaggedHousehold);
   console.log('  ' + verb + ', already joined:          ' + n.usedByMember);
   console.log('  ' + verb + ', removed or left:         ' + n.usedByFormerMember);
+  console.log('  ' + verb + ', not joined, no account (the owner may need to re-send it): ' + n.notJoinedNoAccount);
+  console.log('  ' + verb + ', not joined, has an account (the owner may need to re-send it): ' + n.notJoinedHasAccount);
+  console.log('    (an invite nobody has joined with is kept only if it is a caregiver invite into a family nobody has left)');
   console.log('  pending-list rows ' + (APPLY ? 'cleared' : 'to clear') + ':              ' + n.pendingRows);
   console.log('  kept, still pending (account exists): ' + n.keptPending);
   console.log('  kept, still pending (no account yet): ' + n.keptNoAccount);
+  console.log('  kept, caregiver invites:              ' + n.keptCaregiver);
+  console.log('  kept, co-owner invites:               ' + n.keptOwner);
   console.log('  households read:                      ' + n.households);
   console.log('  ' + (APPLY ? 'unflagged' : 'would unflag') + ', flag on a family with people: ' + n.bogusFlags);
   console.log('  skipped, changed during the run:      ' + n.skippedChanged);
