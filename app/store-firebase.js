@@ -24,6 +24,18 @@
   // Taps stay on the synchronous render(): they measure and scroll on the very next line.
   function rerender() { try { (window.renderSoon || window.render || function () {})(); } catch (e) {} }
 
+  /* Everything a snapshot carries was written by SOMEONE in the circle, and the rules check only
+     who, not what. So ids, colours and photo bytes go through window.cubbyIngest (index.html) on
+     the way into state, and nothing else is trusted to have done it (AUDIT client-1). A doc id that
+     is not one Cubby would make is swapped for a stable stand-in; rawDocId remembers the real key,
+     so the entry can still be edited or deleted. If an older cached index.html has no cubbyIngest,
+     data passes as before rather than the sync breaking. */
+  var PASS = { id: function (v) { return v; }, photo: function (v) { return v; }, event: function (d, id) { d.id = id; return d; }, note: function (d, id) { d.id = id; return d; }, blob: function (a) { return a; }, photos: function (m) { return m; } };
+  function ing() { return window.cubbyIngest || PASS; }
+  var rawDocId = {};
+  function ingestId(raw) { var s = ing().id(raw); if (s !== raw) rawDocId[s] = raw; return s; }
+  function docKey(id) { return rawDocId[id] || String(id); }
+
   var hhRef = null, eventsRef = null, photosRef = null, notesRef = null;
   var booted = false;
   var unsub = [];
@@ -1184,6 +1196,7 @@
   }
   function applyAppBlob(app) {
     if (!app) return;
+    ing().blob(app); // ids and colours another member wrote, made safe before they reach state
     var localTheme = state.settings && state.settings.theme; // theme is per-device
     var localPush = state.settings && state.settings.push;   // reminder on/off + quiet hours: per-device (see appBlobFromState)
     state.babies = app.babies || [];
@@ -1310,7 +1323,7 @@
   function applyPregJourney(owner, d) {
     if (!d) return;
     pregShared = d.sharedWith || [];
-    var data = d.data || {};
+    var data = ing().blob(d.data || {}); // a partner writes data.precon here, so it is ingested like the blob
     var p = state.pregnancy || {};
     if (p.id && data.id && p.id !== data.id) { p = {}; knownPrecon = null; } // a different pregnancy -> drop stale fields
 
@@ -1361,13 +1374,15 @@
   var ownPregPhotoIds = {}, otherPregPhotoIds = {};
   function handlePregPhotoSnap(snap, bag) {
     snap.docChanges().forEach(function (ch) {
-      var id = ch.doc.id;
-      if (ch.type === 'removed') {
+      var id = ingestId(ch.doc.id);
+      // Bytes that are not a raster image data URL are treated as no photo at all.
+      var bytes = ch.type === 'removed' ? '' : ing().photo(ch.doc.data().data);
+      if (!bytes) {
         delete bag[id]; delete PhotoStore.privIds[id];
         if (!circlePhotoIds[id]) delete PhotoStore.map[id];
       } else {
         bag[id] = 1; PhotoStore.privIds[id] = 1;
-        PhotoStore.map[id] = ch.doc.data().data;
+        PhotoStore.map[id] = bytes;
       }
     });
     if (booted && !(snap.metadata && snap.metadata.hasPendingWrites)) rerender();
@@ -1427,9 +1442,9 @@
       for (var i = 0; i < pending.length; i++) {
         var id = pending[i];
         try {
-          await priv.doc(String(id)).set({ data: PhotoStore.map[id], authorId: uidNow });
+          await priv.doc(docKey(id)).set({ data: PhotoStore.map[id], authorId: uidNow });
           PhotoStore.privIds[id] = 1; ownPregPhotoIds[id] = 1;
-          await photosRef.doc(String(id)).delete();
+          await photosRef.doc(docKey(id)).delete();
         } catch (e) { console.warn('preg photo migrate', e); }
       }
     })().then(function () { pregBytesMigrating = false; }, function () { pregBytesMigrating = false; });
@@ -1982,10 +1997,11 @@
       eventsRef.get().then(function (snap) {
         applyingRemote = true; var added = 0;
         snap.forEach(function (doc) {
-          if ((state.events || []).some(function (e) { return String(e.id) === String(doc.id); })) return; // recent: owned by the live listener
-          var data = doc.data(); data.id = doc.id;
+          var eid = ingestId(doc.id);
+          if ((state.events || []).some(function (e) { return String(e.id) === String(eid); })) return; // recent: owned by the live listener
+          var data = ing().event(doc.data(), eid);
           (state.events = state.events || []).push(data);
-          knownEvents[doc.id] = JSON.stringify(stripMeta(data)); added++;
+          knownEvents[eid] = JSON.stringify(stripMeta(data)); added++;
         });
         applyingRemote = false;
         window.cubbyHistoryPending = false;
@@ -1996,7 +2012,7 @@
       return query.onSnapshot(function (snap) {
         applyingRemote = true;
         snap.docChanges().forEach(function (ch) {
-          var data = ch.doc.data(); data.id = ch.doc.id;
+          var data = ing().event(ch.doc.data(), ingestId(ch.doc.id));
           if (ch.type === 'removed') {
             state.events = (state.events || []).filter(function (e) { return String(e.id) !== String(data.id); });
             delete knownEvents[data.id];
@@ -2026,14 +2042,16 @@
 
     unsub.push(photosRef.onSnapshot(function (snap) {
       snap.docChanges().forEach(function (ch) {
-        if (ch.type === 'removed') {
-          delete circlePhotoIds[ch.doc.id];
+        var pid = ingestId(ch.doc.id);
+        var bytes = ch.type === 'removed' ? '' : ing().photo(ch.doc.data().data);
+        if (!bytes) {
+          delete circlePhotoIds[pid];
           // A migrated pregnancy photo leaves the circle collection while its bytes live on
           // in the gated subcollection — don't blank it out from under the owner's screen.
-          if (!PhotoStore.privIds[ch.doc.id]) delete PhotoStore.map[ch.doc.id];
+          if (!PhotoStore.privIds[pid]) delete PhotoStore.map[pid];
         } else {
-          circlePhotoIds[ch.doc.id] = 1;
-          PhotoStore.map[ch.doc.id] = ch.doc.data().data;
+          circlePhotoIds[pid] = 1;
+          PhotoStore.map[pid] = bytes;
         }
       });
       maybeMigratePregPhotoBytes(); // owner's device moves any circle-visible pregnancy bytes out
@@ -2067,7 +2085,7 @@
     state.notes = [];
     function handle(snap) {
       snap.docChanges().forEach(function (ch) {
-        var d = ch.doc.data(); d.id = ch.doc.id;
+        var d = ing().note(ch.doc.data(), ingestId(ch.doc.id));
         if (ch.type === 'removed') dropNote(d.id); else mergeNote(d);
       });
       migrateHandoffToNote(); // one-time: fold any legacy shared handoff into a circle note
@@ -2145,7 +2163,7 @@
     var u = auth.currentUser; if (!u) return false;
     var n = (state.notes || []).find(function (x) { return String(x.id) === String(id); });
     if (n && n.createdBy && n.createdBy !== u.uid) return false; // not mine
-    try { await notesRef.doc(String(id)).delete(); dropNote(id); return true; }
+    try { await notesRef.doc(docKey(id)).delete(); dropNote(id); return true; }
     catch (e) { console.warn('deleteNote', e); return false; }
   };
   // Soft delete / restore (author-only, same update rule as pinning). A soft-deleted note keeps
@@ -2157,7 +2175,7 @@
     var n = (state.notes || []).find(function (x) { return String(x.id) === String(id); });
     if (!n || (n.createdBy && n.createdBy !== u.uid)) return false; // only your own
     var at = Date.now();
-    try { await notesRef.doc(String(id)).update({ deleted: true, deletedAt: at }); n.deleted = true; n.deletedAt = at; return true; }
+    try { await notesRef.doc(docKey(id)).update({ deleted: true, deletedAt: at }); n.deleted = true; n.deletedAt = at; return true; }
     catch (e) { console.warn('softDeleteNote', e); return false; }
   };
   window.LL.restoreNote = async function (id) {
@@ -2165,7 +2183,7 @@
     var u = auth.currentUser; if (!u) return false;
     var n = (state.notes || []).find(function (x) { return String(x.id) === String(id); });
     if (!n || (n.createdBy && n.createdBy !== u.uid)) return false; // only your own
-    try { await notesRef.doc(String(id)).update({ deleted: false, deletedAt: null }); delete n.deleted; delete n.deletedAt; return true; }
+    try { await notesRef.doc(docKey(id)).update({ deleted: false, deletedAt: null }); delete n.deleted; delete n.deletedAt; return true; }
     catch (e) { console.warn('restoreNote', e); return false; }
   };
   // Pin/unpin: at most one pinned note PER MEMBER, not per circle. This comment used to claim
@@ -2188,14 +2206,14 @@
       (state.notes || []).forEach(function (n) {
         if (n.pinned && n.createdBy === u.uid && String(n.id) !== String(id)) {
           n.pinned = false;
-          notesRef.doc(String(n.id)).update({ pinned: false })
+          notesRef.doc(docKey(n.id)).update({ pinned: false })
             .catch(function (e) { console.warn('setNotePinned', e); n.pinned = true; rerender(); });
         }
       });
     }
     var was = !!target.pinned;
     target.pinned = !!pinned;
-    notesRef.doc(String(id)).update({ pinned: !!pinned })
+    notesRef.doc(docKey(id)).update({ pinned: !!pinned })
       .catch(function (e) { console.warn('setNotePinned', e); target.pinned = was; rerender(); });
     return true;
   };
@@ -2237,14 +2255,14 @@
       var ser = JSON.stringify(stripMeta(cur[id]));
       if (knownEvents[id] !== ser) {
         knownEvents[id] = ser;
-        writes.push(eventsRef.doc(String(id)).set(Object.assign({ authorId: cur[id].authorId || uidNow }, cur[id]))
+        writes.push(eventsRef.doc(docKey(id)).set(Object.assign({ authorId: cur[id].authorId || uidNow }, cur[id]))
           .catch(function (e) { if (knownEvents[id] === ser) delete knownEvents[id]; throw e; }));
       }
     });
     Object.keys(knownEvents).forEach(function (id) {
       if (!cur[id]) {
         var oldSer = knownEvents[id]; delete knownEvents[id];
-        writes.push(eventsRef.doc(String(id)).delete()
+        writes.push(eventsRef.doc(docKey(id)).delete()
           .catch(function (e) { if (!cur[id] && !(id in knownEvents)) knownEvents[id] = oldSer; throw e; }));
       }
     });
@@ -2593,10 +2611,10 @@
     // The byte doc may live in either home (circle collection, or my own journey subcollection —
     // e.g. deleting a moment, discarding after a loss, removing kept memories). Try both; the
     // rules referee each delete server-side and a miss is a harmless no-op.
-    if (!wasPriv || circlePhotoIds[id]) { try { await photosRef.doc(String(id)).delete(); } catch (e) {} }
+    if (!wasPriv || circlePhotoIds[id]) { try { await photosRef.doc(docKey(id)).delete(); } catch (e) {} }
     var uidNow = auth.currentUser && auth.currentUser.uid;
     if (wasPriv && uidNow && hhRef) {
-      try { await hhRef.collection('pregnancy').doc(uidNow).collection('photos').doc(String(id)).delete(); } catch (e) {}
+      try { await hhRef.collection('pregnancy').doc(uidNow).collection('photos').doc(docKey(id)).delete(); } catch (e) {}
     }
   };
   PhotoStore.load = async function () {};
@@ -3460,6 +3478,13 @@
            a harness that lies in both directions. */
         Store.load().then(function (d) {
           if (d && typeof state !== 'undefined') {
+            /* And the same ingest checks the snapshots get, for the same reason: a gate must boot
+               the shape the real app produces. */
+            try {
+              ing().blob(d);
+              d.events = (d.events || []).map(function (ev) { return ing().event(ev, ev && ev.id); });
+              d.notes = (d.notes || []).map(function (n) { return ing().note(n, n && n.id); });
+            } catch (e) {}
             try { Object.assign(state, d); } catch (e) {}
             try { if (typeof normalizeLoadedState === 'function') normalizeLoadedState(state); } catch (e) {}
           }
