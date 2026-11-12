@@ -98,8 +98,19 @@ const ids = (docs) => (docs || []).map(d => d.name.split('/').pop()).sort();
   ok("worker queries 'push.nextAt'", src.includes("'users', 'push.nextAt', 'LESS_THAN_OR_EQUAL'"));
   ok("worker queries 'deleteAfter'", src.includes("'households', 'deleteAfter', 'LESS_THAN_OR_EQUAL'"));
   ok('worker no longer pages /households', !src.includes("'/households?pageSize"));
-  ok('the only literal /users paging is the one-time backfill',
-     (src.match(/'\/users\?pageSize/g) || []).length === 1);
+  /* Which FUNCTIONS page /users, not how many times the string appears. The campaign sender
+     (2026-08-13, after this test) pages users too, but only while an operator's campaign is in
+     'sending'; a raw count of 1 went red then and stayed red unseen, because this tier is not run
+     by the hook. Anything else that pages /users on a cron tick still fails here. */
+  const pagers = [...src.matchAll(/'\/users\?pageSize/g)].map((m) => {
+    const before = src.slice(0, m.index);
+    const fn = [...before.matchAll(/^(?:async )?function ([A-Za-z0-9_]+)/gm)].pop();
+    return fn ? fn[1] : '?';
+  });
+  ok('the only literal /users paging is the one-time backfill and a campaign being sent',
+     pagers.length > 0 && pagers.every((f) => f === 'backfillPushNextAt' || f === 'sendCampaigns'), pagers);
+  const camp = src.slice(src.indexOf('async function sendCampaigns('), src.indexOf("'/users?pageSize", src.indexOf('async function sendCampaigns(')));
+  ok('and the campaign sender only pages users for a campaign in sending', /_fsStr\(f\.state\) !== 'sending'\) continue;/.test(camp));
   // The emulator auto-creates indexes and never returns FAILED_PRECONDITION, so it CANNOT catch a
   // missing-index error in production. That is not hypothetical: the first deploy of this change
   // came back queryFailed. Hence the fallback, which keeps medicine reminders flowing regardless.

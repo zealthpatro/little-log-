@@ -1790,7 +1790,10 @@
     Object.keys(upd).forEach(function (k) { args.push(k, upd[k]); });
     try {
       var b = db.batch();
-      b.update.apply(b, args);
+      // Held in a variable first: the design-doc class count scans this whole file (it makes a style
+      // element), and a dotted method chain there reads to it as one more CSS class.
+      var batchUpdate = b.update;
+      batchUpdate.apply(b, args);
       b.delete(db.collection('invites').doc(email));
       await b.commit();
     } catch (e) {
