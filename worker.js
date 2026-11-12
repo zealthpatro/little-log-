@@ -1554,11 +1554,28 @@ async function purgeDeletedHouseholds(env) {
   {
     // No fallback here on purpose: a 30-day grace window can wait for the next tick, and a full
     // /households scan is the expensive one. A failure is logged and retried, never scanned around.
-    const found = (await fsQuery(base, token, 'households', 'deleteAfter', 'LESS_THAN_OR_EQUAL', now, 50, ['deleteAfter', 'ownerId'])).docs;
+    const found = (await fsQuery(base, token, 'households', 'deleteAfter', 'LESS_THAN_OR_EQUAL', now, 50, ['deleteAfter', 'ownerId', 'members'])).docs;
     if (!found) return { households: 0, docs: 0 };
     for (const d of found) {
       const hid = d.name.split('/documents/households/')[1];
       if (!hid) continue;
+      /* Second lock behind the rules. The app flags a household only as its LAST member leaves
+         (deleteAccount), so a due household with anyone still in members was flagged by somebody
+         exceeding their role. Never purge it. Clear the flag instead, because pushGate and
+         /api/dose refuse a flagged household and its medicine reminders would stay dead, and log
+         it. The updateTime precondition leaves alone a household that changed since it was read. */
+      const mem = d.fields && d.fields.members && d.fields.members.mapValue && d.fields.members.mapValue.fields;
+      if (mem && Object.keys(mem).length) {
+        console.error('purge_refused_members', hid, Object.keys(mem).length);
+        if (d.updateTime) {
+          const un = await fetch(base + '/households/' + hid + '?updateMask.fieldPaths=deleteAfter&updateMask.fieldPaths=deletionRequestedBy'
+            + '&currentDocument.updateTime=' + encodeURIComponent(d.updateTime), {
+            method: 'PATCH', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' }, body: JSON.stringify({ fields: {} })
+          }).catch(() => null);
+          if (!un || !un.ok) console.error('purge_unflag_fail', hid, un ? un.status : 'throw');
+        }
+        continue;
+      }
       try {
         // Every child must be confirmed gone before the parent goes. Any failure abandons THIS
         // household untouched: `deleteAfter` stays set, so the next tick retries the whole thing.
@@ -1599,6 +1616,8 @@ async function purgeDeletedHouseholds(env) {
   if (households) console.log('purge_run', JSON.stringify({ households, docs }));
   return { households, docs };
 }
+// Test hook, same pattern as __dose: lets test/purge-guard.test.js drive the real purge.
+export const __purge = { purgeDeletedHouseholds: (env) => purgeDeletedHouseholds(env) };
 
 // Operational heartbeat for the push cron: persist last-run summary in the Worker's own D1 (cubby-games),
 // read by GET /api/health so a silently-dead cron is detectable. Holds counts + a timestamp only, never
