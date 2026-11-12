@@ -2953,7 +2953,7 @@ function scrubEnums(app){
     if(!b || typeof b!=='object') return;
     oneOf(b,'growthSource',['who','cdc']);
     oneOf(b,'sex',['F','M','male','female','']);
-    oneOf(b,'diet',['veg','vegan','']);
+    oneOf(b,'diet',['all','veg','vegan','']);
     oneOf(b,'stageOverride',['baby','child','']);
     if(b.allergies!=null && !Array.isArray(b.allergies)) delete b.allergies;
   });
