@@ -65,6 +65,7 @@ const writes = {};   // status tally of every Firestore write, so a refused writ
    interleaving which signed a double tap in twice, instead of hoping 30 rounds stumble on it.
    Firestore itself still decides every write. */
 let holdBurns = false;
+let oobDown = false;   // section 7c: Identity Toolkit refuses to mint a link
 const spendsLanded = new Map();
 const docOf = (url, body) => {
   if (/:commit$/.test(url)) { const wr = (JSON.parse(body || '{}').writes || [])[0] || {}; return { name: String((wr.update && wr.update.name) || wr.delete || '').split('/documents/')[1] || '', del: !!wr.delete, spend: !!(wr.updateMask && (wr.updateMask.fieldPaths || []).indexOf('tries') > -1) }; }
@@ -75,6 +76,7 @@ globalThis.fetch = async (input, init) => {
   const method = ((init && init.method) || 'GET').toUpperCase();
   const body = init && init.body;
   if (url.startsWith('https://oauth2.googleapis.com/token')) return J({ access_token: 't', expires_in: 3600 });
+  if (url.includes('accounts:sendOobCode') && oobDown) return J({ error: { message: 'UNAVAILABLE' } }, 503);
   if (url.includes('accounts:sendOobCode')) return J({ oobLink: 'https://x.firebaseapp.com/__/auth/action?mode=signIn&oobCode=O&apiKey=k' });
   if (/accounts:lookup$/.test(url)) { const e = (JSON.parse(body || '{}').email || [])[0]; return users.has(e) ? J({ users: [{ localId: users.get(e) }] }) : J({}); }
   if (/\/accounts$/.test(url) && method === 'POST') { const b = JSON.parse(body); const u = 'uid' + (users.size + 1); users.set(b.email, u); return J({ localId: u }); }
@@ -229,6 +231,126 @@ async function listCodes() {
     const again = await mod.signinCanary(ENV);
     ok('a second run is green too (it leaves nothing that caps the next one)', again.ok === true, again.reason);
     ok('and the canary leaves no code document behind', (await listCodes()).length === left, [left, (await listCodes()).length]);
+  }
+
+  /* 7. What the panel SAYS after a Resend inside the 60s cooldown. The worker's cooldown reply is
+     only half of it; the other half is app/store-firebase.js turning that reply into a code box or
+     not. So this section runs the client's own wireEmailRow (cut from the real file, not retyped)
+     over a fake DOM, with its fetch wired straight into the worker under test, and reads back what
+     a parent would see. The bug it pins: an address at its hourly cap gets a LINK-only email from
+     the fallback sender, and a Resend inside the minute came back {cached:true}, which the client
+     reads as "that email had a code", so she was told to type six digits that are not there.
+     Reachable with no attacker at all: five sends in an hour, then Send and Resend. */
+  console.log('\n7. a Resend inside the cooldown shows what the last email really holds');
+  {
+    const csrc = fs.readFileSync(path.join(__dirname, '..', 'app', 'store-firebase.js'), 'utf8');
+    const a = csrc.indexOf('  function wireEmailRow(scope) {'), b = csrc.indexOf('\n  function maybeFinishEmailLink');
+    ok('the client panel code was found in app/store-firebase.js', a > -1 && b > a, [a, b]);
+    // Its two one-line helpers come from the same file, so nothing here is a retyped copy.
+    const escSrc = ['escHtml', 'looksLikeEmail'].map((n) => (csrc.match(new RegExp('^  function ' + n + '\\(.*$', 'm')) || [''])[0]).join('\n');
+    ok('and its helpers', /function escHtml/.test(escSrc) && /function looksLikeEmail/.test(escSrc), escSrc);
+    const wire = new Function('SEND_LABEL', 'errText', 'auth', 'location', 'localStorage', 'fetch', 'setInterval', 'clearInterval',
+      escSrc + '\n' + csrc.slice(a, b) + '\nreturn wireEmailRow;');
+    const el = () => ({ style: {}, value: '', textContent: '', disabled: false, focus() {}, select() {} });
+    function panel() {
+      const input = el(), btn = el(), ci = el(), cb = el();
+      const form = Object.assign(el(), { querySelector: (s) => (s === 'input' ? input : btn) });
+      const codeForm = Object.assign(el(), { querySelector: (s) => (s === 'input' ? ci : cb) });
+      let html = '', kids = {};
+      const note = {
+        style: {},
+        get innerHTML() { return html; },
+        set innerHTML(v) { html = String(v); kids = { '.ll-resend': el(), '.ll-changeemail': el(), '.ll-resend-row': el() }; },
+        get textContent() { return html.replace(/<[^>]*>/g, ''); },
+        set textContent(v) { html = String(v); kids = {}; },
+        querySelector: (s) => kids[s] || null,
+      };
+      const parts = { '.ll-email-toggle': el(), '.ll-email-form': form, '.ll-email-note': note, '.ll-code-form': codeForm };
+      const row = { querySelector: (s) => parts[s] || null };
+      const calls = []; let inflight = 0;
+      const cfetch = async (p, init) => {
+        inflight++;
+        try {
+          const r = await post(w, p, JSON.parse(init.body));
+          calls.push(p + ' ' + r.status);
+          return r;
+        } finally { inflight--; }
+      };
+      const fbAuth = { sendSignInLinkToEmail: async () => { calls.push('firebase-sender'); }, signInWithCustomToken: async () => ({}) };
+      wire('Send code', (e, fb) => fb, fbAuth, { origin: HOST }, { setItem() {}, getItem() { return null; } }, cfetch, () => 1, () => {})({ querySelector: (s) => (s === '.ll-email-row' ? row : null) });
+      const settle = async () => {
+        // Quiet for 10 ticks in a row: the code request, its fallback and the redraw have all landed.
+        let quiet = 0;
+        for (let i = 0; i < 3000 && quiet < 10; i++) { await new Promise((r) => setTimeout(r, 1)); quiet = inflight === 0 ? quiet + 1 : 0; }
+      };
+      return {
+        calls,
+        async send(email) { input.value = email; form.onsubmit({ preventDefault() {} }); await settle(); },
+        async resend() { const rb = note.querySelector('.ll-resend'); if (!rb || !rb.onclick) throw new Error('no Resend button on the panel'); rb.onclick(); await settle(); },
+        seen() { return { codeBox: codeForm.style.display !== 'none' && codeForm.style.display !== undefined, text: note.textContent }; },
+      };
+    }
+    const asksForCode = (s) => s.codeBox || /6-digit code/.test(s.text);
+
+    // 7a. The cap, reached the ordinary way: five codes in an hour, each a minute or more apart.
+    {
+      const e = fresh('capped');
+      for (let i = 0; i < 5; i++) await issue(w, e);
+      cache.clear();   // and a minute after the fifth
+      const p = panel();
+      const mailed = mail.length;
+      await p.send(e);
+      ok('at the cap, Send falls back to the link sender', p.calls.join(',') === '/api/signin-code 429,/api/send-signin-link 200', p.calls);
+      ok('and that email really has no code in it', mail.length === mailed + 1 && lastCode() === null, [mail.length - mailed, lastCode()]);
+      const first = p.seen();
+      ok('so the panel asks for no code: it says to open the link', !asksForCode(first) && /Open the link/.test(first.text), first);
+      p.calls.length = 0;
+      await p.resend();   // the 30s countdown is over, the worker's 60s cooldown is still armed
+      ok('Resend inside the minute mails nothing new', mail.length === mailed + 1 && p.calls.join(',') === '/api/signin-code 429,/api/send-signin-link 200', [mail.length - mailed, p.calls]);
+      const again = p.seen();
+      ok('and the panel still asks for no code: nothing says to type six digits', !asksForCode(again), again);
+      ok('it says to open the link in the email she already has', /Open the link in it on this device/.test(again.text), again.text);
+      ok('in plain words, with no em-dash', !/—/.test(again.text), again.text);
+    }
+
+    // 7b. The companion: the cooldown reply after a send that DID carry a code still offers the box.
+    {
+      const e = fresh('cooled');
+      cache.clear();
+      const p = panel();
+      await p.send(e);
+      ok('a normal Send shows the code box', p.seen().codeBox, p.seen());
+      p.calls.length = 0;
+      await p.resend();
+      const s = p.seen();
+      ok('a Resend inside the minute keeps the code box, because that email has a code', s.codeBox && /6-digit code/.test(s.text), s);
+      ok('and says it was the email from a minute ago', /already sent an email/.test(s.text) && p.calls.join(',') === '/api/signin-code 200', [s.text, p.calls]);
+    }
+
+    // 7c. A code email that went out without its link (Identity Toolkit was down): a Resend inside
+    // the minute must not point her at a link that email does not have.
+    {
+      const e = fresh('nolink');
+      cache.clear();
+      oobDown = true;
+      const p = panel();
+      await p.send(e);
+      oobDown = false;
+      ok('with the link minter down, the code still goes out and the panel offers no link', p.seen().codeBox && !/tap the link/.test(p.seen().text), p.seen());
+      await p.resend();
+      const s = p.seen();
+      ok('a Resend inside the minute keeps the code box and still mentions no link', s.codeBox && !/tap the link/.test(s.text), s);
+    }
+
+    // 7d. A cooldown armed by the worker before this one (its value is just '1'): the old answer stands.
+    {
+      const e = fresh('legacy');
+      cache.clear();
+      cache.set(new Request('https://cooldown.cubby.internal/' + encodeURIComponent(e)).url, '1');
+      const r = await post(w, '/api/send-signin-link', { email: e });
+      const body = await r.json();
+      ok('a cooldown set by the previous worker still answers cached, as it always did', r.status === 200 && body.ok === true && body.cached === true, body);
+    }
   }
 
   console.log('\nFirestore write statuses:', JSON.stringify(writes));

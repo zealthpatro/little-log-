@@ -117,6 +117,27 @@ function cooldownKeyFor(email) {
   return local + '@' + domain;
 }
 
+/* The per-address cooldown REMEMBERS what the email it was armed by carried, and answers from that.
+   It used to hold '1' and answer {ok:true, cached:true}, and every client reads cached as "that
+   email had a code and a link". That is only true of a code email whose link minted. At the hourly
+   cap the code endpoint answers 429 and the client falls back to the link sender, which mails a
+   LINK-only email; a Resend inside the minute then came back cached, and the panel told her to type
+   six digits from an email that has none. Reachable with no attacker: five sends in an hour, then
+   Send and Resend. The fix lives here, not in app/, so the clients already cached on phones are
+   right too: when the earlier email was not a full code-and-link one, answer with what it DID hold
+   and leave cached off. That email went out inside the last minute, so "we just emailed" is true. */
+function cooldownArmed(hasCode, hasLink) {
+  return new Response(JSON.stringify({ hasCode: !!hasCode, hasLink: !!hasLink }), { headers: { 'cache-control': 'max-age=60' } });
+}
+async function cooldownReply(hit) {
+  let was = null;
+  try { was = JSON.parse(await hit.text()); } catch (e) { was = null; }
+  // Armed by the worker before this one (its value is '1'): give the answer it always gave.
+  if (!was || typeof was.hasCode !== 'boolean' || typeof was.hasLink !== 'boolean') return json({ ok: true, cached: true });
+  if (was.hasCode && was.hasLink) return json({ ok: true, cached: true, hasCode: true, hasLink: true });
+  return json({ ok: true, hasCode: was.hasCode, hasLink: was.hasLink });
+}
+
 /* The client address every per-IP limiter keys on. IPv6 is cut to its /64: one subscriber is handed
    a whole /64, so the full address gave a single connection 2^64 separate buckets. A household shares
    one /64 anyway, so a family's limit is unchanged. IPv4 (and IPv4-mapped IPv6) stays per address.
@@ -180,7 +201,8 @@ async function sendSigninLink(request, env) {
   // Light per-email cooldown (normalized key) to absorb rapid re-sends; set only AFTER a real send.
   const cache = caches.default;
   const cooldown = new Request('https://cooldown.cubby.internal/' + encodeURIComponent(cooldownKeyFor(email)));
-  if (await cache.match(cooldown)) return json({ ok: true, cached: true });
+  const armed = await cache.match(cooldown);
+  if (armed) return cooldownReply(armed);
 
   try {
     /* BOTH scopes. This request mints a sign-in link (identitytoolkit) AND writes the code document
@@ -209,7 +231,7 @@ async function sendSigninLink(request, env) {
       })
     });
     if (!r.ok) return json({ error: 'send_failed' }, 502);
-    await cache.put(cooldown, new Response('1', { headers: { 'cache-control': 'max-age=60' } })); // start cooldown only on success
+    await cache.put(cooldown, cooldownArmed(!!code, true)); // start cooldown only on success, and remember what this email holds
     /* Say what the email ACTUALLY carries, rather than leaving the client to assume. This is the
        whole bug class closed at the root: a screen can only offer a code box because the sender just
        told it there is a code in that inbox, so the two can no longer drift apart. */
@@ -706,7 +728,8 @@ async function sendSigninCode(request, env) {
   // armed only after a real send, so a failed send does not lock the person out of retrying.
   const cache = caches.default;
   const cooldown = new Request('https://cooldown.cubby.internal/code-' + encodeURIComponent(cooldownKeyFor(email)));
-  if (await cache.match(cooldown)) return json({ ok: true, cached: true });
+  const armed = await cache.match(cooldown);
+  if (armed) return cooldownReply(armed);
 
   try {
     /* BOTH scopes, and this one was returning 502 store_failed on every single request in production:
@@ -740,7 +763,7 @@ async function sendSigninCode(request, env) {
       })
     });
     if (!r.ok) return json({ error: 'send_failed' }, 502);
-    await cache.put(cooldown, new Response('1', { headers: { 'cache-control': 'max-age=60' } }));
+    await cache.put(cooldown, cooldownArmed(true, !!link));
     return json({ ok: true, hasCode: true, hasLink: !!link });
   } catch (e) {
     return json({ error: 'failed' }, 500);
