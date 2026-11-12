@@ -22,6 +22,12 @@ catalogue behind it. Each rule below cost real time in Aug-Sep 2026 and each has
 - Clock-pinned gates pin the DAY as well as the hour. Two gates flaked on month boundaries.
 - Browser state that must exist BEFORE boot goes in via `page.evaluateOnNewDocument`; a reload's
   teardown fires `visibilitychange` and re-stamps anything written into the old document.
+- A Firestore REST write is proven against the emulator, never only a stubbed `fetch`. The query-string
+  precondition (`?currentDocument.updateTime=`) is refused by Firestore; a stub passed it twice in Nov
+  2026 (sign-in spend, purge unflag). Send preconditions in a `documents:commit` body
+  (`test/purge-unflag-emulator.test.js`, `test/signin-code-emulator.test.js`).
+- A server job that destroys data re-checks its own premise (the purge reads `members` before deleting),
+  whatever the rules above it promise. Rules list what each role MAY write, never what it may not.
 - After the second failed fix of one assertion, stop and print every input it depends on. Two
   rewrites blamed a correct product before one dump read the anchor back as "now".
 
