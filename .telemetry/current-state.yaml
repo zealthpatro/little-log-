@@ -8,18 +8,18 @@
 
 events:
   # --- emitted signals: something is written specifically to measure ---
-  - name: "pageStats increment"
+  - name: "page_stats increment"
     status: LIVE
     source: backend
     locations:
       - file: "worker.js"
-        line: 235            # recordPageView()
+        line: 279            # recordPageView() (moves; search for the name)
       - file: "worker.js"
-        line: 2021           # the only call site, ctx.waitUntil, GET + text/html responses only
-    destination: "Firestore pageStats/{YYYY-MM-DD_hex(path)}"
-    properties: [day, path, nOk, n404, n4xx, n5xx]
+        line: 2610           # the only call site, ctx.waitUntil, GET + text/html responses only
+    destination: "D1 cubby-games page_stats(day, path, cls, n), plus page_stats_total(day, n) for the daily ceiling. Firestore pageStats is history only (2026-08-20 to the move); nothing writes it."
+    properties: [day, path, cls, n]   # cls is one of ok, n404, n4xx, n5xx
     identity: none           # aggregate counter, no user, no cookie, no IP stored
-    notes: "statsKey() collapses /g/:code, /join/:token, /__/auth/:action and any odd path to /:other"
+    notes: "statsKey() maps every path to a fixed bucket: '/', a top-level section ('/app', '/articles/*'), '/:probe', '/:asset' or '/:other'; nothing after a section name is kept. Counting is throttled by PAGE_RATE_LIMITER (30/60s per IPv4, per /48 on IPv6) and stops for the UTC day at PAGE_STATS_DAILY_CAP (default 5000). Serving is never affected."
     category_inferred: acquisition
 
   - name: "cubby-acq (first-touch UTM)"
@@ -94,7 +94,7 @@ events:
     locations:
       - file: "worker.js"
     destination: "Cloudflare log stream only (wrangler tail); nothing persists them"
-    properties: [pagestats_fail, pagestats_write_<status>, push_cron_fail, purge_cron_fail, signin_canary_fail, games_db_error]
+    properties: [pagestats_fail, pagestats_cap_reached, push_cron_fail, purge_cron_fail, signin_canary_fail, games_db_error]
     category_inferred: operational
 
 # --- derived measures: nothing is emitted; tools/analytics.js reconstructs them from product data ---
@@ -122,7 +122,7 @@ derived_measures:
 identity:
   identify_calls: "No identify() calls found. Identity is the Firebase Auth uid; there is no analytics identity layer."
   group_calls: "No group() calls found. The household ({hid}) is the natural group entity: members map, ownerId, one care log."
-  page_calls: "No client page()/screen() calls. Server-side pageStats counts HTML navigations only; in-app screens are one SPA and are not counted."
+  page_calls: "No client page()/screen() calls. Server-side page_stats (D1) counts HTML responses that reach the Worker only; in-app screens are one SPA and are not counted."
   reset_calls: "Not applicable. Sign-out clears localStorage keys including cubby-acq and cubby-ref (store-firebase.js:2492)."
 
 patterns:

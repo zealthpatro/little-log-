@@ -5,6 +5,7 @@
  *   node tools/page_stats.js 5 404            only the routes that 404'd
  *   node tools/page_stats.js 30 --firestore   the OLD history, kept in Firestore pageStats (to 2026-11)
  *   node tools/page_stats.js --self-test      render synthetic rows; needs no credentials
+ *   node tools/page_stats.js 5 --cap=8000     if the Worker's PAGE_STATS_DAILY_CAP is not the default
  *
  * WHERE THE COUNTS LIVE. The Worker's recordPageView writes them to the cubby-games D1, table
  * page_stats, one row per (day, bucket, status class). This reads it through `npx wrangler d1 execute`,
@@ -22,6 +23,11 @@
  * article link 404'd, not which one, and '/:other', '/:asset' and '/:probe' hold everything else. That
  * is the price of a table random paths cannot grow. For the exact path, `npx wrangler tail cubby` while
  * reproducing it. There are no visitors, sessions or journeys either: no ids, no IPs, no query strings.
+ *
+ * A DAY CAN BE CUT SHORT. The Worker stops counting once a UTC day reaches PAGE_STATS_DAILY_CAP views
+ * (default 5000, table page_stats_total), so a flood cannot spend the shared D1's writes. A day that hit
+ * the ceiling is named below the table; its counts are a floor, not the whole day. Pass --cap=N if the
+ * Worker's cap was changed from the default.
  */
 'use strict';
 const path = require('path');
@@ -33,6 +39,8 @@ const POS = ARGS.filter((a) => !a.startsWith('--'));
 const DAYS = Math.max(1, Math.min(90, parseInt(POS[0], 10) || 5));
 const ONLY = (POS[1] || '').trim();
 const DB = 'cubby-games';
+const CAP_FLAG = FLAGS.find((a) => a.startsWith('--cap='));
+const CAP = Math.max(1, parseInt(CAP_FLAG ? CAP_FLAG.slice(6) : '', 10) || 5000);   // worker.js recordPageView default
 const CLASSES = ['ok', 'n404', 'n4xx', 'n5xx'];   // worker.js recordPageView's cls values
 
 function dayKeys(n, now) {
@@ -74,6 +82,15 @@ function render(rows, days, only, source) {
   return lines;
 }
 
+/* page_stats_total rows are (day, n). Names each day that reached the ceiling, so a capped day is not
+   read as a quiet one. */
+function capNote(totals, cap) {
+  const full = (totals || []).filter((t) => Number(t.n || 0) >= cap).map((t) => t.day).sort();
+  if (!full.length) return [];
+  return ['  Counting hit the daily ceiling (' + cap + ') on ' + full.join(', ') + '. Pages were still served;',
+    '  views after the ceiling were not counted, so those days are a floor, not a total.', ''];
+}
+
 /* D1 rows are (path, cls, n); fold them into one line per path. */
 function foldD1(results) {
   const rows = new Map();
@@ -92,6 +109,15 @@ function readD1(days) {
     { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   const j = JSON.parse(out.slice(out.indexOf('[')));
   return foldD1((j[0] && j[0].results) || []);
+}
+function readD1Totals(days) {
+  const sql = "SELECT day, n FROM page_stats_total WHERE day >= '" + days[0] + "'";
+  try {
+    const out = execFileSync('npx', ['wrangler', 'd1', 'execute', DB, '--remote', '--json', '--command', sql],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const j = JSON.parse(out.slice(out.indexOf('[')));
+    return (j[0] && j[0].results) || [];
+  } catch (e) { return []; }   // the note is a nicety; never fail the report over it
 }
 
 async function readFirestore(days) {
@@ -144,15 +170,18 @@ async function readFirestore(days) {
     const only = render(folded, days, '404', 'D1').join('\n');
     ok('`404` keeps only buckets that 404\'d', only.indexOf('/x') < 0 && only.indexOf('/:probe') >= 0);
     ok('an empty D1 window points at the old history', render([], days, '', 'D1').join('\n').indexOf('--firestore') >= 0);
+    const note = capNote([{ day: '2026-11-11', n: 4999 }, { day: '2026-11-12', n: 5000 }], 5000).join('\n');
+    ok('a day that reached the ceiling is named, one under it is not', note.indexOf('2026-11-12') >= 0 && note.indexOf('2026-11-11') < 0);
+    ok('no capped day, no note', capNote([{ day: '2026-11-12', n: 12 }], 5000).length === 0);
     console.log('\n' + pass + ' passed, ' + fail + ' failed\n');
     process.exit(fail ? 1 : 0);
   }
 
   const days = dayKeys(DAYS, Date.now());
-  let rows, source;
+  let rows, source, totals = [];
   if (FLAGS.includes('--firestore')) { rows = await readFirestore(days); source = 'Firestore'; }
   else {
-    try { rows = readD1(days); source = 'D1'; }
+    try { rows = readD1(days); source = 'D1'; totals = readD1Totals(days); }
     catch (e) {
       const full = String((e && ((e.stdout || '') + (e.stderr || '') + (e.message || ''))) || e);
       const msg = full.split('\n').filter((l) => /error|ERROR|fail|auth|login/i.test(l)).slice(0, 4).join('\n  ') || full.trim().slice(-400);
@@ -163,6 +192,6 @@ async function readFirestore(days) {
       }
     }
   }
-  console.log(render(rows, days, ONLY, source).join('\n'));
+  console.log(render(rows, days, ONLY, source).concat(capNote(totals, CAP)).join('\n'));
   process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });

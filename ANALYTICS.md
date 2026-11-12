@@ -26,8 +26,18 @@ the rules still deny every client.
 **A route is now a bucket, not a path.** Random paths used to make one document each, so the store
 could be grown without limit. Now a path lands in one of a small fixed set: `/`, a real top-level
 section (`/app`, `/articles/*`, `/pricing`, ...), `/:probe` (scanners: `.php`, `wp-`, `/.env`),
-`/:asset` (a missing file with an extension) or `/:other`. Counting is also throttled per IP (per /64
+`/:asset` (a missing file with an extension) or `/:other`. Counting is also throttled per IP (per /48
 on IPv6) by `PAGE_RATE_LIMITER`, 30 a minute; past that a request is still served, just not counted.
+
+**A hard ceiling per day.** A per-address throttle multiplies by the number of addresses: a few IPv4s,
+or the 65,536 /64s in one free tunnel /48, could still spend the `cubby-games` D1's daily writes, and
+that database also holds account-deletion cleanup, the guest guessing game and the cron heartbeat. So
+the Worker stops counting for the UTC day once `page_stats_total` reaches `PAGE_STATS_DAILY_CAP`
+(default 5000; set it under `[vars]` in `wrangler.toml` to change it). The check is one conditional
+UPDATE, so past the cap nothing is written, and each isolate then skips D1 for page stats until the day
+ends and logs `pagestats_cap_reached` once. Pages are served exactly as before. A day that hit the
+ceiling is named under the report's table: its counts are a floor, not the whole day (`--cap=N` if the
+cap was changed).
 For the exact broken path, run `npx wrangler tail cubby` while reproducing it.
 
 **Read this first: it counts 404s, not page views.** Workers Static Assets serves any matching asset

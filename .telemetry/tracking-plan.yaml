@@ -98,11 +98,11 @@ events:
   # ── Acquisition ───────────────────────────────────────────────────────────────────────────────
   - name: visit.landed
     category: acquisition
-    source: emitted            # existing pageStats counter, named here; storage unchanged
+    source: emitted            # existing page counter, named here; D1 cubby-games page_stats, throttled, capped per day
     group_level: none
     description: An HTML page was served. App launches count as /app.
     properties:
-      - { name: path, type: string, required: true, note: "secret segments collapsed by statsKey()" }
+      - { name: path, type: string, required: true, note: "a fixed bucket from statsKey(); nothing after a section name is kept" }
       - { name: status_class, type: string, enum: [ok, "404", 4xx, 5xx], required: true }
     expected_frequency: high
 

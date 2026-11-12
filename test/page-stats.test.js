@@ -20,14 +20,24 @@ const ok = (name, cond, detail) => {
   else { fail++; console.log('  FAIL ' + name + (detail !== undefined ? '\n         ' + JSON.stringify(detail).slice(0, 400) : '')); }
 };
 
-/* D1 over real SQLite, counting every statement it is asked to run (inside a batch too). */
+/* D1 over real SQLite, counting every statement it is asked to run (inside a batch too), and the rows
+   each write changed. With opts.writeBudget it behaves like D1's free plan once the day's rows-written
+   allowance is spent: every further write fails, whoever sent it. */
 function makeD1(opts) {
   opts = opts || {};
   const db = new DatabaseSync(':memory:');
-  const stats = { statements: 0 };
+  const stats = { statements: 0, rowsWritten: 0 };
   const prepare = (sql) => {
     let args = [];
-    const go = (fn) => { stats.statements++; if (opts.broken) throw new Error('d1 down'); return fn(); };
+    const isWrite = /^\s*(insert|update|delete|replace)\b/i.test(sql);
+    const go = (fn) => {
+      stats.statements++;
+      if (opts.broken) throw new Error('d1 down');
+      if (isWrite && opts.writeBudget != null && stats.rowsWritten >= opts.writeBudget) throw new Error('D1_ERROR: daily rows written limit exceeded');
+      const out = fn();
+      if (isWrite) stats.rowsWritten += Number(db.prepare('SELECT changes() AS c').get().c || 0);
+      return out;
+    };
     const st = {
       bind: (...a) => { args = a; return st; },
       run: async () => go(() => { db.prepare(sql).run(...args); return { success: true }; }),
@@ -94,13 +104,30 @@ function randomPath(i) {
   const worker = mod.default;
 
   /* One GET through the real router, waiting for whatever it handed to waitUntil. */
-  async function get(env, p, headers, method) {
+  async function getW(w, env, p, headers, method) {
     const pending = [];
     const ctx = { waitUntil: (pr) => pending.push(Promise.resolve(pr).catch((e) => { pending.err = e; })) };
-    const res = await worker.fetch(new Request('https://little-cubby.com' + p, { method: method || 'GET', headers: headers || {} }), env, ctx);
+    const res = await w.fetch(new Request('https://little-cubby.com' + p, { method: method || 'GET', headers: headers || {} }), env, ctx);
     await Promise.all(pending);
     return { res, err: pending.err };
   }
+  const get = (...a) => getW(worker, ...a);
+  /* A fresh copy of worker.js is a fresh isolate: its module-level state starts empty. */
+  let isolates = 0;
+  const freshWorker = async () => (await import('file://' + path.join(__dirname, '..', 'worker.js') + '?isolate=' + (++isolates))).default;
+  /* Pin the clock, DAY included (two gates here flaked on month boundaries). Only new Date() / Date.now()
+     move; everything else is the real Date. */
+  const RealDate = Date;
+  const pinClock = (iso) => {
+    const t = RealDate.parse(iso);
+    globalThis.Date = class extends RealDate { constructor(...a) { if (a.length) super(...a); else super(t); } static now() { return t; } };
+  };
+  const unpinClock = () => { globalThis.Date = RealDate; };
+  /* Capture what the Worker logs, so "logs once" is checked rather than assumed. */
+  const logged = [];
+  const realLog = console.log, realWarn = console.warn, realErr = console.error;
+  const capture = () => { logged.length = 0; const f = (...a) => logged.push(a.map(String).join(' ')); console.log = f; console.warn = f; console.error = f; };
+  const release = () => { console.log = realLog; console.warn = realWarn; console.error = realErr; };
   const baseEnv = (extra) => Object.assign({ ASSETS, FIREBASE_SERVICE_ACCOUNT: SA }, extra);
 
   console.log('\npage stats: anonymous 404 traffic and the family database\n');
@@ -121,7 +148,8 @@ function randomPath(i) {
   ok('every one of them is still served the 404 page', served404 === 1000 && bodyOk === 1000, { served404, bodyOk });
   ok('ZERO requests reached Firestore or Google OAuth', googleCalls() === 0, { googleCalls: googleCalls(), sample: outbound.slice(0, 2) });
   ok('nothing thrown out of waitUntil', threw === 0, threw);
-  ok('D1 statements are bounded by the per-address throttle, not by the request count', d1.stats.statements <= 40, d1.stats.statements);
+  // Two statements per counted view (the daily total, then the bucket), plus schema setup.
+  ok('D1 statements are bounded by the per-address throttle, not by the request count', d1.stats.statements <= 2 * 30 + 5, d1.stats.statements);
   ok('at most 30 of them were counted', totalCounted(d1) <= 30, totalCounted(d1));
 
   console.log('\n2. a thousand random 404s from a thousand addresses');
@@ -138,7 +166,7 @@ function randomPath(i) {
   const reachable = random.filter((p) => !/^\/g\//.test(p)).length;
   ok('every request that reaches the counter was counted (the throttle is per address)', reachable > 800 && totalCounted(d1) === reachable, { counted: totalCounted(d1), reachable });
   ok('but they landed in a small fixed set of buckets, not one row per path', keys.length > 0 && keys.length <= 12, keys);
-  ok('a write is one statement per counted request, plus schema setup', d1.stats.statements <= 1000 + 5, d1.stats.statements);
+  ok('a write is two statements per counted request (total, bucket), plus schema setup', d1.stats.statements <= 2 * reachable + 5, { statements: d1.stats.statements, reachable });
   const stored = JSON.stringify(rows).toLowerCase();
   ok('no random path segment was stored', rows.length > 0 && random.every((p) => { const m = p.match(/[0-9a-f]{16}/); return !m || stored.indexOf(m[0]) < 0; }), keys);
   ok('no query string or secret was stored', rows.length > 0 && stored.indexOf('oobcode') < 0 && stored.indexOf('secret') < 0 && stored.indexOf('?') < 0, keys);
@@ -201,6 +229,105 @@ function randomPath(i) {
   /* Paired with the line above, so it cannot pass on a counter that counts nothing. */
   await get(env, '/' + rnd(), { 'CF-Connecting-IP': '192.0.2.4' });
   ok('and a GET on the same env is', totalCounted(d1) === 1, tableRows(d1));
+
+  /* Round 2. Per-address throttling bounds one address, not the total. 500 /64s inside one /48 (what a
+     free tunnel hands out) or a few IPv4 addresses could still spend the cubby-games D1's daily writes,
+     and that D1 also holds account-deletion cleanup, the guest guessing game and the cron heartbeat. */
+  console.log('\n8. a flood from 500 /64s inside one /48 plus eight IPv4 addresses, with a daily cap of 50');
+  const CAP = 50;
+  d1 = makeD1({ writeBudget: 400 });
+  // Someone's guessing-game hub, there before the flood. Deleting their account must still remove it.
+  d1.raw.exec("CREATE TABLE hubs (code TEXT PRIMARY KEY, owner_uid TEXT, title TEXT, created_at INTEGER)");
+  d1.raw.prepare("INSERT INTO hubs (code, owner_uid, title, created_at) VALUES ('hubcode1', 'uid-leaving', 'Our bump', 1)").run();
+  lim = makeLimiter(30);
+  env = baseEnv({ GAMES_DB: d1, PAGE_RATE_LIMITER: lim, PAGE_STATS_DAILY_CAP: String(CAP) });
+  pinClock('2026-11-12T10:00:00Z');
+  let w = await freshWorker();
+  outbound.length = 0;
+  let floodReqs = 0, flood404 = 0, floodThrew = 0, statementsAtCap = -1;
+  capture();
+  try {
+    const ips = [];
+    for (let s = 0; s < 500; s++) ips.push('2001:470:abcd:' + s.toString(16) + '::1');
+    for (let a = 0; a < 8; a++) ips.push('198.51.100.' + (10 + a));
+    for (const ip of ips) {
+      for (let i = 0; i < 31; i++) {
+        const { res, err } = await getW(w, env, '/x' + i, { 'CF-Connecting-IP': ip });
+        floodReqs++; if (res.status === 404) flood404++; if (err) floodThrew++;
+        if (statementsAtCap < 0 && totalCounted(d1) >= CAP) statementsAtCap = d1.stats.statements;
+      }
+    }
+  } finally { release(); }
+  const capLogs = logged.filter((l) => /pagestats_cap/.test(l));
+  ok('every request was still served the 404 page', flood404 === floodReqs && floodReqs === 508 * 31 && floodThrew === 0, { floodReqs, flood404, floodThrew });
+  ok('counting stopped at the cap: page-stat counts never exceed it', totalCounted(d1) === CAP, { counted: totalCounted(d1), cap: CAP });
+  ok('rows written for page stats stay within two per counted view', d1.stats.rowsWritten <= 1 + 2 * CAP + 2, { rowsWritten: d1.stats.rowsWritten });
+  ok('once the cap is seen, this isolate stops calling D1 for page stats', statementsAtCap > 0 && d1.stats.statements - statementsAtCap <= 1, { statementsAtCap, statements: d1.stats.statements });
+  ok('and says so once, not once per request', capLogs.length === 1, capLogs.slice(0, 3));
+  ok('still zero Firestore requests', googleCalls() === 0, googleCalls());
+  let purgeErr = null;
+  try {
+    // What purgeAccountData runs for a deleted account's hub, against the same D1 after the flood.
+    await d1.prepare('DELETE FROM hubs WHERE code=?').bind('hubcode1').run();
+  } catch (e) { purgeErr = String(e.message || e); }
+  const hubLeft = d1.raw.prepare("SELECT COUNT(*) AS c FROM hubs WHERE owner_uid = 'uid-leaving'").get().c;
+  ok('account-deletion cleanup on the same D1 still runs after the flood', purgeErr === null && hubLeft === 0, { purgeErr, hubLeft });
+
+  console.log('\n9. another isolate on the same day finds the cap already reached');
+  let w2 = await freshWorker();
+  const before = d1.stats.statements, writtenBefore = d1.stats.rowsWritten;
+  capture();
+  try {
+    for (let i = 0; i < 20; i++) await getW(w2, env, '/y' + i, { 'CF-Connecting-IP': '192.0.2.' + (50 + i) });
+  } finally { release(); }
+  ok('counts nothing more', totalCounted(d1) === CAP, totalCounted(d1));
+  ok('writes no row', d1.stats.rowsWritten === writtenBefore, { before: writtenBefore, after: d1.stats.rowsWritten });
+  ok('and asks D1 only once to learn it (schema setup aside)', d1.stats.statements - before <= 3, { statements: d1.stats.statements - before });
+
+  console.log('\n10. the next UTC day counts again');
+  pinClock('2026-11-13T00:00:30Z');
+  await getW(w2, env, '/z', { 'CF-Connecting-IP': '192.0.2.99' });
+  const tomorrow = tableRows(d1).filter((r) => r.day === '2026-11-13');
+  ok('a view after midnight UTC is counted under the new day', tomorrow.length === 1 && tomorrow[0].n === 1, tomorrow);
+  unpinClock();
+
+  console.log('\n11. the cap defaults to 5000 when PAGE_STATS_DAILY_CAP is unset');
+  pinClock('2026-11-12T10:00:00Z');
+  d1 = makeD1();
+  d1.raw.exec('CREATE TABLE page_stats_total (day TEXT PRIMARY KEY, n INTEGER NOT NULL DEFAULT 0)');
+  d1.raw.prepare("INSERT INTO page_stats_total (day, n) VALUES ('2026-11-12', 4999)").run();
+  env = baseEnv({ GAMES_DB: d1, PAGE_RATE_LIMITER: makeLimiter(30) });
+  w = await freshWorker();
+  capture();
+  try { for (let i = 0; i < 3; i++) await getW(w, env, '/d' + i, { 'CF-Connecting-IP': '192.0.2.' + (120 + i) }); }
+  finally { release(); }
+  const totalRow = d1.raw.prepare("SELECT n FROM page_stats_total WHERE day = '2026-11-12'").get();
+  ok('one more view fits under 5000, the next two do not', totalCounted(d1) === 1 && totalRow && totalRow.n === 5000, { counted: totalCounted(d1), total: totalRow });
+  unpinClock();
+
+  console.log('\n12. IPv6 is throttled per /48, whatever way the address is written');
+  const keysFor = async (ipList) => {
+    const l = makeLimiter(30);
+    const e = baseEnv({ GAMES_DB: makeD1(), PAGE_RATE_LIMITER: l });
+    for (const ip of ipList) await get(e, '/' + rnd(), { 'CF-Connecting-IP': ip });
+    return [...l.keys.keys()];
+  };
+  let k = await keysFor(Array.from({ length: 500 }, (_, s) => '2001:470:abcd:' + s.toString(16) + '::1'));
+  ok('500 /64s inside one /48 are one throttle key', k.length === 1, k.slice(0, 3));
+  k = await keysFor(['2001:0:0:5::1', '2001::5:a:b:c:d', '2001:0000:0000:0005:0000:0000:0000:0001', '2001:0:0:9::1']);
+  ok('2001:0:0:5::1 and 2001::5:a:b:c:d share a key (a compressed zero run no longer splits it)', k.length === 1, k);
+  /* Paired with the two lines above, so a constant key cannot pass them. */
+  k = await keysFor(['2001:db8:1::1', '2001:db8:2::1', '198.51.100.1', '::ffff:198.51.100.1']);
+  ok('different /48s, and different IPv4 addresses, keep separate keys', k.length === 3, k);
+  // The default (/64) is what the sign-in limiter uses; check it on the same compressed forms.
+  const src = require('fs').readFileSync(path.join(__dirname, '..', 'worker.js'), 'utf8');
+  const m = src.match(/\nfunction clientIpKey\([\s\S]*?\n}\n/);
+  let cik = null; try { cik = m && new Function(m[0] + '; return clientIpKey;')(); } catch (e) { cik = null; }
+  const req6 = (ip) => ({ headers: { get: () => ip } });
+  ok('clientIpKey(request) keys a /64 the same however it is written, and a different /64 apart',
+    !!cik && cik(req6('2001:0:0:5::1')) === cik(req6('2001::5:a:b:c:d')) && cik(req6('2001::5:a:b:c:d')) !== cik(req6('2001:0:0:6::1'))
+      && cik(req6('2001:0:0:5::1'), 3) === cik(req6('2001:0:0:6::1'), 3),
+    cik ? [cik(req6('2001:0:0:5::1')), cik(req6('2001::5:a:b:c:d')), cik(req6('2001:0:0:5::1'), 3)] : 'clientIpKey not found in worker.js');
 
   console.log('\n' + pass + ' passed, ' + fail + ' failed\n');
   process.exit(fail ? 1 : 0);

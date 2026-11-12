@@ -84,8 +84,10 @@ namespace_id = "1005"
 simple = { limit = 10, period = 60 }
 
 # The 404 counter (worker.js recordPageView). Every unmatched GET reaches it with no account, so it is
-# throttled per IP (per /64 on IPv6) before it may write a row to D1. Thirty a minute is far more broken
+# throttled per IP (per /48 on IPv6) before it may write a row to D1. Thirty a minute is far more broken
 # links than a person hits; a loop gets thirty counts and no more. No binding means no counting.
+# Many addresses still add up, so there is also a hard ceiling per UTC day: PAGE_STATS_DAILY_CAP
+# (default 5000 in worker.js; add it under [vars] to change it).
 [[unsafe.bindings]]
 name = "PAGE_RATE_LIMITER"
 type = "ratelimit"
