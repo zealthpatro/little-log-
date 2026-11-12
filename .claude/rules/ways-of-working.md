@@ -28,6 +28,12 @@ catalogue behind it. Each rule below cost real time in Aug-Sep 2026 and each has
   (`test/purge-unflag-emulator.test.js`, `test/signin-code-emulator.test.js`).
 - A server job that destroys data re-checks its own premise (the purge reads `members` before deleting),
   whatever the rules above it promise. Rules list what each role MAY write, never what it may not.
+- A limit keyed only on what a stranger can know (an email address) is a lockout lever. The first
+  sign-in guess ceiling let one laptop lock a parent out for an hour; split it by network and keep a
+  per-address total (`test/signin-code-budget.test.js` section 2a stages the attack).
+- A rule that makes two writes one atomic act must refuse the FIRST write alone, or an older cached
+  build spends half the act and strands it (a link claimed, nobody joined). Test old client shapes
+  against the new rules, not only the new client against the old (`test/household-guard.test.js` 4b).
 - After the second failed fix of one assertion, stop and print every input it depends on. Two
   rewrites blamed a correct product before one dump read the anchor back as "now".
 

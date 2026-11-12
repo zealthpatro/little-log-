@@ -148,6 +148,7 @@ const TREE = [
   /* The funnel: derivation, Worker, client, and the plan they all answer to. Each proven red. */
   { name: 'funnel-core',    cmd: ['node', 'test/funnel-core.test.js'] },
   { name: 'funnel-worker',  cmd: ['node', 'test/funnel-worker.test.js'] },
+  { name: 'native-deeplink', cmd: ['node', 'test/native-deeplink.test.js'] },   // the native wrapper keeps a token invite link
   { name: 'funnel-steps',   cmd: ['node', 'tools/funnel_steps_check.js', 'url'] },
   { name: 'tracking-plan',  cmd: ['node', 'tools/tracking_plan_check.js'] },
   { name: 'funnel-report',  cmd: ['node', 'tools/funnel_report.js', '--self-test'] },
@@ -204,6 +205,7 @@ const EMU_GATES = [
   { name: 'purge-unflag-emu', emu: 'node purge-unflag-emulator.test.js' }, // the bogus flag really clears
   { name: 'invite-consent', self: ['node', 'test/invite-consent.test.js'] },  // a newcomer is asked before joining
   { name: 'invite-cleanup', self: ['node', 'test/invite-cleanup.test.js'] },  // the one-off cleanup closes every lingering way back in
+  { name: 'ios-signin', self: ['node', 'test/ios-signin-code.test.js'] },       // the installed iOS app signs in by code, in its own container
 ];
 
 function freePort() {

@@ -241,6 +241,31 @@ function firestore(opts) {
   ok('when the snapshot failed, the digest SAYS it failed, in the subject',
      mail4.length === 1 && /FAILED/.test(mail4[0].subject) && /failed on 1 of the last 1/.test(mail4[0].html), mail4[0] && mail4[0].subject);
 
+  /* 7. A day ceiling on the anonymous counter (final review XL-5). The per-IP limiter multiplies by
+     the number of addresses, and this D1 also holds account-deletion cleanup, the guessing game and
+     the cron heartbeat, so a few addresses could spend its daily writes. LAST in this file: the
+     Worker remembers a full day per isolate, so nothing after this would be counted today. */
+  console.log('\n7. the step counter has a day ceiling, and a D1 error never fails the request');
+  {
+    const broken = makeD1();
+    broken.prepare = () => { const st = { bind: () => st, run: async () => { throw new Error('D1_ERROR: daily rows written limit exceeded'); }, first: async () => { throw new Error('D1_ERROR: daily rows written limit exceeded'); }, all: async () => { throw new Error('D1_ERROR'); } }; return st; };
+    broken.batch = async () => [];
+    let threw = null, res = null;
+    try { res = await F.recordStep(req(valid), { GAMES_DB: broken }); } catch (e) { threw = e.message; }
+    ok('a D1 that refuses every write answers 204 instead of throwing', !threw && res && res.status === 204, threw || (res && res.status));
+    const capped = makeD1();
+    const envCap = { GAMES_DB: capped, STEP_STATS_DAILY_CAP: '3' };
+    const sts = [];
+    for (let i = 0; i < 6; i++) sts.push((await F.recordStep(req(valid), envCap)).status);
+    ok('every step is answered 204, under the cap and over it', sts.every((x) => x === 204), sts);
+    ok('only the first 3 are counted (STEP_STATS_DAILY_CAP=3)', count(capped) === 3, count(capped));
+    const total = capped.raw.prepare('SELECT n FROM funnel_steps_total').get();
+    ok('and the day total stops at the cap', total && total.n === 3, total);
+    const later = makeD1();
+    await F.recordStep(req(valid), { GAMES_DB: later, STEP_STATS_DAILY_CAP: '3' });
+    ok('past the cap the isolate stops touching D1 for the rest of the day', count(later) === 0, count(later));
+  }
+
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   console.log('FUNNEL-WORKER: ' + (fail ? 'FAIL' : 'PASS') + '\n');
   process.exit(fail ? 1 : 0);

@@ -191,43 +191,103 @@ const liveMacs = () => [...world.docs.values()].filter((d) => d.fields && d.fiel
     ok('no live code is left to guess against', liveMacs() === 0, liveMacs());
   }
 
-  console.log('\n2. reissuing does not hand out a fresh guess budget');
+  /* The ceilings are split by network as well as per address (final review 2026-11-12): with one
+     ceiling per address, anyone who knew a parent's email could spend it from one laptop and lock her
+     out of code sign-in for an hour. A network is CF-Connecting-IP (IPv4, or the IPv6 /48). */
+  const NET = (n) => ({ 'CF-Connecting-IP': '203.0.113.' + n });
+  async function issueFrom(n) { cacheStore.clear(); const r = await post(worker, '/api/signin-code', { email: EMAIL }, ENV, NET(n)); return { status: r.status, body: await r.json().catch(() => ({})) }; }
+  const verifyFrom = (n, code) => post(worker, '/api/signin-verify', { email: EMAIL, code }, ENV, NET(n));
+
+  console.log('\n2. reissuing does not hand out a fresh guess budget (one network)');
   {
     resetWorld();
     evaluated = 0;
-    await issue(worker); let c = lastCode();
-    for (let i = 0; i < 3; i++) await verify(worker, wrongFor(c, i));
-    await issue(worker); c = lastCode();
-    for (let i = 0; i < 5; i++) await verify(worker, wrongFor(c, i));
-    const third = await issue(worker);
-    ok('a third code can still be sent (8 misses so far this hour)', third.status === 200 && third.body.hasCode === true, third);
+    await issueFrom(1); let c = lastCode();
+    for (let i = 0; i < 4; i++) await verifyFrom(1, wrongFor(c, i));
+    const second = await issueFrom(1);
+    ok('a second code can be sent after 4 misses', second.status === 200 && second.body.hasCode === true, second);
     c = lastCode();
-    for (let i = 0; i < 2; i++) await verify(worker, wrongFor(c, i));
-    ok('ten guesses compared across three codes', evaluated === 10, evaluated);
-    const right = await verify(worker, c);
-    ok('the right code, on the 11th guess in an hour, does not sign in', right.status !== 200, right.status);
-    /* Not "did not match": she may have typed it right. The per-IP limiter's own 429 answer, which
-       the client already turns into "Could not finish signing in just now. Mind trying again?" */
-    ok('it gets the polite try-later answer the limiter already gives', right.status === 429 && (await right.json()).error === 'rate_limited', right.status);
-    ok('and the 11th guess was never compared', evaluated === 10, evaluated);
+    for (let i = 0; i < 3; i++) await verifyFrom(1, wrongFor(c, i));
+    ok('seven guesses compared across two codes', evaluated === 7, evaluated);
+    const right = await verifyFrom(1, c);
+    ok('the right code, as that network\'s 8th guess this hour, does not sign in', right.status !== 200, right.status);
+    const rb = await right.json();
+    ok('it gets the try-later answer, with how long to wait', right.status === 429 && rb.error === 'rate_limited' && rb.retryAfter > 60 && rb.retryAfter <= 3600, rb);
+    ok('and the 8th guess was never compared', evaluated === 7, evaluated);
     const mailed = world.mail.length;
-    const fourth = await issue(worker);
-    ok('no further code is minted for that address this hour', fourth.status !== 200 && world.mail.length === mailed, [fourth, world.mail.length - mailed]);
+    const third = await issueFrom(1);
+    ok('no further code is minted for that network this hour', third.status === 429 && world.mail.length === mailed, [third, world.mail.length - mailed]);
+    ok('and it says how long codes are paused for', third.body.error === 'rate_limited' && third.body.retryAfter > 60, third.body);
     cacheStore.clear();
-    const link = await post(worker, '/api/send-signin-link', { email: EMAIL });
+    const link = await post(worker, '/api/send-signin-link', { email: EMAIL }, ENV, NET(1));
     const lb = await link.json();
-    ok('but the link email still goes out, so a real parent still has a way in', link.status === 200 && lb.hasLink === true, lb);
+    ok('but the link email still goes out from there', link.status === 200 && lb.hasLink === true, lb);
     ok('and it honestly carries no code', lb.hasCode === false && !codeFromEmail(world.mail[world.mail.length - 1].html), lb);
+    /* THE LOCKOUT, closed: those seven misses came from someone else's laptop. Her phone is on its
+       own network, still has its own share, and her code signs her in. */
+    const hers = await issueFrom(2);
+    ok('her phone, on another network, still gets a code', hers.status === 200 && hers.body.hasCode === true, hers);
+    ok('and that code signs her in', (await verifyFrom(2, lastCode())).status === 200);
   }
 
-  console.log('\n3. at most five codes are minted per address per hour');
+  console.log('\n2a. THE LOCKOUT: a stranger with her address and one laptop cannot spend her way in');
   {
     resetWorld();
-    const statuses = [];
-    for (let i = 0; i < 6; i++) statuses.push((await issue(worker)).status);
-    ok('five sends mint five codes', statuses.slice(0, 5).every((s) => s === 200) && world.mail.length === 5, [statuses, world.mail.length]);
-    ok('the sixth mints none and mails nothing', statuses[5] !== 200 && world.mail.length === 5, [statuses, world.mail.length]);
-    ok('the fifth code still works', (await verify(worker, lastCode())).status === 200);
+    evaluated = 0;
+    /* What the final review did to the old worker: ask for codes and burn guesses from one network
+       until refused. That used to spend the whole address, and her own code was then refused too. */
+    let refused = 0;
+    for (let round = 0; round < 4 && refused < 2; round++) {
+      const got = await issueFrom(9);
+      if (got.status !== 200) { refused++; continue; }
+      const c = lastCode();
+      for (let i = 0; i < 5; i++) { const r = await verifyFrom(9, wrongFor(c, i)); if (r.status === 429) { refused++; break; } }
+    }
+    ok('the stranger is refused before he has spent the address', evaluated < 15 && refused > 0, { evaluated, refused });
+    const hers = await issueFrom(2);
+    ok('she asks from her phone and a code arrives', hers.status === 200 && hers.body.hasCode === true, hers);
+    const v = await verifyFrom(2, lastCode());
+    ok('and her code signs her in', v.status === 200, v.status);
+  }
+
+  console.log('\n2b. the per-address total still bounds guessing from many networks');
+  {
+    resetWorld();
+    evaluated = 0;
+    for (const n of [1, 2]) {
+      await issueFrom(n); let c = lastCode();
+      for (let i = 0; i < 5; i++) await verifyFrom(n, wrongFor(c, i));
+      await issueFrom(n); c = lastCode();
+      for (let i = 0; i < 2; i++) await verifyFrom(n, wrongFor(c, i));
+    }
+    ok('two networks at their share: fourteen guesses compared', evaluated === 14, evaluated);
+    await issueFrom(3);
+    const lastGo = lastCode();
+    await verifyFrom(3, wrongFor(lastGo, 0));
+    ok('a third network spends the fifteenth', evaluated === 15, evaluated);
+    const d = await issueFrom(4);
+    ok('a fourth network gets no code: the address has had its guesses', d.status === 429 && d.body.retryAfter > 0, d);
+    const r = await verifyFrom(4, '000000');
+    ok('a guess from a fourth network is refused without a compare', r.status === 429 && evaluated === 15, [r.status, evaluated]);
+    const r3 = await verifyFrom(3, lastGo);
+    ok('and even the right code, from the third network, is not compared past the address total', r3.status === 429 && evaluated === 15, [r3.status, evaluated]);
+  }
+
+  console.log('\n3. codes minted per address per hour: four per network, twelve in all');
+  {
+    resetWorld();
+    const a = [];
+    for (let i = 0; i < 5; i++) a.push((await issueFrom(1)).status);
+    ok('one network: four sends mint four codes', a.slice(0, 4).every((s) => s === 200) && world.mail.length === 4, [a, world.mail.length]);
+    ok('the fifth from there mints none and mails nothing', a[4] === 429 && world.mail.length === 4, [a, world.mail.length]);
+    ok('the fourth code still works', (await verifyFrom(1, lastCode())).status === 200);
+    resetWorld();
+    const all = [];
+    for (const n of [1, 2, 3]) for (let i = 0; i < 4; i++) all.push((await issueFrom(n)).status);
+    ok('three networks mint twelve between them', all.every((s) => s === 200) && world.mail.length === 12, [all, world.mail.length]);
+    const thirteenth = await issueFrom(4);
+    ok('the thirteenth, from a fourth network, mints none', thirteenth.status === 429 && world.mail.length === 12, [thirteenth.status, world.mail.length]);
+    ok('the twelfth code still works', (await verifyFrom(3, lastCode())).status === 200);
   }
 
   console.log('\n4. the issue endpoint still says nothing about whether an account exists');
@@ -255,8 +315,8 @@ const liveMacs = () => [...world.docs.values()].filter((d) => d.fields && d.fiel
     for (let i = 0; i < 4; i++) await verify(worker, wrongFor(first, i));
     await issue(worker); const second = lastCode();
     ok('after a resend the old code is dead', (await verify(worker, first)).status === 400);
-    for (let i = 0; i < 3; i++) await verify(worker, wrongFor(second, i));
-    ok('and the new one still works after nine misses in all', (await verify(worker, second)).status === 200);
+    for (let i = 0; i < 1; i++) await verify(worker, wrongFor(second, i));
+    ok('and the new one still works after six misses in all, a stale code among them', (await verify(worker, second)).status === 200);
     await issue(worker);
     ok('signing in again the same hour works: success clears the slate', (await verify(worker, lastCode())).status === 200);
 

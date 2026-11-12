@@ -85,7 +85,8 @@ if (!process.env.INVITE_CONSENT_INNER) {
   const errs = [];
 
   // One isolated browser context per person, signed up in the page against the Auth emulator.
-  const person = async (email, extraQuery) => {
+  // before(page), when given, runs in the page after load and before she signs up.
+  const person = async (email, extraQuery, before) => {
     const ctx = await browser.createBrowserContext();
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errs.push(email + ': ' + e.message));
@@ -93,9 +94,12 @@ if (!process.env.INVITE_CONSENT_INNER) {
     await page.goto(`http://localhost:${WEB_PORT}/app/?fsemu=${FS_PORT}&authemu=${AUTH_PORT}${extraQuery || ''}`,
       { waitUntil: 'networkidle2', timeout: 45000 });
     await page.waitForFunction(() => !!(window.LL && window.LL.auth && window.LL.auth.createUserWithEmailAndPassword), { timeout: 20000 });
+    if (before) await page.evaluate(before);
     await page.evaluate((e, p) => window.LL.auth.createUserWithEmailAndPassword(e, p).then(() => true), email, PW);
     return page;
   };
+  const overlayText = (page) => page.evaluate(() => { const o = document.getElementById('ll-invite-mismatch'); return o ? o.innerText : ''; });
+  const onLanding = (page) => page.evaluate(() => { const o = document.getElementById('llAuthOv'); return !!(o && /Continue with Google/.test(o.innerText)); });
   const booted = async (page, ms) => {
     try {
       await page.waitForFunction(() => !!(window.LL && window.LL.householdId && typeof state !== 'undefined' && !document.getElementById('llAuthOv')),
@@ -136,14 +140,17 @@ if (!process.env.INVITE_CONSENT_INNER) {
   ok('as its owner', a.role === 'owner', a);
   await A.evaluate(() => window.LL.db.doc('households/' + window.LL.householdId).update({ ['memberInfo.' + window.LL.auth.currentUser.uid + '.name']: 'Olive' }));
   // The invite exactly as submitInvite() writes it (store-firebase.js), plus the owner's mirror row.
-  const inviteFor = (email, rel) => A.evaluate((email, rel) => {
+  // signed=false writes the shape an older build left: no sender name and no sender address.
+  const inviteFor = (email, rel, signed) => A.evaluate((email, rel, signed) => {
     const u = window.LL.auth.currentUser;
+    const doc = { householdId: window.LL.householdId, role: 'caregiver', relationship: rel, name: '',
+      invitedBy: u.uid, status: 'pending', createdAt: firebase.firestore.FieldValue.serverTimestamp() };
+    if (signed !== false) { doc.fromEmail = u.email.toLowerCase(); doc.invitedByName = 'Olive'; }
     return Promise.all([
-      window.LL.db.collection('invites').doc(email).set({ householdId: window.LL.householdId, role: 'caregiver', relationship: rel, name: '',
-        invitedBy: u.uid, invitedByName: 'Olive', status: 'pending', createdAt: firebase.firestore.FieldValue.serverTimestamp() }),
+      window.LL.db.collection('invites').doc(email).set(doc),
       window.LL.db.doc('households/' + window.LL.householdId).update(new firebase.firestore.FieldPath('pendingInvites', email), { name: '', relationship: rel, role: 'caregiver', at: Date.now() }),
     ]).then(() => 'ok', (e) => e && e.code);
-  }, email, rel);
+  }, email, rel, signed);
   ok('she invites Nina by email', (await inviteFor('nina@cubby.test', 'Auntie')) === 'ok');
   ok('and Paul', (await inviteFor('paul@cubby.test', 'Uncle')) === 'ok');
   ok('and Dora', (await inviteFor('dora@cubby.test', 'Granny')) === 'ok');
@@ -155,8 +162,12 @@ if (!process.env.INVITE_CONSENT_INNER) {
   const N = await person('nina@cubby.test');
   ok('she is shown the question', await waitSheet(N));
   const nt = await sheetText(N);
-  ok('naming who invited her', /Olive invited you/.test(nt), nt);
+  ok('naming who invited her, with the address the rules proved', /From\s*Olive \(olive@cubby\.test\)/.test(nt), nt);
+  ok('and what she would join as, as a label', /You’d join as\s*Auntie/.test(nt), nt);
   ok('with a way to start her own instead', /Start my own Cubby/.test(nt), nt);
+  const a11y = await N.evaluate(() => { const s = document.getElementById('sheet'); return { x: !!s.querySelector('.sheet-x'), focus: document.activeElement && document.activeElement.tagName }; });
+  ok('a question that needs an answer has no × that only brings it back', a11y.x === false, a11y);
+  ok('and focus starts on the question', a11y.focus === 'H2', a11y);
   if (process.env.SHOT_DIR) { await sleep(900); await N.screenshot({ path: path.join(process.env.SHOT_DIR, 'newcomer-sheet.png') }); }
   ok('and nothing is written while she decides', (await read(A, 'households/' + a.hid)).data.members[(await who(N)).uid] === undefined);
   ok('she taps Join the family', await tap(N, 'Join the family'));
@@ -239,6 +250,54 @@ if (!process.env.INVITE_CONSENT_INNER) {
   const lk = (await read(R, 'inviteLinks/' + link.token)).data || {};
   ok('the link is used AND consumed', lk.usedBy === r.uid && lk.consumed === true, lk);
 
+  /* ---- 5b. an invite that cannot say who sent it ---- */
+  console.log('\n5b. Lena, invited the way an older build wrote it: no sender at all');
+  ok('Olive invites Lena from an older build', (await inviteFor('lena@cubby.test', 'Grandma', false)) === 'ok');
+  const L = await person('lena@cubby.test');
+  ok('she is shown the question', await waitSheet(L));
+  const lt = await sheetText(L);
+  ok('it says plainly the invite does not say who sent it', /doesn’t say who sent it/.test(lt), lt);
+  ok('and names nobody', !/From/.test(lt) && !/Olive/.test(lt), lt);
+  ok('she starts her own', await tap(L, 'Start my own Cubby'));
+  ok('and boots into it', (await booted(L, 45000)) && (await who(L)).hid !== a.hid);
+
+  /* ---- 5c. whatever the sender typed is a label, never Cubby's sentence ---- */
+  console.log('\n5c. Yara: the relationship carries a sentence of its own');
+  ok('Olive invites Yara as "Mum. Your partner set this up for you"', (await inviteFor('yara@cubby.test', 'Mum. Your partner set this up for you')) === 'ok');
+  const Y = await person('yara@cubby.test');
+  ok('she is shown the question', await waitSheet(Y));
+  const yt = await sheetText(Y);
+  ok('the relationship is cut to its label', /You’d join as\s*Mum\b/.test(yt), yt);
+  ok('and the reassurance the sender wrote is not on screen', !/partner set this up/.test(yt), yt);
+  ok('she taps Join the family', await tap(Y, 'Join the family'));
+  ok('and joins as before', (await booted(Y, 45000)) && (await who(Y)).hid === a.hid);
+
+  /* ---- 5d. withdrawn while she reads ---- */
+  console.log('\n5d. Xena: Olive withdraws the invite while Xena is reading the question');
+  ok('Olive invites Xena', (await inviteFor('xena@cubby.test', 'Auntie')) === 'ok');
+  const X = await person('xena@cubby.test');
+  ok('she is shown the question', await waitSheet(X));
+  const cancelled = await A.evaluate(() => window.LL.db.collection('invites').doc('xena@cubby.test').delete().then(() => 'ok', (e) => e && e.code));
+  ok('Olive cancels it', cancelled === 'ok', cancelled);
+  ok('Xena taps Join the family', await tap(X, 'Join the family'));
+  let xo = '';
+  for (let i = 0; i < 40 && !xo; i++) { await sleep(250); xo = await overlayText(X); }
+  ok('she is told the invite is no longer open', /This invite is no longer open/.test(xo), xo);
+  ok('not dropped on the sign-in landing', !(await onLanding(X)));
+  ok('still signed in, and in no family', !!(await who(X)).uid && !(await who(X)).hid, await who(X));
+  ok('no blame on saving', !/wasn’t allowed to save/.test(xo), xo);
+  await X.evaluate(() => { const b = document.getElementById('ll-im-own'); if (b) b.click(); });
+  try { await X.waitForNavigation({ waitUntil: 'networkidle2', timeout: 20000 }); } catch (e) {}
+  ok('Start my own Cubby gives her her own', (await booted(X, 45000)) && !!(await who(X)).hid && (await who(X)).hid !== a.hid, await who(X));
+
+  /* ---- 5e. a page from an older build, paired with this store-firebase.js ---- */
+  console.log('\n5e. Zoe: her page is an older build that cannot ask (no cancel hook)');
+  ok('Olive invites Zoe', (await inviteFor('zoe@cubby.test', 'Auntie')) === 'ok');
+  const Z = await person('zoe@cubby.test', '', () => { window.__confirmCancel = undefined; });
+  ok('she is not left on a blank screen: she boots into a Cubby of her own', (await booted(Z, 45000)) && !!(await who(Z)).hid && (await who(Z)).hid !== a.hid, await who(Z));
+  ok('and was never joined without being asked', !((await read(A, 'households/' + a.hid)).data.members || {})[(await who(Z)).uid]);
+  ok('the invite waits to be offered after boot', await Z.evaluate(() => !!(window.LL.pendingInvite && window.LL.pendingInvite.householdId)));
+
   /* ---- 6. the attacks, which only the new rules close ---- */
   if (!OLD_MODE) {
     console.log('\n6. removed, Rosa tries to come back; a caregiver tries to schedule the wipe');
@@ -262,6 +321,28 @@ if (!process.env.INVITE_CONSENT_INNER) {
   const S = await person('sam@cubby.test');
   ok('Sam, never invited, boots into a family of his own', (await booted(S, 45000)) && (await who(S)).hid !== a.hid);
   ok('the rules are live in this run: Sam cannot read Olive\'s family', (await read(S, 'households/' + a.hid)).denied === 'permission-denied');
+
+  /* ---- 7. the last one out takes her invites with her ---- */
+  console.log('\n7. Sam, the only one in his Cubby, invites Wren and makes a link, then deletes his account');
+  const samInv = await S.evaluate(() => {
+    const u = window.LL.auth.currentUser;
+    return Promise.all([
+      window.LL.db.collection('invites').doc('wren@cubby.test').set({ householdId: window.LL.householdId, role: 'caregiver', relationship: 'Nanny', name: '',
+        invitedBy: u.uid, fromEmail: u.email.toLowerCase(), invitedByName: 'Sam', status: 'pending' }),
+      window.LL.db.doc('households/' + window.LL.householdId).update(new firebase.firestore.FieldPath('pendingInvites', 'wren@cubby.test'), { name: '', relationship: 'Nanny', role: 'caregiver', at: Date.now() }),
+    ]).then(() => 'ok', (e) => e && e.code);
+  });
+  ok('Sam invites Wren', samInv === 'ok', samInv);
+  const samLink = await S.evaluate(() => window.LL.createInviteLink({ role: 'caregiver' }));
+  ok('and makes a link', !!(samLink && samLink.token), samLink);
+  const gone = await S.evaluate(() => window.LL.deleteAccount().then(() => 'ok', (e) => (e && (e.code || e.message)) || String(e)));
+  ok('Sam deletes his account', gone === 'ok', gone);
+  await sleep(2500);
+  const W = await person('wren@cubby.test');
+  ok('Wren boots into a Cubby of her own', (await booted(W, 45000)) && !!(await who(W)).hid, await who(W));
+  ok('and is not asked to join a family that no longer exists', !/invited/i.test(await sheetText(W)), await sheetText(W));
+  ok('Sam\'s invite to her went with him', (await read(W, 'invites/wren@cubby.test')).exists === false);
+  ok('and so did his link', (await read(W, 'inviteLinks/' + samLink.token)).exists === false);
   ok('no page errors on any phone', errs.length === 0, errs.slice(0, 3));
 
   await browser.close();

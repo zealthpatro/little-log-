@@ -126,6 +126,8 @@ function linkJoinBatch(db, hid, uid, token, role, mutate, linkPatch) {
       assertSucceeds(as('J', 'j@x.com').doc('inviteLinks/tokA').update({ usedBy: 'J', consumed: true })));
     await check('fallback step 2: the single join write, clearing the pending row',
       assertSucceeds(as('J', 'j@x.com').doc('households/HK').update(Object.assign({ joinToken: 'tokA', 'pendingLinks.tokA': del() }, memberUpdate('J', 'caregiver')))));
+    await check('the new invite shape (fromEmail + name) is accepted by the old rules',
+      assertSucceeds(as('O', 'olive@x.com').doc('invites/q@x.com').set({ householdId: 'HE', role: 'caregiver', invitedBy: 'O', fromEmail: 'olive@x.com', invitedByName: 'Olive', status: 'pending' })));
     await check('a newcomer who declines can delete the invite addressed to her',
       assertSucceeds(as('P', 'paul@x.com').doc('invites/paul@x.com').delete()));
     await check('caregiver persist still lands',
@@ -225,6 +227,7 @@ function linkJoinBatch(db, hid, uid, token, role, mutate, linkPatch) {
   const leaveSolo = (extra) => S.doc('households/HS').update(Object.assign({ 'members.S': del(), 'memberInfo.S': del(), 'formerMemberInfo.S': { name: '', relationship: '', avatar: null } }, extra));
   await checkOn(soloSeed, 'last one out, deleteAfter = 1 (purge on the next tick)', () => assertFails(leaveSolo({ deleteAfter: 1, deletionRequestedBy: 'S' })));
   await checkOn(soloSeed, 'last one out, deleteAfter tomorrow', () => assertFails(leaveSolo({ deleteAfter: Date.now() + DAY, deletionRequestedBy: 'S' })));
+  await checkOn(soloSeed, 'last one out, deleteAfter in 6 days (under the week floor)', () => assertFails(leaveSolo({ deleteAfter: Date.now() + 6 * DAY, deletionRequestedBy: 'S' })));
   await checkOn(soloSeed, 'last one out, deleteAfter as a string', () => assertFails(leaveSolo({ deleteAfter: String(Date.now() + 30 * DAY), deletionRequestedBy: 'S' })));
   await checkOn(soloSeed, 'last one out, naming someone else as the requester', () => assertFails(leaveSolo({ deleteAfter: Date.now() + 30 * DAY, deletionRequestedBy: 'C' })));
   await checkOn(() => seed((db) => db.doc('households/H2').set(household({ deleteAfter: 1, deletionRequestedBy: 'C' }))),
@@ -234,6 +237,10 @@ function linkJoinBatch(db, hid, uid, token, role, mutate, linkPatch) {
   await check('the owner clears a bogus deletion flag (cancelling is always safe)', assertSucceeds(O.doc('households/H2').update({ deleteAfter: del(), deletionRequestedBy: del() })));
   await soloSeed();
   await check('last one out, the real client shape (now + 30 days, self)', assertSucceeds(leaveSolo({ deleteAfter: Date.now() + 30 * DAY, deletionRequestedBy: 'S' })));
+  /* Her phone's clock is slow. The client writes 30 days from it, so a phone 3 days slow sends
+     now + 27 days. The old 29-day floor refused that outright, after her private records were gone. */
+  await checkOn(soloSeed, 'last one out from a phone 3 days slow (now + 27 days)', () => assertSucceeds(leaveSolo({ deleteAfter: Date.now() + 27 * DAY, deletionRequestedBy: 'S' })));
+  await checkOn(soloSeed, 'last one out from a phone 20 days slow (now + 10 days)', () => assertSucceeds(leaveSolo({ deleteAfter: Date.now() + 10 * DAY, deletionRequestedBy: 'S' })));
   await seed((db) => db.doc('households/H3').set(household()));
   await check('owner leaves with an heir and no flag', assertSucceeds(O.doc('households/H3').update({ 'members.O': del(), 'memberInfo.O': del(), 'members.C': 'owner', ownerId: 'C', 'formerMemberInfo.O': { name: '', relationship: 'Mama Bear', avatar: null } })));
   await seed((db) => db.doc('households/H4').set(household()));
@@ -308,13 +315,27 @@ function linkJoinBatch(db, hid, uid, token, role, mutate, linkPatch) {
   await checkOn(joinedRemovedSeed, 'J, removed, rejoins with the consumed token (batch)', () => assertFails(linkJoinBatch(J, 'HK', 'J', 'tokA', null, null, { usedBy: 'J', consumed: true })));
   await checkOn(() => linkSeed(), 'a removed member rejoins with a LEGACY claimed link (single write)', () => assertFails(as('L', 'l@x.com').doc('households/HK').update(Object.assign({ joinToken: 'tokLegacy' }, memberUpdate('L', 'caregiver')))));
   await checkOn(() => linkSeed(), 'a removed member rejoins with a LEGACY claimed link (batch)', () => assertFails(linkJoinBatch(as('L', 'l@x.com'), 'HK', 'L', 'tokLegacy')));
-  await checkOn(() => linkSeed(), 'the old two-step: claim, then a separate join write', async () => {
-    await assertSucceeds(J.doc('inviteLinks/tokB').update({ usedBy: 'J' }));
-    await assertFails(J.doc('households/HK').update(Object.assign({ joinToken: 'tokB' }, memberUpdate('J', 'caregiver'))));
+  /* A link may only be claimed in the write that joins. An older cached build claims first and joins
+     second; under these rules its join is refused, and a claim that landed on its own would have
+     spent the owner's link with nobody in. So the claim alone is refused, and the link stays fresh. */
+  await checkOn(() => linkSeed(), 'the old two-step: the claim on its own (usedBy only)', () => assertFails(J.doc('inviteLinks/tokB').update({ usedBy: 'J' })));
+  await checkOn(() => linkSeed(), 'the new client\'s fallback: the claim on its own, with consumed', () => assertFails(J.doc('inviteLinks/tokB').update({ usedBy: 'J', consumed: true })));
+  await checkOn(() => linkSeed(), 'after a refused lone claim the link is still unclaimed, and the real batch joins', async () => {
+    await assertFails(J.doc('inviteLinks/tokB').update({ usedBy: 'J' }));
+    const d = (await readAdmin('inviteLinks/tokB')).data();
+    if (d.usedBy != null || d.consumed === true) throw new Error('the lone claim spent the link: ' + JSON.stringify(d));
+    await assertSucceeds(linkJoinBatch(J, 'HK', 'J', 'tokB'));
+  });
+  await checkOn(() => linkSeed(), 'a claim batched with a join into a DIFFERENT household', async () => {
+    await seed((db) => db.doc('households/HOTHER').set(household({ members: { J: 'owner' }, memberInfo: { J: { name: 'J', role: 'owner' } } })));
+    const b = J.batch();
+    b.update(J.doc('inviteLinks/tokB'), { usedBy: 'J', consumed: true });
+    b.update(J.doc('households/HOTHER'), { updatedAt: ts() });
+    await assertFails(b.commit());
   });
   // The audit's own attack: a link invitee flags the household in the join write itself.
   await checkOn(() => linkSeed(), 'a link joiner sets deleteAfter in the join write', async () => {
-    await assertSucceeds(J.doc('inviteLinks/tokB').update({ usedBy: 'J' }));
+    await assertFails(J.doc('inviteLinks/tokB').update({ usedBy: 'J' }));
     await assertFails(J.doc('households/HK').update(Object.assign({ joinToken: 'tokB', deleteAfter: 1 }, memberUpdate('J', 'caregiver'))));
   });
   await checkOn(() => linkSeed(), 'join batch with an expired link', () => assertFails(linkJoinBatch(J, 'HK', 'J', 'tokExp')));
@@ -343,6 +364,26 @@ function linkJoinBatch(db, hid, uid, token, role, mutate, linkPatch) {
   await check('create carrying deleteAfter = 1 (must FAIL)', assertFails(NEW.doc('households/HNEW2').set(realCreate({ deleteAfter: 1, deletionRequestedBy: 'NEWU' }))));
   await check('create carrying only deleteAfter, a month out (must FAIL)', assertFails(NEW.doc('households/HNEW3').set(realCreate({ deleteAfter: Date.now() + 30 * DAY }))));
   await check('create carrying only deletionRequestedBy (must FAIL)', assertFails(NEW.doc('households/HNEW4').set(realCreate({ deletionRequestedBy: 'NEWU' }))));
+
+  /* ---------------------------------------------------------------------------------------------
+     6. Who an invite says it is from. A newcomer is asked before she joins, naming the sender, and
+        any owner of any household can write an invite. So the sender's address is proven here
+        (fromEmail must be the writer's own sign-in address), and a name may only travel with it. */
+  console.log('\n6. invite sender (fromEmail) is the writer\'s own address');
+  await seed((db) => db.doc('households/HS6').set(household({ ownerId: 'M', members: { M: 'owner' }, memberInfo: { M: { name: 'Mal', role: 'owner' } } })));
+  const M = as('M', 'mal@x.com');
+  const inv = (extra) => Object.assign({ householdId: 'HS6', role: 'caregiver', relationship: 'Auntie', name: 'Vic', invitedBy: 'M', status: 'pending' }, extra || {});
+  await check('the real client shape: own address + name (must SUCCEED)', assertSucceeds(M.doc('invites/v1@x.com').set(inv({ fromEmail: 'mal@x.com', invitedByName: 'Mal' }))));
+  await check('an older build: neither address nor name (must SUCCEED)', assertSucceeds(M.doc('invites/v2@x.com').set(inv())));
+  await check('a name with no address: "Your midwife" (must FAIL)', assertFails(M.doc('invites/v3@x.com').set(inv({ invitedByName: 'Your midwife' }))));
+  await check('someone else\'s address as the sender (must FAIL)', assertFails(M.doc('invites/v4@x.com').set(inv({ fromEmail: 'olive@x.com', invitedByName: 'Olive' }))));
+  await check('an empty address with a name (must FAIL)', assertFails(M.doc('invites/v5@x.com').set(inv({ fromEmail: '', invitedByName: 'Mal' }))));
+  await check('re-inviting rewrites the sender to someone else (must FAIL)', assertFails(M.doc('invites/v1@x.com').set(inv({ fromEmail: 'olive@x.com', invitedByName: 'Olive' }))));
+  await check('re-inviting with her own address again (must SUCCEED)', assertSucceeds(M.doc('invites/v1@x.com').set(inv({ fromEmail: 'mal@x.com', invitedByName: 'Mal' }))));
+  const lk = (extra) => Object.assign({ householdId: 'HS6', role: 'caregiver', relationship: '', invitedBy: 'M', invitedByName: 'Mal', usedBy: null, expiresAt: inHours(24) }, extra || {});
+  await check('a link with her own address (must SUCCEED)', assertSucceeds(M.doc('inviteLinks/tokS1').set(lk({ fromEmail: 'mal@x.com' }))));
+  await check('a link from an older build, no address (must SUCCEED)', assertSucceeds(M.doc('inviteLinks/tokS2').set(lk())));
+  await check('a link claiming someone else\'s address (must FAIL)', assertFails(M.doc('inviteLinks/tokS3').set(lk({ fromEmail: 'olive@x.com' }))));
 
   await env.cleanup();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');

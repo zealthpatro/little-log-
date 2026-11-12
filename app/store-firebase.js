@@ -496,7 +496,21 @@
     var codeForm = row.querySelector('.ll-code-form');
     function sendCode(email) {
       return fetch('/api/signin-code', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: email }) })
-        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) throw new Error(d.error || 'send_failed'); return d; }); });
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) { var er = new Error(d.error || 'send_failed'); er.retryAfter = Number(d.retryAfter) || 0; throw er; } return d; }); });
+    }
+    /* How long codes are paused, in words. The worker's hourly ceilings say when a slot frees
+       (retryAfter, seconds); a pause from the per-IP limiter carries none and lasts about a minute. */
+    function pauseWords(secs) {
+      var m = Math.round((Number(secs) || 0) / 60);
+      if (m <= 1) return 'a minute or so';
+      if (m >= 55) return 'about an hour';
+      return 'about ' + m + ' minutes';
+    }
+    /* The installed iPhone app: a link tapped in Mail opens Safari, whose storage is separate, so a
+       link can never sign THIS app in. Copy that says "open the link" there is a dead end. */
+    function inInstalledIOS() {
+      try { return typeof isStandaloneApp === 'function' && isStandaloneApp() && typeof isIOSDevice === 'function' && isIOSDevice(); }
+      catch (e) { return false; }
     }
     /* Reveal the six-digit box and wire it. ONE implementation for one control: two copies of a
        sign-in submit is how the two routes drifted apart in the first place. */
@@ -510,15 +524,21 @@
         var cb = codeForm.querySelector('button');
         cb.disabled = true; cb.textContent = 'Signing in…';
         fetch('/api/signin-verify', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: email, code: code }) })
-          .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok || !d.token) throw new Error(d.error || 'bad_code'); return d; }); })
+          .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok || !d.token) { var er = new Error(d.error || 'bad_code'); er.retryAfter = Number(d.retryAfter) || 0; throw er; } return d; }); })
           /* The whole point: the session is created HERE, in this container, by this page. No
              navigation, no popup, no cross-origin handler, nothing for iOS to redirect elsewhere. */
           .then(function (d) { return auth.signInWithCustomToken(d.token); })
           .catch(function (err) {
             cb.disabled = false; cb.textContent = 'Sign in';
-            var m = (err && err.message) === 'bad_code'
+            var msg = err && err.message;
+            /* rate_limited is a pause, not a failure, and "mind trying again?" over a pause that can
+               last most of an hour sent her round in circles at 3am. Say it is paused, for how long,
+               and that nothing is wrong. Usually it is somebody else's guesses, not hers. */
+            var m = msg === 'bad_code'
               ? 'That code did not match, or it has expired. Codes last 10 minutes and work once.'
-              : errText(err, 'Could not finish signing in just now. Mind trying again?');
+              : msg === 'rate_limited'
+                ? 'There have been a lot of tries for this email, so codes are paused for ' + pauseWords(err.retryAfter) + '. Nothing is wrong with your account. Try again then.'
+                : errText(err, 'Could not finish signing in just now. Mind trying again?');
             note.textContent = m; ci.select();
           });
       };
@@ -535,12 +555,19 @@
       var hasCode = !!res.hasCode, hasLink = !!res.hasLink;
       if (res.cached) { hasCode = true; hasLink = true; }   // the earlier email came from this same sender
       form.style.display = 'none';
+      var inApp = inInstalledIOS();
       var how = hasCode
         // No "below": the code box renders ABOVE this note (emailRowHtml puts the note last), and a
         // pointer that points the wrong way is worse than none.
         ? ' Type the 6-digit code from that email here.'
-          + (hasLink ? ' Or tap the link in it, if you are reading it on this device.' : '')
-        : ' Open the link in it on this device.';
+          + (hasLink && !inApp ? ' Or tap the link in it, if you are reading it on this device.' : '')
+        /* No code in this email. Either codes are paused for this address (res.capped, the hourly
+           ceiling), or the code could not be stored. Say which, and never tell the installed iPhone
+           app to open a link: it opens in Safari and cannot sign this app in. */
+        : res.capped
+          ? ' Codes for this email are paused for ' + pauseWords(res.retryAfter) + ', after a lot of tries.'
+            + (inApp ? ' The email has a link, which signs you in to Cubby in Safari. To sign in to this app, ask for a code again then.' : ' Tap the link in that email to sign in.')
+          : (inApp ? ' It has a link, which opens Cubby in Safari rather than this app. To sign in here, ask again in a minute for a code.' : ' Open the link in it on this device.');
       note.innerHTML = sentLine(email, res.cached) + how
         + '<div class="ll-resend-row" style="margin-top:8px">Not arrived yet? <button type="button" class="ll-resend" style="' + LINKBTN + '">Resend email</button> &middot; <button type="button" class="ll-changeemail" style="' + LINKBTN + '">Wrong email?</button></div>';
       if (hasCode) showCodeBox(email).focus(); else codeForm.style.display = 'none';
@@ -568,7 +595,13 @@
        code too whenever it can. Each answer states what it actually put in the inbox, so whichever
        one ran, the panel tells the truth. */
     function sendEmail(email) {
-      return sendCode(email).catch(function () { return sendLink(email); });
+      return sendCode(email).catch(function (err) {
+        var capped = !!(err && err.message === 'rate_limited' && err.retryAfter > 0);
+        return sendLink(email).then(function (d) {
+          // The code endpoint's pause rides along, so the panel can say so instead of "open the link".
+          return capped ? Object.assign({}, d, { capped: true, retryAfter: err.retryAfter }) : d;
+        });
+      });
     }
 
     form.onsubmit = function (ev) {
@@ -1088,7 +1121,19 @@
            logged was theirs to read. One tap, naming who invited her. */
         var answer = await askNewcomerToJoin(data);
         if (answer === true) {
-          await joinByEmailInvite(user, data);
+          /* Refused AFTER she said yes: the owner withdrew the invite while she read the sheet, or
+             the family has since closed (the rules never let anyone join a household flagged for
+             deletion). Thrown on, that reached onAuthStateChanged and put a signed-in parent on the
+             sign-in landing under "Cubby wasn't allowed to save that". Nothing was written, so say
+             what happened and let her start her own. */
+          try {
+            await joinByEmailInvite(user, data);
+          } catch (je) {
+            if (!je || je.code !== 'permission-denied') throw je;
+            console.warn('join refused after consent', je.code);
+            showInviteMismatch(email, 'gone');
+            return null;
+          }
           writeOwnMemberEmail(data.householdId); // PRIV-2: email goes to the gated doc, not memberInfo
           await userRef.set({ householdId: data.householdId, name: user.displayName || '', email: user.email || '' }, { merge: true });
           // Remember that this session is a JOIN, not a return, so the first-run screen can say whose
@@ -1687,17 +1732,21 @@
     var u = auth.currentUser;
     if (!u || !hhRef || window.LL.role !== 'owner') return null;
     var token = newInviteToken();
+    var linkDoc = {
+      householdId: window.LL.householdId,
+      role: opts.role === 'owner' ? 'owner' : 'caregiver',
+      relationship: opts.relationship || '',
+      invitedBy: u.uid,
+      invitedByName: nameForUid(u.uid) || (u.displayName || '').split(' ')[0] || '',
+      usedBy: null,
+      createdAt: window.LL.serverTimestamp(),
+      expiresAt: new Date(Date.now() + INVITE_LINK_HOURS * 3600000)
+    };
+    // Checked by the rules against this account's own address, so the sheet that offers the link to
+    // someone with a Cubby already can show who really sent it (inviteFacts).
+    if (u.email) linkDoc.fromEmail = String(u.email).toLowerCase();
     try {
-      await db.collection('inviteLinks').doc(token).set({
-        householdId: window.LL.householdId,
-        role: opts.role === 'owner' ? 'owner' : 'caregiver',
-        relationship: opts.relationship || '',
-        invitedBy: u.uid,
-        invitedByName: nameForUid(u.uid) || (u.displayName || '').split(' ')[0] || '',
-        usedBy: null,
-        createdAt: window.LL.serverTimestamp(),
-        expiresAt: new Date(Date.now() + INVITE_LINK_HOURS * 3600000)
-      });
+      await db.collection('inviteLinks').doc(token).set(linkDoc);
     } catch (e) { console.warn('createInviteLink', e); return null; }
     /* Mirror it onto the household document, the way pending email invites already are. Not a
        convenience: the rules deny LIST on inviteLinks (that is what keeps the token a secret), so
@@ -1732,7 +1781,9 @@
      touch the household.
      The rules published before this change refuse the batch (they read the claim as it was before
      it), so a refusal falls back to the old two steps: claim, then join. The claim sets consumed
-     too, so links used during the deploy window are closed once the new rules go live.
+     too, so links used during the deploy window are closed once the new rules go live. Under the
+     new rules that lone claim is itself refused (a link may only be claimed in the write that
+     joins), so the fallback can never spend a link without getting the person in.
      joinToken is carried on the write because the rule has no other way to know WHICH link
      admitted this person: rules can only read a document whose path they can construct. It is
      spent by the time it lands, so it is an audit trail rather than a secret. The owner's pending
@@ -1806,18 +1857,51 @@
      Pulling the sheet down or tapping outside is not an answer, so it simply asks again: deciding
      for her either way would be wrong at 3am. The inviter's name comes from the invite itself, so
      it is escaped by confirmSheet and the copy never claims more than "invited you". */
+  /* Who sent an invite, as facts for the sheet to draw as data rather than as Cubby's own sentence.
+     The name and the relationship are whatever the sender typed, so a stranger could once write the
+     reassurance ("Mum. Your partner set this up for you") straight into the question. Now the name
+     is a labelled row, the relationship is cut to a short label, and beside them sits the one thing
+     the sender could not choose: fromEmail, which the rules check against their own sign-in address.
+     An invite with no proven address shows no name at all. */
+  function inviteLabel(s, max) {
+    // A label, not a sentence: stop at the first sentence break, squash whitespace, cap the length.
+    return String(s == null ? '' : s).split(/[.!?;:\n\r]/)[0].replace(/\s+/g, ' ').trim().slice(0, max);
+  }
+  function inviteFacts(inv) {
+    var facts = [];
+    var from = String((inv && inv.fromEmail) || '').trim().toLowerCase().slice(0, 120);
+    var who = from ? String((inv && inv.invitedByName) || '').replace(/\s+/g, ' ').trim().slice(0, 30) : '';
+    if (from) facts.push({ label: 'From', value: who ? (who + ' (' + from + ')') : from });
+    var rel = inviteLabel(inv && inv.relationship, 24);
+    if (rel) facts.push({ label: 'You’d join as', value: rel });
+    return { facts: facts, signed: !!from };
+  }
+  // Older builds of the page draw only title and body. Fold the facts into the body there.
+  function factsAsText(facts) {
+    return facts.map(function (f) { return f.label + ': ' + f.value + '.'; }).join(' ');
+  }
   function askNewcomerToJoin(inv) {
     if (typeof window.confirmSheet !== 'function' || !document.getElementById('sheet')) return Promise.resolve(null);
+    /* A page from an older build (the edge or a precache can pair it with this file) has a
+       confirmSheet that ignores onCancel, so "Start my own Cubby" would never settle this promise
+       and she would sit on a blank screen. Its cancel hook is what tells the two apart. Not being
+       able to ask is the existing safe answer: her own Cubby, with the invite offered after boot. */
+    if (typeof window.__confirmCancel !== 'function') return Promise.resolve(null);
     try { hideOverlay(); } catch (e) {}
-    var who = String(inv.invitedByName || '').trim().slice(0, 40);
-    var body = (who ? (who + ' invited you to join their family on Cubby') : 'You’ve been invited to join a family on Cubby')
-      + (inv.relationship ? (', as ' + String(inv.relationship).slice(0, 40)) : '') + '. '
-      + 'If you join, what you log is shared with their family circle, and what they log is shared with you. '
-      + 'If you don’t know who this is, start your own Cubby instead.';
+    var f = inviteFacts(inv);
+    var share = 'If you join, what you log is shared with their family circle, and what they log is shared with you.';
+    var body = f.signed
+      ? share + ' Only join if you know who sent this. If you don’t, start your own Cubby instead.'
+      : 'This invite doesn’t say who sent it. Join if you were expecting one. If not, start your own Cubby, and they can always invite you again. ' + share;
+    var rich = window.confirmSheet.facts === true;
+    if (!rich && f.facts.length) body = factsAsText(f.facts) + ' ' + body;
     return new Promise(function (resolve) {
       var ask = function () {
         window.confirmSheet({
           title: 'You’ve been invited 🐻',
+          lead: 'Someone has invited you to join their family on Cubby.',
+          facts: f.facts,
+          mustAnswer: true,
           body: body,
           confirmLabel: 'Join the family',
           cancelLabel: 'Start my own Cubby',
@@ -1842,28 +1926,45 @@
     try { var el = document.getElementById('ll-invite-mismatch'); if (el) el.remove(); } catch (e) {}
     inviteMismatchShown = false;
   }
-  /* deadLink=true when she followed a TOKEN link that no longer works. The email copy below would
-     send her to fix the wrong thing entirely — her address is fine; the link is spent or expired.
-     Links are single-use and last a day, and only the person who sent it can make another. */
+  /* The three full-screen notes below (dead link, no invite, removed) follow the parent's theme. They
+     used to hard-code the light palette, so at 3am in Night she got a bright cream screen. The
+     fallbacks are the light values, for a page whose tokens have not loaded. */
+  var OV_BG = 'var(--bg,#FBF5E9)', OV_INK = 'var(--ink,#3a2f28)', OV_SOFT = 'var(--ink-soft,#8a7a6d)';
+  /* deadLink is set when the invite she is acting on no longer works, and says which kind:
+     true for a TOKEN link (spent, expired, or into a family that has closed), 'gone' for an email
+     invite whose join was refused after she said yes (withdrawn while she read it, or the family has
+     closed). The email copy below would send her to fix the wrong thing entirely: her address is
+     fine. Only the person who invited her can make another. */
   function showInviteMismatch(email, deadLink) {
     if (inviteMismatchShown) return; inviteMismatchShown = true;
     if (deadLink) {
       try { hideOverlay(); } catch (e) {}
+      var isLink = deadLink !== 'gone';
       var ovd = document.createElement('div'); ovd.id = 'll-invite-mismatch';
-      ovd.setAttribute('style', 'position:fixed;inset:0;z-index:3000;background:#FBF5E9;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;overflow-y:auto');
+      ovd.setAttribute('style', 'position:fixed;inset:0;z-index:3000;background:' + OV_BG + ';display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;overflow-y:auto');
       ovd.innerHTML = '<div style="max-width:360px;font-family:-apple-system,Segoe UI,Roboto,sans-serif">'
         + '<div style="font-size:44px">🐻</div>'
-        + '<h2 style="font-family:Georgia,serif;color:#3a2f28;margin:12px 0 8px;font-size:22px">This invite link has expired</h2>'
-        + '<div style="color:#8a7a6d;font-size:15px;line-height:1.55">Invite links last a day and can only be used once, so that a link passed on by accident cannot let anyone in.</div>'
-        + '<div style="color:#8a7a6d;font-size:15px;line-height:1.55;margin-top:12px">Nothing is wrong with your sign in. Ask them to send you a fresh link.</div>'
-        + '<div style="margin-top:22px"><a href="#" id="ll-im-own" style="color:#8a7a6d;font-size:14px;font-weight:700">Start my own Cubby instead</a></div>'
+        + '<h2 style="font-family:Georgia,serif;color:' + OV_INK + ';margin:12px 0 8px;font-size:22px">' + (isLink ? 'This invite link no longer works' : 'This invite is no longer open') + '</h2>'
+        + '<div style="color:' + OV_SOFT + ';font-size:15px;line-height:1.55">' + (isLink
+            ? 'Invite links last a day and work once, so that a link passed on by accident cannot let anyone in.'
+            : 'It may have been withdrawn, or the family may have closed their Cubby. Nothing was shared.') + '</div>'
+        + '<div style="color:' + OV_SOFT + ';font-size:15px;line-height:1.55;margin-top:12px">Nothing is wrong with your sign in. '
+        + (isLink ? 'Ask them to send you a fresh link.' : 'If you were expecting it, ask them to invite you again.') + '</div>'
+        + '<div style="margin-top:18px"><a href="#" id="ll-im-own" style="display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 14px;color:' + OV_SOFT + ';font-size:15px;font-weight:700">Start my own Cubby instead</a></div>'
         + '</div>';
       document.body.appendChild(ovd);
       var own0 = document.getElementById('ll-im-own');
       if (own0) own0.onclick = function (ev) {
         ev.preventDefault();
         try { sessionStorage.removeItem('cubby-join'); } catch (e) {}
-        clearInviteMismatch(); try { location.reload(); } catch (e) {}
+        /* An email invite into a closed family still exists, and on the reload it would be offered
+           again, refused again, and land her back here. She has chosen her own, so it is hers to
+           throw away (rules allow deleting the one addressed to you). Bounded, so a bad connection
+           cannot hold the button. */
+        var gone = (!isLink && email)
+          ? Promise.race([db.collection('invites').doc(email).delete().catch(function () {}), new Promise(function (r) { setTimeout(r, 3000); })])
+          : Promise.resolve();
+        gone.then(function () { clearInviteMismatch(); try { location.reload(); } catch (e) {} });
       };
       return;
     }
@@ -1873,15 +1974,15 @@
     // silently create a fresh empty household. Join intent is abandoned in exactly one place: the
     // "Start my own Cubby instead" button below, and on a successful join (resolveHousehold).
     var ov = document.createElement('div'); ov.id = 'll-invite-mismatch';
-    ov.setAttribute('style', 'position:fixed;inset:0;z-index:3000;background:#FBF5E9;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;overflow-y:auto');
+    ov.setAttribute('style', 'position:fixed;inset:0;z-index:3000;background:' + OV_BG + ';display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;overflow-y:auto');
     ov.innerHTML = '<div style="max-width:360px;font-family:-apple-system,Segoe UI,Roboto,sans-serif">'
       + '<div style="font-size:44px">🐻</div>'
-      + '<h2 style="font-family:Georgia,serif;color:#3a2f28;margin:12px 0 8px;font-size:22px">We could not find your invite</h2>'
-      + '<div style="color:#8a7a6d;font-size:15px;line-height:1.55">You signed in as <b>' + esc(email) + '</b>, and there is no invite waiting for that address.</div>'
-      + '<div style="color:#8a7a6d;font-size:15px;line-height:1.55;margin-top:12px">Invites are matched by email. If you signed in with Apple and chose to hide your address, Cubby sees the hidden one instead of yours.</div>'
-      + '<div style="color:#8a7a6d;font-size:15px;line-height:1.55;margin-top:12px">Sign in again with the address they sent it to, or ask them to re-send it to <b>' + esc(email) + '</b>.</div>'
+      + '<h2 style="font-family:Georgia,serif;color:' + OV_INK + ';margin:12px 0 8px;font-size:22px">We could not find your invite</h2>'
+      + '<div style="color:' + OV_SOFT + ';font-size:15px;line-height:1.55">You signed in as <b>' + esc(email) + '</b>, and there is no invite waiting for that address.</div>'
+      + '<div style="color:' + OV_SOFT + ';font-size:15px;line-height:1.55;margin-top:12px">Invites are matched by email. If you signed in with Apple and chose to hide your address, Cubby sees the hidden one instead of yours.</div>'
+      + '<div style="color:' + OV_SOFT + ';font-size:15px;line-height:1.55;margin-top:12px">Sign in again with the address they sent it to, or ask them to re-send it to <b>' + esc(email) + '</b>.</div>'
       + '<button id="ll-im-btn" style="margin-top:22px;border:none;border-radius:16px;padding:15px 24px;background:#C97FA0;color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Try a different sign in</button>'
-      + '<div style="margin-top:14px"><a href="#" id="ll-im-own" style="color:#8a7a6d;font-size:14px;font-weight:700">Start my own Cubby instead</a></div>'
+      + '<div style="margin-top:10px"><a href="#" id="ll-im-own" style="display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 14px;color:' + OV_SOFT + ';font-size:15px;font-weight:700">Start my own Cubby instead</a></div>'
       + '</div>';
     document.body.appendChild(ov);
     var btn = document.getElementById('ll-im-btn');
@@ -1911,11 +2012,11 @@
     try { hideOverlay(); } catch (e) {}
     try { var u = auth.currentUser; if (u) db.collection('users').doc(u.uid).set({ householdId: null }, { merge: true }); } catch (e) {}
     var ov = document.createElement('div'); ov.id = 'll-access-lost';
-    ov.setAttribute('style', 'position:fixed;inset:0;z-index:3000;background:#FBF5E9;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;');
+    ov.setAttribute('style', 'position:fixed;inset:0;z-index:3000;background:' + OV_BG + ';display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;');
     ov.innerHTML = '<div style="max-width:340px;font-family:-apple-system,Segoe UI,Roboto,sans-serif">'
       + '<div style="font-size:44px">🐻</div>'
-      + '<h2 style="font-family:Georgia,serif;color:#3a2f28;margin:12px 0 8px;font-size:22px">You’re no longer in this family</h2>'
-      + '<div style="color:#8a7a6d;font-size:15px;line-height:1.55">Your access to this Cubby was removed, or the family was closed. Everything you logged stays part of their story.</div>'
+      + '<h2 style="font-family:Georgia,serif;color:' + OV_INK + ';margin:12px 0 8px;font-size:22px">You’re no longer in this family</h2>'
+      + '<div style="color:' + OV_SOFT + ';font-size:15px;line-height:1.55">Your access to this Cubby was removed, or the family was closed. Everything you logged stays part of their story.</div>'
       + '<button id="ll-al-btn" style="margin-top:22px;border:none;border-radius:16px;padding:15px 24px;background:#C97FA0;color:#fff;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Back to sign in</button></div>';
     document.body.appendChild(ov);
     var btn = document.getElementById('ll-al-btn');
@@ -1929,13 +2030,19 @@
     if (!inv || (window.LL && window.LL.needsIdentity)) return;
     window.LL.pendingInvite = null; // one-shot
     if (!window.confirmSheet) return;
+    // Who sent it, drawn as data (inviteFacts): the same rule as the newcomer's sheet.
+    var f = inviteFacts(inv);
+    // HONEST: joining overwrites users/{uid}.householdId, and there is no in-app way back to the old
+    // one (a household switcher is not built). The old data is not deleted, but it becomes
+    // unreachable from here. The previous copy promised "you can switch back", which reads as data
+    // loss to a tester who joins and then can't find their own baby. Say what actually happens.
+    var body = 'Join this family circle? You’ll switch to their Cubby on this account. Your own Cubby isn’t deleted, but you won’t be able to open it from here afterwards, so only join if you’re ready to switch for good.'
+      + (f.signed ? '' : ' This invite doesn’t say who sent it, so only join if you were expecting one.');
+    if (window.confirmSheet.facts !== true && f.facts.length) body = factsAsText(f.facts) + ' ' + body;
     window.confirmSheet({
       title: 'You’ve been invited 🐻',
-      // HONEST: joining overwrites users/{uid}.householdId, and there is no in-app way back to the old
-      // one (a household switcher is not built). The old data is not deleted, but it becomes
-      // unreachable from here. The previous copy promised "you can switch back", which reads as data
-      // loss to a tester who joins and then can't find their own baby. Say what actually happens.
-      body: (inv.relationship ? ('You’ve been invited as ' + inv.relationship + '. ') : '') + 'Join this family circle? You’ll switch to their Cubby on this account. Your own Cubby isn’t deleted, but you won’t be able to open it from here afterwards — so only join if you’re ready to switch for good.',
+      facts: f.facts,
+      body: body,
       confirmLabel: 'Join the family',
       cancelLabel: 'Not now',
       onConfirm: function () { joinPendingInvite(inv); }
@@ -1948,7 +2055,8 @@
       // through this link between the offer and the tap, stop here rather than joining anyway.
       if (inv.viaLink) {
         if (!(await claimInviteLink(inv, user))) {
-          try { if (window.toast) window.toast('That invite link has already been used.'); } catch (e2) {}
+          // Used, expired, or into a family that has closed. Any of those means: ask for another.
+          try { if (window.toast) window.toast('That invite link no longer works. Ask them for a fresh one.'); } catch (e2) {}
           return;
         }
         try { if (window.toast) window.toast('Joined the family 🐻'); } catch (e2) {}
@@ -1962,7 +2070,9 @@
       setTimeout(function () { try { location.reload(); } catch (e) {} }, 500);
     } catch (e) {
       console.warn('join invite', e);
-      try { if (window.toast) window.toast('Couldn’t join just now — please try again.'); } catch (e2) {}
+      // Refused by the rules: the invite was withdrawn, or the family has closed. Trying again won't help.
+      var gone = e && e.code === 'permission-denied';
+      try { if (window.toast) window.toast(gone ? 'That invite is no longer open. If you were expecting it, ask them to invite you again.' : 'Couldn’t join just now. Mind trying again?'); } catch (e2) {}
     }
   }
 
@@ -2071,9 +2181,12 @@
       // access loss (not a transient token blip) with a one-shot get, then show a calm recovery
       // screen instead of an infinite spinner.
       if (e && e.code === 'permission-denied' && !accessLostShown) {
+        /* The ref as it was when the listener died. Deleting your own account clears hhRef inside
+           this 1.5s, and reading the global then threw an uncaught "Cannot read properties of null". */
+        var refAtLoss = hhRef;
         setTimeout(function () {
-          if (accessLostShown) return;
-          hhRef.get().then(function () {}).catch(function (err) { if (err && err.code === 'permission-denied') showAccessLost(); });
+          if (accessLostShown || !refAtLoss || deletingAccount) return;
+          refAtLoss.get().then(function () {}).catch(function (err) { if (err && err.code === 'permission-denied') showAccessLost(); });
         }, 1500);
       }
     }));
@@ -2607,6 +2720,22 @@
           // and privacy/index.html states the window.
           upd.deleteAfter = Date.now() + 30 * 24 * 60 * 60 * 1000;
           upd.deletionRequestedBy = uid;
+          /* Withdraw every invite and link she still has out, while she is still owner (the rules
+             let an owner delete both). Left behind, they asked a newcomer to join a family that no
+             longer exists, and Join could only fail. Best effort: the family is closing either way,
+             and the rules refuse any join into a household flagged for deletion. */
+          if (members[uid] === 'owner') {
+            try {
+              var hsnap = await hhRef.get();
+              var hd = (hsnap && hsnap.exists && hsnap.data()) || {};
+              var outs = [];
+              Object.keys(hd.pendingInvites || {}).forEach(function (em) { outs.push(db.collection('invites').doc(em).delete().catch(function () {})); });
+              Object.keys(hd.pendingLinks || {}).forEach(function (tk) { outs.push(db.collection('inviteLinks').doc(tk).delete().catch(function () {})); });
+              await Promise.all(outs);
+              if (hd.pendingInvites) upd.pendingInvites = del;
+              if (hd.pendingLinks) upd.pendingLinks = del;
+            } catch (e) { console.warn('withdraw invites', e && e.code); }
+          }
         }
         await hhRef.update(upd);
       }
@@ -3494,25 +3623,37 @@
     // promise stays pending, so waiting on it would freeze "Creating…" forever. Proceed after a
     // short wait; only a real rejection turns into an error.
     var t = setTimeout(function () { if (done) return; done = true; showReady(); }, 6000);
-    db.collection('invites').doc(email).set({
+    var invDoc = {
       householdId: window.LL.householdId, role: owner ? 'owner' : 'caregiver',
       relationship: rel, name: name,
-      // Shown to a newcomer on the sheet that asks whether to join (askNewcomerToJoin): she cannot
-      // read the household before joining, so the invite has to carry who sent it.
-      invitedBy: auth.currentUser.uid, invitedByName: inviterName(), status: 'pending', createdAt: window.LL.serverTimestamp()
-    }).then(function () { if (done) return; done = true; clearTimeout(t); showReady(); })
-      .catch(function (e) {
+      invitedBy: auth.currentUser.uid, status: 'pending', createdAt: window.LL.serverTimestamp()
+    };
+    /* Shown to a newcomer on the sheet that asks whether to join (askNewcomerToJoin): she cannot
+       read the household before joining, so the invite has to carry who sent it. The rules check
+       fromEmail against this account's own sign-in address, and only accept a name that travels
+       with it, so the sheet can show her something the sender could not have made up. */
+    var fromEmail = ((auth.currentUser && auth.currentUser.email) || '').toLowerCase();
+    if (fromEmail) { invDoc.fromEmail = fromEmail; invDoc.invitedByName = inviterName(); }
+    db.collection('invites').doc(email).set(invDoc).then(function () {
+      /* Mirror the pending invite onto the household doc so the circle screen can list and cancel
+         it (owners cannot query /invites: reads there are invitee-only by rule). FieldPath keeps the
+         dots in the email from being read as a nested path. Only once the invite itself has landed:
+         written up front, a refused invite still showed as "Invited, waiting" for someone nobody
+         had invited. */
+      try {
+        if (hhRef) hhRef.update(new firebase.firestore.FieldPath('pendingInvites', email), { name: name, relationship: rel, role: owner ? 'owner' : 'caregiver', at: Date.now() }).catch(function () {});
+      } catch (e) {}
+      if (done) return; done = true; clearTimeout(t); showReady();
+    }).catch(function (e) {
         if (done) return; done = true; clearTimeout(t);
-        msg.textContent = errText(e, 'Could not create the invite just now. Mind trying again?');
+        /* Refused, most often because that address already has an invite from another family
+           (only that family's owner may change it). Saying so would tell anyone with a Cubby who
+           else has invited an address, so the copy names the way forward instead. */
+        msg.textContent = (e && e.code === 'permission-denied')
+          ? 'Cubby couldn’t make an invite for that address. Try sending them an invite link instead.'
+          : errText(e, 'Could not create the invite just now. Mind trying again?');
         btn.textContent = 'Create invite'; btn.disabled = false;
       });
-    // Mirror the pending invite onto the household doc so the circle screen can list and cancel
-    // it (owners cannot query /invites: reads there are invitee-only by rule). FieldPath keeps the
-    // dots in the email from being read as a nested path. Best-effort: the invite doc is the
-    // grant, this is only the visible list.
-    try {
-      if (hhRef) hhRef.update(new firebase.firestore.FieldPath('pendingInvites', email), { name: name, relationship: rel, role: owner ? 'owner' : 'caregiver', at: Date.now() }).catch(function () {});
-    } catch (e) {}
   }
 
   /* ---------- feedback ---------- */

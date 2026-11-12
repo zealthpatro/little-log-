@@ -222,7 +222,7 @@ async function sendSigninLink(request, env) {
        signs in the phone and the laptop she is sitting at never moves. BEST EFFORT on purpose. This
        route works today and is the majority of all sign-ins, so a Firestore hiccup must degrade the
        email to link-only rather than fail the send. The code endpoint makes the opposite trade. */
-    const code = await issueSigninCode(sa, token, email);
+    const code = await issueSigninCode(sa, token, email, await signinNetTag(sa, request));
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'authorization': 'Bearer ' + env.RESEND_API_KEY, 'content-type': 'application/json' },
@@ -374,20 +374,60 @@ const SIGNIN_CODE_INFO = 'cubby-signin-code-v1';
 const SIGNIN_CODE_TTL_MS = 10 * 60 * 1000;   // long enough to fetch it from Mail, short enough to be worthless later
 const SIGNIN_CODE_TRIES = 5;                 // 5 guesses against 1,000,000, then the code dies
 /* Per-address ceilings that a reissue cannot reset (audit server-1). Without them every new code was
-   a fresh 5 guesses, so "5 per code" had no ceiling per address. A real parent types one code a couple
-   of times and resends once or twice; these only ever bite someone guessing at another person's mail. */
+   a fresh 5 guesses, so "5 per code" had no ceiling per address.
+   SPLIT BY NETWORK, as well as per address (final review, 2026-11-12). With one ceiling per address,
+   anyone who knew a parent's email could spend it from one laptop in about three minutes, and she was
+   locked out of code sign-in for an hour; on the installed iOS app a code is the only way in. Now
+   each network gets its own share, and the per-address total stays the guessing bound. One network
+   can only spend its own share, so her phone, on another network, still gets a code and still signs
+   in. Two networks together (14 of 15) still leave her a guess; locking her out needs three at once,
+   each mailing her codes she did not ask for. Her own allowance is 7 misses an hour per network, a
+   stale code typed after a Resend included, which a real parent does not reach.
+   A network is the client's IPv4 address or IPv6 /48 (a free tunnel hands out a /48, so a /64 is
+   one machine's spare change), stored only as a keyed hash, never the address. */
 const SIGNIN_WINDOW_MS = 60 * 60 * 1000;
-const SIGNIN_GUESSES_PER_WINDOW = 10;        // guesses compared per address per rolling hour, across all codes
-const SIGNIN_ISSUES_PER_WINDOW = 5;          // codes minted per address per rolling hour
+const SIGNIN_GUESSES_PER_NET = 7;            // misses compared per address per network per rolling hour
+const SIGNIN_GUESSES_PER_WINDOW = 15;        // and per address from every network together
+const SIGNIN_ISSUES_PER_NET = 4;             // codes minted per address per network per rolling hour
+const SIGNIN_ISSUES_PER_WINDOW = 12;         // and per address in all
 
-/* Timestamps in the rolling window, read from (and written back as) a Firestore array field. They
-   live in the code's own document, so a spend and its record commit in one write. */
-function signinRecent(field, now) {
-  const vals = (field && field.arrayValue && field.arrayValue.values) || [];
-  return vals.map((v) => Number(v && v.integerValue)).filter((t) => t > now - SIGNIN_WINDOW_MS && t <= now + 60000).slice(-20);
+/* The rolling window, as entries {t, net}. Stored as "t:net" strings in `spends`/`issues`, in the
+   code's own document, so a spend and its record commit in one write. The integer arrays of the
+   build before this one (spentAt/issuedAt) are still read, as entries with no network, so they count
+   towards the address total and age out within the hour; every write converts them. */
+function signinEntries(f, field, legacy, now) {
+  const out = [];
+  const inWindow = (t) => t > now - SIGNIN_WINDOW_MS && t <= now + 60000;
+  for (const v of ((f && f[field] && f[field].arrayValue && f[field].arrayValue.values) || [])) {
+    const s = String((v && v.stringValue) || ''), i = s.indexOf(':'), t = i > 0 ? Number(s.slice(0, i)) : NaN;
+    if (inWindow(t)) out.push({ t, net: s.slice(i + 1, i + 25) });
+  }
+  for (const v of ((f && f[legacy] && f[legacy].arrayValue && f[legacy].arrayValue.values) || [])) {
+    const t = Number(v && v.integerValue);
+    if (inWindow(t)) out.push({ t, net: '' });
+  }
+  out.sort((a, b) => a.t - b.t);
+  return out.slice(-40);
 }
-function signinTimes(list) {
-  return { arrayValue: list.length ? { values: list.map((t) => ({ integerValue: String(t) })) } : {} };
+function signinEntriesValue(list) {
+  return { arrayValue: list.length ? { values: list.map((e) => ({ stringValue: e.t + ':' + e.net })) } : {} };
+}
+/* Over either ceiling? retryAfter is when the binding one next frees a slot, in seconds, so the
+   app can say "about 40 minutes" instead of "try again". */
+function signinOver(list, net, perNet, perAll, now) {
+  const mine = list.filter((e) => e.net === net);
+  const wait = (e) => Math.max(1, Math.ceil((e.t + SIGNIN_WINDOW_MS - now) / 1000));
+  if (mine.length >= perNet) return { over: true, retryAfter: wait(mine[mine.length - perNet]) };
+  if (list.length >= perAll) return { over: true, retryAfter: wait(list[list.length - perAll]) };
+  return { over: false, retryAfter: 0 };
+}
+/* The network's keyed hash. Same key as the code MACs, its own label, 12 characters. */
+async function signinNetTag(sa, request) {
+  try {
+    const key = await signinCodeKey(sa);
+    const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode('net:' + clientIpKey(request, 3)));
+    return _b64urlFromBytes(sig).slice(0, 12);
+  } catch (e) { return 'unknown'; }
 }
 /* Every write to a signinCodes document goes through documents:commit, so its precondition travels
    in the JSON body, which is the form the API documents. The query-string form used before
@@ -447,13 +487,15 @@ function newSigninCode() {
    into it. That replace is the single-live-code rule: issuing a new code must kill the previous one,
    never leave two working. Returns '' if the store failed, so each caller can decide whether that is
    fatal (the code endpoint) or merely means a link-only email (the link endpoint).
-   The replace CARRIES the per-address window (spentAt, issuedAt) across, so a reissue gets a new code
-   but never a new guess budget. Past either ceiling it mints nothing and returns null (falsy like '',
-   so every caller degrades the same way, to a link-only email that still signs a real parent in; the
-   code endpoint just names it rate_limited instead of store_failed, so the logs can tell them apart).
-   The write is conditional on the version just read, so a verify racing it cannot have its spend
-   erased. */
-async function issueSigninCode(sa, token, email) {
+   The replace CARRIES the window (spends, issues) across, so a reissue gets a new code but never a
+   new guess budget. Past a ceiling, for this network or for the address, it mints nothing and
+   returns null (falsy like '', so every caller degrades the same way, to a link-only email; the code
+   endpoint names it rate_limited instead of store_failed, so the logs can tell them apart, and puts
+   the wait in out.retryAfter for the app to show). The write is conditional on the version just
+   read, so a verify racing it cannot have its spend erased.
+   net is the requester's signinNetTag. 'srv' for the Worker's own callers (the canary). */
+async function issueSigninCode(sa, token, email, net, out) {
+  net = net || 'srv';
   try {
     const base = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents';
     const docId = await signinCodeDocId(sa, email);
@@ -465,9 +507,16 @@ async function issueSigninCode(sa, token, email) {
       if (prev && !prev.updateTime) return '';                  // cannot write conditionally: refuse, never guess
       const pf = (prev && prev.fields) || {};
       const now = Date.now();
-      const spentAt = signinRecent(pf.spentAt, now), issuedAt = signinRecent(pf.issuedAt, now);
-      if (spentAt.length >= SIGNIN_GUESSES_PER_WINDOW || issuedAt.length >= SIGNIN_ISSUES_PER_WINDOW) return null;   // capped
-      issuedAt.push(now);
+      const spends = signinEntries(pf, 'spends', 'spentAt', now), issues = signinEntries(pf, 'issues', 'issuedAt', now);
+      /* No new code where this network could not use it (its guesses are spent, or the address's
+         are), and none past the issue ceilings. */
+      const capped = [signinOver(spends, net, SIGNIN_GUESSES_PER_NET, SIGNIN_GUESSES_PER_WINDOW, now),
+        signinOver(issues, net, SIGNIN_ISSUES_PER_NET, SIGNIN_ISSUES_PER_WINDOW, now)].filter((c) => c.over);
+      if (capped.length) {
+        if (out) out.retryAfter = Math.max.apply(null, capped.map((c) => c.retryAfter));
+        return null;
+      }
+      issues.push({ t: now, net });
       const code = newSigninCode();
       const mac = _b64urlFromBytes(await signinCodeMac(sa, email, code));
       /* No plaintext address in the document. The id is already an HMAC of it and the address is
@@ -477,8 +526,8 @@ async function issueSigninCode(sa, token, email) {
           mac: { stringValue: mac },
           exp: { integerValue: String(now + SIGNIN_CODE_TTL_MS) },
           tries: { integerValue: String(SIGNIN_CODE_TRIES) },
-          spentAt: signinTimes(spentAt),
-          issuedAt: signinTimes(issuedAt)
+          spends: signinEntriesValue(spends),
+          issues: signinEntriesValue(issues)
         } },
         currentDocument: prev ? { updateTime: prev.updateTime } : { exists: false }
       });
@@ -763,8 +812,10 @@ async function sendSigninCode(request, env) {
        so there was nothing to fall back to. Nobody could get a sign-in code at all. Same defaulted
        scope that kept the page counter empty for two days; that one was silent, this one was not. */
     const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/identitytoolkit');
-    const code = await issueSigninCode(sa, token, email);
-    if (code === null) return json({ error: 'rate_limited' }, 429);   // capped for the hour; the client falls back to a link
+    const capOut = {};
+    const code = await issueSigninCode(sa, token, email, await signinNetTag(sa, request), capOut);
+    // Capped for now; the client falls back to a link, and says how long codes are paused for.
+    if (code === null) return json({ error: 'rate_limited', retryAfter: capOut.retryAfter || 0 }, 429);
     if (!code) return json({ error: 'store_failed' }, 502);   // the code IS this endpoint; no code, no email
 
     /* Carry a link as well. This endpoint is asked for by the installed iOS app, where a tapped link
@@ -811,7 +862,8 @@ async function sendSigninCode(request, env) {
    only ever compared against the version its own committed spend paid for. Nothing is deleted on
    a miss, because the document also carries the per-address window that a reissue must not reset;
    the last try removes the mac instead, which is what kills the code. */
-async function spendSigninCode(sa, token, email, code) {
+async function spendSigninCode(sa, token, email, code, net, out) {
+  net = net || 'srv';
   const base = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents';
   const docId = await signinCodeDocId(sa, email);
   const path = base + '/signinCodes/' + docId;
@@ -826,16 +878,20 @@ async function spendSigninCode(sa, token, email, code) {
     const now = Date.now();
     const exp = Number((f.exp && f.exp.integerValue) || 0);
     const tries = Number((f.tries && f.tries.integerValue) || 0);
-    const spentAt = signinRecent(f.spentAt, now);
+    const spends = signinEntries(f, 'spends', 'spentAt', now);
     storedMac = String((f.mac && f.mac.stringValue) || '');
     if (!storedMac || !(exp > now) || !(tries > 0) || !doc.updateTime) return 'bad_code';
-    // Out of budget for this hour: never compared, and answered the way the per-IP limiter answers.
-    if (spentAt.length >= SIGNIN_GUESSES_PER_WINDOW) return 'capped';
-    spentAt.push(now);
-    const mask = ['tries', 'spentAt'];
+    /* Out of budget for this hour, for this network or for the address: never compared, and
+       answered the way the per-IP limiter answers, with how long until a slot frees. */
+    const over = signinOver(spends, net, SIGNIN_GUESSES_PER_NET, SIGNIN_GUESSES_PER_WINDOW, now);
+    if (over.over) { if (out) out.retryAfter = over.retryAfter; return 'capped'; }
+    spends.push({ t: now, net });
+    // spentAt is masked with no value, so Firestore drops the previous build's integer array: its
+    // entries are carried into spends above.
+    const mask = ['tries', 'spends', 'spentAt'];
     if (tries - 1 <= 0) mask.push('mac');                             // masked but absent: Firestore deletes it
     const spend = await signinCommit(sa, token, {
-      update: { name, fields: { tries: { integerValue: String(tries - 1) }, spentAt: signinTimes(spentAt) } },
+      update: { name, fields: { tries: { integerValue: String(tries - 1) }, spends: signinEntriesValue(spends) } },
       updateMask: { fieldPaths: mask },
       currentDocument: { updateTime: doc.updateTime }
     });
@@ -875,8 +931,10 @@ async function verifySigninCode(request, env) {
     /* BOTH scopes: reads and burns the code document (datastore), then looks up or creates the
        account and mints the custom token (identitytoolkit). */
     const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/identitytoolkit');
-    const spent = await spendSigninCode(sa, token, email, code);
-    if (spent === 'capped') return json({ error: 'rate_limited' }, 429);   // the limiter's own answer
+    const capOut = {};
+    const spent = await spendSigninCode(sa, token, email, code, await signinNetTag(sa, request), capOut);
+    // The limiter's own answer, plus how long until this address can try again from here.
+    if (spent === 'capped') return json({ error: 'rate_limited', retryAfter: capOut.retryAfter || 0 }, 429);
     if (spent === 'failed') return json({ error: 'failed' }, 500);
     if (spent !== 'ok') return json({ error: 'bad_code' }, 400);
     const uid = await getOrCreateUidByEmail(token, sa.project_id, email);
@@ -2470,12 +2528,36 @@ async function recordStep(request, env) {
   catch (e) { return json({ error: 'bad_request' }, 400); }
   const key = stepKey(body && body.event, body && body.props);
   if (!key) return json({ error: 'not_in_plan' }, 400);
-  const db = await funnelDb(env);
-  if (!db) return json({ error: 'unavailable' }, 503);
-  await db.prepare('INSERT INTO funnel_steps (day, key, n) VALUES (?, ?, 1) ON CONFLICT(day, key) DO UPDATE SET n = n + 1')
-    .bind(funnelDay(Date.now()), key).run();
+  /* A DAY CEILING, the page counter's pattern (recordPageView). The per-IP limiter multiplies by the
+     number of addresses, and this D1 also holds account-deletion cleanup, the guest guessing game
+     and the cron heartbeat: a few addresses at 30 a minute could spend its daily writes and stop
+     those. Past the ceiling (STEP_STATS_DAILY_CAP, default 5000) a step is accepted and not counted;
+     losing a count costs nothing. A D1 error is caught too: telemetry must never fail a request. */
+  const day = funnelDay(Date.now());
+  if (stepsFullDay === day) return new Response(null, { status: 204 });
+  const capRaw = parseInt(env.STEP_STATS_DAILY_CAP, 10);
+  const cap = Number.isFinite(capRaw) && capRaw >= 0 ? capRaw : 5000;
+  if (cap < 1) return new Response(null, { status: 204 });
+  try {
+    const db = await funnelDb(env);
+    if (!db) return json({ error: 'unavailable' }, 503);
+    if (!stepsTotalReadyDbs.has(db)) {
+      await db.prepare('CREATE TABLE IF NOT EXISTS funnel_steps_total (day TEXT PRIMARY KEY, n INTEGER NOT NULL DEFAULT 0)').run();
+      stepsTotalReadyDbs.add(db);
+    }
+    // One atomic statement: under the cap the total goes up, and RETURNING gives no row once it is not.
+    const slot = await db.prepare('INSERT INTO funnel_steps_total (day, n) VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET n = n + 1 WHERE n < ? RETURNING n')
+      .bind(day, cap).first();
+    if (!slot) { stepsFullDay = day; console.log('steps_cap_reached', day, cap); return new Response(null, { status: 204 }); }
+    await db.prepare('INSERT INTO funnel_steps (day, key, n) VALUES (?, ?, 1) ON CONFLICT(day, key) DO UPDATE SET n = n + 1')
+      .bind(day, key).run();
+  } catch (e) {
+    console.error('step_fail', (e && e.message) || String(e));
+  }
   return new Response(null, { status: 204 });
 }
+const stepsTotalReadyDbs = new WeakSet();
+let stepsFullDay = '';
 
 /* account.deleted is counted at the moment erasure completes, because erasure removes every record
    that could otherwise prove it happened. Aggregate only. */

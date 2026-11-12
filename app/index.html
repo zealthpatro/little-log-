@@ -5520,11 +5520,31 @@ function confirmSheet(opts){
      pull-down, another screen closing it), so the caller can tell a choice from an accident. */
   __confirmNo=typeof opts.onCancel==='function'?opts.onCancel:null;
   var body=opts.body?('<div class="sub">'+escapeHtml(opts.body)+'</div>'):'';
+  /* facts: [{label, value}] drawn as labelled rows, apart from Cubby's own sentences. For text that
+     somebody else wrote (an invite's sender name and relationship): shown as data, it can never read
+     as Cubby vouching for it. Every part is escaped. lead is one short line of Cubby's own above them. */
+  var lead=opts.lead?('<div class="sub" style="margin-bottom:8px">'+escapeHtml(opts.lead)+'</div>'):'';
+  var facts=(Array.isArray(opts.facts)&&opts.facts.length)
+    ?('<div style="margin:0 0 12px;padding:10px 12px;border-radius:12px;background:var(--card,#fff);border:1px solid var(--ink-dim,#BDB2A6)">'
+      +opts.facts.map(function(f){ return '<div style="display:flex;gap:8px;align-items:baseline;padding:2px 0;font-size:14px;line-height:1.45">'
+        +'<span style="flex:0 0 auto;color:var(--ink-soft,#6E635B)">'+escapeHtml(f&&f.label)+'</span>'
+        +'<b style="color:var(--ink,#2C2521);overflow-wrap:anywhere;min-width:0">'+escapeHtml(f&&f.value)+'</b></div>'; }).join('')
+      +'</div>'):'';
   var bg=opts.danger?'var(--diaper)':'var(--feed)';
-  openSheet('<h2>'+escapeHtml(opts.title||'Are you sure?')+'</h2>'+body
+  openSheet('<h2>'+escapeHtml(opts.title||'Are you sure?')+'</h2>'+lead+facts+body
     +'<button class="btn-primary" style="background:'+bg+'" onclick="__confirmYes()">'+escapeHtml(opts.confirmLabel||'Confirm')+'</button>'
     +'<button class="btn-ghost" onclick="__confirmCancel()">'+escapeHtml(opts.cancelLabel||'Cancel')+'</button>','note');
+  /* mustAnswer: a question that needs a yes or a no. The × read "Close" but could only ever bring the
+     question back, so it goes, and focus starts on the question itself, for VoiceOver and keyboards. */
+  if(opts.mustAnswer){
+    var sh=document.getElementById('sheet');
+    if(sh){
+      var sx=sh.querySelector('.sheet-x'); if(sx) sx.remove();
+      var h2=sh.querySelector('h2'); if(h2){ h2.setAttribute('tabindex','-1'); try{ h2.focus({preventScroll:true}); }catch(e){} }
+    }
+  }
 }
+confirmSheet.facts=true;   // tells store-firebase.js this page draws facts (an older page shows only the body)
 function __confirmYes(){ var cb=__confirmCb; __confirmCb=null; __confirmNo=null; closeSheet(); if(cb) setTimeout(cb,50); }
 function __confirmCancel(){ var no=__confirmNo; __confirmNo=null; __confirmCb=null; closeSheet(); if(no) setTimeout(function(){ no('cancel'); },50); }
 if(typeof window!=='undefined'){ window.confirmSheet=confirmSheet; }

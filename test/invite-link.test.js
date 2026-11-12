@@ -27,7 +27,7 @@
 const fs = require('fs');
 const path = require('path');
 const { initializeTestEnvironment, assertFails, assertSucceeds } = require('@firebase/rules-unit-testing');
-const { doc, setDoc, updateDoc, getDoc, getDocs, collection, deleteDoc } = require('firebase/firestore');
+const { doc, setDoc, updateDoc, getDoc, getDocs, collection, deleteDoc, writeBatch } = require('firebase/firestore');
 
 const RULES = fs.readFileSync(path.join(__dirname, '..', 'firestore.rules'), 'utf8');
 const results = { pass: 0, fail: 0 };
@@ -97,11 +97,21 @@ const inHours = h => new Date(Date.now() + h * 3600000);
     assertFails(setDoc(doc(owner, 'inviteLinks/tok_forever'), {
       householdId: 'H', role: 'caregiver', usedBy: null, invitedBy: OWNER })));
 
+  /* A link is claimed in the very batch that joins its household (claimInviteLink), and only then.
+     A claim on its own could only ever spend the link without letting anyone in. */
+  const claimAndJoin = (db, uid, tok, linkExtra) => {
+    const b = writeBatch(db);
+    b.update(doc(db, 'inviteLinks/' + tok), Object.assign({ usedBy: uid, consumed: true }, linkExtra || {}));
+    b.update(doc(db, 'households/H'), { joinToken: tok, ['members.' + uid]: 'caregiver', ['memberInfo.' + uid]: { name: 'J', role: 'caregiver' } });
+    return b.commit();
+  };
   console.log('\nclaiming a link');
-  await check('the invitee can claim a live link, once, as themselves',
-    assertSucceeds(updateDoc(doc(joiner, 'inviteLinks/tok_live'), { usedBy: JOINER })));
+  await check('a claim on its own, without joining, is refused (it could only spend the link)',
+    assertFails(updateDoc(doc(joiner, 'inviteLinks/tok_live'), { usedBy: JOINER, consumed: true })));
+  await check('the invitee can claim a live link, once, as themselves, in the batch that joins',
+    assertSucceeds(claimAndJoin(joiner, JOINER, 'tok_live')));
   await check('a second person cannot claim the link the first person walked through',
-    assertFails(updateDoc(doc(stranger, 'inviteLinks/tok_live'), { usedBy: STRANGER })));
+    assertFails(claimAndJoin(stranger, STRANGER, 'tok_live')));
   await check('an already-used link cannot be claimed',
     assertFails(updateDoc(doc(joiner, 'inviteLinks/tok_used'), { usedBy: JOINER })));
   await check('an expired link cannot be claimed',
@@ -110,10 +120,13 @@ const inHours = h => new Date(Date.now() + h * 3600000);
     assertFails(updateDoc(doc(joiner, 'inviteLinks/tok_new'), { usedBy: STRANGER })));
 
   console.log('\nthe adversarial cases the prior audit was about');
+  // In the real joining batch, so each refusal is the rule under test and not the lone-claim rule.
   await check('a claimer cannot promote themselves to owner on the way in',
-    assertFails(updateDoc(doc(joiner, 'inviteLinks/tok_new'), { usedBy: JOINER, role: 'owner' })));
+    assertFails(claimAndJoin(stranger, STRANGER, 'tok_new', { role: 'owner' })));
   await check('a claimer cannot extend the expiry while claiming',
-    assertFails(updateDoc(doc(joiner, 'inviteLinks/tok_new'), { usedBy: JOINER, expiresAt: inHours(999) })));
+    assertFails(claimAndJoin(stranger, STRANGER, 'tok_new', { expiresAt: inHours(999) })));
+  await check('(companion) the same batch with nothing extra does join, so those two were refused for what they added',
+    assertSucceeds(claimAndJoin(stranger, STRANGER, 'tok_new')));
   await check('a link can never be re-pointed at another household',
     assertFails(updateDoc(doc(owner, 'inviteLinks/tok_new'), { householdId: 'H2' })));
   await check('a stranger cannot re-point it either',

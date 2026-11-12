@@ -98,13 +98,14 @@ globalThis.fetch = async (input, init) => {
   throw new Error('unstubbed external call: ' + method + ' ' + url);
 };
 
-const post = (w, p, b) => w.fetch(new Request(HOST + p, { method: 'POST', headers: { 'content-type': 'application/json', Origin: HOST }, body: JSON.stringify(b) }), ENV, { waitUntil() {}, passThroughOnException() {} });
+/* ip, when given, is the client's network (CF-Connecting-IP): the hourly ceilings are split by it. */
+const post = (w, p, b, ip) => w.fetch(new Request(HOST + p, { method: 'POST', headers: Object.assign({ 'content-type': 'application/json', Origin: HOST }, ip ? { 'CF-Connecting-IP': ip } : {}), body: JSON.stringify(b) }), ENV, { waitUntil() {}, passThroughOnException() {} });
 const lastCode = () => { const m = String(mail[mail.length - 1].html).match(/>(\d{6})</g); return m ? m[m.length - 1].replace(/\D/g, '') : null; };
 const wrong = (c, k) => String((Number(c) + 1 + (k || 0)) % 1e6).padStart(6, '0');
 let serial = 0;
 const fresh = (tag) => tag + '-' + process.pid + '-' + (++serial) + '@example.com';
-async function issue(w, email) { cache.clear(); const r = await post(w, '/api/signin-code', { email }); return { status: r.status, body: await r.json().catch(() => ({})) }; }
-async function verify(w, email, code) { const r = await post(w, '/api/signin-verify', { email, code }); return { status: r.status, body: await r.json().catch(() => ({})) }; }
+async function issue(w, email, ip) { cache.clear(); const r = await post(w, '/api/signin-code', { email }, ip); return { status: r.status, body: await r.json().catch(() => ({})) }; }
+async function verify(w, email, code, ip) { const r = await post(w, '/api/signin-verify', { email, code }, ip); return { status: r.status, body: await r.json().catch(() => ({})) }; }
 const signedIn = (v) => v.status === 200 && !!v.body.token;
 async function listCodes() {
   const r = await realFetch(DOCS + '/signinCodes?pageSize=300', { headers: { authorization: 'Bearer owner' } });
@@ -174,30 +175,73 @@ async function listCodes() {
     ok('and it was never compared', evaluated === storm, evaluated - storm);
   }
 
-  console.log('\n4. a reissue does not reset the guess budget');
+  console.log('\n4. a reissue does not reset the guess budget (one network), and the budget is split by network');
   {
     const e = fresh('budget');
+    const A = '198.51.100.7', B = '2001:db8:aa:1::5';
     evaluated = 0;
-    await issue(w, e); let c = lastCode();
-    for (let i = 0; i < 3; i++) await verify(w, e, wrong(c, i));
-    await issue(w, e); c = lastCode();
-    for (let i = 0; i < 5; i++) await verify(w, e, wrong(c, i));
-    const third = await issue(w, e);
-    ok('a third code can still be sent after 8 misses', third.status === 200 && third.body.hasCode === true, third);
+    await issue(w, e, A); let c = lastCode();
+    for (let i = 0; i < 4; i++) await verify(w, e, wrong(c, i), A);
+    const second = await issue(w, e, A);
+    ok('a second code can still be sent after 4 misses', second.status === 200 && second.body.hasCode === true, second);
     c = lastCode();
-    for (let i = 0; i < 2; i++) await verify(w, e, wrong(c, i));
-    ok('ten guesses compared across three codes', evaluated === 10, evaluated);
-    const right = await verify(w, e, c);
-    ok('the right code as the 11th guess in an hour does not sign in', right.status !== 200, right.status);
-    ok('it gets the polite try-later answer the limiter already gives', right.status === 429 && right.body.error === 'rate_limited', right);
-    ok('and the 11th guess was never compared', evaluated === 10, evaluated);
+    for (let i = 0; i < 3; i++) await verify(w, e, wrong(c, i), A);
+    ok('seven guesses compared across two codes', evaluated === 7, evaluated);
+    const right = await verify(w, e, c, A);
+    ok('the right code as that network\'s 8th guess in an hour does not sign in', right.status !== 200, right.status);
+    ok('it gets the try-later answer, with how long to wait', right.status === 429 && right.body.error === 'rate_limited' && right.body.retryAfter > 60, right);
+    ok('and the 8th guess was never compared', evaluated === 7, evaluated);
     const mailed = mail.length;
-    const fourth = await issue(w, e);
-    ok('no fourth code is minted this hour', fourth.status !== 200 && mail.length === mailed, [fourth, mail.length - mailed]);
+    const third = await issue(w, e, A);
+    ok('no further code is minted for that network this hour', third.status === 429 && mail.length === mailed && third.body.retryAfter > 60, [third, mail.length - mailed]);
     cache.clear();
-    const link = await post(w, '/api/send-signin-link', { email: e });
+    const link = await post(w, '/api/send-signin-link', { email: e }, A);
     const lb = await link.json();
     ok('but the link email still goes out, honestly without a code', link.status === 200 && lb.hasLink === true && lb.hasCode === false, lb);
+    // THE LOCKOUT, closed. Those guesses were a stranger's. Her phone is another network.
+    const hers = await issue(w, e, B);
+    ok('her phone, on another network, still gets a code', hers.status === 200 && hers.body.hasCode === true, hers);
+    const v = await verify(w, e, lastCode(), B);
+    ok('and that code signs her in, against a real Firestore', signedIn(v), [v.status, v.body.error]);
+    const docs = JSON.stringify(await listCodes());
+    ok('no client address is stored, only a keyed tag', !docs.includes('198.51.100') && !docs.includes('2001:db8'), docs.slice(0, 200));
+  }
+
+  console.log('\n4b. many networks: the per-address total still bounds guessing');
+  {
+    const e = fresh('many');
+    evaluated = 0;
+    for (const ip of ['192.0.2.1', '192.0.2.2']) {
+      await issue(w, e, ip); let c = lastCode();
+      for (let i = 0; i < 5; i++) await verify(w, e, wrong(c, i), ip);
+      await issue(w, e, ip); c = lastCode();
+      for (let i = 0; i < 2; i++) await verify(w, e, wrong(c, i), ip);
+    }
+    await issue(w, e, '192.0.2.3'); const live = lastCode();
+    await verify(w, e, wrong(live, 0), '192.0.2.3');
+    ok('fifteen guesses compared across three networks', evaluated === 15, evaluated);
+    const r = await verify(w, e, live, '192.0.2.3');
+    ok('the right code past the address total is refused without a compare', r.status === 429 && evaluated === 15, [r.status, evaluated]);
+    const d = await issue(w, e, '192.0.2.4');
+    ok('and a fourth network gets no code', d.status === 429, d);
+  }
+
+  console.log('\n4c. a document the previous build wrote (integer spentAt/issuedAt) still counts');
+  {
+    const e = fresh('legacy');
+    await issue(w, e, '192.0.2.9');
+    const now = Date.now();
+    // The newest document is the one just issued for this address (ids are keyed hashes, by design).
+    const target = (await listCodes()).sort((x, y) => (x.updateTime < y.updateTime ? 1 : -1))[0];
+    const ints = (n) => ({ arrayValue: { values: Array.from({ length: n }, (_, i) => ({ integerValue: String(now - 1000 * (i + 1)) })) } });
+    // Add the old shape alongside: 15 misses this hour, with no network recorded.
+    const patch = await realFetch('http://' + EMU + '/v1/' + target.name + '?updateMask.fieldPaths=spentAt', {
+      method: 'PATCH', headers: { authorization: 'Bearer owner', 'content-type': 'application/json' },
+      body: JSON.stringify({ fields: { spentAt: ints(15) } })
+    });
+    ok('the old-shape window is seeded', patch.ok, patch.status);
+    const v = await verify(w, e, lastCode(), '192.0.2.9');
+    ok('fifteen misses recorded by the previous build still cap the address', v.status === 429, [v.status, v.body]);
   }
 
   for (const forced of [false, true]) {
@@ -249,10 +293,11 @@ async function listCodes() {
     // Its two one-line helpers come from the same file, so nothing here is a retyped copy.
     const escSrc = ['escHtml', 'looksLikeEmail'].map((n) => (csrc.match(new RegExp('^  function ' + n + '\\(.*$', 'm')) || [''])[0]).join('\n');
     ok('and its helpers', /function escHtml/.test(escSrc) && /function looksLikeEmail/.test(escSrc), escSrc);
-    const wire = new Function('SEND_LABEL', 'errText', 'auth', 'location', 'localStorage', 'fetch', 'setInterval', 'clearInterval',
+    const wire = new Function('SEND_LABEL', 'errText', 'auth', 'location', 'localStorage', 'fetch', 'setInterval', 'clearInterval', 'isStandaloneApp', 'isIOSDevice',
       escSrc + '\n' + csrc.slice(a, b) + '\nreturn wireEmailRow;');
     const el = () => ({ style: {}, value: '', textContent: '', disabled: false, focus() {}, select() {} });
-    function panel() {
+    function panel(opts) {
+      opts = opts || {};
       const input = el(), btn = el(), ci = el(), cb = el();
       const form = Object.assign(el(), { querySelector: (s) => (s === 'input' ? input : btn) });
       const codeForm = Object.assign(el(), { querySelector: (s) => (s === 'input' ? ci : cb) });
@@ -277,7 +322,8 @@ async function listCodes() {
         } finally { inflight--; }
       };
       const fbAuth = { sendSignInLinkToEmail: async () => { calls.push('firebase-sender'); }, signInWithCustomToken: async () => ({}) };
-      wire('Send code', (e, fb) => fb, fbAuth, { origin: HOST }, { setItem() {}, getItem() { return null; } }, cfetch, () => 1, () => {})({ querySelector: (s) => (s === '.ll-email-row' ? row : null) });
+      const inApp = opts.inApp ? () => true : undefined;   // the installed iPhone app: standalone AND iOS
+      wire('Send code', (e, fb) => fb, fbAuth, { origin: HOST }, { setItem() {}, getItem() { return null; } }, cfetch, () => 1, () => {}, inApp, inApp)({ querySelector: (s) => (s === '.ll-email-row' ? row : null) });
       const settle = async () => {
         // Quiet for 10 ticks in a row: the code request, its fallback and the redraw have all landed.
         let quiet = 0;
@@ -288,6 +334,7 @@ async function listCodes() {
         async send(email) { input.value = email; form.onsubmit({ preventDefault() {} }); await settle(); },
         async resend() { const rb = note.querySelector('.ll-resend'); if (!rb || !rb.onclick) throw new Error('no Resend button on the panel'); rb.onclick(); await settle(); },
         seen() { return { codeBox: codeForm.style.display !== 'none' && codeForm.style.display !== undefined, text: note.textContent }; },
+        async submitCode(code) { ci.value = code; codeForm.onsubmit({ preventDefault() {} }); await settle(); },
       };
     }
     const asksForCode = (s) => s.codeBox || /6-digit code/.test(s.text);
@@ -303,14 +350,44 @@ async function listCodes() {
       ok('at the cap, Send falls back to the link sender', p.calls.join(',') === '/api/signin-code 429,/api/send-signin-link 200', p.calls);
       ok('and that email really has no code in it', mail.length === mailed + 1 && lastCode() === null, [mail.length - mailed, lastCode()]);
       const first = p.seen();
-      ok('so the panel asks for no code: it says to open the link', !asksForCode(first) && /Open the link/.test(first.text), first);
+      ok('so the panel asks for no code: it says codes are paused, and to use the link', !asksForCode(first) && /paused for about/.test(first.text) && /Tap the link in that email/.test(first.text), first);
       p.calls.length = 0;
       await p.resend();   // the 30s countdown is over, the worker's 60s cooldown is still armed
       ok('Resend inside the minute mails nothing new', mail.length === mailed + 1 && p.calls.join(',') === '/api/signin-code 429,/api/send-signin-link 200', [mail.length - mailed, p.calls]);
       const again = p.seen();
       ok('and the panel still asks for no code: nothing says to type six digits', !asksForCode(again), again);
-      ok('it says to open the link in the email she already has', /Open the link in it on this device/.test(again.text), again.text);
+      ok('it says to use the link in the email she already has', /Tap the link in that email/.test(again.text), again.text);
       ok('in plain words, with no em-dash', !/—/.test(again.text), again.text);
+    }
+
+    // 7a2. The same cap in the installed iPhone app: a link cannot sign THIS app in, so never say so.
+    {
+      const e = fresh('cappedapp');
+      for (let i = 0; i < 4; i++) await issue(w, e);
+      cache.clear();
+      const p = panel({ inApp: true });
+      await p.send(e);
+      const s1 = p.seen();
+      ok('in the installed iPhone app the capped panel says codes are paused', !asksForCode(s1) && /paused for about/.test(s1.text), s1);
+      ok('and that the link opens Cubby in Safari, not this app', /in Safari/.test(s1.text) && !/Tap the link in that email/.test(s1.text) && !/Open the link in it on this device/.test(s1.text), s1.text);
+    }
+
+    // 7a3. The right code refused by the hourly ceiling: a pause, said honestly, never "try again".
+    {
+      const e = fresh('verifycap');
+      cache.clear();
+      const p = panel();
+      await p.send(e);
+      ok('a fresh address gets the code box', p.seen().codeBox, p.seen());
+      const c = lastCode();
+      for (let i = 0; i < 4; i++) await verify(w, e, wrong(c, i));
+      await issue(w, e); const c2 = lastCode();
+      for (let i = 0; i < 3; i++) await verify(w, e, wrong(c2, i));
+      await p.submitCode(c2);
+      const s3 = p.seen();
+      ok('her right code past the ceiling says codes are paused, and for how long', /codes are paused for about/.test(s3.text) && /Nothing is wrong with your account/.test(s3.text), s3.text);
+      ok('and does not tell her to keep trying now', !/Mind trying again/.test(s3.text), s3.text);
+      ok('in plain words, with no em-dash', !/—/.test(s3.text), s3.text);
     }
 
     // 7b. The companion: the cooldown reply after a send that DID carry a code still offers the box.

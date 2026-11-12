@@ -24,7 +24,10 @@
  * in a test. The server half is verified against production separately (403 cross-origin, 400 on a
  * malformed address before any send, 400 bad_code with no oracle).
  *
- *   cd test && node ios-signin-code.test.js
+ *   node test/ios-signin-code.test.js     (a gate: tools/gates.js --emulator, as ios-signin)
+ *   Ports are overridable so it never lands on someone else's emulator: FS_PORT, AUTH_PORT,
+ *   WEB_PORT, STATIC_PORT. It always starts its OWN static server and checks that server is serving
+ *   this checkout; it used to reuse anything already on 8095, which could grade a different tree.
  *
  * It must fail if sign-in ever leaves the container again. That is the point of it.
  */
@@ -36,10 +39,10 @@ const http = require('http');
 const { spawn, execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
-const FS_PORT = 8183;
-const AUTH_PORT = 9399;
-const WEB_PORT = 8096;          // our little front server: app + the two stood-in endpoints
-const STATIC_PORT = 8095;       // tools/serve.js behind it
+const FS_PORT = Number(process.env.FS_PORT) || 8783;
+const AUTH_PORT = Number(process.env.AUTH_PORT) || 9783;
+const WEB_PORT = Number(process.env.WEB_PORT) || 8786;          // our little front server: app + the two stood-in endpoints
+const STATIC_PORT = Number(process.env.STATIC_PORT) || 8785;    // tools/serve.js behind it
 const EXEC_PROJECT = 'demo-cubby-iossignin';
 const EMAIL = 'parent@example.test';
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -67,7 +70,8 @@ if (!process.env.IOS_SIGNIN_INNER) {
     emulators: { firestore: { port: FS_PORT }, auth: { port: AUTH_PORT }, ui: { enabled: false } }
   }));
   const firebaseBin = path.join(__dirname, 'node_modules', '.bin', 'firebase');
-  const env = Object.assign({}, process.env, { IOS_SIGNIN_INNER: '1', PATH: '/opt/homebrew/opt/openjdk/bin:' + process.env.PATH });
+  const javaBin = process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin') : '/opt/homebrew/opt/openjdk/bin';
+  const env = Object.assign({}, process.env, { IOS_SIGNIN_INNER: '1', PATH: javaBin + ':' + process.env.PATH });
   try {
     execFileSync(firebaseBin, [
       'emulators:exec', '--only', 'firestore,auth', '--project', EXEC_PROJECT,
@@ -93,12 +97,16 @@ function customToken(uid) {
 
 (async () => {
   let issued = null;                       // the code we "emailed", so the test can read it back
-  let staticProc = null;
-  if ((await get(`http://localhost:${STATIC_PORT}/app/`)).status !== 200) {
-    staticProc = spawn('node', [path.join(ROOT, 'tools', 'serve.js')],
-      { stdio: 'ignore', env: Object.assign({}, process.env, { PORT: String(STATIC_PORT) }) });
-    for (let i = 0; i < 40 && (await get(`http://localhost:${STATIC_PORT}/app/`)).status !== 200; i++) await sleep(250);
+  if ((await get(`http://localhost:${STATIC_PORT}/app/`)).status !== 0) {
+    ok('port ' + STATIC_PORT + ' is free for this run\'s own static server (set STATIC_PORT)', false);
+    process.exit(1);
   }
+  const staticProc = spawn('node', [path.join(ROOT, 'tools', 'serve.js')],
+    { stdio: 'ignore', env: Object.assign({}, process.env, { PORT: String(STATIC_PORT) }) });
+  for (let i = 0; i < 40 && (await get(`http://localhost:${STATIC_PORT}/app/`)).status !== 200; i++) await sleep(250);
+  // The served client must be THIS checkout's, byte for byte, or every verdict below is about another tree.
+  const servedStore = (await get(`http://localhost:${STATIC_PORT}/app/store-firebase.js`)).body;
+  ok('the static server is serving this checkout', servedStore === fs.readFileSync(path.join(ROOT, 'app', 'store-firebase.js'), 'utf8'));
 
   const front = http.createServer((req, res) => {
     const json = (o, s) => { res.writeHead(s || 200, { 'content-type': 'application/json' }); res.end(JSON.stringify(o)); };
@@ -109,7 +117,11 @@ function customToken(uid) {
         let b = {}; try { b = JSON.parse(body || '{}'); } catch (e) {}
         if (req.url === '/api/signin-code') {
           issued = { email: String(b.email || '').toLowerCase(), code: '314159' };
-          return json({ ok: true });
+          /* The real worker's reply says what the email holds (since 13cf826c, 2026-08-30), and the
+             panel only offers a code box when it says hasCode. This stub still answered {ok:true},
+             so the box never appeared and the test failed on base and head alike, unseen, because it
+             was never wired into tools/gates.js. */
+          return json({ ok: true, hasCode: true, hasLink: true });
         }
         if (!issued || String(b.email || '').toLowerCase() !== issued.email || String(b.code) !== issued.code) {
           return json({ error: 'bad_code' }, 400);
@@ -207,6 +219,6 @@ function customToken(uid) {
   console.log('\n' + (fail ? 'FAIL' : 'PASS') + ' — ' + pass + ' passed, ' + fail + ' failed');
   await browser.close();
   front.close();
-  if (staticProc) staticProc.kill();
+  staticProc.kill();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

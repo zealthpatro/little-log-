@@ -39,19 +39,33 @@ service cloud.firestore {
     }
     // Invites are keyed by the invitee's lowercased email.
     match /invites/{email} {
+      /* WHO SENT IT, in a form the sender cannot make up. A newcomer is asked before she joins,
+         and that question shows who invited her. The name is whatever the sender typed, so any
+         owner of any household could sign an invite "Your midwife". fromEmail is checked here
+         against the sender's own sign-in address, so the sheet can show something true beside the
+         name. A name may only travel WITH that address: an invite naming its sender but not
+         proving the address is refused, and the sheet treats an invite with neither as unsigned. */
+      function senderProven() {
+        return ( !('fromEmail' in request.resource.data) && !('invitedByName' in request.resource.data) )
+          || ( request.resource.data.get('fromEmail', '') is string
+               && request.resource.data.get('fromEmail', '') != ''
+               && request.resource.data.fromEmail == request.auth.token.email.lower() );
+      }
       allow read: if request.auth != null && request.auth.token.email.lower() == email;
       allow create: if request.auth != null
         && get(/databases/$(database)/documents/households/$(request.resource.data.householdId)).data.members[request.auth.uid] == 'owner'
         // Role is owner-set here and later enforced at join (SEC-3); constrain it to the two valid
         // values so a bogus role can never be minted. Missing role defaults to caregiver.
-        && request.resource.data.get('role', 'caregiver') in ['owner', 'caregiver'];
+        && request.resource.data.get('role', 'caregiver') in ['owner', 'caregiver']
+        && senderProven();
       // Only the owning household's owner may update an invite, and it can never be re-pointed at
       // another household (that would let an outsider redirect an invite — or their own invite —
       // into a household they don't own and join it). Invitees never update invites: joining is a
       // write to the household doc itself.
       allow update: if request.auth != null
         && request.resource.data.householdId == resource.data.householdId
-        && get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members[request.auth.uid] == 'owner';
+        && get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members[request.auth.uid] == 'owner'
+        && senderProven();
       // The household's owner may withdraw an invite. An invitee may also delete the invite addressed
       // to their OWN email — needed for account deletion, where a caregiver must be able to clear
       // every trace of themselves without an owner's help (App Store 5.1.1(v): deletion can never be
@@ -137,15 +151,21 @@ service cloud.firestore {
         // throw on create would reject the owner's own legitimate link.
         && request.resource.data.get('usedBy', null) == null
         // Same reason: a bare read of an absent expiresAt throws. It would still deny, but say it.
-        && request.resource.data.get('expiresAt', null) is timestamp;
+        && request.resource.data.get('expiresAt', null) is timestamp
+        // The sender's address, when given, must be their own (see senderProven on /invites). A link
+        // without it is still accepted, because older builds never wrote it; the sheet then shows
+        // no sender name for it.
+        && ( !('fromEmail' in request.resource.data)
+             || request.resource.data.fromEmail == request.auth.token.email.lower() );
 
       // Exactly two updates are legal.
       // 1. The owner revokes, which can never re-point the link at a different household.
-      // 2. The invitee CLAIMS it: sets usedBy to their own uid, once, before it expires, changing
-      //    nothing else. An unclaimed link is the only kind that can be claimed, so a forwarded
-      //    link is dead the moment the first person walks through it. The client also sets
-      //    consumed: true in the same write, batched with the join; the household rule requires
-      //    that, which is what makes the link single-use for the join and not just for the claim.
+      // 2. The invitee CLAIMS it: sets usedBy to their own uid and consumed: true, once, before it
+      //    expires, changing nothing else, AND in the same batch that adds them to the household
+      //    (getAfter). The household rule checks the same thing from its side. A claim on its own
+      //    is refused, so a link can never be spent by someone who did not get in. That used to
+      //    happen to an older cached build after the rules changed: it claimed first and joined
+      //    second, the join was refused, and the owner's link was gone for good with nobody in.
       allow update: if request.auth != null
         && request.resource.data.householdId == resource.data.householdId
         && (
@@ -153,9 +173,11 @@ service cloud.firestore {
           || (
                resource.data.get('usedBy', null) == null
             && request.resource.data.usedBy == request.auth.uid
+            && request.resource.data.get('consumed', false) == true
             && request.time < resource.data.expiresAt
-            && request.resource.data.role == resource.data.role
+            && request.resource.data.get('role', 'caregiver') == resource.data.get('role', 'caregiver')
             && request.resource.data.expiresAt == resource.data.expiresAt
+            && getAfter(/databases/$(database)/documents/households/$(resource.data.householdId)).data.get('members', {}).get(request.auth.uid, '') == resource.data.get('role', 'caregiver')
           )
         );
 
@@ -204,8 +226,11 @@ service cloud.firestore {
       }
       /* Deletion is the purge cron's trigger, and the cron erases the whole family with nothing to
          restore from. So it may be scheduled only the way the app does it (deleteAccount, last one
-         out): by an owner, whose write leaves nobody in members, naming themselves, and at least 29
-         days ahead. The client writes 30 days; one day of slack covers a phone whose clock is off.
+         out): by an owner, whose write leaves nobody in members, naming themselves, and at least 7
+         days ahead. The client writes 30 days from the PHONE's clock. The floor was 29 days, which
+         refused a last-one-out deletion outright on a phone more than a day slow, after her private
+         records were already gone (App Store 5.1.1(v) needs deletion to finish). A week's floor still
+         stops "purge on the next tick" and tolerates a clock up to 23 days slow.
          isOwner() reads the state BEFORE the write, so the owner still counts while leaving.
          Removing both fields stays open to an owner: it only ever cancels a deletion. */
       function deletionScheduledProperly() {
@@ -214,7 +239,7 @@ service cloud.firestore {
           || ( request.resource.data.get('members', {}).size() == 0
                && request.resource.data.get('deletionRequestedBy', null) == request.auth.uid
                && request.resource.data.get('deleteAfter', null) is number
-               && request.resource.data.deleteAfter >= request.time.toMillis() + 29 * 24 * 60 * 60 * 1000 );
+               && request.resource.data.deleteAfter >= request.time.toMillis() + 7 * 24 * 60 * 60 * 1000 );
       }
       /* A member who stays in members keeps their circle entry, and its role label cannot drift
          from what they joined as. Without this a caregiver could delete their own memberInfo entry
@@ -321,10 +346,11 @@ service cloud.firestore {
         /* JOINING BY LINK. The role comes off the link, which only an owner can mint, so an invitee
            cannot promote themselves. Single use is enforced HERE, not by the claim alone: the link
            must go from not consumed (get, before this batch) to consumed by this uid (getAfter) in
-           this very write, so claim and join are one atomic act. A removed member's old token is
-           already consumed and can never pass again, and a link claimed by an older build (usedBy
-           set, never consumed) cannot be consumed now, because the claim rule only lets an
-           UNCLAIMED link be claimed. The expiry is checked again here as a second lock. */
+           this very write, so claim and join are one atomic act; the claim rule checks the same
+           pairing from the link's side. A removed member's old token is already consumed and can
+           never pass again, and a link claimed by an older build (usedBy set, never consumed)
+           cannot be consumed now, because the claim rule only lets an UNCLAIMED link be claimed.
+           The expiry is checked again here as a second lock. */
         || ( request.auth != null
              && notYetMember()
              && !('deleteAfter' in resource.data)

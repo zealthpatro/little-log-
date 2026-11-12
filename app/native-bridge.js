@@ -23,6 +23,12 @@
       // screen routing so it is present the moment sign-in resolves.
       if (obj.join === '1' || obj.join === true || obj.join === 1) {
         try { sessionStorage.setItem('cubby-join', '1'); } catch (e) {}
+      } else if (typeof obj.join === 'string' && /^[A-Za-z0-9_-]{8,120}$/.test(obj.join)) {
+        /* A single-use invite LINK (?join=<token>), the way the web page keeps it (index.html stores
+           any join value). Only '1' used to be kept here, so a token link opened in the native app
+           dropped the token, and the invitee silently became the owner of an empty Cubby while the
+           owner's link sat unclaimed. Token-shaped values only: this lands in a document path. */
+        try { sessionStorage.setItem('cubby-join', obj.join); } catch (e) {}
       }
       var dl = { go: obj.go || null, stage: obj.stage || null, read: obj.read || null, tab: obj.tab || null };
       if (dl.go || dl.stage || dl.read || dl.tab) {
