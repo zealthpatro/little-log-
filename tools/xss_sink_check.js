@@ -475,6 +475,12 @@ function pageSetup(tags) {
   ok('store-firebase: both photo byte listeners run the ingest check', count(/ing\(\)\.photo\(/g) >= 2, count(/ing\(\)\.photo\(/g));
   ok('store-firebase: the household blob and the shared journey run the ingest check', /function applyAppBlob\(app\) \{\s*if \(!app\) return;\s*ing\(\)\.blob\(app\)/.test(sf) && /ing\(\)\.blob\(d\.data/.test(sf));
   ok('store-firebase: ing() really is window.cubbyIngest', /function ing\(\) \{ return window\.cubbyIngest \|\| PASS; \}/.test(sf));
+  // Her readings reach her partner through applyMatDoc, not the journey doc, so it needs its own call.
+  const matFold = (sf.match(/function applyMatDoc\(cat, d\) \{[^]*?\n  \}/) || [''])[0];
+  ok('store-firebase: her health readings (applyMatDoc) run the ingest check before they reach state', /var data = \(ing\(\)\.mat \|\| PASS\.mat\)\(d\.data/.test(matFold) && !/Object\.keys\(d\.data/.test(matFold), matFold.slice(-400));
+  const idx = fs.readFileSync(path.join(ROOT, 'app/index.html'), 'utf8');
+  const load = (idx.match(/async load\(\)\{[^]*?\n  \},/) || [''])[0];
+  ok('index.html: Store.load hands back what was cached through the ingest check', /cubbyIngest\.loaded\(d\)/.test(load), load.slice(0, 400));
 
   const own = errs.filter((e) => !/firebase|network|Failed to fetch|ERR_|messaging|installations/i.test(e));
   ok('no page errors along the way', own.length === 0, own.slice(0, 5));

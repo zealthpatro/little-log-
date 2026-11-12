@@ -16,7 +16,9 @@
  *     "><x-pwn ...><img onerror> an attribute, or markup
  *     onerror=&#95;&#95;...      the same call spelt in entities, which survives toUpperCase
  *     PWN-K-                     the marker that must still be on screen, as text
- * and feeds it through window.cubbyIngest exactly as store-firebase.js does, then walks the four
+ * and feeds it through window.cubbyIngest exactly as store-firebase.js does (her health readings
+ * through the real applyMatDoc, cut out of store-firebase.js, both with the ingest and with none, so
+ * a raw sink on any reading is red even while the ingest covers it), then walks the four
  * screens, the pregnancy tabs, and every open*() and render*() function the app has, with no
  * argument and with every id the household holds. Everywhere it asserts no injected element, no
  * injected handler that runs or no longer parses, no payload in a style/src/href, and no sentinel
@@ -30,10 +32,14 @@
  *   number  every number leaf except clocks
  *   clock   every clock leaf (time, at, birth, start, dueDate...)
  *   absent  every field name the app's source reads, added hostile to every record that lacks it
+ *   cached  every number and clock, in the blob an older client left in this browser, landed by
+ *           the boot's own Store.load (seeded before the page exists)
  *
  * And so none of it passes on a blank screen: in each class the hostile marker must be on screen
  * as text for a minimum number of distinct leaves (and named free-text fields in the text class).
  * Section 1 keeps the six repros that beat round 1, by name, both through the ingest and past it.
+ * Section 2 grades what applyMatDoc does to a health doc, and section 3 what Store.load hands back.
+ * XSS_LEAF_ONLY=named|mat|cached|text|enum|select|number|clock|absent runs one part.
  *
  * Plus a static rule: an UNQUOTED ${} inside an on*="..." attribute must be a numeric coercion
  * (hNum, Number) or a literal ternary, or one of the reviewed constants below, counted, so a new
@@ -322,8 +328,67 @@ function addAbsent(h, fields) {
   return tags;
 }
 
+/* ------------------------------------------------------------------ her health readings: the real fold */
+/* Her readings (weights, BP, glucose, careTeam, conditions...) do not ride the journey doc. They live
+   in her own mhealth docs and reach a partner she shares them with through applyMatDoc in
+   app/store-firebase.js. So that is the path the gate lands them through: applyMatDoc, MAT_CATS,
+   ing(), PASS and stableStringify are cut out of the shipped file verbatim and run in the page against
+   the page's own state and window.cubbyIngest. Landing them through cubbyIngest.blob() instead (as
+   this gate once did) graded an ingest production never ran on them.
+   `raw` runs the same fold with no cubbyIngest at all, which is the code's own fallback for an older
+   cached index.html (PASS), so every sink a reading reaches is graded on its own as well. */
+const STORE_SRC = fs.readFileSync(path.join(ROOT, 'app/store-firebase.js'), 'utf8');
+function cutFn(src, header) {
+  const i = src.indexOf(header);
+  if (i < 0) return null;
+  const j = src.indexOf('{', i + header.length - 1);
+  if (j < 0) return null;
+  let d = 0;
+  for (let k = j; k < src.length; k++) {
+    if (src[k] === '{') d++;
+    else if (src[k] === '}') { d--; if (d === 0) return src.slice(i, k + 1); }
+  }
+  return null;
+}
+function matHarness() {
+  const a = STORE_SRC.indexOf('var MAT_CATS = {'), b = STORE_SRC.indexOf('var MAT_PRIVATE_KEYS');
+  const need = {
+    cats: a >= 0 && b > a ? STORE_SRC.slice(a, b) : null,
+    pass: (STORE_SRC.match(/^\s*var PASS = \{[^\n]*\};$/m) || [null])[0],
+    ing: cutFn(STORE_SRC, 'function ing()'),
+    stableStringify: cutFn(STORE_SRC, 'function stableStringify(o)'),
+    applyMatDoc: cutFn(STORE_SRC, 'function applyMatDoc(cat, d)'),
+  };
+  const missing = Object.keys(need).filter((k) => !need[k]);
+  if (missing.length) return { missing };
+  const cats = new Function(need.cats + '\nreturn MAT_CATS;')();
+  const src = 'var matShared = {}, knownMat = {};\n' + need.pass + '\n' + need.ing + '\n' + need.cats + '\n' + need.stableStringify + '\n'
+    + need.applyMatDoc + '\nreturn { apply: applyMatDoc, cats: MAT_CATS, known: function () { return knownMat; } };';
+  return { src, cats, missing };
+}
+const MAT = matHarness();
+/* A journey with her readings in it, split the way syncMaternal writes it: each MAT_CATS category
+   becomes its own doc, everything else stays on the journey doc. */
+function splitPreg(preg) {
+  const journey = Object.assign({}, preg), docs = {};
+  Object.keys(MAT.cats || {}).forEach((cat) => {
+    const data = {};
+    MAT.cats[cat].forEach((k) => { if (journey[k] !== undefined) { data[k] = journey[k]; delete journey[k]; } });
+    docs[cat] = data;
+  });
+  return { journey, docs };
+}
+
 /* ------------------------------------------------------------------ page side */
 function pageSetup() {
+  // applyMatDoc as shipped (see matHarness), folding each of her category docs into state.pregnancy.
+  window.__matFold = function (src, docs, raw) {
+    var H = new Function('window', src)(raw ? { cubbyIngest: null } : window);
+    Object.keys(docs).forEach(function (cat) {
+      H.apply(cat, { ownerUid: 'local', category: cat, sharedWith: ['uidCaregiver'], data: JSON.parse(JSON.stringify(docs[cat])) });
+    });
+    return H;
+  };
   window.__pwnHits = [];
   window.__pwn = window.__PWN = function (k) { window.__pwnHits.push(String(k)); };
   window.__sandboxRun = function (code) {
@@ -379,8 +444,11 @@ function pageSetup() {
   };
 }
 
-/* One class: boot clean, ingest the hostile household the way store-firebase.js does, walk. */
-async function runClass(browser, name, h, tags, must) {
+/* One class: boot clean, ingest the hostile household the way store-firebase.js does, walk.
+   With opts.cached the household is instead the blob an older client left in this browser, put
+   there before the page exists, and the boot's own Store.load is what lands it. */
+async function runClass(browser, name, h, tags, must, opts) {
+  opts = opts || {};
   console.log('\n' + name + ': ' + tags.length + ' distinct hostile leaves');
   const page = await browser.newPage();
   const errs = []; page.on('pageerror', (e) => errs.push(e.message));
@@ -392,37 +460,53 @@ async function runClass(browser, name, h, tags, must) {
   await page.evaluateOnNewDocument(pageSetup);
   await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
   await page.setViewport({ width: 390, height: 844 });
-  await page.goto(BASE + '/app/?e2e=1', { waitUntil: 'networkidle2', timeout: 40000 });
-  await page.evaluate(() => {
-    localStorage.setItem('little-log-v1', JSON.stringify({ babies: [{ id: 'b0', name: 'R', birth: Date.now() - 9e9 }], events: [], settings: { seen: { home: 1, log: 1, album: 1, health: 1, welcome: 1, install: 1 } } }));
-    localStorage.setItem('cubby-quick-uid', 'local'); localStorage.setItem('cubby-theme:local', 'light');
-  });
-  await page.reload({ waitUntil: 'networkidle2' });
+  const SEEN = { home: 1, log: 1, album: 1, health: 1, welcome: 1, install: 1 };
+  if (opts.cached) {
+    // Before any script runs, as an older client would have left it: Store.load reads it at boot.
+    const blob = Object.assign({}, h.app, { events: h.events, notes: h.notes, pregnancy: h.preg });
+    blob.settings = Object.assign({}, h.app.settings, { seen: SEEN });
+    await page.evaluateOnNewDocument((b) => {
+      try { localStorage.setItem('little-log-v1', b); localStorage.setItem('cubby-quick-uid', 'local'); localStorage.setItem('cubby-theme:local', 'light'); } catch (e) {}
+    }, JSON.stringify(blob));
+    await page.goto(BASE + '/app/?e2e=1', { waitUntil: 'networkidle2', timeout: 40000 });
+  } else {
+    await page.goto(BASE + '/app/?e2e=1', { waitUntil: 'networkidle2', timeout: 40000 });
+    await page.evaluate((seen) => {
+      localStorage.setItem('little-log-v1', JSON.stringify({ babies: [{ id: 'b0', name: 'R', birth: Date.now() - 9e9 }], events: [], settings: { seen } }));
+      localStorage.setItem('cubby-quick-uid', 'local'); localStorage.setItem('cubby-theme:local', 'light');
+    }, SEEN);
+    await page.reload({ waitUntil: 'networkidle2' });
+  }
   await sleep(1200);
-  const landed = await page.evaluate((hh) => {
+  const split = splitPreg(h.preg);
+  const landed = await page.evaluate((hh, cached) => {
     const I = window.cubbyIngest;
     if (!I) return { missing: true };
-    // Exactly what store-firebase.js does where each snapshot lands.
-    I.blob(hh.app);
-    const events = hh.events.map((e) => I.event(e, e.id));
-    const notes = hh.notes.map((n) => I.note(n, n.id));
     const photos = I.photos(hh.photos);
-    const preg = I.blob(hh.preg);
-    const seen = (state.settings && state.settings.seen) || {};
-    Object.keys(hh.app).forEach((k) => { state[k] = hh.app[k]; });
-    state.settings = Object.assign({}, hh.app.settings || {}, { seen: seen });
-    state.events = events; state.notes = notes;
-    try { normalizeLoadedState(state); } catch (e) {}
+    if (!cached) {
+      // Exactly what store-firebase.js does where each snapshot lands.
+      I.blob(hh.app);
+      const events = hh.events.map((e) => I.event(e, e.id));
+      const notes = hh.notes.map((n) => I.note(n, n.id));
+      const seen = (state.settings && state.settings.seen) || {};
+      Object.keys(hh.app).forEach((k) => { state[k] = hh.app[k]; });
+      state.settings = Object.assign({}, hh.app.settings || {}, { seen: seen });
+      state.events = events; state.notes = notes;
+      try { normalizeLoadedState(state); } catch (e) {}
+      // The journey doc, as applyPregJourney lands it. Her readings land later, through applyMatDoc.
+      window.__preg = I.blob(hh.journey);
+      window.__matDocs = hh.docs;
+    }
     PhotoStore.map = photos;
     window.LL = window.LL || {}; window.LL.members = hh.members; window.LL.memberInfo = hh.memberInfo; window.LL.role = 'owner';
-    window.__preg = preg;
     window.__realFetch = window.__realFetch || window.fetch;
     window.fetch = function () { return Promise.reject(new Error('offline in the gate')); };
     window.open = function () { return null; };
     try { window.print = function () {}; } catch (e) {}
-    return { babies: (state.babies || []).length, events: state.events.length };
-  }, h);
-  ok(name + ': the household landed through window.cubbyIngest', !landed.missing && landed.babies >= 1, landed);
+    return { babies: (state.babies || []).length, events: (state.events || []).length, preg: !!state.pregnancy };
+  }, Object.assign({}, h, split), !!opts.cached);
+  ok(name + (opts.cached ? ': the household booted from what this browser cached' : ': the household landed through window.cubbyIngest'),
+    !landed.missing && landed.babies >= 1 && (!opts.cached || (landed.events >= 10 && landed.preg)), landed);
   if (landed.missing) { await page.close(); return; }
 
   const html = fs.readFileSync(path.join(ROOT, 'app/index.html'), 'utf8');
@@ -432,8 +516,11 @@ async function runClass(browser, name, h, tags, must) {
   const found = new Map(), shown = {}; let calls = 0;
   const take = (where, list) => list.forEach((f) => { const key = f.k + ' ' + f.what.replace(/ :: .*/, ''); if (!found.has(key)) found.set(key, { where, f }); });
 
-  const sweep = async (phase) => {
-    const r = await page.evaluate(async (fns, phase) => {
+  /* idOnly: hand the household's ids only to functions whose first parameter is an id. With no
+     ingest the ids are raw payloads, and renderMedSheet(editing) or openFeverNudge(v), which no
+     caller ever gives a string, would just be reflecting the gate's own argument back. */
+  const sweep = async (phase, idOnly) => {
+    const r = await page.evaluate(async (fns, phase, idOnly) => {
       const ids = new Set();
       const add = (a) => (Array.isArray(a) ? a : []).forEach((x) => { if (x && x.id != null) ids.add(x.id); });
       add(state.events); add(state.meds); add(state.illnesses); add(state.milestones); add(state.photos); add(state.notes); add(state.consents); add(state.babies);
@@ -446,7 +533,8 @@ async function runClass(browser, name, h, tags, must) {
       const probe = () => document.getElementById('xssProbe') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'xssProbe' }));
       for (const f of fns) {
         const fn = window[f]; if (typeof fn !== 'function') continue;
-        const list = fn.length ? [undefined].concat(args) : [undefined];
+        const p0 = (/^[^(]*\(\s*([A-Za-z_$][\w$]*)/.exec(String(fn)) || [])[1] || '';
+        const list = fn.length && (!idOnly || /^(id|key|k)$|Id$/.test(p0)) ? [undefined].concat(args) : [undefined];
         for (const a of list) {
           try { closeSheet(); } catch (e) {}
           calls++;
@@ -459,7 +547,7 @@ async function runClass(browser, name, h, tags, must) {
         }
       }
       return { out, shown, calls };
-    }, FNS, phase);
+    }, FNS, phase, !!idOnly);
     calls += r.calls;
     r.out.forEach((x) => take(x.where, x.s));
     Object.assign(shown, r.shown);
@@ -489,9 +577,20 @@ async function runClass(browser, name, h, tags, must) {
     "go('album');setAlbumTab('photos')", "go('album');setAlbumTab('memories')", "go('album');setAlbumTab('milestones')",
     "openFeed();setFeedMethod('breast')", "openFeed();setFeedMethod('bottle')", "openFeed();setFeedMethod('solids')", "openFeed();setFeedMethod('water')"], 'eval(v)');
   await sweep('baby');
-  await page.evaluate(() => { state.pregnancy = window.__preg; viewingPreg = true; try { ensurePregFields(state.pregnancy); } catch (e) {} });
-  await screens('pregnancy', ['week', 'care', 'moments', 'body', 'prep', 'trying', 'log'], "viewingPreg=true; pregGo(v);");
-  await sweep('pregnancy');
+  /* The pregnancy: the journey as applyPregJourney lands it, then her readings through the real
+     applyMatDoc. Twice: with the ingest (what her partner's phone does), and with none (the code's
+     own fallback for an older index.html), so a raw sink on any reading is red even while the
+     ingest happens to cover it. A cached blob carries its pregnancy whole, so it is walked once. */
+  const pregPass = async (label, raw) => {
+    await page.evaluate((src, raw, cached) => {
+      if (!cached) { state.pregnancy = JSON.parse(JSON.stringify(window.__preg)); window.__matFold(src, window.__matDocs, raw); }
+      viewingPreg = true; try { ensurePregFields(state.pregnancy); } catch (e) {}
+    }, MAT.src, raw, !!opts.cached);
+    await screens(label, ['week', 'care', 'moments', 'body', 'prep', 'trying', 'log'], "viewingPreg=true; pregGo(v);");
+    await sweep(label, raw);
+  };
+  await pregPass('pregnancy', false);
+  if (!opts.cached) await pregPass('pregnancy (her readings with no ingest)', true);
   await sleep(900);   // an injected <img> fires onerror after its 404 comes back
   const late = await page.evaluate(() => [...new Set(window.__pwnHits)]);
   late.forEach((k) => take('(late)', [{ k, what: 'sentinel ran' }]));
@@ -530,7 +629,7 @@ async function named(browser) {
       localStorage.setItem('cubby-quick-uid', 'local');
     });
     await page.reload({ waitUntil: 'networkidle2' }); await sleep(1200);
-    const r = await page.evaluate(async (mode, png) => {
+    const r = await page.evaluate(async (mode, png, src, cats) => {
       const wait = (ms) => new Promise((res) => setTimeout(res, ms));
       const U = (t) => '<img src=/x-pwn-404 onerror="__pwn(\'' + t + '\')"><x-pwn data-t="' + t + '"></x-pwn>PWN-' + t + '-';
       const E = (t) => '<img src=/x-pwn-404 onerror="' + ('__pwn(\'' + t + '\')').split('').map((c) => '&#' + c.charCodeAt(0) + ';').join('') + '">';
@@ -545,7 +644,7 @@ async function named(browser) {
         bp: [{ id: 'bp1', at: Date.now() - 864e5, sys: U('sys'), dia: U('dia') }], kicks: [{ id: 'k1', start: Date.now() - 864e5, end: Date.now() - 863e5, count: U('count') }],
         glucose: [{ id: 'gl1', at: Date.now() - 864e5, val: U('val'), unit: 'mmol', context: 'fasting' }], nausea: [{ id: 'nz1', at: Date.now() - 864e5, vomits: U('vomits'), water: U('water'), keptFluids: true }],
         conditions: { bp: true, gd: true }, moments: [], precon: [] };
-      if (mode === 'ingest') { window.cubbyIngest.blob(app); window.cubbyIngest.blob(preg); }
+      if (mode === 'ingest') window.cubbyIngest.blob(app);
       Object.keys(app).forEach((k) => { state[k] = app[k]; });
       state.activeBabyId = 'b1'; PhotoStore.map = { ph1: png };
       try { window.toast = function () {}; } catch (e) {}
@@ -580,13 +679,19 @@ async function named(browser) {
         openFoodPrefs();
       });
       await check('stats', async () => { go('log'); probe().innerHTML = renderStats(); });
-      state.pregnancy = preg; viewingPreg = true; try { ensurePregFields(preg); } catch (e) {}
+      if (mode === 'ingest') {
+        // The journey doc as applyPregJourney lands it, her readings through the real applyMatDoc.
+        const docs = {};
+        Object.keys(cats).forEach((c) => { docs[c] = {}; cats[c].forEach((k) => { if (preg[k] !== undefined) { docs[c][k] = preg[k]; delete preg[k]; } }); });
+        window.cubbyIngest.blob(preg); state.pregnancy = preg; window.__matFold(src, docs, false);
+      } else state.pregnancy = preg;
+      viewingPreg = true; try { ensurePregFields(state.pregnancy); } catch (e) {}
       await check('preg', async () => {
         pregGo('care'); await wait(150);
         ['openBPWatch', 'openKickCounter', 'openGlucoseTracker', 'openNausea'].forEach((f) => { try { window[f](); const s = window.__scan(); if (s.length) window.__pwnHits.push(f + ':' + s[0].what.slice(0, 60)); window.__shown({}); } catch (e) {} });
       });
       return out;
-    }, mode, PNG);
+    }, mode, PNG, MAT.src, MAT.cats);
     const clean = (x) => x && !x.err && !x.hits.length && !x.scan.length;
     const why = (x) => JSON.stringify(x).slice(0, 600);
     ok(mode + ': a birth place of 1);__pwn(\'place\');// stays data in all ' + r.placeHandlers + ' birth-poster handlers', clean(r.place) && r.placeHandlers >= 8, why(r.place));
@@ -599,6 +704,119 @@ async function named(browser) {
   }
 }
 
+/* ------------------------------------------------------------------ her readings, folded */
+/* What applyMatDoc does with a health doc she wrote, read on her partner's phone: the same checks the
+   journey gets. Numbers stay numbers, units stay on their list, every list stays a list of records,
+   conditions stay on/off switches, ids are made safe, free text is kept exactly as typed, and a doc
+   only ever sets the keys its own category owns. */
+async function matFold(browser) {
+  console.log('\n2. her health readings, folded in through applyMatDoc');
+  ok('every piece of the fold is still in app/store-firebase.js (MAT_CATS, PASS, ing, stableStringify, applyMatDoc)', !MAT.missing.length, MAT.missing);
+  if (MAT.missing.length) return;
+  const page = await browser.newPage();
+  page.on('dialog', (d) => d.dismiss().catch(() => {}));
+  await page.evaluateOnNewDocument(pageSetup);
+  await page.goto(BASE + '/app/?e2e=1', { waitUntil: 'networkidle2', timeout: 40000 });
+  await sleep(800);
+  const r = await page.evaluate((src) => {
+    const T = 1762862400000;
+    const U = (t) => '<img src=/x-pwn-404 onerror="__pwn(\'' + t + '\')"><x-pwn data-t="' + t + '"></x-pwn>';
+    const Q = (t) => "1);__pwn('" + t + "');//";
+    const docs = {
+      health: {
+        weights: [{ id: 'w1', at: String(T), kg: '68.5', unit: U('wunit') }, 'not a record', { id: 'w2', at: T, kg: Q('kg'), unit: 'lb' }],
+        bp: U('bp'),
+        glucose: [{ id: 'g1', at: T, val: 5.4, unit: 'mmol', context: 'fasting' }, { id: 'g2', at: Q('gat'), val: U('val'), unit: U('gunit'), context: 'post1-breakfast' }],
+        glucoseUnit: U('gu'),
+        urine: [{ id: 'u1', at: T, result: 'clear' }],
+        nausea: [{ id: 'n1', at: T, vomits: '2', water: U('water'), keptFluids: true }],
+        symptoms: [{ id: 's"1', at: T, kind: "1);x();//", note: '<b>as typed</b>' }],
+        supplements: [{ id: 'sp1', name: 'Folic acid' }], supplementLog: [{ id: 'l1', at: T, supplementId: "sp1');__pwn('sid');//" }],
+        appts: [{ id: 'evil', title: U('appt') }], ownerUid: 'uidCaregiver', stage: 'trying',
+      },
+      careteam: { careTeam: [{ id: 'c1', name: 'Jo <b>Midwife</b>', role: 'Midwife', phone: '0113 496 0001' }] },
+      conditions: { conditions: { gdm: true, ['"><img src=x onerror=__pwn(1)>']: true, bp: 'yes' } },
+    };
+    state.pregnancy = { id: 'pg1', ownerUid: 'local', stage: 'expecting', appts: [{ id: 'ap1', title: 'Midwife check' }] };
+    window.__matFold(src, docs, false);
+    const p = state.pregnancy, SAFE = /^[A-Za-z0-9_.:-]{1,128}$/;
+    const clean = { weights: [{ id: 'w9', at: T, kg: 70.2, unit: 'kg' }], bp: [{ id: 'b9', at: T, sys: 122, dia: 78 }], glucose: [{ id: 'g9', at: T, val: 92, unit: 'mgdl', context: 'post2-lunch' }],
+      glucoseUnit: 'mgdl', nausea: [{ id: 'n9', at: T, vomits: 0, keptFluids: true, water: 6 }], symptoms: [{ id: 's9', at: T, kind: 'Back ache', note: '' }] };
+    const before = JSON.stringify(clean);
+    const q = { id: 'pg2', ownerUid: 'local', stage: 'expecting' };
+    state.pregnancy = q; window.__matFold(src, { health: JSON.parse(before) }, false);
+    const kept = Object.keys(clean).every((k) => JSON.stringify(q[k]) === JSON.stringify(clean[k]));
+    return {
+      numStr: p.weights[0].at === T && p.weights[0].kg === 68.5,
+      numBad: p.weights.length === 2 && p.weights[1].kg === undefined && p.glucose[1].val === undefined && p.glucose[1].at === undefined && p.nausea[0].water === undefined,
+      vomits: p.nausea[0].vomits,
+      units: { w0: p.weights[0].unit, w1: p.weights[1].unit, g0: p.glucose[0].unit, g1: p.glucose[1].unit, gu: p.glucoseUnit },
+      bp: p.bp,
+      ids: SAFE.test(p.symptoms[0].id) && SAFE.test(p.supplementLog[0].supplementId),
+      text: p.symptoms[0].kind === "1);x();//" && p.symptoms[0].note === '<b>as typed</b>' && p.careTeam[0].name === 'Jo <b>Midwife</b>' && p.glucose[1].context === 'post1-breakfast',
+      conds: p.conditions,
+      own: { appts: p.appts, ownerUid: p.ownerUid, stage: p.stage },
+      kept, got: kept ? null : JSON.stringify(q).slice(0, 400),
+    };
+  }, MAT.src);
+  const why = (x) => JSON.stringify(x).slice(0, 500);
+  ok('a reading written as a string becomes that number (a weight and its time)', r.numStr && r.vomits === 2, why(r));
+  ok('anything else in a reading is dropped (a weight, a glucose value and its time, glasses of water), and a non-record is dropped from its list', r.numBad, why(r));
+  ok('a unit off its list is dropped, a real one is kept (weights, glucose, her glucose unit)', !r.units.w0 && r.units.w1 === 'lb' && r.units.g0 === 'mmol' && !r.units.g1 && !r.units.gu, why(r.units));
+  ok('a list that is not a list comes back as an empty list (BP)', Array.isArray(r.bp) && r.bp.length === 0, why(r.bp));
+  ok('the ids inside her readings are made safe like every other id', r.ids, why(r));
+  ok('free text stays exactly as she typed it (a symptom, a note, a care-team name, a glucose context)', r.text, why(r));
+  ok('conditions stay on/off switches with safe keys', r.conds && r.conds.gdm === true && r.conds.bp === false && Object.keys(r.conds).length === 3 && Object.keys(r.conds).every((k) => /^[A-Za-z0-9_.:-]{1,128}$/.test(k)), why(r.conds));
+  ok('a health doc cannot set what its category does not own (the visits, who owns the journey, its stage)', r.own.ownerUid === 'local' && r.own.stage === 'expecting' && r.own.appts.length === 1 && r.own.appts[0].id === 'ap1', why(r.own));
+  ok('and a real set of readings comes through exactly as she saved it', r.kept, r.got);
+  await page.close();
+}
+
+/* ------------------------------------------------------------------ a blob an older client cached */
+/* Store.load is the one reader of the blob this browser keeps (little-log-v1). An older client
+   wrote it with no checks, so it is checked on the way out, for every caller. Seeded before the
+   page exists, read back through Store.load itself. */
+async function cachedLoad(browser) {
+  console.log('\n3. a blob an older client left in this browser');
+  const page = await browser.newPage();
+  page.on('dialog', (d) => d.dismiss().catch(() => {}));
+  await page.evaluateOnNewDocument(pageSetup);
+  const U = (t) => '<img src=/x-pwn-404 onerror="__pwn(\'' + t + '\')"><x-pwn data-t="' + t + '"></x-pwn>';
+  const Q = (t) => "1);__pwn('" + t + "');//";
+  const T = 1762862400000;
+  const blob = {
+    babies: [{ id: 'b1', name: 'Robin <b>as typed</b>', birth: T - 200 * 864e5, gestWeeks: Q('gw'), gestDays: '2', color: 'red;background:url(x)', sex: 'F' }],
+    activeBabyId: 'b1',
+    settings: { unit: U('unit'), wUnit: 'lb', seen: { home: 1, log: 1, album: 1, health: 1, welcome: 1, install: 1 } },
+    meds: [{ id: 'md1', name: 'Calpol', babyId: 'b1', active: true, pattern: { type: 'everyX', hours: Q('hours') }, createdAt: T }],
+    events: [{ id: 'ev"1', type: 'feed', babyId: 'b1', time: String(T), method: 'bottle', amount: Q('amount'), unit: 'ml' }],
+    notes: [{ id: 'nt"1', text: 'Nap at 3', at: T, createdBy: 'local', audience: 'circle' }],
+    pregnancy: { id: 'pg1', ownerUid: 'local', stage: 'expecting', dueDate: T + 70 * 864e5, glucose: [{ id: 'g1', at: T, val: U('val'), unit: 'mmol' }], bp: U('bp'), glucoseUnit: U('gu') },
+  };
+  await page.evaluateOnNewDocument((b) => { try { localStorage.setItem('little-log-v1', b); localStorage.setItem('cubby-quick-uid', 'local'); } catch (e) {} }, JSON.stringify(blob));
+  await page.goto(BASE + '/app/?e2e=1', { waitUntil: 'networkidle2', timeout: 40000 });
+  await sleep(1200);
+  const r = await page.evaluate(async (raw) => {
+    const SAFE = /^[A-Za-z0-9_.:-]{1,128}$/;
+    const look = (d) => ({
+      gw: d.babies[0].gestWeeks, gd: d.babies[0].gestDays, name: d.babies[0].name, color: d.babies[0].color,
+      unit: d.settings.unit, wUnit: d.settings.wUnit, hours: d.meds[0].pattern.hours,
+      evId: SAFE.test(d.events[0].id), evTime: d.events[0].time, amount: d.events[0].amount, noteId: SAFE.test(d.notes[0].id),
+      val: d.pregnancy.glucose[0].val, bp: d.pregnancy.bp, gu: d.pregnancy.glucoseUnit,
+    });
+    const booted = look(state);
+    // The boot saves what it drew (no household yet), so put the old blob back and ask Store.load alone.
+    localStorage.setItem('little-log-v1', raw);
+    const d = await Store.load();
+    return { load: d ? look(d) : null, booted };
+  }, JSON.stringify(blob));
+  const good = (x) => x && x.gw === undefined && x.gd === 2 && x.name === 'Robin <b>as typed</b>' && !x.color && x.unit === 'ml' && x.wUnit === 'lb'
+    && x.hours === undefined && x.evId && x.evTime === T && x.amount === undefined && x.noteId && x.val === undefined && Array.isArray(x.bp) && x.bp.length === 0;
+  ok('Store.load hands back what was cached with the same checks a snapshot gets (numbers, units, ids, colours, her readings), free text as typed', good(r.load), JSON.stringify(r.load));
+  ok('and that is what the first boot draws from', good(r.booted), JSON.stringify(r.booted));
+  await page.close();
+}
+
 (async () => {
   staticRule();
   if (STATIC_ONLY) { console.log('\n' + pass + ' passed, ' + fail + ' failed'); console.log('XSS-LEAF: ' + (fail ? 'FAIL' : 'PASS')); process.exit(fail ? 1 : 0); }
@@ -608,10 +826,13 @@ async function named(browser) {
   // XSS_LEAF_ONLY=text (or absent, named...) runs one part, for working on it. The gate runs all.
   const ONLY = process.env.XSS_LEAF_ONLY || '';
   if (!ONLY || ONLY === 'named') await named(browser);
+  if (!ONLY || ONLY === 'mat') await matFold(browser);
+  if (!ONLY || ONLY === 'cached') await cachedLoad(browser);
   const isClock = (k) => CLOCK_KEYS.has(k);
   const CLASSES = [
     { name: 'text', pick: (k, v) => typeof v === 'string' && !SHAPE.has(k) && !KEEP_VALUE.has(v), must: { min: 40, fields: [
-      'app.babies[0].allergies[0]', /^app\.journey\.rel\.[^]+\[0\]\.label$/, 'app.babies[0].birthNote', 'app.babies[0].name', 'notes[0].text', 'preg.appts[0].title', 'memberInfo.uidCaregiver.relationship'] } },
+      'app.babies[0].allergies[0]', /^app\.journey\.rel\.[^]+\[0\]\.label$/, 'app.babies[0].birthNote', 'app.babies[0].name', 'notes[0].text', 'preg.appts[0].title', 'memberInfo.uidCaregiver.relationship',
+      'preg.careTeam[0].name', 'preg.supplements[0].name'] } },   // two of her readings, folded in through applyMatDoc
     { name: 'enum', pick: (k, v) => typeof v === 'string' && SHAPE.has(k) && !SELECT.has(k) && !KEEP_VALUE.has(v), must: { min: 3 } },
     { name: 'select', pick: (k, v) => typeof v === 'string' && SELECT.has(k) && !KEEP_VALUE.has(v), must: { min: 1 } },
     { name: 'number', pick: (k, v) => typeof v === 'number' && !isClock(k), must: { min: 0 } },
@@ -621,6 +842,13 @@ async function named(browser) {
     const h = household();
     const tags = hostile(h, c.pick, c.name === 'text');
     await runClass(browser, c.name, h, tags, c.must);
+  }
+  /* The blob an older client cached, every number and clock in it hostile (the leaves only the
+     ingest guards), landed by the boot's own Store.load. */
+  if (!ONLY || ONLY === 'cached') {
+    const h = household();
+    const tags = hostile(h, (k, v) => typeof v === 'number', false);
+    await runClass(browser, 'cached (every number and clock, in the blob this browser kept)', h, tags, { min: 0 }, { cached: true });
   }
   if (!ONLY || ONLY === 'absent') {
     const h = household();

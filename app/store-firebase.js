@@ -30,7 +30,7 @@
      is not one Cubby would make is swapped for a stable stand-in; rawDocId remembers the real key,
      so the entry can still be edited or deleted. If an older cached index.html has no cubbyIngest,
      data passes as before rather than the sync breaking. */
-  var PASS = { id: function (v) { return v; }, photo: function (v) { return v; }, event: function (d, id) { d.id = id; return d; }, note: function (d, id) { d.id = id; return d; }, blob: function (a) { return a; }, photos: function (m) { return m; } };
+  var PASS = { id: function (v) { return v; }, photo: function (v) { return v; }, event: function (d, id) { d.id = id; return d; }, note: function (d, id) { d.id = id; return d; }, blob: function (a) { return a; }, mat: function (d) { return d; }, photos: function (m) { return m; } };
   function ing() { return window.cubbyIngest || PASS; }
   var rawDocId = {};
   function ingestId(raw) { var s = ing().id(raw); if (s !== raw) rawDocId[s] = raw; return s; }
@@ -1249,10 +1249,16 @@
        (medicines, next) would publish it to everyone she told she was pregnant. Fail closed. */
     if (!MAT_CATS[cat]) return;
     matShared[cat] = d.sharedWith || [];
-    knownMat[cat] = stableStringify([d.data || {}, matShared[cat]]); // don't immediately re-write what we just received
+    /* She writes these and her partner's phone draws them, so they get the journey's checks
+       (numbers stay numbers, units on their list, lists stay lists). And a doc sets only the keys
+       its own category owns: a health doc can never rewrite the visits, the stage, or who owns the
+       pregnancy. An older index.html without mat() passes them through as before. */
+    var data = (ing().mat || PASS.mat)(d.data || {});
+    var own = {};
+    MAT_CATS[cat].forEach(function (k) { if (data[k] !== undefined) own[k] = data[k]; });
+    knownMat[cat] = stableStringify([own, matShared[cat]]); // don't immediately re-write what we just received
     if (!state.pregnancy) state.pregnancy = {};
-    var data = d.data || {};
-    Object.keys(data).forEach(function (k) { state.pregnancy[k] = data[k]; });
+    Object.keys(own).forEach(function (k) { state.pregnancy[k] = own[k]; });
   }
   // Listen to the owner's category docs we're permitted to read (own collection, or specific shared docs).
   function ensureMaternalListeners(uidNow) {
@@ -3477,14 +3483,9 @@
            household would have had normalised away before render. A harness that is not the app is
            a harness that lies in both directions. */
         Store.load().then(function (d) {
+          /* Store.load hands it back through the same ingest checks the snapshots get, for the same
+             reason: a gate must boot the shape the real app produces. */
           if (d && typeof state !== 'undefined') {
-            /* And the same ingest checks the snapshots get, for the same reason: a gate must boot
-               the shape the real app produces. */
-            try {
-              ing().blob(d);
-              d.events = (d.events || []).map(function (ev) { return ing().event(ev, ev && ev.id); });
-              d.notes = (d.notes || []).map(function (n) { return ing().note(n, n && n.id); });
-            } catch (e) {}
             try { Object.assign(state, d); } catch (e) {}
             try { if (typeof normalizeLoadedState === 'function') normalizeLoadedState(state); } catch (e) {}
           }

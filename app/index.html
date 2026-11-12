@@ -1871,18 +1871,19 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 const KEY = 'little-log-v1';
 let memFallback = null;
 const Store = {
+  /* What was cached here may be an older client's copy of what the circle wrote, saved before any of
+     it was checked. So it goes through the same checks a snapshot does (window.cubbyIngest, below)
+     on its way out, for whoever asks. */
   async load(){
     try{
-      if(window.storage){
-        const r = await window.storage.get(KEY);
-        return r && r.value ? JSON.parse(r.value) : null;
-      }
-      if(typeof localStorage!=='undefined'){
-        const v = localStorage.getItem(KEY);
-        return v ? JSON.parse(v) : null;
-      }
+      let v=null;
+      if(window.storage){ const r = await window.storage.get(KEY); v = r && r.value ? r.value : null; }
+      else if(typeof localStorage!=='undefined'){ v = localStorage.getItem(KEY); }
+      else return memFallback;
+      if(!v) return null;
+      const d = JSON.parse(v);
+      return window.cubbyIngest ? window.cubbyIngest.loaded(d) : d;
     }catch(e){ return memFallback; }
-    return memFallback;
   },
   async save(data){
     memFallback = data;
@@ -2958,12 +2959,26 @@ function scrubEnums(app){
     if(b.allergies!=null && !Array.isArray(b.allergies)) delete b.allergies;
   });
   // A pregnancy journey (applyPregJourney hands its data here) or a legacy one inside the blob.
-  [app.pregnancy, (app.stage||app.dueDate||app.lmp||app.appts)?app:null].forEach(p=>{
-    if(!p || typeof p!=='object') return;
-    oneOf(p,'glucoseUnit',['mmol','mgdl']);
-    (Array.isArray(p.glucose)?p.glucose:[]).forEach(g=>oneOf(g,'unit',['mmol','mgdl']));
-    (Array.isArray(p.weights)?p.weights:[]).forEach(w=>oneOf(w,'unit',['kg','lb']));
-  });
+  [app.pregnancy, (app.stage||app.dueDate||app.lmp||app.appts)?app:null].forEach(scrubPregEnums);
+}
+function scrubPregEnums(p){
+  if(!p || typeof p!=='object') return;
+  oneOf(p,'glucoseUnit',['mmol','mgdl']);
+  (Array.isArray(p.glucose)?p.glucose:[]).forEach(g=>oneOf(g,'unit',['mmol','mgdl']));
+  (Array.isArray(p.weights)?p.weights:[]).forEach(w=>oneOf(w,'unit',['kg','lb']));
+}
+/* HER READINGS STAY READINGS. Weights, BP, glucose, check-ins, her care team and her conditions live
+   in her own health docs, not the journey, and reach a partner she shares them with through
+   applyMatDoc in store-firebase.js. Every one of these is a list of records Cubby pushed, and
+   conditions is a set of on/off switches, so anything else in their place is dropped to empty. */
+const MAT_LISTS=['weights','bp','glucose','urine','nausea','symptoms','supplements','supplementLog','careTeam','moodLog'];
+function scrubMat(p){
+  MAT_LISTS.forEach(k=>{ if(k in p) p[k]=Array.isArray(p[k])?p[k].filter(r=>r && typeof r==='object' && !Array.isArray(r)):[]; });
+  if('conditions' in p){
+    const c=p.conditions, out={};
+    if(c && typeof c==='object' && !Array.isArray(c)) Object.keys(c).forEach(k=>{ out[safeId(k)]=c[k]===true; });
+    p.conditions=out;
+  }
 }
 // Map keys that are ids (a baby's timers, vaccines, journey captures): a key is drawn and joined like an id.
 function scrubKeys(m){
@@ -2996,6 +3011,23 @@ window.cubbyIngest={
     [app.timers, app.vaccines, app.lossHolding].forEach(scrubKeys);
     if(app.journey && typeof app.journey==='object') ['titles','saved','rel'].forEach(k=>scrubKeys(app.journey[k]));
     return app;
+  },
+  // One of her health docs' data (applyMatDoc), in place: the same checks as the journey, plus shapes.
+  mat(data){
+    if(!data || typeof data!=='object' || Array.isArray(data)) return {};
+    scrubIds(data); scrubNums(data,NUM_KEYS); scrubPregEnums(data); scrubMat(data);
+    return data;
+  },
+  /* A whole state this browser cached (Store.load). An older client saved it with no checks, and it
+     holds what the circle wrote, so it gets everything a snapshot gets before anything draws it. */
+  loaded(d){
+    if(!d || typeof d!=='object' || Array.isArray(d)) return null;
+    const I=window.cubbyIngest;
+    I.blob(d);
+    d.events=(Array.isArray(d.events)?d.events:[]).filter(e=>e && typeof e==='object').map(e=>I.event(e,e.id));
+    d.notes=(Array.isArray(d.notes)?d.notes:[]).filter(n=>n && typeof n==='object').map(n=>I.note(n,n.id));
+    if(d.pregnancy && typeof d.pregnancy==='object') I.mat(d.pregnancy);
+    return d;
   },
   // A photo map {id: bytes}: ids made safe, bytes that are not a raster data URL dropped.
   photos(map){
