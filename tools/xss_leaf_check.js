@@ -482,6 +482,12 @@ async function runClass(browser, name, h, tags, must) {
     + " if(v==='milestones'){ albumTab='milestones'; go('album'); render(); }"
     + " if(v==='family'){ " + PROBE + " d.innerHTML=window.cubbyFamilyPortrait(); }"
     + " if(v==='who'){ " + PROBE + " d.innerHTML=glWhoChips(''); }");
+  /* Sheets and screens that draw different things in different states: every tab, every feed
+     method. A function walked only in its default state hides the branch the data reaches. */
+  await screens('state', ["go('log');setLogTab('log')", "go('log');setLogTab('stats');setLogRange('month')", "go('log');setLogTab('rituals')",
+    "go('health');setHealthTab('meds')", "go('health');setHealthTab('vaccines')", "go('health');setHealthTab('illness')",
+    "go('album');setAlbumTab('photos')", "go('album');setAlbumTab('memories')", "go('album');setAlbumTab('milestones')",
+    "openFeed();setFeedMethod('breast')", "openFeed();setFeedMethod('bottle')", "openFeed();setFeedMethod('solids')", "openFeed();setFeedMethod('water')"], 'eval(v)');
   await sweep('baby');
   await page.evaluate(() => { state.pregnancy = window.__preg; viewingPreg = true; try { ensurePregFields(state.pregnancy); } catch (e) {} });
   await screens('pregnancy', ['week', 'care', 'moments', 'body', 'prep', 'trying', 'log'], "viewingPreg=true; pregGo(v);");
@@ -567,7 +573,12 @@ async function named(browser) {
         if (btn) { const x = window.__sandboxRun(btn.getAttribute('onclick')); x.hits.forEach((k) => window.__pwnHits.push(k)); if (x.syntax) window.__pwnHits.push('syntax:' + x.syntax); btn.click(); }
         window.makeMomentFromPhoto = realMake;
       });
-      await check('allergies', async () => { go('health'); render(); await wait(200); openFoodPrefs(); });
+      await check('allergies', async () => {
+        go('health'); render(); await wait(150);
+        openFeed(); setFeedMethod('solids'); await wait(150);   // the "Allergy watch" line on the solids sheet
+        const sheet = document.getElementById('sheet').innerHTML; closeSheet(); probe().innerHTML = sheet;
+        openFoodPrefs();
+      });
       await check('stats', async () => { go('log'); probe().innerHTML = renderStats(); });
       state.pregnancy = preg; viewingPreg = true; try { ensurePregFields(preg); } catch (e) {}
       await check('preg', async () => {
@@ -580,7 +591,7 @@ async function named(browser) {
     const why = (x) => JSON.stringify(x).slice(0, 600);
     ok(mode + ': a birth place of 1);__pwn(\'place\');// stays data in all ' + r.placeHandlers + ' birth-poster handlers', clean(r.place) && r.placeHandlers >= 8, why(r.place));
     ok(mode + ': a relationship capture\'s `at` of 1);__pwn(...);// stays data in the Together "Make a keepsake" button', clean(r.relAt) && r.relButton, why(r.relAt));
-    ok(mode + ': allergies stay text on Health and in Food and allergies', clean(r.allergies), why(r.allergies));
+    ok(mode + ': allergies stay text on Health, on the solids sheet and in Food and allergies', clean(r.allergies), why(r.allergies));
     ok(mode + ': and the hostile allergy IS on screen, as text', r.allergies && r.allergies.text.some((t) => /^PWN-allergy-$/i.test(t)), why(r.allergies));
     ok(mode + ': growthSource spelt in entities (it survives toUpperCase) and hcUnit/wUnit/hUnit stay off the Stats screen\'s markup', clean(r.stats), why(r.stats));
     ok(mode + ': the pregnancy readings (visit SFH/EFW/Hb/BP, BP log, kicks, glucose, nausea) stay data', clean(r.preg), why(r.preg));
