@@ -97,8 +97,8 @@ const LINK = 'https://little-cubby.com/__/auth/action?mode=signIn&oobCode=abc123
     ok('the old link-only template is gone', !/function emailHtml\(link\)/.test(WORKER));
     ok('the old code-only template is gone', !/function signinCodeHtml\(/.test(WORKER));
 
-    ok('the LINK endpoint now also mints a code', /let link = await generateSignInLink[\s\S]{0,900}?const code = await issueSigninCode\(sa, token, email\);/.test(WORKER));
-    ok('the CODE endpoint now also mints a link', /const code = await issueSigninCode\(sa, token, email\);[\s\S]{0,900}?link = await generateSignInLink/.test(WORKER));
+    ok('the LINK endpoint now also mints a code', /let link = await generateSignInLink[\s\S]{0,900}?const code = await issueSigninCode\(sa, token, email\b/.test(WORKER));
+    ok('the CODE endpoint now also mints a link', /const code = await issueSigninCode\(sa, token, email\b[^;]*;[\s\S]{0,900}?link = await generateSignInLink/.test(WORKER));
     /* Each endpoint keeps the half it is named for as the hard requirement and treats the other as a
        bonus, so one slow dependency degrades the email instead of costing her the sign-in. */
     ok('no code means no email from the CODE endpoint', WORKER.includes("if (!code) return json({ error: 'store_failed' }, 502);"));
@@ -169,7 +169,7 @@ const LINK = 'https://little-cubby.com/__/auth/action?mode=signIn&oobCode=abc123
     /* Firebase's own sender mails a bare link. If we ever fall back to it there is no code in her
        inbox, so there must be no code box on her screen — the same bug, wearing the other shoe. */
     ok('the Firebase fallback declares itself link-only in that same shape', STORE.includes('return { fallback: true, hasLink: true, hasCode: false };'));
-    ok('the code sender is tried before the link sender', /return sendCode\(email\)\.catch\(function \(\) \{ return sendLink\(email\); \}\);/.test(STORE));
+    ok('the code sender is tried before the link sender', /return sendCode\(email\)\.catch\(function \(err\) \{[\s\S]{0,500}?return sendLink\(email\)/.test(STORE));
     ok('a cooldown that sent NOTHING is not reported as a fresh send', /function sentLine\(email, cached\)/.test(STORE) && /We already sent /.test(STORE));
     ok('the worker response really is passed through to say so', STORE.includes('return d || {};'));
     ok('one code-submit implementation, shared by both panels', (STORE.match(/function showCodeBox\(/g) || []).length === 1

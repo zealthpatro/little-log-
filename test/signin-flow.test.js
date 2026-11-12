@@ -446,7 +446,7 @@ function decodeJwt(t) {
     ok('CONCLUSION: sign-in by email survives the primary route being completely dead', rl.status === 200 && !!linkFromEmail(lastMail().html));
 
     const store = fs.readFileSync(path.join(__dirname, '..', 'app', 'store-firebase.js'), 'utf8');
-    ok('and the client really is wired to take that fallback', /return sendCode\(email\)\.catch\(function \(\) \{ return sendLink\(email\); \}\);/.test(store));
+    ok('and the client really is wired to take that fallback', /return sendCode\(email\)\.catch\(function \(err\) \{[\s\S]{0,500}?return sendLink\(email\)/.test(store));
     ok('with a further fallback to Firebase\'s own sender under that', /sendSignInLinkToEmail\(email/.test(store));
     ok('and Google/Apple sign-in never touch this path at all', /signInWithPopup/.test(store) && !/signInWithPopup[\s\S]{0,200}signin-code/.test(store));
   }
@@ -457,7 +457,7 @@ function decodeJwt(t) {
     ok('the email button asks for a code', /var SEND_LABEL = 'Send code';/.test(store));
     ok('the offer is a code, on every surface', /'Prefer email\? Get a sign-in code<\/button>'/.test(store));
     ok('no browser-guess decides the route any more', !/function codeSignin\(/.test(store));
-    ok('the code sender is tried first', /return sendCode\(email\)\.catch\(function \(\) \{ return sendLink\(email\); \}\);/.test(store));
+    ok('the code sender is tried first', /return sendCode\(email\)\.catch\(function \(err\) \{[\s\S]{0,500}?return sendLink\(email\)/.test(store));
     ok('and the panel is drawn from hasCode/hasLink, not from a guess', /var hasCode = !!res\.hasCode, hasLink = !!res\.hasLink;/.test(store));
     ok('no code box unless the sender said there is a code', /if \(hasCode\) showCodeBox\(email\)\.focus\(\); else codeForm\.style\.display = 'none';/.test(store));
     ok('one panel, so the two routes cannot drift apart again', (store.match(/function showEmailSent\(/g) || []).length === 1

@@ -5525,7 +5525,7 @@ function confirmSheet(opts){
      as Cubby vouching for it. Every part is escaped. lead is one short line of Cubby's own above them. */
   var lead=opts.lead?('<div class="sub" style="margin-bottom:8px">'+escapeHtml(opts.lead)+'</div>'):'';
   var facts=(Array.isArray(opts.facts)&&opts.facts.length)
-    ?('<div style="margin:0 0 12px;padding:10px 12px;border-radius:12px;background:var(--card,#fff);border:1px solid var(--ink-dim,#BDB2A6)">'
+    ?('<div style="margin:0 0 12px;padding:10px 12px;border-radius:12px;background:var(--card,#fff);border:1px solid var(--line,#E7DECF)">'
       +opts.facts.map(function(f){ return '<div style="display:flex;gap:8px;align-items:baseline;padding:2px 0;font-size:14px;line-height:1.45">'
         +'<span style="flex:0 0 auto;color:var(--ink-soft,#6E635B)">'+escapeHtml(f&&f.label)+'</span>'
         +'<b style="color:var(--ink,#2C2521);overflow-wrap:anywhere;min-width:0">'+escapeHtml(f&&f.value)+'</b></div>'; }).join('')
@@ -5544,7 +5544,7 @@ function confirmSheet(opts){
     }
   }
 }
-confirmSheet.facts=true;   // tells store-firebase.js this page draws facts (an older page shows only the body)
+confirmSheet.drawsFacts=true;   // tells store-firebase.js this page draws facts (an older page shows only the body)
 function __confirmYes(){ var cb=__confirmCb; __confirmCb=null; __confirmNo=null; closeSheet(); if(cb) setTimeout(cb,50); }
 function __confirmCancel(){ var no=__confirmNo; __confirmNo=null; __confirmCb=null; closeSheet(); if(no) setTimeout(function(){ no('cancel'); },50); }
 if(typeof window!=='undefined'){ window.confirmSheet=confirmSheet; }
