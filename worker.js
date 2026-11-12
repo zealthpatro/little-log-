@@ -117,18 +117,42 @@ function cooldownKeyFor(email) {
   return local + '@' + domain;
 }
 
+/* The per-address cooldown REMEMBERS what the email it was armed by carried, and answers from that.
+   It used to hold '1' and answer {ok:true, cached:true}, and every client reads cached as "that
+   email had a code and a link". That is only true of a code email whose link minted. At the hourly
+   cap the code endpoint answers 429 and the client falls back to the link sender, which mails a
+   LINK-only email; a Resend inside the minute then came back cached, and the panel told her to type
+   six digits from an email that has none. Reachable with no attacker: five sends in an hour, then
+   Send and Resend. The fix lives here, not in app/, so the clients already cached on phones are
+   right too: when the earlier email was not a full code-and-link one, answer with what it DID hold
+   and leave cached off. That email went out inside the last minute, so "we just emailed" is true. */
+function cooldownArmed(hasCode, hasLink) {
+  return new Response(JSON.stringify({ hasCode: !!hasCode, hasLink: !!hasLink }), { headers: { 'cache-control': 'max-age=60' } });
+}
+async function cooldownReply(hit) {
+  let was = null;
+  try { was = JSON.parse(await hit.text()); } catch (e) { was = null; }
+  // Armed by the worker before this one (its value is '1'): give the answer it always gave.
+  if (!was || typeof was.hasCode !== 'boolean' || typeof was.hasLink !== 'boolean') return json({ ok: true, cached: true });
+  if (was.hasCode && was.hasLink) return json({ ok: true, cached: true, hasCode: true, hasLink: true });
+  return json({ ok: true, hasCode: was.hasCode, hasLink: was.hasLink });
+}
+
 /* The client address every per-IP limiter keys on. IPv6 is cut to its /64: one subscriber is handed
    a whole /64, so the full address gave a single connection 2^64 separate buckets. A household shares
    one /64 anyway, so a family's limit is unchanged. IPv4 (and IPv4-mapped IPv6) stays per address.
-   v6Groups widens the cut: 3 keys on the /48, for a counter where a free tunnel's 65,536 /64s must
-   not each get their own allowance. The address is fully expanded first, so where '::' falls never
-   changes the key (2001:0:0:5::1 and 2001::5:a:b:c:d are the same /64). */
+   v6Groups is how many 16-bit groups to keep (4 = /64, 3 = /48), so a counter that wants a coarser
+   bucket shares this one expansion instead of writing its own. 3 is for a counter where a free
+   tunnel's 65,536 /64s must not each get their own allowance (page views). The address is fully
+   expanded first, so where '::' falls never changes the key (2001:0:0:5::1 and 2001::5:a:b:c:d are
+   the same /64). */
 function clientIpKey(request, v6Groups = 4) {
   const ip = String(request.headers.get('CF-Connecting-IP') || '').trim().toLowerCase().split('%')[0];
   if (!ip) return 'unknown';
   if (ip.indexOf(':') < 0) return ip;
   const mapped = ip.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
   if (mapped) return mapped[1];
+  const keep = Math.min(8, Math.max(1, Math.floor(Number(v6Groups)) || 4));
   let s = ip;
   const v4 = s.match(/^(.*:)(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);   // embedded IPv4 tail
   if (v4) s = v4[1] + ((+v4[2] << 8) | +v4[3]).toString(16) + ':' + ((+v4[4] << 8) | +v4[5]).toString(16);
@@ -136,9 +160,10 @@ function clientIpKey(request, v6Groups = 4) {
   if (halves.length > 2) return ip;
   const head = halves[0] ? halves[0].split(':') : [];
   const tail = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
-  const groups = halves.length === 2 ? head.concat(new Array(Math.max(0, 8 - head.length - tail.length)).fill('0'), tail) : head;
+  if (halves.length === 2 && head.length + tail.length > 7) return ip;      // '::' must stand for at least one group
+  const groups = halves.length === 2 ? head.concat(new Array(8 - head.length - tail.length).fill('0'), tail) : head;
   if (groups.length !== 8 || !groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return ip;   // odd input: key as given
-  return groups.slice(0, v6Groups).map((g) => parseInt(g, 16).toString(16)).join(':') + '::/' + (v6Groups * 16);
+  return groups.slice(0, keep).map((g) => parseInt(g, 16).toString(16)).join(':') + '::/' + (keep * 16);
 }
 
 async function sendSigninLink(request, env) {
@@ -160,7 +185,7 @@ async function sendSigninLink(request, env) {
   // so garbage floods consume the budget too. Fail open if the binding is missing so a config gap
   // can never block real sign-ins; same-origin + the per-email cooldown still apply.
   if (env.SIGNIN_RATE_LIMITER) {
-    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const ip = clientIpKey(request);
     try {
       const { success } = await env.SIGNIN_RATE_LIMITER.limit({ key: ip });
       if (!success) return new Response(JSON.stringify({ error: 'rate_limited' }), { status: 429, headers: { 'content-type': 'application/json', 'retry-after': '60' } });
@@ -179,7 +204,8 @@ async function sendSigninLink(request, env) {
   // Light per-email cooldown (normalized key) to absorb rapid re-sends; set only AFTER a real send.
   const cache = caches.default;
   const cooldown = new Request('https://cooldown.cubby.internal/' + encodeURIComponent(cooldownKeyFor(email)));
-  if (await cache.match(cooldown)) return json({ ok: true, cached: true });
+  const armed = await cache.match(cooldown);
+  if (armed) return cooldownReply(armed);
 
   try {
     /* BOTH scopes. This request mints a sign-in link (identitytoolkit) AND writes the code document
@@ -208,7 +234,7 @@ async function sendSigninLink(request, env) {
       })
     });
     if (!r.ok) return json({ error: 'send_failed' }, 502);
-    await cache.put(cooldown, new Response('1', { headers: { 'cache-control': 'max-age=60' } })); // start cooldown only on success
+    await cache.put(cooldown, cooldownArmed(!!code, true)); // start cooldown only on success, and remember what this email holds
     /* Say what the email ACTUALLY carries, rather than leaving the client to assume. This is the
        whole bug class closed at the root: a screen can only offer a code box because the sender just
        told it there is a code in that inbox, so the two can no longer drift apart. */
@@ -347,6 +373,44 @@ async function recordPageView(env, request, url, status) {
 const SIGNIN_CODE_INFO = 'cubby-signin-code-v1';
 const SIGNIN_CODE_TTL_MS = 10 * 60 * 1000;   // long enough to fetch it from Mail, short enough to be worthless later
 const SIGNIN_CODE_TRIES = 5;                 // 5 guesses against 1,000,000, then the code dies
+/* Per-address ceilings that a reissue cannot reset (audit server-1). Without them every new code was
+   a fresh 5 guesses, so "5 per code" had no ceiling per address. A real parent types one code a couple
+   of times and resends once or twice; these only ever bite someone guessing at another person's mail. */
+const SIGNIN_WINDOW_MS = 60 * 60 * 1000;
+const SIGNIN_GUESSES_PER_WINDOW = 10;        // guesses compared per address per rolling hour, across all codes
+const SIGNIN_ISSUES_PER_WINDOW = 5;          // codes minted per address per rolling hour
+
+/* Timestamps in the rolling window, read from (and written back as) a Firestore array field. They
+   live in the code's own document, so a spend and its record commit in one write. */
+function signinRecent(field, now) {
+  const vals = (field && field.arrayValue && field.arrayValue.values) || [];
+  return vals.map((v) => Number(v && v.integerValue)).filter((t) => t > now - SIGNIN_WINDOW_MS && t <= now + 60000).slice(-20);
+}
+function signinTimes(list) {
+  return { arrayValue: list.length ? { values: list.map((t) => ({ integerValue: String(t) })) } : {} };
+}
+/* Every write to a signinCodes document goes through documents:commit, so its precondition travels
+   in the JSON body, which is the form the API documents. The query-string form used before
+   (?currentDocument.updateTime=<RFC3339>) is read by the Firestore emulator as base version 0, which
+   refused every spend and every reissue: each correct code answered bad_code (round-1 review).
+   Returns {ok, updateTime} on success. raced means the precondition itself was refused (somebody
+   wrote first, so re-read); anything else, a malformed write included, is a real failure and must
+   never be mistaken for a race, or a broken write shape reads as "wrong code" again. */
+function signinDocName(sa, docId) { return 'projects/' + sa.project_id + '/databases/(default)/documents/signinCodes/' + docId; }
+async function signinCommit(sa, token, write) {
+  const r = await fetch('https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents:commit', {
+    method: 'POST',
+    headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+    body: JSON.stringify({ writes: [write] })
+  });
+  let j = null; try { j = await r.json(); } catch (e) {}
+  if (r.ok) {
+    const res = (j && j.writeResults && j.writeResults[0]) || {};
+    return { ok: true, updateTime: String(res.updateTime || (j && j.commitTime) || '') };
+  }
+  const st = String((j && j.error && j.error.status) || '');
+  return { ok: false, raced: /^(FAILED_PRECONDITION|ALREADY_EXISTS|NOT_FOUND|ABORTED)$/.test(st), status: r.status };
+}
 
 async function signinCodeKey(sa) {
   const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(sa.private_key || '')),
@@ -379,27 +443,49 @@ function newSigninCode() {
 
 /* Mint ONE live code for an address and store only its MAC. Shared by both senders, so the invariants
    that make a code safe cannot drift apart between them: the address is inside the MAC, the plaintext
-   is never stored, and the PATCH carries NO updateMask so it REPLACES the document rather than merging
+   is never stored, and the write carries NO updateMask so it REPLACES the document rather than merging
    into it. That replace is the single-live-code rule: issuing a new code must kill the previous one,
    never leave two working. Returns '' if the store failed, so each caller can decide whether that is
-   fatal (the code endpoint) or merely means a link-only email (the link endpoint). */
+   fatal (the code endpoint) or merely means a link-only email (the link endpoint).
+   The replace CARRIES the per-address window (spentAt, issuedAt) across, so a reissue gets a new code
+   but never a new guess budget. Past either ceiling it mints nothing and returns null (falsy like '',
+   so every caller degrades the same way, to a link-only email that still signs a real parent in; the
+   code endpoint just names it rate_limited instead of store_failed, so the logs can tell them apart).
+   The write is conditional on the version just read, so a verify racing it cannot have its spend
+   erased. */
 async function issueSigninCode(sa, token, email) {
   try {
-    const code = newSigninCode();
-    const mac = _b64urlFromBytes(await signinCodeMac(sa, email, code));
     const base = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents';
     const docId = await signinCodeDocId(sa, email);
-    const put = await fetch(base + '/signinCodes/' + docId, {
-      method: 'PATCH',
-      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-      body: JSON.stringify({ fields: {
-        mac: { stringValue: mac },
-        email: { stringValue: email },
-        exp: { integerValue: String(Date.now() + SIGNIN_CODE_TTL_MS) },
-        tries: { integerValue: String(SIGNIN_CODE_TRIES) }
-      } })
-    });
-    return put.ok ? code : '';
+    const path = base + '/signinCodes/' + docId;
+    for (let attempt = 0; attempt < 2; attempt++) {           // one re-read if a verify wrote in between
+      const got = await fetch(path, { headers: { authorization: 'Bearer ' + token } });
+      if (!got.ok && got.status !== 404) return '';
+      const prev = got.ok ? await got.json() : null;
+      if (prev && !prev.updateTime) return '';                  // cannot write conditionally: refuse, never guess
+      const pf = (prev && prev.fields) || {};
+      const now = Date.now();
+      const spentAt = signinRecent(pf.spentAt, now), issuedAt = signinRecent(pf.issuedAt, now);
+      if (spentAt.length >= SIGNIN_GUESSES_PER_WINDOW || issuedAt.length >= SIGNIN_ISSUES_PER_WINDOW) return null;   // capped
+      issuedAt.push(now);
+      const code = newSigninCode();
+      const mac = _b64urlFromBytes(await signinCodeMac(sa, email, code));
+      /* No plaintext address in the document. The id is already an HMAC of it and the address is
+         inside the mac, so verify never needs it back; storing it only kept an email at rest. */
+      const put = await signinCommit(sa, token, {
+        update: { name: signinDocName(sa, docId), fields: {
+          mac: { stringValue: mac },
+          exp: { integerValue: String(now + SIGNIN_CODE_TTL_MS) },
+          tries: { integerValue: String(SIGNIN_CODE_TRIES) },
+          spentAt: signinTimes(spentAt),
+          issuedAt: signinTimes(issuedAt)
+        } },
+        currentDocument: prev ? { updateTime: prev.updateTime } : { exists: false }
+      });
+      if (put.ok) return code;
+      if (!put.raced) return '';
+    }
+    return '';
   } catch (e) { return ''; }
 }
 
@@ -417,7 +503,9 @@ async function issueSigninCode(sa, token, email) {
    quietly eating the thing it is meant to protect. Minting against Firestore directly costs no mail,
    no Resend quota, and does not trip the 60s per-address cooldown.
 
-   What it therefore does NOT cover: routing, signinGuard, and the Resend send. tools/signin_live_check.js
+   It does SPEND, through spendSigninCode, the function a parent's verify runs: a mint alone once stayed
+   green on a Firestore that refused every spend. What it therefore does NOT cover: routing,
+   signinGuard, the account lookup and token mint after a match, and the Resend send. tools/signin_live_check.js
    walks the whole public path and is the one to run after a deploy. Two tiers on purpose, because
    detection wants to be cheap and frequent while verification can be slow and thorough.
    THE ALARM PATH HAS ALREADY TRIED TO FAIL SILENTLY ONCE. The first version of signinCanaryAlert
@@ -447,8 +535,8 @@ async function signinCanaryProbe(env) {
     try { await fetch(path, { method: 'DELETE', headers: { authorization: 'Bearer ' + token } }); } catch (e) {}
   };
 
-  const code = await issueSigninCode(sa, token, CANARY_EMAIL);
-  if (!code) {
+  const first = await issueSigninCode(sa, token, CANARY_EMAIL);
+  if (!first) {
     /* issueSigninCode swallows its reason and returns '', which is right for the caller and useless
        in an alert. Ask Firestore directly so the mail can say "403 PERMISSION_DENIED" instead of
        "it failed", because the first is actionable at 3am and the second is not. */
@@ -467,19 +555,39 @@ async function signinCanaryProbe(env) {
 
   /* Assert the ARTEFACT, never the return value. A canary that only checks "did the function say ok"
      is the same mistake that let the outage ship: the guards were tested and the feature never was. */
-  let got;
-  try { got = await fetch(path, { headers: { authorization: 'Bearer ' + token } }); }
-  catch (e) { return { ok: false, reason: 'a code was minted but reading it back threw: ' + ((e && e.message) || String(e)), sa: sa, token: token }; }
-  if (!got.ok) {
-    await remove();
-    return { ok: false, reason: 'a code was minted but no document exists to show for it, read ' + got.status, sa: sa, token: token };
-  }
-  let fields = {};
-  try { fields = ((await got.json()) || {}).fields || {}; } catch (e) {}
-  const missing = ['mac', 'email', 'exp', 'tries'].filter((k) => !fields[k]);
-  await remove();
-  if (missing.length) return { ok: false, reason: 'the document was written but is malformed, missing: ' + missing.join(', '), sa: sa, token: token };
-  return { ok: true, reason: 'code minted, document verified, document removed', sa: sa, token: token };
+  const readBack = async () => {
+    const got = await fetch(path, { headers: { authorization: 'Bearer ' + token } });
+    if (got.status === 404) return null;
+    if (!got.ok) throw new Error('read ' + got.status);
+    return ((await got.json()) || {}).fields || {};
+  };
+  const fail = async (reason) => { await remove(); return { ok: false, reason: reason, sa: sa, token: token }; };
+  let fields;
+  try { fields = await readBack(); }
+  catch (e) { return fail('a code was minted but reading it back threw: ' + ((e && e.message) || String(e))); }
+  if (!fields) return fail('a code was minted but no document exists to show for it, read 404');
+  const missing = ['mac', 'exp', 'tries'].filter((k) => !fields[k]);
+  if (missing.length) return fail('the document was written but is malformed, missing: ' + missing.join(', '));
+
+  /* Then SPEND, through the very function a parent's sign-in runs. Minting alone never touched the
+     conditional writes, so a Firestore that refused their shape left this canary green while every
+     correct code a parent typed was answered "did not match" (round-1 review, on the emulator). A
+     reissue over the live code takes the updateTime path, a wrong guess must spend exactly one try,
+     and the right code must then be accepted once and burned. Every write here is a write she makes. */
+  const code = await issueSigninCode(sa, token, CANARY_EMAIL);
+  if (!code) return fail('a second code could not replace the first: the conditional reissue was refused');
+  const miss = await spendSigninCode(sa, token, CANARY_EMAIL, String((Number(code) + 1) % 1000000).padStart(6, '0'));
+  if (miss !== 'bad_code') return fail('a wrong guess was answered ' + miss + ', not bad_code');
+  try { fields = await readBack(); }
+  catch (e) { return fail('reading the code back after a wrong guess threw: ' + ((e && e.message) || String(e))); }
+  const left = Number((fields && fields.tries && fields.tries.integerValue) || 0);
+  if (left !== SIGNIN_CODE_TRIES - 1) return fail('a wrong guess did not spend exactly one try: ' + left + ' left');
+  const hit = await spendSigninCode(sa, token, CANARY_EMAIL, code);
+  if (hit !== 'ok') return fail('the right code was answered ' + hit + ': a parent typing her code cannot sign in');
+  try { fields = await readBack(); }
+  catch (e) { return fail('reading the code back after it was used threw: ' + ((e && e.message) || String(e))); }
+  if (fields) return fail('the right code was accepted but not burned: it would work twice');
+  return { ok: true, reason: 'code minted and reissued, a miss spent one try, the right code was accepted once and burned', sa: sa, token: token };
 }
 
 /* One mail per six hours. The outage ran four days, which at the cron interval would have been 384
@@ -594,6 +702,8 @@ async function canaryStatus(env) {
   return res;
 }
 
+/* The per-IP key, exported for test/signin-code-budget.test.js only. Workers ignore named exports. */
+export const __signin = { clientIpKey };
 /* The funnel's pieces, exported for test/funnel-worker.test.js only. Workers ignore named exports. */
 export const __funnel = { recordStep: (req, env) => recordStep(req, env), runFunnelSnapshot, countAccountDeleted, maybeSendFunnelDigest, fsPlain, entryTime };
 
@@ -619,7 +729,7 @@ async function signinGuard(request, env) {
   } catch (e) { sameOrigin = false; }
   if (!sameOrigin) return json({ error: 'forbidden' }, 403);
   if (env.SIGNIN_RATE_LIMITER) {
-    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const ip = clientIpKey(request);
     try {
       const { success } = await env.SIGNIN_RATE_LIMITER.limit({ key: 'code:' + ip });
       if (!success) return json({ error: 'rate_limited' }, 429);
@@ -642,7 +752,8 @@ async function sendSigninCode(request, env) {
   // armed only after a real send, so a failed send does not lock the person out of retrying.
   const cache = caches.default;
   const cooldown = new Request('https://cooldown.cubby.internal/code-' + encodeURIComponent(cooldownKeyFor(email)));
-  if (await cache.match(cooldown)) return json({ ok: true, cached: true });
+  const armed = await cache.match(cooldown);
+  if (armed) return cooldownReply(armed);
 
   try {
     /* BOTH scopes, and this one was returning 502 store_failed on every single request in production:
@@ -651,6 +762,7 @@ async function sendSigninCode(request, env) {
        scope that kept the page counter empty for two days; that one was silent, this one was not. */
     const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/identitytoolkit');
     const code = await issueSigninCode(sa, token, email);
+    if (code === null) return json({ error: 'rate_limited' }, 429);   // capped for the hour; the client falls back to a link
     if (!code) return json({ error: 'store_failed' }, 502);   // the code IS this endpoint; no code, no email
 
     /* Carry a link as well. This endpoint is asked for by the installed iOS app, where a tapped link
@@ -675,11 +787,75 @@ async function sendSigninCode(request, env) {
       })
     });
     if (!r.ok) return json({ error: 'send_failed' }, 502);
-    await cache.put(cooldown, new Response('1', { headers: { 'cache-control': 'max-age=60' } }));
+    await cache.put(cooldown, cooldownArmed(true, !!link));
     return json({ ok: true, hasCode: true, hasLink: !!link });
   } catch (e) {
     return json({ error: 'failed' }, 500);
   }
+}
+
+/* Spend one try on the address's live code, compare, and burn it on a match. The whole of what
+   /api/signin-verify does before it touches an account, and shared with the canary so the canary
+   drives the very writes a parent's sign-in makes. Answers 'ok', 'bad_code', 'capped' (this
+   address has had its guesses for the hour) or 'failed' (Firestore refused for a reason that is
+   not a race; nothing was compared).
+
+   Spend the attempt BEFORE checking it. If the compare came first, an attacker who can abandon
+   the request mid-flight (or make it fail) would get unlimited free guesses.
+   The spend is CONDITIONAL on the version we read (currentDocument.updateTime), so fifty requests
+   that all read tries=5 cannot all spend it: one write lands and the rest are refused. A refused
+   spend re-reads and pays again, at most SIGNIN_CODE_TRIES times; each refusal means another write
+   landed, so a request that runs out of goes has watched the code run out of tries. A guess is
+   only ever compared against the version its own committed spend paid for. Nothing is deleted on
+   a miss, because the document also carries the per-address window that a reissue must not reset;
+   the last try removes the mac instead, which is what kills the code. */
+async function spendSigninCode(sa, token, email, code) {
+  const base = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents';
+  const docId = await signinCodeDocId(sa, email);
+  const path = base + '/signinCodes/' + docId;
+  const name = signinDocName(sa, docId);
+  const read = async () => {
+    const got = await fetch(path, { headers: { authorization: 'Bearer ' + token } });
+    return got.ok ? await got.json() : null;                         // null: no code outstanding
+  };
+  let doc = await read(), storedMac = '', paidAt = '';
+  for (let attempt = 0; attempt < SIGNIN_CODE_TRIES && doc; attempt++) {
+    const f = doc.fields || {};
+    const now = Date.now();
+    const exp = Number((f.exp && f.exp.integerValue) || 0);
+    const tries = Number((f.tries && f.tries.integerValue) || 0);
+    const spentAt = signinRecent(f.spentAt, now);
+    storedMac = String((f.mac && f.mac.stringValue) || '');
+    if (!storedMac || !(exp > now) || !(tries > 0) || !doc.updateTime) return 'bad_code';
+    // Out of budget for this hour: never compared, and answered the way the per-IP limiter answers.
+    if (spentAt.length >= SIGNIN_GUESSES_PER_WINDOW) return 'capped';
+    spentAt.push(now);
+    const mask = ['tries', 'spentAt'];
+    if (tries - 1 <= 0) mask.push('mac');                             // masked but absent: Firestore deletes it
+    const spend = await signinCommit(sa, token, {
+      update: { name, fields: { tries: { integerValue: String(tries - 1) }, spentAt: signinTimes(spentAt) } },
+      updateMask: { fieldPaths: mask },
+      currentDocument: { updateTime: doc.updateTime }
+    });
+    if (spend.ok) { if (!spend.updateTime) return 'failed'; paidAt = spend.updateTime; break; }   // no version, no safe burn
+    if (!spend.raced) return 'failed';
+    doc = await read();                                               // someone wrote first: re-read
+  }
+  if (!paidAt) return 'bad_code';                                     // no code, or others spent every go first
+
+  const key = await signinCodeKey(sa);
+  const ok = await crypto.subtle.verify('HMAC', key, _b64urlToBytes(storedMac),
+    new TextEncoder().encode('code:' + email + ':' + code));
+  if (!ok) return 'bad_code';
+
+  /* Single use, and only for THIS request's spend: the delete is conditional on the version our own
+     spend wrote. A double-tapped correct code has two requests that both paid and both matched; the
+     second one's spend moved the version, so the first one's delete is refused and only one of them
+     signs in. A refused delete means somebody wrote after us (another spend, or a reissue), so this
+     request does not get a session. */
+  const burn = await signinCommit(sa, token, { delete: name, currentDocument: { updateTime: paidAt } });
+  if (burn.ok) return 'ok';
+  return burn.raced ? 'bad_code' : 'failed';
 }
 
 /* POST /api/signin-verify  {email, code} -> {token} for signInWithCustomToken. */
@@ -697,40 +873,10 @@ async function verifySigninCode(request, env) {
     /* BOTH scopes: reads and burns the code document (datastore), then looks up or creates the
        account and mints the custom token (identitytoolkit). */
     const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/identitytoolkit');
-    const base = 'https://firestore.googleapis.com/v1/projects/' + sa.project_id + '/databases/(default)/documents';
-    const docId = await signinCodeDocId(sa, email);
-    const path = base + '/signinCodes/' + docId;
-
-    const got = await fetch(path, { headers: { authorization: 'Bearer ' + token } });
-    if (!got.ok) return json({ error: 'bad_code' }, 400);              // no code outstanding
-    const doc = await got.json();
-    const f = (doc && doc.fields) || {};
-    const exp = Number((f.exp && f.exp.integerValue) || 0);
-    const tries = Number((f.tries && f.tries.integerValue) || 0);
-    const storedMac = String((f.mac && f.mac.stringValue) || '');
-    const storedEmail = String((f.email && f.email.stringValue) || '');
-
-    const dead = async () => { try { await fetch(path, { method: 'DELETE', headers: { authorization: 'Bearer ' + token } }); } catch (e) {} };
-    if (!storedMac || storedEmail !== email || !(exp > Date.now()) || !(tries > 0)) { await dead(); return json({ error: 'bad_code' }, 400); }
-
-    /* Spend the attempt BEFORE checking it. If the compare came first, an attacker who can abandon
-       the request mid-flight (or make it fail) would get unlimited free guesses. */
-    const spend = await fetch(path + '?updateMask.fieldPaths=tries', {
-      method: 'PATCH',
-      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
-      body: JSON.stringify({ fields: { tries: { integerValue: String(tries - 1) } } })
-    });
-    if (!spend.ok) return json({ error: 'failed' }, 500);
-
-    const key = await signinCodeKey(sa);
-    const ok = await crypto.subtle.verify('HMAC', key, _b64urlToBytes(storedMac),
-      new TextEncoder().encode('code:' + email + ':' + code));
-    if (!ok) {
-      if (tries - 1 <= 0) await dead();                                 // out of guesses: burn it
-      return json({ error: 'bad_code' }, 400);
-    }
-
-    await dead();                                                       // single use, always
+    const spent = await spendSigninCode(sa, token, email, code);
+    if (spent === 'capped') return json({ error: 'rate_limited' }, 429);   // the limiter's own answer
+    if (spent === 'failed') return json({ error: 'failed' }, 500);
+    if (spent !== 'ok') return json({ error: 'bad_code' }, 400);
     const uid = await getOrCreateUidByEmail(token, sa.project_id, email);
     if (!uid) return json({ error: 'failed' }, 500);
     const custom = await mintCustomToken(sa, uid);
@@ -821,7 +967,7 @@ async function invitePeek(request, env, url) {
   const token = (url.searchParams.get('t') || '').trim();
   if (!/^[A-Za-z0-9]{16,64}$/.test(token)) return json({ error: 'bad_request' }, 400);
   if (env.SIGNIN_RATE_LIMITER) {
-    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const ip = clientIpKey(request);
     try {
       const { success } = await env.SIGNIN_RATE_LIMITER.limit({ key: 'peek:' + ip });
       if (!success) return json({ error: 'rate_limited' }, 429);
@@ -860,7 +1006,7 @@ async function invitePeek(request, env, url) {
 
 async function sendInviteEmail(request, env, url) {
   if (env.SIGNIN_RATE_LIMITER) {
-    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const ip = clientIpKey(request);
     try {
       const { success } = await env.SIGNIN_RATE_LIMITER.limit({ key: 'inv:' + ip });
       if (!success) return json({ error: 'rate_limited' }, 429);
@@ -982,7 +1128,7 @@ async function newsletterSignup(request, env) {
 
   const limiter = env.NEWSLETTER_RATE_LIMITER || env.SIGNIN_RATE_LIMITER;
   if (limiter) {
-    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const ip = clientIpKey(request);
     try { const { success } = await limiter.limit({ key: 'news:' + ip }); if (!success) return json({ error: 'rate_limited' }, 429); }
     catch (e) { /* limiter unavailable: fail open */ }
   }
@@ -1724,7 +1870,7 @@ async function ensureGamesSchema(env) {
 async function gameRateLimited(request, env, bucket) {
   const limiter = env.GAMES_RATE_LIMITER || env.SIGNIN_RATE_LIMITER;
   if (!limiter) return false;
-  const ip = request.headers.get('cf-connecting-ip') || '?';
+  const ip = clientIpKey(request);
   try { const { success } = await limiter.limit({ key: bucket + ':' + ip }); return !success; }
   catch (e) { return false; }
 }
@@ -1746,7 +1892,7 @@ async function gameRoute(request, env, url) {
   if (!code || !/^[a-z0-9]{4,16}$/.test(code)) return json({ error: 'bad_code' }, 400);
   const action = parts[3];
   if (action === 'guess' && method === 'POST') {
-    const ip = request.headers.get('cf-connecting-ip') || '?';
+    const ip = clientIpKey(request);
     const limiter = env.GAMES_RATE_LIMITER || env.SIGNIN_RATE_LIMITER;
     if (limiter) { try { const { success } = await limiter.limit({ key: 'game:' + ip }); if (!success) return json({ error: 'rate_limited' }, 429); } catch (e) {} }
     const g = await env.GAMES_DB.prepare('SELECT status FROM games WHERE code=?').bind(code).first();
@@ -2306,7 +2452,7 @@ async function recordStep(request, env) {
   if (!same) return json({ error: 'forbidden' }, 403);
   if (Number(request.headers.get('content-length') || 0) > 512) return json({ error: 'too_large' }, 413);
   if (env.STEP_RATE_LIMITER) {
-    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const ip = clientIpKey(request);
     try { const { success } = await env.STEP_RATE_LIMITER.limit({ key: 'step:' + ip }); if (!success) return json({ error: 'rate' }, 429); } catch (e) {}
   }
   let body;
@@ -2495,7 +2641,7 @@ export default {
          limiter itself is unavailable, like every other limiter here; the checks below still hold. */
       const limiter = env.DOSE_RATE_LIMITER || env.SIGNIN_RATE_LIMITER;
       if (limiter) {
-        const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+        const ip = clientIpKey(request);
         try { const { success } = await limiter.limit({ key: 'dose:' + ip }); if (!success) return json({ error: 'rate' }, 429); } catch (e) {}
       }
       if (!env.FIREBASE_SERVICE_ACCOUNT) return json({ error: 'server_config' }, 500);

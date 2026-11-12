@@ -109,18 +109,22 @@ const LINK = 'https://little-cubby.com/__/auth/action?mode=signIn&oobCode=abc123
   console.log('\n4. adding the link did not loosen a single property of the code');
   {
     ok('one place mints and stores a code, so the two senders cannot drift', (WORKER.match(/async function issueSigninCode\(/g) || []).length === 1);
-    /* The whole single-live-code rule rests on this PATCH carrying no updateMask: with one it would
-       MERGE, leaving the previous mac in place and two codes alive at once. */
-    const issue = WORKER.slice(WORKER.indexOf('async function issueSigninCode('), WORKER.indexOf('/* Same-origin + per-IP volume'));
-    ok('the issue PATCH carries NO updateMask, so a new code REPLACES the old one', issue.includes("method: 'PATCH'") && !issue.includes('updateMask'));
+    /* The whole single-live-code rule rests on this write carrying no updateMask: with one it would
+       MERGE, leaving the previous mac in place and two codes alive at once. Sliced to the function's
+       OWN body: the wider slice this used to take also held the canary's diagnostic PATCH, so the
+       "it is a PATCH" half stayed green after the write stopped being one. */
+    const issue = WORKER.slice(WORKER.indexOf('async function issueSigninCode('), WORKER.indexOf('/* THE ALARM THAT DID NOT EXIST.'));
+    ok('the issue write carries NO updateMask, so a new code REPLACES the old one', issue.includes('await signinCommit(sa, token, {') && !issue.includes('updateMask'));
     ok('only the MAC is stored, never the code itself', issue.includes('mac: { stringValue: mac }') && !/code: \{ stringValue: code \}/.test(issue));
     ok('the code is fresh per issue', issue.includes('const code = newSigninCode();'));
     ok('the TTL and the try budget are set at issue', issue.includes('SIGNIN_CODE_TTL_MS') && issue.includes('SIGNIN_CODE_TRIES'));
 
     ok('the address is inside the MAC, so a code cannot be replayed at another address', WORKER.includes("new TextEncoder().encode('code:' + email + ':' + code)"));
     ok('verification is constant time', WORKER.includes("crypto.subtle.verify('HMAC', key, _b64urlToBytes(storedMac),"));
-    ok('the attempt is spent BEFORE the compare', WORKER.indexOf("?updateMask.fieldPaths=tries") < WORKER.indexOf("const ok = await crypto.subtle.verify('HMAC', key, _b64urlToBytes(storedMac)"));
-    ok('a good code is burned, always', /await dead\(\);\s*\/\/ single use, always/.test(WORKER));
+    const spendAt = WORKER.indexOf("updateMask: { fieldPaths: mask },"), compareAt = WORKER.indexOf("const ok = await crypto.subtle.verify('HMAC', key, _b64urlToBytes(storedMac)");
+    ok('the attempt is spent BEFORE the compare', spendAt > -1 && compareAt > -1 && spendAt < compareAt, [spendAt, compareAt]);
+    /* Burned on success, and only against THIS request's own spend, so a double tap signs in once. */
+    ok('a good code is burned, always, against its own spend', /const burn = await signinCommit\(sa, token, \{ delete: name, currentDocument: \{ updateTime: paidAt \} \}\);\s*if \(burn\.ok\) return 'ok';/.test(WORKER));
     ok('both new endpoints sit behind the same-origin guard', (WORKER.match(/const bad = await signinGuard\(request, env\); if \(bad\) return bad;/g) || []).length === 2);
     const cools = WORKER.match(/await cache\.put\(cooldown,/g) || [];
     ok('both senders still arm a per-address cooldown', cools.length === 2, cools.length);
@@ -186,8 +190,10 @@ const LINK = 'https://little-cubby.com/__/auth/action?mode=signIn&oobCode=abc123
         (s) => (s.match(/html: signinEmailHtml\(code, link\)/g) || []).length === 2],
       ['the two subjects drift apart again', WORKER.replace("subject: 'Your Cubby sign-in code',", "subject: 'Your Cubby sign-in link',"),
         (s) => { const x = s.match(/subject: 'Your Cubby sign-in[^']*'/g) || []; return x.length === 2 && x[0] === x[1]; }],
-      ['an updateMask sneaks onto the issue PATCH', WORKER.replace("'/signinCodes/' + docId, {\n      method: 'PATCH',", "'/signinCodes/' + docId + '?updateMask.fieldPaths=mac', {\n      method: 'PATCH',"),
-        (s) => { const i = s.slice(s.indexOf('async function issueSigninCode('), s.indexOf('/* Same-origin + per-IP volume')); return !i.includes('updateMask'); }],
+      ['an updateMask sneaks onto the issue write', WORKER.replace("        currentDocument: prev ? { updateTime: prev.updateTime } : { exists: false }", "        updateMask: { fieldPaths: ['mac'] },\n        currentDocument: prev ? { updateTime: prev.updateTime } : { exists: false }"),
+        (s) => { const i = s.slice(s.indexOf('async function issueSigninCode('), s.indexOf('/* THE ALARM THAT DID NOT EXIST.')); return i.includes('await signinCommit(sa, token, {') && !i.includes('updateMask'); }],
+      ['the success burn loses its precondition', WORKER.replace('{ delete: name, currentDocument: { updateTime: paidAt } }', '{ delete: name }'),
+        (s) => /const burn = await signinCommit\(sa, token, \{ delete: name, currentDocument: \{ updateTime: paidAt \} \}\);\s*if \(burn\.ok\) return 'ok';/.test(s)],
       ['the plaintext code gets stored next to its MAC', WORKER.replace('mac: { stringValue: mac },', 'mac: { stringValue: mac }, code: { stringValue: code },'),
         (s) => { const i = s.slice(s.indexOf('async function issueSigninCode('), s.indexOf('/* Same-origin + per-IP volume')); return !/code: \{ stringValue: code \}/.test(i); }],
       ['the code box is shown over an email with no code in it', STORE.replace("if (hasCode) showCodeBox(email).focus(); else codeForm.style.display = 'none';", 'showCodeBox(email).focus();'),
