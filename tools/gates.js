@@ -172,6 +172,9 @@ const TREE = [
      xss_leaf_check.js as its last section (each leaf field, each sink, mutants included). */
   { name: 'xss-sink',       cmd: ['node', 'tools/xss_sink_check.js', 'url'] },
   { name: 'xss-leaf-static', cmd: ['node', 'tools/xss_leaf_check.js', '--static-only'] },
+  /* brand-images: the founder's rule of 2026-11-13. Only the painted art is on a screen (tools/brand-images.json):
+     no flat face, no drawn bear, no emoji bear. Walks every screen at 390px; --self-test plants each defect. */
+  { name: 'brand-images',   cmd: ['node', 'tools/brand_image_check.js', 'url', '--self-test'] },
 ];
 // These judge PRODUCTION, not this checkout, so a failure is a deploy problem rather than a code
 // problem. Opt-in, because they need the network and they are the founder's to act on.
