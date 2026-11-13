@@ -254,17 +254,17 @@ function runStatic(root, label) {
   return R;
 }
 
-/* ---------------- self-test of the static half: a scratch copy with the three plants ---------------- */
+/* ---------------- self-test of the static half: a scratch copy with five plants ---------------- */
 function staticSelfTest() {
   console.log('\nself-test (static): plant each defect in a scratch copy and watch the same checks catch it');
   const os = require('os');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-brand-'));
   const copy = (p) => { const d = path.join(tmp, p); fs.mkdirSync(path.dirname(d), { recursive: true }); fs.copyFileSync(path.join(ROOT, p), d); };
   ['app/index.html', 'index.html', 'worker.js'].forEach(copy);
-  // A bear in a visible string, the flat face under a new name, and a reference to a picture nobody approved.
+  // A bear in a visible string, the flat face under a new name, a reference to a picture nobody approved,
   fs.appendFileSync(path.join(tmp, 'app/index.html'), '\n<div class="planted">Good evening \u{1F43B}</div>\n');
   fs.appendFileSync(path.join(tmp, 'worker.js'), "\n// planted\nconst planted = '<img src=\"https://little-cubby.com/icons/planted-unapproved.png\">';\n");
-  // ...and a picture from another host, and an inlined picture nobody approved.
+  // a picture from another host, and an inlined picture nobody approved.
   fs.appendFileSync(path.join(tmp, 'index.html'), '\n<img src="https://example.invalid/planted.png"><img src="data:image/png;base64,' + tinyPng().toString('base64') + '">\n');
   fs.writeFileSync(path.join(tmp, 'icons-planted.png'), retiredBytes());
   fs.mkdirSync(path.join(tmp, 'icons'), { recursive: true });

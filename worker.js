@@ -99,7 +99,7 @@ function signinEmailHtml(code, link) {
   return '<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#F7F2E8;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:28px 16px">'
     + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">'
     + '<table role="presentation" width="100%" style="max-width:440px;background:#fff;border-radius:18px;padding:32px 28px;box-shadow:0 8px 28px rgba(0,0,0,.08)">'
-    + '<tr><td align="center"><img src="https://little-cubby.com/icons/logo-512.png" width="56" height="56" alt="Cubby" style="display:block;border:0;border-radius:14px"></td></tr>'
+    + '<tr><td align="center"><img src="https://little-cubby.com/icons/logo-512.png" width="56" height="56" alt="Cubby" style="display:block;margin:0 auto;border:0;border-radius:14px"></td></tr>'
     + '<tr><td align="center" style="font-family:Georgia,serif;font-size:24px;color:#2C2521;padding:6px 0 18px">Sign in to Cubby</td></tr>'
     + codeBlock + rule + linkBlock
     + '<tr><td align="center" style="font-size:12px;color:#9a8d80;padding:22px 0 0;line-height:1.5">If you didn\'t ask to sign in, you can ignore this email and nothing happens.</td></tr>'
