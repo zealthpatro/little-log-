@@ -23,8 +23,7 @@
   .headline{font-family:'Fraunces'; font-weight:600; font-size:80px; line-height:1.12;
     letter-spacing:-0.01em; color:var(--ink); max-width:850px;}
   .footer{position:absolute; left:96px; bottom:92px; display:flex; align-items:center; gap:22px;}
-  .sq{width:88px; height:88px; border-radius:26px; background:var(--surface-2);
-    border:1px solid var(--line); display:flex; align-items:center; justify-content:center;}
+  .sq{width:88px; height:88px; border-radius:26px; overflow:hidden;}
   .lock{display:flex; flex-direction:column;}
   .wm{font-family:'Fraunces'; font-weight:600; font-size:46px; color:var(--ink); line-height:1.05;}
   .tag{font-family:'Nunito Sans'; font-weight:600; font-size:25px; color:var(--ink-faint); margin-top:7px;}
@@ -39,15 +38,7 @@
     </div>
     <div class="footer">
       <div class="sq">
-        <svg width="60" height="60" viewBox="0 0 60 60" aria-hidden="true">
-          <circle cx="22" cy="22" r="8" fill="#C9A57E"/>
-          <circle cx="38" cy="22" r="8" fill="#C9A57E"/>
-          <circle cx="30" cy="33" r="16" fill="#C9A57E"/>
-          <ellipse cx="30" cy="38" rx="8" ry="6" fill="#F1E4D0"/>
-          <ellipse cx="30" cy="34" rx="3" ry="2" fill="#6E5A45"/>
-          <circle cx="24" cy="30" r="2.6" fill="#3E3228"/>
-          <circle cx="36" cy="30" r="2.6" fill="#3E3228"/>
-        </svg>
+        <img src="/icons/logo-512.png" alt="" width="88" height="88" style="display:block;border-radius:26px">
       </div>
       <div class="lock">
         <div class="wm">Cubby</div>

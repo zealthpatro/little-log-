@@ -5,6 +5,10 @@ import os
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from card_logo import paste_logo  # noqa: E402  the painted master, never a drawn bear (2026-11-13)
+
 W, H = 1270, 760
 BG_TOP, BG_BOT = (252, 238, 217), (243, 215, 176)
 BEAR_BG, BEAR_IN, BEAR_DK = (196, 134, 68), (246, 230, 206), (71, 51, 39)
@@ -40,14 +44,6 @@ def dots(d):
         for gy in range(0, H, 38):
             d.ellipse([gx - 2, gy - 2, gx + 2, gy + 2], fill=(196, 134, 68, 0))
 
-def bear(img, cx, cy, r):
-    d = ImageDraw.Draw(img)
-    def circ(x, y, rr, f): d.ellipse([x - rr, y - rr, x + rr, y + rr], fill=f)
-    for ex in (cx - r * 0.62, cx + r * 0.62):
-        circ(ex, cy - r * 0.72, r * 0.34, BEAR_BG); circ(ex, cy - r * 0.72, r * 0.20, BEAR_IN)
-    circ(cx, cy, r, BEAR_BG); circ(cx, cy + r * 0.22, r * 0.44, BEAR_IN)
-    for ex in (cx - r * 0.26, cx + r * 0.26): circ(ex, cy - r * 0.12, r * 0.10, BEAR_DK)
-    circ(cx, cy + r * 0.10, r * 0.085, BEAR_DK)
 
 def wrap(d, text, fnt, maxw):
     words, lines, cur = text.split(), [], ""
@@ -175,7 +171,7 @@ def make(slug, eyebrow, headline, sub, screen_fn, outdir):
     d = ImageDraw.Draw(img)
     grad(d)
     # brand top-left
-    bear(img, 56, 52, 26)
+    paste_logo(img, 56, 52, 54)
     d = ImageDraw.Draw(img)
     d.text((92, 36), "Cubby", font=SERIF(30), fill=INK)
     d.text((W - 248, H - 44), "little-cubby.com", font=SANS(22), fill=INK_FAINT)

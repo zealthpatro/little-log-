@@ -6,6 +6,10 @@ import os
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from card_logo import paste_logo  # noqa: E402  the painted master, never a drawn bear (2026-11-13)
+
 BG_TOP  = (252, 238, 217)
 BG_BOT  = (243, 215, 176)
 BEAR_BG = (196, 134,  68)
@@ -25,19 +29,6 @@ def _grad(draw, W, H, top, bot):
         t = y / max(H - 1, 1)
         draw.line([(0, y), (W, y)], fill=tuple(int(top[i] + (bot[i] - top[i]) * t) for i in range(3)))
 
-
-def _bear(img, cx, cy, r):
-    d = ImageDraw.Draw(img)
-    def circ(x, y, rr, fill):
-        d.ellipse([x - rr, y - rr, x + rr, y + rr], fill=fill)
-    for ex in [cx - r * 0.62, cx + r * 0.62]:
-        circ(ex, cy - r * 0.72, r * 0.34, BEAR_BG)
-        circ(ex, cy - r * 0.72, r * 0.20, BEAR_IN)
-    circ(cx, cy, r, BEAR_BG)
-    circ(cx, cy + r * 0.22, r * 0.44, BEAR_IN)
-    for ex in [cx - r * 0.26, cx + r * 0.26]:
-        circ(ex, cy - r * 0.12, r * 0.10, BEAR_DK)
-    circ(cx, cy + r * 0.10, r * 0.08, BEAR_DK)
 
 
 def _pill(img, x, y, text, font, bg=(220, 105, 50, 200), fg=TEXT_W, pad=(18, 8)):
@@ -77,7 +68,7 @@ def generate(slug, title, age, theme, out_dir):
         img.alpha_composite(ov)
 
         draw = ImageDraw.Draw(img)
-        _bear(img, 52, 48, 28)
+        paste_logo(img, 52, 48, 56)
         try:
             font_brand = ImageFont.truetype(ARIAL_B, 26)
         except Exception:
