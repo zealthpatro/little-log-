@@ -93,7 +93,7 @@
            iPhone has its own storage, separate from Safari, so Google and Apple sign-in finish in Safari
            and leave the installed app signed out (docs/postmortems/2026-08-19-installed-ios-pwa-cannot-
            sign-in.md). The emailed code is the one route that completes inside the installed app. */
-        + '<div class="cbi-step"><span class="cbi-n">4</span><span>Open Cubby from your home screen and sign in with the <b>code we email you</b> 🐻</span></div>'
+        + '<div class="cbi-step"><span class="cbi-n">4</span><span>Open Cubby from your home screen and sign in with the <b>code we email you</b></span></div>'
         + '<p class="cbi-p">Inside the home screen app, use the emailed code rather than Google or Apple.</p>'
         + '<div class="cbi-point">Find ' + SHARE + " below ⌄</div>";
     } else {

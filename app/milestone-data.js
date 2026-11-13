@@ -176,12 +176,12 @@ window.MILESTONES = [
 
   /* --- social and play firsts --- */
   {key:'dl-firstpeekaboo', title:'First peekaboo 🙈', type:'delight', domain:'firsts', cat:'Fun', mo:7, emoji:'🙈'},
-  {key:'dl-firstfavtoy', title:'First favourite toy', type:'delight', domain:'firsts', cat:'Fun', mo:7, emoji:'🧸'},
+  {key:'dl-firstfavtoy', title:'First favourite toy', type:'delight', domain:'firsts', cat:'Fun', mo:7, emoji:'🪀'},
   {key:'dl-firstfavbook', title:'First favourite book', type:'delight', domain:'firsts', cat:'Fun', mo:8, emoji:'📖'},
   {key:'dl-firsthug', title:'First real hug 🤗', type:'delight', domain:'firsts', cat:'Social', mo:9, emoji:'🤗'},
   {key:'dl-firstkissback', title:'First kiss back 😚', type:'delight', domain:'firsts', cat:'Social', mo:12, emoji:'😚'},
   {key:'dl-firstgames', title:'First game of chase', type:'delight', domain:'firsts', cat:'Fun', mo:13, emoji:'🏃'},
-  {key:'dl-firstcuddletoy', title:'First time asking for their lovey', type:'delight', domain:'firsts', cat:'Social', mo:14, emoji:'🧸'},
+  {key:'dl-firstcuddletoy', title:'First time asking for their lovey', type:'delight', domain:'firsts', cat:'Social', mo:14, emoji:'🤗'},
   {key:'dl-firstjoke', title:'First time they made a joke', type:'delight', domain:'firsts', cat:'Fun', mo:24, emoji:'😜'},
   {key:'dl-firstpretend', title:'First pretend play', type:'delight', domain:'firsts', cat:'Fun', mo:18, emoji:'🎭'},
   {key:'dl-firsttantrum', title:'First big feelings moment', type:'delight', domain:'firsts', cat:'Social', mo:18, emoji:'🌧️'},

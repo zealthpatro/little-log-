@@ -338,7 +338,7 @@
       + '</ul></div>'
       + '</div>'
       + '<p class="lp-pro-note">Cubby Pro launches January 2027. Free shares carry a small "made with Cubby · little-cubby.com" mark; Pro shares are clean. Rituals, push reminders &amp; insights are on the Pro roadmap for later. Sign in, then register for Pro from Settings, Cubby Pro, to claim your free trial at launch.</p></section>')
-      + '<section class="lp-final"><h2>Everyone caring for your baby, in sync.</h2>' + cta + '<div class="lp-trust">Free · Private · made with 🐻</div>'
+      + '<section class="lp-final"><h2>Everyone caring for your baby, in sync.</h2>' + cta + '<div class="lp-trust">Free · Private · No ads</div>'
       /* Not on iOS, until sign-in survives the home screen. On iOS an installed PWA gets its OWN
          storage container and the OAuth handler is cross-origin, so sign-in completes in Safari and
          the installed app stays signed out — this sentence was talking people into the one action
@@ -347,8 +347,8 @@
          in-container sign-in ships. */
       + (native || isIOSDeviceUA() ? '' : '<div class="lp-pwa">No download, no app store. Add Cubby to your home screen for an app-like, offline-ready experience in any browser.</div>') + '</section>'
       + (native
-        ? '<footer class="lp-foot">Cubby · a warm, private baby tracker 🐻</footer>'
-        : '<footer class="lp-foot">Cubby · a warm, private baby tracker 🐻<br><a href="/">little-cubby.com</a> · <a href="/articles/">Articles</a> · <a href="/faq/">FAQ</a></footer>')
+        ? '<footer class="lp-foot">Cubby · a warm, private baby tracker</footer>'
+        : '<footer class="lp-foot">Cubby · a warm, private baby tracker<br><a href="/">little-cubby.com</a> · <a href="/articles/">Articles</a> · <a href="/faq/">FAQ</a></footer>')
       + '</div>';
   };
 

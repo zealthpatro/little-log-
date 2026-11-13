@@ -3104,7 +3104,7 @@ function meGreeting(){
   const name=myName();
   const h=new Date().getHours();
   const part = (h<5||h>=23)?'Still up':(h<12?'Good morning':(h<17?'Good afternoon':'Good evening'));
-  return name ? `${part}, ${escapeHtml(name)} 🐻` : `${part} 🐻`;
+  return name ? `${part}, ${escapeHtml(name)}` : `${part}`;
 }
 /* Retires itself. Every other hint in this file is one-shot — coachMark checks hasSeen(), tipLine
    checks hasSeen() — but the ticker had no gate of any kind, so five beginner tips cycled on the
@@ -3154,7 +3154,7 @@ function startTipCycle(){
 function homeNudgeLine(){
   const b=activeBaby(); if(!b) return '';
   const h=new Date().getHours();
-  if(h<5||h>=23) return `The 3am club 🐻, you've got this. Sleep when you can 💛`;
+  if(h<5||h>=23) return `The 3am club, you've got this. Sleep when you can 💛`;
   const evs=babyEvents();
   const recentSleep=evs.filter(e=>e.type==='sleep'&&e.end&&(now()-e.end)<16*3600000);
   const longest=recentSleep.reduce((m,e)=>Math.max(m,netSleepMs(e)),0);
@@ -3276,13 +3276,13 @@ function renderGetStarted(){
        gap. "a word for whoever has baby next" is the phrase the empty notes lane already uses, so
        the two read as one voice. */
     return `<div class="gs-card">
-    <div class="gs-head"><div class="gs-title">Get started 🐻</div><button class="gs-x" onclick="dismissTip('getstarted')">×</button></div>
+    <div class="gs-head"><div class="gs-title">Get started</div><button class="gs-x" onclick="dismissTip('getstarted')">×</button></div>
     ${row(haveMyLog,'Log the next nappy',`${fam?escapeHtml(fam)+' sees':'They see'} it straight away, with your name on it`,'openDiaper()')}
     ${row(saidHello,'Say hello','Leave a word for whoever has baby next','openNoteCompose()')}
   </div>`;
   }
   return `<div class="gs-card">
-    <div class="gs-head"><div class="gs-title">Get started 🐻</div><button class="gs-x" onclick="dismissTip('getstarted')">×</button></div>
+    <div class="gs-head"><div class="gs-title">Get started</div><button class="gs-x" onclick="dismissTip('getstarted')">×</button></div>
     ${row(haveBaby,'Add your baby','Name and birthday','')}
     ${(window.CubbyGuide&&window.cubbyOpenGuide)?row(hasSeen('tip_logguide'),'See what to log, and why','What each one gives you back','cubbyOpenGuide()'):''}
     ${/* This row used to open the feed sheet, whose primary button starts a nursing TIMER — which
@@ -3363,7 +3363,7 @@ function awayRecap(){
   const gapH=Math.max(1,Math.round((now()-since)/3600000));
   /* The first open has no away anchor, and "Today so far" promised day totals the counts no longer
      are: she logs four feeds, Papa one, and the card said "Today so far · 1 feed". So it says whose. */
-  const head = seenAt ? ('While you were away 🐻') : ('Today, from your circle 🐻');
+  const head = seenAt ? ('While you were away') : ('Today, from your circle');
   const when = seenAt ? ('the last '+(gapH>=24?'day':gapH+(gapH===1?' hour':' hours'))) : 'today';
   return `<div class="away-card" onclick="openDayRecap()">
     <div class="away-h">${head}</div>
@@ -3425,7 +3425,7 @@ function dayRecapText(){
 function openDayRecap(){
   const b=activeBaby(); if(!b)return;
   const text=dayRecapText(); window.__dayRecapText=text;
-  openSheet(`<h2>${escapeHtml(b.name)}'s day 🐻</h2><div class="sub">Today at a glance, for whoever's away.</div>
+  openSheet(`<h2>${escapeHtml(b.name)}'s day</h2><div class="sub">Today at a glance, for whoever's away.</div>
     <pre class="visit-sum">${escapeHtml(text)}</pre>
     <button class="btn-primary" style="background:var(--feed);--accent-ink:var(--on-feed,var(--on-accent))" onclick="copyDayRecap()">Copy / share</button>
     <button class="btn-ghost" onclick="closeSheet()">Close</button>`,'feed');
@@ -3849,7 +3849,7 @@ async function saveNote(){
       if(mine&&window.LL.setNotePinned) await window.LL.setNotePinned(mine.id, true);
     }
     markSeen('tip_leftnote');
-    closeSheet(); render(); toast(replaced?'Note left and pinned, your earlier pin came down':'Note left 🐻');
+    closeSheet(); render(); toast(replaced?'Note left and pinned, your earlier pin came down':'Note left');
   } finally { _savingNote=false; }
 }
 function openNoteView(id){
@@ -4013,7 +4013,7 @@ function renderHome(){
   if(mv && !homeHidden('month') && !hasSeen('tip_bday'+mv)){
     al.month += `<div class="alert-pill" style="border-color:var(--star)">
       <div class="ap-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🎉</div>
-      <div class="ap-body"><div class="ap-t">${escapeHtml((activeBaby()||{}).name||'Baby')} is ${mv} month${mv>1?'s':''} 🎉</div><div class="ap-s">Their ${mv}-month card is waiting 🐻</div></div>
+      <div class="ap-body"><div class="ap-t">${escapeHtml((activeBaby()||{}).name||'Baby')} is ${mv} month${mv>1?'s':''} 🎉</div><div class="ap-s">Their ${mv}-month card is waiting</div></div>
       <button onclick="openMemoryCard(${mv},'${hArg(memCandPhoto(mv))}');dismissTip('bday${hArg(mv)}')">See it</button></div>`;
   }
   /* The same slot, in the weeks before the month card can use it. posterOfferDue() hands back a
@@ -6764,7 +6764,7 @@ function openAddEntry(){
   var hasPreg=!!(state.pregnancy && !state.pregnancy.bornBabyId);
   openSheet(`<h2>Add to Cubby</h2><div class="sub">Wherever you are on the journey.</div>
     <div class="prof-cards">
-      <div class="prof-card" onclick="openAddBaby()"><span class="lead" style="background:var(--feed-soft);color:var(--feed);font-size:20px">🐻</span><div class="cflex"><div class="a">${state.babies.length?'Add another little one':'Our baby is here'}</div><div class="b">${state.babies.length?'A twin, or an older sibling':'Track feeds, sleep, growth, vaccines and more'}</div></div><span class="chev">${I.chev}</span></div>
+      <div class="prof-card" onclick="openAddBaby()"><span class="lead" style="background:var(--feed-soft);color:var(--feed);font-size:20px"><img src="/icons/logo-512.png" alt="" width="42" height="42" style="border-radius:inherit"></span><div class="cflex"><div class="a">${state.babies.length?'Add another little one':'Our baby is here'}</div><div class="b">${state.babies.length?'A twin, or an older sibling':'Track feeds, sleep, growth, vaccines and more'}</div></div><span class="chev">${I.chev}</span></div>
       <div class="prof-card" onclick="${hasPreg?'viewingPreg=true;closeSheet();render()':'viewingPreg=true;openStartPregnancy()'}"><span class="lead" style="background:var(--preg-soft);color:var(--preg);font-size:20px">🌸</span><div class="cflex"><div class="a">${hasPreg?'Open your pregnancy':"We're expecting"}</div><div class="b">${hasPreg?'Resume where you left off':'Trying, newly pregnant or counting weeks'}</div></div><span class="chev">${I.chev}</span></div>
     </div>`,'diaper');
 }
@@ -6862,7 +6862,7 @@ function openOnboardInvite(){
      counts every distinct due age including the ones already behind her, and two numbers that
      disagree that close together read as a bug. */
   const vaxN=vaxCalendarCount(activeBaby());
-  openSheet(`<h2>Get home, and the day is already there 🐻</h2><div class="sub">You're set up. Invite whoever else has ${n>1?'them':'your little one'}, your partner, a grandparent or the nanny, and what they log shows up on your screen with their name on it.</div>
+  openSheet(`<h2>Get home, and the day is already there</h2><div class="sub">You're set up. Invite whoever else has ${n>1?'them':'your little one'}, your partner, a grandparent or the nanny, and what they log shows up on your screen with their name on it.</div>
     <div class="preg-card"><div class="pc-ico" style="background:var(--feed-soft)">👨‍👩‍👧</div><div><div class="pc-t">Nobody has to remember it for you</div><div class="pc-b">Feeds, sleep and nappies with their names on them, waiting when you get in. Tap it for the whole day.</div></div></div>
     ${vaxProofLine()?`<div class="sub" style="margin-top:12px;text-align:left">💉 ${vaxProofLine()}</div>`:''}
     ${/* THE FIRST LOG COMES FIRST.
@@ -6958,7 +6958,7 @@ function relKeyFromLabel(label){ const s=(label||'').toLowerCase(); for(const k 
 function journeyBearArt(relation, uid, size){
   if(uid && typeof window.memberAvatarSvg==='function'){ const info=(window.LL&&window.LL.memberInfo)||{}; if(info[uid]) return window.memberAvatarSvg(uid, size||64); }
   const slug = RELATION_BEAR[relation] || RELATION_BEAR.other;
-  return (typeof window.cubbyArtImg==='function') ? window.cubbyArtImg(slug, size||64) : '🐻';
+  return (typeof window.cubbyArtImg==='function') ? window.cubbyArtImg(slug, size||64) : `<img src="/icons/logo-512.png" alt="" width="${size||64}" height="${size||64}">`;
 }
 // Prompt objects carry RAW title/sub (renderers MUST escapeHtml them). onclick is pre-escaped
 // here: jArg makes a user string safe for both the single-quoted JS arg and the double-quoted
@@ -7102,7 +7102,7 @@ function useTaste(k,featureName){
   state.settings.proTaste=state.settings.proTaste||{};
   state.settings.proTaste[k]=tasteUsed(k)+1; persist();
   const left=tasteLeft(k);
-  toast(left>0?`✨ Pro taster · ${left} free ${left===1?'try':'tries'} left`:'✨ That was your last free taste 🐻');
+  toast(left>0?`✨ Pro taster · ${left} free ${left===1?'try':'tries'} left`:'✨ That was your last free taste');
   return true;
 }
 function refundTaste(k){ if(isPro())return; try{ const t=state.settings.proTaste; if(t&&t[k]>0){ t[k]--; persist(); } }catch(e){} }
@@ -7131,13 +7131,13 @@ function openPro(lockedFeature, tastedOut, entry){
   openSheet(`<h2>Cubby Pro ✨</h2>
     <div class="sub">${lockedFeature?(tastedOut?`You've enjoyed your free tastes of <b>${escapeHtml(lockedFeature)}</b>. `:`<b>${escapeHtml(lockedFeature)}</b> is a Pro treat. `):''}The essentials, your data and your privacy stay free, always. Pro brings hands-free voice logging, a doctor-ready summary for every visit, and the keepsake studio.</div>
     <div class="pro-list">${feats}</div>
-    <div class="csub" style="text-align:center;margin:2px 0 10px">Every treat comes with a free taste or two, so try before you decide 🐻</div>
+    <div class="csub" style="text-align:center;margin:2px 0 10px">Every treat comes with a free taste or two, so try before you decide</div>
     ${canBuy
       ? `<button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="startProCheckout('annual')">Start 7-day free trial · $90 a year</button>
          <button class="btn-ghost" onclick="startProCheckout('monthly')">Or pay $9 a month</button>
          <div class="csub" style="text-align:center;margin-top:8px">Cancel anytime in the trial and pay nothing. One plan covers your whole family.</div>`
       : (joined
-        ? `<div class="pro-joined">✅ You're registered for Pro. We'll email you the moment it opens, ${escapeHtml(proLaunch())} 🐻</div>`
+        ? `<div class="pro-joined">✅ You're registered for Pro. We'll email you the moment it opens, ${escapeHtml(proLaunch())}</div>`
         : `<button class="btn-primary" style="background:var(--star);--accent-ink:var(--on-star,var(--on-accent))" onclick="joinProWaitlist()">Register for Pro</button>
            <div class="csub" style="text-align:center;margin-top:8px">Cubby Pro arrives ${escapeHtml(proLaunch())}. Register now to claim your 7-day free trial at launch, ${escapeHtml(proCfg('priceLine'))}. No charge today.</div>`)}`,'star');
 }
@@ -7185,7 +7185,7 @@ async function joinProWaitlist(){
       },{merge:true});
     }
     try{ localStorage.setItem('cubby-pro-waitlist','1'); }catch(e){}
-    openPro(undefined,undefined,'rerender'); toast('🐻 You\'re registered for Cubby Pro!');
+    openPro(undefined,undefined,'rerender'); toast('You\'re registered for Cubby Pro!');
   }catch(e){ toast('Could not register: '+((e&&e.message)||e)); }
 }
 function openBabyProfile(){
@@ -8124,7 +8124,7 @@ function openSettings(){
     </div>
     <div class="set-item" onclick="openPro(undefined,undefined,'settings')" style="cursor:pointer">
       <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">✨</div>
-      <div class="si-body"><div class="a">Cubby Pro</div><div class="b">${isPro()?'Active · thank you 🐻':`Doctor reports, keepsake studio & more · launching ${escapeHtml(proLaunch())}`}</div></div>
+      <div class="si-body"><div class="a">Cubby Pro</div><div class="b">${isPro()?'Active · thank you':`Doctor reports, keepsake studio & more · launching ${escapeHtml(proLaunch())}`}</div></div>
     </div>
     <div class="set-item" onclick="shareCubby()" style="cursor:pointer">
       <div class="si-ico" style="background:var(--pump-soft);color:var(--pump)">${I.heart}</div>
@@ -8785,7 +8785,7 @@ function showDeletedGoodbye(){
   ov.id='cb-del-goodbye';
   ov.setAttribute('style','position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center');
   ov.innerHTML=`<div style="max-width:340px">
-    <div style="font-size:44px">🐻</div>
+    <img src="/icons/logo-512.png" alt="" width="52" height="52" style="display:block;margin:0 auto;border-radius:13px">
     <h2 style="font-family:Georgia,serif;margin:12px 0 8px;font-size:22px">Your account is deleted</h2>
     <div class="cb-del-sub" style="font-size:15px;line-height:1.55;font-weight:600">Thank you for letting us look after some of it for a while. Take care of yourself.</div>
     <button id="cb-del-done" style="margin-top:22px;border:none;border-radius:16px;padding:15px 24px;background:#C97FA0;color:#1A1614;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Close</button></div>`;
@@ -8810,7 +8810,7 @@ function shareCubby(){
   var text="We've been using Cubby to keep track of "+who+" feeds, naps and vaccines together. It's free, private to your family, no ads: "+link;
   if(navigator.share){ navigator.share({text:text}).catch(function(){}); return; }
   if(navigator.clipboard&&navigator.clipboard.writeText){
-    navigator.clipboard.writeText(text).then(function(){ toast('Copied! Paste it anywhere 🐻'); },function(){ window.prompt('Copy this note:',text); });
+    navigator.clipboard.writeText(text).then(function(){ toast('Copied! Paste it anywhere'); },function(){ window.prompt('Copy this note:',text); });
   } else { window.prompt('Copy this note:',text); }
 }
 function confirmLogout(){
@@ -9064,7 +9064,7 @@ function setGuardian(uid,on){
 function obPreview(){
   // Decorative, blurred "this is what you're setting up" backdrop. Not interactive, not real data.
   return `<div class="ob-prev" aria-hidden="true">
-    <div class="ob-greet">Good evening 🐻</div>
+    <div class="ob-greet">Good evening</div>
     <div class="ob-tiles">
       <div class="ob-tile" style="--c:var(--feed);--cs:var(--feed-soft)">${I.feed}<span>Feed</span></div>
       <div class="ob-tile" style="--c:var(--sleep);--cs:var(--sleep-soft)">${I.sleep}<span>Sleep</span></div>
@@ -9084,7 +9084,7 @@ function renderOnboard(){
       <div class="tag">It sets up from your dates and the country you are in. Nothing here keeps a streak, and you can change anything later.</div>
       <div class="prof-cards" style="width:100%;text-align:left">
         <div class="prof-card" onclick="obStage('expecting')"><span class="lead" style="background:var(--preg-soft);font-size:20px">🌸</span><div class="cflex"><div class="a">We're expecting</div><div class="b">Your antenatal visits laid out for where you have your care</div></div><span class="chev">${I.chev}</span></div>
-        <div class="prof-card" onclick="obStage('baby')"><span class="lead" style="background:var(--feed-soft);font-size:20px">🐻</span><div class="cflex"><div class="a">Our baby's here</div><div class="b">The last feed, sleep and nappy on one screen, and their vaccine plan already waiting</div></div><span class="chev">${I.chev}</span></div>
+        <div class="prof-card" onclick="obStage('baby')"><span class="lead" style="background:var(--feed-soft);font-size:20px"><img src="/icons/logo-512.png" alt="" width="42" height="42" style="border-radius:inherit"></span><div class="cflex"><div class="a">Our baby's here</div><div class="b">The last feed, sleep and nappy on one screen, and their vaccine plan already waiting</div></div><span class="chev">${I.chev}</span></div>
         <!-- Trying is a first-class stage, so its tile has to sit at the same weight as the other two.
              It carried a raw pale green while its siblings used --preg-soft / --feed-soft, which made it
              a near-white square in Night. --diaper-soft is the app's green-family soft, the same token
@@ -9110,7 +9110,7 @@ function renderCaregiverWaiting(){
   dropShellCache(); app().innerHTML=`<div class="ob-wrap">
     <div class="onboard ob-card fade-in">
       <div class="logo">Cubby</div>
-      <div class="tag" style="font-size:21px;color:var(--ink);font-weight:600;margin:2px 0 6px">You're in. Nothing for you to set up 🐻</div>
+      <div class="tag" style="font-size:21px;color:var(--ink);font-weight:600;margin:2px 0 6px">You're in. Nothing for you to set up</div>
       <div class="tag">${fam?`You've joined ${escapeHtml(fam)}'s Cubby.`:`You've joined the family's Cubby.`} The moment anything is logged, the last feed, sleep and nappy show up here for you too. Anything you log shows up for them the same way, with your name on it.</div>
       <div class="ob-foot"><button class="ob-logout" onclick="openSettings()">Settings</button><button class="ob-logout" onclick="confirmLogout()">Log out</button></div>
     </div>
@@ -12156,7 +12156,7 @@ function renderPregHome(){
     })()}
     ${(window.CubbyGuide&&CubbyGuide.homeCard)?CubbyGuide.homeCard(false):''}
     <button class="btn-ghost" onclick="openDangerSigns()" style="color:var(--danger-ink);margin-top:14px">⚠️ Urgent warning signs, when to seek care</button>
-    ${pregIsOwner()?`<button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:8px" onclick="openWelcomeBaby()">🐻 Baby has arrived</button>`:''}
+    ${pregIsOwner()?`<button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:8px" onclick="openWelcomeBaby()">Baby has arrived</button>`:''}
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>
   </div>`;
 }
@@ -12183,7 +12183,7 @@ function hideReveal(){ const p=state.pregnancy; if(!pregIsOwner())return; p.know
 /* Hosted guest game (Kahoot-style link, no guest account). Dormant until the cubby-games D1 is provisioned. */
 function gameLink(code){ return location.origin+'/g/'+code; }
 function copyGameLink(code){ const url=gameLink(code);
-  if(navigator.share){ navigator.share({title:'Cubby family games',text:'Guess boy or girl, and the day baby arrives 🐻',url:url}).catch(function(){}); return; }
+  if(navigator.share){ navigator.share({title:'Cubby family games',text:'Guess boy or girl, and the day baby arrives',url:url}).catch(function(){}); return; }
   if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(url).then(function(){toast('Link copied 🔗');}).catch(function(){toast(url);}); } else { toast(url); } }
 function shareGuessGame(){ const p=state.pregnancy; if(!p) return;
   if(p.hubCode){ copyGameLink(p.hubCode); return; }
@@ -13257,7 +13257,7 @@ function renderPregCare(){
     :`<div class="set-item" style="cursor:default">
       <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">📅</div>
       <div class="si-body"><div class="a">Due date &amp; schedule</div><div class="b">${pregDueLabel()?pregDueLabel()+' · ':''}${escapeHtml(cname)}</div></div></div>`}
-    ${pregIsOwner()?`<button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:14px" onclick="openWelcomeBaby()">🐻 Baby has arrived</button>
+    ${pregIsOwner()?`<button class="btn-primary" style="background:var(--preg);--accent-ink:var(--on-preg,var(--on-accent));margin-top:14px" onclick="openWelcomeBaby()">Baby has arrived</button>
     <button class="btn-ghost" style="color:var(--ink-soft)" onclick="confirmEndPregnancy()">End this pregnancy</button>`:''}
     <div class="preg-disclaim">${PREG_DISCLAIM}</div>
   </div>`;
@@ -13906,7 +13906,7 @@ function openWelcomeBaby(){
   newBabyColor=AVATAR_COLORS[Math.floor(Math.random()*AVATAR_COLORS.length)];
   initLogWhen();
   const cc=(p.country&&p.country!=='generic'&&p.country!=='custom')?p.country:detectCountry();
-  openSheet(`<div class="welcome-burst">🐻💕</div>
+  openSheet(`<div class="welcome-burst"><img src="/icons/logo-512.png" alt="" width="64" height="64" style="border-radius:16px"></div>
     <h2 style="text-align:center">Welcome to the world</h2>
     <div class="sub" style="text-align:center">Congratulations. Let's bring your baby into Cubby. You can change anything later, there's no rush.</div>
     <div class="field"><label>Baby's name</label><input id="wbName" placeholder="Your little one's name" autofocus></div>
@@ -13978,7 +13978,7 @@ function showBirthArrival(b){
   // time she opens the Log tab, is orientation rather than noise.
   ['home','health','album'].forEach(markSeen);
   // And the new-user checklist. It auto-hides once there is a baby and a first entry; a baby born
-  // an hour ago has neither, so "Get started 🐻 · Log your first entry" rendered on the screen she
+  // an hour ago has neither, so "Get started · Log your first entry" rendered on the screen she
   // lands on, hours after giving birth.
   markSeen('tip_getstarted');
   // vaccinePlan() is one row per DOSE, and several doses share a single appointment, so counting
@@ -13991,7 +13991,7 @@ function showBirthArrival(b){
   // inside is already themed, so an un-themed cream fill put the headline at 1.1:1 in Night.
   ov.setAttribute('style','position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;padding:30px 24px;text-align:center;overflow-y:auto');
   ov.innerHTML=`<div style="max-width:360px">
-    <div style="font-size:52px;line-height:1">🐻</div>
+    <img src="/icons/logo-512.png" alt="" width="64" height="64" style="display:block;margin:0 auto;border-radius:16px">
     <h2 style="font-family:var(--font-display,Georgia),serif;color:var(--ink,#2C2521);margin:14px 0 8px;font-size:26px;line-height:1.2">Welcome to the world, ${escapeHtml(b.name)}</h2>
     <div style="color:var(--ink-soft,#6B5D50);font-size:15px;line-height:1.6;font-weight:600">Your pregnancy is saved as part of their story. You can look back on it any time from the baby switcher.</div>
     <div style="color:var(--ink-soft,#6B5D50);font-size:15px;line-height:1.6;font-weight:600;margin-top:14px">Cubby has changed shape for them. Feeds, sleep and nappies are on your home screen now.</div>
@@ -16772,9 +16772,9 @@ function vaxSetupCard(b,plan,toConfirm){
   const nm=escapeHtml((b||{}).name||'your baby');
   const cardBtn = window.CubbyVaxCard ? `<button class="vs-btn ghost" onclick="CubbyVaxCard.open()">📷 From their card</button>` : '';
   if(b && b.vaxSetupSeen){
-    return `<div class="vx-setup"><span class="vs-emoji">🐻</span><div class="vs-body"><div class="vs-t">Set up ${nm}'s vaccine history</div><div class="vs-s">Record what's already done so the list shows what's actually next.</div><div class="vs-btns"><button class="vs-btn" onclick="vaxCatchupReopen()">Start</button>${cardBtn}</div></div></div>`;
+    return `<div class="vx-setup"><img class="vs-emoji" src="/icons/logo-512.png" alt="" width="26" height="26" style="border-radius:7px"><div class="vs-body"><div class="vs-t">Set up ${nm}'s vaccine history</div><div class="vs-s">Record what's already done so the list shows what's actually next.</div><div class="vs-btns"><button class="vs-btn" onclick="vaxCatchupReopen()">Start</button>${cardBtn}</div></div></div>`;
   }
-  return `<div class="vx-setup"><span class="vs-emoji">🐻</span><div class="vs-body">
+  return `<div class="vx-setup"><img class="vs-emoji" src="/icons/logo-512.png" alt="" width="26" height="26" style="border-radius:7px"><div class="vs-body">
     <div class="vs-t">Has ${nm} had vaccinations so far?</div>
     <div class="vs-s">No guilt, just a tidy record. We'll set the schedule to match. Estimated dates are tagged "est." and you can fix any later.</div>
     <div class="vs-btns">
@@ -17642,7 +17642,7 @@ function composeShareCard(canvas,maxW){
   } else {
     // classic
     ctx.fillStyle=pal.accent; ctx.font=`700 ${Math.round(W*0.03)}px ${NUN}`;
-    ctx.fillText('🐻', cx, cTop+capH*0.26);
+    ctx.fillText('♡', cx, cTop+capH*0.26);
     ctx.fillStyle=pal.ink;
     const nameSize = ed.font==='Caveat'? W*0.105 : W*0.078;
     ctx.font=`700 ${Math.round(nameSize)}px ${fam}`;
@@ -18202,7 +18202,7 @@ function renderLogTab(){
   let body;
   if(logTab==='stats') body=renderStats();
   else if(logTab==='rituals') body=renderRitualsView();
-  else body=yesterdayCard()+`<button class="btn-ghost" style="margin-bottom:var(--stack)" onclick="openDayRecap()">🐻 Today's recap</button>`+wakeWindowRecap()+tipLine('heat','These strips show your week at a glance, tap Week or Month to switch.')+renderHeatmap()+renderTimeline();
+  else body=yesterdayCard()+`<button class="btn-ghost" style="margin-bottom:var(--stack)" onclick="openDayRecap()">Today's recap</button>`+wakeWindowRecap()+tipLine('heat','These strips show your week at a glance, tap Week or Month to switch.')+renderHeatmap()+renderTimeline();
   return `<div class="fade-in">${coachMark('log','Log, Rituals & Stats','Everything you log lands in this timeline. Flip to Rituals for your gentle daily rhythm, or Stats for charts and growth curves.')}${seg}${body}</div>`;
 }
 
@@ -18267,7 +18267,7 @@ function renderPhotos(){
     <div class="sec-title">Colour</div><div class="chip-row">${palChips}</div>
     <div class="sec-title">Decorations</div><div class="chip-row">${decorChips}</div>
     ${(photoEditor.decor&&photoEditor.decor!=='none')?`<div class="chip-row" style="margin-top:6px">${densChips}<div class="chip ${photoEditor.anim?'sel':''}" onclick="toggleAnim()">${photoEditor.anim?'❚❚ Stop':'▶ Animate'}</div></div>`:''}
-    <div class="sec-title">Bear art</div><div class="chip-row"><div class="chip ${photoEditor.character?'sel':''}" onclick="setChar()">🐻 ${escapeHtml((activeBaby()||{}).name||'Baby')}&rsquo;s bear</div>${CHAR_ART.map(a=>`<div class="chip ${photoEditor.charArt===a[0]?'sel':''}" onclick="setCharArt('${hArg(a[0])}')">${a[1]}</div>`).join('')}</div>`
+    <div class="sec-title">Bear art</div><div class="chip-row"><div class="chip ${photoEditor.character?'sel':''}" onclick="setChar()">${escapeHtml((activeBaby()||{}).name||'Baby')}&rsquo;s bear</div>${CHAR_ART.map(a=>`<div class="chip ${photoEditor.charArt===a[0]?'sel':''}" onclick="setCharArt('${hArg(a[0])}')">${a[1]}</div>`).join('')}</div>`
     :`<div class="sec-title">Keepsake stamp</div><div class="chip-row">${stampChips}</div>
     ${photoEditor.stamp!=='none'?`<div class="sec-title">Stamp tone</div><div class="chip-row">${toneChips}</div>`:''}
     ${posMatters?`<div class="sec-title">Position</div><div class="chip-row">${posChips}</div>`:''}
@@ -18395,7 +18395,7 @@ function setMomentFont(f){ photoEditor.font=f; render(); if(document.fonts&&docu
 function setPalette(p){ photoEditor.palette=p; render(); drawPhoto(); }
 function setTemplate(t){ photoEditor.template=t; if(t==='birthday'){ if(!photoEditor.decor||photoEditor.decor==='none') photoEditor.decor='balloons'; if(!photoEditor.character){ photoEditor.character=true; photoEditor._charImg=null; ensureCharImg(); } } render(); drawPhoto(); }
 /* ---- Sticker pack (tap a sticker, tap the photo to drop it) ---- */
-const STICKERS=['❤️','⭐','🐻','🌙','🌞','🍼','👑','🌈','✨','👣','🎀','☁️','🐣','🦋','🥹','🎈'];
+const STICKERS=['❤️','⭐','🌸','🌙','🌞','🍼','👑','🌈','✨','👣','🎀','☁️','🐣','🦋','🥹','🎈'];
 function selectSticker(e){ photoEditor.activeSticker=(photoEditor.activeSticker===e?null:e); render(); }
 function setStickerSize(s){ photoEditor.stickerSize=s; render(); }
 function placeSticker(ev){
@@ -19858,7 +19858,7 @@ var _INS_CSS='#cbInstallOv{position:fixed;inset:0;z-index:2147483000;background:
 function closeInstall(){ var o=document.getElementById('cbInstallOv'); if(o&&o.parentNode) o.parentNode.removeChild(o); }
 function _insCopy(btn){ var u=location.origin+'/app/'; try{ navigator.clipboard.writeText(u).then(function(){ if(btn) btn.textContent='Link copied ✓'; },function(){}); }catch(e){} }
 function openInstall(){
-  if(isStandaloneApp()){ if(typeof toast==='function') toast("You're all set, Cubby's on your home screen 🐻"); return; }
+  if(isStandaloneApp()){ if(typeof toast==='function') toast("You're all set, Cubby's on your home screen"); return; }
   if(window._bip){ try{ window._bip.prompt(); if(window._bip.userChoice) window._bip.userChoice.then(function(){ window._bip=null; }); return; }catch(e){} } // Android: real one-tap
   if(!document.getElementById('cbInstallCSS')){ var st=document.createElement('style'); st.id='cbInstallCSS'; st.textContent=_INS_CSS; document.head.appendChild(st); }
   var esc=(typeof escapeHtml==='function')?escapeHtml:function(s){return s;};
@@ -19874,7 +19874,7 @@ function openInstall(){
       +'<p class="cbi-p">Two taps and Cubby sits on your home screen like any app, full-screen, offline, no password each time.</p>'
       +'<div class="cbi-step"><span class="cbi-n">1</span><span>Tap <b>Share</b>'+_INS_SHARE+'at the bottom of Safari</span></div>'
       +'<div class="cbi-step"><span class="cbi-n">2</span><span>Scroll down and tap <b>Add to Home Screen</b></span></div>'
-      +'<div class="cbi-step"><span class="cbi-n">3</span><span>Tap <b>Add</b> — that’s it 🐻</span></div>'
+      +'<div class="cbi-step"><span class="cbi-n">3</span><span>Tap <b>Add</b>, that’s it</span></div>'
       +'<div class="cbi-point">Find '+_INS_SHARE+' below ⌄</div>';
   } else { var android=/android/i.test(navigator.userAgent||'');
     body='<div class="cbi-emoji">📱</div><h3 class="cbi-h">'+(android?'Add Cubby to your home screen':'Cubby is best on your phone')+'</h3>'

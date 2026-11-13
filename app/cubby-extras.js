@@ -1,7 +1,8 @@
 /* ============================================================
    CUBBY EXTRAS
    - the painted avatar portraits (app/avatars/*.webp) + how a person resolves to one
-   - cubbyBear(): the old parametric SVG bear, now only the offline/decode fallback
+   - cubbyBear(): the old parametric SVG bear. Nothing draws it any more (2026-11-13): a portrait
+     that will not decode falls back to the painted Cubby face (precached, /icons/logo-512.png)
    - openBearPicker(): choose a painted bear
    - custom warm time picker (replaces the native one)
    Loads after the app + store-firebase, talks to them via globals.
@@ -306,12 +307,13 @@
   }
 
   // Nothing is ever blank: a file that will not decode (or was never fetched before the
-  // household went offline) falls back to the old SVG in the same tone, and never in a hat.
+  // household went offline) falls back to the painted Cubby face, which the service worker
+  // precaches. It was the old hand-coded SVG bear until the founder retired every drawn bear.
   window.cubbyArtFail = function (img) {
     try {
-      var tone = img.getAttribute('data-tone') || 'cream';
       var size = img.getAttribute('width');
-      img.outerHTML = cubbyBear({ fur: TONE_FUR[tone] || TONE_FUR.cream, acc: 'none', size: size ? +size : 0 });
+      var dim = size ? (' width="' + size + '" height="' + size + '"') : '';
+      img.outerHTML = '<img class="cb-av" src="/icons/logo-512.png"' + dim + ' alt="" aria-hidden="true" decoding="async">';
     } catch (e) {}
   };
 

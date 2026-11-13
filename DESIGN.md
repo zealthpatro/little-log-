@@ -161,6 +161,13 @@ on each of the three sub-tabs, so a sibling rule would have landed 16 on one and
   celebration, greeting line, toast flourish, tips ticker, share cards). Not allowed: as
   functional icons in tiles, feature lists, settings rows, marketing feature cards.
 - New icons must match the set (24 grid / stroke 2 / round). Add to `I` in one place.
+- **The brand image is the painted cub, and only the painted cub** (founder, 2026-11-13). The app icon,
+  favicon, sign-in card, landing, site nav, emails and share cards all come from one master,
+  `icons/icon-master-1024.png` (the hero cub's face, ChatGPT-painted), via `tools/gen_brand_icons.py`.
+  No drawn bear (Pillow, SVG circles) and **no emoji bear** (🐻 🧸) anywhere, greetings and toasts
+  included: where a bear stood in for art, use `/icons/logo-512.png` as an `<img>` (empty alt when
+  decorative). Every picture allowed on a screen is listed with its provenance in
+  `tools/brand-images.json`; `tools/brand_image_check.js` fails on anything else.
 - **Per-category glyph canon**: feed = baby bottle, sleep = crescent moon, diaper = peachy bum
   (current diaper glyph), pump = pump flask, growth = scale/ruler, medicine = pill, temp =
   thermometer, vaccine = syringe, note = note card, photo = camera, family = bear.

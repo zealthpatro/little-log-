@@ -77,7 +77,7 @@ Measured live: the note field in the symptom sheet computes to **16px** and stan
 **Where the scale actually reaches.** The app has **11** stylesheets: 4 `<style>` blocks in
 `app/index.html` and 7 injected at runtime from `app/*.js`. The scale governs one of them. In that
 one, `font-size` is written as a token **269** times and as a literal **0** times. Across the other
-ten, **373** literals survive at **35** distinct values.
+ten, **361** literals survive at **33** distinct values.
 
 | Ratchet | Today | Held by |
 |---|---|---|
@@ -558,3 +558,4 @@ Then look at the rendered app at **390px in both themes**, not at the file.
 | 2026-08-30 | Component dedupe: six identical-body pairs folded to one rule each, so class names fell 700 to 694 while the main sheet gained 6, elevation uses fell 66 to 64 and font-size token uses rose 255 to 257. Eighteen of eighteen screenshot pairs differ by 0 pixels. |
 | 2026-08-30 | `.csub` split: the treatment moved to the base class and only `margin-bottom` stayed scoped to `.stat-card`, so the class carries a rule outside a card for the first time and the vocabulary went 694 to 695, 314 to 315 in the main sheet. |
 | 2026-08-30 | Reconciled against the merged tree: 13 red assertions, all of them the doc trailing the code. Radius is 7 tokens and not 5. Elevation and motion had no entry at all. The focus ring is fixed and two-tone, so the "one open contrast defect" paragraph was describing a defect that no longer exists, which is the worse direction for a doc to be wrong in. `.chip` is 44 and not 40. The sheet arrives in 350ms, not 360. Class vocabulary recounted with CSS comments stripped, because a name mentioned only in a comment carries no rule: 702 to 700 across the sheets and 314 to 308 in the main one. Literal transition durations 56 to 37, and reduced-motion blocks 11 to 12. |
+| 2026-11-13 | The emoji bear that stood in for art at the top of five full-screen notes (44px and 52px glyphs) is the painted Cubby face as an image now, so those five font-size literals went with it: 366 to 361 outside the main sheet (the prose said 373, a count that had already drifted), 35 to 33 distinct values. The ratchet ceiling stays at 373 while other lanes are in flight; lower it to the merged count. |

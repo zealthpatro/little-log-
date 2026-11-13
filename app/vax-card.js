@@ -305,7 +305,7 @@
     var n = (typeof window.cubbyVaxCommit === 'function') ? window.cubbyVaxCommit(entries) : 0;
     var shot = st.shot;
     close();
-    if (window.toast) window.toast(n ? ('Recorded ' + n + ' dose' + (n === 1 ? '' : 's') + ' 🐻') : 'Nothing to save');
+    if (window.toast) window.toast(n ? ('Recorded ' + n + ' dose' + (n === 1 ? '' : 's')) : 'Nothing to save');
     /* The photo is discarded. It was a transcription aid, and the dates are what mattered.
        Keeping it is offered ONLY if a real implementation exists, because a card carries a name, a
        date of birth and often a hospital number, and household photos are readable by the whole

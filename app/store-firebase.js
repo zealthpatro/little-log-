@@ -1940,7 +1940,7 @@
     return new Promise(function (resolve) {
       var ask = function () {
         window.confirmSheet({
-          title: 'You’ve been invited 🐻',
+          title: 'You’ve been invited',
           lead: 'Someone has invited you to join their family on Cubby.',
           facts: f.factRows,
           mustAnswer: true,
@@ -1989,7 +1989,7 @@
       var ovd = document.createElement('div'); ovd.id = 'll-invite-mismatch';
       ovd.setAttribute('style', 'position:fixed;inset:0;z-index:3000;background:' + OV_BG + ';display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;overflow-y:auto');
       ovd.innerHTML = '<div style="max-width:360px;font-family:-apple-system,Segoe UI,Roboto,sans-serif">'
-        + '<div style="font-size:44px">🐻</div>'
+        + '<img src="/icons/logo-512.png" alt="" width="52" height="52" style="display:block;margin:0 auto;border-radius:13px">'
         + '<h2 style="font-family:Georgia,serif;color:' + OV_INK + ';margin:12px 0 8px;font-size:22px">' + (isLink ? 'This invite link no longer works' : 'This invite is no longer open') + '</h2>'
         + '<div style="color:' + OV_SOFT + ';font-size:15px;line-height:1.55">' + (isLink
             ? 'Invite links last a day and work once, so that a link passed on by accident cannot let anyone in.'
@@ -2022,7 +2022,7 @@
     var ov = document.createElement('div'); ov.id = 'll-invite-mismatch';
     ov.setAttribute('style', 'position:fixed;inset:0;z-index:3000;background:' + OV_BG + ';display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;overflow-y:auto');
     ov.innerHTML = '<div style="max-width:360px;font-family:-apple-system,Segoe UI,Roboto,sans-serif">'
-      + '<div style="font-size:44px">🐻</div>'
+      + '<img src="/icons/logo-512.png" alt="" width="52" height="52" style="display:block;margin:0 auto;border-radius:13px">'
       + '<h2 style="font-family:Georgia,serif;color:' + OV_INK + ';margin:12px 0 8px;font-size:22px">We could not find your invite</h2>'
       + '<div style="color:' + OV_SOFT + ';font-size:15px;line-height:1.55">You signed in as <b>' + esc(email) + '</b>, and there is no invite waiting for that address.</div>'
       + '<div style="color:' + OV_SOFT + ';font-size:15px;line-height:1.55;margin-top:12px">Invites are matched by email. If you signed in with Apple and chose to hide your address, Cubby sees the hidden one instead of yours.</div>'
@@ -2063,7 +2063,7 @@
     var ov = document.createElement('div'); ov.id = 'll-access-lost';
     ov.setAttribute('style', 'position:fixed;inset:0;z-index:3000;background:' + OV_BG + ';display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;');
     ov.innerHTML = '<div style="max-width:340px;font-family:-apple-system,Segoe UI,Roboto,sans-serif">'
-      + '<div style="font-size:44px">🐻</div>'
+      + '<img src="/icons/logo-512.png" alt="" width="52" height="52" style="display:block;margin:0 auto;border-radius:13px">'
       + '<h2 style="font-family:Georgia,serif;color:' + OV_INK + ';margin:12px 0 8px;font-size:22px">You’re no longer in this family</h2>'
       + '<div style="color:' + OV_SOFT + ';font-size:15px;line-height:1.55">Your access to this Cubby was removed, or the family was closed. Everything you logged stays part of their story.</div>'
       + '<button id="ll-al-btn" style="margin-top:22px;border:none;border-radius:16px;padding:15px 24px;background:#C97FA0;color:#1A1614;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Back to sign in</button></div>';
@@ -2089,7 +2089,7 @@
       + (f.senderProven ? '' : ' This invite doesn’t say who sent it, so only join if you were expecting one.');
     if (window.confirmSheet.drawsFacts !== true && f.factRows.length) body = factsAsText(f.factRows) + ' ' + body;
     window.confirmSheet({
-      title: 'You’ve been invited 🐻',
+      title: 'You’ve been invited',
       facts: f.factRows,
       body: body,
       confirmLabel: 'Join the family',
@@ -2108,14 +2108,14 @@
           try { if (window.toast) window.toast('That invite link no longer works. Ask them for a fresh one.'); } catch (e2) {}
           return;
         }
-        try { if (window.toast) window.toast('Joined the family 🐻'); } catch (e2) {}
+        try { if (window.toast) window.toast('Joined the family'); } catch (e2) {}
         setTimeout(function () { try { location.reload(); } catch (e2) {} }, 500);
         return;
       }
       await joinByEmailInvite(user, inv);
       writeOwnMemberEmail(inv.householdId); // PRIV-2: email goes to the gated doc, not memberInfo
       await db.collection('users').doc(user.uid).set({ householdId: inv.householdId }, { merge: true });
-      try { if (window.toast) window.toast('Joined the family 🐻'); } catch (e) {}
+      try { if (window.toast) window.toast('Joined the family'); } catch (e) {}
       setTimeout(function () { try { location.reload(); } catch (e) {} }, 500);
     } catch (e) {
       console.warn('join invite', e);
@@ -3213,7 +3213,7 @@
     var pendBlock = pendRows ? ('<div class="ll-auth-msg" style="text-align:left;margin:6px 0 2px;font-weight:800">Invited, not joined yet</div><div class="ll-mems">' + pendRows + '</div>') : '';
     var seenByAll = '<div class="ll-auth-msg" style="text-align:left;margin:-2px 0 12px">When you invite people, everyone in your circle can see each other\'s name here, so you know who is who. Email addresses stay between each person and the circle owner. Only you can change your own.</div>';
     var signOutBtn = '<button id="llSignOut" class="ll-modal-btn ll-ghost">Sign out</button>';
-    var versionLine = '<div class="ll-auth-msg" style="margin-top:10px">Cubby v' + (window.CUBBY_VERSION || '') + ' · made with families like you 🐻</div>';
+    var versionLine = '<div class="ll-auth-msg" style="margin-top:10px">Cubby v' + (window.CUBBY_VERSION || '') + ' · made with families like you</div>';
 
     if (leadInvite) {
       /* Invite door. The link and its button first; then whoever the last link went to, because
@@ -3272,8 +3272,8 @@
   function reshareLink(token, btn) {
     if (!token) return;
     var url = location.origin + '/app/?join=' + token;
-    var text = 'Join me on Cubby 🐻\n\n' + url + '\n\nIt works once and only for a day, so it is just for you.';
-    if (navigator.share) { navigator.share({ title: 'Join me on Cubby 🐻', text: text }).catch(function () {}); return; }
+    var text = 'Join me on Cubby\n\n' + url + '\n\nIt works once and only for a day, so it is just for you.';
+    if (navigator.share) { navigator.share({ title: 'Join me on Cubby', text: text }).catch(function () {}); return; }
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(function () {
         if (btn) { var t = btn.textContent; btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = t; }, 1500); }
@@ -3428,7 +3428,7 @@
     // not theirs.
     var bullets = isJoin ? ''
       : '<br><br>• Your log stays <b>private</b> to your family, always.<br>• An idea, or something to make better? We read every note: <b>Settings → Family &amp; sharing → Send feedback</b>.';
-    modal(isJoin ? 'You\'re in 🐻' : 'Welcome to Cubby 🐻',
+    modal(isJoin ? 'You\'re in' : 'Welcome to Cubby',
       '<div class="ll-auth-msg" style="margin:0 0 10px;text-align:left;line-height:1.55">' + intro + bullets + '</div>'
       + '<div class="ll-auth-msg" style="margin:0 0 6px">How should your family see you?</div>'
       + '<div class="ll-mem-av" id="llFrBear" style="width:84px;height:84px;margin:10px auto 4px;cursor:pointer">' + bear + '</div>'
@@ -3640,7 +3640,7 @@
     var text = inviteLinkText(made);
     var done = function () { if (btn) { btn.textContent = 'Copied!'; setTimeout(function () { btn.textContent = 'Make another'; }, 1600); } };
     if (navigator.share) {
-      navigator.share({ title: 'Join me on Cubby 🐻', text: text }).then(function () {
+      navigator.share({ title: 'Join me on Cubby', text: text }).then(function () {
         if (btn) { btn.textContent = 'Shared!'; setTimeout(function () { btn.textContent = 'Make another'; }, 1600); }
       }).catch(function () { if (btn) btn.textContent = 'Make another'; });
       return;
@@ -3676,7 +3676,7 @@
   function inviteLinkText(made) {
     var hasBaby = (typeof state !== 'undefined' && state.babies && state.babies.length);
     var who = hasBaby ? 'our baby\'s day' : 'our journey';
-    return 'Join me on Cubby 🐻\n\n' + made.url + '\n\n'
+    return 'Join me on Cubby\n\n' + made.url + '\n\n'
       + 'It opens Cubby and puts you straight into our circle, so you can see ' + who + ' as it happens.\n'
       + 'The link works once and only for a day, so it is just for you.';
   }
@@ -3698,7 +3698,7 @@
     // Native share sheet first: in the wrapper this is the idiom, and mailto: in a WKWebView is the
     // worst option available. Falls back to the clipboard everywhere it is missing.
     if (navigator.share) {
-      navigator.share({ title: 'Join me on Cubby 🐻', text: text }).then(function () {
+      navigator.share({ title: 'Join me on Cubby', text: text }).then(function () {
         if (btn) { btn.textContent = 'Shared!'; setTimeout(function () { btn.textContent = 'Copy'; }, 1500); }
       }).catch(function () {});
       return;
@@ -3721,7 +3721,7 @@
       // mailto: copy carried the "sign in with this address" line that makes the invite work at all.
       setLastInvite(email);
       var bodyTxt = inviteText(email);
-      var subject = 'Join me on Cubby 🐻';
+      var subject = 'Join me on Cubby';
       var mailto = 'mailto:' + encodeURIComponent(email) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(bodyTxt);
       // We no longer coach people out of Apple's Hide My Email here. That advice existed to paper
       // over the email-matching design, and telling a parent to give up a privacy default is not
@@ -3785,7 +3785,7 @@
   /* ---------- feedback ---------- */
   function openFeedback() {
     modal('Send feedback',
-      '<div class="ll-auth-msg" style="margin:0 0 8px">Bugs, ideas, anything, it goes straight to the Cubby team. Thank you for testing! 🐻</div>'
+      '<div class="ll-auth-msg" style="margin:0 0 8px">Bugs, ideas, anything, it goes straight to the Cubby team. Thank you for testing!</div>'
       + '<textarea id="llFbText" class="ll-fb" placeholder="What happened, or what would make Cubby better?"></textarea>'
       + '<button id="llFbSend" class="ll-modal-btn">Send</button>'
       + '<div id="llFbMsg" class="ll-auth-msg"></div>'
@@ -3807,7 +3807,7 @@
           // testers arrived in arbitrary order. `at` is kept so rows already written stay readable.
           at: window.LL.serverTimestamp(), createdAt: window.LL.serverTimestamp()
         });
-        modal('Thank you 🐻', '<div class="ll-auth-msg" style="margin:0 0 12px">Your feedback was sent, we read every one.</div><button id="llFbDone" class="ll-modal-btn">Close</button>');
+        modal('Thank you', '<div class="ll-auth-msg" style="margin:0 0 12px">Your feedback was sent, we read every one.</div><button id="llFbDone" class="ll-modal-btn">Close</button>');
         document.getElementById('llFbDone').onclick = closeModal;
       } catch (e) { msg.textContent = 'Could not send: ' + ((e && e.message) || e); btn.disabled = false; btn.textContent = 'Send'; }
     };

@@ -7,6 +7,10 @@ import os
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from card_logo import paste_logo  # noqa: E402  the painted master, never a drawn bear (2026-11-13)
+
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "icons" / "screenshots"
 OUT.mkdir(parents=True, exist_ok=True)
@@ -38,7 +42,7 @@ SCREENS = [
          rows=[("💉", "6-in-1 (1st dose)", "due in 4 days"), ("💉", "Rotavirus (1st)", "due in 4 days"), ("✅", "Hepatitis B", "done")]),
     dict(file="circle.png", head="Share with your whole circle",
          sub="Partner, grandparents and nanny, always in sync.",
-         rows=[("🐻", "Mama Bear", "logged a feed"), ("🧸", "Papa Bear", "logged a nap"), ("👵", "Nana Bear", "added a photo")]),
+         rows=[("👩", "Mama Bear", "logged a feed"), ("👨", "Papa Bear", "logged a nap"), ("👵", "Nana Bear", "added a photo")]),
 ]
 
 
@@ -54,19 +58,6 @@ def grad(draw, top, bot):
         t = y / (H - 1)
         draw.line([(0, y), (W, y)], fill=tuple(int(top[i] + (bot[i] - top[i]) * t) for i in range(3)))
 
-
-def bear(img, cx, cy, r):
-    d = ImageDraw.Draw(img)
-    def circ(x, y, rr, fill):
-        d.ellipse([x - rr, y - rr, x + rr, y + rr], fill=fill)
-    for ex in (cx - r * 0.62, cx + r * 0.62):
-        circ(ex, cy - r * 0.72, r * 0.34, BEAR_BG)
-        circ(ex, cy - r * 0.72, r * 0.20, BEAR_IN)
-    circ(cx, cy, r, BEAR_BG)
-    circ(cx, cy + r * 0.22, r * 0.44, BEAR_IN)
-    for ex in (cx - r * 0.26, cx + r * 0.26):
-        circ(ex, cy - r * 0.12, r * 0.10, BEAR_DK)
-    circ(cx, cy + r * 0.10, r * 0.08, BEAR_DK)
 
 
 def wrap(draw, text, ft, max_w):
@@ -98,7 +89,7 @@ def make(spec):
     d = ImageDraw.Draw(img)
 
     # brand row
-    bear(img, 96, 150, 48)
+    paste_logo(img, 96, 150, 100)
     d.text((170, 116), "Cubby", font=font(SANS_B, 60), fill=INK)
 
     # headline
