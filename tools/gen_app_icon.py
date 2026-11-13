@@ -36,10 +36,7 @@ honey = brand.honey_of(master)
 files = {k: v for k, v in brand.native_set(master, honey, brand.face_radius(master, honey)).items() if k.startswith('ios/')}
 if not a.out and not os.path.isdir(os.path.join(brand.ROOT, 'ios')):
     sys.exit('No ios/ here: run `npx cap add ios` first, or pass --out DIR')
-old = os.path.join(a.out or brand.ROOT, 'ios', 'App', 'App', 'Assets.xcassets', 'AppIcon.appiconset', 'AppIcon-512@2x.png')
+# The 1024 App Store icon is written as AppIcon-512@2x.png, the name `npx cap add ios` and the old script
+# used, so this overwrites it in place: no orphan file, no actool "unassigned child" warning, nothing deleted.
 brand.write(files, a.out or brand.ROOT)
-if os.path.exists(old):
-    # The single-size file the old script wrote. The new Contents.json no longer lists it, so Xcode
-    # ignores it; it is left for the person running this to remove, never deleted by a script.
-    print('  note: %s is no longer referenced by Contents.json' % os.path.relpath(old, a.out or brand.ROOT))
 print('  mode=RGB everywhere (Apple requires no alpha)')

@@ -17,6 +17,7 @@
  *      script, stylesheet or SVG of the site (*.md, tools/, test/ and docs/ are not pages);
  *   2. every image a served file points at (src, srcset, href, og:image, url(), manifest and JSON
  *      strings) is a file in the approved set, and every inlined data: image is one the registry names;
+ *      no page or script draws a bear in inline SVG (five or more filled circles and no text);
  *   3. the approved set is intact: each file exists with the bytes it was approved with;
  *   4. the flat face's old bytes (hashed from 866851ac) appear nowhere in the tree, under any name;
  *   5. the web icons are exactly what the master gives (tools/gen_brand_icons.py --check) and no card
@@ -38,9 +39,9 @@
  *   node tools/brand_image_check.js http://127.0.0.1:PORT --self-test  plant a flat-face img, a 🐻 in a
  *        visible string and an unapproved file into the page, and an emoji bear, a flat-face copy and an
  *        unapproved reference into a scratch copy of the static inputs: each must be caught
- *   node tools/brand_image_check.js http://... --shots DIR             also save a 390px screenshot per screen
+ *   node tools/brand_image_check.js http://... --shots=DIR             also save a screenshot per screen (--width=320 to look narrower)
  *   node tools/brand_image_check.js --hash FILE...                     the registry line for a new picture
- *   --root DIR grades another tree (used to show the gate red on the pristine base).
+ *   --root=DIR grades another tree (used to show the gate red on the pristine base).
  */
 const fs = require('fs');
 const path = require('path');
@@ -56,6 +57,7 @@ const REG_PATH = opt('--registry') || path.join(__dirname, 'brand-images.json');
 const SELF = flag('--self-test');
 const STATIC_ONLY = flag('--static-only') || !BASE;
 const SHOTS = opt('--shots');
+const WIDTH = +(opt('--width') || 390);   // 390 is the gate; --width=320 is for looking at the narrowest phone
 
 let pass = 0, fail = 0;
 const ok = (n, c, x) => {
@@ -142,7 +144,7 @@ function resolveRef(file, raw, root) {
 
 function staticScan(root) {
   const rel = (p) => path.relative(root, p).split(path.sep).join('/');
-  const R = { bears: [], refs: [], external: [], missing: [], unapproved: [], pending: new Set(), dataBad: [], retiredFiles: [], scanned: 0 };
+  const R = { bears: [], refs: [], external: [], missing: [], unapproved: [], pending: new Set(), dataBad: [], drawnSvg: [], retiredFiles: [], scanned: 0 };
   const served = walk(root, [], SKIP_DIRS).filter((p) => TEXT_EXT.has(path.extname(p).toLowerCase()) && !/\.md$/i.test(p));
   // workers/ and worker.js are in by construction (not in SKIP_DIRS); vendor bundles are third-party code, not copy.
   const files = served.filter((p) => !/\/app\/vendor\//.test(p) && !/\/tools\//.test(p));
@@ -171,6 +173,20 @@ function staticScan(root) {
       }
       if (v === 'unapproved') R.unapproved.push(r + ' -> ' + p);
       if (v === 'pending') R.pending.add(p);
+    }
+    // A bear drawn in markup: an inline <svg> in a page or a script with five or more filled circles or
+    // ellipses and no text (the social quote template drew one with seven; cubbyBear() has fourteen).
+    // cubbyBear() itself stays in app/cubby-extras.js as dead code nothing calls, because the runtime
+    // self-test draws it to prove the walk catches it; the runtime half proves no screen does.
+    if (/\.(html?|m?js)$/i.test(f)) {
+      const SVG_RE = /<svg\b[\s\S]*?<\/svg>/gi;
+      while ((m = SVG_RE.exec(s))) {
+        const filled = (m[0].match(/<(circle|ellipse)\b(?![^>]*fill=["']none)[^>]*>/gi) || []).length;
+        if (filled < 5 || /<text\b/i.test(m[0])) continue;
+        const fn = s.lastIndexOf('function cubbyBear(', m.index);
+        if (r === 'app/cubby-extras.js' && fn >= 0 && m.index - fn < 1500) continue;
+        R.drawnSvg.push(r + ':' + (s.slice(0, m.index).split('\n').length) + ' -> an inline SVG drawing (' + filled + ' filled circles)');
+      }
     }
     DATA_RE.lastIndex = 0;
     while ((m = DATA_RE.exec(s))) {
@@ -243,6 +259,7 @@ function runStatic(root, label) {
   ok('and every one of them exists', R.missing.length === 0, [...new Set(R.missing)].slice(0, 8).join('\n         '));
   ok('no image is loaded from another host', R.external.length === 0, [...new Set(R.external)].slice(0, 6).join('\n         '));
   ok('every inlined data: image is one the registry names, and none is a drawing or the flat face', R.dataBad.length === 0, R.dataBad.slice(0, 6).join('\n         '));
+  ok('no page or script draws a picture in inline SVG circles (a hand-coded bear)', R.drawnSvg.length === 0, R.drawnSvg.slice(0, 6).join('\n         '));
   ok('the flat face\'s old bytes appear nowhere in the tree, under any name', R.retiredFiles.length === 0, R.retiredFiles.join(', '));
   const integ = registryIntegrity(root);
   ok('the approved set is intact: every file exists with the bytes it was approved with', integ.length === 0, integ.slice(0, 8).join('\n         '));
@@ -254,7 +271,7 @@ function runStatic(root, label) {
   return R;
 }
 
-/* ---------------- self-test of the static half: a scratch copy with five plants ---------------- */
+/* ---------------- self-test of the static half: a scratch copy with six plants ---------------- */
 function staticSelfTest() {
   console.log('\nself-test (static): plant each defect in a scratch copy and watch the same checks catch it');
   const os = require('os');
@@ -266,6 +283,9 @@ function staticSelfTest() {
   fs.appendFileSync(path.join(tmp, 'worker.js'), "\n// planted\nconst planted = '<img src=\"https://little-cubby.com/icons/planted-unapproved.png\">';\n");
   // a picture from another host, and an inlined picture nobody approved.
   fs.appendFileSync(path.join(tmp, 'index.html'), '\n<img src="https://example.invalid/planted.png"><img src="data:image/png;base64,' + tinyPng().toString('base64') + '">\n');
+  // and a bear drawn in inline SVG circles, the way social/card-quote.html drew one until 2026-11-13.
+  fs.appendFileSync(path.join(tmp, 'index.html'), '\n<svg width="60" height="60" viewBox="0 0 60 60"><circle cx="22" cy="22" r="8" fill="#C9A57E"/><circle cx="38" cy="22" r="8" fill="#C9A57E"/>'
+    + '<circle cx="30" cy="33" r="16" fill="#C9A57E"/><ellipse cx="30" cy="38" rx="8" ry="6" fill="#F1E4D0"/><circle cx="24" cy="30" r="2.6" fill="#3E3228"/><circle cx="36" cy="30" r="2.6" fill="#3E3228"/></svg>\n');
   fs.writeFileSync(path.join(tmp, 'icons-planted.png'), retiredBytes());
   fs.mkdirSync(path.join(tmp, 'icons'), { recursive: true });
   fs.writeFileSync(path.join(tmp, 'icons/planted-unapproved.png'), tinyPng());
@@ -275,8 +295,9 @@ function staticSelfTest() {
   ok('catches the flat face under a new name', R.retiredFiles.includes('icons-planted.png'), R.retiredFiles);
   ok('catches the planted picture from another host', R.external.some((e) => /example\.invalid\/planted\.png/.test(e)), R.external);
   ok('catches the planted inlined picture nobody approved', R.dataBad.some((d) => /^index\.html -> an inlined png/.test(d)), R.dataBad);
+  ok('catches the planted bear drawn in inline SVG', R.drawnSvg.some((d) => /^index\.html:\d+ -> an inline SVG drawing \(6 filled/.test(d)), R.drawnSvg);
   const clean = staticScan(path.join(ROOT));
-  ok('and the real tree has none of the five', clean.bears.length === 0 && clean.unapproved.length === 0 && clean.retiredFiles.length === 0 && clean.external.length === 0 && clean.dataBad.length === 0);
+  ok('and the real tree has none of the six', clean.bears.length === 0 && clean.unapproved.length === 0 && clean.retiredFiles.length === 0 && clean.external.length === 0 && clean.dataBad.length === 0 && clean.drawnSvg.length === 0);
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
@@ -290,7 +311,8 @@ function retiredBytes() {
   }
   const f = path.join(ROOT, 'icons/logo-512.png');
   if (fs.existsSync(f) && RETIRED.has(sha(fs.readFileSync(f)))) return fs.readFileSync(f);
-  throw new Error('cannot find the flat face\'s bytes to plant (no git object, no old file)');
+  throw new Error('cannot find the flat face\'s bytes to plant: git object ' + blob + ' is not in this clone and the tree no longer has the old file'
+    + ' (a shallow clone lacks it: git fetch --unshallow). The self-test refuses to pass without proving the real bytes are caught.');
 }
 function tinyPng() {
   const zlib = require('zlib');
@@ -306,7 +328,11 @@ function tinyPng() {
 const COLLECT = () => {
   const vis = (el) => { const r = el.getBoundingClientRect(); if (r.width < 1 || r.height < 1) return false; const cs = getComputedStyle(el); return cs.visibility !== 'hidden' && cs.display !== 'none' && +cs.opacity !== 0; };
   const urls = [];
-  document.querySelectorAll('img').forEach((i) => { if (vis(i) && (i.currentSrc || i.src)) urls.push({ url: i.currentSrc || i.src, how: 'img' + (i.className ? '.' + String(i.className).split(' ')[0] : '') }); });
+  // Anything inside the self-test's planted box is tagged, so the clean grading sets aside exactly the
+  // plants and nothing else (an earlier version set aside every 'Good evening' and every drawing on the
+  // access-lost screen, which would have hidden a real greeting bear on the first-run card).
+  const planted = (el) => !!(el.closest && el.closest('#brand-plant'));
+  document.querySelectorAll('img').forEach((i) => { if (vis(i) && (i.currentSrc || i.src)) urls.push({ url: i.currentSrc || i.src, how: 'img' + (i.className ? '.' + String(i.className).split(' ')[0] : ''), planted: planted(i) }); });
   const bgRe = /url\(["']?([^"')]+)["']?\)/g;
   document.querySelectorAll('*').forEach((el) => {
     ['', '::before', '::after'].forEach((pseudo) => {
@@ -314,7 +340,7 @@ const COLLECT = () => {
       if (!b || b === 'none' || b.indexOf('url(') < 0) return;
       if (!pseudo && !vis(el)) return;
       let m; bgRe.lastIndex = 0;
-      while ((m = bgRe.exec(b))) urls.push({ url: m[1], how: 'background' + pseudo + ' on ' + el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') });
+      while ((m = bgRe.exec(b))) urls.push({ url: m[1], how: 'background' + pseudo + ' on ' + el.tagName.toLowerCase() + (el.id ? '#' + el.id : ''), planted: planted(el) });
     });
   });
   const svgs = [];
@@ -324,7 +350,7 @@ const COLLECT = () => {
     s.querySelectorAll('circle,ellipse').forEach((c) => { const f = (c.getAttribute('fill') || getComputedStyle(c).fill || '').toLowerCase(); if (f && f !== 'none' && f !== 'transparent' && !/rgba\(.*,\s*0\)/.test(f)) filled++; });
     const shapes = s.querySelectorAll('path,circle,ellipse,rect,polygon,polyline,line').length;
     const r = s.getBoundingClientRect();
-    svgs.push({ filled, shapes, text: s.querySelectorAll('text').length, w: Math.round(r.width), h: Math.round(r.height), where: (s.closest('[id]') || {}).id || s.parentElement.className || '' });
+    svgs.push({ filled, shapes, text: s.querySelectorAll('text').length, w: Math.round(r.width), h: Math.round(r.height), where: (s.closest('[id]') || {}).id || s.parentElement.className || '', planted: planted(s) });
   });
   let pseudoBears = [];
   document.querySelectorAll('*').forEach((el) => ['::before', '::after'].forEach((p) => { const c = getComputedStyle(el, p).content; if (c && /\u{1F43B}|\u{1F9F8}|\u{1F43C}|\u{1F428}/u.test(c)) pseudoBears.push(el.tagName + p); }));
@@ -350,12 +376,12 @@ async function runtime(base) {
   const PROBE = '\n  window.__brandProbe = { accessLost: showAccessLost, inviteMismatch: showInviteMismatch, pendingInvite: maybePromptPendingInvite, showSignIn: showSignIn, showStatus: showStatus, hideOverlay: hideOverlay };\n';
   const PLANT_FLAT = '/__brand_selftest/flat-face.png', PLANT_OTHER = '/__brand_selftest/unapproved.png';
 
-  console.log('\nruntime: ' + base + ' at 390px' + (SELF ? ', with plants' : ''));
+  console.log('\nruntime: ' + base + ' at ' + WIDTH + 'px' + (SELF ? ', with plants' : ''));
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'], downloadBehavior: dl.downloadBehavior() });
   const ctx = await browser.createBrowserContext({ downloadBehavior: dl.downloadBehavior() });
   const page = await ctx.newPage();
   await page.setBypassServiceWorker(true);
-  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: SHOTS ? 2 : 1 });
+  await page.setViewport({ width: WIDTH, height: 844, deviceScaleFactor: SHOTS ? 2 : 1 });
   // Light, whatever the machine's own appearance is: headless Chrome follows the Mac into Night.
   await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
   await page.evaluateOnNewDocument((shift) => {
@@ -426,7 +452,7 @@ async function runtime(base) {
       const d = document.createElement('div');
       d.id = 'brand-plant';
       d.setAttribute('style', 'position:fixed;left:8px;top:8px;z-index:99999;background:#fff;padding:4px');
-      d.innerHTML = '<img src="' + a + '" width="40" height="40"><img src="' + b + '" width="40" height="40"><span>Good evening \u{1F43B}</span>'
+      d.innerHTML = '<img src="' + a + '" width="40" height="40"><img src="' + b + '" width="40" height="40"><span>BRAND-SELFTEST-PLANT Good evening \u{1F43B}</span>'
         + '<img src="https://example.invalid/planted.png" width="40" height="40">'
         // and the hand-coded bear the avatars used to fall back to, drawn by the app's own cubbyBear()
         + (typeof window.cubbyBear === 'function' ? '<span style="display:inline-block;width:40px;height:40px">' + window.cubbyBear({ size: 40 }) + '</span>' : '');
@@ -480,17 +506,18 @@ async function runtime(base) {
   for (const s of screens) {
     if (s.error) { errors.push(s.name + ': ' + s.error); continue; }
     const imgs = [];
-    for (const { url, how } of s.urls) {
+    for (const { url, how, planted } of s.urls) {
       if (/^(data|blob):/.test(url)) { imgs.push({ file: url.slice(0, 30) + '…', how, verdict: 'runtime picture (data/blob)' }); continue; }
       const p = toPath(url);
       const h = loaded.get(new URL(url, base).href);
-      if (h && RETIRED.has(h)) flat.push(s.name + ': ' + url);
-      if (p === null) { unapproved.push(s.name + ': ' + url + ' (another host)'); imgs.push({ file: url, how, verdict: 'unapproved' }); continue; }
+      if (h && RETIRED.has(h)) flat.push(s.name + ': ' + url + (planted ? ' [plant]' : ''));
+      const tag = planted ? ' [plant]' : '';
+      if (p === null) { unapproved.push(s.name + ': ' + url + ' (another host)' + tag); imgs.push({ file: url, how, verdict: 'unapproved' }); continue; }
       const v = verdict(p);
-      if (v === 'unapproved') unapproved.push(s.name + ': ' + p + ' (' + how + ')');
+      if (v === 'unapproved') unapproved.push(s.name + ': ' + p + ' (' + how + ')' + tag);
       imgs.push({ file: p, how, verdict: v });
     }
-    s.svgs.filter((g) => g.filled >= 5 && g.text === 0).forEach((g) => drawn.push(s.name + ': an inline SVG drawing with ' + g.filled + ' filled circles (' + g.w + 'x' + g.h + ' in ' + g.where + ')'));
+    s.svgs.filter((g) => g.filled >= 5 && g.text === 0).forEach((g) => drawn.push(s.name + ': an inline SVG drawing with ' + g.filled + ' filled circles (' + g.w + 'x' + g.h + ' in ' + g.where + ')' + (g.planted ? ' [plant]' : '')));
     s.bears.forEach((b) => bears.push(s.name + ': ' + b));
     report.push({ screen: s.name, images: imgs, svgs: s.svgs.length, bears: s.bears });
   }
@@ -533,17 +560,18 @@ function gradeRuntime(R, label) {
       console.log('\nself-test (runtime): the walk ran with a flat-face img, an unapproved file and a 🐻 planted on the access-lost overlay');
       ok('catches the planted flat face', R.flat.some((f) => /access lost: .*flat-face\.png/.test(f)), R.flat);
       ok('catches the planted unapproved file', R.unapproved.some((u) => /access lost: __brand_selftest\/unapproved\.png/.test(u)), R.unapproved);
-      ok('catches the planted 🐻 in visible text', R.bears.some((b) => /access lost: .*Good evening/.test(b)), R.bears);
-      ok('catches the planted hand-coded SVG bear (the old cubbyBear())', R.drawn.some((d) => /^access lost: an inline SVG drawing/.test(d)), R.drawn);
+      ok('catches the planted 🐻 in visible text', R.bears.some((b) => /access lost: .*BRAND-SELFTEST-PLANT/.test(b)), R.bears);
+      ok('catches the planted hand-coded SVG bear (the old cubbyBear())', R.drawn.some((d) => /^access lost: an inline SVG drawing.*\[plant\]$/.test(d)), R.drawn);
       ok('catches the planted picture from another host (refused, never fetched)', R.blocked.some((u) => /example\.invalid\/planted\.png/.test(u)), R.blocked);
+      // Set aside the plants and only the plants: each is tagged where it was collected.
+      const notPlant = (x) => !/\[plant\]$/.test(x);
       const clean = Object.assign({}, R, {
-        unapproved: R.unapproved.filter((u) => u.indexOf('__brand_selftest') < 0),
-        flat: R.flat.filter((u) => u.indexOf('__brand_selftest') < 0),
-        bears: R.bears.filter((b) => !/Good evening/.test(b)),
-        drawn: R.drawn.filter((d) => !/^access lost: /.test(d)),
+        unapproved: R.unapproved.filter(notPlant).filter((u) => u.indexOf('__brand_selftest') < 0),
+        flat: R.flat.filter(notPlant).filter((u) => u.indexOf('__brand_selftest') < 0),
+        bears: R.bears.filter((b) => !/BRAND-SELFTEST-PLANT/.test(b)),
+        drawn: R.drawn.filter(notPlant),
         blocked: R.blocked.filter((u) => !/example\.invalid\/planted/.test(u)),
       });
-      clean.unapproved = clean.unapproved.filter((u) => !/example\.invalid/.test(u));
       gradeRuntime(clean, 'runtime: every screen, plants set aside');
     }
   }

@@ -59,7 +59,7 @@ npx cap add android
 npx cap sync
 gem install --user-install xcodeproj # once
 ruby tools/cap_ios_configure.rb      # plist as a resource + Sign in with Apple entitlement
-python3 tools/gen_app_icon.py        # the real bear icon — cap ships a placeholder (§4)
+python3 tools/gen_app_icon.py        # the painted icon, every size — cap ships a placeholder (§4)
 ```
 
 ### 3b. The Facebook SDK trap (do not skip)
@@ -170,6 +170,15 @@ Verified by a 27-assertion smoke that boots `/app/` with and without a faked Cap
   button) instead of ejecting to Safari. Off-site links still get the system browser.
 
 ## 4. Icons + splash 🖥️
+**2026-11-13: both are the painted cub now, and what follows is the history.** The founder retired the flat
+Pillow face for the painted master `icons/icon-master-1024.png` (the hero cub's face on honey, gpt-image-2,
+pinned by sha256 in `tools/brand-images.json`). `tools/gen_app_icon.py` (still called by `cap_ios_build.sh`)
+writes every AppIcon size from it with no alpha; the 1024 App Store icon keeps the name `AppIcon-512@2x.png`,
+so a regen overwrites the old one and actool reports nothing (checked with `xcrun actool`, 0 warnings).
+`tools/gen_splash.py` cuts the master's face out and centres it on `#F7F2E8`. Android launcher icons:
+`python3 tools/gen_brand_icons.py --native` (adaptive foreground inside the 66dp safe circle, on the master's
+own honey). Nothing below is reconstructed or flood-filled any more.
+
 **App icon: DONE (build 3).** `npx cap add ios` ships a **placeholder** (Capacitor's blue X) — builds 1 and 2
 carried it, which would fail review and looks broken to testers. `python3 tools/gen_app_icon.py` builds the
 required 1024×1024 from `icons/logo-512.png`. It is **not** a plain resize, because Apple demands the icon be

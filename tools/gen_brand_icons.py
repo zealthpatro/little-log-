@@ -68,7 +68,7 @@ IOS_SET = [  # (idiom, size in points, scale)
     ('iphone', 20, 2), ('iphone', 20, 3), ('iphone', 29, 2), ('iphone', 29, 3),
     ('iphone', 40, 2), ('iphone', 40, 3), ('iphone', 60, 2), ('iphone', 60, 3),
     ('ipad', 20, 1), ('ipad', 20, 2), ('ipad', 29, 1), ('ipad', 29, 2),
-    ('ipad', 40, 1), ('ipad', 40, 2), ('ipad', 76, 1), ('ipad', 76, 2), ('ipad', 83.5, 2),
+    ('ipad', 40, 1), ('ipad', 40, 2), ('ipad', 76, 2), ('ipad', 83.5, 2),   # 76@1x: iOS 9 and older only (actool says so)
     ('ios-marketing', 1024, 1),
 ]
 ANDROID_DPI = [('mdpi', 1), ('hdpi', 1.5), ('xhdpi', 2), ('xxhdpi', 3), ('xxxhdpi', 4)]
@@ -200,7 +200,10 @@ def native_set(master, honey, face_r):
     images = []
     for idiom, pt, sc in IOS_SET:
         px = int(round(pt * sc))
-        name = 'AppIcon-%s-%gx%g@%dx.png' % (idiom, pt, pt, sc) if idiom != 'ios-marketing' else 'AppIcon-1024.png'
+        # The 1024 keeps the name Capacitor's template gave it (AppIcon-512@2x.png), so a regen OVERWRITES the
+        # old icon instead of leaving it beside the new set as an unassigned child (an actool warning), and
+        # nothing ever has to be deleted.
+        name = 'AppIcon-%s-%gx%g@%dx.png' % (idiom, pt, pt, sc) if idiom != 'ios-marketing' else 'AppIcon-512@2x.png'
         img = resize(master, px).convert('RGB')          # Apple rejects an alpha channel outright
         files[ios_dir + name] = png_bytes(img)
         images.append({'filename': name, 'idiom': idiom, 'scale': '%dx' % sc, 'size': '%gx%g' % (pt, pt)})
