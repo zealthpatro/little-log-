@@ -41,6 +41,8 @@
  *        unapproved reference into a scratch copy of the static inputs: each must be caught
  *   node tools/brand_image_check.js http://... --shots=DIR             also save a screenshot per screen (--width=320 to look narrower)
  *   node tools/brand_image_check.js --hash FILE...                     the registry line for a new picture
+ *   node tools/brand_image_check.js --approve-cards                    re-approve the article card families
+ *        after a new article (refuses while any card carries the drawn bear)
  *   --root=DIR grades another tree (used to show the gate red on the pristine base).
  */
 const fs = require('fs');
@@ -216,6 +218,17 @@ function staticScan(root) {
   return R;
 }
 
+// A family approved by glob (660 share cards, 571 heroes) is pinned by its file count and one digest over
+// every file's path and sha256, so a picture slipped in under that name, or a card changed, is caught.
+function globDigest(root, glob) {
+  const re = globRe(glob);
+  const top = glob.split('/')[0];
+  const list = walk(path.join(root, top), [], new Set(['node_modules'])).map((f) => path.relative(root, f).split(path.sep).join('/')).filter((p) => re.test(p)).sort();
+  const h = crypto.createHash('sha256');
+  list.forEach((p) => h.update(p + ' ' + sha(fs.readFileSync(path.join(root, p))) + '\n'));
+  return { list, digest: h.digest('hex') };
+}
+
 function registryIntegrity(root) {
   const bad = [];
   const master = REG.master || {};
@@ -229,14 +242,11 @@ function registryIntegrity(root) {
       if (sha(fs.readFileSync(f)) !== h) bad.push(fam.name + ': ' + p + ' is not the approved file (sha256 changed)');
     }
     if (fam.glob) {
-      const re = globRe(fam.glob);
-      const top = fam.glob.split('/')[0];
-      const list = walk(path.join(root, top), [], new Set(['node_modules'])).map((f) => path.relative(root, f).split(path.sep).join('/')).filter((p) => re.test(p)).sort();
-      const h = crypto.createHash('sha256');
-      list.forEach((p) => h.update(p + ' ' + sha(fs.readFileSync(path.join(root, p))) + '\n'));
-      const d = h.digest('hex');
-      if (list.length !== fam.count) bad.push(fam.name + ': ' + list.length + ' files match ' + fam.glob + ', the registry approved ' + fam.count);
-      else if (d !== fam.digest) bad.push(fam.name + ': a file under ' + fam.glob + ' changed (digest ' + d.slice(0, 16) + ', approved ' + String(fam.digest).slice(0, 16) + ')');
+      const { list, digest: d } = globDigest(root, fam.glob);
+      const how = '. New or regenerated cards from tools/gen_article_img.py? node tools/brand_image_check.js --approve-cards'
+        + ' re-approves them, and refuses while any card still carries the drawn bear.';
+      if (list.length !== fam.count) bad.push(fam.name + ': ' + list.length + ' files match ' + fam.glob + ', the registry approved ' + fam.count + how);
+      else if (d !== fam.digest) bad.push(fam.name + ': a file under ' + fam.glob + ' changed (digest ' + d.slice(0, 16) + ', approved ' + String(fam.digest).slice(0, 16) + ')' + how);
     }
   }
   return bad;
@@ -546,6 +556,21 @@ function gradeRuntime(R, label) {
   ok('no inline SVG drawing stands in for art', R.drawn.length === 0, R.drawn.slice(0, 6).join('\n         '));
   ok('no emoji bear in any visible text', R.bears.length === 0, R.bears.slice(0, 10).join('\n         '));
   ok('no image was fetched from another host', R.blocked.length === 0, R.blocked.slice(0, 5));
+}
+
+/* A new article brings a new share card and hero card from tools/gen_article_img.py, which pastes the
+   painted master (card_logo.paste_logo). Re-approving them is one command, and it refuses unless no card
+   anywhere still carries the drawn bear. */
+if (flag('--approve-cards')) {
+  const cl = pyCheck('tools/card_logo.py', ROOT);
+  if (!cl.ok) { console.log('refused, a card still carries the drawn bear: ' + cl.out); process.exit(1); }
+  (REG.families || []).filter((f) => f.glob).forEach((f) => {
+    const { list, digest } = globDigest(ROOT, f.glob);
+    console.log(f.glob + ': ' + f.count + ' -> ' + list.length + ' files' + (digest === f.digest ? ', unchanged' : ', re-approved'));
+    f.count = list.length; f.digest = digest;
+  });
+  fs.writeFileSync(REG_PATH, JSON.stringify(REG, null, 1) + '\n');
+  process.exit(0);
 }
 
 (async () => {
