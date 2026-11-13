@@ -1,6 +1,18 @@
 #!/usr/bin/env python3
-"""Generate Cubby's bear-cub app icons with Pillow (drawn, no external assets)."""
-from PIL import Image, ImageDraw
+"""RETIRED 2026-11-13. This drew the FLAT brown bear face with Pillow circles (55e166ca, June 2026),
+and for five months it was the app icon, favicon and the logo on ~680 pages while everything inside
+the app was painted. The founder retired it: "we should never have such horrible drawings".
+
+Every icon now comes from the painted master, icons/icon-master-1024.png, via
+    python3 tools/gen_brand_icons.py
+Nothing imports this file. It is kept only as the record of what the old face was, and it refuses to
+run, because running it would overwrite the painted icons with the flat face.
+tools/brand_image_check.js fails if the flat face's bytes ever come back.
+"""
+import sys
+sys.exit('generate_icons.py is retired: run python3 tools/gen_brand_icons.py (the painted master is the only source).')
+
+from PIL import Image, ImageDraw  # noqa: E402  (unreachable; kept as the record of the old drawing)
 
 SS = 4  # supersample for smooth edges
 
