@@ -35,8 +35,9 @@ scale is computed from the face's measured extent, so a new master cannot quietl
 
 SMALL SIZES
 At 64px and below a light unsharp mask (radius 0.5, 40%, threshold 1) is applied. Measured on this
-master: local contrast (Laplacian variance) +27 to +30% at 16-64px, the eyes 9-18 levels darker, the
-share of clipped channels from ~2% to ~3-4%. Above 64px it does nothing visible, so it is not applied.
+master (re-measured 2026-11-13 on the square resize): local contrast (Laplacian variance) +27 to +30% at
+16-64px, the darkest pixel (the eyes) 8-18 levels darker, clipped channels from 0.4-1.5% to 1.8-3.0%.
+Above 64px it does nothing visible, so it is not applied.
 
 Usage:
     python3 tools/gen_brand_icons.py                     web icons into icons/
