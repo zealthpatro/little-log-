@@ -6,11 +6,18 @@ Until 2026-11-13 two bears competed. The app icon, favicon, apple-touch icon, ma
 sign-in card, the landing page and the nav of ~680 marketing pages all showed a FLAT brown face that
 generate_icons.py drew with Pillow circles in June (55e166ca), while every illustration inside the app
 was painted (ChatGPT / gpt-image). The founder: "we should never have such horrible drawings, let's
-ensure we have the standard logo everywhere". He picked the master below from six candidates: the
-painted hero cub's FACE ONLY on a honey ground, made from app/journey-art/ov_hero-cub.webp
-(art-src/hero-cub.png) with gpt-image-2. Nothing here draws a bear. Every file is a resize of it.
+ensure we have the standard logo everywhere". Nothing here draws a bear. Every file is made from the
+master below.
 
     icons/icon-master-1024.png    the master, committed as-is (sha256 pinned in tools/brand-images.json)
+
+THE MASTER (founder's pick "W2+", 2026-11-14)
+A painted honey-brown TEDDY face (cream muzzle, dusty-rose inner ears) on a light cream-honey WATERCOLOUR
+wash, the bear about 87% of the width. Made with gpt-image-2 from the painted cub, then centre-cropped so
+the bear is as big as the flat-honey candidate; picked from twelve higher-contrast candidates after a
+three-judge evaluation. It replaced the 2026-11-13 white cub on flat honey, whose face-to-background
+contrast measured 1.2:1. That white cub's bytes are retired (tools/brand-images.json) alongside the June
+flat face.
 
 WHAT IT WRITES (web, committed)
     icons/logo-512.png            512, rounded corners baked in (alpha), the filename ~680 pages use
@@ -18,26 +25,43 @@ WHAT IT WRITES (web, committed)
     icons/apple-touch-icon.png    180, square and opaque (iOS rounds it itself)
     icons/icon-192.png            manifest "any": square, opaque
     icons/icon-512.png            manifest "any": square, opaque
-    icons/icon-maskable-512.png   manifest "maskable": the face shrunk into the 80% safe circle
+    icons/icon-maskable-512.png   manifest "maskable": the bear shrunk into the 80% safe circle
     cap-web/logo.png              192, for the native wrapper's offline fallback page (cap-web/index.html)
 
 WHAT IT WRITES (native, with --native or --native-out; ios/ and android/ are gitignored)
     ios/App/App/Assets.xcassets/AppIcon.appiconset/   every size, 1024 App Store icon, NO alpha
     android/app/src/main/res/mipmap-*/                ic_launcher, ic_launcher_round, ic_launcher_foreground
-    android/app/src/main/res/values/ic_launcher_background.xml   the master's own honey
+    android/app/src/main/res/values/ic_launcher_background.xml   the master's own wash colour
+
+THE BEAR, CUT FROM ITS WASH (analyse(); tools/gen_splash.py uses the same cut)
+The wash is pale: on this master its blue channel never drops below 129 on the 40px border band, while the
+teddy's fur is ~62 and its outline and fur strokes darker still. So:
+  1. Bear = every pixel NOT reachable from the border through wash-pale pixels (a flood fill), which keeps
+     the cream muzzle, the eye highlights and the pink ears, all enclosed by the face; then only the one big
+     shape, so a speck of darker paint in the wash is not the bear.
+  2. The wash UNDER the bear is rebuilt from the wash around it (push-pull fill: averaged down a pyramid,
+     interpolated back up), so the shrunk icons sit on the master's own ground and not on a flat fill.
+     The real wash is kept exactly wherever it shows; its paper grain is std 1-3 levels, so the smooth fill
+     reads as the same paper.
+  3. A soft matte on the outer fringe only: within 14px of the edge, alpha is how far a pixel has moved from
+     the local wash toward the fur's colour (strokes clip to 1, wash pockets between fur strokes fall to 0),
+     ramping to 1 by depth so there is no step; outside 6px it is 0. The fur's colour is un-mixed from the
+     local wash, so composited anywhere it carries no yellow halo (zoomed at full size on cream and dark).
 
 THE MASKED SHAPES
 A maskable icon is cut to whatever the launcher likes, guaranteed only inside a centred circle of 80%
-diameter; an Android adaptive foreground is 108dp of which a 66dp circle is safe. The master's ears
-reach the corners, so for those the face is SHRUNK onto a fill of the master's own honey (sampled from
-its border, never invented), with the master's edge feathered into the fill so no seam shows. The
-scale is computed from the face's measured extent, so a new master cannot quietly clip an ear.
+diameter; an Android adaptive foreground is 108dp of which a 66dp circle is safe. The master's ears reach
+the corners, so for those the cut-out bear is SHRUNK onto the rebuilt wash, its furthest fur at 96% of the
+safe radius. The scale is computed from the bear's measured extent, so a new master cannot quietly clip an
+ear.
 
 SMALL SIZES
-At 64px and below a light unsharp mask (radius 0.5, 40%, threshold 1) is applied. Measured on this
-master (re-measured 2026-11-13 on the square resize): local contrast (Laplacian variance) +27 to +30% at
-16-64px, the darkest pixel (the eyes) 8-18 levels darker, clipped channels from 0.4-1.5% to 1.8-3.0%.
-Above 64px it does nothing visible, so it is not applied.
+At 64px and below a light unsharp mask (radius 0.5, 40%, threshold 1) is applied. Measured on this master
+(2026-11-14, square Lanczos resize, `--measure`): local contrast (Laplacian variance) +29% at each of
+16, 32, 48 and 64px; the darkest pixel (eyes, nose) 37 to 27 at 16px and 21 to 9 at 32px (already 0-5 at
+48-64px); clipped channels from 1.2-2.0% to 1.7-2.7%.
+At 16px the eyes are two dark pixels at best; the head, ears, muzzle and nose carry it (the founder's
+judges said the same). Above 64px it does nothing visible, so it is not applied.
 
 Usage:
     python3 tools/gen_brand_icons.py                     web icons into icons/
@@ -46,6 +70,7 @@ Usage:
     python3 tools/gen_brand_icons.py --check             write nothing; fail if a committed web icon
                                                          differs from what the master gives
     python3 tools/gen_brand_icons.py --strip OUT.png     also render the size strip (light + dark)
+    python3 tools/gen_brand_icons.py --measure           print the small-size sharpening figures
 """
 import argparse
 import hashlib
@@ -64,6 +89,10 @@ REGISTRY = os.path.join(ROOT, 'tools', 'brand-images.json')
 LOGO_RADIUS = 0.24      # same corner as the June logo, so every CSS border-radius over it still wins
 SHARPEN_MAX = 64        # px; see SMALL SIZES above
 SS = 4                  # supersampling for the alpha masks
+SAFE = 0.96             # the bear's furthest fur sits at 96% of a safe circle, never on its rim
+EDGE_DEPTH = 14         # px inside the bear's edge where the matte is pulled by colour
+EDGE_OUT = 6            # px outside it
+NOISE = 10.0            # levels of wash variation that never count as fur
 
 IOS_SET = [  # (idiom, size in points, scale)
     ('iphone', 20, 2), ('iphone', 20, 3), ('iphone', 29, 2), ('iphone', 29, 3),
@@ -92,21 +121,114 @@ def load_master():
     return im
 
 
-def honey_of(master):
-    """The master's own background: the mean of a 40px border band (std ~2-3 per channel)."""
-    a = np.asarray(master).astype(np.float64)
-    b = 40
-    band = np.concatenate([a[:b].reshape(-1, 3), a[-b:].reshape(-1, 3), a[:, :b].reshape(-1, 3), a[:, -b:].reshape(-1, 3)])
-    return tuple(int(round(v)) for v in band.mean(0))
+def _band(a, b=40):
+    return np.concatenate([a[:b].reshape(-1, 3), a[-b:].reshape(-1, 3), a[:, :b].reshape(-1, 3), a[:, -b:].reshape(-1, 3)])
 
 
-def face_radius(master, honey):
-    """How far the face reaches from the centre, as a fraction of the half-size (1.0 = touches an edge midpoint)."""
-    a = np.asarray(master).astype(np.float64)
-    d = np.abs(a - np.array(honey)).max(axis=2)
-    ys, xs = np.nonzero(d > 25)
-    r = np.sqrt((xs - 511.5) ** 2 + (ys - 511.5) ** 2).max()
-    return r / 512.0
+def wash_of(master):
+    """The master's own ground colour: the mean of its 40px border band (a watercolour wash, so this is the
+    average paper; the real wash varies by std ~15 in blue)."""
+    return tuple(int(round(v)) for v in _band(np.asarray(master).astype(np.float64)).mean(0))
+
+
+def _flood(passable, seed):
+    """Pixels reachable from `seed` through True pixels, 4-connected (Pillow's flood fill, on a copy)."""
+    img = Image.fromarray((passable * 100).astype(np.uint8)).copy()
+    ImageDraw.floodfill(img, seed, 255, thresh=0)
+    return np.asarray(img) == 255
+
+
+def _grow(mask, px):
+    return np.asarray(Image.fromarray((mask * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(2 * px + 1))) > 0
+
+
+def _depth(mask, upto):
+    """How many px inside `mask` each pixel is (0 outside), counted up to `upto`."""
+    d = np.zeros(mask.shape)
+    m = Image.fromarray((mask * 255).astype(np.uint8))
+    for _ in range(upto):
+        d += np.asarray(m) > 0
+        m = m.filter(ImageFilter.MinFilter(3))
+    return d
+
+
+def _pushpull(img, known):
+    """Fill the unknown pixels of `img` smoothly from the known ones: average down a 2x pyramid with
+    weights, then interpolate back up, each level keeping what it knows."""
+    c, w = img * known[:, :, None], known.astype(np.float64)
+    pyr = []
+    while True:
+        pyr.append((c, w))
+        if min(c.shape[:2]) <= 1:
+            break
+        h2, w2 = c.shape[0] // 2, c.shape[1] // 2
+        c = c[:h2 * 2, :w2 * 2].reshape(h2, 2, w2, 2, 3).sum((1, 3))
+        w = w[:h2 * 2, :w2 * 2].reshape(h2, 2, w2, 2).sum((1, 3))
+    col = None
+    for c, w in reversed(pyr):
+        own = c / np.maximum(w, 1e-9)[:, :, None]
+        if col is None:
+            col = own
+            continue
+        up = np.dstack([np.asarray(Image.fromarray(col[:, :, k].astype(np.float32)).resize((c.shape[1], c.shape[0]), Image.BILINEAR))
+                        for k in range(3)]).astype(np.float64)
+        k = np.minimum(w, 1.0)[:, :, None]
+        col = own * k + up * (1 - k)
+    return col
+
+
+_ANALYSED = {}
+
+
+def analyse(master):
+    """The bear cut from its wash. Returns a dict:
+        wash    the mean ground colour (tuple)
+        field   the wash with the bear removed and filled from around it (float HxWx3)
+        alpha   the bear's soft matte (float HxW, 0..1)
+        sprite  the bear alone, colours un-mixed from the wash (RGBA Image, same size as the master)
+        face_r  how far the bear reaches from the centre, as a fraction of the half-size
+    See THE BEAR, CUT FROM ITS WASH in the docstring."""
+    key = hashlib.sha256(master.tobytes()).hexdigest()
+    if key in _ANALYSED:
+        return _ANALYSED[key]
+    a = np.asarray(master.convert('RGB')).astype(np.float64)
+    n = a.shape[0]
+    band = _band(a)
+    pale = a[:, :, 2] >= band[:, 2].min() - 4
+    outside = _flood(np.pad(pale, 1, constant_values=True), (0, 0))[1:-1, 1:-1]
+    core = _flood(~outside, (n // 2, n // 2))
+    frac = core.mean()
+    if not 0.25 < frac < 0.80:
+        sys.exit('The bear mask covers %.1f%% of the master: the cut failed, writing nothing' % (100 * frac))
+    field = _pushpull(a, ~_grow(core, 10))
+    fur = np.median(a[core & (a[:, :, 2] < band[:, 2].min() - 20)], 0)
+    u = field - fur
+    span = np.linalg.norm(u, axis=2)
+    moved = ((field - a) * u).sum(2) / np.maximum(span, 1e-6)
+    by_colour = np.clip((moved - NOISE) / np.maximum(span - NOISE, 1e-6), 0, 1)
+    by_depth = np.clip((_depth(core, EDGE_DEPTH + 2) - 4) / (EDGE_DEPTH - 4.0), 0, 1)
+    alpha = np.where(_grow(core, EDGE_OUT), np.maximum(by_colour, by_depth), 0.0)
+    edge = np.concatenate([alpha[0], alpha[-1], alpha[:, 0], alpha[:, -1]])
+    if edge.max() > 0:
+        sys.exit('The bear touches the master\'s edge: no room to cut it out, writing nothing')
+    al = alpha[:, :, None]
+    fg = np.clip(np.where(al > 0.02, (a - (1 - al) * field) / np.maximum(al, 1e-6), a), 0, 255)
+    sprite = Image.fromarray(np.dstack([fg, alpha * 255]).round().astype(np.uint8))
+    ys, xs = np.nonzero(alpha > 0.5)
+    face_r = np.sqrt((xs - (n - 1) / 2.0) ** 2 + (ys - (n - 1) / 2.0) ** 2).max() / (n / 2.0)
+    out = {'wash': wash_of(master), 'field': field, 'alpha': alpha, 'sprite': sprite, 'face_r': float(face_r), 'frac': float(frac)}
+    _ANALYSED[key] = out
+    return out
+
+
+def on_ground(master, ground):
+    """The bear on a flat `ground` colour at full size: un-mixed from the wash, so no halo (gen_splash.py)."""
+    p = analyse(master)
+    a = np.asarray(master.convert('RGB')).astype(np.float64)
+    al = p['alpha'][:, :, None]
+    g = np.array(ground, np.float64)
+    out = np.where(al > 0, a + (1 - al) * (g - p['field']), g)
+    return Image.fromarray(np.clip(np.round(out), 0, 255).astype(np.uint8))
 
 
 def resize(img, size):
@@ -134,34 +256,33 @@ def circled(img):
     return out
 
 
-def inset(master, honey, scale, work=1024):
-    """The whole master shrunk to `scale` and centred on its own honey, edges feathered into the fill."""
+def inset(master, scale):
+    """The cut-out bear shrunk to `scale` and centred on the master's own wash (rebuilt under the bear)."""
+    p = analyse(master)
+    work = master.size[0]
     inner = int(round(work * scale))
-    small = master.resize((inner, inner), Image.LANCZOS)
-    feather = max(2, int(inner * 0.05))
-    ramp = np.minimum.reduce([
-        np.arange(inner)[None, :].repeat(inner, 0), np.arange(inner)[::-1][None, :].repeat(inner, 0),
-        np.arange(inner)[:, None].repeat(inner, 1), np.arange(inner)[::-1][:, None].repeat(inner, 1),
-    ]).astype(np.float64)
-    alpha = Image.fromarray((np.clip(ramp / feather, 0, 1) * 255).astype(np.uint8))
-    canvas = Image.new('RGB', (work, work), honey)
+    small = p['sprite'].resize((inner, inner), Image.LANCZOS)      # Pillow premultiplies RGBA for this
+    canvas = Image.fromarray(np.clip(np.round(p['field']), 0, 255).astype(np.uint8)).convert('RGBA')
     off = (work - inner) // 2
-    canvas.paste(small, (off, off), alpha)
-    return canvas
+    canvas.alpha_composite(small, (off, off))
+    return canvas.convert('RGB')
 
 
 def scale_for_circle(radius_frac, face_r):
-    """Scale that puts the face's furthest point at `radius_frac` of the canvas from the centre."""
-    return min(1.0, radius_frac / (0.5 * face_r))
+    """Scale that puts the bear's furthest fur at SAFE x `radius_frac` of the canvas from the centre."""
+    return min(1.0, SAFE * radius_frac / (0.5 * face_r))
 
 
-def png_bytes(img, honey=None):
-    """PNG bytes. With `honey`, a 240-colour median-cut palette (43-45 dB PSNR against full colour,
-    indistinguishable at any size it is shown) plus 16 alpha levels of honey for the anti-aliased
-    rounded corners. Full colour would be ~380KB for the 512 logo; Pillow's octree palette is 50KB
-    but visibly posterises the muzzle and erases the paper grain, which is the painting."""
+def png_bytes(img, palette=False):
+    """PNG bytes. With `palette`, a 240-colour median-cut palette plus 16 alpha levels for the anti-aliased
+    rounded corners, each level coloured with the mean of the corner pixels at that level (the wash varies
+    from corner to corner, so one colour for all of them would tint the arcs). Measured on this master:
+    38.6 dB PSNR against full colour at 512 (`--measure`; the watercolour grain is busier than the old
+    flat honey), not visible at the sizes it is shown (28-96px, and 512 on a phone's 3x screen), and half
+    the bytes: full colour with alpha is ~450KB for the 512 logo; Pillow's octree palette is smaller but
+    visibly posterises the fur, which is the painting."""
     buf = io.BytesIO()
-    if honey is None:
+    if not palette:
         img.save(buf, 'PNG', optimize=True)
         return buf.getvalue()
     a = np.asarray(img.convert('RGBA'))
@@ -169,9 +290,17 @@ def png_bytes(img, honey=None):
     q = Image.fromarray(np.ascontiguousarray(a[:, :, :3])).quantize(colors=240, method=Image.Quantize.MEDIANCUT)
     idx = np.asarray(q).copy()
     edge = al < 255
-    idx[edge] = 240 + np.round(al[edge] / 255.0 * 15).astype(np.uint8)
+    level = np.round(al / 255.0 * 15).astype(np.uint8)
+    idx[edge] = 240 + level[edge]
+    rgb = a[:, :, :3].astype(np.float64)
+    fill = rgb[~edge].mean(0) if (~edge).any() else np.zeros(3)
+    edge_cols = []
+    for k in range(16):
+        sel = edge & (level == k) & (al > 0)
+        c = rgb[sel].mean(0) if sel.any() else fill
+        edge_cols += [int(round(v)) for v in c]
     out = Image.frombytes('P', (idx.shape[1], idx.shape[0]), idx.astype(np.uint8).tobytes())
-    out.putpalette(q.getpalette()[:240 * 3] + list(honey) * 16)
+    out.putpalette(q.getpalette()[:240 * 3] + edge_cols)
     if edge.any():
         out.save(buf, 'PNG', optimize=True, transparency=bytes([255] * 240 + [int(round(k * 255 / 15.0)) for k in range(16)]))
     else:
@@ -179,23 +308,25 @@ def png_bytes(img, honey=None):
     return buf.getvalue()
 
 
-def web_set(master, honey, face_r):
-    maskable = inset(master, honey, scale_for_circle(0.40, face_r))
+def web_set(master):
+    p = analyse(master)
+    maskable = inset(master, scale_for_circle(0.40, p['face_r']))
     return {
         # The two 512s are on ~680 pages and in the app's precache: palette PNGs (see png_bytes).
-        'icons/logo-512.png': png_bytes(rounded(resize(master, 512), LOGO_RADIUS), honey),
+        'icons/logo-512.png': png_bytes(rounded(resize(master, 512), LOGO_RADIUS), palette=True),
         'icons/favicon.png': png_bytes(rounded(resize(master, 48), LOGO_RADIUS)),
         'icons/apple-touch-icon.png': png_bytes(resize(master, 180)),
         'icons/icon-192.png': png_bytes(resize(master, 192)),
-        'icons/icon-512.png': png_bytes(resize(master, 512), honey),
-        'icons/icon-maskable-512.png': png_bytes(resize(maskable, 512)),
+        'icons/icon-512.png': png_bytes(resize(master, 512), palette=True),
+        'icons/icon-maskable-512.png': png_bytes(resize(maskable, 512), palette=True),
         # The Capacitor webDir fallback page is bundled into the native app and shown offline, so it
         # cannot reach /icons/: it gets its own small copy, beside it.
         'cap-web/logo.png': png_bytes(rounded(resize(master, 192), LOGO_RADIUS)),
     }
 
 
-def native_set(master, honey, face_r):
+def native_set(master):
+    p = analyse(master)
     files = {}
     ios_dir = 'ios/App/App/Assets.xcassets/AppIcon.appiconset/'
     images = []
@@ -211,8 +342,8 @@ def native_set(master, honey, face_r):
     files[ios_dir + 'Contents.json'] = (json.dumps({'images': images, 'info': {'author': 'xcode', 'version': 1}}, indent=2) + '\n').encode()
 
     res = 'android/app/src/main/res/'
-    round_face = inset(master, honey, scale_for_circle(0.44, face_r))      # inside a 92% circle
-    fg = inset(master, honey, scale_for_circle(33.0 / 108.0, face_r))       # adaptive: 66dp safe circle of 108dp
+    round_face = inset(master, scale_for_circle(0.44, p['face_r']))      # inside a 92% circle
+    fg = inset(master, scale_for_circle(33.0 / 108.0, p['face_r']))       # adaptive: 66dp safe circle of 108dp
     for dpi, mul in ANDROID_DPI:
         n, nf = int(48 * mul), int(108 * mul)
         tile = Image.new('RGBA', (n, n), (0, 0, 0, 0))
@@ -223,7 +354,7 @@ def native_set(master, honey, face_r):
         rt.alpha_composite(circled(resize(round_face, sq)), (off, off))
         files[res + 'mipmap-%s/ic_launcher_round.png' % dpi] = png_bytes(rt)
         files[res + 'mipmap-%s/ic_launcher_foreground.png' % dpi] = png_bytes(resize(fg, nf).convert('RGBA'))
-    hexc = '#%02X%02X%02X' % honey
+    hexc = '#%02X%02X%02X' % p['wash']
     files[res + 'values/ic_launcher_background.xml'] = (
         '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n'
         '    <color name="ic_launcher_background">%s</color>\n</resources>\n' % hexc).encode()
@@ -265,19 +396,43 @@ def strip(master, out):
     print('  strip %s (%dx%d)' % (out, w, h))
 
 
+def measure(master):
+    """The figures quoted under SMALL SIZES and in png_bytes()."""
+    def lap(img):
+        g = np.asarray(img.convert('L')).astype(np.float64)
+        return (g[1:-1, :-2] + g[1:-1, 2:] + g[:-2, 1:-1] + g[2:, 1:-1] - 4 * g[1:-1, 1:-1]).var()
+    for s in (16, 32, 48, 64):
+        plain = master.resize((s, s), Image.LANCZOS)
+        sharp = resize(master, s)
+        pa, sa = np.asarray(plain), np.asarray(sharp)
+        clip = lambda x: ((x == 0) | (x == 255)).mean() * 100
+        print('  %2dpx  local contrast %+.0f%%  darkest pixel %d -> %d  clipped channels %.1f%% -> %.1f%%' % (
+            s, 100 * (lap(sharp) / lap(plain) - 1), pa.min(), sa.min(), clip(pa), clip(sa)))
+    full = np.asarray(rounded(resize(master, 512), LOGO_RADIUS)).astype(np.float64)
+    pal = np.asarray(Image.open(io.BytesIO(png_bytes(rounded(resize(master, 512), LOGO_RADIUS), palette=True))).convert('RGBA')).astype(np.float64)
+    opaque = full[:, :, 3] == 255
+    mse = ((full[:, :, :3] - pal[:, :, :3])[opaque] ** 2).mean()
+    print('  512 logo palette PSNR %.1f dB against full colour' % (10 * np.log10(255 ** 2 / mse)))
+    p = analyse(master)
+    print('  bear mask %.1f%% of the master, reaches %.3f of the half-size, wash #%02X%02X%02X' % ((100 * p['frac'], p['face_r']) + p['wash']))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--native', action='store_true')
     ap.add_argument('--native-out')
     ap.add_argument('--check', action='store_true')
     ap.add_argument('--strip')
+    ap.add_argument('--measure', action='store_true')
     a = ap.parse_args()
 
     master = load_master()
-    honey = honey_of(master)
-    face_r = face_radius(master, honey)
-    print('master %s  honey #%02X%02X%02X  face reaches %.3f of the half-size' % (os.path.relpath(MASTER, ROOT), *honey, face_r))
-    web = web_set(master, honey, face_r)
+    p = analyse(master)
+    print('master %s  wash #%02X%02X%02X  bear reaches %.3f of the half-size' % ((os.path.relpath(MASTER, ROOT),) + p['wash'] + (p['face_r'],)))
+    if a.measure:
+        measure(master)
+        return
+    web = web_set(master)
 
     if a.check:
         bad = [rel for rel, data in web.items()
@@ -289,7 +444,7 @@ def main():
 
     write(web, ROOT)
     if a.native or a.native_out:
-        nat = native_set(master, honey, face_r)
+        nat = native_set(master)
         if a.native_out:
             write(nat, a.native_out)
         else:

@@ -9,8 +9,8 @@ corners (iOS applies its own squircle mask; a pre-rounded icon gets double-round
 slivers, and an alpha channel is an outright rejection).
 
 Until 2026-11-13 this upscaled the flat Pillow-drawn face in icons/logo-512.png to 1024 and rebuilt its
-cream gradient by a surface fit. The icon is now the founder's painted master, icons/icon-master-1024.png,
-which is already 1024, square and opaque, so nothing is reconstructed: tools/gen_brand_icons.py resizes
+cream gradient by a surface fit. The icon is now the founder's painted master, icons/icon-master-1024.png
+(since 2026-11-14 the W2+ teddy on a watercolour wash), which is already 1024, square and opaque, so nothing is reconstructed: tools/gen_brand_icons.py resizes
 it to every AppIcon size (and the 1024 is the master itself, flattened to RGB) and writes a Contents.json
 that lists them all.
 
@@ -32,8 +32,7 @@ ap.add_argument('--out')
 a = ap.parse_args()
 
 master = brand.load_master()
-honey = brand.honey_of(master)
-files = {k: v for k, v in brand.native_set(master, honey, brand.face_radius(master, honey)).items() if k.startswith('ios/')}
+files = {k: v for k, v in brand.native_set(master).items() if k.startswith('ios/')}
 if not a.out and not os.path.isdir(os.path.join(brand.ROOT, 'ios')):
     sys.exit('No ios/ here: run `npx cap add ios` first, or pass --out DIR')
 # The 1024 App Store icon is written as AppIcon-512@2x.png, the name `npx cap add ios` and the old script

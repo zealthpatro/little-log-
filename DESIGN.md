@@ -163,8 +163,9 @@ on each of the three sub-tabs, so a sibling rule would have landed 16 on one and
 - New icons must match the set (24 grid / stroke 2 / round). Add to `I` in one place.
 - **The brand image is the painted cub, and only the painted cub** (founder, 2026-11-13). The app icon,
   favicon, sign-in card, landing, site nav, emails and share cards all come from one master,
-  `icons/icon-master-1024.png` (the hero cub's face, ChatGPT-painted), via `tools/gen_brand_icons.py`.
-  No drawn bear (Pillow, SVG circles) and **no emoji bear** (🐻 🧸) anywhere, greetings and toasts
+  `icons/icon-master-1024.png` (since 2026-11-14 "W2+": a painted teddy face on a cream-honey watercolour
+  wash, gpt-image-2 from the painted cub), via `tools/gen_brand_icons.py`.
+  No drawn bear (Pillow, SVG circles) and **no emoji bear** (🐻 🧸 🐼 🐨, in any spelling) anywhere, greetings and toasts
   included: where a bear stood in for art, use `/icons/logo-512.png` as an `<img>` (empty alt when
   decorative). Every picture allowed on a screen is listed with its provenance in
   `tools/brand-images.json`; `tools/brand_image_check.js` fails on anything else.

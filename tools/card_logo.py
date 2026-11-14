@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The painted Cubby face on every Pillow-made card, in place of the drawn bear.
+"""The painted Cubby face on every Pillow-made card: the CURRENT master, and nothing else on them changed.
 
 WHY THIS EXISTS
 Four generators drew the same little bear out of Pillow circles in the top-left corner of everything they
@@ -7,19 +7,23 @@ made: tools/gen_article_img.py (660 og/articles/*.png share cards, 571 articles/
 og/{faq,features,pricing,articles}.png cards), tools/gen_ph_gallery.py (og/producthunt/*), and
 tools/gen_pwa_screenshots.py (icons/screenshots/{track,circle,vaccines}.png). og/cubby-home.png carried the
 flat June logo as a tile. On 2026-11-13 the founder retired every drawn bear for the painted master,
-icons/icon-master-1024.png. The generators now call paste_logo(); this file also repairs the cards that
-already exist, so the change is ONLY the logo: not one other pixel of those cards is re-rendered.
+icons/icon-master-1024.png, and on 2026-11-14 changed the master itself (the white cub on honey became the
+W2+ teddy on a watercolour wash). The generators call paste_logo(); this file also repairs the cards that
+already exist, so a change of logo is ONLY the logo: not one other pixel of those cards is re-rendered.
 
 HOW THE REPAIR STAYS HONEST
-Each card family is rebuilt from its own generator's recipe (gradient, dot grid, wash) over the bear's box
-only. Before a card is touched, that rebuilt background is compared with the card's real pixels in a ring
-around the box; if they differ by more than a rounding error the card is left alone and named, because
-then the recipe is not the one that drew it. Then the box is painted with the rebuilt background and the
-painted logo is composited where the bear was, at the same size.
+Each card family is rebuilt from its own generator's recipe (gradient, dot grid, wash) over the logo's box
+only. A card is current when its box is what that recipe plus the current master gives (within a rounding
+error: fewer than 2% of the box's pixels off by more than 12 levels, so a card freshly drawn by the
+generator itself counts too). Anything else in the box (the drawn bear, the June tile, the November white
+cub) is stale. Before a stale card is touched, the rebuilt background is compared with the card's real
+pixels in a ring around the box; if they differ by more than a rounding error the card is left alone and
+named, because then the recipe is not the one that drew it. Then the box is painted with the rebuilt
+background and the painted logo is composited at the same centre and size.
 
 Usage:
-    python3 tools/card_logo.py --swap            repair every card that still has a drawn bear
-    python3 tools/card_logo.py --check           fail if any card still has one (no writes)
+    python3 tools/card_logo.py --swap            repair every card whose logo is not the current master's
+    python3 tools/card_logo.py --check           fail if any card's logo is not the current master's (no writes)
 """
 import argparse
 import glob
@@ -146,48 +150,66 @@ def repair_home(img):
     return paste_logo(out, (x0 + x1) / 2, (y0 + y1) / 2, x1 - x0)
 
 
+def stale(box_px, want_px):
+    """True when a card's logo box is not what the recipe plus the current master gives."""
+    d = np.abs(np.asarray(box_px, dtype=int) - np.asarray(want_px, dtype=int)).max(axis=2)
+    return (d > 12).mean() > 0.02
+
+
+def expected_box(bg, box, centre, size):
+    """The logo box as the current master draws it on this recipe's background."""
+    x0, y0, x1, y1 = box
+    tile = bg.crop(box).copy()
+    paste_logo(tile, centre[0] - x0, centre[1] - y0, size)
+    return tile
+
+
 def run(swap):
-    bad, done, refused = [], 0, []
+    bad, done, refused, current = [], 0, [], 0
     cache = {}
     for name, files, recipe, (cx, cy), size, box in families():
         for f in files:
             if not os.path.exists(f):
                 continue
-            im = Image.open(f)
-            if caramel_count(im, box) < 150:
-                continue                       # no drawn bear left in the box
+            im = Image.open(f).convert('RGB')
+            key = (recipe, im.size)
+            if key not in cache:
+                bg = recipe(*im.size)
+                cache[key] = (bg, expected_box(bg, box, (cx, cy), size))
+            bg, want = cache[key]
+            if not stale(im.crop(box), want):
+                current += 1
+                continue
             if not swap:
                 bad.append(f)
                 continue
-            key = (recipe, im.size)
-            if key not in cache:
-                cache[key] = recipe(*im.size)
-            bg = cache[key]
             x0, y0, x1, y1 = box
             ring = (x0 - 6, y0 - 6, x1 + 6, y1 + 6)
-            real = np.asarray(im.convert('RGB').crop(ring)).astype(int)
-            want = np.asarray(bg.crop(ring)).astype(int)
+            real = np.asarray(im.crop(ring)).astype(int)
+            wantr = np.asarray(bg.crop(ring)).astype(int)
             m = np.ones(real.shape[:2], bool)
             m[6:-6, 6:-6] = False              # compare only the 6px ring OUTSIDE the box,
             m[:, -6:] = False                  # minus its right side, where the "Cubby" wordmark starts
-            diff = np.abs(real - want)[m].max()
+            diff = np.abs(real - wantr)[m].max()
             if diff > 2:
                 refused.append('%s (ring differs by %d: not drawn by this recipe)' % (os.path.relpath(f, ROOT), diff))
                 continue
-            out = im.convert('RGB')
-            out.paste(bg.crop(box), box[:2])
-            paste_logo(out, cx, cy, size)
-            out.save(f, 'PNG', optimize=True)
+            im.paste(want, box[:2])
+            im.save(f, 'PNG', optimize=True)
             done += 1
     if os.path.exists(HOME):
-        im = Image.open(HOME)
-        if caramel_count(im, HOME_TILE) >= 150:
+        im = Image.open(HOME).convert('RGB')
+        want = repair_home(im)
+        x0, y0, x1, y1 = HOME_TILE
+        if stale(im.crop(HOME_TILE), want.crop(HOME_TILE)):
             if swap:
-                repair_home(im).save(HOME, 'PNG', optimize=True)
+                want.save(HOME, 'PNG', optimize=True)
                 done += 1
             else:
                 bad.append(HOME)
-    return bad, done, refused
+        else:
+            current += 1
+    return bad, done, refused, current
 
 
 def main():
@@ -196,16 +218,17 @@ def main():
     ap.add_argument('--check', action='store_true')
     a = ap.parse_args()
     if a.swap:
-        _, done, refused = run(True)
-        print('swapped the drawn bear for the painted logo on %d cards' % done)
+        _, done, refused, _ = run(True)
+        print('swapped in the current master\'s logo on %d cards' % done)
         for r in refused:
             print('  LEFT ALONE %s' % r)
         if refused:
             sys.exit(1)
-    bad, _, _ = run(False)
+    bad, _, _, current = run(False)
     for f in bad[:20]:
-        print('  DRAWN BEAR still on %s' % os.path.relpath(f, ROOT))
-    print('CARD LOGO: ' + ('FAIL (%d cards)' % len(bad) if bad else 'PASS (no drawn bear on any card)'))
+        print('  OLD LOGO still on %s' % os.path.relpath(f, ROOT))
+    print('CARD LOGO: ' + ('FAIL (%d cards carry a logo that is not the current master\'s)' % len(bad) if bad
+                           else 'PASS (%d cards, every one carries the current master\'s logo)' % current))
     sys.exit(1 if bad else 0)
 
 
