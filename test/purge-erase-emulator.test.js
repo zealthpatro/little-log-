@@ -69,6 +69,8 @@ const RECORDS = (hid) => [
   ['households/' + hid + '/notes/n1', { text: str('a note'), authorId: str('u1') }],
   ['households/' + hid + '/memberEmails/u1', { email: str('u1@example.com') }],
   ['households/' + hid + '/memberEmails/u2', { email: str('u2@example.com') }],
+  // The owner-only copy of a pending link's token (lane B): it must not outlive the family either.
+  ['households/' + hid + '/ownerLinks/r_aaaaaaaaaaaaaaaa', { token: str('AaaaaaaaaaaaaaaaaaaaA1') }],
   ['households/' + hid + '/mhealth/u2/cat/health', { bp: str('120/80') }],
   ['households/' + hid + '/mhealth/u2/cat/mood', { mood: str('low') }],
   ['households/' + hid + '/mhealth/u3', { kept: str('a parent that does exist') }],
@@ -117,7 +119,7 @@ const RECORDS = (hid) => [
   const after = await Promise.all(RECORDS('HP').map(([p]) => exists(p)));
   const left = RECORDS('HP').filter((_, i) => after[i]).map(([p]) => p);
   ok('not one record survives it', left.length === 0, left);
-  for (const [p] of RECORDS('HP')) if (/mhealth|memberEmails|pregnancy\/u\d\/photos/.test(p)) ok(p.replace('households/HP/', '') + ' is gone', !(await exists(p)));
+  for (const [p] of RECORDS('HP')) if (/mhealth|memberEmails|ownerLinks|pregnancy\/u\d\/photos/.test(p)) ok(p.replace('households/HP/', '') + ' is gone', !(await exists(p)));
   ok('the household document is gone', !(await exists('households/HP')));
   ok('and nothing at all is left under it, at any depth', (await subcollections('households/HP')).length === 0, await subcollections('households/HP'));
   for (const sub of ['mhealth/u2', 'mhealth/u3', 'pregnancy/u2', 'pregnancy/u4']) {

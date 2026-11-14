@@ -316,6 +316,60 @@ const count = (out, label) => { const m = out.split('\n').find((l) => l.includes
   ok('a second --apply deletes nothing more', again.code === 0 && count(again.out, 'already joined') === 0
     && count(again.out, 'removed or left') === 0 && count(again.out, 'flag on a family with people') === 0, again.out);
 
+  /* 7. Lane B, P4. Hana joined Mia's family by link with a Hide My Email address while Mia's email
+     invite to Hana's REAL address was still waiting; Mia removed her. That invite lets her back in.
+     It is matched by the name on it against the removed member's tombstone: whole name, trimmed, any
+     case. "Hana Lee" is somebody else; an invite with no name matches no one, and neither does a
+     deletion's tombstone, which keeps no name. */
+  console.log('\n7. her invite to another address, matched by the name of someone removed');
+  const HID_HME = 'hhWillowHme6';
+  const HM = { real: 'hana.real@example.test', lee: 'hana.lee@example.test', noname: 'nameless@example.test' };
+  await auth.createUser({ uid: 'uidHanaHme', email: 'hana.hme@privaterelay.example.test' });
+  const hmeSeed = () => seedDb(async (db) => {
+    await env.clearFirestore();
+    await db.doc('households/' + HID_HME).set({ ownerId: 'uidOwnerMia', members: { uidOwnerMia: 'owner' },
+      memberInfo: { uidOwnerMia: { name: 'Mia', role: 'owner' } },
+      formerMemberInfo: { uidHanaHme: { name: 'Hana', relationship: 'Auntie', avatar: null }, uidLeftByDeleting: { name: '', relationship: 'Nanny', avatar: null } },
+      pendingInvites: { [HM.real]: { name: ' hana ', role: 'caregiver', at: 1 }, [HM.lee]: { name: 'Hana Lee', role: 'caregiver', at: 1 }, [HM.noname]: { name: '', role: 'caregiver', at: 1 } },
+      app: { babies: [] } });
+    await db.doc('invites/' + HM.real).set({ householdId: HID_HME, role: 'caregiver', invitedBy: 'uidOwnerMia', name: ' hana ' });
+    await db.doc('invites/' + HM.lee).set({ householdId: HID_HME, role: 'caregiver', invitedBy: 'uidOwnerMia', name: 'Hana Lee' });
+    await db.doc('invites/' + HM.noname).set({ householdId: HID_HME, role: 'caregiver', invitedBy: 'uidOwnerMia' });
+  });
+  const hanaBack = () => rejoin('uidHanaReal', HM.real, HID_HME, 'caregiver', 'Hana');
+  await hmeSeed();
+  await check('(the hole) with her real address Hana writes herself back in', assertSucceeds(hanaBack()));
+  await hmeSeed();
+  const hDry = runTool([]);
+  ok('the dry run counts her invite on its own line: 1, not the other Hana\'s, not the nameless one',
+    count(hDry.out, 'under the name of someone removed') === 1, hDry.out);
+  ok('and prints no address, uid or household id', leaks(hDry.out).length === 0 && !hDry.out.includes(HID_HME) && !hDry.out.includes('hana'), hDry.out);
+  const hApply = runTool(['--apply']);
+  ok('--apply deletes her invite', hApply.code === 0 && !(await readAdmin('invites/' + HM.real)).exists, hApply.out);
+  ok('and its row', !(HM.real in ((await readAdmin('households/' + HID_HME)).data().pendingInvites || {})));
+  await check('after which she cannot write herself back in', assertFails(hanaBack()));
+  /* The name match must decide on its own, not only ride along with "a family someone has left"
+     (which happens to delete every not-joined invite here as well). So run the tool with that clause
+     cut out: her invite must still go, and the other two must stay. */
+  const SRC = fs.readFileSync(TOOL, 'utf8');
+  const CLAUSE = ' || size(d.formerMemberInfo) > 0)';
+  const mutant = SRC.split(CLAUSE).join(')');
+  ok('(the mutant really drops the "someone has left" clause)', SRC.includes(CLAUSE) && !mutant.includes(CLAUSE));
+  const mutantFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-cleanup-mutant-')), 'invite_cleanup.js');
+  fs.writeFileSync(mutantFile, mutant);
+  const runMutant = () => {
+    const env2 = Object.assign({}, process.env, { NODE_PATH: path.join(ROOT, 'tools', 'node_modules') });
+    delete env2.GOOGLE_APPLICATION_CREDENTIALS;
+    const r = spawnSync('node', [mutantFile, '--apply'], { env: env2, encoding: 'utf8' });
+    return { code: r.status, out: (r.stdout || '') + (r.stderr || '') };
+  };
+  await hmeSeed();
+  const m1 = runMutant();
+  ok('with only the name match, her invite is still deleted', m1.code === 0 && !(await readAdmin('invites/' + HM.real)).exists, m1.out);
+  ok('the other Hana\'s invite is kept (a whole name, not a first name)', (await readAdmin('invites/' + HM.lee)).exists);
+  ok('and so is the invite with no name (an empty name matches nobody, nor a tombstone with none)', (await readAdmin('invites/' + HM.noname)).exists);
+  try { fs.rmSync(path.dirname(mutantFile), { recursive: true, force: true }); } catch (e) {}
+
   await env.cleanup();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   console.log(fail ? 'INVITE-CLEANUP: FAIL' : 'INVITE-CLEANUP: PASS');

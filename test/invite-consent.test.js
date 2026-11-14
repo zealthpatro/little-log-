@@ -194,6 +194,10 @@ if (!process.env.INVITE_CONSENT_INNER) {
   ok('and Dora', (await inviteFor('dora@cubby.test', 'Granny')) === 'ok');
   const link = await A.evaluate(() => window.LL.createInviteLink({ role: 'caregiver', relationship: 'Nanny' }));
   ok('and mints a link for Rosa', !!(link && link.token), link);
+  // Listed under its row id (lane B, D1), or under its token under older rules: section 5 checks that
+  // the join clears exactly this key, which proves nothing unless the key was there first.
+  const hh0 = (await read(A, 'households/' + a.hid)).data || {};
+  ok('(her list shows the link under its row key)', !!((hh0.pendingLinks || {})[(link && link.rowId) || (link && link.token)]), Object.keys(hh0.pendingLinks || {}));
 
   /* ---- 2. a newcomer with an invite is asked, and says yes ---- */
   console.log('\n2. Nina, new, invited by email: asked first, then joins');
@@ -319,7 +323,8 @@ if (!process.env.INVITE_CONSENT_INNER) {
   ok('into Olive\'s family', r.hid === a.hid, { r, a });
   ok('as a caregiver', r.role === 'caregiver', r);
   const hh2 = (await read(A, 'households/' + a.hid)).data;
-  ok('Olive\'s pending row for the link is gone', !((hh2.pendingLinks || {})[link.token]), hh2.pendingLinks);
+  // The row is keyed by the link's row id now (lane B, D1), or by its token under older rules.
+  ok('Olive\'s pending row for the link is gone', !((hh2.pendingLinks || {})[link.token]) && !((hh2.pendingLinks || {})[link.rowId || link.token]), hh2.pendingLinks);
   const lk = (await read(R, 'inviteLinks/' + link.token)).data || {};
   ok('the link is used AND consumed', lk.usedBy === r.uid && lk.consumed === true, lk);
 

@@ -290,7 +290,11 @@ async function until(fn, ms) {
   await sleep(1200);
   const seen = await read(N, 'households/' + a.hid);
   const seenTokens = Object.keys((seen.data && seen.data.pendingLinks) || {});
-  ok('(the hole) Nina, a member, can read that link\'s token off the family document', seenTokens.includes(l2.token), seenTokens);
+  /* Lane B, D1: the circle's list is keyed by a row id now and the token is owner-only, so under these
+     rules Nina cannot read it at all; removing her still cancels every live link (defence in depth,
+     and the only defence under older rules, where the row is keyed by the token she can read). */
+  if (!OLD_MODE) ok('Nina, a member, cannot read that link\'s token off the family document', !seenTokens.includes(l2.token) && !JSON.stringify(seen.data || {}).includes(l2.token) && seenTokens.includes(l2.rowId), seenTokens);
+  else ok('(older rules: the hole) Nina, a member, can read that link\'s token off the family document', seenTokens.includes(l2.token), seenTokens);
 
   ok('Olive opens Family & sharing', await familyOpen(A));
   const rmN = await realTap(A, '.ll-rm[data-uid="' + Nn.who.uid + '"]');
@@ -307,7 +311,7 @@ async function until(fn, ms) {
   ok('one real tap on Remove removes Nina', !!gone, gone && Object.keys(gone.members || {}));
   ok('the link she read is cancelled', (await until(async () => (await adminGet('inviteLinks/' + l2.token)) === null, 8000)) === true);
   const hhAfter = await adminGet('households/' + a.hid);
-  ok('and its row is gone from Olive\'s list', !((hhAfter && hhAfter.pendingLinks) || {})[l2.token], Object.keys((hhAfter && hhAfter.pendingLinks) || {}));
+  ok('and its row is gone from Olive\'s list', !((hhAfter && hhAfter.pendingLinks) || {})[l2.rowId || l2.token], Object.keys((hhAfter && hhAfter.pendingLinks) || {}));
   // Exactly the join claimInviteLink makes: claim, consume and join in one batch.
   const back = await write(N, `(db, firebase) => { const b = db.batch(); const uid = '${Nn.who.uid}';
     b.update(db.doc('inviteLinks/${l2.token}'), { usedBy: uid, consumed: true });
@@ -425,7 +429,7 @@ async function until(fn, ms) {
   const patGone = await until(async () => { const h = await adminGet('households/' + a.hid); return h && !(h.members || {})[Pp.who.uid] ? h : null; }, 15000);
   ok('the removal she made offline reached the server: Pat is out', !!patGone, patGone && patGone.members);
   ok('and the link she had out is cancelled', (await until(async () => (await adminGet('inviteLinks/' + l4.token)) === null, 8000)) === true);
-  ok('and its row is gone from her list', !(((await adminGet('households/' + a.hid)) || {}).pendingLinks || {})[l4.token]);
+  ok('and its row is gone from her list', !(((await adminGet('households/' + a.hid)) || {}).pendingLinks || {})[l4.rowId || l4.token]);
 
   /* ================================================================================================
      C. An invite into a family that has closed */

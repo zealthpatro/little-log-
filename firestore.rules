@@ -149,7 +149,10 @@ service cloud.firestore {
          actually true.
          The owner's own pending-links list is served from a mirror on her household document, the
          same way pending email invites already are, precisely so that nobody ever needs to query
-         this collection. */
+         this collection. Every member reads that document, so the mirror is keyed by a row id that
+         opens nothing; the token itself sits in households/{hid}/ownerLinks/{rowId}, which only an
+         owner can read (see there). Rows written before that change were keyed by the token, and the
+         owner's own device moves them the first time it opens Cubby under these rules. */
       allow get: if request.auth != null;
       allow list: if false;
 
@@ -171,13 +174,16 @@ service cloud.firestore {
         // without it is still accepted, because older builds never wrote it; the sheet then shows
         // no sender name for it.
         && ( !('fromEmail' in request.resource.data)
-             || ( emailProven() && request.resource.data.fromEmail == request.auth.token.email.lower() ) );
+             || ( emailProven() && request.resource.data.fromEmail == request.auth.token.email.lower() ) )
+        // The row id of the owner's pending-links list that this link clears when it is used (see
+        // households, JOINING BY LINK). A string or nothing: links minted before it existed have none.
+        && request.resource.data.get('rowId', '') is string;
 
       // Exactly two updates are legal.
       // 1. The owner edits it, which can never re-point the link at a different household, and can
-      //    never change who it says sent it or what role it grants. Revoking is a delete, and no
-      //    client updates a link as its owner, so this costs nothing; it stops an owner writing
-      //    "Your midwife" over her own address after the rules checked it at create.
+      //    never change who it says sent it or what role it grants. Revoking is a delete, and the
+      //    only owner update the app makes is giving an older link its rowId, so this costs nothing;
+      //    it stops an owner writing "Your midwife" over her own address after the rules checked it.
       // 2. The invitee CLAIMS it: sets usedBy to their own uid and consumed: true, once, before it
       //    expires, changing nothing else, AND in the same batch that adds them to the household
       //    (getAfter). The household rule checks the same thing from its side. A claim on its own
@@ -193,7 +199,9 @@ service cloud.firestore {
           ( get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members.get(request.auth.uid, '') == 'owner'
             && request.resource.data.get('fromEmail', null) == resource.data.get('fromEmail', null)
             && request.resource.data.get('invitedByName', null) == resource.data.get('invitedByName', null)
-            && request.resource.data.get('role', 'caregiver') == resource.data.get('role', 'caregiver') )
+            && request.resource.data.get('role', 'caregiver') == resource.data.get('role', 'caregiver')
+            // The one owner edit the app makes: giving a link minted before row ids its row id.
+            && request.resource.data.get('rowId', '') is string )
           || (
                resource.data.get('usedBy', null) == null
             && request.resource.data.usedBy == request.auth.uid
@@ -297,6 +305,24 @@ service cloud.firestore {
           || ( request.resource.data.get(field, {}).diff(resource.data.get(field, {})).affectedKeys().hasOnly([key])
                && !(key in request.resource.data.get(field, {})) );
       }
+      /* TWO DELETIONS AT ONCE. Each phone writes what it last SAW. When the owner (handing over to an
+         heir) and the heir (leaving) deleted their accounts at the same moment, the second write
+         landed on a family the first had already changed: either the departed heir was written back
+         in as owner, or nobody was left and no deletion was scheduled, so the purge never came.
+         Nobody else adds anyone to a family: people come in only through the join branches, by
+         their own hand. So an owner's write may not add a member, and ANY write that leaves nobody in
+         members must be the last one out scheduling the deletion, at least 7 days ahead of the
+         server's clock (the app writes 30 from the server's clock). A refused write is the phone's
+         cue to look again: the app's deleteAccount reads the family in a transaction. */
+      function addsNoMember() {
+        return request.resource.data.get('members', {}).diff(resource.data.get('members', {})).addedKeys().size() == 0;
+      }
+      function emptiesOnlyAsLastOut() {
+        return request.resource.data.get('members', {}).size() > 0
+          || ( request.resource.data.get('deletionRequestedBy', null) == request.auth.uid
+               && request.resource.data.get('deleteAfter', null) is number
+               && request.resource.data.deleteAfter >= request.time.toMillis() + 7 * 24 * 60 * 60 * 1000 );
+      }
 
       // Account deletion: a member removes THEMSELVES. Without this a caregiver could not delete
       // their own account, because the isMember() branch below freezes the members map — and
@@ -308,12 +334,18 @@ service cloud.firestore {
       //
       // Scoped hard so it can never become a privilege-escalation path: exactly three keys may move,
       // the writer must be GONE from members afterwards, and each of those maps may differ only at
-      // the writer's own uid. So no promoting, no removing anyone else, no touching ownerId,
-      // deleteAfter, pro or the app blob.
+      // the writer's own uid. So no promoting, no removing anyone else, no touching ownerId, pro or
+      // the app blob. The deletion flag moves only when she is the last one out (see
+      // emptiesOnlyAsLastOut), and then it must be set, so a family is never left empty and unflagged.
       function departingSelf() {
         return isMember()
           && !(request.auth.uid in request.resource.data.members)
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'memberInfo', 'formerMemberInfo'])
+          // The last one out also schedules the deletion, whatever her role: a family can be left
+          // with only a caregiver in it, and she must be able to go too (emptiesOnlyAsLastOut).
+          && ( request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'memberInfo', 'formerMemberInfo'])
+               || ( request.resource.data.members.size() == 0
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'memberInfo', 'formerMemberInfo', 'deleteAfter', 'deletionRequestedBy']) ) )
+          && emptiesOnlyAsLastOut()
           && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid])
           && request.resource.data.memberInfo.diff(resource.data.memberInfo).affectedKeys().hasOnly([request.auth.uid])
           && request.resource.data.get('formerMemberInfo', {}).diff(resource.data.get('formerMemberInfo', {})).affectedKeys().hasOnly([request.auth.uid])
@@ -342,7 +374,7 @@ service cloud.firestore {
       // flag only as the last one out). A caregiver may edit shared data and their OWN memberInfo,
       // nothing else. An invitee may join (adds themselves). No one may inject maternal-private data.
       allow update: if proUnchanged() && appBlobClean() && (
-           ( isOwner() && deletionScheduledProperly() )
+           ( isOwner() && deletionScheduledProperly() && addsNoMember() && emptiesOnlyAsLastOut() )
         || departingSelf()
         /* A caregiver: the app blob, updatedAt and their own circle entry, nothing else. Those are
            the only keys a caregiver's client writes (persist, the first-run sheet, the profile, the
@@ -391,7 +423,12 @@ service cloud.firestore {
              && request.resource.data.members[request.auth.uid] == get(/databases/$(database)/documents/inviteLinks/$(request.resource.data.joinToken)).data.get('role', 'caregiver')
              && onlyOwnMemberInfo()
              && joinsVisibly()
-             && onlyClearsOwnPending('pendingLinks', request.resource.data.joinToken) ) );
+             /* Her own row, by the row id the OWNER wrote on the link (the claim may not change it).
+                A link minted before row ids has none, and its row is still keyed by the token. An
+                older build always clears the token key; on a new link that key is not there, so the
+                write changes nothing in the list and is let through (the owner's device tidies the
+                row away), rather than shutting out a person who holds a good link. */
+             && onlyClearsOwnPending('pendingLinks', get(/databases/$(database)/documents/inviteLinks/$(request.resource.data.joinToken)).data.get('rowId', request.resource.data.joinToken)) ) );
       /* No client deletes a family, owner included. Nothing in the app ever has: a family closes by
          the last one out flagging it (deletionScheduledProperly), and the purge cron erases it with
          the service account, which bypasses this file. A deleted id could be CREATED again by anyone
@@ -477,6 +514,21 @@ service cloud.firestore {
         allow delete: if request.auth != null && (
             request.auth.uid == uid
             || ( request.auth.uid in pm() && pm()[request.auth.uid] == 'owner' ) );
+      }
+
+      /* Invite-link TOKENS, where only an owner can read them. The circle's list of pending links
+         (pendingLinks on the household document) is read by every member, and it used to be keyed
+         by each live link's secret token, so any caregiver could copy one and hand it to anyone. Now
+         that list is keyed by a row id that opens nothing, and the token for each row lives here,
+         readable and writable by an owner only: she needs it to copy or share the link again, to
+         cancel it, and to cancel every live link when she removes someone. Nobody can list
+         inviteLinks, and nobody but an owner can read this, so a caregiver has no way to a token.
+         Owner-only in full: an heir who is made owner reads them from then on, a removed or
+         departed owner never again. */
+      match /ownerLinks/{rowId} {
+        allow read, delete: if request.auth != null && pm().get(request.auth.uid, '') == 'owner';
+        allow create, update: if request.auth != null && pm().get(request.auth.uid, '') == 'owner'
+          && request.resource.data.get('token', null) is string;
       }
 
       // Maternal private health (Privacy Max, gate G1). The mother OWNS her health data.

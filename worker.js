@@ -1910,8 +1910,9 @@ async function sendPushReminders(env){
    but has been gutted. ---- */
 /* Every collection directly under a household whose documents have no children of their own.
    memberEmails was missing until the round-4 review (NP-4): each member's sign-in address outlived
-   the purge that reported the household erased. */
-const HH_SUBCOLLECTIONS = ['events', 'photos', 'notes', 'memberEmails'];
+   the purge that reported the household erased. ownerLinks (the owner-only copy of each pending
+   invite link's token, lane B of the Nov 2026 review) goes the same way. */
+const HH_SUBCOLLECTIONS = ['events', 'photos', 'notes', 'memberEmails', 'ownerLinks'];
 /* And the two whose documents DO have children: pregnancy/{owner}/photos/{photo} (the journey photo
    bytes) and mhealth/{owner}/cat/{category} (her private health). Both used to survive (NP-4). The
    app never writes the mhealth/{owner} document itself, only its cat children, so a plain listing of

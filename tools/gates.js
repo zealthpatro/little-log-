@@ -235,6 +235,10 @@ const EMU_GATES = [
   { name: 'join-offline', self: ['node', 'test/join-offline.test.js'] },             // Join the family offline: the card, not an endless loader, and the join still lands
   { name: 'blob-sync', self: ['node', 'test/blob-sync.test.js'] },       // two phones keep every blob edit: lost update, legacy pregnancy, undefined (real rules)
   { name: 'quick-close-emu', self: ['node', 'test/quick-close-emulator.test.js'] }, // a reload 40 ms after logging keeps the entry (real rules, real IndexedDB)
+  /* Lane B (Nov 2026 review D1, D4, P4): no caregiver can read a live link token; two deletions at
+     once never leave a ghost owner or an empty family nobody purges; a removal closes her other invites. */
+  { name: 'links-leave-rules', emu: 'node links-leave-rules.test.js' },
+  { name: 'links-leave', self: ['node', 'test/links-leave.test.js'] },
 ];
 
 function freePort() {

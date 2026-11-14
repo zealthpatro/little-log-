@@ -25,6 +25,12 @@
  *     gives him a new uid that is in no tombstone, before or after the cleanup, so he looks like a
  *     stranger. Either way he could come back in after --apply, as owner with a co-owner invite, and
  *     remove the original owner. Re-sending a genuine invite is a small, one-time cost.
+ *   - an invite under the NAME of someone removed (formerMemberInfo keeps the name on a removal) is
+ *     that person's invite to another address: she joined by link with Hide My Email, say, while the
+ *     owner's invite to her real address was still waiting, and it lets her back in. Deleted, with its
+ *     row, whatever the rest of this list would say, and counted on its own line. Whole name, trimmed,
+ *     any case, read off the invite or its pending row. A deletion's tombstone has no name, so it never
+ *     matches. (The app cancels these at removal now; this closes the ones left from before.)
  * And per household: deleteAfter or deletionRequestedBy set while members is not empty is a flag
  * nobody legitimately sets (only the last one out may), so both fields are cleared.
  * A household with a bogus flag is unflagged, so its invites are judged as a live family's.
@@ -72,6 +78,10 @@ const auth = getAuth(app);
 const has = (o, k) => !!o && typeof o === 'object' && Object.prototype.hasOwnProperty.call(o, k);
 const size = (o) => (o && typeof o === 'object') ? Object.keys(o).length : 0;
 const flagged = (d) => has(d, 'deleteAfter') || has(d, 'deletionRequestedBy');
+// Names are compared whole, trimmed and in any case (removeMember in app/store-firebase.js does the same).
+const nameKey = (v) => String(v == null ? '' : v).trim().replace(/\s+/g, ' ').toLowerCase();
+const removedNames = (d) => new Set(Object.values((d && d.formerMemberInfo) || {}).map((t) => nameKey(t && t.name)).filter(Boolean));
+const inviteName = (inv, d, email) => nameKey((inv && inv.name) || ((((d && d.pendingInvites) || {})[email]) || {}).name);
 // The rules join with the invite's role, missing meaning caregiver. Anything else counts as co-owner.
 const isCaregiverInvite = (inv) => { const r = (inv || {}).role; return r === undefined || r === null || r === 'caregiver'; };
 
@@ -83,7 +93,7 @@ const changedSinceRead = (e) => errCode(e) === '9' || errCode(e) === 'failed-pre
 (async () => {
   const n = {
     invites: 0, keptPending: 0, keptNoAccount: 0, keptCaregiver: 0, keptOwner: 0,
-    notJoinedNoAccount: 0, notJoinedHasAccount: 0,
+    notJoinedNoAccount: 0, notJoinedHasAccount: 0, namedLikeRemoved: 0,
     goneHousehold: 0, flaggedHousehold: 0, usedByMember: 0, usedByFormerMember: 0, pendingRows: 0,
     households: 0, bogusFlags: 0, skippedChanged: 0, errors: 0
   };
@@ -104,7 +114,7 @@ const changedSinceRead = (e) => errCode(e) === '9' || errCode(e) === 'failed-pre
     try { if (typeof hid === 'string' && hid) hh = await readHousehold(hid); } catch (e) { n.errors++; console.log('  read failed: ' + errCode(e)); continue; }
     const d = hh && hh.exists ? (hh.data() || {}) : null;
 
-    let reason = null, clearRow = false;
+    let reason = null, clearRow = false, namesake = false;
     if (!d) reason = 'goneHousehold';
     else if (flagged(d) && size(d.members) === 0) reason = 'flaggedHousehold';
     else {
@@ -116,8 +126,10 @@ const changedSinceRead = (e) => errCode(e) === '9' || errCode(e) === 'failed-pre
       }
       if (uid && has(d.members, uid)) reason = 'usedByMember';
       else if (uid && has(d.formerMemberInfo, uid)) reason = 'usedByFormerMember';
-      // Nobody has joined with it. Keep only a caregiver invite into a family nobody has left.
-      else if (!isCaregiverInvite(invData) || size(d.formerMemberInfo) > 0) reason = uid ? 'notJoinedHasAccount' : 'notJoinedNoAccount';
+      // Nobody has joined with it. Keep only a caregiver invite into a family nobody has left, and
+      // never one under the name of someone removed from it (her invite to another address).
+      else if ((namesake = removedNames(d).has(inviteName(invData, d, email)))
+        || !isCaregiverInvite(invData) || size(d.formerMemberInfo) > 0) reason = uid ? 'notJoinedHasAccount' : 'notJoinedNoAccount';
       else {
         if (uid) n.keptPending++; else n.keptNoAccount++;
         // keptOwner stays 0 under the rule above; it is counted from the invite itself, not assumed,
@@ -142,6 +154,7 @@ const changedSinceRead = (e) => errCode(e) === '9' || errCode(e) === 'failed-pre
       }
     }
     n[reason]++;
+    if (namesake) n.namedLikeRemoved++;
     if (clearRow) n.pendingRows++;
   }
 
@@ -172,6 +185,7 @@ const changedSinceRead = (e) => errCode(e) === '9' || errCode(e) === 'failed-pre
   console.log('  ' + verb + ', not joined, no account (the owner may need to re-send it): ' + n.notJoinedNoAccount);
   console.log('  ' + verb + ', not joined, has an account (the owner may need to re-send it): ' + n.notJoinedHasAccount);
   console.log('    (an invite nobody has joined with is kept only if it is a caregiver invite into a family nobody has left)');
+  console.log('    of those, under the name of someone removed (her invite to another address): ' + n.namedLikeRemoved);
   console.log('  pending-list rows ' + (APPLY ? 'cleared' : 'to clear') + ':              ' + n.pendingRows);
   console.log('  kept, still pending (account exists): ' + n.keptPending);
   console.log('  kept, still pending (no account yet): ' + n.keptNoAccount);

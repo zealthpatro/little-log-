@@ -238,8 +238,15 @@
     + 'background:var(--diaper-soft,#E4EFEA);border-radius:14px;margin-bottom:12px;}'
     + '.ll-hhname-k{font-size:11px;letter-spacing:.05em;text-transform:uppercase;font-weight:700;color:#6f8a80;}'
     + '.ll-hhname-v{font-family:var(--font-display,Georgia),serif;font-size:18px;font-weight:600;color:#2C2521;margin-top:2px;}'
-    + '.ll-mem{display:flex;align-items:center;justify-content:space-between;background:#FBF7EF;border-radius:12px;padding:10px 12px;}'
-    + '.ll-mem-name{font-weight:700;color:#2C2521;font-size:15px;}.ll-mem-email{color:#9a8d80;font-size:12px;}'
+    + '.ll-mem{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#FBF7EF;border-radius:12px;padding:10px 12px;}'
+    // A long name or address wraps, anywhere, so the label and buttons beside it stay on the card at
+    // 320px. The label side gives up its room first (a huge flex-shrink), and it can: its label stacks
+    // over its button (flex-wrap), so an ordinary name or address ("Papadopoulos", "sam.lee@...") that
+    // fits once they stack is never broken mid-word. Without the wrap the label side could not shrink
+    // at all, and the name side broke its words to make room. (The 8px between a stacked label and its
+    // button is the inline gap on that div; a row-gap here would lose to it.)
+    + '.ll-mem-name{font-weight:700;color:#2C2521;font-size:15px;overflow-wrap:anywhere;}.ll-mem-email{color:#9a8d80;font-size:12px;overflow-wrap:anywhere;}'
+    + '.ll-mem>div:last-child{flex-shrink:1000000;flex-wrap:wrap;justify-content:flex-end;}'
     + '.ll-mem-role{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#C97FA0;font-weight:700;}'
     + '.ll-invite{display:flex;flex-direction:column;gap:8px;border-top:1px solid #efe6d6;padding-top:16px;}'
     + '.ll-invite label{font-weight:700;color:#2C2521;font-size:14px;}'
@@ -945,6 +952,10 @@
     ownPregPhotoIds = {}; otherPregPhotoIds = {};
     PhotoStore.privIds = {}; PhotoStore.map = {}; // one account's photo bytes never survive into the next session
     if (memberEmailsUnsub) { try { memberEmailsUnsub(); } catch (e) {} memberEmailsUnsub = null; }
+    // Lane B, D1: one account's link tokens never survive into the next session.
+    if (ownerLinksUnsub) { try { ownerLinksUnsub(); } catch (e) {} ownerLinksUnsub = null; }
+    window.LL.ownerLinks = {}; ownerLinksLoaded = false; ownerLinksDenied = false; ownerLinksDeniedAt = 0; ownerLinksTidiedOnce = false; ownerLinksRows = {};
+    ownerLinksMembers = []; ownerLinksTidySig = '';
     // Config is the same for everyone, so its last value stays applied; only the listener goes.
     if (configUnsub) { try { configUnsub(); } catch (e) {} configUnsub = null; }
     if (avatarClaimT) { clearTimeout(avatarClaimT); avatarClaimT = null; } // never claim a bear into the account being left
@@ -1026,6 +1037,123 @@
       withEmail.forEach(function (u) { upd['memberInfo.' + u + '.email'] = firebase.firestore.FieldValue.delete(); });
       return hhRef.update(upd);
     }).catch(function (e) { console.warn('memberEmail migrate', e); });
+  }
+
+  /* LINK ROWS, the owner's side (lane B, D1). Only an owner can read the tokens, so only her device
+     keeps window.LL.ownerLinks live (Send again, Cancel and Remove need a token without waiting for
+     the network) and only her device tidies the list. Called from every household snapshot:
+     attaches once, and lets go when she stops being an owner.
+     Refused (the rules published before ownerLinks existed) is not for the whole session: Cubby can
+     stay open for days across the new rules being published. A later household snapshot tries
+     again, at most once every OWNER_LINKS_RETRY_MS, and a link minted the new way re-attaches at
+     once (createInviteLink). */
+  var ownerLinksLoaded = false, ownerLinksTidyBusy = false, ownerLinksTidiedOnce = false, ownerLinksRows = {};
+  var ownerLinksMembers = [], ownerLinksTidySig = '', ownerLinksDeniedAt = 0, OWNER_LINKS_RETRY_MS = 20000;
+  function watchOwnerLinks(d) {
+    var owner = (window.LL.role || '') === 'owner';
+    if (owner) { ownerLinksRows = (d && d.pendingLinks) || {}; ownerLinksMembers = Object.keys((d && d.members) || {}); }
+    if (owner && ownerLinksDenied && !ownerLinksUnsub && Date.now() - ownerLinksDeniedAt >= OWNER_LINKS_RETRY_MS) ownerLinksDenied = false;
+    if (owner && !ownerLinksUnsub && !ownerLinksDenied && hhRef) {
+      var mine = hhRef.collection('ownerLinks').onSnapshot(function (s) {
+        var m = {};
+        s.forEach(function (dd) { m[dd.id] = dd.data() || {}; });
+        window.LL.ownerLinks = m;
+        ownerLinksLoaded = true;
+        maybeTidyOwnerLinks();
+      }, function (e) {
+        // Rules published before ownerLinks existed: links are made the old way until a retry gets in.
+        if (e && e.code === 'permission-denied') { ownerLinksDenied = true; ownerLinksDeniedAt = Date.now(); }
+        if (ownerLinksUnsub === mine) { ownerLinksUnsub = null; ownerLinksLoaded = false; window.LL.ownerLinks = {}; }
+      });
+      ownerLinksUnsub = mine;
+    } else if (!owner && ownerLinksUnsub) {
+      try { ownerLinksUnsub(); } catch (e) {}
+      ownerLinksUnsub = null; ownerLinksLoaded = false; window.LL.ownerLinks = {};
+    }
+    if (owner) maybeTidyOwnerLinks();
+  }
+  // What the tidy last judged: who is in the family, and which rows are on the list. A join by an
+  // older build (which clears a token key a row-id row does not have) changes the first; a used,
+  // cancelled or newly minted link changes the second.
+  function ownerLinksSig() {
+    return ownerLinksMembers.slice().sort().join(',') + '|' + Object.keys(ownerLinksRows || {}).sort().join(',');
+  }
+  /* Three things only the owner's device can put right, all in one transaction so they are judged on
+     what the server holds, never on two listeners that have not caught up with each other:
+     1. a row still keyed by its token (written before this change, or by an older build) moves to a
+        row id: the token doc, the link learning its row id, and the row itself, in one write;
+     2. a row whose link has been used or deleted goes (an older build's join clears the token key,
+        which a row-id row does not have);
+     3. a token doc with no row goes, and if its link is still live the link goes too: an older build
+        cancelled that row, or removed someone, and meant the link to stop working.
+     Expired links that nobody used stay, so the list can still say "Link expired".
+     It runs once per session, then again whenever there is an old-shape row or an orphan copy, or
+     the members or the rows have changed since it last ran (ownerLinksSig): an older build's join
+     uses a link without clearing its row, and the row would otherwise say "Link waiting" until a
+     relaunch. A change that lands while it runs is judged straight after. */
+  function maybeTidyOwnerLinks() {
+    if (ownerLinksTidyBusy || !ownerLinksLoaded || ownerLinksDenied || deletingAccount || !hhRef) return;
+    if ((window.LL.role || '') !== 'owner') return;
+    var rows = ownerLinksRows || {}, ol = window.LL.ownerLinks || {};
+    var legacy = Object.keys(rows).some(function (k) { return !isLinkRowId(k); });
+    var orphan = Object.keys(ol).some(function (k) { return !Object.prototype.hasOwnProperty.call(rows, k); });
+    var sig = ownerLinksSig();
+    if (!Object.keys(rows).length && !Object.keys(ol).length) { ownerLinksTidiedOnce = true; ownerLinksTidySig = sig; return; }   // no links at all: nothing to read
+    if (ownerLinksTidiedOnce && !legacy && !orphan && sig === ownerLinksTidySig) return;
+    ownerLinksTidyBusy = true;
+    var ref = hhRef;
+    setTimeout(function () {
+      tidyOwnerLinks(ref).then(function () {
+        ownerLinksTidiedOnce = true; ownerLinksTidySig = sig; ownerLinksTidyBusy = false;
+        if (ref === hhRef && ownerLinksSig() !== sig) maybeTidyOwnerLinks();
+      }, function (e) { console.warn('tidy links', e && e.code); ownerLinksTidyBusy = false; });
+    }, 1200);
+  }
+  function tidyOwnerLinks(ref) {
+    if (!ref || ref !== hhRef || deletingAccount) return Promise.resolve();
+    var FP = firebase.firestore.FieldPath, DEL = firebase.firestore.FieldValue.delete();
+    var known = Object.keys(window.LL.ownerLinks || {});
+    return db.runTransaction(async function (tx) {
+      var hs = await tx.get(ref);
+      if (!hs.exists) return;
+      var rows = (hs.data() || {}).pendingLinks || {};
+      var has = function (k) { return Object.prototype.hasOwnProperty.call(rows, k); };
+      var ids = Object.keys(rows).filter(isLinkRowId);
+      known.forEach(function (k) { if (ids.indexOf(k) < 0) ids.push(k); });
+      // Every read before any write, as a transaction requires.
+      var docs = {}, i;
+      for (i = 0; i < ids.length; i++) {
+        var os = await tx.get(ref.collection('ownerLinks').doc(ids[i]));
+        if (os.exists) docs[ids[i]] = os.data() || {};
+      }
+      var tokens = {};
+      Object.keys(rows).forEach(function (k) { if (!isLinkRowId(k)) tokens[k] = k; });
+      Object.keys(docs).forEach(function (k) { if (typeof docs[k].token === 'string' && docs[k].token) tokens[k] = docs[k].token; });
+      var keys = Object.keys(tokens), links = {};
+      for (i = 0; i < keys.length; i++) {
+        var ls = await tx.get(db.collection('inviteLinks').doc(tokens[keys[i]]));
+        links[keys[i]] = ls.exists ? (ls.data() || {}) : null;
+      }
+      var hhArgs = [];
+      keys.forEach(function (k) {
+        var l = links[k];
+        var live = !!l && !(l.usedBy || l.consumed) && l.householdId === ref.id;
+        if (!isLinkRowId(k)) {
+          if (!live) { hhArgs.push(new FP('pendingLinks', k), DEL); return; }
+          var nid = newLinkRowId(), r = rows[k] || {};
+          tx.set(ref.collection('ownerLinks').doc(nid), { token: k, at: r.at || Date.now(), expiresAt: r.expiresAt || 0 });
+          tx.update(db.collection('inviteLinks').doc(k), { rowId: nid });
+          hhArgs.push(new FP('pendingLinks', k), DEL, new FP('pendingLinks', nid), r);
+        } else if (has(k)) {
+          if (!live) { hhArgs.push(new FP('pendingLinks', k), DEL); tx.delete(ref.collection('ownerLinks').doc(k)); }
+        } else {
+          if (live) tx.delete(db.collection('inviteLinks').doc(tokens[k]));
+          tx.delete(ref.collection('ownerLinks').doc(k));
+        }
+      });
+      // Field paths, never the whole map: a row someone else adds meanwhile is left as it is.
+      if (hhArgs.length) { var txUpdate = tx.update; txUpdate.apply(tx, [ref].concat(hhArgs)); }
+    });
   }
   function membersMap(uid, r) { var m = {}; m[uid] = r; return m; }
   // PRIV-2: memberInfo (the circle-shared blob) no longer carries email addresses. A member's
@@ -1981,6 +2109,37 @@
     return out;
   }
   var INVITE_LINK_HOURS = 24;
+  /* LINK ROWS (lane B, D1). The pending-links list on the household document is read by every
+     member, and it used to be keyed by each live link's token, so any caregiver could copy one and
+     hand it to anyone. A row is now keyed by an id that opens nothing ('r_' and 16 random
+     characters, which can never be a token: tokens have no underscore), and the token for each row
+     lives in households/{hid}/ownerLinks/{rowId}, which only an owner can read. A row still keyed
+     by its token was written before this change (or by an older build); the owner's own device
+     moves it (tidyOwnerLinks). window.LL.ownerLinks is the owner's live copy of that collection. */
+  window.LL.ownerLinks = {};
+  var ownerLinksUnsub = null;      // owner-only listener on households/{hid}/ownerLinks
+  var ownerLinksDenied = false;    // the token listener was refused: rules without ownerLinks (retried, see watchOwnerLinks)
+  function newLinkRowId() {
+    var A = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', out = 'r_';
+    var b = new Uint8Array(16);
+    (window.crypto || window.msCrypto).getRandomValues(b);
+    for (var i = 0; i < b.length; i++) out += A[b[i] % A.length];
+    return out;
+  }
+  function isLinkRowId(key) { return /^r_[A-Za-z0-9]{16}$/.test(String(key || '')); }
+  // The token behind a pending row: from the owner-only doc, or the key itself for a row written
+  // before row ids. '' when it cannot be known on this device.
+  function linkTokenFor(rowKey) {
+    var ol = (window.LL.ownerLinks || {})[rowKey];
+    if (ol && typeof ol.token === 'string' && ol.token) return ol.token;
+    return (rowKey && !isLinkRowId(rowKey)) ? String(rowKey) : '';
+  }
+  // And the other way: which row a token sits under (its own key, for a row written before).
+  function linkRowFor(token) {
+    var ol = window.LL.ownerLinks || {};
+    for (var k in ol) { if (Object.prototype.hasOwnProperty.call(ol, k) && ol[k] && ol[k].token === token) return k; }
+    return token;
+  }
   window.LL.createInviteLink = async function (opts) {
     opts = opts || {};
     var u = auth.currentUser;
@@ -2001,18 +2160,51 @@
     // Checked by the rules against this account's own address, so the sheet that offers the link to
     // someone with a Cubby already can show who really sent it (inviteFacts).
     if (u.email) linkDoc.fromEmail = String(u.email).toLowerCase();
-    try {
-      await db.collection('inviteLinks').doc(token).set(linkDoc);
-    } catch (e) { console.warn('createInviteLink', e); return null; }
     /* Mirror it onto the household document, the way pending email invites already are. Not a
        convenience: the rules deny LIST on inviteLinks (that is what keeps the token a secret), so
        there is no query that could rebuild this list. Without the mirror an owner would have no way
-       to see, re-send or revoke a link she made two minutes ago. */
+       to see, re-send or revoke a link she made two minutes ago.
+       The mirror row is keyed by a row id, and the token goes where only owners can read it, all in
+       ONE batch, so there is never a row without its token or a token without its row. Under rules
+       published before ownerLinks existed that batch is refused, and the link is made the old way
+       (token-keyed row); this owner's device moves that row once the rules allow it.
+       The batch is tried first EVERY time, never skipped on an earlier refusal: Cubby can be open
+       when the new rules are published, and the first link after that must already be the new shape. */
+    var row = { at: Date.now(), expiresAt: Date.now() + INVITE_LINK_HOURS * 3600000, sentTo: '' };
+    var rowId = newLinkRowId();
     try {
-      await hhRef.update(new firebase.firestore.FieldPath('pendingLinks', token),
-        { at: Date.now(), expiresAt: Date.now() + INVITE_LINK_HOURS * 3600000, sentTo: '' });
-    } catch (e) { /* the link still works; only the owner's list of it is poorer */ }
-    return { token: token, url: location.origin + '/app/?join=' + token, hours: INVITE_LINK_HOURS };
+      var b = db.batch();
+      b.set(hhRef.collection('ownerLinks').doc(rowId), { token: token, at: row.at, expiresAt: row.expiresAt });
+      b.set(db.collection('inviteLinks').doc(token), Object.assign({ rowId: rowId }, linkDoc));
+      b.update(hhRef, new firebase.firestore.FieldPath('pendingLinks', rowId), row);
+      await b.commit();
+      window.LL.ownerLinks[rowId] = { token: token, at: row.at, expiresAt: row.expiresAt };
+      // The rules have ownerLinks now. If this session's listener was refused under the ones before,
+      // attach it now, so the tidy moves the rows made the old way without a relaunch.
+      if (ownerLinksDenied && !ownerLinksUnsub) {
+        ownerLinksDenied = false; ownerLinksDeniedAt = 0;
+        watchOwnerLinks({ pendingLinks: window.LL.hhPendingLinks || {}, members: window.LL.members || {} });
+      }
+    } catch (e) {
+      if (!e || e.code !== 'permission-denied') { console.warn('createInviteLink', e); return null; }
+      /* Fall back to the old shape ONLY when the rules really have no ownerLinks yet: a refused batch
+         AND a refused read of ownerLinks. A refusal under rules that do have it is some other
+         problem, and the old shape would put the token back where every member can read it. */
+      var older = false;
+      try { await hhRef.collection('ownerLinks').limit(1).get(); } catch (e2) { older = !!e2 && e2.code === 'permission-denied'; }
+      if (!older) { console.warn('createInviteLink', e); return null; }
+      if (!ownerLinksDenied) { ownerLinksDenied = true; ownerLinksDeniedAt = Date.now(); }
+      rowId = '';
+    }
+    if (!rowId) {
+      try {
+        await db.collection('inviteLinks').doc(token).set(linkDoc);
+      } catch (e) { console.warn('createInviteLink', e); return null; }
+      try {
+        await hhRef.update(new firebase.firestore.FieldPath('pendingLinks', token), row);
+      } catch (e) { /* the link still works; only the owner's list of it is poorer */ }
+    }
+    return { token: token, rowId: rowId || token, url: location.origin + '/app/?join=' + token, hours: INVITE_LINK_HOURS };
   };
   /* Read a token WITHOUT joining. Returns null for anything a person should not walk through:
      missing, already claimed, expired, or pointing at the household they are already in. The rules
@@ -2049,7 +2241,9 @@
     var hh = db.collection('households').doc(link.householdId);
     var upd = Object.assign({ joinToken: link.token },
       memberUpdate(user, link.role || 'caregiver', { relationship: link.relationship, name: link.name }));
-    upd['pendingLinks.' + link.token] = firebase.firestore.FieldValue.delete();
+    // Her own row: by the row id the owner wrote on the link, or by the token for a link minted
+    // before row ids. The rules allow exactly that one key and nothing else (lane B, D1).
+    upd['pendingLinks.' + (isLinkRowId(link.rowId) ? link.rowId : link.token)] = firebase.firestore.FieldValue.delete();
     var joined = false;
     try {
       var b = db.batch();
@@ -2606,6 +2800,7 @@
         memberEmailsUnsub = null; window.LL.memberEmails = {};
       }
       maybeMigrateMemberEmails(d); // owner's device moves legacy blob emails into /memberEmails
+      watchOwnerLinks(d); // lane B, D1: owner-only link tokens, and the owner's device tidies the link rows
       var sig = hhSig(d.app, d.members, d.memberInfo) + '|' + JSON.stringify(d.pro || null);
       if (booted && sig === lastHhSig) return; // our own write echo / duplicate emission, already on screen
       lastHhSig = sig;
@@ -3311,57 +3506,91 @@
       }
 
       // 2. Leave the household.
+      /* Lane B, D4: decided on the family AS THE SERVER HOLDS IT, in a transaction, not on what this
+         phone last saw. When the owner (handing over) and her heir (leaving) deleted their accounts
+         at the same moment, each wrote from a stale picture: the departed heir came back as owner,
+         or nobody was left and no deletion was scheduled, so the purge never came. A transaction
+         re-reads the family and is retried if anyone else's write lands in between, so the second
+         one out sees she is the last one out. The rules refuse both stale shapes too, for an older
+         build. Deleting an account needs the network anyway, so a transaction costs nothing here.
+         The last one out schedules the deletion 30 days after the SERVER's clock (what the privacy
+         page promises), so a phone whose clock is wrong cannot move it. That clock and her
+         withdrawn invites are fetched outside the transaction, and the transaction is run again.
+         A family that already refuses her (lostHere, step 0) has nothing to leave and is skipped. */
       if (hhRef && !lostHere) {
-        var members = window.LL.members || {};
-        var others = Object.keys(members).filter(function (m) { return m !== uid; });
-        var mi = (window.LL.memberInfo || {})[uid] || {};
-        var del = firebase.firestore.FieldValue.delete();
-        var upd = {};
-        upd['members.' + uid] = del;
-        upd['memberInfo.' + uid] = del;
-        upd['formerMemberInfo.' + uid] = { name: '', relationship: mi.relationship || '', avatar: null };
-        if (others.length) {
-          if (members[uid] === 'owner') {
-            var heir = pickHeir(others);
-            // A co-owner is already in charge: she only becomes ownerId, and nobody is promoted.
-            if (members[heir] !== 'owner') upd['members.' + heir] = 'owner';
-            upd.ownerId = heir;
+        var leaveRef = hhRef, prep = { serverNow: 0, invitesWithdrawn: false }, out = null, refused = null;
+        for (var round = 0; round < 5; round++) {
+          try {
+            out = await db.runTransaction(async function (tx) {
+              var snap = await tx.get(leaveRef);
+              var d = (snap.exists && snap.data()) || {};
+              var members = d.members || {};
+              if (!Object.prototype.hasOwnProperty.call(members, uid)) return { gone: true };   // removed meanwhile: nothing to leave
+              var others = Object.keys(members).filter(function (m) { return m !== uid; });
+              var last = !others.length, owner = members[uid] === 'owner';
+              if (last && (!prep.serverNow || (owner && !prep.invitesWithdrawn))) return { prepare: true, isOwner: owner, data: d };
+              var mi = (d.memberInfo || {})[uid] || {};
+              var del = firebase.firestore.FieldValue.delete();
+              var upd = {};
+              upd['members.' + uid] = del;
+              upd['memberInfo.' + uid] = del;
+              upd['formerMemberInfo.' + uid] = { name: '', relationship: mi.relationship || '', avatar: null };
+              if (!last) {
+                if (owner) {
+                  var heir = pickHeir(others, members, d.memberInfo || {});
+                  // A co-owner is already in charge: she only becomes ownerId, and nobody is promoted.
+                  if (members[heir] !== 'owner') upd['members.' + heir] = 'owner';
+                  upd.ownerId = heir;
+                }
+              } else {
+                // Last one out. 30 days is a grace window, not retention: the cron hard-deletes after it,
+                // and privacy/index.html states the window.
+                upd.deleteAfter = prep.serverNow + 30 * 24 * 60 * 60 * 1000;
+                upd.deletionRequestedBy = uid;
+                if (owner && d.pendingInvites) upd.pendingInvites = del;
+                if (owner && d.pendingLinks) upd.pendingLinks = del;
+              }
+              tx.update(leaveRef, upd);
+              return { done: true };
+            });
+          } catch (e) {
+            /* When the other phone's write lands between this read and this write, the rules judge
+               this write against the family as it NOW is, and refuse it before Firestore's own
+               "changed since you read it" check would have retried it. So read again and decide
+               again; a refusal that is still there after that goes to the caller as before. */
+            var again = e && (e.code === 'permission-denied' || e.code === 'aborted' || e.code === 'failed-precondition');
+            if (!again || round === 4) throw e;
+            refused = e; out = null;
+            continue;
           }
-        } else {
-          // Last one out. 30 days is a grace window, not retention: the cron hard-deletes after it,
-          // and privacy/index.html states the window.
-          upd.deleteAfter = Date.now() + 30 * 24 * 60 * 60 * 1000;
-          upd.deletionRequestedBy = uid;
+          if (!out || !out.prepare) break;
           /* Withdraw every invite and link she still has out, while she is still owner (the rules
              let an owner delete both). Left behind, they asked a newcomer to join a family that no
              longer exists, and Join could only fail. Best effort: the family is closing either way,
-             and the rules refuse any join into a household flagged for deletion. */
-          if (members[uid] === 'owner') {
+             and the rules refuse any join into a household flagged for deletion. The link tokens are
+             in the owner-only ownerLinks docs (lane B, D1), which go too. */
+          if (out.isOwner && !prep.invitesWithdrawn) {
             try {
-              var hsnap = await hhRef.get();
-              var hd = (hsnap && hsnap.exists && hsnap.data()) || {};
-              var outs = [];
+              var hd = out.data || {}, outs = [];
               Object.keys(hd.pendingInvites || {}).forEach(function (em) { outs.push(db.collection('invites').doc(em).delete().catch(function () {})); });
-              Object.keys(hd.pendingLinks || {}).forEach(function (tk) { outs.push(db.collection('inviteLinks').doc(tk).delete().catch(function () {})); });
+              var tokens = {};
+              Object.keys(hd.pendingLinks || {}).forEach(function (rk) { if (!isLinkRowId(rk)) tokens[rk] = 1; });
+              try {
+                var ols = await leaveRef.collection('ownerLinks').get();
+                ols.forEach(function (od) {
+                  var t = (od.data() || {}).token; if (t) tokens[t] = 1;
+                  outs.push(od.ref.delete().catch(function () {}));
+                });
+              } catch (e2) { /* rules published before ownerLinks: every row is still keyed by its token */ }
+              Object.keys(tokens).forEach(function (tk) { outs.push(db.collection('inviteLinks').doc(tk).delete().catch(function () {})); });
               await Promise.all(outs);
-              if (hd.pendingInvites) upd.pendingInvites = del;
-              if (hd.pendingLinks) upd.pendingLinks = del;
             } catch (e) { console.warn('withdraw invites', e && e.code); }
+            prep.invitesWithdrawn = true;
           }
+          if (!prep.serverNow) prep.serverNow = (await serverClockMs(uid)) || Date.now();
         }
-        try {
-          await hhRef.update(upd);
-        } catch (e) {
-          /* Refused as the last one out. The rules want deleteAfter at least a week past the SERVER's
-             clock, and this was 30 days past the phone's, so a phone more than about 23 days slow lands
-             under the floor, after her private records are already gone. Ask the server the time once,
-             and try again from that. Anything else, or a second refusal, goes to the caller as before. */
-          if (!(e && e.code === 'permission-denied' && upd.deleteAfter)) throw e;
-          var serverNow = await serverClockMs(uid);
-          if (!serverNow) throw e;
-          upd.deleteAfter = serverNow + 30 * 24 * 60 * 60 * 1000;
-          await hhRef.update(upd);
-        }
+        // Never go on to delete the login while she is still in the family.
+        if (!out || out.prepare) throw refused || new Error('leave_not_written');
       }
 
       // 3. Everything keyed to them outside the household.
@@ -3409,9 +3638,11 @@
   // date anywhere, so "longest-standing" is not actually knowable — prefer a co-parent, which is
   // what the household means by a guardian, and fall back to a stable pick so two devices racing
   // the same deletion cannot promote two different people.
-  function pickHeir(others) {
-    var info = window.LL.memberInfo || {};
-    var members = window.LL.members || {};
+  function pickHeir(others, members, info) {
+    // Lane B, D4: deleteAccount passes the family as its transaction read it; the defaults are the
+    // last snapshot this phone saw.
+    info = info || window.LL.memberInfo || {};
+    members = members || window.LL.members || {};
     var sorted = others.slice().sort();
     /* Someone who is ALREADY an owner stays in charge. Promoting a caregiver beside a co-owner gave the
        caregiver the power to remove her, the very person the family had chosen to share control with. */
@@ -3646,19 +3877,21 @@
        tell whether it went — the modal still said "Just you so far". Expired ones are shown as
        expired rather than hidden, because "I sent that yesterday and heard nothing" deserves an
        answer on screen instead of silence. */
+    // Keyed by row id (lane B, D1), or by the token for a row written before; the buttons carry the
+    // row key and look the token up only when tapped (linkTokenFor), so no token sits in the page.
     var linkMap = (myRole === 'owner') ? (window.LL.hhPendingLinks || {}) : {};
     var linkRows = Object.keys(linkMap).sort(function (a, b) {
       return ((linkMap[b] || {}).at || 0) - ((linkMap[a] || {}).at || 0);
-    }).map(function (tk) {
-      var lv = linkMap[tk] || {};
+    }).map(function (rk) {
+      var lv = linkMap[rk] || {};
       var dead = !lv.expiresAt || lv.expiresAt < Date.now();
       var when = lv.at ? new Date(lv.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
       var status = dead ? 'Link expired' : (lv.sentTo ? ('Emailed to ' + esc(lv.sentTo)) : 'Link waiting');
       return '<div class="ll-mem"><div><div class="ll-mem-name">Invite link</div>'
         + '<div class="ll-mem-email">' + esc(status) + (when ? (' · ' + esc(when)) : '') + '</div></div>'
         + '<div style="display:flex;align-items:center;gap:8px">'
-        + (dead ? '' : '<button class="ll-rm ll-reshare-link" data-token="' + esc(tk) + '">Send again</button>')
-        + '<button class="ll-rm ll-cancel-link" data-token="' + esc(tk) + '">Cancel</button></div></div>';
+        + (dead ? '' : '<button class="ll-rm ll-reshare-link" data-row="' + esc(rk) + '">Send again</button>')
+        + '<button class="ll-rm ll-cancel-link" data-row="' + esc(rk) + '">Cancel</button></div></div>';
     }).join('');
     pendRows += linkRows;
 
@@ -3811,18 +4044,24 @@
       b.onclick = function () { cancelInvite(b.getAttribute('data-email')); };
     });
     Array.prototype.forEach.call(document.querySelectorAll('.ll-reshare-link'), function (b) {
-      b.onclick = function () { reshareLink(b.getAttribute('data-token'), b); };
+      b.onclick = function () { reshareLink(b.getAttribute('data-row'), b); };
     });
     Array.prototype.forEach.call(document.querySelectorAll('.ll-cancel-link'), function (b) {
-      b.onclick = function () { cancelInviteLink(b.getAttribute('data-token')); };
+      b.onclick = function () { cancelInviteLink(b.getAttribute('data-row')); };
     });
   }
 
   /* Send the SAME link again rather than minting a new one. Minting a second link would quietly
      invalidate nothing (both would work) and double the number of live invites into her household,
-     which is the opposite of what "send again" should mean. */
-  function reshareLink(token, btn) {
-    if (!token) return;
+     which is the opposite of what "send again" should mean.
+     Takes the row key (lane B, D1). The token comes from the owner-only copy already on this device,
+     with nothing awaited first, because a share sheet only opens straight from the tap. */
+  function reshareLink(rowKey, btn) {
+    var token = linkTokenFor(rowKey);
+    if (!token) {
+      try { if (window.toast) window.toast('Cubby could not find that link just now. Make a fresh one instead.'); } catch (e) {}
+      return;
+    }
     var url = location.origin + '/app/?join=' + token;
     var text = 'Join me on Cubby 🐻\n\n' + url + '\n\nIt works once and only for a day, so it is just for you.';
     if (navigator.share) { navigator.share({ title: 'Join me on Cubby 🐻', text: text }).catch(function () {}); return; }
@@ -3834,11 +4073,41 @@
   }
   /* Revoke. Deleting the link document is the real revocation — the mirror is only the visible
      list, so it goes second and its failure cannot leave a live link behind. */
-  async function cancelInviteLink(token) {
-    if (!token || !hhRef) return;
+  async function cancelInviteLink(rowKey) {
+    if (!rowKey || !hhRef) return;
+    // Lane B, D1: the row key opens nothing; the token is the owner-only copy (or the key itself, for
+    // a row written before row ids). If this device has not loaded it yet, ask the server once.
+    var token = linkTokenFor(rowKey), copyGone = false;
+    if (!token && isLinkRowId(rowKey)) {
+      try {
+        var os = await hhRef.collection('ownerLinks').doc(rowKey).get();
+        token = (os.exists && (os.data() || {}).token) || '';
+        copyGone = !os.exists && !os.metadata.fromCache;
+      } catch (e) {}
+    }
+    /* The server itself says there is no copy (offline, a copy this phone never saw is a refused read,
+       never "absent"). A copy only ever goes once its link no longer works: Cancel and Remove delete
+       the link first, and the tidy drops a copy with its link or after the link is used. So this row
+       points at nothing that still opens a door (an interrupted removal can leave one behind), and
+       clearing it strands nothing. Without this it would sit on her list for good. */
+    if (!token && copyGone) {
+      try { await hhRef.update(new firebase.firestore.FieldPath('pendingLinks', rowKey), firebase.firestore.FieldValue.delete()); }
+      catch (e) { try { if (window.toast) window.toast('Could not cancel that link just now. Try again in a moment.'); } catch (e2) {} return; }
+      try { if (window.toast) window.toast('That link was already gone, so it has been tidied away.'); } catch (e) {}
+      reopenFamily();
+      return;
+    }
+    /* Still no token (offline, say, on a phone whose copy has not arrived): the row id opens nothing,
+       so the link cannot be reached from here. Clearing the row and the copy anyway would leave a
+       live link she can neither see nor cancel. Touch nothing, as removeMember does, and say so. */
+    if (!token) {
+      try { if (window.toast) window.toast('Could not cancel that link just now. Try again in a moment.'); } catch (e) {}
+      return;
+    }
     try { await db.collection('inviteLinks').doc(token).delete(); }
     catch (e) { try { if (window.toast) window.toast('Could not cancel that link'); } catch (e2) {} return; }
-    try { await hhRef.update(new firebase.firestore.FieldPath('pendingLinks', token), firebase.firestore.FieldValue.delete()); } catch (e) {}
+    try { await hhRef.update(new firebase.firestore.FieldPath('pendingLinks', rowKey), firebase.firestore.FieldValue.delete()); } catch (e) {}
+    if (isLinkRowId(rowKey)) { try { await hhRef.collection('ownerLinks').doc(rowKey).delete(); } catch (e) {} }
     try { if (window.toast) window.toast('Link cancelled'); } catch (e) {}
     reopenFamily();
   }
@@ -3860,8 +4129,14 @@
       out = await r.json().catch(function () { return {}; });
     } catch (e) { return { error: 'network' }; }
     if (!r.ok || !out.ok) return { error: (out && out.error) || 'failed' };
-    // Record who it went to, so the pending row can say so instead of just "waiting".
-    try { await hhRef.update(new firebase.firestore.FieldPath('pendingLinks', token, 'sentTo'), String(email).trim().toLowerCase()); } catch (e) {}
+    // Record who it went to, so the pending row can say so instead of just "waiting". On the row,
+    // which is keyed by its row id now (lane B, D1), or by the token for a row written before.
+    // Only onto a row that is there: a field path write to a missing row would make one, keyed by
+    // the token, which is exactly what every member must not be able to read.
+    var rk = linkRowFor(token);
+    if (Object.prototype.hasOwnProperty.call(window.LL.hhPendingLinks || {}, rk)) {
+      try { await hhRef.update(new firebase.firestore.FieldPath('pendingLinks', rk, 'sentTo'), String(email).trim().toLowerCase()); } catch (e) {}
+    }
     return { ok: true };
   };
 
@@ -4031,9 +4306,26 @@
     openFirstRun(u, { asStep: true, stage: stage, onDone: onDone });
   };
 
+  /* Lane B, P4. Someone who joined by link (with Hide My Email, say) can still have an email invite
+     waiting at ANOTHER address, her real one, and after she is removed that invite lets her straight
+     back in. The owner's pending list carries the name she typed for each invite, so a removal also
+     cancels every pending invite under the same name: whole name, trimmed, any case. The confirm
+     sheet names each address first, so nothing is cancelled that the owner was not shown. */
+  function inviteNameKey(s) { return String(s == null ? '' : s).trim().replace(/\s+/g, ' ').toLowerCase(); }
+  function namesakeInvites(uid, email) {
+    var nm = inviteNameKey(((window.LL.memberInfo || {})[uid] || {}).name);
+    if (!nm) return [];
+    var own = String(email || '').toLowerCase(), pend = window.LL.hhPending || {};
+    return Object.keys(pend).filter(function (em) {
+      return em !== own && inviteNameKey((pend[em] || {}).name) === nm;
+    }).sort();
+  }
+  function listOf(xs) { return xs.length < 2 ? xs.join('') : xs.slice(0, -1).join(', ') + ' and ' + xs[xs.length - 1]; }
+
   function removeMember(uid, email, name) {
     if (!hhRef) return;
-    var linkTokens = function () { return Object.keys(window.LL.hhPendingLinks || {}); };
+    var linkRowKeys = function () { return Object.keys(window.LL.hhPendingLinks || {}); };
+    var alsoInvites = namesakeInvites(uid, email);   // lane B, P4: asked about on the sheet below
     var doRemove = async function () {
       try {
         var del = firebase.firestore.FieldValue.delete();
@@ -4041,9 +4333,10 @@
         // Keep a tombstone so their past entries stay attributed by name forever.
         var mi = (window.LL.memberInfo || {})[uid] || {};
         u['formerMemberInfo.' + uid] = { name: mi.name || name || '', relationship: mi.relationship || '', avatar: mi.avatar || null };
-        /* Every member can read this document, and the owner's list of pending links on it is keyed by
-           each link's secret token. So the person being removed may have copied a live token while she
-           was in, and could walk straight back in with it. Every unused link is cancelled in the same
+        /* Every member can read this document. The owner's list of pending links on it was keyed by each
+           link's secret token, and a row written before row ids (or by an older build) still is. So the
+           person being removed may have copied a live token while she was in, or been forwarded one,
+           and could walk straight back in with it. Every unused link is cancelled in the same
            action: the link documents first (deleting one is the real revocation), then the write that
            removes her, which clears their rows.
            NOTHING IS AWAITED BETWEEN THEM. Firestore queues writes in the order they are made, applies
@@ -4052,14 +4345,28 @@
            never even issued: her Remove did nothing, and was lost if she closed Cubby before the
            connection came back (round-5 review VJ-1; circle-manage section A2 is the gate). */
         var pending = window.LL.hhPendingLinks || {};
-        var linkDeletes = linkTokens().map(function (tk) {
+        /* Lane B, D1: rows are keyed by row id now, and the token comes from the owner-only copy on
+           this device (linkTokenFor), so the deletes are still issued at once with nothing awaited. A
+           row whose token this device does not have is left where it is, for her to cancel. */
+        var linkDeletes = linkRowKeys().map(function (tk) {
+          var token = linkTokenFor(tk);
+          if (!token) return Promise.resolve(null);
           u['pendingLinks.' + tk] = del;
-          return db.collection('inviteLinks').doc(tk).delete().then(function () { return null; }, function (e) {
+          var dropDoc = function () { if (isLinkRowId(tk)) hhRef.collection('ownerLinks').doc(tk).delete().catch(function () {}); return null; };
+          return db.collection('inviteLinks').doc(token).delete().then(dropDoc, function (e) {
             // Refused means it no longer exists (the rules cannot read a missing link's family).
-            return (e && (e.code === 'permission-denied' || e.code === 'not-found')) ? null : tk;
+            return (e && (e.code === 'permission-denied' || e.code === 'not-found')) ? dropDoc() : tk;
           });
         });
+        // Lane B, P4: her invites to her other addresses, the invite first (that is the revocation).
+        alsoInvites.forEach(function (em) {
+          try { db.collection('invites').doc(em).delete().catch(function () {}); } catch (e) {}
+        });
         var removal = hhRef.update(u);
+        alsoInvites.forEach(function (em) {
+          try { hhRef.update(new firebase.firestore.FieldPath('pendingInvites', em), firebase.firestore.FieldValue.delete()).catch(function () {}); } catch (e) {}
+          if (window.LL.hhPending) delete window.LL.hhPending[em];
+        });
         // PRIV-2: drop the removed member's gated email doc too (owner may, by rule). Their
         // address should not linger in a circle they are no longer part of.
         try { hhRef.collection('memberEmails').doc(uid).delete().catch(function () {}); } catch (e) {}
@@ -4083,7 +4390,8 @@
     if (window.confirmSheet) {
       window.confirmSheet({ title: 'Remove ' + (name || 'this person') + '?',
         body: 'They’ll lose access, but everything they logged stays part of the baby’s story.'
-          + (linkTokens().length ? ' Any unused invite links are cancelled too, so you can send fresh ones.' : ''),
+          + (linkRowKeys().length ? ' Any unused invite links are cancelled too, so you can send fresh ones.' : '')
+          + (alsoInvites.length ? ' This also cancels your invite' + (alsoInvites.length > 1 ? 's' : '') + ' to ' + listOf(alsoInvites) + '.' : ''),
         confirmLabel: 'Remove', cancelLabel: 'Keep', danger: true, onConfirm: doRemove });
     } else if (window.confirm('Remove ' + (name || 'this person') + ' from your family?')) {
       doRemove();
