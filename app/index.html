@@ -19767,8 +19767,15 @@ function normalizeLoadedState(saved){
     /* Every medicine now names its subject. Read-side only: nothing is written to migrate, and
        babyId keeps being written forever alongside it, so a caregiver still on an older cached
        bundle (which knows nothing about `subject`) keeps dosing exactly as before. Runs from
-       applyAppBlob on every snapshot, so it has to be idempotent, and it is. */
-    (state.meds||[]).forEach(m=>{ if(m && !m.subject) m.subject={kind:'baby', id:m.babyId}; });
+       applyAppBlob on every snapshot, so it has to be idempotent, and it is.
+       A medicine with no babyId gets a subject with no id, never id:undefined. Firestore refuses
+       undefined, so that one field made every later save of the medicines list fail on this phone
+       (review R3), and an older build's subject that already carries it is repaired the same way. */
+    (state.meds||[]).forEach(m=>{
+      if(!m) return;
+      if(!m.subject) m.subject=(m.babyId!=null)?{kind:'baby', id:m.babyId}:{kind:'baby'};
+      else { const sj=m.subject; if(typeof sj==='object' && 'id' in sj && sj.id===undefined) delete sj.id; }
+    });
     /* A medicine with no pattern crashes four separate code paths that all read m.pattern.type
        without checking: medNextDue, medScheduleText, the medicine list, and the reminder-index
        builder that fills the push queue. Two of those run by themselves, medNextDue every five

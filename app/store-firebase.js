@@ -42,6 +42,10 @@
   var knownEvents = {};      // id -> JSON of last-synced event (for diffing)
   var applyingRemote = false;
   var pushTimer = null;
+  var unackedEv = {};        // id -> { baseSer, n }: entry writes the server has not acknowledged yet (the outbox, below)
+  var blobOut = 0;           // blob writes issued and not yet settled
+  var outboxSaved = false;   // an outbox for this page is in localStorage now (it is hidden or going away)
+  var replayEv = null, replayHold = null; // a stored outbox read at boot, not yet put back by its first snapshot
   var firstRunShown = false;
   var lastHhSig = null; // signature of the last-applied household doc (dedupes our own write echoes)
   /* The household `app` blob is ONE Firestore field holding babies, medicines, vaccines, illnesses
@@ -63,6 +67,12 @@
   var hhHydrated = false;      // has the household snapshot been applied at least once?
   var pushWhenHydrated = false; // a push was suppressed while unhydrated; run it once we are
   var blobBase = null;         // key -> stableStringify(value) of what the server is believed to hold
+  /* Maternal keys an older build left inside the shared blob. firestore.rules appBlobClean refuses
+     EVERY write that touches `app` while any of them is there, for every member, so the owner's
+     one-time move (maybeMigrateLegacyJourney) has to delete them, not just stop writing them.
+     Refreshed from each household snapshot, so "present" always means present on the server. */
+  var LEGACY_BLOB_KEYS = ['pregnancy', 'mhealth', 'maternalHealth'];
+  var legacyBlobPresent = [];
 
   // Raw SDK errors ("client is offline", "permission-denied", "auth/…") must never reach a
   // parent's eyes. One translator, used by every catch that shows a message.
@@ -919,6 +929,9 @@
   };
 
   function teardown() {
+    // Sign-out flushed and waited for the push; nothing of this person's is left in the outbox.
+    if (auth.currentUser && hhRef) dropOutbox(auth.currentUser.uid, hhRef.id);
+    unackedEv = {}; blobOut = 0; replayEv = null; replayHold = null;
     unsub.forEach(function (u) { try { u(); } catch (e) {} });
     matUnsub.forEach(function (u) { try { u(); } catch (e) {} });
     pregUnsub.forEach(function (u) { try { u(); } catch (e) {} });
@@ -1307,11 +1320,16 @@
     // The journey no longer comes from the blob (Item 7). A legacy blob may still carry one;
     // stash it so the owner can relocate it into the owner-owned doc, then never read it again.
     if (app.pregnancy && !legacyBlobPreg) legacyBlobPreg = app.pregnancy;
+    legacyBlobPresent = LEGACY_BLOB_KEYS.filter(function (k) { return Object.prototype.hasOwnProperty.call(app, k); });
     state.den = app.den || null;
     state.consents = app.consents || [];
     state.guardians = app.guardians || null;
-    // Don't stomp a timer the local user just started but hasn't pushed yet.
-    if (!pushTimer) state.timers = app.timers || {};
+    /* Timers take the server's value like every other key. A timer this phone started and has not
+       pushed yet is kept by the general rule in the snapshot handler (holdPendingBlobEdits), which
+       also lets the OTHER phone's timer through when this one did not touch timers. The old special
+       case here kept local timers whenever ANY push was pending, so a caregiver who had just added a
+       medicine never saw the nap the owner started. */
+    state.timers = app.timers || {};
     state.journey = app.journey || null;
     state.lossHolding = app.lossHolding || null;
     normalizeLoadedState(state); // defensive legacy migrations
@@ -1329,6 +1347,127 @@
     var b = appBlobFromState(), m = {};
     Object.keys(b).forEach(function (k) { m[k] = stableStringify(b[k]); });
     return m;
+  }
+
+  /* ---------- a household snapshot that lands while this phone still owes the cloud an edit ----------
+     THE LOST UPDATE (review R1, 2026-11-12). A snapshot used to overwrite every app.* key with the
+     server's copy and then re-baseline, so an edit still waiting in the 350 ms push debounce (or for a
+     retry) vanished from the screen AND from the push: pushNow found nothing dirty. Her own memberInfo
+     write in the same tick was enough to lose a new medicine. So, while a push is pending, every key
+     whose local copy differs from its baseline is a pending local edit: it is held across the snapshot,
+     merged with it (below), and then takes the SERVER's copy as its new baseline. What the merge adds
+     on top of the server's copy therefore stays dirty, and pushNow still writes it.
+     The baseline has to move to the server's copy, not stay where it was. A second snapshot can land
+     inside the same pending window (edits under 350 ms apart keep re-arming the debounce, and a retry
+     waits 8 s to 5 min). Merged against a stale baseline, a record the other phone changed twice looked
+     changed on BOTH sides, so this phone's copy of its first version won and was pushed over its second,
+     and a record the other phone added and then deleted looked added here and came back (review A-V1).
+     Holding a whole key would only move the loss to the other phone when both touched it inside the
+     window, so a held key is merged three ways instead: base = what we last knew the server held,
+     local = this phone, remote = the snapshot. Lists of records with ids (medicines, milestones,
+     illnesses, babies, photos, consents, and any other) merge record by record: a record added or
+     changed on one side only is kept, one deleted on one side and untouched on the other is deleted,
+     and when both changed the same record this phone's edit wins, whole. Every other key (settings,
+     the vaccines map, den, journey, timers...) keeps this phone's value wherever this phone changed
+     it, and takes the other phone's change where only the other phone changed something. That last
+     part is not a nicety: render code adds empty entries without a save (timersFor makes
+     timers[baby] = {} on read), so "keep the whole local key" made a caregiver who had just added a
+     medicine push her empty timers back over the nap the owner had started. Per-device settings
+     (theme, push) stay exactly as applyAppBlob leaves them.
+     WHAT THIS DOES NOT FIX, said plainly. Each push writes whole keys (app.meds is the entire list), and
+     the merge above only runs on a snapshot this phone RECEIVES while its push waits.
+     1. A phone that is offline, for any length of time, receives nothing. Its queued write lands when it
+        reconnects and replaces the whole key, so every edit another phone made to that key meanwhile
+        (a medicine added, a dose corrected) is lost on every phone. Last writer wins, as before this fix.
+        The same happens when two pushes of one key cross on the wire. The fix is a separate lane: push
+        the blob in a transaction that reads the server's copy and runs this same merge before writing
+        (transactions do not run offline, so the edit stays dirty and merges on reconnect), or give
+        medicines, milestones and illnesses a document each.
+     2. An edit the rules REFUSE is reverted from this phone and never retried (see pushNow). */
+  function idListOf(v) {
+    if (!Array.isArray(v)) return null;
+    var byId = {}, keyOrder = [];
+    for (var i = 0; i < v.length; i++) {
+      var it = v[i];
+      if (!it || typeof it !== 'object' || Array.isArray(it)) return null;
+      var id = it.id;
+      if (!((typeof id === 'string' && id) || (typeof id === 'number' && isFinite(id)))) return null;
+      var key = typeof id + ':' + id;
+      if (byId[key]) return null; // two records share an id: there is no safe identity to merge on
+      byId[key] = it; keyOrder.push(key);
+    }
+    return { byId: byId, keyOrder: keyOrder };
+  }
+  function ser3(x) { return x === undefined ? '' : stableStringify(x); }
+  // null when any side is not a list of records with unique ids (the caller then keeps the local value).
+  function mergeIdList(base, local, remote) {
+    var B = idListOf(base), L = idListOf(local), R = idListOf(remote);
+    if (!B || !L || !R) return null;
+    function pick(key) {
+      var b = ser3(B.byId[key]);
+      if (ser3(L.byId[key]) === b) return R.byId[key]; // untouched here: the other phone's version, or its delete
+      if (ser3(R.byId[key]) === b) return L.byId[key]; // untouched there: ours, or our delete
+      return L.byId[key];                              // both changed it: this phone's edit wins
+    }
+    var out = [], seen = {};
+    // The server's order first, then what only this phone has, in this phone's order.
+    R.keyOrder.concat(L.keyOrder).forEach(function (key) {
+      if (seen[key]) return; seen[key] = 1;
+      var v = pick(key);
+      if (v !== undefined) out.push(v);
+    });
+    return out;
+  }
+  function plainObj(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
+  // Three-way merge of one value. undefined means absent (a delete, or never there).
+  function mergeBlobValue(base, local, remote, depth) {
+    var b = ser3(base), l = ser3(local), r = ser3(remote);
+    if (l === b) return remote;           // untouched here: theirs, or their delete
+    if (r === b || r === l) return local; // untouched there, or the same change on both
+    depth = depth || 0;
+    if (depth > 12) return local;
+    if (Array.isArray(local) && Array.isArray(remote)) return mergeIdList(Array.isArray(base) ? base : [], local, remote) || local;
+    if (plainObj(local) && plainObj(remote)) {
+      var bo = plainObj(base) ? base : {}, out = {}, seen = {};
+      Object.keys(local).concat(Object.keys(remote)).forEach(function (k) {
+        if (seen[k]) return; seen[k] = 1;
+        var v = mergeBlobValue(bo[k], local[k], remote[k], depth + 1);
+        if (v !== undefined) out[k] = v;
+      });
+      return out;
+    }
+    return local; // both changed something that cannot be merged: this phone's edit wins
+  }
+  // Before the snapshot is applied: the keys this phone has edited and not yet pushed.
+  function holdPendingBlobEdits() {
+    if (!blobBase || !(pushTimer || pushWhenHydrated)) return null;
+    var cur = appBlobFromState(), held = null;
+    Object.keys(cur).forEach(function (k) {
+      if (blobBase[k] === stableStringify(cur[k])) return;
+      (held = held || {})[k] = { base: blobBase[k], local: state[k], blobValue: cur[k] };
+    });
+    return held;
+  }
+  // After it is applied: put the held edits back, merged with what the snapshot brought. Returns the
+  // baseline for each held key: the server's copy as this snapshot has it. Whatever the merge keeps on
+  // top of that copy stays dirty, so the pending push writes it, and a later snapshot in the same
+  // window is merged against what the server really held, never against what it held before this one.
+  function reapplyPendingBlobEdits(held) {
+    var remote = appBlobFromState(), kept = {};
+    Object.keys(held).forEach(function (k) {
+      var h = held[k], remoteSer = stableStringify(remote[k]);
+      kept[k] = remoteSer; // the server's copy, now (review A-V1: the old baseline here reverted later edits)
+      if (remoteSer === h.base) { state[k] = h.local; return; } // the server did not move it: ours stands as it was
+      var base; try { base = JSON.parse(h.base); } catch (e) { base = undefined; }
+      var merged = mergeBlobValue(base, h.blobValue, remote[k]);
+      if (k === 'settings') { // the per-device fields stay exactly as applyAppBlob left them
+        var dev = state.settings || {};
+        merged = Object.assign({}, merged);
+        ['theme', 'push', 'seen'].forEach(function (f) { if (dev[f] !== undefined) merged[f] = dev[f]; });
+      }
+      state[k] = merged;
+    });
+    return kept;
   }
 
   /* ---------- maternal-private sync (mhealth subcollection) ---------- */
@@ -1705,29 +1844,117 @@
     }
   }
   // One-time migration: relocate a legacy in-blob journey to the owner-owned doc, then strip the
-  // blob. Owner-only, once per session. The legacy journey was already visible to the whole circle
+  // blob. Run by the member the copy names as its owner, or by the household owner when it names
+  // nobody in the circle (legacyJourneyMovedHere). The legacy journey was already visible to the whole circle
   // (it lived in the shared blob), so the migrated sharedWith defaults to the current members, so
   // nobody silently loses access they already had. The new-pregnancy audit governs fresh starts.
+  /* THE STRIP IS NOT OPTIONAL (review R2). This used to rely on pushNow, which writes app.<key> field
+     paths for the keys it knows and so never deleted app.pregnancy. firestore.rules appBlobClean then
+     refused every later write that touched `app`, for the owner and every caregiver, for good. So the
+     move ends with its own update deleting each legacy key still present, and only once her journey
+     (and any private health that rode inside it) is confirmed on the SERVER: a strip that landed
+     first, then a closed tab, would have lost the most sensitive thing a family writes down.
+     Idempotent, so a move that stopped half way (a closed tab, a lost connection) is simply run again.
+     Each run reads her journey doc and her private health docs from the SERVER first and folds them
+     in, so the legacy copy only ever fills what is not there yet and never overwrites her own record.
+     Whatever is still owed (the journey doc, or a health field the legacy copy carries that her
+     health docs lack) is written and then read back from the server, and the strip waits for that.
+     A failure leaves pregMigrated false, and the next household snapshot or a backoff timer tries again. */
+  /* WHOSE MOVE IT IS (review A-V4). The move lands the journey and her health in the PRIVATE docs of
+     whoever runs it. A legacy copy that names another member of the circle as its owner (a co-owner who
+     is the one expecting) is hers: moved by this phone it would sit in this person's private health,
+     unreadable by her, and the strip would then delete the last copy she could read. So when the copy
+     names a current member, only that member's phone moves it, whatever her role. When it names nobody
+     (or 'local', or someone who has left the circle), the household owner moves it, as before. */
+  function legacyJourneyMovedHere(legacy, uidNow, role, members) {
+    var named = legacy && typeof legacy.ownerUid === 'string' && legacy.ownerUid !== 'local' ? legacy.ownerUid : '';
+    if (named && members && Object.prototype.hasOwnProperty.call(members, named)) return named === uidNow;
+    return role === 'owner';
+  }
   function maybeMigrateLegacyJourney() {
     if (pregMigrated) return;
-    if (window.LL.role !== 'owner') return;          // only the household owner relocates
-    var uidNow = auth.currentUser && auth.currentUser.uid; if (!uidNow) return;
-    var legacy = legacyBlobPreg; if (!legacy) return;
-    if (pregOwner) { pregMigrated = true; legacyBlobPreg = null; return; } // an owner-owned doc already exists; nothing to relocate
+    var uidNow = auth.currentUser && auth.currentUser.uid; if (!uidNow || !hhRef) return;
+    if (legacyBlobPresent.indexOf('pregnancy') < 0) return; // nothing legacy in the shared blob
+    var legacy = (legacyBlobPreg && typeof legacyBlobPreg === 'object') ? legacyBlobPreg : null;
+    /* Not this phone's to move: nothing moved, nothing stripped, and the check runs again on every
+       snapshot. The stash is KEPT. Dropped here, a retry already waiting from an earlier failed move
+       (the named member was not in the circle then, so it was this phone's move) found no copy, read
+       that as "a legacy key with nothing in it", and stripped her journey and health from the blob
+       without moving them anywhere (review A-V5). No client can rewrite the legacy key (appBlobClean),
+       so the stash never goes stale. */
+    if (!legacyJourneyMovedHere(legacy, uidNow, window.LL.role, window.LL.members)) return;
     pregMigrated = true;
-    // Seed in-memory state from the legacy blob and claim ownership.
-    var p = state.pregnancy || {};
-    Object.keys(legacy).forEach(function (k) { if (p[k] === undefined) p[k] = legacy[k]; });
-    p.ownerUid = uidNow;
-    state.pregnancy = p;
-    pregOwner = uidNow;
-    // Preserve existing visibility: share the journey with the current circle (everyone who could
-    // already see it via the blob). The owner can trim this later in the privacy sheet.
-    pregShared = ((window.LL.members && Object.keys(window.LL.members)) || []).filter(function (m) { return m !== uidNow; });
-    knownPregJourney = null; // force the journey + blob-strip to be written
-    legacyBlobPreg = null;
-    ensureMaternalListeners(uidNow);
-    scheduledPush(); // writes the journey doc + mhealth + the blob without pregnancy
+    var ref = hhRef, own = ref.collection('pregnancy').doc(uidNow);
+    var cats = Object.keys(MAT_CATS);
+    function catRef(c) { return ref.collection('mhealth').doc(uidNow).collection('cat').doc(c); }
+    function stillHere() { return hhRef === ref && !!auth.currentUser && auth.currentUser.uid === uidNow; }
+    // The health fields the legacy copy carries that a category doc on the server does not hold yet.
+    function owed(c, snap) {
+      var d = (snap && snap.exists && snap.data() && snap.data().data) || {};
+      return MAT_CATS[c].filter(function (k) { return legacy && legacy[k] !== undefined && d[k] === undefined; });
+    }
+    function readServer() { return Promise.all([own].concat(cats.map(catRef)).map(function (r) { return r.get({ source: 'server' }); })); }
+    // A journey another member owns is live here (the carrier is not always the household owner): it is
+    // not hers to fold the legacy copy into. Left exactly as before this fix: nothing moved, nothing stripped.
+    function anothersJourney() { return !!pregOwner && pregOwner !== uidNow; }
+    if (anothersJourney()) { legacyBlobPreg = null; return; }
+    readServer().then(function (snaps) {
+      if (!stillHere()) return false;
+      if (!legacy) return true; // a legacy key with nothing in it: only the strip is owed
+      var journeyOwed = !snaps[0].exists;
+      var catsOwed = cats.filter(function (c, i) { return owed(c, snaps[i + 1]).length; });
+      if (!journeyOwed && !catsOwed.length) return true; // moved already (a strip that never landed): only the strip is owed
+      if (anothersJourney()) { legacyBlobPreg = null; return false; }
+      // She owns what is moved. The listeners for her own health start first: for a new owner they reset
+      // the consent and sync memory that the folds below then fill in from the server.
+      var p = state.pregnancy || {};
+      p.ownerUid = uidNow;
+      state.pregnancy = p;
+      /* pregOwner is NOT set here: her own-doc listener sets it when the doc exists. Set early, that
+         listener reads a "no doc yet" snapshot as "her journey was deleted" and clears state.pregnancy
+         in the middle of the move (clearPregJourneyState), taking the health fields being moved with it. */
+      ensureMaternalListeners(uidNow);
+      // Her own record first, as the server has it (with its sharedWith), so nothing below writes over it.
+      applyingRemote = true;
+      if (snaps[0].exists) applyPregJourney(uidNow, snaps[0].data());
+      cats.forEach(function (c, i) { if (snaps[i + 1].exists) applyMatDoc(c, snaps[i + 1].data()); });
+      applyingRemote = false;
+      // Then the legacy copy fills only what is still missing.
+      p = state.pregnancy;
+      Object.keys(legacy).forEach(function (k) { if (p[k] === undefined) p[k] = legacy[k]; });
+      // Preserve existing visibility: share the journey with the current circle (everyone who could
+      // already see it via the blob). The owner can trim this later in the privacy sheet.
+      if (journeyOwed) pregShared = ((window.LL.members && Object.keys(window.LL.members)) || []).filter(function (m) { return m !== uidNow; });
+      if (journeyOwed) knownPregJourney = null; // force the journey to be written
+      catsOwed.forEach(function (c) { delete knownMat[c]; });
+      // Both started in THIS tick, as pushNow does: once the journey doc lands, its own listener folds
+      // that doc into state.pregnancy, and nothing may be read from state after that point.
+      return Promise.all([syncPregJourney(uidNow), syncMaternal(uidNow)]).then(readServer).then(function (after) {
+        var still = cats.reduce(function (a, c, i) { return a.concat(owed(c, after[i + 1])); }, after[0].exists ? [] : ['journey']);
+        if (still.length) throw new Error('not on the server yet: ' + still.join(', '));
+        return true;
+      });
+    }).then(function (strip) {
+      if (!strip || !stillHere()) return;
+      var keys = legacyBlobPresent.slice(); // only the ones present
+      if (!keys.length) return;
+      var upd = { updatedAt: window.LL.serverTimestamp() };
+      keys.forEach(function (k) { upd['app.' + k] = firebase.firestore.FieldValue.delete(); });
+      return ref.update(upd).then(function () {
+        legacyBlobPreg = null; maybeMigrateLegacyJourney._retryMs = 0;
+        // Edits still waiting on this phone go now. One the rules already REFUSED while the key was
+        // there is not among them: a refused edit is reverted and not retried (see pushNow).
+        if (stillHere()) scheduledPush();
+      });
+    }).catch(function (e) {
+      console.warn('legacy journey move', e);
+      if (!stillHere()) return;
+      pregMigrated = false;
+      // Until it finishes, nobody in the circle can save to the blob, so it does not wait for a snapshot a
+      // quiet household may not send for hours: it tries again on a backoff (5 s, doubling, 5 min at most).
+      var wait = maybeMigrateLegacyJourney._retryMs = Math.min((maybeMigrateLegacyJourney._retryMs || 2500) * 2, 300000);
+      setTimeout(function () { if (stillHere()) maybeMigrateLegacyJourney(); }, wait);
+    });
   }
 
   /* ---------- start real-time sync ---------- */
@@ -2309,6 +2536,12 @@
     var prefs = loadPrefs();
     var gotApp = false, gotEvents = false;
     var lastMembersSig = null; // resubscribe journey listeners only when membership changes
+    // What a quick close left unsent (see flushPendingPush). Each half is put back by the first snapshot
+    // it belongs to; the stored copy goes once both are back in memory, where the next hide saves them again.
+    var outbox = readOutbox(user.uid, hid);
+    replayEv = (outbox && outbox.events) || null; replayHold = (outbox && outbox.blob) || null;
+    if (replayHold && !Object.keys(replayHold).length) replayHold = null;
+    function outboxBack() { if (outbox && !replayEv && !replayHold && hhHydrated) { outbox = null; dropOutbox(user.uid, hid); } }
 
     function maybeBoot(force) {
       // Always need the app blob (babies/settings) to render a meaningful home. Normally also wait
@@ -2323,7 +2556,8 @@
       booted = true;
       // One-time relocation (Item 7): if a legacy blob carried the pregnancy journey (and any
       // maternal-private fields), the owner moves it into the owner-owned pregnancy doc (plus
-      // mhealth), then strips it from the shared blob. Done only by the household owner, once.
+      // mhealth), then strips it from the shared blob. Done once, by the phone whose move it is
+      // (legacyJourneyMovedHere).
       maybeMigrateLegacyJourney();
       hideOverlay();
       render();
@@ -2375,7 +2609,10 @@
       var sig = hhSig(d.app, d.members, d.memberInfo) + '|' + JSON.stringify(d.pro || null);
       if (booted && sig === lastHhSig) return; // our own write echo / duplicate emission, already on screen
       lastHhSig = sig;
+      var held = holdPendingBlobEdits(); // edits still waiting to be pushed, taken BEFORE the server's copy lands on them
+      if (replayHold) { held = Object.assign({}, replayHold, held || {}); replayHold = null; pushWhenHydrated = true; } // a quick close's unsent blob edits
       applyingRemote = true; applyAppBlob(d.app); applyingRemote = false;
+      var keptBase = held ? reapplyPendingBlobEdits(held) : null;
       ensureMaternalListeners(user.uid); // (re)subscribe once we know whose pregnancy it is
       migrateHandoffToNote(); // role + handoff are now known; fold any legacy shared note in once
       gotApp = true;
@@ -2384,9 +2621,13 @@
          applyAppBlob rather than from d.app directly, because the round trip legitimately differs:
          theme and push are per-device and stripped on the way out. */
       blobBase = snapshotBlobBase();
+      // A held key's baseline is the server's copy, not its merged value, so the pending push still finds
+      // what the merge kept on top of it dirty and writes it.
+      if (keptBase) Object.keys(keptBase).forEach(function (k) { blobBase[k] = keptBase[k]; });
       hhHydrated = true;
+      outboxBack();
       if (pushWhenHydrated) { pushWhenHydrated = false; scheduledPush(); }
-      if (booted) rerender(); else maybeBoot();
+      if (booted) { maybeMigrateLegacyJourney(); rerender(); } else maybeBoot(); // the move retries here if it could not finish
     }, function (e) {
       console.warn('household listen', e);
       // Removed from the family (or the household was deleted): the doc becomes unreadable, so the
@@ -2450,6 +2691,7 @@
         });
         applyingRemote = false;
         gotEvents = true;
+        if (replayEv) { var re = replayEv; replayEv = null; if (replayOutboxEvents(re)) scheduledPush(); outboxBack(); } // a quick close's unsent entries
         if (isFallback) window.cubbyHistoryPending = false; // unbounded listener: this IS all of it
         if (!booted) { maybeBoot(); if (!isFallback) hydrateFullHistory(); }
         else if (!(snap.metadata && snap.metadata.hasPendingWrites)) rerender();
@@ -2686,15 +2928,18 @@
     Object.keys(cur).forEach(function (id) {
       var ser = JSON.stringify(stripMeta(cur[id]));
       if (knownEvents[id] !== ser) {
+        var n = noteEvWrite(id, knownEvents[id]);
         knownEvents[id] = ser;
         writes.push(eventsRef.doc(docKey(id)).set(Object.assign({ authorId: cur[id].authorId || uidNow }, cur[id]))
+          .then(function () { settleEvWrite(id, n, ser); })
           .catch(function (e) { if (knownEvents[id] === ser) delete knownEvents[id]; throw e; }));
       }
     });
     Object.keys(knownEvents).forEach(function (id) {
       if (!cur[id]) {
-        var oldSer = knownEvents[id]; delete knownEvents[id];
+        var oldSer = knownEvents[id], n = noteEvWrite(id, oldSer); delete knownEvents[id];
         writes.push(eventsRef.doc(docKey(id)).delete()
+          .then(function () { settleEvWrite(id, n, undefined); })
           .catch(function (e) { if (!cur[id] && !(id in knownEvents)) knownEvents[id] = oldSer; throw e; }));
       }
     });
@@ -2710,11 +2955,25 @@
     });
     if (dirty.length) {
       lastHhSig = hhSig(appBlob, window.LL.members, window.LL.memberInfo); // mark our own write so its echo doesn't re-render
-      writes.push(hhRef.update(upd).then(function () {
-        // Only now is the server known to hold these. A rejected write leaves the baseline alone
-        // so the next push retries the same keys, matching how knownEvents handles a denial above.
+      /* Firestore refuses some values (undefined, above all) by THROWING inside update(), not by
+         rejecting. Thrown here, it escaped this async function as an unhandled rejection: no toast, no
+         retry, and since the same key stayed dirty, every later blob save from this phone died the same
+         silent way (review R3). A refusal is a refusal, however it arrives: it takes the catch below. */
+      var hhWrite;
+      try { hhWrite = hhRef.update(upd); } catch (e) { hhWrite = Promise.reject(e); }
+      blobOut++;
+      writes.push(hhWrite.then(function () {
+        blobOut = Math.max(0, blobOut - 1);
+        /* Only now is the server known to hold these. A write that never left this phone (the
+           synchronous throw above) leaves the baseline alone, so the retry sends the same keys.
+           A write the RULES refuse is different, and is NOT retried: Firestore shows it on this
+           phone at once (latency compensation), that local snapshot re-baselines the key with the
+           edit in it, and the snapshot that reverts the refusal then finds nothing dirty. The edit
+           is gone from this phone and from every later push (review A-V3). Known and accepted; a
+           refusal here means a removed member or a household a legacy key still blocks. */
         if (blobBase) dirty.forEach(function (p) { blobBase[p[0]] = p[1]; });
-      }).catch(function (e) { lastHhSig = null; throw e; }));
+        if (outboxSaved) saveOutbox(); // landed while hidden: the outbox no longer owes it
+      }, function (e) { blobOut = Math.max(0, blobOut - 1); throw e; }).catch(function (e) { lastHhSig = null; throw e; }));
     }
     try {
       await Promise.all(writes);
@@ -2742,6 +3001,117 @@
     syncMaternal(uidNow); // owner-only; writes her private categories to the protected mhealth docs
     syncPregArchive(uidNow); // kept-after-loss memories -> her self-only users/{uid} doc
   }
+
+  /* ---------- a quick close keeps what she just logged (chaos CH-bd7f70) ----------
+     With a household, logging writes nothing on the phone: persist() only arms the 350 ms push above.
+     An entry logged and then the app reloaded, closed or swiped away inside that window was lost from
+     the server AND from her phone, with nothing to say so. Two halves:
+     1. The moment the page is hidden or torn down, the waiting push goes NOW (flushPendingPush).
+        Switching away (visibilitychange to hidden) leaves the page alive long enough for Firestore to
+        keep the writes in its offline queue, and that queue sends them now or the next time Cubby opens.
+        Her journey, private health and kept memories are issued here too: pushNow writes them only
+        after the server has answered, which a phone that suspends the page may never let it hear.
+     2. A reload or a close does NOT leave that time. Firestore's queue lives in IndexedDB, and a write
+        issued while the page is being torn down never commits there (staged on the emulator: the
+        entry was gone after a reload 40 ms later, with the flush in place). So the same moment also
+        writes an OUTBOX to localStorage, which is synchronous: every entry write the server has not
+        acknowledged, and every blob key whose push has not landed, each with the version the server
+        held before (its base). The next boot puts back only what has not moved since: an entry whose
+        copy on this phone still equals its base, and blob keys through the same three-way merge a
+        snapshot uses for a pending edit. A write Firestore did keep, or a change another phone made
+        since, is left exactly as it is. The outbox is per person and household, cleared when the page
+        is visible again, when the writes in it land, and at sign-out, and read once at boot.
+     Not in the outbox, said plainly: her journey and private health docs (written whole, by her own
+     phone only). A reload within 350 ms of a journey edit can still lose that edit. Kept memories have
+     their own synchronous cache (scheduledPush). */
+  function evCanon(ser) { try { return ser === undefined ? null : stableStringify(JSON.parse(ser)); } catch (e) { return null; } }
+  // pushNow, as it issues an entry write: the first unacknowledged write of an entry keeps the version
+  // the server held before it as the base; a later one keeps that base.
+  function noteEvWrite(id, prevSer) {
+    var u = unackedEv[id] || (unackedEv[id] = { baseSer: evCanon(prevSer), n: 0 });
+    return ++u.n;
+  }
+  // When the server acknowledges one: nothing is owed, or, if a later write of it is still out, the
+  // server now holds this one, which becomes that later write's base.
+  function settleEvWrite(id, n, ser) {
+    var u = unackedEv[id];
+    if (!u) return;
+    if (u.n === n) delete unackedEv[id]; else u.baseSer = evCanon(ser);
+    if (outboxSaved) saveOutbox();
+  }
+  function outboxKey(uidNow, hid) { return 'cubby-outbox:' + uidNow + ':' + hid; }
+  function buildOutbox() {
+    var cur = {}, events = {}, blob = {}, any = false;
+    (state.events || []).forEach(function (e) { cur[e.id] = e; });
+    Object.keys(unackedEv).forEach(function (id) { events[id] = { baseSer: unackedEv[id].baseSer, evData: cur[id] || null }; any = true; });
+    // Only what pushNow owes: a push waiting or out. A key that differs with nothing pending (render code
+    // adds empty timer entries without a save) is not an edit, and is not carried into the next boot.
+    if (blobBase && (pushTimer || pushWhenHydrated || blobOut > 0)) {
+      var b = appBlobFromState();
+      Object.keys(b).forEach(function (k) {
+        if (blobBase[k] === stableStringify(b[k])) return;
+        blob[k] = { base: blobBase[k], local: state[k], blobValue: b[k] }; any = true;
+      });
+    }
+    // Read at boot and not put back yet (its first snapshot has not come): carried over as it was.
+    if (replayEv) Object.keys(replayEv).forEach(function (id) { if (!events[id]) { events[id] = replayEv[id]; any = true; } });
+    if (replayHold) Object.keys(replayHold).forEach(function (k) { if (!blob[k]) { blob[k] = replayHold[k]; any = true; } });
+    return any ? { v: 1, at: Date.now(), events: events, blob: blob } : null;
+  }
+  function saveOutbox() {
+    var u = auth.currentUser;
+    if (!u || !hhRef || !hhHydrated) return;
+    try {
+      var ob = buildOutbox(), key = outboxKey(u.uid, hhRef.id);
+      if (ob) localStorage.setItem(key, JSON.stringify(ob)); else localStorage.removeItem(key);
+      outboxSaved = !!ob;
+    } catch (e) {}
+  }
+  function dropOutbox(uidNow, hid) {
+    outboxSaved = false;
+    if (uidNow && hid) { try { localStorage.removeItem(outboxKey(uidNow, hid)); } catch (e) {} }
+  }
+  function readOutbox(uidNow, hid) {
+    var ob = null;
+    try { ob = JSON.parse(localStorage.getItem(outboxKey(uidNow, hid)) || 'null'); } catch (e) {}
+    return ob && typeof ob === 'object' && ob.v === 1 ? ob : null;
+  }
+  // At boot, once the first entries snapshot is applied (from this phone's cache): put back each entry
+  // whose copy here still equals the base it was saved with. Returns how many it put back.
+  function replayOutboxEvents(saved) {
+    var put = 0;
+    Object.keys(saved || {}).forEach(function (id) {
+      var o = saved[id];
+      if (!o || typeof o !== 'object') return;
+      if (evCanon(knownEvents[id]) !== (o.baseSer === undefined ? null : o.baseSer)) return; // it moved: landed, or changed elsewhere
+      var list = state.events = state.events || [];
+      var i = list.findIndex(function (e) { return String(e.id) === String(id); });
+      if (o.evData && typeof o.evData === 'object') { if (i >= 0) list[i] = o.evData; else list.push(o.evData); }
+      else if (i >= 0) list.splice(i, 1); // a delete that never landed
+      else return;
+      put++;
+    });
+    return put;
+  }
+  function flushPendingPush() {
+    if (pushTimer) {
+      clearTimeout(pushTimer); pushTimer = null;
+      var pushed = pushNow(); // issues every entry and blob write before its first await, so all of them in this tick
+      if (pushed && pushed.catch) pushed.catch(function (e) { console.warn('push on hide', e); });
+      var u = auth.currentUser && auth.currentUser.uid;
+      if (u && hhRef && hhHydrated) { syncPregJourney(u); syncMaternal(u); syncPregArchive(u); } // each skips what it already sent
+    }
+    saveOutbox();
+  }
+  function flushOnPageHide(win, doc) {
+    // Capture, so it runs before Firestore's own pagehide handler queues its shutdown behind these writes.
+    win.addEventListener('pagehide', flushPendingPush, true);
+    doc.addEventListener('visibilitychange', function () {
+      if (doc.visibilityState === 'hidden') flushPendingPush();
+      else if (outboxSaved) { var u = auth.currentUser; dropOutbox(u && u.uid, hhRef && hhRef.id); } // alive again: memory is the record
+    });
+  }
+  flushOnPageHide(window, document);
 
   // Swap the app's persistence + photo storage for the cloud versions.
   // With no household there is nowhere to push: pushNow returns on the spot, so before this a woman

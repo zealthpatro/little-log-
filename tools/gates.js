@@ -154,6 +154,8 @@ const TREE = [
   { name: 'stack',          cmd: ['node', 'tools/stack_check.js', 'url'] },
   { name: 'pad',            cmd: ['node', 'tools/pad_audit.js', 'url'] },
   { name: 'blob-clobber',   cmd: ['node', 'test/blob-clobber.test.js'] },
+  { name: 'blob-merge',     cmd: ['node', 'test/blob-merge.test.js'] },     // a pending edit survives a snapshot: the real merge, hold and re-baseline
+  { name: 'quick-close',    cmd: ['node', 'test/quick-close.test.js'] },    // an entry logged just before a reload or close is kept: flush on hide, outbox, guarded replay
   { name: 'dose-ticket',    cmd: ['node', 'test/dose-ticket.test.js'] },
   /* dose-ticket proves a ticket cannot be forged; this proves only a current owner or caregiver can
      get or redeem one. Drives the real worker.js; --self-test re-breaks a temp copy of it. */
@@ -231,6 +233,8 @@ const EMU_GATES = [
   { name: 'removed-records', emu: 'node removed-records.test.js' },                  // a removed mother lists and deletes her own records; nobody else gains anything
   { name: 'removed-records-ui', self: ['node', 'test/removed-records-ui.test.js'] }, // ...from the note, and from account deletion
   { name: 'join-offline', self: ['node', 'test/join-offline.test.js'] },             // Join the family offline: the card, not an endless loader, and the join still lands
+  { name: 'blob-sync', self: ['node', 'test/blob-sync.test.js'] },       // two phones keep every blob edit: lost update, legacy pregnancy, undefined (real rules)
+  { name: 'quick-close-emu', self: ['node', 'test/quick-close-emulator.test.js'] }, // a reload 40 ms after logging keeps the entry (real rules, real IndexedDB)
 ];
 
 function freePort() {
