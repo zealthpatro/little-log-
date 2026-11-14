@@ -362,7 +362,7 @@ const newToken = () => 'tok' + String(++tokSerial).padStart(5, '0') + 'abcdefghi
       ['/api/send-invite', 'email'], ['/api/send-invite', 'token'], ['/api/newsletter', 'email']];
     for (const [p, k] of ROUTES) {
       const got = [];
-      for (const v of [{}, [], ['a@b.co'], 42, 1e308, true]) {
+      for (const v of [{}, [], ['a@example.com'], 42, 1e308, true]) {
         const body = k === 'token' ? { email: 'a@example.com', token: v } : { email: v, code: '123456' };
         const r = await call(w, 'POST', p, body, env);
         got.push(r.threw ? 'threw ' + r.threw.slice(0, 60) : r.status + ' ' + (r.body && r.body.error));
