@@ -167,10 +167,25 @@ function bearSpellings(cp, name) {
 const BEAR_RE = new RegExp(BEARS.map(([cp, n]) => bearSpellings(cp, n).map((s) => s[1]).join('|')).join('|'), 'iu');
 /* Symbols Cubby does not put on a milestone or a Moments card, in any spelling. The jigsaw piece stood on
    'First favourite toy' (13a50ad5) until the brand verifier's note N1 (2026-11-14): on a development
-   tracker many parents read it as an autism-awareness symbol, so the toy is a rubber duck. */
+   tracker many parents read it as an autism-awareness symbol, so the toy is a balloon (DECIDED, below). */
 const AVOID = [[0x1F9E9, 'JIGSAW PUZZLE PIECE', 'read by many parents as an autism-awareness symbol']];
 const AVOID_IN = ['app/milestone-data.js', 'app/journey-catalogue.js'];
 const AVOID_RE = new RegExp(AVOID.map(([cp, n]) => bearSpellings(cp, n).map((s) => s[1]).join('|')).join('|'), 'iu');
+/* A glyph decided for one milestone, held so a revert or a copy-paste is caught. 'First favourite toy' was a
+   yo-yo, then the jigsaw piece (13a50ad5), then the rubber duck (a45603f3), which 'First time feeding the
+   ducks' already wore, so two Fun milestones seven months apart showed one picture (brand verifier,
+   2026-11-14). It is a balloon. Any spelling of the code point counts; the value must be that glyph alone. */
+const DECIDED = [['app/milestone-data.js', 'dl-firstfavtoy', 0x1F388, 'BALLOON', 'First favourite toy']];
+function decidedGlyphs(root) {
+  return DECIDED.map(([file, key, cp, name, title]) => {
+    let src = '';
+    try { src = fs.readFileSync(path.join(root, file), 'utf8'); } catch (e) { /* reported as not found */ }
+    const line = src.split('\n').find((l) => new RegExp('\\bkey\\s*:\\s*([\'"])' + reLit(key) + '\\1').test(l));
+    const m = line && /\bemoji\s*:\s*(['"])(.*?)\1/.exec(line);
+    const want = new RegExp('^(?:' + bearSpellings(cp, name).map((x) => x[1]).join('|') + ')$', 'iu');
+    return { file, key, title, glyph: String.fromCodePoint(cp), got: m ? m[2] : null, ok: !!(m && want.test(m[2])) };
+  });
+}
 /* The top bar: 34px (site.css .nav-brand) and 38px (vax.css .site-head). Since 2026-11-14 it asks for
    icons/logo-96.png with logo-192.png in its srcset for 3x screens; a page copied from an older one would
    bring the 197KB logo-512.png back to every view of it. tools/brand.py and docs/BRAND.md. */
@@ -378,6 +393,9 @@ function runStatic(root, label) {
   ok('no emoji bear in app/, worker.js, workers/ or any served page, script or stylesheet', R.bears.length === 0, R.bears.length + ' lines, e.g.\n         ' + R.bears.slice(0, 8).join('\n         '));
   ok('no milestone or Moments card carries a symbol Cubby avoids (' + AVOID.map(([cp, n, why]) => String.fromCodePoint(cp) + ' ' + n.toLowerCase() + ', ' + why).join('; ') + ')',
     R.avoidScanned === AVOID_IN.length && R.avoid.length === 0, R.avoidScanned + ' of ' + AVOID_IN.length + ' files read; ' + R.avoid.join('\n         '));
+  const dec = decidedGlyphs(root);
+  ok('each milestone glyph decided by name is still that glyph (' + DECIDED.map(([, , cp, , t]) => t + ': ' + String.fromCodePoint(cp)).join('; ') + ')',
+    dec.every((d) => d.ok), dec.filter((d) => !d.ok).map((d) => d.file + ' ' + d.key + ': ' + (d.got === null ? 'not found' : d.got + ', want ' + d.glyph)).join('; '));
   ok('the top bar on every page (' + R.navPages + ') and both page generators asks for the small logo, never the 197KB logo-512.png',
     R.navPages > 100 && R.bigNav.length === 0, R.navPages + ' pages; ' + R.bigNav.length + ', e.g.\n         ' + R.bigNav.slice(0, 8).join('\n         '));
   ok('no page downloads both the small logo and the 197KB logo-512.png (a mark of 96px or less uses logo-96 with logo-192 in its srcset)',
@@ -506,6 +524,19 @@ function staticSelfTest() {
   ok('catches a page that downloads both the small logo and the 512 (the 404 page\'s 64px mark)', R.bothLogos.includes('articles/planted-both-logos/index.html'), R.bothLogos);
   ok('and does not count a 512 that only schema.org JSON-LD and og:image name', !R.bothLogos.includes('articles/planted-schema-logo/index.html') && !R.bothLogos.includes('articles/planted-old-nav/index.html'), R.bothLogos);
   ok('catches the jigsaw piece planted back on a milestone, raw and escaped', R.avoid.filter((b) => /app\/milestone-data\.js:\d+ .*planted-jigsaw/.test(b)).length === 2, R.avoid);
+  // The toy put back on the ducks' glyph (spelled escaped), and its companion: the balloon spelled escaped passes.
+  const md = path.join(tmp, 'app/milestone-data.js');
+  const toyRe = /(key:'dl-firstfavtoy'[^\n]*?emoji:')[^']*(')/;
+  const hadToy = toyRe.test(fs.readFileSync(md, 'utf8'));
+  fs.writeFileSync(md, fs.readFileSync(md, 'utf8').replace(toyRe, '$1\\u{1F986}$2'));
+  const decBad = decidedGlyphs(tmp)[0];
+  const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-brand-glyph-'));
+  fs.mkdirSync(path.join(tmp2, 'app'));
+  fs.writeFileSync(path.join(tmp2, 'app/milestone-data.js'), "  {key:'dl-firstfavtoy-later', emoji:'\u{1F986}'},\n  {key:'dl-firstfavtoy', title:'First favourite toy', emoji:'\\u{1F388}'},\n");
+  const decGood = decidedGlyphs(tmp2)[0];
+  ok('catches the first favourite toy put back on the ducks\' glyph (\\u{1F986})', hadToy && !decBad.ok && decBad.got === '\\u{1F986}', decBad);
+  ok('and passes the balloon in any spelling, reading that milestone\'s own line and not a key that starts the same (\\u{1F388})', decGood.ok && decGood.got === '\\u{1F388}', decGood);
+  fs.rmSync(tmp2, { recursive: true, force: true });
   ok('catches the planted reference to an unapproved file', R.unapproved.some((u) => /icons\/planted-unapproved\.png/.test(u)), R.unapproved);
   RETIRED_SETS.forEach((s, i) => ok('catches ' + s.name + ' under a new name', R.retiredFiles.includes('icons-planted-' + i + '.png') && R.retiredWhich['icons-planted-' + i + '.png'] === s.name, R.retiredFiles));
   ok('catches the planted picture from another host', R.external.some((e) => /example\.invalid\/planted\.png/.test(e)), R.external);
@@ -522,7 +553,7 @@ function staticSelfTest() {
   ok('and none of the wolf\'s or the dog\'s', hit.length === 0, hit);
   const clean = staticScan(path.join(ROOT));
   ok('and the real tree has none of these', clean.bears.length === 0 && clean.unapproved.length === 0 && clean.retiredFiles.length === 0 && clean.external.length === 0
-    && clean.dataBad.length === 0 && clean.drawnSvg.length === 0 && clean.servedUnregistered.length === 0 && clean.avoid.length === 0 && clean.bigNav.length === 0 && clean.bothLogos.length === 0);
+    && clean.dataBad.length === 0 && clean.drawnSvg.length === 0 && clean.servedUnregistered.length === 0 && clean.avoid.length === 0 && clean.bigNav.length === 0 && clean.bothLogos.length === 0 && decidedGlyphs(ROOT).every((d) => d.ok));
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 

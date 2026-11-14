@@ -176,7 +176,7 @@ window.MILESTONES = [
 
   /* --- social and play firsts --- */
   {key:'dl-firstpeekaboo', title:'First peekaboo 🙈', type:'delight', domain:'firsts', cat:'Fun', mo:7, emoji:'🙈'},
-  {key:'dl-firstfavtoy', title:'First favourite toy', type:'delight', domain:'firsts', cat:'Fun', mo:7, emoji:'🦆'},
+  {key:'dl-firstfavtoy', title:'First favourite toy', type:'delight', domain:'firsts', cat:'Fun', mo:7, emoji:'🎈'},
   {key:'dl-firstfavbook', title:'First favourite book', type:'delight', domain:'firsts', cat:'Fun', mo:8, emoji:'📖'},
   {key:'dl-firsthug', title:'First real hug 🤗', type:'delight', domain:'firsts', cat:'Social', mo:9, emoji:'🤗'},
   {key:'dl-firstkissback', title:'First kiss back 😚', type:'delight', domain:'firsts', cat:'Social', mo:12, emoji:'😚'},
