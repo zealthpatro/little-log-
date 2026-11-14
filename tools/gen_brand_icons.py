@@ -20,7 +20,12 @@ contrast measured 1.2:1. That white cub's bytes are retired (tools/brand-images.
 flat face.
 
 WHAT IT WRITES (web, committed)
-    icons/logo-512.png            512, rounded corners baked in (alpha), the filename ~680 pages use
+    icons/logo-512.png            512, rounded corners baked in (alpha): schema.org, emails, the app's screens
+    icons/logo-96.png             96, rounded like it: the site's top bar (34-38px) and its small marks (18-32px),
+                                  9KB where the 512 is 197KB on each of ~680 pages (2026-11-14)
+    icons/logo-192.png            192, the top bar's srcset for 3x screens: 96 is as sharp as the 512 at 1x and 2x
+                                  (Laplacian variance 0.98 and 0.95 of it at 34px) but not at 3x (0.75 at 34px,
+                                  0.53 at 38px), measured 2026-11-14. 31KB.
     icons/favicon.png             48, rounded like the logo
     icons/apple-touch-icon.png    180, square and opaque (iOS rounds it itself)
     icons/icon-192.png            manifest "any": square, opaque
@@ -321,6 +326,10 @@ def web_set(master):
     return {
         # The two 512s are on ~680 pages and in the app's precache: palette PNGs (see png_bytes).
         'icons/logo-512.png': png_bytes(rounded(resize(master, 512), LOGO_RADIUS), palette=True),
+        # The site's top bar draws the logo at 34px (site.css) and 38px (vax.css). It loaded the 197KB 512
+        # on every page; this is 9KB. Palette for the same reason as the 512 (38.6 dB measured at 96).
+        'icons/logo-96.png': png_bytes(rounded(resize(master, 96), LOGO_RADIUS), palette=True),
+        'icons/logo-192.png': png_bytes(rounded(resize(master, 192), LOGO_RADIUS), palette=True),
         'icons/favicon.png': png_bytes(rounded(resize(master, 48), LOGO_RADIUS)),
         'icons/apple-touch-icon.png': png_bytes(resize(master, 180)),
         'icons/icon-192.png': png_bytes(resize(master, 192)),

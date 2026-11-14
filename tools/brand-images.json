@@ -8,7 +8,7 @@
  "families": [
   {
    "name": "Icons from the master",
-   "provenance": "ChatGPT painted art (the master, W2+ since 2026-11-14), made into every size by tools/gen_brand_icons.py: plain Lanczos resizes, except the maskable icon, which shrinks the bear (cut from its wash) onto the master's own wash inside the safe circle. Nothing is drawn.",
+   "provenance": "ChatGPT painted art (the master, W2+ since 2026-11-14), made into every size by tools/gen_brand_icons.py: plain Lanczos resizes, except the maskable icon, which shrinks the bear (cut from its wash) onto the master's own wash inside the safe circle. Nothing is drawn. icons/logo-96.png and logo-192.png (2026-11-14) are the site's top-bar logo, 1x-2x and 3x.",
    "files": {
     "cap-web/logo.png": "6acbe1f20830f8907de8eede090eec09b9b2e73e06bdeb318bd0e307b8ddee38",
     "icons/apple-touch-icon.png": "071441c334fda358845c7d0a292dc8f11d9d5ca6c03208ff4d9ff6d9aaec57eb",
@@ -17,7 +17,9 @@
     "icons/icon-512.png": "50e828f040136684f0b0c0c42b3b40ad61a8f014e42e894180217ddf4e30cd1e",
     "icons/icon-maskable-512.png": "e7d582256dc9d750b79738d202d2ddc961cad57a5f21105857ea14999a02546e",
     "icons/icon-master-1024.png": "036e1af20f9e960264a9d1515e7f0ed8b992c6c65f518927e259e60b89766d40",
-    "icons/logo-512.png": "4dff2140344a9d802c8d875ca38b163c79a11c377c29404041f2bebf72ebf64b"
+    "icons/logo-192.png": "a580957bd4a854a5093c747907acb702c0eabc6d7a26fd3d5477d6b2b03e0dda",
+    "icons/logo-512.png": "4dff2140344a9d802c8d875ca38b163c79a11c377c29404041f2bebf72ebf64b",
+    "icons/logo-96.png": "2093defbad5baf8181b52ad4467d9a50e4ca90f3b65b906d75fdf2ffe605c220"
    }
   },
   {
