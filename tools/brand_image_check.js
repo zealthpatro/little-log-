@@ -730,7 +730,12 @@ async function runtime(base) {
     settings: { unit: 'ml', wUnit: 'kg', hUnit: 'cm', tempUnit: 'C', seen: {} },
     timers: {}, milestones: [], meds: [], photos: [], vaccines: {}, pregnancy: null, notes: [],
   });
-  const PROBE = '\n  window.__brandProbe = { accessLost: showAccessLost, inviteMismatch: showInviteMismatch, pendingInvite: maybePromptPendingInvite, showSignIn: showSignIn, showStatus: showStatus, hideOverlay: hideOverlay };\n';
+  /* The access-lost note stays up only while the person it was shown to is signed in: it watches the
+     auth state and goes with her session (fba14545). This boot has nobody signed in, so the watcher's
+     first call took the note down before it could be looked at. accessLost holds that watcher still for
+     the one call, standing in for her session, and puts the real one back; the note's own markup is
+     what gets graded. */
+  const PROBE = '\n  window.__brandProbe = { accessLost: function () { var own = Object.prototype.hasOwnProperty.call(auth, "onAuthStateChanged"), real = auth.onAuthStateChanged; auth.onAuthStateChanged = function () { return function () {}; }; try { showAccessLost(); } finally { if (own) auth.onAuthStateChanged = real; else delete auth.onAuthStateChanged; } }, inviteMismatch: showInviteMismatch, pendingInvite: maybePromptPendingInvite, showSignIn: showSignIn, showStatus: showStatus, hideOverlay: hideOverlay };\n';
   const PLANT_RETIRED = RETIRED_SETS.map((s, i) => '/__brand_selftest/retired-' + i + '.png'), PLANT_OTHER = '/__brand_selftest/unapproved.png';
 
   console.log('\nruntime: ' + base + ' at ' + WIDTH + 'px' + (SELF ? ', with plants' : ''));
