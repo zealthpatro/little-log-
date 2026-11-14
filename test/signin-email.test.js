@@ -66,7 +66,8 @@ const LINK = 'https://little-cubby.com/__/auth/action?mode=signIn&oobCode=abc123
     ok('the code comes FIRST, above the link', html.indexOf(CODE) < html.indexOf('href="' + LINK));
     ok('it says how long the code lasts and that it is single use', /10 minutes, once/.test(html));
     ok('and it tells someone who did not ask that ignoring it is safe', /ignore this email/.test(html));
-    ok('still the table-based template the other Cubby emails use', html.includes('<table role="presentation"') && html.includes('🐻'));
+    ok('still the table-based template the other Cubby emails use', html.includes('<table role="presentation"'));
+    ok('headed by the painted Cubby face, never an emoji bear', html.includes('src="https://little-cubby.com/icons/logo-512.png"') && !/\u{1F43B}|\u{1F9F8}/u.test(html));
   }
 
   console.log('\n2. it degrades to the half that survived, rather than rendering a broken one');

@@ -39,7 +39,7 @@
    filled on install, and install only runs when THIS file's bytes change, so editing offline.html
    alone leaves every browser that already has it holding the old copy indefinitely. Same discipline as
    app/sw.js, for the same reason, and here it is easy to forget because the page lives in another file. */
-const CACHE = 'cubby-site-v2';
+const CACHE = 'cubby-site-v3';
 const PREFIX = 'cubby-site-';
 const OFFLINE = '/offline.html';
 /* Exactly one file, and that is the point. The offline page carries its own picture inline as a data

@@ -63,7 +63,7 @@
       + '<input type="email" name="email" inputmode="email" autocomplete="email" placeholder="you@email.com" aria-label="Your email" required>'
       + '<button type="submit">Get the guide</button>'
       + '</form>'
-      + '<div class="cn-note">Free · private to you · we never sell your data 🐻</div>';
+      + '<div class="cn-note">Free · private to you · we never sell your data</div>';
     var form = wrap.querySelector('form'), input = wrap.querySelector('input'), btn = wrap.querySelector('button');
     var note = wrap.querySelector('.cn-note');
 
@@ -78,7 +78,7 @@
         body: JSON.stringify({ email: email, stage: s || 'unknown', source: location.pathname,
           utmSource: a.source || '', utmCampaign: a.campaign || '' })
       }).then(function (r) {
-        if (r.ok) { form.style.display = 'none'; showMsg('You’re on the list 🐻 Watch your inbox in a couple of weeks.'); }
+        if (r.ok) { form.style.display = 'none'; showMsg('You’re on the list. Watch your inbox in a couple of weeks.'); }
         else if (r.status === 429) { reset('One moment — try again shortly.'); }
         else if (r.status === 400) { reset('Please check that email and try again.'); }
         else { reset('Something went wrong — please try again.'); }

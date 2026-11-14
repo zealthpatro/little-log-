@@ -34,6 +34,10 @@ jobs:
       # instead of a run that skips it. It went red for exactly this reason on 2026-09-06.
       - name: Wire the tracked hooks (what a fresh clone must do)
         run: sh tools/install_hooks.sh
+      # tools/brand.py --self-test (Chrome-free, so it runs here) drives the icon generators, which need
+      # Pillow and numpy. Without them the gate fails on an import, not on the logo.
+      - name: Python image libraries for the brand tools
+        run: python3 -m pip install --quiet pillow numpy
       - name: Gates (no browser)
         run: node tools/gates.js --no-browser
 

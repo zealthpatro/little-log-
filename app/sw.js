@@ -46,7 +46,14 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  // /icons/* only: cache:'no-cache' so a new version never re-caches a stale icon out of the HTTP cache.
+  // They are browser-cached for a month (_headers) and the painted logo kept the old file names, so a
+  // plain fetch could precache the retired face for weeks. 'no-cache' revalidates: an unchanged icon is
+  // a 304, a changed one comes fresh. Everything else keeps the normal fetch: the app's own files are
+  // never long-cached anyway, and the versioned vendor files are immutable, so forcing them past the
+  // HTTP cache re-downloaded ~550KB on every deploy for nothing (brand verifier F3, 2026-11-14).
+  const req = (u) => (u.indexOf('/icons/') === 0 ? new Request(u, { cache: 'no-cache' }) : u);
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS.map(req))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {

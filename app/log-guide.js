@@ -288,7 +288,7 @@
   }
 
   function swatch(x, cls) {
-    return '<span class="' + cls + '" style="background:var(' + (x.soft || '--surface-2') + ',var(--surface-2));color:var(' + (x.tone || '--ink') + ',var(--ink))">' + (x.ico || '🐻') + '</span>';
+    return '<span class="' + cls + '" style="background:var(' + (x.soft || '--surface-2') + ',var(--surface-2));color:var(' + (x.tone || '--ink') + ',var(--ink))">' + (x.ico || '<img src="/icons/logo-512.png" alt="" width="20" height="20" style="border-radius:5px">') + '</span>';
   }
 
   function row(x) {
@@ -510,7 +510,7 @@
     // checklist should not have to notice a separate teaching card below it saying much the same.
     if (gsUp) return '';
     var who = (c.stage === 'pregnancy') ? 'while you are expecting' : ('for ' + esc(c.babyName || 'your little one') + ' right now');
-    return '<div class="coach"><div class="cm-ico">🐻</div>'
+    return '<div class="coach"><div class="cm-ico"><img src="/icons/logo-512.png" alt="" width="34" height="34" style="border-radius:inherit"></div>'
       + '<div class="cm-body"><div class="cm-t">What to log, and why</div>'
       + '<div class="cm-s">A short guide to the logs that make sense ' + who + ', and what each one gives you back. It stays in Settings if you would rather read it later.</div>'
       // This was measured at 185x34: a PRIMARY call to action shrunk below the thumb floor by an
@@ -529,7 +529,7 @@
   function settingsRow() {
     var chev = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
     return '<div class="set-item" onclick="cubbyOpenGuide()" style="cursor:pointer">'
-      + '<div class="si-ico" style="background:var(--note-soft);color:var(--note);font-size:18px">🐻</div>'
+      + '<div class="si-ico" style="background:var(--note-soft);color:var(--note);font-size:18px"><img src="/icons/logo-512.png" alt="" width="40" height="40" style="border-radius:inherit"></div>'
       + '<div class="si-body"><div class="a">What to log, and why</div><div class="b">A short guide to each log and what it gives you back</div></div>'
       + '<span class="chev">' + chev + '</span></div>';
   }

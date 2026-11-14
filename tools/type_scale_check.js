@@ -83,8 +83,10 @@ jsFiles.forEach((f) => collect(fs.readFileSync(path.join(ROOT, 'app', f), 'utf8'
    Appearance value's 13px, which is var(--fs-body) now).
    Held at 346 through the merge onto the November security release (866851ac), which had added one
    literal under its own ceiling of 373: the join-consent facts rows in confirmSheet, font-size:14px.
-   That one is var(--fs-base) now, the same 14px, so the merged tree is at 346 without a raise. */
-const CEILING = Number(process.env.TYPE_CEILING || 346);
+   That one is var(--fs-base) now, the same 14px, so the merged tree is at 346 without a raise.
+   346 -> 341 on 2026-11-14, merging the brand lane: the painted face replaced the emoji bear at the
+   top of five full-screen notes, and their five 44px and 52px glyph sizes went with it. */
+const CEILING = Number(process.env.TYPE_CEILING || 341);
 const distinct = [...new Set(outside.map((o) => o.px))].sort((a, b) => a - b);
 ok('the ratchet holds: literals outside the stylesheet have not grown', outside.length <= CEILING,
   outside.length + ' literals, ceiling ' + CEILING + '. Lower the ceiling when you migrate some; never raise it.');

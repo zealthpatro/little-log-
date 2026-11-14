@@ -106,7 +106,7 @@ and runs a diff-based sync engine. The app code still just mutates `state` and c
 | `.assetsignore` | Keeps `tools/`, docs, drafts, node_modules and the service-account key out of the deploy. |
 | `.gitignore` | Ignores `tools/serviceAccountKey.json`, node_modules, logs, `.DS_Store`. |
 | `_headers` | Cloudflare header hints (CSP/security; keeps sw/manifest uncached). |
-| `generate_icons.py` | Pillow script that draws the bear app icons into `icons/`. |
+| `generate_icons.py` | RETIRED (refuses to run): drew the old flat bear. Icons come from `tools/gen_brand_icons.py` and the painted master `icons/icon-master-1024.png`. |
 | `tools/serve.js` | Minimal node static server for local preview (replaces broken `python3 -m http.server`). |
 | `tools/analytics.js` | Read-only `firebase-admin` usage report (needs the gitignored service-account key). |
 | `articles-drafts/` | Git-tracked but **never deployed**; staging for articles awaiting human review. |
@@ -288,7 +288,7 @@ curl -sL "https://www.cdc.gov/growthcharts/data/zscore/wtageinf.csv" -o cdc_wfa.
 curl -sL "https://www.cdc.gov/growthcharts/data/zscore/lenageinf.csv" -o cdc_lfa.csv
 # then parse: see parse_growth.py (extracts [month,p5,p25,p50,p75,p95] per sex/measure)
 ```
-Icons: `python3 generate_icons.py`.
+Icons: `python3 tools/gen_brand_icons.py` (every size from the painted master `icons/icon-master-1024.png`).
 
 ---
 
