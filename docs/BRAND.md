@@ -48,7 +48,8 @@ in `touched.txt` beside the proof, and push main (push = deploy). That is the wh
 ## If you change your mind
 
 - Before committing: `git restore --pathspec-from-file=<proof folder>/touched.txt`, the exact files set
-  wrote (it refuses to start unless they are all committed, so this undoes set and nothing else). The same
+  wrote (it refuses to start unless they are all committed, a new card git does not know yet included, so
+  this undoes set and nothing else). The same
   list commits the change: `git commit --pathspec-from-file=<proof folder>/touched.txt`. If this checkout
   has ios/ or android/, follow it with `python3 tools/brand.py native`: git cannot reach those folders, so
   this puts them back on the restored master.

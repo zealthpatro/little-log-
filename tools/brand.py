@@ -1087,6 +1087,18 @@ def set_master(src, provenance=None, name=None, yes=False, native_out=None, proo
             dirty.append('git status failed: ' + outp)
             break
         dirty += [l for l in outp.split('\n') if l.strip()]
+    # A file git does not know (a new article's card not yet committed, which card_logo.py --list returns)
+    # would be overwritten with no way back, and its name in touched.txt makes `git restore` and `git commit
+    # --pathspec-from-file` abort outright (verifier, 2026-11-14). So every path set writes must be in git.
+    known = set()
+    for i in range(0, len(touched), 400):
+        code, outp = _git(['ls-files', '-z', '--'] + touched[i:i + 400], root)
+        if code != 0:
+            dirty.append('git ls-files failed: ' + outp)
+            break
+        known.update(p for p in outp.split('\0') if p)
+    untracked = sorted(set(p for p in touched if p not in known))
+    dirty += ['?? %s   (not in git%s)' % (p, '' if os.path.exists(os.path.join(root, p)) else ', and not on disk') for p in untracked]
     code, head_blob = _git(['rev-parse', 'HEAD:' + old.get('path', MASTER_REL)], root)
     code2, work_blob = _git(['hash-object', old.get('path', MASTER_REL)], root)
     if code != 0 or code2 != 0 or head_blob != work_blob:
@@ -1095,7 +1107,11 @@ def set_master(src, provenance=None, name=None, yes=False, native_out=None, proo
         print('\n  %s: these are not committed, so git could not undo the change:' % ('REFUSED' if yes else 'NOTE'))
         for l in dirty[:12]:
             print('    ' + l)
+        if len(dirty) > 12:
+            print('    ... and %d more' % (len(dirty) - 12))
         print('  Commit them, or put them back (git restore -- <path>) first.')
+        if untracked:
+            print('  A file marked ?? is not in git at all: commit it first (git add, then git commit), so set can be undone.')
         if yes:
             print('Nothing was written.')
             return 3
@@ -1705,6 +1721,18 @@ def self_test():
     nat2 = OrderedDict((t + '/' + p, h) for t in NATIVE_TOPS for p, h in _tree_hashes(os.path.join(mini, t)).items())
     ok('and brand.py native, the undo\'s second line, puts them back byte for byte (%d files)' % len(nat2), r.returncode == 0 and nat2 == nat0,
        (r.stdout + r.stderr)[-600:] or [p for p in nat0 if nat0[p] != nat2.get(p)][:5])
+    # A card git does not know yet (a new article's og card, not committed): card_logo.py --list returns it, so
+    # set would overwrite it with no way back and put it in touched.txt, where it makes git restore abort.
+    arts = [c for c in mcards if c.startswith('og/articles/')]
+    plant = os.path.dirname(arts[0]) + '/planted-untracked-card.png'
+    shutil.copyfile(os.path.join(mini, arts[0]), os.path.join(mini, plant))
+    listed_now = [l for l in subprocess.run([sys.executable, os.path.join(mini, 'tools', 'card_logo.py'), '--list'], cwd=mini, capture_output=True, text=True).stdout.split('\n') if l]
+    hp = _hash_all(mini, fm + mcards + [plant])
+    proof2 = os.path.join(tmp, 'proof-untracked')
+    r = subprocess.run([sys.executable, mini_set, 'set', mirror, '--yes', '--no-tree-gate', '--proof', proof2], cwd=mini, capture_output=True, text=True)
+    ok('refuses an untracked card that card_logo.py --list returns (git could not undo it), naming it, and writes nothing',
+       plant in listed_now and r.returncode == 3 and ('?? ' + plant) in r.stdout and 'Nothing was written' in r.stdout
+       and _hash_all(mini, fm + mcards + [plant]) == hp and not os.path.exists(os.path.join(proof2, 'touched.txt')), (r.returncode, r.stdout[-900:]))
     ok('the real tree is still untouched', _hash_all(ROOT, tracked) == tree_before)
 
     shutil.rmtree(tmp, ignore_errors=True)
