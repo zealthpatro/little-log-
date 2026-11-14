@@ -145,6 +145,11 @@ async function adminGet(p) {
   const j = await r.json();
   return fromValue({ mapValue: { fields: j.fields || {} } });
 }
+/* An email invite from this family, whichever kind the form wrote: this family's own
+   (invites/{email}/from/{hid}) under rules that allow it, else the address-keyed one. */
+async function anyInvite(email, hid) {
+  return (await adminGet('invites/' + email + '/from/' + hid)) || (await adminGet('invites/' + email));
+}
 // Publish a ruleset to the running emulator, as a deploy would, while every page stays open.
 async function setRules(content) {
   const r = await fetch(`http://localhost:${FS_PORT}/emulator/v1/projects/${PAGE_PROJECT}:securityRules`,
@@ -580,7 +585,7 @@ const newTok = () => { const A = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRST
   // Under rules that allow one invite per family, the form wrote this family's own invite instead.
   ok('and so is this family\'s own invite there', (await until(async () => (await adminGet('invites/hana.real@links.test/from/' + a.hid)) === null, 8000)) === true);
   ok('and its row is off Olive\'s list', !!(await until(async () => { const h = await adminGet('households/' + a.hid); return h && !((h.pendingInvites || {})['hana.real@links.test']); }, 8000)));
-  const hl = await adminGet('invites/hanalee@links.test');
+  const hl = await anyInvite('hanalee@links.test', a.hid);
   ok('the other Hana\'s invite is untouched, row and all', !!hl && !!((((await adminGet('households/' + a.hid)) || {}).pendingInvites || {})['hanalee@links.test']), hl);
   await Hh.page.browserContext().close();
   // Hana signs in with her real address and tries the email join (joinByEmailInvite, field for field).
@@ -704,7 +709,7 @@ const newTok = () => { const A = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRST
   const keep = await realTap(A2, '#sheet button', 'Keep');
   ok('she taps Keep', keep.found && keep.onTop, keep);
   await sleep(800);
-  ok('and Ida stays, with her invite', ((((await adminGet('households/' + a.hid)) || {}).members) || {})[Ii.who.uid] === 'caregiver' && !!(await adminGet('invites/' + LONG)));
+  ok('and Ida stays, with her invite', ((((await adminGet('households/' + a.hid)) || {}).members) || {})[Ii.who.uid] === 'caregiver' && !!(await anyInvite(LONG, a.hid)));
   await A2.setViewport({ width: 390, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
   await Ii.page.browserContext().close();
   for (const p of ordPages) await p.browserContext().close();
