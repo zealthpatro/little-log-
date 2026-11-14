@@ -7046,6 +7046,33 @@ function cubbyStep(event, props){
   }catch(e){}
 }
 window.cubbyStep=cubbyStep; window.funnelStage=funnelStage;
+/* Cubby opened by a signed-in family, at most once per device per local day. The only "was it used
+   today" signal there is: Cloudflare serves /app/ without the Worker, so nothing else sees a visit,
+   and reading without logging left no trace at all. Called by app/store-firebase.js once the
+   household's data has loaded, then waits a few seconds so a pregnancy record, which arrives on its own
+   listener, can set the stage. The day is only marked once the count is actually sent, so a page closed
+   in those seconds is counted next time rather than lost. cubbyStep already skips internal devices and
+   anything off production. */
+function cubbyAppOpened(delayMs){
+  try{
+    const d=new Date(), day=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
+    if(localStorage.getItem('cubby-opened')===day) return;
+    setTimeout(function(){
+      try{
+        if(localStorage.getItem('cubby-opened')===day) return;
+        localStorage.setItem('cubby-opened',day);
+        const surface=isNativeApp()?'native':(isStandaloneApp()?'pwa':'browser');
+        cubbyStep('app.opened',{stage:funnelStage(), surface:surface});
+      }catch(e){}
+    }, delayMs==null?4000:delayMs);
+  }catch(e){}
+}
+window.cubbyAppOpened=cubbyAppOpened;
+/* The founder's own opens would swamp a small cohort, and INTERNAL_UIDS cannot reach a count that
+   carries no uid. Opening the app once with ?internal=1 marks this device internal; ?internal=0 clears
+   it. Anyone can mark their own device: the only effect is that it stops being counted. */
+try{ const iq=new URLSearchParams(location.search).get('internal');
+  if(iq==='1') localStorage.setItem('cubby-internal','1'); else if(iq==='0') localStorage.removeItem('cubby-internal'); }catch(e){}
 function obStage(kind){
   obFunnel=true;
   cubbyStep('onboarding.step_reached',{step:'stage_chosen', stage:kind==='expecting'?'pregnancy':(kind==='planning'?'trying':'baby')});

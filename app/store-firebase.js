@@ -2890,6 +2890,7 @@
       maybeMigrateLegacyJourney();
       hideOverlay();
       render();
+      try { if (typeof window.cubbyAppOpened === 'function') window.cubbyAppOpened(); } catch (e) {}
       maybeFirstRun(user);
       maybePromptPendingInvite();
     }

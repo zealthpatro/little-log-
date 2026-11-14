@@ -88,6 +88,29 @@ const ok = (n, c, x) => { if (c) { pass++; console.log('  ok   ' + n); } else { 
   ok('a device marked internal sends nothing at all', (await steps()).length === beforeInt, (await steps()).length - beforeInt);
   await page.evaluate(() => localStorage.removeItem('cubby-internal'));
 
+  /* app.opened is called by app/store-firebase.js once the household data loads, and this harness runs in
+     local mode where that file never loads, so the function is exercised directly here. Placed before
+     section 4 on purpose: its payload then goes through the same check against the Worker's REAL
+     allowlist and the same "no uid, no household" scan as every other step. */
+  console.log('\n3b. an app open, once per device per day');
+  await page.evaluate(() => localStorage.removeItem('cubby-opened'));
+  const beforeOpen = (await steps()).length;
+  await page.evaluate(() => cubbyAppOpened(0));
+  await sleep(300);
+  const opened = (await steps()).slice(beforeOpen);
+  ok('opening the app counts exactly one app.opened', opened.length === 1 && opened[0].event === 'app.opened', opened);
+  ok('it names the surface, and a browser tab is a browser', opened[0] && opened[0].props.surface === 'browser', opened[0]);
+  ok('and the stage, from the same enum as every other step', opened[0] && ['trying', 'pregnancy', 'baby', 'none'].indexOf(opened[0].props.stage) >= 0, opened[0]);
+  await page.evaluate(() => cubbyAppOpened(0));
+  await sleep(300);
+  ok('opening it again the same day counts nothing', (await steps()).length === beforeOpen + 1, (await steps()).length - beforeOpen);
+  await page.evaluate(() => { localStorage.removeItem('cubby-opened'); localStorage.setItem('cubby-internal', '1'); });
+  const beforeIntOpen = (await steps()).length;
+  await page.evaluate(() => cubbyAppOpened(0));
+  await sleep(300);
+  ok('and an internal device is never counted as an open', (await steps()).length === beforeIntOpen, (await steps()).length - beforeIntOpen);
+  await page.evaluate(() => localStorage.removeItem('cubby-internal'));
+
   console.log('\n4. every payload is one the SERVER accepts, and carries nothing else');
   const payloads = await steps();
   const refused = payloads.filter((p) => core.stepKey(p.event, p.props) === null);

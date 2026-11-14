@@ -251,6 +251,13 @@ export const STEP_EVENTS = {
     stage: ['trying', 'pregnancy', 'baby', 'none'],
     entry_point: ['settings', 'feature_gate', 'other'],
   },
+  /* Cubby opened by a signed-in family, once per device per day. The only "was it used today" signal
+     there is: Cloudflare serves /app/ without the Worker, so nothing else ever sees a visit. A date, a
+     stage and a surface; no uid, no household, so it counts device-days, never a person's trail. */
+  'app.opened': {
+    stage: ['trying', 'pregnancy', 'baby', 'none'],
+    surface: ['native', 'pwa', 'browser'],
+  },
 };
 
 /* Validates one emitted step. Returns the canonical counter key or null. Every property the event

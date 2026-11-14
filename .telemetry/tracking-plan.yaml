@@ -5,7 +5,7 @@
 #   1. MEASURE HOUSEHOLDS, NOT PEOPLE. The household is the unit the product is built around, and a
 #      person-level trail is exactly what a privacy-first family app must not keep.
 #   2. DERIVE BEFORE EMITTING. If a stored product record already proves a moment happened, the
-#      reporter reads it. Nothing new is collected for it. 13 of the 18 events here are derived.
+#      reporter reads it. Nothing new is collected for it. 13 of the 19 events here are derived.
 #   3. EMIT ONLY WHERE NOTHING IS STORED, AND THEN ANONYMOUSLY. Four moments leave no record at all
 #      (a wizard step abandoned, a sheet opened and closed, an account erased). Those increment an
 #      aggregate counter in D1 with no uid, no household id, no free text and no health value, the
@@ -280,6 +280,21 @@ events:
       - { name: stage, type: string, enum: [trying, pregnancy, baby, none], required: true }
       - { name: entry_point, type: string, enum: [settings, feature_gate, other], required: true }
     expected_frequency: low
+
+  - name: app.opened
+    category: engagement
+    source: emitted            # opening the app stores nothing, and Cloudflare never runs the Worker for it
+    group_level: none
+    description: >
+      Cubby was opened by a signed-in family, counted at most once per device per local day, a few
+      seconds after the household's data loads so an expecting mother's stage has arrived. Anonymous:
+      no uid and no household id, so it counts device-days, never a person. surface says whether it was
+      the iOS app, an installed PWA or a browser tab. It is the only signal that anyone used Cubby on a
+      given day; before it, reading without logging was invisible.
+    properties:
+      - { name: stage, type: string, enum: [trying, pregnancy, baby, none], required: true }
+      - { name: surface, type: string, enum: [native, pwa, browser], required: true }
+    expected_frequency: high
 
   - name: pro.waitlist_joined
     category: billing
