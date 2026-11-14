@@ -228,6 +228,13 @@ def on_ground(master, ground):
     al = p['alpha'][:, :, None]
     g = np.array(ground, np.float64)
     out = np.where(al > 0, a + (1 - al) * (g - p['field']), g)
+    # A pale fringe pixel with no stroke within 2px is a pocket of wash the matte half-kept: on a flat
+    # ground its texture shows as a faint yellow speck beside the ear (found zoomed at full size,
+    # 2026-11-14: 280 pixels in the whole outline, up to 49 levels off cream). It becomes ground.
+    lum = out.mean(2)
+    near_stroke = np.asarray(Image.fromarray(((lum < 170) * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(5))) > 0
+    speck = (p['alpha'] > 0) & (p['alpha'] < 0.98) & (lum > 205) & ~near_stroke
+    out[speck] = g
     return Image.fromarray(np.clip(np.round(out), 0, 255).astype(np.uint8))
 
 

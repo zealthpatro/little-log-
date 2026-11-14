@@ -19,8 +19,9 @@ would draw a visible square against #F7F2E8). So:
      and pink ears stay in), the wash rebuilt under the bear from around it, and a soft matte on the
      outer 14px pulled by colour, so the wash pockets between the fur strokes drop out.
   2. On cream, each fringe pixel keeps its fur and swaps its share of the LOCAL wash for cream
-     (pixel + (1 - alpha) x (cream - wash)), so the fur's edge carries no yellow halo. Checked zoomed at
-     full size at the ear and the head tuft, on cream and on near-black.
+     (pixel + (1 - alpha) x (cream - wash)), so the fur's edge carries no yellow halo. A pale fringe pixel
+     with no stroke within 2px (a wash pocket the matte half-kept, which showed as a faint speck beside
+     the ear) becomes cream. Checked zoomed at full size at the ear and the head tuft, on cream.
   3. Lanczos-resize so the face's long side is ~22% of the canvas, well inside what survives
      aspect-fill cropping on every device, at the optical centre (46% height); flat RGB.
 
