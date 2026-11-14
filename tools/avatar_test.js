@@ -276,7 +276,7 @@ const PROBE = function (cfg) {
 const pct = x => (x * 100).toFixed(2) + '%';
 
 (async () => {
-  const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });
+  const browser = await puppeteer.launch({downloadBehavior:require(__dirname+'/gate_downloads').downloadBehavior(), executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });
   const page = await browser.newPage();
   const errs = [];
   page.on('pageerror', e => errs.push(e.message));

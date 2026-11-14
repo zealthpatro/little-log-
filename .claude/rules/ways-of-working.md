@@ -43,13 +43,20 @@ catalogue behind it. Each rule below cost real time in Aug-Sep 2026 and each has
 - A gate's Chrome saves every `<a download>` into the real Downloads folder unless it is launched with
   `downloadBehavior` from `tools/gate_downloads.js`, and each `createBrowserContext()` needs it again.
   223 calendar files piled up before `tools/gates.js` started failing any gate that adds to that folder.
+- Inside a hook git exports `GIT_DIR`; from a linked worktree it names the SHARED repo. A gate that
+  runs git init, config or reset in a temp dir with it inherited rewrites the real one for every
+  worktree. Delete `GIT_*` before any git in a test (`test/prepush-worktree.test.js` pushes from one).
 - A manual `npx wrangler deploy` uploads the FOLDER, gitignored keys included; only `.assetsignore`
   fences them. `tools/deploy_exclusion_check.js` walks for key-shaped files and fails any it misses.
 - Hooks are tracked in `.githooks/` and `core.hooksPath` points there; `.git/hooks` is never read.
   `tools/hooks_check.js` asserts what git resolves. `tools/harness_check.js` asserts the same for
   `.claude/settings.json`, `.claude/hooks/` and this file.
-- A test not in `tools/gates.js` does not exist: wire it or delete it. The `--emulator` tier is not
-  run by the hook or CI; a red there is invisible.
+- A test not in `tools/gates.js` does not exist: wire it or delete it. `tools/test_wiring_check.js` now
+  fails any test file that nothing runs (12 were orphaned on 13 Nov 2026, two of them red).
+- Push = deploy, so pre-push asks two questions of the pushed range: product code with no test changed
+  is refused unless a commit says `Test-exempt: <why>` (`tools/change_test_check.js`), and a range that
+  touches rules, Worker or `app/store-firebase.js` runs `--emulator` too, on free ports; CI runs that
+  tier on every push. Chaos and both fuzzers run nightly (`tools/nightly.sh`); see `docs/TESTING.md`.
 - "Does it exist?" is the wrong question. "What would it do right now?" is the right one. It found a
   dead pre-push hook, a mute canary, an Android build that cannot sign anyone in, and five orphaned tests.
 

@@ -43,6 +43,7 @@ const FS_PORT = Number(process.env.FS_PORT) || 8783;
 const AUTH_PORT = Number(process.env.AUTH_PORT) || 9783;
 const WEB_PORT = Number(process.env.WEB_PORT) || 8786;          // our little front server: app + the two stood-in endpoints
 const STATIC_PORT = Number(process.env.STATIC_PORT) || 8785;    // tools/serve.js behind it
+const HUB_PORT = Number(process.env.HUB_PORT) || 0, LOG_PORT = Number(process.env.LOG_PORT) || 0, WS_PORT = Number(process.env.WS_PORT) || 0;
 const EXEC_PROJECT = 'demo-cubby-iossignin';
 const EMAIL = 'parent@example.test';
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -67,7 +68,8 @@ if (!process.env.IOS_SIGNIN_INNER) {
     "rules_version = '2';\nservice cloud.firestore { match /databases/{db}/documents { match /{document=**} { allow read, write: if true; } } }\n");
   fs.writeFileSync(path.join(scratch, 'firebase.json'), JSON.stringify({
     firestore: { rules: 'open.rules' },
-    emulators: { firestore: { port: FS_PORT }, auth: { port: AUTH_PORT }, ui: { enabled: false } }
+    emulators: Object.assign({ firestore: Object.assign({ port: FS_PORT }, WS_PORT ? { websocketPort: WS_PORT } : {}), auth: { port: AUTH_PORT }, ui: { enabled: false } },
+      HUB_PORT ? { hub: { port: HUB_PORT } } : {}, LOG_PORT ? { logging: { port: LOG_PORT } } : {})
   }));
   const firebaseBin = path.join(__dirname, 'node_modules', '.bin', 'firebase');
   const javaBin = process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin') : '/opt/homebrew/opt/openjdk/bin';
@@ -140,7 +142,8 @@ function customToken(uid) {
   await new Promise((r) => front.listen(WEB_PORT, r));
 
   const puppeteer = require(path.join(ROOT, 'tools', 'node_modules', 'puppeteer-core'));
-  const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });
+  const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'],
+    downloadBehavior: require(path.join(ROOT, 'tools', 'gate_downloads.js')).downloadBehavior() });
   const page = await browser.newPage();
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
   await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1');

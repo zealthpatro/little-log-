@@ -77,7 +77,7 @@ async function chapterLabels(page) {
 }
 
 (async () => {
-  const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });
+  const browser = await puppeteer.launch({downloadBehavior:require(__dirname+'/gate_downloads').downloadBehavior(), executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });
 
   // ---- 1. IT LOADS, AND IT DOES NOT TOUCH THE APP SHELL ----------------------------------------
   console.log('\n1. the module loads and the overlay leaves the shell alone');
@@ -162,6 +162,11 @@ async function chapterLabels(page) {
 
   // The labour tools arrive when they are useful, not at week 12.
   const weeks = await page.evaluate(() => {
+    /* As the carrier. The Mood block above leaves matIsOwner answering false, and since the carrier
+       became the journey's ownerUid (late Oct 2026, tools/carrier_view_check.js) a non-owner is never
+       offered the labour tools at all, so these lines read [] and failed for a reason that was not
+       about weeks. Found when this file was wired into tools/gates.js (Nov 2026). */
+    window.LL.matIsOwner = function () { return true; };
     function keys(w) {
       /* Move the pregnancy rather than the number. ctx.week and ctx.actions both come off the record
          now that quickAvailable applies the same 28/36 rule the guide does, so faking one and not
@@ -491,7 +496,9 @@ async function chapterLabels(page) {
   check(carrier.blankOwner === true, 'the person who set the journey up is still treated as the carrier');
   check(carrier.blankInvited === false, 'someone invited into it, who never named a relationship, is not');
   check(carrier.namedPapa === false, 'a named Papa Bear is never the carrier');
-  check(carrier.namedMama === true, 'a named Mama Bear always is');
+  /* Was "a named Mama Bear always is". The carrier is the journey's ownerUid now, never a label
+     (tools/carrier_view_check.js): a Mama Bear invited into someone else's journey is not pregnant. */
+  check(carrier.namedMama === false, 'a named Mama Bear who did not set the journey up is not the carrier either');
 
   // ---- 13. QUIET AFTER A LOSS, FOR A PARENT WHO STILL HAS A CHILD ------------------------------
   /* The holding screen is the whole screen and it is gated on having no babies, which is right — you

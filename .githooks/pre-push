@@ -12,6 +12,17 @@
 #
 # tools/hooks_check.js asserts that path exists and is executable, so this cannot rot again.
 #
+# WHAT IT RUNS (Nov 2026). Git hands this hook one line per ref on stdin:
+#   <local ref> <local sha> <remote ref> <remote sha>
+# 1. tools/change_test_check.js reads those ranges: product code changed with no test or gate changed,
+#    and no "Test-exempt: <reason>" trailer, stops the push.
+# 2. The same ranges pick the tier. A push that touches firestore.rules, storage.rules, worker.js,
+#    workers/, app/store-firebase.js, tools/gates.js or any file an emulator gate runs (read from
+#    tools/gates.js) runs `node tools/gates.js --emulator` (the Firestore suites, each on its own free
+#    ports); anything else runs `node tools/gates.js`.
+#    The emulator tier used to run nowhere automatically, so a red there was invisible.
+# test/prepush-tier.test.js feeds this file real stdin in a throwaway repo and checks both choices.
+#
 # Bypass with --no-verify when you have decided the failure is acceptable AND written down why.
 
 ROOT=$(git rev-parse --show-toplevel)
@@ -27,8 +38,51 @@ if [ ! -d "$ROOT/tools/node_modules" ]; then
   exit 1
 fi
 
+# The same for test/node_modules, and UP FRONT, before a minute of gates has run. The first security
+# push of Nov 2026 died after 56 minutes on exactly this: the suites that need firebase and
+# rules-unit-testing were reached last, found nothing to require, and the whole run was thrown away.
+# Several tree gates load it too, so every push needs it, not only the emulator tier.
+if [ ! -d "$ROOT/test/node_modules" ]; then
+  echo "✋ test/node_modules is missing at $ROOT"
+  echo "   The Firestore suites and the gates that load firebase cannot run, so this push would be unverified."
+  echo "   → ln -s /Users/m1promax/Downloads/little-log-pwa/test/node_modules $ROOT/test/node_modules"
+  echo "     or push with --no-verify if you have decided that is acceptable."
+  exit 1
+fi
+
+# git's stdin can be read once; keep it for both questions below.
+RANGES=$(cat)
+
+if ! printf '%s\n' "$RANGES" | node "$ROOT/tools/change_test_check.js" --stdin; then
+  echo ""
+  echo "Push stopped: product code changed and no test did. Add the test that proves it, or put"
+  echo "   Test-exempt: <why no test can see this>"
+  echo "on one of the commits, or push with --no-verify if you have decided that is acceptable."
+  exit 1
+fi
+
+TIER=$(printf '%s\n' "$RANGES" | node "$ROOT/tools/change_test_check.js" --stdin --tier)
+GATE_ARGS=""
+if [ "$TIER" = "emulator" ]; then
+  # The emulator suites also need java (test/node_modules was checked above). Refuse rather than skip,
+  # for the same reason: this push touches exactly what only those suites can judge.
+  # Ask the java the suites will actually use to RUN (tools/gates.js puts $JAVA_HOME/bin first on PATH).
+  # `command -v java` was always satisfied on a Mac: /usr/bin/java is Apple's stub, present with or without
+  # a JDK, and it only fails when called ("Unable to locate a Java Runtime").
+  JAVA_BIN=java
+  [ -n "$JAVA_HOME" ] && JAVA_BIN="$JAVA_HOME/bin/java"
+  if ! "$JAVA_BIN" -version >/dev/null 2>&1; then
+    echo "✋ this push needs the Firestore emulator suites and $JAVA_BIN does not run (no JDK, or a JAVA_HOME without one)."
+    echo "   → export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-26.jdk/Contents/Home"
+    echo "     or push with --no-verify if you have decided that is acceptable."
+    exit 1
+  fi
+  GATE_ARGS="--emulator"
+  echo "This push touches the rules, the Worker or the Firestore layer: running the emulator tier too."
+fi
+
 echo "Running gates before push (skip with --no-verify)..."
-if ! node "$ROOT/tools/gates.js"; then
+if ! node "$ROOT/tools/gates.js" $GATE_ARGS; then
   echo ""
   echo "Push stopped: a gate failed. Fix it, or push with --no-verify if you have decided"
   echo "the failure is acceptable and written down why."

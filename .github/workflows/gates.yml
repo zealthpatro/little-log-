@@ -10,7 +10,8 @@ name: Gates
 #
 #   node tools/gates.js               everything judged from the checkout
 #   node tools/gates.js --live        also audit what is actually deployed
-#   node tools/gates.js --emulator    also the Firestore rules suites
+#   node tools/gates.js --emulator    also the Firestore rules suites (the `emulator` job below
+#                                     runs them here too, on every push to main and every PR)
 
 on:
   push:
@@ -35,6 +36,38 @@ jobs:
         run: sh tools/install_hooks.sh
       - name: Gates (no browser)
         run: node tools/gates.js --no-browser
+
+  # THE SECOND NET for the Firestore emulator tier (Nov 2026). The rules suites, the Worker-against-
+  # Firestore suites and the chaos/fuzz self-tests ran on nothing automatic: the founder's pre-push
+  # hook now runs them when a push touches the rules, the Worker or the Firestore layer, and this job
+  # runs them on EVERY push to main and every PR, so a bypassed hook (--no-verify) or a push from a
+  # machine without java is still judged before anyone else builds on it.
+  #
+  # tools/gates.js --emulator-only gives each suite its own free ports (never the 8080 default) and
+  # uses test/node_modules' own firebase-tools, which `npm install --prefix test` puts there. The
+  # self-hosting suites drive the app in Chrome, so this runner's Chrome is named in CHROME_PATH and
+  # puppeteer-core is installed next to the gates, exactly as the live job does.
+  emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # The Firestore and Auth emulators are Java; 21 is what current firebase-tools asks for.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install firebase-tools and the rules-testing SDK (test/package.json)
+        run: npm install --prefix test --no-audit --no-fund
+      - name: Install the browser driver the self-hosting suites use
+        run: npm install --no-save --prefix tools puppeteer-core
+      - name: Firestore emulator tier (each suite on its own free ports)
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: node tools/gates.js --emulator-only
 
   # Production is a separate job on purpose, and it BLOCKS.
   #

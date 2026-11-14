@@ -22,6 +22,15 @@ const OOB_URL = 'https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode'
 function json(data, status) {
   return new Response(JSON.stringify(data), { status: status || 200, headers: { 'content-type': 'application/json' } });
 }
+/* A text field of a JSON body: the string, '' when it is absent (undefined or null), and null when it is
+   there but is not a string ({}, [], 42, true), which the caller answers as 400 bad_request. Five routes
+   called .trim() on the raw value, so a non-string email or token threw out of the fetch handler and the
+   platform answered with its own error page (found by tools/fuzz_worker.js; test/worker-routes.test.js 9). */
+function bodyText(body, key) {
+  const v = body && typeof body === 'object' ? body[key] : undefined;
+  if (v === undefined || v === null) return '';
+  return typeof v === 'string' ? v : null;
+}
 function b64url(buf) {
   const bytes = new Uint8Array(buf);
   let bin = '';
@@ -223,7 +232,9 @@ async function sendSigninLink(request, env) {
 
   let body;
   try { body = await request.json(); } catch (e) { return json({ error: 'bad_request' }, 400); }
-  const email = ((body && body.email) || '').trim().toLowerCase();
+  const rawEmail = bodyText(body, 'email');
+  if (rawEmail === null) return json({ error: 'bad_request' }, 400);
+  const email = rawEmail.trim().toLowerCase();
   if (!signinEmailOk(email)) return json({ error: 'invalid_email' }, 400);
 
   let sa;
@@ -865,7 +876,9 @@ async function signinGuard(request, env) {
 async function sendSigninCode(request, env) {
   const bad = await signinGuard(request, env); if (bad) return bad;
   let body; try { body = await request.json(); } catch (e) { return json({ error: 'bad_request' }, 400); }
-  const email = ((body && body.email) || '').trim().toLowerCase();
+  const rawEmail = bodyText(body, 'email');
+  if (rawEmail === null) return json({ error: 'bad_request' }, 400);
+  const email = rawEmail.trim().toLowerCase();
   if (!signinEmailOk(email)) return json({ error: 'invalid_email' }, 400);
 
   let sa; try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return json({ error: 'server_config' }, 500); }
@@ -1000,8 +1013,14 @@ async function spendSigninCode(sa, token, email, code, ip, out) {
 async function verifySigninCode(request, env) {
   const bad = await signinGuard(request, env); if (bad) return bad;
   let body; try { body = await request.json(); } catch (e) { return json({ error: 'bad_request' }, 400); }
-  const email = ((body && body.email) || '').trim().toLowerCase();
-  const code = String((body && body.code) || '').trim();
+  const rawEmail = bodyText(body, 'email');
+  if (rawEmail === null) return json({ error: 'bad_request' }, 400);
+  const email = rawEmail.trim().toLowerCase();
+  /* The code: a string, or a number read as its digits (as String() always did). Anything else is a bad
+     request: String() itself throws on an object whose toString and valueOf are not functions. */
+  const rawCode = body && typeof body === 'object' ? body.code : undefined;
+  if (rawCode != null && typeof rawCode !== 'string' && typeof rawCode !== 'number' && rawCode !== false) return json({ error: 'bad_request' }, 400);
+  const code = String(rawCode || '').trim();
   if (!signinEmailOk(email)) return json({ error: 'invalid_email' }, 400);
   if (!/^[0-9]{6}$/.test(code)) return json({ error: 'invalid_code' }, 400);
 
@@ -1217,8 +1236,12 @@ async function sendInviteEmail(request, env, url) {
     } catch (e) { /* limiter unavailable: fail open, the auth check below still holds */ }
   }
   let body; try { body = await request.json(); } catch (e) { return json({ error: 'bad_request' }, 400); }
-  const email = ((body && body.email) || '').trim().toLowerCase();
-  const token = ((body && body.token) || '').trim();
+  const rawEmail = bodyText(body, 'email');
+  if (rawEmail === null) return json({ error: 'bad_request' }, 400);
+  const email = rawEmail.trim().toLowerCase();
+  const rawToken = bodyText(body, 'token');
+  if (rawToken === null) return json({ error: 'bad_request' }, 400);
+  const token = rawToken.trim();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254) return json({ error: 'invalid_email' }, 400);
   if (!/^[A-Za-z0-9]{16,64}$/.test(token)) return json({ error: 'bad_request' }, 400);
 
@@ -1341,7 +1364,9 @@ async function newsletterSignup(request, env) {
 
   let body;
   try { body = await request.json(); } catch (e) { return json({ error: 'bad_request' }, 400); }
-  const email = ((body && body.email) || '').trim().toLowerCase();
+  const rawEmail = bodyText(body, 'email');
+  if (rawEmail === null) return json({ error: 'bad_request' }, 400);
+  const email = rawEmail.trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254) return json({ error: 'invalid_email' }, 400);
   const cap = function (v, n) { return (typeof v === 'string' ? v : '').slice(0, n); };
   const stage = cap(body.stage, 32), source = cap(body.source, 200);

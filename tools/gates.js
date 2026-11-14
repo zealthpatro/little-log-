@@ -15,7 +15,9 @@
  *   node tools/gates.js              tree gates: everything that can be judged from this checkout
  *   node tools/gates.js --live       also check production (third-party trackers, shipped claims)
  *   node tools/gates.js --emulator   also run the Firestore rules suites (needs java + firebase-tools)
+ *   node tools/gates.js --emulator-only   only the Firestore suites (what CI's emulator job runs)
  *   node tools/gates.js --all
+ *   --only=<name> filters the emulator tier too, so --emulator --only=household-guard runs one suite.
  *
  * Exit code is non-zero if any REQUIRED gate fails, so CI and a pre-commit hook can both use it.
  */
@@ -29,11 +31,14 @@ const dl = require('./gate_downloads');
 const ROOT = path.join(__dirname, '..');
 const ARGS = process.argv.slice(2);
 const has = (f) => ARGS.includes(f) || ARGS.includes('--all');
-const LIVE = has('--live'), EMU = has('--emulator');
+const EMU_ONLY = ARGS.includes('--emulator-only');
+const LIVE = has('--live'), EMU = has('--emulator') || EMU_ONLY;
 // CI runs on Linux without the Mac Chrome these gates drive, so it takes the Chrome-free subset.
 // That is still 6 gates more than ran automatically before this file existed.
 const NO_BROWSER = ARGS.includes('--no-browser');
 const ONLY = (ARGS.find((a) => a.startsWith('--only=')) || '').slice(7);
+/* --only=a,b runs every gate whose name contains a OR b (the nightly dry-run picks one of each tier). */
+const onlyMatch = (name) => ONLY.split(',').filter(Boolean).some((x) => name.includes(x));
 
 // Gates that need a browser get `url`; the runner substitutes the real base URL it started.
 const TREE = [
@@ -207,6 +212,37 @@ const TREE = [
   /* No tab scrolls sideways at 320px, Light or Night: the Night wash behind the header slid the app 80px. */
   { name: 'sideways-320',   cmd: ['node', 'tools/sideways_scroll_check.js', 'url'] },
 ];
+
+/* ---- Wiring and the push itself (Nov 2026, "a test not in gates.js does not exist"). ----
+   Kept as its own list so parallel edits to TREE above do not collide with it. */
+TREE.push(
+  /* Every test/*.js and tools/*_check|_gate|_test.js is named here or excused with a checked reason. */
+  { name: 'test-wiring',    cmd: ['node', 'tools/test_wiring_check.js', '--self-test'] },
+  /* The pre-push refusal of product code with no test, proven in a throwaway repo. */
+  { name: 'change-test',    cmd: ['node', 'tools/change_test_check.js', '--self-test'] },
+  /* The real .githooks/pre-push, fed git's stdin: emulator tier for rules/Worker pushes, refusal works. */
+  { name: 'prepush-tier',   cmd: ['node', 'test/prepush-tier.test.js'] },
+  /* A real push from a LINKED worktree leaves the shared repository byte-identical (no gate inherits GIT_DIR). */
+  { name: 'prepush-worktree', cmd: ['node', 'test/prepush-worktree.test.js'] },
+  /* The nightly bug-bash's verdict, board line and open-findings ledger, over five synthetic nights. */
+  { name: 'nightly-report', cmd: ['node', 'tools/nightly_report.js', '--self-test'] },
+  /* The Worker under seeded malformed requests: never throws, never an undeclared 5xx, never reflects. */
+  { name: 'fuzz-worker',    cmd: ['node', 'tools/fuzz_worker.js', '--self-test', '--seconds=20'] },
+  /* Eleven gates that had been run by nothing. Each was watched red against an empty server and green
+     against this tree on 2026-11-13; guide had three stale lines (fixed, see its comments) and
+     marketing-type passed against an empty server (it now fails when it graded nothing). */
+  { name: 'family-portrait', cmd: ['node', 'tools/family_portrait_check.js', 'url'] },
+  { name: 'household-name', cmd: ['node', 'tools/household_name_check.js', 'url'] },
+  { name: 'invite-arrival', cmd: ['node', 'tools/invite_arrival_check.js', 'url'] },
+  { name: 'mkt-type',       cmd: ['node', 'tools/marketing_type_check.js', 'url'] },
+  { name: 'rerender',       cmd: ['node', 'tools/rerender_gate.js', 'url'] },
+  { name: 'avatar',         cmd: ['node', 'tools/avatar_test.js', 'url'] },
+  { name: 'deletion-reach', cmd: ['node', 'tools/deletion_reachable_test.js', 'url'] },
+  { name: 'dosecal',        cmd: ['node', 'tools/dosecal_test.js', 'url'] },
+  { name: 'guide',          cmd: ['node', 'tools/guide_test.js', 'url'] },
+  { name: 'medalarm',       cmd: ['node', 'tools/medalarm_test.js', 'url'] },
+  { name: 'vaxcard',        cmd: ['node', 'tools/vaxcard_test.js', 'url'] },
+);
 // These judge PRODUCTION, not this checkout, so a failure is a deploy problem rather than a code
 // problem. Opt-in, because they need the network and they are the founder's to act on.
 /* The real host, for the gates that must grade what is DEPLOYED rather than what is in the tree. */
@@ -228,8 +264,8 @@ const LIVE_GATES = [
 ];
 /* These need a real Firestore emulator, so they cannot run in the tree tier. loss-archive and
    push-query drive the app or the Worker's query against it rather than testing rules, which is
-   why they live in test/ and still belong here. loss-archive binds its own ports (8181 emulator,
-   8080 web) and starts what it needs itself. */
+   why they live in test/ and still belong here. loss-archive starts what it needs itself, on the
+   free ports the loop below hands it (it used to bind 8181 and 8080, and 8080 is usually taken). */
 const EMU_GATES = [
   { name: 'rules',        emu: 'node rules-test.js' },
   { name: 'invite-link',  emu: 'node invite-link.test.js' },
@@ -269,6 +305,79 @@ const EMU_GATES = [
   { name: 'admin-read-emu', self: ['node', 'test/admin-read-emulator.test.js'] },
 ];
 
+/* ---- The emulator tier on FREE ports (Nov 2026, the pre-push emulator lane). ----
+   Every emu suite used to run as `npx firebase-tools emulators:exec` from test/, which reads the repo's
+   firebase.json and binds Firestore on 8080 (plus hub 4400, logging 4500, websocket 9150). On this Mac
+   8080 is usually another session's server, so the tier either failed to start or, worse, a suite with a
+   hard-coded host graded and CLEARED another session's emulator. So each run gets seven ports nothing is
+   listening on: an `emu` suite runs inside a temp firebase.json that names them (rules copied from THIS
+   tree), and a `self` suite gets them as FS_PORT/AUTH_PORT/WEB_PORT/STATIC_PORT/HUB_PORT/LOG_PORT/WS_PORT,
+   which every self-hosting suite reads. The CLI is test/node_modules' own firebase when it is there, so
+   nothing is fetched from npm at push time. */
+async function emuPorts() {
+  const names = ['FS_PORT', 'AUTH_PORT', 'WEB_PORT', 'STATIC_PORT', 'HUB_PORT', 'LOG_PORT', 'WS_PORT'];
+  const out = {}, used = new Set();
+  /* EMU_PORT_RANGE=7601-7639 keeps every pick inside a band a session has agreed to use (a shared Mac
+     where other sessions own other ports); without it the OS hands out free ephemeral ports. */
+  const band = /^(\d+)-(\d+)$/.exec(process.env.EMU_PORT_RANGE || '');
+  let next = band ? Number(band[1]) : 0;
+  for (const n of names) {
+    let p = 0;
+    if (band) {
+      for (; next <= Number(band[2]) && !p; next++) if (await portIsFree(next)) p = next;
+      if (!p) throw new Error('EMU_PORT_RANGE ' + band[0] + ' has no seven free ports');
+    } else {
+      p = await freePort();
+      while (used.has(p)) p = await freePort();
+    }
+    used.add(p); out[n] = p;
+  }
+  return out;
+}
+function portIsFree(port) {
+  return new Promise((res) => {
+    const s = net.createServer();
+    s.once('error', () => res(false));
+    s.listen(port, '127.0.0.1', () => s.close(() => res(true)));
+  });
+}
+function emuEnv(ports) {
+  const env = Object.assign({}, process.env);
+  Object.keys(ports).forEach((k) => { env[k] = String(ports[k]); });
+  if (process.env.JAVA_HOME) env.PATH = path.join(process.env.JAVA_HOME, 'bin') + path.delimiter + (process.env.PATH || '');
+  return env;
+}
+function emuConfig(ports) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-emu-'));
+  fs.copyFileSync(path.join(ROOT, 'firestore.rules'), path.join(dir, 'firestore.rules'));
+  fs.writeFileSync(path.join(dir, 'firebase.json'), JSON.stringify({
+    firestore: { rules: 'firestore.rules' },
+    emulators: { firestore: { port: ports.FS_PORT, websocketPort: ports.WS_PORT }, hub: { port: ports.HUB_PORT },
+      logging: { port: ports.LOG_PORT }, ui: { enabled: false }, singleProjectMode: true },
+  }));
+  return dir;
+}
+function firebaseCli() {
+  const local = path.join(ROOT, 'test', 'node_modules', '.bin', 'firebase');
+  return fs.existsSync(local) ? [local] : ['npx', 'firebase-tools'];
+}
+
+/* Bug-bashing on the emulator: each self-test plants a known bug and must catch it (Nov 2026). The long
+   seeded runs are nightly (tools/nightly.sh), not here. */
+EMU_GATES.push(
+  { name: 'fuzz-rules',   self: ['node', 'tools/fuzz_rules.js', '--self-test'] },   // model vs real rules, every role
+  { name: 'chaos',        self: ['node', 'tools/chaos.js', '--self-test'] },        // two phones, real app, planted lost write
+);
+
+/* The tree server's port. Inside EMU_PORT_RANGE when one is set, so a session that agreed a band stays in
+   it for every port this runner binds, taken from the TOP of the band so the emulator picks (which start
+   at the bottom) are not pushed out of it; otherwise any free port, as before. */
+async function treePort() {
+  const band = /^(\d+)-(\d+)$/.exec(process.env.EMU_PORT_RANGE || '');
+  if (!band) return freePort();
+  for (let p = Number(band[2]); p >= Number(band[1]); p--) if (await portIsFree(p)) return p;
+  throw new Error('EMU_PORT_RANGE ' + band[0] + ' has no free port for the tree server');
+}
 function freePort() {
   return new Promise((res, rej) => {
     const s = net.createServer();
@@ -287,10 +396,24 @@ function waitFor(url, ms) {
     })();
   });
 }
-function run(cmd, cwd) {
+/* No gate inherits the repository git handed a hook (Nov 2026). Inside a hook git exports GIT_DIR, and from a
+   LINKED worktree it points into the SHARED repository (<repo>/.git/worktrees/<name>). Two gates build
+   throwaway repos with plain `git init/config/commit/reset`, and with GIT_DIR inherited every one of those
+   wrote the real repository instead: a probe push from a worktree left core.bare=true, core.hooksPath=/dev/null,
+   a test user.email and rewritten branch heads, shared by every worktree, while the gate said PASS. Every
+   gate runs with its cwd inside this checkout, so git still finds the right repository without them.
+   test/prepush-worktree.test.js pushes from a real linked worktree and cuts the scrub line out to watch it go red. */
+const GIT_REPO_ENV = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_OBJECT_DIRECTORY',
+  'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_PREFIX'];
+function childEnv(env) {
+  const e = Object.assign({}, env || process.env);
+  for (const k of GIT_REPO_ENV) delete e[k];
+  return e;
+}
+function run(cmd, cwd, env) {
   return new Promise((res) => {
     const t0 = Date.now();
-    const p = spawn(cmd[0], cmd.slice(1), { cwd: cwd || ROOT, env: process.env });
+    const p = spawn(cmd[0], cmd.slice(1), { cwd: cwd || ROOT, env: childEnv(env) });
     let out = '';
     p.stdout.on('data', (d) => { out += d; });
     p.stderr.on('data', (d) => { out += d; });
@@ -303,9 +426,9 @@ function run(cmd, cwd) {
    A gate that adds an entry to the watched folder FAILS, whatever its own exit code, and the failure
    names the files and the fix (tools/gate_downloads.js). `watch` is null where there is no ~/Downloads
    (CI is Linux), and then nothing is checked. */
-async function runGate(name, cmd, cwd, watch) {
+async function runGate(name, cmd, cwd, watch, env) {
   const before = dl.snapshot(watch);
-  const r = await run(cmd, cwd);
+  const r = await run(cmd, cwd, env);
   const left = dl.added(before, dl.snapshot(watch));
   if (left.length) {
     r.code = r.code || 1;
@@ -373,23 +496,23 @@ async function selfTestDownloads() {
 
 (async () => {
   if (ARGS.includes('--self-test-downloads')) process.exit(await selfTestDownloads());
-  const port = await freePort();
+  const port = await treePort();
   const base = 'http://127.0.0.1:' + port;
   console.log('\nCubby gates');
   console.log('serving THIS tree (' + ROOT + ') at ' + base);
   console.log('every browser gate is given that URL explicitly, so none of them can grade another checkout.\n');
 
-  const server = spawn('node', ['tools/serve.js'], { cwd: ROOT, env: Object.assign({}, process.env, { PORT: String(port) }), stdio: 'ignore' });
+  const server = spawn('node', ['tools/serve.js'], { cwd: ROOT, env: Object.assign(childEnv(), { PORT: String(port) }), stdio: 'ignore' });
   const stopServer = () => { try { server.kill(); } catch (e) {} };
   process.on('exit', stopServer);
   process.on('SIGINT', () => { stopServer(); process.exit(130); });
   try { await waitFor(base + '/app/', 15000); }
   catch (e) { console.error('could not start the local server: ' + e.message); stopServer(); process.exit(2); }
 
-  let list = TREE.slice();
+  let list = EMU_ONLY ? [] : TREE.slice();
   if (LIVE) list = list.concat(LIVE_GATES);
   if (NO_BROWSER) list = list.filter((g) => !g.cmd.includes('url'));
-  if (ONLY) list = list.filter((g) => g.name.includes(ONLY));
+  if (ONLY) list = list.filter((g) => onlyMatch(g.name));
 
   const WATCH = dl.userDownloads();
   console.log(WATCH
@@ -407,15 +530,26 @@ async function selfTestDownloads() {
   }
 
   if (EMU) {
-    console.log('\n  firestore emulator');
-    for (const g of EMU_GATES) {
+    console.log('\n  firestore emulator (each suite on its own free ports, never the 8080 default)');
+    const emuList = ONLY ? EMU_GATES.filter((g) => onlyMatch(g.name)) : EMU_GATES;
+    for (const g of emuList) {
       process.stdout.write('  ' + g.name.padEnd(18));
-      // A self-hosting suite starts its own emulator and web server; the rest run inside one.
-      const r = g.self
-        ? await runGate(g.name, g.self, ROOT, WATCH)
-        : await runGate(g.name, ['npx', 'firebase-tools', 'emulators:exec', '--only', 'firestore', '--project', 'demo-cubby', g.emu], path.join(ROOT, 'test'), WATCH);
+      /* Free ports for THIS run (see emuPorts below). A self-hosting suite starts its own emulator and
+         web server and reads them from the environment; the rest run inside one we start from a temp
+         firebase.json that names them. */
+      const ports = await emuPorts();
+      const env = emuEnv(ports);
+      let r, cfgDir = null;
+      if (g.self) r = await runGate(g.name, g.self, ROOT, WATCH, env);
+      else {
+        cfgDir = emuConfig(ports);
+        r = await runGate(g.name, firebaseCli().concat(['emulators:exec', '--only', 'firestore', '--project', 'demo-cubby',
+          '--config', path.join(cfgDir, 'firebase.json'), g.emu]), path.join(ROOT, 'test'), WATCH, env);
+        try { fs.rmSync(cfgDir, { recursive: true, force: true }); } catch (e) {}
+      }
+      r.out = 'ports ' + JSON.stringify(ports) + '\n' + r.out;
       results.push({ name: g.name, ok: r.code === 0, ms: r.ms, out: r.out });
-      console.log((r.code === 0 ? 'ok  ' : 'FAIL') + '  ' + String((r.ms / 1000).toFixed(1) + 's').padStart(7) + '  ' + (r.downloads ? r.downloads.split('\n')[0] : gist(r.out, r.code === 0)));
+      console.log((r.code === 0 ? 'ok  ' : 'FAIL') + '  ' + String((r.ms / 1000).toFixed(1) + 's').padStart(7) + '  ' + (r.downloads ? r.downloads.split('\n')[0] : gist(r.out, r.code === 0)) + '  [firestore :' + ports.FS_PORT + ']');
     }
   }
 

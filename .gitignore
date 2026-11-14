@@ -9,6 +9,9 @@ serviceAccountKey.json
 .env
 node_modules/
 tools/node_modules
+# The worktree recipe and the pre-push hook both say `ln -s .../test/node_modules`; a symlink is a file,
+# so `node_modules/` above never matched it and every worktree showed it as untracked.
+test/node_modules
 tools/package.json
 tools/package-lock.json
 *.log
@@ -47,3 +50,7 @@ _local/
 # screenshot proof sets (proof/, admin screens with sample data). .assetsignore keeps them off the site too.
 .wrangler/
 proof/
+
+# Chaos and fuzz output: open bugs, with repro steps. The repo is public, so these never leave this Mac.
+chaos-failures/
+reports-dryrun/

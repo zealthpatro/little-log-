@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.cubby.nightly</string>
+  <!-- A TEMPLATE. tools/install_nightly.sh replaces __HOME__ with the real home folder and copies the
+       result to ~/Library/LaunchAgents; nothing reads this file in place.
+
+       Runs from the ops clone, __HOME__/cubby-ops/little-log-pwa, never from the main checkout in
+       ~/Downloads, which macOS denies to background jobs (the weekly health check died on its first
+       line for five weeks that way). The clone is moved to origin/main first, so the nightly.sh that
+       runs is always the committed one; nightly.sh checks again, and refuses a dirty clone. The git
+       is the Command Line Tools' own: /usr/bin/git is Xcode's shim and under launchd it stopped at
+       the Xcode licence prompt. caffeinate -i holds the Mac awake for exactly as long as the run. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/caffeinate</string>
+    <string>-i</string>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>G=/Library/Developer/CommandLineTools/usr/bin/git; [ -x "$G" ] || G=git; cd __HOME__/cubby-ops/little-log-pwa || { /usr/bin/osascript -e 'display notification "Could not open ~/cubby-ops/little-log-pwa. Nothing was checked tonight." with title "Cubby nightly did not run"'; exit 1; }; [ -n "$($G status --porcelain --untracked-files=no)" ] || { $G fetch -q origin; $G checkout -q --detach origin/main; }; exec /bin/sh tools/nightly.sh</string>
+  </array>
+  <!-- 02:30 local (Asia/Dubai). launchd runs a missed fire on the next wake. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>2</integer>
+    <key>Minute</key><integer>30</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>__HOME__/cubby-reports/nightly-launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/cubby-reports/nightly-launchd.log</string>
+</dict>
+</plist>

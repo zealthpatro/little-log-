@@ -37,7 +37,7 @@ function check(ok, label, detail) {
 }
 
 (async () => {
-  const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });
+  const browser = await puppeteer.launch({downloadBehavior:require(__dirname+'/gate_downloads').downloadBehavior(), executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });
   const page = await browser.newPage();
   await page.setViewport({ width: 390, height: 850, deviceScaleFactor: 1 });
   const errs = [];

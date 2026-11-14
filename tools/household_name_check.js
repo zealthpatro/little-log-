@@ -1,12 +1,12 @@
 /* The family has a name, it falls back sensibly, and the fallback is never treated as chosen. */
-const p=require('/Users/m1promax/Downloads/little-log-pwa/tools/node_modules/puppeteer-core');
+const p=require(__dirname+'/node_modules/puppeteer-core');
 const C='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const s=ms=>new Promise(r=>setTimeout(r,ms));
-const B='http://localhost:8123', DAY=86400000;
+const B=(process.argv[2]||'http://localhost:8123').replace(/\/$/,''), DAY=86400000;
 const d=new Date(); d.setHours(13,0,0,0); const CLOCK=d.getTime(), OFF=CLOCK-Date.now();
 let pass=0,fail=0; const ok=(n,c,x)=>{c?(pass++,console.log('  ok   '+n)):(fail++,console.log('  FAIL '+n+'  '+JSON.stringify(x).slice(0,160)))};
 (async()=>{
- const b=await p.launch({executablePath:C,headless:'new',args:['--no-sandbox']});
+ const b=await p.launch({downloadBehavior:require(__dirname+'/gate_downloads').downloadBehavior(),executablePath:C,headless:'new',args:['--no-sandbox']});
  const boot=async(st)=>{
   const pg=await b.newPage(); const errs=[]; pg.on('pageerror',e=>errs.push(e.message));
   await pg.emulateMediaFeatures([{name:'prefers-color-scheme',value:'light'}]);

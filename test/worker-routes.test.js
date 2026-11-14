@@ -350,6 +350,45 @@ const newToken = () => 'tok' + String(++tokSerial).padStart(5, '0') + 'abcdefghi
     ok('the companion: a real step is still counted', good.status === 204 && d1.raw.prepare('SELECT COUNT(*) n FROM funnel_steps').get().n === 1, good);
   }
 
+  /* 9. Found by tools/fuzz_worker.js (Nov 2026): five routes called .trim() on the raw JSON value, so an
+     email or token that was an object, an array, a number or a boolean threw out of the fetch handler
+     and Cloudflare answered its own 500 page. Each must answer 400 bad_request instead, and the companion
+     line proves the same route still reaches its real validation with a string. */
+  console.log('\n9. a non-string email or token in the body is a bad request, never a throw');
+  {
+    const w = await isolate();
+    const env = Object.assign({ GAMES_DB: makeD1(), NEWSLETTER_DB: makeD1() }, BASE_ENV);
+    const ROUTES = [['/api/signin-code', 'email'], ['/api/send-signin-link', 'email'], ['/api/signin-verify', 'email'],
+      ['/api/send-invite', 'email'], ['/api/send-invite', 'token'], ['/api/newsletter', 'email']];
+    for (const [p, k] of ROUTES) {
+      const got = [];
+      for (const v of [{}, [], ['a@b.co'], 42, 1e308, true]) {
+        const body = k === 'token' ? { email: 'a@example.com', token: v } : { email: v, code: '123456' };
+        const r = await call(w, 'POST', p, body, env);
+        got.push(r.threw ? 'threw ' + r.threw.slice(0, 60) : r.status + ' ' + (r.body && r.body.error));
+      }
+      ok('POST ' + p + ' with a non-string ' + k + ' answers 400 bad_request every time (object, array, number, boolean)',
+        got.every((g) => g === '400 bad_request'), got);
+    }
+    const sane = await call(w, 'POST', '/api/signin-code', { email: 'not-an-address' }, env);
+    ok('the companion: a string that is not an address still gets the route\'s own answer (invalid_email)', sane.status === 400 && sane.body && sane.body.error === 'invalid_email', sane);
+    const none = await call(w, 'POST', '/api/newsletter', {}, env);
+    ok('and an absent email is still invalid_email, not bad_request', none.status === 400 && none.body && none.body.error === 'invalid_email', none);
+    /* The sign-in code went through String(), which throws too when the value is an object whose toString
+       and valueOf are not functions ({"toString":1}). Any field a route coerces is a field a body can poison. */
+    const gotCode = [];
+    for (const v of [{ toString: 1 }, { toString: 1, valueOf: 1 }, [{ toString: 1 }], {}, true]) {
+      const r = await call(w, 'POST', '/api/signin-verify', { email: 'a@example.com', code: v }, env);
+      gotCode.push(r.threw ? 'threw ' + r.threw.slice(0, 60) : r.status + ' ' + (r.body && r.body.error));
+    }
+    ok('POST /api/signin-verify with a code that is not a string or a number answers 400, never throws',
+      gotCode.every((g) => /^400 (bad_request|invalid_code)$/.test(g)), gotCode);
+    const numCode = await call(w, 'POST', '/api/signin-verify', { email: 'a@example.com', code: 12 }, env);
+    ok('the companion: a numeric code is still read as digits (too short here: invalid_code, as before)', numCode.status === 400 && numCode.body && numCode.body.error === 'invalid_code', numCode);
+    const poisonEmail = await call(w, 'POST', '/api/signin-code', { email: { toString: 1 } }, env);
+    ok('and an email object built to break String() is bad_request on the email routes too', poisonEmail.status === 400 && poisonEmail.body && poisonEmail.body.error === 'bad_request', poisonEmail);
+  }
+
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) {}
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   console.log(fail ? 'WORKER-ROUTES: FAIL' : 'WORKER-ROUTES: PASS');

@@ -31,7 +31,7 @@ const SEED={babies:[
 let fails=0,passes=0;
 const ck=(ok,what,d)=>{ ok?(passes++,console.log('  ok   '+what)):(fails++,console.log('  FAIL '+what+(d?'  '+d:''))); };
 (async()=>{
- const b=await puppeteer.launch({executablePath:process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:'new',args:['--no-sandbox','--disable-gpu']});
+ const b=await puppeteer.launch({downloadBehavior:require(__dirname+'/gate_downloads').downloadBehavior(),executablePath:process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:'new',args:['--no-sandbox','--disable-gpu']});
  const p=await b.newPage(); const errs=[]; p.on('pageerror',e=>errs.push(e.message));
  await p.setViewport({width:390,height:850,deviceScaleFactor:1});
  await p.goto((process.argv[2]||'http://localhost:8080')+'/app/?e2e=1',{waitUntil:'networkidle2'});

@@ -36,7 +36,7 @@ const MIN_STEP = 1.5;   // px a subtitle must clear its own body copy by
 const MIN_FOLD = 12;    // luminance a band must differ from the page by
 const MAX_DRIFT = 1.5;  // luminance that difference may vary across scroll positions
 
-let pass = 0, fail = 0;
+let pass = 0, fail = 0, homeLadders = 0;
 const ok = m => { pass++; console.log('  ok   ' + m); };
 const bad = m => { fail++; console.log('  FAIL ' + m); };
 
@@ -89,7 +89,7 @@ async function effectiveBg(page, x, y) {
 }
 
 (async () => {
-  const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox'] });
+  const browser = await puppeteer.launch({downloadBehavior:require(__dirname+'/gate_downloads').downloadBehavior(), executablePath: CHROME, headless: 'new', args: ['--no-sandbox'] });
 
   console.log('1. type ladder: title > subtitle > body, with a real step');
   for (const w of WIDTHS) {
@@ -103,6 +103,7 @@ async function effectiveBg(page, x, y) {
       const m = await measure(page);
       for (const L of m.ladders) {
         if (L.title == null || L.sub == null || L.body == null) continue; // section absent on this page
+        if (url === '/') homeLadders++;
         const label = `${url} @${w} ${L.name}: ${L.title}/${L.sub}/${L.body}`;
         if (!(L.title > L.sub)) bad(label + ' — title not larger than subtitle');
         else if (!(L.sub - L.body >= MIN_STEP)) bad(label + ` — subtitle only ${(L.sub - L.body).toFixed(1)}px over body (need ${MIN_STEP})`);
@@ -118,6 +119,12 @@ async function effectiveBg(page, x, y) {
       await page.close();
     }
   }
+
+  /* Every line in section 1 skips a section that is absent, so on its own this gate passed against an
+     EMPTY server (16 ok, 0 failed: measured 2026-11-13 when it was first wired into tools/gates.js).
+     The home page always carries all three ladders; if none was measured there, nothing was graded. */
+  if (homeLadders < 3 * WIDTHS.length) bad(`only ${homeLadders} of ${3 * WIDTHS.length} type ladders were found on / — this gate graded nothing (is ${BASE} the marketing site?)`);
+  else ok(`the home page's ${homeLadders} ladders were all measured, so section 1 graded something`);
 
   console.log('\n2. folds: a band differs from the page, and by the SAME amount at any scroll');
   for (const url of PAGES) {

@@ -39,8 +39,11 @@ const http = require('http');
 const { spawn, execFileSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
-const EMU_PORT = 8181;
-const WEB_PORT = 8080;
+/* Ports come from the environment when tools/gates.js runs this (it hands every emulator suite free
+   ports), and fall back to the historical 8181/8080 by hand. HUB_PORT, LOG_PORT, WS_PORT likewise. */
+const EMU_PORT = Number(process.env.FS_PORT) || 8181;
+const WEB_PORT = Number(process.env.WEB_PORT) || 8080;
+const HUB_PORT = Number(process.env.HUB_PORT) || 0, LOG_PORT = Number(process.env.LOG_PORT) || 0, WS_PORT = Number(process.env.WS_PORT) || 0;
 const UID = 'LOSSMOM';
 const EXEC_PROJECT = 'demo-cubby-app';   // what emulators:exec runs as
 const PROJECT = 'little-log-a9caa';      // what the app SDK namespaces its writes under (firebase-init.js)
@@ -48,10 +51,18 @@ const APP_URL = `http://localhost:${WEB_PORT}/app/?fsemu=${EMU_PORT}&fsuid=${UID
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 let pass = 0, fail = 0;
+const failed = [];
 const ok = (n, c, extra) => {
   if (c) { pass++; console.log('  ok   ' + n); }
-  else { fail++; console.log('  FAIL ' + n + (extra !== undefined ? ('  ' + JSON.stringify(extra)) : '')); }
+  else { fail++; failed.push(n); console.log('  FAIL ' + n + (extra !== undefined ? ('  ' + JSON.stringify(extra)) : '')); }
 };
+/* KNOWN INTERMITTENT (Nov 2026). These lines, and only these, fail on some runs of an unchanged tree, and on
+   some nights on nearly every run: after endPregnancy(true) and a reload the calm holding screen does not
+   come back. See FLAKE below and docs/TESTING.md, "Known intermittent: loss-archive". It is a product race,
+   not a harness flake, and it is NOT excused: the suite still exits 1. The note only says so plainly, so
+   nobody re-runs it until it passes and calls that green. */
+const KNOWN_RACE = /holding screen/;
+const FLAKE = 'measured: 6 of 18 runs in the verification pass of 13-14 Nov (3/8 on 866851ac, 3/10 on q-gates-chaos, app/ identical), then 39 of 40 on 14 Nov 01:00-01:45 +04 at load average 9-30 (19/20 plain, and 20/20 with the browser forced light or dark, UTC or Dubai time: neither colour scheme nor time zone is the cause), then 9 of 10 on 14 Nov 05:12-05:16 +04 at load average 7-12. 54 of 68 runs in all';
 
 function get(url) {
   return new Promise((resolve) => {
@@ -83,12 +94,13 @@ if (!process.env.LOSS_ARCH_INNER) {
   // its writes under its real configured projectId — the emulator must host both quietly.
   fs.writeFileSync(path.join(scratch, 'firebase.json'), JSON.stringify({
     firestore: { rules: 'open.rules' },
-    emulators: { firestore: { port: EMU_PORT }, ui: { enabled: false } }
+    emulators: Object.assign({ firestore: Object.assign({ port: EMU_PORT }, WS_PORT ? { websocketPort: WS_PORT } : {}), ui: { enabled: false } },
+      HUB_PORT ? { hub: { port: HUB_PORT } } : {}, LOG_PORT ? { logging: { port: LOG_PORT } } : {})
   }));
   const firebaseBin = path.join(__dirname, 'node_modules', '.bin', 'firebase');
   const env = Object.assign({}, process.env, {
     LOSS_ARCH_INNER: '1',
-    PATH: '/opt/homebrew/opt/openjdk/bin:' + process.env.PATH
+    PATH: (process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin') : '/opt/homebrew/opt/openjdk/bin') + ':' + process.env.PATH
   });
   try {
     execFileSync(firebaseBin, [
@@ -104,15 +116,26 @@ if (!process.env.LOSS_ARCH_INNER) {
 
 /* ---------- inner phase: drive the real app against the emulator ---------- */
 (async () => {
-  // Web server: reuse one already on :8080, else start our own.
+  // Web server: reuse one already on WEB_PORT only if it serves THIS checkout, else start our own.
+  /* It used to reuse whatever answered on :8080, and on a shared Mac that is usually another
+     session's tree: every verdict below would have been about somebody else's code (Nov 2026). */
   let serveProc = null;
+  const mine = fs.readFileSync(path.join(ROOT, 'app', 'store-firebase.js'), 'utf8');
   if ((await get(`http://localhost:${WEB_PORT}/app/`)).status !== 200) {
-    serveProc = spawn('node', [path.join(ROOT, 'tools', 'serve.js')], { stdio: 'ignore' });
+    serveProc = spawn('node', [path.join(ROOT, 'tools', 'serve.js')], { stdio: 'ignore', env: Object.assign({}, process.env, { PORT: String(WEB_PORT) }) });
     for (let i = 0; i < 40 && (await get(`http://localhost:${WEB_PORT}/app/`)).status !== 200; i++) await sleep(250);
+  }
+  const served = (await get(`http://localhost:${WEB_PORT}/app/store-firebase.js`)).body;
+  const servesMine = served === mine;   // ok() returns nothing, so the verdict is kept here
+  ok('the web server on ' + WEB_PORT + ' serves THIS checkout (set WEB_PORT to a free port otherwise)', servesMine);
+  if (!servesMine) {
+    if (serveProc) serveProc.kill();
+    process.exit(1);
   }
 
   const puppeteer = require(path.join(ROOT, 'tools', 'node_modules', 'puppeteer-core'));
-  const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });
+  const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'],
+    downloadBehavior: require(path.join(ROOT, 'tools', 'gate_downloads.js')).downloadBehavior() });
   const page = await browser.newPage();
   await page.setViewport({ width: 390, height: 850 });
   const errs = [];
@@ -243,6 +266,14 @@ if (!process.env.LOSS_ARCH_INNER) {
 
   await browser.close();
   if (serveProc) serveProc.kill();
+  const race = failed.filter((n) => KNOWN_RACE.test(n)), other = failed.filter((n) => !KNOWN_RACE.test(n));
+  if (race.length) {
+    console.log('\nKNOWN INTERMITTENT PRODUCT RACE: ' + race.length + ' line(s) above (' + race.map((n) => '"' + n.slice(0, 50) + '"').join(', ') + ')');
+    console.log('  The holding screen sometimes does not come back after a reload. This is the app, not the harness');
+    console.log('  (' + FLAKE + '),');
+    console.log('  and it is not excused: this suite stays red when it happens. See docs/TESTING.md, "Known intermittent: loss-archive".');
+    if (other.length) console.log('  ' + other.length + ' OTHER line(s) failed as well; those are not this race.');
+  }
   console.log(`\nloss-archive-reload: ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

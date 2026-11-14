@@ -34,7 +34,7 @@ let fails = 0, passes = 0;
 const ck = (ok, what, d) => { ok ? (passes++, console.log('  ok   ' + what)) : (fails++, console.log('  FAIL ' + what + (d ? '\n         ' + d : ''))); };
 
 (async () => {
-  const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'], protocolTimeout: 300000 });
+  const b = await puppeteer.launch({downloadBehavior:require(__dirname+'/gate_downloads').downloadBehavior(), executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'], protocolTimeout: 300000 });
   const p = await b.newPage();
   const errs = [];
   p.on('pageerror', (e) => errs.push(e.message));

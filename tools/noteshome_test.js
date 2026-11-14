@@ -73,7 +73,7 @@ const DOWN = ['today-strip', 'daySurface'], UP = ['daySurface', 'today-strip'];
 const where = r => JSON.stringify(r.order);
 
 (async () => {
-  const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });
+  const b = await puppeteer.launch({downloadBehavior:require(__dirname+'/gate_downloads').downloadBehavior(), executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });
   const p = await b.newPage(); const errs = [];
   p.on('pageerror', e => errs.push(e.message));
   await p.setViewport({ width: 390, height: 850, deviceScaleFactor: 1 });

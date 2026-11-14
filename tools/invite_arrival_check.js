@@ -30,12 +30,12 @@ const CASES = [
 ];
 
 (async () => {
-  const b = await p.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });
+  const b = await p.launch({downloadBehavior:require(__dirname+'/gate_downloads').downloadBehavior(), executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });
   for (const [body, expectT, expectS, label] of CASES) {
     /* A FRESH browser context per case. The service worker registers on the first load and then
        persists across pages in the same context, answering /api/invite-peek itself so the mock is
        never consulted again. Isolating storage per case is what makes each one honest. */
-    const ctx = await b.createBrowserContext();
+    const ctx = await b.createBrowserContext({downloadBehavior:require(__dirname+'/gate_downloads').downloadBehavior()});
     const pg = await ctx.newPage();
     const errs = [];
     pg.on('pageerror', (e) => errs.push(e.message));

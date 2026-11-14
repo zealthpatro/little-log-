@@ -44,3 +44,7 @@ docs
 schema
 social
 storage.rules
+
+# Chaos and fuzz output (gitignored too): open bugs with repro steps, never published.
+chaos-failures
+reports-dryrun
