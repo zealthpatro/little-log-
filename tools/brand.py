@@ -39,7 +39,8 @@ set       the one command for a logo change. Validates the file (square, at leas
           --check and gen_brand_icons --check, and draws a before/after proof sheet for the founder.
           When this tree has ios/ or android/ (gitignored; any checkout that has built the app), set remakes
           their icons, splash and the offline logo in public/ in place and checks them, because the brand
-          gate reads the whole tree and would find the old master's bytes there (verifier M1, 2026-11-14).
+          gate reads them with every file git tracks and would find the old master's bytes there (verifier
+          M1, 2026-11-14). It never reads a nested checkout or gitignored scratch (tree_files; verifier M1b).
 native    remakes ios/ and android/ from the master as set does (the undo after git restore, which cannot
           reach them); --check writes nothing and fails on any file that is not what the master gives.
 
@@ -53,6 +54,7 @@ import json
 import math
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -848,9 +850,26 @@ class SetFailed(Exception):
     pass
 
 
+# A pre-push hook in a worktree exports GIT_DIR (and git may set others), and every git below inherits them:
+# run in a scratch folder, `git init; git add -A; git commit` then commits that folder onto the branch being
+# pushed (shown 2026-11-14). So git here always finds its repo from the folder it runs in.
+GIT_LOCAL_VARS = ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+                  'GIT_PREFIX', 'GIT_IMPLICIT_WORK_TREE', 'GIT_NAMESPACE', 'GIT_SHALLOW_FILE', 'GIT_GRAFT_FILE', 'GIT_REPLACE_REF_BASE', 'GIT_NO_REPLACE_OBJECTS')
+
+
+def git_env():
+    return {k: v for k, v in os.environ.items() if k not in GIT_LOCAL_VARS}
+
+
 def _git(args, root):
-    r = subprocess.run(['git'] + args, cwd=root, capture_output=True, text=True)
+    r = subprocess.run(['git'] + args, cwd=root, capture_output=True, text=True, env=git_env())
     return r.returncode, r.stdout.strip()
+
+
+# Paths go to git as pathspecs, where '*', '?' and '[' are patterns: a card named og/articles/q*.png also
+# matched og/articles/qa/notes.png, so the dirty check reported a file set never writes, and the printed undo
+# (git restore --pathspec-from-file) would have thrown away an edit to it. Every path set hands git is literal.
+LITERAL = '--literal-pathspecs'
 
 
 def validate_master_file(path):
@@ -909,16 +928,64 @@ def _tree_hashes(d):
     return out
 
 
-def retired_in_tree(root, hashes):
-    """Image files anywhere under `root` (but .git and node_modules) whose bytes are in `hashes`: the brand gate's
-    retired-bytes walk (tools/brand_image_check.js staticScan), for trees too small for the whole gate."""
+NEVER_DIRS = ('.git', 'node_modules', '.wrangler', '_local', 'native-build')
+
+
+def _is_checkout(d):
+    return os.path.exists(os.path.join(d, '.git'))
+
+
+def _walk_files(d, root):
+    """Files under d on disk, never inside NEVER_DIRS or a folder that is its own checkout (a .git file or folder)."""
     out = []
-    for base, dirs, files in os.walk(root):
-        dirs[:] = sorted(d for d in dirs if d not in ('.git', 'node_modules'))
-        for f in sorted(files):
-            p = os.path.join(base, f)
-            if re.search(r'\.(png|jpe?g|webp|gif|ico|avif)$', f, re.I) and os.path.getsize(p) <= 20 * 1024 * 1024 and sha256_file(p) in hashes:
-                out.append(rel(p, root))
+    for base, dirs, files in os.walk(d):
+        dirs[:] = sorted(x for x in dirs if x not in NEVER_DIRS and not _is_checkout(os.path.join(base, x)))
+        out += [rel(os.path.join(base, f), root) for f in sorted(files) if os.path.isfile(os.path.join(base, f)) and not os.path.islink(os.path.join(base, f))]
+    return out
+
+
+def tree_files(root):
+    """What this repo ships or builds, the brand gate's rule (tools/brand_image_check.js treeFiles): in a git
+    checkout's top folder, the files git tracks (the index) plus ios/ and android/ (gitignored, built from this
+    checkout); in any other folder, every file on disk; never a nested checkout (the ~67 worktrees under
+    .claude/worktrees/ in the main checkout: verifier M1b), node_modules, .wrangler, _local/ or native-build/.
+    Returns (how, [paths])."""
+    code, top = _git(['rev-parse', '--show-toplevel'], root)
+    if code != 0 or not top or os.path.realpath(top) != os.path.realpath(root):
+        return 'disk', _walk_files(root, root)
+    r = subprocess.run(['git', 'ls-files', '-z', '--cached'], cwd=root, capture_output=True, env=git_env())
+    if r.returncode != 0:
+        raise SetFailed('git ls-files failed in %s: %s' % (root, r.stderr.decode('utf-8', 'replace')))
+    ok_dir = {'': True}
+
+    def dir_ok(d):
+        if d not in ok_dir:
+            parent, name = (d.rsplit('/', 1) if '/' in d else ('', d))
+            ok_dir[d] = dir_ok(parent) and name not in NEVER_DIRS and not _is_checkout(os.path.join(root, d))
+        return ok_dir[d]
+    files, seen = [], set()
+    for p in r.stdout.decode('utf-8', 'surrogateescape').split('\0'):
+        if not p or p in seen:
+            continue
+        seen.add(p)
+        full = os.path.join(root, p)
+        if dir_ok(p.rsplit('/', 1)[0] if '/' in p else '') and os.path.isfile(full) and not os.path.islink(full):
+            files.append(p)
+    for t in NATIVE_TOPS:
+        d = os.path.join(root, t)
+        if os.path.isdir(d) and not _is_checkout(d):
+            files += [p for p in _walk_files(d, root) if p not in seen]
+    return 'git', sorted(files)
+
+
+def retired_in_tree(root, hashes):
+    """The files of this tree (tree_files) that are images whose bytes are in `hashes`: the brand gate's
+    retired-bytes check (tools/brand_image_check.js staticScan), for trees too small for the whole gate."""
+    out = []
+    for p in tree_files(root)[1]:
+        f = os.path.join(root, p)
+        if re.search(r'\.(png|jpe?g|webp|gif|ico|avif)$', p, re.I) and os.path.getsize(f) <= 20 * 1024 * 1024 and sha256_file(f) in hashes:
+            out.append(p)
     return out
 
 
@@ -1082,7 +1149,7 @@ def set_master(src, provenance=None, name=None, yes=False, native_out=None, proo
     touched = [old.get('path', MASTER_REL), REG_REL] + list(fm) + cards
     dirty = []
     for i in range(0, len(touched), 400):
-        code, outp = _git(['status', '--porcelain', '--untracked-files=no', '--'] + touched[i:i + 400], root)
+        code, outp = _git([LITERAL, 'status', '--porcelain', '--untracked-files=no', '--'] + touched[i:i + 400], root)
         if code != 0:
             dirty.append('git status failed: ' + outp)
             break
@@ -1092,7 +1159,7 @@ def set_master(src, provenance=None, name=None, yes=False, native_out=None, proo
     # --pathspec-from-file` abort outright (verifier, 2026-11-14). So every path set writes must be in git.
     known = set()
     for i in range(0, len(touched), 400):
-        code, outp = _git(['ls-files', '-z', '--'] + touched[i:i + 400], root)
+        code, outp = _git([LITERAL, 'ls-files', '-z', '--'] + touched[i:i + 400], root)
         if code != 0:
             dirty.append('git ls-files failed: ' + outp)
             break
@@ -1183,7 +1250,7 @@ def set_master(src, provenance=None, name=None, yes=False, native_out=None, proo
     except SetFailed as e:
         print('\nFAILED: %s' % e)
         print('\nTo put the tree back as it was (every file set writes was committed when it started):')
-        print('  git restore --pathspec-from-file=%s' % touched_list)
+        print('  git %s restore --pathspec-from-file=%s' % (LITERAL, touched_list))
         if tops:
             print('  python3 tools/brand.py native      (%s: not in git, so this remakes them from the restored master)' % ' and '.join(t + '/' for t in tops))
         return 1
@@ -1215,8 +1282,8 @@ def set_master(src, provenance=None, name=None, yes=False, native_out=None, proo
         print('    %-18s %d of %d' % (k, a, b))
     print('\nDone. The proof for the founder: %s' % sheet)
     print('Next: look at it; node tools/gates.js; then commit the files it wrote and push (push = deploy):')
-    print('  git commit --pathspec-from-file=%s -m "The logo is ..."' % touched_list)
-    print('Changed your mind before committing? git restore --pathspec-from-file=%s' % touched_list)
+    print('  git %s commit --pathspec-from-file=%s -m "The logo is ..."' % (LITERAL, touched_list))
+    print('Changed your mind before committing? git %s restore --pathspec-from-file=%s' % (LITERAL, touched_list))
     if tops:
         print('  and then python3 tools/brand.py native   (%s are not in git: this remakes them from the restored master)' % ' and '.join(t + '/' for t in tops))
     print('The native set for the next app build is in %s (tools/cap_ios_build.sh regenerates ios/ from the master anyway).' % prep)
@@ -1640,9 +1707,20 @@ def self_test():
     with open(os.path.join(mini, '.gitignore'), 'w') as f:      # as the real tree: the native projects are not in git
         f.write('/ios/\n/android/\n/native-build/\n')
     gitc = ['git', '-c', 'core.hooksPath=/dev/null', '-c', 'user.name=brand-selftest', '-c', 'user.email=brand-selftest@localhost', '-c', 'commit.gpgsign=false']
-    subprocess.run(['git', 'init', '-q'], cwd=mini, check=True)
-    subprocess.run(gitc + ['add', '-A'], cwd=mini, check=True)
-    subprocess.run(gitc + ['commit', '-q', '-m', 'mini tree'], cwd=mini, check=True)
+    genv = git_env()       # never the GIT_DIR a pre-push hook exports: that would commit the mini tree onto the branch
+    # A card whose name git reads as a pattern, and a tracked file that pattern matches, edited and not
+    # committed: set must neither refuse over that edit nor let its printed undo or commit touch it.
+    art0 = sorted(p for p in os.listdir(os.path.join(mini, 'og', 'articles')) if p.endswith('.png'))[0]
+    GLOB_CARD, GLOB_BYSTANDER = 'og/articles/q*.png', 'og/articles/qa/notes.png'
+    os.makedirs(os.path.join(mini, 'og', 'articles', 'qa'))
+    for p in (GLOB_CARD, GLOB_BYSTANDER):
+        shutil.copyfile(os.path.join(mini, 'og', 'articles', art0), os.path.join(mini, p))
+    subprocess.run(['git', 'init', '-q'], cwd=mini, check=True, env=genv)
+    subprocess.run(gitc + ['add', '-A'], cwd=mini, check=True, env=genv)
+    subprocess.run(gitc + ['commit', '-q', '-m', 'mini tree'], cwd=mini, check=True, env=genv)
+    with open(os.path.join(mini, GLOB_BYSTANDER), 'ab') as f:
+        f.write(b'an edit set must not touch')
+    bystander = sha256_file(os.path.join(mini, GLOB_BYSTANDER))
     mini_set = os.path.join(mini, 'tools', 'brand.py')
     # A checkout that has built the app (verifier M1): ios/ with the AppIcon set tools/cap_ios_build.sh writes
     # (gen_app_icon.py) and its splash, android/ res with the launcher icons and splash, and the offline logo
@@ -1694,6 +1772,55 @@ def self_test():
     stale = retired_in_tree(mini, retired_now)
     ok('no retired logo\'s bytes anywhere in the miniature tree, ios/ and android/ included (the brand gate\'s walk; verifier M1)',
        not stale and len(retired_now) >= len(fm), stale[:6])
+    ok('a card named %s was swapped, and the uncommitted edit to %s, which that name matches as a pattern, was neither refused over nor touched'
+       % (GLOB_CARD, GLOB_BYSTANDER), r.returncode == 0 and GLOB_CARD in mcards and h1.get(GLOB_CARD) != h0.get(GLOB_CARD)
+       and sha256_file(os.path.join(mini, GLOB_BYSTANDER)) == bystander and GLOB_BYSTANDER not in out, out[-1200:])
+    # The commit it prints, run on a copy: exactly the files set wrote go in, the bystander's edit stays out.
+    mcopy = os.path.join(tmp, 'mini-commit')
+    shutil.copytree(mini, mcopy, symlinks=True)
+    m = re.search(r'^\s*(git .*\bcommit --pathspec-from-file=.*)$', out, re.M)
+    cmd = shlex.split(m.group(1)) if m else ['false']
+    rc = subprocess.run(gitc + cmd[1:], cwd=mcopy, capture_output=True, text=True, env=genv) if m else None
+    st = subprocess.run(['git', 'status', '--porcelain', '--untracked-files=no'], cwd=mcopy, capture_output=True, text=True, env=genv).stdout
+    shown = subprocess.run(['git', '-c', 'core.quotePath=false', 'show', '--name-only', '--format=', 'HEAD'], cwd=mcopy, capture_output=True, text=True, env=genv).stdout.split('\n')
+    ok('the commit it prints (%s) commits what set wrote, %s included, and leaves the edit to %s uncommitted'
+       % (' '.join(cmd[:3]), GLOB_CARD, GLOB_BYSTANDER), rc is not None and rc.returncode == 0 and st.strip() == 'M ' + GLOB_BYSTANDER
+       and GLOB_CARD in shown and MASTER_REL in shown and GLOB_BYSTANDER not in shown, (m and m.group(1), rc and (rc.stdout + rc.stderr)[-300:], st[-300:]))
+    shutil.rmtree(mcopy, ignore_errors=True)
+    # The founder's main checkout holds ~67 worktrees under .claude/worktrees/ (verifier M1b): a real one made
+    # from the mini tree's first commit (every file in it is now retired), one whose admin folder is gone (a
+    # .git file), gitignored scratch, an untracked folder and an SPM checkout inside ios/. None is this tree.
+    old_bytes = open(os.path.join(ROOT, MASTER_REL), 'rb').read()
+    subprocess.run(gitc + ['worktree', 'add', '-q', '--detach', '.claude/worktrees/old-desk', 'HEAD'], cwd=mini, check=True, env=genv, capture_output=True)
+    not_tree = ['.claude/worktrees/fake-desk/icons/logo-512.png', 'native-build/old-export/AppIcon.png', '_local/old.png', 'loose/old.png',
+                'ios/App/CapApp-SPM/.build/checkouts/dep/res/old.png']
+    for p in not_tree:
+        os.makedirs(os.path.dirname(os.path.join(mini, p)), exist_ok=True)
+        open(os.path.join(mini, p), 'wb').write(old_bytes)
+    open(os.path.join(mini, '.claude/worktrees/fake-desk/.git'), 'w').write('gitdir: /nonexistent/.git/worktrees/fake-desk\n')
+    os.makedirs(os.path.join(mini, 'ios/App/CapApp-SPM/.build/checkouts/dep/.git'))
+
+    def gate_line():       # the brand gate's own retired-bytes line, run on the mini tree (the rest of its static half needs the whole site)
+        g = subprocess.run(['node', os.path.join(mini, 'tools', 'brand_image_check.js'), '--static-only'], cwd=mini, capture_output=True, text=True, env=genv)
+        lines = (g.stdout + g.stderr).split('\n')
+        i = next((n for n, l in enumerate(lines) if 'no retired logo' in l and 'appear anywhere' in l), None)
+        return '\n'.join(lines[i:i + 3]) if i is not None else (g.stdout + g.stderr)[-400:]
+    nested_old = sha256_file(os.path.join(mini, '.claude/worktrees/old-desk', MASTER_REL)) in retired_now
+    stale_nested, line_nested = retired_in_tree(mini, retired_now), gate_line()
+    ok('neither brand.py nor the brand gate reads a nested worktree (made by git worktree add, every file retired), one with a .git file, gitignored scratch, an untracked folder or an SPM checkout in ios/ (verifier M1b)',
+       nested_old and tree_files(mini)[0] == 'git' and not stale_nested and line_nested.lstrip().startswith('ok '), (nested_old, stale_nested[:6], line_nested))
+    # and the same bytes where they ship or build: staged in git, and under ios/
+    caught = ['icons/planted-old.png', 'ios/App/App/planted-old.png']
+    for p in caught:
+        open(os.path.join(mini, p), 'wb').write(old_bytes)
+    subprocess.run(gitc + ['add', caught[0]], cwd=mini, check=True, env=genv)
+    stale_caught, line_caught = retired_in_tree(mini, retired_now), gate_line()
+    ok('while the same bytes staged in git and under ios/ are caught by both', sorted(stale_caught) == sorted(caught)
+       and line_caught.lstrip().startswith('FAIL') and all(p in line_caught for p in caught), (stale_caught, line_caught))
+    subprocess.run(gitc + ['rm', '-q', '--cached', caught[0]], cwd=mini, check=True, env=genv)
+    for p in caught:
+        os.remove(os.path.join(mini, p))
+    shutil.rmtree(os.path.join(mini, 'ios/App/CapApp-SPM'))      # the plant inside ios/ goes, so ios/ is as set left it
     try:
         summ = json.load(open(os.path.join(proof, 'summary.json')))
     except (OSError, ValueError):
@@ -1708,12 +1835,15 @@ def self_test():
     r = subprocess.run([sys.executable, mini_set, 'set', os.path.join(ROOT, MASTER_REL), '--yes', '--no-tree-gate', '--proof', proof], cwd=mini, capture_output=True, text=True)
     ok('refuses to run again over its own uncommitted change (git could not undo it)', r.returncode == 3 and 'REFUSED' in r.stdout, r.stdout[-800:])
     touched = os.path.join(proof, 'touched.txt')
-    listed = open(touched).read().split() if os.path.exists(touched) else []
-    r = subprocess.run(['git', 'restore', '--pathspec-from-file=' + touched], cwd=mini, capture_output=True, text=True)
+    listed = [l for l in open(touched).read().split('\n') if l] if os.path.exists(touched) else []
+    m = re.search(r'Changed your mind before committing\? (git .*)$', out, re.M)
+    undo = shlex.split(m.group(1)) if m else ['false']
+    r = subprocess.run(undo, cwd=mini, capture_output=True, text=True, env=genv)
     back = _hash_all(mini, fm + mcards)
-    ok('and the undo it prints puts every file back (git restore --pathspec-from-file=touched.txt, %d paths)' % len(listed),
-       r.returncode == 0 and back == h0 and load_registry(mini) == reg and MASTER_REL in listed and REG_REL in listed,
-       (r.stdout + r.stderr)[-400:] or [p for p in h0 if h0[p] != back.get(p)][:5])
+    ok('and the undo it prints (%s) puts every file back, %s included, and leaves the edit to %s (%d paths)' % (' '.join(undo[:3]), GLOB_CARD, GLOB_BYSTANDER, len(listed)),
+       r.returncode == 0 and back == h0 and load_registry(mini) == reg and MASTER_REL in listed and REG_REL in listed and GLOB_CARD in listed
+       and sha256_file(os.path.join(mini, GLOB_BYSTANDER)) == bystander,
+       (r.stdout + r.stderr)[-400:] or [p for p in h0 if h0[p] != back.get(p)][:5] or 'the edit to %s is gone' % GLOB_BYSTANDER)
     r = subprocess.run([sys.executable, mini_set, 'native', '--check'], cwd=mini, capture_output=True, text=True)
     ok('git restore cannot reach ios/ and android/, and native --check says so (they are still on the abandoned master)',
        r.returncode == 1 and 'NATIVE: FAIL' in r.stdout, (r.stdout + r.stderr)[-600:])
@@ -1733,6 +1863,12 @@ def self_test():
     ok('refuses an untracked card that card_logo.py --list returns (git could not undo it), naming it, and writes nothing',
        plant in listed_now and r.returncode == 3 and ('?? ' + plant) in r.stdout and 'Nothing was written' in r.stdout
        and _hash_all(mini, fm + mcards + [plant]) == hp and not os.path.exists(os.path.join(proof2, 'touched.txt')), (r.returncode, r.stdout[-900:]))
+    # The card digests cover what git tracks, so approving them over a card git does not know would leave it out
+    # and the gate would fail after the commit: the approval names it and changes nothing.
+    reg_bytes = open(os.path.join(mini, REG_REL), 'rb').read()
+    r = subprocess.run(['node', 'tools/brand_image_check.js', '--approve-cards'], cwd=mini, capture_output=True, text=True, env=genv)
+    ok('brand_image_check --approve-cards refuses while a card is not in git, naming it, and leaves the registry as it was',
+       r.returncode == 1 and plant in r.stdout and 'git add' in r.stdout and open(os.path.join(mini, REG_REL), 'rb').read() == reg_bytes, (r.stdout + r.stderr)[-600:])
     ok('the real tree is still untouched', _hash_all(ROOT, tracked) == tree_before)
 
     shutil.rmtree(tmp, ignore_errors=True)

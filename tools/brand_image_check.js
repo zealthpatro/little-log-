@@ -27,7 +27,10 @@
  *   4. no retired logo's bytes appear anywhere in the tree, under any name: the June flat face (hashed
  *      from 866851ac) and the November white cub with its icons and text cards (hashed from c1fb604a);
  *      and every image FILE the site serves (the tree minus .assetsignore) is approved or pending,
- *      whether or not any page names it;
+ *      whether or not any page names it. "The tree" is what this repo ships or builds: every file git
+ *      tracks, plus ios/ and android/ (gitignored, built from this checkout). A folder that is its own
+ *      checkout (the ~67 worktrees under .claude/worktrees/ in the main checkout), node_modules, .wrangler
+ *      and gitignored scratch are never read (treeFiles below; brand verifier M1b, 2026-11-14);
  *   5. the web icons are exactly what the master gives (tools/gen_brand_icons.py --check) and every card
  *      carries the current master's logo, never the drawn bear or a retired one (tools/card_logo.py --check).
  * RUNTIME (headless Chrome on THIS tree, localhost only, 390px):
@@ -120,16 +123,80 @@ const SKIP_DIRS = new Set(['.git', 'node_modules', 'tools', 'test', 'docs', 'art
   '_local', 'native-build', 'ios', 'android', 'credentials', 'App']);
 const TEXT_EXT = new Set(['.html', '.htm', '.js', '.mjs', '.css', '.json', '.webmanifest', '.svg', '.xml', '.txt']);
 const IMG_EXT = /\.(png|jpe?g|webp|gif|svg|ico|avif)$/i;
-function walk(dir, out, skip) {
+/* What this repo ships or builds, the only files any check below reads. Until 2026-11-14 every walk read
+   the folder, so in the founder's main checkout, which holds ~67 git worktrees under .claude/worktrees/ and
+   gitignored scratch, the retired-bytes check found the June logo in old worktrees: set failed its own last
+   check there and the pre-push gate was red for files no deploy ever ships (brand verifier M1b). Now:
+   - in a git checkout's top folder, the files git tracks (the index, so a staged new file counts), plus the
+     native projects ios/ and android/ (gitignored, but built from this checkout: brand verifier M1);
+   - in any other folder (the self-test's scratch copies), every file on disk;
+   and in both, never a folder that is its own checkout (a .git file or folder inside: a worktree, a nested
+   repo, an SPM checkout under ios/), node_modules, .wrangler, or the gitignored scratch _local/ and
+   native-build/. tools/brand.py tree_files() is the same rule in Python (its self-test runs this gate's walk
+   on a git tree with nested worktrees). git runs with GIT_DIR and friends cleared: a pre-push hook in a
+   worktree exports GIT_DIR, which would point git in a scratch folder at the real repo. */
+const NATIVE_TOPS = ['ios', 'android'];
+const NEVER_DIRS = new Set(['.git', 'node_modules', '.wrangler', '_local', 'native-build']);
+const GIT_LOCAL_VARS = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_PREFIX', 'GIT_IMPLICIT_WORK_TREE', 'GIT_NAMESPACE', 'GIT_SHALLOW_FILE', 'GIT_GRAFT_FILE', 'GIT_REPLACE_REF_BASE', 'GIT_NO_REPLACE_OBJECTS'];
+const GIT_ENV = Object.fromEntries(Object.entries(process.env).filter(([k]) => !GIT_LOCAL_VARS.includes(k)));
+const git = (args, cwd, extra) => spawnSync('git', args, Object.assign({ cwd, env: GIT_ENV, maxBuffer: 1 << 28 }, extra || {}));
+const isCheckout = (dir) => fs.existsSync(path.join(dir, '.git'));
+function walk(dir, out, skip, root) {
   let ents = [];
   try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return out; }
   for (const e of ents) {
     const p = path.join(dir, e.name);
-    if (e.isDirectory()) { if (!skip.has(e.name)) walk(p, out, skip); }
+    if (e.isDirectory()) { if (!skip.has(e.name) && !NEVER_DIRS.has(e.name) && !isCheckout(p)) walk(p, out, skip, root); else if (root && isCheckout(p)) root.nested.push(p); }
     else if (e.isFile()) out.push(p);
   }
   return out;
 }
+const TREE = new Map();
+function treeFiles(root) {
+  if (TREE.has(root)) return TREE.get(root);
+  const T = { how: 'disk', tracked: 0, native: 0, nested: [], files: [] };
+  const top = git(['rev-parse', '--show-toplevel'], root, { encoding: 'utf8' });
+  let real = null;
+  try { real = fs.realpathSync(root) === fs.realpathSync((top.stdout || '').trim()); } catch (e) { real = false; }
+  const relOf = (p) => path.relative(root, p).split(path.sep).join('/');
+  if (top.status === 0 && real) {
+    const ls = git(['ls-files', '-z', '--cached'], root);
+    if (ls.status !== 0) throw new Error('git ls-files failed in ' + root + ': ' + String(ls.stderr));
+    const seen = new Set();
+    const dirOk = new Map([['', true]]);
+    const okDir = (d) => {          // no folder on the way down is skipped or a checkout of its own
+      if (dirOk.has(d)) return dirOk.get(d);
+      const parent = d.indexOf('/') < 0 ? '' : d.slice(0, d.lastIndexOf('/'));
+      const name = d.slice(d.lastIndexOf('/') + 1);
+      const v = okDir(parent) && !NEVER_DIRS.has(name) && !isCheckout(path.join(root, d));
+      if (okDir(parent) && !v && isCheckout(path.join(root, d))) T.nested.push(path.join(root, d));
+      dirOk.set(d, v);
+      return v;
+    };
+    for (const p of ls.stdout.toString('utf8').split('\0')) {
+      if (!p || seen.has(p)) continue;
+      seen.add(p);
+      if (!okDir(p.indexOf('/') < 0 ? '' : p.slice(0, p.lastIndexOf('/')))) continue;
+      let st; try { st = fs.lstatSync(path.join(root, p)); } catch (e) { continue; }   // deleted, not yet staged
+      if (st.isFile()) T.files.push(p);
+    }
+    T.how = 'git';
+    T.tracked = T.files.length;
+    NATIVE_TOPS.forEach((t) => {
+      const d = path.join(root, t);
+      if (!fs.existsSync(d) || isCheckout(d)) return;
+      walk(d, [], new Set(), T).map(relOf).forEach((p) => { if (!seen.has(p)) { seen.add(p); T.files.push(p); T.native++; } });
+    });
+  } else {
+    T.files = walk(root, [], new Set(), T).map(relOf);
+  }
+  T.nested = T.nested.map(relOf).sort();
+  T.files.sort();
+  TREE.set(root, T);
+  return T;
+}
+const inSkipped = (p, names) => p.split('/').slice(0, -1).some((d) => names.has(d));
 
 /* The four bears, and every way a source file can spell one. Until 2026-11-14 only 🐻 had its escapes
    listed, so `emoji:'\u{1F9F8}'` in app/milestone-data.js passed the gate (the brand verifier's mutant B).
@@ -228,7 +295,9 @@ function resolveRef(file, raw, root) {
 function staticScan(root) {
   const rel = (p) => path.relative(root, p).split(path.sep).join('/');
   const R = { bears: [], avoid: [], avoidScanned: 0, bigNav: [], bothLogos: [], navPages: 0, refs: [], external: [], missing: [], unapproved: [], pending: new Set(), dataBad: [], drawnSvg: [], retiredFiles: [], scanned: 0 };
-  const served = walk(root, [], SKIP_DIRS).filter((p) => TEXT_EXT.has(path.extname(p).toLowerCase()) && !/\.md$/i.test(p));
+  const T = treeFiles(root);
+  R.tree = T;
+  const served = T.files.filter((p) => !inSkipped(p, SKIP_DIRS) && TEXT_EXT.has(path.extname(p).toLowerCase()) && !/\.md$/i.test(p)).map((p) => path.join(root, p));
   // workers/ and worker.js are in by construction (not in SKIP_DIRS); vendor bundles are third-party code, not copy.
   const files = served.filter((p) => !/\/app\/vendor\//.test(p) && !/\/tools\//.test(p));
   for (const f of files) {
@@ -298,10 +367,10 @@ function staticScan(root) {
     }
   }
   NAV_GENERATORS.forEach((g) => { try { if (BIG_NAV_RE.test(fs.readFileSync(path.join(root, g), 'utf8'))) R.bigNav.push(g); } catch (e) { /* not in this tree */ } });
-  // Retired bytes anywhere, under any name, in the WHOLE tree (tools/ and docs/ too).
-  const every = walk(root, [], new Set(['.git', 'node_modules']));
+  // Retired bytes anywhere, under any name, in the WHOLE tree (tools/ and docs/ too, ios/ and android/; never
+  // a nested checkout or gitignored scratch: treeFiles).
   R.retiredWhich = {};
-  for (const f of every) {
+  for (const f of T.files.map((p) => path.join(root, p))) {
     if (!/\.(png|jpe?g|webp|gif|ico|avif)$/i.test(f)) continue;
     let st; try { st = fs.statSync(f); } catch (e) { continue; }
     if (st.size > 20 * 1024 * 1024) continue;
@@ -330,27 +399,16 @@ function assetIgnore(root) {
 }
 function servedImages(root) {
   const ig = assetIgnore(root);
-  const out = [];
-  (function go(dir) {
-    let ents = [];
-    try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
-    for (const e of ents) {
-      if (ig.names.has(e.name) || ig.globs.some((g) => g.test(e.name))) continue;
-      if (e.name.startsWith('.') && e.name !== '.well-known') continue;     // .git, .wrangler, .agents: not pages
-      const p = path.join(dir, e.name);
-      if (e.isDirectory()) go(p);
-      else if (e.isFile() && IMG_EXT.test(e.name)) out.push(path.relative(root, p).split(path.sep).join('/'));
-    }
-  })(root);
-  return out.sort();
+  const skip = (name) => ig.names.has(name) || ig.globs.some((g) => g.test(name))
+    || (name.startsWith('.') && name !== '.well-known');                    // .git, .wrangler, .agents: not pages
+  return treeFiles(root).files.filter((p) => IMG_EXT.test(p) && !p.split('/').some(skip));
 }
 
 // A family approved by glob (660 share cards, 571 heroes) is pinned by its file count and one digest over
 // every file's path and sha256, so a picture slipped in under that name, or a card changed, is caught.
 function globDigest(root, glob) {
   const re = globRe(glob);
-  const top = glob.split('/')[0];
-  const list = walk(path.join(root, top), [], new Set(['node_modules'])).map((f) => path.relative(root, f).split(path.sep).join('/')).filter((p) => re.test(p)).sort();
+  const list = treeFiles(root).files.filter((p) => re.test(p));
   const h = crypto.createHash('sha256');
   list.forEach((p) => h.update(p + ' ' + sha(fs.readFileSync(path.join(root, p))) + '\n'));
   return { list, digest: h.digest('hex') };
@@ -389,6 +447,10 @@ function pyCheck(script, root) {
 function runStatic(root, label) {
   console.log('\nstatic: ' + label + ' (' + root + ')');
   const R = staticScan(root);
+  const T = R.tree;
+  ok('read what this tree ships or builds: ' + (T.how === 'git' ? T.tracked + ' files git tracks and ' + T.native + ' in ios/ and android/'
+    : T.files.length + ' files on disk (not a git checkout\'s top)') + (T.nested.length ? ', and not the ' + T.nested.length + ' nested checkout' + (T.nested.length > 1 ? 's' : '') + ' in it' : ''),
+  T.files.length > 1000, T.files.length);
   ok('scanned the served text files (' + R.scanned + ')', R.scanned > 100, R.scanned);
   ok('no emoji bear in app/, worker.js, workers/ or any served page, script or stylesheet', R.bears.length === 0, R.bears.length + ' lines, e.g.\n         ' + R.bears.slice(0, 8).join('\n         '));
   ok('no milestone or Moments card carries a symbol Cubby avoids (' + AVOID.map(([cp, n, why]) => String.fromCodePoint(cp) + ' ' + n.toLowerCase() + ', ' + why).join('; ') + ')',
@@ -409,7 +471,7 @@ function runStatic(root, label) {
   ok('found the image files the site serves (' + R.servedImages.length + ')', R.servedImages.length > 1000, R.servedImages.length);
   ok('every image file the site serves is approved or pending in tools/brand-images.json, referenced or not', R.servedUnregistered.length === 0,
     R.servedUnregistered.length + ', e.g.\n         ' + R.servedUnregistered.slice(0, 8).join('\n         ') + '\n         (a new picture: node tools/brand_image_check.js --hash <file>)');
-  ok('no retired logo\'s bytes (' + RETIRED_SETS.map((s) => s.name).join(', ') + ') appear anywhere in the tree, under any name', R.retiredFiles.length === 0,
+  ok('no retired logo\'s bytes (' + RETIRED_SETS.map((s) => s.name).join(', ') + ') appear anywhere in the tree, ios/ and android/ included, under any name', R.retiredFiles.length === 0,
     (R.retiredFiles.some((f) => /^(ios|android)\//.test(f)) ? 'ios/ and android/ are made from the master: python3 tools/brand.py native remakes them (set does it too)\n         ' : '')
     + R.retiredFiles.map((f) => f + ' (' + R.retiredWhich[f] + ')').join(', '));
   const integ = registryIntegrity(root);
@@ -512,6 +574,16 @@ function staticSelfTest() {
   fs.appendFileSync(path.join(tmp, 'index.html'), '\n<svg width="60" height="60" viewBox="0 0 60 60"><circle cx="22" cy="22" r="8" fill="#C9A57E"/><circle cx="38" cy="22" r="8" fill="#C9A57E"/>'
     + '<circle cx="30" cy="33" r="16" fill="#C9A57E"/><ellipse cx="30" cy="38" rx="8" ry="6" fill="#F1E4D0"/><circle cx="24" cy="30" r="2.6" fill="#3E3228"/><circle cx="36" cy="30" r="2.6" fill="#3E3228"/></svg>\n');
   RETIRED_SETS.forEach((s, i) => fs.writeFileSync(path.join(tmp, 'icons-planted-' + i + '.png'), retiredBytes(s)));
+  // An old logo in folders that are not this tree (M1b): a worktree (a .git file), a nested repo (a .git
+  // folder), node_modules, .wrangler and gitignored scratch. None may count; the same bytes under ios/ must.
+  const old = retiredBytes(RETIRED_SETS[0]);
+  const plantAt = (dir, p, bytes) => { fs.mkdirSync(path.dirname(path.join(dir, p)), { recursive: true }); fs.writeFileSync(path.join(dir, p), bytes); };
+  const NOT_TREE = ['.claude/worktrees/old-desk/icons/logo-512.png', 'vendor/nested-repo/icons/logo-512.png', 'node_modules/pkg/old.png',
+    '.wrangler/tmp/old.png', '_local/old.png', 'native-build/old-export/old.png'];
+  NOT_TREE.forEach((p) => plantAt(tmp, p, old));
+  plantAt(tmp, '.claude/worktrees/old-desk/.git', 'gitdir: /nonexistent/.git/worktrees/old-desk\n');
+  fs.mkdirSync(path.join(tmp, 'vendor/nested-repo/.git'), { recursive: true });
+  plantAt(tmp, 'ios/App/App/public/logo.png', old);
   fs.mkdirSync(path.join(tmp, 'icons'), { recursive: true });
   fs.writeFileSync(path.join(tmp, 'icons/planted-unapproved.png'), tinyPng());
   const R = staticScan(tmp);
@@ -539,6 +611,34 @@ function staticSelfTest() {
   fs.rmSync(tmp2, { recursive: true, force: true });
   ok('catches the planted reference to an unapproved file', R.unapproved.some((u) => /icons\/planted-unapproved\.png/.test(u)), R.unapproved);
   RETIRED_SETS.forEach((s, i) => ok('catches ' + s.name + ' under a new name', R.retiredFiles.includes('icons-planted-' + i + '.png') && R.retiredWhich['icons-planted-' + i + '.png'] === s.name, R.retiredFiles));
+  ok('catches a retired logo under ios/, and not one in a nested worktree, a nested repo, node_modules, .wrangler, _local/ or native-build/ (a folder, not a git checkout)',
+    R.tree.how === 'disk' && R.retiredFiles.includes('ios/App/App/public/logo.png') && !R.retiredFiles.some((f) => NOT_TREE.includes(f))
+    && R.tree.nested.includes('.claude/worktrees/old-desk') && R.tree.nested.includes('vendor/nested-repo'), { how: R.tree.how, retired: R.retiredFiles, nested: R.tree.nested });
+  // The same in a git checkout, the founder's main checkout in miniature: what git tracks (committed or only
+  // staged) and ios/ and android/ count; a real `git worktree add` under .claude/worktrees/, a worktree whose
+  // admin folder is gone, an untracked or gitignored folder and an SPM checkout inside ios/ do not.
+  const g = fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-brand-git-'));
+  const gitc = ['-c', 'core.hooksPath=/dev/null', '-c', 'user.name=brand-selftest', '-c', 'user.email=brand-selftest@localhost', '-c', 'commit.gpgsign=false'];
+  const run = (args) => { const r = git(gitc.concat(args), g, { encoding: 'utf8' }); if (r.status !== 0) throw new Error('git ' + args.join(' ') + ': ' + r.stderr); };
+  run(['init', '-q']);
+  fs.writeFileSync(path.join(g, '.gitignore'), '/ios/\n/android/\n_local/\nnode_modules/\n');
+  plantAt(g, 'icons/committed-old.png', old);
+  run(['add', '.gitignore', 'icons/committed-old.png']);
+  run(['commit', '-q', '-m', 'self-test tree']);
+  run(['worktree', 'add', '-q', '--detach', '.claude/worktrees/real-desk', 'HEAD']);
+  plantAt(g, '.claude/worktrees/fake-desk/.git', 'gitdir: /nonexistent/.git/worktrees/fake-desk\n');
+  const GIT_NOT_TREE = ['.claude/worktrees/real-desk/icons/committed-old.png', '.claude/worktrees/fake-desk/icons/logo-512.png', 'loose/old.png', '_local/old.png',
+    'node_modules/pkg/old.png', 'ios/App/CapApp-SPM/.build/checkouts/dep/res/old.png'];
+  GIT_NOT_TREE.slice(1).forEach((p) => plantAt(g, p, old));
+  fs.mkdirSync(path.join(g, 'ios/App/CapApp-SPM/.build/checkouts/dep/.git'), { recursive: true });
+  const GIT_TREE = ['android/app/src/main/res/mipmap-mdpi/ic_launcher.png', 'docs/staged-old.png', 'icons/committed-old.png', 'ios/App/App/public/logo.png'];
+  GIT_TREE.forEach((p) => { if (!fs.existsSync(path.join(g, p))) plantAt(g, p, old); });
+  run(['add', 'docs/staged-old.png']);
+  const RG = staticScan(g);
+  ok('in a git checkout: catches a retired logo committed, only staged, under ios/ and under android/, and nothing in a nested worktree, an untracked or gitignored folder or an SPM checkout',
+    RG.tree.how === 'git' && fs.existsSync(path.join(g, GIT_NOT_TREE[0])) && JSON.stringify([...RG.retiredFiles].sort()) === JSON.stringify(GIT_TREE),
+    { how: RG.tree.how, retired: RG.retiredFiles, nested: RG.tree.nested });
+  fs.rmSync(g, { recursive: true, force: true });
   ok('catches the planted picture from another host', R.external.some((e) => /example\.invalid\/planted\.png/.test(e)), R.external);
   ok('catches the planted inlined picture nobody approved', R.dataBad.some((d) => /^index\.html -> an inlined png/.test(d)), R.dataBad);
   ok('catches the planted bear drawn in inline SVG', R.drawnSvg.some((d) => /^index\.html:\d+ -> an inline SVG drawing \(6 filled/.test(d)), R.drawnSvg);
@@ -563,7 +663,7 @@ function staticSelfTest() {
 function retiredBytes(set) {
   const s = set || RETIRED_SETS[0];
   for (const [p, blob] of Object.entries(s.blob)) {
-    const r = spawnSync('git', ['cat-file', 'blob', blob], { cwd: ROOT, maxBuffer: 1 << 26 });
+    const r = git(['cat-file', 'blob', blob], ROOT);
     if (r.status === 0 && s.sha.has(sha(r.stdout))) return r.stdout;
     const f = path.join(ROOT, p);
     if (fs.existsSync(f) && s.sha.has(sha(fs.readFileSync(f)))) return fs.readFileSync(f);
@@ -812,6 +912,17 @@ function gradeRuntime(R, label) {
 if (flag('--approve-cards')) {
   const cl = pyCheck('tools/card_logo.py', ROOT);
   if (!cl.ok) { console.log('refused, a card carries a logo that is not the current master\'s: ' + cl.out); process.exit(1); }
+  // The digests cover what git tracks (treeFiles), so a new article's cards count once they are added.
+  // Approving before that would leave them out and the gate would fail after the commit: say so instead.
+  if (treeFiles(ROOT).how === 'git') {
+    const res = (REG.families || []).filter((f) => f.glob).map((f) => globRe(f.glob));
+    const others = git(['ls-files', '-z', '--others', '--exclude-standard'], ROOT, { encoding: 'utf8' });
+    const loose = (others.stdout || '').split('\0').filter((p) => p && res.some((re) => re.test(p)));
+    if (loose.length) {
+      console.log('refused, git does not know ' + loose.length + ' card' + (loose.length > 1 ? 's' : '') + ' yet: git add them, then approve again\n  ' + loose.slice(0, 12).join('\n  '));
+      process.exit(1);
+    }
+  }
   (REG.families || []).filter((f) => f.glob).forEach((f) => {
     const { list, digest } = globDigest(ROOT, f.glob);
     console.log(f.glob + ': ' + f.count + ' -> ' + list.length + ' files' + (digest === f.digest ? ', unchanged' : ', re-approved'));
