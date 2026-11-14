@@ -13,8 +13,8 @@ python3 tools/brand.py set b87.png --name "the honey teddy" --provenance "gpt-im
 python3 tools/brand.py set b87.png --name "the honey teddy" --provenance "..." --yes
 ```
 
-Then review the proof it prints (`before-after.png`), run `node tools/gates.js`, commit what it lists and
-push main (push = deploy). That is the whole change.
+Then review the proof it prints (`before-after.png`), run `node tools/gates.js`, commit the files it lists
+in `touched.txt` beside the proof, and push main (push = deploy). That is the whole change.
 
 **Need candidates first?** `python3 tools/brand.py propose --ref app/journey-art/ov_hero-cub.webp
 --variants v.json --dry-run` shows the requests; without `--dry-run` it calls gpt-image-2 (paid, key in
@@ -43,8 +43,9 @@ push main (push = deploy). That is the whole change.
 
 ## If you change your mind
 
-- Before committing: `git restore -- icons cap-web og articles social tools/brand-images.json`
-  (set refuses to start unless those are committed, so this only undoes set).
+- Before committing: `git restore --pathspec-from-file=<proof folder>/touched.txt`, the exact files set
+  wrote (it refuses to start unless they are all committed, so this undoes set and nothing else). The same
+  list commits the change: `git commit --pathspec-from-file=<proof folder>/touched.txt`.
 - After committing: `python3 tools/brand.py set <the old file> --yes`. A master that comes back leaves the
   retired list, and the files come out byte for byte as before.
 

@@ -547,13 +547,17 @@ def _fmt(v):
 
 
 def compare_html(cands):
+    usable = [c['set_accepts'] for c in cands]
+
     def row(key, title, values, best=None, unit=''):
+        # The best value is shaded among the candidates set would accept: a file the generators cannot cut
+        # is not a choice, however well it scores.
         cells = []
-        nums = [v for v in values if isinstance(v, (int, float)) and not isinstance(v, bool)]
+        nums = [v for v, u in zip(values, usable) if u and isinstance(v, (int, float)) and not isinstance(v, bool)]
         top = (max(nums) if best == 'max' else min(nums)) if (best and nums) else None
-        for v in values:
+        for v, u in zip(values, usable):
             s = (_fmt(v) + unit) if not isinstance(v, str) else v
-            cells.append('<td%s>%s</td>' % (' class="best"' if (top is not None and v == top and len(nums) > 1) else '', s))
+            cells.append('<td%s>%s</td>' % (' class="best"' if (u and top is not None and v == top and len(nums) > 1) else '', s))
         return '<tr><th title="%s">%s</th>%s</tr>' % (METRICS.get(key, '').replace('"', '&quot;'), title, ''.join(cells))
 
     def mask_cell(c, key):
@@ -597,7 +601,7 @@ img{max-width:100%%;height:auto;border-radius:8px;border:1px solid var(--line);b
 dt{font-weight:700;margin-top:10px}dd{margin:2px 0 0;color:var(--soft)}
 </style></head><body><main>
 <h1>Logo candidates</h1>
-<p>Made by <code>python3 tools/brand.py compare</code>. Same inputs, same bytes. Hover a row name for what it measures; the best of each measured row is shaded.</p>
+<p>Made by <code>python3 tools/brand.py compare</code>. Same inputs, same bytes. Hover a row name for what it measures; the best of each measured row is shaded, among the candidates set would accept.</p>
 <div class="wrap"><table><thead><tr><th></th>%s</tr></thead><tbody>
 %s
 </tbody></table></div>
@@ -996,6 +1000,10 @@ def set_master(src, provenance=None, name=None, yes=False, native_out=None, proo
     log = []
     before_dir = os.path.join(tmpd, 'before')
     proof = os.path.abspath(proof or os.path.join(tempfile.gettempdir(), 'cubby-brand-proof-%s' % new_sha[:12]))
+    os.makedirs(proof, exist_ok=True)
+    touched_list = os.path.join(proof, 'touched.txt')
+    with open(touched_list, 'w') as f:                # exactly what set writes in the tree, for git restore
+        f.write('\n'.join(sorted(set(touched))) + '\n')
     print('\n  Before: snapshot of the current derivatives, and the current native set, in %s' % before_dir)
     fm_before = _hash_all(root, list(fm))
     cards_before = _hash_all(root, cards)
@@ -1037,8 +1045,8 @@ def set_master(src, provenance=None, name=None, yes=False, native_out=None, proo
         _step('gen_brand_icons.py --check', [sys.executable, 'tools/gen_brand_icons.py', '--check'], root, log)
     except SetFailed as e:
         print('\nFAILED: %s' % e)
-        print('\nTo put the tree back as it was (set only writes files that were committed when it started):')
-        print('  git restore -- %s %s icons cap-web og articles social' % (MASTER_REL, REG_REL))
+        print('\nTo put the tree back as it was (every file set writes was committed when it started):')
+        print('  git restore --pathspec-from-file=%s' % touched_list)
         return 1
     cards_after = _hash_all(root, cards)
     prep_after = _tree_hashes(prep)
@@ -1066,7 +1074,9 @@ def set_master(src, provenance=None, name=None, yes=False, native_out=None, proo
     for k, (a, b) in changed.items():
         print('    %-18s %d of %d' % (k, a, b))
     print('\nDone. The proof for the founder: %s' % sheet)
-    print('Next: look at it; node tools/gates.js; then commit icons/ cap-web/ og/ articles/ social/ %s and push (push = deploy).' % REG_REL)
+    print('Next: look at it; node tools/gates.js; then commit the files it wrote and push (push = deploy):')
+    print('  git commit --pathspec-from-file=%s -m "The logo is ..."' % touched_list)
+    print('Changed your mind before committing? git restore --pathspec-from-file=%s' % touched_list)
     print('The native set for the next app build is in %s (tools/cap_ios_build.sh regenerates ios/ from the master anyway).' % prep)
     return 0
 
@@ -1524,6 +1534,13 @@ def self_test():
     ok('and it drew the before/after proof (%dx%d)' % size, size == (2 * CW + 20, 132 + 4 * CH), size)
     r = subprocess.run([sys.executable, mini_set, 'set', os.path.join(ROOT, MASTER_REL), '--yes', '--no-tree-gate', '--proof', proof], cwd=mini, capture_output=True, text=True)
     ok('refuses to run again over its own uncommitted change (git could not undo it)', r.returncode == 3 and 'REFUSED' in r.stdout, r.stdout[-800:])
+    touched = os.path.join(proof, 'touched.txt')
+    listed = open(touched).read().split() if os.path.exists(touched) else []
+    r = subprocess.run(['git', 'restore', '--pathspec-from-file=' + touched], cwd=mini, capture_output=True, text=True)
+    back = _hash_all(mini, fm + mcards)
+    ok('and the undo it prints puts every file back (git restore --pathspec-from-file=touched.txt, %d paths)' % len(listed),
+       r.returncode == 0 and back == h0 and load_registry(mini) == reg and MASTER_REL in listed and REG_REL in listed,
+       (r.stdout + r.stderr)[-400:] or [p for p in h0 if h0[p] != back.get(p)][:5])
     ok('the real tree is still untouched', _hash_all(ROOT, tracked) == tree_before)
 
     shutil.rmtree(tmp, ignore_errors=True)
