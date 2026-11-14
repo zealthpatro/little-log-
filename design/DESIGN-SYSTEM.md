@@ -408,7 +408,8 @@ screen, two answers to "this one". Screenshot it and you cannot unsee it.
 | components whose selected state hardcodes a hue instead of `--accent` | 1 | `.chip.sel` |
 
 Counted as `class="…"` occurrences in `app/index.html`: `.btn-ghost` **180**, `.btn-primary` **144**,
-`.chip` **72**, `.set-item` **63**. The app's most-used button is the one with no visual chrome, and
+`.chip` **72**, `.set-item` **41** (63 until the Settings and Data sheets moved onto `setItem` on 27 October
+2026; the component's own template is one of the 41). The app's most-used button is the one with no visual chrome, and
 it outnumbers the primary 1.25 to 1. That is not automatically wrong, but only 23 of those ghosts are
 a bare `closeSheet()`. The rest carry forward actions, so "ghost means cancel" is not a rule you can
 rely on when you are reading a screen you did not write.
@@ -438,6 +439,17 @@ safety net, the pregnancy weeks alert, reopening an illness, leaving loss holdin
 moves those selectors to the action name in the same commit, or the gate goes blind without failing.
 And a migration that changes nothing a parent sees is recorded in `design/COMPONENT-LOG.md` as shipped
 without a widget stage; anything new a parent would see is rendered and approved first.
+
+**Built so far (27 October 2026): the alert pill and the set-item row.** `alertPill(props)`,
+`setItem(props)` and `UI_ACTIONS` sit beside `escapeHtml` in `app/index.html`, on four shared parts:
+`uiTxt` (escaping), `uiTok` (colour tokens), `uiAct` (an action and its arguments) and `uiIco` (the icon
+box). Every alert pill is drawn by `alertPill`; every row the Settings and Data sheets write themselves
+by `setItem` (the two rows the teaching and guide modules add to Settings are still theirs). Copy that
+shape for the next component: props in, escaped markup out, icons by name from `I`, actions by name
+with their arguments as a JSON array in `data-args`. `tools/alert_pill_check.js` holds the pill, the
+registry and the dispatcher, and ratchets the hand-written inline handlers in `app/index.html` that
+interpolate a value (onclick, oninput, onchange, onkeydown), so that count can only fall.
+`tools/set_item_check.js` holds the row, and ratchets the hand-written `.set-item` rows the same way.
 
 ---
 

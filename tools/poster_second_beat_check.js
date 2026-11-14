@@ -67,13 +67,16 @@ const seed = (over) => Object.assign({
 }, over || {});
 
 /* Every probe below reads the real rendered stack, never a variable. A pill is identified by the
-   handler on its own button, which is the thing a thumb actually reaches. */
+   action on its own button, which is the thing a thumb actually reaches. Pills are AlertPill
+   components now, so the button names its action in data-act (the month card is 'openMonthCard');
+   onclick is still read so a hand-written pill would be found too. */
+const ACT = "(b.getAttribute('data-act')||b.getAttribute('onclick')||'')";
 const PROBE = `(function(){
   var pills=[].slice.call(document.querySelectorAll('.alert-pill'));
   var find=function(fn){ return pills.filter(function(p){
-    return [].slice.call(p.querySelectorAll('button')).some(function(b){ return (b.getAttribute('onclick')||'').indexOf(fn)>=0; });
+    return [].slice.call(p.querySelectorAll('button')).some(function(b){ return ${ACT}.indexOf(fn)>=0; });
   }); };
-  var poster=find('openPosterOffer'), month=find('openMemoryCard');
+  var poster=find('openPosterOffer'), month=find('openMonthCard');
   var p0=poster[0];
   return {
     pills: pills.length,
@@ -91,7 +94,7 @@ const PROBE = `(function(){
    fail. So the probes return a shape and the assertions do the judging. */
 const PILL = (fn) => `(function(){
   var pills=[].slice.call(document.querySelectorAll('.alert-pill'));
-  return pills.filter(function(x){ return [].slice.call(x.querySelectorAll('button')).some(function(b){ return (b.getAttribute('onclick')||'').indexOf('${fn}')>=0; }); })[0]||null;
+  return pills.filter(function(x){ return [].slice.call(x.querySelectorAll('button')).some(function(b){ return ${ACT}.indexOf('${fn}')>=0; }); })[0]||null;
 })()`;
 
 const SHEET = `(function(){
@@ -389,7 +392,7 @@ const SHEET = `(function(){
     await load(seed());
     const r = await page.evaluate(`(function(){
       var pills=[].slice.call(document.querySelectorAll('.alert-pill'));
-      var p=pills.filter(function(x){ return [].slice.call(x.querySelectorAll('button')).some(function(b){return (b.getAttribute('onclick')||'').indexOf('openPosterOffer')>=0;}); })[0];
+      var p=pills.filter(function(x){ return [].slice.call(x.querySelectorAll('button')).some(function(b){return ${ACT}.indexOf('openPosterOffer')>=0;}); })[0];
       if(!p) return null;
       var box=p.getBoundingClientRect();
       var btns=[].slice.call(p.querySelectorAll('button')).map(function(b){ var r=b.getBoundingClientRect(); return { w:Math.round(r.width), h:Math.round(r.height) }; });

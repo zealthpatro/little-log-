@@ -49,6 +49,21 @@ const TREE = [
   { name: 'two-caregivers', cmd: ['node', 'test/two-caregiver-journey.test.js', 'url'] },
   { name: 'mkt-contrast',   cmd: ['node', 'tools/marketing_contrast_check.js', 'url'] },
   { name: 'type',           cmd: ['node', 'tools/type_check.js', 'url'] },
+  /* config/app reaches every phone with no deploy and no review, so the validator in front of it is
+     held to a written contract: plain text, known hosts, locked safety widgets, nothing dropped. */
+  { name: 'config',         cmd: ['node', 'tools/config_check.js', '--self-test'] },
+  /* The alert pills are one component now, and their buttons are named actions run by one listener.
+     The contract (escaped text, ids as data, a closed registry) is held statically here... */
+  { name: 'alert-pill',     cmd: ['node', 'tools/alert_pill_check.js', '--self-test'] },
+  /* The second component, the icon-title-subtitle row, held the same way; it also ratchets the
+     hand-written .set-item rows that are left, so they can only move onto it. */
+  { name: 'set-item',       cmd: ['node', 'tools/set_item_check.js', '--self-test'] },
+  /* ...and the dose pill's ways out are tapped for real here. It was orphaned until the AlertPill
+     migration: the only test that taps In 15 min and Not now on the pill, and nothing ran it. With the
+     listener broken it fails 12 checks; that was watched on 2026-10-27 before it was wired. It reads the
+     dose pill, not any pill: the month card sits beside it 89 days a year. It cannot judge a missed
+     "set times" slot in the four minutes around midnight, and fails there rather than guess. */
+  { name: 'medalarm',       cmd: ['node', 'tools/medalarm_test.js', 'url'] },
   { name: 'grid',           cmd: ['node', 'tools/grid_check.js'] },
   { name: 'type-scale',     cmd: ['node', 'tools/type_scale_check.js'] },
   /* design-doc checks design/DESIGN-SYSTEM.md against the code in both directions, which is the

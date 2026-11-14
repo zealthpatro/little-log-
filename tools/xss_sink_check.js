@@ -28,6 +28,12 @@
  *      normalizeLoadedState, the same normaliser the cloud path runs on every blob snapshot).
  *   2. The SINKS: the same values put straight into state after boot, past every ingest check, so
  *      the escaping at each sink is graded on its own.
+ *      2d. Every alert pill a member's words or ids can reach (the month card, a sibling's dose, a
+ *      fever, an illness reading, a visit, an overdue vaccine, the four consent states, the child and
+ *      poster pills) and
+ *      the Settings and Data rows that print a member's words, each staged hostile and required to be
+ *      on screen, with each button handing its handler exactly the id it was drawn with.
+ *      2e. The one document listener that runs component buttons (UI_ACTIONS), in the real page.
  *   3. The INGEST helpers store-firebase.js calls where Firestore snapshots land: ids, colours and
  *      photo bytes are neutralised and the entry itself is kept. Plus a static check that every
  *      listener actually calls them.
@@ -55,7 +61,11 @@ const TAGS = ['rel', 'name', 'notetext', 'noteby', 'noteid', 'evid', 'evnote', '
   'side', 'illid', 'illname', 'msid', 'mstitle', 'docid', 'docname', 'clinic', 'askid', 'asktext',
   'rtid', 'rttitle', 'cid', 'clabel', 'creq', 'dose', 'unit', 'evunit', 'medid2',
   'apptid', 'appttitle', 'place', 'ctname', 'ctrole', 'preid', 'pretext', 'symp', 'momid', 'momcap', 'bag',
-  'plan', 'vq', 'guessname', 'guessnote', 'guestnick', 'guestrel', 'guestdate', 'guestnote', 'obs'];
+  'plan', 'vq', 'guessname', 'guessnote', 'guestnick', 'guestrel', 'guestdate', 'guestnote', 'obs',
+  // 2d: every alert pill and the Settings and Data rows
+  'kidid', 'kidname', 'visitname', 'monthph', 'kidill', 'kidillname', 'illtemp', 'illunit', 'fevunit', 'kidmed',
+  'kidmedname', 'kiddose', 'kidunit', 'othermed', 'cask', 'caskby', 'casklabel', 'cwait', 'cwaitlabel', 'cready',
+  'cdecl', 'cdecllabel', 'newid', 'newname', 'disp', 'vxname'];
 /* One payload per field, aimed at all three contexts at once:
      \');__pwn_t();//   closes a single-quoted JS string inside a handler. A bare quote would be
                         turned into \' by a half-escaper; the backslash in front cancels that.
@@ -404,6 +414,264 @@ function pageSetup(tags) {
   ok('pregnancy: and a guest\'s due-date guess (date, length) is on screen, as text', late.text.indexOf('PWN-guestdate') >= 0 && late.text.indexOf('PWN-guestrel') >= 0);
   await sweep('pregnancy');
   await page.evaluate(() => { state.pregnancy = null; viewingPreg = false; try { closeSheet(); } catch (e) {} });
+
+  /* 2d. Every alert pill, and the Settings and Data rows, each carrying what a member wrote.
+     Sections 1 and 2 only ever drew three of the pills (a dose due, an illness with no temperature,
+     a consent waiting on this guardian) and no Settings row with a member's words in it, and nothing
+     asserted even those were on screen, so a pill nobody staged, or one that stopped being drawn,
+     passed for free. The month card's photo id, the fever and illness readings, the doctor on the
+     visit pill, a sibling's name on a dose, the three other consent states and the read-only export
+     row were never drawn hostile at all. They are all drawn here, past the ingest (the second lock
+     on its own), and for each one: it is on screen, the hostile words are on it as text, byte for
+     byte, nothing was injected and nothing ran, and tapping each button hands its handler exactly
+     the id it was drawn with. Handlers are stubbed by their global names, so this grades the markup
+     and the dispatch whichever way a button is wired (data-act, or an inline handler).
+     The pregnancy-weeks pill prints only Cubby's own words; there is nothing to stage. The overdue
+     vaccine's name reads like Cubby's (it comes from the schedule), but the plan lives in the shared
+     blob, so any member can write it: it is staged hostile with the rest. */
+  console.log('\n2d. every alert pill, and the Settings and Data rows, each carrying what a member wrote');
+  const V = {
+    kidId: P('kidid'), kidName: P('kidname'), visitName: P('visitname'), monthPh: P('monthph'),
+    illId: P('kidill'), illName: P('kidillname'), illTemp: P('illtemp'), illUnit: P('illunit'), fevUnit: P('fevunit'),
+    kidMed: P('kidmed'), kidMedName: P('kidmedname'), kidDose: P('kiddose'), kidUnit: P('kidunit'),
+    otherMed: P('othermed'), otherBaby: P('babyid'), otherName: P('babyname'),
+    cAsk: P('cask'), cAskBy: P('caskby'), cAskLabel: P('casklabel'), cWait: P('cwait'), cWaitLabel: P('cwaitlabel'),
+    cReady: P('cready'), cDecl: P('cdecl'), cDeclLabel: P('cdecllabel'), rel: P('rel'),
+    newId: P('newid'), newName: P('newname'), vxName: P('vxname'),
+  };
+  // go and render too: the vaccine pill's Open is go('health') then render(), and a real render would
+  // repaint the pills mid-walk and strand every button after it.
+  const STUBS = ['logDose', 'snoozeMedAlert', 'dismissMedAlert', 'openTemp', 'openFeverSafetyNet', 'openVisitSummary',
+    'openMemoryCard', 'dismissTip', 'openPosterOffer', 'dismissPosterOffer', 'ackChild', 'openConsentReview',
+    'downloadExport', 'ackDecline', 'openBabyProfile', 'openGuardians', 'requestExport', 'go', 'render'];
+  const stage = (kind) => page.evaluate((kind, v, clock, day) => {
+    try { closeSheet(); } catch (e) {}
+    window.__pwnHits = [];
+    const iso = (t) => { const d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+    state.babies = state.babies.filter((b) => b.id !== v.kidId && b.id !== v.newId);
+    state.events = state.events.filter((e) => e.babyId !== v.kidId && e.babyId !== v.newId);
+    let mv = null;
+    if (kind === 'older') {
+      // Nineteen months old (the child stage starts at 18) and on her month day, a day or few past the mark.
+      const kid = { id: v.kidId, name: v.kidName, sex: 'F', color: '#F4A6B8', allergies: [], routines: [],
+        doctors: [{ id: 'dv1', role: 'GP', name: v.visitName, clinic: '', phone: '', nextVisit: iso(clock) }] };
+      state.babies.push(kid); state.activeBabyId = kid.id;
+      for (let k = 1; k < 12 && !mv; k++) { const d = new Date(clock - k * day); d.setMonth(d.getMonth() - 19); kid.birth = d.getTime(); mv = monthiversary(); }
+      state.photos = (state.photos || []).filter((p) => p.babyId !== kid.id).concat([{ id: 'pm1', babyId: kid.id, photoId: v.monthPh, slot: mv, caption: '', createdAt: clock - day }]);
+      state.illnesses = (state.illnesses || []).filter((i) => i.babyId !== kid.id).concat([{ id: v.illId, babyId: kid.id, name: v.illName, startedAt: clock - day, endedAt: null, by: 'uidEvil' }]);
+      // A fever with a unit a member wrote, and a later reading on the illness that is all member-written.
+      state.events.push({ id: 'kt1', type: 'temperature', babyId: kid.id, time: clock - 2 * 3600000, temp: 39.2, unit: v.fevUnit, authorId: 'uidEvil' });
+      state.events.push({ id: 'kt2', type: 'temperature', babyId: kid.id, time: clock - 3600000, temp: v.illTemp, unit: v.illUnit, illnessId: v.illId, authorId: 'uidEvil' });
+      state.meds = (state.meds || []).filter((m) => m.id !== v.kidMed && m.id !== v.otherMed).concat([
+        { id: v.kidMed, name: v.kidMedName, dose: v.kidDose, unit: v.kidUnit, babyId: kid.id, subject: { kind: 'baby', id: kid.id }, active: true, pattern: { type: 'daily', times: ['00:00'] }, createdAt: 0 },
+        // A sibling's dose names the sibling, and the sibling's name is a member's to write.
+        { id: v.otherMed, name: 'Iron', dose: '1', unit: 'ml', babyId: v.otherBaby, subject: { kind: 'baby', id: v.otherBaby }, active: true, pattern: { type: 'daily', times: ['00:00'] }, createdAt: 0 }]);
+      // Her vaccine plan, from the shared blob: one dose a parent confirmed missed, its name a member's.
+      state.vaccines = state.vaccines || {};
+      state.vaccines[kid.id] = [{ id: 'vx1', name: v.vxName, group: '2 months', dueMonths: 2, given: false, givenAt: null, note: '', missed: true }];
+      state.guardians = ['local', 'uidEvil'];
+      state.consents = [
+        { id: v.cAsk, type: 'delete', scope: 'photos', label: v.cAskLabel, requestedBy: 'uidEvil', requestedByName: v.cAskBy, at: clock - 3600000, approvals: ['uidEvil'], status: 'pending' },
+        { id: v.cWait, type: 'delete', scope: 'photos', label: v.cWaitLabel, requestedBy: 'local', requestedByName: 'Test Parent', at: clock - 3500000, approvals: ['local'], status: 'pending' },
+        { id: v.cReady, type: 'export', scope: 'all', label: 'Export everything', requestedBy: 'local', requestedByName: 'Test Parent', at: clock - 3400000, approvals: ['local', 'uidEvil'], status: 'ready' },
+        { id: v.cDecl, type: 'delete', scope: 'photos', label: v.cDeclLabel, requestedBy: 'local', requestedByName: 'Test Parent', at: clock - 3300000, approvals: ['local'], status: 'declined', seenDecline: false }];
+    } else {
+      // A newborn, ten days old, with one log and the setup card done with: the poster offer.
+      const nb = { id: v.newId, name: v.newName, birth: clock - 10 * day, sex: 'M', color: '#5E6AA8', allergies: [], routines: [], doctors: [] };
+      state.babies.push(nb); state.activeBabyId = nb.id;
+      state.events.push({ id: 'nf1', type: 'feed', babyId: nb.id, time: clock - 3600000, side: 'L', dur: 600000, authorId: 'local' });
+      markSeen('tip_getstarted');
+    }
+    view = 'home'; go('home'); render();
+    return { mv: mv };
+  }, kind, V, CLOCK, DAY);
+
+  /* Reads every pill on screen, then taps each named button with the handlers stubbed and records
+     what each one received. One pill is found by the words a parent sees on it. */
+  const tapPills = (want) => page.evaluate((want, stubs) => {
+    const got = {};
+    const pills = [...document.querySelectorAll('#scroll .alert-pill')];
+    const saved = {}; let calls = [];
+    stubs.forEach((n) => { saved[n] = window[n]; window[n] = function () { calls.push([n, [].slice.call(arguments)]); }; });
+    try {
+      Object.keys(want).forEach((key) => {
+        const w = want[key];
+        const pill = pills.find((p) => w.find.every((s) => p.textContent.indexOf(s) >= 0));
+        if (!pill) { got[key] = { missing: true }; return; }
+        const r = { text: pill.textContent, taps: {} };
+        w.taps.forEach((label) => {
+          const b = [...pill.querySelectorAll('button')].find((x) => x.textContent.trim() === label);
+          calls = [];
+          if (b) b.click();
+          r.taps[label] = b ? calls : 'no button';
+        });
+        const due = pill.querySelector('[data-due]');
+        r.due = due ? Number(due.getAttribute('data-due')) : null;
+        got[key] = r;
+      });
+    } finally { stubs.forEach((n) => { window[n] = saved[n]; }); }
+    return got;
+  }, want, STUBS);
+
+  const checkPills = async (label, want, expect) => {
+    await sleep(350);
+    const found = await page.evaluate(() => window.__scan(document));
+    ok('pills, ' + label + ': nothing injected, nothing ran', found.length === 0, found.slice(0, 8).join('\n         '));
+    const got = await tapPills(want);
+    for (const key of Object.keys(want)) {
+      const g = got[key];
+      ok('pills, ' + label + ': the ' + key + ' pill is drawn', g && !g.missing, g);
+      if (!g || g.missing) continue;
+      want[key].shows.forEach((s) => ok('pills, ' + label + ': the ' + key + ' pill shows the hostile ' + s.slice(4, s.indexOf('\\')) + ' as text, exactly', g.text.indexOf(s) >= 0, g.text.slice(0, 300)));
+      for (const [btn, calls] of Object.entries(expect(key, g))) {
+        ok('pills, ' + label + ': ' + key + ' "' + btn + '" hands its handler exactly ' + JSON.stringify(calls).slice(0, 90), JSON.stringify(g.taps[btn]) === JSON.stringify(calls), g.taps[btn]);
+      }
+    }
+    const after = await page.evaluate(() => window.__scan(document));
+    ok('pills, ' + label + ': still nothing ran after every tap', after.length === 0, after.slice(0, 8).join('\n         '));
+  };
+
+  const older = await stage('older');
+  ok('pills: the older child is on her month day (staging)', older.mv != null, older);
+  const OLDER = {
+    month: { find: [V.kidName, ' month'], shows: [V.kidName], taps: ['See it'] },
+    child: { find: [V.kidName, 'growing up'], shows: [V.kidName], taps: ['Lovely'] },
+    'dose (hers)': { find: [V.kidMedName], shows: [V.kidMedName, V.kidDose, V.kidUnit], taps: ['Log', 'In 15 min', 'Not now'] },
+    'dose (a sibling\'s)': { find: [V.otherName, 'Iron'], shows: [V.otherName], taps: ['Log', 'In 15 min', 'Not now'] },
+    illness: { find: [V.illName], shows: [V.illName, V.illTemp, V.illUnit], taps: ['Temp'] },
+    vaccine: { find: ['Vaccine overdue'], shows: [V.vxName], taps: ['Open'] },
+    fever: { find: ['Fever logged'], shows: [V.fevUnit], taps: ['When to call', 'Summary'] },
+    visit: { find: ['Appointment soon'], shows: [V.visitName], taps: ['Summary'] },
+    'consent (needs your OK)': { find: [V.cAskBy], shows: [V.cAskBy, V.cAskLabel], taps: ['Review'] },
+    'consent (waiting)': { find: ['Waiting for', V.cWaitLabel], shows: [V.rel, V.cWaitLabel], taps: ['View'] },
+    'consent (ready)': { find: ['Export agreed'], shows: [], taps: ['Download'] },
+    'consent (declined)': { find: ['Not this time'], shows: [V.cDeclLabel], taps: ['OK'] },
+  };
+  await checkPills('an older child on her month day', OLDER, (key, g) => ({
+    month: { 'See it': [['openMemoryCard', [older.mv, V.monthPh]], ['dismissTip', ['bday' + older.mv]]] },
+    child: { Lovely: [['ackChild', []]] },
+    'dose (hers)': { Log: [['logDose', [V.kidMed]]], 'In 15 min': [['snoozeMedAlert', [V.kidMed, g.due]]], 'Not now': [['dismissMedAlert', [V.kidMed, g.due]]] },
+    'dose (a sibling\'s)': { Log: [['logDose', [V.otherMed]]], 'In 15 min': [['snoozeMedAlert', [V.otherMed, g.due]]], 'Not now': [['dismissMedAlert', [V.otherMed, g.due]]] },
+    illness: { Temp: [['openTemp', []]] },
+    vaccine: { Open: [['go', ['health']], ['render', []]] },
+    fever: { 'When to call': [['openFeverSafetyNet', []]], Summary: [['openVisitSummary', []]] },
+    visit: { Summary: [['openVisitSummary', []]] },
+    'consent (needs your OK)': { Review: [['openConsentReview', [V.cAsk]]] },
+    'consent (waiting)': { View: [['openConsentReview', [V.cWait]]] },
+    'consent (ready)': { Download: [['downloadExport', [V.cReady]]] },
+    'consent (declined)': { OK: [['ackDecline', [V.cDecl]]] },
+  })[key]);
+
+  /* The Settings and Data rows, on the same household: the profile row names the active child, the
+     Guardians row names the guardians, and a caregiver's read-only export row names them too. */
+  const rows = (open, guardians) => page.evaluate((open, guardians, stubs) => {
+    try { closeSheet(); } catch (e) {}
+    window.__pwnHits = [];
+    if (guardians) state.guardians = guardians;
+    (new Function(open))();
+    const saved = {}; let calls = [];
+    stubs.forEach((n) => { saved[n] = window[n]; window[n] = function () { calls.push([n, [].slice.call(arguments)]); }; });
+    const out = [];
+    try {
+      document.querySelectorAll('.set-item').forEach((r) => {
+        const t = (r.querySelector('.a') || r).textContent, s = (r.querySelector('.b') || r).textContent;
+        if (!/PWN/.test(t + s)) return;
+        calls = []; r.click();
+        out.push({ title: t, sub: s, wired: !!(r.getAttribute('data-act') || r.getAttribute('onclick')), calls: calls });
+      });
+    } finally { stubs.forEach((n) => { window[n] = saved[n]; }); }
+    return { rows: out, found: window.__scan(document) };
+  }, open, guardians || null, STUBS);
+  const set = await rows('openSettings();');
+  ok('rows, Settings: nothing injected, nothing ran', set.found.length === 0, set.found.slice(0, 8).join('\n         '));
+  const prof = set.rows.find((r) => r.title.indexOf(V.kidName + '\'s profile') >= 0);
+  ok('rows, Settings: the profile row shows the child\'s hostile name as text, exactly', !!prof, set.rows);
+  ok('rows, Settings: and a tap on it opens her profile, nothing else', prof && JSON.stringify(prof.calls) === JSON.stringify([['openBabyProfile', []]]), prof);
+  const dat = await rows('openDataSheet();', ['local', 'uidEvil']);
+  ok('rows, Data (a guardian): nothing injected, nothing ran', dat.found.length === 0, dat.found.slice(0, 8).join('\n         '));
+  const gRow = dat.rows.find((r) => r.title.indexOf('Guardians') >= 0);
+  ok('rows, Data (a guardian): the Guardians row shows a guardian\'s hostile name as text, exactly', !!gRow && gRow.sub.indexOf(V.rel) >= 0, dat.rows);
+  ok('rows, Data (a guardian): and a tap on it opens Guardians, nothing else', gRow && JSON.stringify(gRow.calls) === JSON.stringify([['openGuardians', []]]), gRow);
+  const cg = await rows('openDataSheet();', ['uidEvil']);
+  ok('rows, Data (a caregiver): nothing injected, nothing ran', cg.found.length === 0, cg.found.slice(0, 8).join('\n         '));
+  const xRow = cg.rows.find((r) => r.title.indexOf('Export data') >= 0);
+  ok('rows, Data (a caregiver): the read-only export row names the guardian, hostile, as text', !!xRow && xRow.sub.indexOf(V.rel) >= 0, cg.rows);
+  ok('rows, Data (a caregiver): and it is still read-only: no action, and a tap does nothing', xRow && !xRow.wired && xRow.calls.length === 0, xRow);
+  await page.evaluate(() => { try { closeSheet(); } catch (e) {} state.guardians = ['local', 'uidEvil']; });
+
+  await stage('newborn');
+  await checkPills('a newborn\'s first weeks', {
+    poster: { find: ['A keepsake from the day', V.newName], shows: [V.newName], taps: ['See it', 'Not now'] },
+  }, () => ({ 'See it': [['openPosterOffer', []]], 'Not now': [['dismissPosterOffer', []]] }));
+
+  /* 2e. The one listener that runs every component's buttons, in the real page. tools/alert_pill_check.js
+     holds it in a vm; this holds the copy the app actually registered, with whatever else the page has
+     added to the document since. A name UI_ACTIONS does not own does nothing, even one every object
+     inherits; arguments are JSON or nothing; and nothing is evaluated on the way. */
+  console.log('\n2e. the component action listener, in the real page');
+  const disp = await page.evaluate(() => {
+    const r = { registry: typeof UI_ACTIONS === 'object' && UI_ACTIONS !== null };
+    if (!r.registry) return r;
+    window.__pwnHits = [];
+    const names = Object.keys(UI_ACTIONS), saved = {}, calls = [];
+    names.forEach((n) => { saved[n] = UI_ACTIONS[n]; UI_ACTIONS[n] = function () { calls.push([n, [].slice.call(arguments)]); }; });
+    // An inherited name that would run if the listener ever looked past UI_ACTIONS' own entries.
+    Object.defineProperty(Object.prototype, '__pwn_disp', { value: function () { window.__pwnHits.push('disp-inherited'); }, configurable: true, writable: true });
+    const spied = []; const realEval = window.eval, realFn = window.Function, realST = window.setTimeout, realSI = window.setInterval;
+    window.eval = function (s) { spied.push('eval'); return realEval(s); };
+    window.Function = function () { spied.push('Function'); return realFn.apply(this, arguments); };
+    window.setTimeout = function (f) { if (typeof f === 'string') spied.push('setTimeout(string)'); return realST.apply(window, arguments); };
+    window.setInterval = function (f) { if (typeof f === 'string') spied.push('setInterval(string)'); return realSI.apply(window, arguments); };
+    const errs = [];
+    const tap = (act, args) => {
+      const b = document.createElement('button');
+      b.setAttribute('data-act', act);
+      if (args !== undefined) b.setAttribute('data-args', args);
+      const inner = document.createElement('span'); b.appendChild(inner);
+      document.body.appendChild(b);
+      const before = calls.length;
+      try { inner.click(); } catch (e) { errs.push(act + ': ' + e.message); }
+      b.remove();
+      return calls.slice(before);
+    };
+    try {
+      r.inherited = ['__pwn_disp', 'constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf', '__defineGetter__', 'isPrototypeOf']
+        .map((n) => [n, tap(n, '[]').length]).filter((x) => x[1]);
+      r.unknown = tap('noSuchAction', '[]').length + tap('', '[]').length + tap('logDose ', '[]').length;
+      const known = names[0];
+      r.badJson = tap(known, '"]);__pwn_disp();//').length + tap(known, '[1,').length;
+      r.notArray = tap(known, '{"0":"x","length":1}').length + tap(known, '"x"').length + tap(known, 'null').length + tap(known, '7').length;
+      const lit = '__pwn_disp()";alert(1);//<x-pwn>';
+      r.literal = tap(known, JSON.stringify([lit, 3, null, true]));
+      r.literalOk = r.literal.length === 1 && JSON.stringify(r.literal[0][1]) === JSON.stringify([lit, 3, null, true]);
+      r.noArgs = tap(known);
+      r.known = known;
+    } finally {
+      names.forEach((n) => { UI_ACTIONS[n] = saved[n]; });
+      delete Object.prototype.__pwn_disp;
+      window.eval = realEval; window.Function = realFn; window.setTimeout = realST; window.setInterval = realSI;
+    }
+    r.spied = spied; r.errs = errs; r.hits = window.__pwnHits.slice();
+    // Every data-act on screen names an own entry, and every data-args parses to an array.
+    r.badOnScreen = [...document.querySelectorAll('[data-act]')].filter((el) => {
+      if (!Object.prototype.hasOwnProperty.call(UI_ACTIONS, el.getAttribute('data-act'))) return true;
+      if (!el.hasAttribute('data-args')) return false;
+      try { return !Array.isArray(JSON.parse(el.getAttribute('data-args'))); } catch (e) { return true; }
+    }).map((el) => el.outerHTML.slice(0, 120));
+    return r;
+  });
+  ok('the page has one action registry, UI_ACTIONS', disp.registry, disp);
+  if (disp.registry) {
+    ok('an inherited name (__proto__, constructor, toString, one planted on Object.prototype...) does nothing', !disp.inherited.length && disp.hits.indexOf('disp-inherited') < 0, disp);
+    ok('an unknown name does nothing', disp.unknown === 0, disp.unknown);
+    ok('data-args that is not JSON does nothing, and its text never runs', disp.badJson === 0 && !disp.hits.length, disp);
+    ok('data-args that is JSON but not an array does nothing', disp.notArray === 0, disp.notArray);
+    ok('a known name gets its arguments as plain values, exactly, a script-shaped string included', disp.literalOk, disp.literal);
+    ok('a known name with no data-args gets no arguments', disp.noArgs.length === 1 && disp.noArgs[0][1].length === 0, disp.noArgs);
+    ok('nothing is evaluated on the way (no eval, Function, or string timer)', !disp.spied.length, disp.spied);
+    ok('and nothing threw', !disp.errs.length, disp.errs);
+    ok('every data-act on screen names an own UI_ACTIONS entry, with array arguments', !disp.badOnScreen.length, disp.badOnScreen);
+  }
 
   console.log('\n3. the ingest helpers store-firebase.js calls where snapshots land');
   const ing = await page.evaluate((p, color, srcBad, png) => {

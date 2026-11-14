@@ -304,10 +304,12 @@ const BANNED = [
      a fever of your own.
 
      So this section never calls openFeverSafetyNet(). It walks the screens and clicks what is
-     actually on them. `page.evaluate(() => openFeverSafetyNet())` is not a door. */
-  const doorsOnScreen = () => page.evaluate(() => [...document.querySelectorAll('[onclick]')]
+     actually on them. `page.evaluate(() => openFeverSafetyNet())` is not a door. A door names its
+     handler in onclick, or in data-act once it is a code component (the Home pill is, since the
+     AlertPill migration), so both are read: reading only one would make the other half blind. */
+  const doorsOnScreen = () => page.evaluate(() => [...document.querySelectorAll('[onclick],[data-act]')]
     .filter((el) => !el.closest('#sheet') && el.offsetParent !== null)
-    .map((el) => el.getAttribute('onclick'))
+    .map((el) => el.getAttribute('data-act') || el.getAttribute('onclick'))
     .filter((s) => /openFeverSafetyNet/.test(s)));
 
   console.log('\n8. the parent who did not log it can still reach the list');
@@ -321,7 +323,7 @@ const BANNED = [
     // The summary was the pill's only action before this change and must not have been displaced.
     ok('without taking the summary away from that pill', home.some((t) => /fever logged/i.test(t) && /summary/i.test(t)), home);
     const tapped = await page.evaluate(() => {
-      const el = [...document.querySelectorAll('[onclick]')].find((x) => !x.closest('#sheet') && x.offsetParent !== null && /openFeverSafetyNet/.test(x.getAttribute('onclick')));
+      const el = [...document.querySelectorAll('[onclick],[data-act]')].find((x) => !x.closest('#sheet') && x.offsetParent !== null && /openFeverSafetyNet/.test(x.getAttribute('data-act') || x.getAttribute('onclick')));
       if (!el) return false; el.click(); return true;
     });
     ok('tapping it really opens the sheet', tapped === true);

@@ -77,7 +77,14 @@ jsFiles.forEach((f) => collect(fs.readFileSync(path.join(ROOT, 'app', f), 'utf8'
    JS-injected stylesheets migrate onto the tokens; never raise it to make a run go green. */
 /* 374 -> 373 on 2026-08-30: the tap-target pass deleted the inline `font-size:13px` that was
    shrinking the "Show me" CTA in app/log-guide.js. One literal gone is one off the ceiling. */
-const CEILING = Number(process.env.TYPE_CEILING || 373);
+/* 373 -> 358 on 2026-10-27: the true count had drifted to 365 under a ceiling nobody lowered, and the
+   AlertPill component took 7 more (eight inline glyph sizes became one; 18px is var(--fs-title) now).
+   358 -> 346 the same day: the Settings and Data sheet rows moved onto setItem (11 glyph sizes and the
+   Appearance value's 13px, which is var(--fs-body) now).
+   Held at 346 through the merge onto the November security release (866851ac), which had added one
+   literal under its own ceiling of 373: the join-consent facts rows in confirmSheet, font-size:14px.
+   That one is var(--fs-base) now, the same 14px, so the merged tree is at 346 without a raise. */
+const CEILING = Number(process.env.TYPE_CEILING || 346);
 const distinct = [...new Set(outside.map((o) => o.px))].sort((a, b) => a - b);
 ok('the ratchet holds: literals outside the stylesheet have not grown', outside.length <= CEILING,
   outside.length + ' literals, ceiling ' + CEILING + '. Lower the ceiling when you migrate some; never raise it.');

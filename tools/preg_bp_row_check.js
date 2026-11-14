@@ -170,7 +170,8 @@ const seed = (p, over) => Object.assign({
     const open = !!(s && s.classList.contains('show'));
     if (!open) return { open: false, rows: [], secTitles: [], txt: '', handlers: [] };
     const rows = [].slice.call(s.querySelectorAll('.set-item')).map((e) => ({
-      on: e.getAttribute('onclick') || '', a: (e.querySelector('.a') || {}).textContent || '',
+      // A setItem row names its action in data-act; a hand-written one still in onclick.
+      on: e.getAttribute('data-act') || e.getAttribute('onclick') || '', a: (e.querySelector('.a') || {}).textContent || '',
       b: (e.querySelector('.b') || {}).textContent || '',
     }));
     return {
@@ -189,8 +190,8 @@ const seed = (p, over) => Object.assign({
   // Tap a real row by its handler, the way a thumb does.
   const tapRow = async (frag) => {
     const hit = await page.evaluate((f) => {
-      const el = [].slice.call(document.querySelectorAll('#sheet [onclick], #scroll [onclick]'))
-        .find((e) => (e.getAttribute('onclick') || '').indexOf(f) >= 0);
+      const el = [].slice.call(document.querySelectorAll('#sheet [onclick], #scroll [onclick], #sheet [data-act], #scroll [data-act]'))
+        .find((e) => (e.getAttribute('data-act') || e.getAttribute('onclick') || '').indexOf(f) >= 0);
       if (!el) return false; el.click(); return true;
     }, frag);
     await sleep(300);

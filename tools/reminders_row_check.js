@@ -80,7 +80,7 @@ const DAILY_MED = { id: 'm1', babyId: 'b1', name: 'Infant paracetamol', dose: '2
     openSettings();
     const sheet = document.getElementById('sheet');
     const rows = Array.from(sheet.querySelectorAll('.set-item'))
-      .filter((el) => /openReminders/.test(el.getAttribute('onclick') || ''));
+      .filter((el) => /openReminders/.test(el.getAttribute('data-act') || el.getAttribute('onclick') || ''));
     const r = rows[0];
     return {
       count: rows.length,
@@ -94,7 +94,7 @@ const DAILY_MED = { id: 'm1', babyId: 'b1', name: 'Infant paracetamol', dose: '2
   const clickRowAndReadSheet = () => page.evaluate(() => {
     const sheet = document.getElementById('sheet');
     const row = Array.from(sheet.querySelectorAll('.set-item'))
-      .filter((el) => /openReminders/.test(el.getAttribute('onclick') || ''))[0];
+      .filter((el) => /openReminders/.test(el.getAttribute('data-act') || el.getAttribute('onclick') || ''))[0];
     if (!row) return { opened: false };
     row.click();
     const s = document.getElementById('sheet');
@@ -236,7 +236,7 @@ const DAILY_MED = { id: 'm1', babyId: 'b1', name: 'Infant paracetamol', dose: '2
       try { closeSheet(); } catch (e) {}
       openSettings();
       const rows = Array.from(document.querySelectorAll('#sheet .set-item'))
-        .filter((el) => /openReminders/.test(el.getAttribute('onclick') || ''));
+        .filter((el) => /openReminders/.test(el.getAttribute('data-act') || el.getAttribute('onclick') || ''));
       return { count: rows.length, sub: rows[0] ? (rows[0].querySelector('.si-body .b').textContent || '').replace(/\s+/g, ' ').trim() : null };
     });
     ok('the second caregiver sees the row too', asCaregiver.count === 1, asCaregiver);
@@ -249,7 +249,7 @@ const DAILY_MED = { id: 'm1', babyId: 'b1', name: 'Infant paracetamol', dose: '2
     const before = (await readRow()).sub;
     const off = await page.evaluate(() => {
       const row = Array.from(document.querySelectorAll('#sheet .set-item'))
-        .filter((el) => /openReminders/.test(el.getAttribute('onclick') || ''))[0];
+        .filter((el) => /openReminders/.test(el.getAttribute('data-act') || el.getAttribute('onclick') || ''))[0];
       row.click();
       setMedAlerts(false);
       const s = document.getElementById('sheet');
@@ -414,7 +414,7 @@ const DAILY_MED = { id: 'm1', babyId: 'b1', name: 'Infant paracetamol', dose: '2
       window.persist = function () { n++; return real.apply(this, arguments); };
       openSettings();
       const rows = Array.from(document.querySelectorAll('#sheet .set-item'))
-        .filter((el) => /openReminders/.test(el.getAttribute('onclick') || ''));
+        .filter((el) => /openReminders/.test(el.getAttribute('data-act') || el.getAttribute('onclick') || ''));
       const sub = rows[0] ? (rows[0].querySelector('.si-body .b').textContent || '').replace(/\s+/g, ' ').trim() : null;
       const generated = !!(state.vaccines && state.vaccines.b1);
       window.persist = real;

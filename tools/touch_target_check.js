@@ -75,7 +75,7 @@ const AA = 24;
    the bridge once per surface rather than once per control: 500 controls x 4 walks x a round trip
    is minutes, and inside the page it is milliseconds. */
 const PROBE = () => {
-  const SEL = 'button,a,input,select,textarea,[onclick],[role="button"],[tabindex]';
+  const SEL = 'button,a,input,select,textarea,[onclick],[data-act],[role="button"],[tabindex]';
   const LIMIT = 60;                       // walking past 60px tells us nothing we need
   const out = [];
   const seenEl = new Set();

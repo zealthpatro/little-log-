@@ -91,14 +91,14 @@ async function shoot(page, file, height) {
   const setShot = await shoot(page, '02-settings.png', 1400);
   const hasData = await page.evaluate(() => {
     const s = document.getElementById('sheet');
-    const row = [].slice.call(s.querySelectorAll('[onclick]')).filter((e) => /export or delete your data/i.test(e.textContent || ''))[0];
+    const row = [].slice.call(s.querySelectorAll('[onclick],[data-act]')).filter((e) => /export or delete your data/i.test(e.textContent || ''))[0];
     if (row) row.click();
     return !!row;
   });
   await sleep(400);
   const del = await page.evaluate(() => {
     const s = document.getElementById('sheet');
-    const row = [].slice.call(s.querySelectorAll('[onclick]')).filter((e) => /delete my account/i.test(e.textContent || ''))[0];
+    const row = [].slice.call(s.querySelectorAll('[onclick],[data-act]')).filter((e) => /delete my account/i.test(e.textContent || ''))[0];
     if (row) row.click();
     return !!row;
   });

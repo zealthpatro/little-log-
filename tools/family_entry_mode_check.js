@@ -552,7 +552,7 @@ const SIGN_IN = (role, info, extra) => ({ role: role, info: info, extra: extra |
       const ov0 = document.getElementById('llModalOv'); if (ov0) ov0.remove();
       openSettings();
       const rows = [].slice.call(document.querySelectorAll('.set-item'))
-        .filter((e) => /openFamily/.test(e.getAttribute('onclick') || ''));
+        .filter((e) => /openFamily/.test(e.getAttribute('data-act') || e.getAttribute('onclick') || ''));
       if (!rows.length) return { found: 0 };
       rows[0].click();
       const ov = document.getElementById('llModalOv');
@@ -573,11 +573,20 @@ const SIGN_IN = (role, info, extra) => ({ role: role, info: info, extra: extra |
         // The label of a Settings row can be a line or two below its own onclick, so the window is
         // the call site plus the little block it sits in.
         const near = lines.slice(i, i + 4).join(' ');
+        // A label written for a template ('&amp;') or for a component, which escapes it itself ('&').
+        const settings = /Family &amp; sharing|Your profile &amp; family|Your profile & family/.test(near);
+        // The UI_ACTIONS entry is what every act:'openFamily' door runs, not a door of its own.
+        if (/\bopenFamily:\(\)=>/.test(line)) return;
         (line.match(/openFamily\(([^)]*)\)/g) || []).forEach(function (m) {
-          const row = { line: i + 1, arg: m, settings: /Family &amp; sharing|Your profile &amp; family/.test(near),
-            label: line.replace(/\s+/g, ' ').trim().slice(0, 90) };
+          const row = { line: i + 1, arg: m, settings, label: line.replace(/\s+/g, ' ').trim().slice(0, 90) };
           if (/^openFamily\(\)$/.test(m)) out.push(row);
           else if (!/'invite'/.test(m)) out.push(row);
+        });
+        // A component door (setItem, alertPill). UI_ACTIONS.openFamily takes no arguments, so EVERY such
+        // door opens the Settings order, args:['invite'] or not: an invite door needs its own registry
+        // action, and only that action may be exempt here. Quoting as loose as the component gates read it.
+        (line.match(/\bact\s*:\s*['"]openFamily['"]/g) || []).forEach(function (m) {
+          out.push({ line: i + 1, arg: m, settings, label: line.replace(/\s+/g, ' ').trim().slice(0, 90) });
         });
       });
       return out;

@@ -84,10 +84,18 @@ async function resetSpy(page) { await page.evaluate(() => { window.__spy.toasts 
  * touch it, so the storm assertions still run against both layers. */
 async function clearStormFloor(page) { await page.evaluate(() => { window._medAlertFloorAt = 0; }); }
 
+/* THE DOSE pill, not any pill. Home carries other alert pills, and the month card one is up beside this
+   dose for two weeks after every monthiversary: with the baby seeded 120 days old that is 89 days a
+   year (all of March, May and June 2027 among them), and every "the alert steps aside" below would go
+   red for a dose that had stepped aside perfectly. The dose pill is the one with the Log action. Each
+   absence check below follows a presence check with this same finder, so a pill that stopped matching
+   it fails here rather than passing as gone. */
+const DOSE_PILL = '.alert-pill:has([data-act="logDose"])';
+
 // The alert pill's actions, as a thumb would read them: label + the class that shapes them.
 async function pillActions(page) {
-  return page.evaluate(() => {
-    var p = document.querySelector('.alert-pill');
+  return page.evaluate((sel) => {
+    var p = document.querySelector(sel);
     if (!p) return null;
     return {
       text: (p.textContent || '').replace(/\s+/g, ' ').trim(),
@@ -95,7 +103,7 @@ async function pillActions(page) {
         label: (b.textContent || '').trim(), cls: b.className || ''
       }))
     };
-  });
+  }, DOSE_PILL);
 }
 async function medEventCount(page) { return page.evaluate(() => state.events.filter(e => e.type === 'medicine').length); }
 // The persisted snooze, read back the way a cold boot reads it: out of localStorage, not memory.
@@ -119,7 +127,8 @@ async function tapText(page, selector, text) {
 }
 
 (async () => {
-  const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });
+  const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'],
+    downloadBehavior: require('./gate_downloads').downloadBehavior() });
   const page = await browser.newPage();
   await page.setViewport({ width: 390, height: 850, deviceScaleFactor: 1 });
   const errs = [];
@@ -247,9 +256,9 @@ async function tapText(page, selector, text) {
   console.log(`\n5. snooze (shrunk to ${SNOOZE_MS / 1000}s): quiet before, exactly one alert after`);
   await page.evaluate(ms => { window.MED_SNOOZE_MS = ms; }, SNOOZE_MS);
   await resetSpy(page);
-  check(await tapText(page, '.alert-pill button', snoozeBtn ? snoozeBtn.label : 'In 15 min'), 'tapped the snooze');
+  check(await tapText(page, DOSE_PILL + ' button', snoozeBtn ? snoozeBtn.label : 'In 15 min'), 'tapped the snooze');
   await sleep(700);
-  check(await page.evaluate(() => !document.querySelector('.alert-pill')), 'the alert steps aside');
+  check(await page.evaluate((sel) => !document.querySelector(sel), DOSE_PILL), 'the alert steps aside');
   let ev = await medEventCount(page);
   check(ev === 1, 'snoozing did NOT fabricate a dose record', `(medicine events: ${ev})`);
   let led = await storedSnooze(page);
@@ -265,7 +274,7 @@ async function tapText(page, selector, text) {
   s = await spy(page);
   check(s.alerts.length === 1, 'the snooze re-alerts EXACTLY ONCE when it ends', `(alerts: ${s.alerts.length})`);
   check(s.haptics === 1, 'and that one is felt, once', `(haptics: ${s.haptics})`);
-  check(await page.evaluate(() => !!document.querySelector('.alert-pill')), 'and the pill comes back on its own, with no tap to prompt it');
+  check(await page.evaluate((sel) => !!document.querySelector(sel), DOSE_PILL), 'and the pill comes back on its own, with no tap to prompt it');
   ev = await medEventCount(page);
   check(ev === 1, 'a snooze that ran out still invented no dose', `(medicine events: ${ev})`);
   if (s.alerts.length > 1) note.push(`snooze re-fire ≈ ${(s.alerts.length / WATCH_TICKS).toFixed(2)} alerts/sec`);
@@ -277,20 +286,20 @@ async function tapText(page, selector, text) {
   console.log(`\n6. snooze again (${RELOAD_SNOOZE_MS / 1000}s), then reload the app mid-window`);
   await page.evaluate(ms => { window.MED_SNOOZE_MS = ms; }, RELOAD_SNOOZE_MS);
   const snoozedAt = Date.now();
-  check(await tapText(page, '.alert-pill button', snoozeBtn ? snoozeBtn.label : 'In 15 min'), 'tapped the snooze again');
+  check(await tapText(page, DOSE_PILL + ' button', snoozeBtn ? snoozeBtn.label : 'In 15 min'), 'tapped the snooze again');
   await sleep(500);
-  check(await page.evaluate(() => !document.querySelector('.alert-pill')), 'the alert steps aside again');
+  check(await page.evaluate((sel) => !document.querySelector(sel), DOSE_PILL), 'the alert steps aside again');
 
   await page.reload({ waitUntil: 'networkidle2' });
   await sleep(1600);
   await page.evaluate(INSTALL_SPY);
   await clearStormFloor(page);
   check(/__spy/.test(await page.evaluate(() => String(window.toast))), 'spy re-installed after the reload');
-  const afterReload = await page.evaluate(() => ({
+  const afterReload = await page.evaluate((sel) => ({
     stillOverdue: typeof medNextDue === 'function' && state.meds[0] ? medNextDue(state.meds[0]) <= Date.now() : false,
-    pill: !!document.querySelector('.alert-pill'),
+    pill: !!document.querySelector(sel),
     view: typeof view !== 'undefined' ? view : '?'
-  }));
+  }), DOSE_PILL);
   // Without this the next two checks would pass for the wrong reason (nothing due, so nothing shown).
   check(afterReload.stillOverdue, 'the medicine is STILL overdue after the reload (the test is not vacuous)');
   check(afterReload.view === 'home', 'the reloaded app is on home, where the pill lives', `(view: ${afterReload.view})`);
@@ -310,17 +319,17 @@ async function tapText(page, selector, text) {
 
   // ---- 7. THE PARENT CAN STOP IT IN ONE TAP, AND IT STAYS STOPPED -----------------------------
   console.log('\n7. one tap to stop it, and it stays stopped');
-  check(await page.evaluate(() => !!document.querySelector('.alert-pill')), 'the pill is back and dismissable');
+  check(await page.evaluate((sel) => !!document.querySelector(sel), DOSE_PILL), 'the pill is back and dismissable');
   await resetSpy(page);
-  const dismissed = await tapText(page, '.alert-pill button', 'Not now');
+  const dismissed = await tapText(page, DOSE_PILL + ' button', 'Not now');
   check(dismissed, 'tapped the dismiss');
   await sleep(700);
-  check(await page.evaluate(() => !document.querySelector('.alert-pill')), 'the alert is gone');
+  check(await page.evaluate((sel) => !document.querySelector(sel), DOSE_PILL), 'the alert is gone');
   const eventsAfter = await medEventCount(page);
   check(eventsAfter === 1, 'dismissing did NOT fabricate a dose record', `(medicine events: ${eventsAfter})`);
   await page.evaluate(() => render());
   await sleep(400);
-  check(await page.evaluate(() => !document.querySelector('.alert-pill')), 'it stays gone across a re-render');
+  check(await page.evaluate((sel) => !document.querySelector(sel), DOSE_PILL), 'it stays gone across a re-render');
   await clearStormFloor(page);
   await sleep(WATCH_TICKS * 1000 + 400);
   s = await spy(page);

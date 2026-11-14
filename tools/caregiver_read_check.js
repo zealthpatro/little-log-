@@ -335,7 +335,8 @@ const seed = (p, over) => Object.assign({
       window.__toasts = []; window.__saved = [];
       openDataSheet();
       const s = document.getElementById('sheet');
-      const handlers = [].slice.call(s.querySelectorAll('[onclick]')).map((e) => e.getAttribute('onclick'));
+      // A live control names its action in onclick, or in data-act once it is a setItem row.
+      const handlers = [].slice.call(s.querySelectorAll('[onclick],[data-act]')).map((e) => e.getAttribute('data-act') || e.getAttribute('onclick'));
       return {
         open: !!(s && s.classList.contains('show')),
         txt: (s.innerText || '').replace(/\s+/g, ' '),
@@ -370,7 +371,7 @@ const seed = (p, over) => Object.assign({
       window.__toasts = []; window.__saved = [];
       openDataSheet();
       const s = document.getElementById('sheet');
-      const handlers = [].slice.call(s.querySelectorAll('[onclick]')).map((e) => e.getAttribute('onclick'));
+      const handlers = [].slice.call(s.querySelectorAll('[onclick],[data-act]')).map((e) => e.getAttribute('data-act') || e.getAttribute('onclick'));
       const txt = (s.innerText || '').replace(/\s+/g, ' ');
       exportData();
       return { exportWired: handlers.filter((h) => /requestExport/.test(h)).length, txt, saved: window.__saved.slice(), toasts: window.__toasts.slice() };

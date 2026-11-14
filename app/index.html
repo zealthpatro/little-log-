@@ -3037,6 +3037,132 @@ window.cubbyIngest={
   }
 };
 
+/* ---------- CODE COMPONENTS (design/DESIGN-SYSTEM.md §4, docs/plans/2026-10-09-ADR-001-sdui.md) ----------
+   A component takes props and returns markup. It escapes its own text, takes icons by name from I, and
+   names its action instead of building an onclick string: a button carries data-act, the name of an
+   entry in UI_ACTIONS, and data-args, a JSON array of plain values. One listener on the document runs
+   them. An id any member of the circle wrote therefore reaches its handler as a value and is never
+   parsed as script, and every word the component prints is escaped. Those are the two injection holes
+   that reached production in October: member-chosen ids interpolated raw into onclick, and free-text
+   doses printed raw into the page. Gate: tools/alert_pill_check.js. */
+
+/* Every action a code component can take. A name that is not in here does nothing, and data cannot add
+   one: the names are fixed in this file, the arguments arrive as values, and nothing is evaluated.
+   Each entry is exactly what the old inline handler did, in the same order. */
+const UI_ACTIONS={
+  logDose:(id)=>logDose(id),
+  snoozeMedAlert:(id,due)=>snoozeMedAlert(id,due),
+  dismissMedAlert:(id,due)=>dismissMedAlert(id,due),
+  openVaccines:()=>{ go('health'); healthTab='vaccines'; render(); },
+  openTemp:()=>openTemp(),
+  openFeverSafetyNet:()=>openFeverSafetyNet(),
+  openVisitSummary:()=>openVisitSummary(),
+  // The photo is chosen when the pill is drawn, as it always was, so the card she opens is the one offered.
+  openMonthCard:(month,photoId)=>{ openMemoryCard(month,photoId); dismissTip('bday'+month); },
+  openPosterOffer:()=>openPosterOffer(),
+  dismissPosterOffer:()=>dismissPosterOffer(),
+  ackChild:()=>ackChild(),
+  openWeeksTakeBack:()=>openWeeksTakeBack(),
+  openConsentReview:(id)=>openConsentReview(id),
+  downloadExport:(id)=>downloadExport(id),
+  ackDecline:(id)=>ackDecline(id),
+  // The Settings and Data sheets (setItem rows).
+  openAppearance:()=>openAppearance(),
+  addToHomeScreen:(msgId)=>addToHomeScreen(msgId),
+  openDen:()=>{ closeSheet(); goDen(); },
+  openBabySheet:()=>openBabySheet(),
+  openPregArchive:()=>openPregArchive(),
+  openBabyProfile:()=>openBabyProfile(),
+  // Defined by store-firebase.js, which can arrive after this script: missing means do nothing, as before.
+  openFamily:()=>{ window.openFamily&&window.openFamily(); },
+  openProSettings:()=>openPro(undefined,undefined,'settings'),
+  shareCubby:()=>shareCubby(),
+  openFeedback:()=>{ window.openFeedback&&window.openFeedback(); },
+  openReminders:()=>openReminders(),
+  openQuickSettings:()=>openQuickSettings(),
+  openMoodNote:()=>openMoodNote(),
+  openLogBP:()=>openLogBP(),
+  openTrash:()=>openTrash(),
+  openDataSheet:()=>openDataSheet(),
+  confirmLogout:()=>confirmLogout(),
+  requestExport:()=>requestExport(),
+  openImport:()=>openImport(),
+  openDeleteRequest:()=>openDeleteRequest(),
+  openGuardians:()=>openGuardians(),
+  openDeleteAccount:()=>openDeleteAccount(),
+};
+/* Registered once, on the document, because paintShell replaces the pills on nearly every render and a
+   listener on a pill would die with it. Synchronous, like the inline handler it replaces: gates read the
+   sheet on the line after the click. Own properties only, so "constructor" or "__proto__" is not an action. */
+document.addEventListener('click',function(e){
+  const el=e.target&&e.target.closest?e.target.closest('[data-act]'):null;
+  if(!el) return;
+  const name=el.getAttribute('data-act');
+  if(!Object.prototype.hasOwnProperty.call(UI_ACTIONS,name)) return;
+  let args;
+  try{ args=JSON.parse(el.getAttribute('data-args')||'[]'); }catch(_){ return; }
+  if(!Array.isArray(args)) return;
+  UI_ACTIONS[name].apply(null,args);
+});
+
+/* What every component shares, so each rule is written once: the escaping, the colour-token check, how an
+   action is carried, and the icon box. */
+const uiTxt=v=>escapeHtml(String(v==null?'':v));   // String first: escapeHtml(0) is '', and a dose can be 0
+const uiTok=t=>/^[a-z][a-z-]*$/.test(t||'')?t:'line';
+function uiAct(act,args){ return ` data-act="${uiTxt(act)}"${args&&args.length?` data-args="${uiTxt(JSON.stringify(args))}"`:''}`; }
+/* An I icon in the tint's ink on its soft fill, or solid (the fill is the tint, the icon white); or an emoji
+   glyph at the title size, with ink:false leaving out the ink colour and small:true drawing it at 17px. */
+function uiIco(cls,p,tint){
+  if(p.glyph!=null) return `<div class="${cls}" style="background:var(--${tint}-soft)${p.ink===false?'':`;color:var(--${tint})`}${p.small?';font-size:17px':';font-size:var(--fs-title)'}">${uiTxt(p.glyph)}</div>`;
+  return `<div class="${cls}" style="${p.solid?`background:var(--${tint});color:#fff`:`background:var(--${tint}-soft);color:var(--${tint})`}">${Object.prototype.hasOwnProperty.call(I,p.icon)?I[p.icon]:''}</div>`;
+}
+
+/* AlertPill: the compact alert on home and on the planning and pregnancy shells (a dose due, a fever
+   logged, a consent waiting). It reproduces the thirteen hand-written pills exactly; nothing a parent
+   sees changed when they moved onto it.
+     edge          colour token for the left edge: 'med', 'sleep', 'star' ...
+     tint          the icon box's token when it is not the edge's (a declined consent: danger edge, med box)
+     icon          a key of I, drawn in the tint's ink. Or:
+     glyph         an emoji at the title size. ink:false leaves the box without an ink colour, small:true
+                   draws it at 17px: the consent shield, the one glyph off the type scale, kept so this
+                   migration moved no pixel. The type ratchet counts it.
+     title, sub    plain text, escaped here. Pass raw values: escapeHtml output would show its entities.
+     due           a timestamp. Appends the countdown the 1s tick rewrites, so it stays a [data-due] span.
+     acts          [{label, act, args, kind}]: act names a UI_ACTIONS entry, kind is 'soft' or 'quiet'.
+   One action sits beside the text. Two or more wrap underneath it (ap-stack), because three real tap
+   targets will not fit beside a medicine name at 320px. */
+function alertPill(p){
+  const tint=uiTok(p.tint||p.edge), acts=p.acts||[], many=acts.length>1;
+  const btn=a=>`<button${a.kind==='soft'||a.kind==='quiet'?` class="ap-${a.kind}"`:''}${uiAct(a.act,a.args)}>${uiTxt(a.label)}</button>`;
+  return `<div class="alert-pill${many?' ap-stack':''}" style="border-color:var(--${uiTok(p.edge)})">
+    ${uiIco('ap-ico',p,tint)}
+    <div class="ap-body"><div class="ap-t">${uiTxt(p.title)}</div><div class="ap-s">${uiTxt(p.sub)}${p.due!=null?`<span data-due="${+p.due}">${uiTxt(fmtDue(p.due-now()))}</span>`:''}</div></div>
+    ${many?`<div class="ap-acts">${acts.map(btn).join('\n')}</div>`:acts.map(btn).join('')}</div>`;
+}
+
+/* SetItemRow: the icon, title and subtitle row (.set-item in design/DESIGN-SYSTEM.md §4), the most
+   repeated row in the app. It reproduces the hand-written rows it replaced exactly.
+     act, args     what tapping the row does, a UI_ACTIONS name. No act draws a read-only row.
+     tint          the icon box's colour token. icon, glyph, ink and small work as in alertPill;
+                   solid:true fills the box with the token and draws the icon white (the delete rows)
+     title, sub    plain text, escaped here. Pass raw values: '&', never '&amp;'.
+     danger        the title in --danger-ink
+     teach         {id, label, guide}: the info dot after the title, drawn by the teaching module, or by
+                   the guide's where that has not loaded. The dot stops its own click, so tapping it
+                   never fires the row.
+     value         short text at the right edge (Appearance: Light, Night or System)
+     chev          the chevron, for a row that leads somewhere deeper */
+function setItem(p){
+  const dot=!p.teach?'':(window.CubbyTeachUI?CubbyTeachUI.dot(p.teach.id,p.teach.label)
+    :((window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info(p.teach.guide):''));
+  return `<div class="set-item"${p.act?uiAct(p.act,p.args):''} style="cursor:${p.act?'pointer':'default'}">
+      ${uiIco('si-ico',p,uiTok(p.tint))}
+      <div class="si-body"><div class="a"${p.danger?' style="color:var(--danger-ink)"':''}>${uiTxt(p.title)}${dot}</div><div class="b">${uiTxt(p.sub)}</div></div>${p.value!=null?`
+      <span style="font-weight:800;font-size:var(--fs-body);color:var(--ink-soft)">${uiTxt(p.value)}</span>`:''}${p.chev?`
+      <span class="chev">${I.chev}</span>`:''}
+    </div>`;
+}
+
 /* ---------- HOME ---------- */
 function lastOf(type){ return babyEvents().find(e=>e.type===type); }
 function myName(){
@@ -3963,30 +4089,31 @@ function renderHome(){
     if(due!==null && now()>=due && !medDismissed(m,due) && !medSnoozed(m,due)){
       // Names the child only when it is NOT the one on screen. For a single baby this line is
       // byte-identical to before; for twins it is the difference between a dose and the wrong dose.
-      const who = x.other ? escapeHtml(x.baby.name)+' · ' : '';
-      al.dose += `<div class="alert-pill ap-stack" style="border-color:var(--med)">
-        <div class="ap-ico" style="background:var(--med-soft);color:var(--med)">${I.pill}</div>
-        <div class="ap-body"><div class="ap-t">${escapeHtml(m.name)} ${now()-due>60000?'overdue':'due'}</div><div class="ap-s">${who}${escapeHtml(String(m.dose==null?'':m.dose))} ${escapeHtml(String(m.unit||''))} · <span data-due="${escapeHtml(String(due))}">${fmtDue(due-now())}</span></div></div>
-        <div class="ap-acts"><button onclick="logDose('${hArg(m.id)}')">Log</button>
-        <button class="ap-soft" onclick="snoozeMedAlert('${hArg(m.id)}',${Number(due)})">In 15 min</button>
-        <button class="ap-quiet" onclick="dismissMedAlert('${hArg(m.id)}',${Number(due)})">Not now</button></div></div>`;
+      const who = x.other ? (x.baby.name||'')+' · ' : '';
+      // The ledger key is m.id+'@'+due. JSON turns a non-finite due into null, and a crafted -Infinity
+      // schedule would then key every snooze and dismissal to '@0' and never quiet the pill; as a
+      // string it survives, and both handlers already read +due.
+      const dueArg = Number.isFinite(due) ? due : String(due);
+      al.dose += alertPill({edge:'med', icon:'pill', title:`${m.name||''} ${now()-due>60000?'overdue':'due'}`,
+        sub:`${who}${m.dose==null?'':m.dose} ${m.unit||''} · `, due,
+        acts:[{label:'Log', act:'logDose', args:[m.id]},
+              {label:'In 15 min', act:'snoozeMedAlert', args:[m.id,dueArg], kind:'soft'},
+              {label:'Not now', act:'dismissMedAlert', args:[m.id,dueArg], kind:'quiet'}]});
     }
   });
   const odv=vaccineOverdue();
   if(odv){
-    al.vaccine += `<div class="alert-pill" style="border-color:var(--sleep)">
-      <div class="ap-ico" style="background:var(--sleep-soft);color:var(--sleep)">${I.syringe}</div>
-      <div class="ap-body"><div class="ap-t">Vaccine overdue</div><div class="ap-s">${escapeHtml(odv.name)} · due ${fmtSince(odv._due)}</div></div>
-      <button onclick="go('health');healthTab='vaccines';render()">Open</button></div>`;
+    al.vaccine += alertPill({edge:'sleep', icon:'syringe', title:'Vaccine overdue',
+      sub:`${odv.name||''} · due ${fmtSince(odv._due)}`, acts:[{label:'Open', act:'openVaccines'}]});
   }
   const ill=activeIllness();
   if(ill){
     const lt=lastTemp(ill.id);
     const days=illnessDays(ill);
-    al.illness += `<div class="alert-pill" style="border-color:var(--pump)">
-      <div class="ap-ico" style="background:var(--pump-soft);color:var(--pump)">${illnessIcon(ill.name)}</div>
-      <div class="ap-body"><div class="ap-t">${escapeHtml(ill.name)} · day ${days}</div><div class="ap-s">${lt?('last temp '+lt.temp+'°'+(lt.unit||'C')+(isFever(lt.temp,lt.unit)?' · fever':'')):'tap to manage'}</div></div>
-      <button onclick="openTemp()">Temp</button></div>`;
+    // The temperature and its unit are member-written and were printed raw here; the pill escapes them now.
+    al.illness += alertPill({edge:'pump', icon:illnessIconKey(ill.name), title:`${ill.name||''} · day ${days}`,
+      sub:lt?('last temp '+lt.temp+'°'+(lt.unit||'C')+(isFever(lt.temp,lt.unit)?' · fever':'')):'tap to manage',
+      acts:[{label:'Temp', act:'openTemp'}]});
   }
   const fev=lastFeverEvent();
   if(fev){
@@ -3996,25 +4123,20 @@ function renderHome(){
        consequence sheet: it fires inside saveTemp, in the logger's browser, and is gone on Got it.
        So "when do I call?" was answerable only by logging a fever of your own. Same rung as
        Summary, because neither is the obvious one at 3am. */
-    al.fever += `<div class="alert-pill ap-stack" style="border-color:var(--med)">
-      <div class="ap-ico" style="background:var(--med-soft);color:var(--med)">${I.stetho}</div>
-      <div class="ap-body"><div class="ap-t">Fever logged</div><div class="ap-s">${escapeHtml(String(fev.temp))}°${escapeHtml(fev.unit||'C')} · ${fmtSince(fev.time)}</div></div>
-      <div class="ap-acts"><button onclick="openFeverSafetyNet()">When to call</button>
-      <button onclick="openVisitSummary()">Summary</button></div></div>`;
+    al.fever += alertPill({edge:'med', icon:'stetho', title:'Fever logged',
+      sub:`${fev.temp}°${fev.unit||'C'} · ${fmtSince(fev.time)}`,
+      acts:[{label:'When to call', act:'openFeverSafetyNet'}, {label:'Summary', act:'openVisitSummary'}]});
   }
   const uv=upcomingVisit();
   if(uv){
-    al.visit += `<div class="alert-pill" style="border-color:var(--sleep)">
-      <div class="ap-ico" style="background:var(--sleep-soft);color:var(--sleep)">${I.stetho}</div>
-      <div class="ap-body"><div class="ap-t">Appointment soon</div><div class="ap-s">${escapeHtml(uv.name)} · ${new Date(uv.t).toLocaleDateString(undefined,{month:'short',day:'numeric'})}</div></div>
-      <button onclick="openVisitSummary()">Summary</button></div>`;
+    al.visit += alertPill({edge:'sleep', icon:'stetho', title:'Appointment soon',
+      sub:`${uv.name||''} · ${new Date(uv.t).toLocaleDateString(undefined,{month:'short',day:'numeric'})}`,
+      acts:[{label:'Summary', act:'openVisitSummary'}]});
   }
   const mv=monthiversary();
   if(mv && !homeHidden('month') && !hasSeen('tip_bday'+mv)){
-    al.month += `<div class="alert-pill" style="border-color:var(--star)">
-      <div class="ap-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🎉</div>
-      <div class="ap-body"><div class="ap-t">${escapeHtml((activeBaby()||{}).name||'Baby')} is ${mv} month${mv>1?'s':''} 🎉</div><div class="ap-s">Their ${mv}-month card is waiting 🐻</div></div>
-      <button onclick="openMemoryCard(${mv},'${hArg(memCandPhoto(mv))}');dismissTip('bday${hArg(mv)}')">See it</button></div>`;
+    al.month += alertPill({edge:'star', glyph:'🎉', title:`${(activeBaby()||{}).name||'Baby'} is ${mv} month${mv>1?'s':''} 🎉`,
+      sub:`Their ${mv}-month card is waiting 🐻`, acts:[{label:'See it', act:'openMonthCard', args:[mv, memCandPhoto(mv)]}]});
   }
   /* The same slot, in the weeks before the month card can use it. posterOfferDue() hands back a
      baby only while they are under a month old, so this pill and the one above are never both up.
@@ -4030,18 +4152,15 @@ function renderHome(){
      as it goes, and asking it twice per paint would write twice. */
   const pnb = (!gsCard && evs.length && !homeHidden('poster')) ? posterOfferDue() : null;
   if(pnb){
-    al.poster += `<div class="alert-pill ap-stack" style="border-color:var(--star)">
-      <div class="ap-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🎀</div>
-      <div class="ap-body"><div class="ap-t">A keepsake from the day ${escapeHtml(pnb.name)} arrived</div><div class="ap-s">Their name and birthday are already on the poster. Add the rest whenever you like.</div></div>
-      <div class="ap-acts"><button onclick="openPosterOffer()">See it</button>
-      <button class="ap-quiet" onclick="dismissPosterOffer()">Not now</button></div></div>`;
+    al.poster += alertPill({edge:'star', glyph:'🎀', title:`A keepsake from the day ${pnb.name||''} arrived`,
+      sub:'Their name and birthday are already on the poster. Add the rest whenever you like.',
+      acts:[{label:'See it', act:'openPosterOffer'}, {label:'Not now', act:'dismissPosterOffer', kind:'quiet'}]});
   }
   const _cab=activeBaby();
   if(_cab && !homeHidden('child') && stageOf(_cab)==='child' && !_cab.childAck){
-    al.child += `<div class="alert-pill" style="border-color:var(--star)">
-      <div class="ap-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🌱</div>
-      <div class="ap-body"><div class="ap-t">${escapeHtml(_cab.name)} is growing up</div><div class="ap-s">Cubby is growing with them. Quick log now leads with the toddler years; the early logs are under More.</div></div>
-      <button onclick="ackChild()">Lovely</button></div>`;
+    al.child += alertPill({edge:'star', glyph:'🌱', title:`${_cab.name||''} is growing up`,
+      sub:'Cubby is growing with them. Quick log now leads with the toddler years; the early logs are under More.',
+      acts:[{label:'Lovely', act:'ackChild'}]});
   }
   /* The pregnancy is over and the calendar has not noticed. Whether the baby arrived or the
      pregnancy ended, the week markers she wrote carry on landing, and every route to them lived on
@@ -5197,15 +5316,17 @@ function eventDetail(e){
 }
 const ACTIVITY_ICONS={'Tummy time':'tummy','Bath':'bath','Massage':'massage','Play':'play','Walk':'walk','Sun time':'sun','Reading':'book','Skin-to-skin':'heart'};
 function activityIcon(name){ const k=ACTIVITY_ICONS[name]; return k&&I[k]?I[k]:I.note; }
-function illnessIcon(name){
+// A key of I, because alertPill takes icons by name only; illnessIcon is the markup for everyone else.
+function illnessIconKey(name){
   const n=(name||'').toLowerCase();
-  if(n.includes('cold')) return I.snow;
-  if(n.includes('flu')) return I.virus;
-  if(n.includes('tummy')||n.includes('stomach')||n.includes('diarr')||n.includes('vomit')) return I.gut;
-  if(n.includes('ear')) return I.ear;
-  if(n.includes('teeth')||n.includes('tooth')) return I.tooth;
-  return I.thermo;
+  if(n.includes('cold')) return 'snow';
+  if(n.includes('flu')) return 'virus';
+  if(n.includes('tummy')||n.includes('stomach')||n.includes('diarr')||n.includes('vomit')) return 'gut';
+  if(n.includes('ear')) return 'ear';
+  if(n.includes('teeth')||n.includes('tooth')) return 'tooth';
+  return 'thermo';
 }
+function illnessIcon(name){ return I[illnessIconKey(name)]; }
 function authorTag(e){
   if(!e || !e.authorId) return '';
   var info = (window.LL && window.LL.memberInfo) || {};
@@ -5526,7 +5647,7 @@ function confirmSheet(opts){
   var lead=opts.lead?('<div class="sub" style="margin-bottom:8px">'+escapeHtml(opts.lead)+'</div>'):'';
   var facts=(Array.isArray(opts.facts)&&opts.facts.length)
     ?('<div style="margin:0 0 12px;padding:10px 12px;border-radius:12px;background:var(--card,#fff);border:1px solid var(--line,#E7DECF)">'
-      +opts.facts.map(function(f){ return '<div style="display:flex;gap:8px;align-items:baseline;padding:2px 0;font-size:14px;line-height:1.45">'
+      +opts.facts.map(function(f){ return '<div style="display:flex;gap:8px;align-items:baseline;padding:2px 0;font-size:var(--fs-base);line-height:1.45">'
         +'<span style="flex:0 0 auto;color:var(--ink-soft,#6E635B)">'+escapeHtml(f&&f.label)+'</span>'
         +'<b style="color:var(--ink,#2C2521);overflow-wrap:anywhere;min-width:0">'+escapeHtml(f&&f.value)+'</b></div>'; }).join('')
       +'</div>'):'';
@@ -8086,108 +8207,46 @@ async function syncReminderIndex(){
 function openSettings(){
   const s=state.settings;
   openSheet(`<h2>Settings</h2><div class="sub">Cubby preferences.</div>
-    <div class="set-item" onclick="openAppearance()" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--sleep-soft);color:var(--sleep)">${I.moon}</div>
-      <div class="si-body"><div class="a">Appearance</div><div class="b">Light, night, or follow your phone</div></div>
-      <span style="font-weight:800;font-size:13px;color:var(--ink-soft)">${themeModeLabel()}</span>
-      <span class="chev">${I.chev}</span>
-    </div>
-    ${canShowInstall()?`<div class="set-item" onclick="addToHomeScreen('llSetInstallMsg')" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--feed-soft);color:var(--feed);font-size:18px">📲</div>
-      <div class="si-body"><div class="a">Add Cubby to your home screen</div><div class="b">Open it like an app: full screen, one tap, works offline</div></div>
-      <span class="chev">${I.chev}</span>
-    </div>
+    ${setItem({act:'openAppearance', tint:'sleep', icon:'moon', title:'Appearance', sub:'Light, night, or follow your phone', value:themeModeLabel(), chev:true})}
+    ${canShowInstall()?`${setItem({act:'addToHomeScreen', args:['llSetInstallMsg'], tint:'feed', glyph:'📲', title:'Add Cubby to your home screen', sub:'Open it like an app: full screen, one tap, works offline', chev:true})}
     <div id="llSetInstallMsg" style="display:none;font-size:13px;color:var(--ink-soft);font-weight:600;background:var(--surface-2);border-radius:12px;padding:11px 13px;margin:-4px 0 2px"></div>`:''}
-    ${FEATURES.den?`<div class="set-item" onclick="closeSheet();goDen()" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🏡</div>
-      <div class="si-body"><div class="a">Our Den</div><div class="b">Chores, shopping, meals, staff, expenses</div></div>
-    </div>`:''}
-    <div class="set-item" onclick="openBabySheet()" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--diaper-soft);color:var(--diaper)">${I.home}</div>
-      <div class="si-body"><div class="a">Manage babies</div><div class="b">${state.babies.length} added</div></div>
-    </div>
+    ${FEATURES.den?setItem({act:'openDen', tint:'star', glyph:'🏡', title:'Our Den', sub:'Chores, shopping, meals, staff, expenses'}):''}
+    ${setItem({act:'openBabySheet', tint:'diaper', icon:'home', title:'Manage babies', sub:`${state.babies.length} added`})}
     ${/* The second door to the archive, for the mother who is in the baby stage and never opens the
           switcher. Present only when there is something to open, and only ever on her own device:
           state.pregnancyArchive is filled from users/{uid}, which nobody else can read. */''}
-    ${pregArchiveList().length?`<div class="set-item" onclick="openPregArchive()" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--preg-soft);color:var(--preg);font-size:18px">🤍</div>
-      <div class="si-body"><div class="a">${pregArchiveList().length>1?'Your earlier pregnancies':'Your earlier pregnancy'}</div><div class="b">Kept, and still yours</div></div>
-      <span class="chev">${I.chev}</span>
-    </div>`:''}
-    ${activeBaby()?`<div class="set-item" onclick="openBabyProfile()" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--star-soft);color:var(--star)">${I.star}</div>
-      <div class="si-body"><div class="a">${escapeHtml(activeBaby().name)}'s profile</div><div class="b">Birth details, food &amp; allergies</div></div>
-    </div>`:''}
-    <div class="set-item" onclick="window.openFamily&&window.openFamily()" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--feed-soft);color:var(--feed);font-size:18px">👨‍👩‍👧</div>
-      <div class="si-body"><div class="a">Your profile &amp; family${(window.CubbyTeachUI)?CubbyTeachUI.dot('openFamily','your circle'):((window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('sharing'):'')}</div><div class="b">Your name &amp; relationship, invite people, your bear</div></div>
-    </div>
-    <div class="set-item" onclick="openPro(undefined,undefined,'settings')" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">✨</div>
-      <div class="si-body"><div class="a">Cubby Pro</div><div class="b">${isPro()?'Active · thank you 🐻':`Doctor reports, keepsake studio & more · launching ${escapeHtml(proLaunch())}`}</div></div>
-    </div>
-    <div class="set-item" onclick="shareCubby()" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--pump-soft);color:var(--pump)">${I.heart}</div>
-      <div class="si-body"><div class="a">Share Cubby with a friend</div><div class="b">Know another tired parent? Send them your link</div></div>
-      <span class="chev">${I.chev}</span>
-    </div>
-    <div class="set-item" onclick="window.openFeedback&&window.openFeedback()" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--note-soft);color:var(--note);font-size:18px">💬</div>
-      <div class="si-body"><div class="a">Tell us how it feels</div><div class="b">Two minutes of your thoughts makes Cubby better for every family.</div></div>
-      <span class="chev">${I.chev}</span>
-    </div>
+    ${pregArchiveList().length?setItem({act:'openPregArchive', tint:'preg', glyph:'🤍', title:pregArchiveList().length>1?'Your earlier pregnancies':'Your earlier pregnancy', sub:'Kept, and still yours', chev:true}):''}
+    ${activeBaby()?setItem({act:'openBabyProfile', tint:'star', icon:'star', title:`${activeBaby().name||''}'s profile`, sub:'Birth details, food & allergies'}):''}
+    ${setItem({act:'openFamily', tint:'feed', glyph:'👨‍👩‍👧', title:'Your profile & family', teach:{id:'openFamily', label:'your circle', guide:'sharing'}, sub:'Your name & relationship, invite people, your bear'})}
+    ${setItem({act:'openProSettings', tint:'star', glyph:'✨', title:'Cubby Pro', sub:isPro()?'Active · thank you 🐻':`Doctor reports, keepsake studio & more · launching ${proLaunch()}`})}
+    ${setItem({act:'shareCubby', tint:'pump', icon:'heart', title:'Share Cubby with a friend', sub:'Know another tired parent? Send them your link', chev:true})}
+    ${setItem({act:'openFeedback', tint:'note', glyph:'💬', title:'Tell us how it feels', sub:'Two minutes of your thoughts makes Cubby better for every family.', chev:true})}
     ${/* This row used to promise "gentle nudges for medicine, vaccines & rituals" and two of those
           three channels do not exist. syncReminderIndex pushes ONLY medicine and says so in its own
           comment, vaccines reach a parent through vaxCalendarRow writing an .ics, and the rituals
           sheet admits outright that Cubby does not send reminders for them. Name the things that are
           real FOR THIS PARENT, so the row and the sheet it opens tell the same story: reminderRowSub
           drops each calendar clause wherever that screen does not exist. */''}
-    <div class="set-item" onclick="openReminders()" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:18px">🔔</div>
-      <div class="si-body"><div class="a">Reminders</div><div class="b">${reminderRowSub()}</div></div>
-      <span class="chev">${I.chev}</span></div>
-    <div class="set-item" onclick="openQuickSettings()" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--feed-soft);color:var(--feed)">${I.plus}</div>
-      <div class="si-body"><div class="a">What you log</div><div class="b">${quickChosenHome().length} on home${quickPrefs().on?', round button on':', round button off'} · just for you</div></div>
-      <span class="chev">${I.chev}</span>
-    </div>
+    ${setItem({act:'openReminders', tint:'star', glyph:'🔔', title:'Reminders', sub:reminderRowSub(), chev:true})}
+    ${setItem({act:'openQuickSettings', tint:'feed', icon:'plus', title:'What you log', sub:`${quickChosenHome().length} on home${quickPrefs().on?', round button on':', round button off'} · just for you`, chev:true})}
     ${/* After a birth the pregnancy shell is a keepsake with no tabs, so her private wellbeing notes
           were reachable only by a deep link she would never think to type. They are hers and they
           matter more in the weeks after a birth, not less. Owner-only, and only once there is a
           record to open. */''}
-    ${(state.pregnancy&&state.pregnancy.bornBabyId&&pregIsOwner())?`<div class="set-item" onclick="openMoodNote()" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--note-soft);color:var(--note);font-size:18px">🤍</div>
-      <div class="si-body"><div class="a">How you are, in yourself</div><div class="b">Private to you, always. Never shared with your circle</div></div>
-      <span class="chev">${I.chev}</span>
-    </div>`:''}
+    ${(state.pregnancy&&state.pregnancy.bornBabyId&&pregIsOwner())?setItem({act:'openMoodNote', tint:'note', glyph:'🤍', title:'How you are, in yourself', sub:'Private to you, always. Never shared with your circle', chev:true}):''}
     ${/* Her wellbeing note was the only maternal thing that survived the handover, and it is the
           gentler half of the same orphaning. Blood pressure is the clinical half: pre-eclampsia can
           present after the birth, so a reading in those weeks is worth keeping, and the record
           sheet is a place she opens to look back rather than a place she thinks to log into. The
           note above stays for good because a feeling has no end date; this one is pregBpDoor(),
           which closes twelve weeks after the birth. openLogBP checks it again for itself. */''}
-    ${pregBpDoor()?`<div class="set-item" onclick="openLogBP()" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--pump-soft);color:var(--pump);font-size:18px">🩺</div>
-      <div class="si-body"><div class="a">Blood pressure</div><div class="b">${escapeHtml(pregBpRowSub())}</div></div>
-      <span class="chev">${I.chev}</span>
-    </div>`:''}
+    ${pregBpDoor()?setItem({act:'openLogBP', tint:'pump', glyph:'🩺', title:'Blood pressure', sub:pregBpRowSub(), chev:true}):''}
     ${(window.CubbyTeachUI&&CubbyTeachUI.settingsRow)?CubbyTeachUI.settingsRow():''}
     ${(window.CubbyGuide&&CubbyGuide.settingsRow)?CubbyGuide.settingsRow():''}
     <div class="set-label">Your data &amp; account</div>
-    <div class="set-item" onclick="openTrash()" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--sleep-soft);color:var(--sleep)">${I.trash}</div>
-      <div class="si-body"><div class="a">Recently deleted</div><div class="b">${trashCount()?trashCount()+' waiting · kept for 30 days':'Deleted things wait here for 30 days'}</div></div>
-      <span class="chev">${I.chev}</span>
-    </div>
-    <div class="set-item" onclick="openDataSheet()" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--note-soft);color:var(--note)">${I.note}</div>
-      <div class="si-body"><div class="a">Data</div><div class="b">Export or delete your data</div></div>
-      <span class="chev">${I.chev}</span>
-    </div>
-    <div class="set-item" onclick="confirmLogout()" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--sleep-soft);color:var(--sleep);font-size:17px">👋</div>
-      <div class="si-body"><div class="a">Log out</div><div class="b">Sign out · your data stays safely synced</div></div>
-    </div>
+    ${setItem({act:'openTrash', tint:'sleep', icon:'trash', title:'Recently deleted', sub:trashCount()?trashCount()+' waiting · kept for 30 days':'Deleted things wait here for 30 days', chev:true})}
+    ${setItem({act:'openDataSheet', tint:'note', icon:'note', title:'Data', sub:'Export or delete your data', chev:true})}
+    ${setItem({act:'confirmLogout', tint:'sleep', glyph:'👋', small:true, title:'Log out', sub:'Sign out · your data stays safely synced'})}
     <p style="font-size:12px;color:var(--ink-faint);font-weight:600;text-align:center;margin-top:14px">Cubby v${CUBBY_VERSION} · ${Date.now()<Date.UTC(2026,6,27)?'beta':'early access'}</p>`,'sleep');
 }
 /* One list, two places: the Quick log row on home AND the floating button. Everything here is
@@ -8309,32 +8368,15 @@ function openDataSheet(){
      the door exists and who it belongs to, and rather than a live-looking row that refuses on the
      tap. Nothing here is a control that silently says no. */
   const exportRow = amG
-    ? `<div class="set-item" onclick="requestExport()" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--note-soft);color:var(--note)">${I.note}</div>
-      <div class="si-body"><div class="a">Export data</div><div class="b">Download everything as a JSON file, yours whenever you want it</div></div>
-    </div>`
-    : `<div class="set-item" style="cursor:default">
-      <div class="si-ico" style="background:var(--note-soft);color:var(--note)">${I.note}</div>
-      <div class="si-body"><div class="a">Export data</div><div class="b">A copy of the family record stays with ${escapeHtml(gNames)}. Ask them if you need one.</div></div>
-    </div>`;
+    ? setItem({act:'requestExport', tint:'note', icon:'note', title:'Export data', sub:'Download everything as a JSON file, yours whenever you want it'})
+    : setItem({tint:'note', icon:'note', title:'Export data', sub:`A copy of the family record stays with ${gNames}. Ask them if you need one.`});
   openSheet(`<h2>Your data</h2><div class="sub">${dataSub} Your own account is yours alone.</div>
     ${exportRow}
-    ${activeBaby()?`<div class="set-item" onclick="openImport()" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--sleep-soft);color:var(--sleep)">${I.upload}</div>
-      <div class="si-body"><div class="a">Bring in old logs</div><div class="b">Import a CSV from the app you were using</div></div>
-    </div>`:''}
-    <div class="set-item" onclick="openDeleteRequest()" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--danger);color:#fff">${I.trash}</div>
-      <div class="si-body"><div class="a" style="color:var(--danger-ink)">Delete data...</div><div class="b">Choose what to erase${solo?'':', both guardians must agree'}</div></div>
-    </div>
-    <div class="set-item" onclick="openGuardians()" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--star-soft);color:var(--star);font-size:17px">🛡️</div>
-      <div class="si-body"><div class="a">Guardians</div><div class="b">${escapeHtml(householdGuardians().map(u=>guardianName(u)).join(' + '))||'Who approves the big actions'}</div></div>
-    </div>
-    <div class="set-item" onclick="openDeleteAccount()" style="cursor:pointer">
-      <div class="si-ico" style="background:var(--danger);color:#fff">${I.trash}</div>
-      <div class="si-body"><div class="a" style="color:var(--danger-ink)">Delete my account</div><div class="b">Your account and your private records, on your own</div></div>
-    </div>
+    ${activeBaby()?setItem({act:'openImport', tint:'sleep', icon:'upload', title:'Bring in old logs', sub:'Import a CSV from the app you were using'}):''}
+    ${setItem({act:'openDeleteRequest', tint:'danger', solid:true, icon:'trash', danger:true, title:'Delete data...', sub:`Choose what to erase${solo?'':', both guardians must agree'}`})}
+    ${/* A guardian's name is the name a member gave themselves, and this row printed it raw. */''}
+    ${setItem({act:'openGuardians', tint:'star', glyph:'🛡️', small:true, title:'Guardians', sub:householdGuardians().map(u=>guardianName(u)).join(' + ')||'Who approves the big actions'})}
+    ${setItem({act:'openDeleteAccount', tint:'danger', solid:true, icon:'trash', danger:true, title:'Delete my account', sub:'Your account and your private records, on your own'})}
     ${recent?`<div class="set-label">Recent decisions</div>${recent}`:''}
     <button class="btn-ghost" onclick="openSettings()">Back to settings</button>`,'sleep');
 }
@@ -8997,26 +9039,18 @@ function consentBanners(){
   cs.forEach(c=>{
     const mine=c.requestedBy===myUid();
     if(c.status==='pending'&&isGuardian()&&c.approvals.indexOf(myUid())<0){
-      html+=`<div class="alert-pill" style="border-color:var(--star)">
-        <div class="ap-ico" style="background:var(--star-soft);font-size:17px">🛡️</div>
-        <div class="ap-body"><div class="ap-t">${escapeHtml(c.requestedByName||'A family member')} needs your OK</div><div class="ap-s">${escapeHtml(c.label)}</div></div>
-        <button onclick="openConsentReview('${hArg(c.id)}')">Review</button></div>`;
+      html+=alertPill({edge:'star', glyph:'🛡️', ink:false, small:true, title:`${c.requestedByName||'A family member'} needs your OK`,
+        sub:c.label||'', acts:[{label:'Review', act:'openConsentReview', args:[c.id]}]});
     } else if(c.status==='pending'&&mine){
       const waiting=householdGuardians().filter(u=>c.approvals.indexOf(u)<0);
-      html+=`<div class="alert-pill" style="border-color:var(--note)">
-        <div class="ap-ico" style="background:var(--note-soft);font-size:17px">🛡️</div>
-        <div class="ap-body"><div class="ap-t">Waiting for ${escapeHtml(waiting.map(guardianName).join(' and ')||'agreement')}</div><div class="ap-s">${escapeHtml(c.label)}</div></div>
-        <button onclick="openConsentReview('${hArg(c.id)}')">View</button></div>`;
+      html+=alertPill({edge:'note', glyph:'🛡️', ink:false, small:true, title:`Waiting for ${waiting.map(guardianName).join(' and ')||'agreement'}`,
+        sub:c.label||'', acts:[{label:'View', act:'openConsentReview', args:[c.id]}]});
     } else if(c.status==='ready'&&mine){
-      html+=`<div class="alert-pill" style="border-color:var(--diaper)">
-        <div class="ap-ico" style="background:var(--diaper-soft);font-size:17px">🛡️</div>
-        <div class="ap-body"><div class="ap-t">Export agreed</div><div class="ap-s">Your download is ready</div></div>
-        <button onclick="downloadExport('${hArg(c.id)}')">Download</button></div>`;
+      html+=alertPill({edge:'diaper', glyph:'🛡️', ink:false, small:true, title:'Export agreed',
+        sub:'Your download is ready', acts:[{label:'Download', act:'downloadExport', args:[c.id]}]});
     } else if(c.status==='declined'&&mine&&!c.seenDecline){
-      html+=`<div class="alert-pill" style="border-color:var(--danger)">
-        <div class="ap-ico" style="background:var(--med-soft);font-size:17px">🛡️</div>
-        <div class="ap-body"><div class="ap-t">Not this time</div><div class="ap-s">${escapeHtml(c.label)} was declined, nothing changed</div></div>
-        <button onclick="ackDecline('${hArg(c.id)}')">OK</button></div>`;
+      html+=alertPill({edge:'danger', tint:'med', glyph:'🛡️', ink:false, small:true, title:'Not this time',
+        sub:`${c.label||''} was declined, nothing changed`, acts:[{label:'OK', act:'ackDecline', args:[c.id]}]});
     }
   });
   return html;
@@ -9953,10 +9987,7 @@ function pregWeeksLeftAlert(){
   const s=(w&&a)?'Your pregnancy weeks and your antenatal dates are still set to show. Take them off whenever you like.'
     :(a?'Your antenatal appointment dates are still set to show, with an alert on each one. Take them off whenever you like.'
        :'Your pregnancy weeks are still set to show, one a week. Take them off whenever you like.');
-  return `<div class="alert-pill" style="border-color:var(--preg)">
-    <div class="ap-ico" style="background:var(--preg-soft);font-size:18px">📅</div>
-    <div class="ap-body"><div class="ap-t">${t}</div><div class="ap-s">${s}</div></div>
-    <button onclick="openWeeksTakeBack()">Take off</button></div>`;
+  return alertPill({edge:'preg', glyph:'📅', ink:false, title:t, sub:s, acts:[{label:'Take off', act:'openWeeksTakeBack'}]});
 }
 /* The way out, wherever she is standing. It is a sheet and not a one-tap row because taking them off
    cannot be undone from inside Cubby: the record goes and with it the only list of what was written.

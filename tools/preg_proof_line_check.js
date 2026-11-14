@@ -562,7 +562,8 @@ const seed = (p, over) => Object.assign({
     const r = await page.evaluate(() => ({
       ahead: pregApptsAhead().length, stranded: pregApptsStranded(),
       weeks: pregWeeksStranded(), alert: pregWeeksLeftAlert().replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
-      onScreen: !!document.querySelector('.alert-pill button[onclick*="openWeeksTakeBack"]'),
+      // The pill is an AlertPill component, so its button names the action in data-act, not onclick.
+      onScreen: !!document.querySelector('.alert-pill button[data-act="openWeeksTakeBack"]'),
     }));
     ok('nothing is left to offer her', r.ahead === 0, r);
     ok('but the dates she already wrote are still coming', r.stranded === true, r);

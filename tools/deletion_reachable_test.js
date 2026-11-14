@@ -97,7 +97,7 @@ function check(ok, label, detail) {
     //    hop down, behind "Data / Export or delete your data". Walk the real route a person walks.
     const reachedData = await page.evaluate(() => {
       const s = document.getElementById('sheet');
-      const row = [].slice.call(s.querySelectorAll('[onclick]'))
+      const row = [].slice.call(s.querySelectorAll('[onclick],[data-act]'))
         .filter((e) => /export or delete your data/i.test(e.textContent || ''))[0];
       if (!row) return false;
       row.click(); return true;
@@ -108,7 +108,7 @@ function check(ok, label, detail) {
     // 4. ...and "Delete my account" is on it.
     const reachedDelete = await page.evaluate(() => {
       const s = document.getElementById('sheet');
-      const row = [].slice.call(s.querySelectorAll('[onclick]'))
+      const row = [].slice.call(s.querySelectorAll('[onclick],[data-act]'))
         .filter((e) => /delete my account/i.test(e.textContent || ''))[0];
       if (!row) return { found: false };
       row.click();

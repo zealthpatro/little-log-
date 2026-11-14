@@ -479,7 +479,8 @@ const seed = (p) => ({
       /still in your calendar/i.test(door || '') && /whenever you like/i.test(door || ''), door);
     ok('and it does not offer to add any more weeks to a pregnancy that has ended', (await calRow()) === null, await calRow());
 
-    await click('[onclick^="openWeeksTakeBack"]');
+    // On the baby side the door is the AlertPill, whose button names its action in data-act.
+    await click('.alert-pill [data-act="openWeeksTakeBack"]');
     await sleep(300);
     await click('#sheet .btn-danger');
     await sleep(350);

@@ -56,9 +56,16 @@ Decision: `docs/plans/2026-10-09-ADR-001-sdui.md`.
 | Component | Render | Approved | Figma | Built |
 |---|---|---|---|---|
 | `Home / Anchors` (top, feed, alerts) with remote config | not needed: no visible change | 2026-10-12 | n/a | branch `claude/config-sdui` (c3fc199b), merges after the full suite |
-| `Code / AlertPill` | not needed while it reproduces today's pills | 2026-10-12 (plan) | waiting on a team | next |
-| `Code / SetItemRow`, `Card`, `ChipRow`, `Seg`, `Button`, `SheetHeader` | as above | 2026-10-12 (plan) | waiting on a team | November to December |
-| `SDUI / ProSheet` and `SDUI / NudgeCard` from registry components | **mockup due before build** | — | waiting on a team | mid-December, for the January Pro launch |
+| `Code / AlertPill` | not needed: it reproduces today's pills | 2026-10-12 (plan) | waiting on a team | 2026-10-27, branch `claude/config-sdui`: all 13 pills, gate `alert-pill` |
+| `Code / SetItemRow` | not needed: it reproduces today's rows | 2026-10-12 (plan) | waiting on a team | 2026-10-27, branch `claude/config-sdui`: the Settings and Data sheets (23 rows), gate `set-item`. The other 40 hand-written rows move when their screen is next touched; the gate's ratchet only lets that number fall |
+| `Code / Card`, `ChipRow`, `Seg`, `Button`, `SheetHeader` | as above | 2026-10-12 (plan) | waiting on a team | November to December |
+| `SDUI / ProSheet` and `SDUI / NudgeCard` from registry components | 2026-10-27 | — | waiting on a team | mid-December, for the January Pro launch |
+
+Render: Design canvas, https://claude.ai/artifact/SQwjG6QC8uiw1NbXLiLwQn (private). Four boards: the Pro sheet
+built from server blocks (waitlist and checkout states), home with a server card in a new feed-anchor slot that
+the frame places after the alerts, the rejected free-form layout (promo first, dose alert hidden by config), and
+the registry of blocks, actions and icons. Decisions it asks for: whether a Pro card may appear on home at all,
+whether the intro and feature rows are server copy or stay in code, and the iOS price question (Apple 3.1.1).
 
 ---
 
@@ -89,4 +96,6 @@ Recorded for completeness: these were invisible changes, so there was nothing to
 | Manifest `shortcuts` (Feed, Sleep, Nappy) | 2026-09-26 | Long-press an installed Cubby. Android and desktop today; iPhone needs the native half |
 | `sw_cache_guard` derives the bump list from the service worker | 2026-09-26 | The old pattern missed 8 of 30 precached assets, including the manifest |
 | `deploy-excl(live)` asks production instead of localhost | 2026-09-24 | Had never once checked production |
+| `Code / SetItemRow`: the 23 rows of the Settings and Data sheets become `setItem(props)`, sharing the escaping, token check, action attributes and icon box with `alertPill` | 2026-10-27 | Parity measured against the old tree in 8 households: all 23 rows, 640 of 648 screenshots byte-identical, every tap reaching the same handler with the same values, the info dot on the family row still opening its own explainer and never the row. The other 8 screenshots are the fix: the Guardians row printed a guardian's own member name raw, so a name holding markup rendered as markup; it is text now |
+| `Code / AlertPill`: the 13 hand-written alert pills become one component, `alertPill(props)`, and their 17 inline handlers become named actions in `UI_ACTIONS`, run by one listener on the document | 2026-10-27 | Pixel, style and tap parity measured against the old tree, pill by pill: 13 kinds, 136 screenshots byte-identical at 320 and 390 in both themes, every button reaching the same handler with the same arguments. On main this closes the pill half of the stored-script class: the dose, month and consent buttons put member-written ids (and a photo id) inside onclick, and the illness pill printed a member-written temperature and unit raw, which no gate covered. The full id fix for the rest of the app is 33d13699 on `claude/launch-prep`, not merged; its 13 pill hunks will conflict with this one and resolve to the component. The consent shield stays at 17px, the one glyph off the type scale, so no pixel moved |
 | App Review notes rewritten | 2026-09-29 | Text for Apple, not a screen. The August draft sent the reviewer to a "Care" tab that does not exist and promised a vaccine schedule in progress and a shared photo album the seeder never writes |

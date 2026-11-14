@@ -153,6 +153,14 @@ const EMPTY = { babies: [], activeBabyId: null, events: [], settings: { unit: 'm
           if (!found.has(fn)) found.set(fn, { fn, from: (kind === 'preg' ? 'preg:' : '') + v,
             text: (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 30) });
         });
+        /* A code component names its action in data-act and carries no onclick (the alert pills,
+           since the AlertPill migration). Without this the walk would quietly stop reaching them:
+           ackChild is on screen nowhere else. Same rule as above, no arguments. */
+        document.querySelectorAll('[data-act]:not([data-args])').forEach((el) => {
+          const fn = el.getAttribute('data-act');
+          if (fn && !found.has(fn)) found.set(fn, { fn, from: (kind === 'preg' ? 'preg:' : '') + v,
+            text: (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 30) });
+        });
       }));
       const reg = {}; Object.keys(rows).forEach((id) => { reg[String(rows[id].fn).replace(/\(.*$/, '')] = rows[id]; });
       return [...found.values()].map((f) => Object.assign(f, {
@@ -164,8 +172,11 @@ const EMPTY = { babies: [], activeBabyId: null, events: [], settings: { unit: 'm
       const before = pageErrs.length;
       const r = await page.evaluate((fnStr) => {
         const name = String(fnStr).replace(/\(.*$/, '');
-        if (typeof window[name] !== 'function') return { missing: true, name };
-        try { window[name](); } catch (e) { return { threw: String(e && e.message).slice(0, 120), name }; }
+        // A data-act name runs through the same registry the click would (openVaccines has no global).
+        const call = typeof window[name] === 'function' ? window[name]
+          : (typeof UI_ACTIONS === 'object' && Object.prototype.hasOwnProperty.call(UI_ACTIONS, name) ? UI_ACTIONS[name] : null);
+        if (!call) return { missing: true, name };
+        try { call(); } catch (e) { return { threw: String(e && e.message).slice(0, 120), name }; }
         const sheet = document.getElementById('sheet');
         const open = !!(sheet && sheet.classList.contains('show'));
         const h2 = sheet && sheet.querySelector('h2');
@@ -190,6 +201,11 @@ const EMPTY = { babies: [], activeBabyId: null, events: [], settings: { unit: 'm
             const m = /(?:^|[;\s])([a-zA-Z_$][\w$]*)\s*\(\s*\)/.exec(el.getAttribute('onclick') || '');
             if (m && !out.has(m[1])) out.set(m[1], { fn: m[1], text: (el.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 28) });
           });
+          // The rows of a component sheet (Settings, Data) name their action in data-act; same rule, no arguments.
+          s.querySelectorAll('[data-act]:not([data-args])').forEach((el) => {
+            const n = el.getAttribute('data-act');
+            if (n && !out.has(n)) out.set(n, { fn: n, text: (el.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 28) });
+          });
           return [...out.values()];
         });
         const DESTRUCTIVE = /delete|remove|erase|wipe|endPregnancy|signOut|leave|revoke|reset|clear|discard|stop/i;
@@ -199,8 +215,10 @@ const EMPTY = { babies: [], activeBabyId: null, events: [], settings: { unit: 'm
             domain: 'destructive', name: k.fn, skipped: 'destructive, listed not pressed', parent: f.id }); continue; }
           const b2 = pageErrs.length;
           const r2 = await page.evaluate((n) => {
-            if (typeof window[n] !== 'function') return { missing: true, name: n };
-            try { window[n](); } catch (e) { return { threw: String(e && e.message).slice(0, 120), name: n }; }
+            const call = typeof window[n] === 'function' ? window[n]
+              : (typeof UI_ACTIONS === 'object' && Object.prototype.hasOwnProperty.call(UI_ACTIONS, n) ? UI_ACTIONS[n] : null);
+            if (!call) return { missing: true, name: n };
+            try { call(); } catch (e) { return { threw: String(e && e.message).slice(0, 120), name: n }; }
             const sheet = document.getElementById('sheet');
             const h2 = sheet && sheet.querySelector('h2');
             return { name: n, open: !!(sheet && sheet.classList.contains('show')),
