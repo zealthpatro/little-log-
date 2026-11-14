@@ -23,9 +23,10 @@ compare   sizes.png (512 to 16px on light and dark), homescreen.png (60px betwee
           column unless --no-current. Same inputs, same bytes. Every number is defined in METRICS below.
 propose   writes a jobs file for tools/gen_art.js (gpt-image-2 by default, the reference image attached) and
           runs it, then compares what came back. --dry-run prints the requests and sends nothing.
-zoom      the centred square crop that makes the subject PCT wide, resized back to the input's size. It only
-          crops in, and refuses when the subject would come within 1/128 of an edge (the cut in
-          tools/gen_brand_icons.py needs clear wash all round).
+zoom      the square crop, centred on the subject, that makes it PCT wide, resized back to the input's size.
+          That is the W2+ step: from its source (icon4-cream-honey) at 87.1% it gives W2+ back at 30.7 dB PSNR,
+          where a crop centred on the image gives 18 dB. It only crops in, and refuses when the subject would
+          come within 1/128 of an edge (the cut in tools/gen_brand_icons.py needs clear wash all round).
 set       the one command for a logo change. Validates the file (square, at least 1024, RGB, no alpha), asks
           the generators whether they can cut it, and shows what will change. With --yes it copies it to
           icons/icon-master-1024.png and runs every generator: the web icons and the small nav logos, the
@@ -670,8 +671,10 @@ def zoom(src, pct, out):
     if pct <= cur + 0.05:
         raise SystemExit('zoom: the subject is already %.1f%% wide; zoom only crops in (it never pads the ground out)' % cur)
     side = n * cur / pct
-    x0 = y0 = (n - side) / 2.0
     bx0, by0, bx1, by1 = (v * n for v in m['bbox'])
+    # centred on the subject (its bounding box), kept inside the image
+    x0 = min(max((bx0 + bx1) / 2.0 - side / 2.0, 0.0), n - side)
+    y0 = min(max((by0 + by1) / 2.0 - side / 2.0, 0.0), n - side)
     margin = min(bx0 - x0, by0 - y0, x0 + side - bx1, y0 + side - by1) * n / side
     need = n / 128.0
     if margin < need:
@@ -681,8 +684,8 @@ def zoom(src, pct, out):
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     res.save(out, 'PNG', optimize=True)
     got = measure(res)
-    print('zoom: subject %.1f%% -> %.1f%% wide (asked %.1f%%), a centred %.1fpx crop of %dpx, resized back to %dpx: %s'
-          % (cur, got['width_pct'], pct, side, n, n, out))
+    print('zoom: subject %.1f%% -> %.1f%% wide (asked %.1f%%), a %.1fpx crop at (%.1f, %.1f) centred on it, resized back to %dpx: %s'
+          % (cur, got['width_pct'], pct, side, x0, y0, n, out))
     return out, cur, got['width_pct']
 
 
@@ -943,13 +946,13 @@ def set_master(src, provenance=None, name=None, yes=False, native_out=None, proo
     new_img = Image.open(cand).convert('RGB')
     mo = measure(old_img) if old_img else None
     mn = measure(new_img)
-    print('\n  %-26s %-26s %s' % ('', 'now: ' + (old.get('name') or 'the master')[:20], 'new: ' + name[:30]))
+    print('\n  %-26s %-36s %s' % ('', 'now: ' + (old.get('name') or 'the master')[:30], 'new: ' + name[:30]))
     rows = [('fur vs background', 'contrast_fur', ':1'), ('subject vs background', 'contrast_subject', ':1'), ('subject width', 'width_pct', '%'),
             ('reach from the centre', 'reach', '')]
     for label, k, u in rows:
-        print('  %-26s %-26s %s' % (label, (_fmt(mo[k]) + u) if mo else '-', _fmt(mn[k]) + u))
+        print('  %-26s %-36s %s' % (label, (_fmt(mo[k]) + u) if mo else '-', _fmt(mn[k]) + u))
     for s in (29, 16):
-        print('  %-26s %-26s %s' % ('edge energy at %dpx' % s, _fmt(edge_energy(old_img, s)) if old_img else '-', _fmt(edge_energy(new_img, s))))
+        print('  %-26s %-36s %s' % ('edge energy at %dpx' % s, _fmt(edge_energy(old_img, s)) if old_img else '-', _fmt(edge_energy(new_img, s))))
     fm = from_master_files(reg)
     cards = _cards(root)
     prep = os.path.abspath(native_out or os.path.join(root, PREP_REL))
@@ -1236,7 +1239,7 @@ def proof_sheet(before, native_before, after_root, native_after, out_dir, old_na
             _minis(native, _open(j('icons/favicon.png'))),
         ]
     titles = ['Home-screen icon (iOS app, 60pt@3x)', 'Masked shapes (maskable, Android round, adaptive)', 'Website top bar and browser tab',
-              'Sign-in card logo (52px)', 'Share card', 'Promo cards, the logo corner at 2x', 'iOS launch splash', 'Icon sizes 16 to 60px, light and dark']
+              'Sign-in card logo (52px)', 'Share card', 'Promo cards, the logo corner zoomed', 'iOS launch splash', 'Icon sizes 16 to 60px, light and dark']
     b, a = side(before, native_before), side(after_root, native_after)
     rows = (len(titles) + 1) // 2
     W, H = 2 * CW + 20, 132 + rows * CH
@@ -1373,6 +1376,14 @@ def self_test():
     mz = measure(Image.open(z))
     ok('zooms a 70%%-wide subject to 80%% (got %.1f%%), same size, RGB' % mz['width_pct'],
        abs(mz['width_pct'] - 80) <= 1.5 and Image.open(z).size == (1024, 1024) and Image.open(z).mode == 'RGB', mz)
+    low = _fixture(os.path.join(tmp, 'low.png'), width=0.60, dy=0.08)
+    zl = os.path.join(tmp, 'zlow.png')
+    zoom(low, 75, zl)
+    ml = measure(Image.open(low))
+    mzl = measure(Image.open(zl))
+    centre = lambda b: ((b[0] + b[2]) / 2.0, (b[1] + b[3]) / 2.0)
+    ok('centres the crop on the subject: one sitting %.0f%% low comes out centred (%.3f, %.3f)' % (((centre(ml['bbox'])[1] - 0.5) * 100,) + centre(mzl['bbox'])),
+       abs(centre(mzl['bbox'])[0] - 0.5) < 0.01 and abs(centre(mzl['bbox'])[1] - 0.5) < 0.01, (ml['bbox'], mzl['bbox']))
     for pct, why, word in ((99, 'a crop that would bring the subject to the edge', 'edge'), (60, 'zooming out', 'only crops in')):
         dst = os.path.join(tmp, 'z%d.png' % pct)
         try:
@@ -1500,11 +1511,17 @@ def self_test():
        len(regm['retired']) == nret0 + 1 and new_set[0].get('sha256', {}).get(MASTER_REL) == reg['master']['sha256']
        and len(new_set[0]['sha256']) == len(fm) and MASTER_REL in new_set[0].get('git_blob', {}), new_set[0])
     ok('every from_master file is pinned at its new bytes', all(regm_h == h1[p] for fam in regm['families'] if fam.get('from_master') for p, regm_h in fam['files'].items()))
-    summ = json.load(open(os.path.join(proof, 'summary.json')))
+    try:
+        summ = json.load(open(os.path.join(proof, 'summary.json')))
+    except (OSError, ValueError):
+        summ = {'changed': {'native set': [0, 0]}}
     nat = summ['changed']['native set']
     ok('the native set was regenerated into native-build/brand-native, every image changed (%d of %d)' % tuple(nat), nat[0] == nat[1] > 40, summ['changed'])
-    sheet = Image.open(os.path.join(proof, 'before-after.png'))
-    ok('and it drew the before/after proof (%dx%d)' % sheet.size, sheet.size == (2 * CW + 20, 132 + 4 * CH), sheet.size)
+    try:
+        size = Image.open(os.path.join(proof, 'before-after.png')).size
+    except OSError:
+        size = (0, 0)
+    ok('and it drew the before/after proof (%dx%d)' % size, size == (2 * CW + 20, 132 + 4 * CH), size)
     r = subprocess.run([sys.executable, mini_set, 'set', os.path.join(ROOT, MASTER_REL), '--yes', '--no-tree-gate', '--proof', proof], cwd=mini, capture_output=True, text=True)
     ok('refuses to run again over its own uncommitted change (git could not undo it)', r.returncode == 3 and 'REFUSED' in r.stdout, r.stdout[-800:])
     ok('the real tree is still untouched', _hash_all(ROOT, tracked) == tree_before)

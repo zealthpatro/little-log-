@@ -31,7 +31,8 @@ push main (push = deploy). That is the whole change.
   the retired white cub measures 1.3:1, W2+ 2.4:1), **edge energy** at 29 and 16px (visible detail at
   Settings-icon and favicon size), **subject width** (% of the tile), and how the maskable, Android round
   and adaptive icons will shrink it. "The generators can cut it" must say yes, or set refuses the file.
-- **zoom** crops in around the centre until the face is that wide, and refuses if an ear would touch an edge.
+- **zoom** crops in, centred on the face, until it is that wide (the W2+ step), and refuses if an ear would
+  come near an edge.
 - **set** without `--yes` writes nothing: it checks the file (square, at least 1024px, RGB, no alpha), asks
   the generators whether they can cut the face from its ground, and lists what will change. With `--yes` it
   writes the master, regenerates the web icons (and the top bar's `logo-96.png` / `logo-192.png`), the
