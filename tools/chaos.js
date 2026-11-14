@@ -296,9 +296,10 @@ async function runSession(actions, opts) {
   const model = { logs: {}, meds: {}, ms: {}, babies: {}, babyId: null, timer: null, timerBy: null };
   const tokens = {};
   let hid = null;
-  /* The signature is WHAT broke, not who it happened to: which of two racing phones loses its write
-     changes from run to run, so a signature that kept the name called a 4-in-4 lost write "flaky"
-     (0/3 re-runs) on 2026-11-13. Names, ids and numbers are folded out. */
+  /* The signature is WHAT broke, not who it happened to. Names, ids and numbers are folded out, so the
+     same broken invariant seen on a different phone in a re-run is one finding, and the flake check
+     counts it as the same one (the self-test proves the two halves of one seeded race share a
+     signature, and that the old name-bearing signature split them). */
   let curStep = null;                 // the action running now, so a violation inside it names it
   const violate = (inv, detail, step) => { V.push({ inv, detail: String(detail).slice(0, 400), step: step || curStep || null, sig: sigFor(inv, detail) }); };
   const b = await ensureBrowser();

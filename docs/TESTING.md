@@ -127,8 +127,8 @@ again in 2 of 3 it is **real**, and the session's earliest real violation is shr
 keeping each action's prerequisites) to the shortest list that still breaks the same invariant. Each is
 saved as `chaos-failures/<seed>.json` with a one-line repro; otherwise it is **flaky** with its count,
 or **unchecked** if the re-run budget (box + 15 min) ran out. A signature is what broke, not who it
-happened to: names, ids and numbers are folded out, because which of two racing phones loses its write
-changes from run to run. Race gaps are seeded, so a replay races the same way.
+happened to: names, ids and numbers are folded out, so the same broken invariant seen on another phone in
+a re-run is one finding. Race gaps are seeded, so a replay races the same way.
 `CHAOS_DEBUG=1` with `--replay` prints what the server and each phone hold at a failed checkpoint. `chaos-failures/` is gitignored and assetsignored: the repo is public. The generator promises
 that between two checkpoints an item is touched only by the phone that made it; the self-test counts
 that over 400 seeds, and against a generator with the lock removed, which must break it.
