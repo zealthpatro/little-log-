@@ -2659,7 +2659,7 @@
       + '<button id="ll-al-btn" style="margin-top:22px;border:none;border-radius:16px;padding:15px 24px;background:#C97FA0;color:#1A1614;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Back to sign in</button>'
       /* Quieter, and only once we know she has records there (see offerOwnRecordDeletion). The wrapper
          carries hidden: the button sets its own display, which would beat the attribute. */
-      + '<div id="ll-al-rec-row" hidden style="margin-top:10px"><button id="ll-al-rec" type="button" style="border:none;background:none;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 14px;color:' + OV_SOFT + ';font-size:15px;font-weight:700;line-height:1.35;text-decoration:underline">Delete my pregnancy records from that family</button></div>'
+      + '<div id="ll-al-rec-row" hidden style="margin-top:10px"><button id="ll-al-rec" type="button" style="border:none;background:none;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 14px;color:' + OV_SOFT + ';font-size:var(--fs-lead,15px);font-weight:700;line-height:1.35;text-decoration:underline">Delete my pregnancy records from that family</button></div>'
       + '</div>';
     document.body.appendChild(ov);
     /* The note goes once she is signed out, by its button or any other way. Signing out does not
