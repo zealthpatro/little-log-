@@ -18,7 +18,8 @@
  *      and docs/ are not pages); and no milestone or Moments card carries a symbol Cubby avoids (🧩, the
  *      jigsaw piece, which many parents read as an autism-awareness symbol: founder, 2026-11-14);
  *      The site's top bar asks for the small logo (icons/logo-96.png, logo-192.png in its srcset), never the
- *      197KB logo-512.png it loaded on ~680 pages until 2026-11-14 (pages and the two page generators);
+ *      197KB logo-512.png it loaded on ~680 pages until 2026-11-14 (pages and the two page generators),
+ *      and no page asks for both the small logo and the 512 (the 404 page's 64px mark did);
  *   2. every image a served file points at (src, srcset, href, og:image, url(), manifest and JSON
  *      strings) is a file in the approved set, and every inlined data: image is one the registry names;
  *      no page or script draws a bear in inline SVG (five or more filled circles and no text);
@@ -175,6 +176,12 @@ const AVOID_RE = new RegExp(AVOID.map(([cp, n]) => bearSpellings(cp, n).map((s) 
    bring the 197KB logo-512.png back to every view of it. tools/brand.py and docs/BRAND.md. */
 const BIG_NAV_RE = /<a class="nav-brand"[^>]*>\s*<img\b[^>]*\/icons\/logo-512\.png|<header class="site-head">\s*<a\b[^>]*>\s*<img\b[^>]*\/icons\/logo-512\.png/;
 const NAV_GENERATORS = ['tools/gen_category_hub.py', 'tools/gen_vax_country.py'];
+/* A page that asks for the small logo AND the 512 downloads both: 404.html drew its 64px mark from the 512
+   under a top bar on logo-96, so it cost 9-31KB more than before the small logo existed (brand verifier,
+   2026-11-14). Only what a browser fetches counts (img, source, link, url()); the schema.org "logo" in
+   JSON-LD and og:image are read by crawlers, not downloaded by the page. */
+const LOGO_FETCH_RE = (name) => new RegExp('<(?:img|source|link)\\b[^>]*icons\\/' + name + '\\.png|url\\(\\s*["\']?[^)"\']*icons\\/' + name + '\\.png', 'i');
+const FETCH_512_RE = LOGO_FETCH_RE('logo-512'), FETCH_SMALL_RE = LOGO_FETCH_RE('logo-(?:96|192)');
 const BEAR_TEXT_RE = /\u{1F43B}|\u{1F9F8}|\u{1F43C}|\u{1F428}/u;
 // An image path inside quotes, url(), an attribute, or a JSON value.
 const REF_RE = /(["'(\s=,])((?:https?:\/\/[^"'()\s<>]+?)|(?:[^"'()\s<>`]*?))\.(png|jpe?g|webp|gif|svg|ico|avif)(?=[?#"')\s,;\\]|$)/gim;
@@ -205,7 +212,7 @@ function resolveRef(file, raw, root) {
 
 function staticScan(root) {
   const rel = (p) => path.relative(root, p).split(path.sep).join('/');
-  const R = { bears: [], avoid: [], avoidScanned: 0, bigNav: [], navPages: 0, refs: [], external: [], missing: [], unapproved: [], pending: new Set(), dataBad: [], drawnSvg: [], retiredFiles: [], scanned: 0 };
+  const R = { bears: [], avoid: [], avoidScanned: 0, bigNav: [], bothLogos: [], navPages: 0, refs: [], external: [], missing: [], unapproved: [], pending: new Set(), dataBad: [], drawnSvg: [], retiredFiles: [], scanned: 0 };
   const served = walk(root, [], SKIP_DIRS).filter((p) => TEXT_EXT.has(path.extname(p).toLowerCase()) && !/\.md$/i.test(p));
   // workers/ and worker.js are in by construction (not in SKIP_DIRS); vendor bundles are third-party code, not copy.
   const files = served.filter((p) => !/\/app\/vendor\//.test(p) && !/\/tools\//.test(p));
@@ -219,6 +226,7 @@ function staticScan(root) {
       R.navPages++;
       if (BIG_NAV_RE.test(s)) R.bigNav.push(r);
     }
+    if (/\.html?$/i.test(f) && FETCH_512_RE.test(s) && FETCH_SMALL_RE.test(s)) R.bothLogos.push(r);
     if (AVOID_IN.includes(r)) {
       R.avoidScanned++;
       s.split('\n').forEach((line, i) => { if (AVOID_RE.test(line)) R.avoid.push(r + ':' + (i + 1) + '  ' + [...line.trim()].slice(0, 110).join('')); });
@@ -372,6 +380,8 @@ function runStatic(root, label) {
     R.avoidScanned === AVOID_IN.length && R.avoid.length === 0, R.avoidScanned + ' of ' + AVOID_IN.length + ' files read; ' + R.avoid.join('\n         '));
   ok('the top bar on every page (' + R.navPages + ') and both page generators asks for the small logo, never the 197KB logo-512.png',
     R.navPages > 100 && R.bigNav.length === 0, R.navPages + ' pages; ' + R.bigNav.length + ', e.g.\n         ' + R.bigNav.slice(0, 8).join('\n         '));
+  ok('no page downloads both the small logo and the 197KB logo-512.png (a mark of 96px or less uses logo-96 with logo-192 in its srcset)',
+    R.bothLogos.length === 0, R.bothLogos.length + ': ' + R.bothLogos.slice(0, 8).join(', '));
   ok('found the image references it is grading (' + R.refs.length + ')', R.refs.length > 1000, R.refs.length);
   ok('every image a served file points at is in the approved set', R.unapproved.length === 0, R.unapproved.length + ', e.g.\n         ' + [...new Set(R.unapproved)].slice(0, 8).join('\n         '));
   ok('and every one of them exists', R.missing.length === 0, [...new Set(R.missing)].slice(0, 8).join('\n         '));
@@ -463,6 +473,13 @@ function staticSelfTest() {
   // A page copied from an older one, bringing the 197KB logo back to its top bar.
   fs.mkdirSync(path.join(tmp, 'articles/planted-old-nav'), { recursive: true });
   fs.writeFileSync(path.join(tmp, 'articles/planted-old-nav/index.html'), '<nav class="nav"><div class="nav-in">\n  <a class="nav-brand" href="/"><img src="/icons/logo-512.png" alt="Cubby"><b>Cubby</b></a>\n</div></nav>\n');
+  // 404.html before 2026-11-14: the top bar on logo-96, its 64px mark on the 512, so the page fetched both.
+  // And its companion, which must NOT count: the 512 only in JSON-LD and og:image, as on every article.
+  const smallNav = '<nav class="nav"><div class="nav-in">\n  <a class="nav-brand" href="/"><img src="/icons/logo-96.png" srcset="/icons/logo-96.png 96w, /icons/logo-192.png 192w" sizes="34px" alt="Cubby"><b>Cubby</b></a>\n</div></nav>\n';
+  ['planted-both-logos', 'planted-schema-logo'].forEach((d) => fs.mkdirSync(path.join(tmp, 'articles', d), { recursive: true }));
+  fs.writeFileSync(path.join(tmp, 'articles/planted-both-logos/index.html'), smallNav + '<main class="nf">\n  <img class="bear" src="/icons/logo-512.png" alt="" width="64" height="64">\n</main>\n');
+  fs.writeFileSync(path.join(tmp, 'articles/planted-schema-logo/index.html'), '<head><meta property="og:image" content="https://little-cubby.com/icons/logo-512.png">\n'
+    + '<script type="application/ld+json">{"publisher":{"logo":{"@type":"ImageObject","url":"https://little-cubby.com/icons/logo-512.png"}}}</script></head>\n' + smallNav);
   // A picture nobody approved that no file names (its path is built at runtime), in a served folder; and
   // the same bytes in two folders the site never serves, which must NOT count.
   fs.mkdirSync(path.join(tmp, 'app/spot-art'), { recursive: true });
@@ -486,6 +503,8 @@ function staticSelfTest() {
   ok('catches the planted bear built from a number, String.fromCodePoint(0x1F43B)', R.bears.some((b) => /^worker\.js:\d+ .*plantedNumber/.test(b)), R.bears);
   ok('catches the planted panda built from a decimal, String.fromCodePoint(128060)', R.bears.some((b) => /^index\.html:\d+ .*planted-decimal/.test(b)), R.bears);
   ok('catches a page whose top bar loads the 197KB logo-512.png again', R.bigNav.includes('articles/planted-old-nav/index.html'), R.bigNav);
+  ok('catches a page that downloads both the small logo and the 512 (the 404 page\'s 64px mark)', R.bothLogos.includes('articles/planted-both-logos/index.html'), R.bothLogos);
+  ok('and does not count a 512 that only schema.org JSON-LD and og:image name', !R.bothLogos.includes('articles/planted-schema-logo/index.html') && !R.bothLogos.includes('articles/planted-old-nav/index.html'), R.bothLogos);
   ok('catches the jigsaw piece planted back on a milestone, raw and escaped', R.avoid.filter((b) => /app\/milestone-data\.js:\d+ .*planted-jigsaw/.test(b)).length === 2, R.avoid);
   ok('catches the planted reference to an unapproved file', R.unapproved.some((u) => /icons\/planted-unapproved\.png/.test(u)), R.unapproved);
   RETIRED_SETS.forEach((s, i) => ok('catches ' + s.name + ' under a new name', R.retiredFiles.includes('icons-planted-' + i + '.png') && R.retiredWhich['icons-planted-' + i + '.png'] === s.name, R.retiredFiles));
@@ -503,7 +522,7 @@ function staticSelfTest() {
   ok('and none of the wolf\'s or the dog\'s', hit.length === 0, hit);
   const clean = staticScan(path.join(ROOT));
   ok('and the real tree has none of these', clean.bears.length === 0 && clean.unapproved.length === 0 && clean.retiredFiles.length === 0 && clean.external.length === 0
-    && clean.dataBad.length === 0 && clean.drawnSvg.length === 0 && clean.servedUnregistered.length === 0 && clean.avoid.length === 0 && clean.bigNav.length === 0);
+    && clean.dataBad.length === 0 && clean.drawnSvg.length === 0 && clean.servedUnregistered.length === 0 && clean.avoid.length === 0 && clean.bigNav.length === 0 && clean.bothLogos.length === 0);
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 

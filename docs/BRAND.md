@@ -49,10 +49,10 @@ in `touched.txt` beside the proof, and push main (push = deploy). That is the wh
 
 - Before committing: `git restore --pathspec-from-file=<proof folder>/touched.txt`, the exact files set
   wrote (it refuses to start unless they are all committed, a new card git does not know yet included, so
-  this undoes set and nothing else). The same
-  list commits the change: `git commit --pathspec-from-file=<proof folder>/touched.txt`. If this checkout
-  has ios/ or android/, follow it with `python3 tools/brand.py native`: git cannot reach those folders, so
-  this puts them back on the restored master.
+  this undoes set and nothing else). The same list commits the change:
+  `git commit --pathspec-from-file=<proof folder>/touched.txt`. If this checkout has ios/ or android/,
+  follow it with `python3 tools/brand.py native`: git cannot reach those folders, so this puts them back
+  on the restored master.
 - After committing: `python3 tools/brand.py set <the old file> --yes`. A master that comes back leaves the
   retired list, and the files come out byte for byte as before.
 
@@ -64,6 +64,7 @@ in `touched.txt` beside the proof, and push main (push = deploy). That is the wh
   app build picks the change up; App Store screenshots are not regenerated.
 - Pages load `icons/logo-96.png` in the top bar (with `logo-192.png` for 3x screens): 9KB instead of the
   197KB `logo-512.png`, which stays for schema.org, emails and the app's own screens. The brand gate fails a
-  page whose top bar asks for the 512 again.
+  page whose top bar asks for the 512 again, and a page that asks for both (any other mark of 96px or less
+  on a page takes logo-96 with logo-192 in its srcset, as the 404 page's 64px bear does).
 - `node tools/brand_image_check.js` is the gate behind all of this; `python3 tools/brand.py --self-test`
   proves the tool itself (both run in `node tools/gates.js`).
