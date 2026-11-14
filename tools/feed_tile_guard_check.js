@@ -507,7 +507,11 @@ const seed = (over) => Object.assign({
       timers: { b1: { feed: { start: now - 12 * MIN, side: 'left' } }, b2: { feed: { start: now - 9 * HOUR, side: 'right' } } },
     };
     await load(seed(twins));
-    const b = await banners();
+    /* Wait for both banners rather than read once: load() sleeps a fixed 1.4 s, and on a loaded machine
+       (the full pre-push run) the second twin's banner can still be drawing, which read as a product
+       failure on 14 Nov. Polled up to 8 s; the assertion below is unchanged. */
+    let b = await banners();
+    for (let i = 0; i < 40 && b.length < 2; i++) { await sleep(200); b = await banners(); }
     ok('both banners name their own baby', b.length === 2 && /Robin/.test(b[0].lbl) && /Wren/.test(b[1].lbl), b);
     // Wren's Stop is the door. Nine hours, so it diverts to the question instead of writing.
     const r = await page.evaluate(() => {
