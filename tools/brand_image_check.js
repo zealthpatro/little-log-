@@ -382,7 +382,8 @@ function runStatic(root, label) {
   ok('every image file the site serves is approved or pending in tools/brand-images.json, referenced or not', R.servedUnregistered.length === 0,
     R.servedUnregistered.length + ', e.g.\n         ' + R.servedUnregistered.slice(0, 8).join('\n         ') + '\n         (a new picture: node tools/brand_image_check.js --hash <file>)');
   ok('no retired logo\'s bytes (' + RETIRED_SETS.map((s) => s.name).join(', ') + ') appear anywhere in the tree, under any name', R.retiredFiles.length === 0,
-    R.retiredFiles.map((f) => f + ' (' + R.retiredWhich[f] + ')').join(', '));
+    (R.retiredFiles.some((f) => /^(ios|android)\//.test(f)) ? 'ios/ and android/ are made from the master: python3 tools/brand.py native remakes them (set does it too)\n         ' : '')
+    + R.retiredFiles.map((f) => f + ' (' + R.retiredWhich[f] + ')').join(', '));
   const integ = registryIntegrity(root);
   ok('the approved set is intact: every file exists with the bytes it was approved with', integ.length === 0, integ.slice(0, 8).join('\n         '));
   const ic = pyCheck('tools/gen_brand_icons.py', root);

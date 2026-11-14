@@ -14,6 +14,7 @@ This file is that flow, one subcommand per step:
     python3 tools/brand.py zoom b.png --subject-width 87 --out b87.png            optional: make it bigger
     python3 tools/brand.py set b87.png --provenance "..."                         what WOULD change
     python3 tools/brand.py set b87.png --provenance "..." --yes                   change it, with a proof
+    python3 tools/brand.py native [--check]                                       ios/ and android/ from the master
     python3 tools/brand.py --self-test                                            tools/gates.js runs this
 
 compare   sizes.png (512 to 16px on light and dark), homescreen.png (60px between neutral app tiles on a
@@ -36,6 +37,11 @@ set       the one command for a logo change. Validates the file (square, at leas
           digests re-approved), moves the old master and everything made from it into a retired set (and takes
           a set OUT of retirement when its master comes back), runs the brand gate's static half, card_logo
           --check and gen_brand_icons --check, and draws a before/after proof sheet for the founder.
+          When this tree has ios/ or android/ (gitignored; any checkout that has built the app), set remakes
+          their icons, splash and the offline logo in public/ in place and checks them, because the brand
+          gate reads the whole tree and would find the old master's bytes there (verifier M1, 2026-11-14).
+native    remakes ios/ and android/ from the master as set does (the undo after git restore, which cannot
+          reach them); --check writes nothing and fails on any file that is not what the master gives.
 
 Python 3 and Pillow, the standard library otherwise. The generators it drives use numpy; they run as their
 own processes. Nothing here draws a bear: every picture in a proof is made from the files themselves.
@@ -61,6 +67,14 @@ MASTER_REL = 'icons/icon-master-1024.png'
 REG_REL = 'tools/brand-images.json'
 PREP_REL = os.path.join('native-build', 'brand-native')   # gitignored and in .assetsignore
 FONTS = os.path.join(ROOT, 'app', 'fonts')
+# This tree's own native projects (gitignored; `npx cap add` makes them). tools/cap_ios_build.sh writes the
+# master's icons and splash into ios/ (gen_app_icon.py, gen_splash.py) and `cap copy` puts cap-web/logo.png
+# in each public/ folder, so after any build they hold the master's bytes. The brand gate reads the whole
+# tree for retired bytes, so a set that left them alone failed its own last check in any checkout that had
+# built the app (brand verifier M1, 2026-11-14). set refreshes them in place; `brand.py native` does it alone.
+NATIVE_TOPS = ('ios', 'android')
+NATIVE_PUBLIC = ('ios/App/App/public/logo.png', 'android/app/src/main/assets/public/logo.png')
+CAP_LOGO = 'cap-web/logo.png'
 
 # The production recipe, from tools/gen_brand_icons.py (the self-test proves they still agree).
 SHARPEN_MAX = 64
@@ -895,6 +909,94 @@ def _tree_hashes(d):
     return out
 
 
+def retired_in_tree(root, hashes):
+    """Image files anywhere under `root` (but .git and node_modules) whose bytes are in `hashes`: the brand gate's
+    retired-bytes walk (tools/brand_image_check.js staticScan), for trees too small for the whole gate."""
+    out = []
+    for base, dirs, files in os.walk(root):
+        dirs[:] = sorted(d for d in dirs if d not in ('.git', 'node_modules'))
+        for f in sorted(files):
+            p = os.path.join(base, f)
+            if re.search(r'\.(png|jpe?g|webp|gif|ico|avif)$', f, re.I) and os.path.getsize(p) <= 20 * 1024 * 1024 and sha256_file(p) in hashes:
+                out.append(rel(p, root))
+    return out
+
+
+def native_tops(root):
+    """The native projects this tree has (ios/, android/), the ones set refreshes in place."""
+    return [t for t in NATIVE_TOPS if os.path.isdir(os.path.join(root, t))]
+
+
+def native_targets(root, fresh):
+    """{path in the tree: the file it should hold} for this tree's native projects. `fresh` is a native set and
+    splash just made from the master (gen_brand_icons.py --native-out, gen_splash.py --out), laid out as ios/
+    and android/. A project that is not here is not created; the offline logo in a public/ folder is refreshed
+    only where `cap copy` has already put one (cap copy owns that folder)."""
+    out = OrderedDict()
+    for top in native_tops(root):
+        for p, _ in _tree_hashes(os.path.join(fresh, top)).items():
+            out[top + '/' + p] = os.path.join(fresh, top, p)
+    for p in NATIVE_PUBLIC:
+        if os.path.exists(os.path.join(root, p)):
+            out[p] = os.path.join(root, CAP_LOGO)
+    return out
+
+
+def native_drift(root, fresh):
+    """The native files in this tree that are not what the master gives (missing or different)."""
+    bad = []
+    for p, src in native_targets(root, fresh).items():
+        dst = os.path.join(root, p)
+        if not os.path.exists(dst) or sha256_file(dst) != sha256_file(src):
+            bad.append(p)
+    return bad
+
+
+def refresh_native(root, fresh):
+    """Write the master's native set into this tree's ios/ and android/ (only those that exist). Returns the paths."""
+    done = []
+    for p, src in native_targets(root, fresh).items():
+        dst = os.path.join(root, p)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copyfile(src, dst)
+        done.append(p)
+    return done
+
+
+def make_native(root, out, log):
+    """The native set and splash from the CURRENT master, into `out` (nothing in the tree is written)."""
+    _step('the native set from the master', [sys.executable, 'tools/gen_brand_icons.py', '--native-out', out, '--no-web'], root, log)
+    _step('the native splash from the master', [sys.executable, 'tools/gen_splash.py', '--out', out], root, log)
+
+
+def native(check=False, root=None):
+    """`brand.py native`: bring this tree's ios/ and android/ in step with the master (after an undo of set with
+    git restore, which cannot reach these gitignored folders). --check writes nothing and fails on any drift."""
+    root = root or ROOT
+    tops = native_tops(root)
+    print('brand.py native%s: %s' % (' --check' if check else '', ', '.join(t + '/' for t in tops) or 'no ios/ or android/ in this tree'))
+    if not tops:
+        print('Nothing to do: there is no native project here (`npx cap add ios` makes one).')
+        return 0
+    tmpd = tempfile.mkdtemp(prefix='cubby-brand-native-')
+    try:
+        make_native(root, tmpd, [])
+    except SetFailed as e:
+        print('\nFAILED: %s' % e)
+        return 1
+    if check:
+        drift = native_drift(root, tmpd)
+        for p in drift[:20]:
+            print('  DIFFERS %s' % p)
+        print('NATIVE: ' + ('FAIL (%d of %d files are not what the master gives; python3 tools/brand.py native remakes them)' % (len(drift), len(native_targets(root, tmpd)))
+                            if drift else 'PASS (%d files in %s match the master)' % (len(native_targets(root, tmpd)), ' and '.join(t + '/' for t in tops))))
+        return 1 if drift else 0
+    done = refresh_native(root, tmpd)
+    drift = native_drift(root, tmpd)
+    print('  wrote %d files in %s from the master%s' % (len(done), ' and '.join(t + '/' for t in tops), '' if not drift else '; still different: ' + ', '.join(drift[:5])))
+    return 1 if drift else 0
+
+
 def _step(label, cmd, root, log):
     t = time.time()
     r = subprocess.run(cmd, cwd=root, capture_output=True, text=True)
@@ -967,9 +1069,14 @@ def set_master(src, provenance=None, name=None, yes=False, native_out=None, proo
     print('    %-34s %d icons and text cards made from the master (tools/gen_brand_icons.py, tools/card_logo.py)' % ('', len([p for p in fm if p != MASTER_REL])))
     print('    %-34s %d cards: every share card, hero, og, Product Hunt, promo and social card (card_logo.py --swap --force)' % ('', len(cards)))
     print('    %-34s the native set: iOS AppIcon and Splash, Android mipmaps and splash (prepared, not built)' % rel(prep, root))
+    tops = native_tops(root)
+    if tops:
+        print('    %-34s this tree\'s native project%s (gitignored): icons, splash and offline logo remade in place'
+              % (' and '.join(t + '/' for t in tops), 's' if len(tops) > 1 else ''))
     print('    %-34s the master pin, %d hashes re-pinned, the card digests re-approved;' % (REG_REL, len(fm)))
     print('    %-34s retired: + %s (the old master and what changed with it)%s' % ('', retiring, ('; back from retirement: ' + ', '.join(comes_back)) if comes_back else ''))
-    print('    then: the brand gate\'s static half, card_logo.py --check, gen_brand_icons.py --check, and a before/after proof sheet')
+    print('    then: the brand gate\'s static half, card_logo.py --check, gen_brand_icons.py --check, %sand a before/after proof sheet'
+          % ('ios/ and android/ against the master, ' if tops else ''))
 
     # Can it be undone with git? Only if everything it writes is committed now.
     touched = [old.get('path', MASTER_REL), REG_REL] + list(fm) + cards
@@ -1029,8 +1136,16 @@ def set_master(src, provenance=None, name=None, yes=False, native_out=None, proo
         pin['master']['sha256'] = new_sha            # the generators refuse a master that is not pinned
         write_registry(pin, root)
         print('  ok   %-46s        %s' % ('wrote ' + MASTER_REL, new_sha[:12]))
-        _step('web icons, nav logos, native set', [sys.executable, 'tools/gen_brand_icons.py', '--native-out', prep], root, log)
-        _step('the native splash', [sys.executable, 'tools/gen_splash.py', '--out', prep], root, log)
+        # The native set goes to a fresh folder first, so what is copied on is exactly this run's set.
+        native_new = os.path.join(tmpd, 'native-new')
+        _step('web icons, nav logos, native set', [sys.executable, 'tools/gen_brand_icons.py', '--native-out', native_new], root, log)
+        _step('the native splash', [sys.executable, 'tools/gen_splash.py', '--out', native_new], root, log)
+        for p in _tree_hashes(native_new):
+            os.makedirs(os.path.dirname(os.path.join(prep, p)), exist_ok=True)
+            shutil.copyfile(os.path.join(native_new, p), os.path.join(prep, p))
+        if tops:
+            done = refresh_native(root, native_new)
+            print('  ok   %-46s        %d files' % ('remade ' + ' and '.join(t + '/' for t in tops) + ' in place', len(done)))
         _step('every card\'s logo (card_logo.py --swap --force)', [sys.executable, 'tools/card_logo.py', '--swap', '--force'], root, log)
         fm_after = _hash_all(root, list(fm))
         reg2, notes = next_registry(reg, OrderedDict([(p, h) for p, h in fm_before.items() if h]), fm_after,
@@ -1043,10 +1158,18 @@ def set_master(src, provenance=None, name=None, yes=False, native_out=None, proo
             _step('brand gate, static half', ['node', 'tools/brand_image_check.js', '--static-only'], root, log)
         _step('card_logo.py --check', [sys.executable, 'tools/card_logo.py', '--check'], root, log)
         _step('gen_brand_icons.py --check', [sys.executable, 'tools/gen_brand_icons.py', '--check'], root, log)
+        if tops:
+            drift = native_drift(root, native_new)
+            print('  %s %-46s        %s' % ('ok  ' if not drift else 'FAIL', ' and '.join(t + '/' for t in tops) + ' match the master',
+                                           '%d files' % len(native_targets(root, native_new)) if not drift else ', '.join(drift[:4])))
+            if drift:
+                raise SetFailed('%d native files are not what the master gives: %s' % (len(drift), ', '.join(drift[:8])))
     except SetFailed as e:
         print('\nFAILED: %s' % e)
         print('\nTo put the tree back as it was (every file set writes was committed when it started):')
         print('  git restore --pathspec-from-file=%s' % touched_list)
+        if tops:
+            print('  python3 tools/brand.py native      (%s: not in git, so this remakes them from the restored master)' % ' and '.join(t + '/' for t in tops))
         return 1
     cards_after = _hash_all(root, cards)
     prep_after = _tree_hashes(prep)
@@ -1067,7 +1190,8 @@ def set_master(src, provenance=None, name=None, yes=False, native_out=None, proo
     summary = OrderedDict([('date', today), ('old', OrderedDict([('name', old.get('name')), ('sha256', old.get('sha256'))])),
                            ('new', OrderedDict([('name', name), ('sha256', new_sha), ('source', os.path.basename(src))])),
                            ('changed', changed), ('metrics', OrderedDict([('old', mo), ('new', mn)])), ('native_out', prep),
-                           ('prep_was_current', bool(prep_before) and prep_before == native_b)])
+                           ('prep_was_current', bool(prep_before) and prep_before == native_b),
+                           ('native_in_tree', OrderedDict([('folders', tops), ('files', len(native_targets(root, native_new)) if tops else 0)]))])
     with open(os.path.join(proof, 'summary.json'), 'w', encoding='utf-8') as f:
         f.write(json.dumps(summary, indent=1, ensure_ascii=False) + '\n')
     print('\n  Changed (of each kind, how many differ from before):')
@@ -1077,6 +1201,8 @@ def set_master(src, provenance=None, name=None, yes=False, native_out=None, proo
     print('Next: look at it; node tools/gates.js; then commit the files it wrote and push (push = deploy):')
     print('  git commit --pathspec-from-file=%s -m "The logo is ..."' % touched_list)
     print('Changed your mind before committing? git restore --pathspec-from-file=%s' % touched_list)
+    if tops:
+        print('  and then python3 tools/brand.py native   (%s are not in git: this remakes them from the restored master)' % ' and '.join(t + '/' for t in tops))
     print('The native set for the next app build is in %s (tools/cap_ios_build.sh regenerates ios/ from the master anyway).' % prep)
     return 0
 
@@ -1483,7 +1609,7 @@ def self_test():
     print('\nset --yes, end to end, on a miniature tree (a git repo in the scratch folder)')
     mini = os.path.join(tmp, 'mini')
     reg = load_registry()
-    keep = [MASTER_REL, REG_REL, '.assetsignore'] + ['tools/' + f for f in ('brand.py', 'gen_brand_icons.py', 'gen_splash.py', 'card_logo.py', 'brand_image_check.js')]
+    keep = [MASTER_REL, REG_REL, '.assetsignore'] + ['tools/' + f for f in ('brand.py', 'gen_brand_icons.py', 'gen_splash.py', 'card_logo.py', 'brand_image_check.js', 'gen_app_icon.py')]
     keep += ['app/fonts/' + f for f in ('fraunces-600-latin.woff2', 'nunitosans-600-latin.woff2', 'nunitosans-700-latin.woff2', 'nunitosans-800-latin.woff2')]
     keep += list(from_master_files(reg))
     cards = _cards(ROOT)
@@ -1495,11 +1621,33 @@ def self_test():
         if os.path.exists(s):
             os.makedirs(os.path.dirname(os.path.join(mini, p)), exist_ok=True)
             shutil.copy2(s, os.path.join(mini, p))
+    with open(os.path.join(mini, '.gitignore'), 'w') as f:      # as the real tree: the native projects are not in git
+        f.write('/ios/\n/android/\n/native-build/\n')
     gitc = ['git', '-c', 'core.hooksPath=/dev/null', '-c', 'user.name=brand-selftest', '-c', 'user.email=brand-selftest@localhost', '-c', 'commit.gpgsign=false']
     subprocess.run(['git', 'init', '-q'], cwd=mini, check=True)
     subprocess.run(gitc + ['add', '-A'], cwd=mini, check=True)
     subprocess.run(gitc + ['commit', '-q', '-m', 'mini tree'], cwd=mini, check=True)
     mini_set = os.path.join(mini, 'tools', 'brand.py')
+    # A checkout that has built the app (verifier M1): ios/ with the AppIcon set tools/cap_ios_build.sh writes
+    # (gen_app_icon.py) and its splash, android/ res with the launcher icons and splash, and the offline logo
+    # `cap copy` puts in each public/ folder. Before the fix, set left all of it on the old master, and the
+    # brand gate's whole-tree walk failed set's own last check on the retired bytes in ios/ and public/.
+    os.makedirs(os.path.join(mini, 'ios'))
+    os.makedirs(os.path.join(mini, 'android', 'app', 'src', 'main', 'res'))
+    seed = os.path.join(tmp, 'native-seed')
+    seeded = [subprocess.run([sys.executable, 'tools/gen_app_icon.py'], cwd=mini, capture_output=True, text=True),
+              subprocess.run([sys.executable, 'tools/gen_brand_icons.py', '--native-out', seed, '--no-web'], cwd=mini, capture_output=True, text=True)]
+    if os.path.isdir(os.path.join(seed, 'android')):
+        shutil.copytree(os.path.join(seed, 'android'), os.path.join(mini, 'android'), dirs_exist_ok=True)
+    seeded.append(subprocess.run([sys.executable, 'tools/gen_splash.py'], cwd=mini, capture_output=True, text=True))
+    for p in NATIVE_PUBLIC:
+        os.makedirs(os.path.dirname(os.path.join(mini, p)), exist_ok=True)
+        shutil.copyfile(os.path.join(mini, CAP_LOGO), os.path.join(mini, p))
+    nat0 = OrderedDict((t + '/' + p, h) for t in NATIVE_TOPS for p, h in _tree_hashes(os.path.join(mini, t)).items())
+    ok('the miniature tree has built-app native folders: ios/ from gen_app_icon.py and gen_splash.py, android/ res, both public/ logos (%d files)' % len(nat0),
+       all(r.returncode == 0 for r in seeded) and len(nat0) > 50 and 'ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-iphone-60x60@3x.png' in nat0
+       and all(p in nat0 for p in NATIVE_PUBLIC) and nat0['ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-iphone-60x60@3x.png'] == sha256_file(os.path.join(mini, 'icons/apple-touch-icon.png')),
+       [(r.stdout + r.stderr)[-300:] for r in seeded])
     fm = list(from_master_files(reg))
     mcards = [l for l in subprocess.run([sys.executable, os.path.join(mini, 'tools', 'card_logo.py'), '--list'], cwd=mini, capture_output=True, text=True).stdout.split('\n') if l]
     h0 = _hash_all(mini, fm + mcards)
@@ -1521,6 +1669,15 @@ def self_test():
        len(regm['retired']) == nret0 + 1 and new_set[0].get('sha256', {}).get(MASTER_REL) == reg['master']['sha256']
        and len(new_set[0]['sha256']) == len(fm) and MASTER_REL in new_set[0].get('git_blob', {}), new_set[0])
     ok('every from_master file is pinned at its new bytes', all(regm_h == h1[p] for fam in regm['families'] if fam.get('from_master') for p, regm_h in fam['files'].items()))
+    nat1 = OrderedDict((t + '/' + p, h) for t in NATIVE_TOPS for p, h in _tree_hashes(os.path.join(mini, t)).items())
+    drift = native_drift(mini, os.path.join(mini, PREP_REL))
+    unchanged = [p for p in nat0 if p.endswith('.png') and nat1.get(p) == nat0[p]]
+    ok('set remade ios/ and android/ in place: every icon, splash and public/ logo is what the new master gives, every image changed (%d files), and its undo names brand.py native'
+       % len(nat1), not drift and not unchanged and list(nat1) == list(nat0) and 'tools/brand.py native' in out, drift[:5] or unchanged[:5] or out[-600:])
+    retired_now = set(h for s in regm.get('retired') or [] for h in (s.get('sha256') or {}).values())
+    stale = retired_in_tree(mini, retired_now)
+    ok('no retired logo\'s bytes anywhere in the miniature tree, ios/ and android/ included (the brand gate\'s walk; verifier M1)',
+       not stale and len(retired_now) >= len(fm), stale[:6])
     try:
         summ = json.load(open(os.path.join(proof, 'summary.json')))
     except (OSError, ValueError):
@@ -1541,6 +1698,13 @@ def self_test():
     ok('and the undo it prints puts every file back (git restore --pathspec-from-file=touched.txt, %d paths)' % len(listed),
        r.returncode == 0 and back == h0 and load_registry(mini) == reg and MASTER_REL in listed and REG_REL in listed,
        (r.stdout + r.stderr)[-400:] or [p for p in h0 if h0[p] != back.get(p)][:5])
+    r = subprocess.run([sys.executable, mini_set, 'native', '--check'], cwd=mini, capture_output=True, text=True)
+    ok('git restore cannot reach ios/ and android/, and native --check says so (they are still on the abandoned master)',
+       r.returncode == 1 and 'NATIVE: FAIL' in r.stdout, (r.stdout + r.stderr)[-600:])
+    r = subprocess.run([sys.executable, mini_set, 'native'], cwd=mini, capture_output=True, text=True)
+    nat2 = OrderedDict((t + '/' + p, h) for t in NATIVE_TOPS for p, h in _tree_hashes(os.path.join(mini, t)).items())
+    ok('and brand.py native, the undo\'s second line, puts them back byte for byte (%d files)' % len(nat2), r.returncode == 0 and nat2 == nat0,
+       (r.stdout + r.stderr)[-600:] or [p for p in nat0 if nat0[p] != nat2.get(p)][:5])
     ok('the real tree is still untouched', _hash_all(ROOT, tracked) == tree_before)
 
     shutil.rmtree(tmp, ignore_errors=True)
@@ -1583,7 +1747,11 @@ def main(argv=None):
     s.add_argument('--proof', help='where the before/after proof goes (default: a folder in the system temp)')
     s.add_argument('--date', help=argparse.SUPPRESS)
     s.add_argument('--no-tree-gate', action='store_true', help=argparse.SUPPRESS)   # the self-test's miniature tree only
+    n = sub.add_parser('native', help='remake this tree\'s ios/ and android/ icons, splash and offline logo from the master')
+    n.add_argument('--check', action='store_true', help='write nothing; fail if any of them is not what the master gives')
     a = ap.parse_args(argv)
+    if a.cmd == 'native':
+        return native(a.check)
     if a.cmd == 'compare':
         compare(a.images, a.names, a.out, current=not a.no_current)
         return 0

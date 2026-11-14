@@ -40,12 +40,18 @@ in `touched.txt` beside the proof, and push main (push = deploy). That is the wh
   `tools/brand-images.json`, moves the old master and everything made from it into a **retired** set (so
   its bytes can never come back unnoticed), runs the brand gate, `card_logo.py --check` and
   `gen_brand_icons.py --check`, and draws the proof.
+- **ios/ and android/**: once the app has been built here, these gitignored folders hold the master's app
+  icon, splash and offline-page logo. set remakes them in place and checks them, because the brand gate
+  reads the whole tree and would fail on the old logo's bytes there. `python3 tools/brand.py native` does
+  the same on its own; `--check` only reports.
 
 ## If you change your mind
 
 - Before committing: `git restore --pathspec-from-file=<proof folder>/touched.txt`, the exact files set
   wrote (it refuses to start unless they are all committed, so this undoes set and nothing else). The same
-  list commits the change: `git commit --pathspec-from-file=<proof folder>/touched.txt`.
+  list commits the change: `git commit --pathspec-from-file=<proof folder>/touched.txt`. If this checkout
+  has ios/ or android/, follow it with `python3 tools/brand.py native`: git cannot reach those folders, so
+  this puts them back on the restored master.
 - After committing: `python3 tools/brand.py set <the old file> --yes`. A master that comes back leaves the
   retired list, and the files come out byte for byte as before.
 
