@@ -15230,7 +15230,7 @@ function renderIllness(){
     head=`<div class="med-due" style="background:var(--pump);margin-top:4px">${illnessIcon(ill.name)}
         <div class="info"><div class="lbl" style="cursor:pointer" onclick="openIllnessStart('${hArg(ill.id)}')">Day ${days} · since ${new Date(ill.startedAt).toLocaleDateString(undefined,{month:'short',day:'numeric'})} · <span style="text-decoration:underline;text-underline-offset:2px;opacity:.85">change</span></div>
         <div class="nm">${escapeHtml(ill.name)}</div>
-        <div class="sub">${lt?('last temp '+lt.temp+'°'+(lt.unit||'C')+(isFever(lt.temp,lt.unit)?' · fever':'')):'no temperature logged yet'}</div></div></div>
+        <div class="sub">${lt?('last temp '+escapeHtml(String(lt.temp))+'°'+escapeHtml(String(lt.unit||'C'))+(isFever(lt.temp,lt.unit)?' · fever':'')):'no temperature logged yet'}</div></div></div>
       <div class="row2"><button class="btn-primary" style="background:var(--med);--accent-ink:var(--on-med,var(--on-accent))" onclick="openTemp()">${I.thermo} Temperature</button>
         <button class="btn-primary" style="background:var(--pump);--accent-ink:var(--on-pump,var(--on-accent))" onclick="openSymptom()">${I.pulse} Symptom</button></div>
       ${/* The second durable door to the safety net, on the screen a parent is already on while an

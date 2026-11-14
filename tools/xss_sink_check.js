@@ -34,6 +34,7 @@
  *      the Settings and Data rows that print a member's words, each staged hostile and required to be
  *      on screen, with each button handing its handler exactly the id it was drawn with.
  *      2e. The one document listener that runs component buttons (UI_ACTIONS), in the real page.
+ *      2f. Health > Illness: the "last temp" line, with a reading whose temp and unit a member wrote.
  *   3. The INGEST helpers store-firebase.js calls where Firestore snapshots land: ids, colours and
  *      photo bytes are neutralised and the entry itself is kept. Plus a static check that every
  *      listener actually calls them.
@@ -598,6 +599,25 @@ function pageSetup(tags) {
   ok('rows, Data (a caregiver): the read-only export row names the guardian, hostile, as text', !!xRow && xRow.sub.indexOf(V.rel) >= 0, cg.rows);
   ok('rows, Data (a caregiver): and it is still read-only: no action, and a tap does nothing', xRow && !xRow.wired && xRow.calls.length === 0, xRow);
   await page.evaluate(() => { try { closeSheet(); } catch (e) {} state.guardians = ['local', 'uidEvil']; });
+
+  /* 2f. Health > Illness, the card a parent opens while an illness runs, on the same household. Its
+     "last temp" line prints the newest reading on the illness, and that reading's temp and unit are a
+     member's to write. The card's chart turns each reading into a number first, so the newest reading
+     is staged twice, each time with one hostile field the chart still reads: a hostile unit on a real
+     temperature, then a hostile temperature in °F. The list of readings under the line escapes the
+     same two fields, so the line itself is matched whole, as text and byte for byte. */
+  console.log('\n2f. Health > Illness, with a reading a member wrote');
+  const illCase = async (label, temp, unit, want) => {
+    await page.evaluate((t, u) => { const e = state.events.find((x) => x.id === 'kt2'); e.temp = t; e.unit = u; }, temp, unit);
+    const r = await visit('Health > Illness, ' + label, "go('health'); healthTab='illness'; render();", '#scroll');
+    ok('illness card, ' + label + ': opens', !r.err, r.err);
+    ok('illness card, ' + label + ': it is the running illness, by her hostile name', r.text.indexOf(V.illName) >= 0, r.text.slice(0, 300));
+    ok('illness card, ' + label + ': nothing injected, nothing ran', r.found.length === 0, r.found.slice(0, 8).join('\n         '));
+    ok('illness card, ' + label + ': the "last temp" line shows it as text, exactly', r.text.indexOf(want) >= 0, r.text.slice(0, 400));
+  };
+  await illCase('a reading whose unit a member wrote', 39.4, V.illUnit, 'last temp 39.4°' + V.illUnit);
+  await illCase('a reading whose temperature a member wrote', V.illTemp, 'F', 'last temp ' + V.illTemp + '°F');
+  await page.evaluate(() => { healthTab = null; view = 'home'; go('home'); render(); });
 
   await stage('newborn');
   await checkPills('a newborn\'s first weeks', {
