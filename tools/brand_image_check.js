@@ -13,8 +13,10 @@
  * from. This gate holds the tree to it, two ways.
  *
  * STATIC (no browser):
- *   1. no emoji bear (🐻 🧸 🐼 🐨, raw or escaped) in app/, worker.js, workers/ or any served page,
- *      script, stylesheet or SVG of the site (*.md, tools/, test/ and docs/ are not pages);
+ *   1. no emoji bear (🐻 🧸 🐼 🐨, raw or escaped, octal bytes and code-point numbers too) in app/,
+ *      worker.js, workers/ or any served page, script, stylesheet or SVG of the site (*.md, tools/, test/
+ *      and docs/ are not pages); and no milestone or Moments card carries a symbol Cubby avoids (🧩, the
+ *      jigsaw piece, which many parents read as an autism-awareness symbol: founder, 2026-11-14);
  *   2. every image a served file points at (src, srcset, href, og:image, url(), manifest and JSON
  *      strings) is a file in the approved set, and every inlined data: image is one the registry names;
  *      no page or script draws a bear in inline SVG (five or more filled circles and no text);
@@ -128,13 +130,18 @@ function walk(dir, out, skip) {
 
 /* The four bears, and every way a source file can spell one. Until 2026-11-14 only 🐻 had its escapes
    listed, so `emoji:'\u{1F9F8}'` in app/milestone-data.js passed the gate (the brand verifier's mutant B).
-   Each form is built from the code point, so a fifth bear is one entry in BEARS. */
+   Each form is built from the code point, so a fifth bear is one entry in BEARS. The octal byte escape
+   (\360\237\220\273) and the bear built from a number (String.fromCodePoint(0x1F43B), chr(128059),
+   String.fromCharCode(0xD83D, 0xDC3B)) were added after the verifier's note N2, 2026-11-14. A bare decimal
+   is only a bear inside fromCodePoint/chr: 128059 alone could be a count. */
 const BEARS = [[0x1F43B, 'BEAR FACE'], [0x1F9F8, 'TEDDY BEAR'], [0x1F43C, 'PANDA FACE'], [0x1F428, 'KOALA']];
 const reLit = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 function bearSpellings(cp, name) {
   const hex = cp.toString(16);
   const hi = (0xD800 + ((cp - 0x10000) >> 10)).toString(16), lo = (0xDC00 + ((cp - 0x10000) & 0x3FF)).toString(16);
   const bytes = [...Buffer.from(String.fromCodePoint(cp), 'utf8')].map((b) => b.toString(16));
+  const octal = bytes.map((b) => parseInt(b, 16).toString(8));
+  const hiN = parseInt(hi, 16), loN = parseInt(lo, 16);
   return [
     ['raw', reLit(String.fromCodePoint(cp)), (c) => String.fromCodePoint(c)],
     ['JS/Ruby \\u{…}', '\\\\u\\{0*' + hex + '\\}', (c) => '\\u{' + c.toString(16).toUpperCase() + '}'],
@@ -147,9 +154,20 @@ function bearSpellings(cp, name) {
     ['URL-encoded UTF-8', bytes.map((b) => '%' + b).join(''), () => bytes.map((b) => '%' + b.toUpperCase()).join('')],
     ['UTF-8 byte escapes', bytes.map((b) => '\\\\x' + b).join(''), () => bytes.map((b) => '\\x' + b.toUpperCase()).join('')],
     ['Python \\N{…}', '\\\\N\\{' + reLit(name) + '\\}', () => '\\N{' + name + '}'],
+    ['UTF-8 octal byte escapes', octal.map((o) => '\\\\0?' + o).join(''), () => octal.map((o) => '\\' + o).join('')],
+    ['a hex number (String.fromCodePoint(0x…), chr(0x…))', '(?<![0-9a-z_$])0x0*' + hex + '(?![0-9a-f])', (c) => 'String.fromCodePoint(0x' + c.toString(16).toUpperCase() + ')'],
+    ['a decimal inside fromCodePoint or chr', '(?:fromCodePoint|chr)\\s*\\([^)]*?(?<![0-9a-z_$.])0*' + cp + '(?![0-9.])', (c) => 'chr(' + c + ')'],
+    ['String.fromCharCode of the surrogate numbers', 'fromCharCode\\s*\\(\\s*(?:0x0*' + hi + '|' + hiN + ')\\s*,\\s*(?:0x0*' + lo + '|' + loN + ')(?![0-9a-f])',
+      () => 'String.fromCharCode(0x' + hi.toUpperCase() + ', ' + loN + ')'],
   ];
 }
 const BEAR_RE = new RegExp(BEARS.map(([cp, n]) => bearSpellings(cp, n).map((s) => s[1]).join('|')).join('|'), 'iu');
+/* Symbols Cubby does not put on a milestone or a Moments card, in any spelling. The jigsaw piece stood on
+   'First favourite toy' (13a50ad5) until the brand verifier's note N1 (2026-11-14): on a development
+   tracker many parents read it as an autism-awareness symbol, so the toy is a rubber duck. */
+const AVOID = [[0x1F9E9, 'JIGSAW PUZZLE PIECE', 'read by many parents as an autism-awareness symbol']];
+const AVOID_IN = ['app/milestone-data.js', 'app/journey-catalogue.js'];
+const AVOID_RE = new RegExp(AVOID.map(([cp, n]) => bearSpellings(cp, n).map((s) => s[1]).join('|')).join('|'), 'iu');
 const BEAR_TEXT_RE = /\u{1F43B}|\u{1F9F8}|\u{1F43C}|\u{1F428}/u;
 // An image path inside quotes, url(), an attribute, or a JSON value.
 const REF_RE = /(["'(\s=,])((?:https?:\/\/[^"'()\s<>]+?)|(?:[^"'()\s<>`]*?))\.(png|jpe?g|webp|gif|svg|ico|avif)(?=[?#"')\s,;\\]|$)/gim;
@@ -180,7 +198,7 @@ function resolveRef(file, raw, root) {
 
 function staticScan(root) {
   const rel = (p) => path.relative(root, p).split(path.sep).join('/');
-  const R = { bears: [], refs: [], external: [], missing: [], unapproved: [], pending: new Set(), dataBad: [], drawnSvg: [], retiredFiles: [], scanned: 0 };
+  const R = { bears: [], avoid: [], avoidScanned: 0, refs: [], external: [], missing: [], unapproved: [], pending: new Set(), dataBad: [], drawnSvg: [], retiredFiles: [], scanned: 0 };
   const served = walk(root, [], SKIP_DIRS).filter((p) => TEXT_EXT.has(path.extname(p).toLowerCase()) && !/\.md$/i.test(p));
   // workers/ and worker.js are in by construction (not in SKIP_DIRS); vendor bundles are third-party code, not copy.
   const files = served.filter((p) => !/\/app\/vendor\//.test(p) && !/\/tools\//.test(p));
@@ -189,7 +207,11 @@ function staticScan(root) {
     try { s = fs.readFileSync(f, 'utf8'); } catch (e) { continue; }
     R.scanned++;
     const r = rel(f);
-    s.split('\n').forEach((line, i) => { if (BEAR_RE.test(line)) R.bears.push(r + ':' + (i + 1) + '  ' + line.trim().slice(0, 110)); });
+    s.split('\n').forEach((line, i) => { if (BEAR_RE.test(line)) R.bears.push(r + ':' + (i + 1) + '  ' + [...line.trim()].slice(0, 110).join('')); });
+    if (AVOID_IN.includes(r)) {
+      R.avoidScanned++;
+      s.split('\n').forEach((line, i) => { if (AVOID_RE.test(line)) R.avoid.push(r + ':' + (i + 1) + '  ' + [...line.trim()].slice(0, 110).join('')); });
+    }
     if (/\.json$/.test(f) && /brand-images\.json$/.test(f)) continue;
     let m;
     REF_RE.lastIndex = 0;
@@ -334,6 +356,8 @@ function runStatic(root, label) {
   const R = staticScan(root);
   ok('scanned the served text files (' + R.scanned + ')', R.scanned > 100, R.scanned);
   ok('no emoji bear in app/, worker.js, workers/ or any served page, script or stylesheet', R.bears.length === 0, R.bears.length + ' lines, e.g.\n         ' + R.bears.slice(0, 8).join('\n         '));
+  ok('no milestone or Moments card carries a symbol Cubby avoids (' + AVOID.map(([cp, n, why]) => String.fromCodePoint(cp) + ' ' + n.toLowerCase() + ', ' + why).join('; ') + ')',
+    R.avoidScanned === AVOID_IN.length && R.avoid.length === 0, R.avoidScanned + ' of ' + AVOID_IN.length + ' files read; ' + R.avoid.join('\n         '));
   ok('found the image references it is grading (' + R.refs.length + ')', R.refs.length > 1000, R.refs.length);
   ok('every image a served file points at is in the approved set', R.unapproved.length === 0, R.unapproved.length + ', e.g.\n         ' + [...new Set(R.unapproved)].slice(0, 8).join('\n         '));
   ok('and every one of them exists', R.missing.length === 0, [...new Set(R.missing)].slice(0, 8).join('\n         '));
@@ -415,6 +439,12 @@ function staticSelfTest() {
   ['app/index.html', 'index.html', 'worker.js', 'app/milestone-data.js', '.assetsignore'].forEach(copy);
   // A teddy spelled as an escape, the brand verifier's mutant B (2026-11-14): this passed the gate then.
   fs.appendFileSync(path.join(tmp, 'app/milestone-data.js'), "\n  ({key:'planted-teddy', title:'Planted', emoji:'\\u{1F9F8}'});\n");
+  // The spellings the verifier's note N2 found missing: a teddy as octal UTF-8 bytes, a bear and a panda
+  // built from numbers. And the jigsaw piece back on a milestone, raw and escaped.
+  fs.appendFileSync(path.join(tmp, 'app/milestone-data.js'), "  ({key:'planted-octal', title:'Planted', emoji:\"\\360\\237\\247\\270\"});\n"
+    + "  ({key:'planted-jigsaw', title:'Planted toy', emoji:'\u{1F9E9}'});\n  ({key:'planted-jigsaw-escaped', title:'Planted toy', emoji:'\\uD83E\\uDDE9'});\n");
+  fs.appendFileSync(path.join(tmp, 'worker.js'), "\nconst plantedNumber = String.fromCodePoint(0x1F43B);\n");
+  fs.appendFileSync(path.join(tmp, 'index.html'), "\n<script>document.title += String.fromCodePoint(128060); // planted-decimal</script>\n");
   // A picture nobody approved that no file names (its path is built at runtime), in a served folder; and
   // the same bytes in two folders the site never serves, which must NOT count.
   fs.mkdirSync(path.join(tmp, 'app/spot-art'), { recursive: true });
@@ -434,6 +464,10 @@ function staticSelfTest() {
   const R = staticScan(tmp);
   ok('catches the planted 🐻', R.bears.some((b) => /app\/index\.html:\d+ .*planted/.test(b)), R.bears);
   ok('catches the planted teddy spelled \\u{1F9F8} (mutant B)', R.bears.some((b) => /app\/milestone-data\.js:\d+ .*planted-teddy/.test(b)), R.bears);
+  ok('catches the planted teddy spelled as octal UTF-8 bytes \\360\\237\\247\\270', R.bears.some((b) => /app\/milestone-data\.js:\d+ .*planted-octal/.test(b)), R.bears);
+  ok('catches the planted bear built from a number, String.fromCodePoint(0x1F43B)', R.bears.some((b) => /^worker\.js:\d+ .*plantedNumber/.test(b)), R.bears);
+  ok('catches the planted panda built from a decimal, String.fromCodePoint(128060)', R.bears.some((b) => /^index\.html:\d+ .*planted-decimal/.test(b)), R.bears);
+  ok('catches the jigsaw piece planted back on a milestone, raw and escaped', R.avoid.filter((b) => /app\/milestone-data\.js:\d+ .*planted-jigsaw/.test(b)).length === 2, R.avoid);
   ok('catches the planted reference to an unapproved file', R.unapproved.some((u) => /icons\/planted-unapproved\.png/.test(u)), R.unapproved);
   RETIRED_SETS.forEach((s, i) => ok('catches ' + s.name + ' under a new name', R.retiredFiles.includes('icons-planted-' + i + '.png') && R.retiredWhich['icons-planted-' + i + '.png'] === s.name, R.retiredFiles));
   ok('catches the planted picture from another host', R.external.some((e) => /example\.invalid\/planted\.png/.test(e)), R.external);
@@ -450,7 +484,7 @@ function staticSelfTest() {
   ok('and none of the wolf\'s or the dog\'s', hit.length === 0, hit);
   const clean = staticScan(path.join(ROOT));
   ok('and the real tree has none of these', clean.bears.length === 0 && clean.unapproved.length === 0 && clean.retiredFiles.length === 0 && clean.external.length === 0
-    && clean.dataBad.length === 0 && clean.drawnSvg.length === 0 && clean.servedUnregistered.length === 0);
+    && clean.dataBad.length === 0 && clean.drawnSvg.length === 0 && clean.servedUnregistered.length === 0 && clean.avoid.length === 0);
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
