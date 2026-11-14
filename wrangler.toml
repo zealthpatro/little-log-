@@ -29,10 +29,16 @@ not_found_handling = "404-page"
 [vars]
 MAIL_FROM = "Cubby <noreply@mail.little-cubby.com>"
 
-# Per-IP rate limiter for the magic-link endpoint (worker.js sendSigninLink). Caps one IP to
-# 5 POST /api/send-signin-link calls per 60s (per Cloudflare location), so the endpoint can't be
-# abused to blast sign-in emails or burn the Resend quota. Available on all plans. period must be
-# 10 or 60; namespace_id is any unique id for this account's limiter.
+# Per-IP rate limiter for the magic-link endpoint (worker.js sendSigninLink). Configured as 5 POST
+# /api/send-signin-link calls per 60s per Cloudflare location, to stop the endpoint blasting sign-in
+# emails or burning the Resend quota. Available on all plans. period must be 10 or 60; namespace_id
+# is any unique id for this account's limiter.
+# EVERY limit in this file is APPROXIMATE, and far looser than its number. Each machine checks a
+# locally cached count and syncs in the background, so requests spread across one location's machines
+# barely add up. Measured 2026-10-27 from one IP: at 1 a second, nothing was ever refused; in a burst,
+# 6 of 100 dose calls in 5s were refused against 10/60s (strict would refuse 90), and 9 of 60
+# invite-peek calls in 6s against this 5/60s (strict: 55). These limits blunt a flood. They do not
+# enforce a number. docs/postmortems/2026-10-27-rate-limiters-never-denied.md.
 [[unsafe.bindings]]
 name = "SIGNIN_RATE_LIMITER"
 type = "ratelimit"
@@ -85,7 +91,8 @@ simple = { limit = 10, period = 60 }
 
 # The 404 counter (worker.js recordPageView). Every unmatched GET reaches it with no account, so it is
 # throttled per IP (per /48 on IPv6) before it may write a row to D1. Thirty a minute is far more broken
-# links than a person hits; a loop gets thirty counts and no more. No binding means no counting.
+# links than a person hits. Like every limit here it is approximate (see the note above), so a loop is
+# slowed, not capped at thirty; the day ceiling below is the hard bound. No binding means no counting.
 # Many addresses still add up, so there is also a hard ceiling per UTC day: PAGE_STATS_DAILY_CAP
 # (default 5000 in worker.js; add it under [vars] to change it).
 [[unsafe.bindings]]

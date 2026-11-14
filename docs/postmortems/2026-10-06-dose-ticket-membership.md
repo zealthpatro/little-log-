@@ -5,9 +5,11 @@
   record, and a removed caregiver kept being told that family's medicines. Found by reading `main` at
   952a7496. Not exploited by us and not tested against production. Whether anyone else used it is
   **not yet known**: see corrective action 6.
-- **Duration:** 2026-08-14 (d8337da0, "Log a dose from the notification: the server half") until the
-  fix reaches production. Fifty-three days and counting at the time of writing.
-- **Status:** FIX READY, NOT DEPLOYED. Waiting on the founder's OK to push `main`.
+- **Duration:** 2026-08-14 (d8337da0, "Log a dose from the notification: the server half") to
+  2026-10-26 16:07:43Z, when the fix went live. Seventy-three days. The fix was ready on 2026-10-06 and
+  spent twenty of those days unshipped (see "The fix sat for twenty days" below).
+- **Status:** RESOLVED. Fix 6ea571dd, deployed inside 0898be20 as Worker version d1855c05 at
+  2026-10-26 16:07:43Z. Exploitation still unknown (action 6).
 - **Author:** Claude (Opus 5.5), for the founder
 
 > Policy: **every breakage gets a documented, blameless 5-Whys post-mortem.** Blameless = focus on
@@ -114,19 +116,40 @@ One commit, server only, ships by deploying `main`:
   `--self-test` then re-breaks the fix 14 ways in temp copies and requires each to go red, for 86 in
   all. Wired into `tools/gates.js` as `dose-membership`.
 
+## The fix sat for twenty days
+- 2026-10-06: fix committed and proven (red 47/72 on the old worker, green 86/86 with the self-test) on
+  a branch, waiting on the founder's OK to push.
+- 2026-10-22 10:38 +0545: another session cherry-picked it onto local `main` (6ea571dd, the same patch)
+  and committed ad445c74, recording the founder's yes to push past a pre-push suite that two of the
+  founder's own files in ~/Downloads had tripped. That push never reached origin: `origin/main` stayed
+  at afbb4944 (2026-10-13) and its reflog shows no update. Nobody checked, so the hole stayed open.
+- 2026-10-26: found by the viewerIsCarrier session, which asked the founder and pushed it together with
+  its own fix (0898be20, full pre-push suite 107/107, dose-membership green). Cloudflare Workers Builds
+  deployed it as version d1855c05 at 16:07:43Z.
+- **How it was proven live.** The behavioural check planned for this (bad tickets until a 429) could
+  not decide it: the old code never limits, and the new limiter was not seen to deny either (action 11).
+  What decided it is the deployed version itself: `wrangler versions view d1855c05 --json` lists the
+  `__dose` named export (`sendPushReminders`, `mintDoseTicket`) and the `DOSE_RATE_LIMITER` binding
+  (namespace 1005). Both exist only in a tree that contains this fix. Behavioural proof followed on
+  2026-10-27: a burst of 100 bad tickets in 5s got six 429s from `/api/dose`, and only the fixed route
+  has a limiter. A slow probe could never have shown it, because Cloudflare's limiter refuses nothing
+  at one request a second (docs/postmortems/2026-10-27-rate-limiters-never-denied.md).
+
 ## Corrective actions
 | # | Action | Type | Status |
 |---|--------|------|--------|
-| 1 | Cron checks membership and `deleteAfter` before sending anything | Fix | DONE (deploy pending) |
-| 2 | `/api/dose` re-checks membership, household, medicine and child; fields from `app.meds`; fail closed | Fix | DONE (deploy pending) |
-| 3 | Already-logged check inside the medicine's interval | Fix | DONE (deploy pending) |
-| 4 | `DOSE_RATE_LIMITER` binding in `wrangler.toml` | Fix | DONE (deploy pending) |
+| 1 | Cron checks membership and `deleteAfter` before sending anything | Fix | DONE, live 2026-10-26 |
+| 2 | `/api/dose` re-checks membership, household, medicine and child; fields from `app.meds`; fail closed | Fix | DONE, live 2026-10-26 |
+| 3 | Already-logged check inside the medicine's interval | Fix | DONE, live 2026-10-26 |
+| 4 | `DOSE_RATE_LIMITER` binding in `wrangler.toml` | Fix | DONE, live 2026-10-26; approximate like every Cloudflare limiter (action 11) |
 | 5 | `test/dose-membership.test.js`, real worker, 14-mutant self-test, wired into `tools/gates.js` | Prevent | DONE |
 | 6 | Read-only production audit: every event with `via == 'notification'` whose `authorId` is not, and was not, a member of that household (check `members` and `formerMemberInfo`) | Process | TODO (founder: needs the service account) |
 | 7 | §2.5 step 6 (drop now-wrong `push.due` entries after a dose logged from the button) and step 7 (ticket ledger) | Fix | TODO |
 | 8 | The web button says "Dose logged" for `already:true`; it should say it was already logged, and by whom. Needs an `app/sw.js` CACHE bump | Fix | TODO |
 | 9 | Audit every other service-account write in `worker.js` for a rule it bypasses without re-checking | Prevent | TODO |
 | 10 | Tighten the `users/{uid}` write rule so `householdId` must match a real membership, only with emulator coverage of every sign-in path (store-firebase.js resolveHousehold and the join paths) | Prevent | TODO, deliberately not in this fix |
+| 11 | No production rate limiter had been seen to deny. Answered 2026-10-27: they work but are approximate by design (a burst of 100 dose calls in 5s got 6 refusals against 10/60s; a trickle gets none), and every call now goes through one logging helper. docs/postmortems/2026-10-27-rate-limiters-never-denied.md | Prevent | DONE (deploy pending) |
+| 12 | A push is done when `git ls-remote origin refs/heads/main` shows it, not when a commit says it happened | Process | DONE (this document) |
 
 ## Lessons
 - A signature proves who a statement is for, not that they are allowed. When the service account

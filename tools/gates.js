@@ -165,6 +165,9 @@ const TREE = [
   /* dose-ticket proves a ticket cannot be forged; this proves only a current owner or caregiver can
      get or redeem one. Drives the real worker.js; --self-test re-breaks a temp copy of it. */
   { name: 'dose-membership', cmd: ['node', 'test/dose-membership.test.js', '--self-test'] },
+  /* Every limiter call goes through rateLimited(), which fails open but never silently: a throw, a
+     malformed reply and a denial are each logged. Production went months without one 429. */
+  { name: 'ratelimit',      cmd: ['node', 'test/ratelimit.test.js', '--self-test'] },
   { name: 'push-delivery',  cmd: ['node', 'test/push-delivery.test.js'] },
   { name: 'signin-canary',  cmd: ['node', 'test/signin-canary.test.js'] },
   /* The funnel: derivation, Worker, client, and the plan they all answer to. Each proven red. */

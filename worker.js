@@ -31,6 +31,51 @@ function bodyText(body, key) {
   if (v === undefined || v === null) return '';
   return typeof v === 'string' ? v : null;
 }
+/* The one way to ask a rate limiter. True only when the request should be held back.
+
+   Almost every route fails OPEN when its limiter is unavailable, on purpose: a limiter outage must
+   never block a parent signing in or logging a dose, and each route has a stronger check behind it
+   (same-origin, the per-address and per-network sign-in ceilings, a per-code guess count, a signed
+   ticket). The page-view counter alone fails CLOSED ({ failClosed: true }), because a lost count
+   costs nothing. Failing SILENTLY was the gap. Every call site used to catch the error and throw it
+   away, so when production was seen never to return a 429 (73 bad dose tickets in a row, one a
+   second, against 10 a minute) nobody could tell a limiter that throws from one that allows. It was
+   neither: a Cloudflare limiter is approximate and far looser than its number (a burst gets a few
+   429s, a steady trickle gets none; wrangler.toml has the measurements). A reply without a boolean
+   `success` used to DENY, which failed closed everywhere. Now a throw and a malformed reply are
+   logged and follow the route's policy, a denial is logged and refused, and an allow logs nothing,
+   so `wrangler tail` can tell them apart.
+   docs/postmortems/2026-10-27-rate-limiters-never-denied.md; test/ratelimit.test.js. */
+async function rateLimited(limiter, key, where, opts) {
+  if (!limiter) return false;
+  const unavailable = !!(opts && opts.failClosed);
+  let r;
+  try { r = await limiter.limit({ key }); }
+  catch (e) { _rlLog('ratelimit_throw', where); return unavailable; }
+  if (!r || typeof r.success !== 'boolean') { _rlLog('ratelimit_shape', where); return unavailable; }
+  if (!r.success) _rlLog('ratelimit_deny', where);
+  return !r.success;
+}
+/* What a limiter line may say: the reason and the route, NOTHING else. Every key carries the client's
+   IP or network (clientIpKey), and a limiter's error text or reply may repeat it, so neither the key,
+   the error message nor the reply is ever logged; the November work stores networks only as HMAC tags.
+   And at most RL_LOG_PER_MIN lines a minute per reason and route in an isolate, then one
+   `ratelimit_dropped <reason> <route> <n>` when the minute turns, so a flood of refused requests cannot
+   become a log-volume lever. The map is bounded: a handful of reasons times a fixed set of routes. */
+const RL_LOG_PER_MIN = 5;
+const _rlLogState = new Map();
+function _rlLog(reason, where) {
+  const win = Math.floor(Date.now() / 60000), id = reason + ' ' + where;
+  let st = _rlLogState.get(id);
+  if (!st || st.win !== win) {
+    if (st && st.dropped) console.log('ratelimit_dropped', reason, where, st.dropped);
+    st = { win, logged: 0, dropped: 0 };
+    _rlLogState.set(id, st);
+  }
+  if (st.logged >= RL_LOG_PER_MIN) { st.dropped++; return; }
+  st.logged++;
+  if (reason === 'ratelimit_deny') console.log(reason, where); else console.error(reason, where);
+}
 function b64url(buf) {
   const bytes = new Uint8Array(buf);
   let bin = '';
@@ -222,12 +267,8 @@ async function sendSigninLink(request, env) {
   // Per-IP rate limit (volume defense). Counts every request to this endpoint regardless of body,
   // so garbage floods consume the budget too. Fail open if the binding is missing so a config gap
   // can never block real sign-ins; same-origin + the per-email cooldown still apply.
-  if (env.SIGNIN_RATE_LIMITER) {
-    const ip = clientIpKey(request);
-    try {
-      const { success } = await env.SIGNIN_RATE_LIMITER.limit({ key: ip });
-      if (!success) return new Response(JSON.stringify({ error: 'rate_limited' }), { status: 429, headers: { 'content-type': 'application/json', 'retry-after': '60' } });
-    } catch (e) { /* limiter unavailable: fail open */ }
+  if (await rateLimited(env.SIGNIN_RATE_LIMITER, clientIpKey(request), 'signin_link')) {
+    return new Response(JSON.stringify({ error: 'rate_limited' }), { status: 429, headers: { 'content-type': 'application/json', 'retry-after': '60' } });
   }
 
   let body;
@@ -356,8 +397,7 @@ async function recordPageView(env, request, url, status) {
      unthrottled counter is the hole this replaced. Distinct 'pv' key prefix if it borrows SIGNIN's. */
   const limiter = env.PAGE_RATE_LIMITER || env.SIGNIN_RATE_LIMITER;
   if (!limiter) return;
-  try { const { success } = await limiter.limit({ key: 'pv:' + clientIpKey(request, 3) }); if (!success) return; }
-  catch (e) { return; }
+  if (await rateLimited(limiter, 'pv:' + clientIpKey(request, 3), 'page_view', { failClosed: true })) return;
   const key = statsKey(url.pathname);
   const cls = status === 404 ? 'n404' : (status >= 500 ? 'n5xx' : (status >= 400 ? 'n4xx' : 'ok'));
   try {
@@ -862,13 +902,9 @@ async function signinGuard(request, env) {
     else if (referer) sameOrigin = new URL(referer).host === url.host;
   } catch (e) { sameOrigin = false; }
   if (!sameOrigin) return json({ error: 'forbidden' }, 403);
-  if (env.SIGNIN_RATE_LIMITER) {
-    const ip = clientIpKey(request);
-    try {
-      const { success } = await env.SIGNIN_RATE_LIMITER.limit({ key: 'code:' + ip });
-      if (!success) return json({ error: 'rate_limited' }, 429);
-    } catch (e) { /* limiter unavailable: fail open, so a config gap cannot block real sign-ins */ }
-  }
+  // Fails open, so a config gap cannot block real sign-ins; the code ceilings still hold.
+  const where = url.pathname === '/api/signin-verify' ? 'signin_verify' : 'signin_code';
+  if (await rateLimited(env.SIGNIN_RATE_LIMITER, 'code:' + clientIpKey(request), where)) return json({ error: 'rate_limited' }, 429);
   return null;
 }
 
@@ -1189,13 +1225,8 @@ async function inviteSendSlot(env, uid) {
 async function invitePeek(request, env, url) {
   const token = (url.searchParams.get('t') || '').trim();
   if (!/^[A-Za-z0-9]{16,64}$/.test(token)) return json({ error: 'bad_request' }, 400);
-  if (env.SIGNIN_RATE_LIMITER) {
-    const ip = clientIpKey(request);
-    try {
-      const { success } = await env.SIGNIN_RATE_LIMITER.limit({ key: 'peek:' + ip });
-      if (!success) return json({ error: 'rate_limited' }, 429);
-    } catch (e) { /* limiter unavailable: the token requirement still holds */ }
-  }
+  // Fails open: the token requirement still holds.
+  if (await rateLimited(env.SIGNIN_RATE_LIMITER, 'peek:' + clientIpKey(request), 'invite_peek')) return json({ error: 'rate_limited' }, 429);
   let sa; try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return json({ ok: true }, 200); }
   try {
     const at = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore');
@@ -1228,13 +1259,8 @@ async function invitePeek(request, env, url) {
 }
 
 async function sendInviteEmail(request, env, url) {
-  if (env.SIGNIN_RATE_LIMITER) {
-    const ip = clientIpKey(request);
-    try {
-      const { success } = await env.SIGNIN_RATE_LIMITER.limit({ key: 'inv:' + ip });
-      if (!success) return json({ error: 'rate_limited' }, 429);
-    } catch (e) { /* limiter unavailable: fail open, the auth check below still holds */ }
-  }
+  // Fails open: the auth check below still holds.
+  if (await rateLimited(env.SIGNIN_RATE_LIMITER, 'inv:' + clientIpKey(request), 'invite_send')) return json({ error: 'rate_limited' }, 429);
   let body; try { body = await request.json(); } catch (e) { return json({ error: 'bad_request' }, 400); }
   const rawEmail = bodyText(body, 'email');
   if (rawEmail === null) return json({ error: 'bad_request' }, 400);
@@ -1355,12 +1381,7 @@ async function newsletterSignup(request, env) {
   } catch (e) { sameOrigin = false; }
   if (!sameOrigin) return json({ error: 'forbidden' }, 403);
 
-  const limiter = env.NEWSLETTER_RATE_LIMITER || env.SIGNIN_RATE_LIMITER;
-  if (limiter) {
-    const ip = clientIpKey(request);
-    try { const { success } = await limiter.limit({ key: 'news:' + ip }); if (!success) return json({ error: 'rate_limited' }, 429); }
-    catch (e) { /* limiter unavailable: fail open */ }
-  }
+  if (await rateLimited(env.NEWSLETTER_RATE_LIMITER || env.SIGNIN_RATE_LIMITER, 'news:' + clientIpKey(request), 'newsletter')) return json({ error: 'rate_limited' }, 429);
 
   let body;
   try { body = await request.json(); } catch (e) { return json({ error: 'bad_request' }, 400); }
@@ -2173,11 +2194,7 @@ async function ensureGamesSchema(env) {
   await env.GAMES_DB.prepare("CREATE INDEX IF NOT EXISTS idx_guesses_code ON guesses(code)").run();
 }
 async function gameRateLimited(request, env, bucket) {
-  const limiter = env.GAMES_RATE_LIMITER || env.SIGNIN_RATE_LIMITER;
-  if (!limiter) return false;
-  const ip = clientIpKey(request);
-  try { const { success } = await limiter.limit({ key: bucket + ':' + ip }); return !success; }
-  catch (e) { return false; }
+  return rateLimited(env.GAMES_RATE_LIMITER || env.SIGNIN_RATE_LIMITER, bucket + ':' + clientIpKey(request), 'game_' + bucket);
 }
 /* Our own pages are the only legitimate callers of the anonymous game WRITES: the guest page is
    /g/<code> on this origin, and the host's reveal comes from the app (the native wrapper loads it from
@@ -2242,9 +2259,7 @@ async function gameRoute(request, env, url) {
   const action = parts[3];
   if (action === 'guess' && method === 'POST') {
     if (gamesDayFull()) return json({ error: 'rate_limited' }, 429);
-    const ip = clientIpKey(request);
-    const limiter = env.GAMES_RATE_LIMITER || env.SIGNIN_RATE_LIMITER;
-    if (limiter) { try { const { success } = await limiter.limit({ key: 'game:' + ip }); if (!success) return json({ error: 'rate_limited' }, 429); } catch (e) {} }
+    if (await rateLimited(env.GAMES_RATE_LIMITER || env.SIGNIN_RATE_LIMITER, 'game:' + clientIpKey(request), 'game_guess')) return json({ error: 'rate_limited' }, 429);
     const g = await env.GAMES_DB.prepare('SELECT status FROM games WHERE code=?').bind(code).first();
     if (!g) return json({ error: 'not_found' }, 404);
     if (g.status !== 'open') return json({ error: 'closed' }, 409);
@@ -2844,10 +2859,7 @@ async function recordStep(request, env) {
   try { same = origin ? new URL(origin).host === url.host : (referer ? new URL(referer).host === url.host : false); } catch (e) { same = false; }
   if (!same) return json({ error: 'forbidden' }, 403);
   if (Number(request.headers.get('content-length') || 0) > 512) return json({ error: 'too_large' }, 413);
-  if (env.STEP_RATE_LIMITER) {
-    const ip = clientIpKey(request);
-    try { const { success } = await env.STEP_RATE_LIMITER.limit({ key: 'step:' + ip }); if (!success) return json({ error: 'rate' }, 429); } catch (e) {}
-  }
+  if (await rateLimited(env.STEP_RATE_LIMITER, 'step:' + clientIpKey(request), 'step')) return json({ error: 'rate' }, 429);
   let body;
   try { const raw = await request.text(); if (raw.length > 512) return json({ error: 'too_large' }, 413); body = JSON.parse(raw); }
   catch (e) { return json({ error: 'bad_request' }, 400); }
@@ -3075,10 +3087,7 @@ export default {
       /* Per IP, before anything costs a token or a read. A tap is one request. Fails open if the
          limiter itself is unavailable, like every other limiter here; the checks below still hold. */
       const limiter = env.DOSE_RATE_LIMITER || env.SIGNIN_RATE_LIMITER;
-      if (limiter) {
-        const ip = clientIpKey(request);
-        try { const { success } = await limiter.limit({ key: 'dose:' + ip }); if (!success) return json({ error: 'rate' }, 429); } catch (e) {}
-      }
+      if (await rateLimited(limiter, 'dose:' + clientIpKey(request), 'dose')) return json({ error: 'rate' }, 429);
       if (!env.FIREBASE_SERVICE_ACCOUNT) return json({ error: 'server_config' }, 500);
       let sa; try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return json({ error: 'server_config' }, 500); }
       let body = null; try { body = await request.json(); } catch (e) {}
