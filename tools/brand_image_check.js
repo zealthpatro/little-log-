@@ -782,7 +782,7 @@ if (flag('--approve-cards')) {
     if (!SELF) gradeRuntime(R, 'runtime: every screen');
     else {
       console.log('\nself-test (runtime): the walk ran with each retired logo, an unapproved file and a 🐻 planted on the access-lost overlay');
-      RETIRED_SETS.forEach((s, i) => ok('catches ' + s.name + ', planted on a screen', R.flat.some((f) => new RegExp('access lost: .*retired-' + i + '\\.png.*\\[' + s.name + '\\]').test(f)), R.flat));
+      RETIRED_SETS.forEach((s, i) => ok('catches ' + s.name + ', planted on a screen', R.flat.some((f) => new RegExp('access lost: .*retired-' + i + '\\.png.*\\[' + reLit(s.name) + '\\]').test(f)), R.flat));
       ok('catches the planted unapproved file', R.unapproved.some((u) => /access lost: __brand_selftest\/unapproved\.png/.test(u)), R.unapproved);
       ok('catches the planted 🐻 in visible text', R.bears.some((b) => /access lost: .*BRAND-SELFTEST-PLANT/.test(b)), R.bears);
       ok('catches the planted hand-coded SVG bear (the old cubbyBear())', R.drawn.some((d) => /^access lost: an inline SVG drawing.*\[plant\]$/.test(d)), R.drawn);
