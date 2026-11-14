@@ -19,9 +19,12 @@
  *      strings) is a file in the approved set, and every inlined data: image is one the registry names;
  *      no page or script draws a bear in inline SVG (five or more filled circles and no text);
  *   3. the approved set is intact: each file exists with the bytes it was approved with;
- *   4. the flat face's old bytes (hashed from 866851ac) appear nowhere in the tree, under any name;
- *   5. the web icons are exactly what the master gives (tools/gen_brand_icons.py --check) and no card
- *      still carries the drawn bear (tools/card_logo.py --check).
+ *   4. no retired logo's bytes appear anywhere in the tree, under any name: the June flat face (hashed
+ *      from 866851ac) and the November white cub with its icons and text cards (hashed from c1fb604a);
+ *      and every image FILE the site serves (the tree minus .assetsignore) is approved or pending,
+ *      whether or not any page names it;
+ *   5. the web icons are exactly what the master gives (tools/gen_brand_icons.py --check) and every card
+ *      carries the current master's logo, never the drawn bear or a retired one (tools/card_logo.py --check).
  * RUNTIME (headless Chrome on THIS tree, localhost only, 390px):
  *   6. it boots the app the way the other gates do (?e2e=1, seeded) and walks every main tab top and
  *      bottom, the first-run cards, the landing, the sign-in card, the boot card, the invite sheet, the
@@ -29,20 +32,21 @@
  *      Add-to-Cubby sheet, plus the marketing home page and an article page. On each it collects every
  *      rendered image (img/picture currentSrc, CSS background-image including ::before/::after, every
  *      image response with its bytes), every inline SVG, and the visible text. It fails on any picture
- *      outside the approved set, the flat face's bytes under any URL, an inline SVG drawing (five or
+ *      outside the approved set, a retired logo's bytes under any URL, an inline SVG drawing (five or
  *      more filled circles or ellipses and no text: the old cubbyBear() was thirteen), or an emoji bear.
  *      The overlays that live inside store-firebase.js's closure are reached through a probe the gate
  *      adds to the script it SERVES to its own browser; the file on disk is never touched.
  *
  *   node tools/brand_image_check.js http://127.0.0.1:PORT              both halves
  *   node tools/brand_image_check.js --static-only
- *   node tools/brand_image_check.js http://127.0.0.1:PORT --self-test  plant a flat-face img, a 🐻 in a
- *        visible string and an unapproved file into the page, and an emoji bear, a flat-face copy and an
- *        unapproved reference into a scratch copy of the static inputs: each must be caught
+ *   node tools/brand_image_check.js http://127.0.0.1:PORT --self-test  plant each retired logo, a 🐻 in a
+ *        visible string and an unapproved file into the page, and an emoji bear, an escaped teddy, a copy
+ *        of each retired logo, an unapproved reference and an unreferenced unapproved file into a scratch
+ *        copy of the static inputs: each must be caught (and every spelling of every bear, and no wolf)
  *   node tools/brand_image_check.js http://... --shots=DIR             also save a screenshot per screen (--width=320 to look narrower)
  *   node tools/brand_image_check.js --hash FILE...                     the registry line for a new picture
  *   node tools/brand_image_check.js --approve-cards                    re-approve the article card families
- *        after a new article (refuses while any card carries the drawn bear)
+ *        after a new article or a new master (refuses while any card's logo is not the current master's)
  *   --root=DIR grades another tree (used to show the gate red on the pristine base).
  */
 const fs = require('fs');
@@ -76,7 +80,14 @@ if (flag('--hash')) {
 
 /* ---------------- the registry ---------------- */
 const REG = JSON.parse(fs.readFileSync(REG_PATH, 'utf8'));
-const RETIRED = new Set(Object.values((REG.retired || {}).sha256 || {}));
+// Retired logos, each a named set of hashes whose bytes may never be in the tree or on a screen again:
+// the June flat face (Pillow circles) and, since 2026-11-14, the November white cub on flat honey.
+// (Until then `retired` was one object; both shapes are read.)
+const RETIRED_SETS = [].concat(REG.retired || []).map((r) => ({
+  name: r.name || 'the flat face', sha: new Set(Object.values(r.sha256 || {})), blob: r.git_blob || {},
+}));
+const RETIRED = new Set(RETIRED_SETS.reduce((a, r) => a.concat([...r.sha]), []));
+const retiredName = (h) => (RETIRED_SETS.find((r) => r.sha.has(h)) || { name: 'a retired logo' }).name;
 const globRe = (g) => new RegExp('^' + g.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('[^/]+') + '$');
 function approvedSet() {
   const exact = new Map();          // path -> sha256
@@ -115,7 +126,30 @@ function walk(dir, out, skip) {
   return out;
 }
 
-const BEAR_RE = /\u{1F43B}|\u{1F9F8}|\u{1F43C}|\u{1F428}|\\u\{?1F43B\}?|\\uD83D\\uDC3B|\\uD83E\\uDDF8|&#x1F43B;|&#128059;|&#x1F9F8;|&#129528;/iu;
+/* The four bears, and every way a source file can spell one. Until 2026-11-14 only 🐻 had its escapes
+   listed, so `emoji:'\u{1F9F8}'` in app/milestone-data.js passed the gate (the brand verifier's mutant B).
+   Each form is built from the code point, so a fifth bear is one entry in BEARS. */
+const BEARS = [[0x1F43B, 'BEAR FACE'], [0x1F9F8, 'TEDDY BEAR'], [0x1F43C, 'PANDA FACE'], [0x1F428, 'KOALA']];
+const reLit = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function bearSpellings(cp, name) {
+  const hex = cp.toString(16);
+  const hi = (0xD800 + ((cp - 0x10000) >> 10)).toString(16), lo = (0xDC00 + ((cp - 0x10000) & 0x3FF)).toString(16);
+  const bytes = [...Buffer.from(String.fromCodePoint(cp), 'utf8')].map((b) => b.toString(16));
+  return [
+    ['raw', reLit(String.fromCodePoint(cp)), (c) => String.fromCodePoint(c)],
+    ['JS/Ruby \\u{…}', '\\\\u\\{0*' + hex + '\\}', (c) => '\\u{' + c.toString(16).toUpperCase() + '}'],
+    ['JS/JSON surrogate pair', '\\\\u' + hi + '\\\\u' + lo, () => '\\u' + hi.toUpperCase() + '\\u' + lo.toUpperCase()],
+    ['Python/C \\U…', '\\\\U0*' + hex + '(?![0-9a-f])', (c) => '\\U000' + c.toString(16).toUpperCase()],
+    ['Perl \\x{…}', '\\\\x\\{0*' + hex + '\\}', (c) => '\\x{' + c.toString(16) + '}'],
+    ['CSS \\…', '\\\\0*' + hex + '(?![0-9a-f])', (c) => '\\' + c.toString(16).toUpperCase() + ' '],
+    ['HTML hex entity', '&#x0*' + hex + '(?![0-9a-f])', (c) => '&#x' + c.toString(16).toUpperCase() + ';'],
+    ['HTML decimal entity', '&#0*' + cp + '(?![0-9])', (c) => '&#' + c + ';'],
+    ['URL-encoded UTF-8', bytes.map((b) => '%' + b).join(''), () => bytes.map((b) => '%' + b.toUpperCase()).join('')],
+    ['UTF-8 byte escapes', bytes.map((b) => '\\\\x' + b).join(''), () => bytes.map((b) => '\\x' + b.toUpperCase()).join('')],
+    ['Python \\N{…}', '\\\\N\\{' + reLit(name) + '\\}', () => '\\N{' + name + '}'],
+  ];
+}
+const BEAR_RE = new RegExp(BEARS.map(([cp, n]) => bearSpellings(cp, n).map((s) => s[1]).join('|')).join('|'), 'iu');
 const BEAR_TEXT_RE = /\u{1F43B}|\u{1F9F8}|\u{1F43C}|\u{1F428}/u;
 // An image path inside quotes, url(), an attribute, or a JSON value.
 const REF_RE = /(["'(\s=,])((?:https?:\/\/[^"'()\s<>]+?)|(?:[^"'()\s<>`]*?))\.(png|jpe?g|webp|gif|svg|ico|avif)(?=[?#"')\s,;\\]|$)/gim;
@@ -203,19 +237,55 @@ function staticScan(root) {
       let buf;
       try { buf = Buffer.from(m[3], 'base64'); } catch (e) { continue; }
       const h = sha(buf);
-      if (RETIRED.has(h)) R.dataBad.push(r + ' -> the flat face, inlined');
+      if (RETIRED.has(h)) R.dataBad.push(r + ' -> ' + retiredName(h) + ', inlined');
       else if (!INLINE.has(h)) R.dataBad.push(r + ' -> an inlined ' + m[1] + ' the registry does not name (sha256 ' + h.slice(0, 16) + ')');
     }
   }
   // Retired bytes anywhere, under any name, in the WHOLE tree (tools/ and docs/ too).
   const every = walk(root, [], new Set(['.git', 'node_modules']));
+  R.retiredWhich = {};
   for (const f of every) {
     if (!/\.(png|jpe?g|webp|gif|ico|avif)$/i.test(f)) continue;
     let st; try { st = fs.statSync(f); } catch (e) { continue; }
     if (st.size > 20 * 1024 * 1024) continue;
-    if (RETIRED.has(sha(fs.readFileSync(f)))) R.retiredFiles.push(rel(f));
+    const h = sha(fs.readFileSync(f));
+    if (RETIRED.has(h)) { R.retiredFiles.push(rel(f)); R.retiredWhich[rel(f)] = retiredName(h); }
   }
+  // Every image FILE the site serves is in the registry, referenced or not. The reference scan above
+  // cannot see a picture whose path is built at runtime (`/app/spot-art/${name}_x.webp`), and the browser
+  // walk only sees the screens it visits, so an unregistered file on an unvisited sub-tab passed both
+  // (the brand verifier's mutant B, 2026-11-14). "Served" is what Cloudflare uploads: the tree minus
+  // .assetsignore and the gate's own skips.
+  R.servedImages = servedImages(root);
+  R.servedUnregistered = R.servedImages.filter((p) => verdict(p) === 'unapproved');
   return R;
+}
+
+function assetIgnore(root) {
+  let lines = [];
+  try { lines = fs.readFileSync(path.join(root, '.assetsignore'), 'utf8').split('\n'); } catch (e) { /* none: SKIP_DIRS alone */ }
+  const names = new Set(SKIP_DIRS), globs = [];
+  lines.map((l) => l.trim()).filter((l) => l && !l.startsWith('#')).forEach((l) => {
+    const p = l.replace(/^\/+|\/+$/g, '');
+    if (p.indexOf('*') >= 0) globs.push(globRe(p)); else names.add(p);
+  });
+  return { names, globs };
+}
+function servedImages(root) {
+  const ig = assetIgnore(root);
+  const out = [];
+  (function go(dir) {
+    let ents = [];
+    try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
+    for (const e of ents) {
+      if (ig.names.has(e.name) || ig.globs.some((g) => g.test(e.name))) continue;
+      if (e.name.startsWith('.') && e.name !== '.well-known') continue;     // .git, .wrangler, .agents: not pages
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) go(p);
+      else if (e.isFile() && IMG_EXT.test(e.name)) out.push(path.relative(root, p).split(path.sep).join('/'));
+    }
+  })(root);
+  return out.sort();
 }
 
 // A family approved by glob (660 share cards, 571 heroes) is pinned by its file count and one digest over
@@ -244,7 +314,7 @@ function registryIntegrity(root) {
     if (fam.glob) {
       const { list, digest: d } = globDigest(root, fam.glob);
       const how = '. New or regenerated cards from tools/gen_article_img.py? node tools/brand_image_check.js --approve-cards'
-        + ' re-approves them, and refuses while any card still carries the drawn bear.';
+        + ' re-approves them, and refuses while any card carries a logo that is not the current master\'s.';
       if (list.length !== fam.count) bad.push(fam.name + ': ' + list.length + ' files match ' + fam.glob + ', the registry approved ' + fam.count + how);
       else if (d !== fam.digest) bad.push(fam.name + ': a file under ' + fam.glob + ' changed (digest ' + d.slice(0, 16) + ', approved ' + String(fam.digest).slice(0, 16) + ')' + how);
     }
@@ -268,17 +338,72 @@ function runStatic(root, label) {
   ok('every image a served file points at is in the approved set', R.unapproved.length === 0, R.unapproved.length + ', e.g.\n         ' + [...new Set(R.unapproved)].slice(0, 8).join('\n         '));
   ok('and every one of them exists', R.missing.length === 0, [...new Set(R.missing)].slice(0, 8).join('\n         '));
   ok('no image is loaded from another host', R.external.length === 0, [...new Set(R.external)].slice(0, 6).join('\n         '));
-  ok('every inlined data: image is one the registry names, and none is a drawing or the flat face', R.dataBad.length === 0, R.dataBad.slice(0, 6).join('\n         '));
+  ok('every inlined data: image is one the registry names, and none is a drawing or a retired logo', R.dataBad.length === 0, R.dataBad.slice(0, 6).join('\n         '));
   ok('no page or script draws a picture in inline SVG circles (a hand-coded bear)', R.drawnSvg.length === 0, R.drawnSvg.slice(0, 6).join('\n         '));
-  ok('the flat face\'s old bytes appear nowhere in the tree, under any name', R.retiredFiles.length === 0, R.retiredFiles.join(', '));
+  ok('found the image files the site serves (' + R.servedImages.length + ')', R.servedImages.length > 1000, R.servedImages.length);
+  ok('every image file the site serves is approved or pending in tools/brand-images.json, referenced or not', R.servedUnregistered.length === 0,
+    R.servedUnregistered.length + ', e.g.\n         ' + R.servedUnregistered.slice(0, 8).join('\n         ') + '\n         (a new picture: node tools/brand_image_check.js --hash <file>)');
+  ok('no retired logo\'s bytes (' + RETIRED_SETS.map((s) => s.name).join(', ') + ') appear anywhere in the tree, under any name', R.retiredFiles.length === 0,
+    R.retiredFiles.map((f) => f + ' (' + R.retiredWhich[f] + ')').join(', '));
   const integ = registryIntegrity(root);
   ok('the approved set is intact: every file exists with the bytes it was approved with', integ.length === 0, integ.slice(0, 8).join('\n         '));
   const ic = pyCheck('tools/gen_brand_icons.py', root);
   ok('the web icons are exactly what the painted master gives', ic.ok, ic.out);
   const cl = pyCheck('tools/card_logo.py', root);
-  ok('no share card, hero card or promo card still carries the drawn bear', cl.ok, cl.out);
+  ok('every share card, hero card and promo card carries the current master\'s logo (no drawn bear, no retired logo)', cl.ok, cl.out);
   if (R.pending.size) console.log('  note pending the founder\'s decision, unchanged: ' + [...R.pending].join(', '));
   return R;
+}
+
+/* ---------------- the app's precache: fresh icons, untouched vendor files ---------------- */
+/* The painted logo kept the retired faces' file names, and /icons/* is browser-cached for a month, so an
+   installed PWA could precache an old face from its own HTTP cache. app/sw.js asks for /icons/* with
+   cache:'no-cache' (or 'reload') and leaves every other file to the normal fetch: forcing the immutable
+   vendor files past the HTTP cache re-downloaded them on every deploy (brand verifier F3). This runs the
+   SW's real install handler in a sandbox and reads back what it would ask for: behaviour, not grep. */
+async function swPrecache(src) {
+  const vm = require('vm');
+  const handlers = {}, reqs = [];
+  class Req { constructor(u, init) { this.url = String(u); this.cache = (init && init.cache) || 'default'; } }
+  const sandbox = {
+    self: { addEventListener: (t, f) => { handlers[t] = f; }, skipWaiting: () => Promise.resolve(), clients: { claim: () => Promise.resolve() }, registration: {} },
+    caches: { open: () => Promise.resolve({ addAll: (list) => { list.forEach((x) => reqs.push(typeof x === 'string' ? { url: x, cache: 'default' } : { url: x.url, cache: x.cache })); return Promise.resolve(); } }), keys: () => Promise.resolve([]) },
+    Request: Req, URL, Promise, setTimeout, fetch: () => Promise.reject(new Error('no network in the sandbox')), console: { log() {}, warn() {}, error() {} },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(src, sandbox, { timeout: 2000 });
+  if (!handlers.install) return { reqs, error: 'no install handler' };
+  await new Promise((done) => handlers.install({ waitUntil: (p) => Promise.resolve(p).then(done, done) }));
+  return { reqs };
+}
+function gradePrecache(reqs) {
+  const icons = reqs.filter((r) => r.url.indexOf('/icons/') === 0);
+  const rest = reqs.filter((r) => r.url.indexOf('/icons/') !== 0);
+  return {
+    icons, rest,
+    staleIcons: icons.filter((r) => r.cache !== 'no-cache' && r.cache !== 'reload').map((r) => r.url + ' (' + r.cache + ')'),
+    forced: rest.filter((r) => r.cache !== 'default').map((r) => r.url + ' (' + r.cache + ')'),
+  };
+}
+async function runPrecache(root) {
+  const f = path.join(root, 'app/sw.js');
+  if (!fs.existsSync(f)) { ok('the app service worker is in this tree', false, 'app/sw.js'); return; }
+  const { reqs, error } = await swPrecache(fs.readFileSync(f, 'utf8'));
+  const g = gradePrecache(reqs);
+  ok('the app SW precaches the icons (' + g.icons.length + ') and the rest (' + g.rest.length + ')', !error && g.icons.length >= 3 && g.rest.length > 10, error || reqs.length);
+  ok('it asks for every /icons/* file past the HTTP cache (no-cache or reload), so no retired face is precached', g.staleIcons.length === 0, g.staleIcons);
+  ok('and leaves every other file to the normal fetch (the vendor files stay cached)', g.forced.length === 0, g.forced.slice(0, 6));
+}
+async function precacheSelfTest() {
+  console.log('\nself-test (precache): the same reading of two mutant service workers');
+  const src = fs.readFileSync(path.join(ROOT, 'app/sw.js'), 'utf8');
+  const install = /self\.addEventListener\('install', \(e\) => \{[\s\S]*?\n\}\);/;
+  if (!install.test(src)) { ok('found the install handler to mutate', false); return; }
+  const every = src.replace(install, "self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' }))))); });");
+  const none = src.replace(install, "self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS))); });");
+  const a = gradePrecache((await swPrecache(every)).reqs), b = gradePrecache((await swPrecache(none)).reqs);
+  ok('catches a SW that forces EVERY file past the HTTP cache (the November build)', a.forced.some((x) => /\/app\/vendor\//.test(x)), a.forced);
+  ok('catches a SW that lets the icons come from the HTTP cache (the June build)', b.staleIcons.some((x) => /\/icons\/logo-512\.png/.test(x)), b.staleIcons);
 }
 
 /* ---------------- self-test of the static half: a scratch copy with six plants ---------------- */
@@ -287,8 +412,15 @@ function staticSelfTest() {
   const os = require('os');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-brand-'));
   const copy = (p) => { const d = path.join(tmp, p); fs.mkdirSync(path.dirname(d), { recursive: true }); fs.copyFileSync(path.join(ROOT, p), d); };
-  ['app/index.html', 'index.html', 'worker.js'].forEach(copy);
-  // A bear in a visible string, the flat face under a new name, a reference to a picture nobody approved,
+  ['app/index.html', 'index.html', 'worker.js', 'app/milestone-data.js', '.assetsignore'].forEach(copy);
+  // A teddy spelled as an escape, the brand verifier's mutant B (2026-11-14): this passed the gate then.
+  fs.appendFileSync(path.join(tmp, 'app/milestone-data.js'), "\n  ({key:'planted-teddy', title:'Planted', emoji:'\\u{1F9F8}'});\n");
+  // A picture nobody approved that no file names (its path is built at runtime), in a served folder; and
+  // the same bytes in two folders the site never serves, which must NOT count.
+  fs.mkdirSync(path.join(tmp, 'app/spot-art'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'app/spot-art/rituals_x.webp'), tinyPng());
+  ['docs', 'social'].forEach((d) => { fs.mkdirSync(path.join(tmp, d), { recursive: true }); fs.writeFileSync(path.join(tmp, d, 'planted-unserved.png'), tinyPng()); });
+  // A bear in a visible string, each retired logo under a new name, a reference to a picture nobody approved,
   fs.appendFileSync(path.join(tmp, 'app/index.html'), '\n<div class="planted">Good evening \u{1F43B}</div>\n');
   fs.appendFileSync(path.join(tmp, 'worker.js'), "\n// planted\nconst planted = '<img src=\"https://little-cubby.com/icons/planted-unapproved.png\">';\n");
   // a picture from another host, and an inlined picture nobody approved.
@@ -296,33 +428,45 @@ function staticSelfTest() {
   // and a bear drawn in inline SVG circles, the way social/card-quote.html drew one until 2026-11-13.
   fs.appendFileSync(path.join(tmp, 'index.html'), '\n<svg width="60" height="60" viewBox="0 0 60 60"><circle cx="22" cy="22" r="8" fill="#C9A57E"/><circle cx="38" cy="22" r="8" fill="#C9A57E"/>'
     + '<circle cx="30" cy="33" r="16" fill="#C9A57E"/><ellipse cx="30" cy="38" rx="8" ry="6" fill="#F1E4D0"/><circle cx="24" cy="30" r="2.6" fill="#3E3228"/><circle cx="36" cy="30" r="2.6" fill="#3E3228"/></svg>\n');
-  fs.writeFileSync(path.join(tmp, 'icons-planted.png'), retiredBytes());
+  RETIRED_SETS.forEach((s, i) => fs.writeFileSync(path.join(tmp, 'icons-planted-' + i + '.png'), retiredBytes(s)));
   fs.mkdirSync(path.join(tmp, 'icons'), { recursive: true });
   fs.writeFileSync(path.join(tmp, 'icons/planted-unapproved.png'), tinyPng());
   const R = staticScan(tmp);
   ok('catches the planted 🐻', R.bears.some((b) => /app\/index\.html:\d+ .*planted/.test(b)), R.bears);
+  ok('catches the planted teddy spelled \\u{1F9F8} (mutant B)', R.bears.some((b) => /app\/milestone-data\.js:\d+ .*planted-teddy/.test(b)), R.bears);
   ok('catches the planted reference to an unapproved file', R.unapproved.some((u) => /icons\/planted-unapproved\.png/.test(u)), R.unapproved);
-  ok('catches the flat face under a new name', R.retiredFiles.includes('icons-planted.png'), R.retiredFiles);
+  RETIRED_SETS.forEach((s, i) => ok('catches ' + s.name + ' under a new name', R.retiredFiles.includes('icons-planted-' + i + '.png') && R.retiredWhich['icons-planted-' + i + '.png'] === s.name, R.retiredFiles));
   ok('catches the planted picture from another host', R.external.some((e) => /example\.invalid\/planted\.png/.test(e)), R.external);
   ok('catches the planted inlined picture nobody approved', R.dataBad.some((d) => /^index\.html -> an inlined png/.test(d)), R.dataBad);
   ok('catches the planted bear drawn in inline SVG', R.drawnSvg.some((d) => /^index\.html:\d+ -> an inline SVG drawing \(6 filled/.test(d)), R.drawnSvg);
+  ok('catches the planted unregistered file no page names (app/spot-art/rituals_x.webp)', R.servedUnregistered.includes('app/spot-art/rituals_x.webp'), R.servedUnregistered);
+  ok('and does not count the same bytes in folders the site never serves (docs/, social/)', !R.servedUnregistered.some((p) => /planted-unserved/.test(p)) && !R.servedImages.some((p) => /planted-unserved/.test(p)), R.servedImages);
+  // Every spelling of every bear, and none of the near misses (the wolf and the dog sit beside them).
+  const miss = [], hit = [];
+  BEARS.forEach(([cp, n]) => bearSpellings(cp, n).forEach(([form, , make]) => { if (!BEAR_RE.test('x = "' + make(cp) + '";')) miss.push(form + ' of U+' + cp.toString(16).toUpperCase()); }));
+  [[0x1F43A, 'WOLF FACE'], [0x1F436, 'DOG FACE']].forEach(([cp, n]) => bearSpellings(cp, n).forEach(([form, , make]) => { if (BEAR_RE.test('x = "' + make(cp) + '";')) hit.push(form + ' of U+' + cp.toString(16).toUpperCase()); }));
+  const forms = BEARS.length * bearSpellings(BEARS[0][0], BEARS[0][1]).length;
+  ok('catches every spelling of all four bears (' + (forms - miss.length) + ' of ' + forms + ')', miss.length === 0, miss);
+  ok('and none of the wolf\'s or the dog\'s', hit.length === 0, hit);
   const clean = staticScan(path.join(ROOT));
-  ok('and the real tree has none of the six', clean.bears.length === 0 && clean.unapproved.length === 0 && clean.retiredFiles.length === 0 && clean.external.length === 0 && clean.dataBad.length === 0 && clean.drawnSvg.length === 0);
+  ok('and the real tree has none of these', clean.bears.length === 0 && clean.unapproved.length === 0 && clean.retiredFiles.length === 0 && clean.external.length === 0
+    && clean.dataBad.length === 0 && clean.drawnSvg.length === 0 && clean.servedUnregistered.length === 0);
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
-/* The flat face's bytes, for the plants. From git's object store (any clone of this repo has them),
-   or from the tree itself when it IS the old tree. Never written into the tree. */
-function retiredBytes() {
-  const blob = ((REG.retired || {}).git_blob || {})['icons/logo-512.png'];
-  if (blob) {
+/* A retired logo's bytes, for the plants. From git's object store (any clone of this repo has them, as
+   long as lanes are merged rather than squashed), or from the tree itself when it IS the old tree.
+   Never written into the tree. */
+function retiredBytes(set) {
+  const s = set || RETIRED_SETS[0];
+  for (const [p, blob] of Object.entries(s.blob)) {
     const r = spawnSync('git', ['cat-file', 'blob', blob], { cwd: ROOT, maxBuffer: 1 << 26 });
-    if (r.status === 0 && RETIRED.has(sha(r.stdout))) return r.stdout;
+    if (r.status === 0 && s.sha.has(sha(r.stdout))) return r.stdout;
+    const f = path.join(ROOT, p);
+    if (fs.existsSync(f) && s.sha.has(sha(fs.readFileSync(f)))) return fs.readFileSync(f);
   }
-  const f = path.join(ROOT, 'icons/logo-512.png');
-  if (fs.existsSync(f) && RETIRED.has(sha(fs.readFileSync(f)))) return fs.readFileSync(f);
-  throw new Error('cannot find the flat face\'s bytes to plant: git object ' + blob + ' is not in this clone and the tree no longer has the old file'
-    + ' (a shallow clone lacks it: git fetch --unshallow). The self-test refuses to pass without proving the real bytes are caught.');
+  throw new Error('cannot find the bytes of ' + s.name + ' to plant: git objects ' + Object.values(s.blob).join(', ') + ' are not in this clone and the tree no longer has the old files'
+    + ' (a shallow clone lacks them: git fetch --unshallow). The self-test refuses to pass without proving the real bytes are caught.');
 }
 function tinyPng() {
   const zlib = require('zlib');
@@ -384,7 +528,7 @@ async function runtime(base) {
     timers: {}, milestones: [], meds: [], photos: [], vaccines: {}, pregnancy: null, notes: [],
   });
   const PROBE = '\n  window.__brandProbe = { accessLost: showAccessLost, inviteMismatch: showInviteMismatch, pendingInvite: maybePromptPendingInvite, showSignIn: showSignIn, showStatus: showStatus, hideOverlay: hideOverlay };\n';
-  const PLANT_FLAT = '/__brand_selftest/flat-face.png', PLANT_OTHER = '/__brand_selftest/unapproved.png';
+  const PLANT_RETIRED = RETIRED_SETS.map((s, i) => '/__brand_selftest/retired-' + i + '.png'), PLANT_OTHER = '/__brand_selftest/unapproved.png';
 
   console.log('\nruntime: ' + base + ' at ' + WIDTH + 'px' + (SELF ? ', with plants' : ''));
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'], downloadBehavior: dl.downloadBehavior() });
@@ -416,7 +560,8 @@ async function runtime(base) {
       return req.abort();
     }
     try {
-      if (url.pathname === PLANT_FLAT) return req.respond({ status: 200, contentType: 'image/png', body: retiredBytes() });
+      const ri = PLANT_RETIRED.indexOf(url.pathname);
+      if (ri >= 0) return req.respond({ status: 200, contentType: 'image/png', body: retiredBytes(RETIRED_SETS[ri]) });
       if (url.pathname === PLANT_OTHER) return req.respond({ status: 200, contentType: 'image/png', body: tinyPng() });
       if (url.pathname === '/app/store-firebase.js') {
         const r = await fetch(u);
@@ -462,12 +607,12 @@ async function runtime(base) {
       const d = document.createElement('div');
       d.id = 'brand-plant';
       d.setAttribute('style', 'position:fixed;left:8px;top:8px;z-index:99999;background:#fff;padding:4px');
-      d.innerHTML = '<img src="' + a + '" width="40" height="40"><img src="' + b + '" width="40" height="40"><span>BRAND-SELFTEST-PLANT Good evening \u{1F43B}</span>'
+      d.innerHTML = a.map((u) => '<img src="' + u + '" width="40" height="40">').join('') + '<img src="' + b + '" width="40" height="40"><span>BRAND-SELFTEST-PLANT Good evening \u{1F43B}</span>'
         + '<img src="https://example.invalid/planted.png" width="40" height="40">'
         // and the hand-coded bear the avatars used to fall back to, drawn by the app's own cubbyBear()
         + (typeof window.cubbyBear === 'function' ? '<span style="display:inline-block;width:40px;height:40px">' + window.cubbyBear({ size: 40 }) + '</span>' : '');
       document.body.appendChild(d);
-    }, PLANT_FLAT, PLANT_OTHER);
+    }, PLANT_RETIRED, PLANT_OTHER);
     await sleep(600);
   };
 
@@ -520,7 +665,7 @@ async function runtime(base) {
       if (/^(data|blob):/.test(url)) { imgs.push({ file: url.slice(0, 30) + '…', how, verdict: 'runtime picture (data/blob)' }); continue; }
       const p = toPath(url);
       const h = loaded.get(new URL(url, base).href);
-      if (h && RETIRED.has(h)) flat.push(s.name + ': ' + url + (planted ? ' [plant]' : ''));
+      if (h && RETIRED.has(h)) flat.push(s.name + ': ' + url + ' [' + retiredName(h) + ']' + (planted ? ' [plant]' : ''));
       const tag = planted ? ' [plant]' : '';
       if (p === null) { unapproved.push(s.name + ': ' + url + ' (another host)' + tag); imgs.push({ file: url, how, verdict: 'unapproved' }); continue; }
       const v = verdict(p);
@@ -533,7 +678,7 @@ async function runtime(base) {
   }
   // Every image that crossed the wire, whether or not it is still in the DOM.
   for (const [u, h] of loaded) {
-    if (RETIRED.has(h)) flat.push('network: ' + u);
+    if (RETIRED.has(h)) flat.push('network: ' + u + ' [' + retiredName(h) + ']');
     const p = toPath(u);
     if (p !== null && verdict(p) === 'unapproved' && !unapproved.some((x) => x.indexOf(p) >= 0)) unapproved.push('network: ' + p);
   }
@@ -552,18 +697,18 @@ function gradeRuntime(R, label) {
     ['landing (signed out)', 'sign-in card', 'access lost'].every((n) => (R.report.find((s) => s.screen === n) || { images: [] }).images.some((i) => i.file === 'icons/logo-512.png')),
     R.report.filter((s) => /landing|sign-in|access/.test(s.screen)).map((s) => s.screen + ': ' + s.images.map((i) => i.file).join(',')));
   ok('every rendered picture is in the approved set', R.unapproved.length === 0, R.unapproved.slice(0, 10).join('\n         '));
-  ok('the flat face is on no screen, under any URL', R.flat.length === 0, R.flat.slice(0, 6).join('\n         '));
+  ok('no retired logo (' + RETIRED_SETS.map((s) => s.name).join(', ') + ') is on any screen, under any URL', R.flat.length === 0, R.flat.slice(0, 6).join('\n         '));
   ok('no inline SVG drawing stands in for art', R.drawn.length === 0, R.drawn.slice(0, 6).join('\n         '));
   ok('no emoji bear in any visible text', R.bears.length === 0, R.bears.slice(0, 10).join('\n         '));
   ok('no image was fetched from another host', R.blocked.length === 0, R.blocked.slice(0, 5));
 }
 
 /* A new article brings a new share card and hero card from tools/gen_article_img.py, which pastes the
-   painted master (card_logo.paste_logo). Re-approving them is one command, and it refuses unless no card
-   anywhere still carries the drawn bear. */
+   painted master (card_logo.paste_logo); a new master re-swaps every card (card_logo.py --swap).
+   Re-approving them is one command, and it refuses unless every card's logo is the current master's. */
 if (flag('--approve-cards')) {
   const cl = pyCheck('tools/card_logo.py', ROOT);
-  if (!cl.ok) { console.log('refused, a card still carries the drawn bear: ' + cl.out); process.exit(1); }
+  if (!cl.ok) { console.log('refused, a card carries a logo that is not the current master\'s: ' + cl.out); process.exit(1); }
   (REG.families || []).filter((f) => f.glob).forEach((f) => {
     const { list, digest } = globDigest(ROOT, f.glob);
     console.log(f.glob + ': ' + f.count + ' -> ' + list.length + ' files' + (digest === f.digest ? ', unchanged' : ', re-approved'));
@@ -577,13 +722,14 @@ if (flag('--approve-cards')) {
   console.log('\nBrand images: only the painted art on a Cubby screen');
   console.log('tree ' + ROOT + (BASE ? ', served at ' + BASE : '') + ', registry ' + path.relative(process.cwd(), REG_PATH));
   runStatic(ROOT, 'this tree');
-  if (SELF) staticSelfTest();
+  await runPrecache(ROOT);
+  if (SELF) { staticSelfTest(); await precacheSelfTest(); }
   if (!STATIC_ONLY) {
     const R = await runtime(BASE);
     if (!SELF) gradeRuntime(R, 'runtime: every screen');
     else {
-      console.log('\nself-test (runtime): the walk ran with a flat-face img, an unapproved file and a 🐻 planted on the access-lost overlay');
-      ok('catches the planted flat face', R.flat.some((f) => /access lost: .*flat-face\.png/.test(f)), R.flat);
+      console.log('\nself-test (runtime): the walk ran with each retired logo, an unapproved file and a 🐻 planted on the access-lost overlay');
+      RETIRED_SETS.forEach((s, i) => ok('catches ' + s.name + ', planted on a screen', R.flat.some((f) => new RegExp('access lost: .*retired-' + i + '\\.png.*\\[' + s.name + '\\]').test(f)), R.flat));
       ok('catches the planted unapproved file', R.unapproved.some((u) => /access lost: __brand_selftest\/unapproved\.png/.test(u)), R.unapproved);
       ok('catches the planted 🐻 in visible text', R.bears.some((b) => /access lost: .*BRAND-SELFTEST-PLANT/.test(b)), R.bears);
       ok('catches the planted hand-coded SVG bear (the old cubbyBear())', R.drawn.some((d) => /^access lost: an inline SVG drawing.*\[plant\]$/.test(d)), R.drawn);
