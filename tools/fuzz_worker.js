@@ -371,8 +371,9 @@ const PLANTS = [
     from: "      if (request.method !== 'GET') return new Response('method not allowed', { status: 405 });\n      return invitePeek(request, env, url);",
     to: "      if (request.method !== 'GET') return new Response('<p>not allowed: ' + decodeURIComponent(url.search) + '</p>', { status: 405, headers: { 'content-type': 'text/html' } });\n      return invitePeek(request, env, url);" },
   { name: 'the dose limiter\'s "no" ignored', inv: 'I4',
-    from: "        try { const { success } = await limiter.limit({ key: 'dose:' + ip }); if (!success) return json({ error: 'rate' }, 429); } catch (e) {}",
-    to: "        try { await limiter.limit({ key: 'dose:' + ip }); } catch (e) {}" },
+    // Every limiter goes through rateLimited() now; the plant drops the dose route's answer to it.
+    from: "      if (await rateLimited(limiter, 'dose:' + clientIpKey(request), 'dose')) return json({ error: 'rate' }, 429);",
+    to: "      await rateLimited(limiter, 'dose:' + clientIpKey(request), 'dose');" },
 ];
 
 function loadKnown() {
