@@ -137,7 +137,8 @@ async function check(engine, key) {
 
   if (a.check) { await check(engine, key); return; }
 
-  fs.mkdirSync(ARTSRC, { recursive: true });
+  // A dry run writes nothing, not even the art-src/ folder (tools/brand.py --self-test runs one inside the gates).
+  if (!a.dryRun) fs.mkdirSync(ARTSRC, { recursive: true });
   const jobs = a.jobs
     ? JSON.parse(fs.readFileSync(path.isAbsolute(a.jobs) ? a.jobs : path.join(ROOT, a.jobs), 'utf8'))
     : [{ out: a.out, prompt: a.prompt, ref: a.ref, aspect: a.aspect }];

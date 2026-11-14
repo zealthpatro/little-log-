@@ -3,12 +3,15 @@
  "master": {
   "path": "icons/icon-master-1024.png",
   "sha256": "036e1af20f9e960264a9d1515e7f0ed8b992c6c65f518927e259e60b89766d40",
+  "name": "the W2+ painted teddy",
+  "date": "2026-11-14",
   "provenance": "ChatGPT painted art, the founder's pick \"W2+\" (2026-11-14): a painted honey-brown teddy face (cream muzzle, dusty-rose inner ears) on a light cream-honey watercolour wash, made with gpt-image-2 from the painted cub (app/journey-art/ov_hero-cub.webp, full size art-src/hero-cub.png), then centre-cropped so the bear is about 87% of the width. Chosen from twelve higher-contrast candidates after a three-judge evaluation. It replaced the 2026-11-13 white cub on flat honey, whose face-to-background contrast measured 1.2:1."
  },
  "families": [
   {
    "name": "Icons from the master",
-   "provenance": "ChatGPT painted art (the master, W2+ since 2026-11-14), made into every size by tools/gen_brand_icons.py: plain Lanczos resizes, except the maskable icon, which shrinks the bear (cut from its wash) onto the master's own wash inside the safe circle. Nothing is drawn. icons/logo-96.png and logo-192.png (2026-11-14) are the site's top-bar logo, 1x-2x and 3x.",
+   "provenance": "ChatGPT painted art: the master (see `master` above), made into every size by tools/gen_brand_icons.py: plain Lanczos resizes, except the maskable icon, which shrinks the bear (cut from its wash) onto the master's own wash inside the safe circle. Nothing is drawn. icons/logo-96.png and logo-192.png (2026-11-14) are the site's top-bar logo, 1x-2x and 3x. tools/brand.py set re-hashes this family when the master changes.",
+   "from_master": true,
    "files": {
     "cap-web/logo.png": "6acbe1f20830f8907de8eede090eec09b9b2e73e06bdeb318bd0e307b8ddee38",
     "icons/apple-touch-icon.png": "071441c334fda358845c7d0a292dc8f11d9d5ca6c03208ff4d9ff6d9aaec57eb",
@@ -410,7 +413,8 @@
   },
   {
    "name": "Text cards carrying the master",
-   "provenance": "Typographic cards drawn by Pillow (tools/gen_article_img.py, gen_ph_gallery.py, gen_pwa_screenshots.py) and the social quote template (social/card-quote.html). Their only picture is the master logo, swapped in by tools/card_logo.py (2026-11-13 in place of a drawn bear, 2026-11-14 the W2+ master in place of the white cub); no other pixel changed.",
+   "provenance": "Typographic cards drawn by Pillow (tools/gen_article_img.py, gen_ph_gallery.py, gen_pwa_screenshots.py) and the social quote template (social/card-quote.html). Their only picture is the master logo, swapped in by tools/card_logo.py (2026-11-13 in place of a drawn bear, 2026-11-14 the W2+ master in place of the white cub, and the social quote card's footer since 2026-11-14 too); no other pixel changed. tools/brand.py set re-hashes this family when the master changes.",
+   "from_master": true,
    "files": {
     "icons/screenshots/circle.png": "61bc67a298aebdd9d69821ea35c3f6ab5bba846561712998dfbde1fdd25c13dc",
     "icons/screenshots/track.png": "6b63917d740ecf6f72eace5abaf4bfe9f4b278d454a518724fe1268035491f98",
@@ -425,7 +429,7 @@
     "og/producthunt/ph-keepsakes.png": "36b88dd3fb899826b54b5f28d2617369a47eb3f229fb67aa1846879bd8fe312f",
     "og/producthunt/ph-logging.png": "0738f6c28e1f972efa178a7ce05c2e20607958284023b085f514ee75b6ae87de",
     "og/producthunt/ph-vaccines.png": "156e6280a7bd699143fa90226a44f5eba8147549fc80359f670fd589b5eded8a",
-    "social/out/w1-mon-quote.png": "05753b0259e378c9a1b9d13cdf17cbf5a908a323c9801797bb12ce22d8eee854"
+    "social/out/w1-mon-quote.png": "b5db01d329a0e4172e80d73fc553661834b579af7ec5e52cdf9ed26fe2d6c71d"
    }
   },
   {

@@ -175,6 +175,11 @@ const TREE = [
   /* brand-images: the founder's rule of 2026-11-13. Only the painted art is on a screen (tools/brand-images.json):
      no flat face, no drawn bear, no emoji bear. Walks every screen at 390px; --self-test plants each defect. */
   { name: 'brand-images',   cmd: ['node', 'tools/brand_image_check.js', 'url', '--self-test'] },
+  /* brand-py: the logo change as one tool (tools/brand.py propose, compare, zoom, set; docs/BRAND.md). Its
+     self-test measures made-up subjects, proves compare byte-deterministic and draws sizes exactly as
+     gen_brand_icons.py does, runs propose dry with fetch cut off, holds set to its refusals, and runs
+     set --yes end to end on a miniature git copy of the tree in a temp folder. The real tree is never written. */
+  { name: 'brand-py',       cmd: ['python3', 'tools/brand.py', '--self-test'] },
 ];
 // These judge PRODUCTION, not this checkout, so a failure is a deploy problem rather than a code
 // problem. Opt-in, because they need the network and they are the founder's to act on.
