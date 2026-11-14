@@ -39,6 +39,21 @@ LOCAL=${1:-}
 
 [ -f "$KEY_PATH" ] || { echo "✖ No API key at $KEY_PATH"; exit 1; }
 
+# The offline fallback page (cap-web/, shown if the phone is offline before the app has ever loaded) is
+# COPIED into the native projects by Capacitor; the build never reads cap-web/ itself. Without this step
+# a build ships whatever was copied last: on 2026-11-14 the main checkout's ios/App/App/public still had
+# the 🐻 the site had dropped, and no logo.png (brand verifier F1). `cap copy` copies web assets and
+# capacitor.config.json only; it never touches plugins or Pods (that is `cap sync`/`update`), so the
+# Meta-SDK check below still holds. Android is copied too when it exists, so the two shells stay in step.
+echo "▸ Copying the offline fallback (cap-web/) into the native projects…"
+npx --no-install cap copy ios
+if [ -d android ]; then npx --no-install cap copy android; fi
+for F in index.html logo.png; do
+  cmp -s "cap-web/$F" "ios/App/App/public/$F" \
+    || { echo "✖ ios/App/App/public/$F is not cap-web/$F after cap copy: the build would ship a stale offline page. Stopping."; exit 1; }
+done
+echo "  ✓ offline fallback = cap-web/ (painted logo, no emoji bear)"
+
 echo "▸ Configuring the Xcode project (entitlements, plist, AppDelegate, icon)…"
 ruby tools/cap_ios_configure.rb
 python3 tools/gen_app_icon.py
