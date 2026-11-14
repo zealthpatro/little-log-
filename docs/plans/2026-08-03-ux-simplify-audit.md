@@ -138,7 +138,7 @@ method/duration). Sibling: past nursing feeds are only 5/10/15/20/30/45 min inst
 - `inviteText` promises "feeds, naps and nappies… You'll see everything, live" (1764-1770) even
   for an owner-private pregnancy circle whose recipient lands on "There's nothing for you to set
   up" (app/index.html:4209). **Change:** stage-aware invite text.
-- Placeholder "their-google-email@gmail.com" (1559) implies Google-only at the exact field where
+- Placeholder "their-google-email" at Gmail (1559) implies Google-only at the exact field where
   Apple Hide-My-Email mismatches are born (846-879). Neutral placeholder + one-line hint.
 
 ### 10. Right defaults, honest numbers in the everyday surfaces (logging #6; care #6; moments #8)

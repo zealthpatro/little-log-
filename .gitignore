@@ -41,3 +41,9 @@ tools/rag/.embedding-cache.json
 
 # Local-only scratch (test downloads, samples). Never committed; .assetsignore keeps it off the site too.
 _local/
+
+# Local working folders, never committed (tools/deploy_exclusion_check.js walks for them at any depth):
+# wrangler's cache and state (.wrangler/cache/cf.json holds this machine's location and network) and
+# screenshot proof sets (proof/, admin screens with sample data). .assetsignore keeps them off the site too.
+.wrangler/
+proof/

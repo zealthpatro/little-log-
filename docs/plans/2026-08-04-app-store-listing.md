@@ -123,7 +123,7 @@ Paste into TestFlight > Test Information > Beta App Review notes, and fill the s
 
 Sign-in is required by design and the rules return nothing without it, so review gets a dedicated, seeded demo account. Exact steps:
 
-1. Create a fresh Google account, suggested `cubby.review.demo@gmail.com`, with a strong password you are happy to hand Apple. Do not reuse any personal account.
+1. Create a fresh Google account, suggested `cubby.review.demo` at Gmail, with a strong password you are happy to hand Apple. Do not reuse any personal account.
 2. On any device, sign in to Cubby with it (Continue with Google) and run the first-run wizard: stage Baby, child "Bo Bear", birthday about 10 weeks ago, country United States.
 3. Seed a believable week, all fictional (fictional-baby rule, no real child's data or photos): 8 to 10 feeds, a few naps including one left running, nappies, one pumping session, weight and height entries so the growth chart draws, the 2-month vaccines marked given with the 4-month ones upcoming, one medicine course with doses remaining, one milestone, and 3 or 4 photos from our own bear art or stock, never a real baby.
 4. Create a second throwaway account, invite it as a caregiver, accept, and log two entries from it so "who did what" shows two people.

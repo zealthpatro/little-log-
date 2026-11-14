@@ -41,13 +41,20 @@ const INTERNAL = ['.git', '.claude', '.githooks', '.github', 'tools', 'test', 'w
      admin service-account JSON, art-src/ holds image-API keys, native-build/ the TestFlight export
      config, and _local/ is scratch that must never ship. Nothing was exposed as of 2026-09-24 (live
      404s checked; every inspectable deploy was git-based), but that was the deploy path, not the list. */
-  'credentials', 'art-src', 'native-build', '_local'];
+  'credentials', 'art-src', 'native-build', '_local',
+  /* The admin Worker (Cubby Ops). Already inside `workers`; named on its own as well so that removing
+     the broad line one day cannot put the admin's code on the public site (admin spec §4.1, S35). */
+  'workers/admin',
+  /* Local working folders (WORK_DIRS below): wrangler's cache and state, and screenshot proof sets. */
+  '.wrangler', 'proof'];
 /* One concrete public URL per excluded class, asked of production. */
 const MUST_404 = ['.githooks/pre-push', '.githooks/pre-commit', '.github/workflows/gates.yml', 'test/rules-test.js',
   'firebase.json', 'tools/gates.js', 'wrangler.toml', 'worker.js', 'firestore.rules', '.assetsignore', 'CLAUDE.md',
   'ios/App/App/capacitor.config.json', 'android/app/build.gradle', '.claude/settings.json',
   // Was 200 until 2026-10-22: an internal security dashboard, the published rules, and the storage rules.
-  'design/audit', 'design/firestore.published.rules', 'storage.rules'];
+  'design/audit', 'design/firestore.published.rules', 'storage.rules',
+  // The admin Worker's entry file and config (admin spec S35): production must 404 both.
+  'workers/admin/src/index.mjs', 'workers/admin/wrangler.toml'];
 const MUST_200 = ['/', '/app/'];
 
 let pass = 0, fail = 0;
@@ -74,9 +81,17 @@ const TEXTY = new Set(['', '.json', '.txt', '.pem', '.key', '.p8', '.env', '.var
    .assetsignore below, so skipping one can never hide an uncovered key. */
 const SKIP_NAME = new Set(['.git', 'node_modules']);
 const SKIP_PATH = new Set(['.claude/worktrees']);
+/* Local working folders that hold this machine's data, not the site's: wrangler's cache and state
+   (.wrangler/cache/cf.json records this machine's location and network; `wrangler dev` writes one next to
+   whichever wrangler file it ran, workers/admin/ included) and screenshot proof sets (proof/, every admin
+   screen with sample data). Neither is key-shaped, so the key walk alone passed them. Each, at any depth,
+   must be kept off the site (a manual `npx wrangler deploy` uploads the folder) AND out of git (a
+   `git add -A` publishes to the public repo). */
+const WORK_DIRS = new Set(['.wrangler', 'proof']);
+const WORK_PROBES = ['.wrangler/', 'proof/', 'workers/admin/.wrangler/', 'app/.wrangler/'];
 
 function walk(root) {
-  const hits = [], skipped = [], stack = [''];
+  const hits = [], skipped = [], work = [], stack = [''];
   while (stack.length) {
     const rel = stack.pop();
     let ents = [];
@@ -85,7 +100,7 @@ function walk(root) {
       const r = rel ? rel + '/' + e.name : e.name;
       if (e.isDirectory()) {
         if (SKIP_NAME.has(e.name) || SKIP_PATH.has(r)) skipped.push(r + '/');
-        else stack.push(r);
+        else { if (WORK_DIRS.has(e.name)) work.push(r + '/'); stack.push(r); }
         continue;
       }
       // Files, and symlinks by their own name (never followed).
@@ -97,7 +112,7 @@ function walk(root) {
       } catch (err) {}
     }
   }
-  return { hits, skipped };
+  return { hits, skipped, work };
 }
 
 /* git with nothing of this machine's in it. Inside a hook git exports GIT_DIR and friends, which
@@ -160,14 +175,79 @@ function checkKeys(ignoreText, root, label) {
   return open.map((h) => h.rel);
 }
 
+/* Working folders (WORK_DIRS): the rule exists whether or not one is on disk today (the probes), and
+   every one the walk finds is covered, by .assetsignore for the site and by .gitignore for the repo. */
+function checkWork(assetsText, gitText, root, label) {
+  const { work } = walk(root);
+  const asks = WORK_PROBES.concat(work.filter((w) => !WORK_PROBES.includes(w)));
+  const site = coverage(assetsText, asks), repo = coverage(gitText, asks);
+  const served = asks.filter((w) => !site.get(w)), tracked = asks.filter((w) => !repo.get(w));
+  console.log('\n' + label);
+  ok('every working folder (' + [...WORK_DIRS].join(', ') + ') is kept off the site, ' + (work.length ? work.length + ' found here' : 'none on disk here') + ' plus ' + WORK_PROBES.length + ' probes',
+    served.length === 0, 'NOT in .assetsignore: ' + served.join(', '));
+  ok('and out of git, so a `git add -A` cannot publish one to the public repo', tracked.length === 0, 'NOT in .gitignore: ' + tracked.join(', '));
+  return served.length + tracked.length;
+}
+
+/* The admin Worker (admin spec §4.1, S5, S35). Three things, each able to go red:
+   1. every TRACKED file under workers/admin/ is kept off the main site by .assetsignore, as git's
+      check-ignore reads it (the same rules wrangler applies), and still is with the broad `workers`
+      line removed, so the explicit `workers/admin` line carries it on its own;
+   2. no key-shaped file exists under workers/admin/ AT ALL, fenced or not: its secrets live only in
+      Worker secrets (wrangler secret put);
+   3. its wrangler file has no second front door: workers_dev = false, preview_urls = false, and no
+      [assets] directory unless run_worker_first = true; and no secret is written into [vars]. */
+const ADMIN_SECRETS = ['ACCESS_AUD', 'ACCESS_TEAM_DOMAIN', 'ADMIN_PEOPLE', 'FIREBASE_READER_SA', 'INTERNAL_UIDS'];
+function adminFiles(root) {
+  const r = spawnSync('git', ['-C', root, 'ls-files', '-z', 'workers/admin'], { env: cleanGitEnv() });
+  return r.status === 0 ? r.stdout.toString().split('\0').filter(Boolean) : [];
+}
+function checkAdminWrangler(text, label) {
+  const code = text.split('\n').map((l) => l.replace(/#.*$/, '')).join('\n');
+  const bad = [];
+  if (!/^\s*workers_dev\s*=\s*false\s*$/m.test(code)) bad.push('workers_dev = false is missing');
+  if (!/^\s*preview_urls\s*=\s*false\s*$/m.test(code)) bad.push('preview_urls = false is missing');
+  const assets = /^\s*\[assets\]\s*$([\s\S]*?)(?=^\s*\[|(?![\s\S]))/m.exec(code);
+  if (assets && !/^\s*run_worker_first\s*=\s*true\s*$/m.test(assets[1])) bad.push('[assets] without run_worker_first = true');
+  for (const n of ADMIN_SECRETS) if (new RegExp('^\\s*' + n + '\\s*=', 'm').test(code)) bad.push(n + ' is written into the file');
+  if (!/^\s*routes\s*=.*admin\.little-cubby\.com/m.test(code)) bad.push('the route is not admin.little-cubby.com');
+  ok(label + ': no second front door, no [assets] before the check, no secret in the file', bad.length === 0, bad.join('; '));
+  return bad;
+}
+function checkAdmin(ignoreText, root, label, files) {
+  console.log('\n' + label);
+  files = files || adminFiles(root);
+  ok('the admin Worker has tracked files to check (' + files.length + ')', files.length > 0);
+  const cov = coverage(ignoreText, files);
+  const open = files.filter((f) => !cov.get(f));
+  ok('every tracked file under workers/admin/ is kept off the main site', open.length === 0, 'served: ' + open.slice(0, 5).join(', '));
+  const narrow = ignoreText.split('\n').filter((l) => l.trim() !== 'workers').join('\n');
+  const cov2 = coverage(narrow, files);
+  const open2 = files.filter((f) => !cov2.get(f));
+  ok('and still is with the broad `workers` line gone (the explicit workers/admin line holds)', open2.length === 0, 'served: ' + open2.slice(0, 5).join(', '));
+  const { hits } = walk(path.join(root, 'workers', 'admin'));
+  ok('no key-shaped file exists under workers/admin/ at all', hits.length === 0, hits.map((h) => h.rel + ' (' + h.why + ')').join(', '));
+  let toml = '';
+  try { toml = fs.readFileSync(path.join(root, 'workers', 'admin', 'wrangler.toml'), 'utf8'); } catch (e) {}
+  ok('workers/admin/wrangler.toml exists', !!toml);
+  checkAdminWrangler(toml, 'workers/admin/wrangler.toml');
+  return open.length + open2.length + hits.length;
+}
+
 (async () => {
   console.log('\ndeploy exclusion: the repo is the deploy, so what is the deny-list missing?');
   const real = fs.readFileSync(path.join(ROOT, '.assetsignore'), 'utf8');
+  const gitignore = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8');
   checkStatic(real, 'static, this checkout');
   for (const r of roots()) {
     try { checkKeys(real, r, 'key-shaped files, ' + r + (r === path.resolve(ROOT) ? '' : ' (the primary checkout, where the gitignored keys actually live)')); }
     catch (e) { ok('the key-shape walk ran in ' + r, false, e.message); }
+    try { checkWork(real, gitignore, r, 'working folders, ' + r); }
+    catch (e) { ok('the working-folder walk ran in ' + r, false, e.message); }
   }
+
+  try { checkAdmin(real, path.resolve(ROOT), 'the admin Worker, workers/admin/'); }
+  catch (e) { ok('the admin check ran', false, e.message); }
 
   if (BASE) {
     console.log('\nlive, ' + BASE);
@@ -242,6 +322,50 @@ function checkKeys(ignoreText, root, label) {
     fail = before3; console.log = quiet;
     ok('a skipped node_modules that .assetsignore stops covering goes RED', staged3 >= 1, staged3);
     ok('and is fine while it does', staged4 === 0, staged4);
+
+    /* Working folders (N10): wrangler's cache with this machine's location, and a proof set of screenshots,
+       planted at the root and under workers/admin/. Covered by the real files; RED when either line goes. */
+    const workTree = scratch({ '.wrangler/cache/cf.json': '{"colo":"SELFTEST"}', 'proof/admin-overview-390.png': 'png',
+      'workers/admin/.wrangler/tmp/bundle/index.js': '', 'app/index.html': '<p>public</p>' });
+    const drop = (text, names) => text.split('\n').filter((l) => !names.includes(l.trim())).join('\n');
+    const reds2 = (fn) => { const b = fail; console.log = () => {}; let n; try { fn(); } catch (e) { n = -1; } console.log = quiet; n = n === -1 ? -1 : fail - b; fail = b; return n; };
+    ok('working folders planted at the root and under workers/admin/: covered by the real .assetsignore and .gitignore', reds2(() => checkWork(real, gitignore, workTree, 'scratch')) === 0);
+    ok('.wrangler missing from .assetsignore goes RED', reds2(() => checkWork(drop(real, ['.wrangler']), gitignore, workTree, 'scratch')) >= 1);
+    ok('proof missing from .assetsignore goes RED', reds2(() => checkWork(drop(real, ['proof']), gitignore, workTree, 'scratch')) >= 1);
+    ok('.wrangler missing from .gitignore goes RED', reds2(() => checkWork(real, drop(gitignore, ['.wrangler/']), workTree, 'scratch')) >= 1);
+    ok('proof missing from .gitignore goes RED', reds2(() => checkWork(real, drop(gitignore, ['proof/']), workTree, 'scratch')) >= 1);
+    ok('and with neither line in either file, even an empty tree goes RED (the probes)', reds2(() => checkWork(drop(real, ['.wrangler', 'proof']), drop(gitignore, ['.wrangler/', 'proof/']), scratch({}), 'scratch')) >= 2);
+    const deep = scratch({ 'articles/some-guide/proof/shot.png': 'png' });
+    ok('a proof folder deep in the tree is found and judged too', reds2(() => checkWork(drop(real, ['proof']), gitignore, deep, 'scratch')) >= 1);
+
+    /* The admin Worker, staged in scratch trees. */
+    const adminTree = (extra, toml) => {
+      const files = Object.assign({ '.assetsignore': real, 'workers/admin/src/index.mjs': 'export default {}', 'workers/admin/wrangler.toml': toml }, extra || {});
+      const d = scratch(files);
+      return { d, files: Object.keys(files).filter((f) => f.startsWith('workers/admin/')) };
+    };
+    const goodToml = fs.readFileSync(path.join(ROOT, 'workers', 'admin', 'wrangler.toml'), 'utf8');
+    const reds = (fn) => { const b = fail; console.log = () => {}; try { fn(); } catch (e) {} console.log = quiet; const n = fail - b; fail = b; return n; };
+    let t = adminTree({}, goodToml);
+    ok('the real admin wrangler file, staged, is clean', reds(() => checkAdmin(real, t.d, 'scratch', t.files)) === 0);
+    const noBoth = real.split('\n').filter((l) => l.trim() !== 'workers' && l.trim() !== 'workers/admin').join('\n');
+    t = adminTree({}, goodToml);
+    ok('with both `workers` and `workers/admin` gone from .assetsignore, the admin files go RED', reds(() => checkAdmin(noBoth, t.d, 'scratch', t.files)) >= 2);
+    const onlyBroad = real.split('\n').filter((l) => l.trim() !== 'workers/admin').join('\n');
+    ok('with only the broad line left, the "explicit line holds" check goes RED', reds(() => checkAdmin(onlyBroad, t.d, 'scratch', t.files)) >= 1);
+    t = adminTree({ 'workers/admin/keys/reader.json': '{"type": "service_account", "private' + '_key": "' + PK + '"}' }, goodToml);
+    ok('a service-account key planted under workers/admin/ goes RED, though .assetsignore fences it', reds(() => checkAdmin(real, t.d, 'scratch', t.files)) >= 1);
+    for (const [label, toml] of [
+      ['workers_dev = true', goodToml.replace(/^workers_dev = false$/m, 'workers_dev = true')],
+      ['no preview_urls line', goodToml.replace(/^preview_urls = false$/m, '')],
+      ['an [assets] directory with no run_worker_first', goodToml + '\n[assets]\ndirectory = "./public"\n'],
+      ['ADMIN_PEOPLE written into [vars]', goodToml.replace('[vars]\n', '[vars]\nADMIN_PEOPLE = "[]"\n')],
+    ]) {
+      t = adminTree({}, toml);
+      ok('an admin wrangler file with ' + label + ' goes RED', reds(() => checkAdmin(real, t.d, 'scratch', t.files)) >= 1);
+    }
+    t = adminTree({}, goodToml + '\n[assets]\ndirectory = "./public"\nrun_worker_first = true\n');
+    ok('[assets] WITH run_worker_first = true is allowed (spec §4.1, builder\'s call)', reds(() => checkAdmin(real, t.d, 'scratch', t.files)) === 0);
   }
 
   console.log('\n' + pass + ' passed, ' + fail + ' failed');

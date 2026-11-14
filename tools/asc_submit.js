@@ -26,6 +26,18 @@ const PHONE = arg('--phone');
 const DEMO = arg('--demo');
 const NO_DEMO = ARGS.includes('--no-demo');
 const DO = ARGS.includes('--submit');
+/* The account holder's name and address: flags, then the environment, then a local JSON file outside the
+   repo ({"firstName": "...", "lastName": "...", "email": "..."}). Nothing personal lives in this file. */
+const CONTACT_FILE = process.env.ASC_CONTACT_FILE || path.join(require('os').homedir(), '.appstore-keys', 'asc-contact.json');
+const CONTACT = (() => {
+  let f = {};
+  try { f = JSON.parse(fs.readFileSync(CONTACT_FILE, 'utf8')); } catch (e) {}
+  return {
+    firstName: arg('--first') || process.env.ASC_CONTACT_FIRST || f.firstName || '',
+    lastName: arg('--last') || process.env.ASC_CONTACT_LAST || f.lastName || '',
+    email: arg('--email') || process.env.ASC_CONTACT_EMAIL || f.email || '',
+  };
+})();
 
 const asc = (a) => { const o = execFileSync('node', [path.join(__dirname, 'asc.js')].concat(a), { encoding: 'utf8', maxBuffer: 1 << 24 }); return o.trim() ? JSON.parse(o) : null; };
 const get = (p) => asc(['get', p]);
@@ -65,6 +77,8 @@ const ck = (ok, label, extra) => { if (!ok) fail++; console.log('  ' + (ok ? 'ok
   const il = get('/appInfos/' + info.id + '/appInfoLocalizations').data.find((l) => l.attributes.locale === 'en-US');
   ck(!!il.attributes.privacyPolicyUrl, 'privacy policy URL', il.attributes.privacyPolicyUrl || '');
   ck(!!PHONE, 'review contact phone', PHONE || 'pass --phone "+<country> ..."');
+  ck(!!(CONTACT.firstName && CONTACT.lastName && /@/.test(CONTACT.email)), 'review contact name and address',
+    CONTACT.email ? 'from flags, environment or ' + CONTACT_FILE : 'pass --first --last --email, or put them in ' + CONTACT_FILE);
   ck(!!(DEMO || NO_DEMO), 'demo account decided', DEMO ? 'credentials given' : (NO_DEMO ? 'declared not required (Sign in with Apple)' : 'pass --demo or --no-demo'));
   console.log('  ??    App Privacy answers   Apple exposes no API for these. If they are unfinished, the submit below fails and says so.');
 
@@ -77,10 +91,12 @@ const ck = (ok, label, extra) => { if (!ok) fail++; console.log('  ' + (ok ? 'ok
     const i = md.indexOf('### Notes text for the reviewer');
     return /```\n([\s\S]*?)```/.exec(md.slice(i))[1].trim();
   })();
-  /* The ASC account holder's own address, read from /users, rather than a guess. Apple already
-     writes to this one, so it is the address that will actually be read mid-review. */
-  const attrs = { contactFirstName: 'Saurav', contactLastName: 'Patro',
-    contactEmail: arg('--email') || 'sauravpatro@icloud.com',
+  /* The App Store Connect account holder's contact, for the reviewer. Never written into this public
+     repo (admin spec S34): from --first/--last/--email, else the environment, else a local file outside
+     the repo (CONTACT_FILE). Use the account holder's own address: Apple already writes to it, so it is
+     the one that will actually be read mid-review. */
+  const attrs = { contactFirstName: CONTACT.firstName, contactLastName: CONTACT.lastName,
+    contactEmail: CONTACT.email,
     contactPhone: PHONE, notes: notes };
   if (DEMO) { const [u, ...p] = DEMO.split(':'); attrs.demoAccountRequired = true; attrs.demoAccountName = u; attrs.demoAccountPassword = p.join(':'); }
   else { attrs.demoAccountRequired = false; }

@@ -105,3 +105,13 @@ simple = { limit = 30, period = 60 }
 binding = "GAMES_DB"
 database_name = "cubby-games"
 database_id = "c2e576e9-ad79-416a-a1b9-4598be4f3c82"
+
+# The admin's own database (cubby-admin), written ONLY by the admin Worker (workers/admin). The main Worker
+# reads it in exactly one named function, adminChainSummary in worker.js: two SELECTs, so the Monday digest
+# carries the access log's chain head and the week's counts (admin spec S19). Kept COMMENTED until the
+# database exists (docs/ADMIN-DEPLOY.md step 5): paste the same database_id the admin's wrangler.toml got,
+# uncomment, then deploy. Unbound, the digest simply leaves the section out.
+# [[d1_databases]]
+# binding = "ADMIN_DB"
+# database_name = "cubby-admin"
+# database_id = "<the cubby-admin id>"

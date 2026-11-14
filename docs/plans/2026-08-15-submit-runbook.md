@@ -24,14 +24,14 @@ App Review has to be able to sign in. Two honest options.
 
 **Option A, a seeded demo family. Better review, slightly more work.**
 
-1. Create a fresh Google account, for example `cubby.review.demo@gmail.com`. Use a password you are
+1. Create a fresh Google account, for example `cubby.review.demo` at Gmail. Use a password you are
    willing to hand Apple. Do not reuse anything personal.
 2. Sign into Cubby once with it and finish the first-run wizard: stage Baby, name **Bo**, birthday
    about ten weeks ago, country United States.
 3. Tell me the address and password, and I run:
 
 ```bash
-node tools/seed_review_demo.js cubby.review.demo@gmail.com --write
+node tools/seed_review_demo.js "<the review account address>" --write
 ```
 
 That writes a fictional week: eight feeds and six nappies a day across seven days, three naps a day,
@@ -71,7 +71,7 @@ and it damages the exact label the privacy wedge depends on.
 With a demo account:
 
 ```bash
-node tools/asc_submit.js --phone "+971 50 123 4567" --demo "cubby.review.demo@gmail.com:THEPASSWORD" --submit
+node tools/asc_submit.js --phone "+971 50 123 4567" --demo "<the review account address>:THEPASSWORD" --submit
 ```
 
 Without one:

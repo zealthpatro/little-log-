@@ -187,6 +187,21 @@ const TREE = [
   { name: 'worker-routes',  cmd: ['node', 'test/worker-routes.test.js'] },   // invite mail caps, newsletter consent, game ceilings, no throws
   /* xss-sink: markup in anything a circle member can write is drawn as text, in every view. It runs
      xss_leaf_check.js as its last section (each leaf field, each sink, mutants included). */
+  /* Cubby Ops, the admin Worker (workers/admin), phase 1 of docs/superpowers/specs/2026-11-13-admin-dashboard-design.md.
+     Each runs its --self-test: every rule is broken in a temp copy and the suite must go red on it. */
+  { name: 'admin-access',     cmd: ['node', 'test/admin-access.test.js', '--self-test'] },      // Access JWT re-checked, fail closed, headers on every answer (S1-S8)
+  { name: 'admin-access-log', cmd: ['node', 'test/admin-access-log.test.js', '--self-test'] },  // logged before shown, hash chain, fixed vocabulary, digest head (S16-S19)
+  { name: 'admin-no-content', cmd: ['node', 'test/admin-no-content.test.js', '--self-test'] },  // masked reads, no log content anywhere, private pregnancy, read budget
+  { name: 'admin-hold',       cmd: ['node', 'test/admin-hold.test.js', '--self-test'] },        // the loss-hold reader fails closed (S12)
+  { name: 'dir-erasure',      cmd: ['node', 'test/admin-dir-erasure.test.js', '--self-test'] }, // gone from Auth = gone from the admin next tick; failure is never "gone"
+  { name: 'admin-screens',    cmd: ['node', 'test/admin-screens.test.js', '--self-test'] },     // formula-safe CSV, the three system checks, "Waiting", two-people = digest, own accounts hidden
+  /* No personal email address in any tracked file (admin spec S34). The repo is public. */
+  { name: 'no-personal-address', cmd: ['node', 'tools/address_check.js', '--self-test'] },
+  { name: 'admin-live-self', cmd: ['node', 'tools/admin_live_check.js', '--self-test'] },   // admin(live) can go red: a page, a missing header, a stray redirect, a 404
+  { name: 'push-daily',       cmd: ['node', 'test/push-daily.test.js', '--self-test'] },                       // the day's reminders tally the admin reads; not on the public /api/health
+  /* The admin's pages in Chrome: a hostile name stays text, nothing loads from another origin, 44px targets,
+     no sideways scroll at 390 or 320. --self-test also breaks escaping, wrapping and the fonts in a temp copy. */
+  { name: 'admin-ui',         cmd: ['node', 'test/admin-ui.test.js', 'url', '--self-test'] },
   { name: 'xss-sink',       cmd: ['node', 'tools/xss_sink_check.js', 'url'] },
   { name: 'xss-leaf-static', cmd: ['node', 'tools/xss_leaf_check.js', '--static-only'] },
   /* No tab scrolls sideways at 320px, Light or Night: the Night wash behind the header slid the app 80px. */
@@ -206,6 +221,10 @@ const LIVE_GATES = [
      once actually checked production. claims(live) keeps 'url' on purpose — see its header: it needs
      the seeded ?e2e=1 shell, which is hostname-guarded to localhost. */
   { name: 'deploy-excl(live)',cmd: ['node', 'tools/deploy_exclusion_check.js', 'liveurl'] },
+  /* The deployed admin (admin.little-cubby.com): every path, asked with no Access session, is a redirect
+     to Access or a 401/403, and a 403 the Worker wrote carries its headers. Red until the founder's first
+     admin deploy (docs/ADMIN-DEPLOY.md), which is what it is for. */
+  { name: 'admin(live)',      cmd: ['node', 'tools/admin_live_check.js'] },
 ];
 /* These need a real Firestore emulator, so they cannot run in the tree tier. loss-archive and
    push-query drive the app or the Worker's query against it rather than testing rules, which is
@@ -245,6 +264,9 @@ const EMU_GATES = [
   { name: 'invite-family-rules', emu: 'node invite-family-rules.test.js' },  // invites/{email}/from/{hid}: who reads, writes, joins, spends
   { name: 'invite-households', emu: 'node invite-households.test.js' },      // the founder's reports and the Worker's funnel query count both kinds of email invite
   { name: 'invite-family', self: ['node', 'test/invite-family.test.js'] },   // several families, "Not joined yet", the empty-Cubby question
+  /* The admin Worker's masked reads, Auth listing and refresh on the REAL Firestore and Auth emulators:
+     every mask honoured by the server, nothing planted reaches D1 or a page, a real 404 reads as held. */
+  { name: 'admin-read-emu', self: ['node', 'test/admin-read-emulator.test.js'] },
 ];
 
 function freePort() {

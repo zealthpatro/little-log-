@@ -8,6 +8,9 @@ wrangler.toml
 .gitignore
 tools
 workers
+# The admin Worker (Cubby Ops) on its own line too: `workers` above already covers it, and this keeps it
+# covered if that line is ever narrowed. tools/deploy_exclusion_check.js proves both.
+workers/admin
 serviceAccountKey.json
 node_modules
 package.json
@@ -26,6 +29,10 @@ credentials
 art-src
 native-build
 _local
+# Local working folders, gitignored too: wrangler's cache and state (.wrangler/cache/cf.json holds this
+# machine's location) and screenshot proof sets. tools/deploy_exclusion_check.js walks for both.
+.wrangler
+proof
 
 # Internal working material that was being served from the public site. Found 2026-10-22: /design/audit
 # (an internal security dashboard that still called a fixed finding "LIVE NOW"), the published rules, the

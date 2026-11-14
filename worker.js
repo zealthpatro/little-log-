@@ -2080,14 +2080,27 @@ export const __purge = { purgeDeletedHouseholds: (env) => purgeDeletedHouseholds
 // Operational heartbeat for the push cron: persist last-run summary in the Worker's own D1 (cubby-games),
 // read by GET /api/health so a silently-dead cron is detectable. Holds counts + a timestamp only, never
 // any family / Firestore data.
-async function recordCronRun(env, summary) {
+async function recordCronRun(env, summary, nowMs) {
   if (!env.GAMES_DB) return;
+  const now = nowMs || Date.now();
   try {
     await env.GAMES_DB.prepare("CREATE TABLE IF NOT EXISTS ops_state (key TEXT PRIMARY KEY, value TEXT, updated_at INTEGER)").run();
     await env.GAMES_DB.prepare("INSERT INTO ops_state(key,value,updated_at) VALUES('push_last_run',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at")
-      .bind(JSON.stringify(summary || {}), Date.now()).run();
+      .bind(JSON.stringify(summary || {}), now).run();
+    /* The day's tally, for the admin dashboard's "Reminders sending" check (admin spec §6.1): reminders
+       sent and failed since UTC midnight, added in one statement so two runs cannot lose a count. Kept in
+       ops_state for the admin to read; deliberately NOT added to the public /api/health. */
+    const day = new Date(now).toISOString().slice(0, 10);
+    const sent = Math.max(0, Number(summary && summary.sent) || 0), failed = Math.max(0, Number(summary && summary.failed) || 0);
+    await env.GAMES_DB.prepare("INSERT INTO ops_state(key,value,updated_at) VALUES('push_daily', json_object('day', ?1, 'sent', ?2, 'failed', ?3), ?4) "
+      + "ON CONFLICT(key) DO UPDATE SET value = CASE WHEN json_extract(ops_state.value, '$.day') = ?1 "
+      + "THEN json_object('day', ?1, 'sent', json_extract(ops_state.value, '$.sent') + ?2, 'failed', json_extract(ops_state.value, '$.failed') + ?3) "
+      + "ELSE excluded.value END, updated_at = excluded.updated_at")
+      .bind(day, sent, failed, now).run();
   } catch (e) { console.error('ops_state_write_fail', (e && e.message) || String(e)); }
 }
+// Test hook, same pattern as __purge: lets test/push-daily.test.js drive the real cron record.
+export const __ops = { recordCronRun: (env, summary, nowMs) => recordCronRun(env, summary, nowMs) };
 
 // Deletes the D1 rows tied to one Firebase uid. Firestore rules cannot see D1, so without this a
 // deleted account would leave its guessing-game hubs (and every guest's nickname and guess) behind.
@@ -2873,7 +2886,7 @@ async function maybeSendFunnelDigest(env, nowMs) {
   if (sent && sent.value === week) return;
   const rows = ((await db.prepare('SELECT day, ok, reason, body FROM funnel_snapshots ORDER BY day DESC LIMIT 7').all()).results) || [];
   if (!rows.length || rows[0].day !== week) return;     // wait for today's snapshot
-  const html = funnelDigestHtml(rows);
+  const html = funnelDigestHtml(rows) + await adminChainSummary(env, now.getTime());
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST', headers: { authorization: 'Bearer ' + env.RESEND_API_KEY, 'content-type': 'application/json' },
     body: JSON.stringify({ from: env.MAIL_FROM || 'Cubby <noreply@mail.little-cubby.com>', to: env.ALERT_EMAIL,
@@ -2883,6 +2896,24 @@ async function maybeSendFunnelDigest(env, nowMs) {
     await db.prepare("INSERT INTO funnel_meta (key, value, at) VALUES ('digest_last', ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, at = excluded.at")
       .bind(week, now.getTime()).run();
   } else console.error('funnel_digest_send_fail', r.status);
+}
+
+/* The admin access log's chain head and this week's counts, so a copy of the chain's state leaves the
+   admin's own database every Monday (docs/superpowers/specs/2026-11-13-admin-dashboard-design.md, S19).
+   This is the main Worker's ONLY use of ADMIN_DB (cubby-admin, written by the admin Worker alone): two
+   SELECTs, here. Unbound means nothing is added; a read failure says so and never stops the digest. */
+async function adminChainSummary(env, nowMs) {
+  if (!env.ADMIN_DB) return '';
+  try {
+    const head = await env.ADMIN_DB.prepare('SELECT seq, hash FROM access_log ORDER BY seq DESC LIMIT 1').first();
+    const rows = ((await env.ADMIN_DB.prepare('SELECT action, COUNT(*) AS n FROM access_log WHERE at >= ? GROUP BY action')
+      .bind(nowMs - 7 * FUNNEL_DAY_MS).all()).results) || [];
+    const n = (re) => rows.filter((r) => re.test(String(r.action))).reduce((a, r) => a + (Number(r.n) || 0), 0);
+    const hash = head && /^[0-9a-f]{64}$/.test(String(head.hash)) ? String(head.hash) : '';
+    return '<h3>The admin access log</h3><p>' + (head ? 'Chain head at entry ' + (Number(head.seq) || 0) + ': <code>' + hash + '</code>' : 'The access log is empty.')
+      + '<br>This week: views ' + n(/^view_/) + ', exports ' + n(/^export_/) + ', notes sent ' + n(/^nudge_outcome$/)
+      + ', erasures ' + n(/^erase_outcome$/) + ', manual accesses ' + n(/^manual_access$/) + ', refused requests ' + n(/^denied$/) + '.</p>';
+  } catch (e) { return '<p>The admin access log could not be read this week.</p>'; }
 }
 
 function funnelDigestHeadline(rows) {

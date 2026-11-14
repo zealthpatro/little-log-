@@ -1,0 +1,64 @@
+# Cubby Ops: the admin Worker. Its own Worker, its own hostname, its own database. Never the main site.
+#
+# Spec: docs/superpowers/specs/2026-11-13-admin-dashboard-design.md (§4). Founder checklist: docs/ADMIN-DEPLOY.md.
+# Deploy by hand only from a clean clone outside ~/Downloads:  npx wrangler deploy -c workers/admin/wrangler.toml
+#
+# NO [assets] DIRECTORY, on purpose: every byte this Worker serves (pages, its one script, its stylesheet,
+# its fonts) comes from modules it imports, and only AFTER the Cloudflare Access JWT is re-verified in code.
+# tools/deploy_exclusion_check.js fails if an [assets] table appears here without run_worker_first = true.
+name = "cubby-admin"
+main = "src/index.mjs"
+compatibility_date = "2026-11-01"
+
+# A second hostname is a second front door. The Worker would refuse it anyway (it 403s any Host that is not
+# admin.little-cubby.com), but none is created. tools/deploy_exclusion_check.js requires both lines.
+workers_dev = false
+preview_urls = false
+
+# The Custom Domain creates admin.little-cubby.com and its DNS record at the first deploy. Cloudflare Access
+# must protect the hostname BEFORE that deploy (docs/ADMIN-DEPLOY.md steps 2 and 3).
+routes = [ { pattern = "admin.little-cubby.com", custom_domain = true } ]
+
+# Every 15 minutes: the Auth check, the 15-minute pass, a chunk of the daily pass (spec §4.7). Sized for
+# Workers Free: at most 30 Google requests a tick, inside 50 subrequests.
+[triggers]
+crons = ["*/15 * * * *"]
+
+# Not secrets. Changing either is a reviewed commit.
+[vars]
+ADMIN_DAILY_READ_BUDGET = "8000"
+
+# The admin's own database. Written by this Worker only. Created by the founder (docs/ADMIN-DEPLOY.md step 5):
+#   npx wrangler d1 create cubby-admin
+# then paste the database_id it prints below, replacing the placeholder. The placeholder is all zeros on
+# purpose: a deploy with it fails loudly instead of binding the wrong database.
+[[d1_databases]]
+binding = "ADMIN_DB"
+database_name = "cubby-admin"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+# Read-only BY CODE (a gate scans workers/admin/ for any INSERT, UPDATE, DELETE, REPLACE or CREATE against
+# them). The main Worker's existing databases: the same ids as the main wrangler.toml (ids are not secrets).
+[[d1_databases]]
+binding = "GAMES_DB"
+database_name = "cubby-games"
+database_id = "c2e576e9-ad79-416a-a1b9-4598be4f3c82"
+
+[[d1_databases]]
+binding = "NEWSLETTER_DB"
+database_name = "cubby-newsletter"
+database_id = "d0ee7337-8acf-4028-80bb-2e99a48db694"
+
+# The sign-in canary, through the main Worker's own fetch handler (a service binding, so no same-zone
+# fetch and no error 1042). The main Worker "cubby" already exists.
+[[services]]
+binding = "MAIN"
+service = "cubby"
+
+# Phase 4 only (notes from the team). NOT in phase 1:
+# [[services]]  binding = "WRITES"  service = "cubby"  entrypoint = "AdminWrites"
+
+# Secrets, set with `npx wrangler secret put <NAME> -c workers/admin/wrangler.toml`, NEVER in this file:
+#   ACCESS_AUD, ACCESS_TEAM_DOMAIN, ADMIN_PEOPLE, FIREBASE_READER_SA, INTERNAL_UIDS
+# Without the first four, or with ADMIN_PEOPLE holding anything but exactly one person, every request is a 503.

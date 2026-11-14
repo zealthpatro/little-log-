@@ -1,6 +1,6 @@
 # Cubby — Live First-Run Walk (Verified on the Deployed App)
 
-**July 3, 2026 · little-cubby.com/app · fresh account (saurav@zealth.club, email-link sign-in) · Cubby v0.9.0 beta.**
+**July 3, 2026 · little-cubby.com/app · fresh account (the account holder's address, email-link sign-in) · Cubby v0.9.0 beta.**
 This is the live-walk companion to CUBBY-CRITIQUE-VERIFIED-VERDICTS.md (code) and CUBBY-CUSTOMER-LENS-EXPERIENCE-MAP.md (analysis). Everything below was seen on screen, not read from source. Walk: sign-in → chooser → add baby (Aarav, b. 2 Apr 2026, India) → invite sheet → home → first log → Health/Vaccines → Album/Memories → keepsake studio → Stats/Growth → Settings → Pro sheet.
 
 ---
@@ -23,7 +23,7 @@ The app **assigned "Mama Bear" without ever asking.** Greeting: "Good morning, M
 
 ### F2 — The invite CTA lands on bureaucracy (the aha is built, then dropped)
 "Invite someone" (peak emotional beat) opens the **Family & sharing settings sheet**: her own profile form (name, relationship, avatar, feedback button) sits *above* the invite form. The moment says "bring in Papa"; the screen says "confirm your account details."
-And the flow itself, live: placeholder `their-google-email@gmail.com` → Create invite → **"Cubby doesn't send emails. Send this link yourself (text / WhatsApp)"** → the link is the **generic homepage URL** (the email does the matching) → invitee must sign in with exactly that address. Four failure points at the single highest-value growth action. **Fix: a dedicated invite moment-sheet (not settings) issuing a tokenized link with a one-tap WhatsApp share — no email guessing.**
+And the flow itself, live: placeholder `their-google-email` at Gmail → Create invite → **"Cubby doesn't send emails. Send this link yourself (text / WhatsApp)"** → the link is the **generic homepage URL** (the email does the matching) → invitee must sign in with exactly that address. Four failure points at the single highest-value growth action. **Fix: a dedicated invite moment-sheet (not settings) issuing a tokenized link with a one-tap WhatsApp share — no email guessing.**
 
 ### F3 — The minute-two aha is silent (confirmed live)
 The IAP plan — 34 doses, correct dates, beautiful — exists the moment birthday+country are set, and nothing announces it. Worse: the Health tab **defaults to Medicine (empty)**, so day-one exploration hits a blank before the treasure. **Fixes: (a) surface the plan as the setup climax ("Aarav's vaccine plan is ready — all 34 doses, IAP, with dates. We'll remind you."); (b) default Health to Vaccines until a medicine exists.**
