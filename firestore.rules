@@ -497,7 +497,13 @@ service cloud.firestore {
             && ( category != 'mood'
                  || !('sharedWith' in request.resource.data)
                  || request.resource.data.sharedWith.size() == 0 );  // mood is never shareable
-        allow delete: if request.auth != null && request.auth.uid == owner && request.auth.uid in pm();
+        /* HER OWN, WITHOUT MEMBERSHIP: find and delete (D2, Nov 2026). An owner who removes a mother
+           used to strand her here: every rule above asks for membership, so she could neither see nor
+           erase her own health, while anyone she had shared it with could still read it. The record's
+           own uid may list her own categories and delete them, in or out of the family. List, not get
+           or write: nothing becomes readable to anyone but her, and nothing can be put back. */
+        allow list: if request.auth != null && request.auth.uid == owner;
+        allow delete: if request.auth != null && request.auth.uid == owner;
       }
 
       // Pregnancy JOURNEY (Privacy Max, Item 7). The bare fact of expecting is the most sensitive
@@ -537,7 +543,10 @@ service cloud.firestore {
                  && request.auth.uid in resource.data.sharedWith
                  && preconOnly() )
         );
-        allow delete: if request.auth != null && request.auth.uid == owner && request.auth.uid in pm();
+        /* Her own journey, in or out of the family (D2): she may see whether it is there and delete
+           it. A removed mother could do neither, and the partner she had told could still read it. */
+        allow get: if request.auth != null && request.auth.uid == owner;
+        allow delete: if request.auth != null && request.auth.uid == owner;
 
         // The journey's photo BYTES (bump photos, scan moments, journey-card photos).
         // Their metadata is owner-gated on the doc above, and the bytes must honor the
@@ -556,8 +565,9 @@ service cloud.firestore {
           );
           allow create, update: if request.auth != null && request.auth.uid == owner
               && request.auth.uid in pm();
-          allow delete: if request.auth != null && request.auth.uid == owner
-              && request.auth.uid in pm();
+          // Her own bytes, in or out of the family (D2): listed to find them, then deleted.
+          allow list: if request.auth != null && request.auth.uid == owner;
+          allow delete: if request.auth != null && request.auth.uid == owner;
         }
       }
     }

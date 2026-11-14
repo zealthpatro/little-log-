@@ -1149,16 +1149,20 @@
              deletion). Thrown on, that reached onAuthStateChanged and put a signed-in parent on the
              sign-in landing under "Cubby wasn't allowed to save that". Nothing was written, so say
              what happened and let her start her own. */
+          var joinLanded = watchJoinWait(); // offline, the loader gives way to the connectivity card
           try {
             await joinByEmailInvite(user, data);
           } catch (je) {
+            joinLanded();
             if (!je || je.code !== 'permission-denied') throw je;
             console.warn('join refused after consent', je.code);
             showInviteMismatch(email, 'gone');
             return null;
           }
           writeOwnMemberEmail(data.householdId); // PRIV-2: email goes to the gated doc, not memberInfo
-          await userRef.set({ householdId: data.householdId, name: user.displayName || '', email: user.email || '' }, { merge: true });
+          try {
+            await userRef.set({ householdId: data.householdId, name: user.displayName || '', email: user.email || '' }, { merge: true });
+          } finally { joinLanded(); }
           // Remember that this session is a JOIN, not a return, so the first-run screen can say whose
           // circle they have walked into. Read once by openFirstRun and never persisted.
           window.LL.justJoined = { invitedBy: data.invitedBy || null, role: data.role || 'caregiver' };
@@ -1958,6 +1962,39 @@
       ask();
     });
   }
+  /* "Join the family" with no connection (P2, Nov 2026). The join is one batch, and offline the SDK
+     keeps it queued and sends it when the connection returns, so the tap itself is never lost. The
+     screen was: the rotating loader turned for as long as she stayed offline, which reads as stuck.
+     After about 8 seconds without the server's answer it gives way to the boot's own connectivity
+     card, word for word, and the join stays queued underneath. Its button never reloads the page:
+     her pointer to the family is saved only once the join lands, so a reload while it waits would
+     leave her in the family with nothing on this phone pointing at it. "Try again" just looks again.
+     Call the returned function once the join and her pointer have landed, or the join has failed. */
+  var JOIN_WAIT_MS = 8000;
+  function watchJoinWait() {
+    var settled = false, timer = null;
+    function arm() {
+      timer = setTimeout(function () {
+        timer = null;
+        if (settled || !document.getElementById('llAuthMsg')) return; // something else owns the screen
+        if (!showConnTrouble({
+          title: 'We can’t reach your Cubby',
+          body: 'You look offline. Anything already saved on this phone is still here, safe. Try again once you have a connection.',
+          action: 'void 0'
+        })) return;
+        var again = document.querySelector('#llAuthOv .es-cta');
+        if (again) again.onclick = function () { if (!settled) { showStatus('Setting things up…'); arm(); } };
+      }, JOIN_WAIT_MS);
+    }
+    arm();
+    return function () {
+      if (settled) return;
+      settled = true;
+      if (timer) { clearTimeout(timer); timer = null; }
+      // Landed while the card was up: back to the loader, and the boot takes it from there.
+      if (document.querySelector('#llAuthOv .conn-card')) showStatus('Setting things up…');
+    };
+  }
   // The invite did not match the address they signed in with. Explain it in their terms and offer
   // the only two things that actually resolve it, rather than silently starting a new family.
   var inviteMismatchShown = false;
@@ -2047,6 +2084,39 @@
     };
   }
 
+  /* A REMOVED MOTHER'S OWN RECORDS (D2, Nov 2026). Her journey, her private health and her pregnancy
+     photo bytes live under the family, in her own uid's paths. Once an owner removed her she could no
+     longer reach them, while anyone she had shared them with still could. The rules now let the
+     record's own uid list and delete those three, and only those, without membership. Used by the
+     note below and by account deletion. */
+  function ownRecordPaths(ref, uid) {
+    var journey = ref.collection('pregnancy').doc(uid);
+    return { catsCol: ref.collection('mhealth').doc(uid).collection('cat'), journeyDoc: journey, photosCol: journey.collection('photos') };
+  }
+  // true: she has some there. false: none. null: the rules or the network would not say (older rules
+  // refuse an ex-member outright), and then nothing is offered that could not be done.
+  async function hasOwnRecords(ref, uid) {
+    var at = ownRecordPaths(ref, uid);
+    try {
+      var found = await Promise.all([at.catsCol.limit(1).get(), at.photosCol.limit(1).get(), at.journeyDoc.get()]);
+      return found[0].size > 0 || found[1].size > 0 || found[2].exists === true;
+    } catch (e) { return null; }
+  }
+  // Every one of them, in batches (one round trip, all or nothing each). Listed from the SERVER: from
+  // the cache, an offline phone would "find" what it last saw and queue deletes nobody confirmed.
+  async function deleteOwnRecords(ref, uid) {
+    var at = ownRecordPaths(ref, uid);
+    var fromServer = { source: 'server' };
+    var found = await Promise.all([at.catsCol.get(fromServer), at.photosCol.get(fromServer)]);
+    var refs = found[0].docs.concat(found[1].docs).map(function (d) { return d.ref; });
+    refs.push(at.journeyDoc);
+    for (var i = 0; i < refs.length; i += 400) {
+      var b = db.batch();
+      refs.slice(i, i + 400).forEach(function (r) { b.delete(r); });
+      await b.commit();
+    }
+  }
+
   var accessLostShown = false;
   function showAccessLost() {
     if (accessLostShown) return;
@@ -2059,17 +2129,101 @@
     // left open, it hid the one thing she needs to read.
     try { closeModal(); } catch (e) {}
     try { hideOverlay(); } catch (e) {}
-    try { var u = auth.currentUser; if (u) db.collection('users').doc(u.uid).set({ householdId: null }, { merge: true }); } catch (e) {}
+    /* The family she lost is remembered on her own users doc (self-only by rule): after this her pointer
+       is cleared and her next sign-in starts afresh, and account deletion still has to find her private
+       records there, first, before anything else goes. */
+    var lostRef = hhRef, u = auth.currentUser;
+    try {
+      if (u) {
+        var pointer = { householdId: null };
+        if (lostRef) pointer.formerHouseholdIds = firebase.firestore.FieldValue.arrayUnion(lostRef.id);
+        db.collection('users').doc(u.uid).set(pointer, { merge: true });
+      }
+    } catch (e) {}
     var ov = document.createElement('div'); ov.id = 'll-access-lost';
-    ov.setAttribute('style', 'position:fixed;inset:0;z-index:3000;background:' + OV_BG + ';display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;');
+    ov.setAttribute('style', 'position:fixed;inset:0;z-index:3000;background:' + OV_BG + ';display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;overflow-y:auto;');
     ov.innerHTML = '<div style="max-width:340px;font-family:-apple-system,Segoe UI,Roboto,sans-serif">'
       + '<div style="font-size:44px">🐻</div>'
       + '<h2 style="font-family:Georgia,serif;color:' + OV_INK + ';margin:12px 0 8px;font-size:22px">You’re no longer in this family</h2>'
       + '<div style="color:' + OV_SOFT + ';font-size:15px;line-height:1.55">Your access to this Cubby was removed, or the family was closed. Everything you logged stays part of their story.</div>'
-      + '<button id="ll-al-btn" style="margin-top:22px;border:none;border-radius:16px;padding:15px 24px;background:#C97FA0;color:#1A1614;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Back to sign in</button></div>';
+      + '<button id="ll-al-btn" style="margin-top:22px;border:none;border-radius:16px;padding:15px 24px;background:#C97FA0;color:#1A1614;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Back to sign in</button>'
+      /* Quieter, and only once we know she has records there (see offerOwnRecordDeletion). The wrapper
+         carries hidden: the button sets its own display, which would beat the attribute. */
+      + '<div id="ll-al-rec-row" hidden style="margin-top:10px"><button id="ll-al-rec" type="button" style="border:none;background:none;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 14px;color:' + OV_SOFT + ';font-size:15px;font-weight:700;line-height:1.35;text-decoration:underline">Delete my pregnancy records from that family</button></div>'
+      + '</div>';
     document.body.appendChild(ov);
+    /* The note goes once she is signed out, by its button or any other way. Signing out does not
+       reload, so it used to stay at 3000 under the sign-in screen (99999) and then sit over her next
+       Cubby the moment that one booted: a new family she could not see, still flagged as the one she
+       lost. The boot's own listener was registered first, so the sign-in screen is already up when
+       this runs and the old family never shows in between. */
+    try {
+      var lostUid = u ? u.uid : null, stopWatch = null, watchDone = false;
+      var endNote = function (who) {
+        if (watchDone || (who && who.uid === lostUid)) return;
+        watchDone = true;
+        if (stopWatch) stopWatch();
+        try { ov.remove(); } catch (e) {}
+        accessLostShown = false;
+      };
+      stopWatch = auth.onAuthStateChanged(endNote);
+      if (watchDone) stopWatch();
+    } catch (e) {}
     var btn = document.getElementById('ll-al-btn');
     if (btn) btn.onclick = function () { if (window.LL && typeof window.LL.signOut === 'function') window.LL.signOut(); else { try { location.reload(); } catch (e) {} } };
+    if (lostRef && u) offerOwnRecordDeletion(lostRef, u.uid);
+  }
+  /* The quiet second button on the note above. Shown only when she has records in that family and the
+     rules let her reach them, so under the older rules it simply never appears. One confirm, the app's
+     own, lifted over the note (it is 3000, the sheet 51); closeSheet() puts it back. */
+  function offerOwnRecordDeletion(ref, uid) {
+    hasOwnRecords(ref, uid).then(function (has) {
+      var rec = document.getElementById('ll-al-rec'), row = document.getElementById('ll-al-rec-row');
+      if (has !== true || !rec || !row || typeof window.confirmSheet !== 'function') return;
+      row.removeAttribute('hidden');
+      var busy = false;
+      rec.onclick = function () {
+        if (busy) return;
+        window.confirmSheet({
+          title: 'Delete your pregnancy records?',
+          body: 'This removes your journey, health notes and pregnancy photos from that family’s Cubby. It can’t be undone.',
+          confirmLabel: 'Delete',
+          cancelLabel: 'Keep',
+          danger: true,
+          onConfirm: function () {
+            busy = true;
+            deleteOwnRecords(ref, uid).then(function () {
+              row.setAttribute('hidden', '');
+              noteOverNote('Your pregnancy records are deleted.');
+              // Nothing left there for account deletion to find.
+              try { db.collection('users').doc(uid).set({ formerHouseholdIds: firebase.firestore.FieldValue.arrayRemove(ref.id) }, { merge: true }); } catch (e) {}
+            }, function (e) {
+              console.warn('delete own records', e && e.code);
+              noteOverNote(errText(e));
+            }).then(function () { busy = false; });
+          }
+        });
+        var scrimEl = document.getElementById('scrim'), sheetEl = document.getElementById('sheet');
+        if (scrimEl) scrimEl.style.zIndex = '3001';
+        if (sheetEl) sheetEl.style.zIndex = '3002';
+      };
+    });
+  }
+  /* A toast is 60 and the note is 3000: lift it while it shows, then hand it back. Its stylesheet
+     transitions "all", z-index included, so the lift is made with the transition off: otherwise it
+     climbs from 60 over the same 0.3s the toast fades in, and spends that fade behind the note. */
+  function noteOverNote(msg) {
+    var t = document.getElementById('toast');
+    var stack = function (z) {
+      if (!t) return;
+      t.style.setProperty('transition', 'none');
+      t.style.zIndex = z;
+      void t.offsetWidth; // apply it now, before the transition comes back
+      t.style.removeProperty('transition');
+    };
+    stack('3003');
+    setTimeout(function () { stack(''); }, 2600);
+    try { if (window.toast) window.toast(msg); } catch (e) {}
   }
 
   // An existing user (already in a household) who ALSO has a pending invite to a different family:
@@ -2729,11 +2883,39 @@
     deletingAccount = true;
 
     try {
+      /* 0. Families she is no longer in (D2). Removed by an owner, her journey, private health and
+         pregnancy photos stayed under that family, readable by whoever she had shared them with, and
+         deleting her account used to leave them there: it only ever looked in the family it had open.
+         The rules let her own uid delete exactly those without membership, so they go first, before
+         anything else (private records first is this function's rule). Under the rules published
+         before that, the deletes are refused and the rest carries on as it always did. lostHere is the
+         family this phone still has open after "you're no longer in this family": there is nothing to
+         leave there, so steps 1 and 2 skip it. */
+      var lostHere = null;
+      if (hhRef && accessLostShown) {
+        // Asked of the server, not assumed from the note: only a family that really refuses her is skipped.
+        try { await hhRef.get({ source: 'server' }); } catch (e) { if (e && e.code === 'permission-denied') lostHere = hhRef; }
+      }
+      var formerIds = [];
+      try {
+        var meSnap = await db.collection('users').doc(uid).get();
+        formerIds = ((meSnap.exists && meSnap.data().formerHouseholdIds) || []).slice();
+      } catch (e) { console.warn('former families', e && e.code); }
+      if (lostHere && formerIds.indexOf(lostHere.id) < 0) formerIds.push(lostHere.id);
+      var openId = (hhRef && !lostHere) ? hhRef.id : null;
+      for (var fi = 0; fi < formerIds.length; fi++) {
+        if (!formerIds[fi] || formerIds[fi] === openId) continue;
+        var formerRef = db.collection('households').doc(String(formerIds[fi]));
+        try { await deleteOwnRecords(formerRef, uid); } catch (e) { console.warn('del records in a former family', e && e.code); }
+        // Her gated email there goes too (self-delete has never needed membership).
+        try { await formerRef.collection('memberEmails').doc(uid).delete(); } catch (e) {}
+      }
+
       // 1. Private records FIRST. Their rules require membership, so once we drop out of members we
       //    could never reach them again — they would sit in the household forever, unreadable by
       //    everyone including her, but still stored. That is the exact failure the existing
       //    removeMember() path already has for a removed member.
-      if (hhRef) {
+      if (hhRef && !lostHere) {
         try {
           var cats = await hhRef.collection('mhealth').doc(uid).collection('cat').get();
           await Promise.all(cats.docs.map(function (d) { return d.ref.delete().catch(function () {}); }));
@@ -2759,7 +2941,7 @@
       }
 
       // 2. Leave the household.
-      if (hhRef) {
+      if (hhRef && !lostHere) {
         var members = window.LL.members || {};
         var others = Object.keys(members).filter(function (m) { return m !== uid; });
         var mi = (window.LL.memberInfo || {})[uid] || {};

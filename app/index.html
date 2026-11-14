@@ -453,6 +453,11 @@
   width:150%;height:300px;pointer-events:none;z-index:-1;
   background:radial-gradient(closest-side,rgba(224,166,85,.055),rgba(224,166,85,0) 100%);
 }
+/* WebKit before Safari 16 has no overflow clip (the header's own rule below), so there the wash is
+   kept to the header's width instead: a little narrower, and nothing to scroll sideways to. */
+@supports not (overflow-x:clip){
+  [data-theme="night"] .topbar::before{width:100%;}
+}
 /* User photos and the painted art are never dimmed: dimming a parent's photo of their baby reads
    as a bug and breaks the keepsake promise. The hairline above stops a bright photo glaring as an
    unbounded hole, and art that arrives with transparency gets a deliberate paper tile behind it. */
@@ -510,6 +515,11 @@ body{
 .topbar{
   display:flex;align-items:center;gap:12px;
   padding:18px 20px 12px;flex-shrink:0;position:relative;
+  /* Sideways only. The Night wash behind the header is 150% of it wide, so at 320px it reached
+     from -80px to 400px and the whole app slid 80px under a sideways swipe. Clip keeps it to the
+     header's own width without making the header a scroller, and the wash still spills down
+     behind the cards (overflow-y stays visible). tools/sideways_scroll_check.js holds every tab. */
+  overflow-x:clip;
 }
 .baby-pill{
   display:flex;align-items:center;gap:10px;flex:1;

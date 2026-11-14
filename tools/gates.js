@@ -187,6 +187,8 @@ const TREE = [
      xss_leaf_check.js as its last section (each leaf field, each sink, mutants included). */
   { name: 'xss-sink',       cmd: ['node', 'tools/xss_sink_check.js', 'url'] },
   { name: 'xss-leaf-static', cmd: ['node', 'tools/xss_leaf_check.js', '--static-only'] },
+  /* No tab scrolls sideways at 320px, Light or Night: the Night wash behind the header slid the app 80px. */
+  { name: 'sideways-320',   cmd: ['node', 'tools/sideways_scroll_check.js', 'url'] },
 ];
 // These judge PRODUCTION, not this checkout, so a failure is a deploy problem rather than a code
 // problem. Opt-in, because they need the network and they are the founder's to act on.
@@ -226,6 +228,9 @@ const EMU_GATES = [
   { name: 'ios-signin', self: ['node', 'test/ios-signin-code.test.js'] },       // the installed iOS app signs in by code, in its own container
   { name: 'circle-manage', self: ['node', 'test/circle-manage.test.js'] },    // remove/cancel tap through, a removal closes every live link
   { name: 'signin-claim-auth', self: ['node', 'test/signin-claim-auth-emu.test.js'] }, // claiming an unproven account keeps HER one account (real Auth emulator)
+  { name: 'removed-records', emu: 'node removed-records.test.js' },                  // a removed mother lists and deletes her own records; nobody else gains anything
+  { name: 'removed-records-ui', self: ['node', 'test/removed-records-ui.test.js'] }, // ...from the note, and from account deletion
+  { name: 'join-offline', self: ['node', 'test/join-offline.test.js'] },             // Join the family offline: the card, not an endless loader, and the join still lands
 ];
 
 function freePort() {
