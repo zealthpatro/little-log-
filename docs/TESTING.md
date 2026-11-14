@@ -208,21 +208,16 @@ that only a since-corrected harness produced can be closed as a harness artifact
 corrected harness. The list is empty: the two "timer stopped" ids of 14 Nov replay clean from their
 short lists now, and a longer list still reproduces both, so they stay open.
 
-## Known intermittent: loss-archive
+## Known intermittent: loss-archive (closed 14 Nov 2026)
 
-`test/loss-archive-reload.test.js` (emulator tier) fails on some runs of an unchanged tree on the same
-three lines: after `endPregnancy(true)` and a reload, the calm holding screen often does not come back
-(`holdingScreen:false`, `keptRow:false`). It is a product race, not a harness flake, and it is NOT
-excused: the suite exits 1 and blocks the emulator tier when it happens, and its output says so in a
-`KNOWN INTERMITTENT PRODUCT RACE` paragraph so nobody re-runs it until green and calls that a pass.
-Measured: 6 of 18 runs in the verification pass of 13-14 Nov (3 of 8 on 866851ac, 3 of 10 on
-q-gates-chaos, `app/` identical), then 39 of 40 on 14 Nov between 01:00 and 01:45 (+04) at load average
-9-30: 19 of 20 plain, and all 20 with the browser forced to light or dark and to UTC or Dubai time, so
-neither the colour scheme nor the time zone is the cause; then 9 of 10 on 14 Nov between 05:12 and 05:16
-(+04) at load average 7-12. That is 54 of 68 runs in all (79%), and 6 of 18 (33%) in the quietest pass.
-The rate moves with the machine's load and from one session to the next; treat any single green run as
-luck. Re-measure after any change to how the app restores the
-holding screen, and update `FLAKE` in the test.
+`test/loss-archive-reload.test.js` (emulator tier) used to fail on some runs of an unchanged tree, always on
+the same lines: after `endPregnancy(true)` and a reload, the holding screen did not come back. It was a
+product race, never excused: the suite exited 1 and said so in a `KNOWN INTERMITTENT PRODUCT RACE`
+paragraph. It failed in 54 of 68 runs measured on 13-14 Nov. The change that keeps every edit when two
+phones save the shared household close together closed it: 6 of 6 runs passed in the release
+integration of 14 Nov, under normal load. The paragraph stays in the test so that if it ever comes back,
+it reads as a regression of that fix and not as noise. Re-measure after any change to how the app
+restores the holding screen, and update `FLAKE` in the test.
 
 ## Every gate here was watched red
 

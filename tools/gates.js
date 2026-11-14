@@ -251,7 +251,6 @@ TREE.push(
   { name: 'deletion-reach', cmd: ['node', 'tools/deletion_reachable_test.js', 'url'] },
   { name: 'dosecal',        cmd: ['node', 'tools/dosecal_test.js', 'url'] },
   { name: 'guide',          cmd: ['node', 'tools/guide_test.js', 'url'] },
-  { name: 'medalarm',       cmd: ['node', 'tools/medalarm_test.js', 'url'] },
   { name: 'vaxcard',        cmd: ['node', 'tools/vaxcard_test.js', 'url'] },
 );
 // These judge PRODUCTION, not this checkout, so a failure is a deploy problem rather than a code

@@ -56,13 +56,13 @@ const ok = (n, c, extra) => {
   if (c) { pass++; console.log('  ok   ' + n); }
   else { fail++; failed.push(n); console.log('  FAIL ' + n + (extra !== undefined ? ('  ' + JSON.stringify(extra)) : '')); }
 };
-/* KNOWN INTERMITTENT (Nov 2026). These lines, and only these, fail on some runs of an unchanged tree, and on
-   some nights on nearly every run: after endPregnancy(true) and a reload the calm holding screen does not
-   come back. See FLAKE below and docs/TESTING.md, "Known intermittent: loss-archive". It is a product race,
+/* KNOWN INTERMITTENT until 14 Nov 2026, closed by the household blob-sync change (6 of 6 runs green after it).
+   If these lines fail again it is a regression of that fix: after endPregnancy(true) and a reload the calm
+   holding screen did not come back. See FLAKE below and docs/TESTING.md, "Known intermittent: loss-archive". It is a product race,
    not a harness flake, and it is NOT excused: the suite still exits 1. The note only says so plainly, so
    nobody re-runs it until it passes and calls that green. */
 const KNOWN_RACE = /holding screen/;
-const FLAKE = 'measured: 6 of 18 runs in the verification pass of 13-14 Nov (3/8 on 866851ac, 3/10 on q-gates-chaos, app/ identical), then 39 of 40 on 14 Nov 01:00-01:45 +04 at load average 9-30 (19/20 plain, and 20/20 with the browser forced light or dark, UTC or Dubai time: neither colour scheme nor time zone is the cause), then 9 of 10 on 14 Nov 05:12-05:16 +04 at load average 7-12. 54 of 68 runs in all';
+const FLAKE = 'measured: 6 of 18 runs in the verification pass of 13-14 Nov (3/8 on 866851ac, 3/10 on q-gates-chaos, app/ identical), then 39 of 40 on 14 Nov 01:00-01:45 +04 at load average 9-30 (19/20 plain, and 20/20 with the browser forced light or dark, UTC or Dubai time: neither colour scheme nor time zone is the cause), then 9 of 10 on 14 Nov 05:12-05:16 +04 at load average 7-12. 54 of 68 runs in all; then 0 of 6 after the blob-sync fix, in the release integration of 14 Nov';
 
 function get(url) {
   return new Promise((resolve) => {

@@ -283,8 +283,8 @@ async function until(fn, ms) {
   }, predSrc);
   const inWindow = (w) => !!w && w.dt >= 0 && w.dt < DEBOUNCE;
   /* A timing case only judges anything if the other phone's change really landed INSIDE her debounce.
-     Under load it sometimes lands just after, which is the documented residual (two pushes of the same
-     key racing at the server), not this fix. So the case is set up again, up to three times, until the
+     Under load it sometimes lands just after, which is a different case from the one this tests. So the
+     case is set up again, up to three times, until the
      window is hit; the window itself is still asserted, on the attempt that is judged. */
   const inWindowCase = async (label, run) => {
     let w = null;
