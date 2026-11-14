@@ -10,6 +10,7 @@
 */
 const http = require('http');
 const path = require('path');
+const { invitedHouseholdIds } = require('./invite_households');
 
 const DEMO = process.argv.includes('--demo');
 const PORT = 8787;
@@ -37,13 +38,14 @@ function initDb() {
 /* ---- read + compute the full ops dataset (real Firestore) ---- */
 async function collect() {
   const { leakyBucket } = require('./funnel');
-  const [usersSnap, hhSnap, fbSnap, wlSnap, evSnap, invSnap] = await Promise.all([
+  const [usersSnap, hhSnap, fbSnap, wlSnap, evSnap, invitedHhIds] = await Promise.all([
     db.collection('users').get(),
     db.collection('households').get(),
     db.collection('feedback').get().catch(() => ({ docs: [], size: 0 })),
     db.collection('waitlist').get().catch(() => ({ docs: [], size: 0 })),
     db.collectionGroup('events').get(),
-    db.collection('invites').get().catch(() => ({ docs: [], size: 0 })),
+    // Both kinds of email invite: the address-keyed one and each family's own (tools/invite_households.js).
+    invitedHouseholdIds(db),
   ]);
   const now = Date.now();
   const evByHh = {}; const typeTotals = {}; const authorSet = new Set();
@@ -82,7 +84,6 @@ async function collect() {
   const active1 = households.filter(h => h.last > now - DAY).length;
   const active7 = households.filter(h => h.last > now - 7 * DAY).length;
   const proOwnerUids = new Set(wlSnap.docs.map(d => d.id));
-  const invitedHhIds = new Set(invSnap.docs.map(d => (d.data() || {}).householdId).filter(Boolean));
   const lb = leakyBucket(households.map(h => ({ id: h.id, ownerId: h.ownerId, babies: h.babies, events: h.events, activeDays: h.activeDays, members: h.memberCount, created: h.created, firstLog: h.firstLog })), proOwnerUids, invitedHhIds);
 
   return {

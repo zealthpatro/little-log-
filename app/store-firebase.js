@@ -1223,8 +1223,12 @@
         var em0 = (user.email || '').toLowerCase();
         if (em0) {
           var pend = await db.collection('invites').doc(em0).get();
-          if (pend.exists && pend.data().householdId && pend.data().householdId !== curHid) {
-            window.LL.pendingInvite = Object.assign({ email: em0 }, pend.data());
+          // Every family that has invited her, one offer each, most recent first (readInviteOffers).
+          // The one into the family she is already in is not an offer.
+          var offers0 = (await readInviteOffers(em0, pend)).filter(function (o) { return o.householdId !== curHid; });
+          if (offers0.length) {
+            window.LL.pendingInvite = offers0[0];
+            window.LL.pendingInviteQueue = offers0.slice(1);
           }
         }
         // Same for a token link. Someone who already has a Cubby must never be moved into another
@@ -1277,19 +1281,31 @@
         try { await user.getIdToken(true); inv = await db.collection('invites').doc(email).get(); }
         catch (e2) { console.warn('invite lookup refused twice; continuing without it', e2 && e2.code); inv = null; }
       }
-      if (inv && inv.exists) {
-        var data = inv.data();
+      /* Every family that has invited her: the address-keyed invite and each family's own
+         (invites/{email}/from/{hid}), one offer per family, most recent first. More than one, and
+         she is asked about each in turn on the same sheet; "Not this one" throws that one away and
+         moves on to the next. */
+      var offers = await readInviteOffers(email, inv);
+      /* At most NEWCOMER_ASKS of them stand between her and a Cubby of her own. Anyone with an account
+         can make households and invite any address from each, so with no limit a stranger could hold a
+         newcomer at the door with one question after another. The rest wait in the pending list and are
+         offered once she is in, where "Not now" lets her past each one. */
+      var asked = offers.slice(0, NEWCOMER_ASKS), later = offers.slice(NEWCOMER_ASKS);
+      for (var oi = 0; oi < asked.length; oi++) {
+        var data = asked[oi];
+        var moreOffers = oi < asked.length - 1;
         /* ASK FIRST, the way an existing user has always been asked (maybePromptPendingInvite).
            Anyone with an account can write an invite for any address, so joining here without a
            word let a stranger pull a new parent into the stranger's family, where everything she
            logged was theirs to read. One tap, naming who invited her. */
-        var answer = await askNewcomerToJoin(data);
+        var answer = await askNewcomerToJoin(data, { more: moreOffers });
         if (answer === true) {
           /* Refused AFTER she said yes: the owner withdrew the invite while she read the sheet, or
              the family has since closed (the rules never let anyone join a household flagged for
              deletion). Thrown on, that reached onAuthStateChanged and put a signed-in parent on the
              sign-in landing under "Cubby wasn't allowed to save that". Nothing was written, so say
-             what happened and let her start her own. */
+             what happened and let her start her own. The dead invite is hers to throw away, so it
+             is not offered again; another family's invite is not touched. */
           var joinLanded = watchJoinWait(); // offline, the loader gives way to the connectivity card
           try {
             await joinByEmailInvite(user, data);
@@ -1297,6 +1313,13 @@
             joinLanded();
             if (!je || je.code !== 'permission-denied') throw je;
             console.warn('join refused after consent', je.code);
+            await Promise.race([declineOffer(email, data), new Promise(function (r) { setTimeout(r, 3000); })]);
+            if (moreOffers || later.length) {
+              try { if (window.toast) window.toast('That invite is no longer open.'); } catch (e) {}
+              // The last she is asked about here: her own Cubby next, with the rest still waiting.
+              if (!moreOffers) declinedInvite = true;
+              continue;
+            }
             showInviteMismatch(email, 'gone');
             return null;
           }
@@ -1317,15 +1340,25 @@
           // a "we could not find your invite" screen.
           // Not awaited: on a bad connection she should not wait on it. If it never lands, the
           // invite is simply offered again later, the way it is to anyone with a Cubby.
-          try { db.collection('invites').doc(email).delete().catch(function (e) { console.warn('decline invite', e && e.code); }); } catch (e) {}
+          // Only THIS family's invite goes; the next family's is asked about next.
+          declineOffer(email, data);
           try { sessionStorage.removeItem('cubby-join'); } catch (e) {}
           declinedInvite = true;
-        } else {
-          // Could not ask (no sheet on this screen). Never join silently: she gets her own Cubby,
-          // and the invite is offered after boot, as it is to anyone who already has one.
-          window.LL.pendingInvite = Object.assign({ email: email }, data);
-          declinedInvite = true;
+          continue;
         }
+        // Could not ask (no sheet on this screen). Never join silently: she gets her own Cubby,
+        // and the invites are offered after boot, as they are to anyone who already has one.
+        window.LL.pendingInvite = data;
+        window.LL.pendingInviteQueue = offers.slice(oi + 1);
+        declinedInvite = true;
+        break;
+      }
+      // Not asked yet: offered after boot, as they are to anyone who already has a Cubby. Not thrown
+      // away either; only her own "no" ever deletes an invite.
+      if (later.length && !window.LL.pendingInvite) {
+        window.LL.pendingInvite = later[0];
+        window.LL.pendingInviteQueue = later.slice(1);
+        declinedInvite = true;
       }
     }
 
@@ -2295,12 +2328,61 @@
       // element), and a dotted method chain there reads to it as one more CSS class.
       var batchUpdate = b.update;
       batchUpdate.apply(b, args);
-      b.delete(db.collection('invites').doc(email));
+      /* Every invite this family holds for her, in the same batch: the rules refuse a join that
+         leaves one behind. Only the docs she READ go in: under the rules live before the per-family
+         invite, deleting a path they have no rule for would refuse the whole batch. */
+      if (inv.hasFamily) b.delete(familyInviteRef(email, inv.householdId));
+      if (inv.hasLegacy || !inv.hasFamily) b.delete(db.collection('invites').doc(email));
       await b.commit();
     } catch (e) {
       if (!e || e.code !== 'permission-denied') throw e;
       await hh.update(upd);
     }
+  }
+  /* ONE INVITE PER FAMILY PER ADDRESS (firestore.rules, invites/{email}/from/{hid}). The address-keyed
+     invite let whichever family wrote first hold a person's slot, and her real family could not invite
+     her at all. Each family now writes its own. The address-keyed one is still read, joined, declined
+     and cancelled for as long as older builds write it, and while the rules live before this change
+     refuse the per-family one, which is when this client writes the address-keyed one instead. */
+  function familyInviteRef(email, hid) { return db.collection('invites').doc(email).collection('from').doc(hid); }
+  // How many invites a newcomer is asked about before she is in a Cubby of her own (resolveHousehold).
+  var NEWCOMER_ASKS = 3;
+  function inviteMillis(d) {
+    var c = d && d.createdAt;
+    try { if (c && typeof c.toMillis === 'function') return c.toMillis(); } catch (e) {}
+    return typeof c === 'number' ? c : 0;
+  }
+  /* Every invite waiting for this address, one offer per family, most recent first. legacySnap is the
+     address-keyed doc, already read by the caller (or null). The per-family list is refused by the rules
+     live before this change, and then it is simply empty. An offer remembers which docs it came from
+     (hasFamily, hasLegacy), because joining or declining it must spend exactly those. */
+  async function readInviteOffers(email, legacySnap) {
+    var byHid = {}, list = [];
+    function add(d, kind) {
+      if (!d || !d.householdId) return;
+      var o = byHid[d.householdId];
+      if (!o) { o = byHid[d.householdId] = { email: email }; list.push(o); }
+      /* When a family holds both, the newer one says what the owner wants now. Usually that is the
+         family's own (this build writes it), but an older build that cannot see it may have cancelled
+         and sent the address-keyed one again since, perhaps with another role. Ties: the family's own. */
+      if (!(o.hasFamily || o.hasLegacy) || inviteMillis(d) > inviteMillis(o) || (kind === 'family' && inviteMillis(d) === inviteMillis(o))) Object.assign(o, d);
+      if (kind === 'family') o.hasFamily = true; else o.hasLegacy = true;
+    }
+    try { if (legacySnap && legacySnap.exists) add(legacySnap.data(), 'legacy'); } catch (e) {}
+    try {
+      var fam = await db.collection('invites').doc(email).collection('from').get();
+      fam.forEach(function (s) { add(Object.assign({}, s.data(), { householdId: (s.data() || {}).householdId || s.id }), 'family'); });
+    } catch (e) { /* refused (the rules live before this change) or offline: the address-keyed one only */ }
+    list.sort(function (a, b) { return inviteMillis(b) - inviteMillis(a); });
+    return list;
+  }
+  /* She has said no to ONE family's invite: throw that one away and no other. Both of its docs, when
+     it has both. Never awaited by a caller that must not wait; each refusal is quiet. */
+  function declineOffer(email, inv) {
+    var outs = [];
+    if (inv && inv.hasFamily) outs.push(familyInviteRef(email, inv.householdId).delete().catch(function (e) { console.warn('decline invite', e && e.code); }));
+    if (inv && (inv.hasLegacy || !inv.hasFamily)) outs.push(db.collection('invites').doc(email).delete().catch(function (e) { console.warn('decline invite', e && e.code); }));
+    return Promise.all(outs);
   }
   /* A newcomer whose address has an invite waiting: ask, on the app's own confirm sheet, naming who
      sent it. Resolves true (join), false (she chose her own Cubby) or null (no sheet to ask with).
@@ -2347,7 +2429,10 @@
   function factsAsText(rows) {
     return rows.map(function (row) { return String(row.label) + ': ' + String(row.value) + '.'; }).join(' ');
   }
-  function askNewcomerToJoin(inv) {
+  function askNewcomerToJoin(inv, opts) {
+    // more: another family's invite is still to come, so saying no here is "Not this one", not yet
+    // "Start my own Cubby" (that is what saying no to the last one means).
+    var more = !!(opts && opts.more);
     if (typeof window.confirmSheet !== 'function' || !document.getElementById('sheet')) return Promise.resolve(null);
     /* A page from an older build (the edge or a precache can pair it with this file) has a
        confirmSheet that ignores onCancel, so "Start my own Cubby" would never settle this promise
@@ -2357,9 +2442,13 @@
     try { hideOverlay(); } catch (e) {}
     var f = inviteFacts(inv);
     var share = 'If you join, what you log is shared with their family circle, and what they log is shared with you.';
-    var body = f.senderProven
-      ? share + ' Only join if you know who sent this. If you don’t, start your own Cubby instead.'
-      : 'This invite doesn’t say who sent it. Join if you were expecting one. If not, start your own Cubby, and they can always invite you again. ' + share;
+    var body = more
+      ? (f.senderProven
+        ? share + ' Only join if you know who sent this.'
+        : 'This invite doesn’t say who sent it. Only join if you were expecting one, and they can always invite you again. ' + share)
+      : (f.senderProven
+        ? share + ' Only join if you know who sent this. If you don’t, start your own Cubby instead.'
+        : 'This invite doesn’t say who sent it. Join if you were expecting one. If not, start your own Cubby, and they can always invite you again. ' + share);
     var rich = window.confirmSheet.drawsFacts === true;
     if (!rich && f.factRows.length) body = factsAsText(f.factRows) + ' ' + body;
     return new Promise(function (resolve) {
@@ -2371,7 +2460,7 @@
           mustAnswer: true,
           body: body,
           confirmLabel: 'Join the family',
-          cancelLabel: 'Start my own Cubby',
+          cancelLabel: more ? 'Not this one' : 'Start my own Cubby',
           onConfirm: function () { try { showStatus('Setting things up…'); } catch (e) {} resolve(true); },
           onCancel: function (how) {
             if (how !== 'cancel') { setTimeout(ask, 250); return; }
@@ -2656,21 +2745,65 @@
     if (!window.confirmSheet) return;
     // Who sent it, drawn as data (inviteFacts): the same rule as the newcomer's sheet.
     var f = inviteFacts(inv);
-    // HONEST: joining overwrites users/{uid}.householdId, and there is no in-app way back to the old
-    // one (a household switcher is not built). The old data is not deleted, but it becomes
-    // unreachable from here. The previous copy promised "you can switch back", which reads as data
-    // loss to a tester who joins and then can't find their own baby. Say what actually happens.
-    var body = 'Join this family circle? You’ll switch to their Cubby on this account. Your own Cubby isn’t deleted, but you won’t be able to open it from here afterwards, so only join if you’re ready to switch for good.'
-      + (f.senderProven ? '' : ' This invite doesn’t say who sent it, so only join if you were expecting one.');
-    if (window.confirmSheet.drawsFacts !== true && f.factRows.length) body = factsAsText(f.factRows) + ' ' + body;
-    window.confirmSheet({
-      title: 'You’ve been invited 🐻',
-      facts: f.factRows,
-      body: body,
-      confirmLabel: 'Join the family',
-      cancelLabel: 'Not now',
-      onConfirm: function () { joinPendingInvite(inv); }
-    });
+    var ask = function (empty) {
+      // HONEST: joining overwrites users/{uid}.householdId, and there is no in-app way back to the old
+      // one (a household switcher is not built). The old data is not deleted, but it becomes
+      // unreachable from here. The previous copy promised "you can switch back", which reads as data
+      // loss to a tester who joins and then can't find their own baby. Say what actually happens.
+      // When there is nothing in hers to leave behind (ownCubbyIsEmpty), the warning would only
+      // frighten her for nothing, so she is told that instead.
+      var body = (empty
+        ? 'Join this family circle? You’ll move into their Cubby. Yours is still empty, so nothing is left behind.'
+        : 'Join this family circle? You’ll switch to their Cubby on this account. Your own Cubby isn’t deleted, but you won’t be able to open it from here afterwards, so only join if you’re ready to switch for good.')
+        + (f.senderProven ? '' : ' This invite doesn’t say who sent it, so only join if you were expecting one.');
+      if (window.confirmSheet.drawsFacts !== true && f.factRows.length) body = factsAsText(f.factRows) + ' ' + body;
+      window.confirmSheet({
+        title: 'You’ve been invited 🐻',
+        facts: f.factRows,
+        body: body,
+        confirmLabel: 'Join the family',
+        cancelLabel: 'Not now',
+        onConfirm: function () { joinPendingInvite(inv); },
+        // Another family's invite, if there is one, is offered next; nothing is thrown away by
+        // "Not now". Only her own tap moves on: a sheet closed by something else leaves the rest
+        // for the next launch rather than opening over whatever closed it.
+        onCancel: function (how) { if (how === 'cancel') offerNextPendingInvite(); }
+      });
+    };
+    ownCubbyIsEmpty().then(ask, function () { ask(false); });
+  }
+  function offerNextPendingInvite() {
+    var q = (window.LL && window.LL.pendingInviteQueue) || [];
+    if (!q.length) return;
+    window.LL.pendingInvite = q.shift();
+    window.LL.pendingInviteQueue = q;
+    setTimeout(maybePromptPendingInvite, 300);
+  }
+  /* Is her own Cubby still empty, with nothing in it she would leave behind by moving? No baby, no
+     logs, no journey (or kept memories of one), no notes or photos or anything else kept, and nobody
+     else in it. Read from the server where the app holds only part of it (the logs load the last four
+     months first; the journey and the notes have their own listeners), and any doubt, a failed read or
+     an offline phone, answers no, so the warning stays. "Nothing is left behind" has to be true. */
+  async function ownCubbyIsEmpty() {
+    var me = auth.currentUser;
+    if (!me || !hhRef) return false;
+    var people = Object.keys(window.LL.members || {});
+    if (people.length !== 1 || people[0] !== me.uid) return false;
+    if ((state.babies || []).length || (state.events || []).length || state.pregnancy || (state.pregnancyArchive || []).length) return false;
+    var kept = ['notes', 'photos', 'milestones', 'meds', 'illnesses'].some(function (k) { return (state[k] || []).length > 0; });
+    if (kept || state.handoff) return false;
+    try {
+      var reads = await Promise.all([
+        hhRef.collection('events').limit(1).get({ source: 'server' }),
+        hhRef.collection('photos').limit(1).get({ source: 'server' }),
+        // Notes are read the way the rules let anyone read them: her own, and any left to the circle.
+        hhRef.collection('notes').where('createdBy', '==', me.uid).limit(1).get({ source: 'server' }),
+        hhRef.collection('notes').where('audience', '==', 'circle').limit(1).get({ source: 'server' })
+      ]);
+      if (reads.some(function (q) { return q.size > 0; })) return false;
+      var journey = await hhRef.collection('pregnancy').doc(me.uid).get({ source: 'server' });
+      return !journey.exists;
+    } catch (e) { return false; }
   }
   async function joinPendingInvite(inv) {
     try {
@@ -2702,11 +2835,13 @@
       if (gone && inv && !inv.viaLink) {
         var mine = ((auth.currentUser && auth.currentUser.email) || '').toLowerCase();
         if (mine) {
-          await Promise.race([db.collection('invites').doc(mine).delete().catch(function () {}),
+          // This family's invite only: another family's is still hers to be asked about.
+          await Promise.race([declineOffer(mine, inv),
             new Promise(function (r) { setTimeout(r, 3000); })]);
         }
       }
       try { if (window.toast) window.toast(gone ? 'That invite is no longer open. If you were expecting it, ask them to invite you again.' : 'Couldn’t join just now. Mind trying again?'); } catch (e2) {}
+      if (gone) offerNextPendingInvite();
     }
   }
 
@@ -3572,7 +3707,10 @@
           if (out.isOwner && !prep.invitesWithdrawn) {
             try {
               var hd = out.data || {}, outs = [];
-              Object.keys(hd.pendingInvites || {}).forEach(function (em) { outs.push(db.collection('invites').doc(em).delete().catch(function () {})); });
+              Object.keys(hd.pendingInvites || {}).forEach(function (em) {
+                outs.push(db.collection('invites').doc(em).delete().catch(function () {}));
+                outs.push(familyInviteRef(em, leaveRef.id).delete().catch(function () {})); // this family's own invite too
+              });
               var tokens = {};
               Object.keys(hd.pendingLinks || {}).forEach(function (rk) { if (!isLinkRowId(rk)) tokens[rk] = 1; });
               try {
@@ -3594,7 +3732,14 @@
       }
 
       // 3. Everything keyed to them outside the household.
-      if (email) { try { await db.collection('invites').doc(email).delete(); } catch (e) {} }
+      if (email) {
+        try { await db.collection('invites').doc(email).delete(); } catch (e) {}
+        // Every family's own invite to her address as well: each is a document named by her address.
+        try {
+          var mineFrom = await db.collection('invites').doc(email).collection('from').get();
+          await Promise.all(mineFrom.docs.map(function (dd) { return dd.ref.delete().catch(function () {}); }));
+        } catch (e) { /* refused by the rules live before this change, which have none to delete */ }
+      }
       try { await db.collection('waitlist').doc(uid).delete(); } catch (e) {}
       // users/{uid} carries the push tokens, so deleting it also stops delivery at the cron.
       // It also carries her kept-after-loss archive — deletion takes it along (correct: her
@@ -3866,12 +4011,8 @@
     var joinedEmails = {};
     Object.keys(info).forEach(function (uid) { var em = (emailForUid(uid) || '').toLowerCase(); if (em) joinedEmails[em] = 1; });
     var pendMap = (myRole === 'owner') ? (window.LL.hhPending || {}) : {};
-    var pendRows = Object.keys(pendMap).filter(function (em) { return !joinedEmails[em]; }).sort().map(function (em) {
-      var pv = pendMap[em] || {};
-      return '<div class="ll-mem"><div><div class="ll-mem-name">' + esc(pv.name || em) + '</div><div class="ll-mem-email">' + esc(em) + '</div></div>'
-        + '<div style="display:flex;align-items:center;gap:8px"><span class="ll-mem-role">Invited · waiting</span>'
-        + '<button class="ll-rm ll-cancel-inv" data-email="' + esc(em) + '">Cancel</button></div></div>';
-    }).join('');
+    var pendEmails = Object.keys(pendMap).filter(function (em) { return !joinedEmails[em]; }).sort();
+    var pendRows = pendEmails.map(function (em) { return pendingEmailRow(em, pendMap[em] || {}); }).join('');
 
     /* Pending LINKS. Until now an owner could make a link, lose the share sheet, and have no way to
        tell whether it went — the modal still said "Just you so far". Expired ones are shown as
@@ -4037,12 +4178,11 @@
     var copyBtn = document.getElementById('llCopyLink'); if (copyBtn) copyBtn.onclick = copyAppLink; // owner-only now
     if (myRole === 'owner') document.getElementById('llInvBtn').onclick = submitInvite;
     Array.prototype.forEach.call(document.querySelectorAll('.ll-rm'), function (b) {
-      if (b.classList.contains('ll-cancel-inv')) return; // pending-invite cancels are wired below
+      if (b.classList.contains('ll-cancel-inv') || b.classList.contains('ll-reinvite')) return; // pending-invite rows are wired below
       b.onclick = function () { removeMember(b.getAttribute('data-uid'), b.getAttribute('data-email'), b.getAttribute('data-name')); };
     });
-    Array.prototype.forEach.call(document.querySelectorAll('.ll-cancel-inv'), function (b) {
-      b.onclick = function () { cancelInvite(b.getAttribute('data-email')); };
-    });
+    wirePendingEmailRows(document);
+    if (myRole === 'owner') checkPendingInvites(pendEmails);
     Array.prototype.forEach.call(document.querySelectorAll('.ll-reshare-link'), function (b) {
       b.onclick = function () { reshareLink(b.getAttribute('data-row'), b); };
     });
@@ -4140,38 +4280,123 @@
     return { ok: true };
   };
 
+  /* A pending EMAIL invite's row on the circle screen. Gone means Cubby asked the server and this
+     family's own invite is no longer there: she started her own Cubby instead, or it was taken back
+     somewhere else. It used to keep saying "Invited · waiting" until the owner tapped Cancel and was
+     told it had already gone. Now it says so, and offers to send it again. Only a row marked
+     perFamily is ever checked: the address-keyed invite cannot be read by an owner, so its row stays
+     exactly as it was. Touch targets are 44px tall, and the words are drawn in the theme's ink rungs,
+     inline, so this adds no CSS class: the shared pink role label measures 2.8:1 on this row in Light
+     and the shared red button 4.2:1; --preg-ink and --danger-ink clear 5.3:1 in both themes, and
+     "Invite again" is not a warning, so it is plain --ink. */
+  var inviteGone = {}; // householdId|email -> true once the server said that invite is no longer there
+  function goneKey(email) { return (window.LL.householdId || '') + '|' + email; }
+  function pendingEmailRow(em, pv) {
+    var gone = inviteGone[goneKey(em)] === true;
+    var tap = 'min-height:44px;padding:0 6px;';
+    return '<div class="ll-mem" data-pend-email="' + esc(em) + '"><div><div class="ll-mem-name">' + esc(pv.name || em) + '</div><div class="ll-mem-email">' + esc(em) + '</div></div>'
+      + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end"><span class="ll-mem-role" style="color:var(--preg-ink,#8C547A)">' + (gone ? 'Not joined yet' : 'Invited · waiting') + '</span>'
+      + (gone ? '<button class="ll-rm ll-reinvite" data-email="' + esc(em) + '" style="' + tap + 'color:var(--ink,#2C2521)">Invite again</button>' : '')
+      + '<button class="ll-rm ll-cancel-inv" data-email="' + esc(em) + '" style="' + tap + 'color:var(--danger-ink,#9F4C3B)">Cancel</button></div></div>';
+  }
+  function wirePendingEmailRows(root) {
+    Array.prototype.forEach.call(root.querySelectorAll('.ll-cancel-inv'), function (b) {
+      b.onclick = function () { cancelInvite(b.getAttribute('data-email')); };
+    });
+    Array.prototype.forEach.call(root.querySelectorAll('.ll-reinvite'), function (b) {
+      b.onclick = function () { inviteAgain(b.getAttribute('data-email'), b); };
+    });
+  }
+  // Redraw one row in place once its check comes back, so a parent typing in the invite form below
+  // does not lose what she typed to a rebuilt sheet.
+  function redrawPendingRow(em) {
+    var pv = (window.LL.hhPending || {})[em];
+    Array.prototype.forEach.call(document.querySelectorAll('[data-pend-email]'), function (row) {
+      if (row.getAttribute('data-pend-email') !== em) return;
+      if (!pv) { row.remove(); return; }
+      var tmp = document.createElement('div');
+      tmp.innerHTML = pendingEmailRow(em, pv);
+      var fresh = tmp.firstChild;
+      row.parentNode.replaceChild(fresh, row);
+      wirePendingEmailRows(fresh);
+    });
+  }
+  // Ask the server about each of this family's own invites. Offline, refused, or any doubt: the row
+  // stays as it is drawn. Only a definite "not there" from the server turns a row to "Not joined yet".
+  function checkPendingInvites(emails) {
+    var hid = window.LL.householdId; if (!hid) return;
+    (emails || []).forEach(function (em) {
+      var pv = (window.LL.hhPending || {})[em] || {};
+      if (pv.perFamily !== true) return;
+      familyInviteRef(em, hid).get({ source: 'server' }).then(function (snap) {
+        var gone = !snap.exists, k = hid + '|' + em;
+        if ((inviteGone[k] === true) === gone) return;
+        if (gone) inviteGone[k] = true; else delete inviteGone[k];
+        redrawPendingRow(em);
+      }, function () {});
+    });
+  }
+  // "Invite again": the same invite, made again through the one path that makes invites.
+  function inviteAgain(em, btn) {
+    var pv = (window.LL.hhPending || {})[em] || {};
+    if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
+    var settle = function (text) {
+      redrawPendingRow(em);
+      try { window.toast && window.toast(text); } catch (e) {}
+    };
+    createEmailInvite({ email: em, name: pv.name || '', rel: pv.relationship || '', role: pv.role || 'caregiver' }).then(function (kind) {
+      if (kind === 'withdrawn') { redrawPendingRow(em); return; }
+      // The mirror row was rewritten by createEmailInvite; keep the local copy in step for the redraw.
+      if (window.LL.hhPending) window.LL.hhPending[em] = Object.assign({}, pv, { perFamily: kind === 'family' });
+      settle('Invite ready for ' + em + '.');
+    }, function (e) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Invite again'; }
+      try {
+        window.toast && window.toast((e && e.code === 'permission-denied')
+          ? 'Cubby couldn’t make an invite for that address. Try sending them an invite link instead.'
+          : errText(e, 'Could not make the invite just now. Mind trying again?', true));
+      } catch (e2) {}
+    });
+  }
+
   // Withdraw a pending invite: the invite doc is what grants join rights, so deleting it is the
-  // real revocation; the household mirror entry is just the visible list. firestore.rules already
-  // lets any household owner delete an invite pointing at their household.
+  // real revocation; the household mirror entry is just the visible list. firestore.rules lets the
+  // household's owner delete this family's own invite, and the address-keyed one when it points at
+  // her household. Both doors are closed, because an older build may have written the other one.
   function cancelInvite(email) {
     if (!email || !hhRef) return;
+    var hid = window.LL.householdId;
+    function tidy(text) {
+      try { hhRef.update(new firebase.firestore.FieldPath('pendingInvites', email), firebase.firestore.FieldValue.delete()).catch(function () {}); } catch (e) {}
+      if (window.LL.hhPending) delete window.LL.hhPending[email];
+      delete inviteGone[goneKey(email)];
+      if (getLastInvite() === email) setLastInvite('');
+      try { window.toast && window.toast(text); } catch (e) {}
+      reopenFamily();
+    }
+    // A row Cubby already found gone has nothing live to withdraw: it only comes off the list.
+    if (inviteGone[goneKey(email)] === true) {
+      noteInviteCancelled(hid, email);
+      try { familyInviteRef(email, hid).delete().catch(function () {}); } catch (e) {}
+      try { db.collection('invites').doc(email).delete().catch(function () {}); } catch (e) {}
+      tidy('Taken off your list.');
+      return;
+    }
     var doCancel = function () {
       var done = false;
-      function finish() {
-        try { hhRef.update(new firebase.firestore.FieldPath('pendingInvites', email), firebase.firestore.FieldValue.delete()).catch(function () {}); } catch (e) {}
-        if (window.LL.hhPending) delete window.LL.hhPending[email];
-        if (getLastInvite() === email) setLastInvite('');
-        try { window.toast && window.toast('Invite cancelled.'); } catch (e) {}
-        reopenFamily();
-      }
+      noteInviteCancelled(hid, email);
       // Same optimistic exit as saves: offline the delete is queued and will land; don't hang.
-      var t = setTimeout(function () { if (done) return; done = true; finish(); }, 6000);
-      db.collection('invites').doc(email).delete()
-        .then(function () { if (done) return; done = true; clearTimeout(t); finish(); })
-        .catch(function (e) {
-          if (done) return; done = true; clearTimeout(t);
-          // A denied delete here almost always means the invite doc is already gone (used and
-          // later cleaned up elsewhere): tidy the stale mirror entry rather than erroring forever.
-          if (e && e.code === 'permission-denied') {
-            try { hhRef.update(new firebase.firestore.FieldPath('pendingInvites', email), firebase.firestore.FieldValue.delete()).catch(function () {}); } catch (e3) {}
-            if (window.LL.hhPending) delete window.LL.hhPending[email];
-            if (getLastInvite() === email) setLastInvite('');
-            try { window.toast && window.toast('That invite was already gone, so it has been tidied away.'); } catch (e2) {}
-            reopenFamily();
-            return;
-          }
-          try { window.toast && window.toast(errText(e, 'Could not cancel that invite just now. Mind trying again?', true)); } catch (e2) {}
-        });
+      var t = setTimeout(function () { if (done) return; done = true; tidy('Invite cancelled.'); }, 6000);
+      var settled = function (p) { return p.then(function () { return null; }, function (e) { return e || { code: 'unknown' }; }); };
+      Promise.all([settled(familyInviteRef(email, hid).delete()), settled(db.collection('invites').doc(email).delete())]).then(function (r) {
+        if (done) return; done = true; clearTimeout(t);
+        if (!r[0] || !r[1]) { tidy('Invite cancelled.'); return; }
+        // Both refused: under the rules live before this change the per-family delete always is, and
+        // a refused address-keyed delete almost always means that invite is already gone (used, or
+        // cleaned up elsewhere). Tidy the stale row rather than erroring forever.
+        if (r[0].code === 'permission-denied' && r[1].code === 'permission-denied') { tidy('That invite was already gone, so it has been tidied away.'); return; }
+        try { window.toast && window.toast(errText(r[1].code === 'permission-denied' ? r[0] : r[1], 'Could not cancel that invite just now. Mind trying again?', true)); } catch (e2) {}
+      });
     };
     if (window.confirmSheet) {
       window.confirmSheet({ title: 'Cancel this invite?', body: 'The invite for ' + email + ' will stop working. You can always invite them again.', confirmLabel: 'Cancel invite', cancelLabel: 'Keep it', danger: true, onConfirm: doCancel });
@@ -4359,8 +4584,10 @@
           });
         });
         // Lane B, P4: her invites to her other addresses, the invite first (that is the revocation).
+        // Both kinds: the address-keyed one and this family's own (invites/{email}/from/{hid}).
         alsoInvites.forEach(function (em) {
           try { db.collection('invites').doc(em).delete().catch(function () {}); } catch (e) {}
+          try { familyInviteRef(em, hhRef.id).delete().catch(function () {}); } catch (e) {}
         });
         var removal = hhRef.update(u);
         alsoInvites.forEach(function (em) {
@@ -4372,6 +4599,8 @@
         try { hhRef.collection('memberEmails').doc(uid).delete().catch(function () {}); } catch (e) {}
         if (email) {
           try { db.collection('invites').doc(email).delete().catch(function () {}); } catch (e) {}
+          // And this family's own invite to that address, which an owner may always delete.
+          try { familyInviteRef(String(email).toLowerCase(), hhRef.id).delete().catch(function () {}); } catch (e) {}
           // Drop any pending-invite mirror entry too, so a removed member's email doesn't linger
           // in the "Invited, waiting" list once they're gone from memberInfo.
           try { hhRef.update(new firebase.firestore.FieldPath('pendingInvites', String(email).toLowerCase()), firebase.firestore.FieldValue.delete()).catch(function () {}); } catch (e) {}
@@ -4602,9 +4831,55 @@
     // promise stays pending, so waiting on it would freeze "Creating…" forever. Proceed after a
     // short wait; only a real rejection turns into an error.
     var t = setTimeout(function () { if (done) return; done = true; showReady(); }, 6000);
+    createEmailInvite({ email: email, name: name, rel: rel, role: owner ? 'owner' : 'caregiver' }).then(function () {
+      if (done) return; done = true; clearTimeout(t); showReady();
+    }).catch(function (e) {
+        if (done) return; done = true; clearTimeout(t);
+        /* Refused. With one invite per family this is no longer another family holding the address;
+           it is the rules saying no to this owner (an address nobody proved, say). Saying more would
+           tell anyone with a Cubby who else has invited an address, so the copy names the way
+           forward instead. */
+        msg.textContent = (e && e.code === 'permission-denied')
+          ? 'Cubby couldn’t make an invite for that address. Try sending them an invite link instead.'
+          : errText(e, 'Could not create the invite just now. Mind trying again?');
+        btn.textContent = 'Create invite'; btn.disabled = false;
+      });
+  }
+  /* A Cancel can come before the server's answer to the invite it withdraws (offline, say). The answer
+     then wrote the perFamily mark, and that put back the row the Cancel had taken off her list: a
+     "Not joined yet" row with "Invite again", for an invite she had withdrawn. So each invite made on
+     this phone takes a number, a Cancel records the number it came after (householdId|email), and an
+     answer marks its row only when no Cancel came after it and the row is still on her list here. */
+  var inviteSeq = 0, inviteCancelled = {};
+  function noteInviteCancelled(hid, email) { inviteCancelled[hid + '|' + email] = ++inviteSeq; }
+  /* The one way an email invite is made: the invite form above and "Invite again" on the circle screen.
+     o: { email, name, rel, role }. Resolves 'family' when this family's own invite
+     (invites/{email}/from/{hid}) is in, 'legacy' when the address-keyed one was written instead, or
+     'withdrawn' when she cancelled it on this phone before Cubby knew which to write (nothing is
+     written then). Rejects with the refusal.
+     WHICH ONE. The client ships before the rules that allow the per-family invite, and a write the
+     rules will refuse must never be the one left queued: offline, the refusal only arrives after she
+     has closed Cubby, with nobody left to write the other one, and her list would say "Invited ·
+     waiting" for an invite that never existed. So it asks first, by reading this family's own invite
+     to that address (an owner may, under the new rules; the older rules refuse it). Refused: the
+     address-keyed invite, as before. Read: this family's own. No answer (offline): whatever the rules
+     said last time on this phone, and the address-keyed one if they have never said, which every
+     version of the rules accepts. */
+  var FAMILY_RULES_KEY = 'cubby-invite-family-rules';
+  function familyRulesKnown() { try { return localStorage.getItem(FAMILY_RULES_KEY) === '1'; } catch (e) { return false; } }
+  function familyRulesSeen() { try { localStorage.setItem(FAMILY_RULES_KEY, '1'); } catch (e) {} }
+  function familyInvitesAllowed(email, hid) {
+    return familyInviteRef(email, hid).get({ source: 'server' }).then(function () { familyRulesSeen(); return true; }, function (e) {
+      if (e && e.code === 'permission-denied') return false;
+      return familyRulesKnown();
+    });
+  }
+  function createEmailInvite(o) {
+    var hid = window.LL.householdId;
+    var mySeq = ++inviteSeq;
     var invDoc = {
-      householdId: window.LL.householdId, role: owner ? 'owner' : 'caregiver',
-      relationship: rel, name: name,
+      householdId: hid, role: o.role === 'owner' ? 'owner' : 'caregiver',
+      relationship: o.rel || '', name: o.name || '',
       invitedBy: auth.currentUser.uid, status: 'pending', createdAt: window.LL.serverTimestamp()
     };
     /* Shown to a newcomer on the sheet that asks whether to join (askNewcomerToJoin): she cannot
@@ -4620,26 +4895,43 @@
        server answered never was, and she had a live invite she could neither see nor cancel. If the
        rules refuse the invite, its row comes off again below, so nobody shows as "Invited, waiting"
        who was never invited. */
-    var pendingRow = new firebase.firestore.FieldPath('pendingInvites', email);
+    var pendingRow = new firebase.firestore.FieldPath('pendingInvites', o.email);
     try {
-      if (hhRef) hhRef.update(pendingRow, { name: name, relationship: rel, role: owner ? 'owner' : 'caregiver', at: Date.now() }).catch(function () {});
+      if (hhRef) hhRef.update(pendingRow, { name: invDoc.name, relationship: invDoc.relationship, role: invDoc.role, at: Date.now() }).catch(function () {});
     } catch (e) {}
-    db.collection('invites').doc(email).set(invDoc).then(function () {
-      if (done) return; done = true; clearTimeout(t); showReady();
-    }).catch(function (e) {
-        // Before the done check: a refusal that arrives after the optimistic exit still takes the row.
-        if (e && e.code === 'permission-denied') {
-          try { if (hhRef) hhRef.update(pendingRow, firebase.firestore.FieldValue.delete()).catch(function () {}); } catch (e2) {}
-        }
-        if (done) return; done = true; clearTimeout(t);
-        /* Refused, most often because that address already has an invite from another family
-           (only that family's owner may change it). Saying so would tell anyone with a Cubby who
-           else has invited an address, so the copy names the way forward instead. */
-        msg.textContent = (e && e.code === 'permission-denied')
-          ? 'Cubby couldn’t make an invite for that address. Try sending them an invite link instead.'
-          : errText(e, 'Could not create the invite just now. Mind trying again?');
-        btn.textContent = 'Create invite'; btn.disabled = false;
+    var dropRow = function () {
+      try { if (hhRef) hhRef.update(pendingRow, firebase.firestore.FieldValue.delete()).catch(function () {}); } catch (e2) {}
+    };
+    var legacy = function () {
+      return db.collection('invites').doc(o.email).set(invDoc).then(function () { delete inviteGone[hid + '|' + o.email]; return 'legacy'; }, function (e2) {
+        // A refusal that arrives after the form's optimistic exit still takes the row.
+        if (e2 && e2.code === 'permission-denied') dropRow();
+        throw e2;
       });
+    };
+    return familyInvitesAllowed(o.email, hid).then(function (allowed) {
+      /* Cancelled while Cubby was still asking which invite to write (a slow connection): her Cancel
+         had nothing to delete yet, so writing it now would leave a live invite she has withdrawn. */
+      if ((inviteCancelled[hid + '|' + o.email] || 0) > mySeq) return 'withdrawn';
+      if (!allowed) return legacy();
+      return familyInviteRef(o.email, hid).set(invDoc).then(function () {
+        familyRulesSeen();
+        /* The server has it. Only now is the row marked as this family's own invite, which is what lets
+           the circle screen check on it later (an owner may read her own family's invite, never the
+           address-keyed one). A mark written before the answer could call a live invite gone. */
+        var withdrawn = (inviteCancelled[hid + '|' + o.email] || 0) > mySeq;
+        var listed = !!(window.LL.hhPending && window.LL.hhPending[o.email]);
+        if (!withdrawn && listed) {
+          try { if (hhRef) hhRef.update(new firebase.firestore.FieldPath('pendingInvites', o.email, 'perFamily'), true).catch(function () {}); } catch (e) {}
+        }
+        delete inviteGone[hid + '|' + o.email];
+        return 'family';
+      }, function (e) {
+        // Refused although the rules seemed to allow it (they were changed back): the old way, once.
+        if (e && e.code === 'permission-denied') return legacy();
+        throw e;
+      });
+    });
   }
 
   /* ---------- feedback ---------- */

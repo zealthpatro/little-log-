@@ -86,6 +86,40 @@ service cloud.firestore {
       allow delete: if request.auth != null && (
            ( emailProven() && request.auth.token.email.lower() == email )
         || get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members[request.auth.uid] == 'owner' );
+
+      /* ONE INVITE PER FAMILY PER ADDRESS. The doc above is keyed only by the address, so whoever
+         writes it first holds it, and every other family's owner is refused: another family could
+         hold a person's slot and her real family was told "Cubby couldn't make an invite for that
+         address". Here each family has its own slot, so nobody can hold anyone else's.
+           - the invitee, her own PROVEN address only, may list and read every invite to her, and
+             delete any of them (declining one, or deleting her account)
+           - an owner may create, read, update and delete the one for HER OWN household, and no other:
+             the household is the path, and the doc must name the same one. She may read a missing
+             one (not found, not denied), which is how her circle screen learns an invite was declined
+           - nobody lists anyone else's: an owner learning who else invited her guest would be a leak
+           - the sender proof is senderProven() above, exactly
+         The legacy doc above stays, for the builds that still write it, until it is gone. Each join
+         branch spends every grant the address holds for THAT family, through whichever door. */
+      match /from/{hid} {
+        function familyOwner() {
+          return request.auth != null
+            && get(/databases/$(database)/documents/households/$(hid)).data.get('members', {}).get(request.auth.uid, '') == 'owner';
+        }
+        function invitee() {
+          return emailProven() && request.auth.token.email.lower() == email;
+        }
+        allow list: if invitee();
+        allow get: if invitee() || familyOwner();
+        /* Dated by the server, on every write (createEmailInvite sends serverTimestamp()). Offers are
+           asked most recent first, so a date the sender picked could put any number of a stranger's
+           invites ahead of a person's real one. */
+        allow create, update: if familyOwner()
+          && request.resource.data.get('householdId', '') == hid
+          && request.resource.data.get('role', 'caregiver') in ['owner', 'caregiver']
+          && request.resource.data.get('createdAt', null) == request.time
+          && senderProven();
+        allow delete: if invitee() || familyOwner();
+      }
     }
 
     /* Invite LINKS, keyed by an unguessable token. Additive: /invites (keyed by email) is untouched
@@ -230,6 +264,21 @@ service cloud.firestore {
         return emailProven()
           && exists(/databases/$(database)/documents/invites/$(request.auth.token.email.lower()))
           && get(/databases/$(database)/documents/invites/$(request.auth.token.email.lower())).data.householdId == hid;
+      }
+      // This family's own invite to the writer's proven address (invites/{email}/from/{hid}).
+      function familyInvitedHere() {
+        return emailProven()
+          && exists(/databases/$(database)/documents/invites/$(request.auth.token.email.lower())/from/$(hid))
+          && get(/databases/$(database)/documents/invites/$(request.auth.token.email.lower())/from/$(hid)).data.get('householdId', '') == hid;
+      }
+      /* A join spends EVERY grant the address holds for this family, whichever door it came through:
+         this family's per-family invite, and the legacy one when it points here. One left behind was a
+         standing way back in for anyone the owner later removed. A legacy invite from another family
+         is that family's, and stays. */
+      function spendsEveryInviteHere() {
+        return !existsAfter(/databases/$(database)/documents/invites/$(request.auth.token.email.lower())/from/$(hid))
+          && ( !existsAfter(/databases/$(database)/documents/invites/$(request.auth.token.email.lower()))
+               || getAfter(/databases/$(database)/documents/invites/$(request.auth.token.email.lower())).data.get('householdId', '') != hid );
       }
       // Pro entitlement is set ONLY by the billing Worker (Admin credentials bypass rules).
       // No client, owner included, may grant or change it.
@@ -397,7 +446,29 @@ service cloud.firestore {
              // invites can only be created by an owner). Prevents an invitee self-promoting to
              // 'owner' — hasOnly() above restricts WHICH member key changes, never its value.
              && request.resource.data.members[request.auth.uid] == get(/databases/$(database)/documents/invites/$(request.auth.token.email.lower())).data.get('role', 'caregiver')
-             && !existsAfter(/databases/$(database)/documents/invites/$(request.auth.token.email.lower()))
+             && spendsEveryInviteHere()
+             && onlyOwnMemberInfo()
+             && joinsVisibly()
+             && onlyClearsOwnPending('pendingInvites', request.auth.token.email.lower()) )
+        /* JOINING BY THIS FAMILY'S OWN EMAIL INVITE (invites/{email}/from/{hid}). The same door as
+           above in every other respect: the role is the one the owner set on it, and every invite
+           this address holds for this family goes in the same batch. */
+        || ( familyInvitedHere()
+             /* Only while the owner's circle still lists it. Older builds cannot see this invite: their
+                Cancel and Remove delete the address-keyed one and take the row off her list, and that
+                has to be enough to close this door too. Every build writes the row before the invite. */
+             && request.auth.token.email.lower() in resource.data.get('pendingInvites', {})
+             /* And on the terms that row states. An older build's Cancel leaves this invite in place, and
+                its next invite to the same address writes the row again, maybe with another role: the
+                row is the owner's latest word, so a withdrawn owner invite cannot come back as owner. */
+             && resource.data.pendingInvites[request.auth.token.email.lower()].get('role', 'caregiver')
+                  == get(/databases/$(database)/documents/invites/$(request.auth.token.email.lower())/from/$(hid)).data.get('role', 'caregiver')
+             && notYetMember()
+             && !('deleteAfter' in resource.data)
+             && changedKeys().hasOnly(['members', 'memberInfo', 'pendingInvites'])
+             && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid])
+             && request.resource.data.members[request.auth.uid] == get(/databases/$(database)/documents/invites/$(request.auth.token.email.lower())/from/$(hid)).data.get('role', 'caregiver')
+             && spendsEveryInviteHere()
              && onlyOwnMemberInfo()
              && joinsVisibly()
              && onlyClearsOwnPending('pendingInvites', request.auth.token.email.lower()) )

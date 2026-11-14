@@ -577,6 +577,8 @@ const newTok = () => { const A = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRST
   await A2.setViewport({ width: 390, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
   ok('Hana is removed', !!(await until(async () => { const h = await adminGet('households/' + a.hid); return h && !(h.members || {})[Hh.who.uid]; }, 10000)));
   ok('her invite at her real address is cancelled', (await until(async () => (await adminGet('invites/hana.real@links.test')) === null, 8000)) === true);
+  // Under rules that allow one invite per family, the form wrote this family's own invite instead.
+  ok('and so is this family\'s own invite there', (await until(async () => (await adminGet('invites/hana.real@links.test/from/' + a.hid)) === null, 8000)) === true);
   ok('and its row is off Olive\'s list', !!(await until(async () => { const h = await adminGet('households/' + a.hid); return h && !((h.pendingInvites || {})['hana.real@links.test']); }, 8000)));
   const hl = await adminGet('invites/hanalee@links.test');
   ok('the other Hana\'s invite is untouched, row and all', !!hl && !!((((await adminGet('households/' + a.hid)) || {}).pendingInvites || {})['hanalee@links.test']), hl);

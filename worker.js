@@ -2618,6 +2618,29 @@ async function funnelPage(base, token, path, fields, spend) {
   return out;
 }
 
+/* Each family's own email invites, invites/{email}/from/{hid} (one invite per family per address).
+   Their parent document usually does not exist, so the list of /invites above never sees them: one
+   collection-group query, masked to householdId, and only the ones that really sit under /invites,
+   because 'from' is a plain word another collection could use one day. */
+async function funnelFamilyInvites(base, token, spend) {
+  const r = await fetch(base + ':runQuery', {
+    method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+    body: JSON.stringify({ structuredQuery: {
+      from: [{ collectionId: 'from', allDescendants: true }],
+      select: { fields: [{ fieldPath: 'householdId' }] },
+      limit: 5000,
+    } }),
+  });
+  if (!r.ok) throw new Error('family invites query ' + r.status);
+  const docs = ((await r.json()) || []).map((e) => e && e.document).filter(Boolean)
+    .filter((d) => /\/documents\/invites\/[^/]+\/from\/[^/]+$/.test(d.name || ''));
+  spend(Math.max(1, docs.length));
+  return docs;
+}
+// For test/invite-households.test.js, which sends this exact query to the Firestore emulator: a stubbed
+// fetch can only prove the stub.
+export const __funnelInvites = { funnelFamilyInvites };
+
 /* The shared pregnancy journey, masked to stage, birth and the TIMING of the logs that live there.
    households/{hid}/pregnancy/{owner} is a subcollection; the first audit had it at the top level, which
    would have counted zero pregnancies. Maternal-private health is in mhealth and is never read. */
@@ -2693,8 +2716,9 @@ async function funnelInput(env, now) {
 
   const cohort = new Set(households.map((h) => h.id));
   const inv = await funnelPage(base, token, 'invites', ['householdId'], spend);
+  const famInv = await funnelFamilyInvites(base, token, spend);
   const links = await funnelPage(base, token, 'inviteLinks', ['householdId', 'hid'], spend);
-  const invitedHouseholdIds = inv.concat(links).map((x) => fsField(x, 'householdId') || fsField(x, 'hid')).filter((h) => h && cohort.has(h));
+  const invitedHouseholdIds = inv.concat(famInv, links).map((x) => fsField(x, 'householdId') || fsField(x, 'hid')).filter((h) => h && cohort.has(h));
   const wl = await funnelPage(base, token, 'waitlist', ['uid'], spend);
   const waitlistUids = wl.map((x) => fsField(x, 'uid') || (x.name || '').split('/waitlist/')[1]).filter(Boolean);
 

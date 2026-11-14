@@ -76,6 +76,11 @@ function firestore(opts) {
         { name: 'projects/p/databases/(default)/documents/households/' + OLD, fields: { ownerId: str(OLDO),
           members: { mapValue: { fields: { [OLDO]: str('owner'), [OLDC]: str('caregiver') } } } } }] });
     }
+    /* Each family's own invites: the collection-group query over 'from'. familyInvites lists the docs
+       it answers with (by name); by default there are none, as before that path existed. */
+    if (url.endsWith(':runQuery') && /"collectionId":"from"/.test(String((init && init.body) || ''))) {
+      return j((opts.familyInvites || []).map((d) => ({ document: d })));
+    }
     if (url.endsWith(':runQuery')) {
       return j([hhDoc(HH, OWNER, { [OWNER]: 'owner', [CARE]: 'caregiver' }, [1]), hhDoc(HH2, FOUNDER, { [FOUNDER]: 'owner' }, [1, 2])].map((d) => ({ document: d })));
     }
@@ -90,7 +95,7 @@ function firestore(opts) {
     }
     if (url.indexOf('/pregnancy') >= 0) return j({});
     if (url.indexOf('/users/') >= 0) return j({ fields: { acq: { mapValue: { fields: { source: str('instagram') } } } } });
-    if (url.indexOf('/invites?') >= 0) return j({ documents: [{ name: 'x/invites/a', fields: { householdId: str(HH) } }] });
+    if (url.indexOf('/invites?') >= 0) return j(opts.noLegacyInvites ? {} : { documents: [{ name: 'x/invites/a', fields: { householdId: str(HH) } }] });
     if (url.indexOf('/inviteLinks?') >= 0) return j({});
     if (url.indexOf('/waitlist?') >= 0) return j({ documents: [{ name: 'x/waitlist/' + OWNER, fields: { uid: str(OWNER) } }] });
     return j({}, 404);
@@ -175,6 +180,25 @@ function firestore(opts) {
   ok('two authors on one day reach the wedge', body.funnel.baby.shared_logging === 1, body.funnel.baby);
   ok('the invite and the waitlist are attributed', body.funnel.baby.invite_sent === 1 && body.funnel.baby.pro_waitlisted === 1, body.funnel.baby);
   ok('it records how many Firestore reads it spent', typeof body.reads === 'number' && body.reads > 0, body.reads);
+
+  console.log('\n3a. a family\'s own email invite (invites/{email}/from/{hid}) is an invite sent too');
+  {
+    const famDoc = (pathName) => ({ name: 'projects/p/databases/(default)/documents/' + pathName, fields: { householdId: str(HH) } });
+    let d1f = makeD1();
+    let fsf = firestore({ noLegacyInvites: true, familyInvites: [famDoc('invites/a@x.test/from/' + HH)] });
+    await withFetch(fsf.fetchImpl, () => F.runFunnelSnapshot(Object.assign({}, env, { GAMES_DB: d1f }), NOW));
+    const bf = JSON.parse(d1f.raw.prepare('SELECT body FROM funnel_snapshots').get().body);
+    ok('with only a family\'s own invite, the household still counts as having sent one', bf.funnel.baby.invite_sent === 1, bf.funnel.baby);
+    const famBody = Object.values(fsf.bodies).find((x) => /"collectionId":"from"/.test(x)) || '';
+    ok('read with a collection-group query masked to householdId alone',
+      /"allDescendants":true/.test(famBody) && /"select":\{"fields":\[\{"fieldPath":"householdId"\}\]\}/.test(famBody), famBody);
+    // The companion: the same matcher, given a 'from' document that is NOT under /invites, must not count it.
+    d1f = makeD1();
+    fsf = firestore({ noLegacyInvites: true, familyInvites: [famDoc('households/' + HH + '/from/x')] });
+    await withFetch(fsf.fetchImpl, () => F.runFunnelSnapshot(Object.assign({}, env, { GAMES_DB: d1f }), NOW));
+    const bo = JSON.parse(d1f.raw.prepare('SELECT body FROM funnel_snapshots').get().body);
+    ok('(companion) a collection called "from" anywhere else is not an invite', bo.funnel.baby.invite_sent === 0, bo.funnel.baby);
+  }
 
   console.log('\n3b. and it sees EVERY household\'s week, not only new sign-ups');
   ok('an old household outside the cohort is seen as active this week', body.activity && body.activity.active_households === 2, body.activity);

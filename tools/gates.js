@@ -239,6 +239,12 @@ const EMU_GATES = [
      once never leave a ghost owner or an empty family nobody purges; a removal closes her other invites. */
   { name: 'links-leave-rules', emu: 'node links-leave-rules.test.js' },
   { name: 'links-leave', self: ['node', 'test/links-leave.test.js'] },
+  /* One invite per family per address (lane C): nobody can hold a person's invite slot against her
+     real family, an owner's circle says when an invite was declined, and an empty Cubby is not warned
+     about switching for good. */
+  { name: 'invite-family-rules', emu: 'node invite-family-rules.test.js' },  // invites/{email}/from/{hid}: who reads, writes, joins, spends
+  { name: 'invite-households', emu: 'node invite-households.test.js' },      // the founder's reports and the Worker's funnel query count both kinds of email invite
+  { name: 'invite-family', self: ['node', 'test/invite-family.test.js'] },   // several families, "Not joined yet", the empty-Cubby question
 ];
 
 function freePort() {

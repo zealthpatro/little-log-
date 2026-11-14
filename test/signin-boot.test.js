@@ -72,7 +72,12 @@ function check(store) {
   r.retriesOnFreshToken = /catch \(e\) \{[\s\S]{0,200}?getIdToken\(true\)[\s\S]{0,200}?invites'\)\.doc\(email\)\.get\(\)/.test(newUser);
   // and the inner catch must NOT rethrow, or the guard is decorative
   r.doesNotRethrow = !/catch \(e2\) \{[^}]*throw/.test(newUser);
-  r.toleratesNull = /if \(inv && inv\.exists\)/.test(newUser);
+  /* A null result is "no invite". Since one invite per family per address (lane C), the branch hands
+     the address-keyed read to readInviteOffers(email, inv), which checks it before reading it, and
+     reads each family's own invites beside it; the inline check is still accepted. */
+  const offers = bodyOf(store, 'async function readInviteOffers(email, legacySnap)');
+  r.toleratesNull = /if \(inv && inv\.exists\)/.test(newUser)
+    || (/readInviteOffers\(email, inv\)/.test(newUser) && /if \(legacySnap && legacySnap\.exists\)/.test(offers));
 
   r.noDeadFreshener = !/freshenTokenForEmailReads/.test(store);   // removed with its disproved theory
   return r;
@@ -119,15 +124,22 @@ console.log('\n4. the boot handler still sends a THROW back to the door, which i
 
 if (SELF) {
   console.log('\n5. --self-test: put the defect back and watch it fail');
-  const broken = STORE.replace(
+  let broken = STORE.replace(
     /var inv = null;\s*try \{\s*inv = await db\.collection\('invites'\)\.doc\(email\)\.get\(\);\s*\} catch \(e\) \{[\s\S]*?\}\s*if \(inv && inv\.exists\)/,
     "var inv = await db.collection('invites').doc(email).get();\n      if (inv.exists)");
+  // The shape since one invite per family: the guarded read is followed by readInviteOffers.
+  if (broken === STORE) broken = STORE.replace(
+    /var inv = null;\s*try \{\s*inv = await db\.collection\('invites'\)\.doc\(email\)\.get\(\);\s*\} catch \(e\) \{[\s\S]*?inv = null; \}\s*\}/,
+    "var inv = await db.collection('invites').doc(email).get();");
   ok('the mutation actually removed the guard', broken !== STORE);
   const r = check(broken);
   ok('catches: an UNGUARDED new-user invites read', r.guarded === false);
   ok('catches: no retry on a fresh token', r.retriesOnFreshToken === false);
 
   ok('catches: a re-added freshener', check(STORE + '\nfreshenTokenForEmailReads').noDeadFreshener === false);
+
+  const deref = STORE.replace('if (legacySnap && legacySnap.exists)', 'if (legacySnap.exists)');
+  ok('catches: a null result read without a check', deref !== STORE && check(deref).toleratesNull === false);
 
   const rethrow = STORE.replace('catch (e2) { console.warn(', 'catch (e2) { throw e2; console.warn(');
   ok('catches: a guard that rethrows is not a guard', check(rethrow).doesNotRethrow === false);

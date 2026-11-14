@@ -10,6 +10,7 @@ const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 const path = require('path');
 const { leakyBucket, retention, wedge } = require('./funnel');
+const { invitedHouseholdIds } = require('./invite_households');
 let sa;
 try { sa = require(path.join(__dirname, 'serviceAccountKey.json')); }
 catch (e) { console.error('\nMissing tools/serviceAccountKey.json. See ANALYTICS.md (Firebase console > Project settings > Service accounts > Generate new private key).\n'); process.exit(1); }
@@ -25,13 +26,14 @@ const pct = (n, d) => d ? Math.round((n / d) * 100) + '%' : '0%';
 const bar = (n, max, w = 24) => '█'.repeat(Math.round((n / (max || 1)) * w)).padEnd(w, ' ');
 
 (async () => {
-  const [usersSnap, hhSnap, fbSnap, wlSnap, evSnap, invSnap] = await Promise.all([
+  const [usersSnap, hhSnap, fbSnap, wlSnap, evSnap, invitedHhIds] = await Promise.all([
     db.collection('users').get(),
     db.collection('households').get(),
     db.collection('feedback').get().catch(() => ({ docs: [] })),
     db.collection('waitlist').get().catch(() => ({ docs: [] })),
     db.collectionGroup('events').get(),
-    db.collection('invites').get().catch(() => ({ docs: [] })),
+    // Both kinds of email invite: the address-keyed one and each family's own (tools/invite_households.js).
+    invitedHouseholdIds(db),
   ]);
 
   // group events by household
@@ -88,7 +90,6 @@ const bar = (n, max, w = 24) => '█'.repeat(Math.round((n / (max || 1)) * w)).p
 
   // ── Activation funnel (the leaky bucket) — from data we already collect, no new tracking ──
   const proOwnerUids = new Set(wlSnap.docs.map(d => d.id));
-  const invitedHhIds = new Set(invSnap.docs.map(d => (d.data() || {}).householdId).filter(Boolean));
   const lb = leakyBucket(households, proOwnerUids, invitedHhIds);
   const maxDrop = Math.max(0, ...lb.funnel.slice(1).map(r => r.drop));
   line('\n── Activation funnel (the leaky bucket) ──');

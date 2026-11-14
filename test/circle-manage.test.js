@@ -7,8 +7,10 @@
  *      looked like nothing). Removing someone also cancels every unused link, because every member
  *      can read the live link tokens: a removed member must not walk back in with one she saw.
  *   B. An email invite made offline shows in the owner's circle after a relaunch, a removal made
- *      offline reaches the server after a relaunch (B3), and an invite
- *      the rules refuse leaves no "Invited, waiting" row behind.
+ *      offline reaches the server after a relaunch (B3), and an address another family already
+ *      invited (B2): under the rules live before one-invite-per-family the invite is refused and
+ *      leaves no "Invited, waiting" row behind; under the new rules her own family's invite goes in
+ *      beside the other family's (test/invite-family.test.js is that change's own gate).
  *   C. An email invite into a family that has closed is thrown away when the join is refused, so
  *      it is not offered again on every launch.
  *   D. An owner who deletes her account leaves a co-owner in charge rather than promoting a
@@ -26,7 +28,7 @@
  *   node test/circle-manage.test.js                     (rules = ./firestore.rules)
  *   RULES_FILE=/tmp/live.rules node test/circle-manage.test.js
  *       the deploy window: this client against the rules that are live now. Sections whose answer
- *       depends on the new rules (C, and E's 30 days) are checked the way those rules allow.
+ *       depends on the new rules (B2, C, and E's 30 days) are checked the way those rules allow.
  *
  * Ports: FS_PORT, AUTH_PORT, WEB_PORT, HUB_PORT, LOG_PORT, WS_PORT.
  */
@@ -394,11 +396,22 @@ async function until(fn, ms) {
     document.getElementById('llInvEmail').value = 'sq@circle.test';
     document.getElementById('llInvBtn').click();
   });
-  const sqMsg = await until(() => A2.evaluate(() => { const m = document.getElementById('llInvMsg'); return m && /couldn’t make an invite/.test(m.innerText) ? m.innerText : ''; }), 12000);
-  ok('she is told Cubby could not make that invite', !!sqMsg, sqMsg);
-  await sleep(2500);
-  const sqRow = (((await adminGet('households/' + a.hid)) || {}).pendingInvites || {})['sq@circle.test'];
-  ok('and no "Invited, waiting" row is left for someone nobody invited', !sqRow, sqRow);
+  if (OLD_MODE) {
+    // The rules live before one-invite-per-family: the address is held, and she is told so.
+    const sqMsg = await until(() => A2.evaluate(() => { const m = document.getElementById('llInvMsg'); return m && /couldn’t make an invite/.test(m.innerText) ? m.innerText : ''; }), 12000);
+    ok('she is told Cubby could not make that invite', !!sqMsg, sqMsg);
+    await sleep(2500);
+    const sqRow = (((await adminGet('households/' + a.hid)) || {}).pendingInvites || {})['sq@circle.test'];
+    ok('and no "Invited, waiting" row is left for someone nobody invited', !sqRow, sqRow);
+  } else {
+    /* One invite per family per address (lane C, D3): another family holding the address no longer
+       blocks hers. Her own family's invite goes in beside the other family's, which stays. */
+    const sqMsg = await until(() => A2.evaluate(() => { const m = document.getElementById('llInvMsg'); return m && /Invite ready/.test(m.innerText) ? m.innerText : ''; }), 12000);
+    ok('another family holding that address no longer blocks her: the invite is ready', !!sqMsg, sqMsg);
+    ok('as her own family\'s invite (invites/sq/from/<her family>)', !!(await until(async () => ((await adminGet('invites/sq@circle.test/from/' + a.hid)) || {}).householdId === a.hid, 8000)));
+    const sqRow = await until(async () => { const r = (((await adminGet('households/' + a.hid)) || {}).pendingInvites || {})['sq@circle.test']; return r && r.perFamily === true ? r : null; }, 8000);
+    ok('and her row says so, marked as her family\'s own', !!sqRow, sqRow);
+  }
   ok('(the other family\'s invite is untouched)', ((await adminGet('invites/sq@circle.test')) || {}).householdId === 'HSQ');
   await A2.evaluate(() => { try { document.getElementById('llModalOv').remove(); } catch (e) {} });
 

@@ -31,6 +31,15 @@
  *     row, whatever the rest of this list would say, and counted on its own line. Whole name, trimmed,
  *     any case, read off the invite or its pending row. A deletion's tombstone has no name, so it never
  *     matches. (The app cancels these at removal now; this closes the ones left from before.)
+ * Each family's own invites, invites/{email}/from/{hid} (one invite per family per address, the
+ * November 2026 change that stopped one family holding a person's address against every other):
+ *   - joins spend these by rule, so the lingering-grant cases above cannot arise for them. What is
+ *     cleared is an invite nobody can use or should: into a household that is gone or being deleted,
+ *     for someone who is already in that family (it would become a way back in the day she was
+ *     removed), or one that names a different household than its own path. Every other one is kept.
+ *   - a legacy invite above shares its pendingInvites row with the same family's own invite to the
+ *     same address, so when that one exists the row is left alone: clearing it would hide a live
+ *     invite from the owner's circle.
  * And per household: deleteAfter or deletionRequestedBy set while members is not empty is a flag
  * nobody legitimately sets (only the last one out may), so both fields are cleared.
  * A household with a bogus flag is unflagged, so its invites are judged as a live family's.
@@ -95,7 +104,9 @@ const changedSinceRead = (e) => errCode(e) === '9' || errCode(e) === 'failed-pre
     invites: 0, keptPending: 0, keptNoAccount: 0, keptCaregiver: 0, keptOwner: 0,
     notJoinedNoAccount: 0, notJoinedHasAccount: 0, namedLikeRemoved: 0,
     goneHousehold: 0, flaggedHousehold: 0, usedByMember: 0, usedByFormerMember: 0, pendingRows: 0,
-    households: 0, bogusFlags: 0, skippedChanged: 0, errors: 0
+    households: 0, bogusFlags: 0, skippedChanged: 0, errors: 0,
+    rowsKeptForFamily: 0, familyInvites: 0, familyKept: 0,
+    familyGoneHousehold: 0, familyFlaggedHousehold: 0, familyAlreadyMember: 0, familyMalformed: 0
   };
   const hhCache = new Map();
   const readHousehold = async (hid) => {
@@ -138,6 +149,13 @@ const changedSinceRead = (e) => errCode(e) === '9' || errCode(e) === 'failed-pre
         continue;
       }
       clearRow = has(d.pendingInvites, email);
+      // The row is keyed by the address alone. When this family also has its OWN invite to her
+      // (invites/{email}/from/{hid}), that live invite shares the row: leave it.
+      if (clearRow) {
+        try {
+          if ((await db.collection('invites').doc(email).collection('from').doc(hid).get()).exists) { clearRow = false; n.rowsKeptForFamily++; }
+        } catch (e) { n.errors++; console.log('  read failed: ' + errCode(e)); continue; }
+      }
     }
 
     if (APPLY) {
@@ -155,6 +173,46 @@ const changedSinceRead = (e) => errCode(e) === '9' || errCode(e) === 'failed-pre
     }
     n[reason]++;
     if (namesake) n.namedLikeRemoved++;
+    if (clearRow) n.pendingRows++;
+  }
+
+  /* 1b. Each family's own invites. A collection-group read, kept to the ones under /invites: 'from'
+     is a plain word, and a collection of that name anywhere else is none of this script's business. */
+  const fam = await db.collectionGroup('from').get();
+  for (const fi of fam.docs) {
+    const inv = fi.ref.parent.parent;
+    if (!inv || !inv.parent || inv.parent.id !== 'invites' || inv.parent.parent) continue;
+    n.familyInvites++;
+    const email = inv.id, hid = fi.id, fd = fi.data() || {};
+    let reason = null, clearRow = false, hh = null;
+    if (fd.householdId !== hid) reason = 'familyMalformed';
+    else {
+      try { hh = await readHousehold(hid); } catch (e) { n.errors++; console.log('  read failed: ' + errCode(e)); continue; }
+      const d = hh && hh.exists ? (hh.data() || {}) : null;
+      if (!d) reason = 'familyGoneHousehold';
+      else if (flagged(d) && size(d.members) === 0) reason = 'familyFlaggedHousehold';
+      else {
+        let uid = null;
+        try { uid = (await auth.getUserByEmail(email)).uid; }
+        catch (e) {
+          if (errCode(e) !== 'auth/user-not-found' && errCode(e) !== 'auth/invalid-email') { n.errors++; console.log('  account lookup failed: ' + errCode(e)); continue; }
+        }
+        if (uid && has(d.members, uid)) { reason = 'familyAlreadyMember'; clearRow = has(d.pendingInvites, email); }
+      }
+    }
+    if (!reason) { n.familyKept++; continue; }
+    if (APPLY) {
+      try {
+        const b = db.batch();
+        b.delete(fi.ref, { lastUpdateTime: fi.updateTime });
+        if (clearRow) b.update(hh.ref, new FieldPath('pendingInvites', email), FieldValue.delete());
+        await b.commit();
+      } catch (e) {
+        if (changedSinceRead(e)) { n.skippedChanged++; continue; }
+        n.errors++; console.log('  delete failed: ' + errCode(e)); continue;
+      }
+    }
+    n[reason]++;
     if (clearRow) n.pendingRows++;
   }
 
@@ -191,6 +249,13 @@ const changedSinceRead = (e) => errCode(e) === '9' || errCode(e) === 'failed-pre
   console.log('  kept, still pending (no account yet): ' + n.keptNoAccount);
   console.log('  kept, caregiver invites:              ' + n.keptCaregiver);
   console.log('  kept, co-owner invites:               ' + n.keptOwner);
+  console.log('  rows left for the family\'s own invite: ' + n.rowsKeptForFamily);
+  console.log('  family invites read:                  ' + n.familyInvites);
+  console.log('  ' + verb + ', family invite, household gone: ' + n.familyGoneHousehold);
+  console.log('  ' + verb + ', family invite, household being deleted: ' + n.familyFlaggedHousehold);
+  console.log('  ' + verb + ', family invite, already in that family: ' + n.familyAlreadyMember);
+  console.log('  ' + verb + ', family invite naming another household: ' + n.familyMalformed);
+  console.log('  kept, family invites still pending:   ' + n.familyKept);
   console.log('  households read:                      ' + n.households);
   console.log('  ' + (APPLY ? 'unflagged' : 'would unflag') + ', flag on a family with people: ' + n.bogusFlags);
   console.log('  skipped, changed during the run:      ' + n.skippedChanged);

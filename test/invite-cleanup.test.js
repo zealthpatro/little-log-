@@ -21,6 +21,11 @@
  *     where he signs up again BEFORE the cleanup runs.
  *   - a live family that carries a bogus deletion flag keeps its genuine pending invites
  *   - the script refuses to run on half an emulator setup, or with no credentials at all
+ *   - section 7, one invite per family (invites/{email}/from/{hid}): an old address-keyed invite it
+ *     deletes leaves the pendingInvites row alone when the same family's own invite to that address
+ *     is live (they share the row), and a family's own invite is deleted only when nobody can use it
+ *     (household gone or being deleted, she is already in that family, or it names another
+ *     household); a genuinely pending one is kept
  *
  *   node test/invite-cleanup.test.js          (self-hosting: starts both emulators itself)
  * Ports are overridable so it never collides with another suite: FS_PORT, AUTH_PORT.
@@ -101,7 +106,10 @@ const UID = { owner: 'uidOwnerOlive', removed: 'uidRemovedRex', joined: 'uidJoin
 const EM = { removed: 'rex.removed@example.test', joined: 'jo.joined@example.test', pending: 'pat.pending@example.test',
   stranger: 'kim.elsewhere@example.test', gone: 'gus.gone@example.test', dying: 'dee.dying@example.test',
   bogusPending: 'bo.bogusfam@example.test',
-  ray: 'ray.selfgone@example.test', rae: 'rae.selfgone@example.test', ross: 'ross.oldbuild@example.test', roy: 'roy.backearly@example.test' };
+  ray: 'ray.selfgone@example.test', rae: 'rae.selfgone@example.test', ross: 'ross.oldbuild@example.test', roy: 'roy.backearly@example.test',
+  // Section 7, one invite per family: Kai has an old address-keyed invite AND his family's own one.
+  kai: 'kai.twodoors@example.test', fGone: 'fay.famgone@example.test', fDying: 'fin.famdying@example.test',
+  fPending: 'flo.fampending@example.test', fOdd: 'fox.famodd@example.test' };
 const AUTH_URL = () => 'http://' + process.env.FIREBASE_AUTH_EMULATOR_HOST + '/identitytoolkit.googleapis.com/v1/';
 async function idt(p, body) {
   const r = await fetch(AUTH_URL() + p + '?key=fake', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -316,12 +324,47 @@ const count = (out, label) => { const m = out.split('\n').find((l) => l.includes
   ok('a second --apply deletes nothing more', again.code === 0 && count(again.out, 'already joined') === 0
     && count(again.out, 'removed or left') === 0 && count(again.out, 'flag on a family with people') === 0, again.out);
 
-  /* 7. Lane B, P4. Hana joined Mia's family by link with a Hide My Email address while Mia's email
+  console.log('\n7. one invite per family, beside the address-keyed one');
+  await seedDb(async (db) => {
+    // Kai's old address-keyed co-owner invite into a family someone has left (deleted, as in 4), and
+    // his family's own invite to him, made since; the two share his row on Olive's list.
+    await db.doc('invites/' + EM.kai).set({ householdId: HID, role: 'owner', invitedBy: UID.owner });
+    await db.doc('invites/' + EM.kai + '/from/' + HID).set({ householdId: HID, role: 'caregiver', invitedBy: UID.owner });
+    await db.doc('households/' + HID).update(new FP('pendingInvites', EM.kai), { name: 'Kai', role: 'caregiver', at: 2, perFamily: true });
+    await db.doc('invites/' + EM.fGone + '/from/' + HID_GONE).set({ householdId: HID_GONE, role: 'caregiver' });
+    await db.doc('invites/' + EM.fDying + '/from/' + HID_DYING).set({ householdId: HID_DYING, role: 'caregiver' });
+    await db.doc('invites/' + EM.joined + '/from/' + HID).set({ householdId: HID, role: 'caregiver', invitedBy: UID.owner });
+    await db.doc('households/' + HID).update(new FP('pendingInvites', EM.joined), { name: 'Jo', role: 'caregiver', at: 2, perFamily: true });
+    await db.doc('invites/' + EM.fPending + '/from/' + HID_CALM).set({ householdId: HID_CALM, role: 'caregiver', invitedBy: UID.calmOwner });
+    await db.doc('invites/' + EM.fOdd + '/from/' + HID_CALM).set({ householdId: HID, role: 'owner' });
+  });
+  const dry7 = runTool([]);
+  ok('the dry run reads the six family invites', count(dry7.out, 'family invites read') === 6, dry7.out);
+  ok('and names nobody', leaks(dry7.out).length === 0, leaks(dry7.out));
+  const fam7 = runTool(['--apply']);
+  ok('--apply exits 0', fam7.code === 0, fam7.out);
+  ok('and names nobody', leaks(fam7.out).length === 0, leaks(fam7.out));
+  ok('Kai\'s old address-keyed co-owner invite is deleted, as before', !(await readAdmin('invites/' + EM.kai)).exists);
+  ok('his family\'s own invite to him is untouched', (await readAdmin('invites/' + EM.kai + '/from/' + HID)).exists);
+  const h7 = (await readAdmin('households/' + HID)).data();
+  ok('and the row they share stays on Olive\'s list', !!(h7.pendingInvites || {})[EM.kai], Object.keys(h7.pendingInvites || {}));
+  ok('a family invite into a household that is gone is deleted', !(await readAdmin('invites/' + EM.fGone + '/from/' + HID_GONE)).exists);
+  ok('one into a household being deleted is deleted', !(await readAdmin('invites/' + EM.fDying + '/from/' + HID_DYING)).exists);
+  ok('one for someone already in that family is deleted', !(await readAdmin('invites/' + EM.joined + '/from/' + HID)).exists);
+  ok('and its row with it', !(h7.pendingInvites || {})[EM.joined], Object.keys(h7.pendingInvites || {}));
+  ok('one that names another household than its own is deleted', !(await readAdmin('invites/' + EM.fOdd + '/from/' + HID_CALM)).exists);
+  ok('(companion) a genuinely pending family invite is kept', (await readAdmin('invites/' + EM.fPending + '/from/' + HID_CALM)).exists);
+  ok('counts: 1 gone, 1 being deleted, 1 already in, 1 naming another, 2 kept, 1 row left for the family\'s own',
+    count(fam7.out, 'family invite, household gone') === 1 && count(fam7.out, 'family invite, household being deleted') === 1
+    && count(fam7.out, 'family invite, already in that family') === 1 && count(fam7.out, 'family invite naming another household') === 1
+    && count(fam7.out, 'family invites still pending') === 2 && count(fam7.out, 'rows left for the family') === 1, fam7.out);
+
+  /* 8. Lane B, P4. Runs after section 7, because its seed clears the emulator. Hana joined Mia's family by link with a Hide My Email address while Mia's email
      invite to Hana's REAL address was still waiting; Mia removed her. That invite lets her back in.
      It is matched by the name on it against the removed member's tombstone: whole name, trimmed, any
      case. "Hana Lee" is somebody else; an invite with no name matches no one, and neither does a
      deletion's tombstone, which keeps no name. */
-  console.log('\n7. her invite to another address, matched by the name of someone removed');
+  console.log('\n8. her invite to another address, matched by the name of someone removed');
   const HID_HME = 'hhWillowHme6';
   const HM = { real: 'hana.real@example.test', lee: 'hana.lee@example.test', noname: 'nameless@example.test' };
   await auth.createUser({ uid: 'uidHanaHme', email: 'hana.hme@privaterelay.example.test' });
@@ -371,6 +414,7 @@ const count = (out, label) => { const m = out.split('\n').find((l) => l.includes
   try { fs.rmSync(path.dirname(mutantFile), { recursive: true, force: true }); } catch (e) {}
 
   await env.cleanup();
+
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   console.log(fail ? 'INVITE-CLEANUP: FAIL' : 'INVITE-CLEANUP: PASS');
   process.exit(fail ? 1 : 0);
