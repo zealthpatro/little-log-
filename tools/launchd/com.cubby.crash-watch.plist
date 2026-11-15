@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.cubby.crash-watch</string>
+  <!-- A TEMPLATE. node tools/crash_watch.js --install replaces __HOME__ and copies the result to
+       ~/Library/LaunchAgents; nothing reads this file in place.
+
+       Hourly: reads TestFlight crash reports through the App Store Connect key in ~/.appstore-keys,
+       sorts them into known, new and regressed (tools/crash_signatures.json), writes
+       __HOME__/cubby-reports/CRASHES.md and a brief per crash, and notifies on new or regressed.
+       Runs from the ops clone (never ~/Downloads, which macOS denies to background jobs), moved to
+       origin/main first so the committed watcher is what runs. It never pushes, builds or uploads. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"; export PATH; G=/Library/Developer/CommandLineTools/usr/bin/git; [ -x "$G" ] || G=git; cd __HOME__/cubby-ops/little-log-pwa || { /usr/bin/osascript -e 'display notification "Could not open ~/cubby-ops/little-log-pwa. No crash reports were read." with title "Cubby crash watch did not run"'; exit 1; }; [ -n "$($G status --porcelain --untracked-files=no)" ] || { $G fetch -q origin; $G checkout -q --detach origin/main; }; exec node tools/crash_watch.js</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>3600</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>__HOME__/cubby-reports/crash-watch.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/cubby-reports/crash-watch.log</string>
+</dict>
+</plist>

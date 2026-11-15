@@ -141,7 +141,10 @@ async function builds() {
   }
 }
 
-(async () => {
+// tools/crash_watch.js reuses the signed client; the CLI below runs only when this file is run.
+module.exports = { api, get, app };
+
+if (require.main === module) (async () => {
   const [cmd, ...rest] = process.argv.slice(2);
   try {
     if (!cmd || cmd === 'state') await state();

@@ -222,6 +222,10 @@ const TREE = [
      gen_brand_icons.py does, runs propose dry with fetch cut off, holds set to its refusals, and runs
      set --yes end to end on a miniature git copy of the tree in a temp folder. The real tree is never written. */
   { name: 'brand-py',       cmd: ['python3', 'tools/brand.py', '--self-test'] },
+  /* crash-watch: the hourly TestFlight crash reader (tools/crash_watch.js, launchd com.cubby.crash-watch).
+     Offline: a TestFlight text log and a simulator .ips of one crash share a signature, known/new/regressed
+     follow the build numerically, each alert fires once, and no tester address reaches a report. */
+  { name: 'crash-watch',    cmd: ['node', 'tools/crash_watch.js', '--self-test'] },
 ];
 
 /* ---- Wiring and the push itself (Nov 2026, "a test not in gates.js does not exist"). ----
