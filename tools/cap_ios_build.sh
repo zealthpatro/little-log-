@@ -59,6 +59,11 @@ ruby tools/cap_ios_configure.rb
 python3 tools/gen_app_icon.py
 python3 tools/gen_splash.py
 
+# Does it OPEN? Every check below inspects the archive; none runs it. 2026.46.1 passed them all and
+# crashed at launch on every iPhone (iOS 27 + no UIScene adoption). Build for the newest simulator,
+# launch, and stop here unless it is still running with no crash report. set -e makes red fatal.
+bash tools/ios_launch_smoke.sh
+
 # CalVer: year.ISOweek.release (founder-approved 2026-08-02). A second build in the same week:
 # CUBBY_REL=2 bash tools/cap_ios_build.sh. Apple compares segments numerically, so 2027.4 > 2026.53.
 VER="$(date +%G).$(date +%V | sed 's/^0//').${CUBBY_REL:-1}"
@@ -120,11 +125,16 @@ else
 fi
 
 echo "▸ Exporting (re-signs for distribution, preserving the entitlements)…"
+# The old `| grep … || true` printed EXPORT FAILED and still exited 0, so 2026-11-15's agreement-expired
+# failure looked like a finished build. Keep the whole log and fail unless it says it succeeded.
+EXPORT_LOG="$OUT.log"
 xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportOptionsPlist "$PLIST" \
   -allowProvisioningUpdates \
   -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "$KEY_ID" -authenticationKeyIssuerID "$ISSUER" \
-  -exportPath "$OUT" | grep -E "error|Upload succeeded|EXPORT SUCCEEDED|EXPORT FAILED" || true
-
+  -exportPath "$OUT" > "$EXPORT_LOG" 2>&1 || true
+grep -E "error|Upload succeeded|EXPORT SUCCEEDED|EXPORT FAILED" "$EXPORT_LOG" || true
 # "Redundant Binary Upload ... build number 'N'" (code 90189) means the PRIOR upload SUCCEEDED --
-# manageAppVersionAndBuildNumber auto-bumps. Check scratchpad/asc.js before rebuilding.
-echo "▸ Done. Verify the build state with: node scratchpad/asc.js"
+# manageAppVersionAndBuildNumber auto-bumps. Check with node tools/asc.js builds before rebuilding.
+grep -qE "EXPORT SUCCEEDED|Upload succeeded" "$EXPORT_LOG" \
+  || { echo "✖ Export/upload did not succeed (full log: $EXPORT_LOG). Nothing new reached TestFlight."; exit 1; }
+echo "▸ Done. Verify the build state with: node tools/asc.js builds"
