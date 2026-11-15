@@ -14,14 +14,18 @@ This file is that flow, one subcommand per step:
     python3 tools/brand.py zoom b.png --subject-width 87 --out b87.png            optional: make it bigger
     python3 tools/brand.py set b87.png --provenance "..."                         what WOULD change
     python3 tools/brand.py set b87.png --provenance "..." --yes                   change it, with a proof
+    python3 tools/brand.py set b87.png --frame rim-shade --yes                    ...framed (none, rim, rim-shade, ring)
     python3 tools/brand.py native [--check]                                       ios/ and android/ from the master
+    python3 tools/brand.py stamp [--check]                                        ?v= on every logo URL, from the registry
     python3 tools/brand.py --self-test                                            tools/gates.js runs this
 
 compare   sizes.png (512 to 16px on light and dark), homescreen.png (60px between neutral app tiles on a
           blue-grey and a dark wallpaper), web.png (the top bar beside the real wordmark at 1x, 2x and 3x, and
           the browser-tab favicon at 16 and 32px), context-light.png (white and the site's cream), metrics.json
           and compare.html, which shows them with the numbers in one table. The current master is the first
-          column unless --no-current. Same inputs, same bytes. Every number is defined in METRICS below.
+          column unless --no-current. Each candidate is drawn twice, as painted and framed (--frame STYLE, else
+          the registry's frame, else rim-shade), with the tile's edge measured against the site's cream and a
+          dark ground both ways. Same inputs, same bytes. Every number is defined in METRICS below.
 propose   writes a jobs file for tools/gen_art.js (gpt-image-2 by default, the reference image attached) and
           runs it, then compares what came back. --dry-run prints the requests and sends nothing.
 zoom      the square crop, centred on the subject, that makes it PCT wide, resized back to the input's size.
@@ -29,20 +33,28 @@ zoom      the square crop, centred on the subject, that makes it PCT wide, resiz
           where a crop centred on the image gives 18 dB. It only crops in, and refuses when the subject would
           come within 1/128 of an edge (the cut in tools/gen_brand_icons.py needs clear wash all round).
 set       the one command for a logo change. Validates the file (square, at least 1024, RGB, no alpha), asks
-          the generators whether they can cut it, and shows what will change. With --yes it copies it to
+          the generators whether they can cut it, and shows what will change. --frame STYLE changes the frame
+          every tile is drawn with (tools/brand_style.py; default: keep the registry's), on a new master or on
+          the same one. With --yes it copies it to
           icons/icon-master-1024.png and runs every generator: the web icons and the small nav logos, the
           native set into native-build/brand-native (gitignored, outside what the site serves), the splash,
           every card's logo (tools/card_logo.py --swap --force), then re-pins tools/brand-images.json (the
           master's sha256, provenance and date; the two families made from the master re-hashed; the card
           digests re-approved), moves the old master and everything made from it into a retired set (and takes
-          a set OUT of retirement when its master comes back), runs the brand gate's static half, card_logo
-          --check and gen_brand_icons --check, and draws a before/after proof sheet for the founder.
+          a set OUT of retirement when its master comes back), puts the new ?v=<version> on every reference to
+          a file made from the master (pages, manifests, both service workers' lists, worker.js's emails,
+          cap-web/) and bumps app/sw.js's CACHE so installed apps fetch them, runs the brand gate's static
+          half, card_logo --check and gen_brand_icons --check, and draws a before/after proof sheet.
           When this tree has ios/ or android/ (gitignored; any checkout that has built the app), set remakes
           their icons, splash and the offline logo in public/ in place and checks them, because the brand
           gate reads them with every file git tracks and would find the old master's bytes there (verifier
           M1, 2026-11-14). It never reads a nested checkout or gitignored scratch (tree_files; verifier M1b).
 native    remakes ios/ and android/ from the master as set does (the undo after git restore, which cannot
           reach them); --check writes nothing and fails on any file that is not what the master gives.
+stamp     puts the registry's url_version on every reference to a file made from the master (a page copied
+          from an older one, a new generator template); --check writes nothing and lists the stale ones.
+          /icons/* is cached for 30 days (_headers), so a reference without the current version can show a
+          visitor the previous logo for a month (founder, 2026-11-15).
 
 Python 3 and Pillow, the standard library otherwise. The generators it drives use numpy; they run as their
 own processes. Nothing here draws a bear: every picture in a proof is made from the files themselves.
@@ -64,6 +76,9 @@ from collections import OrderedDict
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageOps, ImageStat
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import brand_style  # noqa: E402  the frame and the URL version, one implementation for every generator
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MASTER_REL = 'icons/icon-master-1024.png'
 REG_REL = 'tools/brand-images.json'
@@ -77,6 +92,7 @@ FONTS = os.path.join(ROOT, 'app', 'fonts')
 NATIVE_TOPS = ('ios', 'android')
 NATIVE_PUBLIC = ('ios/App/App/public/logo.png', 'android/app/src/main/assets/public/logo.png')
 CAP_LOGO = 'cap-web/logo.png'
+SW_REL = 'app/sw.js'
 
 # The production recipe, from tools/gen_brand_icons.py (the self-test proves they still agree).
 SHARPEN_MAX = 64
@@ -115,6 +131,11 @@ METRICS = OrderedDict([
     ('adaptive', MASKS[2][2]),
     ('cut', 'Whether tools/gen_brand_icons.py can cut the subject from its ground (its --preflight). If not, '
             'set refuses the file.'),
+    ('edge_cream', 'Tile edge vs the site\'s cream: WCAG contrast of the mean colour of the 512px tile\'s outer 2% '
+                   '(inside its rounded corner) against #FBF5E9, as painted and with the frame. This is what makes the '
+                   'tile stand out in the top bar: the painted wash is nearly the page\'s own colour.'),
+    ('edge_dark', 'Tile edge vs a dark ground (#1C1C1E, the dark wallpaper and the app\'s Night landing): the same, '
+                  'as painted and framed.'),
 ])
 
 
@@ -166,12 +187,31 @@ def prod_resize(img, size):
 
 def rounded(img, frac, ss=4):
     """Exactly tools/gen_brand_icons.rounded(): corners cut on a 4x supersampled mask."""
-    n = img.size[0]
-    mask = Image.new('L', (n * ss, n * ss), 0)
-    ImageDraw.Draw(mask).rounded_rectangle([0, 0, n * ss - 1, n * ss - 1], radius=int(n * ss * frac), fill=255)
-    out = img.convert('RGBA')
-    out.putalpha(mask.resize((n, n), Image.LANCZOS))
-    return out
+    return brand_style.rounded(img, frac, ss)
+
+
+NO_FRAME = brand_style.FRAMES['none']
+
+
+def tile(img, size, frame=None, radius=LOGO_RADIUS):
+    """Exactly tools/gen_brand_icons.tile(): resized, framed along its own corner, corners cut."""
+    return rounded(brand_style.framed(prod_resize(img, size), frame or NO_FRAME, radius), radius)
+
+
+def ios_icon(img, size, frame=None):
+    """A square icon as iOS shows it: tools/gen_brand_icons.square() (framed along the iOS corner, its
+    corners rim), then cut by the iOS corner."""
+    return rounded(brand_style.framed(prod_resize(img, size), frame or NO_FRAME, IOS_RADIUS), IOS_RADIUS)
+
+
+def tile_edge(t):
+    """The mean colour of a tile's outer 2% band, inside its rounded corner (alpha 255)."""
+    a = t.getchannel('A').point(lambda v: 255 if v == 255 else 0)
+    inner = a
+    for _ in range(max(1, int(round(t.size[0] * 0.02)))):
+        inner = inner.filter(ImageFilter.MinFilter(3))
+    band = ImageChops.subtract(a, inner)
+    return tuple(ImageStat.Stat(t.convert('RGB'), band).mean)
 
 
 def circle_mask(n, ss=4):
@@ -346,7 +386,16 @@ def preflight(path):
     return ok_, why.replace('preflight %s: ' % os.path.basename(path), '') if ok_ else why
 
 
-def candidate_metrics(img, info, path=None):
+def frame_metrics(img, frame):
+    """The tile's edge against the site's cream and a dark ground, as painted and framed (METRICS)."""
+    plain, framed_ = tile_edge(tile(img, 512)), tile_edge(tile(img, 512, frame))
+    return OrderedDict([('style', frame.get('style')), ('frame', brand_style.describe(frame)),
+                        ('edge_plain', hexc(plain)), ('edge_framed', hexc(framed_)),
+                        ('edge_cream_plain', round(contrast(plain, SITE_CREAM), 2)), ('edge_cream_framed', round(contrast(framed_, SITE_CREAM), 2)),
+                        ('edge_dark_plain', round(contrast(plain, DARK_WALL), 2)), ('edge_dark_framed', round(contrast(framed_, DARK_WALL), 2))])
+
+
+def candidate_metrics(img, info, path=None, frame=None):
     m = measure(img)
     out = OrderedDict([('name', info.get('name')), ('file', info['file']), ('sha256', info['sha256']),
                        ('size', info['size']), ('mode', info['mode']), ('square', info['square']), ('alpha', info['alpha'])])
@@ -365,6 +414,8 @@ def candidate_metrics(img, info, path=None):
         cut, why = False, 'not square'
     out['cut'] = OrderedDict([('ok', cut), ('detail', why)])
     out['set_accepts'] = bool(ok_file and cut)
+    if frame:
+        out['frame'] = frame_metrics(img, frame)
     return out
 
 
@@ -388,7 +439,7 @@ def _stack(blocks, bg=(255, 255, 255), gap=0):
     return out
 
 
-def render_sizes(img, name):
+def render_sizes(img, name, frame=None):
     pad = 24
     w = pad + sum(s + pad for s in SIZES)
     row = max(SIZES) + 2 * pad
@@ -400,7 +451,7 @@ def render_sizes(img, name):
         d.rectangle([0, y0, w, y0 + row - 1], fill=wall)
         x = pad
         for s in SIZES:
-            ic = rounded(prod_resize(img, s), IOS_RADIUS)
+            ic = ios_icon(img, s, frame)
             block.paste(ic, (x, y0 + pad + (max(SIZES) - s) // 2), ic)
             x += s + pad
     x = pad
@@ -438,14 +489,14 @@ def _tile(colour, glyph, s):
     return rounded(t, IOS_RADIUS)
 
 
-def render_homescreen(img, name, s=60):
+def render_homescreen(img, name, s=60, frame=None):
     cols, rows, gx, gy = 4, 3, 28, 30
     pw = cols * s + (cols + 1) * gx
     ph = rows * (s + 18) + (rows + 1) * gy
     block = Image.new('RGB', (2 * pw + 20, ph + 40), (255, 255, 255))
     d = ImageDraw.Draw(block)
     _label(d, (0, 8), name, 22)
-    me = rounded(prod_resize(img, s), IOS_RADIUS)
+    me = ios_icon(img, s, frame)
     for p, dark in enumerate((False, True)):
         panel = wallpaper(pw, ph, dark)
         pd = ImageDraw.Draw(panel)
@@ -462,9 +513,25 @@ def render_homescreen(img, name, s=60):
     return block
 
 
+# site.css .nav-brand img: filter: drop-shadow(0 2px 6px rgba(60,40,25,.18)) (founder, 2026-11-15). A CSS
+# shadow's blur is twice the Gaussian's standard deviation.
+NAV_SHADOW = (0, 2, 6, (60, 40, 25), 0.18)
+
+
+def drop_shadow(canvas, logo, xy, k, shadow=NAV_SHADOW):
+    """Paint `logo`'s CSS drop-shadow onto `canvas` under where it will sit, at device pixel ratio k."""
+    dx, dy, blur, rgb_, alpha = shadow
+    pad = int(3 * blur * k) + 2
+    a = Image.new('L', (logo.width + 2 * pad, logo.height + 2 * pad), 0)
+    a.paste(logo.getchannel('A'), (pad, pad))
+    a = a.filter(ImageFilter.GaussianBlur(blur * k / 2.0)).point(lambda v: int(round(v * alpha)))
+    canvas.paste(Image.new('RGB', a.size, rgb_), (xy[0] - pad + int(round(dx * k)), xy[1] - pad + int(round(dy * k))), a)
+
+
 def nav_bar(logo_src, dpr, width=640):
-    """The site's top bar (site.css .nav-in / .nav-brand) at `dpr`: the 34px logo, 9px gap, the Fraunces
-    600 21px wordmark, the tabs and the pink button, on the bar's cream. `logo_src` is what the page loads."""
+    """The site's top bar (site.css .nav-in / .nav-brand) at `dpr`: the 34px logo with its drop shadow, 9px
+    gap, the Fraunces 600 21px wordmark, the tabs and the pink button, on the bar's cream. `logo_src` is what
+    the page loads."""
     k = dpr
     h = int(56 * k)
     bar = Image.new('RGB', (int(width * k), h), SITE_CREAM)
@@ -476,6 +543,7 @@ def nav_bar(logo_src, dpr, width=640):
     ImageDraw.Draw(mask).rounded_rectangle([0, 0, n * 4 - 1, n * 4 - 1], radius=int(10 * k * 4), fill=255)
     lg.putalpha(ImageChops.multiply(lg.getchannel('A'), mask.resize((n, n), Image.LANCZOS)))
     x = int(20 * k)
+    drop_shadow(bar, lg, (x, (h - n) // 2), k)
     bar.paste(lg, (x, (h - n) // 2), lg)
     x += n + int(9 * k)
     f = font('serif', int(21 * k), opsz=21)
@@ -511,10 +579,10 @@ def browser_tabs(fav48, dark):
     return out
 
 
-def render_web(img, name):
-    logo96 = rounded(prod_resize(img, 96), LOGO_RADIUS)
-    logo192 = rounded(prod_resize(img, 192), LOGO_RADIUS)
-    fav48 = rounded(prod_resize(img, 48), LOGO_RADIUS)
+def render_web(img, name, frame=None):
+    logo96 = tile(img, 96, frame)
+    logo192 = tile(img, 192, frame)
+    fav48 = tile(img, 48, frame)
     bars = [nav_bar(logo96, 1), nav_bar(logo96, 2), nav_bar(logo192, 3)]
     tabs_l, tabs_d = browser_tabs(fav48, False), browser_tabs(fav48, True)
     w = max(b.width for b in bars)
@@ -536,7 +604,7 @@ def render_web(img, name):
     return block
 
 
-def render_context(img, name):
+def render_context(img, name, frame=None):
     sizes = [(34, 'nav'), (56, 'email'), (96, ''), (180, '')]
     pad = 28
     w = pad + sum(s + pad for s, _ in sizes)
@@ -550,7 +618,7 @@ def render_context(img, name):
         pd.rectangle([0, 0, w - 1, row - 1], outline=(230, 226, 220))
         x = pad
         for s, what in sizes:
-            ic = rounded(prod_resize(img, s), LOGO_RADIUS)
+            ic = tile(img, s, frame)
             panel.paste(ic, (x, (row - s) // 2), ic)
             x += s + pad
         block.paste(panel, (p * (w + 20), 40))
@@ -562,7 +630,7 @@ def _fmt(v):
     return ('%.2f' % v).rstrip('0').rstrip('.') if isinstance(v, float) else str(v)
 
 
-def compare_html(cands):
+def compare_html(cands, frame=None):
     usable = [c['set_accepts'] for c in cands]
 
     def row(key, title, values, best=None, unit=''):
@@ -591,6 +659,10 @@ def compare_html(cands):
         row('maskable', 'Maskable icon', [mask_cell(c, 'maskable') for c in cands]),
         row('android_round', 'Android round', [mask_cell(c, 'android_round') for c in cands]),
         row('adaptive', 'Android adaptive', [mask_cell(c, 'adaptive') for c in cands]),
+        row('edge_cream', 'Tile edge vs the site\'s cream, as painted', [c['frame']['edge_cream_plain'] for c in cands], 'max', ':1'),
+        row('edge_cream', 'Tile edge vs the site\'s cream, framed', [c['frame']['edge_cream_framed'] for c in cands], 'max', ':1'),
+        row('edge_dark', 'Tile edge vs a dark ground, as painted', [c['frame']['edge_dark_plain'] for c in cands], 'max', ':1'),
+        row('edge_dark', 'Tile edge vs a dark ground, framed', [c['frame']['edge_dark_framed'] for c in cands], 'max', ':1'),
         row('cut', 'The generators can cut it', [('yes' if c['cut']['ok'] else 'no: ' + c['cut']['detail']) for c in cands]),
         row('', 'brand.py set would accept it', [('yes' if c['set_accepts'] else 'no') for c in cands]),
         row('', 'Background, fur', ['%s, %s' % (c['subject']['background'], c['subject']['fur']) for c in cands]),
@@ -617,7 +689,7 @@ img{max-width:100%%;height:auto;border-radius:8px;border:1px solid var(--line);b
 dt{font-weight:700;margin-top:10px}dd{margin:2px 0 0;color:var(--soft)}
 </style></head><body><main>
 <h1>Logo candidates</h1>
-<p>Made by <code>python3 tools/brand.py compare</code>. Same inputs, same bytes. Hover a row name for what it measures; the best of each measured row is shaded, among the candidates set would accept.</p>
+<p>Made by <code>python3 tools/brand.py compare</code>. Same inputs, same bytes. Hover a row name for what it measures; the best of each measured row is shaded, among the candidates set would accept. Every picture shows each candidate as painted, then framed (%s).</p>
 <div class="wrap"><table><thead><tr><th></th>%s</tr></thead><tbody>
 %s
 </tbody></table></div>
@@ -626,13 +698,27 @@ dt{font-weight:700;margin-top:10px}dd{margin:2px 0 0;color:var(--soft)}
 <h2>The site's top bar and a browser tab</h2><img src="web.png" alt="Each candidate in the top bar and as a favicon">
 <h2>On white and on the site's cream</h2><img src="context-light.png" alt="Each candidate on white and cream">
 <h2>What each number means</h2><dl>%s</dl>
-<p>Pick one, then: <code>python3 tools/brand.py set FILE --provenance "..."</code> shows what would change; add <code>--yes</code> to do it.</p>
+<p>Pick one, then: <code>python3 tools/brand.py set FILE --frame %s --provenance "..."</code> shows what would change; add <code>--yes</code> to do it.</p>
 </main></body></html>
-""" % (head, '\n'.join(rows), defs)
+""" % (brand_style.describe(frame or NO_FRAME), head, '\n'.join(rows), defs, (frame or NO_FRAME)['style'])
 
 
-def compare(paths, names=None, out=None, current=True, quiet=False):
+def compare_frame(frame=None, root=None):
+    """The frame compare draws: the one asked for, else the registry's, else rim-shade (so the framed column
+    always shows a frame)."""
+    if frame:
+        return frame
+    try:
+        f = brand_style.frame_of(load_registry(root))
+    except (OSError, ValueError):
+        f = NO_FRAME
+    return f if f.get('style') != 'none' else brand_style.FRAMES['rim-shade']
+
+
+def compare(paths, names=None, out=None, current=True, quiet=False, frame=None):
     names = list(names or [])
+    frame = compare_frame(frame)
+    framed_name = lambda nm: nm + ' + ' + frame['style']
     if names and len(names) != len(paths):
         raise SystemExit('compare: %d names for %d images' % (len(names), len(paths)))
     out = os.path.abspath(out or os.path.join(tempfile.gettempdir(), 'cubby-brand-compare'))
@@ -651,23 +737,25 @@ def compare(paths, names=None, out=None, current=True, quiet=False):
         info['name'] = name
         if not quiet:
             print('  measuring %s' % name)
-        cands.append(candidate_metrics(img, info, p))
-        blocks['sizes'].append(render_sizes(img, name))
-        blocks['homescreen'].append(render_homescreen(img, name))
-        blocks['web'].append(render_web(img, name))
-        blocks['context-light'].append(render_context(img, name))
+        cands.append(candidate_metrics(img, info, p, frame))
+        blocks['sizes'] += [render_sizes(img, name), render_sizes(img, framed_name(name), frame)]
+        blocks['homescreen'] += [render_homescreen(img, name), render_homescreen(img, framed_name(name), frame=frame)]
+        blocks['web'] += [render_web(img, name), render_web(img, framed_name(name), frame)]
+        blocks['context-light'] += [render_context(img, name), render_context(img, framed_name(name), frame)]
     for k, bl in blocks.items():
         _stack(bl, gap=24).save(os.path.join(out, k + '.png'), 'PNG', optimize=True)
-    doc = OrderedDict([('tool', 'tools/brand.py compare'), ('metrics', METRICS), ('candidates', cands)])
+    doc = OrderedDict([('tool', 'tools/brand.py compare'), ('metrics', METRICS), ('frame', frame), ('candidates', cands)])
     with open(os.path.join(out, 'metrics.json'), 'w', encoding='utf-8') as f:
         f.write(json.dumps(doc, indent=1, ensure_ascii=False) + '\n')
     with open(os.path.join(out, 'compare.html'), 'w', encoding='utf-8') as f:
-        f.write(compare_html(cands))
+        f.write(compare_html(cands, frame))
     if not quiet:
-        print('\n  %-28s %8s %8s %7s %7s %7s  %s' % ('', 'fur', 'subject', 'e29', 'e16', 'width', 'set accepts'))
+        print('\n  framed as %s' % brand_style.describe(frame))
+        print('\n  %-28s %8s %8s %7s %7s %7s %15s  %s' % ('', 'fur', 'subject', 'e29', 'e16', 'width', 'edge on cream', 'set accepts'))
         for c in cands:
-            print('  %-28s %7.2f: %7.2f: %7.2f %7.2f %6.1f%%  %s' % (c['name'][:28], c['subject']['contrast_fur'], c['subject']['contrast_subject'],
+            print('  %-28s %7.2f: %7.2f: %7.2f %7.2f %6.1f%% %5.2f -> %5.2f:  %s' % (c['name'][:28], c['subject']['contrast_fur'], c['subject']['contrast_subject'],
                                                               c['edge_energy']['29'], c['edge_energy']['16'], c['subject']['width_pct'],
+                                                              c['frame']['edge_cream_plain'], c['frame']['edge_cream_framed'],
                                                               'yes' if c['set_accepts'] else 'no (' + c['cut']['detail'][:60] + ')'))
         print('\n  open %s' % os.path.join(out, 'compare.html'))
     return out, cands
@@ -776,6 +864,22 @@ def write_registry(reg, root=None):
         f.write(json.dumps(reg, indent=1, ensure_ascii=False) + '\n')
 
 
+def with_style(reg, frame, version):
+    """The registry with its "frame" and "url_version" set, both right after "master"."""
+    out = OrderedDict()
+    for k, v in reg.items():
+        if k in ('frame', 'url_version'):
+            continue
+        out[k] = v
+        if k == 'master':
+            out['frame'] = OrderedDict(frame)
+            out['url_version'] = version
+    if 'frame' not in out:
+        out['frame'] = OrderedDict(frame)
+        out['url_version'] = version
+    return out
+
+
 def from_master_files(reg):
     """Every file the registry pins that is made from the master (families marked from_master), with its pin."""
     out = OrderedDict()
@@ -787,33 +891,41 @@ def from_master_files(reg):
 
 
 def next_registry(reg, before, after, new_master, today, blobs):
-    """The registry after a master change. Pure, so the self-test can drive it with made-up hashes.
+    """The registry after a master or frame change. Pure, so the self-test can drive it with made-up hashes.
       before/after  {path: sha256} of the master and every from_master file, read from disk
-      new_master    {'sha256', 'name', 'provenance'}
+      new_master    {'sha256', 'name', 'provenance'} and, when the frame is set, 'frame' and 'url_version'
       blobs         {path: git blob id} of the OLD files, for the gate's self-test plants
     Returns (registry, notes). The old master and each from_master file whose bytes changed go into a new
-    retired set; a retired set whose master comes back is taken out of retirement; and no hash that is now
-    approved stays retired."""
+    retired set (a new frame alone retires the old frame's icons and cards: the master stays); no hash that
+    is now approved stays retired, so a set whose files are all approved again (its master back, in its
+    frame) leaves retirement, and one whose master is back in another frame keeps only the other frame's
+    files."""
     reg = json.loads(json.dumps(reg), object_pairs_hook=OrderedDict)
     notes = []
     old = reg.get('master', {})
     old_sha = old.get('sha256')
+    old_frame = reg.get('frame') or brand_style.FRAMES['none']
+    new_frame = new_master.get('frame', old_frame)
+    frame_changed = brand_style.canonical(old_frame) != brand_style.canonical(new_frame)
     changed = OrderedDict((p, h) for p, h in before.items() if after.get(p) != h)
     master_path = old.get('path', MASTER_REL)
-    retired = list(reg.get('retired') or [])
-    keep = []
-    for s in retired:
-        if new_master['sha256'] in (s.get('sha256') or {}).values():
-            notes.append('taken out of retirement: %s (its master is the master again)' % s.get('name'))
-            continue
-        keep.append(s)
-    if old_sha and old_sha != new_master['sha256'] and changed:
+    keep = list(reg.get('retired') or [])
+    back = set(s.get('name') for s in keep if new_master['sha256'] in (s.get('sha256') or {}).values())
+    if old_sha and (old_sha != new_master['sha256'] or frame_changed) and changed:
         rs = OrderedDict()
         rs['name'] = old.get('name') or ('the master pinned %s' % old_sha[:8])
-        rs['why'] = ('The master from %s, retired %s by tools/brand.py set when %s replaced it: its master and every icon '
-                     'and text card made from it, hashed before the change. The share cards and heroes that carried it are '
-                     'held by tools/card_logo.py --check (any logo box that is not the current master\'s fails) and their '
-                     'pinned digests.' % (old.get('date', 'an earlier date'), today, new_master.get('name') or 'a new master'))
+        if old_sha == new_master['sha256']:
+            rs['name'] += ', ' + ('unframed' if old_frame.get('style', 'none') == 'none' else 'with the %s frame' % old_frame.get('style'))
+        if old_sha == new_master['sha256']:
+            rs['why'] = ('The icons and text cards of the master from %s as they were framed (%s), retired %s by tools/brand.py '
+                         'set when the frame became %s: the master stays, these bytes of it go. The share cards and heroes are '
+                         'held by tools/card_logo.py --check and their pinned digests.'
+                         % (old.get('date', 'an earlier date'), brand_style.describe(old_frame), today, brand_style.describe(new_frame)))
+        else:
+            rs['why'] = ('The master from %s, retired %s by tools/brand.py set when %s replaced it: its master and every icon '
+                         'and text card made from it, hashed before the change. The share cards and heroes that carried it are '
+                         'held by tools/card_logo.py --check (any logo box that is not the current master\'s fails) and their '
+                         'pinned digests.' % (old.get('date', 'an earlier date'), today, new_master.get('name') or 'a new master'))
         rs['retired_on'] = today
         rs['sha256'] = OrderedDict(sorted(changed.items()))
         rs['git_blob'] = OrderedDict((p, b) for p, b in sorted(blobs.items()) if p in changed)
@@ -826,7 +938,9 @@ def next_registry(reg, before, after, new_master, today, blobs):
             del s['sha256'][p]
             if p in (s.get('git_blob') or {}):
                 del s['git_blob'][p]
-        if gone:
+        if not s.get('sha256') and s.get('name') in back:
+            notes.append('taken out of retirement: %s (its master is the master again)' % s.get('name'))
+        elif gone:
             notes.append('%s: %d hash%s now approved again, no longer retired' % (s.get('name'), len(gone), '' if len(gone) == 1 else 'es'))
     reg['retired'] = [s for s in keep if s.get('sha256')]
     m = OrderedDict()
@@ -836,12 +950,137 @@ def next_registry(reg, before, after, new_master, today, blobs):
     m['date'] = today
     m['provenance'] = new_master.get('provenance') or ''
     reg['master'] = m
+    if 'frame' in new_master or 'url_version' in new_master:
+        reg = with_style(reg, new_frame, new_master.get('url_version') or brand_style.version_for(new_master['sha256'], new_frame))
     for fam in reg.get('families', []):
         if fam.get('from_master'):
             for p in list(fam.get('files', {})):
                 if p in after:
                     fam['files'][p] = after[p]
     return reg, notes
+
+
+# ---------------------------------------------------------------- versioned logo URLs
+
+# What the brand gate reads for image references (tools/brand_image_check.js staticScan): the tree's text
+# files outside these folders, never app/vendor/ or tools/. stamp writes exactly where the gate looks.
+SKIP_DIRS = {'.git', 'node_modules', 'tools', 'test', 'docs', 'art-src', '.claude', '.githooks', '_local', 'native-build', 'ios',
+             'android', 'credentials', 'App'}
+TEXT_EXT = ('.html', '.htm', '.js', '.mjs', '.css', '.json', '.webmanifest', '.svg', '.xml', '.txt')
+
+
+def ref_text_files(root):
+    """The text files the brand gate reads for image references (tools/brand_image_check.js staticScan): the
+    tree's (tree_files), outside SKIP_DIRS, never app/vendor/ or tools/. stamp writes exactly where it looks."""
+    out = []
+    for p in tree_files(root)[1]:
+        parts = p.split('/')
+        low = p.lower()
+        if any(d in SKIP_DIRS for d in parts[:-1]) or not low.endswith(TEXT_EXT) or low.endswith('.md'):
+            continue
+        if '/app/vendor/' in '/' + p or '/tools/' in '/' + p or p.endswith('brand-images.json'):
+            continue
+        out.append(p)
+    return out
+
+
+def logo_refs(root, version, reg=None):
+    """{file: (references to a file made from the master, of them carrying `version`)} for every text file
+    the brand gate reads that has any."""
+    reg = reg or load_registry(root)
+    versioned, names = set(brand_style.versioned_paths(reg)), brand_style.approved_names(reg)
+    out = OrderedDict()
+    for f in ref_text_files(root):
+        try:
+            text = open(os.path.join(root, f), encoding='utf-8').read()
+        except (OSError, UnicodeDecodeError):
+            continue
+        _, refs, current = brand_style.stamp_text(text, f, root, versioned, version, names)
+        if refs:
+            out[f] = (refs, current)
+    return out
+
+
+def stamp_tree(root, version, reg=None):
+    """Put ?v=<version> on every reference to a file made from the master. Returns the files it rewrote."""
+    reg = reg or load_registry(root)
+    versioned, names = set(brand_style.versioned_paths(reg)), brand_style.approved_names(reg)
+    done = []
+    for f in ref_text_files(root):
+        fp = os.path.join(root, f)
+        try:
+            text = open(fp, encoding='utf-8').read()
+        except (OSError, UnicodeDecodeError):
+            continue
+        new, refs, _ = brand_style.stamp_text(text, f, root, versioned, version, names)
+        if refs and new != text:
+            with open(fp, 'w', encoding='utf-8', newline='') as fh:
+                fh.write(new)
+            done.append(f)
+    return done
+
+
+def stale_refs(root, version, reg=None):
+    """Every reference to a file made from the master that does not carry ?v=<version>, as 'file:line  text'."""
+    reg = reg or load_registry(root)
+    versioned, names = set(brand_style.versioned_paths(reg)), brand_style.approved_names(reg)
+    out = []
+    for f in ref_text_files(root):
+        try:
+            text = open(os.path.join(root, f), encoding='utf-8').read()
+        except (OSError, UnicodeDecodeError):
+            continue
+        for m, p in brand_style.refs_in(text, f, root, names):
+            if p not in versioned:
+                continue
+            if brand_style.carries(text, m.end(), version):
+                continue
+            vm = brand_style.VER_RE.match(text, m.end())
+            line = text.count('\n', 0, m.start()) + 1
+            out.append('%s:%d  %s%s' % (f, line, (m.group(2) + '.' + m.group(3)).strip(), ('?v=' + vm.group(1)) if vm else ' (no version)'))
+    return out
+
+
+def bump_sw(root):
+    """app/sw.js CACHE little-log-vN -> vN+1, so an installed app precaches the new logo URLs. Returns (N, N+1)."""
+    fp = os.path.join(root, SW_REL)
+    text = open(fp, encoding='utf-8').read()
+    m = re.search(r"(const CACHE = 'little-log-v)(\d+)(';)", text)
+    if not m:
+        raise SetFailed('cannot find "const CACHE = \'little-log-vN\';" in %s' % SW_REL)
+    n = int(m.group(2))
+    with open(fp, 'w', encoding='utf-8', newline='') as fh:
+        fh.write(text[:m.start()] + m.group(1) + str(n + 1) + m.group(3) + text[m.end():])
+    return n, n + 1
+
+
+def stamp(check=False, root=None):
+    """`brand.py stamp`: every logo URL to the registry's url_version (written first if it is missing or not
+    what the master and frame give). --check writes nothing and fails on a stale one."""
+    root = root or ROOT
+    reg = load_registry(root)
+    want = brand_style.version_for(reg['master']['sha256'], brand_style.frame_of(reg))
+    print('brand.py stamp%s: url_version %s (the master %s, %s)' % (' --check' if check else '', want, reg['master']['sha256'][:12],
+                                                                   brand_style.describe(brand_style.frame_of(reg))))
+    if check:
+        bad = stale_refs(root, want, reg)
+        if reg.get('url_version') != want:
+            bad.insert(0, '%s url_version is %r' % (REG_REL, reg.get('url_version')))
+        for b in bad[:25]:
+            print('  STALE ' + b)
+        refs = logo_refs(root, want, reg)
+        print('STAMP: ' + ('FAIL (%d stale; python3 tools/brand.py stamp rewrites them)' % len(bad) if bad
+                           else 'PASS (%d references in %d files carry ?v=%s)' % (sum(r for r, _ in refs.values()), len(refs), want)))
+        return 1 if bad else 0
+    if reg.get('url_version') != want:
+        write_registry(with_style(reg, brand_style.frame_of(reg), want), root)
+        print('  wrote url_version %s into %s' % (want, REG_REL))
+    done = stamp_tree(root, want, reg)
+    print('  rewrote %d file%s' % (len(done), '' if len(done) == 1 else 's'))
+    left = stale_refs(root, want, reg)
+    for b in left[:10]:
+        print('  LEFT ' + b)
+    return 1 if left else 0
 
 
 # ---------------------------------------------------------------- set
@@ -1076,7 +1315,7 @@ def _step(label, cmd, root, log):
     return out
 
 
-def set_master(src, provenance=None, name=None, yes=False, native_out=None, proof=None, tree_gate=True, today=None, root=None):
+def set_master(src, provenance=None, name=None, yes=False, native_out=None, proof=None, tree_gate=True, today=None, root=None, frame_style=None):
     root = root or ROOT
     today = today or datetime.date.today().isoformat()
     src = os.path.abspath(src)
@@ -1105,12 +1344,25 @@ def set_master(src, provenance=None, name=None, yes=False, native_out=None, proo
     reg = load_registry(root)
     old = reg.get('master', {})
     master_abs = os.path.join(root, old.get('path', MASTER_REL))
-    if old.get('sha256') == new_sha and os.path.exists(master_abs) and sha256_file(master_abs) == new_sha:
-        print('  that is already the master (%s, sha256 %s). Nothing to change.' % (old.get('name') or '', new_sha[:12]))
+    try:
+        old_frame = brand_style.frame_of(reg)
+        new_frame = brand_style.preset(frame_style, old_frame) if frame_style else old_frame
+    except ValueError as e:
+        print('  REFUSED: %s' % e)
+        print('Nothing was written.')
+        return 2
+    frame_changed = brand_style.canonical(old_frame) != brand_style.canonical(new_frame)
+    version = brand_style.version_for(new_sha, new_frame)
+    same_master = old.get('sha256') == new_sha and os.path.exists(master_abs) and sha256_file(master_abs) == new_sha
+    if same_master and not frame_changed:
+        print('  that is already the master (%s, sha256 %s), framed as %s. Nothing to change.' % (old.get('name') or '', new_sha[:12], brand_style.describe(old_frame)))
+        if reg.get('url_version') != version:
+            print('  (its url_version is not written yet: python3 tools/brand.py stamp writes it and every URL)')
         return 0
-    name = name or os.path.splitext(os.path.basename(src))[0]
-    prov = provenance or ('Set by tools/brand.py set on %s from %s (sha256 %s). No provenance was given: add where it came '
-                          'from with --provenance.' % (today, os.path.basename(src), new_sha[:12]))
+    name = name or (old.get('name') if same_master else None) or os.path.splitext(os.path.basename(src))[0]
+    prov = provenance or (old.get('provenance') if same_master else None) or (
+        'Set by tools/brand.py set on %s from %s (sha256 %s). No provenance was given: add where it came '
+        'from with --provenance.' % (today, os.path.basename(src), new_sha[:12]))
     if resized:
         prov += ' (%s by tools/brand.py set)' % resized
 
@@ -1126,8 +1378,15 @@ def set_master(src, provenance=None, name=None, yes=False, native_out=None, proo
         print('  %-26s %-36s %s' % (label, (_fmt(mo[k]) + u) if mo else '-', _fmt(mn[k]) + u))
     for s in (29, 16):
         print('  %-26s %-36s %s' % ('edge energy at %dpx' % s, _fmt(edge_energy(old_img, s)) if old_img else '-', _fmt(edge_energy(new_img, s))))
+    fo = frame_metrics(old_img, old_frame) if old_img else None
+    fn = frame_metrics(new_img, new_frame)
+    print('  %-26s %-36s %s' % ('frame', brand_style.describe(old_frame)[:36], brand_style.describe(new_frame)))
+    print('  %-26s %-36s %s' % ('tile edge vs the cream', (_fmt(fo['edge_cream_framed']) + ':1') if fo else '-', _fmt(fn['edge_cream_framed']) + ':1'))
+    print('  %-26s %-36s %s' % ('tile edge vs a dark ground', (_fmt(fo['edge_dark_framed']) + ':1') if fo else '-', _fmt(fn['edge_dark_framed']) + ':1'))
     fm = from_master_files(reg)
     cards = _cards(root)
+    refs = logo_refs(root, version, reg)
+    nrefs = sum(r for r, _ in refs.values())
     prep = os.path.abspath(native_out or os.path.join(root, PREP_REL))
     retiring = old.get('name') or 'the old master'
     comes_back = [s.get('name') for s in reg.get('retired') or [] if new_sha in (s.get('sha256') or {}).values()]
@@ -1140,13 +1399,19 @@ def set_master(src, provenance=None, name=None, yes=False, native_out=None, proo
     if tops:
         print('    %-34s this tree\'s native project%s (gitignored): icons, splash and offline logo remade in place'
               % (' and '.join(t + '/' for t in tops), 's' if len(tops) > 1 else ''))
-    print('    %-34s the master pin, %d hashes re-pinned, the card digests re-approved;' % (REG_REL, len(fm)))
-    print('    %-34s retired: + %s (the old master and what changed with it)%s' % ('', retiring, ('; back from retirement: ' + ', '.join(comes_back)) if comes_back else ''))
+    print('    %-34s %d references in %d files carry ?v=%s (was %s): pages, manifests, service workers, emails, cap-web/'
+          % ('', nrefs, len(refs), version, reg.get('url_version') or 'none'))
+    if SW_REL in refs:
+        print('    %-34s CACHE bumped, so an installed app precaches the new URLs' % SW_REL)
+    print('    %-34s the master pin and frame, %d hashes re-pinned, the card digests re-approved;' % (REG_REL, len(fm)))
+    print('    %-34s retired: + %s (the old %s and what changed with it)%s' % ('', retiring + ('' if not same_master else ' as framed now'),
+                                                                         'frame' if same_master else 'master',
+                                                                         ('; back from retirement: ' + ', '.join(comes_back)) if comes_back else ''))
     print('    then: the brand gate\'s static half, card_logo.py --check, gen_brand_icons.py --check, %sand a before/after proof sheet'
           % ('ios/ and android/ against the master, ' if tops else ''))
 
     # Can it be undone with git? Only if everything it writes is committed now.
-    touched = [old.get('path', MASTER_REL), REG_REL] + list(fm) + cards
+    touched = [old.get('path', MASTER_REL), REG_REL] + list(fm) + cards + list(refs)
     dirty = []
     for i in range(0, len(touched), 400):
         code, outp = _git([LITERAL, 'status', '--porcelain', '--untracked-files=no', '--'] + touched[i:i + 400], root)
@@ -1217,8 +1482,9 @@ def set_master(src, provenance=None, name=None, yes=False, native_out=None, proo
             f.write(data)
         pin = json.loads(json.dumps(reg), object_pairs_hook=OrderedDict)
         pin['master']['sha256'] = new_sha            # the generators refuse a master that is not pinned
+        pin = with_style(pin, new_frame, version)    # ...and draw the frame the registry names
         write_registry(pin, root)
-        print('  ok   %-46s        %s' % ('wrote ' + MASTER_REL, new_sha[:12]))
+        print('  ok   %-46s        %s, %s' % ('wrote ' + MASTER_REL, new_sha[:12], brand_style.describe(new_frame)))
         # The native set goes to a fresh folder first, so what is copied on is exactly this run's set.
         native_new = os.path.join(tmpd, 'native-new')
         _step('web icons, nav logos, native set', [sys.executable, 'tools/gen_brand_icons.py', '--native-out', native_new], root, log)
@@ -1230,9 +1496,14 @@ def set_master(src, provenance=None, name=None, yes=False, native_out=None, proo
             done = refresh_native(root, native_new)
             print('  ok   %-46s        %d files' % ('remade ' + ' and '.join(t + '/' for t in tops) + ' in place', len(done)))
         _step('every card\'s logo (card_logo.py --swap --force)', [sys.executable, 'tools/card_logo.py', '--swap', '--force'], root, log)
+        stamped = stamp_tree(root, version, reg)
+        print('  ok   %-46s        %d files, ?v=%s' % ('stamped every logo URL', len(stamped), version))
+        if SW_REL in refs:
+            a, b = bump_sw(root)
+            print('  ok   %-46s        little-log-v%d -> v%d' % ('bumped ' + SW_REL + ' CACHE', a, b))
         fm_after = _hash_all(root, list(fm))
         reg2, notes = next_registry(reg, OrderedDict([(p, h) for p, h in fm_before.items() if h]), fm_after,
-                                    {'sha256': new_sha, 'name': name, 'provenance': prov}, today, blobs)
+                                    {'sha256': new_sha, 'name': name, 'provenance': prov, 'frame': new_frame, 'url_version': version}, today, blobs)
         write_registry(reg2, root)
         print('  ok   %-46s        %s' % ('re-pinned ' + REG_REL, '; '.join(notes) or 'nothing retired'))
         _step('card digests (brand_image_check --approve-cards)', ['node', 'tools/brand_image_check.js', '--approve-cards'], root, log)
@@ -1241,6 +1512,10 @@ def set_master(src, provenance=None, name=None, yes=False, native_out=None, proo
             _step('brand gate, static half', ['node', 'tools/brand_image_check.js', '--static-only'], root, log)
         _step('card_logo.py --check', [sys.executable, 'tools/card_logo.py', '--check'], root, log)
         _step('gen_brand_icons.py --check', [sys.executable, 'tools/gen_brand_icons.py', '--check'], root, log)
+        stale = stale_refs(root, version)
+        print('  %s %-46s        %s' % ('ok  ' if not stale else 'FAIL', 'every logo URL carries ?v=' + version, '; '.join(stale[:3]) or '%d references' % nrefs))
+        if stale:
+            raise SetFailed('%d logo references do not carry ?v=%s: %s' % (len(stale), version, '; '.join(stale[:8])))
         if tops:
             drift = native_drift(root, native_new)
             print('  %s %-46s        %s' % ('ok  ' if not drift else 'FAIL', ' and '.join(t + '/' for t in tops) + ' match the master',
@@ -1263,15 +1538,19 @@ def set_master(src, provenance=None, name=None, yes=False, native_out=None, proo
         ('text cards', [sum(1 for p in fm_before if fm_before[p] != fm_after.get(p) and p.startswith(('og/', 'social/', 'icons/screenshots/'))),
                         sum(1 for p in fm_before if p.startswith(('og/', 'social/', 'icons/screenshots/')))]),
         ('cards', [sum(1 for p in cards if cards_before[p] != cards_after[p]), len(cards)]),
+        ('logo URLs', [len(stamped), len(refs)]),
         # images only: Contents.json and the adaptive XML do not depend on the master, and the background
         # colour XML changes only when the wash colour does
         ('native set', [sum(1 for p in prep_after if p.endswith('.png') and native_b.get(p) != prep_after[p]),
                         sum(1 for p in prep_after if p.endswith('.png'))]),
     ])
     os.makedirs(proof, exist_ok=True)
-    sheet = proof_sheet(before_dir, native_before, root, prep, proof, old.get('name') or 'the old master', name, mo, mn, today)
-    summary = OrderedDict([('date', today), ('old', OrderedDict([('name', old.get('name')), ('sha256', old.get('sha256'))])),
-                           ('new', OrderedDict([('name', name), ('sha256', new_sha), ('source', os.path.basename(src))])),
+    sheet = proof_sheet(before_dir, native_before, root, prep, proof, (old.get('name') or 'the old master') + ', ' + old_frame.get('style', 'none'),
+                        name + ', ' + new_frame.get('style', 'none'), mo, mn, today, fo, fn)
+    summary = OrderedDict([('date', today), ('old', OrderedDict([('name', old.get('name')), ('sha256', old.get('sha256')), ('frame', old_frame),
+                                                                  ('url_version', reg.get('url_version'))])),
+                           ('new', OrderedDict([('name', name), ('sha256', new_sha), ('source', os.path.basename(src)), ('frame', new_frame),
+                                                ('url_version', version)])),
                            ('changed', changed), ('metrics', OrderedDict([('old', mo), ('new', mn)])), ('native_out', prep),
                            ('prep_was_current', bool(prep_before) and prep_before == native_b),
                            ('native_in_tree', OrderedDict([('folders', tops), ('files', len(native_targets(root, native_new)) if tops else 0)]))])
@@ -1439,7 +1718,7 @@ def _minis(native, fav):
     return c
 
 
-def proof_sheet(before, native_before, after_root, native_after, out_dir, old_name, new_name, mo, mn, today):
+def proof_sheet(before, native_before, after_root, native_after, out_dir, old_name, new_name, mo, mn, today, fo=None, fn=None):
     """The founder's before/after sheet, in the layout of the W2+ proof (scratchpad brand-proof-teddy,
     2026-11-14): eight pairs in two columns, BEFORE left, AFTER right. Every panel is made from the files."""
     def side(tree, native):
@@ -1468,8 +1747,9 @@ def proof_sheet(before, native_before, after_root, native_after, out_dir, old_na
     d.text((20, 54), 'Each pair: BEFORE on the left, AFTER on the right. Made by tools/brand.py set on %s from the files themselves; '
                      'look before you commit.' % today, fill=(110, 110, 110), font=font('sans-semi', 17))
     if mo and mn:
-        d.text((20, 84), 'Fur vs background %s:1 -> %s:1.  Subject width %s%% -> %s%%.  Reach %s -> %s.' % (
-            _fmt(mo['contrast_fur']), _fmt(mn['contrast_fur']), _fmt(mo['width_pct']), _fmt(mn['width_pct']), _fmt(mo['reach']), _fmt(mn['reach'])),
+        d.text((20, 84), 'Fur vs background %s:1 -> %s:1.  Subject width %s%% -> %s%%.  Reach %s -> %s.%s' % (
+            _fmt(mo['contrast_fur']), _fmt(mn['contrast_fur']), _fmt(mo['width_pct']), _fmt(mn['width_pct']), _fmt(mo['reach']), _fmt(mn['reach']),
+            ('  Tile edge on the cream %s:1 -> %s:1.' % (_fmt(fo['edge_cream_framed']), _fmt(fn['edge_cream_framed']))) if fo and fn else ''),
             fill=(60, 60, 60), font=font('sans-semi', 17))
     for i, t in enumerate(titles):
         x, y = 20 + (i % 2) * CW, 132 + (i // 2) * CH
@@ -1530,14 +1810,108 @@ def self_test():
     print('\nthe recipe brand.py renders with is the one the generators use')
     probe = os.path.join(tmp, 'probe')
     os.makedirs(probe)
-    code = ('import sys; sys.path.insert(0, %r); import gen_brand_icons as g\nfrom PIL import Image\n'
-            'm = Image.open(%r).convert("RGB")\nfor s in (16, 29, 60, 180):\n'
-            '    g.rounded(g.resize(m, s), g.LOGO_RADIUS).save(%r %% s)\n') % (os.path.join(ROOT, 'tools'), os.path.join(ROOT, MASTER_REL), os.path.join(probe, 'gen-%d.png'))
+    FR = brand_style.FRAMES
+    styles = ['none', 'rim-shade', 'ring']
+    code = ('import sys; sys.path.insert(0, %r); import gen_brand_icons as g, brand_style as bs\nfrom PIL import Image\n'
+            'm = Image.open(%r).convert("RGB")\nfor k in %r:\n    for s in (16, 29, 60, 180):\n'
+            '        g.tile(m, s, bs.FRAMES[k]).save(%r %% (k, s))\n        g.square(m, s, bs.FRAMES[k]).save(%r %% (k, s))\n') % (
+        os.path.join(ROOT, 'tools'), os.path.join(ROOT, MASTER_REL), styles, os.path.join(probe, 'tile-%s-%d.png'), os.path.join(probe, 'square-%s-%d.png'))
     r = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True)
     master = Image.open(os.path.join(ROOT, MASTER_REL)).convert('RGB')
     same = r.returncode == 0 and all(
-        list(Image.open(os.path.join(probe, 'gen-%d.png' % s)).getdata()) == list(rounded(prod_resize(master, s), LOGO_RADIUS).getdata()) for s in (16, 29, 60, 180))
-    ok('16, 29, 60 and 180px come out pixel for pixel as tools/gen_brand_icons.py draws them', same, r.stdout + r.stderr)
+        list(Image.open(os.path.join(probe, 'tile-%s-%d.png' % (k, s))).getdata()) == list(tile(master, s, FR[k]).getdata())
+        and list(Image.open(os.path.join(probe, 'square-%s-%d.png' % (k, s))).getdata()) == list(brand_style.framed(prod_resize(master, s), FR[k], IOS_RADIUS).getdata())
+        for k in styles for s in (16, 29, 60, 180))
+    ok('16, 29, 60 and 180px tiles and square icons, unframed, rim-shade and ring, come out pixel for pixel as tools/gen_brand_icons.py draws them', same, r.stdout + r.stderr)
+
+    # -- the frame: a setting, drawn one way (tools/brand_style.py)
+    print('\nthe frame (tools/brand_style.py)')
+    plain = prod_resize(master, 512)
+    col = brand_style.rgb(FR['rim']['colour'])
+    ok('no frame draws nothing, and nor does any frame below 32px (16 and 31px)',
+       list(brand_style.framed(plain, FR['none'], LOGO_RADIUS).getdata()) == list(plain.getdata())
+       and all(list(brand_style.framed(prod_resize(master, k), FR['rim-shade'], LOGO_RADIUS).getdata()) == list(prod_resize(master, k).getdata()) for k in (16, 31)))
+    rim = brand_style.framed(plain, FR['rim'], LOGO_RADIUS)
+    edges = [rim.getpixel(xy) for xy in ((2, 256), (509, 256), (256, 2), (256, 509))]
+    ok('a rim is its colour %s at the middle of every edge, and the face inside it is untouched' % FR['rim']['colour'],
+       edges == [col] * 4 and rim.getpixel((20, 256)) == plain.getpixel((20, 256)) and rim.getpixel((256, 256)) == plain.getpixel((256, 256)), edges)
+    rs = brand_style.framed(plain, FR['rim-shade'], LOGO_RADIUS)
+    top, mid, bot = rs.getpixel((256, 2)), rs.getpixel((2, 256)), rs.getpixel((256, 509))
+    ok('rim-shade: light on the rim at the top %s, the plain rim halfway down %s, shade at the bottom %s' % (hexc(top), hexc(mid), hexc(bot)),
+       sum(top) > sum(col) + 30 and mid == col and sum(bot) < sum(col) - 30, (top, mid, bot))
+    sq = brand_style.framed(plain, FR['rim'], IOS_RADIUS)
+    corner = [sq.getpixel(xy) for xy in ((0, 0), (511, 0), (0, 511), (511, 511), (20, 20), (491, 491))]
+    ok('a square icon the system rounds itself is rim right into its corners, so the iOS mask meets rim and never a sliver of wash (no double edge)',
+       corner == [col] * 6, corner)
+    tr = tile(master, 512, FR['rim'])
+    ok('a tile cuts its own corners: framed, its corner pixel is transparent and the middle of its edge is rim',
+       tr.getpixel((0, 0))[3] == 0 and tr.getpixel((2, 256))[:3] == col, (tr.getpixel((0, 0)), tr.getpixel((2, 256))))
+    bad_frames = [{'style': 'bezel'}, {'style': 'rim', 'rim': 0.03, 'colour': 'honey'}, {'style': 'rim', 'rim': 0.9, 'colour': '#D6A058'},
+                  {'style': 'rim-shade', 'rim': 0.03, 'colour': '#D6A058'}]
+    ok('a frame is checked: an unknown style, a colour that is not #RRGGBB, a rim wider than half the tile and a missing light are refused',
+       all(brand_style.check_frame(f) for f in bad_frames) and not any(brand_style.check_frame(f) for f in FR.values()), [brand_style.check_frame(f) for f in bad_frames])
+    va, vb, vc = brand_style.version_for('a' * 64, FR['none']), brand_style.version_for('b' * 64, FR['none']), brand_style.version_for('a' * 64, FR['rim-shade'])
+    ok('the URL version is 8 hex that change with the master and with the frame, not with key order (%s %s %s)' % (va, vb, vc),
+       len({va, vb, vc}) == 3 and all(re.match(r'^[0-9a-f]{8}$', v) for v in (va, vb, vc))
+       and va == brand_style.version_for('a' * 64, OrderedDict(reversed(list(FR['none'].items()))))
+       and brand_style.canonical({'style': 'rim', 'rim': 1.0, 'colour': '#000000'}) == '{"colour":"#000000","rim":1,"style":"rim"}')
+
+    # -- versioned logo URLs, on a scratch folder (not a checkout: every file on disk, as the gate reads one)
+    print('\nversioned logo URLs (stamp and stale_refs on a scratch folder, and the brand gate on the same folder)')
+    reg_real = load_registry()
+    V = brand_style.version_for(reg_real['master']['sha256'], brand_style.frame_of(reg_real))
+    OLD = 'ffffffff' if V != 'ffffffff' else '00000000'
+    sd = os.path.join(tmp, 'stamp')
+    scratch = OrderedDict([
+        ('index.html', '<link rel="icon" type="image/png" href="/icons/favicon.png">\n<a class="nav-brand" href="/"><img src="/icons/logo-96.png" '
+                       'srcset="/icons/logo-96.png 96w, /icons/logo-192.png 192w" sizes="34px" alt="Cubby"></a>\n'
+                       '<meta property="og:image" content="https://little-cubby.com/og/cubby-home.png">\n'
+                       '<script type="application/ld+json">{"logo":"https://little-cubby.com/icons/logo-512.png?v=' + OLD + '"}</script>\n'
+                       '<img src="/app/spot-art/x.webp"><img src="https://example.com/icons/logo-512.png"><img src="/icons/screenshots/01-two-names.png">\n'),
+        ('app/sw.js', "const CACHE = 'little-log-v41';\nconst ASSETS = [\n  '/app/',\n  '/icons/icon-192.png',\n  '/icons/logo-512.png'\n];\n"),
+        ('app/manifest.webmanifest', '{"icons": [{"src": "/icons/icon-192.png"}, {"src": "/icons/icon-maskable-512.png", "purpose": "maskable"}]}\n'),
+        ('cap-web/index.html', '<img src="logo.png" alt="" width="64" height="64">\n'),
+        ('worker.js', "const mail = '<img src=\"https://little-cubby.com/icons/logo-512.png\" width=\"56\">';\n"),
+        ('tools/page.html', '<img src="/icons/logo-96.png">\n'),
+        ('docs/page.html', '<img src="/icons/logo-96.png">\n'),
+    ])
+    for f, text in scratch.items():
+        os.makedirs(os.path.dirname(os.path.join(sd, f)), exist_ok=True)
+        with open(os.path.join(sd, f), 'w') as fh:
+            fh.write(text)
+    shutil.copyfile(os.path.join(ROOT, CAP_LOGO), os.path.join(sd, CAP_LOGO))
+    before_stale = stale_refs(sd, V, reg_real)
+    done = stamp_tree(sd, V, reg_real)
+    got = OrderedDict((f, open(os.path.join(sd, f)).read()) for f in scratch)
+    want_n = OrderedDict([('index.html', 6), ('app/sw.js', 2), ('app/manifest.webmanifest', 2), ('cap-web/index.html', 1), ('worker.js', 1)])
+    ok('finds every logo reference before (%d: a favicon link, a srcset, og:image, JSON-LD with an old ?v=, a service worker list, a manifest, '
+       'a relative cap-web/ logo, an email) and none in tools/ or docs/' % len(before_stale),
+       len(before_stale) == sum(want_n.values()) and sum(1 for b in before_stale if b.endswith('?v=' + OLD)) == 1
+       and not any(b.startswith(('tools/', 'docs/')) for b in before_stale), before_stale)
+    ok('stamp puts ?v=%s on each of them, replacing the old one, and rewrites exactly those files' % V,
+       sorted(done) == sorted(want_n) and all(got[f].count('?v=' + V) == n for f, n in want_n.items()) and OLD not in got['index.html']
+       and 'logo.png?v=' + V in got['cap-web/index.html'], (done, got))
+    ok('and leaves alone a picture not made from the master, another host\'s URL, tools/ and docs/',
+       '"/app/spot-art/x.webp"' in got['index.html'] and '"https://example.com/icons/logo-512.png"' in got['index.html']
+       and '"/icons/screenshots/01-two-names.png"' in got['index.html'] and got['tools/page.html'] == scratch['tools/page.html']
+       and got['docs/page.html'] == scratch['docs/page.html'], got['index.html'])
+    ok('a second stamp rewrites nothing, and nothing is stale', stamp_tree(sd, V, reg_real) == [] and stale_refs(sd, V, reg_real) == [])
+
+    def gate_version_line(root_dir):
+        g = subprocess.run(['node', os.path.join(ROOT, 'tools', 'brand_image_check.js'), '--static-only', '--root=' + root_dir], cwd=ROOT,
+                           capture_output=True, text=True, env=git_env())
+        lines = (g.stdout + g.stderr).split('\n')
+        i = next((n for n, l in enumerate(lines) if 'every reference to a logo file made from the master' in l), None)
+        return '\n'.join(lines[i:i + 3]) if i is not None else (g.stdout + g.stderr)[-400:]
+    line_ok = gate_version_line(sd)
+    with open(os.path.join(sd, 'app', 'landing.js'), 'w') as fh:
+        fh.write("var a = '<img src=\"/icons/logo-512.png?v=" + OLD + "\">';\n")
+    line_bad, stale_bad = gate_version_line(sd), stale_refs(sd, V, reg_real)
+    ok('the brand gate reads that folder the same way: green on it, and red on a script with an old ?v=, as stale_refs is',
+       line_ok.lstrip().startswith('ok ') and line_bad.lstrip().startswith('FAIL') and 'app/landing.js:1 -> /icons/logo-512.png?v=' + OLD in line_bad
+       and stale_bad == ['app/landing.js:1  /icons/logo-512.png?v=' + OLD], (line_ok, line_bad, stale_bad))
+    ok('bump_sw takes the app service worker\'s CACHE up by one (v41 -> v42)',
+       bump_sw(sd) == (41, 42) and "const CACHE = 'little-log-v42';" in open(os.path.join(sd, 'app', 'sw.js')).read())
 
     # -- measuring
     print('\ncompare: the numbers')
@@ -1587,6 +1961,25 @@ def self_test():
         ok('refuses two names for one image', False)
     except SystemExit as e:
         ok('refuses two names for one image', 'names' in str(e), e)
+
+    # Two masters, two frames: each is drawn as painted and framed, and the frame is the only difference.
+    mirror_fx = os.path.join(tmp, 'mirror-fx.png')
+    ImageOps.mirror(Image.open(good)).save(mirror_fx, 'PNG')
+    oa, ob = os.path.join(tmp, 'cmp-ring'), os.path.join(tmp, 'cmp-rimshade')
+    _, ca = compare([good, mirror_fx], ['good', 'mirrored'], oa, current=False, quiet=True, frame=brand_style.FRAMES['ring'])
+    _, cb = compare([good, mirror_fx], ['good', 'mirrored'], ob, current=False, quiet=True, frame=brand_style.FRAMES['rim-shade'])
+    sa, sb = Image.open(os.path.join(oa, 'sizes.png')).convert('RGB'), Image.open(os.path.join(ob, 'sizes.png')).convert('RGB')
+    bh = (sa.height + 24) // 4                                  # four blocks: good, good + frame, mirrored, mirrored + frame
+    crop = lambda im, k: im.crop((0, 44 + k * bh, im.width, k * bh + bh - 24))
+    same_plain = all(ImageChops.difference(crop(sa, k), crop(sb, k)).getbbox() is None for k in (0, 2))
+    diff_framed = all(ImageChops.difference(crop(sa, k), crop(sb, k)).getbbox() is not None for k in (1, 3))
+    htm = open(os.path.join(oa, 'compare.html'), encoding='utf-8').read()
+    ok('compare draws two masters as painted and framed: with two frames the painted rows are pixel for pixel the same and the framed rows differ',
+       sa.size == sb.size and same_plain and diff_framed and 'good + ring' not in htm and 'ring: rim 1.2% #6B4226' in htm, (sa.size, sb.size, same_plain, diff_framed))
+    gb = {c['name']: c['frame'] for c in cb}['good']
+    ok('and measures what the frame is for: the tile edge against the site\'s cream, as painted %s:1 and framed %s:1' % (_fmt(gb['edge_cream_plain']), _fmt(gb['edge_cream_framed'])),
+       gb['edge_cream_framed'] > gb['edge_cream_plain'] + 0.5 and json.load(open(os.path.join(ob, 'metrics.json')))['frame']['style'] == 'rim-shade'
+       and all(c['frame']['style'] == 'ring' for c in ca), gb)
 
     # -- zoom
     print('\nzoom')
@@ -1692,7 +2085,12 @@ def self_test():
     print('\nset --yes, end to end, on a miniature tree (a git repo in the scratch folder)')
     mini = os.path.join(tmp, 'mini')
     reg = load_registry()
-    keep = [MASTER_REL, REG_REL, '.assetsignore'] + ['tools/' + f for f in ('brand.py', 'gen_brand_icons.py', 'gen_splash.py', 'card_logo.py', 'brand_image_check.js', 'gen_app_icon.py')]
+    keep = [MASTER_REL, REG_REL, '.assetsignore'] + ['tools/' + f for f in ('brand.py', 'brand_style.py', 'gen_brand_icons.py', 'gen_splash.py', 'card_logo.py',
+                                                                          'brand_image_check.js', 'gen_app_icon.py')]
+    # Files that point at the logo (a page, the 404, the app's service worker and manifest, the sign-in email,
+    # the native offline page): set puts the new ?v= on them and bumps the service worker.
+    REF_SAMPLE = [SW_REL, 'app/manifest.webmanifest', 'index.html', '404.html', 'cap-web/index.html', 'worker.js', 'articles/baby-blues-explained/index.html']
+    keep += REF_SAMPLE
     keep += ['app/fonts/' + f for f in ('fraunces-600-latin.woff2', 'nunitosans-600-latin.woff2', 'nunitosans-700-latin.woff2', 'nunitosans-800-latin.woff2')]
     keep += list(from_master_files(reg))
     cards = _cards(ROOT)
@@ -1745,6 +2143,10 @@ def self_test():
     fm = list(from_master_files(reg))
     mcards = [l for l in subprocess.run([sys.executable, os.path.join(mini, 'tools', 'card_logo.py'), '--list'], cwd=mini, capture_output=True, text=True).stdout.split('\n') if l]
     h0 = _hash_all(mini, fm + mcards)
+    mrefs = list(logo_refs(mini, 'none', reg))
+    hr0 = _hash_all(mini, mrefs)
+    sw_n = lambda: int(re.search(r"const CACHE = 'little-log-v(\d+)';", open(os.path.join(mini, SW_REL)).read()).group(1))
+    sw0 = sw_n()
     nret0 = len(reg.get('retired') or [])
     proof = os.path.join(tmp, 'proof')
     t1 = time.time()
@@ -1755,6 +2157,18 @@ def self_test():
     h1 = _hash_all(mini, fm + mcards)
     same = [p for p in h0 if h0[p] == h1[p]]
     ok('every icon and card made from the master changed (%d of %d)' % (len(h0) - len(same), len(h0)), not same, same)
+    v_mirror = brand_style.version_for(sha256_file(mirror), brand_style.frame_of(load_registry(mini)))
+    hr1 = _hash_all(mini, mrefs)
+
+    def mini_gate(*keys):          # the brand gate's own lines, run on the mini tree (the rest of its static half needs the whole site)
+        g = subprocess.run(['node', os.path.join(mini, 'tools', 'brand_image_check.js'), '--static-only'], cwd=mini, capture_output=True, text=True, env=genv)
+        lines = (g.stdout + g.stderr).split('\n')
+        return [next((l.strip() for l in lines if k in l), 'no line with ' + k) for k in keys]
+    vlines = mini_gate("the registry's url_version is the one its master and frame give", 'every reference to a logo file made from the master')
+    ok('every logo URL in it (%d files: %s) now carries ?v=%s, the registry names that version, the brand gate agrees, and app/sw.js CACHE went up by one (v%d -> v%d)'
+       % (len(mrefs), ', '.join(mrefs), v_mirror, sw0, sw_n()),
+       sorted(mrefs) == sorted(REF_SAMPLE) and all(hr0[p] != hr1[p] for p in mrefs) and not stale_refs(mini, v_mirror)
+       and load_registry(mini).get('url_version') == v_mirror and sw_n() == sw0 + 1 and all(l.startswith('ok ') for l in vlines), (vlines, stale_refs(mini, v_mirror)[:5]))
     regm = load_registry(mini)
     ok('the master is the new file, pinned with its name, date and provenance', regm['master']['sha256'] == sha256_file(mirror) == sha256_file(os.path.join(mini, MASTER_REL))
        and regm['master']['name'] == 'the mirrored master' and regm['master']['provenance'] == 'brand.py self-test', regm['master'])
@@ -1841,7 +2255,8 @@ def self_test():
     r = subprocess.run(undo, cwd=mini, capture_output=True, text=True, env=genv)
     back = _hash_all(mini, fm + mcards)
     ok('and the undo it prints (%s) puts every file back, %s included, and leaves the edit to %s (%d paths)' % (' '.join(undo[:3]), GLOB_CARD, GLOB_BYSTANDER, len(listed)),
-       r.returncode == 0 and back == h0 and load_registry(mini) == reg and MASTER_REL in listed and REG_REL in listed and GLOB_CARD in listed
+       r.returncode == 0 and back == h0 and _hash_all(mini, mrefs) == hr0 and load_registry(mini) == reg and MASTER_REL in listed and REG_REL in listed and GLOB_CARD in listed
+       and all(p in listed for p in mrefs)
        and sha256_file(os.path.join(mini, GLOB_BYSTANDER)) == bystander,
        (r.stdout + r.stderr)[-400:] or [p for p in h0 if h0[p] != back.get(p)][:5] or 'the edit to %s is gone' % GLOB_BYSTANDER)
     r = subprocess.run([sys.executable, mini_set, 'native', '--check'], cwd=mini, capture_output=True, text=True)
@@ -1869,6 +2284,54 @@ def self_test():
     r = subprocess.run(['node', 'tools/brand_image_check.js', '--approve-cards'], cwd=mini, capture_output=True, text=True, env=genv)
     ok('brand_image_check --approve-cards refuses while a card is not in git, naming it, and leaves the registry as it was',
        r.returncode == 1 and plant in r.stdout and 'git add' in r.stdout and open(os.path.join(mini, REG_REL), 'rb').read() == reg_bytes, (r.stdout + r.stderr)[-600:])
+
+    # -- two masters and two frames, there and back (the founder's frame is a setting: one command each way)
+    print('\nset --frame: two masters and two frames, there and back, byte for byte')
+    os.remove(os.path.join(mini, plant))
+    reg0 = load_registry(mini)
+    F0 = brand_style.frame_of(reg0)
+    F1 = 'ring' if F0['style'] != 'ring' else 'rim'
+    track = fm + mcards + mrefs
+    s0, nat_s0 = _hash_all(mini, track), OrderedDict((t + '/' + p, h) for t in NATIVE_TOPS for p, h in _tree_hashes(os.path.join(mini, t)).items())
+    swn0, sw_text = sw_n(), lambda: re.sub(r"little-log-v\d+", 'little-log-vN', open(os.path.join(mini, SW_REL)).read())
+    sw_t0 = sw_text()
+
+    def run_set(src, style, label, *extra):
+        pr = os.path.join(tmp, 'proof-' + label)
+        rr = subprocess.run([sys.executable, mini_set, 'set', src, '--frame', style, '--yes', '--no-tree-gate', '--proof', pr] + list(extra), cwd=mini,
+                            capture_output=True, text=True)
+        o = rr.stdout + rr.stderr
+        mm = re.search(r'^\s*(git .*\bcommit --pathspec-from-file=.*)$', o, re.M)
+        cc = subprocess.run(gitc + shlex.split(mm.group(1))[1:], cwd=mini, capture_output=True, text=True, env=genv) if (rr.returncode == 0 and mm) else None
+        return rr.returncode == 0 and cc is not None and cc.returncode == 0, o
+    ok1, o1 = run_set(mirror, F1, 'b')
+    s1 = _hash_all(mini, track)
+    ok('a second master in a second frame (%s): every icon, card and logo URL changes, and the commit it prints commits it (%d files)' % (F1, len(track)),
+       ok1 and all(s0[p] != s1[p] for p in track), (o1[-1500:], [p for p in track if s0[p] == s1[p]][:6]))
+    ok2, o2 = run_set(mirror, F0['style'], 'c')
+    s2 = _hash_all(mini, track)
+    still = sorted(p for p in track if s1[p] == s2[p])
+    last = (load_registry(mini).get('retired') or [{}])[-1]
+    ok('the same master back in the first frame (%s): only the master and the maskable icon stay, every framed icon, card and logo URL changes, '
+       'and the %s frame\'s bytes are retired without the master (%d hashes)' % (F0['style'], F1, len(last.get('sha256', {}))),
+       ok2 and still == sorted({MASTER_REL, 'icons/icon-maskable-512.png'}) and MASTER_REL not in last.get('sha256', {})
+       and len(last.get('sha256', {})) == len(fm) - 2 and F1 in last.get('name', ''), (o2[-1500:], still, last.get('name')))
+    if brand_style.canonical(F0) == brand_style.canonical(brand_style.FRAMES[F0['style']]):
+        ok3, o3 = run_set(os.path.join(ROOT, MASTER_REL), F0['style'], 'd', '--name', reg0['master'].get('name', ''), '--provenance', reg0['master'].get('provenance', ''))
+        s3 = _hash_all(mini, track)
+        reg3 = load_registry(mini)
+        nat_s3 = OrderedDict((t + '/' + p, h) for t in NATIVE_TOPS for p, h in _tree_hashes(os.path.join(mini, t)).items())
+        diff = [p for p in track if s3[p] != s0[p] and p != SW_REL]
+        ok('and the first master in the first frame again: every icon, card, logo URL and native file is back byte for byte (%d + %d files; app/sw.js but for its '
+           'CACHE, v%d -> v%d), the registry pins what it pinned, and no approved hash is left retired' % (len(track), len(nat_s3), swn0, sw_n()),
+           ok3 and not diff and sw_text() == sw_t0 and sw_n() == swn0 + 3 and nat_s3 == nat_s0
+           and [reg3['master']['sha256'], brand_style.canonical(brand_style.frame_of(reg3)), reg3.get('url_version'), from_master_files(reg3)]
+           == [reg0['master']['sha256'], brand_style.canonical(F0), brand_style.version_for(reg0['master']['sha256'], F0), from_master_files(reg0)]
+           and not any(h in set(s0.values()) for st in reg3.get('retired') or [] for h in (st.get('sha256') or {}).values()),
+           {'set ok': ok3, 'files not back': diff[:6], 'sw back': sw_text() == sw_t0, 'cache': (swn0, sw_n()), 'native back': nat_s3 == nat_s0,
+            'registry': [reg3['master']['sha256'][:12], reg3.get('frame'), reg3.get('url_version')], 'out': o3[-600:]})
+    else:
+        print('  note the registry\'s frame is tuned by hand (%s), so --frame cannot name it: the way back is not checked' % brand_style.canonical(F0))
     ok('the real tree is still untouched', _hash_all(ROOT, tracked) == tree_before)
 
     shutil.rmtree(tmp, ignore_errors=True)
@@ -1907,17 +2370,24 @@ def main(argv=None):
     s.add_argument('--provenance')
     s.add_argument('--name', help='a short name for it in the registry and the proof ("the W2+ painted teddy")')
     s.add_argument('--yes', action='store_true')
+    s.add_argument('--frame', choices=list(brand_style.FRAMES), help='the frame every tile is drawn with (default: keep the registry\'s)')
     s.add_argument('--native-out', help='where the native set goes (default native-build/brand-native, gitignored)')
     s.add_argument('--proof', help='where the before/after proof goes (default: a folder in the system temp)')
     s.add_argument('--date', help=argparse.SUPPRESS)
     s.add_argument('--no-tree-gate', action='store_true', help=argparse.SUPPRESS)   # the self-test's miniature tree only
     n = sub.add_parser('native', help='remake this tree\'s ios/ and android/ icons, splash and offline logo from the master')
     n.add_argument('--check', action='store_true', help='write nothing; fail if any of them is not what the master gives')
+    st = sub.add_parser('stamp', help='put the registry\'s url_version on every logo URL')
+    st.add_argument('--check', action='store_true', help='write nothing; fail on a reference that does not carry it')
+    c.add_argument('--frame', choices=list(brand_style.FRAMES), help='the frame for the framed column (default: the registry\'s, else rim-shade)')
     a = ap.parse_args(argv)
     if a.cmd == 'native':
         return native(a.check)
+    if a.cmd == 'stamp':
+        return stamp(a.check)
     if a.cmd == 'compare':
-        compare(a.images, a.names, a.out, current=not a.no_current)
+        compare(a.images, a.names, a.out, current=not a.no_current,
+                frame=brand_style.preset(a.frame, brand_style.frame_of(load_registry())) if a.frame else None)
         return 0
     if a.cmd == 'propose':
         propose(a.ref, a.variants, a.out, a.dry_run, a.engine, run_compare=not a.no_compare)
@@ -1926,7 +2396,7 @@ def main(argv=None):
         zoom(a.image, a.subject_width, a.out)
         return 0
     if a.cmd == 'set':
-        return set_master(a.image, a.provenance, a.name, a.yes, a.native_out, a.proof, tree_gate=not a.no_tree_gate, today=a.date)
+        return set_master(a.image, a.provenance, a.name, a.yes, a.native_out, a.proof, tree_gate=not a.no_tree_gate, today=a.date, frame_style=a.frame)
     ap.print_help()
     return 2
 

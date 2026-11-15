@@ -2,7 +2,7 @@
    CUBBY EXTRAS
    - the painted avatar portraits (app/avatars/*.webp) + how a person resolves to one
    - cubbyBear(): the old parametric SVG bear. Nothing draws it any more (2026-11-13): a portrait
-     that will not decode falls back to the painted Cubby face (precached, /icons/logo-512.png)
+     that will not decode falls back to the painted Cubby face (precached, /icons/logo-512.png?v=09cba32f)
    - openBearPicker(): choose a painted bear
    - custom warm time picker (replaces the native one)
    Loads after the app + store-firebase, talks to them via globals.
@@ -313,7 +313,7 @@
     try {
       var size = img.getAttribute('width');
       var dim = size ? (' width="' + size + '" height="' + size + '"') : '';
-      img.outerHTML = '<img class="cb-av" src="/icons/logo-512.png"' + dim + ' alt="" aria-hidden="true" decoding="async">';
+      img.outerHTML = '<img class="cb-av" src="/icons/logo-512.png?v=09cba32f"' + dim + ' alt="" aria-hidden="true" decoding="async">';
     } catch (e) {}
   };
 

@@ -2,27 +2,35 @@
  "_about": "Every image file allowed on a Cubby screen, and where it came from. The founder's rule (2026-11-13): the painted cub made with ChatGPT is the standard image, no drawn bear and no emoji bear anywhere. tools/brand_image_check.js holds the tree to this list, statically and in a browser. A new picture is a deliberate edit here: `node tools/brand_image_check.js --hash <file>` prints the line to add.",
  "master": {
   "path": "icons/icon-master-1024.png",
-  "sha256": "036e1af20f9e960264a9d1515e7f0ed8b992c6c65f518927e259e60b89766d40",
-  "name": "the W2+ painted teddy",
-  "date": "2026-11-14",
-  "provenance": "ChatGPT painted art, the founder's pick \"W2+\" (2026-11-14): a painted honey-brown teddy face (cream muzzle, dusty-rose inner ears) on a light cream-honey watercolour wash, made with gpt-image-2 from the painted cub (app/journey-art/ov_hero-cub.webp, full size art-src/hero-cub.png), then centre-cropped so the bear is about 87% of the width. Chosen from twelve higher-contrast candidates after a three-judge evaluation. It replaced the 2026-11-13 white cub on flat honey, whose face-to-background contrast measured 1.2:1."
+  "sha256": "2c5513cd7ae1b98f9990dfb666cb7ff4976731e67c31e55f3349d074032eca2c",
+  "name": "deep-brown",
+  "date": "2026-11-15",
+  "provenance": "gpt-image-2 deep-brown teddy from the W2+ master, founder pick A + rim + light/shade, 2026-11-15"
  },
+ "frame": {
+  "style": "rim-shade",
+  "rim": 0.03,
+  "colour": "#D6A058",
+  "highlight": 0.22,
+  "shade": 0.18
+ },
+ "url_version": "09cba32f",
  "families": [
   {
    "name": "Icons from the master",
    "provenance": "ChatGPT painted art: the master (see `master` above), made into every size by tools/gen_brand_icons.py: plain Lanczos resizes, except the maskable icon, which shrinks the bear (cut from its wash) onto the master's own wash inside the safe circle. Nothing is drawn. icons/logo-96.png and logo-192.png (2026-11-14) are the site's top-bar logo, 1x-2x and 3x. tools/brand.py set re-hashes this family when the master changes.",
    "from_master": true,
    "files": {
-    "cap-web/logo.png": "6acbe1f20830f8907de8eede090eec09b9b2e73e06bdeb318bd0e307b8ddee38",
-    "icons/apple-touch-icon.png": "071441c334fda358845c7d0a292dc8f11d9d5ca6c03208ff4d9ff6d9aaec57eb",
-    "icons/favicon.png": "a27075ca030d63cb253c67458ae1dc88c38f748f33d3988acafda1ece20b2579",
-    "icons/icon-192.png": "070a95ff6c445f32a63765964e7ba0e0c0c24658a7f3263894fff5dafaf2db2f",
-    "icons/icon-512.png": "50e828f040136684f0b0c0c42b3b40ad61a8f014e42e894180217ddf4e30cd1e",
-    "icons/icon-maskable-512.png": "e7d582256dc9d750b79738d202d2ddc961cad57a5f21105857ea14999a02546e",
-    "icons/icon-master-1024.png": "036e1af20f9e960264a9d1515e7f0ed8b992c6c65f518927e259e60b89766d40",
-    "icons/logo-192.png": "a580957bd4a854a5093c747907acb702c0eabc6d7a26fd3d5477d6b2b03e0dda",
-    "icons/logo-512.png": "4dff2140344a9d802c8d875ca38b163c79a11c377c29404041f2bebf72ebf64b",
-    "icons/logo-96.png": "2093defbad5baf8181b52ad4467d9a50e4ca90f3b65b906d75fdf2ffe605c220"
+    "cap-web/logo.png": "70b37b87bf8f6e9a54a33e036527c44ced4e704405fd7cee015b9c02628ecbf6",
+    "icons/apple-touch-icon.png": "1cbe4e6bea604d85f1c7182ae40480a6f4e350d72a66851407364b628c275bce",
+    "icons/favicon.png": "51aee00c5aa0fe57cff9dacd0458c5da89b67dd1ae13a725078edc949b3b8c6e",
+    "icons/icon-192.png": "40da2564cab73b11192a4a58eb65e93851ee1493956657a135844e081740ed57",
+    "icons/icon-512.png": "f02fd86d92903fdee59adc15d3bf43638e866015e5794922bfbce9559b2323a5",
+    "icons/icon-maskable-512.png": "5967c4c0481c811f4abe8db0d9cf6409cec571a521e893c9691344f50d48124d",
+    "icons/icon-master-1024.png": "2c5513cd7ae1b98f9990dfb666cb7ff4976731e67c31e55f3349d074032eca2c",
+    "icons/logo-192.png": "f23d1173571f0a8046b0bde83ac360dfda71fa37ecc9dbb41d3c3f8e13e03684",
+    "icons/logo-512.png": "b735ca9611a154539b42676a8e7227bb3707033aa45bfc2bea59b549cfa16bcf",
+    "icons/logo-96.png": "d8b5ae47498d3bc23a273df97b00887ca401c4536da0c5758afa48563983f5b8"
    }
   },
   {
@@ -416,20 +424,20 @@
    "provenance": "Typographic cards drawn by Pillow (tools/gen_article_img.py, gen_ph_gallery.py, gen_pwa_screenshots.py) and the social quote template (social/card-quote.html). Their only picture is the master logo, swapped in by tools/card_logo.py (2026-11-13 in place of a drawn bear, 2026-11-14 the W2+ master in place of the white cub, and the social quote card's footer since 2026-11-14 too); no other pixel changed. tools/brand.py set re-hashes this family when the master changes.",
    "from_master": true,
    "files": {
-    "icons/screenshots/circle.png": "61bc67a298aebdd9d69821ea35c3f6ab5bba846561712998dfbde1fdd25c13dc",
-    "icons/screenshots/track.png": "6b63917d740ecf6f72eace5abaf4bfe9f4b278d454a518724fe1268035491f98",
-    "icons/screenshots/vaccines.png": "59a0bb23b42c2443a4a9063c086d32e551a8dc2d172b829c993a9bf47394ff09",
-    "og/articles.png": "a583f24475901687f934ec20f662befa1e743bb1a9034b49dc835501ac48fe07",
-    "og/cubby-home.png": "94357b11c857377b3f954b61a89e9d2fb0678a5995f7235bb32e5f1e3a40bc77",
-    "og/faq.png": "8ab65196ed2272d3b9afbcd1075148cc1ae62ff6dd0fe06d5438de56f154c6d7",
-    "og/features.png": "4a1769c09ecb9fa4ed00359ec5e765e0eec1b8ff52a964f458cd80046a9a2276",
-    "og/pricing.png": "84c5e0e17cc628fd30e999f1778a7f543b76448d6bd2e021e4a294560d2ca2ce",
-    "og/producthunt/ph-care-circle.png": "245ca9b58e6a443c0caa6b57879f2f3fb551f49fcd33587759e5a14ba032c00d",
-    "og/producthunt/ph-hero.png": "c2e44d50ec0a54ef65109aeb1ee44ad5ff9fe087071575e6be6f57ce913ff019",
-    "og/producthunt/ph-keepsakes.png": "36b88dd3fb899826b54b5f28d2617369a47eb3f229fb67aa1846879bd8fe312f",
-    "og/producthunt/ph-logging.png": "0738f6c28e1f972efa178a7ce05c2e20607958284023b085f514ee75b6ae87de",
-    "og/producthunt/ph-vaccines.png": "156e6280a7bd699143fa90226a44f5eba8147549fc80359f670fd589b5eded8a",
-    "social/out/w1-mon-quote.png": "b5db01d329a0e4172e80d73fc553661834b579af7ec5e52cdf9ed26fe2d6c71d"
+    "icons/screenshots/circle.png": "f8f180128b3bf790095f644514e79b1c4500c927664959e94de1130afc9eda3b",
+    "icons/screenshots/track.png": "41eae8aea77094aab7add38abe829c90b6200b1a43ad1492478e3ff9f8b05690",
+    "icons/screenshots/vaccines.png": "465e5eeb705437b2f81e330b64eee782e267e093373a2a2e7a1b4563e99f704b",
+    "og/articles.png": "c607c44b7f258728a863b7bb19733d051ded73eab82d0bf4b51703cc60d0cd9c",
+    "og/cubby-home.png": "87ebee10e7efa488b56b233f87f5eea7baf736e679c7e0b3456f123566bb1877",
+    "og/faq.png": "3e3f412bc673f80579192a6e873b5462f5babf7468bfa1c67f4dd9c7207e787d",
+    "og/features.png": "07f099fe419abd2fd333df8b96ab1273b0d89e4df334862d19a46018c4278483",
+    "og/pricing.png": "9c35af6a656bd921d0b956ea45074b0319404073f114336012a9e0651c563d52",
+    "og/producthunt/ph-care-circle.png": "1960a73291dfb0fd38508cb61fd23911a7a736e7de6f2ee08f5950379ae559aa",
+    "og/producthunt/ph-hero.png": "65f921fb032dfd89070a8aa1ede0f417c734c2aa6466a5d84325cf6deb57b903",
+    "og/producthunt/ph-keepsakes.png": "a5a636df0d17ad3f19b7ed531171b9dff5ec42ff1704bfe46e6137fd70275787",
+    "og/producthunt/ph-logging.png": "07107a8b64ca510cc4716cca64792b3a9edfc57f29956c773cf2290b771e2acc",
+    "og/producthunt/ph-vaccines.png": "7f19c20492ba594a72ec7dda4fe7fd6b06519a04d5a7d8abdeb9670d416ec6b6",
+    "social/out/w1-mon-quote.png": "ead27171187e67626bc2734a2e70e3180591c445347fe4a1e9bf1c2890a242b4"
    }
   },
   {
@@ -437,14 +445,14 @@
    "provenance": "Same as the text cards: tools/gen_article_img.py, master logo swapped in by tools/card_logo.py.",
    "glob": "og/articles/*.png",
    "count": 660,
-   "digest": "68d6a10ee0231b772b42fdf9fb0f1fe29c80e4dff75099339aa9f58d9d54d9c7"
+   "digest": "7afef2fb78d3c4f458d72850e5ac76b88b44f66f7e5ceb298ccdc48eaae5a095"
   },
   {
    "name": "Article hero cards",
    "provenance": "Same as the text cards: tools/gen_article_img.py, master logo swapped in by tools/card_logo.py. Shown at the top of 140 article pages.",
    "glob": "articles/*/hero.png",
    "count": 571,
-   "digest": "71bde43228dbb77df276df9139aad21c56d6dab05564809346129be39800ba17"
+   "digest": "101fda0fd6e28404f4d3118e4889666feb88c30d7e87912da6fe9ecfe2083667"
   }
  ],
  "inline": [
@@ -566,6 +574,41 @@
    "git_blob": {
     "icons/logo-512.png": "fb08b34c9faaad72db74be10621a2e456b385668",
     "icons/icon-master-1024.png": "af2fdcddd7dd47928df48ff6bb52088cb560afb2"
+   }
+  },
+  {
+   "name": "the W2+ painted teddy",
+   "why": "The master from 2026-11-14, retired 2026-11-15 by tools/brand.py set when deep-brown replaced it: its master and every icon and text card made from it, hashed before the change. The share cards and heroes that carried it are held by tools/card_logo.py --check (any logo box that is not the current master's fails) and their pinned digests.",
+   "retired_on": "2026-11-15",
+   "sha256": {
+    "cap-web/logo.png": "6acbe1f20830f8907de8eede090eec09b9b2e73e06bdeb318bd0e307b8ddee38",
+    "icons/apple-touch-icon.png": "071441c334fda358845c7d0a292dc8f11d9d5ca6c03208ff4d9ff6d9aaec57eb",
+    "icons/favicon.png": "a27075ca030d63cb253c67458ae1dc88c38f748f33d3988acafda1ece20b2579",
+    "icons/icon-192.png": "070a95ff6c445f32a63765964e7ba0e0c0c24658a7f3263894fff5dafaf2db2f",
+    "icons/icon-512.png": "50e828f040136684f0b0c0c42b3b40ad61a8f014e42e894180217ddf4e30cd1e",
+    "icons/icon-maskable-512.png": "e7d582256dc9d750b79738d202d2ddc961cad57a5f21105857ea14999a02546e",
+    "icons/icon-master-1024.png": "036e1af20f9e960264a9d1515e7f0ed8b992c6c65f518927e259e60b89766d40",
+    "icons/logo-192.png": "a580957bd4a854a5093c747907acb702c0eabc6d7a26fd3d5477d6b2b03e0dda",
+    "icons/logo-512.png": "4dff2140344a9d802c8d875ca38b163c79a11c377c29404041f2bebf72ebf64b",
+    "icons/logo-96.png": "2093defbad5baf8181b52ad4467d9a50e4ca90f3b65b906d75fdf2ffe605c220",
+    "icons/screenshots/circle.png": "61bc67a298aebdd9d69821ea35c3f6ab5bba846561712998dfbde1fdd25c13dc",
+    "icons/screenshots/track.png": "6b63917d740ecf6f72eace5abaf4bfe9f4b278d454a518724fe1268035491f98",
+    "icons/screenshots/vaccines.png": "59a0bb23b42c2443a4a9063c086d32e551a8dc2d172b829c993a9bf47394ff09",
+    "og/articles.png": "a583f24475901687f934ec20f662befa1e743bb1a9034b49dc835501ac48fe07",
+    "og/cubby-home.png": "94357b11c857377b3f954b61a89e9d2fb0678a5995f7235bb32e5f1e3a40bc77",
+    "og/faq.png": "8ab65196ed2272d3b9afbcd1075148cc1ae62ff6dd0fe06d5438de56f154c6d7",
+    "og/features.png": "4a1769c09ecb9fa4ed00359ec5e765e0eec1b8ff52a964f458cd80046a9a2276",
+    "og/pricing.png": "84c5e0e17cc628fd30e999f1778a7f543b76448d6bd2e021e4a294560d2ca2ce",
+    "og/producthunt/ph-care-circle.png": "245ca9b58e6a443c0caa6b57879f2f3fb551f49fcd33587759e5a14ba032c00d",
+    "og/producthunt/ph-hero.png": "c2e44d50ec0a54ef65109aeb1ee44ad5ff9fe087071575e6be6f57ce913ff019",
+    "og/producthunt/ph-keepsakes.png": "36b88dd3fb899826b54b5f28d2617369a47eb3f229fb67aa1846879bd8fe312f",
+    "og/producthunt/ph-logging.png": "0738f6c28e1f972efa178a7ce05c2e20607958284023b085f514ee75b6ae87de",
+    "og/producthunt/ph-vaccines.png": "156e6280a7bd699143fa90226a44f5eba8147549fc80359f670fd589b5eded8a",
+    "social/out/w1-mon-quote.png": "b5db01d329a0e4172e80d73fc553661834b579af7ec5e52cdf9ed26fe2d6c71d"
+   },
+   "git_blob": {
+    "icons/icon-master-1024.png": "62e9c9061e279ce94cd3760f30148d1b6104e44c",
+    "icons/logo-512.png": "35f774dcd03d77724d000946b7ef84d923d8b1da"
    }
   }
  ]

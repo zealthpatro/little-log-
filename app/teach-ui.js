@@ -235,7 +235,7 @@
      spent, six to eight taught, which is how the 44 rows that carry no trigger get reached at all
      without spending 44 more interruptions on them. */
   function doorCard() {
-    return '<div class="coach"><div class="cm-ico"><img src="/icons/logo-512.png" alt="" width="34" height="34" style="border-radius:inherit"></div>'
+    return '<div class="coach"><div class="cm-ico"><img src="/icons/logo-512.png?v=09cba32f" alt="" width="34" height="34" style="border-radius:inherit"></div>'
       + '<div class="cm-body"><div class="cm-t">A few things you have not met yet</div>'
       + '<div class="cm-s">Cubby can do a little more than you have needed so far. Here is what might be worth knowing now.</div>'
       + '<button class="btn-primary" style="margin-top:9px;padding:8px 14px;font-size:13px" '
@@ -280,7 +280,7 @@
     var r = rows()[id];
     if (!r) return '';
     var act = r.depth === 'page' ? 'CubbyTeachUI.page(\'' + id + '\')' : 'CubbyTeachUI.go(\'' + id + '\')';
-    return '<div class="coach"><div class="cm-ico"><img src="/icons/logo-512.png" alt="" width="34" height="34" style="border-radius:inherit"></div>'
+    return '<div class="coach"><div class="cm-ico"><img src="/icons/logo-512.png?v=09cba32f" alt="" width="34" height="34" style="border-radius:inherit"></div>'
       + '<div class="cm-body"><div class="cm-t">' + esc(r.label) + '</div>'
       + '<div class="cm-s">' + esc(r.one) + '</div>'
       + '<button class="btn-primary" style="margin-top:9px;padding:8px 14px;font-size:13px" '

@@ -150,7 +150,9 @@ on each of the three sub-tabs, so a sibling rule would have landed 16 on one and
 - Radius tokens only: `--radius` 26px (cards, tiles, sheets), `--radius-sm` 16px (buttons,
   inputs, chips), plus `--radius-xs` 10px (small chips, tags — to be added) and `50%` (round).
 - Two shadow levels only: resting `0 5px 14px var(--shadow)` and raised/sheet
-  `0 14px 36px var(--shadow-strong)`. No other shadows.
+  `0 14px 36px var(--shadow-strong)`. No other shadows, with one named exception: the brand mark's own soft
+  `filter: drop-shadow(0 2px 6px rgba(60,40,25,.18))` in the site's top bar and on the app's landing (deeper,
+  `rgba(0,0,0,.45)`, in Night), which lifts the framed logo off the cream (founder, 2026-11-15).
 
 ## A6. Iconography (the rules)
 - **One icon language: the `I.*` line-SVG set** in `app/index.html` (~45 icons):
@@ -163,8 +165,9 @@ on each of the three sub-tabs, so a sibling rule would have landed 16 on one and
 - New icons must match the set (24 grid / stroke 2 / round). Add to `I` in one place.
 - **The brand image is the painted cub, and only the painted cub** (founder, 2026-11-13). The app icon,
   favicon, sign-in card, landing, site nav, emails and share cards all come from one master,
-  `icons/icon-master-1024.png` (since 2026-11-14 "W2+": a painted teddy face on a cream-honey watercolour
-  wash, gpt-image-2 from the painted cub), via `tools/gen_brand_icons.py`. **To change the logo, follow
+  `icons/icon-master-1024.png` (since 2026-11-15 a deep chocolate-caramel painted teddy on a cream-honey
+  watercolour wash, gpt-image-2 from the W2+ teddy), via `tools/gen_brand_icons.py`, every tile framed as
+  `tools/brand-images.json` says (since 2026-11-15 a honey rim with soft light and shade). **To change the logo, follow
   [docs/BRAND.md](docs/BRAND.md)**: `tools/brand.py compare`, `zoom` (optional), `set FILE --yes`, review
   the proof, ship. Never copy a PNG over the master. The site's top bar loads `/icons/logo-96.png`
   (`logo-192.png` in its srcset for 3x screens), not the 197KB 512.

@@ -10,10 +10,13 @@ follow the authority's own naming; no cost/policy claims beyond cited sources.
 Run from repo root:  python3 tools/gen_vax_country.py
 """
 import html
+import sys
 import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tools"))
+import brand_style  # noqa: E402  the ?v= every logo URL carries
 REVIEWED = "24 June 2026"
 REVIEWED_ISO = "2026-06-24"
 
@@ -243,7 +246,8 @@ def main():
     for code in ["in", "ca", "au", "ie", "nz", "sa", "sg"]:
         out = ROOT / "vaccination-schedule" / code / "index.html"
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(page(code), encoding="utf-8")
+        # Every logo URL carries the registry's ?v= (tools/brand_style.py): /icons/* is cached for a month.
+        out.write_text(brand_style.stamp_page(page(code), str(out.relative_to(ROOT))), encoding="utf-8")
         print(f"  wrote {out.relative_to(ROOT)}  ({len(SCHED[code])} doses)")
     print("Done.")
 

@@ -67,7 +67,12 @@ const LINK = 'https://little-cubby.com/__/auth/action?mode=signIn&oobCode=abc123
     ok('it says how long the code lasts and that it is single use', /10 minutes, once/.test(html));
     ok('and it tells someone who did not ask that ignoring it is safe', /ignore this email/.test(html));
     ok('still the table-based template the other Cubby emails use', html.includes('<table role="presentation"'));
-    ok('headed by the painted Cubby face, never an emoji bear', html.includes('src="https://little-cubby.com/icons/logo-512.png"') && !/\u{1F43B}|\u{1F9F8}/u.test(html));
+    /* At the logo's current URL: /icons/* is cached for a month, so every logo URL carries the registry's
+       ?v= (tools/brand_style.py, founder 2026-11-15); a mail without it showed the old face to anyone whose
+       mail client had cached it. tools/brand_image_check.js holds worker.js to the same. */
+    const LOGO_V = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'tools', 'brand-images.json'), 'utf8')).url_version;
+    ok('headed by the painted Cubby face at its current URL (?v=' + LOGO_V + '), never an emoji bear',
+      !!LOGO_V && html.includes('src="https://little-cubby.com/icons/logo-512.png?v=' + LOGO_V + '"') && !/\u{1F43B}|\u{1F9F8}/u.test(html));
   }
 
   console.log('\n2. it degrades to the half that survived, rather than rendering a broken one');

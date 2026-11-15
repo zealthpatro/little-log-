@@ -12,6 +12,8 @@ change of master now reaches them without a browser. On 2026-11-13 the founder r
 icons/icon-master-1024.png, and on 2026-11-14 changed the master itself (the white cub on honey became the
 W2+ teddy on a watercolour wash). The generators call paste_logo(); this file also repairs the cards that
 already exist, so a change of logo is ONLY the logo: not one other pixel of those cards is re-rendered.
+Since 2026-11-15 the logo on every card is framed as tools/brand-images.json's "frame" says (the founder's
+"A + rim + light/shade"), drawn by tools/brand_style.py exactly as the web icons are.
 
 HOW THE REPAIR STAYS HONEST
 Each card family is rebuilt from its own generator's recipe (gradient, dot grid, wash) over the logo's box
@@ -39,25 +41,29 @@ import sys
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import brand_style  # noqa: E402  the frame, drawn one way for every logo
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MASTER = os.path.join(ROOT, 'icons', 'icon-master-1024.png')
 CARAMEL = np.array([196, 134, 68])      # the drawn bear's fur, and the flat June logo's: #C48644
 _cache = {}
 
 
+def frame():
+    if 'frame' not in _cache:
+        _cache['frame'] = brand_style.frame_of(brand_style.load_registry(ROOT))
+    return _cache['frame']
+
+
 def logo(size, radius=0.24):
-    """The master, resized to `size`, corners rounded like icons/logo-512.png."""
+    """The master, resized to `size`, framed and its corners rounded like icons/logo-512.png."""
     key = (size, radius)
     if key not in _cache:
         m = Image.open(MASTER).convert('RGB').resize((size, size), Image.LANCZOS)
         if size <= 64:
             m = m.filter(ImageFilter.UnsharpMask(radius=0.5, percent=40, threshold=1))
-        ss = 4
-        mask = Image.new('L', (size * ss, size * ss), 0)
-        ImageDraw.Draw(mask).rounded_rectangle([0, 0, size * ss - 1, size * ss - 1], radius=int(size * ss * radius), fill=255)
-        out = m.convert('RGBA')
-        out.putalpha(mask.resize((size, size), Image.LANCZOS))
-        _cache[key] = out
+        _cache[key] = brand_style.rounded(brand_style.framed(m, frame(), radius), radius)
     return _cache[key]
 
 

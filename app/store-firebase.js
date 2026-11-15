@@ -702,7 +702,7 @@
     }
     ov.classList.remove('landing');
     ov.innerHTML =
-      '<div class="ll-auth-card"><img src="/icons/logo-512.png" alt="Cubby" class="ll-auth-logo-img">'
+      '<div class="ll-auth-card"><img src="/icons/logo-512.png?v=09cba32f" alt="Cubby" class="ll-auth-logo-img">'
       + '<h1>Cubby</h1><p>A warm, private baby log you can share with the people who care for them.</p>'
       + '<div class="ll-values"><div><span>⚡</span>Log feeds, sleep &amp; nappies in seconds</div><div><span>👨‍👩‍👧</span>Share with family &amp; caregivers, live</div><div><span>🔒</span>Private to your family</div></div>'
       // Google's branding guidelines apply wherever their button appears, so carry the same official
@@ -750,7 +750,7 @@
     var lines = meaningful ? [msg].concat(LOADER_LINES) : LOADER_LINES;
     var i = meaningful ? 0 : Math.floor(Math.random() * lines.length);
     overlay().innerHTML =
-      '<div class="ll-auth-card ll-boot"><img src="/icons/logo-512.png" alt="Cubby" class="ll-auth-logo-img">'
+      '<div class="ll-auth-card ll-boot"><img src="/icons/logo-512.png?v=09cba32f" alt="Cubby" class="ll-auth-logo-img">'
       + '<h1>Cubby</h1><div class="ll-spin"></div>'
       + '<div class="ll-auth-msg" id="llAuthMsg"></div></div>';
     var mEl = document.getElementById('llAuthMsg'); if (mEl) mEl.textContent = lines[i];
@@ -2536,7 +2536,7 @@
       var ovd = document.createElement('div'); ovd.id = 'll-invite-mismatch';
       ovd.setAttribute('style', 'position:fixed;inset:0;z-index:3000;background:' + OV_BG + ';display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;overflow-y:auto');
       ovd.innerHTML = '<div style="max-width:360px;font-family:-apple-system,Segoe UI,Roboto,sans-serif">'
-        + '<img src="/icons/logo-512.png" alt="" width="52" height="52" style="display:block;margin:0 auto;border-radius:13px">'
+        + '<img src="/icons/logo-512.png?v=09cba32f" alt="" width="52" height="52" style="display:block;margin:0 auto;border-radius:13px">'
         + '<h2 style="font-family:Georgia,serif;color:' + OV_INK + ';margin:12px 0 8px;font-size:22px">' + (isLink ? 'This invite link no longer works' : 'This invite is no longer open') + '</h2>'
         + '<div style="color:' + OV_SOFT + ';font-size:15px;line-height:1.55">' + (isLink
             ? 'Invite links last a day and work once, so that a link passed on by accident cannot let anyone in.'
@@ -2569,7 +2569,7 @@
     var ov = document.createElement('div'); ov.id = 'll-invite-mismatch';
     ov.setAttribute('style', 'position:fixed;inset:0;z-index:3000;background:' + OV_BG + ';display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;overflow-y:auto');
     ov.innerHTML = '<div style="max-width:360px;font-family:-apple-system,Segoe UI,Roboto,sans-serif">'
-      + '<img src="/icons/logo-512.png" alt="" width="52" height="52" style="display:block;margin:0 auto;border-radius:13px">'
+      + '<img src="/icons/logo-512.png?v=09cba32f" alt="" width="52" height="52" style="display:block;margin:0 auto;border-radius:13px">'
       + '<h2 style="font-family:Georgia,serif;color:' + OV_INK + ';margin:12px 0 8px;font-size:22px">We could not find your invite</h2>'
       + '<div style="color:' + OV_SOFT + ';font-size:15px;line-height:1.55">You signed in as <b>' + esc(email) + '</b>, and there is no invite waiting for that address.</div>'
       + '<div style="color:' + OV_SOFT + ';font-size:15px;line-height:1.55;margin-top:12px">Invites are matched by email. If you signed in with Apple and chose to hide your address, Cubby sees the hidden one instead of yours.</div>'
@@ -2653,7 +2653,7 @@
     var ov = document.createElement('div'); ov.id = 'll-access-lost';
     ov.setAttribute('style', 'position:fixed;inset:0;z-index:3000;background:' + OV_BG + ';display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;overflow-y:auto;');
     ov.innerHTML = '<div style="max-width:340px;font-family:-apple-system,Segoe UI,Roboto,sans-serif">'
-      + '<img src="/icons/logo-512.png" alt="" width="52" height="52" style="display:block;margin:0 auto;border-radius:13px">'
+      + '<img src="/icons/logo-512.png?v=09cba32f" alt="" width="52" height="52" style="display:block;margin:0 auto;border-radius:13px">'
       + '<h2 style="font-family:Georgia,serif;color:' + OV_INK + ';margin:12px 0 8px;font-size:22px">You’re no longer in this family</h2>'
       + '<div style="color:' + OV_SOFT + ';font-size:15px;line-height:1.55">Your access to this Cubby was removed, or the family was closed. Everything you logged stays part of their story.</div>'
       + '<button id="ll-al-btn" style="margin-top:22px;border:none;border-radius:16px;padding:15px 24px;background:#C97FA0;color:#1A1614;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Back to sign in</button>'

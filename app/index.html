@@ -25,7 +25,7 @@
 <meta property="og:title" content="Cubby: Baby Tracker, Vaccine Schedule &amp; Keepsakes">
 <meta property="og:description" content="One calm place for feeds, naps, vaccines and memories, shared with everyone who cares for your baby. Free to start, no ads.">
 <meta property="og:url" content="https://little-cubby.com/">
-<meta property="og:image" content="https://little-cubby.com/og/cubby-home.png">
+<meta property="og:image" content="https://little-cubby.com/og/cubby-home.png?v=09cba32f">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:locale" content="en_GB">
@@ -33,12 +33,12 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Cubby: Baby Tracker, Vaccine Schedule &amp; Keepsakes">
 <meta name="twitter:description" content="Track your baby, never miss a vaccine, keep every memory. Free, private, no ads.">
-<meta name="twitter:image" content="https://little-cubby.com/og/cubby-home.png">
+<meta name="twitter:image" content="https://little-cubby.com/og/cubby-home.png?v=09cba32f">
 <!-- Structured data: app + organisation + FAQ (also powers SERP rich results) -->
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[
 {"@type":"SoftwareApplication","name":"Cubby","applicationCategory":"HealthApplication","operatingSystem":"Web, iOS, Android","description":"Baby tracker with vaccine schedules, multi-caregiver real-time sync, growth charts and keepsakes.","url":"https://little-cubby.com/","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"publisher":{"@type":"Organization","name":"Cubby","url":"https://little-cubby.com/"}},
-{"@type":"Organization","name":"Cubby","url":"https://little-cubby.com/","logo":"https://little-cubby.com/icons/logo-512.png"},
+{"@type":"Organization","name":"Cubby","url":"https://little-cubby.com/","logo":"https://little-cubby.com/icons/logo-512.png?v=09cba32f"},
 {"@type":"FAQPage","mainEntity":[
 {"@type":"Question","name":"Is Cubby free?","acceptedAnswer":{"@type":"Answer","text":"Yes. Logging feeds, sleep, nappies and pumping, plus sharing with caregivers, is free. Pro adds extras like insights and exports."}},
 {"@type":"Question","name":"Can both parents and a nanny use the same baby?","acceptedAnswer":{"@type":"Answer","text":"Yes. Cubby syncs in real time across every caregiver, parents, grandparents, the nanny or daycare, with shared handoff notes."}},
@@ -49,8 +49,8 @@
 </script>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#FBF5E9">
-<link rel="icon" type="image/png" href="/icons/favicon.png">
-<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="/icons/favicon.png?v=09cba32f">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=09cba32f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Cubby">
@@ -1833,7 +1833,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 <style>#seo-fallback{display:none}</style>
 <noscript><style>#seo-fallback{display:block!important}</style></noscript>
 <main id="seo-fallback" style="max-width:680px;margin:0 auto;padding:40px 22px;font-family:'Nunito Sans',system-ui,sans-serif;color:var(--ink)">
-<img src="/icons/logo-512.png" alt="Cubby logo" width="76" height="76" style="border-radius:18px">
+<img src="/icons/logo-512.png?v=09cba32f" alt="Cubby logo" width="76" height="76" style="border-radius:18px">
 <h1 style="font-family:'Fraunces',Georgia,serif;font-size:34px;margin:14px 0 6px">Cubby: a warm, private baby tracker</h1>
 <p style="font-size:17px;line-height:1.5;color:var(--ink-soft)">Log every feed, nap, nappy and vaccine in one calm place, shared in real time with everyone who cares for your little one: parents, grandparents, the nanny, daycare and more. Free to start, no ads, private to your family.</p>
 <p><a href="/app/" style="font-weight:800;color:var(--pump-ink)">Start free with Google</a></p>
@@ -6895,7 +6895,7 @@ function openAddEntry(){
   var hasPreg=!!(state.pregnancy && !state.pregnancy.bornBabyId);
   openSheet(`<h2>Add to Cubby</h2><div class="sub">Wherever you are on the journey.</div>
     <div class="prof-cards">
-      <div class="prof-card" onclick="openAddBaby()"><span class="lead" style="background:var(--feed-soft);color:var(--feed);font-size:20px"><img src="/icons/logo-512.png" alt="" width="42" height="42" style="border-radius:inherit"></span><div class="cflex"><div class="a">${state.babies.length?'Add another little one':'Our baby is here'}</div><div class="b">${state.babies.length?'A twin, or an older sibling':'Track feeds, sleep, growth, vaccines and more'}</div></div><span class="chev">${I.chev}</span></div>
+      <div class="prof-card" onclick="openAddBaby()"><span class="lead" style="background:var(--feed-soft);color:var(--feed);font-size:20px"><img src="/icons/logo-512.png?v=09cba32f" alt="" width="42" height="42" style="border-radius:inherit"></span><div class="cflex"><div class="a">${state.babies.length?'Add another little one':'Our baby is here'}</div><div class="b">${state.babies.length?'A twin, or an older sibling':'Track feeds, sleep, growth, vaccines and more'}</div></div><span class="chev">${I.chev}</span></div>
       <div class="prof-card" onclick="${hasPreg?'viewingPreg=true;closeSheet();render()':'viewingPreg=true;openStartPregnancy()'}"><span class="lead" style="background:var(--preg-soft);color:var(--preg);font-size:20px">🌸</span><div class="cflex"><div class="a">${hasPreg?'Open your pregnancy':"We're expecting"}</div><div class="b">${hasPreg?'Resume where you left off':'Trying, newly pregnant or counting weeks'}</div></div><span class="chev">${I.chev}</span></div>
     </div>`,'diaper');
 }
@@ -7116,7 +7116,7 @@ function relKeyFromLabel(label){ const s=(label||'').toLowerCase(); for(const k 
 function journeyBearArt(relation, uid, size){
   if(uid && typeof window.memberAvatarSvg==='function'){ const info=(window.LL&&window.LL.memberInfo)||{}; if(info[uid]) return window.memberAvatarSvg(uid, size||64); }
   const slug = RELATION_BEAR[relation] || RELATION_BEAR.other;
-  return (typeof window.cubbyArtImg==='function') ? window.cubbyArtImg(slug, size||64) : `<img src="/icons/logo-512.png" alt="" width="${size||64}" height="${size||64}">`;
+  return (typeof window.cubbyArtImg==='function') ? window.cubbyArtImg(slug, size||64) : `<img src="/icons/logo-512.png?v=09cba32f" alt="" width="${size||64}" height="${size||64}">`;
 }
 // Prompt objects carry RAW title/sub (renderers MUST escapeHtml them). onclick is pre-escaped
 // here: jArg makes a user string safe for both the single-quoted JS arg and the double-quoted
@@ -8864,7 +8864,7 @@ function showDeletedGoodbye(){
   ov.id='cb-del-goodbye';
   ov.setAttribute('style','position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center');
   ov.innerHTML=`<div style="max-width:340px">
-    <img src="/icons/logo-512.png" alt="" width="52" height="52" style="display:block;margin:0 auto;border-radius:13px">
+    <img src="/icons/logo-512.png?v=09cba32f" alt="" width="52" height="52" style="display:block;margin:0 auto;border-radius:13px">
     <h2 style="font-family:Georgia,serif;margin:12px 0 8px;font-size:22px">Your account is deleted</h2>
     <div class="cb-del-sub" style="font-size:15px;line-height:1.55;font-weight:600">Thank you for letting us look after some of it for a while. Take care of yourself.</div>
     <button id="cb-del-done" style="margin-top:22px;border:none;border-radius:16px;padding:15px 24px;background:#C97FA0;color:#1A1614;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Close</button></div>`;
@@ -9155,7 +9155,7 @@ function renderOnboard(){
       <div class="tag">It sets up from your dates and the country you are in. Nothing here keeps a streak, and you can change anything later.</div>
       <div class="prof-cards" style="width:100%;text-align:left">
         <div class="prof-card" onclick="obStage('expecting')"><span class="lead" style="background:var(--preg-soft);font-size:20px">🌸</span><div class="cflex"><div class="a">We're expecting</div><div class="b">Your antenatal visits laid out for where you have your care</div></div><span class="chev">${I.chev}</span></div>
-        <div class="prof-card" onclick="obStage('baby')"><span class="lead" style="background:var(--feed-soft);font-size:20px"><img src="/icons/logo-512.png" alt="" width="42" height="42" style="border-radius:inherit"></span><div class="cflex"><div class="a">Our baby's here</div><div class="b">The last feed, sleep and nappy on one screen, and their vaccine plan already waiting</div></div><span class="chev">${I.chev}</span></div>
+        <div class="prof-card" onclick="obStage('baby')"><span class="lead" style="background:var(--feed-soft);font-size:20px"><img src="/icons/logo-512.png?v=09cba32f" alt="" width="42" height="42" style="border-radius:inherit"></span><div class="cflex"><div class="a">Our baby's here</div><div class="b">The last feed, sleep and nappy on one screen, and their vaccine plan already waiting</div></div><span class="chev">${I.chev}</span></div>
         <!-- Trying is a first-class stage, so its tile has to sit at the same weight as the other two.
              It carried a raw pale green while its siblings used --preg-soft / --feed-soft, which made it
              a near-white square in Night. --diaper-soft is the app's green-family soft, the same token
@@ -13974,7 +13974,7 @@ function openWelcomeBaby(){
   newBabyColor=AVATAR_COLORS[Math.floor(Math.random()*AVATAR_COLORS.length)];
   initLogWhen();
   const cc=(p.country&&p.country!=='generic'&&p.country!=='custom')?p.country:detectCountry();
-  openSheet(`<div class="welcome-burst"><img src="/icons/logo-512.png" alt="" width="64" height="64" style="border-radius:16px"></div>
+  openSheet(`<div class="welcome-burst"><img src="/icons/logo-512.png?v=09cba32f" alt="" width="64" height="64" style="border-radius:16px"></div>
     <h2 style="text-align:center">Welcome to the world</h2>
     <div class="sub" style="text-align:center">Congratulations. Let's bring your baby into Cubby. You can change anything later, there's no rush.</div>
     <div class="field"><label>Baby's name</label><input id="wbName" placeholder="Your little one's name" autofocus></div>
@@ -14059,7 +14059,7 @@ function showBirthArrival(b){
   // inside is already themed, so an un-themed cream fill put the headline at 1.1:1 in Night.
   ov.setAttribute('style','position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;padding:30px 24px;text-align:center;overflow-y:auto');
   ov.innerHTML=`<div style="max-width:360px">
-    <img src="/icons/logo-512.png" alt="" width="64" height="64" style="display:block;margin:0 auto;border-radius:16px">
+    <img src="/icons/logo-512.png?v=09cba32f" alt="" width="64" height="64" style="display:block;margin:0 auto;border-radius:16px">
     <h2 style="font-family:var(--font-display,Georgia),serif;color:var(--ink,#2C2521);margin:14px 0 8px;font-size:26px;line-height:1.2">Welcome to the world, ${escapeHtml(b.name)}</h2>
     <div style="color:var(--ink-soft,#6B5D50);font-size:15px;line-height:1.6;font-weight:600">Your pregnancy is saved as part of their story. You can look back on it any time from the baby switcher.</div>
     <div style="color:var(--ink-soft,#6B5D50);font-size:15px;line-height:1.6;font-weight:600;margin-top:14px">Cubby has changed shape for them. Feeds, sleep and nappies are on your home screen now.</div>
@@ -16840,9 +16840,9 @@ function vaxSetupCard(b,plan,toConfirm){
   const nm=escapeHtml((b||{}).name||'your baby');
   const cardBtn = window.CubbyVaxCard ? `<button class="vs-btn ghost" onclick="CubbyVaxCard.open()">📷 From their card</button>` : '';
   if(b && b.vaxSetupSeen){
-    return `<div class="vx-setup"><img class="vs-emoji" src="/icons/logo-512.png" alt="" width="26" height="26" style="border-radius:7px"><div class="vs-body"><div class="vs-t">Set up ${nm}'s vaccine history</div><div class="vs-s">Record what's already done so the list shows what's actually next.</div><div class="vs-btns"><button class="vs-btn" onclick="vaxCatchupReopen()">Start</button>${cardBtn}</div></div></div>`;
+    return `<div class="vx-setup"><img class="vs-emoji" src="/icons/logo-512.png?v=09cba32f" alt="" width="26" height="26" style="border-radius:7px"><div class="vs-body"><div class="vs-t">Set up ${nm}'s vaccine history</div><div class="vs-s">Record what's already done so the list shows what's actually next.</div><div class="vs-btns"><button class="vs-btn" onclick="vaxCatchupReopen()">Start</button>${cardBtn}</div></div></div>`;
   }
-  return `<div class="vx-setup"><img class="vs-emoji" src="/icons/logo-512.png" alt="" width="26" height="26" style="border-radius:7px"><div class="vs-body">
+  return `<div class="vx-setup"><img class="vs-emoji" src="/icons/logo-512.png?v=09cba32f" alt="" width="26" height="26" style="border-radius:7px"><div class="vs-body">
     <div class="vs-t">Has ${nm} had vaccinations so far?</div>
     <div class="vs-s">No guilt, just a tidy record. We'll set the schedule to match. Estimated dates are tagged "est." and you can fix any later.</div>
     <div class="vs-btns">

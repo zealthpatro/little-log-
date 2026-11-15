@@ -1,6 +1,6 @@
 /* Cubby service worker.
    Bump CACHE on every deploy so old assets are cleared. */
-const CACHE = 'little-log-v367';
+const CACHE = 'little-log-v368';
 const ASSETS = [
   '/app/',
   '/app/index.html',
@@ -38,11 +38,11 @@ const ASSETS = [
      belong to screens a parent reaches with a connection, and 250KB on every offline launch to
      decorate an empty Rituals tab is not a trade worth making. 22KB. */
   '/app/spot-art/offline_balloon.webp',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
-  '/icons/apple-touch-icon.png',
-  '/icons/logo-512.png',
-  '/icons/favicon.png'
+  '/icons/icon-192.png?v=09cba32f',
+  '/icons/icon-512.png?v=09cba32f',
+  '/icons/apple-touch-icon.png?v=09cba32f',
+  '/icons/logo-512.png?v=09cba32f',
+  '/icons/favicon.png?v=09cba32f'
 ];
 
 self.addEventListener('install', (e) => {
@@ -104,8 +104,8 @@ self.addEventListener('push', (e) => {
      the same endpoint. Passing an unsupported key is harmless, so there is nothing to feature-detect. */
   const opts = {
     body: n.body || '',
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
+    icon: '/icons/icon-192.png?v=09cba32f',
+    badge: '/icons/icon-192.png?v=09cba32f',
     tag: d.tag || n.tag || 'cubby',   // same tag replaces rather than stacks: a retry cannot pile up
     data: d
   };
@@ -127,12 +127,12 @@ self.addEventListener('notificationclick', (e) => {
         .then((r) => self.registration.showNotification(r.ok ? 'Dose logged' : 'Could not log that dose', {
           body: r.ok ? ((d.medName ? d.medName + ' ' : '') + 'is on the record.')
                      : 'Open Cubby and log it there, so nothing is missed.',
-          icon: '/icons/icon-192.png', badge: '/icons/icon-192.png',
+          icon: '/icons/icon-192.png?v=09cba32f', badge: '/icons/icon-192.png?v=09cba32f',
           tag: (d.tag || 'cubby') + '-done'
         }))
         .catch(() => self.registration.showNotification('Could not log that dose', {
           body: 'You look offline. Open Cubby and log it there.',
-          icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', tag: (d.tag || 'cubby') + '-done'
+          icon: '/icons/icon-192.png?v=09cba32f', badge: '/icons/icon-192.png?v=09cba32f', tag: (d.tag || 'cubby') + '-done'
         }))
     );
     return;

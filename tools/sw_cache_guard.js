@@ -31,6 +31,9 @@ function precached() {
   return new Set(
     (body.match(/'(\/[^']+)'/g) || [])
       .map((s) => s.slice(1, -1))
+      // '/icons/logo-512.png?v=…' is the file icons/logo-512.png: since 2026-11-15 every logo URL carries the
+      // logo's version (tools/brand_style.py), and a guard that kept the query matched no staged path at all.
+      .map((u) => u.split('?')[0].split('#')[0])
       .map((u) => (u === '/app/' ? 'app/index.html' : u.replace(/^\//, '')))
   );
 }

@@ -1,8 +1,10 @@
 # Changing the logo
 
 Every Cubby logo (app icon, favicon, the site's top bar, sign-in card, emails, 1,245 share and promo
-cards, the native app icon and splash) is made from ONE file, `icons/icon-master-1024.png`. Changing the
-logo means changing that file with `tools/brand.py`, never by copying a PNG over it.
+cards, the native app icon and splash) is made from ONE file, `icons/icon-master-1024.png`, dressed in ONE
+frame, the `"frame"` in `tools/brand-images.json` (since 2026-11-15 the founder's "A + rim + light/shade": a
+honey rim about 3% of the tile wide with a soft light across the top and shade across the bottom). Changing
+the logo or its frame means `tools/brand.py set`, never copying a PNG over the master or editing the registry.
 
 ## To change the logo
 
@@ -11,10 +13,16 @@ python3 tools/brand.py compare a.png b.png c.png        # look and measure; open
 python3 tools/brand.py zoom b.png --subject-width 87 --out b87.png      # optional: make the face bigger
 python3 tools/brand.py set b87.png --name "the honey teddy" --provenance "gpt-image-2 from the painted cub, founder's pick, 3 judges"
 python3 tools/brand.py set b87.png --name "the honey teddy" --provenance "..." --yes
+python3 tools/brand.py set icons/icon-master-1024.png --frame rim --yes   # the same master, another frame
 ```
 
+Frames: `none`, `rim` (a rim of the tile's own shape), `rim-shade` (the rim, light over the top third and shade
+over the bottom), `ring` (a thin cocoa ring). `--frame` starts from the style's preset in `tools/brand_style.py`;
+without it set keeps the registry's frame.
+
 Then review the proof it prints (`before-after.png`), run `node tools/gates.js`, commit the files it lists
-in `touched.txt` beside the proof (the `git --literal-pathspecs commit` line it prints), and push main
+in `touched.txt` beside the proof (the `git --literal-pathspecs commit` line it prints: it already holds the
+pages whose logo URLs changed and the `app/sw.js` CACHE bump the pre-commit hook asks for), and push main
 (push = deploy). That is the whole change.
 
 **Need candidates first?** `python3 tools/brand.py propose --ref app/journey-art/ov_hero-cub.webp
@@ -24,7 +32,10 @@ in `touched.txt` beside the proof (the `git --literal-pathspecs commit` line it 
 
 ## What each step does
 
-- **compare** writes `sizes.png` (512 to 16px, light and dark), `homescreen.png` (60px among other apps,
+- **compare** draws every candidate twice, as painted and framed (`--frame STYLE`, else the registry's frame,
+  else rim-shade), and adds the **tile edge** against the site's cream and a dark ground both ways (the
+  painted wash is nearly the page's own colour: 1.07:1 on the cream; the honey rim 2.17:1).
+  It writes `sizes.png` (512 to 16px, light and dark), `homescreen.png` (60px among other apps,
   blue-grey and dark), `web.png` (the top bar beside the real Fraunces wordmark at 1x, 2x and 3x, and the
   favicon in a browser tab), `context-light.png` (white and the site's cream), `metrics.json` and
   `compare.html`. The current master is always the first column. Same inputs, same bytes.
@@ -38,9 +49,25 @@ in `touched.txt` beside the proof (the `git --literal-pathspecs commit` line it 
   the generators whether they can cut the face from its ground, and lists what will change. With `--yes` it
   writes the master, regenerates the web icons (and the top bar's `logo-96.png` / `logo-192.png`), the
   native set into `native-build/brand-native/` (gitignored), every card's logo, re-pins
-  `tools/brand-images.json`, moves the old master and everything made from it into a **retired** set (so
-  its bytes can never come back unnoticed), runs the brand gate, `card_logo.py --check` and
-  `gen_brand_icons.py --check`, and draws the proof.
+  `tools/brand-images.json` (the master, the frame and `url_version`), moves the old master (or, for a new
+  frame alone, the old frame's icons and cards) into a **retired** set (so its bytes can never come back
+  unnoticed), puts `?v=<url_version>` on every reference to a file made from the master and bumps
+  `app/sw.js`'s CACHE, runs the brand gate, `card_logo.py --check` and `gen_brand_icons.py --check`, and
+  draws the proof.
+- **The frame** goes on every tile: the logo PNGs, the favicon, the apple-touch and manifest icons, the iOS
+  AppIcon set (along the iOS corner, the square's corners rim too, so the system's mask never leaves a
+  double edge), the legacy Android square, `cap-web/logo.png` and every card's logo. Never on the maskable
+  icon, the Android adaptive or round icon (the launcher cuts those to its own shape) or the splash (the
+  face alone on cream), and never below 32px (at 16px a 3% rim is half a pixel of noise).
+  `favicon.png` is one 48px file, framed: a 2x tab draws it at 32px, but a 1x tab (a desktop at 100%)
+  scales it to 16px itself, where the rim shows as a faint warm edge. A separate unframed 16px favicon would
+  need a second `<link rel="icon" sizes="16x16">` on every page: an open choice, not made here.
+- **Versioned URLs**: `/icons/*` is cached for 30 days (`_headers`) and the files keep their names, so after
+  the 2026-11-14 change returning visitors kept the old logo for up to a month. Every reference to a file
+  made from the master (pages, manifests, both service workers' lists, `worker.js`'s emails, `cap-web/`)
+  carries `?v=` and the first 8 hex of sha256(master sha256 | frame), so a new logo is a new URL. The page
+  generators stamp what they write; `python3 tools/brand.py stamp` re-stamps a page copied from an older
+  one (`--check` only lists them); the brand gate recomputes the version and fails any other.
 - **ios/ and android/**: once the app has been built here, these gitignored folders hold the master's app
   icon, splash and offline-page logo. set remakes them in place and checks them, because the brand gate
   reads them along with every file git tracks and would fail on the old logo's bytes there.
@@ -64,8 +91,10 @@ in `touched.txt` beside the proof (the `git --literal-pathspecs commit` line it 
 
 ## Good to know
 
-- Returning visitors keep `/icons/*` in their browser cache for up to 30 days (`_headers`), so the old
-  logo can linger on the site for them. Shortening that is an open founder decision.
+- `/icons/*` stays cached for 30 days (`_headers`): a logo change reaches returning visitors anyway, because
+  it changes every URL (`?v=`, above). Set the version by `brand.py set` or `stamp`, never by hand.
+- The site's top bar and the app's landing draw the logo with a soft drop shadow (`filter: drop-shadow`,
+  warm on cream, deeper in Night); the brand gate checks the rules and the computed style.
 - The iOS build (`tools/cap_ios_build.sh`) regenerates its icon and splash from the master, so the next
   app build picks the change up; App Store screenshots are not regenerated.
 - Pages load `icons/logo-96.png` in the top bar (with `logo-192.png` for 3x screens): 9KB instead of the

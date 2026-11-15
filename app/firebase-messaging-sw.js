@@ -22,8 +22,8 @@ try {
     var d = (payload && payload.data) || {};
     self.registration.showNotification(n.title || 'Cubby', {
       body: n.body || '',
-      icon: '/icons/icon-192.png',
-      badge: '/icons/icon-192.png',
+      icon: '/icons/icon-192.png?v=09cba32f',
+      badge: '/icons/icon-192.png?v=09cba32f',
       tag: d.tag || 'cubby',
       data: d
     });

@@ -32,16 +32,25 @@
  *      checkout (the ~67 worktrees under .claude/worktrees/ in the main checkout), node_modules, .wrangler
  *      and gitignored scratch are never read (treeFiles below; brand verifier M1b, 2026-11-14);
  *   5. the web icons are exactly what the master gives (tools/gen_brand_icons.py --check) and every card
- *      carries the current master's logo, never the drawn bear or a retired one (tools/card_logo.py --check).
+ *      carries the current master's logo, never the drawn bear or a retired one (tools/card_logo.py --check);
+ *   6. every reference to a file made from the master (the logo, icons and text cards: pages, manifests, both
+ *      service workers' lists, worker.js's emails, cap-web/) carries ?v=<url_version>, the first 8 hex of
+ *      sha256(master sha256 | the frame as canonical JSON), recomputed here, not read. /icons/* is cached for
+ *      30 days (_headers) and the files keep their names, so a reference without it showed returning visitors
+ *      the old logo for up to a month after 2026-11-14 (founder, 2026-11-15). python3 tools/brand.py stamp fixes it;
+ *   7. the logo casts its soft drop shadow where the founder asked for one (2026-11-15): the site's top bar
+ *      (site.css .nav-brand img, vax.css .site-head img) and the app's landing (.lp-nav-brand img, .lp-logo img),
+ *      with a Night rule for each on the landing. The runtime half reads the computed filter too.
  * RUNTIME (headless Chrome on THIS tree, localhost only, 390px):
- *   6. it boots the app the way the other gates do (?e2e=1, seeded) and walks every main tab top and
+ *   8. it boots the app the way the other gates do (?e2e=1, seeded) and walks every main tab top and
  *      bottom, the first-run cards, the landing, the sign-in card, the boot card, the invite sheet, the
  *      dead-invite note, the access-lost overlay, the account-deleted goodbye, the birth arrival and the
  *      Add-to-Cubby sheet, plus the marketing home page and an article page. On each it collects every
  *      rendered image (img/picture currentSrc, CSS background-image including ::before/::after, every
  *      image response with its bytes), every inline SVG, and the visible text. It fails on any picture
  *      outside the approved set, a retired logo's bytes under any URL, an inline SVG drawing (five or
- *      more filled circles or ellipses and no text: the old cubbyBear() was thirteen), or an emoji bear.
+ *      more filled circles or ellipses and no text: the old cubbyBear() was thirteen), an emoji bear, or a
+ *      logo drawn from a URL without the current ?v= (one a script builds at runtime is caught here).
  *      The overlays that live inside store-firebase.js's closure are reached through a probe the gate
  *      adds to the script it SERVES to its own browser; the file on disk is never touched.
  *
@@ -111,6 +120,14 @@ function approvedSet() {
 }
 const APPROVED = approvedSet();
 const INLINE = new Set((REG.inline || []).map((i) => i.sha256));
+/* The version every logo URL carries (tools/brand_style.py version_for, the same arithmetic): the first 8 hex
+   of sha256("<master sha256>|<the frame as JSON, keys sorted, no spaces>"). Recomputed, never read from the
+   registry, so a url_version edited by hand fails too. */
+const canonicalFrame = (f) => { const o = f || { style: 'none' }; return JSON.stringify(Object.fromEntries(Object.keys(o).sort().map((k) => [k, o[k]]))); };
+const URL_VERSION = sha(Buffer.from(String((REG.master || {}).sha256) + '|' + canonicalFrame(REG.frame), 'utf8')).slice(0, 8);
+const VERSIONED = new Set((REG.families || []).filter((f) => f.from_master).reduce((a, f) => a.concat(Object.keys(f.files || {})), []));
+// What follows a reference: exactly ?v=<URL_VERSION>, and not one hex digit more.
+const carriesVersion = (s, end) => { const m = /^\?v=([0-9a-f]*)/.exec(s.slice(end, end + 24)); return { ok: !!m && m[1] === URL_VERSION, had: m ? m[1] : null }; };
 function verdict(p) {
   if (APPROVED.exact.has(p)) return 'approved';
   if (APPROVED.globs.some((g) => g.re.test(p))) return 'approved';
@@ -292,9 +309,27 @@ function resolveRef(file, raw, root) {
   return { path: cands[0] };
 }
 
+/* The logo's soft shadow (founder, 2026-11-15: "on the website a soft drop shadow under the logo on the cream
+   header"). Each rule must carry a filter: drop-shadow(...), which follows the tile's rounded corners. */
+const SHADOW_RULES = [['site.css', '.nav-brand img', false], ['vax.css', '.site-head img', false], ['app/landing.js', '.lp-nav-brand img', false],
+  ['app/landing.js', '.lp-logo img', false], ['app/landing.js', '.lp-nav-brand img', true], ['app/landing.js', '.lp-logo img', true]];
+function logoShadows(root) {
+  return SHADOW_RULES.map(([file, sel, night]) => {
+    let src = '';
+    try { src = fs.readFileSync(path.join(root, file), 'utf8'); } catch (e) { return { file, sel, night, ok: false, why: 'not found' }; }
+    const re = new RegExp('(^|[\\s\'"}])' + reLit(sel) + '\\s*\\{([^}]*)\\}', 'gm');
+    let m, body = null;
+    while ((m = re.exec(src))) {
+      const before = src.slice(Math.max(0, m.index - 24), m.index + m[1].length);
+      if (/data-theme="night"\]\s*$/.test(before) === night) { body = m[2]; break; }
+    }
+    return { file, sel: (night ? '[data-theme="night"] ' : '') + sel, ok: body !== null && /filter\s*:\s*drop-shadow\(/.test(body), why: body === null ? 'no such rule' : body };
+  });
+}
+
 function staticScan(root) {
   const rel = (p) => path.relative(root, p).split(path.sep).join('/');
-  const R = { bears: [], avoid: [], avoidScanned: 0, bigNav: [], bothLogos: [], navPages: 0, refs: [], external: [], missing: [], unapproved: [], pending: new Set(), dataBad: [], drawnSvg: [], retiredFiles: [], scanned: 0 };
+  const R = { bears: [], avoid: [], avoidScanned: 0, bigNav: [], bothLogos: [], navPages: 0, refs: [], external: [], missing: [], unapproved: [], pending: new Set(), dataBad: [], drawnSvg: [], retiredFiles: [], scanned: 0, logoRefs: 0, unversioned: [] };
   const T = treeFiles(root);
   R.tree = T;
   const served = T.files.filter((p) => !inSkipped(p, SKIP_DIRS) && TEXT_EXT.has(path.extname(p).toLowerCase()) && !/\.md$/i.test(p)).map((p) => path.join(root, p));
@@ -327,6 +362,11 @@ function staticScan(root) {
       if (res.external) { R.external.push(r + ' -> ' + res.external); continue; }
       const p = res.path.split('?')[0].split('#')[0];
       R.refs.push(p);
+      if (VERSIONED.has(p)) {
+        R.logoRefs++;
+        const cv = carriesVersion(s, REF_RE.lastIndex);
+        if (!cv.ok) R.unversioned.push(r + ':' + s.slice(0, m.index).split('\n').length + ' -> ' + raw + (cv.had !== null ? '?v=' + cv.had : ' (no version)'));
+      }
       const v = verdict(p);
       if (!fs.existsSync(path.join(root, p))) {
         if (v === 'unapproved') R.missing.push(r + ' -> ' + p);
@@ -384,6 +424,7 @@ function staticScan(root) {
   // .assetsignore and the gate's own skips.
   R.servedImages = servedImages(root);
   R.servedUnregistered = R.servedImages.filter((p) => verdict(p) === 'unapproved');
+  R.shadows = logoShadows(root);
   return R;
 }
 
@@ -466,6 +507,11 @@ function runStatic(root, label) {
   ok('every image a served file points at is in the approved set', R.unapproved.length === 0, R.unapproved.length + ', e.g.\n         ' + [...new Set(R.unapproved)].slice(0, 8).join('\n         '));
   ok('and every one of them exists', R.missing.length === 0, [...new Set(R.missing)].slice(0, 8).join('\n         '));
   ok('no image is loaded from another host', R.external.length === 0, [...new Set(R.external)].slice(0, 6).join('\n         '));
+  ok('the registry\'s url_version is the one its master and frame give (' + URL_VERSION + ')', REG.url_version === URL_VERSION,
+    'registry ' + JSON.stringify(REG.url_version) + ', computed ' + URL_VERSION + ' (python3 tools/brand.py stamp writes it)');
+  ok('found the references to the logo files it grades (' + R.logoRefs + ')', R.logoRefs > 1000, R.logoRefs);
+  ok('every reference to a logo file made from the master carries ?v=' + URL_VERSION + ', so no browser cache keeps an old logo (' + R.logoRefs + ' references)',
+    R.logoRefs > 0 && R.unversioned.length === 0, R.unversioned.length + ' do not, e.g.\n         ' + R.unversioned.slice(0, 8).join('\n         ') + '\n         (python3 tools/brand.py stamp rewrites them)');
   ok('every inlined data: image is one the registry names, and none is a drawing or a retired logo', R.dataBad.length === 0, R.dataBad.slice(0, 6).join('\n         '));
   ok('no page or script draws a picture in inline SVG circles (a hand-coded bear)', R.drawnSvg.length === 0, R.drawnSvg.slice(0, 6).join('\n         '));
   ok('found the image files the site serves (' + R.servedImages.length + ')', R.servedImages.length > 1000, R.servedImages.length);
@@ -474,6 +520,8 @@ function runStatic(root, label) {
   ok('no retired logo\'s bytes (' + RETIRED_SETS.map((s) => s.name).join(', ') + ') appear anywhere in the tree, ios/ and android/ included, under any name', R.retiredFiles.length === 0,
     (R.retiredFiles.some((f) => /^(ios|android)\//.test(f)) ? 'ios/ and android/ are made from the master: python3 tools/brand.py native remakes them (set does it too)\n         ' : '')
     + R.retiredFiles.map((f) => f + ' (' + R.retiredWhich[f] + ')').join(', '));
+  ok('the logo casts its soft drop shadow in the site\'s top bar and on the app\'s landing, light and Night (' + R.shadows.length + ' rules)',
+    R.shadows.every((x) => x.ok), R.shadows.filter((x) => !x.ok).map((x) => x.file + ' ' + x.sel + ': ' + x.why));
   const integ = registryIntegrity(root);
   ok('the approved set is intact: every file exists with the bytes it was approved with', integ.length === 0, integ.slice(0, 8).join('\n         '));
   const ic = pyCheck('tools/gen_brand_icons.py', root);
@@ -512,6 +560,7 @@ function gradePrecache(reqs) {
     icons, rest,
     staleIcons: icons.filter((r) => r.cache !== 'no-cache' && r.cache !== 'reload').map((r) => r.url + ' (' + r.cache + ')'),
     forced: rest.filter((r) => r.cache !== 'default').map((r) => r.url + ' (' + r.cache + ')'),
+    unversioned: reqs.filter((r) => VERSIONED.has(r.url.split('?')[0].replace(/^\//, '')) && r.url.slice(r.url.indexOf('?')) !== '?v=' + URL_VERSION).map((r) => r.url),
   };
 }
 async function runPrecache(root) {
@@ -522,6 +571,8 @@ async function runPrecache(root) {
   ok('the app SW precaches the icons (' + g.icons.length + ') and the rest (' + g.rest.length + ')', !error && g.icons.length >= 3 && g.rest.length > 10, error || reqs.length);
   ok('it asks for every /icons/* file past the HTTP cache (no-cache or reload), so no retired face is precached', g.staleIcons.length === 0, g.staleIcons);
   ok('and leaves every other file to the normal fetch (the vendor files stay cached)', g.forced.length === 0, g.forced.slice(0, 6));
+  ok('every logo file it precaches is asked for at ?v=' + URL_VERSION + ' (' + reqs.filter((r) => VERSIONED.has(r.url.split('?')[0].replace(/^\//, ''))).length + ')',
+    reqs.some((r) => VERSIONED.has(r.url.split('?')[0].replace(/^\//, ''))) && g.unversioned.length === 0, g.unversioned);
 }
 async function precacheSelfTest() {
   console.log('\nself-test (precache): the same reading of two mutant service workers');
@@ -533,6 +584,9 @@ async function precacheSelfTest() {
   const a = gradePrecache((await swPrecache(every)).reqs), b = gradePrecache((await swPrecache(none)).reqs);
   ok('catches a SW that forces EVERY file past the HTTP cache (the November build)', a.forced.some((x) => /\/app\/vendor\//.test(x)), a.forced);
   ok('catches a SW that lets the icons come from the HTTP cache (the June build)', b.staleIcons.some((x) => /\/icons\/logo-512\.png/.test(x)), b.staleIcons);
+  // The 2026-11-14 build: every icon at its bare name, so a month-old cached copy answered the precache.
+  const bare = gradePrecache((await swPrecache(src.replace(/\?v=[0-9a-f]{8}/g, ''))).reqs);
+  ok('catches a SW that precaches the logo files without ?v= (the 2026-11-14 build)', bare.unversioned.some((x) => x === '/icons/logo-512.png'), bare.unversioned);
 }
 
 /* ---------------- self-test of the static half: a scratch copy with six plants ---------------- */
@@ -586,6 +640,18 @@ function staticSelfTest() {
   plantAt(tmp, 'ios/App/App/public/logo.png', old);
   fs.mkdirSync(path.join(tmp, 'icons'), { recursive: true });
   fs.writeFileSync(path.join(tmp, 'icons/planted-unapproved.png'), tinyPng());
+  // A page copied from one stamped before the last logo change (an old ?v=), one from before versions existed
+  // (none), and their companion, which must NOT count: the current version, in a srcset and in JSON-LD.
+  const STALE_V = URL_VERSION === 'ffffffff' ? '00000000' : 'ffffffff';
+  fs.mkdirSync(path.join(tmp, 'articles/planted-versions'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'articles/planted-versions/index.html'), '<link rel="icon" type="image/png" href="/icons/favicon.png">\n'
+    + '<a class="nav-brand" href="/"><img src="/icons/logo-96.png?v=' + STALE_V + '" alt="Cubby"></a>\n'
+    + '<img src="/icons/logo-96.png?v=' + URL_VERSION + '" srcset="/icons/logo-96.png?v=' + URL_VERSION + ' 96w, /icons/logo-192.png?v=' + URL_VERSION + ' 192w" alt="">\n'
+    + '<script type="application/ld+json">{"logo":"https://little-cubby.com/icons/logo-512.png?v=' + URL_VERSION + '"}</script>\n'
+    + '<script>var planted = \'/icons/logo-512.png?v=' + URL_VERSION + '0\';</script>\n');
+  ['site.css', 'vax.css', 'app/landing.js'].forEach(copy);
+  fs.writeFileSync(path.join(tmp, 'site.css'), fs.readFileSync(path.join(tmp, 'site.css'), 'utf8').replace(/(\.nav-brand img\{[^}]*?);?filter:drop-shadow\([^;}]*\)/, '$1'));
+  fs.writeFileSync(path.join(tmp, 'app/landing.js'), fs.readFileSync(path.join(tmp, 'app/landing.js'), 'utf8').replace(/(\[data-theme="night"\] \.lp-logo img\{)filter:drop-shadow/, '$1outline:drop-shadow'));
   const R = staticScan(tmp);
   ok('catches the planted 🐻', R.bears.some((b) => /app\/index\.html:\d+ .*planted/.test(b)), R.bears);
   ok('catches the planted teddy spelled \\u{1F9F8} (mutant B)', R.bears.some((b) => /app\/milestone-data\.js:\d+ .*planted-teddy/.test(b)), R.bears);
@@ -610,6 +676,13 @@ function staticSelfTest() {
   ok('and passes the balloon in any spelling, reading that milestone\'s own line and not a key that starts the same (\\u{1F388})', decGood.ok && decGood.got === '\\u{1F388}', decGood);
   fs.rmSync(tmp2, { recursive: true, force: true });
   ok('catches the planted reference to an unapproved file', R.unapproved.some((u) => /icons\/planted-unapproved\.png/.test(u)), R.unapproved);
+  const lostShadow = R.shadows.filter((x) => !x.ok).map((x) => x.file + ' ' + x.sel);
+  ok('catches the top bar\'s logo shadow taken out of site.css, and the landing\'s Night one, and nothing else (' + lostShadow.join('; ') + ')',
+    lostShadow.length === 2 && lostShadow.includes('site.css .nav-brand img') && lostShadow.includes('app/landing.js [data-theme="night"] .lp-logo img'), R.shadows);
+  const pv = R.unversioned.filter((u) => u.indexOf('articles/planted-versions/') === 0);
+  ok('catches a logo URL with an old ?v=, one with none, and one with a digit too many, and not the current one in a srcset or JSON-LD (' + pv.length + ' of 3)',
+    pv.length === 3 && pv.some((u) => /favicon\.png \(no version\)$/.test(u)) && pv.some((u) => u.endsWith('logo-96.png?v=' + STALE_V))
+    && pv.some((u) => u.endsWith('logo-512.png?v=' + URL_VERSION + '0')), R.unversioned);
   RETIRED_SETS.forEach((s, i) => ok('catches ' + s.name + ' under a new name', R.retiredFiles.includes('icons-planted-' + i + '.png') && R.retiredWhich['icons-planted-' + i + '.png'] === s.name, R.retiredFiles));
   ok('catches a retired logo under ios/, and not one in a nested worktree, a nested repo, node_modules, .wrangler, _local/ or native-build/ (a folder, not a git checkout)',
     R.tree.how === 'disk' && R.retiredFiles.includes('ios/App/App/public/logo.png') && !R.retiredFiles.some((f) => NOT_TREE.includes(f))
@@ -652,8 +725,8 @@ function staticSelfTest() {
   ok('catches every spelling of all four bears (' + (forms - miss.length) + ' of ' + forms + ')', miss.length === 0, miss);
   ok('and none of the wolf\'s or the dog\'s', hit.length === 0, hit);
   const clean = staticScan(path.join(ROOT));
-  ok('and the real tree has none of these', clean.bears.length === 0 && clean.unapproved.length === 0 && clean.retiredFiles.length === 0 && clean.external.length === 0
-    && clean.dataBad.length === 0 && clean.drawnSvg.length === 0 && clean.servedUnregistered.length === 0 && clean.avoid.length === 0 && clean.bigNav.length === 0 && clean.bothLogos.length === 0 && decidedGlyphs(ROOT).every((d) => d.ok));
+  ok('and the real tree has none of these', clean.bears.length === 0 && clean.unapproved.length === 0 && clean.retiredFiles.length === 0 && clean.external.length === 0 && clean.unversioned.length === 0
+    && clean.dataBad.length === 0 && clean.drawnSvg.length === 0 && clean.shadows.every((x) => x.ok) && clean.servedUnregistered.length === 0 && clean.avoid.length === 0 && clean.bigNav.length === 0 && clean.bothLogos.length === 0 && decidedGlyphs(ROOT).every((d) => d.ok));
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
@@ -713,7 +786,12 @@ const COLLECT = () => {
   document.querySelectorAll('*').forEach((el) => ['::before', '::after'].forEach((p) => { const c = getComputedStyle(el, p).content; if (c && /\u{1F43B}|\u{1F9F8}|\u{1F43C}|\u{1F428}/u.test(c)) pseudoBears.push(el.tagName + p); }));
   const text = document.body ? document.body.innerText : '';
   const bears = (text.match(/[^\n]{0,40}(?:\u{1F43B}|\u{1F9F8}|\u{1F43C}|\u{1F428})[^\n]{0,20}/gu) || []).concat(pseudoBears);
-  return { urls, svgs, bears };
+  const shadows = {};
+  ['.nav-brand img', '.site-head img', '.lp-nav-brand img', '.lp-logo img'].forEach((sel) => {
+    const el = [...document.querySelectorAll(sel)].find(vis);
+    if (el) shadows[sel] = getComputedStyle(el).filter;
+  });
+  return { urls, svgs, bears, shadows };
 };
 
 async function runtime(base) {
@@ -737,6 +815,7 @@ async function runtime(base) {
      what gets graded. */
   const PROBE = '\n  window.__brandProbe = { accessLost: function () { var own = Object.prototype.hasOwnProperty.call(auth, "onAuthStateChanged"), real = auth.onAuthStateChanged; auth.onAuthStateChanged = function () { return function () {}; }; try { showAccessLost(); } finally { if (own) auth.onAuthStateChanged = real; else delete auth.onAuthStateChanged; } }, inviteMismatch: showInviteMismatch, pendingInvite: maybePromptPendingInvite, showSignIn: showSignIn, showStatus: showStatus, hideOverlay: hideOverlay };\n';
   const PLANT_RETIRED = RETIRED_SETS.map((s, i) => '/__brand_selftest/retired-' + i + '.png'), PLANT_OTHER = '/__brand_selftest/unapproved.png';
+  const PLANT_BARE = '/icons/logo-96.png';      // a logo a script built without ?v=
 
   console.log('\nruntime: ' + base + ' at ' + WIDTH + 'px' + (SELF ? ', with plants' : ''));
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'], downloadBehavior: dl.downloadBehavior() });
@@ -811,16 +890,17 @@ async function runtime(base) {
   const scrollTo = (where) => page.evaluate((w) => { const s = document.getElementById('scroll'); if (s) s.scrollTop = w === 'bottom' ? s.scrollHeight : 0; }, where);
   const plant = async () => {
     if (!SELF) return;
-    await page.evaluate((a, b) => {
+    await page.evaluate((a, b, c) => {
       const d = document.createElement('div');
       d.id = 'brand-plant';
       d.setAttribute('style', 'position:fixed;left:8px;top:8px;z-index:99999;background:#fff;padding:4px');
       d.innerHTML = a.map((u) => '<img src="' + u + '" width="40" height="40">').join('') + '<img src="' + b + '" width="40" height="40"><span>BRAND-SELFTEST-PLANT Good evening \u{1F43B}</span>'
+        + '<img src="' + c + '" width="40" height="40">'
         + '<img src="https://example.invalid/planted.png" width="40" height="40">'
         // and the hand-coded bear the avatars used to fall back to, drawn by the app's own cubbyBear()
         + (typeof window.cubbyBear === 'function' ? '<span style="display:inline-block;width:40px;height:40px">' + window.cubbyBear({ size: 40 }) + '</span>' : '');
       document.body.appendChild(d);
-    }, PLANT_RETIRED, PLANT_OTHER);
+    }, PLANT_RETIRED, PLANT_OTHER, PLANT_BARE);
     await sleep(600);
   };
 
@@ -844,6 +924,8 @@ async function runtime(base) {
 
   const P = (expr) => page.evaluate(new Function('if (!window.__brandProbe) throw new Error("the probe did not reach store-firebase.js"); ' + expr));
   await take('landing (signed out)', () => P('window.__brandProbe.showSignIn();'));
+  await take('landing (signed out, Night)', () => page.evaluate(() => document.documentElement.setAttribute('data-theme', 'night')));
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
   await take('sign-in card', () => P('var L = window.cubbyLanding; window.cubbyLanding = undefined; try { window.__brandProbe.showSignIn(); } finally { window.cubbyLanding = L; }'));
   await take('boot card', () => P('window.__brandProbe.showStatus("Signing you in…");'));
   await P('window.__brandProbe.hideOverlay();');
@@ -865,7 +947,7 @@ async function runtime(base) {
   const origin = new URL(base).origin;
   const toPath = (u) => { try { const x = new URL(u, base); return x.origin === origin ? decodeURIComponent(x.pathname).replace(/^\//, '') : null; } catch (e) { return null; } };
   const report = [];
-  let unapproved = [], flat = [], drawn = [], bears = [], errors = [];
+  let unapproved = [], flat = [], drawn = [], bears = [], errors = [], unversioned = [];
   for (const s of screens) {
     if (s.error) { errors.push(s.name + ': ' + s.error); continue; }
     const imgs = [];
@@ -878,11 +960,12 @@ async function runtime(base) {
       if (p === null) { unapproved.push(s.name + ': ' + url + ' (another host)' + tag); imgs.push({ file: url, how, verdict: 'unapproved' }); continue; }
       const v = verdict(p);
       if (v === 'unapproved') unapproved.push(s.name + ': ' + p + ' (' + how + ')' + tag);
+      if (VERSIONED.has(p)) { const q = new URL(url, base).search; if (q !== '?v=' + URL_VERSION) unversioned.push(s.name + ': ' + p + (q || ' (no version)') + ' (' + how + ')' + tag); }
       imgs.push({ file: p, how, verdict: v });
     }
     s.svgs.filter((g) => g.filled >= 5 && g.text === 0).forEach((g) => drawn.push(s.name + ': an inline SVG drawing with ' + g.filled + ' filled circles (' + g.w + 'x' + g.h + ' in ' + g.where + ')' + (g.planted ? ' [plant]' : '')));
     s.bears.forEach((b) => bears.push(s.name + ': ' + b));
-    report.push({ screen: s.name, images: imgs, svgs: s.svgs.length, bears: s.bears });
+    report.push({ screen: s.name, images: imgs, svgs: s.svgs.length, bears: s.bears, shadows: s.shadows });
   }
   // Every image that crossed the wire, whether or not it is still in the DOM.
   for (const [u, h] of loaded) {
@@ -890,7 +973,7 @@ async function runtime(base) {
     const p = toPath(u);
     if (p !== null && verdict(p) === 'unapproved' && !unapproved.some((x) => x.indexOf(p) >= 0)) unapproved.push('network: ' + p);
   }
-  const results = { report, unapproved, flat, drawn, bears, errors, blocked, loaded: loaded.size, probeServed, pageErrors: errs };
+  const results = { report, unapproved, flat, drawn, bears, errors, blocked, loaded: loaded.size, probeServed, pageErrors: errs, unversioned };
   if (SHOTS) fs.writeFileSync(path.join(SHOTS, 'screens.json'), JSON.stringify(report, null, 1));
   return results;
 }
@@ -909,6 +992,15 @@ function gradeRuntime(R, label) {
   ok('no inline SVG drawing stands in for art', R.drawn.length === 0, R.drawn.slice(0, 6).join('\n         '));
   ok('no emoji bear in any visible text', R.bears.length === 0, R.bears.slice(0, 10).join('\n         '));
   ok('no image was fetched from another host', R.blocked.length === 0, R.blocked.slice(0, 5));
+  const sh = (n) => (R.report.find((s) => s.screen === n) || {}).shadows || {};
+  const drop = (f, colour) => typeof f === 'string' && /drop-shadow\(/.test(f) && f.indexOf(colour) >= 0;
+  const want = [['website home', '.nav-brand img', 'rgba(60, 40, 25, 0.18)'], ['landing (signed out)', '.lp-nav-brand img', 'rgba(60, 40, 25, 0.18)'],
+    ['landing (signed out)', '.lp-logo img', 'rgba(60, 40, 25, 0.2)'], ['landing (signed out, Night)', '.lp-nav-brand img', 'rgba(0, 0, 0, 0.45)'],
+    ['landing (signed out, Night)', '.lp-logo img', 'rgba(0, 0, 0, 0.45)']];
+  const lost = want.filter(([n, sel, c]) => !drop(sh(n)[sel], c)).map(([n, sel]) => n + ' ' + sel + ': ' + JSON.stringify(sh(n)[sel]));
+  ok('the logo is drawn with its soft drop shadow: the site\'s top bar, and the landing in light and Night (computed style)', lost.length === 0, lost);
+  const logos = R.report.reduce((n, s) => n + s.images.filter((i) => VERSIONED.has(i.file)).length, 0);
+  ok('every logo on a screen was drawn from a URL with ?v=' + URL_VERSION + ' (' + logos + ' of them)', logos > 0 && R.unversioned.length === 0, R.unversioned.slice(0, 8).join('\n         '));
 }
 
 /* A new article brings a new share card and hero card from tools/gen_article_img.py, which pastes the
@@ -953,6 +1045,7 @@ if (flag('--approve-cards')) {
       ok('catches the planted 🐻 in visible text', R.bears.some((b) => /access lost: .*BRAND-SELFTEST-PLANT/.test(b)), R.bears);
       ok('catches the planted hand-coded SVG bear (the old cubbyBear())', R.drawn.some((d) => /^access lost: an inline SVG drawing.*\[plant\]$/.test(d)), R.drawn);
       ok('catches the planted picture from another host (refused, never fetched)', R.blocked.some((u) => /example\.invalid\/planted\.png/.test(u)), R.blocked);
+      ok('catches the planted logo drawn from a URL without ?v= (a script that builds the old path)', R.unversioned.some((u) => /^access lost: icons\/logo-96\.png \(no version\).*\[plant\]$/.test(u)), R.unversioned);
       // Set aside the plants and only the plants: each is tagged where it was collected.
       const notPlant = (x) => !/\[plant\]$/.test(x);
       const clean = Object.assign({}, R, {
@@ -961,6 +1054,7 @@ if (flag('--approve-cards')) {
         bears: R.bears.filter((b) => !/BRAND-SELFTEST-PLANT/.test(b)),
         drawn: R.drawn.filter(notPlant),
         blocked: R.blocked.filter((u) => !/example\.invalid\/planted/.test(u)),
+        unversioned: R.unversioned.filter(notPlant),
       });
       gradeRuntime(clean, 'runtime: every screen, plants set aside');
     }

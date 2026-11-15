@@ -153,7 +153,7 @@ function signinEmailHtml(code, link) {
   return '<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#F7F2E8;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:28px 16px">'
     + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">'
     + '<table role="presentation" width="100%" style="max-width:440px;background:#fff;border-radius:18px;padding:32px 28px;box-shadow:0 8px 28px rgba(0,0,0,.08)">'
-    + '<tr><td align="center"><img src="https://little-cubby.com/icons/logo-512.png" width="56" height="56" alt="Cubby" style="display:block;margin:0 auto;border:0;border-radius:14px"></td></tr>'
+    + '<tr><td align="center"><img src="https://little-cubby.com/icons/logo-512.png?v=09cba32f" width="56" height="56" alt="Cubby" style="display:block;margin:0 auto;border:0;border-radius:14px"></td></tr>'
     + '<tr><td align="center" style="font-family:Georgia,serif;font-size:24px;color:#2C2521;padding:6px 0 18px">Sign in to Cubby</td></tr>'
     + codeBlock + rule + linkBlock
     + '<tr><td align="center" style="font-size:12px;color:#9a8d80;padding:22px 0 0;line-height:1.5">If you didn\'t ask to sign in, you can ignore this email and nothing happens.</td></tr>'
@@ -1343,7 +1343,7 @@ async function sendInviteEmail(request, env, url) {
         // Deliberately says nothing about the baby: not a name, not a stage, nothing. An invite
         // lands in an inbox that may not be as private as the person sending it assumes.
         html: '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:440px;margin:0 auto;padding:28px 22px;color:#3a2f28">'
-          + '<img src="https://little-cubby.com/icons/logo-512.png" width="56" height="56" alt="Cubby" style="display:block;border:0;border-radius:14px">'
+          + '<img src="https://little-cubby.com/icons/logo-512.png?v=09cba32f" width="56" height="56" alt="Cubby" style="display:block;border:0;border-radius:14px">'
           + '<h1 style="font-family:Georgia,serif;font-size:23px;margin:12px 0 10px">' + who + ' invited you to ' + (famName ? escHtml(famName) : 'their Cubby') + '</h1>'
           + '<p style="font-size:15px;line-height:1.55;color:#6b615a">Cubby is where they keep the everyday things: feeds, naps, nappies, the next appointment. Opening this link puts you in their circle so you can see it as it happens, and add to it yourself.</p>'
           + '<p style="margin:22px 0"><a href="' + link + '" style="background:#C97FA0;color:#fff;text-decoration:none;font-weight:700;padding:14px 24px;border-radius:14px;display:inline-block">' + (famName ? 'Join ' + escHtml(famName) : 'Join their Cubby') + '</a></p>'

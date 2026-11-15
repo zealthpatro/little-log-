@@ -7,9 +7,10 @@ carried it: every launch flashed Capacitor branding before the cream app appeare
 the bear on Cubby cream (#F7F2E8), matching `ios.backgroundColor` and the app's own background so launch
 reads as one continuous surface.
 
-The source is the founder's master, icons/icon-master-1024.png: since 2026-11-14 the W2+ teddy on a
-light cream-honey watercolour wash (before it, 2026-11-13, a white cub on flat honey), the same image every
-icon is made from (tools/gen_brand_icons.py). Until 2026-11-13 this script flood-filled the FLAT
+The source is the founder's master, icons/icon-master-1024.png: since 2026-11-15 a deep chocolate-caramel
+teddy on a light cream-honey watercolour wash (before it the W2+ honey teddy, 2026-11-14, and a white cub on
+flat honey, 2026-11-13), the same image every icon is made from (tools/gen_brand_icons.py). The splash is the
+face alone: the frame every icon tile wears (tools/brand_style.py) is never drawn here. Until 2026-11-13 this script flood-filled the FLAT
 Pillow-drawn face out of icons/logo-512.png; that face is gone everywhere.
 
 A splash is not an icon: we want the face alone on flat cream, not a pasted-on watercolour tile (its edge

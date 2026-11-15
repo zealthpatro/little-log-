@@ -302,10 +302,10 @@
       return '<div class="lp-step"><div class="lp-sn">' + s[0] + '</div><div class="lp-st">' + s[1] + '</div><div class="lp-ss">' + s[2] + '</div></div>';
     }).join('');
     return '<div class="lp' + (native ? ' lp-native' : '') + '">'
-      + (native ? '' : '<nav class="lp-nav"><a href="/" class="lp-nav-brand"><img src="/icons/logo-512.png" alt="Cubby">Cubby</a>'
+      + (native ? '' : '<nav class="lp-nav"><a href="/" class="lp-nav-brand"><img src="/icons/logo-512.png?v=09cba32f" alt="Cubby">Cubby</a>'
       + '<span class="lp-nav-links"><a href="/features/">Features</a><a href="/articles/">Articles</a><a href="/pricing/">Pricing</a><a href="/faq/">FAQ</a></span></nav>')
       + '<header class="lp-hero">'
-      + '<div class="lp-logo"><img src="/icons/logo-512.png" alt="Cubby"></div>'
+      + '<div class="lp-logo"><img src="/icons/logo-512.png?v=09cba32f" alt="Cubby"></div>'
       + '<h1 class="lp-name">Cubby</h1>'
       + '<p class="lp-tag">A warm, private baby log for everyone who cares for your little one: parents, grandparents, the nanny, daycare and more.</p>'
       + cta
@@ -396,12 +396,14 @@
     + '.lp{max-width:680px;margin:0 auto;padding:0 22px 56px;font-family:"Nunito Sans",system-ui,sans-serif;color:var(--ink,#2C2521);}'
     + '.lp-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 0 0;}'
     + '.lp-nav-brand{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:800;color:var(--ink-soft,#6E635B);text-decoration:none;}'
-    + '.lp-nav-brand img{width:22px;height:22px;border-radius:7px;}'
+    /* The logo's soft shadow, warm on cream and deeper in Night (the Night block below), so the framed tile
+       stands off the page: founder, 2026-11-15. drop-shadow follows the tile's own rounded corners. */
+    + '.lp-nav-brand img{width:22px;height:22px;border-radius:7px;filter:drop-shadow(0 1px 4px rgba(60,40,25,.18));}'
     + '.lp-nav-links{display:flex;gap:2px;}'
     + '.lp-nav-links a{font-size:13px;font-weight:700;color:var(--ink-soft,#6E635B);text-decoration:none;padding:6px 8px;border-radius:8px;}'
     + '.lp-nav-links a:hover{background:var(--surface-2,#FBF7EF);color:var(--ink,#2C2521);}'
     + '.lp-hero{text-align:center;padding:40px 0 28px;}'
-    + '.lp-logo img{width:88px;height:88px;border-radius:22px;box-shadow:0 8px 22px rgba(0,0,0,.12);display:block;margin:0 auto;}'
+    + '.lp-logo img{width:88px;height:88px;border-radius:22px;filter:drop-shadow(0 6px 16px rgba(60,40,25,.20));display:block;margin:0 auto;}'
     + '.lp-name{font-family:"Fraunces",Georgia,serif;font-size:40px;margin:14px 0 6px;color:var(--ink,#2C2521);}'
     + '.lp-tag{font-size:17px;line-height:1.5;color:var(--ink-soft,#6E635B);max-width:440px;margin:0 auto 22px;font-weight:600;}'
     /* Google's sign-in branding guidelines, followed: their light-theme surface (#FFFFFF), their border
@@ -536,6 +538,8 @@
        inherits --ink-soft from .lp-pro p in both themes (8.26:1 here). */
     + '[data-theme="night"] .lp-trust,[data-theme="night"] .lp-pwa,'
     + '[data-theme="night"] .lp-foot{color:var(--ink-faint) !important;}'
-    + '[data-theme="night"] .lp-msg,[data-theme="night"] .lp-foot a{color:var(--preg);}';
+    + '[data-theme="night"] .lp-msg,[data-theme="night"] .lp-foot a{color:var(--preg);}'
+    + '[data-theme="night"] .lp-nav-brand img{filter:drop-shadow(0 1px 4px rgba(0,0,0,.45));}'
+    + '[data-theme="night"] .lp-logo img{filter:drop-shadow(0 6px 16px rgba(0,0,0,.45));}';
   document.head.appendChild(st);
 })();

@@ -15,6 +15,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
 _spec = importlib.util.spec_from_file_location("gai", "tools/gen_article_img.py")
 gai = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(gai)
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+import brand_style  # noqa: E402  the ?v= every logo URL carries
 
 # Each hub: slug, crumb label, h1, SEO title, meta description, intro, article-match
 # pattern (on slug), image pill theme+age, and a few safe FAQ Q&A. Copy follows the house
@@ -197,6 +199,8 @@ def build(slug):
 </html>
 '''
     os.makedirs(f"articles/{slug}", exist_ok=True)
+    # Every logo URL carries the registry's ?v= (tools/brand_style.py): /icons/* is cached for a month.
+    page = brand_style.stamp_page(page, f"articles/{slug}/index.html")
     open(f"articles/{slug}/index.html", "w", encoding="utf-8").write(page)
     print(f"  built /articles/{slug}/ ({len(arts)} guides)")
 

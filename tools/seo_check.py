@@ -151,7 +151,8 @@ def check():
 
         # og/twitter images resolve to a real image
         for u in OGIMG.findall(t):
-            p = strip_domain(u)
+            # The logo's text cards carry ?v=<version> (tools/brand_style.py, 2026-11-15): the file is the path.
+            p = strip_domain(u).split("?")[0].split("#")[0]
             ok = p.startswith("/") and p.lower().endswith(IMG_EXT) and (p in files)
             if not ok:
                 hard.append((f, f"unresolved social image -> {u}"))
@@ -218,7 +219,7 @@ def do_fix(og_files):
     for f in og_files:
         t = open(f, encoding="utf-8").read(); o = t
         def repl(m):
-            u = strip_domain(m.group(1))
+            u = strip_domain(m.group(1)).split("?")[0].split("#")[0]   # a versioned card is still its file
             ok = u.startswith("/") and u.lower().endswith(IMG_EXT) and os.path.exists("." + u)
             return m.group(0) if ok else m.group(0).split('content="')[0] + 'content="https://little-cubby.com/og/articles.png">'
         t = OGIMG.sub(repl, t)
