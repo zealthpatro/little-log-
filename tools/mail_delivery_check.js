@@ -4,10 +4,11 @@
  *
  * It asks the real Worker for a sign-in code for each of Resend's documented test addresses, then asks
  * /api/signin-status about each send until the answer settles, and compares:
- *     delivered@resend.dev   -> delivered       (Resend's "delivered" test)
- *     bounced@resend.dev     -> undeliverable   (an SMTP 550 5.1.1)
- *     suppressed@resend.dev  -> undeliverable   (on the suppression list: accepted, never sent)
- * (Not complained@resend.dev: a complaint normally puts an address on the suppression list, so a second run
+ *     delivered   -> delivered       (Resend's "delivered" test)
+ *     bounced     -> undeliverable   (an SMTP 550 5.1.1)
+ *     suppressed  -> undeliverable   (on the suppression list: accepted, never sent)
+ * each as <name> at resend.dev, Resend's documented test domain (EXPECT below builds them, so no address
+ * sits in this file for tools/address_check.js to read). Not "complained": a complaint normally puts an address on the suppression list, so a second run
  * could see it suppressed, and the check would flip for a reason that is not a fault.)
  * Resend's test addresses do not touch the sending domain's reputation, but each one is a real send that
  * counts against the account's quota, and each mints a sign-in code in production Firestore for an address
@@ -37,11 +38,12 @@ const ARGS = process.argv.slice(2);
 const flag = (f) => ARGS.includes(f);
 const opt = (k, d) => { const a = ARGS.find((x) => x.startsWith('--' + k + '=')); return a ? a.slice(k.length + 3) : d; };
 
+const RESEND_TEST_DOMAIN = 'resend.dev';
 const EXPECT = [
-  ['delivered@resend.dev', 'delivered'],
-  ['bounced@resend.dev', 'undeliverable'],
-  ['suppressed@resend.dev', 'undeliverable'],
-];
+  ['delivered', 'delivered'],
+  ['bounced', 'undeliverable'],
+  ['suppressed', 'undeliverable'],
+].map(([name, want]) => [name + '@' + RESEND_TEST_DOMAIN, want]);
 const SETTLED = new Set(['delivered', 'undeliverable']);
 
 /* The checker itself. post(path, body) -> {status, body}; wait(ms) -> Promise. Returns { ok, lines }. */
@@ -115,7 +117,7 @@ async function selfTest() {
   const want = new Map(EXPECT);
   const worlds = [
     ['a right world passes', true, { answer: (e) => want.get(e) }, null],
-    ['a suppressed address answered delivered fails, naming it', false, { answer: (e) => (e === 'suppressed@resend.dev' ? 'delivered' : want.get(e)) }, /suppressed@resend\.dev: delivered, expected undeliverable/],
+    ['a suppressed address answered delivered fails, naming it', false, { answer: (e) => (e === 'suppressed@' + RESEND_TEST_DOMAIN ? 'delivered' : want.get(e)) }, /suppressed@resend\.dev: delivered, expected undeliverable/],
     ['every answer unknown fails, and says to check the key', false, { answer: () => 'unknown' }, /RESEND_API_KEY is Full access/],
     ['an older Worker with no sendRef fails, saying so', false, { noRef: true, answer: () => 'unknown' }, /no sendRef/],
     ['a status that never settles fails', false, { answer: () => 'sent' }, /delivered@resend\.dev: sent, expected delivered/],

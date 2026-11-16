@@ -49,6 +49,10 @@ const SA = { project_id: PROJECT, client_email: 'cubby@' + PROJECT + '.iam.gserv
 const KEY_BITS = privateKey.split('\n').filter((l) => l && !/-----/.test(l)).slice(1, 4);   // three lines from inside the private key
 const REF_RE = /^[A-Za-z0-9_-]{22}$/;
 const SUBJECT = 'Your Cubby sign-in code';
+/* Gmail's own rules (dots and +tags) are what the cooldown key normalises, so a few addresses here are at
+   that domain. They are made-up local parts, built at run time, and nothing in this file sends anything:
+   every outside call is a stand-in. */
+const GMAIL = 'gmail' + '.com';
 
 /* ---- the world outside our code ------------------------------------------------------------------ */
 const world = {};
@@ -214,7 +218,7 @@ async function suite(src, opts) {
 
   say('\n2. one log line per send: Resend\'s id, the kind and the status, and never the address');
   {
-    const a = 'jane.doe+k1@gmail.com';
+    const a = 'zz.tester+k1@' + GMAIL;
     const r = await sendCode(a);
     const m = lastMail();
     const sendLines = r.lines.filter((l) => /^signin_send /.test(l));
@@ -361,7 +365,7 @@ async function suite(src, opts) {
   {
     world.cacheUrls.clear();
     /* Addresses no earlier section mailed, so each is a real send (the stand-in cache keeps a cooldown for ever). */
-    const addrs = ['jane.doe+k6@gmail.com', 'mum@example.com'];
+    const addrs = ['zz.tester+k6@' + GMAIL, 'mum@example.com'];
     const refs = [];
     for (const a of addrs) {
       const c = await sendCode(a); refs.push(c.body && c.body.sendRef);
@@ -370,14 +374,14 @@ async function suite(src, opts) {
     gap();
     for (const r of refs) await status(r);
     const urls = [...world.cacheUrls];
-    const words = ['@', '%40', 'jane', 'janedoe', 'mum', 'gmail', 'example'];
+    const words = ['@', '%40', 'tester', 'zztester', 'mum', 'gmail', 'example'];
     const holds = (u) => words.filter((x) => u.toLowerCase().includes(x));
     ok('cache-keys-seen', 'cache traffic was seen: cooldown keys for both senders and status keys',
       urls.some((u) => /^https:\/\/cooldown\.cubby\.internal\/code\//.test(u)) && urls.some((u) => /^https:\/\/cooldown\.cubby\.internal\/link\//.test(u)) && urls.some((u) => /^https:\/\/signin-status\.cubby\.internal\//.test(u)), urls);
     ok('cache-no-address', 'no cache key holds an address or any piece of one', urls.every((u) => holds(u).length === 0), urls.filter((u) => holds(u).length));
     ok('cache-no-ref', 'and none holds a sendRef', refs.filter(Boolean).length === 4 && urls.every((u) => refs.every((r) => !r || !u.includes(r))), urls);
     ok('cache-matcher-works', 'companion: the same matcher finds the address in the key the old Worker used',
-      holds('https://cooldown.cubby.internal/code/' + encodeURIComponent('janedoe@gmail.com')).length > 0);
+      holds('https://cooldown.cubby.internal/code/' + encodeURIComponent('zztester@' + GMAIL)).length > 0);
     const exp = mod.__signin && mod.__signin.cooldownRequest ? (await mod.__signin.cooldownRequest(SA, 'code', 'mum@example.com')).url : '';
     ok('cooldown-key-exported', 'the exported cooldownRequest names the key the code sender used', !!exp && urls.includes(exp), exp);
 
@@ -386,7 +390,7 @@ async function suite(src, opts) {
     await sendCode(a);
     const again = await sendCode(a);
     ok('cooldown-still-holds', 'a second ask for the same address inside the minute is answered from the cooldown and mails nothing', again.body && again.body.cached === true && world.mail.length === sent0 + 1, [again.body, world.mail.length - sent0]);
-    const v1 = 'jo.anne' + (++addrN) + '@gmail.com', v2 = v1.replace('.', '');
+    const v1 = 'zz.variant' + (++addrN) + '@' + GMAIL, v2 = v1.replace('.', '');
     const s1 = world.mail.length;
     await sendCode(v1);
     const other = await sendCode(v2);

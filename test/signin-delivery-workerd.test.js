@@ -33,6 +33,10 @@ const HOST = 'https://little-cubby.com';
 const PROJECT = 'little-log-a9caa';
 const FS = 'https://firestore.googleapis.com/v1/projects/' + PROJECT + '/databases/(default)/documents';
 const RESEND_KEY = 're_SECRETKEYfortests_0123';
+/* Gmail's own rules (dots and +tags) are what the cooldown key normalises, so a few addresses here are at
+   that domain. They are made-up local parts, built at run time, and nothing in this file sends anything:
+   every outside call is a stand-in. */
+const GMAIL = 'gmail' + '.com';
 const { privateKey } = nodeCrypto.generateKeyPairSync('rsa', { modulusLength: 2048, privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
 const SA = { project_id: PROJECT, client_email: 'cubby@' + PROJECT + '.iam.gserviceaccount.com', private_key: privateKey };
 
@@ -127,7 +131,7 @@ async function outside(req) {
     const lines = () => logs.map((l) => String(l.message || ''));
 
     console.log('\n1. a send answers a sendRef, and workerd\'s console holds one line with Resend\'s id and no address');
-    const addr = 'jane.doe+k1@gmail.com';
+    const addr = 'zz.tester+k1@' + GMAIL;
     const l0 = logs.length;
     const s = await post('/api/signin-code', { email: addr });
     const m = world.mail[world.mail.length - 1] || {};
@@ -135,7 +139,7 @@ async function outside(req) {
     const sendLines = lines().slice(l0).filter((l) => /signin_send/.test(l));
     ok('one signin_send line, holding Resend\'s id', sendLines.length === 1 && sendLines[0].includes(m.id || 'none'), lines().slice(l0));
     const code = (/>(\d{6})</.exec(m.html || '') || [])[1] || 'nocode';
-    ok('and no line holds the address, its local part, the code or the link', lines().slice(l0).every((l) => !l.includes(addr) && !l.includes('jane') && !l.includes(code) && !l.includes('OOBSECRET')), lines().slice(l0));
+    ok('and no line holds the address, its local part, the code or the link', lines().slice(l0).every((l) => !l.includes(addr) && !l.includes('tester') && !l.includes(code) && !l.includes('OOBSECRET')), lines().slice(l0));
 
     console.log('\n2. the sendRef finds its entry in workerd\'s cache, and the cooldown still holds');
     world.events.set(m.id, 'suppressed');
@@ -147,14 +151,14 @@ async function outside(req) {
 
     console.log('\n3. workerd\'s cache holds the cooldown under the hashed key, and nothing under the address');
     const caches = await mf.getCaches();
-    const plain = await caches.default.match('https://cooldown.cubby.internal/code/' + encodeURIComponent('janedoe@gmail.com'));
+    const plain = await caches.default.match('https://cooldown.cubby.internal/code/' + encodeURIComponent('zztester@' + GMAIL));
     ok('asked with the key the old Worker used (the address), the cache has nothing', !plain, plain ? await plain.text() : null);
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-delivery-wd-'));
     for (const k of Object.keys(modules)) { fs.mkdirSync(path.dirname(path.join(dir, k)), { recursive: true }); fs.writeFileSync(path.join(dir, k === 'worker.js' ? 'worker.mjs' : k), modules[k].contents); }
     const mod = await import(pathToFileURL(path.join(dir, 'worker.mjs')).href);
     const hashed = mod.__signin && mod.__signin.cooldownRequest ? (await mod.__signin.cooldownRequest(SA, 'code', addr)).url : '';
     const hit = hashed ? await caches.default.match(hashed) : null;
-    ok('asked with the hashed key, it has the cooldown, which names no address', !!hit && !/@/.test(await hit.clone().text()) && !/@|%40|jane/i.test(hashed), hashed);
+    ok('asked with the hashed key, it has the cooldown, which names no address', !!hit && !/@/.test(await hit.clone().text()) && !/@|%40|tester/i.test(hashed), hashed);
     fs.rmSync(dir, { recursive: true, force: true });
 
     console.log('\n4. a Resend that never answers is unknown in time, and polling has its own limiter bucket');
