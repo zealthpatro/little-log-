@@ -364,7 +364,7 @@ function selfTest() {
   ok('the kept fields never include the email', !('email' in keepFields(sub('S9', '2026-11-18T00:00:00Z', 'x'))) && !JSON.stringify(keepFields(sub('S9', '', ''))).includes('example.invalid'));
   // 5. The catalogue in the repo parses and names the crash that started all this.
   const real = loadCatalogue();
-  ok('tools/crash_signatures.json catalogues the scene crash with its fix', real.some((k) => t1.frames.some((f) => normSymbol(f.symbol).includes(k.match)) && k.fixedIn === '2026.46.2'), real);
+  ok('tools/crash_signatures.json catalogues the scene crash with its fix', real.some((k) => t1.frames.some((f) => normSymbol(f.symbol).includes(k.match)) && k.fixedIn === '2026.47.1'), real);
   ok('every catalogue entry has match, title, fixedIn and fix', real.every((k) => k.match && k.title && k.fixedIn && k.fix), real);
   fs.rmSync(dir, { recursive: true, force: true });
   console.log((fail ? 'CRASH-WATCH SELF-TEST: FAIL' : 'CRASH-WATCH SELF-TEST: PASS') + ' (' + pass + ' passed, ' + fail + ' failed)');

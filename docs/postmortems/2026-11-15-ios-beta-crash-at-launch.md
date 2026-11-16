@@ -2,8 +2,8 @@
 
 - **Date:** 2026-11-15
 - **Severity:** P1 (every TestFlight install of the native app; no App Store customers yet)
-- **Duration:** TestFlight 2026.46.1 uploaded 15 Nov → fixed build 2026.46.2 the same week
-- **Status:** RESOLVED in the build tooling (this commit); 2026.46.2 carries it
+- **Duration:** TestFlight 2026.46.1 uploaded 15 Nov → fixed build 2026.47.1 in beta testing 16 Nov (00:24 +04). It is 47.1, not 46.2: the build script stamps the ISO week, and the week turned at midnight.
+- **Status:** RESOLVED. 2026.47.1 carries the fix; its launch smoke stayed up 12 s on the iOS 27 simulator before upload.
 - **Author:** Claude (main window), with the founder's crash report
 
 > Blameless. Dates come from `node tools/asc.js builds`, the Xcode bundle's install time and the

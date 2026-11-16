@@ -6,7 +6,7 @@
       "match": "_UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption",
       "title": "iOS 27 stops an app that has not adopted the UIScene lifecycle",
       "why": "Built with the iOS 27 SDK and no UIApplicationSceneManifest, UIKit traps at launch (EXC_BREAKPOINT). The Capacitor 8.4 template has no scene delegate.",
-      "fixedIn": "2026.46.2",
+      "fixedIn": "2026.47.1",
       "fix": "tools/cap_ios_configure.rb step 6 (SceneDelegate.swift + scene manifest), gated by tools/ios_launch_smoke.sh",
       "postmortem": "docs/postmortems/2026-11-15-ios-beta-crash-at-launch.md"
     }
