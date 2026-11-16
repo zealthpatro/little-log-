@@ -164,8 +164,8 @@ redraws the screen, so that stops it too). `undeliverable` replaces "Check your 
 couldn’t get that email to <address>, so no code is on its way. Check the address, or continue with
 Google or Apple." (For an email that carried no code: "so it won’t arrive".) `delivered` adds "It’s
 been delivered. If it isn’t in your inbox, have a look in Spam or Promotions." Anything else changes
-nothing. The code box, its focus and what she typed are never touched. A Worker that returns no
-`sendRef` (older builds) leaves the panel exactly as before.
+nothing until about 45 seconds (round 7, below). What she typed is never touched, and the code box always
+stays usable. A Worker that returns no `sendRef` (older builds) is never asked about.
 The note's line is a polite live region that is on the page, empty, before any answer, so a screen
 reader reads the answer out when it arrives.
 
@@ -180,9 +180,10 @@ cooldown answer and a wrong code (a code error has its own line and no longer wi
 Resend and "Wrong email?" with it). Only a new email (a new `sendRef`, Firebase's own fallback sender,
 or another address) replaces what the panel knows.
 
-**The Resend key must be Full access for any of this to answer.** A Sending-access key gets 401
-`restricted_api_key` on `GET /emails/{id}`, which is `unknown`, so with today's key (permission not
-yet checked) the panel shows exactly what it showed before and only the log line is new. Resend has no
+**The Resend key must be Full access for the status route to answer.** A Sending-access key gets 401
+`restricted_api_key` on `GET /emails/{id}`, which is `unknown`, so with today's key (Sending access, per
+the founder) the panel never says delivered or undeliverable; it says the round-7 "it can take a few
+minutes" line instead (below), and the log line is new. Resend has no
 read-only permission: reading needs Full access, which also lets the key manage domains and read
 every email. That trade is the founder's call.
 
@@ -196,6 +197,38 @@ put each address that asked for a sign-in email there in plain text.
 purpose: every `console.*` argument in `worker.js` is clean, but a log event most likely carries its
 request's URL, and `/api/invite-peek?t=<invite token>` logs a line when its limiter refuses. Turning
 it on (with `[observability.logs] invocation_logs = false`) is the founder's decision.
+
+**When nothing settles (round 7, 17 Nov 2026).** With a Sending-access key every status ask is
+`unknown`, and an ask can also land in another data centre, meet a delayed email, or never happen (an
+older Worker, a reload). So whatever the key, if nothing is settled by the ask at 45 seconds (or 45
+seconds after a send with no `sendRef`, or 15 seconds after a cooldown answer, whose email went out up
+to a minute earlier), the panel's line says once: "It can take a few minutes to arrive. You can also
+continue with Google or Apple now." A settled answer that comes later replaces it. Under an undeliverable
+note "Resend email" is hidden (a resend to a suppressed address is suppressed again and spends the
+address's hourly codes) and "Wrong email?" stays. Every note is kept above the iPhone keyboard with the
+code box; an undeliverable note over an EMPTY box lets go of it, so the keys drop and she sees the note
+and the Google and Apple buttons. A cooldown answer whose email nobody has asked about yet (a reload
+before the first ask) looks once itself, inside the same six-reads bound, and passes on only a settled
+state.
+
+## 9d. Runbook: a sign-in email that did not arrive (16 Nov 2026)
+Never write the address into a ticket, a commit, a doc or a log: the repo is public. Work from the id.
+1. **Find the send.** Each send logs one line, `signin_send {"kind","status","id"}`; `id` is Resend's
+   email id. Workers Logs is off, so reproduce it while `npx wrangler tail cubby --format pretty` runs,
+   or ask her for the time and find the send in Resend's Emails list by time. Open it in Resend
+   (Emails, then the email; the id is in its URL).
+2. **Read its status.** Delivered: Gmail took it, so look in Spam or Promotions with her, and use Show
+   original (SPF, DKIM, DMARC pass). Delivery delayed: Gmail is deferring; Resend retries. Bounced: read
+   the SMTP reply; 550 5.1.1 means no such mailbox (this address only), a 5.7.x is a policy refusal
+   (possibly every Gmail parent: escalate). Suppressed: Resend never sent it (step 3).
+3. **Suppressed: read the Suppressions page** (resend.com/emails/suppressions). Suppressions are
+   team-wide. Find the address and read why it was added (a hard bounce, a spam complaint, or a manual
+   add) and when, and open the email that caused it if there is one.
+4. **Remove it only once the cause is fixed**: the mailbox now exists, the typo is corrected, or she
+   confirms the complaint was a slip. Resend's own guidance: an address removed while the cause stands
+   is suppressed again, and every second hard bounce costs `mail.little-cubby.com` reputation with Gmail,
+   for every parent. Removing it does not guarantee delivery; send one code and check step 2 again.
+5. **Meanwhile** she can sign in with Google or Apple; the panel says so (§9c).
 
 ## 10. Decision log
 - 2026-06: For family scale, ship/keep free client email (EmailJS or mailto). Do **not** build
@@ -229,3 +262,8 @@ it on (with `[observability.logs] invocation_logs = false`) is the founder's dec
   could not be delivered, and the cooldown's cache key hashed so no address reaches Cloudflare's
   analytics. Gmail has dropped this product's mail silently before (2026-06-11, above), so a
   `delivered` from Resend does not close the question on its own.
+- 2026-11-16 (evening): the founder read Resend's dashboard: the test address's send is
+  **Suppressed** (per address, team-wide; what put it there and when is still to be read on the
+  Suppressions page). Round 7 (§9c, §9d): the "it can take a few minutes" line that works with any key,
+  every note above the iPhone keyboard, no "Resend email" under an undeliverable note, a cooldown
+  answer that looks once itself, and the runbook.

@@ -1,9 +1,11 @@
 # Post-mortem — a sign-in email Resend accepted never arrived, and the app said "we just emailed you"
 
 - **Date:** 2026-11-16
-- **Severity:** P0 (open until its scope is known: one address, or every Gmail parent)
+- **Severity:** P0. Resend shows the send as Suppressed, which is per address; it stays open until the
+  suppression's origin is read (a 5.7.x policy bounce behind it would make it every Gmail parent)
 - **Duration:** 2026-11-16 10:03 UTC (first send) → open. The app-side fix is built, not yet live.
-- **Status:** OPEN. DRAFT: the root cause of the non-delivery awaits the founder's reading of Resend's dashboard.
+- **Status:** OPEN. The founder read the send's status (Suppressed) on 16 Nov; the suppression's origin
+  and date are still to be read on Resend's Suppressions page.
 - **Author:** Claude (lane M), from the read-only investigation of 16 Nov 2026
 
 > Policy: **every breakage gets a documented, blameless 5-Whys post-mortem.** Blameless = focus on
@@ -37,15 +39,16 @@ the day's release did not touch the send path.
   sign-in email was visible there to anyone with access to the Cloudflare account.
 
 ## Root cause
-**Why the email did not arrive: not known yet.** It awaits the founder's reading of Resend's dashboard
-for the three sends, and above all the first one (10:03 UTC). What each reading would mean:
-- `Suppressed`, after an earlier `Bounced` with SMTP 550 5.1.1 (for example, the first send went out
-  before the new Gmail account existed): this address only.
-- `Bounced` with a 5.7.x policy reply from Gmail, or `Delivery delayed` with 421 4.7.x: every Gmail
-  parent. A later `Suppressed` would follow from that first bounce, so `Suppressed` alone does not
-  settle the scope.
-- `Delivered`: Gmail accepted it. This product's mail has been silently dropped by Gmail before
-  (EMAIL.md, 2026-06-11), so a positive delivery to a long-standing Gmail account is still needed.
+**Why the email did not arrive: the address was on Resend's suppression list.** The founder read the
+send in Resend's dashboard on 16 Nov 2026: status `Suppressed`. Resend keeps one suppression list for
+the whole team. An address goes on it after a hard bounce, a spam complaint, or a manual add, and from
+then on Resend accepts every send to it (a 2xx, which is all the Worker ever saw) and never sends it.
+So this was one address, not a Gmail-wide block. Still to read, on the Suppressions page
+(resend.com/emails/suppressions): what put the address there, and when. A hard bounce with 550 5.1.1
+(for example a first send before the new mailbox existed, or a mistyped address) means this address
+only. A bounce with a 5.7.x policy reply would mean Gmail refused Cubby's mail, which reopens the
+scope. A complaint or a manual add would each be their own story. No address is written here or
+anywhere in the repo; the send is found by its Resend id (EMAIL.md §9d).
 
 **Why the app said "we just emailed you" (certain, and fixed whatever the scope):** the Worker treated
 Resend's acceptance as delivery. It kept no Resend message id, wrote no log line, had no read-back
@@ -53,22 +56,29 @@ and no webhook, and armed the cooldown on any 2xx, so nothing could ever learn t
 was suppressed, bounced or failed.
 
 ## 5 Whys
-1. **Why did a parent wait for an email that would never come?** Because the app told her "Check your
-   inbox: we just emailed you" and offered only the code box. (Measured: the four 200s above.)
-2. **Why did the app say that?** Because both senders turned any 2xx from Resend into
-   `{ok:true, hasCode:true}` and armed the cooldown, and the panel draws "we just emailed" from that.
-3. **Why was a 2xx taken to mean delivered?** Because acceptance was the only signal Cubby ever
-   looked at. Resend accepts an email for a suppressed address with a 2xx and then never sends it (its
-   own email events: "suppressed: the email was not sent"), and a bounce comes after acceptance; Cubby
-   threw away the id that would have let it ask.
-4. **Why could nothing see past acceptance?** Because every gate stubs Resend as `200 {id}`, and the
-   post-deploy live check sends to an `example.test` address (which can never be delivered) and checks
-   only that Resend accepted it. Delivery was last confirmed by a person with an inbox on 2026-06-14.
-5. **Why was delivery never measured?** Because each earlier email failure (Gmail dropping the shared
-   Firebase sender on 2026-06-11, the Worker losing its secrets in early August, the wrong OAuth scope
-   from 2026-08-19 to 08-23) happened before or at the provider's API, and the guards built after each
-   one stop at that boundary too. → **Root cause (of the false "we just emailed"): the system treated
-   "accepted by our email provider" as "delivered to her", with no way to learn otherwise.**
+1. **Why did a parent wait for an email that would never come?** Because no email was ever sent, and the
+   app told her "Check your inbox: we just emailed you" and offered only the code box. (Measured: the
+   four 200s above.)
+2. **Why was no email sent?** Because the address was on Resend's suppression list, so Resend accepted
+   each request and skipped it. (Measured: the founder's reading, status `Suppressed`.)
+3. **Why was the address on the suppression list?** Because something put it there: a hard bounce, a
+   spam complaint, or a manual add. Which one, and when, is the reading still to take on the
+   Suppressions page. (Inferred, most likely: an earlier send hard-bounced, for example before the new
+   mailbox existed. Not proven.)
+4. **Why did the app say "we just emailed" over a send that never left?** Because both senders turned
+   any 2xx from Resend into `{ok:true, hasCode:true}` and armed the cooldown, and acceptance was the
+   only signal Cubby ever looked at. Suppression is silent at the send call by Resend's design (the send
+   is accepted; only the email's later status says `suppressed`), and Cubby threw away the id that
+   would have let it ask.
+5. **Why could nothing see past acceptance, and why was she given no way out?** Because every gate stubs
+   Resend as `200 {id}`, the post-deploy live check sends to an `example.test` address and checks only
+   acceptance, and each earlier email failure (Gmail dropping the shared Firebase sender on 2026-06-11,
+   the Worker losing its secrets in early August, the wrong OAuth scope from 2026-08-19 to 08-23)
+   happened before or at the provider's API, so the guards built after each one stop at that boundary
+   too. And the panel was built on the premise that the email comes, so it never pointed back to Google
+   or Apple. → **Root cause: the system treated "accepted by our email provider" as "delivered to her",
+   had no way to learn otherwise, and gave a parent no way out while she waited; one address on the
+   provider's suppression list was enough to show it.**
 
 ## Timeline (dates from `git log`; times from Cloudflare analytics, UTC)
 - 2026-06-14 (5bb85290): the Worker sends sign-in mail through Resend; the last documented delivery to
@@ -83,11 +93,21 @@ was suppressed, bounced or failed.
 - 2026-11-16 10:03:51, 10:04:27, 12:18:49, 12:21:42: the four requests above. No email arrives.
 - 2026-11-16, afternoon: read-only investigation (DNS, code, production, history, a skeptic).
 - 2026-11-16, evening: the app-side fix is built on branch fix6-M (below). Not live yet.
+- 2026-11-16, evening: the founder reads the send in Resend: `Suppressed`. Production's Resend key is
+  Sending access, so the status route answers `unknown` to every ask there.
+- 2026-11-17: round 7 on fix6-M: the "it can take a few minutes" line that works with any key, every
+  note above the iPhone keyboard, no "Resend email" under an undeliverable note, a cooldown answer that
+  looks once itself. Not live yet.
 
 ## Contributing factors (blameless)
 - The test address was brand new. If the first send went out before the mailbox existed, a 5.1.1
-  bounce would put it on Resend's suppression list, and every later send would be accepted and dropped.
-  (Hypothesis; the dashboard decides.)
+  bounce would have put it on Resend's suppression list, and every later send would be accepted and
+  dropped, which is what the dashboard shows for this send. (The origin is a hypothesis until the
+  Suppressions page is read.)
+- The status the app needed to read back is behind a Full-access Resend key, and production's key is
+  Sending access, so round 6's watch alone would have changed nothing on her screen.
+- In the installed app she waits in the code box with the keyboard up, and the note sat under the box,
+  so under the keys (round-6 skeptic R6M2-1): even a correct note would not have been seen.
 - The free plan's sending volume is near zero, so `mail.little-cubby.com` has little reputation with
   Gmail. (Hypothesis.)
 - Workers Logs is off and no log line existed, so production kept no record of Resend's replies.
@@ -106,35 +126,56 @@ Built on fix6-M, waiting for the root session to integrate and push (EMAIL.md §
   and says the email could not reach that address, pointing to the address and to Google or Apple. On
   delivered it says so and mentions Spam and Promotions. The code box is never touched.
 - A second ask for the same address inside the minute never says "use that one" over an email that
-  could not come: the cooldown's answer carries what the status route has already found (so a reload is
-  covered), and the panel keeps what it learned when she taps "Wrong email?" or types a wrong code.
+  could not come: the cooldown's answer carries what is settled about its email, and when nobody has
+  asked yet (a reload before the panel's first ask) it looks once itself, inside the same bound; the
+  panel keeps what it learned when she taps "Wrong email?" or types a wrong code.
+- Whatever the key (round 7): if nothing is settled about 45 seconds after the email went, the line says
+  once "It can take a few minutes to arrive. You can also continue with Google or Apple now." Every note
+  is kept above the iPhone keyboard with the code box; an undeliverable note over an empty box lets go
+  of it so the keys drop and the Google and Apple buttons show. "Resend email" is hidden under an
+  undeliverable note; "Wrong email?" stays. At 320 px the email row has its right gutter back.
 - The cooldown's cache key is an HMAC of the address, not the address.
-- Gates: `signin-delivery` (Node, with fifteen mutants), `signin-delivery-workerd` (workerd's own Cache
-  API, timeout, rate limiter and console) and the mail-status section of `ios-signin` (the real panel and
-  the real Firebase SDK against the Auth emulator, ten parents at once: undeliverable, delivered,
-  unknown, an older Worker, a link-only email, "Wrong email?" then the same address, a reload, a wrong
-  code, signing in before an answer, and the panel leaving the screen).
+- Gates: `signin-delivery` (Node, with eighteen mutants), `signin-delivery-workerd` (workerd's own Cache
+  API, fetch, timeout, rate limiter and console) and the mail-status section of `ios-signin` (the real
+  panel and the real Firebase SDK against the Auth emulator, eighteen parents at once: undeliverable,
+  delivered, unknown, an older Worker, a link-only email, "Wrong email?" then the same address, a
+  reload, a wrong code, signing in before an answer, the panel leaving the screen, and from round 7 five
+  parents with the stood-in keyboard up, a reload before any ask, a different address after "Wrong
+  email?", and a bounce that comes after the slow line).
 
-This makes the app truthful. It does not make the email arrive: that depends on the root cause above.
-It answers only with a Full-access Resend key; with a Sending-access key every answer is `unknown` and
-the panel shows exactly what it showed before.
+**What she sees, by key.** With today's Sending-access key every status read is a 401, so `unknown`:
+the panel says "Check your inbox" and, about 45 seconds later, "It can take a few minutes to arrive.
+You can also continue with Google or Apple now." That is what a parent in the incident would see tonight,
+and it is the way out she did not have. With a Full-access key (the founder's call: it can also read
+every email and manage domains) the panel learns at the 8-second ask that a suppressed email is
+undeliverable, says "We couldn’t get that email to <address>, so no code is on its way. Check the
+address, or continue with Google or Apple.", hides "Resend email", and drops the keyboard if her code
+box is empty; a reload's cooldown answer says the same. Neither key makes the email arrive: that is the
+suppression, and the runbook (EMAIL.md §9d) is how it is cleared.
 
 ## Corrective actions
 | # | Action | Type (Fix/Prevent/Process/Doc) | Status |
 |---|--------|--------------------------------|--------|
 | 1 | Log Resend's id per send; `/api/signin-status`; the panel's undeliverable and delivered notes | Fix | Built (fix6-M), not live |
 | 2 | Hash the cooldown's cache key, both senders | Fix | Built (fix6-M), not live |
-| 3 | Read Resend's dashboard for the three sends (first send first), and its suppression list | Process | TODO (founder) |
+| 3 | Read Resend's dashboard for the three sends (first send first), and its suppression list | Process | Status read (Suppressed); the suppression's origin and date TODO (founder) |
 | 4 | Send a code to a long-standing Gmail account; Show original: SPF, DKIM and DMARC pass | Process | TODO (founder) |
 | 5 | Check the Resend key's permission; decide whether a Full-access key belongs in the Worker | Process | TODO (founder) |
 | 6 | Decide on Workers Logs (`[observability]`, invocation logs off); first move the invite-peek token out of its URL | Process | TODO (founder) |
 | 7 | Point `tools/signin_live_check.js` at a Resend test address instead of `example.test` | Prevent | TODO |
 | 8 | A Resend webhook into D1, for bounces and suppressions after the status window closes | Prevent | TODO |
 | 9 | The invite email's cooldown cache key holds the invite token (`cooldown.cubby.internal/inv/<token>`) | Fix | TODO |
+| 10 | "It can take a few minutes" with Google and Apple, after 45 s with nothing settled, whatever the key | Fix | Built (fix6-M, round 7), not live |
+| 11 | Every note above the iPhone keyboard; an empty code box lets go under "no code is on its way" | Fix | Built (fix6-M, round 7), not live |
+| 12 | Remove the address from the suppression list only once its cause is fixed (EMAIL.md §9d) | Process | TODO (founder) |
 
 ## Lessons
 - "The provider accepted it" is not "she has it". Any step whose success happens somewhere we cannot see
   needs a way to ask, and the screen must not claim more than the answer.
 - A cache key is a URL, and URLs end up in analytics. Hash anything personal before it becomes one.
+- A provider's suppression list fails one address silently and for good: the API keeps saying yes.
+  Whatever the app cannot know, it must still leave her a way in.
+- A note under the keyboard is a note not said. Check where a message lands on the device's real
+  surface, keys up, before calling it shown.
 - A guard that stops at the API boundary cannot see a failure past it. The next delivery gate has to
   read a real outcome (Resend's test addresses, a real inbox), not an acceptance.
