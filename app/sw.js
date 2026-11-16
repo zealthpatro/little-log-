@@ -1,6 +1,6 @@
 /* Cubby service worker.
    Bump CACHE on every deploy so old assets are cleared. */
-const CACHE = 'little-log-v368';
+const CACHE = 'little-log-v369';
 const ASSETS = [
   '/app/',
   '/app/index.html',
@@ -25,6 +25,9 @@ const ASSETS = [
   '/app/pregnancy-data.js',
   '/app/reads-data.js',
   '/app/native-bridge.js',
+  // Cubby's own usage events: the allowlist (generated from workers/usage/core.mjs) and the tracker.
+  '/app/usage-allowlist.js',
+  '/app/cubby-track.js',
   '/app/milestone-data.js',
   '/app/journey-catalogue.js',
   '/app/firebase-messaging-sw.js',
@@ -139,10 +142,14 @@ self.addEventListener('notificationclick', (e) => {
   }
   // A campaign carries its own destination; a dose reminder just opens the app.
   const target = typeof d.url === 'string' && d.url.indexOf('/app') >= 0 ? d.url : '/app/';
+  /* The page records the tap as push.opened (app/cubby-track.js), by KIND only: a marker in the fragment
+     of the URL it opens, which the page reads and then takes off the address bar, or a message to a page
+     already open. A fragment is never part of the request, so /app/ still opens from the cache at once. */
+  const nk = (d.medId || /^(med|digest)-/.test(String(d.tag || ''))) ? 'medicine' : (d.cat === 'marketing' || d.cat === 'feature') ? d.cat : 'other';
   e.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cl) => {
-      for (const c of cl) { if (c.url.indexOf('/app') >= 0 && 'focus' in c) return c.focus(); }
-      if (self.clients.openWindow) return self.clients.openWindow(target);
+      for (const c of cl) { if (c.url.indexOf('/app') >= 0 && 'focus' in c) { try { c.postMessage({ cubbyNotification: nk }); } catch (err) {} return c.focus(); } }
+      if (self.clients.openWindow) { const u = new URL(target, self.location.origin); u.hash = (u.hash.length > 1 ? u.hash.slice(1) + '&' : '') + 'from=notification&nk=' + nk; return self.clients.openWindow(u.href); }
     })
   );
 });

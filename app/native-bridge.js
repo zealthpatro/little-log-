@@ -159,6 +159,8 @@
 
     // Deep links from a universal link / custom scheme (Associated Domains).
     function routeUrl(rawUrl) {
+      // Usage visits (app/cubby-track.js): a link brought the app forward. Only that it was a link, never which.
+      try { if (window.cubbyTrackLinkOpened) window.cubbyTrackLinkOpened(); } catch (e) {}
       try {
         var u = new URL(rawUrl);
         // An email sign-in link must be HANDLED, not just parsed for deep-link keys: hand the whole
@@ -178,6 +180,8 @@
         P.App.getLaunchUrl().then(function (r) { if (r && r.url) routeUrl(r.url); }).catch(function () {});
       }
     } catch (e) {}
+    // Usage visits (app/cubby-track.js): the app coming to the front or going away. JavaScript only, no store review.
+    try { P.App && P.App.addListener && P.App.addListener('appStateChange', function (s) { try { if (window.cubbyTrackAppState) window.cubbyTrackAppState(!!(s && s.isActive)); } catch (e) {} }); } catch (e) {}
 
     /* Android hardware back. Without this, back on the home screen quits the app instantly, which is a
        horrible way to lose a half-typed note. Close whatever is open first; only exit from the top. */
@@ -230,7 +234,10 @@
         // they aren't — this must never be the thing that turns reminders on.
         Msg.checkPermissions().then(function (res) { if (res && res.receive === 'granted') fetchToken(false); }, function () {});
         window.cubbyEnableNativePush = function () {
+          // Usage: only a real OS prompt is an ask; a permission already decided records nothing.
+          var asked = new Promise(function (r) { r(Msg.checkPermissions()); }).then(function (p) { var a = !!(p && /^prompt/.test(p.receive || '')); try { if (a && window.cubbyTrack) window.cubbyTrack('push.permission', { state: 'asked' }); } catch (e) {} return a; }, function () { return false; });
           return Msg.requestPermissions().then(function (res) {
+            asked.then(function (a) { try { var st = res && res.receive; if (a && window.cubbyTrack && (st === 'granted' || st === 'denied')) window.cubbyTrack('push.permission', { state: st }); } catch (e) {} });
             if (!res || res.receive !== 'granted') return false;
             return fetchToken(true).then(function (t) { return !!t; });
           });
@@ -243,6 +250,8 @@
         // explicit — a rotation is not a request to switch reminders back on.
         Msg.addListener('tokenReceived', function (ev) { try { handOverToken(ev && ev.token, false); } catch (e) {} });
         Msg.addListener('notificationActionPerformed', function (ev) {
+          // Only the kind of notification (medicine, feature, marketing...) is recorded, never its words or ids.
+          try { if (window.cubbyTrackPushOpened && (!ev || !ev.actionId || ev.actionId === 'tap')) window.cubbyTrackPushOpened((ev && ev.notification && ev.notification.data) || {}); } catch (e) {}
           try { routeDeepLink(ev && ev.notification && ev.notification.data); } catch (e) {}
         });
       }

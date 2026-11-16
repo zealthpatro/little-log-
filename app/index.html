@@ -2315,6 +2315,7 @@ function addEvent(ev){
   if(!ev.babyId) ev.babyId = state.activeBabyId;
   state.events.push(ev);
   persist();
+  try{ if(window.cubbyTrackEntry) window.cubbyTrackEntry(ev.type,'logged'); }catch(_ut){}   // usage: the tool only (app/cubby-track.js)
   return ev.id;
 }
 /* ---- multi-baby logging: single child unaffected; 2+ babies can log for one or all ---- */
@@ -2450,6 +2451,7 @@ function commitEvent(payload){
   targets.forEach(bid=>{ const ev=Object.assign({},payload); ev.id=uid(); ev.babyId=bid; state.events.push(ev); written.push(ev.id); });
   markUndo(written, payload&&payload.type);
   persist();
+  try{ if(window.cubbyTrackEntry) window.cubbyTrackEntry(payload&&payload.type,'logged'); }catch(_ut){}   // once per save, however many babies
   return written;
 }
 function targetChips(reRender){
@@ -2700,9 +2702,13 @@ function render(){
      ever fired and the whole earned-cue system was dead until they dismissed a coach mark. */
   teachScan();
   _renderView();
+  try{ window.__cubbyScreen=usageScreen(); if(window.cubbyTrackScreen) window.cubbyTrackScreen(window.__cubbyScreen); }catch(_ut){}   // deduped there: a repaint is not a view
   if(_sy){ var _ns=document.getElementById('scroll'); if(_ns && _ns!==_ss) _ns.scrollTop=_sy; }
   maybeRunDeepLink();
 }
+/* The SCREENS name (workers/usage/core.mjs) for what _renderView just drew, in its own order. The loss
+   holding screen has no name at all: it is never instrumented, and the tracker is silent there anyway. */
+function usageScreen(){ if(state.pregnancy && (viewingPreg || (!state.pregnancy.bornBabyId && state.babies.length===0))) return state.pregnancy.stage==='planning'?'cycle':'pregnancy_week'; if(state.babies.length===0 && myLossHolding()) return null; if(state.babies.length===0) return (window.LL && window.LL.role==='caregiver')?'home':'onboarding'; return ({home:'home',log:'timeline',album:'photos',health:'health',den:'den'})[view]||null; }
 
 /* ---- Deep-link router: a CTA / email / push / article button can open a specific screen in one tap ----
    e.g. /app/?go=kicks · ?stage=expecting · ?read=<slug> · ?tab=care. The intent is stashed at load so it
@@ -5885,6 +5891,7 @@ function stopFeed(babyId){
   const _fid=uid();
   armFirstEntryLine('feed',[babyId]);     // this door pushes straight to state.events, so it arms its own
   state.events.push({id:_fid,babyId,type:'feed',method:'breast',side:t.side,time:t.start,dur});
+  try{ if(window.cubbyTrackEntry) window.cubbyTrackEntry('feed','logged'); }catch(_ut){}
   delete tt.feed; persist(); render(); loggedToast('Feed logged · '+fmtDur(dur), [_fid], 'feed');
 }
 /* The two honest doors behind the guarded Feed tile. Stop is the primary because it is what a parent
@@ -5961,6 +5968,7 @@ function saveFeedCorrect(babyId){
   const _fid=uid();
   armFirstEntryLine('feed',[babyId]);     // the correction path is still somebody's first feed
   state.events.push({id:_fid,babyId,type:'feed',method:'breast',side:t.side,time:t.start,dur:end-t.start});
+  try{ if(window.cubbyTrackEntry) window.cubbyTrackEntry('feed','logged'); }catch(_ut){}
   delete tt.feed; persist(); closeSheet(); render(); toast('Feed logged · '+fmtDur(end-t.start));
 }
 function discardRunningFeed(babyId){
@@ -6232,6 +6240,7 @@ function stopSleep(babyId){
   const _sid=uid();
   armFirstEntryLine('sleep',[babyId]);    // same: the timer stops bypass commitEvent entirely
   state.events.push({id:_sid,babyId,type:'sleep',time:t.start,end});
+  try{ if(window.cubbyTrackEntry) window.cubbyTrackEntry('sleep','logged'); }catch(_ut){}
   delete tt.sleep; persist();
   wwNotYetArm(babyId,_sid);   // Stop is on every tab; hold the promise until she is next on home
   render(); loggedToast('Sleep logged · '+fmtDur(end-t.start), [_sid], 'sleep');
@@ -6276,6 +6285,7 @@ function saveSleepCorrect(babyId){
   if(end>now()){ toast('That is in the future'); return; }
   armFirstEntryLine('sleep',[babyId]);    // and so is the nap somebody forgot to stop
   state.events.push({id:uid(),babyId,type:'sleep',time:t.start,end});
+  try{ if(window.cubbyTrackEntry) window.cubbyTrackEntry('sleep','logged'); }catch(_ut){}
   delete tt.sleep; persist(); closeSheet(); render(); toast('Nap logged · '+fmtDur(end-t.start));
 }
 // Genuinely still asleep, e.g. a night feed logged at 4am. Snoozes the nudge for six hours so the
@@ -6773,6 +6783,7 @@ function saveEdit(id){
     F.forEach(f=>{ const k=f[1]; if(next[k]!==e[k]){ chg(k,e[k],next[k]); if(next[k]===undefined) delete e[k]; else e[k]=next[k]; } });
   }
   if(hist.length){ e.editedBy=u; e.editedAt=t; e.history=(e.history||[]).concat(hist); }
+  try{ if(hist.length && window.cubbyTrackEntry) window.cubbyTrackEntry(e.type,'edited'); }catch(_ut){}   // only when something changed
   persist(); closeSheet(); render(); toast(hist.length?'Updated':'No changes');
 }
 function deleteEvent(id){
@@ -6786,6 +6797,7 @@ function confirmDeleteEvent(id){
   const e=state.events.find(x=>x.id===id); if(!e)return;
   if(!canEditEvent(e)){ toast('Only the logger or an owner can delete this'); return; }
   e.deleted=true; e.deletedBy=myUid(); e.deletedAt=now();   // soft-delete: keep the doc + photo, recoverable
+  try{ if(window.cubbyTrackEntry) window.cubbyTrackEntry(e.type,'deleted'); }catch(_ut){}
   persist(); closeSheet(); render(); toast('Moved to recently deleted');
 }
 function recoverEvent(id){
@@ -8142,7 +8154,9 @@ async function enablePush(){
   }
   if(!CUBBY_VAPID){ toast('Reminders coming soon'); return; }
   try{
+    let _utAsk=false; try{ _utAsk=Notification.permission==='default'; if(_utAsk && window.cubbyTrack) window.cubbyTrack('push.permission',{state:'asked'}); }catch(_ut){}   // usage: only a real prompt is an ask
     const perm=await Notification.requestPermission();
+    try{ if(_utAsk && window.cubbyTrack && (perm==='granted'||perm==='denied')) window.cubbyTrack('push.permission',{state:perm}); }catch(_ut){}
     if(perm!=='granted'){ toast('Notifications are turned off in your browser'); return; }
     // Subscribe with the SW ALREADY controlling /app/ (sw.js). Registering firebase-messaging-sw.js
     // here used to replace it, because a registration is keyed by scope, and since sw.js re-registers
@@ -14986,7 +15000,8 @@ function requestNotif(){
      granted permission that never produces a notification teaches exactly one lesson, and it is the
      wrong one. Ask on the day we can deliver. */
   if(!remindersLive()) return;
-  try{ if('Notification' in window && Notification.permission==='default') Notification.requestPermission(); }catch(e){}
+  try{ if(window.cubbyTrack && 'Notification' in window && Notification.permission==='default') window.cubbyTrack('push.permission',{state:'asked'}); }catch(_ut){}
+  try{ if('Notification' in window && Notification.permission==='default') Promise.resolve(Notification.requestPermission()).then(function(p){ try{ if(window.cubbyTrack && (p==='granted'||p==='denied')) window.cubbyTrack('push.permission',{state:p}); }catch(_ut){} },function(){}); }catch(e){}
 }
 /* ONE due event = at most ONE alert on this device. Ever.
    This runs on a 1s interval and the worst-case failure is an alarm beside a sleeping baby, so it
@@ -15819,6 +15834,7 @@ function openVisitSummary(){
 function openDoctorReport(){
   const b=activeBaby(); if(!b) return;
   if(!useTaste('pdf','Doctor PDF report')) return;
+  try{ if(window.cubbyTrack) window.cubbyTrack('feature.used',{feature:'report',action:'opened'}); }catch(_ut){}
   const esc=escapeHtml;
   const illBlock=illnessSummary(now()-14*86400000, now());
   const askLines=babyAskQs(b).filter(q=>!q.done).map(q=>'- '+q.text);
@@ -19865,6 +19881,9 @@ try{
 <script defer src="teach-ui.js"></script>
 <script defer src="vax-card.js"></script>
 <script defer src="store-firebase.js"></script>
+<!-- Cubby's own usage events (spec 2026-11-13 §8): the allowlist generated from workers/usage/core.mjs, then the tracker. -->
+<script defer src="usage-allowlist.js"></script>
+<script defer src="cubby-track.js"></script>
 <script defer src="voice-log.js"></script>
 <!-- Bear avatars + custom time picker. -->
 <script src="cubby-extras.js"></script>
@@ -19934,6 +19953,7 @@ function closeInstall(){ var o=document.getElementById('cbInstallOv'); if(o&&o.p
 function _insCopy(btn){ var u=location.origin+'/app/'; try{ navigator.clipboard.writeText(u).then(function(){ if(btn) btn.textContent='Link copied ✓'; },function(){}); }catch(e){} }
 function openInstall(){
   if(isStandaloneApp()){ if(typeof toast==='function') toast("You're all set, Cubby's on your home screen"); return; }
+  try{ var _ub=window._bip; if(_ub && window.cubbyTrack){ window.cubbyTrack('install.prompted',{outcome:'shown',prompt:'android_chrome'}); if(_ub.userChoice && _ub.userChoice.then) _ub.userChoice.then(function(c){ try{ window.cubbyTrack('install.prompted',{outcome:(c&&c.outcome==='accepted')?'accepted':'dismissed',prompt:'android_chrome'}); }catch(_ut){} },function(){}); } }catch(_ut){}
   if(window._bip){ try{ window._bip.prompt(); if(window._bip.userChoice) window._bip.userChoice.then(function(){ window._bip=null; }); return; }catch(e){} } // Android: real one-tap
   if(!document.getElementById('cbInstallCSS')){ var st=document.createElement('style'); st.id='cbInstallCSS'; st.textContent=_INS_CSS; document.head.appendChild(st); }
   var esc=(typeof escapeHtml==='function')?escapeHtml:function(s){return s;};
@@ -19962,6 +19982,7 @@ function openInstall(){
   ov.querySelector('.cbi-x').addEventListener('click',closeInstall);
   var cp=ov.querySelector('[data-copy]'); if(cp) cp.addEventListener('click',function(){ _insCopy(cp); });
   document.body.appendChild(ov);
+  try{ if(ios && !wv && window.cubbyTrack) window.cubbyTrack('install.prompted',{outcome:'shown',prompt:'ios_instructions'}); }catch(_ut){}
 }
 function addToHomeScreen(_msgElId){ openInstall(); }  // every in-app install CTA now opens the guided flow
 </script>

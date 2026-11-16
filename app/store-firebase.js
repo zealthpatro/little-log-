@@ -12,6 +12,32 @@
   // machine down on top of the message the parent is already being shown.
   if (!window.LL || !window.LL.auth) return;
   var auth = window.LL.auth, db = window.LL.db;
+  /* Sign-in steps as usage events (app/cubby-track.js; spec §8.3 signin.attempted). The method, the step
+     and a fixed error word only: never the address, the code or the provider's own message. */
+  var _signinTries = {};
+  function signinErr(err) {
+    var c = String((err && (err.code || err.message)) || '');
+    if (/popup-closed/.test(c)) return 'popup_closed';
+    if (/popup-blocked/.test(c)) return 'popup_blocked';
+    if (/cancel/i.test(c)) return 'cancelled';
+    if (/network|offline|Failed to fetch/i.test(c)) return 'network';
+    if (/invalid-action-code|invalid_link/.test(c)) return 'invalid_link';
+    if (/expired/.test(c)) return 'expired_code';
+    if (/bad_code/.test(c)) return 'wrong_code';
+    if (/rate_limited|too-many/.test(c)) return 'too_many';
+    if (/no_session|user-token-expired/.test(c)) return 'no_session';
+    return 'other';
+  }
+  function signinTrack(method, step, outcome, err) {
+    try {
+      if (!window.cubbyTrack) return;
+      if (step === 'started') { _signinTries[method] = (_signinTries[method] || 0) + 1; try { sessionStorage.setItem('cubby-signin-method', method); } catch (e) {} }
+      var inApp = false;
+      try { inApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) || !!window.navigator.standalone || !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches); } catch (e) {}
+      window.cubbyTrack('signin.attempted', { method: method, step: step, outcome: outcome, error: err ? signinErr(err) : 'none',
+        attempt: Math.max(1, Math.min(20, _signinTries[method] || 1)), storage: inApp ? 'app' : 'browser' });
+    } catch (e) {}
+  }
   var LOCAL_PREFS_KEY = 'little-log-prefs-v1'; // per-device: activeBabyId, timers, theme
   // Ids whose bytes came from an owner-gated pregnancy photos subcollection (not the circle
   // collection). Lets the two byte listeners share PhotoStore.map without stepping on each other.
@@ -512,6 +538,7 @@
     /* ---- the code path: the way in, everywhere ---- */
     var codeForm = row.querySelector('.ll-code-form');
     function sendCode(email) {
+      signinTrack('email_code', 'started', 'succeeded');
       return fetch('/api/signin-code', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: email }) })
         .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) { var er = new Error(d.error || 'send_failed'); er.retryAfter = Number(d.retryAfter) || 0; er.liveCode = d.liveCode === true; er.liveFor = Number(d.liveFor) || 0; throw er; } return d; }); });
     }
@@ -555,6 +582,7 @@
           .then(function (d) { return auth.signInWithCustomToken(d.token); })
           .catch(function (err) {
             cb.disabled = false; cb.textContent = 'Sign in';
+            signinTrack('email_code', 'verified', 'failed', err);
             var msg = err && err.message;
             /* rate_limited is a pause, not a failure, and "mind trying again?" over a pause that can
                last most of an hour sent her round in circles at 3am. Say it is paused, for how long,
@@ -675,11 +703,13 @@
         }
       })
       .catch(function (err) {
+        signinTrack('email_link', 'verified', 'failed', err);
         showSignIn(errText(err, 'That sign-in didn’t finish. Send yourself a fresh link and try once more.'));
       });
   }
 
   function showSignIn(msg) {
+    try { if (window.cubbyTrackScreen) window.cubbyTrackScreen('signin'); } catch (e) {}
     /* Any re-render of this screen means the attempt is over, one way or another, so the stuck-timer
        must not outlive it — otherwise backing out of a popup (a deliberate, normal act) gets told 25
        seconds later that it "did not come back". The timer nulls itself before calling in here, so
@@ -902,8 +932,10 @@
   }
   function signInGoogle() {
     signInBusy();
-    if (nativeAuth()) { nativeSignIn('google').catch(nativeSignInFailed); return; }
+    signinTrack('google', 'started', 'succeeded');
+    if (nativeAuth()) { nativeSignIn('google').catch(function (err) { signinTrack('google', 'provider_returned', userCancelled(err) ? 'abandoned' : 'failed', err); nativeSignInFailed(err); }); return; }
     auth.signInWithPopup(window.LL.googleProvider).catch(function (err) {
+      signinTrack('google', 'provider_returned', (err && err.code === 'auth/popup-closed-by-user') ? 'abandoned' : 'failed', err);
       // Backing out of the popup is a normal, chosen action — stay quiet, like native does.
       if (err && err.code === 'auth/popup-closed-by-user') { showSignIn(''); return; }
       if (err && (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request'
@@ -916,8 +948,10 @@
 
   function signInApple() {
     signInBusy();
-    if (nativeAuth()) { nativeSignIn('apple').catch(nativeSignInFailed); return; }
+    signinTrack('apple', 'started', 'succeeded');
+    if (nativeAuth()) { nativeSignIn('apple').catch(function (err) { signinTrack('apple', 'provider_returned', userCancelled(err) ? 'abandoned' : 'failed', err); nativeSignInFailed(err); }); return; }
     auth.signInWithPopup(window.LL.appleProvider).catch(function (err) {
+      signinTrack('apple', 'provider_returned', (err && err.code === 'auth/popup-closed-by-user') ? 'abandoned' : 'failed', err);
       // Backing out of the popup is a normal, chosen action — stay quiet, like native does.
       if (err && err.code === 'auth/popup-closed-by-user') { showSignIn(''); return; }
       if (err && (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request'
@@ -938,6 +972,13 @@
   function teardown() {
     // Sign-out flushed and waited for the push; nothing of this person's is left in the outbox.
     if (auth.currentUser && hhRef) dropOutbox(auth.currentUser.uid, hhRef.id);
+    /* The usage tracker (app/cubby-track.js). A deletion that stopped after her usage rows were asked to go
+       left it silent (deleteAccount's catch); signing out ends that, so whoever signs in next on this page, her
+       included, is tracked as anyone is. A deletion still running, or one that finished (its sign-out lands
+       here too), keeps it silent until the page reloads. And whose family record has been seen from the
+       server is forgotten: the next account waits for its own (startSync). */
+    if (!deletingAccount) window.__cubbyDeleting = false;
+    householdSeen('');
     unackedEv = {}; blobOut = 0; replayEv = null; replayHold = null;
     unsub.forEach(function (u) { try { u(); } catch (e) {} });
     matUnsub.forEach(function (u) { try { u(); } catch (e) {} });
@@ -2845,7 +2886,22 @@
     }
   }
 
+  /* For the usage tracker (app/cubby-track.js, PRIV-4): has this person's family record been seen AS THE
+     SERVER HOLDS IT? Firestore answers first from this phone's own copy, which can be a day old, and a loss
+     holding set on another phone (Papa ends the pregnancy and her holding is seeded) arrives only with the
+     server's copy. So for a signed-in person the tracker sends nothing until window.__cubbyHouseholdSeen
+     names her uid, set below once a household snapshot from the server, with nothing of this phone's own
+     pending, has been applied. '*' is the local-only test page (?e2e=1), which has no family record for
+     anyone; '' is nobody yet. A person this never names (no family, or a read that failed) is held: what the
+     tracker recorded waits on the phone for an open where it is said. */
+  function householdSeen(who) {
+    window.__cubbyHouseholdSeen = who;
+    // What waited for it goes now (or, if the server's copy brought her holding, is dropped now).
+    try { if (who && typeof window.cubbyTrackFlush === 'function') window.cubbyTrackFlush(); } catch (e) {}
+  }
+
   function startSync(hid, user) {
+    householdSeen('');
     hhRef = db.collection('households').doc(hid);
     eventsRef = hhRef.collection('events');
     photosRef = hhRef.collection('photos');
@@ -2975,6 +3031,26 @@
         }, 1500);
       }
     }));
+    /* PRIV-4: the same document again, for its metadata only. It shares the listener above's watch (no extra
+       reads), and unlike that one it is told when the server's copy arrives even if that copy matches the
+       cached one. Registered after it, so when the server's copy did change, the listener above has applied
+       it (a loss holding with it) before this one reports.
+       Only a copy with nothing of this phone's own pending counts. With a write this phone made offline,
+       answered before the server's reply to the listen reaches the phone, Firestore's first copy after
+       reconnecting is marked fromCache false while that write still shows as pending, and it does not hold
+       the server's newer changes: a holding seeded overnight is not in it. The copy after it, with nothing
+       pending, is the server's. Seen on the emulator in most unstaged runs; tools/usage_tracker_check.js
+       S20 stages that delivery order every time.
+       A listen that fails reports nothing: the tracker keeps holding, and what it recorded waits on the phone
+       for the next open. */
+    var serverSeen = false, offServerSeen = null;
+    offServerSeen = hhRef.onSnapshot({ includeMetadataChanges: true }, function (snap) {
+      if (serverSeen || !snap || !snap.metadata || snap.metadata.fromCache || snap.metadata.hasPendingWrites) return;
+      serverSeen = true;
+      try { if (offServerSeen) offServerSeen(); } catch (e) {}
+      householdSeen(user.uid);
+    }, function () {});
+    unsub.push(offServerSeen);
 
     // ---- Two-stage events load (fast signed-in boot) ----
     // The old listener loaded the ENTIRE event history before the first render (behind the SDK
@@ -3308,15 +3384,21 @@
     }
     try {
       await Promise.all(writes);
-      pushNow._retryDelay = 0;
+      pushNow._retryDelay = 0; pushNow._fails = 0;
     } catch (e) {
       console.warn('push', e);
       var nowMs = Date.now();
       // permission-denied is NOT offline: for a removed member "we'll try again" is a lie. Say what
       // actually happened and where the door is; offline keeps its honest, patient message.
       var denied = !!(e && e.code === 'permission-denied');
+      pushNow._fails = (pushNow._fails || 0) + 1;
       if (!pushNow._warnedAt || nowMs - pushNow._warnedAt > 120000) { // gentle: at most one toast per 2 min
         pushNow._warnedAt = nowMs;
+        try {
+          var code = String((e && e.code) || '');
+          if (window.cubbyTrack) window.cubbyTrack('save.failed', { error: denied ? 'permission_denied' : /unavailable/.test(code) ? 'unavailable' : /deadline/.test(code) ? 'deadline'
+            : /resource-exhausted/.test(code) ? 'quota' : /too large|exceeds/i.test(String(e && e.message)) ? 'too_large' : 'other', retries: Math.min(50, pushNow._fails - 1), offline: navigator.onLine === false ? 'yes' : 'no' });
+        } catch (e3) {}
         try {
           if (denied) window.toast && window.toast('Cubby wasn’t allowed to save that. If you’ve been removed from this circle, sign out and back in.');
           else if (navigator.onLine === false) window.toast && window.toast('You look offline. Cubby will sync when you’re back.');
@@ -3582,6 +3664,12 @@
     // Removing ourselves from members makes the household snapshot fire "you were removed". Suppress
     // that mid-deletion so the calm access-lost screen can't race the flow we are already running.
     deletingAccount = true;
+    /* app/cubby-track.js sends nothing more, and keeps nothing it had queued, from here on. Set only now
+       that a deletion has really started (AR-1): a call refused at the door above used to set it first and
+       leave it set, so the tracker stayed silent for the rest of the page. What happens to it when the
+       deletion does not finish is decided in the catch below. */
+    window.__cubbyDeleting = true;
+    var usagePurgeAsked = false;
 
     try {
       /* 0. Families she is no longer in (D2). Removed by an owner, her journey, private health and
@@ -3748,8 +3836,11 @@
       try { await db.collection('users').doc(uid).delete(); } catch (e) { console.warn('del user doc', e); }
       try { localStorage.removeItem(pregArchCacheKey(uid)); } catch (e) {}
       try { if (window.cubbyDisableNativePush) await window.cubbyDisableNativePush(); } catch (e) {}
-      // Guessing-game hubs live in D1, keyed by this uid, and rules do not reach them.
+      // Guessing-game hubs live in D1, keyed by this uid, and rules do not reach them. So do her usage
+      // rows and feedback notes (worker.js purgeAccountData).
       try {
+        // From this line her usage rows may be gone from the server, whatever answer comes back (or none).
+        usagePurgeAsked = true;
         var tok = await u.getIdToken();
         await fetch('/api/account/purge', {
           method: 'POST',
@@ -3777,6 +3868,14 @@
       return true;
     } catch (e) {
       deletingAccount = false;
+      /* AR-1: the tracker after a deletion that did not finish, decided here once.
+         - It failed before her usage rows were asked to go (the leave in step 2 refused: she is still in her
+           family, still signed in, and is asked to try again). Nothing the tracker sent has been erased, so
+           it carries on as before.
+         - It failed after (step 5: the login itself could not be deleted, a stale email-code session). Her
+           usage rows were asked to go and may be gone, so nothing new is recorded under the account she
+           asked to delete until she signs out (teardown clears it) or the page reloads. */
+      if (!usagePurgeAsked) window.__cubbyDeleting = false;
       throw e;
     }
   };
@@ -3979,6 +4078,7 @@
     if (mode === 'invite' && typeof window.cubbyStep === 'function') {
       window.cubbyStep('invite.sheet_opened', { stage: window.funnelStage ? window.funnelStage() : 'none', entry_point: entry || 'other' });
     }
+    try { if (mode === 'invite' && window.cubbyTrack) window.cubbyTrack('feature.used', { feature: 'invite', action: 'opened' }); } catch (_ut) {}
     var myRole = window.LL.role || 'caregiver';
     var info = window.LL.memberInfo || {};
     var myRel = (info[me.uid] && info[me.uid].relationship) || '';
@@ -4986,6 +5086,7 @@
   // the logged-in UI from seeded localStorage. No credentials, no network.
   var e2eMode = new URLSearchParams(location.search).get('e2e');
   if ((location.hostname === 'localhost' || location.hostname === '127.0.0.1') && (e2eMode === '1' || e2eMode === 'onboard')) {
+    householdSeen('*');   // the usage tracker (PRIV-4): a local-only page has no family record to wait for
     try {
       window.LL.role = 'owner';
       window.LL.members = { local: { role: 'owner' } };
@@ -5021,6 +5122,7 @@
   auth.onAuthStateChanged(async function (user) {
     if (!user) { teardown(); showSignIn(''); return; }
     try { localStorage.setItem('cubby-member', '1'); } catch (e) {}
+    try { var _sm = sessionStorage.getItem('cubby-signin-method'); if (_sm) { sessionStorage.removeItem('cubby-signin-method'); signinTrack(_sm, 'signed_in', 'succeeded'); } } catch (e) {}
     try {
       showStatus('Setting things up…');
       ensureConfigListener(); // runs beside the household read, never in front of it

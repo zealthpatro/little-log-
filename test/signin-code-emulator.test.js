@@ -307,8 +307,13 @@ async function listCodes() {
     // Its two one-line helpers come from the same file, so nothing here is a retyped copy.
     const escSrc = ['escHtml', 'looksLikeEmail'].map((n) => (csrc.match(new RegExp('^  function ' + n + '\\(.*$', 'm')) || [''])[0]).join('\n');
     ok('and its helpers', /function escHtml/.test(escSrc) && /function looksLikeEmail/.test(escSrc), escSrc);
+    /* The panel also records its sign-in steps through signinTrack (spec §8.3), which lives with its state at
+       the top of the file. Taken whole from there too; with no window here it is a silent no-op. */
+    const t0 = csrc.indexOf('  var _signinTries = {};'), t1 = csrc.indexOf('\n  var LOCAL_PREFS_KEY');
+    const trackSrc = t0 > -1 && t1 > t0 ? csrc.slice(t0, t1) : '';
+    ok('and the sign-in step recorder it calls', /function signinTrack\(/.test(trackSrc) && /function signinErr\(/.test(trackSrc), [t0, t1]);
     const wire = new Function('SEND_LABEL', 'errText', 'auth', 'location', 'localStorage', 'fetch', 'setInterval', 'clearInterval', 'isStandaloneApp', 'isIOSDevice',
-      escSrc + '\n' + csrc.slice(a, b) + '\nreturn wireEmailRow;');
+      escSrc + '\n' + trackSrc + '\n' + csrc.slice(a, b) + '\nreturn wireEmailRow;');
     const el = () => ({ style: {}, value: '', textContent: '', disabled: false, focus() {}, select() {} });
     function panel(opts) {
       opts = opts || {};

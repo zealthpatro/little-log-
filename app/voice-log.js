@@ -158,6 +158,7 @@
   var PRIVACY = 'Cubby uses your phone’s built-in dictation. On some phones the audio is processed by the device maker. Your entry stays private to your circle.';
 
   function openVoiceLog() {
+    try { if (window.cubbyTrack) window.cubbyTrack('feature.used', { feature: 'voice', action: 'opened' }); } catch (_ut) {}   // the tool, never the words
     vs = { mode: 'input', text: '', intent: null, listening: false, err: '' };
     renderVoiceSheet();
     /* The mic does NOT start on open. It used to, so tapping "Say it" put a live microphone in the
