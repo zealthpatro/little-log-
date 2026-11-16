@@ -332,3 +332,56 @@ match. What is left then is outside the database: the chain head
 in each Monday digest. Compare it with the Access log tab: the entry the digest names must still be there,
 with the same hash. Entries written since the last digest have no outside copy, so they cannot be checked
 that way. Keep D1 write access to your own login, and treat any token with D1 edit like the dashboard itself.
+
+## Phase 2: the usage panels (after `cubby-usage` exists)
+
+Once you have created `cubby-usage` (spec §16 step 12), uncomment the `USAGE_DB` block in
+`workers/admin/wrangler.toml` with the same database id as the main `wrangler.toml`, and deploy the admin
+again. Nothing else changes, and no secret is added.
+
+- **What you see.** Until families are told what our team can see (phase 3), the overview's usage tiles,
+  "Saving and sync", "What people use", "Time in Cubby" and "Where they use it", the household page's
+  usage panels, and the Visits, Usage events, Sign-ins and Devices tabs show your own accounts only, the
+  uids in `INTERNAL_UIDS`. "Hide our own accounts" is ticked by default, so every one of them says
+  "Waiting for usage events" until you untick it. That is expected, not a fault.
+- **Why only yours.** One function, `usageScope` in `workers/admin/src/usage.mjs`, limits every read of a
+  table that names a person to `INTERNAL_UIDS`. Even if the main Worker stored a family's events by
+  mistake, no page, tab or CSV would show them (`admin-no-content` stages exactly that). The one exception
+  is by design and is said on the page: a pregnancy or trying tool's use has no person in it, so it joins
+  the overview's total (below).
+- **Read only.** The admin holds `USAGE_DB` through a handle that can only run a SELECT, and no admin code
+  writes it (`admin-access-log` section 5).
+- **Times.** Usage times are the family's own time zone. A visit that logged medicine or a health entry
+  shows the hour its visit started, everywhere, CSV included (F5): every event of that visit reads that
+  same hour, even one sent after the clock turned. A device's first and last seen are when a visit started,
+  shown exactly as that visit's own row shows it, never when its data arrived (an arrival is as good as the
+  minute of a dose); a device whose oldest visit is past the 90 days shows the day it was first seen, no
+  time. "Saving and sync" leaves the time out ("Working · the newest save went through") when the newest
+  write or failure arrived with a visit that logged a dose or a health entry.
+- **Order, and whole visits (F5).** Every list is sorted by the time it shows: by the family's own day and
+  hour, then, inside an hour, the rows with minutes, then the hour-only rows, as if at the start of the
+  hour. So a dose visit's place never narrows its minute, and a device's first and last seen are picked the
+  same way. A visit reaches the server in several batches, so the dose is judged over every stored row of
+  the visit, never the share inside a window: "Visits, last 48 hours" finds its visits by arrival, reads
+  each whole, and lists one while what it shows is inside the 48 hours (an hour-only visit leaves at the
+  start of an hour). Retention removes a visit oldest batch first, so a visit whose start is gone may have
+  lost its dose: it shows the hour only (so does an event the app sent from the background, outside any
+  visit), and one that kept its end (its length) is not shown at all until retention takes the rest. A Getting started screen is never shown per person, like a pregnancy or trying
+  screen, so a journey shared with nobody and none look alike (S41).
+- **A failed read is said.** A usage CSV whose read fails answers 503, "Usage events could not be read just
+  now, so nothing was exported.", with no file and no export in the log.
+- **Pregnancy and trying tools** are kept by the main Worker only as daily totals with no person or
+  household in them (§8.4), so the uses beside them on "What people use" count everyone the server stored,
+  not only our own accounts. The note under the table says so. Their households and people are counted
+  inside the scope, and they never appear on a per-person page.
+- **Not built yet.** The household page's per-person columns (Last seen, Opens Cubby on, Visits 7 days,
+  Time 7 days) and the People tab's Last seen and usage columns are "internal accounts from phase 2" in
+  spec §6.2 and §6.3, but they were not in this phase's list (§17). They wait, with the line that says they
+  switch on once families are told. Building them for our own accounts is a later change through
+  `usageScope`. The Devices tab's Reminders column shows each phone's newest notification answer, which the
+  main Worker records in `devices.push` from `push.permission`; a phone that never sent one reads "Not recorded".
+- **Every view and export is logged** as for the other tabs: `view_records` or `export_csv`, with the tab
+  and every household shown, written before anything is served.
+- **Check it.** Use Cubby for a day from each way in (iPhone app, home-screen app, Android app, browser
+  tab), open the dashboard, untick "Hide our own accounts", and look for your own visits on the Visits tab.
+  Then delete a test account in the app and check its rows are gone from the Devices tab.

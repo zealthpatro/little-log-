@@ -21,9 +21,10 @@ import { appendLog, recordDenied, tabChain, checkChain, actorId, brokenLine, MAN
 import { createTokenSource } from '../../shared/google-auth.mjs';
 import { runTick, readHouseholdFresh } from './directory.mjs';
 import { budgetState } from './meter.mjs';
-import { directory, overviewNumbers, canaryCheck, remindersCheck, digestCheck, newsletterFor, visibleHousehold, visiblePerson, allRows } from './data.mjs';
-import { overviewPage, householdPage, recordsPage, manualPage, messagePage, bands, peopleCells, householdCells, accessCells,
-  PEOPLE_COLUMNS, HOUSEHOLD_COLUMNS, ACCESS_COLUMNS } from './views.mjs';
+import { directory, overviewNumbers, canaryCheck, remindersCheck, digestCheck, newsletterFor, visibleHousehold, visiblePerson, allRows, RANGE_DAYS } from './data.mjs';
+import { overviewPage, householdPage, recordsPage, manualPage, messagePage, bands, peopleCells, householdCells, accessCells, usageCells,
+  PEOPLE_COLUMNS, HOUSEHOLD_COLUMNS, ACCESS_COLUMNS, USAGE_COLUMNS } from './views.mjs';
+import { usageOverview, usageHousehold, usageTab, usageCounts, USAGE_TABS } from './usage.mjs';
 import { dayFromKey, href } from './html.mjs';
 import { asset } from './assets.mjs';
 
@@ -40,6 +41,7 @@ const logFailed = (e) => (brokenSays(e)
   ? htmlResponse(messagePage('Access log broken', brokenSays(e), 503), 503)
   : htmlResponse(messagePage('Not shown', 'The access log could not be written just now, so nothing is shown. Try again in a minute.', 503), 503));
 const notFound = () => htmlResponse(messagePage('Not found', 'There is nothing here.', 404), 404);
+const notExported = () => htmlResponse(messagePage('Not exported', 'Usage events could not be read just now, so nothing was exported. Try again in a minute.', 503), 503);
 
 /* A browser loading a page AHEAD of a click (Chrome's speculation rules send Sec-Purpose: prefetch or
    prefetch;prerender, older browsers Purpose: prefetch, Firefox X-Moz: prefetch, Safari X-Purpose: preview).
@@ -97,7 +99,8 @@ export function createHandler(deps) {
     const dir = await directory(cfg);
     const numbers = overviewNumbers(dir, t, range, hideInternal);
     const [canary, reminders, digest] = await Promise.all([canaryCheck(cfg), remindersCheck(cfg, t), digestCheck(cfg, t, (d) => dayFromKey(d))]);
-    return htmlResponse(overviewPage({ range, hideInternal, numbers, checks: { canary, reminders, digest }, bands: await pageBands(cfg, t) }));
+    const usage = await usageOverview(cfg, t, numbers.from, RANGE_DAYS[range] || 7, hideInternal);
+    return htmlResponse(overviewPage({ range, hideInternal, numbers, usage, now: t, checks: { canary, reminders, digest }, bands: await pageBands(cfg, t) }));
   }
 
   /* ---- /household/<n> ---- */
@@ -134,7 +137,8 @@ export function createHandler(deps) {
     for (const p of h.members) {
       if (p.email && p.email_verified) newsletter.set(p.uid, await newsletterFor(cfg, p.email));
     }
-    return htmlResponse(householdPage({ h, fresh: data, newsletter, loggedAt: row.at, now: t, bands: await pageBands(cfg, t) }));
+    const usage = await usageHousehold(cfg, h, t);
+    return htmlResponse(householdPage({ h, fresh: data, newsletter, usage, loggedAt: row.at, now: t, bands: await pageBands(cfg, t) }));
   }
 
   /* ---- /records and /records.csv ---- */
@@ -172,10 +176,11 @@ export function createHandler(deps) {
 
   async function records(cfg, req, url, t, csv) {
     const tab = ['people', 'households', 'visits', 'events', 'signins', 'devices', 'access'].includes(url.searchParams.get('tab')) ? url.searchParams.get('tab') : 'people';
-    if (csv && !['people', 'households', 'access'].includes(tab)) return notFound();
-    const q = String(url.searchParams.get('q') || '').slice(0, 120);
-    const stage = STAGE_FILTERS.includes(url.searchParams.get('stage')) ? url.searchParams.get('stage') : 'any';
-    const view = SAVED_VIEWS.includes(url.searchParams.get('view')) ? url.searchParams.get('view') : '';
+    /* The usage tabs take no search, stage or saved view, so none is carried into the log or the page. */
+    const filtersApply = !USAGE_TABS.includes(tab);
+    const q = filtersApply ? String(url.searchParams.get('q') || '').slice(0, 120) : '';
+    const stage = filtersApply && STAGE_FILTERS.includes(url.searchParams.get('stage')) ? url.searchParams.get('stage') : 'any';
+    const view = filtersApply && SAVED_VIEWS.includes(url.searchParams.get('view')) ? url.searchParams.get('view') : '';
     const hideInternal = url.searchParams.get('own') !== 'show';
     const pageNo = Math.max(1, Math.min(100000, parseInt(url.searchParams.get('page') || '1', 10) || 1));
     const dir = await directory(cfg);
@@ -184,8 +189,14 @@ export function createHandler(deps) {
     if (view) detail.view = view;
     if (q.trim()) detail.searched = true;
 
-    let all = [], rows = [], hids = [], total = 0, chain = null, accessTop = 0;
-    if (tab === 'people' || tab === 'households') {
+    let all = [], rows = [], hids = [], total = 0, chain = null, accessTop = 0, usage = null;
+    if (USAGE_TABS.includes(tab)) {
+      /* Visits, Usage events, Sign-ins, Devices: our own accounts only in phase 2 (usage.mjs usageScope). The
+         page (or every row, for a CSV) is read first so the access log can record each household it shows. */
+      try { usage = await usageTab(cfg, tab, hideInternal, pageNo, csv); }
+      catch (e) { console.error('admin_usage_fail', code(e)); usage = { state: 'error', total: 0, rows: [] }; }
+      total = usage.total;
+    } else if (tab === 'people' || tab === 'households') {
       all = filtered(dir, tab, q, stage, view, hideInternal, t);
       total = all.length;
     } else if (tab === 'access') {
@@ -205,6 +216,12 @@ export function createHandler(deps) {
     const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
     const slice = csv || tab === 'access' ? all : all.slice((pageNo - 1) * PAGE_SIZE, pageNo * PAGE_SIZE);
     const byUid = new Map(dir.people.map((p) => [p.uid, p]));
+    /* A uid as the directory knows it: a name and a household number, never the uid or the household id. */
+    const who = (uid) => {
+      const p = byUid.get(uid);
+      const h = p && p.hid ? dir.byHid.get(p.hid) || null : null;
+      return { name: p ? (p.name || 'No name yet') : 'An account no longer here', h, byHid: (hid) => dir.byHid.get(hid) || null };
+    };
     const accessRows = (list) => list.map((r) => {
       const h = r.target_hid ? dir.byHid.get(r.target_hid) : null;
       const p = r.target_uid ? byUid.get(r.target_uid) : null;
@@ -217,14 +234,23 @@ export function createHandler(deps) {
       rows = slice.map((h) => ({ cells: householdCells(h, t), link: '/household/' + h.display_no, hid: h.hid }));
     } else if (tab === 'access') {
       rows = accessRows(slice);
+    } else if (usage) {
+      rows = usage.rows.map((r) => {
+        const w = who(r.uid);
+        const h = r.hid ? dir.byHid.get(r.hid) || null : w.h;
+        return { cells: usageCells(tab, r, who), link: h ? '/household/' + h.display_no : null, hid: h ? h.hid : null };
+      });
     }
-    hids = rows.map((r) => r.hid).filter(Boolean);
+    hids = [...new Set(rows.map((r) => r.hid).filter(Boolean))];
 
+    /* A usage read that failed is said, never served as a file of no rows that looks like "no events". No
+       file leaves, so no export is logged. */
+    if (csv && usage && usage.state === 'error') return notExported();
     if (csv) {
       detail.rows = rows.length;
       try { await logRow(cfg, req, t, 'export_csv', { detail }, hids); }
       catch (e) { console.error('admin_log_fail', code(e)); return logFailed(e); }
-      const cols = tab === 'people' ? PEOPLE_COLUMNS : (tab === 'households' ? HOUSEHOLD_COLUMNS : ACCESS_COLUMNS);
+      const cols = tab === 'people' ? PEOPLE_COLUMNS : (tab === 'households' ? HOUSEHOLD_COLUMNS : (USAGE_COLUMNS[tab] || ACCESS_COLUMNS));
       const body = [cols].concat(rows.map((r) => r.cells)).map((line) => line.map(csvCell).join(',')).join('\r\n') + '\r\n';
       return secure(new Response(body, { headers: {
         'content-type': 'text/csv; charset=utf-8',
@@ -238,12 +264,12 @@ export function createHandler(deps) {
       rows = accessRows(await allRows(cfg.db, 'SELECT * FROM access_log WHERE seq <= ? ORDER BY seq DESC LIMIT ?', accessTop, PAGE_SIZE));
       chain = await tabChain(cfg.db, t);
     }
-    const counts = {
+    const counts = Object.assign(await usageCounts(cfg, hideInternal), {
       people: dir.people.filter((p) => visiblePerson(p, dir.byHid, hideInternal)).length,
       households: dir.households.filter((h) => visibleHousehold(h, hideInternal)).length,
       access: tab === 'access' ? total : Number(((await cfg.db.prepare('SELECT COUNT(*) AS n FROM access_log').first()) || {}).n) || 0,
-    };
-    return htmlResponse(recordsPage({ tab, q, stage, view, hideInternal, rows, total, pageNo, pages, counts, chain, bands: await pageBands(cfg, t) }));
+    });
+    return htmlResponse(recordsPage({ tab, q, stage, view, hideInternal, rows, total, pageNo, pages, counts, chain, usage, bands: await pageBands(cfg, t) }));
   }
 
   /* ---- Record a manual access ---- */

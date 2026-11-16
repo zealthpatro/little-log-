@@ -10,7 +10,7 @@
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
-const { selfTest } = require('./helpers/admin-selftest');
+const { selfTest, controlRun } = require('./helpers/admin-selftest');
 
 const ROOT = process.env.ADMIN_ROOT || path.join(__dirname, '..');
 const imp = (rel) => import(pathToFileURL(path.join(ROOT, rel)).href);
@@ -33,15 +33,22 @@ function walk(dir, out) {
 
   console.log('\n1. every route that shows family data writes its row FIRST; a failed write shows nothing (S16)');
   const ROUTES = ['/', '/household/4', '/records', '/records?tab=households', '/records?tab=access', '/records.csv?tab=people',
-    '/records.csv?tab=households', '/records.csv?tab=access', '/manual-access?household=4'];
+    '/records.csv?tab=households', '/records.csv?tab=access', '/manual-access?household=4',
+    /* Phase 2: the usage panels and tabs, with cubby-usage holding our own rows (household 1 is the founder's). */
+    '/?own=show', '/household/1', '/records?tab=visits&own=show', '/records?tab=events&own=show', '/records?tab=signins&own=show',
+    '/records?tab=devices&own=show', '/records.csv?tab=visits&own=show', '/records.csv?tab=events&own=show', '/records.csv?tab=signins&own=show',
+    '/records.csv?tab=devices&own=show'];
+  /* What a usage page or CSV would show: none of it may leave when the log row cannot be written. */
+  const USAGE_SHOWN = ['iPhone app', 'v369', 'visit.started', 'Log a feed', 'Working · last write'];
   {
-    const fx = await F.buildFixture({});
+    const fx = await F.buildFixture({ usage: 'sample' });
     await fx.tickUntilDone();
     for (const p of ROUTES) {
       const before = fx.admin.raw.prepare('SELECT COUNT(*) AS n FROM access_log').get().n;
       const r = await fx.request(p);
       ok(p + ' answers 200 and leaves exactly one access-log row', r.status === 200 && fx.admin.raw.prepare('SELECT COUNT(*) AS n FROM access_log').get().n === before + 1, r.status);
     }
+    await fx.request('/household/4');
     const hh = fx.admin.raw.prepare("SELECT * FROM access_log WHERE action = 'view_household' ORDER BY seq DESC LIMIT 1").get();
     const body = await (await fx.request('/household/4')).text();
     const row = fx.admin.raw.prepare("SELECT at FROM access_log WHERE action = 'view_household' ORDER BY seq DESC LIMIT 1").get();
@@ -50,13 +57,16 @@ function walk(dir, out) {
   }
   {
     let failing = false;
-    const fx = await F.buildFixture({ adminHooks: { before: (sql) => { if (failing && /INSERT INTO access_log /.test(sql)) throw new Error('D1_ERROR: staged log failure'); } } });
+    const fx = await F.buildFixture({ usage: 'sample', adminHooks: { before: (sql) => { if (failing && /INSERT INTO access_log /.test(sql)) throw new Error('D1_ERROR: staged log failure'); } } });
     await fx.tickUntilDone();
+    const shownOk = (await (await fx.request('/records?tab=visits&own=show')).text()) + (await (await fx.request('/?own=show')).text()) + (await (await fx.request('/records.csv?tab=events&own=show')).text());
+    ok('(companion) with the log working, those pages DO show what the matcher looks for', USAGE_SHOWN.every((x) => shownOk.includes(x)), USAGE_SHOWN.filter((x) => !shownOk.includes(x)));
     failing = true;
     for (const p of ROUTES) {
       const r = await fx.request(p);
       const body = await r.text();
-      ok(p + ' with the log write failing: 503 and not one name', r.status === 503 && !NAMES.some((n) => body.includes(n)), r.status + ' ' + NAMES.filter((n) => body.includes(n)));
+      const seen = NAMES.concat(USAGE_SHOWN).filter((n) => body.includes(n));
+      ok(p + ' with the log write failing: 503 and not one name or usage row', r.status === 503 && seen.length === 0, r.status + ' ' + seen);
     }
     const n0 = fx.admin.raw.prepare('SELECT COUNT(*) AS n FROM access_log').get().n;
     const h0 = fx.admin.raw.prepare('SELECT COUNT(*) AS n FROM access_log_hids').get().n;
@@ -611,7 +621,14 @@ function walk(dir, out) {
 
   console.log('\n3. lists and exports record every household they showed (access_log_hids)');
   {
-    const fx = await F.buildFixture({});
+    const S = await imp('workers/admin/dev/sample.mjs');
+    /* The founder's own two weeks, plus one visit he made as a caregiver in Maya's household (testing her
+       invite), so a usage list can show two households. */
+    const fx = await F.buildFixture({ usage: async (d1) => {
+      await S.seedUsage(d1);
+      await S.ingestVisit(d1, { uid: S.FOUNDER_UID, hid: 'HHID_sample_maya', role: 'caregiver', tz: 'Asia/Dubai', device: 'd_samiphone001', platform: 'ios_app', app_version: 'v369', ua: S.USAGE_UA.ios },
+        S.NOW - 2 * 3600000, [[0, 'visit.started', { opened_from: 'link', start: 'cold' }], [6, 'feature.used', { feature: 'feed', action: 'logged' }], [30, 'visit.ended', { seconds: 30, reason: 'hidden' }]]);
+    } });
     await fx.tickUntilDone();
     const hidsOf = (seq) => fx.admin.raw.prepare('SELECT hid FROM access_log_hids WHERE seq = ? ORDER BY hid').all(seq).map((r) => r.hid);
     const last = () => fx.admin.raw.prepare('SELECT * FROM access_log ORDER BY seq DESC LIMIT 1').get();
@@ -633,6 +650,25 @@ function walk(dir, out) {
     ok('a search records THAT it searched, never what', JSON.parse(row.detail).searched === true && !/maya/i.test(row.detail), row.detail);
     await fx.request('/records?tab=households&stage=pregnant');
     ok('a filtered list records only what it showed', JSON.stringify(hidsOf(last().seq)) === JSON.stringify(['HHID_sample_leena']), hidsOf(last().seq));
+    /* Phase 2: the usage tabs, exactly as the existing tabs. */
+    const both = ['HHID_sample_founder', 'HHID_sample_maya'];
+    await fx.request('/records?tab=visits&own=show');
+    row = last();
+    ok('the Visits tab: view_records with its tab, and both households its page showed', row.action === 'view_records' && JSON.parse(row.detail).tab === 'visits' && JSON.stringify(hidsOf(row.seq)) === JSON.stringify(both), [row.detail, hidsOf(row.seq)]);
+    for (const tab of ['visits', 'events', 'signins', 'devices']) {
+      const body = await (await fx.request('/records.csv?tab=' + tab + '&own=show')).text();
+      row = last();
+      const lines = body.trim().split('\r\n').length - 1;
+      const want = tab === 'visits' || tab === 'events' ? both : ['HHID_sample_founder'];
+      ok('the ' + tab + ' CSV: export_csv with its tab, its ' + lines + ' rows, and every household in the file', row.action === 'export_csv' && JSON.parse(row.detail).tab === tab
+        && JSON.parse(row.detail).rows === lines && lines > 0 && JSON.stringify(hidsOf(row.seq)) === JSON.stringify(want), [row.detail, hidsOf(row.seq)]);
+    }
+    await fx.request('/records?tab=events&own=show&page=4');
+    row = last();
+    ok('a later page records the households on THAT page only (page 4 of events: the founder\'s)', JSON.parse(row.detail).page_no === 4 && JSON.stringify(hidsOf(row.seq)) === JSON.stringify(['HHID_sample_founder']), [row.detail, hidsOf(row.seq)]);
+    await fx.request('/records?tab=signins');
+    row = last();
+    ok('our own accounts hidden: the tab shows nothing, and records no household', row.action === 'view_records' && JSON.parse(row.detail).own === 'hidden' && hidsOf(row.seq).length === 0, [row.detail, hidsOf(row.seq)]);
   }
 
   console.log('\n4. detail holds fixed keys and fixed values only; the actor is a first name and a hash (S18)');
@@ -681,9 +717,41 @@ function walk(dir, out) {
       const re = /(games|newsletter|GAMES_DB|NEWSLETTER_DB|USAGE_DB)\b[^;]{0,40}\.prepare\(\s*(['"`])([^'"`]*)\2/g;
       let m;
       while ((m = re.exec(src))) if (/\b(INSERT|UPDATE|DELETE|REPLACE|CREATE|DROP|ALTER)\b/i.test(m[3])) writes.push(path.relative(ROOT, f) + ': ' + m[3].slice(0, 60));
-      if (/USAGE_DB/.test(src)) writes.push(path.relative(ROOT, f) + ': touches USAGE_DB in phase 1');
     }
     ok('nothing under workers/admin/ writes cubby-games, cubby-newsletter or cubby-usage', writes.length === 0, writes);
+    /* Phase 2: the admin READS cubby-usage. USAGE_DB is named in one place, config.mjs, which hands the rest of
+       the Worker only a read-only handle (usage.mjs readOnly); usage.mjs, where every usage read lives, holds
+       no SQL that writes; and the handle itself refuses a write at run time. */
+    const rel = (f) => path.relative(ROOT, f).split(path.sep).join('/');
+    const names = admin.filter((f) => /USAGE_DB/.test(code(f))).map(rel);
+    const cfgSrc = code(path.join(ROOT, 'workers', 'admin', 'src', 'config.mjs'));
+    ok('USAGE_DB is named only in config.mjs, and bound there through the read-only handle', JSON.stringify(names) === '["workers/admin/src/config.mjs"]'
+      && /usage: env\.USAGE_DB && typeof env\.USAGE_DB\.prepare === 'function' \? readOnly\(env\.USAGE_DB\) : null/.test(cfgSrc) && (cfgSrc.match(/USAGE_DB/g) || []).length === 3, names);
+    const SQL_WRITE = /\b(INSERT|UPDATE|DELETE|REPLACE\s+INTO|UPSERT|CREATE|DROP|ALTER)\b/i;
+    const literals = (src) => src.match(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g) || [];
+    const usageWrites = literals(code(path.join(ROOT, 'workers', 'admin', 'src', 'usage.mjs'))).filter((x) => SQL_WRITE.test(x));
+    ok('usage.mjs holds no SQL string that writes', usageWrites.length === 0, usageWrites);
+    ok('(companion) the same matcher finds a staged one', literals("x.prepare('DELETE FROM usage_events WHERE uid = ?'); y = \"SELECT 1\";").filter((x) => SQL_WRITE.test(x)).length === 1);
+    const Um = await imp('workers/admin/src/usage.mjs');
+    const D1 = await imp('workers/admin/dev/d1-sqlite.mjs');
+    const udb = D1.applySqlFile(D1.makeD1(), path.join(ROOT, 'schema', 'usage.sql'));
+    const ro = Um.readOnly(udb);
+    const STAGED = ['DELETE FROM usage_events', "INSERT INTO devices (device, uid, platform, os, browser, app_version, first_seen, last_seen) VALUES ('d', 'u', 'browser', 'o', 'b', 'v1', 1, 1)",
+      "UPDATE devices SET uid = 'x'", 'REPLACE INTO usage_meta (key) VALUES (1)', 'CREATE TABLE x (a)', 'DROP TABLE devices', 'PRAGMA writable_schema = 1',
+      'WITH x AS (SELECT 1) DELETE FROM usage_events', 'SELECT 1; DELETE FROM usage_events', ' select 1 ; update devices set uid = 1'];
+    const let_through = [];
+    for (const q of STAGED) { try { ro.prepare(q); let_through.push(q); } catch (e) { if (!/usage_read_only/.test(e.message)) let_through.push(q + ' (' + e.message + ')'); } }
+    ok('the read-only handle refuses every write (' + STAGED.length + ' staged) and has no batch or exec', let_through.length === 0 && ro.batch === undefined && ro.exec === undefined && Object.isFrozen(ro), let_through);
+    ok('(companion) and answers a SELECT', (await ro.prepare('SELECT COUNT(*) AS n FROM usage_events').bind().first()).n === 0);
+    const C = await imp('workers/admin/src/config.mjs');
+    const fxc = await F.buildFixture({ usage: 'sample' });
+    const cfg = C.readConfig(fxc.env).cfg;
+    let refused = false; try { cfg.usage.prepare('DELETE FROM usage_events'); } catch (e) { refused = /usage_read_only/.test(e.message); }
+    ok('what readConfig hands the Worker for USAGE_DB is that handle', refused && cfg.usage !== fxc.env.USAGE_DB && typeof cfg.usage.batch === 'undefined');
+    const before = fxc.usage.dump(), writesBefore = fxc.usage.log.length;
+    await fxc.tickUntilDone();
+    for (const p of ROUTES) await fxc.request(p);
+    ok('and every route above, run against cubby-usage, leaves it byte for byte as it was, with no write statement run', fxc.usage.dump() === before && fxc.usage.log.length === writesBefore, fxc.usage.log.slice(writesBefore, writesBefore + 3));
     const reads = admin.map(code).join('\n');
     ok('the newsletter is read by email_hash only, never email or unsub_token', /SELECT stage, status FROM subscribers WHERE email_hash = \?/.test(reads) && !/unsub_token|SELECT[^'"`]*\bemail\b[^'"`]*FROM subscribers/.test(reads));
   }
@@ -718,6 +786,13 @@ function walk(dir, out) {
   }
 
   if (process.argv.includes('--self-test') && !process.env.ADMIN_MUTANT) {
+    /* The control run itself can go red, on exactly the failure this suite swallows (section 6 catches a
+       worker.js that will not load): worker.js in the copy gains a module the copy does not hold. Without
+       the control, every mutant below would turn red for that and count as caught. */
+    console.log('\nself-test of the self-test: the control run on a copy that cannot load worker.js');
+    const broken = controlRun(__filename, (tmp) => fs.appendFileSync(path.join(tmp, 'worker.js'), "\nimport './workers/zz-not-in-the-copy/core.mjs';\n"));
+    ok('a copy whose worker.js cannot load fails the control (exit ' + broken.code + ', ' + (broken.failLine || 'no FAIL line').slice(0, 80) + '), though WRONG_REASON alone sees nothing in it',
+      !broken.passed && broken.code !== 0 && !broken.wrong && /worker\.js exposes the Monday digest/.test(broken.failLine), broken);
     selfTest(__filename, [
       { name: 'a failed log write is swallowed and data is served', file: 'workers/admin/src/index.mjs',
         find: "    try { row = await logRow(cfg, req, t, 'view_household', { target_hid: h.hid, detail: { page: 'household' } }, []); }\n    catch (e) { console.error('admin_log_fail', code(e)); return logFailed(e); }",
@@ -787,6 +862,15 @@ function walk(dir, out) {
       { name: 'the Monday digest drops the chain head', file: 'worker.js', find: 'const html = funnelDigestHtml(rows) + await adminChainSummary(env, now.getTime());', replace: 'const html = funnelDigestHtml(rows);' },
       { name: 'the main Worker writes ADMIN_DB', file: 'worker.js', find: "    const head = await env.ADMIN_DB.prepare('SELECT seq, hash FROM access_log ORDER BY seq DESC LIMIT 1').first();",
         replace: "    await env.ADMIN_DB.prepare('DELETE FROM admin_meta WHERE key = ?').bind('x').run();\n    const head = await env.ADMIN_DB.prepare('SELECT seq, hash FROM access_log ORDER BY seq DESC LIMIT 1').first();" },
+      { name: 'a usage CSV records no household', file: 'workers/admin/src/index.mjs', find: "return { cells: usageCells(tab, r, who), link: h ? '/household/' + h.display_no : null, hid: h ? h.hid : null };",
+        replace: "return { cells: usageCells(tab, r, who), link: h ? '/household/' + h.display_no : null, hid: null };" },
+      { name: 'a usage tab is served when its log row fails', file: 'workers/admin/src/index.mjs',
+        find: "    detail.page_no = pageNo;\n    try { await logRow(cfg, req, t, 'view_records', { detail }, hids); }\n    catch (e) { console.error('admin_log_fail', code(e)); return logFailed(e); }",
+        replace: "    detail.page_no = pageNo;\n    try { await logRow(cfg, req, t, 'view_records', { detail }, hids); }\n    catch (e) { if (!usage) { console.error('admin_log_fail', code(e)); return logFailed(e); } }" },
+      { name: 'config hands over USAGE_DB itself, not the read-only handle', file: 'workers/admin/src/config.mjs', find: '? readOnly(env.USAGE_DB) : null', replace: '? env.USAGE_DB : null' },
+      { name: 'the read-only handle lets a write through', file: 'workers/admin/src/usage.mjs', find: "if (typeof sql !== 'string' || !READ.test(sql) || WRITE.test(sql)) throw new Error('usage_read_only');", replace: "if (typeof sql !== 'string') throw new Error('usage_read_only');" },
+      { name: 'usage.mjs writes cubby-usage', file: 'workers/admin/src/usage.mjs', find: '  const total = Number((await one(db, c.sql, c.binds)).n) || 0;',
+        replace: "  await db.prepare('DELETE FROM usage_meta WHERE key = ?').bind('x').run();\n  const total = Number((await one(db, c.sql, c.binds)).n) || 0;" },
       { name: 'the admin writes cubby-games', file: 'workers/admin/src/data.mjs', find: "const rows = await allRows(cfg.games, \"SELECT key, value, updated_at FROM ops_state WHERE key IN ('push_last_run', 'push_daily')\");",
         replace: "await cfg.games.prepare('DELETE FROM ops_state WHERE key = ?').bind('x').run();\n    const rows = await allRows(cfg.games, \"SELECT key, value, updated_at FROM ops_state WHERE key IN ('push_last_run', 'push_daily')\");" },
     ], ok);

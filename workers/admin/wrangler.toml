@@ -50,6 +50,14 @@ binding = "NEWSLETTER_DB"
 database_name = "cubby-newsletter"
 database_id = "d0ee7337-8acf-4028-80bb-2e99a48db694"
 
+# cubby-usage (phase 2): the main Worker writes it, the admin only reads it (same read-only-by-code gate).
+# COMMENTED until the founder creates it (spec §16 step 12); paste the same id as the main wrangler.toml.
+# Unbound, every usage panel says "Waiting for usage events".
+# [[d1_databases]]
+# binding = "USAGE_DB"
+# database_name = "cubby-usage"
+# database_id = "<paste>"
+
 # The sign-in canary, through the main Worker's own fetch handler (a service binding, so no same-zone
 # fetch and no error 1042). The main Worker "cubby" already exists.
 [[services]]

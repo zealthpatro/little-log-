@@ -42,7 +42,11 @@ async function serveFixture(F, extra) {
   /* Port 0 lets the OS pick; ADMIN_UI_PORT pins it, for a machine that allows only a port range. */
   await new Promise((res) => srv.listen(Number(process.env.ADMIN_UI_PORT) || 0, '127.0.0.1', res));
   const port = srv.address().port;
-  fx = await F.buildFixture({ host: '127.0.0.1:' + port, origin: 'http://127.0.0.1:' + port, scheme: 'http', hostile: true });
+  /* cubby-usage holds the founder's own sample usage AND rows the server would refuse, hostile strings among
+     them (sample.mjs stageOddUsage): the usage tabs must keep them inert too. */
+  const S = await import(pathToFileURL(path.join(ROOT, 'workers', 'admin', 'dev', 'sample.mjs')).href);
+  fx = await F.buildFixture({ host: '127.0.0.1:' + port, origin: 'http://127.0.0.1:' + port, scheme: 'http', hostile: true,
+    usage: async (d1) => { await S.seedUsage(d1); S.stageOddUsage(d1); } });
   const o = [console.log, console.error]; console.log = () => {}; console.error = () => {};
   try { await fx.tickUntilDone(); } finally { [console.log, console.error] = o; }
   return { fx, srv, base: 'http://127.0.0.1:' + port };
@@ -116,6 +120,11 @@ async function inspect(browser, url, width) {
       ['records-access', '/records?tab=access'], ['records-visits', '/records?tab=visits'],
       ['records-saved-view', '/records?tab=households&view=invite_waiting&own=show'],
       ['manual-access', '/manual-access?household=' + no('HHID_sample_maya')],
+      /* Phase 2: the usage panels and tabs over our own rows (and the refused, hostile ones). */
+      ['overview-30', '/?own=show&range=30'], ['household-founder', '/household/' + no('HHID_sample_founder')],
+      ['records-visits-own', '/records?tab=visits&own=show'], ['records-events-own', '/records?tab=events&own=show'],
+      ['records-events-own-p2', '/records?tab=events&own=show&page=2'],
+      ['records-signins-own', '/records?tab=signins&own=show'], ['records-devices-own', '/records?tab=devices&own=show'],
     ];
     if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
     for (const [name, p] of SCREENS) {

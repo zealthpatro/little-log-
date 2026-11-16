@@ -3,6 +3,10 @@
  *
  *   PORT=7721 node workers/admin/dev/preview.mjs            (ports 7701-7739 on this machine)
  *   PORT=7721 node workers/admin/dev/preview.mjs --hostile  (adds a household with a hostile name)
+ *   PORT=7721 node workers/admin/dev/preview.mjs --no-usage (USAGE_DB unbound: every usage panel waits)
+ *
+ * By default cubby-usage holds the founder's own two weeks of sample usage (sample.mjs seedUsage), as phase
+ * 2 runs. Untick "Hide our own accounts" on the overview to see it.
  *
  * Refuses to start if any production secret or binding is in the environment, or if asked to serve the
  * production hostname (fixture.mjs). Each request is signed with the fixture's own Access key on the way
@@ -13,7 +17,8 @@ import { buildFixture } from './fixture.mjs';
 
 const PORT = Number(process.env.PORT || 7721);
 const host = '127.0.0.1:' + PORT;
-const fx = await buildFixture({ host, origin: 'http://' + host, scheme: 'http', processEnv: process.env, hostile: process.argv.includes('--hostile') });
+const fx = await buildFixture({ host, origin: 'http://' + host, scheme: 'http', processEnv: process.env, hostile: process.argv.includes('--hostile'),
+  usage: process.argv.includes('--no-usage') ? undefined : 'sample' });
 await fx.tickUntilDone();
 
 http.createServer(async (req, res) => {

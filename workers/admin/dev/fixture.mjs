@@ -21,11 +21,12 @@ import { fileURLToPath } from 'node:url';
 import { createHandler } from '../src/index.mjs';
 import { makeD1, applySqlFile } from './d1-sqlite.mjs';
 import { createFakeGoogle } from './fake-google.mjs';
-import { sampleWorld, seedGames, seedNewsletter, NOW, FOUNDER_UID } from './sample.mjs';
+import { sampleWorld, seedGames, seedNewsletter, seedUsage, NOW, FOUNDER_UID } from './sample.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.join(HERE, '..', '..', '..');
 export const MIGRATION = path.join(HERE, '..', 'migrations', '0001_init.sql');
+export const USAGE_SCHEMA = path.join(ROOT, 'schema', 'usage.sql');
 export const PRODUCTION_HOST = 'admin.little-cubby.com';
 export const PRODUCTION_NAMES = Object.freeze(['ACCESS_AUD', 'ACCESS_TEAM_DOMAIN', 'ADMIN_PEOPLE', 'FIREBASE_READER_SA',
   'INTERNAL_UIDS', 'MAIN', 'WRITES', 'GAMES_DB', 'NEWSLETTER_DB', 'USAGE_DB']);
@@ -74,6 +75,15 @@ export async function buildFixture(opts) {
   const admin = applySqlFile(makeD1({ hooks: opts.adminHooks }), MIGRATION);
   const games = seedGames(makeD1(), { digestLast: opts.digestLast });
   const newsletter = await seedNewsletter(makeD1(), fs.readFileSync(path.join(ROOT, 'schema', 'newsletter.sql'), 'utf8'));
+  /* cubby-usage (phase 2), as real SQLite with the real schema. opts.usage: undefined leaves USAGE_DB
+     unbound (as production is until the founder creates it); 'empty' binds it with no rows; 'sample' seeds
+     the founder's own two weeks through the main Worker's ingest(); a function seeds it however a test needs. */
+  let usage = null;
+  if (opts.usage) {
+    usage = applySqlFile(makeD1({ hooks: opts.usageHooks }), USAGE_SCHEMA);
+    if (opts.usage === 'sample') await seedUsage(usage);
+    else if (typeof opts.usage === 'function') await opts.usage(usage);
+  }
   const canary = opts.canary || { ok: true, ageSeconds: 360 };
   const env = Object.assign({
     ACCESS_AUD: AUD,
@@ -83,7 +93,7 @@ export async function buildFixture(opts) {
       client_email: 'cubby-admin-reader@' + world.projectId + '.iam.gserviceaccount.com', private_key: sa.privateKey }),
     INTERNAL_UIDS: FOUNDER_UID,
     ADMIN_DAILY_READ_BUDGET: String(opts.budget || 8000),
-    ADMIN_DB: admin, GAMES_DB: games, NEWSLETTER_DB: newsletter,
+    ADMIN_DB: admin, GAMES_DB: games, NEWSLETTER_DB: newsletter, USAGE_DB: usage || undefined,
     MAIN: { fetch: async () => new Response(JSON.stringify(canary), { status: canary.ok ? 200 : 503, headers: { 'content-type': 'application/json' } }) },
   }, opts.env || {});
   for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k];
@@ -109,6 +119,6 @@ export async function buildFixture(opts) {
     }
     return last;
   }
-  return { env, handler, fake, admin, games, newsletter, world, key, certKeys, token, request, tick, tickUntilDone,
+  return { env, handler, fake, admin, games, newsletter, usage, world, key, certKeys, token, request, tick, tickUntilDone,
     setNow: (t) => { clock = t; }, now, base };
 }

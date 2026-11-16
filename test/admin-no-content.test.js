@@ -9,6 +9,14 @@
  * token as a pendingLinks key, a forged users.email, push tokens, the loss archive, an entry time at a
  * recognisable minute. Not one may reach D1, a response or a log line. The real Firestore's own masking
  * is proven separately on the emulator (test/admin-read-emulator.test.js).
+ *
+ * Phase 2 (§6, §7): cubby-usage. Before families are told, no per-person activity about a family is shown:
+ * a family member's usage rows, staged as the server would store them, change no page, tab or CSV at all,
+ * and every read that names a person carries the one scope (usage.mjs usageScope). Her pregnancy or trying
+ * use is the one exception, by design: those tools are kept only as daily totals with no person in them, so
+ * her use joins the overview's total (and the note there says so), and nothing else moves. Rows the server
+ * would refuse (unknown events, props outside the allowlist, hostile strings) never reach a page as
+ * themselves (§7), and a hostile name on one of our own accounts stays text on every usage tab and CSV (§8).
  */
 'use strict';
 const path = require('path');
@@ -45,7 +53,8 @@ async function everyPage(fx) {
   const paths = ['/', '/?own=show', '/?range=today', '/?range=90&own=show'];
   for (const n of nos) paths.push('/household/' + n, '/manual-access?household=' + n);
   for (const tab of ['people', 'households', 'visits', 'events', 'signins', 'devices', 'access']) paths.push('/records?tab=' + tab + '&own=show');
-  for (const tab of ['people', 'households', 'access']) paths.push('/records.csv?tab=' + tab + '&own=show');
+  for (const tab of ['people', 'households', 'visits', 'events', 'signins', 'devices', 'access']) paths.push('/records.csv?tab=' + tab + '&own=show');
+  for (const tab of ['visits', 'events', 'signins', 'devices']) paths.push('/records?tab=' + tab, '/records?tab=' + tab + '&own=show&page=2');
   for (const v of ['no_first_entry', 'one_logging', 'invite_waiting']) paths.push('/records?tab=households&own=show&view=' + v);
   paths.push('/records?tab=people&own=show&stage=pregnant', '/records?tab=people&own=show&q=maya');
   for (const p of paths) {
@@ -293,6 +302,176 @@ async function everyPage(fx) {
     ok('and the meter counts every read billed, never fewer (' + m.used + ' = 7980 + ' + billed + ')', m.used === 7980 + billed, [m, billed]);
   }
 
+  console.log('\n6. phase 2: no per-person activity about a family, only our own accounts, through one helper (S45, §17, §8.4)');
+  {
+    const U = await imp('workers/admin/src/usage.mjs');
+    const visit = (secs, extra) => [[0, 'visit.started', { opened_from: 'icon', start: 'cold' }]].concat(extra || []).concat([[secs, 'visit.ended', { seconds: secs, reason: 'hidden' }]]);
+    /* Maya (a family, not ours), as the server WOULD store her if it measured her: mode "on", notice seen.
+       Every row she leaves carries a marker that no other row has. No pregnancy or trying tool: those are
+       kept only as daily totals with no person in them, which nobody owns (§8.4). */
+    const MAYA = { uid: 'UID_sample_maya', hid: 'HHID_sample_maya', tz: 'Asia/Dubai', device: 'd_zzstranger01', platform: 'android_app',
+      app_version: 'v7731', native_version: '77.31', ua: S.USAGE_UA.android };
+    const MINE = { uid: S.FOUNDER_UID, hid: 'HHID_sample_founder', tz: 'Asia/Dubai', device: 'd_zzmine000001', platform: 'browser', app_version: 'v7730', ua: S.USAGE_UA.mac, visit: 'v_zzmine01' };
+    const HERS = ['v7731', 'v7700', '77.31', '1h 12m', 'd_zzstranger', 'v_zzstr'];
+    const OURS = ['v7730', 'v_zzmine01', '1h 30m'];
+    const stageMaya = async (d1) => {
+      for (let i = 0; i < 6; i++) {
+        await S.ingestVisit(d1, Object.assign({ visit: 'v_zzstr00' + i }, MAYA), S.NOW - (6 - i) * 7 * 3600000, visit(4321, [
+          [5, 'screen.viewed', { screen: 'photos' }], [9, 'feature.used', { feature: 'feed', action: 'logged' }],
+          [12, 'save.failed', { error: 'unavailable', retries: 3, offline: 'yes' }],
+          [20, 'signin.attempted', { method: 'email_code', step: 'verified', outcome: 'failed', error: 'wrong_code', attempt: 2, storage: 'browser' }],
+          [30, 'app.updated', { from_version: 'v7700', to_version: 'v7731' }]]), { mode: 'on', notice: 'n1', internal: '' });
+      }
+    };
+    const seedOurs = async (d1) => { await S.seedUsage(d1); await S.ingestVisit(d1, MINE, S.NOW - 3 * 3600000, visit(5432, [[7, 'feature.used', { feature: 'sleep', action: 'logged' }]])); };
+    const stmts = { a: [], b: [] };
+    const hook = (k) => ({ before: (sql, args) => { stmts[k].push({ sql, args }); } });
+    const a = await F.buildFixture({ usage: async (d1) => { await seedOurs(d1); await stageMaya(d1); }, usageHooks: hook('a') });
+    const b = await F.buildFixture({ usage: seedOurs, usageHooks: hook('b') });
+    const mayaRows = a.usage.raw.prepare("SELECT COUNT(*) AS n FROM usage_events WHERE uid = 'UID_sample_maya'").get().n;
+    ok('staged: ' + mayaRows + ' usage events of hers, with her household stamped, her daily totals and her device', mayaRows === 42
+      && a.usage.raw.prepare("SELECT COUNT(*) AS n FROM usage_daily WHERE uid = 'UID_sample_maya' AND hid = 'HHID_sample_maya'").get().n > 0
+      && a.usage.raw.prepare("SELECT COUNT(*) AS n FROM devices WHERE uid = 'UID_sample_maya'").get().n === 1, mayaRows);
+    let pa = [], pb = [];
+    stmts.a.length = 0; stmts.b.length = 0;
+    await captured(async () => { await a.tickUntilDone(); await b.tickUntilDone(); pa = await everyPage(a); pb = await everyPage(b); });
+    const norm = (x) => x.replace(/datetime="[^"]*"/g, '').replace(/<time[^>]*>[^<]*<\/time>/g, '');
+    const differ = pa.filter((x, i) => norm(x.body) !== norm(pb[i].body) || x.status !== pb[i].status).map((x) => x.p);
+    ok('with her rows in cubby-usage, every page, tab and CSV reads exactly as without them (' + pa.length + ' answers)', differ.length === 0 && pa.length === pb.length, differ.slice(0, 8));
+    const found = (marks, pages) => marks.filter((z) => pages.some((x) => x.body.includes(z)));
+    ok('none of her markers (version, app build, a 1h 12m visit, device, visit ids) appears anywhere', found(HERS, pa).length === 0, found(HERS, pa));
+    ok('(companion) the same matcher finds our own staged markers on those pages', found(OURS, pa).length === OURS.length, found(OURS, pa));
+    const mayaNo = a.admin.raw.prepare("SELECT display_no FROM dir_households WHERE hid = 'HHID_sample_maya'").get().display_no;
+    const mp = (pa.find((x) => x.p === '/household/' + mayaNo) || {}).body || '';
+    ok('her household page waits on failed saves and sign-in problems, though she has 6 of each', /Failed saves, 7 days<\/span><span class="sub">Waiting for usage events</.test(mp) && /Sign-in problems, 7 days<\/span><span class="sub">Waiting for usage events</.test(mp));
+    /* Every statement that reads a table naming a person carries the scope, bound to our own uids only. */
+    const PERSON = /FROM (usage_events|usage_daily|devices)\b/;
+    const unscoped = stmts.a.filter((x) => PERSON.test(x.sql) && !(/\b(d\.)?uid IN \(\?(, \?)*\)/.test(x.sql) && x.args.includes(S.FOUNDER_UID)) && !/WHERE uid = '' AND hid = ''/.test(x.sql));
+    ok('every read of usage_events, usage_daily or devices (' + stmts.a.filter((x) => PERSON.test(x.sql)).length + ') is limited to our own uids by the one scope', stmts.a.length > 50 && unscoped.length === 0, unscoped.slice(0, 2).map((x) => x.sql.slice(0, 160)));
+    ok('and not one of them is bound to her uid', !stmts.a.some((x) => x.args.includes('UID_sample_maya')));
+    const totalsOnly = stmts.a.filter((x) => PERSON.test(x.sql) && /WHERE uid = '' AND hid = ''/.test(x.sql));
+    ok('the one read without a person is the pregnancy-and-trying totals (uid and household empty)', totalsOnly.length > 0 && totalsOnly.every((x) => /metric = 'feature'/.test(x.sql) && /key IN \(/.test(x.sql)), totalsOnly.length);
+    /* The helper itself. */
+    const cfg = (internal, usage) => ({ usage: usage === false ? null : {}, internal: new Set(internal) });
+    const sc = U.usageScope(cfg([S.FOUNDER_UID, 'x y', 'UID_two']), false);
+    ok('usageScope: our own uids (well formed), sorted', JSON.stringify(sc.uids) === JSON.stringify([S.FOUNDER_UID, 'UID_two']) && sc.where('uid') === 'uid IN (?, ?)' && sc.has(S.FOUNDER_UID) && !sc.has('UID_sample_maya'));
+    ok('usageScope: nobody while "Hide our own accounts" is ticked, when nothing is tagged, or with cubby-usage unbound',
+      U.usageScope(cfg([S.FOUNDER_UID]), true).empty && U.usageScope(cfg([]), false).empty && U.usageScope(cfg([S.FOUNDER_UID], false), false).empty);
+    /* JOURNEY_KEYS: totals only, never per person. */
+    const JOURNEY = /\b(pregnancy_week|kicks|contractions|cycle)\b|Pregnancy week|Kick counts|Contraction|\bCycle\b/;
+    const perPerson = pa.filter((x) => /^\/(household\/|records(\.csv)?\?tab=(visits|events|signins|devices))/.test(x.p));
+    const named = perPerson.filter((x) => JOURNEY.test(x.body)).map((x) => x.p);
+    ok('no per-person view or CSV names a pregnancy or trying tool (' + perPerson.length + ' answers), though our rows hold one', named.length === 0
+      && a.usage.raw.prepare("SELECT COUNT(*) AS n FROM usage_events WHERE uid = ? AND props LIKE '%pregnancy_week%'").get(S.FOUNDER_UID).n > 0, named);
+    ok('(companion) the same matcher finds it where it belongs: the overview\'s totals', JOURNEY.test((pa.find((x) => x.p === '/?own=show') || {}).body || ''));
+    /* Her kick count. Pregnancy and trying tools are stored as daily totals with no person in them (§8.4), so
+       her use joins the overview's total, which the note beside it says counts everyone the server stored;
+       her household and she are not counted, and no other page, tab or CSV moves. */
+    const kicks = async (d1) => { await seedOurs(d1); await S.ingestVisit(d1, Object.assign({ visit: 'v_zzkick01' }, MAYA), S.NOW - 2 * 3600000,
+      visit(60, [[5, 'screen.viewed', { screen: 'kicks' }], [9, 'feature.used', { feature: 'kicks', action: 'logged' }]]), { mode: 'on', notice: 'n1', internal: '' }); };
+    const c = await F.buildFixture({ usage: kicks });
+    let pc = [];
+    await captured(async () => { await c.tickUntilDone(); pc = await everyPage(c); });
+    ok('staged: her kick count is a total with no person or household in it', c.usage.raw.prepare("SELECT SUM(n) AS n FROM usage_daily WHERE uid = '' AND hid = '' AND metric = 'feature' AND key = 'kicks'").get().n === 1);
+    const changed = pc.filter((x, i) => norm(x.body) !== norm(pb[i].body) || x.status !== pb[i].status).map((x) => x.p);
+    ok('her kick count changes only the overview with our own accounts shown (' + pc.length + ' answers)', JSON.stringify(changed) === JSON.stringify(['/?own=show', '/?range=90&own=show']), changed);
+    const cut = (body) => { const i = body.indexOf('>What people use</h2>'); return i < 0 ? body : body.slice(0, i) + body.slice(body.indexOf('</section>', i)); };
+    ok('and on those two pages, only the "What people use" card', changed.length === 2 && changed.every((p) => norm(cut(pc.find((x) => x.p === p).body)) === norm(cut(pb.find((x) => x.p === p).body))));
+    const ov = (pc.find((x) => x.p === '/?own=show') || {}).body || '';
+    const kickRow = (/<tr><td class="strong">Kick counts \*<\/td><td>([^<]*)<\/td><td>([^<]*)<\/td><td>([^<]*)<\/td>/.exec(ov) || []).slice(1);
+    ok('her use is in the total, but neither her household nor she is counted: "Kick counts *" 0, 0, 1', JSON.stringify(kickRow) === '["0","0","1"]', kickRow);
+    ok('and the note beside it says those uses are not limited to our own accounts', ov.includes('so their uses count everyone the server stored, not only our own accounts.'), (ov.match(/<p class="note">\*[^<]*/) || [''])[0]);
+  }
+
+  console.log('\n7. rows the server would refuse never reach a page as themselves (S14, S23): allowlisted values only, fixed labels');
+  {
+    const V = await imp('workers/admin/src/views.mjs');
+    const core = await imp('workers/usage/core.mjs');
+    const fx = await F.buildFixture({ usage: async (d1) => { await S.seedUsage(d1); S.stageOddUsage(d1); } });
+    let pages = [];
+    await captured(async () => { await fx.tickUntilDone(); pages = await everyPage(fx); });
+    const leaks = [];
+    for (const z of S.ZZ.concat(['onerror', '__pwned', 'ZZ/Hostile'])) for (const p of pages) if (p.body.includes(z)) leaks.push(z + ' in ' + p.p);
+    ok('not one planted string, hostile or otherwise, reaches a page or CSV (' + pages.length + ' answers)', leaks.length === 0, leaks.slice(0, 8));
+    const ev = (pages.find((x) => x.p === '/records.csv?tab=events&own=show') || {}).body || '';
+    ok('(companion) the odd rows ARE listed, their unknown parts replaced: an "Unknown event", and "action: logged" alone', /"Unknown event"/.test(ev) && /"action: logged"/.test(ev) && (ev.match(/v_zzodd001/g) || []).length === 6, (ev.match(/[^\n]*v_zzodd001[^\n]*/g) || []).slice(0, 4));
+    const dv = (pages.find((x) => x.p === '/records.csv?tab=devices&own=show') || {}).body || '';
+    ok('(companion) the odd device is listed as "Other", "Other", "Unknown", with no app build and "Not recorded"', /"Sam","Browser tab","Other","Other","Unknown","","Not recorded"/.test(dv), dv.split('\r\n').slice(0, 7));
+    const want = (list, map) => list.filter((k) => !Object.prototype.hasOwnProperty.call(map || {}, k));
+    const missing = [].concat(want(core.SCREENS, V.SCREEN_LABEL), want(core.FEATURES, V.FEATURE_LABEL), want(core.PLATFORMS, V.PLATFORM_LABEL));
+    ok('every allowlisted screen, feature and platform has a fixed label, so none is ever spelled from its own string', missing.length === 0, missing);
+  }
+
+  console.log('\n8. a hostile name on one of our own accounts stays text on every usage tab, page and CSV (S14)');
+  {
+    /* The hostile household made ours, so its names reach the usage tabs at all: one member is named with
+       markup, the other with a spreadsheet formula (workers/admin/dev/sample.mjs). */
+    const OURS8 = [S.FOUNDER_UID, 'UID_sample_hostile', 'UID_sample_hostile2'].join(',');
+    const member = (uid, device, role) => ({ uid, hid: 'HHID_sample_hostile', role, tz: 'Asia/Dubai', device, platform: 'browser', app_version: 'v369', ua: S.USAGE_UA.mac });
+    const steps = [[0, 'visit.started', { opened_from: 'icon', start: 'cold' }],
+      [4, 'signin.attempted', { method: 'google', step: 'signed_in', outcome: 'succeeded', error: 'none', attempt: 1, storage: 'browser' }],
+      [9, 'feature.used', { feature: 'feed', action: 'logged' }], [30, 'visit.ended', { seconds: 30, reason: 'hidden' }]];
+    const fx = await F.buildFixture({ hostile: true, env: { INTERNAL_UIDS: OURS8 }, usage: async (d1) => {
+      await S.ingestVisit(d1, member('UID_sample_hostile', 'd_zzhostile001', 'owner'), S.NOW - 3 * 3600000, steps, { internal: OURS8 });
+      await S.ingestVisit(d1, member('UID_sample_hostile2', 'd_zzhostile002', 'caregiver'), S.NOW - 2 * 3600000, steps, { internal: OURS8 });
+    } });
+    const pages = [];
+    await captured(async () => {
+      await fx.tickUntilDone();
+      const no = fx.admin.raw.prepare("SELECT display_no FROM dir_households WHERE hid = 'HHID_sample_hostile'").get().display_no;
+      const paths = ['/household/' + no];
+      for (const tab of ['visits', 'events', 'signins', 'devices']) paths.push('/records?tab=' + tab + '&own=show', '/records.csv?tab=' + tab + '&own=show');
+      for (const p of paths) { const r = await fx.request(p); pages.push({ p, status: r.status, body: await r.text() }); }
+    });
+    const htmlPages = pages.filter((x) => !x.p.startsWith('/records.csv'));
+    const csvs = pages.filter((x) => x.p.startsWith('/records.csv'));
+    const RAW = /<img src=x|<script>window\.__pwned/;
+    ok('no page carries her name as markup (' + htmlPages.length + ' pages: the household and the four usage tabs)', htmlPages.length === 5 && htmlPages.every((x) => x.status === 200 && !RAW.test(x.body)),
+      htmlPages.filter((x) => RAW.test(x.body)).map((x) => x.p));
+    const ESC = '&lt;img src=x onerror=&quot;window.__pwned=1&quot;&gt;';
+    const nameCells = (body) => (body.match(/<td[^>]*>(?:<a [^>]*>)?[^<]*&lt;img src=x[^<]*/g) || []).length;
+    ok('(companion) her name IS in each usage tab\'s rows, and on the household page\'s visits, as text', htmlPages.every((x) => x.body.includes(ESC))
+      && htmlPages.filter((x) => x.p.startsWith('/records?')).every((x) => nameCells(x.body) >= 1)
+      && /<ul class="visits">[\s\S]*?&lt;img src=x[\s\S]*?<\/ul>/.test(htmlPages[0].body), htmlPages.map((x) => x.p + ' ' + nameCells(x.body)));
+    const asCsv = (s) => '"' + String(s).replace(/"/g, '""') + '"';
+    ok('in every usage CSV the formula name leaves defused, \'=HYPERLINK("http://x"), and no cell starts as a formula', csvs.length === 4
+      && csvs.every((x) => x.status === 200 && x.body.includes(asCsv('\'=HYPERLINK("http://x")')) && !/(^|,)"[=+\-@\t\r]/m.test(x.body)), csvs.map((x) => x.p));
+    const stored = fx.admin.raw.prepare("SELECT name FROM dir_people WHERE uid = 'UID_sample_hostile'").get().name;
+    ok('(companion) and the markup name leaves as the plain text the directory holds, in every usage CSV', /^<img src=x onerror=/.test(stored) && csvs.every((x) => x.body.includes(asCsv(stored))), stored);
+  }
+
+  console.log('\n9. a journey shared with nobody leaves no trace per person (S41): her home screen and "not started" look alike');
+  {
+    /* A no-baby owner's home paints as her journey (pregnancy week, or cycle when trying) whether or not she
+       shares it, and as Getting started when she has none (app/index.html usageScreen). One of our own
+       accounts makes the same visit three ways: on the pregnancy week, on Getting started, and (the
+       companion) on Settings. The first two must read the same on every page, tab and CSV. */
+    const ME = { uid: S.FOUNDER_UID, hid: 'HHID_sample_founder', tz: 'Asia/Dubai', device: 'd_zzjourney001', platform: 'ios_app', app_version: 'v369', ua: S.USAGE_UA.ios, visit: 'v_zzjour01' };
+    const homeVisit = (screen) => async (d1) => {
+      await S.ingestVisit(d1, ME, S.NOW - 3 * 3600000, [[0, 'visit.started', { opened_from: 'icon', start: 'cold' }], [1, 'screen.viewed', { screen }],
+        [130, 'visit.ended', { seconds: 130, reason: 'hidden' }]]);
+    };
+    const pagesFor = async (screen) => {
+      const fx = await F.buildFixture({ usage: homeVisit(screen) });
+      let pages = [];
+      await captured(async () => { await fx.tickUntilDone(); pages = await everyPage(fx); });
+      return pages;
+    };
+    const norm = (x) => x.replace(/datetime="[^"]*"/g, '').replace(/<time[^>]*>[^<]*<\/time>/g, '');
+    const differ = (a, b) => a.filter((x, i) => norm(x.body) !== norm(b[i].body) || x.status !== b[i].status).map((x) => x.p);
+    const journey = await pagesFor('pregnancy_week'), notStarted = await pagesFor('onboarding'), settings = await pagesFor('settings');
+    const d = differ(journey, notStarted);
+    ok('her visit on the pregnancy week and the same visit on Getting started read the same on every page, tab and CSV (' + journey.length + ' answers)', d.length === 0 && journey.length === notStarted.length, d);
+    const ev = (pages) => (pages.find((x) => x.p === '/records.csv?tab=events&own=show') || {}).body || '';
+    ok('and neither one names its screen: no "Getting started", no "onboarding", no pregnancy week, on any usage tab or the household page',
+      ![...journey, ...notStarted].some((x) => /^\/(household\/|records(\.csv)?\?tab=(visits|events|signins|devices))/.test(x.p) && /Getting started|onboarding|pregnancy_week|Pregnancy week/.test(x.body)),
+      notStarted.filter((x) => /Getting started|onboarding/.test(x.body)).map((x) => x.p));
+    const c = differ(journey, settings);
+    ok('(companion) the same visit on Settings DOES read differently, where a screen is shown: the Visits tab and its CSV, Usage events and its CSV, the household page',
+      ['/records?tab=visits&own=show', '/records.csv?tab=visits&own=show', '/records?tab=events&own=show', '/records.csv?tab=events&own=show'].every((p) => c.includes(p))
+      && c.some((p) => p.startsWith('/household/')) && /screen: settings/.test(ev(settings)), c);
+  }
+
   if (process.argv.includes('--self-test') && !process.env.ADMIN_MUTANT) {
     selfTest(__filename, [
       { name: 'the reducer keeps the baby\'s name', file: 'workers/admin/src/reduce.mjs', find: 'babyDetail: babies.length ? babyAgeLabel(youngest, now) : null,', replace: 'babyDetail: babies.length ? String(babies[0].name) : null,' },
@@ -311,6 +490,32 @@ async function everyPage(fx) {
       { name: 'the hold field is named in a second function', file: 'workers/admin/src/peek.mjs', find: null, replace: "export const peek = () => 'app.lossHolding';\n" },
       { name: 'invitee names are kept', file: 'workers/admin/src/reduce.mjs', find: "invited.push({ kind: 'email', relationship: cleanText(v && v.relationship, 40),", replace: "invited.push({ kind: 'email', relationship: cleanText(v && v.name, 40)," },
       { name: 'a forbidden field joins the allowlist', file: 'workers/shared/fs-read.mjs', find: "'push.quietStart', 'push.quietEnd', 'teamNotes', 'privacyNoticeSeen'] },", replace: "'push.quietStart', 'push.quietEnd', 'teamNotes', 'privacyNoticeSeen', 'email'] }," },
+      /* Phase 2: the one helper, and what stands behind it. */
+      { name: 'the usage scope admits everyone', file: ['workers/admin/src/usage.mjs', 'workers/admin/src/usage.mjs'],
+        find: ["has: (u) => uids.includes(u),", "where: (col) => col + ' IN (' + uids.map(() => '?').join(', ') + ')',"],
+        replace: ['has: () => true,', "where: (col) => '(' + col + ' IS NOT NULL OR ' + col + ' IN (' + uids.map(() => '?').join(', ') + '))',"] },
+      { name: 'one read forgets the scope (households measured)', file: 'workers/admin/src/usage.mjs',
+        find: "const measured = await one(db, 'SELECT COUNT(DISTINCT hid) AS n FROM usage_events WHERE hid IS NOT NULL AND ' + S, U);",
+        replace: "const measured = await one(db, 'SELECT COUNT(DISTINCT hid) AS n FROM usage_events WHERE hid IS NOT NULL', []);" },
+      { name: 'a pregnancy screen is shown per person', file: 'workers/admin/src/usage.mjs', find: 'export const okScreen = (s) => (SCREENS.includes(s) && !hiddenPerPerson(s) ? s : null);', replace: 'export const okScreen = (s) => (SCREENS.includes(s) ? s : null);' },
+      { name: 'stored props are shown as stored', file: 'workers/admin/src/usage.mjs',
+        find: 'if (Object.prototype.hasOwnProperty.call(p, k) && propOk(spec.props[k], p[k]) && !hiddenPerPerson(p[k])) out.push([k, p[k]]);',
+        replace: 'if (Object.prototype.hasOwnProperty.call(p, k)) out.push([k, p[k]]);' },
+      { name: 'an unknown event name is shown as stored', file: 'workers/admin/src/usage.mjs', find: 'visit: okVisit(r.visit), name: props ? r.name : null,', replace: 'visit: okVisit(r.visit), name: r.name,' },
+      { name: 'an OS is shown as stored', file: 'workers/admin/src/usage.mjs', find: "export const okOs = (s) => (typeof s === 'string' && /^(iOS \\d{1,2}\\.\\d{1,2}|Android \\d{1,2}|macOS|Windows|Linux)$/.test(s) ? s : 'Other');", replace: "export const okOs = (s) => String(s);" },
+      { name: 'an unknown key is spelled from its own string', file: ['workers/admin/src/usage.mjs', 'workers/admin/src/views.mjs'],
+        find: ['export const okFeature = (s) => (FEATURES.includes(s) && !hiddenPerPerson(s) ? s : null);', "const word = (map, k) => (k != null && Object.prototype.hasOwnProperty.call(map, k) ? map[k] : ELSE);"],
+        replace: ['export const okFeature = (s) => (isJourney(s) ? null : s);', "const word = (map, k) => (k != null && Object.prototype.hasOwnProperty.call(map, k) ? map[k] : String(k));"] },
+      { name: 'a screen loses its fixed label', file: 'workers/admin/src/views.mjs', find: "log_note: 'Write a note', ", replace: '' },
+      /* Found green by the review of 16 Nov until §6's kick count and §8. */
+      { name: 'the journey totals count her household and her', file: 'workers/admin/src/usage.mjs',
+        find: "+ \"AND json_extract(props, '$.feature') = ? AND \" + scope.where('uid'), [now - 30 * DAY, r.key, ...scope.uids]);",
+        replace: "+ \"AND json_extract(props, '$.feature') = ? AND (1 OR \" + scope.where('uid') + ')', [now - 30 * DAY, r.key, ...scope.uids]);" },
+      { name: 'the journey note says the totals are our own accounts only', file: 'workers/admin/src/views.mjs', find: 'so their uses count everyone the server stored, not only our own accounts.', replace: 'so they count our own accounts only.' },
+      { name: 'a usage tab renders the person name as markup', file: 'workers/admin/src/views.mjs', find: '  const person = w.name;', replace: '  const person = trusted(w.name);' },
+      { name: 'the household visits render a name as markup', file: 'workers/admin/src/views.mjs', find: ' · ${nameOf(h, v.uid)} · ', replace: ' · ${trusted(nameOf(h, v.uid))} · ' },
+      { name: 'Getting started is shown per person', file: 'workers/admin/src/usage.mjs', find: "export const PERSON_HIDDEN = Object.freeze([...JOURNEY_KEYS, 'onboarding']);", replace: 'export const PERSON_HIDDEN = Object.freeze([...JOURNEY_KEYS]);' },
+      { name: 'a usage CSV leaves a formula name as a formula', file: 'workers/admin/src/index.mjs', find: "if (/^[=+\\-@\\t\\r]/.test(s)) s = \"'\" + s;", replace: '' },
     ], ok);
   }
 

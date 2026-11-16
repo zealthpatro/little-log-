@@ -8,6 +8,8 @@
  * Nothing here is ever logged or rendered: the address in ADMIN_PEOPLE leaves this module only as a
  * value compared with the verified token's email, and as a 16-hex hash in the access log.
  */
+import { readOnly } from './usage.mjs';
+
 export const ADMIN_HOST = 'admin.little-cubby.com';
 export const DEFAULT_READ_BUDGET = 8000;
 export const MAX_READ_BUDGET = 20000;
@@ -70,6 +72,8 @@ export function readConfig(env) {
       db: env.ADMIN_DB,
       games: env.GAMES_DB && typeof env.GAMES_DB.prepare === 'function' ? env.GAMES_DB : null,
       newsletter: env.NEWSLETTER_DB && typeof env.NEWSLETTER_DB.prepare === 'function' ? env.NEWSLETTER_DB : null,
+      /* cubby-usage, written only by the main Worker: the admin holds it through a handle that can only SELECT. */
+      usage: env.USAGE_DB && typeof env.USAGE_DB.prepare === 'function' ? readOnly(env.USAGE_DB) : null,
       main: env.MAIN && typeof env.MAIN.fetch === 'function' ? env.MAIN : null,
     },
   };

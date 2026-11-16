@@ -193,3 +193,149 @@ export async function seedNewsletter(d1, schemaSql) {
     .run(await h('maya@example.com'), 'maya@example.com', 'baby', 'subscribed', 'ZZUNSUBTOKEN7731', '2026-09-03T00:00:00Z', '2026-09-03T00:00:00Z');
   return d1;
 }
+
+/* ---------- cubby-usage (phase 2) ----------
+ * SAMPLE usage rows, written through the main Worker's own ingest() (workers/usage/core.mjs), so every row
+ * is shaped exactly as production stores it: canonical props, server-stamped household, coarse OS, daily
+ * totals, devices. Mode "internal", as phase 2 runs: the founder's own test accounts only (INTERNAL_UIDS).
+ *
+ * The founder ("Sam", household 8) uses Cubby from all four ways in for two weeks: an iPhone app, the
+ * home-screen app, an Android phone that has not updated, and a laptop browser tab. Times are his own
+ * (Asia/Dubai). One visit logs a dose (so F5 rounds it to the hour), one opens the pregnancy week view (a
+ * JOURNEY_KEYS tool: kept only as a total), one sign-in fails, two saves fail, one update lands.
+ */
+import { ingest } from '../../usage/core.mjs';
+
+export const USAGE_UA = {
+  ios: 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
+  android: 'Mozilla/5.0 (Linux; Android 15; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+  mac: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+};
+export const FOUNDER_DEVICES = [
+  { device: 'd_samiphone001', platform: 'ios_app', ua: USAGE_UA.ios, app_version: 'v369', native_version: '1.4.0' },
+  { device: 'd_samhomescr01', platform: 'home_screen', ua: USAGE_UA.ios, app_version: 'v369' },
+  { device: 'd_samandroid01', platform: 'android_app', ua: USAGE_UA.android, app_version: 'v368', native_version: '1.3.2' },
+  { device: 'd_sambrowser01', platform: 'browser', ua: USAGE_UA.mac, app_version: 'v369' },
+];
+
+let idn = 0;
+const uuid = () => '6f1c0b8e-0000-4000-8000-' + (++idn).toString(16).padStart(12, '0');
+/* A small seeded generator, so the sample is the same on every run. */
+function rng(seed) { let x = seed >>> 0; return () => { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296; }; }
+
+/* One visit, sent as the tracker would send it, received at the visit's end. `who` names the person and
+   device; `steps` are [secondsIntoVisit, name, props]. Returns ingest()'s answer. */
+export async function ingestVisit(d1, who, startMs, steps, opts) {
+  opts = opts || {};
+  const visit = who.visit || 'v_' + (startMs % 2821109907456).toString(36).padStart(8, '0').slice(-8);
+  const events = steps.map(([s, name, props]) => ({ id: uuid(), t: startMs + s * 1000, visit, name, props }));
+  const end = startMs + Math.max(0, ...steps.map(([s]) => s)) * 1000 + 2000;
+  const body = { v: 1, tz: who.tz, device: who.device, platform: who.platform, app_version: who.app_version, events };
+  if (who.native_version) body.native_version = who.native_version;
+  return ingest(body, {
+    db: d1, uid: who.uid, ua: who.ua, now: opts.receivedAt || end, notice: opts.notice || '',
+    env: { USAGE_MODE: opts.mode || 'internal', INTERNAL_UIDS: opts.internal || FOUNDER_UID, USAGE_DAILY_CAP: '1000000' },
+    membership: async () => ({ hid: who.hid, role: who.role || 'owner', notice: opts.notice || '' }),
+  });
+}
+
+/* Dubai is UTC+4: the local hour h on `daysAgo` days before NOW. */
+const dubaiAt = (daysAgo, h, m) => { const t = new Date(NOW - daysAgo * DAY); t.setUTCHours(h - 4, m || 0, 0, 0); return t.getTime(); };
+
+export async function seedUsage(d1) {
+  const r = rng(7731);
+  const pick = (xs) => xs[Math.floor(r() * xs.length)];
+  const founder = (dev) => Object.assign({ uid: FOUNDER_UID, hid: 'HHID_sample_founder', role: 'owner', tz: 'Asia/Dubai' }, dev);
+  const [iphone, home, android, laptop] = FOUNDER_DEVICES.map(founder);
+  const ROUTINE = [
+    [['home', 'feed', 'logged'], ['timeline', 'timeline', 'opened']],
+    [['log_nappy', 'nappy', 'logged']],
+    [['log_sleep', 'sleep', 'logged'], ['timeline', 'timeline', 'opened']],
+    [['photos', 'photos', 'opened'], ['moments', 'moments', 'opened']],
+    [['log_feed', 'feed', 'logged'], ['log_nappy', 'nappy', 'logged']],
+    [['circle', 'invite', 'opened'], ['settings', 'theme', 'opened']],
+  ];
+  const visitSteps = (plan, seconds, from) => {
+    const steps = [[0, 'visit.started', { opened_from: from, start: r() < 0.5 ? 'cold' : 'warm' }]];
+    let s = 4;
+    for (const [screen, feature, action] of plan) {
+      steps.push([s, 'screen.viewed', { screen }]); s += 6 + Math.floor(r() * 20);
+      steps.push([s, 'feature.used', { feature, action }]); s += 5 + Math.floor(r() * 15);
+    }
+    steps.push([Math.max(s, seconds), 'visit.ended', { seconds: Math.max(s, seconds), reason: 'hidden' }]);
+    return steps;
+  };
+  /* Every visit is collected first and sent in time order, as a phone sends them (devices.last_seen is the
+     newest batch's arrival). */
+  const plan = [];
+  /* The iPhone app ran v368 until it picked up v369 yesterday at 9:02am (the app.updated visit below). */
+  const updatedAt = dubaiAt(1, 9, 2);
+  const at = (dev, start, steps) => plan.push({ dev: dev === iphone && start < updatedAt ? Object.assign({}, iphone, { app_version: 'v368' }) : dev, start, steps });
+  /* Two weeks of ordinary visits, one to three a day, at the hours a parent opens Cubby. */
+  for (let d = 13; d >= 0; d--) {
+    const n = 1 + Math.floor(r() * 3);
+    for (let i = 0; i < n; i++) {
+      const hour = pick([3, 6, 7, 8, 9, 13, 14, 19, 21, 22, 23]);
+      if (d === 0 && hour >= 14) continue;   // nothing from the future: it is 2:42pm in Dubai
+      const dev = d > 9 ? pick([iphone, android, laptop]) : pick([iphone, iphone, home, android, laptop]);
+      at(dev, dubaiAt(d, hour, Math.floor(r() * 59)), visitSteps(pick(ROUTINE), 40 + Math.floor(r() * 400), pick(['icon', 'icon', 'notification', 'link'])));
+    }
+  }
+  /* A dose logged at 9:14pm two days ago: F5 shows that whole visit at the hour only ("9pm"). */
+  at(iphone, dubaiAt(2, 21, 14), [[0, 'visit.started', { opened_from: 'notification', start: 'warm' }],
+    [3, 'screen.viewed', { screen: 'log_medicine' }], [21, 'feature.used', { feature: 'medicine', action: 'logged' }], [70, 'visit.ended', { seconds: 70, reason: 'hidden' }]]);
+  /* The pregnancy week view, a JOURNEY_KEYS tool: the server keeps it as a total with no person. */
+  at(laptop, dubaiAt(4, 20, 5), [[0, 'visit.started', { opened_from: 'icon', start: 'cold' }],
+    [5, 'screen.viewed', { screen: 'pregnancy_week' }], [12, 'feature.used', { feature: 'pregnancy_week', action: 'opened' }], [95, 'visit.ended', { seconds: 95, reason: 'hidden' }]]);
+  /* Signing in on the home-screen app: a wrong code first, then Google. */
+  at(home, dubaiAt(6, 8, 30), [[0, 'visit.started', { opened_from: 'icon', start: 'cold' }],
+    [2, 'signin.attempted', { method: 'email_code', step: 'started', outcome: 'succeeded', error: 'none', attempt: 1, storage: 'app' }],
+    [40, 'signin.attempted', { method: 'email_code', step: 'verified', outcome: 'failed', error: 'wrong_code', attempt: 1, storage: 'app' }],
+    [55, 'signin.attempted', { method: 'google', step: 'started', outcome: 'succeeded', error: 'none', attempt: 1, storage: 'app' }],
+    [70, 'signin.attempted', { method: 'google', step: 'signed_in', outcome: 'succeeded', error: 'none', attempt: 1, storage: 'app' }],
+    [90, 'push.permission', { state: 'granted' }], [120, 'visit.ended', { seconds: 120, reason: 'hidden' }]]);
+  /* Two saves that did not reach the server on a weak signal, three days ago. */
+  at(android, dubaiAt(3, 7, 50), [[0, 'visit.started', { opened_from: 'icon', start: 'warm' }],
+    [8, 'feature.used', { feature: 'feed', action: 'logged' }], [30, 'save.failed', { error: 'unavailable', retries: 5, offline: 'yes' }],
+    [40, 'feature.used', { feature: 'nappy', action: 'logged' }], [62, 'save.failed', { error: 'deadline', retries: 5, offline: 'no' }],
+    [80, 'visit.ended', { seconds: 80, reason: 'idle' }]]);
+  /* The iPhone app picked up v369 yesterday. */
+  at(iphone, updatedAt, [[0, 'visit.started', { opened_from: 'icon', start: 'cold' }],
+    [1, 'app.updated', { from_version: 'v368', to_version: 'v369' }], [6, 'screen.viewed', { screen: 'home' }],
+    [9, 'feature.used', { feature: 'feed', action: 'logged' }], [48, 'visit.ended', { seconds: 48, reason: 'hidden' }]]);
+  /* And one this morning, 25 minutes ago. */
+  at(iphone, NOW - 25 * 60000, [[0, 'visit.started', { opened_from: 'notification', start: 'warm' }],
+    [3, 'screen.viewed', { screen: 'log_feed' }], [15, 'feature.used', { feature: 'feed', action: 'logged' }], [52, 'visit.ended', { seconds: 52, reason: 'hidden' }]]);
+  plan.sort((a, b) => a.start - b.start);
+  for (const v of plan) await ingestVisit(d1, v.dev, v.start, v.steps);
+  return d1;
+}
+
+/* Rows the server would never store (its allowlist refuses them), written straight into cubby-usage for
+ * the founder, so the dashboard's own checks are what stands between them and a page: an unknown event
+ * name, props outside the allowlist, a hostile OS and browser, a version and a time zone that are not
+ * their formats, a device with a push value no list holds, and daily totals under unknown keys. Every
+ * planted string is a ZZ value (or HOSTILE): test/admin-no-content.test.js and test/admin-ui.test.js
+ * require that none of them reaches a page, a CSV or the browser as markup. */
+export const ODD_VISIT = 'v_zzodd001';
+export function stageOddUsage(d1) {
+  const t = NOW - 5 * 3600000;
+  const ins = d1.raw.prepare('INSERT INTO usage_events (who, id, at, client_at, local_day, local_hour, tz, uid, hid, role, device, visit, platform, os, browser, app_version, native_version, name, props) '
+    + "VALUES (?, ?, ?, ?, '2026-11-13', 9, ?, ?, 'HHID_sample_founder', 'owner', 'd_samiphone001', ?, 'ios_app', ?, ?, ?, ?, ?, ?)");
+  const row = (id, tz, os, browser, version, native, name, props) => ins.run(FOUNDER_UID, id, t, t, tz, FOUNDER_UID, ODD_VISIT, os, browser, version, native, name, JSON.stringify(props));
+  /* A plain start, so the odd visit is whole: a visit that kept its end but lost its start is not shown at
+     all (workers/admin/src/usage.mjs, "a visit, read whole"), and these rows must be. */
+  row('zz-0', 'Asia/Dubai', 'iOS 26.1', 'Safari', 'v369', null, 'visit.started', { opened_from: 'icon', start: 'cold' });
+  row('zz-1', 'Asia/Dubai', HOSTILE, HOSTILE, 'v1 ZZ-AMOUNT-7731', 'ZZ-DOSE-7731', 'ZZ-NOTE-7731.used', { feature: 'ZZ-DOSE-7731' });
+  row('zz-2', 'ZZ/Hostile', 'iOS 26.1', 'Safari', 'v369', '1.4.0', 'feature.used', { action: 'logged', feature: 'ZZ-NOTE-7731', note: 'ZZ-NOTE-7731' });
+  row('zz-3', 'Asia/Dubai', 'iOS 26.1', 'Safari', 'v369', null, 'screen.viewed', { screen: HOSTILE });
+  row('zz-4', 'Asia/Dubai', 'iOS 26.1', 'Safari', 'v369', null, 'signin.attempted', { method: 'ZZ-SYMPTOM-7731', step: 'verified', outcome: 'failed', error: 'ZZ-MOOD-7731', attempt: 1, storage: 'app' });
+  row('zz-5', 'Asia/Dubai', 'iOS 26.1', 'Safari', 'v369', null, 'visit.ended', { seconds: 'ZZ-TEMPERATURE-7731', reason: 'hidden' });
+  d1.raw.prepare('INSERT INTO devices (device, uid, platform, os, browser, app_version, native_version, push, first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run('d_zzoddodd001', FOUNDER_UID, 'browser', HOSTILE, HOSTILE, 'ZZ-DOSE-7731', '<script>window.__pwned=4</script>', 'ZZPUSHTOKEN7731', t - DAY, t);
+  const daily = d1.raw.prepare("INSERT INTO usage_daily (local_day, uid, hid, platform, metric, key, n) VALUES ('2026-11-13', ?, 'HHID_sample_founder', 'ios_app', ?, ?, 5)");
+  daily.run(FOUNDER_UID, 'feature', 'ZZ-SYMPTOM-7731');
+  daily.run(FOUNDER_UID, 'feature', HOSTILE);
+  daily.run(FOUNDER_UID, 'screen', 'ZZ-MOOD-7731');
+  return d1;
+}

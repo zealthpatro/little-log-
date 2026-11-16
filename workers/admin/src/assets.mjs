@@ -9,6 +9,8 @@ import { FONTS } from './fonts.gen.mjs';
 import { secure } from './headers.mjs';
 
 const W = Array.from({ length: 101 }, (_, i) => '.w-' + i + '{width:' + i + '%}').join('');
+/* Bar heights for "When people open Cubby, by local hour": classes, because the CSP forbids inline style. */
+const H = Array.from({ length: 101 }, (_, i) => '.h-' + i + '{height:' + i + '%}').join('');
 const LATIN = 'U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD';
 const LATIN_EXT = 'U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF';
 const face = (family, file, weights, range) => "@font-face{font-family:'" + family + "';font-style:normal;font-weight:" + weights
@@ -127,8 +129,20 @@ td:first-child{overflow-wrap:anywhere}
 .nav-line{margin:0}
 .foot{font-size:13px;font-weight:600;color:var(--ink-soft)}
 .message{max-width:640px}
+.h3{font-family:var(--sans);font-size:13px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-soft);margin:8px 0 10px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;font-weight:600}
+table.table-narrow{min-width:520px}
+.grid td,.grid th{text-align:center}.grid td:first-child,.grid th:first-child{text-align:left}
+.heat-0{color:var(--ink-soft)}.heat-1{background:#F1F2FA}.heat-2{background:var(--sleep-soft)}.heat-3{background:#C9CCEA}.heat-4{background:#AEB3DF;font-weight:800}
+.hours{display:grid;grid-template-columns:repeat(24,minmax(0,1fr));gap:3px;height:96px;align-items:end}
+.hour{display:flex;align-items:flex-end;height:100%;min-width:0}
+.hb{display:block;width:100%;background:var(--sleep);border-radius:4px 4px 0 0;min-height:2px}
+.hours-axis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));font-size:12px;font-weight:700;color:var(--ink-soft);margin-top:6px}
+.visits{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.visits li{padding:10px 0;border-top:1px solid var(--line);font-size:14px;font-weight:600;overflow-wrap:anywhere}
 @media (max-width:600px){h1{font-size:28px}.wrap{padding:24px 16px 48px;gap:20px}.card{padding:20px}.funnel{grid-template-columns:minmax(0,1fr) 48px}.funnel .bar{grid-column:1 / -1;grid-row:2}.tiles{gap:12px}.tile{padding:16px}.tile-value{font-size:32px}}`,
   W,
+  H,
 ].join('\n');
 
 /* The one script. It only ever writes textContent. */
