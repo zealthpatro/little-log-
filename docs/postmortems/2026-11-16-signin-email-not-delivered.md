@@ -112,7 +112,7 @@ Built on fix6-M, waiting for the root session to integrate and push (EMAIL.md §
 
 This makes the app truthful. It does not make the email arrive: that depends on the root cause above.
 It answers only with a Full-access Resend key; with a Sending-access key every answer is `unknown` and
-the panel behaves exactly as before.
+the panel shows exactly what it showed before.
 
 ## Corrective actions
 | # | Action | Type (Fix/Prevent/Process/Doc) | Status |

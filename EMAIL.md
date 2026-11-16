@@ -167,7 +167,7 @@ never touched. A Worker that returns no `sendRef` (older builds) leaves the pane
 
 **The Resend key must be Full access for any of this to answer.** A Sending-access key gets 401
 `restricted_api_key` on `GET /emails/{id}`, which is `unknown`, so with today's key (permission not
-yet checked) the panel behaves exactly as before and only the log line is new. Resend has no
+yet checked) the panel shows exactly what it showed before and only the log line is new. Resend has no
 read-only permission: reading needs Full access, which also lets the key manage domains and read
 every email. That trade is the founder's call.
 

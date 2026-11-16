@@ -258,7 +258,7 @@ async function cooldownReply(hit, who) {
    Cache API is per data centre) finds nothing and is answered 'unknown' without asking Resend at all.
 
    WHAT IT CAN ANSWER. Reading an email back needs a full-access Resend key; a sending-only key gets
-   401 restricted_api_key, which is 'unknown', so the app then behaves exactly as it did before this.
+   401 restricted_api_key, which is 'unknown', so the panel then shows exactly what it showed before this.
    Resend's team rate limit (10 a second) is shared with every send, so each email is looked up at
    most SIGNIN_STATUS_LOOKUPS times, at least SIGNIN_STATUS_GAP_MS apart, a settled answer is kept and
    never asked again, and the route has its own per-network limiter bucket (signinGuard). */
