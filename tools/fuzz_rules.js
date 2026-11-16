@@ -272,7 +272,8 @@ t('cancel the live link', OWNERS, (db, w) => db.doc('inviteLinks/' + w.tok.live)
 t('extend the live link', OWNERS, (db, w) => db.doc('inviteLinks/' + w.tok.live).update({ expiresAt: TS.fromMillis(w.now + 2 * DAY) }));
 /* everything else */
 for (const c of ['newsletter', 'ops', 'pageStats', 'signinCodes', 'pushLedger', 'campaigns', 'config']) t('write ' + c, [], (db, w, a) => db.doc(c + '/' + (a || 'A')).set({ x: 1 }));
-t('send feedback', SIGNED, (db, w) => db.collection('feedback').add({ text: 'hi' }));
+t('send feedback in your own name', SIGNED, (db, w, a) => db.collection('feedback').add({ text: 'hi', uid: a ? ACTORS[a].uid : 'A' }));
+t('send feedback in someone else\'s name', [], (db, w, a) => db.collection('feedback').add({ text: 'hi', uid: a === 'O' ? 'C' : 'O' }));
 t('write your own users doc', SIGNED, (db, w, a) => db.doc('users/' + (a || 'A')).set({ householdId: w.H }));
 t('write the owner\'s users doc', ['O'], (db, w) => db.doc('users/O').set({ householdId: 'Elsewhere' }));
 t('join the Pro waitlist', SIGNED, (db, w, a) => db.doc('waitlist/' + (a || 'A')).set({ email: 'x' }));

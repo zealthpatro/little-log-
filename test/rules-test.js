@@ -260,7 +260,9 @@ async function check(name, p) {
   await check('newsletter: signed-in write (fails)', assertFails(setDoc(doc(O, 'newsletter/x'), { email: 'a@b.c' })));
   await check('waitlist: own signup (succeeds)', assertSucceeds(setDoc(doc(C, 'waitlist/C'), { email: 'c@x.com' })));
   await check('waitlist: someone else\'s signup read (fails)', assertFails(getDoc(doc(C, 'waitlist/O'))));
-  await check('feedback: create (succeeds)', assertSucceeds(setDoc(doc(C, 'feedback/f1'), { text: 'love it' })));
+  await check('feedback: create in her own name (succeeds)', assertSucceeds(setDoc(doc(C, 'feedback/f1'), { text: 'love it', uid: 'C' })));
+  await check('feedback: create in someone else\'s name (fails)', assertFails(setDoc(doc(C, 'feedback/f2'), { text: 'love it', uid: 'O' })));
+  await check('feedback: create with no name on it (fails)', assertFails(setDoc(doc(C, 'feedback/f3'), { text: 'love it' })));
   await check('feedback: read back (fails)', assertFails(getDoc(doc(C, 'feedback/f1'))));
 
   console.log('\nInvite create — owner-only + role hygiene (2026-07-12 hardening):');
