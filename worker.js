@@ -202,8 +202,11 @@ function signinEmailOk(email) {
    Send and Resend. The fix lives here, not in app/, so the clients already cached on phones are
    right too: when the earlier email was not a full code-and-link one, answer with what it DID hold
    and leave cached off. That email went out inside the last minute, so "we just emailed" is true. */
-function cooldownArmed(hasCode, hasLink, who) {
-  return new Response(JSON.stringify({ hasCode: !!hasCode, hasLink: !!hasLink, who: String(who || '') }), { headers: { 'cache-control': 'max-age=60' } });
+/* refKey (16 Nov 2026) is the name the email's status entry is filed under (signinRefKey): a hash of the
+   sendRef, never the ref itself, so the cooldown can say what the status route has since learned about
+   that email (cooldownReply) without handing anybody a way to ask about it. */
+function cooldownArmed(hasCode, hasLink, who, refKey) {
+  return new Response(JSON.stringify(Object.assign({ hasCode: !!hasCode, hasLink: !!hasLink, who: String(who || '') }, refKey ? { refKey } : {})), { headers: { 'cache-control': 'max-age=60' } });
 }
 /* WHICH EXACT ADDRESS armed the cooldown (round-4 review, signin-1). The key is the normalised
    address, so jane+k1@ and jane@ share one bucket, but the code, its document and its ceilings are
@@ -223,7 +226,16 @@ function cooldownArmed(hasCode, hasLink, who) {
 async function cooldownWho(email) {
   return (await sha256hex('cubby-cooldown:' + email)).slice(0, 16);
 }
-/* null: no cooldown applies to this exact address, so go on and send. Otherwise the answer to give. */
+/* null: no cooldown applies to this exact address, so go on and send. Otherwise the answer to give.
+   WHAT IS ALREADY KNOWN (skeptic M-S1, 16 Nov 2026). The panel had told her that email could not reach
+   her and to check the address. She tapped "Wrong email?", saw it was right and sent again inside the
+   minute, or reopened the app and asked again; the cooldown answered cached, and the panel said "We
+   already sent an email ... so use that one" over an email that was never coming. So when the status
+   route has settled what became of the email that armed this cooldown, the answer carries it as
+   `state` ('undeliverable' or 'delivered'), and the panel shows that note instead. Read from this
+   colo's cache only, never asked of Resend, so a repeat stays as quick as it was. It tells nobody
+   anything new: the answer goes only to the exact address that armed it (`who`), and anybody who can
+   type that address could send one and ask the status route themselves. */
 async function cooldownReply(hit, who) {
   if (!hit) return null;
   let was = null;
@@ -231,8 +243,10 @@ async function cooldownReply(hit, who) {
   if (was && typeof was === 'object' && typeof was.who === 'string' && was.who && was.who !== who) return null;
   // Armed by the worker before this one (its value is '1', or carries no address hash): give the answer it always gave.
   if (!was || typeof was.hasCode !== 'boolean' || typeof was.hasLink !== 'boolean') return json({ ok: true, cached: true });
-  if (was.hasCode && was.hasLink) return json({ ok: true, cached: true, hasCode: true, hasLink: true });
-  return json({ ok: true, hasCode: was.hasCode, hasLink: was.hasLink });
+  const known = await signinSettledState(was.refKey);
+  const state = known ? { state: known } : {};
+  if (was.hasCode && was.hasLink) return json(Object.assign({ ok: true, cached: true, hasCode: true, hasLink: true }, state));
+  return json(Object.assign({ ok: true, hasCode: was.hasCode, hasLink: was.hasLink }, state));
 }
 
 /* ---- Did the sign-in email actually go? ---------------------------------------------------------
@@ -281,8 +295,21 @@ const SIGNIN_MAIL_STATE = new Map([
   ['bounced', 'undeliverable'], ['suppressed', 'undeliverable'], ['failed', 'undeliverable'], ['canceled', 'undeliverable'],
 ]);
 const SIGNIN_MAIL_SETTLED = new Set(['delivered', 'undeliverable']);
+async function signinRefKey(ref) {
+  return (await sha256hex('cubby-signin-ref:' + ref)).slice(0, 40);
+}
 async function signinRefRequest(ref) {
-  return new Request('https://signin-status.cubby.internal/' + (await sha256hex('cubby-signin-ref:' + ref)).slice(0, 40));
+  return new Request('https://signin-status.cubby.internal/' + await signinRefKey(ref));
+}
+/* What the status route has already settled about the email filed under refKey: 'undeliverable',
+   'delivered', or '' when nothing is settled (or there is no entry here). For cooldownReply. */
+async function signinSettledState(refKey) {
+  if (typeof refKey !== 'string' || !/^[0-9a-f]{40}$/.test(refKey)) return '';
+  try {
+    const hit = await caches.default.match(new Request('https://signin-status.cubby.internal/' + refKey));
+    const e = hit ? JSON.parse(await hit.text()) : null;
+    return e && typeof e === 'object' && SIGNIN_MAIL_SETTLED.has(e.last) ? e.last : '';
+  } catch (x) { return ''; }
 }
 function signinRefEntry(e, at) {
   const left = Math.max(1, SIGNIN_REF_TTL_S - Math.floor((Date.now() - at) / 1000));
@@ -455,7 +482,8 @@ async function sendSigninLink(request, env) {
     });
     const sendRef = await signinSent(r, 'link');   // the log line, and a way for the app to ask what became of it
     if (!r.ok) return json({ error: 'send_failed' }, 502);
-    await cache.put(cooldown, cooldownArmed(!!code, true, who)); // start cooldown only on success, and remember what this email holds, and for whom
+    // start cooldown only on success, and remember what this email holds, for whom, and where its status is filed
+    await cache.put(cooldown, cooldownArmed(!!code, true, who, sendRef ? await signinRefKey(sendRef) : ''));
     /* Say what the email ACTUALLY carries, rather than leaving the client to assume. This is the
        whole bug class closed at the root: a screen can only offer a code box because the sender just
        told it there is a code in that inbox, so the two can no longer drift apart. */
@@ -1109,7 +1137,7 @@ async function sendSigninCode(request, env) {
     });
     const sendRef = await signinSent(r, 'code');   // the log line, and a way for the app to ask what became of it
     if (!r.ok) return json({ error: 'send_failed' }, 502);
-    await cache.put(cooldown, cooldownArmed(true, !!link, who));
+    await cache.put(cooldown, cooldownArmed(true, !!link, who, sendRef ? await signinRefKey(sendRef) : ''));
     return json(Object.assign({ ok: true, hasCode: true, hasLink: !!link }, sendRef ? { sendRef } : {}));
   } catch (e) {
     return json({ error: 'failed' }, 500);

@@ -22,12 +22,17 @@
  *   6. no cache key holds an address or a sendRef, and the cooldown still holds for the exact address that
  *      armed it, apart for the code and link senders;
  *   7. the status route is same-origin only, and rate limited in a bucket of its own ('status:'), so
- *      polling never spends the code budget.
+ *      polling never spends the code budget;
+ *   8. a cooldown answer carries what the status route has already settled about the email that armed it
+ *      (state undeliverable or delivered), so a repeat inside the minute never says "use that one" over
+ *      an email that could not come; nothing when nothing is settled; never to another exact address;
+ *      and the cooldown keeps only the hash the status entry is filed under, never the sendRef.
  *
  *   node test/signin-delivery.test.js               judge this tree's worker.js
- *   node test/signin-delivery.test.js --self-test   then break worker.js twelve ways in memory; each break
+ *   node test/signin-delivery.test.js --self-test   then break worker.js fifteen ways in memory; each break
  *                                                   must turn its named check red
- *   SIGNIN_DELIVERY_WORKER=<path to a worker.js>    grade that file instead (on 274848d4: 57 of 78 red)
+ *   SIGNIN_DELIVERY_WORKER=<path to a worker.js>    grade that file instead (on 274848d4: 63 of 87 red;
+ *                                                   on fe9edbda, before section 6b's fix: 4 of 87)
  */
 'use strict';
 const fs = require('fs');
@@ -58,7 +63,7 @@ const GMAIL = 'gmail' + '.com';
 const world = {};
 function resetWorld() {
   Object.assign(world, {
-    docs: new Map(), times: new Map(), mail: [], sendReply: null, oob: 0,
+    docs: new Map(), times: new Map(), mail: [], sendReply: null, oob: 0, oobDown: false,
     reads: [], events: new Map(), readReply: null,
     cache: new Map(), cacheUrls: new Set(),
     logs: [], clock: 0,
@@ -82,6 +87,7 @@ globalThis.fetch = async (input, init) => {
   const headers = (init && init.headers) || {};
   if (url === 'https://oauth2.googleapis.com/token') return J({ access_token: ACCESS_TOKEN, expires_in: 3600 });
   if (url === 'https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode') {
+    if (world.oobDown) return J({ error: { message: 'UNAVAILABLE' } }, 503);
     world.oob++;
     return J({ oobLink: 'https://' + PROJECT + '.firebaseapp.com/__/auth/action?mode=signIn&oobCode=' + OOB_SECRET + world.oob + '&apiKey=AIzaTest' });
   }
@@ -402,6 +408,60 @@ async function suite(src, opts) {
     ok('cooldown-code-link-apart', 'a link sent to an address does not arm its code cooldown', code.body && !code.body.cached && world.mail.length === s3 + 1, code.body);
   }
 
+  /* Skeptic M-S1 (round 6). The panel learned an email was undeliverable and said so; she tapped "Wrong
+     email?", saw the address was right, and sent again inside the minute. The cooldown answered cached,
+     and a new panel (or the same one, once "Wrong email?" had dropped what it knew) drew "We already sent
+     an email ... so use that one" over an email that could not come. A reload inside the minute did the
+     same. So a cooldown answer now says what the status route has already settled about the email that
+     armed it, and the panel shows that instead. */
+  say('\n6b. a cooldown answer says what is already known about the email that armed it');
+  {
+    const known = async (send, addr, ev) => {
+      const s = await send(addr); const m = lastMail();
+      world.events.set(m.id, ev); gap();
+      const q = await status(s.body && s.body.sendRef);
+      return { s, q };
+    };
+    const a = fresh('known');
+    const ka = await known(sendCode, a, 'suppressed');
+    const sent0 = world.mail.length;
+    const again = await sendCode(a);
+    ok('cooldown-says-undeliverable', 'once the status route has found it undeliverable, a second ask inside the minute is answered cached with state undeliverable, and mails nothing',
+      ka.q.body && ka.q.body.state === 'undeliverable' && again.body && again.body.cached === true && again.body.state === 'undeliverable' && world.mail.length === sent0, [ka.q.body, again.body, world.mail.length - sent0]);
+    ok('cooldown-state-no-ref', 'and that answer hands out no sendRef', !!again.body && !('sendRef' in again.body), again.body);
+    const b = fresh('arrived');
+    const kb = await known(sendCode, b, 'delivered');
+    const b2 = await sendCode(b);
+    ok('cooldown-says-delivered', 'delivered is passed on the same way', b2.body && b2.body.cached === true && b2.body.state === 'delivered', b2.body);
+    const c = fresh('unasked');
+    await sendCode(c);
+    const c2 = await sendCode(c);
+    ok('cooldown-unasked-no-state', 'companion: with nothing known yet (no status asked), the cooldown answer carries no state', c2.body && c2.body.cached === true && !('state' in c2.body), c2.body);
+    const d = fresh('sentonly');
+    const kd = await known(sendCode, d, 'sent');
+    const d2 = await sendCode(d);
+    ok('cooldown-sent-no-state', 'nor when Resend has only said sent', kd.q.body && kd.q.body.state === 'sent' && d2.body && d2.body.cached === true && !('state' in d2.body), [kd.q.body, d2.body]);
+    const e = fresh('linkonly');
+    await known(sendLink, e, 'bounced');
+    const e2 = await sendLink(e);
+    ok('cooldown-link-says-undeliverable', 'the link sender\'s cooldown says it too', e2.body && e2.body.cached === true && e2.body.state === 'undeliverable', e2.body);
+    world.oobDown = true;
+    const f = fresh('nolink');
+    const kf = await known(sendCode, f, 'suppressed');
+    world.oobDown = false;
+    const f2 = await sendCode(f);
+    ok('cooldown-nolink-says-undeliverable', 'and so does the answer for a code email that went without its link (which is not cached)',
+      kf.s.body && kf.s.body.hasLink === false && f2.body && !f2.body.cached && f2.body.hasCode === true && f2.body.hasLink === false && f2.body.state === 'undeliverable', [kf.s.body, f2.body]);
+    const v1 = 'zz.known' + (++addrN) + '@' + GMAIL, v2 = v1.replace('.', '');
+    await known(sendCode, v1, 'suppressed');
+    const s0 = world.mail.length;
+    const v2r = await sendCode(v2);
+    ok('cooldown-state-exact-address', 'another exact address in the same bucket is not told about that email: it gets a real send', v2r.body && !v2r.body.cached && !('state' in v2r.body) && world.mail.length === s0 + 1, v2r.body);
+    const refs = [ka, kb, kd, kf].map((k) => k.s.body && k.s.body.sendRef).filter(Boolean);
+    const vals = [...world.cache.entries()].filter(([u]) => /^https:\/\/cooldown\.cubby\.internal\//.test(u)).map(([, v]) => v);
+    ok('cooldown-value-no-ref', 'no cooldown entry holds a sendRef (at most the hash its status entry is filed under)', refs.length === 4 && vals.length > 0 && vals.every((v) => refs.every((r) => !v.includes(r))), vals.slice(0, 4));
+  }
+
   say('\n7. same origin only, and a limiter bucket of its own');
   {
     const s = await sendCode(fresh('org'));
@@ -430,7 +490,7 @@ async function suite(src, opts) {
   return { pass, fail, failed };
 }
 
-/* ---- --self-test: break worker.js in memory, twelve ways; each must turn its own check red ---- */
+/* ---- --self-test: break worker.js in memory, fifteen ways; each must turn its own check red ---- */
 const MUTANTS = [
   { name: 'the send log line carries the address', red: 'send-log-clean',
     edits: [["const sendRef = await signinSent(r, 'code');", "const sendRef = await signinSent(r, 'code ' + email);"]] },
@@ -458,6 +518,12 @@ const MUTANTS = [
     edits: [['  if (SIGNIN_MAIL_SETTLED.has(last)) return last;                   // settled: Resend is not asked again\n', '']] },
   { name: 'no timeout on the Resend read', red: 'timeout-unknown', slow: true,
     edits: [['      signal: AbortSignal.timeout(SIGNIN_STATUS_TIMEOUT_MS)\n', '']] },
+  { name: 'the cooldown forgets what the status route learned', red: 'cooldown-says-undeliverable',
+    edits: [['  const known = await signinSettledState(was.refKey);', "  const known = '';"]] },
+  { name: 'the cooldown passes on a state that is not settled', red: 'cooldown-sent-no-state',
+    edits: [["return e && typeof e === 'object' && SIGNIN_MAIL_SETTLED.has(e.last) ? e.last : '';", "return e && typeof e === 'object' && e.last ? e.last : '';"]] },
+  { name: 'the cooldown keeps the sendRef itself', red: 'cooldown-value-no-ref',
+    edits: [["await cache.put(cooldown, cooldownArmed(true, !!link, who, sendRef ? await signinRefKey(sendRef) : ''));", 'await cache.put(cooldown, cooldownArmed(true, !!link, who, sendRef));']] },
 ];
 
 (async () => {

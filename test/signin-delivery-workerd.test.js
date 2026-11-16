@@ -5,7 +5,8 @@
  *   1. a send answers a sendRef, and workerd's console carries exactly one signin_send line with Resend's
  *      id and no address;
  *   2. the sendRef finds its entry in workerd's own cache, so /api/signin-status answers 'undeliverable'
- *      for a suppressed email, and the cooldown still answers 'cached' for a repeat;
+ *      for a suppressed email, and the cooldown still answers 'cached' for a repeat, carrying that
+ *      settled state (state: 'undeliverable', read from the same cache);
  *   3. workerd's cache holds the cooldown under the hashed key, and NOTHING under the address: asked from
  *      outside with the key the old Worker used (cooldown.cubby.internal/code/<address>), it has nothing
  *      (on 274848d4 it had the entry);
@@ -17,7 +18,8 @@
  *
  *   node test/signin-delivery-workerd.test.js       (gate signin-delivery-workerd, emulator tier: it starts
  *                                                     a runtime; WEB_PORT is workerd's port)
- *   SIGNIN_DELIVERY_WORKER=<path to a worker.js>    grade that file instead (on 274848d4: 8 of 13 red, the address key among them)
+ *   SIGNIN_DELIVERY_WORKER=<path to a worker.js>    grade that file instead (on 274848d4: 8 of 13 red, the address key among them;
+ *                                                   on fe9edbda, 1 of 14: the cooldown answer carried no state)
  */
 'use strict';
 const fs = require('fs');
@@ -148,6 +150,8 @@ async function outside(req) {
     ok('and the answer holds nothing of the email', !st.text.includes(addr) && !st.text.includes(code) && !st.text.includes('sign-in code'), st.text);
     const again = await post('/api/signin-code', { email: addr });
     ok('a repeat inside the minute is answered from the cooldown', again.status === 200 && again.body && again.body.cached === true && world.mail.length === 1, [again.body, world.mail.length]);
+    /* Skeptic M-S1: that answer says what the status route already found, read back through workerd's cache. */
+    ok('and that cooldown answer says undeliverable, so the panel never says "use that one" over it', again.body && again.body.state === 'undeliverable' && !('sendRef' in again.body), again.body);
 
     console.log('\n3. workerd\'s cache holds the cooldown under the hashed key, and nothing under the address');
     const caches = await mf.getCaches();
