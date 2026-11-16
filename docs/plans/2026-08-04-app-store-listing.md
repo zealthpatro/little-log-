@@ -75,7 +75,7 @@ No spaces, no duplicates of name or subtitle words (Apple indexes those already)
 
 ## 4. App Privacy questionnaire (Apple nutrition label)
 
-Honest answers from real practice: health data lives in Firebase (Google Cloud Firestore + Storage) as a processor, sign-in via Firebase Auth, and there is deliberately no analytics SDK, no ads SDK, and no tracking of any kind (`ANALYTICS.md`; the Meta SDK is stripped from the binary by `tools/cap_strip_facebook.js`).
+Honest answers from real practice: health data lives in Firebase (Google Cloud Firestore + Storage) as a processor, sign-in via Firebase Auth, and there is deliberately no analytics SDK, no ads SDK, and no cross-app tracking of any kind (`ANALYTICS.md`; the Meta SDK is stripped from the binary by `tools/cap_strip_facebook.js`). Cubby measures how its own features are used, first-party, on its own servers: which screens and buttons, never what anyone types or logs (`.telemetry/tracking-plan.yaml` `linked_usage`; admin spec §8 and §15.1).
 
 **Do you or your third-party partners collect data from this app?** Yes (accounts and logs are collected; "no data collected" would be false).
 
@@ -85,20 +85,25 @@ Honest answers from real practice: health data lives in Firebase (Google Cloud F
 
 | Data type | Collected? | Purpose | Justification |
 |---|---|---|---|
-| Contact info: email address | Yes | App functionality | Sign-in (Apple, Google or email link), circle invites, account notices. Never marketing lists, never sold. |
+| Contact info: email address | Yes | App functionality | Sign-in (Apple, Google or email link), circle invites, account notices, and notes from the team, which are customer support. Never marketing lists, never sold. |
 | Contact info: name | Yes | App functionality | Shown to the user's own circle as a warm label (Mama Bear). Required at first run. |
 | Health & fitness: health data | Yes | App functionality | The product itself: feeds, sleep, growth, vaccines, medicines, pregnancy and cycle logs. Visible only to the circle per server-side rules; mood notes shareable with no one. |
 | User content: photos or videos | Yes | App functionality | The family album and keepsakes, visible only to the invited circle. On-device enhance uploads nothing extra. |
 | User content: other user content | Yes | App functionality | Notes, diary entries, milestones, checklists. Same circle-only rules. |
-| Identifiers: user ID | Yes | App functionality | Firebase Auth UID, needed to enforce the security rules that keep each family's data theirs. |
+| Identifiers: user ID | Yes | App functionality, Analytics | Firebase Auth UID, needed to enforce the security rules that keep each family's data theirs, and the account Cubby's own usage events are linked to. |
+| Identifiers: device ID | Yes | App functionality, Analytics | A random install id made by Cubby (not the advertising identifier, not a fingerprint), renewed on sign-out, so one person's devices can be told apart. |
+| Usage data: product interaction | Yes | App functionality, Analytics | Cubby's own usage events: visits, which screens and buttons are used, sign-in steps. Every value is from a fixed list or a bounded number, never what anyone types or logs. Kept on Cubby's own servers: raw events 90 days (30 for pregnancy and trying tools), daily totals until the account is deleted. |
+| Diagnostics: other diagnostic data | Yes | App functionality | Sign-in and save error codes from a fixed list, never an error's message text. Declared on purpose (admin spec F12): under-declaring is the costlier mistake. |
 
-**Data NOT collected (answer No):** precise or coarse location (the user picks a country by hand for schedules; the device's location is never read), contacts, browsing history, search history, purchase history (no IAP exists), financial info, usage data (no analytics SDK, first-party stance), diagnostics (no crash SDK), sensitive info categories beyond the health data declared above, surroundings, body data beyond the declared health logs.
+**Data NOT collected (answer No):** precise or coarse location (the user picks a country by hand for schedules; the device's location is never read), contacts, browsing history, search history, purchase history (no IAP exists), financial info, sensitive info categories beyond the health data declared above, surroundings, body data beyond the declared health logs.
 
-**Third parties:** Google Firebase (auth, Firestore, storage, FCM) and Cloudflare (serving) act as processors under our instructions; the email delivery provider processes addresses only to send sign-in links and invites. None of them may use the data for their own purposes. No advertising or analytics partners exist.
+**When these answers must be live:** App Privacy answers change in App Store Connect without a new build. These answers must be live in App Store Connect before `USAGE_MODE` becomes "on" (admin spec §16, founder step 15). `tools/tracking_plan_check.js` fails while this section or the review note below says otherwise and the usage allowlist is not empty.
+
+**Third parties:** Google Firebase (auth, Firestore, storage, FCM) and Cloudflare (serving, and the databases that hold usage events and the access log) act as processors under our instructions; the email delivery provider processes addresses only to send sign-in links and invites. None of them may use the data for their own purposes. No advertising or analytics partners exist.
 
 **Privacy policy URL:** `https://little-cubby.com/privacy/`
 
-Do NOT tick anything speculative "to be safe". Over-declaring (for example claiming we collect location or usage data) is as untruthful as under-declaring, and it wrongly worsens the label our privacy wedge depends on.
+Do NOT tick anything speculative "to be safe". Over-declaring (for example claiming we collect location) is as untruthful as under-declaring, and it wrongly worsens the label our privacy wedge depends on.
 
 ---
 
@@ -167,7 +172,7 @@ SENSITIVE CONTENT
 Cubby supports pregnancy, including pregnancy loss. If a loss is recorded the app becomes a quiet holding screen and stops its prompts. Nothing is graphic, which is why the rating is 4+.
 
 PRIVACY
-No advertising, no third-party analytics and no tracking SDK is present. The app counts anonymous product events, which are a date, an event name from a fixed list and a counter, with no user id, no household id, no cookie and no stored IP address. Nothing is used to track.
+No advertising, no third-party analytics and no tracking SDK is present. Cubby measures how its own features are used (which screens and buttons, never what anyone types or logs), linked to the signed-in account and kept on Cubby's own servers, so its small team can fix problems and help people who get stuck. Nothing is used to track anyone across apps or websites.
 
 Thank you for your time. The contact above is monitored throughout review.
 ```
@@ -231,7 +236,7 @@ Rules while shooting: fictional data only (no real children), status bar clean (
 - [ ] Name, subtitle, description, keywords pasted from this file, char counts verified in ASC.
 - [ ] Promotional text pasted (optional, editable later without review).
 - [ ] Privacy policy URL `https://little-cubby.com/privacy/`, support URL `https://little-cubby.com/contact/` (/support/ and /faq/ were checked: /support/ is a 404, /contact/ is the real support page).
-- [ ] App Privacy answered exactly as §4, nothing speculative.
+- [ ] App Privacy answered exactly as §4, nothing speculative, and published before `USAGE_MODE` becomes "on" (founder step 15).
 - [ ] Age rating answered as §5, 4+, Health & Fitness + Lifestyle.
 - [ ] Demo account seeded and verified from a clean device (§6), credentials in the review fields.
 - [ ] Beta App Review notes pasted, external group added, WhatsApp welcome sent (§7).

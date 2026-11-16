@@ -55,11 +55,20 @@ App Store Connect > Cubby > App Privacy > Edit. Answers are already decided in
 
 - "Do you collect data from this app?" **Yes.** ("No" would be false: accounts and logs are collected.)
 - **Data used to track you: nothing.** No ATT prompt is needed, because nothing tracks.
-- **Linked to the user, all "App Functionality" only:** email address, name, health data, photos or
-  videos, other user content, user ID.
+- **Linked to the user, "App Functionality" only:** email address, name, health data, photos or
+  videos, other user content, and Diagnostics, Other Diagnostic Data (sign-in and save error codes
+  from a fixed list).
+- **Linked to the user, "App Functionality" and "Analytics":** user ID, device ID (Cubby's own random
+  install id, not the advertising identifier), and Usage Data, Product Interaction (Cubby's own usage
+  events: which screens and buttons, never what anyone types or logs).
 - **Answer No to everything else**, in particular location, contacts, browsing history, search
-  history, purchase history, financial info, usage data and diagnostics. There is no analytics SDK
-  and no crash SDK, so declaring them would be untrue.
+  history, purchase history and financial info. There is no analytics SDK, no ads SDK and no crash
+  SDK; the usage measurement is Cubby's own, on its own servers (admin spec §8 and §15.1).
+
+**These answers must be live in App Store Connect before `USAGE_MODE` becomes "on"** (admin spec §16,
+founder step 15). App Privacy answers change without a new build, so publish them as soon as they are
+entered. `tools/tracking_plan_check.js` fails while this section says otherwise and the usage
+allowlist is not empty.
 
 Do not tick anything speculative "to be safe". Over-declaring is as untruthful as under-declaring,
 and it damages the exact label the privacy wedge depends on.

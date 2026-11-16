@@ -93,9 +93,11 @@ alone cannot cover.
 
 ## The funnel: what families are doing in Cubby
 
-Plan: `.telemetry/tracking-plan.yaml` (18 events, 13 derived from records Cubby already keeps, 5
-anonymous counters). Read it before adding anything: `tools/tracking_plan_check.js` fails the suite if
-the code and the plan disagree.
+Plan: `.telemetry/tracking-plan.yaml`, version 2: 19 household events (13 derived from records Cubby
+already keeps, 6 anonymous counters) and, in `linked_usage`, the 16 usage events linked to a signed-in
+person (admin spec §8). Families are not measured until `USAGE_MODE` is "on", the last step of phase 3.
+Read it before adding anything: `tools/tracking_plan_check.js` fails the suite if the code, the plan
+and the App Store answers disagree.
 
 ```bash
 node tools/funnel_report.js

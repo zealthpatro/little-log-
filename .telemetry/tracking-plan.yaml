@@ -1,44 +1,68 @@
-# Cubby tracking plan
+# Cubby tracking plan, version 2
 #
-# Four rules, in priority order. Every event below was checked against all four.
+# Two parts. `events` is the household plan of September 2026: in `events`, 13 of the 19 events here are
+# derived. `linked_usage` is Cubby's own usage events, linked to a signed-in person, built in phase 2 of
+# docs/superpowers/specs/2026-11-13-admin-dashboard-design.md (§8, §9.1, §10): 11 of the 16 linked
+# events are sent by a device, 4 are derived and 1 is written by the server.
+#
+# Five rules, in priority order. Every event below was checked against all five.
 #
 #   1. MEASURE HOUSEHOLDS, NOT PEOPLE. The household is the unit the product is built around, and a
 #      person-level trail is exactly what a privacy-first family app must not keep.
+#      FAMILIES ARE NOT MEASURED until the last step of phase 3 of the admin spec, the commit that sets
+#      USAGE_MODE to "on". Until that commit, this rule stays true for every family, word for word. The
+#      linked events below exist in code, but USAGE_MODE "off" stores nothing at all, and "internal"
+#      stores only the founder's own accounts (INTERNAL_UIDS), so no family has a person-level trail.
+#      Families are told before they are measured: the first-run card, the Privacy screen, the policy
+#      and the App Store answers go live first (spec §17). Phase 3 rewrites this rule in that commit.
 #   2. DERIVE BEFORE EMITTING. If a stored product record already proves a moment happened, the
-#      reporter reads it. Nothing new is collected for it. 13 of the 19 events here are derived.
+#      reporter reads it. Nothing new is collected for it.
 #   3. EMIT ONLY WHERE NOTHING IS STORED, AND THEN ANONYMOUSLY. Four moments leave no record at all
 #      (a wizard step abandoned, a sheet opened and closed, an account erased). Those increment an
 #      aggregate counter in D1 with no uid, no household id, no free text and no health value, the
-#      same shape as the pageStats counter that already exists.
+#      same shape as the pageStats counter that already exists. The linked events are the one
+#      deliberate exception, and only under rule 1's switch.
 #   4. THERE IS NO LOSS EVENT. The only records of a pregnancy loss are her kept-after-loss archive,
 #      users/{uid}.pregnancyArchive, which store-firebase.js calls "the one doc only she can ever read
 #      or write", and lossHolding, which is circle-shared only because of an open privacy defect. An
 #      analytics job reading either would break a promise the product made to her. See `decisions`.
+#      The same holds for the linked events: no loss event, no loss screen or feature, and while her
+#      own loss holding is active the tracker sends nothing at all.
+#   5. NOTHING THAT CARRIES CONTENT. Every linked property is a value from a fixed list, a bounded
+#      integer or one fixed format. No property can hold free text, so none can hold what a family
+#      logged. Identity rides only in the envelope, which the server sets, never in a property.
 
 meta:
   product: Cubby
-  version: 1
-  created: 2026-09-24
-  updated: 2026-09-24
+  version: 2
+  created: '2026-09-24'
+  updated: '2026-11-15'
   owner: founder
   implementation: first_party        # no SDK, no CDP, no third party. tools/thirdparty_gate.js enforces it.
   naming: object.action, snake_case, past tense
-  pii_policy: none                   # no email, name, baby name, health value or free text in any event or snapshot
+  pii_policy: linked_envelope_only   # no property of any event carries an email, name, baby name, health value or free text; a uid and household id appear only in the server-set envelope of a linked usage event
   internal_user_policy: by_flag
   internal_user_detail: >
     Derived measures exclude households whose ownerId is listed in the Worker env var INTERNAL_UIDS
     (comma-separated, set with `npx wrangler secret put INTERNAL_UIDS`). Emitted counters are skipped
     on any device where localStorage 'cubby-internal' is '1', which the founder sets once per device.
     Five of the thirteen historical accounts are the founder's, so without this every rate is wrong.
+    For the linked usage events INTERNAL_UIDS is also the whole of who is stored in mode "internal",
+    and the admin leaves those uids out of every number by default (spec S28).
   sources:
     derived: "computed by the daily snapshot job from records the product already stores; nothing new is collected"
     emitted: "an atomic increment of D1 funnel_steps(day, key, n) in GAMES_DB; anonymous, aggregate, allowlisted"
+    linked: "POST /api/usage on the main Worker into D1 cubby-usage, checked against workers/usage/core.mjs USAGE_EVENTS on the phone and again on the server; see linked_usage"
 
 entities:
   user:
     id_property: uid
     id_format: "Firebase Auth uid, opaque 28 characters"
-    note: "Never appears in an event, a counter or a snapshot. Used only to join records inside the job."
+    note: >
+      Never appears in a household event, a counter, a snapshot or any event property. A linked usage
+      event carries it only in its envelope, set by the server from the verified sign-in token
+      (linked_usage.envelope), and only for the people USAGE_MODE allows. Used otherwise only to join
+      records inside the job.
     traits:
       - name: acq_source
         type: string
@@ -306,6 +330,257 @@ events:
       - { name: acq_source, type: string, required: false }
     expected_frequency: low
 
+# ── Linked usage events (version 2) ───────────────────────────────────────────────────────────────
+# Spec: docs/superpowers/specs/2026-11-13-admin-dashboard-design.md §8 to §10. The allowlist is
+# workers/usage/core.mjs USAGE_EVENTS; app/usage-allowlist.js is generated from it; this section lists the
+# same events, properties, values, bounds and formats. tools/tracking_plan_check.js fails when any differ.
+linked_usage:
+  families_measured: false
+  families: >
+    FAMILIES ARE NOT MEASURED until the last step of phase 3, the reviewed commit that sets USAGE_MODE
+    to "on". Until then rule 1, "measure households, not people", stays true for every family. Phase 2
+    ships the pipeline dark ("off") and then on the founder's own accounts only ("internal").
+  usage_mode:
+    current: "off"
+    where: "wrangler.toml [vars] USAGE_MODE. Every change of mode is a reviewed commit (spec §8.8)."
+    modes:
+      - mode: "off"
+        stores: >
+          Nothing. POST /api/usage answers {"mode": "off"}. The tracker asks once a day with an empty
+          batch and otherwise sends nothing. This is the default and what ships first.
+      - mode: "internal"
+        stores: >
+          Only events from uids listed in the INTERNAL_UIDS secret, the founder's own accounts. Everyone
+          else is answered {"mode": "off"} and nothing of theirs is stored, and nothing is stored before
+          sign-in. Founder step 12 approves this one-line change.
+      - mode: "on"
+        stores: >
+          Everyone, and a linked event is refused (counted as notice) until that person has seen the
+          card for the current privacy notice. Flipped only as the last step of phase 3, after the
+          screens, the policy and the App Store answers are live (founder steps 13 to 18).
+  where_it_runs: >
+    One tracker, app/cubby-track.js, for the iPhone and Android apps, the home-screen app and a browser
+    tab (they all run the same web code). It is silent off little-cubby.com, while the person's own
+    loss holding is active, and while an account deletion is running. It holds at most 500 events and
+    sends at most 50 at a time. One person's queued events never travel under another person's sign-in.
+    The anonymous counters in `events` (onboarding.step_reached, invite.sheet_opened, pro.sheet_viewed,
+    app.opened, visit.landed, account.deleted) keep running unchanged.
+  envelope:
+    note: >
+      Who and which household are added by the server, never trusted from the phone. A body naming uid,
+      hid, role, householdId or userId is refused whole with a 400. The envelope is the only place a uid
+      or household can appear; no event property may carry either.
+    fields:
+      - { field: uid, set_by: server, rule: "from the verified Firebase ID token only; null before sign-in" }
+      - { field: hid, set_by: server, rule: "from the membership cache, confirmed against households/{hid}.members, at most 6 hours old" }
+      - { field: role, set_by: server, enum: [owner, caregiver], rule: "from the same membership read" }
+      - { field: v, set_by: client, rule: "schema version, 1" }
+      - { field: id, set_by: client, format: '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$', rule: "a random v4 uuid per event; anything else drops the event; stored keyed by (who, id)" }
+      - { field: device, set_by: client, format: '^d_[a-z0-9]{12}$', rule: "a random install id kept in local storage and renewed on sign-out; not a fingerprint" }
+      - { field: visit, set_by: client, format: '^v_[a-z0-9]{8}$', rule: "random per visit" }
+      - { field: platform, set_by: client, enum: [ios_app, android_app, home_screen, browser] }
+      - { field: app_version, set_by: client, format: '^v\d{1,5}$', rule: "the number of the running service worker cache, little-log-vNNN" }
+      - { field: native_version, set_by: client, format: '^\d{1,3}(\.\d{1,3}){0,3}$', rule: "apps only; anything else is stored as null" }
+      - { field: tz, set_by: client, rule: "an IANA name, validated on the server; unknown becomes UTC" }
+      - { field: t, set_by: client, rule: "device time, clamped to between 7 days before and 5 minutes after receipt" }
+      - { field: os, set_by: server, rule: "coarse, from the user agent, for example iOS 26.1; the raw user agent is never stored" }
+      - { field: browser, set_by: server, rule: "coarse, from the user agent, for example Chrome" }
+      - { field: local_day, set_by: server, rule: "the event time in tz, so a 3am feed counts as 3am in Dubai" }
+      - { field: local_hour, set_by: server, rule: "0 to 23, the same way" }
+  before_sign_in: >
+    Only the events marked before_sign_in may arrive without a token: visit.started, visit.ended,
+    screen.viewed (for the signin and landing screens only), signin.attempted, app.updated and
+    install.prompted. They are stored with no uid, kept 30 days, limited per IP, and stored at all only
+    in mode "on". On the phone they wait up to 24 hours for a sign-in, then go without a token.
+  formats:
+    version: '^v\d{1,5}$'
+    nudge_id: '^n_[a-z0-9]{8}$'
+  journey_keys: [pregnancy_week, kicks, contractions, cycle]
+  journey_rule: >
+    The screens and features that exist only on the pregnancy or trying path. Their raw events are kept
+    30 days, not 90. usage_daily never holds a per-person or per-household row for them, only aggregate
+    rows (uid and hid empty), so no per-person history of a pregnancy exists past 30 days. Every new
+    pregnancy-only or trying-only screen or feature joins this list in the same commit.
+  never_instrumented:
+    pattern: 'loss|mood|mhealth|wellbeing|(^|_)bp($|_)|blood|archive|private'
+    what: >
+      Her private health ("How you are, in yourself", blood pressure, mood), the loss holding screen, the
+      kept-after-loss archive, and anything owner-private. None of these has a screen name, a feature
+      name or an event, and the gate refuses any screen or feature that matches the pattern.
+  record_kinds: >
+    entry.logged is derived. The admin folds each record type to a coarse kind before anything is stored,
+    and keeps kinds only as 7-day counts per household, never per day: feed to feed, sleep to sleep,
+    diaper to nappy, pump to pump, growth to growth, medicine to medicine; temperature, symptom and visit
+    to health_log; vaccine to vaccines; milestone and activity to moments; anything else to other.
+  retention:
+    events_days: 90           # usage_events with a uid
+    anon_days: 30             # usage_events with no uid
+    journey_days: 30          # every JOURNEY_KEYS event
+    aggregate_days: 396       # usage_daily aggregate rows (uid empty), 13 months
+    refused_days: 90          # usage_refused
+    table:
+      - { data: "usage_events with a uid", kept: "90 days", removed_by: "the daily retention run (main cron), in chunks" }
+      - { data: "usage_events with no uid, and every JOURNEY_KEYS event", kept: "30 days", removed_by: "the same run" }
+      - { data: "usage_daily per-person rows, devices, membership", kept: "until the account is deleted", removed_by: "account purge; household purge; weekly orphan sweep" }
+      - { data: "usage_daily aggregate rows (uid empty)", kept: "13 months", removed_by: "the daily run" }
+      - { data: "nudges", kept: "until the account is deleted", removed_by: "the same as usage_daily per-person rows" }
+      - { data: "shared_entries", kept: "7 days at most; less if stopped, or if the family deletes the source entry", removed_by: "every cron tick; stop deletes at once; the read path ignores expired rows" }
+      - { data: "usage_refused", kept: "90 days", removed_by: "the daily run" }
+      - { data: "dir_people", kept: "current state; a person Auth no longer has is gone on the next 15-minute tick", removed_by: "the Auth check at the start of every admin tick" }
+      - { data: "dir_households, dir_household_days", kept: "current state; day rows 90 days", removed_by: "the Auth check, the 15-minute and daily refresh, and the admin's own delete after an erasure" }
+      - { data: "feedback/{id} in Firestore", kept: "until the account is deleted", removed_by: "the account purge" }
+      - { data: "access_log, access_log_hids", kept: "24 months", removed_by: "a yearly job, from a recorded checkpoint" }
+    erasure: >
+      Account deletion (/api/account/purge, with the verified uid) deletes the person's rows from
+      usage_events, usage_daily, devices, membership, nudges and the shared_entries they shared, and their
+      feedback documents. The household purge deletes that household's rows after its document is gone.
+      A weekly orphan sweep asks Auth which uids still exist and deletes every row for the ones that do
+      not; a lookup failure is never read as "does not exist".
+
+  events:
+    - name: visit.started
+      source: new
+      before_sign_in: true
+      fires_when: Cubby comes to the front, from cold or from the background.
+      how: "apps: Capacitor appStateChange active and launch; appUrlOpen gives link, a tapped notification gives notification. Web: the page becomes visible, or pageshow."
+      properties:
+        - { name: opened_from, type: string, enum: [icon, notification, link, other] }
+        - { name: start, type: string, enum: [cold, warm] }
+
+    - name: visit.ended
+      source: new
+      before_sign_in: true
+      fires_when: Cubby goes away, or 30 minutes pass with no interaction.
+      how: "apps: appStateChange inactive. Web: visibilitychange hidden or pagehide, sent with keepalive."
+      properties:
+        - { name: seconds, type: integer, min: 0, max: 86400 }
+        - { name: reason, type: string, enum: [hidden, idle] }
+
+    - name: screen.viewed
+      source: new
+      before_sign_in: true
+      before_sign_in_screens: [signin, landing]
+      fires_when: A tab or sheet opens. A repaint of the same screen is not a view.
+      properties:
+        - name: screen
+          type: string
+          enum: [signin, landing, home, timeline, log_feed, log_sleep, log_nappy, log_pump, log_growth, log_medicine,
+                 log_health, log_note, pregnancy_week, kicks, contractions, cycle, appointments, vaccines, photos,
+                 moments, circle, invite, settings, privacy, reminders, report, guide, games, pro, health, den,
+                 onboarding]
+
+    - name: feature.used
+      source: new
+      before_sign_in: false
+      fires_when: A control that does something is used. The tool is recorded, never the entry.
+      properties:
+        - name: feature
+          type: string
+          enum: [feed, sleep, nappy, pump, growth, medicine, health_log, note, timeline, pregnancy_week, kicks,
+                 contractions, cycle, appointments, vaccines, invite, moments, photos, report, voice, reminders,
+                 export, games, pro, theme]
+        - { name: action, type: string, enum: [logged, edited, deleted, shared, opened] }
+
+    - name: entry.logged
+      source: derived
+      before_sign_in: false
+      fires_when: An entry is saved to the family record.
+      recorded_as: "Nothing is sent. Type, who wrote it and when come from the masked record read, folded to record_kinds."
+      properties: []
+
+    - name: signin.attempted
+      source: new
+      before_sign_in: true
+      fires_when: Each step of signing in. One event with an outcome, not separate failed and succeeded events.
+      how: "apps: the native Apple and Google sheets. Web: the popup or redirect, the email link or code."
+      properties:
+        - { name: method, type: string, enum: [google, apple, email_link, email_code] }
+        - { name: step, type: string, enum: [started, provider_returned, verified, signed_in] }
+        - { name: outcome, type: string, enum: [succeeded, failed, abandoned] }
+        - { name: error, type: string, enum: [popup_closed, popup_blocked, network, no_session, invalid_link, expired_code, wrong_code, too_many, cancelled, other, none], note: "mapped from Firebase and network codes; never the error's message text" }
+        - { name: attempt, type: integer, min: 1, max: 20 }
+        - { name: storage, type: string, enum: [app, browser], note: "whether the step ran in the same storage that will use the session, the iPhone home-screen trap" }
+
+    - name: save.failed
+      source: new
+      before_sign_in: false
+      fires_when: An entry did not reach the server after retries.
+      properties:
+        - { name: error, type: string, enum: [permission_denied, unavailable, deadline, quota, too_large, other] }
+        - { name: retries, type: integer, min: 0, max: 50 }
+        - { name: offline, type: string, enum: ['yes', 'no'] }
+
+    - name: app.updated
+      source: new
+      before_sign_in: true
+      fires_when: A new version of Cubby starts running.
+      properties:
+        - { name: from_version, type: string, format: version }
+        - { name: to_version, type: string, format: version }
+
+    - name: push.permission
+      source: new
+      before_sign_in: false
+      fires_when: Notification permission is asked, given or taken away.
+      how: "apps: the FirebaseMessaging plugin. Web: Web Push (on iPhone, only in the home-screen app)."
+      properties:
+        - { name: state, type: string, enum: [asked, granted, denied, revoked] }
+
+    - name: push.opened
+      source: new
+      before_sign_in: false
+      fires_when: A notification is tapped.
+      how: "apps: FirebaseMessaging notificationActionPerformed. Web: the service worker's notificationclick, recorded by the page it opens."
+      properties:
+        - { name: kind, type: string, enum: [medicine, feed, sleep, appointment, vaccine, feature, marketing, team_note, other] }
+
+    - name: invite.sent
+      source: derived
+      before_sign_in: false
+      fires_when: An invite goes out.
+      recorded_as: "From the record. The address is never reported."
+      properties:
+        - { name: channel, type: string, enum: [email, link] }
+
+    - name: member.joined
+      source: derived
+      before_sign_in: false
+      fires_when: Someone joins a household.
+      recorded_as: "From the record."
+      properties:
+        - { name: role, type: string, enum: [owner, caregiver] }
+
+    - name: nudge.sent
+      source: server
+      before_sign_in: false
+      fires_when: The team sends a note (phase 4).
+      recorded_as: "Written to the nudges ledger by the send path (id, channel, template, who on the team sent it). Never sent by a device."
+      properties: []
+
+    - name: nudge.seen
+      source: new
+      before_sign_in: false
+      fires_when: The person sees the note. The card is shown, the push is tapped, or the email's link is opened.
+      properties:
+        - { name: nudge_id, type: string, format: nudge_id }
+        - { name: channel, type: string, enum: [note, email, push] }
+
+    - name: nudge.acted
+      source: derived
+      before_sign_in: false
+      fires_when: The suggested thing happens within 14 days.
+      recorded_as: "Nothing is sent. Worked out per template (spec §11.6)."
+      properties: []
+
+    - name: install.prompted
+      source: new
+      before_sign_in: true
+      fires_when: Cubby offers to be added to the home screen, and the answer.
+      how: "Android Chrome's install prompt; the iPhone instructions sheet. Not needed in the apps."
+      properties:
+        - { name: outcome, type: string, enum: [shown, accepted, dismissed] }
+        - { name: prompt, type: string, enum: [android_chrome, ios_instructions] }
+
 # ── Monitoring ────────────────────────────────────────────────────────────────────────────────────
 snapshot_sync:
   cadence: daily
@@ -340,24 +615,28 @@ snapshot_sync:
 
 # ── The App Store privacy label ───────────────────────────────────────────────────────────────────
 privacy_label:
-  planned_answer_before_this_plan: "Usage Data: not collected"
-  finding: >
-    That answer is already inaccurate, independent of this plan. The existing pageStats counter records
-    every HTML navigation, and the iOS app is a remote-loaded wrapper, so each app launch is a counted
-    request to /app. Apple defines Product Interaction as including app launches. An anonymous,
-    aggregate count is still collected data; it is simply Not Linked to You.
-  correct_answer: >
-    Usage Data > Product Interaction > Data Not Linked to You > purpose Analytics. Not used for
-    tracking. Everything else unchanged: nothing is used to track, and the Linked to You categories stay
-    App Functionality only.
-  what_this_plan_adds_to_the_label: >
-    Nothing new. Five events are emitted: pageStats, which exists today, and four new ones of exactly
-    the same shape, anonymous and aggregate. The thirteen derived events read records already declared
-    as App Functionality and collect nothing.
+  # Spec §15.1, decided with the admin design on 2026-11-13. The submission package says the same:
+  # docs/plans/2026-08-04-app-store-listing.md §4 and its review note, docs/plans/2026-08-15-submit-runbook.md §3.
+  answers:
+    - { data: "Usage Data: Product Interaction", linked: true, purposes: [App Functionality, Analytics], tracking: false }
+    - { data: "Diagnostics: Other Diagnostic Data", linked: true, purposes: [App Functionality], tracking: false, note: "sign-in and save error codes from fixed lists (spec F12: declared now, because under-declaring is the costlier mistake)" }
+    - { data: "Identifiers: Device ID", linked: true, purposes: [App Functionality, Analytics], tracking: false, note: "the random install id that tells one person's devices apart; not the advertising identifier" }
+    - { data: "Identifiers: User ID", linked: true, purposes: [App Functionality, Analytics], tracking: false, note: "already declared; gains the Analytics purpose" }
+    - { data: "Contact Info: Name and Email Address", linked: true, purposes: [App Functionality], tracking: false, note: "notes from the team are customer support, which is why they must never sell" }
+  tracking: "None. No App Tracking Transparency prompt is needed."
+  when: >
+    App Privacy answers change in App Store Connect without a new build. They must be published there
+    before USAGE_MODE becomes "on" (spec §16, founder step 15).
+  history: >
+    The August 2026 package answered Usage Data as not collected. Version 1 of this plan found that
+    wrong already, because the anonymous page counter counts every app launch, and proposed Not Linked
+    to You. Version 2 makes Usage Data Linked to You, because the linked usage events carry the account
+    in their envelope.
   must_not_happen: >
-    No event may carry a uid, household id, email, name or health value, because any one of those would
-    move Usage Data into Linked to You, which is the category the product's positioning depends on
-    keeping empty. tools/tracking_plan_check.js enforces this against the running code.
+    No event PROPERTY may carry a uid, household id, email, name or health value. Identity rides only in
+    the envelope of a linked usage event, set by the server from the verified sign-in, and the household
+    events and anonymous counters carry none at all. tools/tracking_plan_check.js enforces this against
+    the running code, and fails while any store document still says usage data is not collected.
 
 # ── Decisions, written down so they are not undone as oversights ──────────────────────────────────
 decisions:
@@ -370,6 +649,10 @@ decisions:
     cost: >
       Retention cannot exclude a household that went quiet after a loss, so it is slightly understated.
       Every snapshot says so in retention_note.
+    covers_linked_usage: >
+      Since version 2 this covers the linked usage events too. No loss event, no screen or feature for the
+      loss holding screen or the kept archive (linked_usage.never_instrumented), and the tracker is silent
+      while her own loss holding is active, so nothing that could become a loss signal is created.
   - decision: Member join timing is not computed.
     because: "joinedAt lives in memberInfo beside the member's name. The job reads members (uid to role) and never memberInfo."
     cost: "member.joined is counted but not timed. The wedge, which matters more, is timed from care-log authorship."
@@ -392,3 +675,42 @@ decisions:
       existed. Worse, its "care entries in the last 7 days: 0" was computed over that empty cohort and read as
       "nobody uses Cubby". The fix bounds by TIME instead of by sign-up date for activity: every household, its
       last 7 days only, via a time-filtered query with the same field mask. Cost follows this week's activity.
+  - decision: Usage events are linked to the signed-in account (version 2).
+    by: founder
+    decided: '2026-11-13'           # "approve the design, only me for now", docs/superpowers/specs/2026-11-13-admin-dashboard-design.md
+    recorded: '2026-11-15'          # this plan, version 2, in the same change as the allowlist
+    because: >
+      The anonymous aggregates can say "0 of 11 households reached two people logging" but not which
+      family is stuck, on which phone, at which step, and what would help (spec §1). The line that keeps
+      it safe: the team sees who uses Cubby and how, never what they logged. Identity rides only in the
+      server-set envelope, never in a property, so no event can carry what a family logged.
+    cost: >
+      Usage Data moves to Linked to You in the App Store answers (privacy_label), and the privacy policy
+      gains a section that names it. That is the price of the decision, paid in the open.
+  - decision: Families are told before they are measured.
+    because: >
+      Building events before the privacy screens would have measured families under a label and a policy
+      that said otherwise. So phase 2 ships USAGE_MODE "off", then "internal" (the founder's own accounts),
+      and "on" is the last commit of phase 3, after the screens, the policy and the store answers are live.
+    cost: "Weeks without per-person numbers about families. Rule 1 stays true for them until then."
+  - decision: Pregnancy and trying tools are kept shorter and never per person in the daily totals.
+    because: >
+      A per-person history of a pregnancy outlives the pregnancy and can describe a loss without naming
+      it. JOURNEY_KEYS are kept 30 days as raw events and only as aggregate daily rows.
+    cost: "No per-person trend for kicks, contractions or cycles past a month."
+  - decision: One sign-in event with an outcome, not signin.failed and signin.succeeded.
+    because: "The spec's event catalogue wins over the Explorer sample; the admin shows it as signin.attempted, failed."
+  - decision: Eleven household properties keep values that are not a fixed list, and no new one may join them.
+    free_properties: [visit.landed.path, user.attributed.source, user.attributed.medium, user.attributed.campaign,
+                      user.attributed.content, household.created.acq_source, household.activated.entry_type,
+                      care_entry.logged.entry_type, member.joined.days_since_created,
+                      household.shared_logging_reached.days_since_created, pro.waitlist_joined.acq_source]
+    because: >
+      Spec §8.5 says every property in this plan declares an enum, a bounded integer or one of three formats.
+      These eleven are from the September 2026 household plan and predate that rule. None is a linked usage
+      event and none carries a uid: path is a fixed bucket from statsKey(); the campaign tags are the
+      first-touch tags a link carried; entry_type is the record type the app itself wrote; days_since_created
+      is computed by the reporter from stored dates (and for member.joined not computed at all). Every
+      snapshot holds counts only. tools/tracking_plan_check.js names the same eleven and fails on any other
+      household property without an enum, a bound or a yes or no flag.
+    cost: "Their values are not listed here. Giving each a fixed list is a change to the funnel code, not to this plan."

@@ -83,7 +83,7 @@ Household  (the group; ownerId, members map with roles)
 | Scheduled first-party report | weekly funnel, delivered to the founder | required |
 | Any third-party analytics tool | none, by design | excluded |
 
-**Destination constraint that shapes the design:** no third party, ever. `tools/thirdparty_gate.js` enforces the no-trackers promise, the App Store privacy label is about to declare Usage Data as not collected, and privacy is the product's positioning. So there is no CDP, no SDK and no event-volume billing; the constraint is legibility and the privacy label rather than cost.
+**Destination constraint that shapes the design:** no third party, ever. `tools/thirdparty_gate.js` enforces the no-trackers promise, the App Store answers in the submission package declare Usage Data as linked to the account (first-party, for Analytics; admin spec §15.1), and privacy is the product's positioning. So there is no CDP, no SDK and no event-volume billing; the constraint is legibility and the privacy label rather than cost.
 
 ## Codebase Observations
 - **Feature areas inferred:** four tabs (home, log, album, health) and 147 sheets, including FirstLog, AddBaby, OnboardInvite, AddSomeone, Pro, StartPregnancy, ExpectingSetup, PlanningSetup, PositiveTest, KickCounter, Contraction, LogBP, DeleteAccount, GuessGame.
