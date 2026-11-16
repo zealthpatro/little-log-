@@ -211,7 +211,8 @@ async function suite(mod, src, quiet) {
 
   if (SELF) {
     say('\n7. --self-test: each break is caught');
-    const BASE = SRC.replace("from './workers/funnel/core.mjs'", "from '" + 'file://' + path.join(ROOT, 'workers', 'funnel', 'core.mjs') + "'");
+    /* Every worker module import points back into the tree (see dose-membership.test.js for why). */
+    const BASE = SRC.replace(/from '\.\/workers\/([a-z-]+)\/([a-z-]+\.mjs)'/g, (m, d, f) => "from '" + 'file://' + path.join(ROOT, 'workers', d, f) + "'");
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ratelimit-'));
     const MUTANTS = [
       ['a throw is swallowed silently again', "catch (e) { _rlLog('ratelimit_throw', where); return unavailable; }", 'catch (e) { return unavailable; }'],

@@ -28,6 +28,21 @@ not_found_handling = "404-page"
 # `wrangler secret put` and never live in this file or the repo.
 [vars]
 MAIL_FROM = "Cubby <noreply@mail.little-cubby.com>"
+# Usage events (POST /api/usage; docs/superpowers/specs/2026-11-13-admin-dashboard-design.md §8.8). Every
+# change of mode is a reviewed commit: off stores nothing; internal stores only the founder's own accounts
+# (INTERNAL_UIDS secret); on measures families, and is flipped only as the last step of phase 3, after
+# the privacy screens, the policy and the App Store answers are live.
+USAGE_MODE = "off"
+# Events stored per UTC day across everyone. Workers Free allows 100,000 D1 rows written a day for the
+# whole account (shared with the games and the newsletter), and D1 bills one written row per row plus one
+# per index the write touches, deletes included. Worst case per event (a batch of one, a new daily row):
+# day counter 1 + usage_events 5 (WITHOUT ROWID, four indexes) + usage_daily 4 + device 2 = 12 to store
+# it, and 5 more when retention deletes it 90 days on. Retention may delete 1.5 caps of rows a day
+# (worker.js retentionDailyRows), so a backlog can drain. At 2,400: steady state 2,400 x (12 + 5) =
+# 40,800; a catch-up day 2,400 x 12 + 3,600 x 5 = 46,800. Both stay under half, with about 3,000 left
+# for membership refreshes and the cron's markers. test/usage-erasure.test.js recomputes this from the
+# real schema and fails if the cap or an index breaks it.
+USAGE_DAILY_CAP = "2400"
 
 # Per-IP rate limiter for the magic-link endpoint (worker.js sendSigninLink). Configured as 5 POST
 # /api/send-signin-link calls per 60s per Cloudflare location, to stop the endpoint blasting sign-in
@@ -64,8 +79,6 @@ binding = "NEWSLETTER_DB"
 database_name = "cubby-newsletter"
 database_id = "d0ee7337-8acf-4028-80bb-2e99a48db694"
 
-# Per-IP rate limiter for the guessing-game guest writes (worker.js gameRoute). 20/60s/IP so a whole
-# family on one wifi can all guess, but a script can't flood. Falls back to SIGNIN_RATE_LIMITER if absent.
 # POST /api/step, the anonymous funnel counter. A person walking the setup wizard sends five at most;
 # thirty a minute is generous for a human and tight for a loop trying to fake a funnel.
 [[unsafe.bindings]]
@@ -74,11 +87,31 @@ type = "ratelimit"
 namespace_id = "1004"
 simple = { limit = 30, period = 60 }
 
+# Per-IP rate limiter for the guessing-game guest writes (worker.js gameRoute). 20/60s/IP so a whole
+# family on one wifi can all guess, but a script can't flood. Falls back to SIGNIN_RATE_LIMITER if absent.
 [[unsafe.bindings]]
 name = "GAMES_RATE_LIMITER"
 type = "ratelimit"
 namespace_id = "1003"
 simple = { limit = 20, period = 60 }
+
+# POST /api/usage, per signed-in person (or per IP before sign-in). A visit sends a few batches a minute
+# at most; 120 a minute stops a loop without ever touching a real person.
+[[unsafe.bindings]]
+name = "USAGE_RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1007"
+simple = { limit = 120, period = 60 }
+
+# cubby-usage, written only by this Worker. COMMENTED until the founder creates it (spec §16 step 12):
+#   1) npx wrangler d1 create cubby-usage
+#   2) npx wrangler d1 execute cubby-usage --remote --file=./schema/usage.sql
+#   3) paste the database_id below and in workers/admin/wrangler.toml, uncomment both, then push.
+# Unbound, /api/usage answers {"mode":"off"} and stores nothing, whatever USAGE_MODE says.
+# [[d1_databases]]
+# binding = "USAGE_DB"
+# database_name = "cubby-usage"
+# database_id = "<paste>"
 
 # POST /api/dose, the "Log it" button on a medicine reminder (worker.js). A tap is one request; ten a
 # minute per IP covers a family on one wifi clearing a few reminders, and stops a loop replaying

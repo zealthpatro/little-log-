@@ -14,6 +14,7 @@
 */
 
 import { snapshot as funnelSnapshotOf, activity as funnelActivityOf, stepKey, dayKey as funnelDay } from './workers/funnel/core.mjs';
+import { ingest as usageIngest, newIsolate as usageNewIsolate, modeOf as usageModeOf, LIMITS as USAGE_LIMITS, runRetention as usageRunRetention, eraseUid as usageEraseUid, eraseHid as usageEraseHid, orphanSweep as usageOrphanSweep, markHidErase as usageMarkHidErase, erasePendingHids as usageErasePendingHids } from './workers/usage/core.mjs';
 
 const OAUTH_SCOPE = 'https://www.googleapis.com/auth/identitytoolkit';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -2106,10 +2107,23 @@ async function purgeDeletedHouseholds(env) {
           docs += n;
         }
         if (!complete) { console.error('purge_hh_incomplete', hid); continue; }
+        /* Its usage rows go with it (§10). Once the document is gone this query never finds the household
+           again, so the erasure is put on record in cubby-usage FIRST: a pending marker that eraseHid clears
+           in the same transaction as the rows, and that usageMaintenance retries every tick until it does.
+           If even the marker cannot be written, the document stays and the next tick tries the whole
+           household again (everything under it is already gone, so that retry is a few empty listings). */
+        if (env.USAGE_DB) {
+          try { await usageMarkHidErase(env.USAGE_DB, hid, now); }
+          catch (e) { console.error('purge_usage_mark_fail'); continue; }
+        }
         // The household doc LAST, so an interrupted run retries rather than orphaning subcollections.
         const delHh = await fetch(base + '/households/' + hid, { method: 'DELETE', headers: { authorization: 'Bearer ' + token } });
         if (delHh.ok) {
           households++; docs++;
+          /* After the document is gone: nothing can confirm this household any more, and eraseHid clears
+             it from the membership cache in the same batch, so no later row is stamped with it. A failure
+             leaves the marker, and usageMaintenance (later in this same cron run, then every tick) retries. */
+          if (env.USAGE_DB) { try { await usageEraseHid(env.USAGE_DB, hid); } catch (e) { console.error('purge_usage_hid_fail'); } }
           const internal = String(env.INTERNAL_UIDS || '').split(',').map((x) => x.trim());
           const owner = d.fields && d.fields.ownerId && d.fields.ownerId.stringValue;
           if (!owner || internal.indexOf(owner) < 0) await countAccountDeleted(env);
@@ -2150,29 +2164,46 @@ export const __ops = { recordCronRun: (env, summary, nowMs) => recordCronRun(env
 
 // Deletes the D1 rows tied to one Firebase uid. Firestore rules cannot see D1, so without this a
 // deleted account would leave its guessing-game hubs (and every guest's nickname and guess) behind.
-// Same cascade order as the hub-close path: children first, then the hub row.
 async function purgeAccountData(request, env) {
   let body; try { body = await request.json(); } catch (e) { return json({ error: 'bad_request' }, 400); }
   let auth; try { auth = await verifyFirebaseToken((body && body.idToken) || ''); }
   catch (e) { return json({ error: 'unauthorized' }, 401); }
   if (!auth || !auth.uid) return json({ error: 'unauthorized' }, 401);
-  if (!env.GAMES_DB) return json({ ok: true, hubs: 0 });
-  try {
-    // A user who never hosted a game hits this before the tables exist; creating them is cheaper
-    // than letting a missing table read as a failed deletion.
-    await ensureHubSchema(env);
-    const owned = await env.GAMES_DB.prepare('SELECT code FROM hubs WHERE owner_uid=?').bind(auth.uid).all();
-    const codes = ((owned && owned.results) || []).map(r => r.code);
-    for (const code of codes) {
-      await env.GAMES_DB.prepare('DELETE FROM hub_guesses WHERE hub_code=?').bind(code).run();
-      await env.GAMES_DB.prepare('DELETE FROM hub_games WHERE hub_code=?').bind(code).run();
-      await env.GAMES_DB.prepare('DELETE FROM hubs WHERE code=?').bind(code).run();
-    }
-    return json({ ok: true, hubs: codes.length });
-  } catch (e) {
-    console.error('purge_account_fail', (e && e.message) || String(e));
-    return json({ error: 'db_error' }, 500);
+  /* Hubs, usage rows and feedback notes go with the account (spec §10). Each part runs whatever the
+     others do: the app ignores this answer (best-effort), the weekly orphan sweep backstops the usage
+     rows, and a failure is logged by code and answered 500 so it is visible, never silently "ok".
+     SUBREQUESTS. Workers Free allows 50 per invocation and D1 calls count, so the order and the shape
+     are fixed: the hubs first, in one D1 batch (the guests' guesses are the part nobody else can
+     delete); the usage rows in one batch; feedback last, one query and one documents:commit per 500
+     notes, in a bounded number of rounds. test/feedback-purge-emulator.test.js counts every call,
+     each D1 statement included, against a real Firestore with 0, 40, 500, 1,100 and 4,001 notes, and
+     holds the total at 50 or under. */
+  let failed = false, hubs = 0;
+  if (env.GAMES_DB) {
+    try { hubs = await purgeHubsOf(env, auth.uid); }
+    catch (e) { failed = true; console.error('purge_account_fail', (e && e.message) || String(e)); }
   }
+  if (env.USAGE_DB) { try { await usageEraseUid(env.USAGE_DB, auth.uid); } catch (e) { failed = true; console.error('purge_usage_fail'); } }
+  try { await deleteFeedbackOf(env, auth.uid); } catch (e) { failed = true; console.error('purge_feedback_fail'); }
+  return failed ? json({ error: 'db_error' }, 500) : json({ ok: true, hubs });
+}
+
+/* Every hub this uid owns, with its games and every guest's guess: children first, then the hub row, in
+   ONE batch (one transaction, one subrequest) however many hubs she has. A fresh D1 has no hub tables
+   until someone hosts, and a failed batch changes nothing, so on any error the tables are made and the
+   batch runs once more; a second failure throws. Returns how many hubs went. */
+async function purgeHubsOf(env, uid) {
+  const db = env.GAMES_DB;
+  const run = () => db.batch([
+    db.prepare('DELETE FROM hub_guesses WHERE hub_code IN (SELECT code FROM hubs WHERE owner_uid = ?)').bind(uid),
+    db.prepare('DELETE FROM hub_games WHERE hub_code IN (SELECT code FROM hubs WHERE owner_uid = ?)').bind(uid),
+    db.prepare('DELETE FROM hubs WHERE owner_uid = ?').bind(uid),
+  ]);
+  let res;
+  try { res = await run(); }
+  catch (e) { await ensureHubSchema(env); res = await run(); }
+  const last = res && res[2];
+  return (last && last.meta && last.meta.changes) || 0;
 }
 
 // ---- Boy-or-girl guessing game (hosted, guests need no account). ISOLATED in cubby-games D1. ----
@@ -2992,6 +3023,211 @@ function funnelDigestHtml(rows) {
   return h;
 }
 
+/* ---- Usage events: POST /api/usage, and their retention and erasure -----------------------------
+   docs/superpowers/specs/2026-11-13-admin-dashboard-design.md §8 to §10; the rules live in
+   workers/usage/core.mjs. Nothing is stored unless USAGE_DB is bound (the founder creates cubby-usage)
+   AND USAGE_MODE allows it: off (the default) stores nothing, internal stores only INTERNAL_UIDS, on
+   is the last commit of phase 3, after families are told. Who and which household come from the
+   verified token and a server-side membership read, never from the body. Log lines carry codes only:
+   never a uid, an email, a name or a body. */
+const USAGE_MEMBERSHIP_TTL = 6 * 3600000;
+const USAGE_NOTICE_RECHECK = 10 * 60000;
+
+/* Two Firestore reads per person per 6 hours at most: users/{uid} (the household CLAIM and the notice
+   they saw) and households/{hid}.members (the PROOF). A read error keeps the previous answer and never
+   invents one; until a household is confirmed, hid stays null, and the confirmation backfills that
+   person's null rows from the last 24 hours. */
+async function usageMembership(env, uid, now) {
+  const db = env.USAGE_DB;
+  const row = await db.prepare('SELECT hid, role, notice, checked_at FROM membership WHERE uid = ?').bind(uid).first();
+  const notice = String(env.PRIVACY_NOTICE || '');
+  const age = row ? now - Number(row.checked_at || 0) : Infinity;
+  const fresh = row && age < USAGE_MEMBERSHIP_TTL && !(notice && row.notice !== notice && age > USAGE_NOTICE_RECHECK);
+  if (fresh) return row;
+  if (!env.FIREBASE_SERVICE_ACCOUNT) return row || null;
+  let sa; try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return row || null; }
+  const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore');
+  const base = 'https://firestore.googleapis.com/v1/projects/' + FS_PROJECT + '/databases/(default)/documents';
+  const u = await fsGetStrict(base, token, '/users/' + encodeURIComponent(uid), ['householdId', 'privacyNoticeSeen']);
+  if (!u.ok && u.status !== 404) return row || null;
+  const f = (u.doc && u.doc.fields) || {};
+  const claim = (f.householdId && f.householdId.stringValue) || '';
+  const seen = (f.privacyNoticeSeen && f.privacyNoticeSeen.stringValue) || '';
+  let hid = null, role = null;
+  if (claim && _HID_RE.test(claim)) {
+    const hh = await fsGetStrict(base, token, '/households/' + encodeURIComponent(claim), ['members']);
+    if (!hh.ok && hh.status !== 404) return row || null;
+    if (hh.ok && _isCarer(hh.doc.fields, uid)) {
+      hid = claim;
+      role = _fsStr(hh.doc.fields.members.mapValue.fields[uid]);
+    }
+  }
+  await db.prepare('INSERT INTO membership (uid, hid, role, notice, checked_at) VALUES (?, ?, ?, ?, ?) '
+    + 'ON CONFLICT(uid) DO UPDATE SET hid = excluded.hid, role = excluded.role, notice = excluded.notice, checked_at = excluded.checked_at')
+    .bind(uid, hid, role, seen, now).run();
+  if (hid) {
+    await db.prepare('UPDATE usage_events SET hid = ?, role = ? WHERE uid = ? AND hid IS NULL AND at >= ?').bind(hid, role, uid, now - 86400000).run();
+  }
+  return { hid, role, notice: seen, checked_at: now };
+}
+
+/* What this isolate remembers between requests: the UTC day each usage ceiling was found full (the
+   recordStep pattern, spec §8.7; workers/usage/core.mjs newIsolate). Past a ceiling, this isolate answers
+   those requests for the rest of the day without touching D1. */
+const usageIsolate = usageNewIsolate();
+
+/* The body, read as a stream and stopped as soon as it passes maxBytes, whether or not the request states
+   its length, so a chunked upload of many megabytes is never buffered. Bytes are counted, not UTF-16
+   units. Returns the text, or null when it is too large. */
+async function usageReadCapped(request, maxBytes) {
+  if (Number(request.headers.get('content-length') || 0) > maxBytes) return null;
+  if (!request.body) return '';
+  const reader = request.body.getReader();
+  const parts = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) { reader.cancel().catch(() => {}); return null; }
+    parts.push(value);
+  }
+  const buf = new Uint8Array(size);
+  let at = 0;
+  for (const p of parts) { buf.set(p, at); at += p.byteLength; }
+  return new TextDecoder().decode(buf);
+}
+
+async function usageRoute(request, env) {
+  const url = new URL(request.url);
+  const origin = request.headers.get('Origin'), referer = request.headers.get('Referer');
+  let same = false;
+  try { same = origin ? new URL(origin).host === url.host : (referer ? new URL(referer).host === url.host : false); } catch (e) { same = false; }
+  if (!same) return json({ error: 'forbidden' }, 403);
+  /* Mode off, or no database yet: answer before reading the body, a token check or a limiter. */
+  if (!env.USAGE_DB || usageModeOf(env) === 'off') return json({ mode: 'off' });
+  let raw; try { raw = await usageReadCapped(request, USAGE_LIMITS.maxBytes); } catch (e) { return json({ error: 'bad_request' }, 400); }
+  if (raw === null) return json({ error: 'too_large' }, 413);
+  let body; try { body = JSON.parse(raw); } catch (e) { return json({ error: 'bad_request' }, 400); }
+  let uid = null;
+  const authz = request.headers.get('Authorization') || '';
+  if (authz) {
+    const m = /^Bearer (\S+)$/.exec(authz);
+    if (!m) return json({ error: 'unauthorized' }, 401);
+    try { uid = (await verifyFirebaseToken(m[1])).uid; } catch (e) { return json({ error: 'unauthorized' }, 401); }
+  }
+  const limiter = env.USAGE_RATE_LIMITER || env.STEP_RATE_LIMITER;
+  if (await rateLimited(limiter, uid ? 'usage:' + uid : 'usage-anon:' + clientIpKey(request), 'usage')) return json({ error: 'rate' }, 429);
+  const now = Date.now();
+  const out = await usageIngest(body, {
+    db: env.USAGE_DB, env, uid, now, ua: request.headers.get('User-Agent') || '', notice: String(env.PRIVACY_NOTICE || ''),
+    membership: (u) => usageMembership(env, u, now),
+    isolate: usageIsolate,
+    log: (code) => console.error(code),
+  });
+  return json(out.body, out.status);
+}
+
+/* Every cron tick (each part on its own, so one failing never stops the others):
+   1. Households whose usage erasure is still pending (the purge writes the marker before the household
+      document goes): retried, five a tick, until each one's rows and marker go together.
+   2. Retention (§10): raw rows past 90 days (a signed-in visit goes whole), anonymous and pregnancy rows
+      past 30, anonymous device rows 30 days after last seen, aggregate days past 13 months, refusal
+      counts and day ceilings past 90. At most USAGE_RETENTION_STATEMENTS D1 statements a tick, and the
+      day is marked done ONLY once every class is drained, so a day with more expired rows than one tick
+      clears keeps going on the next ticks. It also stops for the UTC day once it has deleted the day's
+      allowance (retentionDailyRows): a backlog (say, after the cron was down) drains over several days
+      instead of spending the account's D1 write allowance in one.
+   3. Sundays: the orphan sweep, which asks Auth which uids still exist. A lookup FAILURE stops the sweep
+      and deletes nothing; only an answer that leaves a uid out erases it. */
+const USAGE_RETENTION_STATEMENTS = 10;
+/* Rows retention may delete in one UTC day: one and a half times the day's event ceiling. At the cap a
+   day expires at most a cap's worth of rows (one day's inserts, 90 days on), so the extra half is what a
+   backlog drains at. The write arithmetic behind both numbers is beside USAGE_DAILY_CAP in wrangler.toml. */
+function retentionDailyRows(env) {
+  const capRaw = parseInt(env && env.USAGE_DAILY_CAP, 10);
+  const cap = Number.isFinite(capRaw) && capRaw >= 0 ? capRaw : 20000;
+  return Math.max(1000, Math.floor(cap * 1.5));
+}
+async function usageMaintenance(env, nowMs) {
+  const db = env.USAGE_DB;
+  if (!db) return;
+  const now = nowMs || Date.now();
+  const day = new Date(now).toISOString().slice(0, 10);
+  let failed = false;
+  try { await usageErasePendingHids(db, 5); } catch (e) { failed = true; console.error('usage_pending_hid_fail'); }
+  try { await usageRetention(env, db, now, day); } catch (e) { failed = true; console.error('usage_retention_fail'); }
+  try { await usageSweep(env, db, now, day); } catch (e) { failed = true; console.error('usage_sweep_fail'); }
+  return !failed;
+}
+async function usageRetention(env, db, now, day) {
+  const meta = {};
+  for (const r of ((await db.prepare("SELECT key, value FROM usage_meta WHERE key IN ('retention_day', 'retention_rows')").all()).results) || []) meta[r.key] = r.value;
+  if (meta.retention_day === day) return;
+  // 'YYYY-MM-DD:n', the rows retention has deleted so far on that UTC day.
+  const [spentDay, spentRows] = String(meta.retention_rows || '').split(':');
+  const spent = spentDay === day ? Number(spentRows) || 0 : 0;
+  const allowance = retentionDailyRows(env) - spent;
+  if (allowance <= 0) { console.log('usage_retention_allowance_spent'); return; }
+  const r = await usageRunRetention(db, now, { statements: USAGE_RETENTION_STATEMENTS, maxRows: allowance });
+  const put = (k, v) => db.prepare('INSERT INTO usage_meta (key, value, at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, at = excluded.at').bind(k, v, now);
+  const marks = [put('retention_rows', day + ':' + (spent + r.total))];
+  if (r.drained) marks.push(put('retention_day', day));
+  await db.batch(marks);
+  console.log('usage_retention', JSON.stringify(r));
+}
+async function usageSweep(env, db, now, day) {
+  if (new Date(now).getUTCDay() !== 0) return;
+  const swept = await db.prepare("SELECT value FROM usage_meta WHERE key = 'sweep_day'").first();
+  if (swept && swept.value === day) return;
+  if (!env.FIREBASE_SERVICE_ACCOUNT) return;
+  const sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT);
+  const token = await getAccessToken(sa, OAUTH_SCOPE);
+  const api = 'https://identitytoolkit.googleapis.com/v1/projects/' + FS_PROJECT;
+  const exists = async (uids) => {
+    const r = await fetch(api + '/accounts:lookup', { method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' }, body: JSON.stringify({ localId: uids }) });
+    if (!r.ok) throw new Error('lookup_' + r.status);
+    const j = await r.json();
+    return { known: new Set(((j && j.users) || []).map((x) => x.localId)) };
+  };
+  const erased = await usageOrphanSweep(db, exists, 100);
+  await db.prepare("INSERT INTO usage_meta (key, value, at) VALUES ('sweep_day', ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, at = excluded.at").bind(day, now).run();
+  console.log('usage_sweep', erased);
+}
+// Test hook, same pattern as __purge: test/usage-erasure.test.js checks the D1 write arithmetic against it.
+export const __usage = { retentionDailyRows };
+
+/* The person's feedback notes go with their account (§10): they hold their address, name and a raw
+   user agent, and they were written to the team. Query on uid with the master service account, then
+   delete what came back in ONE documents:commit (500 writes, Firestore's most per commit), and repeat
+   while a full page comes back, at most FEEDBACK_ROUNDS commits: two subrequests per 500 notes, never one
+   per note (one per note let 38 planted notes use up the purge's 50-subrequest budget before the hubs).
+   Notes still there after the last commit throw, so the purge answers 500 and logs it. */
+const FEEDBACK_PAGE = 500, FEEDBACK_ROUNDS = 8;
+async function deleteFeedbackOf(env, uid) {
+  if (!env.FIREBASE_SERVICE_ACCOUNT || !uid) return 0;
+  const sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT);
+  const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore');
+  const base = 'https://firestore.googleapis.com/v1/projects/' + FS_PROJECT + '/databases/(default)/documents';
+  const headers = { authorization: 'Bearer ' + token, 'content-type': 'application/json' };
+  let n = 0;
+  for (let round = 0; ; round++) {
+    const r = await fetch(base + ':runQuery', {
+      method: 'POST', headers,
+      body: JSON.stringify({ structuredQuery: { from: [{ collectionId: 'feedback' }], where: { fieldFilter: { field: { fieldPath: 'uid' }, op: 'EQUAL', value: { stringValue: uid } } }, select: { fields: [{ fieldPath: 'uid' }] }, limit: FEEDBACK_PAGE } }),
+    });
+    if (!r.ok) throw new Error('feedback_query_' + r.status);
+    const names = ((await r.json()) || []).map((x) => x && x.document && x.document.name).filter(Boolean);
+    if (!names.length) return n;
+    if (round === FEEDBACK_ROUNDS) throw new Error('feedback_more');
+    // No precondition: deleting a note that is already gone is a success, and nothing here may wait on it.
+    const c = await fetch(base + ':commit', { method: 'POST', headers, body: JSON.stringify({ writes: names.map((name) => ({ delete: name })) }) });
+    if (!c.ok) throw new Error('feedback_commit_' + c.status);
+    n += names.length;
+    if (names.length < FEEDBACK_PAGE) return n;
+  }
+}
+
 export default {
   async scheduled(event, env) {
     try { await sendPushReminders(env); } catch (e) { console.error('push_cron_fail', (e && e.message) || String(e)); }
@@ -3004,6 +3240,9 @@ export default {
        nothing a parent depends on waits behind analytics. */
     try { await runFunnelSnapshot(env); } catch (e) { console.error('funnel_snapshot_throw', (e && e.message) || String(e)); }
     try { await maybeSendFunnelDigest(env); } catch (e) { console.error('funnel_digest_throw', (e && e.message) || String(e)); }
+    /* Fifth and independent: pending household usage erasures and retention, every tick until the
+       day's retention is done (usageMaintenance), and the orphan sweep on Sundays. */
+    try { await usageMaintenance(env); } catch (e) { console.error('usage_maintenance_throw'); }
   },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -3040,6 +3279,10 @@ export default {
     /* The dead man's switch. Public and unauthenticated so an external uptime monitor can poll it;
        it says whether sign-in works and how long ago that was last true, and nothing else. */
     /* Anonymous funnel steps. See recordStep. */
+    if (url.pathname === '/api/usage') {
+      if (request.method !== 'POST') return new Response('method not allowed', { status: 405 });
+      return usageRoute(request, env);
+    }
     if (url.pathname === '/api/step') {
       if (request.method !== 'POST') return json({ error: 'method' }, 405);
       return recordStep(request, env);

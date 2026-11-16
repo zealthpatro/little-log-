@@ -458,7 +458,9 @@ async function suite(mod, quiet) {
   if (SELF) {
     say('\n14. --self-test: each break is caught');
     const SRC = fs.readFileSync(path.join(ROOT, 'worker.js'), 'utf8')
-      .replace("from './workers/funnel/core.mjs'", "from '" + 'file://' + path.join(ROOT, 'workers', 'funnel', 'core.mjs') + "'");
+      /* Every worker module import points back into the tree, or the temp copy cannot load it: when worker.js
+         gained workers/usage/core.mjs, a funnel-only rewrite turned every mutant into a load failure. */
+      .replace(/from '\.\/workers\/([a-z-]+)\/([a-z-]+\.mjs)'/g, (m, d, f) => "from '" + 'file://' + path.join(ROOT, 'workers', d, f) + "'");
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dose-membership-'));
     const MUTANTS = [
       ['the cron sends to anyone again', 'if (gate !== \'member\') {', 'if (false) {'],
