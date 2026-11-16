@@ -176,7 +176,21 @@ const TREE = [
   { name: 'native-deeplink', cmd: ['node', 'test/native-deeplink.test.js'] },   // the native wrapper keeps a token invite link
   { name: 'sender-name', cmd: ['node', 'test/sender-name.test.js'] },   // a sender's own name never reads as an address or a claim
   { name: 'funnel-steps',   cmd: ['node', 'tools/funnel_steps_check.js', 'url'] },
-  { name: 'tracking-plan',  cmd: ['node', 'tools/tracking_plan_check.js'] },
+  /* The plan, both allowlists and the App Store answers agree (admin spec §14 tracking-plan, extended).
+     --self-test stages every failure it knows in temp copies (about 2s) before judging this tree. */
+  { name: 'tracking-plan',  cmd: ['node', 'tools/tracking_plan_check.js', '--self-test'] },
+  /* Usage events, phase 2 of docs/superpowers/specs/2026-11-13-admin-dashboard-design.md. ingest(): what
+     /api/usage may store, over real SQLite with a pinned day and hour, and its D1 rows a day under any
+     traffic. route: the route around it (body cap, limiter keys, membership, the full-day memory, log lines),
+     through the real worker.js. erasure: account and household purges, the orphan sweep and retention, with
+     a 100-day steady state through the real cron. Each -mut gate is that file's --self-test: an unaltered
+     temp copy must pass, then every mutant must turn its own named check red. */
+  { name: 'usage-ingest',   cmd: ['node', 'test/usage-ingest.test.js'] },
+  { name: 'usage-ingest-mut', cmd: ['node', 'test/usage-ingest.test.js', '--self-test'] },
+  { name: 'usage-route',    cmd: ['node', 'test/usage-route.test.js'] },
+  { name: 'usage-route-mut', cmd: ['node', 'test/usage-route.test.js', '--self-test'] },
+  { name: 'usage-erasure',  cmd: ['node', 'test/usage-erasure.test.js'] },
+  { name: 'usage-erasure-mut', cmd: ['node', 'test/usage-erasure.test.js', '--self-test'] },
   { name: 'funnel-report',  cmd: ['node', 'tools/funnel_report.js', '--self-test'] },
   { name: 'signin-email',   cmd: ['node', 'test/signin-email.test.js', '--self-test'] },
   { name: 'signin-flow',    cmd: ['node', 'test/signin-flow.test.js', '--self-test'] },
@@ -217,6 +231,12 @@ const TREE = [
   /* brand-images: the founder's rule of 2026-11-13. Only the painted art is on a screen (tools/brand-images.json):
      no flat face, no drawn bear, no emoji bear. Walks every screen at 390px; --self-test plants each defect. */
   { name: 'brand-images',   cmd: ['node', 'tools/brand_image_check.js', 'url', '--self-test'] },
+  /* Usage events (admin spec §8, phase 2, USAGE_MODE stays off). usage-tracker drives the real tracker in the
+     seeded app: no content leaves, nothing during her loss holding or a deletion, the notice holds linked events
+     in mode on, one person's queue never leaves under another's token, the cap, the pagehide batch. --self-test
+     serves mutants of app/cubby-track.js (and of its hooks) from temp copies of the tree; each must be caught.
+     usage-ingest and usage-erasure (the server half) sit with tracking-plan, above. */
+  { name: 'usage-tracker',  cmd: ['node', 'tools/usage_tracker_check.js', 'url', '--self-test'] },
   /* brand-py: the logo change as one tool (tools/brand.py propose, compare, zoom, set; docs/BRAND.md). Its
      self-test measures made-up subjects, proves compare byte-deterministic and draws sizes exactly as
      gen_brand_icons.py does, runs propose dry with fetch cut off, holds set to its refusals, and runs
@@ -294,6 +314,7 @@ const EMU_GATES = [
   { name: 'signin-code-emu', emu: 'node signin-code-emulator.test.js' },   // the real conditional spend, race and burn
   { name: 'purge-unflag-emu', emu: 'node purge-unflag-emulator.test.js' }, // the bogus flag really clears
   { name: 'purge-erase-emu', emu: 'node purge-erase-emulator.test.js' },   // mhealth, pregnancy photos and memberEmails really go
+  { name: 'feedback-purge-emu', emu: 'node feedback-purge-emulator.test.js' }, // her notes go by commit, and her hubs inside 50 subrequests
   { name: 'invite-consent', self: ['node', 'test/invite-consent.test.js'] },  // a newcomer is asked before joining
   { name: 'invite-cleanup', self: ['node', 'test/invite-cleanup.test.js'] },  // the one-off cleanup closes every lingering way back in
   { name: 'ios-signin', self: ['node', 'test/ios-signin-code.test.js'] },       // the installed iOS app signs in by code, in its own container
