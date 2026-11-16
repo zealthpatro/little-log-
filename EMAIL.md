@@ -200,10 +200,13 @@ it on (with `[observability.logs] invocation_logs = false`) is the founder's dec
 
 **When nothing settles (round 7, 17 Nov 2026).** With a Sending-access key every status ask is
 `unknown`, and an ask can also land in another data centre, meet a delayed email, or never happen (an
-older Worker, a reload). So whatever the key, if nothing is settled by the ask at 45 seconds (or 45
-seconds after a send with no `sendRef`, or 15 seconds after a cooldown answer, whose email went out up
-to a minute earlier), the panel's line says once: "It can take a few minutes to arrive. You can also
-continue with Google or Apple now." A settled answer that comes later replaces it. Under an undeliverable
+older Worker, a reload). So whatever the key, if nothing is settled about 45 seconds after the email
+went (or 15 seconds after a cooldown answer, whose email went out up to a minute earlier), the panel's
+line says once: "It can take a few minutes to arrive. You can also continue with Google or Apple now."
+It is timed from the send, not from a step of the asking schedule, so it is there as soon as she comes
+back from Mail (iOS stops the app's timers while she is away); with a `sendRef` it still comes with an
+answer that is not settled, never just before one that is, and a status ask that hangs is given up
+after 7 seconds. A settled answer that comes later replaces it. Under an undeliverable
 note "Resend email" is hidden (a resend to a suppressed address is suppressed again and spends the
 address's hourly codes) and "Wrong email?" stays. Every note is kept above the iPhone keyboard with the
 code box; an undeliverable note over an EMPTY box lets go of it, so the keys drop and she sees the note

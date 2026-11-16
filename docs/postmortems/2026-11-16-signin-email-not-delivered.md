@@ -98,6 +98,10 @@ was suppressed, bounced or failed.
 - 2026-11-17: round 7 on fix6-M: the "it can take a few minutes" line that works with any key, every
   note above the iPhone keyboard, no "Resend email" under an undeliverable note, a cooldown answer that
   looks once itself. Not live yet.
+- 2026-11-17: round 7's skeptic: the slow line was tied to the asking chain's 45-second step, so a parent
+  who went to Mail to look for the code and came back a minute later got it 37 seconds after her return.
+  Pass 2 times it from the send (and from the wall clock, for a phone that slept), proves a hung status
+  ask is given up, and that a "codes paused" answer gets no slow line. Not live yet.
 
 ## Contributing factors (blameless)
 - The test address was brand new. If the first send went out before the mailbox existed, a 5.1.1
@@ -130,18 +134,22 @@ Built on fix6-M, waiting for the root session to integrate and push (EMAIL.md §
   asked yet (a reload before the panel's first ask) it looks once itself, inside the same bound; the
   panel keeps what it learned when she taps "Wrong email?" or types a wrong code.
 - Whatever the key (round 7): if nothing is settled about 45 seconds after the email went, the line says
-  once "It can take a few minutes to arrive. You can also continue with Google or Apple now." Every note
+  once "It can take a few minutes to arrive. You can also continue with Google or Apple now." It is timed
+  from the send, so it is there the moment she comes back from Mail, and a status ask that hangs is given
+  up after 7 seconds so it cannot hold the line back. Every note
   is kept above the iPhone keyboard with the code box; an undeliverable note over an empty box lets go
   of it so the keys drop and the Google and Apple buttons show. "Resend email" is hidden under an
   undeliverable note; "Wrong email?" stays. At 320 px the email row has its right gutter back.
 - The cooldown's cache key is an HMAC of the address, not the address.
 - Gates: `signin-delivery` (Node, with eighteen mutants), `signin-delivery-workerd` (workerd's own Cache
   API, fetch, timeout, rate limiter and console) and the mail-status section of `ios-signin` (the real
-  panel and the real Firebase SDK against the Auth emulator, eighteen parents at once: undeliverable,
+  panel and the real Firebase SDK against the Auth emulator, twenty-four parents at once: undeliverable,
   delivered, unknown, an older Worker, a link-only email, "Wrong email?" then the same address, a
   reload, a wrong code, signing in before an answer, the panel leaving the screen, and from round 7 five
   parents with the stood-in keyboard up, a reload before any ask, a different address after "Wrong
-  email?", and a bounce that comes after the slow line).
+  email?", a bounce that comes after the slow line, and six more in its second pass: back from Mail
+  60 seconds on, with a sendRef and without, back at 30 seconds, a phone that slept, a status ask that
+  never comes back, and codes paused while her newest still works).
 
 **What she sees, by key.** With today's Sending-access key every status read is a 401, so `unknown`:
 the panel says "Check your inbox" and, about 45 seconds later, "It can take a few minutes to arrive.
@@ -177,5 +185,7 @@ suppression, and the runbook (EMAIL.md §9d) is how it is cleared.
   Whatever the app cannot know, it must still leave her a way in.
 - A note under the keyboard is a note not said. Check where a message lands on the device's real
   surface, keys up, before calling it shown.
+- A wait built as a chain of steps drifts when the phone puts the app aside: she checks Mail, and the
+  chain stops where it was. Time a promise ("about 45 seconds after the email went") from the event.
 - A guard that stops at the API boundary cannot see a failure past it. The next delivery gate has to
   read a real outcome (Resend's test addresses, a real inbox), not an acceptance.
