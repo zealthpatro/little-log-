@@ -6,7 +6,9 @@
  *      id and no address;
  *   2. the sendRef finds its entry in workerd's own cache, so /api/signin-status answers 'undeliverable'
  *      for a suppressed email, and the cooldown still answers 'cached' for a repeat, carrying that
- *      settled state (state: 'undeliverable', read from the same cache);
+ *      settled state (state: 'undeliverable', read from the same cache); and when nothing has asked the
+ *      status route yet (a reload before the panel's first ask), the cooldown looks once itself, through
+ *      workerd's fetch, and says it too (round 7);
  *   3. workerd's cache holds the cooldown under the hashed key, and NOTHING under the address: asked from
  *      outside with the key the old Worker used (cooldown.cubby.internal/code/<address>), it has nothing
  *      (on 274848d4 it had the entry);
@@ -18,8 +20,9 @@
  *
  *   node test/signin-delivery-workerd.test.js       (gate signin-delivery-workerd, emulator tier: it starts
  *                                                     a runtime; WEB_PORT is workerd's port)
- *   SIGNIN_DELIVERY_WORKER=<path to a worker.js>    grade that file instead (on 274848d4: 8 of 13 red, the address key among them;
- *                                                   on fe9edbda, 1 of 14: the cooldown answer carried no state)
+ *   SIGNIN_DELIVERY_WORKER=<path to a worker.js>    grade that file instead (15 checks: on 274848d4, 10 red, the address
+ *                                                   key among them; on fe9edbda, 2: the cooldown answers carried no state;
+ *                                                   on 24c349f5, 1: nothing asked yet, so no state)
  */
 'use strict';
 const fs = require('fs');
@@ -152,6 +155,16 @@ async function outside(req) {
     ok('a repeat inside the minute is answered from the cooldown', again.status === 200 && again.body && again.body.cached === true && world.mail.length === 1, [again.body, world.mail.length]);
     /* Skeptic M-S1: that answer says what the status route already found, read back through workerd's cache. */
     ok('and that cooldown answer says undeliverable, so the panel never says "use that one" over it', again.body && again.body.state === 'undeliverable' && !('sendRef' in again.body), again.body);
+    /* Round 7 (R6M2-2): a reload before the panel's first ask. Nothing asked the status route, so the
+       cooldown looks once itself, through workerd's fetch and the same cache entry. */
+    const NET2 = { 'CF-Connecting-IP': '198.51.100.9' };
+    const r1 = await post('/api/signin-code', { email: 'reload@example.org' }, NET2);
+    const rm = world.mail[world.mail.length - 1] || {};
+    world.events.set(rm.id, 'suppressed');
+    const rr0 = world.reads.length, rmail = world.mail.length;
+    const r2 = await post('/api/signin-code', { email: 'reload@example.org' }, NET2);
+    ok('nothing asked yet: the cooldown answer looks once itself and says undeliverable, on workerd',
+      r1.status === 200 && r2.body && r2.body.cached === true && r2.body.state === 'undeliverable' && world.reads.length - rr0 === 1 && world.mail.length === rmail, [r2.body, world.reads.length - rr0, world.mail.length - rmail]);
 
     console.log('\n3. workerd\'s cache holds the cooldown under the hashed key, and nothing under the address');
     const caches = await mf.getCaches();

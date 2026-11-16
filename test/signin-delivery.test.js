@@ -26,13 +26,17 @@
  *   8. a cooldown answer carries what the status route has already settled about the email that armed it
  *      (state undeliverable or delivered), so a repeat inside the minute never says "use that one" over
  *      an email that could not come; nothing when nothing is settled; never to another exact address;
- *      and the cooldown keeps only the hash the status entry is filed under, never the sendRef.
+ *      and the cooldown keeps only the hash the status entry is filed under, never the sendRef;
+ *   9. (round 7) when nothing has asked yet (a reload before the panel's first ask), the cooldown looks once
+ *      itself, inside the status route's own bound (six reads per email, four seconds apart, a settled
+ *      answer kept), passes on only a settled state, reads nothing for another exact address, and with a
+ *      sending-only key (401) answers exactly as before.
  *
  *   node test/signin-delivery.test.js               judge this tree's worker.js
- *   node test/signin-delivery.test.js --self-test   then break worker.js fifteen ways in memory; each break
+ *   node test/signin-delivery.test.js --self-test   then break worker.js eighteen ways in memory; each break
  *                                                   must turn its named check red
- *   SIGNIN_DELIVERY_WORKER=<path to a worker.js>    grade that file instead (on 274848d4: 63 of 87 red;
- *                                                   on fe9edbda, before section 6b's fix: 4 of 87)
+ *   SIGNIN_DELIVERY_WORKER=<path to a worker.js>    grade that file instead (92 checks: on 274848d4, 66 red;
+ *                                                   on fe9edbda, 7; on 24c349f5, before round 7's look, 3)
  */
 'use strict';
 const fs = require('fs');
@@ -436,7 +440,35 @@ async function suite(src, opts) {
     const c = fresh('unasked');
     await sendCode(c);
     const c2 = await sendCode(c);
-    ok('cooldown-unasked-no-state', 'companion: with nothing known yet (no status asked), the cooldown answer carries no state', c2.body && c2.body.cached === true && !('state' in c2.body), c2.body);
+    ok('cooldown-unasked-no-state', 'companion: nothing asked yet and Resend has only said sent, so the cooldown answer carries no state', c2.body && c2.body.cached === true && !('state' in c2.body), c2.body);
+    /* Round 7 (R6M2-2). She reloads before the panel's first ask, or another panel sends again: the status
+       route was never asked, and the new panel holds no sendRef. The cooldown looks once itself. */
+    const g = fresh('reloaded');
+    await sendCode(g); const gm = lastMail();
+    world.events.set(gm.id, 'suppressed');
+    const g0 = world.mail.length, gr = world.reads.length;
+    const g2 = await sendCode(g);
+    ok('cooldown-looks-itself', 'nothing asked yet, and Resend has suppressed it: the cooldown answer looks once itself and says undeliverable, and mails nothing',
+      g2.body && g2.body.cached === true && g2.body.state === 'undeliverable' && world.mail.length === g0 && world.reads.length - gr === 1 && world.reads[gr].id === gm.id, [g2.body, world.mail.length - g0, world.reads.length - gr]);
+    world.events.set(gm.id, 'delivered');   // were it read again, this is what it would say
+    const g3 = []; for (let i = 0; i < 4; i++) { gap(); g3.push((await sendCode(g)).body); }
+    ok('cooldown-look-kept', 'and once settled, four more asks five seconds apart read Resend no more, and still say undeliverable', world.reads.length - gr === 1 && g3.every((x) => x && x.state === 'undeliverable'), [world.reads.length - gr, g3]);
+    const h = fresh('bounded');
+    await sendCode(h);
+    const hr = world.reads.length;
+    for (let i = 0; i < 3; i++) { await sendCode(h); world.clock += 1000; }
+    const hNear = world.reads.length - hr;
+    for (let i = 0; i < 12; i++) { gap(); await sendCode(h); }
+    ok('cooldown-look-bounded', 'an email that stays sent: asks a second apart read it once, and twelve more five seconds apart read it six times in all',
+      hNear === 1 && world.reads.length - hr === 6, [hNear, world.reads.length - hr]);
+    const k = fresh('sendonly');
+    await sendCode(k);
+    world.readReply = () => J({ statusCode: 401, name: 'restricted_api_key', message: 'This API key is restricted to only send emails' }, 401);
+    const k0 = world.mail.length;
+    const k2 = await sendCode(k);
+    world.readReply = null;
+    ok('cooldown-look-sending-only', 'a sending-only key: the look is refused, and the answer is the plain cooldown answer, with no state and no new email',
+      k2.status === 200 && k2.body && k2.body.cached === true && !('state' in k2.body) && world.mail.length === k0, [k2.status, k2.body]);
     const d = fresh('sentonly');
     const kd = await known(sendCode, d, 'sent');
     const d2 = await sendCode(d);
@@ -457,6 +489,11 @@ async function suite(src, opts) {
     const s0 = world.mail.length;
     const v2r = await sendCode(v2);
     ok('cooldown-state-exact-address', 'another exact address in the same bucket is not told about that email: it gets a real send', v2r.body && !v2r.body.cached && !('state' in v2r.body) && world.mail.length === s0 + 1, v2r.body);
+    const w1 = 'zz.look' + (++addrN) + '@' + GMAIL, w2 = w1.replace('.', '');
+    await sendCode(w1); world.events.set(lastMail().id, 'suppressed');
+    const wr0 = world.reads.length;
+    await sendCode(w2);
+    ok('cooldown-look-exact-address', 'and nothing about the first email is read from Resend for it', world.reads.length === wr0, world.reads.slice(wr0));
     const refs = [ka, kb, kd, kf].map((k) => k.s.body && k.s.body.sendRef).filter(Boolean);
     const vals = [...world.cache.entries()].filter(([u]) => /^https:\/\/cooldown\.cubby\.internal\//.test(u)).map(([, v]) => v);
     ok('cooldown-value-no-ref', 'no cooldown entry holds a sendRef (at most the hash its status entry is filed under)', refs.length === 4 && vals.length > 0 && vals.every((v) => refs.every((r) => !v.includes(r))), vals.slice(0, 4));
@@ -490,7 +527,7 @@ async function suite(src, opts) {
   return { pass, fail, failed };
 }
 
-/* ---- --self-test: break worker.js in memory, fifteen ways; each must turn its own check red ---- */
+/* ---- --self-test: break worker.js in memory, eighteen ways; each must turn its own check red ---- */
 const MUTANTS = [
   { name: 'the send log line carries the address', red: 'send-log-clean',
     edits: [["const sendRef = await signinSent(r, 'code');", "const sendRef = await signinSent(r, 'code ' + email);"]] },
@@ -519,9 +556,17 @@ const MUTANTS = [
   { name: 'no timeout on the Resend read', red: 'timeout-unknown', slow: true,
     edits: [['      signal: AbortSignal.timeout(SIGNIN_STATUS_TIMEOUT_MS)\n', '']] },
   { name: 'the cooldown forgets what the status route learned', red: 'cooldown-says-undeliverable',
-    edits: [['  const known = await signinSettledState(was.refKey);', "  const known = '';"]] },
+    edits: [['  const known = await signinSettledState(env, was.refKey);', "  const known = '';"]] },
   { name: 'the cooldown passes on a state that is not settled', red: 'cooldown-sent-no-state',
-    edits: [["return e && typeof e === 'object' && SIGNIN_MAIL_SETTLED.has(e.last) ? e.last : '';", "return e && typeof e === 'object' && e.last ? e.last : '';"]] },
+    edits: [["  return SIGNIN_MAIL_SETTLED.has(st) ? st : '';", "  return st === 'unknown' ? '' : st;"]] },
+  { name: 'the cooldown passes on whatever its look said', red: 'cooldown-look-sending-only',
+    edits: [["  return SIGNIN_MAIL_SETTLED.has(st) ? st : '';", '  return st;']] },
+  { name: 'the cooldown looks before it checks the address', red: 'cooldown-look-exact-address',
+    edits: [['  if (!hit) return null;\n  let was = null;\n  try { was = JSON.parse(await hit.text()); } catch (e) { was = null; }\n',
+      "  if (!hit) return null;\n  let was = null;\n  try { was = JSON.parse(await hit.text()); } catch (e) { was = null; }\n  if (was && typeof was === 'object') await signinSettledState(env, was.refKey);\n"]] },
+  /* Round 7 (R6M2-2): the cooldown as round 6 left it, reading only what the status route had found. */
+  { name: 'the cooldown never looks itself', red: 'cooldown-looks-itself',
+    edits: [['  const st = await signinMailStateAt(env, refKey);', "  let st = '';\n  try { const h = await caches.default.match(new Request('https://signin-status.cubby.internal/' + refKey)); st = h ? String(JSON.parse(await h.text()).last || '') : ''; } catch (x) { st = ''; }"]] },
   { name: 'the cooldown keeps the sendRef itself', red: 'cooldown-value-no-ref',
     edits: [["await cache.put(cooldown, cooldownArmed(true, !!link, who, sendRef ? await signinRefKey(sendRef) : ''));", 'await cache.put(cooldown, cooldownArmed(true, !!link, who, sendRef));']] },
 ];

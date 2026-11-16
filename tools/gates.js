@@ -310,8 +310,9 @@ TREE.push(
 /* Did the sign-in email actually go? (P0, 16 Nov 2026: Resend accepted three sends to a new Gmail address and
    none arrived, while the app said "we just emailed you".) A send's sendRef and its one log line (Resend's id,
    never the address), /api/signin-status's coarse answer for every Resend event and every failure, the bound
-   on lookups, same-origin and its own limiter bucket, and no address in any cache key; driven through the real
-   worker.js. --self-test breaks worker.js twelve ways in memory and each must turn its own check red. */
+   on lookups, same-origin and its own limiter bucket, no address in any cache key, and a cooldown answer that
+   says what is settled about its email (looking once itself when nobody has asked yet); driven through the real
+   worker.js. --self-test breaks worker.js eighteen ways in memory and each must turn its own check red. */
 TREE.push(
   { name: 'signin-delivery', cmd: ['node', 'test/signin-delivery.test.js', '--self-test'] },
   /* The live delivery check's checker, against a stand-in Worker on 127.0.0.1 only. Its live mode sends real

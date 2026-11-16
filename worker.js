@@ -233,17 +233,25 @@ async function cooldownWho(email) {
    already sent an email ... so use that one" over an email that was never coming. So when the status
    route has settled what became of the email that armed this cooldown, the answer carries it as
    `state` ('undeliverable' or 'delivered'), and the panel shows that note instead. Read from this
-   colo's cache only, never asked of Resend, so a repeat stays as quick as it was. It tells nobody
-   anything new: the answer goes only to the exact address that armed it (`who`), and anybody who can
-   type that address could send one and ask the status route themselves. */
-async function cooldownReply(hit, who) {
+   colo's cache. It tells nobody anything new: the answer goes only to the exact address that armed it
+   (`who`), and anybody who can type that address could send one and ask the status route themselves.
+   WHEN NOTHING HAS ASKED YET (round 7, R6M2-2). A reload or a second panel before the panel's first ask
+   (8 seconds) found nothing settled, so the answer carried no state, and the new panel, which holds no
+   sendRef, could never ask: "use that one" over an email Resend had already suppressed. So when the
+   status route has not settled it, the cooldown looks once itself (signinSettledState), inside the same
+   bound as the status route: at most six reads of that email in all, four seconds apart, and a settled
+   answer is kept and never asked again. It still passes on only a settled state, so the answer says no
+   more than before; it is just no longer silent because nobody happened to ask first. With a
+   sending-only key that read is a 401, and the answer is exactly what it was (the panel's own "it can
+   take a few minutes" line covers her then). */
+async function cooldownReply(hit, who, env) {
   if (!hit) return null;
   let was = null;
   try { was = JSON.parse(await hit.text()); } catch (e) { was = null; }
   if (was && typeof was === 'object' && typeof was.who === 'string' && was.who && was.who !== who) return null;
   // Armed by the worker before this one (its value is '1', or carries no address hash): give the answer it always gave.
   if (!was || typeof was.hasCode !== 'boolean' || typeof was.hasLink !== 'boolean') return json({ ok: true, cached: true });
-  const known = await signinSettledState(was.refKey);
+  const known = await signinSettledState(env, was.refKey);
   const state = known ? { state: known } : {};
   if (was.hasCode && was.hasLink) return json(Object.assign({ ok: true, cached: true, hasCode: true, hasLink: true }, state));
   return json(Object.assign({ ok: true, hasCode: was.hasCode, hasLink: was.hasLink }, state));
@@ -301,15 +309,13 @@ async function signinRefKey(ref) {
 async function signinRefRequest(ref) {
   return new Request('https://signin-status.cubby.internal/' + await signinRefKey(ref));
 }
-/* What the status route has already settled about the email filed under refKey: 'undeliverable',
-   'delivered', or '' when nothing is settled (or there is no entry here). For cooldownReply. */
-async function signinSettledState(refKey) {
+/* What is settled about the email filed under refKey: 'undeliverable', 'delivered', or '' when nothing is
+   (no entry in this colo, a sending-only key, Resend has only said sent or delayed). For cooldownReply. It
+   asks the way the status route asks (signinMailStateAt), so the one bound on reads holds for both. */
+async function signinSettledState(env, refKey) {
   if (typeof refKey !== 'string' || !/^[0-9a-f]{40}$/.test(refKey)) return '';
-  try {
-    const hit = await caches.default.match(new Request('https://signin-status.cubby.internal/' + refKey));
-    const e = hit ? JSON.parse(await hit.text()) : null;
-    return e && typeof e === 'object' && SIGNIN_MAIL_SETTLED.has(e.last) ? e.last : '';
-  } catch (x) { return ''; }
+  const st = await signinMailStateAt(env, refKey);
+  return SIGNIN_MAIL_SETTLED.has(st) ? st : '';
 }
 function signinRefEntry(e, at) {
   const left = Math.max(1, SIGNIN_REF_TTL_S - Math.floor((Date.now() - at) / 1000));
@@ -344,9 +350,15 @@ async function signinSent(r, kind) {
    failure (no entry, a sending-only key, a timeout, any non-2xx, an answer it cannot read) is
    'unknown', which the app treats as "say nothing new". */
 async function signinMailState(env, ref) {
-  if (!SIGNIN_REF_RE.test(ref) || !env.RESEND_API_KEY) return 'unknown';
+  if (!SIGNIN_REF_RE.test(ref)) return 'unknown';
+  return signinMailStateAt(env, await signinRefKey(ref));
+}
+/* The same, for the entry filed under refKey (the hash of a sendRef): shared by the status route and the
+   cooldown (signinSettledState), so a read either of them makes counts against the one bound. */
+async function signinMailStateAt(env, refKey) {
+  if (!env || !env.RESEND_API_KEY) return 'unknown';
   const cache = caches.default;
-  const key = await signinRefRequest(ref);
+  const key = new Request('https://signin-status.cubby.internal/' + refKey);
   let e = null;
   try { const hit = await cache.match(key); e = hit ? JSON.parse(await hit.text()) : null; } catch (x) { e = null; }
   if (!e || typeof e !== 'object' || typeof e.id !== 'string' || !RESEND_ID_RE.test(e.id)) return 'unknown';
@@ -451,7 +463,7 @@ async function sendSigninLink(request, env) {
   const cache = caches.default;
   const cooldown = await cooldownRequest(sa, 'link', email);
   const who = await cooldownWho(email);
-  const held = await cooldownReply(await cache.match(cooldown), who);
+  const held = await cooldownReply(await cache.match(cooldown), who, env);
   if (held) return held;
 
   try {
@@ -1097,7 +1109,7 @@ async function sendSigninCode(request, env) {
      key, never the address. It answers only for the exact address that armed it (cooldownReply). */
   const cooldown = await cooldownRequest(sa, 'code', email);
   const who = await cooldownWho(email);
-  const held = await cooldownReply(await cache.match(cooldown), who);
+  const held = await cooldownReply(await cache.match(cooldown), who, env);
   if (held) return held;
 
   try {
