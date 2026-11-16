@@ -130,6 +130,58 @@ discontinued (2024), so an ESP key is required either way.
 When adding an ESP, send marketing/transactional from **subdomains** (`mail.`/`news.`, per §2)
 with their own SPF/DKIM, and leave the apex record for Firebase auth mail.
 
+## 9c. Did the sign-in email actually go? (16 Nov 2026)
+A 2xx from Resend means Resend **accepted** the email, nothing more. Resend answers 2xx for an
+address on its suppression list and then never sends it, and a bounce arrives after acceptance. On
+16 Nov 2026 a new Gmail address asked for a code three times; each send was a 2xx, the app said
+"Check your inbox: we just emailed you", and nothing arrived in any folder
+(`docs/postmortems/2026-11-16-signin-email-not-delivered.md`). Until then Cubby kept no Resend id,
+logged nothing and could not learn what happened after acceptance.
+
+**What the Worker does now** (`worker.js`, `signinSent`, `signinMailState`, `signinStatus`):
+- Each send (code or link) writes ONE log line: `signin_send {"kind","status","id"}`, or
+  `{"kind","status","error"}` on a refusal (Resend's error *name* only; its message can repeat the
+  address). Never the address, the code, the link or a token.
+- On a 2xx with an id it keeps `{id, kind, at}` in the Cache API for an hour, under a SHA-256 of a
+  fresh 128-bit `sendRef`, and returns the `sendRef` to the app. The app never holds Resend's id.
+- `POST /api/signin-status {ref}` (same origin; its own limiter bucket `status:<network>` on
+  `SIGNIN_RATE_LIMITER`, so polling never spends the code budget) reads
+  `GET https://api.resend.com/emails/{id}` and answers ONE word: `sent` (queued, scheduled, sent),
+  `delivered` (delivered, opened, clicked, and complained, which Resend defines as delivered and then
+  marked as spam), `delayed` (delivery_delayed), `undeliverable` (bounced, suppressed, failed,
+  canceled) or `unknown` (anything else, any non-2xx, a timeout of 5 s, a ref it did not mint). The
+  email body (it holds the code), the recipient and the subject are never returned or logged.
+- Bounded: at most 6 Resend reads per email, at least 4 s apart, and a settled answer (delivered or
+  undeliverable) is kept and never asked again. Resend's rate limit is per team (10 a second) and
+  shared with every send.
+- The Cache API is per data centre, so a status ask that lands in another colo finds nothing and is
+  `unknown`. That is the safe direction: the panel then says nothing new.
+
+**What the app does** (`app/store-firebase.js`, the email panel): after a send that came back with a
+`sendRef`, while the code panel is open and she is not signed in, it asks at about 8, 20, 45 and 90
+seconds and stops at the first settled answer. `undeliverable` replaces "Check your inbox" with "We
+couldn’t get that email to <address>, so no code is on its way. Check the address, or continue with
+Google or Apple." (For an email that carried no code: "so it won’t arrive".) `delivered` adds "It’s been delivered. If it isn’t in your inbox, have a look in
+Spam or Promotions." Anything else changes nothing. The code box, its focus and what she typed are
+never touched. A Worker that returns no `sendRef` (older builds) leaves the panel exactly as before.
+
+**The Resend key must be Full access for any of this to answer.** A Sending-access key gets 401
+`restricted_api_key` on `GET /emails/{id}`, which is `unknown`, so with today's key (permission not
+yet checked) the panel behaves exactly as before and only the log line is new. Resend has no
+read-only permission: reading needs Full access, which also lets the key manage domains and read
+every email. That trade is the founder's call.
+
+**The cooldown's cache key no longer holds the address.** It is an HMAC (the sign-in code key,
+label `cooldown:`) of the normalised address, under `cooldown.cubby.internal/code/` or `/link/`.
+Cloudflare's zone analytics list every cache read and write as a subrequest path, and the old key
+put each address that asked for a sign-in email there in plain text.
+
+**Logs are not kept yet.** Without `[observability]` in `wrangler.toml`, `signin_send` and
+`signin_status` lines are visible only live (`npx wrangler tail cubby`). Workers Logs was left off on
+purpose: every `console.*` argument in `worker.js` is clean, but a log event most likely carries its
+request's URL, and `/api/invite-peek?t=<invite token>` logs a line when its limiter refuses. Turning
+it on (with `[observability.logs] invocation_logs = false`) is the founder's decision.
+
 ## 10. Decision log
 - 2026-06: For family scale, ship/keep free client email (EmailJS or mailto). Do **not** build
   Blaze/ESP yet. Revisit when approaching real users or adding promotional email.
@@ -156,3 +208,9 @@ with their own SPF/DKIM, and leave the apex record for Firebase auth mail.
   2026-06-14.** Accepts the service-account-in-Worker-secret tradeoff (founder go-ahead 2026-06-14)
   -- the only way to custom-send Firebase auth links.
 - Transactional != marketing: always separate streams, domains, and consent.
+- 2026-11-16: A new Gmail address never received three sign-in emails that Resend accepted. The
+  scope (this address, or every Gmail parent) waits on Resend's dashboard. Built the same day (§9c):
+  one log line per send with Resend's id, `/api/signin-status` and the panel note for an email that
+  could not be delivered, and the cooldown's cache key hashed so no address reaches Cloudflare's
+  analytics. Gmail has dropped this product's mail silently before (2026-06-11, above), so a
+  `delivered` from Resend does not close the question on its own.
