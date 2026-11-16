@@ -55,7 +55,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      # Full history: test/links-leave.test.js grades old app builds against the rules published BEFORE
+      # (git show 866851ac:firestore.rules). A depth-1 checkout has no such commit, so that half went red
+      # on every CI run while it passed on the laptop.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -66,8 +71,11 @@ jobs:
           java-version: '21'
       - name: Install firebase-tools and the rules-testing SDK (test/package.json)
         run: npm install --prefix test --no-audit --no-fund
-      - name: Install the browser driver the self-hosting suites use
-        run: npm install --no-save --prefix tools puppeteer-core
+      # puppeteer-core AND firebase-admin in ONE install: `npm install --no-save X` prunes every package X
+      # does not depend on, and the invite suites load firebase-admin from tools/node_modules (adminFrom).
+      # Installing puppeteer-core alone left them failing on "Cannot find module 'firebase-admin/app'".
+      - name: Install the browser driver and the admin SDK the self-hosting suites use
+        run: npm install --no-save --prefix tools puppeteer-core firebase-admin
       - name: Firestore emulator tier (each suite on its own free ports)
         env:
           CHROME_PATH: /usr/bin/google-chrome
