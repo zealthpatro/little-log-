@@ -159,11 +159,26 @@ logged nothing and could not learn what happened after acceptance.
 
 **What the app does** (`app/store-firebase.js`, the email panel): after a send that came back with a
 `sendRef`, while the code panel is open and she is not signed in, it asks at about 8, 20, 45 and 90
-seconds and stops at the first settled answer. `undeliverable` replaces "Check your inbox" with "We
+seconds and stops at the first settled answer, or as soon as the panel leaves the screen (a sign-in
+redraws the screen, so that stops it too). `undeliverable` replaces "Check your inbox" with "We
 couldn’t get that email to <address>, so no code is on its way. Check the address, or continue with
-Google or Apple." (For an email that carried no code: "so it won’t arrive".) `delivered` adds "It’s been delivered. If it isn’t in your inbox, have a look in
-Spam or Promotions." Anything else changes nothing. The code box, its focus and what she typed are
-never touched. A Worker that returns no `sendRef` (older builds) leaves the panel exactly as before.
+Google or Apple." (For an email that carried no code: "so it won’t arrive".) `delivered` adds "It’s
+been delivered. If it isn’t in your inbox, have a look in Spam or Promotions." Anything else changes
+nothing. The code box, its focus and what she typed are never touched. A Worker that returns no
+`sendRef` (older builds) leaves the panel exactly as before.
+The note's line is a polite live region that is on the page, empty, before any answer, so a screen
+reader reads the answer out when it arrives.
+
+**A second ask inside the minute keeps what is known.** The undeliverable note says "Check the
+address", so "Wrong email?" and the same address again is the likely next tap, and the Worker's
+one-minute cooldown answers it without a new email. Two things keep "We already sent an email ... so
+use that one" off her screen when that email could not come: the cooldown remembers where its email's
+status is filed (a hash of the `sendRef`, never the ref) and its answer carries `state: 'undeliverable'`
+or `'delivered'` once the status route has found it, which covers a reload (in the same data centre,
+like everything the Cache API holds); and the panel keeps its own watch across "Wrong email?", a
+cooldown answer and a wrong code (a code error has its own line and no longer wipes the note, or
+Resend and "Wrong email?" with it). Only a new email (a new `sendRef`, Firebase's own fallback sender,
+or another address) replaces what the panel knows.
 
 **The Resend key must be Full access for any of this to answer.** A Sending-access key gets 401
 `restricted_api_key` on `GET /emails/{id}`, which is `unknown`, so with today's key (permission not

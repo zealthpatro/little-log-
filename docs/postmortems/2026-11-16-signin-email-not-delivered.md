@@ -105,10 +105,15 @@ Built on fix6-M, waiting for the root session to integrate and push (EMAIL.md §
 - The panel asks at about 8, 20, 45 and 90 seconds. On undeliverable it stops saying "check your inbox"
   and says the email could not reach that address, pointing to the address and to Google or Apple. On
   delivered it says so and mentions Spam and Promotions. The code box is never touched.
+- A second ask for the same address inside the minute never says "use that one" over an email that
+  could not come: the cooldown's answer carries what the status route has already found (so a reload is
+  covered), and the panel keeps what it learned when she taps "Wrong email?" or types a wrong code.
 - The cooldown's cache key is an HMAC of the address, not the address.
-- Gates: `signin-delivery` (Node, with twelve mutants), `signin-delivery-workerd` (workerd's own Cache API,
-  timeout, rate limiter and console) and the mail-status section of `ios-signin` (the real panel, four
-  parents at once, against the Auth emulator).
+- Gates: `signin-delivery` (Node, with fifteen mutants), `signin-delivery-workerd` (workerd's own Cache
+  API, timeout, rate limiter and console) and the mail-status section of `ios-signin` (the real panel and
+  the real Firebase SDK against the Auth emulator, ten parents at once: undeliverable, delivered,
+  unknown, an older Worker, a link-only email, "Wrong email?" then the same address, a reload, a wrong
+  code, signing in before an answer, and the panel leaving the screen).
 
 This makes the app truthful. It does not make the email arrive: that depends on the root cause above.
 It answers only with a Full-access Resend key; with a Sending-access key every answer is `unknown` and
