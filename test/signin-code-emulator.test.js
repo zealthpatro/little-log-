@@ -445,14 +445,16 @@ async function listCodes() {
       ok('a Resend inside the minute keeps the code box and still mentions no link', s.codeBox && !/tap the link/.test(s.text), s);
     }
 
-    // 7d. A cooldown armed by the worker before this one (its value is just '1'): the old answer stands.
+    // 7d. A cooldown VALUE in the oldest shape (just '1'): the old answer stands. Since 16 Nov 2026 the key is a
+    // keyed hash of the address (cooldownRequest), so it is seeded under the key this worker reads; an entry an
+    // older worker left under the plaintext key is never read, and lapses within its minute.
     {
       const e = fresh('legacy');
       cache.clear();
-      cache.set(new Request('https://cooldown.cubby.internal/' + encodeURIComponent(e)).url, '1');
+      cache.set((await mod.__signin.cooldownRequest(SA, 'link', e)).url, '1');
       const r = await post(w, '/api/send-signin-link', { email: e });
       const body = await r.json();
-      ok('a cooldown set by the previous worker still answers cached, as it always did', r.status === 200 && body.ok === true && body.cached === true, body);
+      ok('a cooldown value in the oldest shape (\'1\') still answers cached, as it always did', r.status === 200 && body.ok === true && body.cached === true, body);
     }
   }
 
@@ -566,12 +568,12 @@ async function listCodes() {
     const ab = await again.json().catch(() => ({}));
     ok('a repeat of her OWN address inside the minute is still answered from her cooldown, and mails nothing', ab.cached === true && mail.length === mailed, [ab, mail.length - mailed]);
     const old = fresh('oldcool');
-    const ckey = new Request('https://cooldown.cubby.internal/code/' + encodeURIComponent(old)).url;
+    const ckey = (await mod.__signin.cooldownRequest(SA, 'code', old)).url;   // the hashed key (16 Nov 2026)
     for (const legacy of ['1', JSON.stringify({ hasCode: true, hasLink: true })]) {
       cache.set(ckey, legacy);
       const r = await post(w, '/api/signin-code', { email: old }, HER);
       const b = await r.json().catch(() => ({}));
-      ok('a cooldown from the previous worker (' + (legacy === '1' ? "'1'" : 'no address hash') + ') still gives its old answer', b.cached === true && mail.length === mailed, b);
+      ok('a cooldown value in an older shape (' + (legacy === '1' ? "'1'" : 'no address hash') + ') still gives its old answer', b.cached === true && mail.length === mailed, b);
     }
     const leftOver = JSON.stringify([...cache.values()]);
     ok('no cooldown value holds an address in plain text', !/@/.test(leftOver), leftOver.slice(0, 200));

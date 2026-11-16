@@ -307,6 +307,18 @@ TREE.push(
   { name: 'widget-snapshot', cmd: ['node', 'test/widget-snapshot.test.js', 'url'] },   // the shared since-rules, both copies, held equal
   { name: 'widget-parity', cmd: ['node', 'tools/widget_parity_check.js', '--self-test'] },   // the widget copy rules, the Quick-action fields and the generated files
 );
+/* Did the sign-in email actually go? (P0, 16 Nov 2026: Resend accepted three sends to a new Gmail address and
+   none arrived, while the app said "we just emailed you".) A send's sendRef and its one log line (Resend's id,
+   never the address), /api/signin-status's coarse answer for every Resend event and every failure, the bound
+   on lookups, same-origin and its own limiter bucket, and no address in any cache key; driven through the real
+   worker.js. --self-test breaks worker.js twelve ways in memory and each must turn its own check red. */
+TREE.push(
+  { name: 'signin-delivery', cmd: ['node', 'test/signin-delivery.test.js', '--self-test'] },
+  /* The live delivery check's checker, against a stand-in Worker on 127.0.0.1 only. Its live mode sends real
+     email through Resend and refuses to start without --live --yes-send-real-email: the founder's call, never
+     a gate's. */
+  { name: 'mail-delivery-self', cmd: ['node', 'tools/mail_delivery_check.js', '--self-test'] },
+);
 // These judge PRODUCTION, not this checkout, so a failure is a deploy problem rather than a code
 // problem. Opt-in, because they need the network and they are the founder's to act on.
 /* The real host, for the gates that must grade what is DEPLOYED rather than what is in the tree. */
@@ -476,6 +488,13 @@ EMU_GATES.push(
    SIGINT, SIGHUP or SIGALRM to a process holding a D1 stops its workerd first (section 0 checks each). */
 EMU_GATES.push(
   { name: 'usage-d1', self: ['node', 'test/usage-d1-engine.test.js', '--self-test'] },
+);
+/* The same delivery checks on workerd itself (Miniflare, offline): the sendRef entry and the hashed cooldown in
+   workerd's own Cache API (nothing under the address), AbortSignal.timeout, a real rate-limit binding, and
+   workerd's console. Emulator tier because it starts a runtime; WEB_PORT is workerd's port. The panel's half
+   (what she sees for each answer) is in ios-signin, above. */
+EMU_GATES.push(
+  { name: 'signin-delivery-workerd', self: ['node', 'test/signin-delivery-workerd.test.js'] },
 );
 
 /* The tree server's port. Inside EMU_PORT_RANGE when one is set, so a session that agreed a band stays in

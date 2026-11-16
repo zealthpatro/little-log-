@@ -171,6 +171,19 @@ function cooldownKeyFor(email) {
   if (domain === 'gmail.com' || domain === 'googlemail.com') local = local.replace(/\./g, '');
   return local + '@' + domain;
 }
+/* The cooldown's cache key: a keyed hash of the normalised address, never the address itself.
+   A Cache API key is a URL, and Cloudflare's zone analytics list every cache read and write a Worker
+   makes as a subrequest, path included. Keyed by the address, every address that asked for a sign-in
+   email sat in those analytics in plain text (found during the 16 Nov 2026 sign-in email review).
+   An HMAC under the code key (signinCodeKey, with its own 'cooldown:' label) rather than a bare hash,
+   so a path cannot be checked against a guessed address either. 'code/' and 'link/' keep the two
+   senders' buckets apart, as before: a link asked for never arms the code cooldown. Each path is a
+   fixed 32 characters of base64url, so no address can spell the other sender's. */
+async function cooldownRequest(sa, sender, email) {
+  const key = await signinCodeKey(sa);
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode('cooldown:' + cooldownKeyFor(email)));
+  return new Request('https://cooldown.cubby.internal/' + sender + '/' + _b64urlFromBytes(sig).slice(0, 32));
+}
 /* The address check the three public sign-in endpoints share. '.invalid' is a reserved TLD (RFC
    2606), so no person has one, and the canary's address is one (CANARY_EMAIL, in a public repo).
    Before this, three networks asking for canary@cubby.invalid could cap it and raise a false
@@ -220,6 +233,129 @@ async function cooldownReply(hit, who) {
   if (!was || typeof was.hasCode !== 'boolean' || typeof was.hasLink !== 'boolean') return json({ ok: true, cached: true });
   if (was.hasCode && was.hasLink) return json({ ok: true, cached: true, hasCode: true, hasLink: true });
   return json({ ok: true, hasCode: was.hasCode, hasLink: was.hasLink });
+}
+
+/* ---- Did the sign-in email actually go? ---------------------------------------------------------
+
+   A 2xx from Resend means Resend ACCEPTED the message, and nothing more. It answers 2xx for an
+   address on its suppression list too, and then never sends it ("suppressed: the email was not sent
+   because the recipient is on the suppression list", Resend's email events). A hard bounce or a
+   failure after acceptance is just as invisible from here. Both senders used to turn any 2xx into
+   "Check your inbox: we just emailed you", keep nothing, log nothing, and arm the cooldown, so a
+   parent whose email would never come was told to wait for it, with no hint that Google or Apple
+   would let her in. That is what a new Gmail address met on 16 Nov 2026
+   (docs/postmortems/2026-11-16-signin-email-not-delivered.md).
+
+   So a send now ends in three things. One log line, `signin_send {kind, status, id}` (or
+   `{kind, status, error}` on a refusal): Resend's message id and HTTP status, which is enough to find
+   the email in Resend's dashboard, and never the address, the code, the link or a token. The id kept
+   in this colo's cache for an hour, under a hash of a fresh random sendRef. And that sendRef, handed
+   to the app, which asks /api/signin-status a few times while she waits.
+
+   WHY A sendRef AND NOT THE ID. The app never holds Resend's id, so it cannot ask about anybody
+   else's email; the cache key is a hash of the ref, so the key in Cloudflare's analytics cannot be
+   replayed as a ref; and a ref this Worker did not mint (or one minted in another colo, since the
+   Cache API is per data centre) finds nothing and is answered 'unknown' without asking Resend at all.
+
+   WHAT IT CAN ANSWER. Reading an email back needs a full-access Resend key; a sending-only key gets
+   401 restricted_api_key, which is 'unknown', so the app then behaves exactly as it did before this.
+   Resend's team rate limit (10 a second) is shared with every send, so each email is looked up at
+   most SIGNIN_STATUS_LOOKUPS times, at least SIGNIN_STATUS_GAP_MS apart, a settled answer is kept and
+   never asked again, and the route has its own per-network limiter bucket (signinGuard). */
+const SIGNIN_REF_TTL_S = 3600;
+const SIGNIN_STATUS_LOOKUPS = 6;
+const SIGNIN_STATUS_GAP_MS = 4000;
+const SIGNIN_STATUS_TIMEOUT_MS = 5000;
+const SIGNIN_REF_RE = /^[A-Za-z0-9_-]{22}$/;
+const RESEND_ID_RE = /^[A-Za-z0-9-]{8,64}$/;
+/* Resend's last_event, in the five words the app acts on. 'complained' is delivered: Resend's own
+   definition is that the email reached her mail server and she marked it as spam, so "look in Spam"
+   is the true thing to say, and "it never reached you" would not be. 'canceled' only happens to a
+   scheduled email, which these never are; it is not coming, so it is undeliverable. Anything else
+   (a new event name, an empty one) is 'unknown', which changes nothing on her screen. A Map, so an
+   inherited name like 'constructor' is not an event. */
+const SIGNIN_MAIL_STATE = new Map([
+  ['queued', 'sent'], ['scheduled', 'sent'], ['sent', 'sent'],
+  ['delivered', 'delivered'], ['opened', 'delivered'], ['clicked', 'delivered'], ['complained', 'delivered'],
+  ['delivery_delayed', 'delayed'],
+  ['bounced', 'undeliverable'], ['suppressed', 'undeliverable'], ['failed', 'undeliverable'], ['canceled', 'undeliverable'],
+]);
+const SIGNIN_MAIL_SETTLED = new Set(['delivered', 'undeliverable']);
+async function signinRefRequest(ref) {
+  return new Request('https://signin-status.cubby.internal/' + (await sha256hex('cubby-signin-ref:' + ref)).slice(0, 40));
+}
+function signinRefEntry(e, at) {
+  const left = Math.max(1, SIGNIN_REF_TTL_S - Math.floor((Date.now() - at) / 1000));
+  return new Response(JSON.stringify(e), { headers: { 'cache-control': 'max-age=' + left } });
+}
+/* After Resend answered a sign-in send: the one log line, and on a 2xx with an id, the sendRef ('' when
+   there is none to give). Never throws: the email may already be on its way, and a throw here would
+   turn that into a 500 and a second email from the fallback sender. */
+async function signinSent(r, kind) {
+  try {
+    let j = null;
+    try { j = await r.json(); } catch (e) { j = null; }
+    if (!r.ok) {
+      /* The error's NAME only (validation_error, daily_quota_exceeded, ...). Its message can repeat
+         what was sent, the address included. */
+      const name = j && typeof j.name === 'string' && /^[a-z_]{1,40}$/.test(j.name) ? j.name : '';
+      console.error('signin_send', JSON.stringify({ kind, status: r.status, error: name }));
+      return '';
+    }
+    const id = j && typeof j.id === 'string' && RESEND_ID_RE.test(j.id) ? j.id : '';
+    console.log('signin_send', JSON.stringify({ kind, status: r.status, id }));
+    if (!id) return '';
+    const ref = _b64urlFromBytes(crypto.getRandomValues(new Uint8Array(16)));
+    const at = Date.now();
+    await caches.default.put(await signinRefRequest(ref), signinRefEntry({ id, kind, at, n: 0, t: 0, last: '' }, at));
+    return ref;
+  } catch (e) { return ''; }
+}
+/* What became of the email behind a sendRef: 'sent', 'delivered', 'delayed', 'undeliverable' or
+   'unknown'. Only ever the coarse word: Resend's answer holds the whole email (its HTML carries the
+   code and the link), the recipient and the subject, and none of it is returned or logged. Every
+   failure (no entry, a sending-only key, a timeout, any non-2xx, an answer it cannot read) is
+   'unknown', which the app treats as "say nothing new". */
+async function signinMailState(env, ref) {
+  if (!SIGNIN_REF_RE.test(ref) || !env.RESEND_API_KEY) return 'unknown';
+  const cache = caches.default;
+  const key = await signinRefRequest(ref);
+  let e = null;
+  try { const hit = await cache.match(key); e = hit ? JSON.parse(await hit.text()) : null; } catch (x) { e = null; }
+  if (!e || typeof e !== 'object' || typeof e.id !== 'string' || !RESEND_ID_RE.test(e.id)) return 'unknown';
+  const at = Number(e.at) || Date.now(), n = Number(e.n) || 0, t = Number(e.t) || 0;
+  const last = SIGNIN_MAIL_SETTLED.has(e.last) || e.last === 'sent' || e.last === 'delayed' ? e.last : 'unknown';
+  if (SIGNIN_MAIL_SETTLED.has(last)) return last;                   // settled: Resend is not asked again
+  const now = Date.now();
+  if (n >= SIGNIN_STATUS_LOOKUPS || now - t < SIGNIN_STATUS_GAP_MS) return last;
+  // Counted before Resend is asked, so an ask that arrives while this one waits sees the gap.
+  try { await cache.put(key, signinRefEntry(Object.assign({}, e, { n: n + 1, t: now }), at)); } catch (x) { return 'unknown'; }
+  let status = 0, event = '';
+  try {
+    const r = await fetch('https://api.resend.com/emails/' + encodeURIComponent(e.id), {
+      headers: { authorization: 'Bearer ' + env.RESEND_API_KEY },
+      signal: AbortSignal.timeout(SIGNIN_STATUS_TIMEOUT_MS)
+    });
+    status = r.status;
+    if (r.ok) {
+      const j = await r.json();
+      event = j && typeof j.last_event === 'string' && /^[a-z_]{1,32}$/.test(j.last_event) ? j.last_event : '';
+    }
+  } catch (x) { event = ''; }
+  const state = (status >= 200 && status < 300 && SIGNIN_MAIL_STATE.get(event)) || 'unknown';
+  console.log('signin_status', JSON.stringify({ kind: e.kind === 'link' ? 'link' : 'code', status, event, state, id: e.id }));
+  if (state !== 'unknown' && state !== last) {
+    try { await cache.put(key, signinRefEntry(Object.assign({}, e, { n: n + 1, t: now, last: state }), at)); } catch (x) { /* asked again next time */ }
+  }
+  return state;
+}
+/* POST /api/signin-status {ref} -> {state}. Same origin, and its own limiter bucket (signinGuard). */
+async function signinStatus(request, env) {
+  const bad = await signinGuard(request, env); if (bad) return bad;
+  let body; try { body = await request.json(); } catch (e) { return json({ error: 'bad_request' }, 400); }
+  const ref = bodyText(body, 'ref');
+  if (ref === null) return json({ error: 'bad_request' }, 400);
+  return json({ state: await signinMailState(env, ref) });
 }
 
 /* The client address every per-IP limiter keys on. IPv6 is cut to its /64: one subscriber is handed
@@ -283,10 +419,10 @@ async function sendSigninLink(request, env) {
   try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return json({ error: 'server_config' }, 500); }
   if (!env.RESEND_API_KEY) return json({ error: 'server_config' }, 500);
 
-  // Light per-email cooldown (normalized key) to absorb rapid re-sends; set only AFTER a real send.
-  // It answers only for the exact address that armed it (cooldownReply).
+  // Light per-email cooldown (normalized key, hashed: cooldownRequest) to absorb rapid re-sends; set
+  // only AFTER a real send. It answers only for the exact address that armed it (cooldownReply).
   const cache = caches.default;
-  const cooldown = new Request('https://cooldown.cubby.internal/' + encodeURIComponent(cooldownKeyFor(email)));
+  const cooldown = await cooldownRequest(sa, 'link', email);
   const who = await cooldownWho(email);
   const held = await cooldownReply(await cache.match(cooldown), who);
   if (held) return held;
@@ -317,12 +453,13 @@ async function sendSigninLink(request, env) {
         html: signinEmailHtml(code, link)
       })
     });
+    const sendRef = await signinSent(r, 'link');   // the log line, and a way for the app to ask what became of it
     if (!r.ok) return json({ error: 'send_failed' }, 502);
     await cache.put(cooldown, cooldownArmed(!!code, true, who)); // start cooldown only on success, and remember what this email holds, and for whom
     /* Say what the email ACTUALLY carries, rather than leaving the client to assume. This is the
        whole bug class closed at the root: a screen can only offer a code box because the sender just
        told it there is a code in that inbox, so the two can no longer drift apart. */
-    return json({ ok: true, hasCode: !!code, hasLink: true });
+    return json(Object.assign({ ok: true, hasCode: !!code, hasLink: true }, sendRef ? { sendRef } : {}));
   } catch (e) {
     return json({ error: 'failed' }, 500);
   }
@@ -877,8 +1014,9 @@ async function canaryStatus(env) {
   return res;
 }
 
-/* The per-IP key, exported for test/signin-code-budget.test.js only. Workers ignore named exports. */
-export const __signin = { clientIpKey };
+/* The per-IP key, exported for test/signin-code-budget.test.js only, and the cooldown's cache key, for
+   test/signin-code-emulator.test.js and test/signin-delivery.test.js. Workers ignore named exports. */
+export const __signin = { clientIpKey, cooldownRequest };
 /* The funnel's pieces, exported for test/funnel-worker.test.js only. Workers ignore named exports. */
 export const __funnel = { recordStep: (req, env) => recordStep(req, env), runFunnelSnapshot, countAccountDeleted, maybeSendFunnelDigest, fsPlain, entryTime };
 
@@ -904,8 +1042,11 @@ async function signinGuard(request, env) {
   } catch (e) { sameOrigin = false; }
   if (!sameOrigin) return json({ error: 'forbidden' }, 403);
   // Fails open, so a config gap cannot block real sign-ins; the code ceilings still hold.
-  const where = url.pathname === '/api/signin-verify' ? 'signin_verify' : 'signin_code';
-  if (await rateLimited(env.SIGNIN_RATE_LIMITER, 'code:' + clientIpKey(request), where)) return json({ error: 'rate_limited' }, 429);
+  const where = url.pathname === '/api/signin-verify' ? 'signin_verify' : url.pathname === '/api/signin-status' ? 'signin_status' : 'signin_code';
+  /* The status route is polled while she waits, so it has a bucket of its own: asking whether an
+     email arrived can never spend the allowance a code request or a code check needs. */
+  const bucket = where === 'signin_status' ? 'status:' : 'code:';
+  if (await rateLimited(env.SIGNIN_RATE_LIMITER, bucket + clientIpKey(request), where)) return json({ error: 'rate_limited' }, 429);
   return null;
 }
 
@@ -924,10 +1065,9 @@ async function sendSigninCode(request, env) {
   // Per-address cooldown, so one address cannot be mailed repeatedly. Same shape as the link path:
   // armed only after a real send, so a failed send does not lock the person out of retrying.
   const cache = caches.default;
-  /* 'code/' and not 'code-': encodeURIComponent always escapes '/', so no address the link sender
-     keys on can spell this one. With '-', a link asked for code-alice@... armed alice's code cooldown.
-     It answers only for the exact address that armed it (cooldownReply). */
-  const cooldown = new Request('https://cooldown.cubby.internal/code/' + encodeURIComponent(cooldownKeyFor(email)));
+  /* Its own 'code/' bucket, apart from the link sender's (cooldownRequest), and a keyed hash in the
+     key, never the address. It answers only for the exact address that armed it (cooldownReply). */
+  const cooldown = await cooldownRequest(sa, 'code', email);
   const who = await cooldownWho(email);
   const held = await cooldownReply(await cache.match(cooldown), who);
   if (held) return held;
@@ -967,9 +1107,10 @@ async function sendSigninCode(request, env) {
         html: signinEmailHtml(code, link)
       })
     });
+    const sendRef = await signinSent(r, 'code');   // the log line, and a way for the app to ask what became of it
     if (!r.ok) return json({ error: 'send_failed' }, 502);
     await cache.put(cooldown, cooldownArmed(true, !!link, who));
-    return json({ ok: true, hasCode: true, hasLink: !!link });
+    return json(Object.assign({ ok: true, hasCode: true, hasLink: !!link }, sendRef ? { sendRef } : {}));
   } catch (e) {
     return json({ error: 'failed' }, 500);
   }
@@ -3494,6 +3635,11 @@ export default {
     if (url.pathname === '/api/signin-verify') {
       if (request.method !== 'POST') return json({ error: 'method' }, 405);
       return verifySigninCode(request, env);
+    }
+    /* What became of a sign-in email: asked by the app while she waits for it (signinMailState). */
+    if (url.pathname === '/api/signin-status') {
+      if (request.method !== 'POST') return json({ error: 'method' }, 405);
+      return signinStatus(request, env);
     }
     if (url.pathname === '/api/send-signin-link') {
       if (request.method !== 'POST') return new Response('method not allowed', { status: 405 });
