@@ -1,0 +1,7 @@
+# The image libraries the logo tools are byte-stable on (tools/brand.py, tools/gen_brand_icons.py).
+# The committed icons were made with exactly these. Another Pillow resamples and compresses to other
+# bytes, so every icon would differ from the approved hashes; brand.py refuses to run set, native or
+# --self-test on anything else. CI installs from this file (.github/workflows/gates.yml). To move on:
+# change the pins here, install them, run python3 tools/brand.py set <master> again and commit it all.
+pillow==11.3.0
+numpy==2.0.2

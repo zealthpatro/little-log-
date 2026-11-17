@@ -80,6 +80,32 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import brand_style  # noqa: E402  the frame and the URL version, one implementation for every generator
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def toolchain_problem(pins=None):
+    """What stops this machine making the committed icon bytes, or None. The pins live in
+    tools/requirements-brand.txt (CI installs from it): Pillow 12 on CI against 11.3.0 on the Mac made
+    every regenerated icon differ, so brand-py was red on CI from the logo change on (Nov 2026)."""
+    if pins is None:
+        pins = {}
+        with open(os.path.join(ROOT, 'tools', 'requirements-brand.txt')) as f:
+            for line in f:
+                m = re.match(r'^\s*([A-Za-z0-9_.-]+)==([^\s#]+)', line)
+                if m:
+                    pins[m.group(1).lower()] = m.group(2)
+    have = {}
+    import PIL
+    have['pillow'] = PIL.__version__
+    try:
+        import numpy
+        have['numpy'] = numpy.__version__
+    except ImportError:
+        have['numpy'] = None
+    wrong = ['%s %s (needs %s)' % (k, have.get(k) or 'missing', v) for k, v in sorted(pins.items()) if have.get(k) != v]
+    if not wrong:
+        return None
+    return ('the logo tools make the committed bytes only on the pinned libraries: ' + ', '.join(wrong)
+            + '. Install them: python3 -m pip install -r tools/requirements-brand.txt')
 MASTER_REL = 'icons/icon-master-1024.png'
 REG_REL = 'tools/brand-images.json'
 PREP_REL = os.path.join('native-build', 'brand-native')   # gitignored and in .assetsignore
@@ -1800,6 +1826,12 @@ def self_test():
             failed[0] += 1
             print('  FAIL ' + name + ('\n         ' + str(extra)[:900] if extra is not None else ''))
 
+    print('\ntoolchain: the pinned image libraries (tools/requirements-brand.txt)')
+    ok('this machine has the pinned Pillow and numpy', toolchain_problem() is None, toolchain_problem())
+    wrong = toolchain_problem({'pillow': '0.0.1'})
+    ok('and a pin this machine does not have is refused, naming what it has and what it needs',
+       bool(wrong) and 'pillow' in wrong and '0.0.1' in wrong and 'requirements-brand.txt' in wrong, wrong)
+
     t0 = time.time()
     tmp = tempfile.mkdtemp(prefix='cubby-brandpy-selftest-')
     print('\nbrand.py self-test (scratch: %s)' % tmp)
@@ -2086,7 +2118,7 @@ def self_test():
     mini = os.path.join(tmp, 'mini')
     reg = load_registry()
     keep = [MASTER_REL, REG_REL, '.assetsignore'] + ['tools/' + f for f in ('brand.py', 'brand_style.py', 'gen_brand_icons.py', 'gen_splash.py', 'card_logo.py',
-                                                                          'brand_image_check.js', 'gen_app_icon.py')]
+                                                                          'brand_image_check.js', 'gen_app_icon.py', 'requirements-brand.txt')]
     # Files that point at the logo (a page, the 404, the app's service worker and manifest, the sign-in email,
     # the native offline page): set puts the new ?v= on them and bumps the service worker.
     REF_SAMPLE = [SW_REL, 'app/manifest.webmanifest', 'index.html', '404.html', 'cap-web/index.html', 'worker.js', 'articles/baby-blues-explained/index.html']
@@ -2345,6 +2377,11 @@ def self_test():
 def main(argv=None):
     if argv is None:
         argv = sys.argv[1:]
+    if argv[:1] == ['--self-test'] or argv[:1] in (['set'], ['native']):
+        tp = toolchain_problem()
+        if tp:
+            print('brand.py: ' + tp)
+            return 1
     if argv[:1] == ['--self-test']:
         return self_test()
     ap = argparse.ArgumentParser(prog='brand.py', description='Change Cubby\'s logo. docs/BRAND.md is the one-page flow.')

@@ -871,10 +871,16 @@ async function runtime(base) {
   });
 
   const screens = [];
+  /* Each screen's OWN logo slot. "Is the logo anywhere on the page" was always true: the app's header logo sits
+     behind every overlay, so a sign-in screen showing other art still passed (2026-11-16: the app's own sign-in
+     showed the waving cub and nothing went red). The slot is the one image that screen puts at its top. */
+  const SLOTS = { 'landing (signed out)': '.lp .lp-logo img', 'app sign-in (installed or native)': '.lp-app .lp-logo img',
+    'sign-in card': '.ll-auth-card .ll-auth-logo-img', 'access lost': '#ll-access-lost img' };
   const take = async (name, prep) => {
     if (prep) { try { await prep(); } catch (e) { screens.push({ name, error: String(e.message || e) }); return; } }
     await sleep(700);
     const c = await page.evaluate(COLLECT);
+    if (SLOTS[name]) c.slot = await page.evaluate((sel) => { const i = document.querySelector(sel); return i ? (i.getAttribute('src') || '') : null; }, SLOTS[name]);
     if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: true }); await page.screenshot({ path: path.join(SHOTS, name.replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.png') }); }
     screens.push(Object.assign({ name }, c));
   };
@@ -926,6 +932,10 @@ async function runtime(base) {
   await take('landing (signed out)', () => P('window.__brandProbe.showSignIn();'));
   await take('landing (signed out, Night)', () => page.evaluate(() => document.documentElement.setAttribute('data-theme', 'night')));
   await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
+  /* The app's own sign-in (app/landing.js appSignIn): what the iPhone app and an installed home-screen app
+     show, chosen by isNative() || isStandalone(). It showed the waving cub, not the logo, until 2026-11-16,
+     and no screen here rendered it. navigator.standalone is how iOS Safari reports an installed app. */
+  await take('app sign-in (installed or native)', () => P('Object.defineProperty(navigator, "standalone", { value: true, configurable: true }); try { window.__brandProbe.showSignIn(); } finally { delete navigator.standalone; }'));
   await take('sign-in card', () => P('var L = window.cubbyLanding; window.cubbyLanding = undefined; try { window.__brandProbe.showSignIn(); } finally { window.cubbyLanding = L; }'));
   await take('boot card', () => P('window.__brandProbe.showStatus("Signing you in…");'));
   await P('window.__brandProbe.hideOverlay();');
@@ -965,7 +975,7 @@ async function runtime(base) {
     }
     s.svgs.filter((g) => g.filled >= 5 && g.text === 0).forEach((g) => drawn.push(s.name + ': an inline SVG drawing with ' + g.filled + ' filled circles (' + g.w + 'x' + g.h + ' in ' + g.where + ')' + (g.planted ? ' [plant]' : '')));
     s.bears.forEach((b) => bears.push(s.name + ': ' + b));
-    report.push({ screen: s.name, images: imgs, svgs: s.svgs.length, bears: s.bears, shadows: s.shadows });
+    report.push({ screen: s.name, images: imgs, svgs: s.svgs.length, bears: s.bears, shadows: s.shadows, slot: s.slot });
   }
   // Every image that crossed the wire, whether or not it is still in the DOM.
   for (const [u, h] of loaded) {
@@ -984,9 +994,11 @@ function gradeRuntime(R, label) {
   ok('every screen rendered (' + R.report.length + ' of them)', R.errors.length === 0 && R.report.length >= 20, R.errors);
   const imgCount = R.report.reduce((n, s) => n + s.images.length, 0);
   ok('and they drew pictures to grade (' + imgCount + ' rendered images, ' + R.loaded + ' fetched)', imgCount > 15 && R.loaded >= 4, imgCount + ' rendered, ' + R.loaded + ' fetched');
-  ok('the painted face is on the landing, the sign-in card and the access-lost overlay',
-    ['landing (signed out)', 'sign-in card', 'access lost'].every((n) => (R.report.find((s) => s.screen === n) || { images: [] }).images.some((i) => i.file === 'icons/logo-512.png')),
-    R.report.filter((s) => /landing|sign-in|access/.test(s.screen)).map((s) => s.screen + ': ' + s.images.map((i) => i.file).join(',')));
+  const SLOTTED = ['landing (signed out)', 'app sign-in (installed or native)', 'sign-in card', 'access lost'];
+  const slotOf = (n) => (R.report.find((s) => s.screen === n) || {}).slot;
+  ok('the painted face is in the logo slot of the landing, the app\'s own sign-in (iPhone app and installed app), the sign-in card and the access-lost overlay',
+    SLOTTED.every((n) => /^\/icons\/logo-512\.png(\?|$)/.test(slotOf(n) || '')),
+    SLOTTED.map((n) => n + ': ' + JSON.stringify(slotOf(n))));
   ok('every rendered picture is in the approved set', R.unapproved.length === 0, R.unapproved.slice(0, 10).join('\n         '));
   ok('no retired logo (' + RETIRED_SETS.map((s) => s.name).join(', ') + ') is on any screen, under any URL', R.flat.length === 0, R.flat.slice(0, 6).join('\n         '));
   ok('no inline SVG drawing stands in for art', R.drawn.length === 0, R.drawn.slice(0, 6).join('\n         '));
