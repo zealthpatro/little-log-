@@ -23,6 +23,15 @@ binding = "ASSETS"
 # views (into D1, never the family Firestore). Set run_worker_first if that ever needs to change, and
 # price it: it puts the Worker in front of every asset request, images and scripts included.
 not_found_handling = "404-page"
+# NAVIGATIONS skip the Worker too (measured 17 Nov 2026). With not_found_handling set and a
+# compatibility_date of 2025-04-01 or later, a browser navigation (Sec-Fetch-Mode: navigate) to a path
+# with no file gets the 404 page above straight from the asset layer, and worker.js never sees it. Two
+# kinds of link are ONLY worker.js: the sign-in link in every sign-in email (/__/auth/action, proxied to
+# Firebase) and a shared family game (/g/<code>). From 8 Jul 2026, when the 404 page arrived, both showed
+# "That page moved or never existed" to every parent and guest who opened one in a browser, while every
+# script and test (no navigation header) still reached the Worker. So the Worker runs first for these
+# paths only; tools/live_nav_check.js asks production as a browser does (gates.js --live).
+run_worker_first = ["/__/*", "/g/*"]
 
 # Non-secret config. Secrets (RESEND_API_KEY, FIREBASE_SERVICE_ACCOUNT) are set with
 # `wrangler secret put` and never live in this file or the repo.
