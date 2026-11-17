@@ -8,8 +8,12 @@
  *       broke); the last line is always "REPLAY: CLEAN|REPRODUCED|OTHER" (tools/nightly_report.js reads it)
  *   node tools/chaos.js --self-test                                 serve the app with a planted lost-write
  *       bug (diaper entries never leave the phone), and fail unless a session catches it, the flake check
- *       calls it real, and the shrinker cuts the list down to the actions that matter; then run the same
- *       script against the real app and fail if anything is broken there
+ *       calls it real, and the shrinker cuts the list down to the actions that matter; then a member whose
+ *       sign-in is ten minutes old deletes her account (her phone signs in again first, as a parent is asked to),
+ *       and the same deletion without that sign-in must be refused; Olive on two phones removes Nina and then
+ *       deletes her own account, and the same exit with the goodbye under the sign-in screen and the old pointer
+ *       write (a merge) must be caught twice; then run the same script against the real app and fail if anything
+ *       is broken there
  *
  * A session is one family: Olive (owner), sometimes her own second phone, and newcomers who join by link
  * or answer an email invite (yes or no). Then a seeded mix of what families do: log a feed, a sleep, a
@@ -27,7 +31,11 @@
  *      (an entry, its edit, its delete; the baby; a medicine; a milestone; a running timer)
  *   C  nothing a member wrote is lost by another member's save (the generator never lets two phones
  *      touch the SAME item between checkpoints, except in a race, so every expectation is exact)
- *   C  a removed member can read nothing: the household and its entries refuse her, from the server
+ *   C  a removed member can read nothing: the household and its entries refuse her, from the server; and her
+ *      own user record says she has no family and remembers the one she lost
+ *   S  a member who has deleted her account (through the app's own Delete) is no longer in the family, on the
+ *      server; the goodbye is what she sees (the element at the centre of her screen); and her user record is
+ *      gone, and stays gone once her other phones have reacted
  *
  * On a failure the whole action list is re-run three times. Seen in 2 of 3 or more it is REAL, and is
  * shrunk (delta debugging, dependencies kept) to the shortest list that still breaks the same invariant,
@@ -139,7 +147,9 @@ function startWeb() {
   return new Promise((res) => {
     const srv = http.createServer((req, resp) => {
       let p = decodeURIComponent((req.url || '/').split('?')[0]);
-      if (OVERRIDE[p] !== undefined) { resp.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'text/plain', 'cache-control': 'no-store' }); resp.end(OVERRIDE[p]); return; }
+      // A planted page answers its folder's URL too: the phones open /app/, not /app/index.html.
+      const key = OVERRIDE[p] !== undefined ? p : (p.endsWith('/') && OVERRIDE[p + 'index.html'] !== undefined ? p + 'index.html' : null);
+      if (key) { resp.writeHead(200, { 'content-type': TYPES[path.extname(key)] || 'text/plain', 'cache-control': 'no-store' }); resp.end(OVERRIDE[key]); return; }
       let fp = path.join(ROOT, p);
       if (!fp.startsWith(ROOT)) { resp.writeHead(403); resp.end(); return; }
       try { if (fs.statSync(fp).isDirectory()) fp = path.join(fp, 'index.html'); } catch (e) {}
@@ -559,13 +569,123 @@ async function runSession(actions, opts) {
       case 'deleteAccount': {
         if (!usable(act.who)) return 'skip';
         if (!P.online) { await P.page.setOfflineMode(false); P.online = true; }
-        const r = await P.page.evaluate(() => window.LL.deleteAccount().then(() => 'ok', (e) => (e && (e.code || e.message)) || 'failed'));
+        /* Deleting an account asks for a sign-in under four minutes old before it deletes anything
+           (store-firebase.js freshSignIn: Firebase deletes a login only soon after a sign-in), and a password
+           session has no sheet to be asked again, so a phone that signed in earlier in a long session was refused
+           at the door (reauth_unsupported) and reported here as a violation. She proves it is her again first,
+           as the app asks a parent to. */
+        /* opts.skipReauth is the self-test's plant: this line taken out, which must turn a deletion after a stale
+           sign-in into a refusal (reauth_unsupported). */
+        const again = opts.skipReauth ? 'ok' : await P.page.evaluate((e, p) => window.LL.auth.currentUser.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(e, p))
+          .then(() => 'ok', (x) => (x && (x.code || x.message)) || 'failed'), P.email, PW);
+        if (again !== 'ok') violate('legit-denied', act.who + ' could not sign in again before deleting her account: ' + again);
+        /* Through the app's own Delete (doDeleteAccount, what the confirm sheet runs), so what she sees at the end is
+           judged as well; what LL.deleteAccount threw on the way is kept. */
+        const r = await P.page.evaluate(async () => {
+          const real = window.LL.deleteAccount;
+          let threw = null;
+          window.LL.deleteAccount = () => real().catch((e) => { threw = (e && (e.code || e.message)) || 'failed'; throw e; });
+          try { await doDeleteAccount(); } finally { window.LL.deleteAccount = real; }
+          return threw || 'ok';
+        });
+        // Her other phones: the same account, signed in elsewhere (Olive's second phone).
+        const mine = Object.entries(phones).filter(([, Q]) => Q !== P && Q.uid && Q.uid === P.uid && !Q.closed);
         if (r !== 'ok') violate('legit-denied', act.who + ' could not delete her own account: ' + r);
-        Object.values(model.logs).forEach((m) => { if (m.by === act.who) m.unknown = true; });   // what deletion keeps of her entries is not this harness's question
+        else {
+          // Finished means she has left the family, as the server holds it, not only that the call resolved.
+          const hh = await adminGet('households/' + hid).catch(() => null);
+          if (hh && hh.members && Object.prototype.hasOwnProperty.call(hh.members, P.uid)) violate('delete', act.who + ' deleted her account and is still in the family');
+          /* And she sees that it finished. Firebase signs her out as the login goes, so the sign-in screen is up; the
+             goodbye must be on top of it. From July to November 2026 it lay under it (z-index 4000 against 99999):
+             she saw a plain sign-in screen, and Continue with Google made her a new, empty account. */
+          await P.page.waitForFunction(() => !!(window.LL && window.LL.auth && !window.LL.auth.currentUser && document.getElementById('llAuthOv') && document.getElementById('cb-del-goodbye')), { timeout: 8000 }).catch(() => {});
+          const look = await P.page.evaluate(() => {
+            const at = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+            return { top: !at ? 'none' : at.closest('#cb-del-goodbye') ? 'goodbye' : at.closest('#llAuthOv') ? 'signin' : at.closest('#ll-access-lost') ? 'access-lost' : (at.id || at.tagName.toLowerCase()),
+              out: !window.LL.auth.currentUser, signIn: !!document.getElementById('llAuthOv'), goodbye: !!document.getElementById('cb-del-goodbye') };
+          }).catch((e) => ({ top: 'unreadable: ' + e.message }));
+          if (look.top !== 'goodbye') violate('delete', act.who + ' deleted her account and the goodbye is not what she sees: the centre of her screen is ' + look.top);
+          /* Her user record is gone (step 3), and stays gone. Her other phone, still signed in on a token that outlives
+             the account, loses the family when she leaves it and writes her pointer there; that write used to make the
+             record again, under an account that no longer exists (SAR-5). Waited for: that phone shows "You're no
+             longer in this family" (the write goes with it), then 2 s for it to land. */
+          const others = [];
+          for (const [w2, Q] of mine) {
+            const lost = await Q.page.waitForFunction(() => !!document.getElementById('ll-access-lost'), { timeout: 12000 }).then(() => true, () => false);
+            others.push({ phone: w2, lost });
+          }
+          if (mine.length) await sleep(2000);
+          const userDoc = await adminGet('users/' + P.uid).catch(() => null);
+          P.selfNote = Object.assign({}, P.selfNote || {}, { finished: look, others, userDoc: !!userDoc });
+          if (userDoc) violate('delete', act.who + ' deleted her account and her user record is on the server again' + (mine.length ? ' (her other phone wrote it back)' : '') + ': ' + JSON.stringify(userDoc).slice(0, 160));
+        }
+        const hers = [act.who].concat(mine.map(([w2]) => w2));
+        Object.values(model.logs).forEach((m) => { if (hers.includes(m.by)) m.unknown = true; });   // what deletion keeps of her entries is not this harness's question
         P.gone = true; P.member = false;
+        mine.forEach(([, Q]) => { Q.gone = true; Q.member = false; });
         return 'ok';
       }
       case 'settle': return settle(!!act.final, act.n);
+      /* Self-test only: her deletion stops at its very last step, the login itself (the Auth emulator's account delete
+         fails on the wire), after she has left the family. On the real SDK she must then be signed out, not left on
+         this phone's copy of a family that now refuses her (store-firebase.js signOutAfterStop), and still signed out
+         once the page is reloaded. She signs in again, as the sign-in screen tells her, lands in a new Cubby of her
+         own (her user record went with the first attempt), and deletes; that one finishes, and her account is gone
+         from the Auth emulator. */
+      case 'deleteStopsAtLogin': {
+        if (!usable(act.who)) return 'skip';
+        if (!P.online) { await P.page.setOfflineMode(false); P.online = true; }
+        const signIn = () => P.page.evaluate((e, p) => window.LL.auth.currentUser.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(e, p))
+          .then(() => 'ok', (x) => (x && (x.code || x.message)) || 'failed'), P.email, PW);
+        const del = () => P.page.evaluate(() => window.LL.deleteAccount().then(() => ({ r: 'ok' }), (e) => ({ r: (e && (e.code || e.message)) || 'failed', stage: (e && e.cubbyDeletion) || '' })));
+        const out = { again: await signIn() };
+        await P.page.setRequestInterception(true);
+        const cut = (r) => { if (r.method() === 'POST' && /accounts:delete/.test(r.url())) r.abort('failed').catch(() => {}); else r.continue().catch(() => {}); };
+        P.page.on('request', cut);
+        try { out.first = await del(); } finally { P.page.off('request', cut); await P.page.setRequestInterception(false); }
+        await sleep(2500);   // past the household listener's 1.5 s re-check
+        out.after = await P.page.evaluate(() => ({ out: !window.LL.auth.currentUser, signIn: !!document.getElementById('llAuthOv'), note: !!document.getElementById('ll-access-lost') }));
+        const hh = (await adminGet('households/' + hid).catch(() => null)) || {};
+        out.left = !Object.prototype.hasOwnProperty.call(hh.members || {}, P.uid);
+        if (!(out.first.r === 'auth/network-request-failed' && out.first.stage === 'login')) violate('delete', act.who + '\'s deletion was meant to stop at the login and did not: ' + JSON.stringify(out.first));
+        else if (!out.left) violate('delete', act.who + '\'s deletion stopped at the login with her still in the family');
+        else if (!out.after.out || !out.after.signIn || out.after.note) violate('delete', act.who + ' was not left signed out on the sign-in screen after her deletion stopped at the login: ' + JSON.stringify(out.after));
+        else if (!(out.reloaded = await P.page.reload({ waitUntil: 'networkidle2', timeout: 45000 }).then(() => sleep(4000)).then(() => P.page.evaluate(() => {
+          const ov = document.getElementById('llAuthOv');
+          return !!(window.LL && window.LL.auth && !window.LL.auth.currentUser && ov && /Continue with Google/.test(ov.textContent));
+        })).catch((e) => 'reload failed: ' + e.message)) || out.reloaded !== true) violate('delete', act.who + ' was not still signed out on the sign-in screen after a reload: ' + out.reloaded);
+        else {
+          await P.page.evaluate((e, p) => window.LL.auth.signInWithEmailAndPassword(e, p).then(() => true), P.email, PW);
+          try { await P.page.waitForFunction((old) => !!(window.LL.householdId && window.LL.householdId !== old && !document.getElementById('llAuthOv')), { timeout: 40000 }, hid); } catch (e) {}
+          out.hid2 = await P.page.evaluate(() => window.LL.householdId);
+          const fam2 = out.hid2 && out.hid2 !== hid ? await adminGet('households/' + out.hid2).catch(() => null) : null;
+          if (!fam2 || (fam2.members || {})[P.uid] !== 'owner' || (fam2.app && (fam2.app.babies || []).length)) violate('delete', act.who + ' signed in again and did not land in an empty Cubby of her own: ' + JSON.stringify({ hid2: out.hid2, members: fam2 && fam2.members, babies: fam2 && fam2.app && fam2.app.babies }));
+          else {
+            out.second = await del();
+            const look = await fetch(`http://localhost:${AUTH_PORT}/identitytoolkit.googleapis.com/v1/projects/${process.env.GCLOUD_PROJECT || EXEC_PROJECT}/accounts:lookup`,
+              { method: 'POST', headers: ADMIN, body: JSON.stringify({ localId: [P.uid] }) }).then((x) => x.json()).catch(() => ({}));
+            const fam3 = await adminGet('households/' + out.hid2).catch(() => null);
+            if (out.second.r !== 'ok') violate('legit-denied', act.who + ' signed in again and could not finish deleting her account: ' + out.second.r);
+            else if ((look.users || []).length) violate('delete', act.who + ' finished deleting and her account is still on the Auth emulator');
+            else if (!fam3 || typeof fam3.deleteAfter !== 'number' || Object.keys(fam3.members || {}).length) violate('delete', act.who + '\'s new Cubby was not flagged for deletion with nobody in it: ' + JSON.stringify(fam3 && { members: fam3.members, deleteAfter: fam3.deleteAfter }));
+          }
+        }
+        P.selfNote = out;
+        Object.values(model.logs).forEach((m) => { if (m.by === act.who) m.unknown = true; });
+        P.gone = true; P.member = false;
+        return 'ok';
+      }
+      /* Self-test only: her sign-in made act.agoMs old on the Auth emulator (its lastLoginAt is what a refreshed token
+         carries as auth_time), checked from her phone the way the app reads it before it deletes an account. */
+      case 'staleSignIn': {
+        if (!usable(act.who)) return 'skip';
+        const u = await fetch(`http://localhost:${AUTH_PORT}/identitytoolkit.googleapis.com/v1/projects/${process.env.GCLOUD_PROJECT || EXEC_PROJECT}/accounts:update`,
+          { method: 'POST', headers: ADMIN, body: JSON.stringify({ localId: P.uid, lastLoginAt: String(Date.now() - act.agoMs) }) });
+        const age = await P.page.evaluate(() => window.LL.auth.currentUser.getIdTokenResult(true).then((t) => Date.parse(t.issuedAtTime) - Date.parse(t.authTime), () => -1));
+        P.signInAge = age;
+        if (!u.ok || age < act.agoMs - 60000) violate('harness', 'could not make ' + act.who + '\'s sign-in ' + Math.round(act.agoMs / 60000) + ' min old: ' + u.status + ', age ' + age);
+        return 'ok';
+      }
       /* Self-test only: a stylesheet on one phone (a planted layout bug). */
       case 'plantCss': { if (!usable(act.who)) return 'skip'; await P.page.addStyleTag({ content: act.css }); return 'ok'; }
       /* Self-test only: one blob key is emptied on a phone and saved, as an overwrite would leave it, so the
@@ -688,6 +808,18 @@ async function runSession(actions, opts) {
         window.LL.db.collection('households/' + h + '/events').get({ source: 'server' }).then((q) => 'read ' + q.size, (e) => e && e.code),
       ]), hid).catch((e) => ['error ' + e.message]);
       if (r.some((x) => /^read/.test(String(x)))) violate('removed-reads', w + ' was removed and can still read: ' + JSON.stringify(r));
+      /* And her own user record says so: no family, and the one she lost remembered (account deletion finds her
+         records there through it). Her phone writes it when it shows "You're no longer in this family", as an update,
+         which Firestore refuses for a record that is not there (SAR-5); every way into a family writes that record,
+         so for a live account it is always there. */
+      let ptr = null;
+      for (let k = 0; k < 20; k++) {
+        ptr = await adminGet('users/' + P.uid).catch(() => null);
+        if (ptr && ptr.householdId === null && (ptr.formerHouseholdIds || []).includes(hid)) break;
+        await sleep(500);
+      }
+      if (!(ptr && ptr.householdId === null && (ptr.formerHouseholdIds || []).includes(hid))) violate('removed-pointer', w + ' was removed and her own record does not say so: ' + JSON.stringify(ptr).slice(0, 160));
+      P.selfNote = Object.assign({}, P.selfNote || {}, { pointer: ptr, family: hid });
       P.removedChecked = true;
     }
     return 'ok';
@@ -708,7 +840,8 @@ async function runSession(actions, opts) {
   } finally {
     for (const P of Object.values(phones)) { try { await P.ctx.close(); } catch (e) {} }
   }
-  return { sid, violations: V, steps };
+  return { sid, violations: V, steps, ages: Object.fromEntries(Object.entries(phones).map(([w, P]) => [w, P.signInAge])),
+    notes: Object.fromEntries(Object.entries(phones).map(([w, P]) => [w, P.selfNote])) };
 }
 
 /* ---------- flake check and shrinking ---------- */
@@ -838,6 +971,23 @@ const SELF_SCRIPT = [
   { a: 'log', who: 'nina', kind: 'diaper', note: 'd1', n: 'L7' }, { a: 'visit', who: 'olive', tab: 'log', w320: true, n: 'L8' },
   { a: 'log', who: 'olive', kind: 'sleep', note: 's1', n: 'L9' }, { a: 'settle', n: 'L10', final: true },
 ];
+/* And a deletion: Nina joins, logs, and deletes her account with a sign-in ten minutes old. And one that stops at the
+   login (STOP_SCRIPT): signed out, she signs in again and deletes. */
+const DELETE_SCRIPT = [
+  { a: 'boot', who: 'olive', n: 'L1' }, { a: 'inviteLink', who: 'olive', for: 'nina', n: 'L2' }, { a: 'joinLink', who: 'nina', skewMs: 0, n: 'L3' },
+  { a: 'settle', n: 'L4' }, { a: 'log', who: 'nina', kind: 'feed', note: 'f1', n: 'L5' }, { a: 'settle', n: 'L6' },
+  { a: 'staleSignIn', who: 'nina', agoMs: 10 * 60000, n: 'L7' }, { a: 'deleteAccount', who: 'nina', n: 'L8' }, { a: 'settle', n: 'L9', final: true },
+];
+const STOP_SCRIPT = DELETE_SCRIPT.slice(0, 6).concat([{ a: 'deleteStopsAtLogin', who: 'nina', n: 'L7' }, { a: 'settle', n: 'L8', final: true }]);
+/* And a family's exit (EXIT_SCRIPT): Olive, on two phones, removes Nina, whose own record must then say she has no
+   family; then Olive deletes her account on one phone, the last one out. The goodbye must be what she sees, and her
+   other phone, told she is no longer in the family, must not write her user record back. */
+const EXIT_SCRIPT = [
+  { a: 'boot', who: 'olive', n: 'L1' }, { a: 'second', who: 'olive2', skewMs: 0, n: 'L2' }, { a: 'inviteLink', who: 'olive', for: 'nina', n: 'L3' },
+  { a: 'joinLink', who: 'nina', skewMs: 0, n: 'L4' }, { a: 'settle', n: 'L5' }, { a: 'log', who: 'nina', kind: 'feed', note: 'f1', n: 'L6' },
+  { a: 'remove', who: 'olive', target: 'nina', n: 'L7' }, { a: 'settle', n: 'L8' },
+  { a: 'deleteAccount', who: 'olive', n: 'L9' }, { a: 'settle', n: 'L10', final: true },
+];
 const PLANT = {
   file: '/app/store-firebase.js',
   from: '        writes.push(eventsRef.doc(docKey(id)).set(Object.assign({ authorId: cur[id].authorId || uidNow }, cur[id]))',
@@ -908,6 +1058,55 @@ const PLANT = {
       ok('and night mode\'s header wash, clipped by body{overflow:hidden}, is not a sideways scroll', !panV.some((v) => v.step === 'L2'), panV.map((v) => v.step + ' ' + v.detail));
       ok('and a replay that breaks some OTHER invariant fails (exit 2), never reads as clean',
         replayVerdict([{ sig: 'b' }], 'a').code === 2 && replayVerdict([{ sig: 'a' }], 'a').code === 1 && replayVerdict([], 'a').code === 0);
+      /* Deleting an account asks for a sign-in under four minutes old before it deletes anything (store-firebase.js
+         freshSignIn), and a password session has no sheet to be asked again, so the deleteAccount action signs her
+         phone in again first. A session short enough for a gate never gets that old, so the plant makes it so on the
+         Auth emulator, and the same deletion without the sign-in again must then be refused at the door. */
+      const del = await runSession(DELETE_SCRIPT, { tag: 'd' });
+      const delStep = (r) => (r.steps.find((x) => x.n === 'L8') || {}).out;
+      const delBad = del.violations.filter((v) => /legit-denied|delete|harness/.test(v.inv));
+      ok('a member whose sign-in is ten minutes old (' + Math.round((del.ages.nina || 0) / 60000) + ' min, read from her phone) deletes her account: her phone signs in again, the deletion finishes, and she is out of the family',
+        delStep(del) === 'ok' && (del.ages.nina || 0) >= 9 * 60000 && !delBad.length, { step: delStep(del), age: del.ages.nina, violations: delBad.map((v) => v.inv + ': ' + v.detail) });
+      /* A resolved deletion must leave her out of the family: planted to skip the leave, it resolves with her still in. */
+      const LEAVE = { from: '      if (hhRef && !lostHere) {\n        var leaveRef = hhRef,', to: '      if (false) {   // PLANTED BY tools/chaos.js --self-test: the leave is skipped\n        var leaveRef = hhRef,' };
+      ok('the leave plant site is in store-firebase.js exactly once', src.split(LEAVE.from).length === 2);
+      OVERRIDE = { [PLANT.file]: src.replace(LEAVE.from, LEAVE.to) };
+      const kept = await runSession(DELETE_SCRIPT, { tag: 'l' });
+      OVERRIDE = {};
+      ok('and a deletion planted to skip the leave, which resolves with her still in the family, is caught',
+        kept.violations.some((v) => v.inv === 'delete' && /deleted her account and is still in the family/.test(v.detail)), kept.violations.map((v) => v.inv + ': ' + v.detail));
+      const noRe = await runSession(DELETE_SCRIPT, { tag: 'n', skipReauth: true });
+      ok('and with that sign-in taken out, the same deletion is refused at the door (reauth_unsupported), so the line is what passes it',
+        noRe.violations.some((v) => v.inv === 'legit-denied' && /could not delete her own account: reauth_unsupported/.test(v.detail)), noRe.violations.map((v) => v.inv + ': ' + v.detail));
+      const stop = await runSession(STOP_SCRIPT, { tag: 'o' });
+      const stopBad = stop.violations.filter((v) => /legit-denied|delete|harness|pageerror|unhandled/.test(v.inv)), sn = stop.notes.nina || {};
+      ok('on the real SDK, a deletion that stops at the login (its account delete failing on the wire) leaves her signed out of the family she has left; she signs in again, lands in a new Cubby of her own, and deleting finishes',
+        !stopBad.length && !!sn.first && sn.first.stage === 'login' && !!sn.second && sn.second.r === 'ok', { violations: stopBad.map((v) => v.inv + ': ' + v.detail), note: sn });
+      const dn = del.notes.nina || {};
+      ok('and the deletion that finished ends on the goodbye: the centre of her screen, over the sign-in screen Firebase\'s sign-out brought up',
+        !!dn.finished && dn.finished.top === 'goodbye' && dn.finished.out && dn.finished.signIn && dn.userDoc === false, dn);
+      /* A family's exit, on the real SDK: a removal on a live account writes her pointer (an update: her record is there,
+         made by her own join), and an account deleted on one phone stays deleted from the other. */
+      const ex = await runSession(EXIT_SCRIPT, { tag: 'x' });
+      const exBad = ex.violations.filter((v) => /legit-denied|delete|remove|harness|pageerror|unhandled|converge/.test(v.inv)), xo = ex.notes.olive || {}, xn = ex.notes.nina || {};
+      ok('Olive removes Nina (joined by link, so her record is her own join\'s): Nina\'s record then says she has no family and remembers the one she lost',
+        !exBad.length && !!xn.pointer && xn.pointer.householdId === null && (xn.pointer.formerHouseholdIds || []).includes(xn.family), { violations: exBad.map((v) => v.inv + ': ' + v.detail), nina: xn });
+      ok('then Olive deletes her account on one phone: the goodbye is what she sees, and her second phone, told she is no longer in the family, leaves her user record deleted',
+        !exBad.length && !!xo.finished && xo.finished.top === 'goodbye' && xo.finished.out && xo.finished.signIn
+          && (xo.others || []).length === 1 && xo.others[0].lost === true && xo.userDoc === false, { violations: exBad.map((v) => v.inv + ': ' + v.detail), olive: xo });
+      /* The same exit with the goodbye back at z-index 4000 and the second phone's pointer written as a merge, as both were
+         until November 2026: each must be caught. */
+      const idx = fs.readFileSync(path.join(ROOT, 'app', 'index.html'), 'utf8');
+      const BYE = { from: 'position:fixed;inset:0;z-index:100003;', to: 'position:fixed;inset:0;z-index:4000;' };
+      const PTR = { from: '.update(pointer).catch(', to: '.set(pointer, { merge: true }).catch(' };
+      ok('the goodbye and pointer plant sites are each in their file exactly once', idx.split(BYE.from).length === 2 && src.split(PTR.from).length === 2);
+      OVERRIDE = { '/app/index.html': idx.replace(BYE.from, BYE.to), [PLANT.file]: src.replace(PTR.from, PTR.to) };
+      const exP = await runSession(EXIT_SCRIPT, { tag: 'y' });
+      OVERRIDE = {};
+      ok('planted with the goodbye under the sign-in screen, a finished deletion is caught: the centre of her screen is the sign-in screen',
+        exP.violations.some((v) => v.inv === 'delete' && /goodbye is not what she sees: the centre of her screen is signin/.test(v.detail)), exP.violations.map((v) => v.inv + ': ' + v.detail));
+      ok('and planted with the old pointer write (a merge, which makes the record), her second phone writes her user record back after the deletion, and that is caught',
+        exP.violations.some((v) => v.inv === 'delete' && /user record is on the server again \(her other phone wrote it back\)/.test(v.detail)), exP.violations.map((v) => v.inv + ': ' + v.detail));
       console.log('\nthe same script against the real app');
       /* The harness's own rule: a violation counts only if the same list breaks it again in 2 of 3 runs.
          So a timing-dependent app race this short script can hit is reported here as a flake (and named),

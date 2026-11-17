@@ -156,6 +156,19 @@ function customToken(uid) {
     window.matchMedia = (q) => (/display-mode:\s*standalone/.test(q)
       ? { matches: true, media: q, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, onchange: null }
       : mm(q));
+    /* The iPhone keyboard, as WebKit reports it: the visual viewport gets shorter and fires resize, and
+       nothing else changes (100dvh included). Chrome has no on-screen keyboard, so window.__keys(px)
+       stands one in. */
+    let keys = 0;
+    const vv = new EventTarget();
+    Object.defineProperties(vv, {
+      width: { get: () => document.documentElement.clientWidth },
+      height: { get: () => document.documentElement.clientHeight - keys },
+      offsetTop: { get: () => 0 }, offsetLeft: { get: () => 0 }, scale: { get: () => 1 },
+      pageTop: { get: () => window.scrollY }, pageLeft: { get: () => window.scrollX },
+    });
+    Object.defineProperty(window, 'visualViewport', { get: () => vv, configurable: true });
+    window.__keys = (px) => { keys = px; vv.dispatchEvent(new Event('resize')); };
   });
   const errs = [];
   page.on('pageerror', (e) => errs.push(e.message));
@@ -172,6 +185,28 @@ function customToken(uid) {
   });
   ok('we are emulating a standalone iOS app', offer.standalone, offer);
   ok('and the email row offers a CODE, because a link cannot come back here', /code/i.test(offer.text || ''), offer);
+
+  /* Device test, 16 Nov 2026 (iPhone 18 Pro, the TestFlight app): she tapped "Prefer email? Get a
+     sign-in code" and typed her address with the field and Send code under the keys. The screen is one
+     phone tall, so there was nothing to scroll. */
+  console.log('\nthe keyboard never covers the field she is typing in');
+  const KEYS = 340;   // an iPhone keyboard with its suggestions bar, in CSS pixels
+  const formBox = (sel, k) => page.evaluate((s, kk) => {
+    const f = document.querySelector(s), r = f.getBoundingClientRect();
+    return { top: Math.round(r.top), bottom: Math.round(r.bottom), keysTop: document.documentElement.clientHeight - kk, focused: f.contains(document.activeElement) };
+  }, sel, k);
+  await page.evaluate(() => document.querySelector('.ll-email-toggle').click());
+  await sleep(300);
+  const kb0 = await formBox('.ll-email-form', KEYS);
+  ok('the email field has focus and sits where the keys come up, so the next check can fail', kb0.focused && kb0.bottom > kb0.keysTop, kb0);
+  await page.evaluate((k) => window.__keys(k), KEYS);
+  await sleep(400);
+  const kb1 = await formBox('.ll-email-form', KEYS);
+  ok('with the keys up, the email field and Send code are above them', kb1.bottom <= kb1.keysTop && kb1.top >= 0, kb1);
+  await page.evaluate(() => window.__keys(0));
+  await sleep(300);
+  const pad = await page.evaluate(() => document.getElementById('llAuthOv').style.paddingBottom);
+  ok('and when the keys go, the room made for them goes too', pad === '', { paddingBottom: pad });
 
   console.log('\nshe asks for the code and types it in, without leaving');
   await page.evaluate((email) => {
@@ -195,6 +230,11 @@ function customToken(uid) {
      whether she ends up signed in, and whether anything navigated to get her there. Fail, keep going,
      report everything. */
   if (codeFormShown) {
+    await page.evaluate((k) => window.__keys(k), KEYS);
+    await sleep(400);
+    const kb2 = await formBox('.ll-code-form', KEYS);
+    ok('the code box has focus, and with the keys up it is above them too', kb2.focused && kb2.bottom <= kb2.keysTop && kb2.top >= 0, kb2);
+    await page.evaluate(() => window.__keys(0));
     await page.evaluate((code) => {
       const cf = document.querySelector('.ll-code-form');
       cf.querySelector('input').value = code;

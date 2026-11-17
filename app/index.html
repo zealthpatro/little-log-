@@ -8864,27 +8864,58 @@ async function doDeleteAccount(){
     try{ closeSheet(); }catch(e){}
     showDeletedGoodbye();
   }catch(e){
-    const s=((e&&(e.code||e.message))||'')+'';
-    // Reauth was cancelled at the provider sheet: that is a normal "actually, not now", not a fault.
-    if(/cancel/i.test(s)||/AuthorizationError error 100[13]/.test(s)) toast('Nothing was deleted');
-    else if(/reauth_unsupported/.test(s)) toast('Please log out, sign in again, then delete');
-    else toast('Could not finish deleting. Please try again');
+    const s=[e&&e.code,e&&e.message,typeof e==='string'?e:''].filter(Boolean).join(' ');
+    // Backing out of the sign-in sheet (Apple, Google, the web popup) is a normal "actually, not now".
+    const cancelled=/cancel|popup-closed-by-user/i.test(s)||/AuthorizationError error 100[13]/.test(s);
+    const signInAgain=/reauth_unsupported/.test(s);
+    /* Say only what is true. store-firebase.js stamps how far it got (deletionStage): it asks for a recent
+       sign-in before it deletes or leaves anything, so a stop there deleted nothing. A sign-in Firebase
+       still asks for at the very end comes after her private records have gone and she has left her
+       family; only the account itself is still here, and saying "Nothing was deleted" then was untrue.
+       That stop signs her out (store-firebase.js signOutAfterStop), and the sign-in screen she lands on covers
+       this page's toasts, so what is left is said on that screen until she signs in (window.LL.signInNote).
+       A later attempt's door, once she is back in, is told as a toast like the rest.
+       tools/usage_tracker_check.js S22 and S23 read each of these off the real deletion on the emulator. */
+    const stage=(e&&e.cubbyDeletion)||'';
+    if(stage==='nothing'){
+      if(cancelled) toast('Nothing was deleted');
+      else if(signInAgain) toast('Please log out, sign in again, then delete');
+      else toast('Nothing was deleted. Please try again');
+    }else if(stage==='login'){
+      const left='Your private records are deleted, but your account is still here. ';
+      const signedOut=!(window.LL.auth&&window.LL.auth.currentUser);
+      if(signedOut&&typeof window.LL.signInNote==='function') window.LL.signInNote(left+'Sign in again, then delete it to finish.');
+      else toast(left+(signInAgain?'Log out, sign in again, then delete it':cancelled?'Delete it once more to finish':'Please try again'),{ms:7000,tapToDismiss:true});
+    }else toast('Could not finish deleting. Please try again');
   }
 }
 /* The auth user is gone, so the app would otherwise snap straight to the sign-in screen. Say goodbye
-   first: this is someone leaving, and it should not feel like being logged out by an error. */
+   first: this is someone leaving, and it should not feel like being logged out by an error.
+   Firebase's user.delete() signs her out as it finishes, so by the time this runs the sign-in screen
+   (#llAuthOv, z-index 99999) is already up. The goodbye sat at 4000 from July to November 2026, under it:
+   on every phone she saw the plain sign-in screen, with no word that her account had gone, and Continue
+   with Google made her a new empty one. So it sits above that screen and the app's full-screen reports
+   and readers (100000 to 100002), and takes the focus, so a screen reader starts here and not on the
+   sign-in screen underneath. Close loads /app/ afresh. tools/usage_tracker_check.js (S8b, S22-S24) and
+   tools/chaos.js read what is on top at the centre once a deletion has finished. */
 function showDeletedGoodbye(){
   const ov=document.createElement('div');
   ov.id='cb-del-goodbye';
-  ov.setAttribute('style','position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center');
+  ov.setAttribute('role','dialog');
+  ov.setAttribute('aria-modal','true');
+  ov.setAttribute('aria-labelledby','cb-del-title');
+  ov.setAttribute('style','position:fixed;inset:0;z-index:100003;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center');
   ov.innerHTML=`<div style="max-width:340px">
     <img src="/icons/logo-512.png?v=09cba32f" alt="" width="52" height="52" style="display:block;margin:0 auto;border-radius:13px">
-    <h2 style="font-family:Georgia,serif;margin:12px 0 8px;font-size:22px">Your account is deleted</h2>
+    <h2 id="cb-del-title" style="font-family:Georgia,serif;margin:12px 0 8px;font-size:22px">Your account is deleted</h2>
     <div class="cb-del-sub" style="font-size:15px;line-height:1.55;font-weight:600">Thank you for letting us look after some of it for a while. Take care of yourself.</div>
     <button id="cb-del-done" style="margin-top:22px;border:none;border-radius:16px;padding:15px 24px;background:#C97FA0;color:#1A1614;font-weight:800;font-size:16px;cursor:pointer;font-family:inherit">Close</button></div>`;
   document.body.appendChild(ov);
   const b=document.getElementById('cb-del-done');
-  if(b) b.onclick=function(){ try{ location.replace('/app/'); }catch(e){ location.reload(); } };
+  if(b){
+    b.onclick=function(){ try{ location.replace('/app/'); }catch(e){ location.reload(); } };
+    try{ b.focus({preventScroll:true}); }catch(e){}
+  }
 }
 /* Referral: deterministic short code from the signed-in uid (djb2 -> base36). */
 function refCode(){

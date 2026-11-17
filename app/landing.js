@@ -122,7 +122,8 @@
     // convention, and the smoothest path: Face ID, no account picker).
     return '<div class="lp lp-app' + (isIOS() ? ' lp-ios' : '') + '">'
       + '<div class="lp-app-top">'
-      + '<div class="lp-logo"><img src="/app/spot-art/welcome_cub.webp" alt="Cubby"></div>'
+      // The logo, as on the web landing and the sign-in card (founder, 2026-11-16: "show the logo on sign-in").
+      + '<div class="lp-logo"><img src="/icons/logo-512.png?v=09cba32f" alt="Cubby"></div>'
       + '<h1 class="lp-name">Cubby</h1>'
       + '<p class="lp-app-tag">One calm place for everyone caring for your little one.</p>'
       + '</div>'

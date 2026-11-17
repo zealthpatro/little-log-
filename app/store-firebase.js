@@ -498,6 +498,34 @@
   }
   function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function looksLikeEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e); }
+  /* The field she is typing in stays above the keyboard. The app's own sign-in is exactly one screen
+     tall (.lp-app is min-height:100dvh inside the fixed overlay), and an iPhone keyboard does not change
+     100dvh, so when the keys came up over the email field there was nothing to scroll: WebKit could not
+     bring the field up, and the address and Send code sat under the keys (device test, 16 Nov 2026). The
+     code step only escaped because its longer note made the screen taller than the phone. So while a
+     field of the email row has focus and the keys cover part of the screen, the overlay gets that much
+     room below its content and the row is moved up above the keys; when the keys go, the room goes. */
+  function fitAboveKeys() {
+    var vv = window.visualViewport, ov = document.getElementById('llAuthOv');
+    if (!vv || !ov) return;
+    var a = document.activeElement, row = a && a.closest ? a.closest('.ll-email-row') : null;
+    var keys = row && ov.contains(row) && ov.classList.contains('landing')
+      ? Math.max(0, Math.round(document.documentElement.clientHeight - vv.height)) : 0;
+    if (keys < 80) { ov.style.paddingBottom = ''; return; }
+    ov.style.paddingBottom = keys + 'px';
+    var f = a.closest('form') || a, r = f.getBoundingClientRect();
+    var top = vv.offsetTop + 12, bottom = vv.offsetTop + vv.height - 16;
+    if (r.bottom > bottom) ov.scrollTop += Math.min(r.bottom - bottom, r.top - top);
+    else if (r.top < top) ov.scrollTop -= top - r.top;
+  }
+  (function () {
+    var vv = window.visualViewport, t = null;
+    if (!vv) return;
+    var soon = function () { clearTimeout(t); t = setTimeout(fitAboveKeys, 60); };
+    vv.addEventListener('resize', soon);
+    document.addEventListener('focusin', soon);
+    document.addEventListener('focusout', soon);
+  })();
   function wireEmailRow(scope) {
     var row = scope.querySelector('.ll-email-row'); if (!row) return;
     var toggle = row.querySelector('.ll-email-toggle'), form = row.querySelector('.ll-email-form'), note = row.querySelector('.ll-email-note');
@@ -708,7 +736,18 @@
       });
   }
 
+  /* What is left for her to do, said on the sign-in screen until someone signs in (Nov 2026). An account
+     deletion that stops at the login signs her out (deleteAccount), and the sign-in screen covers the app's
+     toasts, so app/index.html doDeleteAccount says it here instead (window.LL.signInNote). A message of the
+     moment (a sign-in that failed) still comes first; the note is back on the next plain draw.
+     tools/usage_tracker_check.js S23 reads it off the screen. */
+  var signInNote = '';
+  window.LL.signInNote = function (msg) {
+    signInNote = String(msg || '');
+    if (!auth.currentUser) showSignIn('');
+  };
   function showSignIn(msg) {
+    msg = msg || signInNote;
     try { if (window.cubbyTrackScreen) window.cubbyTrackScreen('signin'); } catch (e) {}
     /* Any re-render of this screen means the attempt is over, one way or another, so the stuck-timer
        must not outlive it — otherwise backing out of a popup (a deliberate, normal act) gets told 25
@@ -863,6 +902,41 @@
     }
     return u.reauthenticateWithPopup(kind === 'apple' ? window.LL.appleProvider : window.LL.googleProvider);
   }
+  /* Account deletion asks for a recent sign-in BEFORE it deletes or leaves anything (Nov 2026). Firebase
+     deletes a login only soon after a sign-in (about five minutes, auth/requires-recent-login), and says so
+     only when the login itself is deleted, the LAST step of deleteAccount. By then she had left her family,
+     her private records were gone and her usage purge was asked for, yet a sign-in sheet she closed there
+     was reported as "Nothing was deleted". So the age of her sign-in is read first, by the server's clock
+     alone (a token refreshed now carries the server's time beside the time she signed in), and when it is
+     near the limit she is asked to sign in again before step 0. A cancel or an email-code session then
+     really means nothing was deleted. If Firebase still asks at the end (the steps outran the minute left),
+     deleteAccount says how far it got (deletionStage) and the app says only that.
+     tools/usage_tracker_check.js S22 drives each path on the Firestore emulator. */
+  var FRESH_SIGNIN_MS = 4 * 60 * 1000;   // a minute under Firebase's five, for the steps in between
+  async function freshSignIn(u) {
+    var t = await u.getIdTokenResult(true);
+    var age = Date.parse(t && t.issuedAtTime) - Date.parse(t && t.authTime);
+    if (age >= 0 && age < FRESH_SIGNIN_MS) return;
+    await reauthenticate(u);
+  }
+  /* How far a deletion that stopped got, stamped on what it throws (app/index.html doDeleteAccount reads it):
+     'nothing' (nothing deleted or left), 'partly' (some steps ran, the login and possibly the family remain),
+     'login' (everything but the login itself is done). It is the furthest ANY attempt for this account got on
+     this page, not only this one: after a stop at the login, a retry she cancels at the sign-in sheet deletes
+     nothing more, but her private records and her place in the family went the first time, and "Nothing was
+     deleted" would be untrue again (tools/usage_tracker_check.js S23). */
+  var deletionReached = {};   // uid -> the furthest stage an attempt for that account reached on this page
+  var STAGE_RANK = { nothing: 0, partly: 1, login: 2 };
+  function deletionStage(e, stage, uid) {
+    if (!e || typeof e !== 'object') e = new Error(String(e));
+    if (uid) {
+      var before = deletionReached[uid];
+      if (before && STAGE_RANK[before] > STAGE_RANK[stage]) stage = before;
+      deletionReached[uid] = stage;
+    }
+    try { if (!e.cubbyDeletion) e.cubbyDeletion = stage; } catch (x) {}
+    return e;
+  }
   /* Backing out of the native sheet is normal and must stay silent. But detect it NARROWLY: an earlier
      version matched /cancel/i on the message and err.code === 1001, and BOTH are wrong — the plugin
      sends code as a string like "auth/...", and Apple's cancel reads "The operation couldn't be
@@ -973,10 +1047,11 @@
     // Sign-out flushed and waited for the push; nothing of this person's is left in the outbox.
     if (auth.currentUser && hhRef) dropOutbox(auth.currentUser.uid, hhRef.id);
     /* The usage tracker (app/cubby-track.js). A deletion that stopped after her usage rows were asked to go
-       left it silent (deleteAccount's catch); signing out ends that, so whoever signs in next on this page, her
-       included, is tracked as anyone is. A deletion still running, or one that finished (its sign-out lands
-       here too), keeps it silent until the page reloads. And whose family record has been seen from the
-       server is forgotten: the next account waits for its own (startSync). */
+       left it silent until she is signed out (deleteAccount's catch signs her out itself); signing out ends
+       that, so whoever signs in next on this page, her included, is tracked as anyone is. A deletion still
+       running, or one that finished (its sign-out lands here too), keeps it silent until the page reloads.
+       And whose family record has been seen from the server is forgotten: the next account waits for its own
+       (startSync). */
     if (!deletingAccount) window.__cubbyDeleting = false;
     householdSeen('');
     unackedEv = {}; blobOut = 0; replayEv = null; replayHold = null;
@@ -2682,13 +2757,21 @@
     try { hideOverlay(); } catch (e) {}
     /* The family she lost is remembered on her own users doc (self-only by rule): after this her pointer
        is cleared and her next sign-in starts afresh, and account deletion still has to find her private
-       records there, first, before anything else goes. */
+       records there, first, before anything else goes.
+       An update, which Firestore refuses (not-found) when the doc is not there, never a merge, which makes
+       it. Every way into a family writes that doc (resolveHousehold, the link and invite joins), so a member
+       losing a family has one, unless account deletion has removed it (step 3, whether or not the login itself
+       then went), and then there is nothing to point from: her own records there went in that deletion. Her
+       other phone, still signed in on a token that outlives the account, lands here when that deletion takes
+       her out of the family, and its merge used to write the record back, under an account that no longer
+       exists, where nothing ever removed it (Nov 2026). The rules allow both (users/{uid}: her own write).
+       tools/chaos.js --self-test drives both on the real SDK: Olive deleting on one of two phones, and a removal. */
     var lostRef = hhRef, u = auth.currentUser;
     try {
       if (u) {
         var pointer = { householdId: null };
         if (lostRef) pointer.formerHouseholdIds = firebase.firestore.FieldValue.arrayUnion(lostRef.id);
-        db.collection('users').doc(u.uid).set(pointer, { merge: true });
+        db.collection('users').doc(u.uid).update(pointer).catch(function (e) { console.warn('access lost: pointer', e && e.code); });
       }
     } catch (e) {}
     var ov = document.createElement('div'); ov.id = 'll-access-lost';
@@ -3025,9 +3108,13 @@
         /* The ref as it was when the listener died. Deleting your own account clears hhRef inside
            this 1.5s, and reading the global then threw an uncaught "Cannot read properties of null". */
         var refAtLoss = hhRef;
+        /* And only while the page still has that family open. An account deletion that stops at the login
+           signs her out (teardown clears hhRef), and this re-check, landing after, read the family as refused
+           and put the note up over the sign-in screen, taking that screen away (hideOverlay) and leaving the
+           app showing with nobody signed in (tools/usage_tracker_check.js S23b). */
         setTimeout(function () {
-          if (accessLostShown || !refAtLoss || deletingAccount) return;
-          refAtLoss.get().then(function () {}).catch(function (err) { if (err && err.code === 'permission-denied') showAccessLost(); });
+          if (accessLostShown || !refAtLoss || deletingAccount || refAtLoss !== hhRef) return;
+          refAtLoss.get().then(function () {}).catch(function (err) { if (err && err.code === 'permission-denied' && refAtLoss === hhRef) showAccessLost(); });
         }, 1500);
       }
     }));
@@ -3655,12 +3742,49 @@
   // If they are the LAST member there is nobody for the story to stay for, so the household is
   // flagged with deleteAfter and the Worker cron hard-deletes it 30 days later.
   var deletingAccount = false;
+  /* A deletion that stops once she has left her family, with only the login itself left (Firebase asked at the
+     very end for a sign-in she closed, or the connection went at that step), signs her out (Nov 2026). Kept
+     signed in, she was left on this phone's copy of a family she had already left: anything she logged there
+     vanished, refused, under "If you've been removed from this circle, sign out and back in", and keeping that
+     page usable for a retry took a ledger of what each earlier attempt had done (the family she left, whether
+     her purge was asked, whether the "no longer in this family" note may show), which still left her stuck.
+     Signed out, the retry is one clean path whatever stopped: she signs in, which is a fresh sign-in, so
+     nothing asks again, and deletes; each attempt starts from what the server holds. The sign-in screen says
+     what is left (app/index.html doDeleteAccount, window.LL.signInNote above).
+     Nothing of the family she left travels into her next Cubby: a sign-in with no family of hers makes one
+     from this phone's local copy (buildMigrationPayload), which step 4 deleted, and from what this phone
+     holds in memory, which is emptied here, so anything that saves locally from now on saves an empty family.
+     Its entries go, and its settings with them: the family's name and its Pro taste counts came back as her
+     new Cubby's own (Nov 2026). Only the units are kept (ml or oz, kg or lb and the like): how she reads
+     amounts, nothing about that family. The theme and reminders are this phone's own, and applyAppBlob keeps
+     them. Nothing waiting to be pushed is pushed (LL.signOut would flush it,
+     into a family that now refuses her).
+     tools/usage_tracker_check.js S23 and S23b drive it under this tree's firestore.rules. */
+  var UNIT_KEYS = ['unit', 'wUnit', 'hUnit', 'hcUnit', 'tempUnit'];
+  async function signOutAfterStop() {
+    if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
+    try {
+      var units = {}, was = state.settings || {};
+      UNIT_KEYS.forEach(function (k) { if (was[k] != null) units[k] = was[k]; });
+      applyAppBlob({ settings: units }); state.events = [];
+    } catch (e) {}
+    teardown();
+    try { await auth.signOut(); } catch (e) { console.warn('sign-out after a deletion stopped at the login', e && (e.code || e.message)); }
+  }
+  /* Does the server refuse her this family's record? Every member may read it (firestore.rules, isMember), so a
+     refusal from the server, never the phone's cache, means she is no longer in it, or it no longer exists. */
+  async function refusedHere(ref) {
+    try { await ref.get({ source: 'server' }); return false; }
+    catch (e) { return !!(e && e.code === 'permission-denied'); }
+  }
   window.LL.isDeletingAccount = function () { return deletingAccount; };
   window.LL.deleteAccount = async function () {
     var u = auth.currentUser;
-    if (!u) throw new Error('not_signed_in');
+    if (!u) throw deletionStage(new Error('not_signed_in'), 'nothing');
     var uid = u.uid;
     var email = (u.email || '').toLowerCase();
+    // A recent sign-in first, or none of what follows starts (see freshSignIn).
+    try { await freshSignIn(u); } catch (e) { throw deletionStage(e, 'nothing', uid); }
     // Removing ourselves from members makes the household snapshot fire "you were removed". Suppress
     // that mid-deletion so the calm access-lost screen can't race the flow we are already running.
     deletingAccount = true;
@@ -3669,7 +3793,7 @@
        leave it set, so the tracker stayed silent for the rest of the page. What happens to it when the
        deletion does not finish is decided in the catch below. */
     window.__cubbyDeleting = true;
-    var usagePurgeAsked = false;
+    var loginLeft = false;
 
     try {
       /* 0. Families she is no longer in (D2). Removed by an owner, her journey, private health and
@@ -3679,12 +3803,10 @@
          anything else (private records first is this function's rule). Under the rules published
          before that, the deletes are refused and the rest carries on as it always did. lostHere is the
          family this phone still has open after "you're no longer in this family": there is nothing to
-         leave there, so steps 1 and 2 skip it. */
+         leave there, so steps 1 and 2 skip it. Asked of the server, not assumed from the note: only a
+         family that really refuses her is skipped (and step 2 asks again when its leave is refused). */
       var lostHere = null;
-      if (hhRef && accessLostShown) {
-        // Asked of the server, not assumed from the note: only a family that really refuses her is skipped.
-        try { await hhRef.get({ source: 'server' }); } catch (e) { if (e && e.code === 'permission-denied') lostHere = hhRef; }
-      }
+      if (hhRef && accessLostShown && await refusedHere(hhRef)) lostHere = hhRef;
       var formerIds = [];
       try {
         var meSnap = await db.collection('users').doc(uid).get();
@@ -3749,7 +3871,9 @@
               var snap = await tx.get(leaveRef);
               var d = (snap.exists && snap.data()) || {};
               var members = d.members || {};
-              if (!Object.prototype.hasOwnProperty.call(members, uid)) return { gone: true };   // removed meanwhile: nothing to leave
+              // Removed meanwhile: nothing to leave. Only under rules that still let her read the family; these refuse
+              // that read, and that refusal is settled after the rounds below.
+              if (!Object.prototype.hasOwnProperty.call(members, uid)) return { gone: true };
               var others = Object.keys(members).filter(function (m) { return m !== uid; });
               var last = !others.length, owner = members[uid] === 'owner';
               if (last && (!prep.serverNow || (owner && !prep.invitesWithdrawn))) return { prepare: true, isOwner: owner, data: d };
@@ -3781,9 +3905,9 @@
             /* When the other phone's write lands between this read and this write, the rules judge
                this write against the family as it NOW is, and refuse it before Firestore's own
                "changed since you read it" check would have retried it. So read again and decide
-               again; a refusal that is still there after that goes to the caller as before. */
+               again; a refusal that is still there after that is settled below. */
             var again = e && (e.code === 'permission-denied' || e.code === 'aborted' || e.code === 'failed-precondition');
-            if (!again || round === 4) throw e;
+            if (!again) throw e;
             refused = e; out = null;
             continue;
           }
@@ -3816,8 +3940,19 @@
           }
           if (!prep.serverNow) prep.serverNow = (await serverClockMs(uid)) || Date.now();
         }
+        /* Refused every round. That is a write the rules will not take while she is still in the family
+           (the caller hears it, and she is asked to try again), or a family that no longer lets her read it at
+           all: her own leave reached the server and only its answer was lost (Firestore runs the transaction
+           again, and that read is refused), or an owner removed her while this ran. Asked of the server, the
+           second kind is certain (refusedHere): there is nothing left to leave, so her own records there go as
+           a former family's do (step 0) and the deletion goes on. It used to stop here, "Could not finish
+           deleting", on every retry on that page (tools/usage_tracker_check.js S24). */
+        if ((!out || out.prepare) && refused && refused.code === 'permission-denied' && await refusedHere(leaveRef)) {
+          try { await deleteOwnRecords(leaveRef, uid); } catch (e) { console.warn('del records in the family she is out of', e && e.code); }
+          try { await leaveRef.collection('memberEmails').doc(uid).delete(); } catch (e) {}
+        }
         // Never go on to delete the login while she is still in the family.
-        if (!out || out.prepare) throw refused || new Error('leave_not_written');
+        else if (!out || out.prepare) throw refused || new Error('leave_not_written');
       }
 
       // 3. Everything keyed to them outside the household.
@@ -3839,8 +3974,8 @@
       // Guessing-game hubs live in D1, keyed by this uid, and rules do not reach them. So do her usage
       // rows and feedback notes (worker.js purgeAccountData).
       try {
-        // From this line her usage rows may be gone from the server, whatever answer comes back (or none).
-        usagePurgeAsked = true;
+        // From this line her usage rows may be gone from the server, whatever answer comes back (or none);
+        // only step 5 is left after it, so a stop from here on is a stop at the login (see the catch).
         var tok = await u.getIdToken();
         await fetch('/api/account/purge', {
           method: 'POST',
@@ -3857,6 +3992,7 @@
       } catch (e) {}
 
       // 5. The login itself. Last, because everything above needs an authenticated session.
+      loginLeft = true;
       try {
         await u.delete();
       } catch (e) {
@@ -3867,16 +4003,22 @@
       }
       return true;
     } catch (e) {
+      // Only the login left: she is signed out (see signOutAfterStop). Before the leave: still in her family.
+      if (loginLeft) await signOutAfterStop();
       deletingAccount = false;
       /* AR-1: the tracker after a deletion that did not finish, decided here once.
-         - It failed before her usage rows were asked to go (the leave in step 2 refused: she is still in her
-           family, still signed in, and is asked to try again). Nothing the tracker sent has been erased, so
-           it carries on as before.
-         - It failed after (step 5: the login itself could not be deleted, a stale email-code session). Her
-           usage rows were asked to go and may be gone, so nothing new is recorded under the account she
-           asked to delete until she signs out (teardown clears it) or the page reloads. */
-      if (!usagePurgeAsked) window.__cubbyDeleting = false;
-      throw e;
+         - It stopped before her usage rows were asked to go (the leave in step 2 refused: she is still in her
+           family, still signed in, and is asked to try again). Nothing the tracker sent has been erased, so it
+           carries on as before.
+         - It stopped after (steps 3 and 4 never stop a deletion, so that is step 5, the login itself). She has
+           just been signed out, and signing out ends the silence, as it always has (teardown): whoever signs in
+           next is tracked as anyone is. Were the sign-out itself to fail she would still be the account she
+           asked to delete, so nothing new is recorded under it until she signs out herself or the page reloads
+           (tools/usage_tracker_check.js S21). No later attempt on this page can switch it back on before then:
+           with her family torn down there is no leave left to refuse, so each one reaches step 5 or stops at the
+           door, before this flag is touched. */
+      if (!loginLeft || !auth.currentUser) window.__cubbyDeleting = false;
+      throw deletionStage(e, loginLeft ? 'login' : 'partly', uid);
     }
   };
   // Who inherits the circle when a departing owner leaves others behind. We do not record a join
@@ -5121,6 +5263,7 @@
   }
   auth.onAuthStateChanged(async function (user) {
     if (!user) { teardown(); showSignIn(''); return; }
+    signInNote = '';   // said what was left to do; she has signed in to do it
     try { localStorage.setItem('cubby-member', '1'); } catch (e) {}
     try { var _sm = sessionStorage.getItem('cubby-signin-method'); if (_sm) { sessionStorage.removeItem('cubby-signin-method'); signinTrack(_sm, 'signed_in', 'succeeded'); } } catch (e) {}
     try {

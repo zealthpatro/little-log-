@@ -1,15 +1,23 @@
 #!/usr/bin/env node
 /* usage-tracker: Cubby's own usage events, measured in the seeded app the way a parent uses it.
  *
- *   node tools/usage_tracker_check.js <base-url>               the checks, against the tree that url serves
+ *   node tools/usage_tracker_check.js <base-url>               the tree tier (S0-S19, S8b), against the tree that url serves
  *   node tools/usage_tracker_check.js <base-url> --self-test   and then against mutants of app/cubby-track.js
+ *   node tools/usage_tracker_check.js <base-url> --emulator [--self-test]   the emulator tier (S0, S20-S24) instead
+ *
+ * Two tiers, two gates (tools/gates.js). `usage-tracker` is the tree tier: it needs Chrome and nothing else, so
+ * every push runs it without java or an emulator. `usage-tracker-emu` is the emulator tier: S20-S24 run the app's
+ * real sync layer on a Firestore emulator this file starts itself (see startEmulator), so they need java and the
+ * emulator jar, and run wherever the other emulator suites run (`node tools/gates.js --emulator`, CI's emulator
+ * job). Each tier's --self-test runs only the mutants its own sections can catch. --only=S20 picks sections by
+ * hand, and starts the emulator whenever it picks S20-S24.
  *
  * Spec: docs/superpowers/specs/2026-11-13-admin-dashboard-design.md §8.1 and S24, gate row `usage-tracker`.
  * The tracker (app/cubby-track.js) is the only code that decides what leaves a phone, so this drives the
  * REAL tracker inside the REAL app (?e2e=1, localhost only) and reads what it would have sent from its test
  * sink, window.__cubbyTrackTest, installed before boot with evaluateOnNewDocument. Nothing here talks to
  * any host but this one: every other request is aborted, and the app's Firebase sign-in is replaced, for the
- * tracker only, by a fake signed-in person whose tokens are labelled with whose they are. S20 and S21 also
+ * tracker only, by a fake signed-in person whose tokens are labelled with whose they are. S20-S24 also
  * start a Firestore emulator on this machine (see startEmulator) and run the app's real sync layer on it.
  *
  * What it proves (each section's checks name it):
@@ -29,7 +37,10 @@
  *   S6  the pagehide batch goes out final, at once, with the cached token while getIdToken() cannot answer.
  *   S7  the queue never passes 500, oldest dropped first.
  *   S8  account deletion: nothing more flows, and a deletion refused at the door (nobody signed in to the
- *       app's sign-in layer) never silences the tracker (AR-1). S9  mode off: only one empty ask a day. S10 off
+ *       app's sign-in layer) never silences the tracker (AR-1). S8b what the app says when a deletion stops, read
+ *       off doDeleteAccount for every stage the sign-in layer stamps (the index.html half of DELETE-TRUTH, here so
+ *       a push that touches only index.html still meets it), and that a deletion that finishes ends on the goodbye,
+ *       on top of the sign-in screen Firebase's sign-out brings up, with the focus. S9  mode off: only one empty ask a day. S10 off
  *       the production host with no sink, no request reaches /api/usage. S11 a notification tap (URL marker, page message)
  *       and a link open. S12 the install prompts and the web permission asks. S13 the native shell's hooks
  *       (a stand-in Capacitor). S14 the timer Stops, the doctor report, voice logging and the invite sheet.
@@ -53,8 +64,36 @@
  *       offline write is still pending and without the holding. Companion: a server copy with nothing new in it
  *       releases the queue (seen only through its metadata).
  *   S21 AR-1 through the real deleteAccount on the emulator: refused at the leave (before her usage rows were
- *       asked to go) the tracker carries on; stopped at the login (after them) nothing more is sent or kept until
- *       she signs out, and signed in again on the same page she is tracked again.
+ *       asked to go) the tracker carries on, and the app's own Delete says it could not finish, never "Nothing was
+ *       deleted" (her private records went first, F2); signing out then forgets whose family record was seen
+ *       (window.__cubbyHouseholdSeen is '' before the next sign-in, NEW-2). Stopped at the login (after them) with the
+ *       sign-out that follows refused, she is still the account she asked to delete, and nothing more is sent or kept
+ *       until she signs out herself; signed in again on the same page she is tracked again.
+ *   S22 DELETE-TRUTH through the real deleteAccount and the app's own doDeleteAccount message: a sign-in too old for
+ *       Firebase to delete the login is asked for again BEFORE anything is deleted or left, so a Google sheet she
+ *       closes, or an email-code session, leaves her place in the family, her private health page, her email, her
+ *       note to herself and her user record untouched, asks for no usage purge, and the app says so. Companion:
+ *       when she does sign in again the deletion runs to the end and the same probes see each of them go. When
+ *       Firebase still asks at the very end (past the point of no return) the app never says "Nothing was deleted":
+ *       she is signed out, and the sign-in screen says what is left. And in the iPhone app (a stand-in Capacitor with
+ *       the sign-in plugin) the door asks with the app's own Apple sheet; backing out of it deletes nothing, and
+ *       signing in on it lets the deletion run to the end. Wherever S22-S24 see a deletion finish, the stand-in signs
+ *       her out as Firebase does, and the element at the centre of the screen must be the goodbye (SAR-1).
+ *   S23 SA1 and SA3, under this tree's own firestore.rules (put in force on the emulator; the page's Firestore calls
+ *       carry her identity): a deletion that stopped at the login signs her out, so no copy of the family she left is
+ *       left open (a log made after it reaches no family and is never refused), and the sign-in screen says "Sign in
+ *       again, then delete it to finish". Nothing of that family stays in this phone's memory, so her next Cubby holds
+ *       none of it: not its baby, not the two entries she logged there, not its name (in memory, on the server, and in
+ *       Family & sharing, which showed it while she was in that family) or its Pro taste counts (her units do come with
+ *       her). She signs in again, lands in a new Cubby of her own, and deleting finishes (that Cubby flagged,
+ *       her user record gone, the purge asked again), with the goodbye on top and no "account is still here" left
+ *       under it. A sheet she closes at a later door is still not "Nothing was
+ *       deleted", and nothing is sent under her account from the deletion's start until she signs in again, or after
+ *       it finishes. S23b the same stop with the sheet closed at once, inside the household listener's 1.5 s
+ *       re-check: the sign-in screen stays, with no "no longer in this family" note and no user record written back.
+ *   S24 SA2, under this tree's firestore.rules: her leave reaches the server but its answer is lost (503), so
+ *       Firestore's rerun of the transaction is refused; the same deletion sees the family no longer lets her in and
+ *       finishes, where it used to stop at "Could not finish deleting" on every try.
  *
  * Self-test: each mutant is a copy of app/cubby-track.js with one rule broken, served from a temp copy of the
  * tree (symlinks, its own tools/serve.js), and must be caught by the check named for it: no dedupe, amount
@@ -66,8 +105,17 @@
  * hooks instead (index.html entry hooks, the render hook, the web ask, native-bridge.js, its ask and its link hook),
  * the service worker's marker, and store-firebase.js's half: the family record reported from the cache, while its
  * own write is pending, never through metadata, or not at all for a local-only page, and
- * the deletion flag raised at the door, kept after an early failure, cleared after a late one, or kept after
- * sign-out. An unmutated temp copy must pass first, so a caught mutant is the mutation and not the harness.
+ * the deletion flag raised at the door, kept after an early failure, cleared after a late one, kept after sign-out,
+ * or cleared by the sign-out a finished deletion ends with, the family record not forgotten at sign-out, the recent
+ * sign-in asked for only at the end, and the old message that called every cancelled sign-in "Nothing was deleted",
+ * a stop part-way said as "nothing", the web window's close not read as a cancel, an unstamped stop called
+ * "nothing"; and SA1-SA3's: a stop at the login that keeps her signed in, the family she left kept in memory, the
+ * household listener's re-check let loose on the sign-in screen, the message left as a toast under that screen, a
+ * later stop forgetting how far an earlier one got, a leave refused because she is already out stopping the
+ * deletion, and the iPhone app's door asking with a web popup; and SAR-1, SAR-3 and SAR-4's: the goodbye back under
+ * the sign-in screen, the family's settings kept whole after a stop, its entries kept in memory, and the stop's note
+ * kept after she signs in again.
+ * An unmutated temp copy must pass first, so a caught mutant is the mutation and not the harness.
  * Each temp copy is removed once it has been graded (the symlinks in it, never what they point at).
  */
 const fs = require('fs');
@@ -84,6 +132,11 @@ const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Conte
 const ARGS = process.argv.slice(2);
 const BASE = (ARGS.find((a) => /^https?:\/\//.test(a)) || 'http://127.0.0.1:8123').replace(/\/$/, '');
 const SELF = ARGS.includes('--self-test');
+/* The emulator tier: the sections that run the real sync layer on a Firestore emulator. The tree tier never
+   starts one, so it needs neither java nor the emulator jar. */
+const EMU_TIER = ARGS.includes('--emulator');
+const EMU_SECTIONS = ['S20', 'S21', 'S22', 'S23', 'S23b', 'S24'];
+const inTier = (k) => (EMU_TIER ? EMU_SECTIONS.includes(k) : !EMU_SECTIONS.includes(k));
 const ONLY = (ARGS.find((a) => a.startsWith('--only=')) || '').slice(7).split(',').filter(Boolean);   // --only=S2,S5 while working
 const PICK = (ARGS.find((a) => a.startsWith('--mutants=')) || '').slice(10).split(',').filter(Boolean); // --mutants=a,b while working: a partial self-test, never a pass
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -173,11 +226,52 @@ function boot(cfg) {
      person, or made to never answer. The app's own sign-in layer (store-firebase.js) keeps the real auth
      it captures while it loads (unless cfg.appAuth, for the one sheet that needs a signed-in app); every
      later reader of window.LL.auth, the tracker included, gets this. */
-  const U = window.__utAuth = { delay: {}, hang: false, delivered: [], n: 0 };
+  /* Her sign-in, for account deletion (S21-S24): how long ago she signed in by the server's clock
+     (cfg.signedInAgo ms, a minute by default), whether Firebase refuses to delete the login anyway
+     (cfg.staleLogin: requires-recent-login, as when the steps outran the window), the door she came in by
+     (cfg.provider, e.g. 'google.com' or 'apple.com'; none is an email-code sign-in, which cannot be asked again),
+     and what she does with each sign-in sheet she is shown (cfg.reauth, in order: 'cancel', 'cancel-late',
+     'closed' or 'ok'). On the web the sheet is Firebase's popup; with cfg.native it is the iPhone app's own
+     Apple or Google sheet (the Capacitor sign-in plugin, below), whose credential Firebase then takes.
+     Signing out signs her out (the app's own listeners hear it), unless cfg.signOutFails: the first sign-out
+     is refused and she stays signed in. */
+  const U = window.__utAuth = { delay: {}, hang: false, delivered: [], n: 0,
+    ago: cfg.signedInAgo === undefined ? 60000 : cfg.signedInAgo, stale: !!cfg.staleLogin, reauths: 0, deletes: 0,
+    popups: 0, nativeSheets: 0, credentials: 0, signOuts: 0 };
+  const sheet = () => (cfg.reauth || [])[U.reauths++] || 'cancel';
+  U.sheet = sheet;
   const mk = (uid) => ({
-    uid, providerData: [],
-    /* An email-code sign-in older than five minutes: Firebase refuses to delete the login (AR-1's case). */
-    delete() { return cfg.staleLogin ? Promise.reject(Object.assign(new Error('requires recent login'), { code: 'auth/requires-recent-login' })) : Promise.resolve(); },
+    uid, providerData: cfg.provider ? [{ providerId: cfg.provider, uid }] : [],
+    /* Deleting the login signs her out, as Firebase's user.delete() does (it ends in auth.signOut(), whose
+       listeners hear it before the call resolves): the app's own sign-in screen is up before the goodbye is
+       drawn. Until Nov 2026 this resolved with her still signed in, and the goodbye was certified over a
+       screen no real phone has; on the real SDK it lay under the sign-in screen (SAR-1). */
+    delete() {
+      U.deletes++;
+      if (U.stale) return Promise.reject(Object.assign(new Error('requires recent login'), { code: 'auth/requires-recent-login' }));
+      U.switchTo(null);
+      return Promise.resolve();
+    },
+    getIdTokenResult() {
+      const now = Date.now();
+      return Promise.resolve({ token: 'tok-' + uid, claims: {}, signInProvider: cfg.provider || 'custom',
+        authTime: new Date(now - U.ago).toUTCString(), issuedAtTime: new Date(now).toUTCString() });
+    },
+    reauthenticateWithPopup() {
+      U.popups++;
+      const how = sheet();
+      if (how === 'ok') { U.ago = 0; U.stale = false; return Promise.resolve({}); }
+      const no = how === 'closed'
+        ? Object.assign(new Error('The popup has been closed by the user before finalizing the operation.'), { code: 'auth/popup-closed-by-user' })
+        : Object.assign(new Error('The user did not grant your application the permissions it requested.'), { code: 'auth/user-cancelled' });
+      // 'cancel-late': she looks at the sheet for three seconds before closing it.
+      return how === 'cancel-late' ? new Promise((res, rej) => setTimeout(() => rej(no), 3000)) : Promise.reject(no);
+    },
+    // The iPhone app: she has already said yes on its own sheet (cfg.native), and Firebase takes that credential.
+    reauthenticateWithCredential(cred) {
+      U.credentials++; U.lastCredential = cred && cred.providerId;
+      U.ago = 0; U.stale = false; return Promise.resolve({});
+    },
     getIdToken() {
       const t = 'tok-' + uid + '-' + (++U.n);
       if (U.hang) return new Promise(() => {});
@@ -192,7 +286,12 @@ function boot(cfg) {
     get currentUser() { return cur; },
     onAuthStateChanged(cb) { authCbs.push(cb); setTimeout(() => cb(cur), 0); return () => {}; },
     onIdTokenChanged(cb) { tokCbs.push(cb); setTimeout(() => cb(cur), 0); return () => {}; },
-    isSignInWithEmailLink: () => false, getRedirectResult: () => Promise.resolve({}), setPersistence: () => Promise.resolve(), signOut: () => Promise.resolve(),
+    isSignInWithEmailLink: () => false, getRedirectResult: () => Promise.resolve({}), setPersistence: () => Promise.resolve(),
+    signOut() {
+      U.signOuts++;
+      if (cfg.signOutFails && U.signOuts === 1) return Promise.reject(Object.assign(new Error('An internal error has occurred.'), { code: 'auth/internal-error' }));
+      U.switchTo(null); return Promise.resolve();
+    },
   };
   U.switchTo = (uid) => { cur = uid ? mk(uid) : null; authCbs.forEach((f) => f(cur)); tokCbs.forEach((f) => f(cur)); };
   /* Scripted server answers (the sink calls window.__cubbyTrackMode(token, body)): a mode for asks with and
@@ -228,6 +327,35 @@ function boot(cfg) {
     set(v) { realDb = v; if (cfg.netOff && v && typeof v.disableNetwork === 'function') { try { v.disableNetwork(); } catch (e) {} } },
   });
   window.LL = LL;
+  /* cfg.realRules (S23, S23b, S24): the page's Firestore calls carry her identity, an emulator mock token for cfg.user, so
+     the emulator judges them by the rules S23 puts in force (this tree's firestore.rules) instead of letting anyone
+     do anything. firebase-init.js points Firestore at the emulator itself, before anything else touches it; this
+     adds her token to that one call. It is engaged when window.__utFsAs names her. And when the household listener
+     loses her (its permission-denied warning), the real time is kept in window.__utLost (S23b times its re-check). */
+  if (cfg.realRules) {
+    window.__utLost = [];
+    const warn = console.warn;
+    console.warn = function (...a) {
+      try { if (a[0] === 'household listen' && a[1] && a[1].code === 'permission-denied') window.__utLost.push(R.now()); } catch (e) {}
+      return warn.apply(this, a);
+    };
+    const who = { sub: cfg.user, user_id: cfg.user, email: cfg.user + '@emu.test', email_verified: true,
+      firebase: { sign_in_provider: cfg.provider || 'custom', identities: {} } };
+    let fb;
+    Object.defineProperty(window, 'firebase', { configurable: true, enumerable: true, get: () => fb, set(v) {
+      fb = v;
+      const init = v && v.initializeApp;
+      if (typeof init !== 'function') return;
+      v.initializeApp = function (...a) {
+        const app = init.apply(this, a);
+        try {
+          const fsdb = v.firestore(), use = fsdb.useEmulator;
+          fsdb.useEmulator = function (host, port, o) { const r = use.call(this, host, port, Object.assign({ mockUserToken: who }, o || {})); window.__utFsAs = who.sub; return r; };
+        } catch (e) { window.__utFsAs = 'not engaged: ' + e; }
+        return app;
+      };
+    } });
+  }
   if (cfg.native) {
     const L = window.__utCap = {};
     const add = (plugin) => (ev, cb) => { (L[plugin + ':' + ev] = L[plugin + ':' + ev] || []).push(cb); return Promise.resolve({ remove() {} }); };
@@ -238,19 +366,30 @@ function boot(cfg) {
         FirebaseMessaging: { addListener: add('Msg'), checkPermissions: () => Promise.resolve({ receive: 'prompt' }),
           requestPermissions: () => Promise.resolve({ receive: 'granted' }), getToken: () => Promise.resolve({ token: '' }),
           deleteToken: () => Promise.resolve() },
+        /* The app's own Apple and Google sheets (@capacitor-firebase/authentication, skipNativeAuth): 'ok' hands
+           back a credential, a cancel is what Apple's sheet says when she backs out of it. */
+        FirebaseAuthentication: {
+          signInWithApple: () => native('apple'), signInWithGoogle: () => native('google'),
+        },
       },
     };
+    function native(kind) {
+      U.nativeSheets++;
+      if (sheet() === 'ok') return Promise.resolve({ credential: { idToken: 'zz-native-' + kind + '-id-token', nonce: 'zz-nonce', accessToken: null } });
+      return Promise.reject(new Error(kind === 'apple' ? 'The operation couldn’t be completed. (com.apple.AuthenticationServices.AuthorizationError error 1001.)' : 'Sign in canceled.'));
+    }
   }
 }
 
-/* cfg.search replaces ?e2e=1 (the cloud path, ?fsemu=, in S20 and S21); ctxIn opens the page in a context
+/* cfg.search replaces ?e2e=1 (the cloud path, ?fsemu=, in S20-S24); ctxIn opens the page in a context
    that already exists (the same phone, opened again). ctl.refuse(url, method) answers a request as Firestore
-   does when its rules refuse it, ctl.delay(url, method) holds one back that many ms, and local lists every
-   request this page made to this machine. */
+   does when its rules refuse it, ctl.delay(url, method) holds one back that many ms, ctl.hook(request) takes a
+   request over entirely when it returns true (S24), and local lists every request this page made to this
+   machine. */
 async function openApp(browser, base, cfg, ctxIn) {
   const ctx = ctxIn || await browser.createBrowserContext({ downloadBehavior: dl.downloadBehavior() });
   const page = await ctx.newPage();
-  const errs = [], usageReqs = [], foreign = [], local = [], ctl = { refuse: null, delay: null };
+  const errs = [], usageReqs = [], foreign = [], local = [], ctl = { refuse: null, delay: null, hook: null };
   page.on('pageerror', (e) => errs.push(String(e.message || e)));
   await page.setBypassServiceWorker(true);
   await page.setRequestInterception(true);
@@ -261,6 +400,7 @@ async function openApp(browser, base, cfg, ctxIn) {
     if (h === '127.0.0.1' || h === 'localhost') {
       if (/\/api\/usage/.test(u)) usageReqs.push(u);
       local.push({ method: r.method(), url: u });
+      if (ctl.hook && ctl.hook(r)) return;
       if (ctl.refuse && r.method() !== 'OPTIONS' && ctl.refuse(u, r.method())) {
         return r.respond({ status: 403, contentType: 'application/json',
           headers: { 'access-control-allow-origin': r.headers().origin || '*', 'access-control-allow-credentials': 'true' },
@@ -553,6 +693,75 @@ SECTIONS.S8 = async (b, base, R) => {
     const s = await sent(page), q = await queue(page);
     R.ok('S8.silent', 'nothing is sent once the deletion has started, not even what was queued', s.length === n0, s.slice(n0).map((x) => x.body.events.map((e) => e.name)));
     R.ok('S8.cleared', 'and the queue is emptied', q.length === 0, q.map((x) => x.ev.name));
+  } finally { await ctx.close(); }
+};
+
+/* What the app says when a deletion stops (index.html doDeleteAccount), for every stage store-firebase.js stamps on
+   what it throws, read off the page. The tree tier, so every push runs it: the stamping itself is the emulator
+   tier's (S21, S22, S23), which a push touching store-firebase.js runs, and this half lives in index.html, which
+   does not trigger that tier (F4). LL.deleteAccount is stood in for, for this one call each time. */
+SECTIONS.S8b = async (b, base, R) => {
+  console.log('\nS8b. account deletion: what the app says when it stops, for each stage the sign-in layer reports');
+  const { ctx, page } = await openApp(b, base, {});
+  try {
+    const say = (stage, code, message) => page.evaluate(async (stage, code, message) => {
+      const real = window.LL.deleteAccount;
+      window.LL.deleteAccount = () => Promise.reject(Object.assign(new Error(message), code ? { code } : {}, stage ? { cubbyDeletion: stage } : {}));
+      try { await doDeleteAccount(); } finally { window.LL.deleteAccount = real; }
+      const t = document.getElementById('toast');
+      return t ? t.textContent : '';
+    }, stage, code, message);
+    const CANCEL = ['auth/user-cancelled', 'The user did not grant your application the permissions it requested.'];
+    const CLOSED = ['auth/popup-closed-by-user', 'The popup has been closed by the user before finalizing the operation.'];
+    const APPLE = ['', 'The operation couldn’t be completed. (com.apple.AuthenticationServices.AuthorizationError error 1001.)'];
+    const CODE = ['', 'reauth_unsupported'];
+    const AGAIN = 'Could not finish deleting. Please try again';
+    const LEFT = 'Your private records are deleted, but your account is still here. ';
+    const CASES = [
+      ['nothing-cancel', 'nothing', CANCEL, 'Nothing was deleted', 'stopped before anything, at a sign-in sheet she cancelled'],
+      ['nothing-closed', 'nothing', CLOSED, 'Nothing was deleted', 'stopped before anything, the web sign-in window closed'],
+      ['nothing-apple', 'nothing', APPLE, 'Nothing was deleted', 'stopped before anything, the Apple sheet backed out of'],
+      ['nothing-code', 'nothing', CODE, 'Please log out, sign in again, then delete', 'stopped before anything, an email-code session too old to ask again'],
+      ['nothing-other', 'nothing', ['unavailable', 'Failed to get document because the client is offline.'], 'Nothing was deleted. Please try again', 'stopped before anything, offline'],
+      ['partly-refused', 'partly', ['permission-denied', 'Missing or insufficient permissions.'], AGAIN, 'stopped part-way (the leave refused, private records already gone)'],
+      ['partly-cancel', 'partly', CANCEL, AGAIN, 'a cancelled sign-in after an earlier attempt stopped part-way: not "Nothing was deleted"'],
+      ['login-cancel', 'login', CANCEL, LEFT + 'Delete it once more to finish', 'stopped at the login, the sheet cancelled'],
+      ['login-code', 'login', CODE, LEFT + 'Log out, sign in again, then delete it', 'stopped at the login, an email-code session'],
+      ['login-other', 'login', ['auth/network-request-failed', 'A network error has occurred.'], LEFT + 'Please try again', 'stopped at the login, offline'],
+      ['unstamped', '', CANCEL, AGAIN, 'a stop that does not say how far it got is never called "Nothing was deleted"'],
+    ];
+    for (const [id, stage, [code, message], want, what] of CASES) {
+      const got = await say(stage, code, message);
+      R.ok('S8b.' + id, what + ': "' + want + '"', got === want, { stage, code, got });
+    }
+    /* A deletion that finishes. Firebase signs her out as the login goes, so the sign-in screen is up before the
+       goodbye is drawn: the stand-in draws it the way the sign-in layer does when nobody is signed in (signInNote('')
+       calls the same showSignIn that onAuthStateChanged(null) does; this tier's page has no Firebase user). The
+       goodbye must be what she sees: the element at the centre of the screen is inside it, and it has the focus. At
+       z-index 4000, as it was from July to November 2026, the centre was the sign-in screen (SAR-1). */
+    const bye = await page.evaluate(async () => {
+      const real = window.LL.deleteAccount;
+      window.LL.deleteAccount = () => { window.__utAuth.switchTo(null); window.LL.signInNote(''); return Promise.resolve(true); };
+      try { await doDeleteAccount(); } finally { window.LL.deleteAccount = real; }
+      const at = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+      return { goodbye: !!document.getElementById('cb-del-goodbye'), signIn: !!document.getElementById('llAuthOv'),
+        top: !at ? 'none' : at.closest('#cb-del-goodbye') ? 'goodbye' : at.closest('#llAuthOv') ? 'signin' : (at.id || at.tagName.toLowerCase()),
+        focus: (document.activeElement && document.activeElement.id) || '' };
+    });
+    R.ok('S8b.goodbye', 'companion: a deletion that finishes says goodbye instead, and that is what she sees: the sign-in screen Firebase\'s sign-out brings up is under it, the centre of the screen is the goodbye, and its Close has the focus',
+      bye.goodbye && bye.signIn && bye.top === 'goodbye' && bye.focus === 'cb-del-done', bye);
+    /* Last, because it signs the page out: a stop at the login signs her out (store-firebase.js), and the sign-in
+       screen covers the toasts, so what is left is said on that screen, and stays there. */
+    const out = await page.evaluate(async () => {
+      document.getElementById('cb-del-goodbye')?.remove();
+      const real = window.LL.deleteAccount;
+      window.LL.deleteAccount = () => { window.__utAuth.switchTo(null); return Promise.reject(Object.assign(new Error('The user did not grant your application the permissions it requested.'), { code: 'auth/user-cancelled', cubbyDeletion: 'login' })); };
+      try { await doDeleteAccount(); } finally { window.LL.deleteAccount = real; }
+      const ov = document.getElementById('llAuthOv');
+      return { out: !window.LL.auth.currentUser, note: ov ? ([...ov.querySelectorAll('.lp-msg, .ll-auth-msg')].map((x) => x.textContent.trim()).filter(Boolean)[0] || '') : '' };
+    });
+    R.ok('S8b.login-signed-out', 'stopped at the login and signed out: the sign-in screen says "' + LEFT + 'Sign in again, then delete it to finish."',
+      out.out && out.note === LEFT + 'Sign in again, then delete it to finish.', out);
   } finally { await ctx.close(); }
 };
 
@@ -949,15 +1158,20 @@ SECTIONS.S19 = async (b, base, R) => {
   } finally { await o.ctx.close(); }
 };
 
-/* ---------------- the real sync layer: the Firestore emulator (S20, S21) ---------------- */
-/* S20 and S21 run the app's REAL sign-in layer (store-firebase.js: resolveHousehold, startSync, deleteAccount)
+/* ---------------- the real sync layer: the Firestore emulator (S20-S24, the emulator tier) ---------------- */
+/* S20-S24 run the app's REAL sign-in layer (store-firebase.js: resolveHousehold, startSync, deleteAccount)
    against a Firestore emulator through the localhost-only ?fsemu= hook in firebase-init.js, so what they prove
    is what the Firestore SDK really does, not what a stand-in says it does. The emulator is the jar firebase-tools
-   keeps in ~/.cache/firebase/emulators, started here with java directly (the firebase CLI would also fetch its
-   message of the day from the internet), on ports inside EMU_PORT_RANGE, with open rules: the fsemu hook sends
-   no token, and the rules are rules-test.js's job. One emulator serves the whole run, the self-test included;
-   each section empties it first. */
-const EMU = { port: 0, proc: null, dir: null, project: 'little-log-a9caa' };
+   keeps in ~/.cache/firebase/emulators (any emulator suite run through the firebase CLI downloads it, and in a
+   full `gates.js --emulator` run `rules` does so first), started here with java directly (the firebase CLI
+   would also fetch its message of the day from the internet), with open rules: the fsemu hook sends no token,
+   and the rules are rules-test.js's job (S23, S23b and S24 are the exception, see OPEN_RULES). Its ports are FS_PORT and WS_PORT when tools/gates.js hands them over,
+   else two inside EMU_PORT_RANGE. One emulator serves the whole run, the self-test included; each section
+   empties it first. Only the emulator tier starts it. */
+const EMU = { port: 0, proc: null, gone: false, dir: null, project: 'little-log-a9caa' };
+/* Open rules: S20-S22 test the sync layer, not the rules, and their pages carry no identity. S23, S23b and S24 put
+   this tree's own firestore.rules in force for their run (emuRules) and put these back after. */
+const OPEN_RULES = "rules_version = '2';\nservice cloud.firestore { match /databases/{db}/documents { match /{document=**} { allow read, write: if true; } } }\n";
 function emulatorJar() {
   if (process.env.FIRESTORE_EMULATOR_JAR) return process.env.FIRESTORE_EMULATOR_JAR;
   const dir = path.join(os.homedir(), '.cache', 'firebase', 'emulators');
@@ -969,17 +1183,20 @@ function emulatorJar() {
 }
 async function startEmulator() {
   const jar = emulatorJar();
-  if (!jar || !fs.existsSync(jar)) throw new Error('no Firestore emulator jar in ~/.cache/firebase/emulators (any emulator suite downloads it: node tools/gates.js --emulator --only=two-caregivers), or set FIRESTORE_EMULATOR_JAR');
-  const [port, ws] = await pickPorts(2);
+  if (!jar || !fs.existsSync(jar)) throw new Error('no Firestore emulator jar in ~/.cache/firebase/emulators (an emulator suite run through the firebase CLI downloads it: node tools/gates.js --emulator-only --only=rules), or set FIRESTORE_EMULATOR_JAR');
+  const given = [Number(process.env.FS_PORT), Number(process.env.WS_PORT)];
+  const [port, ws] = given[0] && given[1] ? given : await pickPorts(2);
   EMU.dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-usage-emu-'));
   const rules = path.join(EMU.dir, 'open.rules');
-  fs.writeFileSync(rules, "rules_version = '2';\nservice cloud.firestore { match /databases/{db}/documents { match /{document=**} { allow read, write: if true; } } }\n");
+  fs.writeFileSync(rules, OPEN_RULES);
   const java = process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin', 'java') : 'java';
   let said = '', exited = false;
   EMU.proc = spawn(java, ['-jar', jar, '--host=127.0.0.1', '--port=' + port, '--websocket_port=' + ws, '--rules=' + rules], { cwd: EMU.dir, stdio: ['ignore', 'pipe', 'pipe'] });
   EMU.proc.stdout.on('data', (d) => { said += d; });
   EMU.proc.stderr.on('data', (d) => { said += d; });
-  EMU.proc.on('exit', () => { exited = true; });
+  EMU.proc.on('exit', () => { exited = true; EMU.gone = true; });
+  // No java on PATH (or a JAVA_HOME without one) is a spawn error: reported as this gate's failure, not a crash.
+  EMU.proc.on('error', (e) => { exited = true; EMU.gone = true; said += 'could not start ' + java + ': ' + e.message; });
   process.on('exit', () => { try { EMU.proc.kill('SIGKILL'); } catch (e) {} });
   const stop = Date.now() + 60000;
   for (;;) {
@@ -994,7 +1211,7 @@ async function startEmulator() {
 async function stopEmulator() {
   if (EMU.proc) {
     const p = EMU.proc; EMU.proc = null;
-    await new Promise((res) => { if (p.exitCode !== null) return res(); p.once('exit', () => res()); try { p.kill('SIGTERM'); } catch (e) { res(); } setTimeout(() => { try { p.kill('SIGKILL'); } catch (e) {} }, 5000); });
+    await new Promise((res) => { if (EMU.gone || p.exitCode !== null) return res(); p.once('exit', () => res()); try { p.kill('SIGTERM'); } catch (e) { res(); } setTimeout(() => { try { p.kill('SIGKILL'); } catch (e) {} }, 5000); });
   }
   if (EMU.dir && path.dirname(EMU.dir) === path.resolve(os.tmpdir()) && /^cubby-usage-emu-/.test(path.basename(EMU.dir))) { try { fs.rmSync(EMU.dir, { recursive: true, force: true }); } catch (e) {} }
   EMU.dir = null;
@@ -1128,8 +1345,11 @@ SECTIONS.S21 = async (b, base, R) => {
   console.log('\nS21. an account deletion that does not finish, through the real sync layer (Firestore emulator) (AR-1)');
   await emuClear();
   // (a) Refused before her usage rows were asked to go: the leave (step 2) is refused, as the rules refuse it.
-  //     She is still in her family and is asked to try again; the tracker carries on.
-  let o = await openApp(b, base, cloudPage('zz-del-early'));
+  //     She is still in her family and is asked to try again; the tracker carries on. Her sign-in is a minute
+  //     old (the stand-in's default), so deleteAccount's recent-sign-in check lets the deletion start. Run through
+  //     the app's own Delete (doDeleteAccount), so what it says is read too: her private records went in step 1,
+  //     so "Nothing was deleted" would be untrue (F2).
+  let o = await openApp(b, base, cloudPage('zz-del-early', { appAuth: true }));
   try {
     const uid = 'zz-del-early', tokOf = /^tok-zz-del-early-/;
     const hid = await cloudBooted(o.page);
@@ -1137,23 +1357,38 @@ SECTIONS.S21 = async (b, base, R) => {
     let s = await sendsUntil(o.page, (x) => named(eventsOf(x), 'feature.used', { feature: 'export' }).length > 0, 20000);
     R.ok('S21.early-before', 'companion: before the deletion her events flow', !!hid && named(eventsOf(s), 'feature.used', { feature: 'export' }).some((e) => tokOf.test(e._token || '')), eventsOf(s).map((e) => [e.name, e._token]));
     o.ctl.refuse = (u, m) => m === 'POST' && /documents:commit/.test(u);
-    const err = await o.page.evaluate(() => window.LL.deleteAccount().then(() => 'resolved', (e) => String((e && (e.code || e.message)) || e)));
+    const said = await deleteFromApp(o.page);
+    const err = said.goodbye ? 'resolved' : String((said.threw && (said.threw.code || said.threw.message)) || '');
     o.ctl.refuse = null;
     const st = await o.page.evaluate((u) => ({ member: !!(window.LL.members || {})[u], deleting: window.__cubbyDeleting }), uid);
     const refused = o.local.filter((x) => x.method === 'POST' && /documents:commit/.test(x.url)).length;
     const purge = o.local.filter((x) => /\/api\/account\/purge/.test(x.url)).length;
     R.ok('S21.early-staged', 'staged: the leave was refused (permission-denied), she is still in her family, and her usage rows were never asked to go',
       err === 'permission-denied' && refused > 0 && st.member && purge === 0, { err, refused, purge, st });
+    R.ok('S21.early-says', 'and the app says it could not finish, never "Nothing was deleted": her private records went before the leave was refused',
+      said.said === 'Could not finish deleting. Please try again' && !!said.threw && said.threw.stage === 'partly', said);
     const n0 = (await sent(o.page)).length;
     await o.page.evaluate(() => window.cubbyTrack('feature.used', { feature: 'games', action: 'opened' }));
     s = await sendsUntil(o.page, (x) => named(eventsOf(x), 'feature.used', { feature: 'games' }).length > 0, 10000);
     R.ok('S21.early-flows', 'after it, her next event flows under her token: the deletion that never got that far did not silence her',
       named(eventsOf(s.slice(n0)), 'feature.used', { feature: 'games' }).some((e) => tokOf.test(e._token || '')), { deleting: await o.page.evaluate(() => window.__cubbyDeleting), sent: eventsOf(s.slice(n0)).map((e) => e.name) });
+    // She signs out. Signing out also forgets whose family record was seen as the server holds it (teardown, NEW-2):
+    // nothing may be sent on her old say-so between a sign-out and the next sign-in's own server copy. Staged first:
+    // before the sign-out it named her (she is still in her family, signed in).
+    const seenIn = await o.page.evaluate(() => window.__cubbyHouseholdSeen);
+    await o.page.evaluate(async () => { await window.LL.signOut(); });
+    await sleep(300);
+    const seenOut = await o.page.evaluate(() => ({ seen: window.__cubbyHouseholdSeen, out: !window.LL.auth.currentUser }));
+    R.ok('S21.signed-out-unseen', 'signed out, her family record no longer counts as seen: window.__cubbyHouseholdSeen is \'\' before the next sign-in (and named her before)',
+      seenIn === uid && seenOut.seen === '' && seenOut.out, { seenIn, seenOut });
   } finally { await o.ctx.close(); }
-  // (b) Stopped after them: an email-code sign-in older than five minutes, so the login itself cannot be deleted
-  //     (requires-recent-login, and no provider to ask again). Her usage rows have been asked to go; nothing new is
-  //     recorded under that account until she signs out. She then signs in again, as the app tells her to.
-  o = await openApp(b, base, cloudPage('zz-del-late', { appAuth: true, staleLogin: true }));
+  // (b) Stopped after them: an email-code sign-in that looked recent when the deletion began (a minute old), but
+  //     Firebase still refuses to delete the login at the end (requires-recent-login: the steps outran the window),
+  //     and there is no provider to ask again. Her usage rows have been asked to go. The deletion then signs her
+  //     out (S23 drives that); here that sign-out is refused (cfg.signOutFails), so she is still the account she
+  //     asked to delete, and nothing new may be recorded under it until she signs out herself. She then does, and
+  //     signs in again.
+  o = await openApp(b, base, cloudPage('zz-del-late', { appAuth: true, staleLogin: true, signOutFails: true }));
   try {
     const uid = 'zz-del-late', tokOf = /^tok-zz-del-late-/;
     const hid = await cloudBooted(o.page);
@@ -1162,15 +1397,17 @@ SECTIONS.S21 = async (b, base, R) => {
     R.ok('S21.late-before', 'companion: before the deletion her events flow', !!hid && named(eventsOf(s), 'feature.used', { feature: 'export' }).some((e) => tokOf.test(e._token || '')), eventsOf(s).map((e) => [e.name, e._token]));
     const err = await o.page.evaluate(() => window.LL.deleteAccount().then(() => 'resolved', (e) => String((e && (e.code || e.message)) || e)));
     const purge = o.local.filter((x) => x.method === 'POST' && /\/api\/account\/purge/.test(x.url)).length;
-    R.ok('S21.late-staged', 'staged: the deletion stopped at the login (reauth_unsupported), after her usage rows were asked to go', err === 'reauth_unsupported' && purge === 1, { err, purge });
+    const still = await o.page.evaluate(() => ({ who: window.LL.auth.currentUser && window.LL.auth.currentUser.uid, signOuts: window.__utAuth.signOuts }));
+    R.ok('S21.late-staged', 'staged: the deletion stopped at the login (reauth_unsupported), after her usage rows were asked to go, and the sign-out that follows was refused, so she is still signed in',
+      err === 'reauth_unsupported' && purge === 1 && still.who === uid && still.signOuts === 1, { err, purge, still });
     const n0 = (await sent(o.page)).length;
     await o.page.evaluate(() => { window.cubbyTrack('feature.used', { feature: 'games', action: 'opened' }); window.cubbyTrackEntry('feed', 'logged'); });
     await settle(o.page);
     const s1 = (await sent(o.page)).slice(n0), q1 = await queue(o.page);
     R.ok('S21.late-silent', 'after it nothing more is sent or kept under the account she asked to delete', s1.length === 0 && q1.length === 0,
       { sent: s1.map((x) => x.body.events.map((e) => e.name)), queued: q1.map((x) => x.ev.name) });
-    // She signs out, then in again on the same page.
-    await o.page.evaluate(async () => { await window.LL.signOut(); window.__utAuth.switchTo(null); });
+    // She signs out herself (this time it works), then in again on the same page.
+    await o.page.evaluate(async () => { await window.LL.signOut(); });
     await sleep(300);
     await o.page.evaluate((u) => window.__utAuth.switchTo(u), uid);
     const back = await cloudBooted(o.page);
@@ -1181,6 +1418,424 @@ SECTIONS.S21 = async (b, base, R) => {
       !!back && named(eventsOf(s.slice(n1)), 'feature.used', { feature: 'pro' }).some((e) => tokOf.test(e._token || '')),
       { back, deleting: await o.page.evaluate(() => window.__cubbyDeleting), seen: await o.page.evaluate(() => window.__cubbyHouseholdSeen), sent: eventsOf(s.slice(n1)).map((e) => [e.name, e._token]) });
   } finally { await o.ctx.close(); }
+};
+
+/* What a deletion would remove, on the emulator: her place in the family, a private health page, her email, a note
+   she wrote to herself, and her own user record. Planted after the app has booted (merged into, never over, what
+   the app wrote), read back over REST, as the server holds them. */
+const fsVal = (v) => (typeof v === 'string' ? { stringValue: v } : typeof v === 'number' ? { integerValue: String(v) }
+  : typeof v === 'boolean' ? { booleanValue: v } : Array.isArray(v) ? { arrayValue: v.length ? { values: v.map(fsVal) } : {} }
+    : { mapValue: { fields: Object.keys(v).reduce((a, k) => { a[k] = fsVal(v[k]); return a; }, {}) } });
+async function emuMerge(docPath, obj) {
+  const mask = Object.keys(obj).map((k) => 'updateMask.fieldPaths=' + encodeURIComponent(k)).join('&');
+  const r = await fetch(emuDocs() + '/' + docPath + '?' + mask, { method: 'PATCH', headers: { 'content-type': 'application/json', authorization: 'Bearer owner' },
+    body: JSON.stringify({ fields: Object.keys(obj).reduce((a, k) => { a[k] = fsVal(obj[k]); return a; }, {}) }) });
+  return r.ok;
+}
+async function emuRead(docPath) {
+  const r = await fetch(emuDocs() + '/' + docPath, { headers: { authorization: 'Bearer owner' } });
+  return r.ok ? r.json() : null;
+}
+async function plantPrivate(hid, uid) {
+  const h = 'households/' + encodeURIComponent(hid);
+  const oks = await Promise.all([
+    emuMerge(h + '/mhealth/' + uid + '/cat/conditions', { ownerUid: uid, category: 'conditions', data: { conditions: ['zz-private'] }, sharedWith: [] }),
+    emuMerge(h + '/memberEmails/' + uid, { email: uid + '@zz.test' }),
+    emuMerge(h + '/notes/zz-to-herself', { createdBy: uid, createdByName: '', at: CLOCK, day: '2026-11-14', text: 'zz to herself', audience: uid, pinned: false }),
+    emuMerge('users/' + uid, { zzKept: 1 }),
+  ]);
+  return oks.every(Boolean);
+}
+async function herRecords(hid, uid) {
+  const h = 'households/' + encodeURIComponent(hid);
+  const [hh, health, email, note, user] = await Promise.all([emuRead(h), emuRead(h + '/mhealth/' + uid + '/cat/conditions'),
+    emuRead(h + '/memberEmails/' + uid), emuRead(h + '/notes/zz-to-herself'), emuRead('users/' + uid)]);
+  const members = (((hh || {}).fields || {}).members || {}).mapValue || {};
+  return { member: !!(members.fields || {})[uid], health: !!health, email: !!email, note: !!note, user: !!(user && user.fields && user.fields.zzKept) };
+}
+const allThere = (x) => !!x && x.member && x.health && x.email && x.note && x.user;
+const allGone = (x) => !!x && !x.member && !x.health && !x.email && !x.note && !x.user;
+/* The app's own Delete path (doDeleteAccount in index.html, what the confirm sheet runs), what it then says, and what
+   LL.deleteAccount threw on the way (its code, and the stage store-firebase.js stamped on it). */
+const deleteFromApp = (page) => page.evaluate(async () => {
+  const real = window.LL.deleteAccount;
+  let threw = null;
+  window.LL.deleteAccount = () => real().catch((e) => { threw = { code: (e && e.code) || '', message: (e && e.message) || String(e), stage: (e && e.cubbyDeletion) || '' }; throw e; });
+  try { await doDeleteAccount(); } finally { window.LL.deleteAccount = real; }
+  const t = document.getElementById('toast'), ov = document.getElementById('llAuthOv');
+  // The sign-in screen's own message line (the web landing, the app's, the invite's and the plain card).
+  const note = ov ? ([...ov.querySelectorAll('.lp-msg, .ll-auth-msg')].map((x) => x.textContent.trim()).filter(Boolean)[0] || '') : '';
+  // What she sees: whose is the element at the centre of the screen (SAR-1: a finished deletion's goodbye lay under
+  // the sign-in screen that Firebase's sign-out brings up).
+  const at = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+  const top = !at ? 'none' : at.closest('#cb-del-goodbye') ? 'goodbye' : at.closest('#llAuthOv') ? 'signin' : at.closest('#ll-access-lost') ? 'access-lost' : (at.id || at.tagName.toLowerCase());
+  return { said: t ? t.textContent : '', goodbye: !!document.getElementById('cb-del-goodbye'), threw,
+    signedOut: !window.LL.auth.currentUser, signIn: !!(ov && /Continue with Google/.test(ov.textContent)), overlay: !!ov, note, top };
+});
+/* A deletion that finished, as she sees it: the goodbye, over the sign-in screen Firebase's sign-out has already
+   brought up (so "on top" is not won for want of anything to be under), with nothing under it still saying her
+   account is here (signInNote, SAR-4). */
+const goodbyeSeen = (r) => !!r && r.goodbye && r.signedOut && r.overlay && r.top === 'goodbye' && !/account is still here/.test(r.note);
+const LOGIN_LEFT = 'Your private records are deleted, but your account is still here. ';
+const SIGN_IN_TO_FINISH = LOGIN_LEFT + 'Sign in again, then delete it to finish.';
+const signInSheets = (page) => page.evaluate(() => ({ asked: window.__utAuth.reauths, loginDeletes: window.__utAuth.deletes, deleting: window.__cubbyDeleting === true,
+  localCopy: !!localStorage.getItem('little-log-v1') }));
+const purgesAsked = (o) => o.local.filter((x) => x.method === 'POST' && /\/api\/account\/purge/.test(x.url)).length;
+
+SECTIONS.S22 = async (b, base, R) => {
+  console.log('\nS22. account deletion says only what is true: a sign-in it needs is asked for before anything is deleted (DELETE-TRUTH)');
+  await emuClear();
+  // (a) Google, signed in ten minutes ago: Firebase would refuse to delete the login. She is asked to sign in again
+  //     and closes the sheet. Then she tries again and signs in (the companion: the same probes see it all go).
+  let o = await openApp(b, base, cloudPage('zz-truth-google', { appAuth: true, provider: 'google.com', signedInAgo: 600000, staleLogin: true, reauth: ['closed', 'ok'] }));
+  try {
+    const uid = 'zz-truth-google';
+    const hid = await cloudBooted(o.page);
+    await sleep(1500);
+    const planted = hid ? await plantPrivate(hid, uid) : false;
+    const before = hid ? await herRecords(hid, uid) : null;
+    R.ok('S22.door-staged', 'staged: she is in her family, with a private health page, her email, a note to herself and her own user record',
+      planted && allThere(before), { hid, planted, before });
+    const r1 = await deleteFromApp(o.page);
+    const after = await herRecords(hid, uid), st = await signInSheets(o.page);
+    R.ok('S22.door-asked', 'staged: she was asked to sign in again, and closed the sheet', st.asked === 1, st);
+    R.ok('S22.door-kept', 'a sign-in she closes leaves her place in the family and every record where it was, the login and this phone\'s copy too, and asks for no usage purge',
+      allThere(after) && st.loginDeletes === 0 && st.localCopy && purgesAsked(o) === 0, { after, st, purges: purgesAsked(o) });
+    R.ok('S22.door-says', 'and the app says "Nothing was deleted", which is now true', r1.said === 'Nothing was deleted', r1);
+    R.ok('S22.door-tracked', 'and the tracker was never silenced: the deletion never started', !st.deleting, st);
+    const r2 = await deleteFromApp(o.page);
+    const gone = await herRecords(hid, uid), st2 = await signInSheets(o.page);
+    R.ok('S22.door-companion', 'companion: she tries again and signs in, the deletion runs to the end, the same probes see every one of them go, and the goodbye is what she sees',
+      goodbyeSeen(r2) && allGone(gone) && st2.asked === 2 && purgesAsked(o) === 1, { r2, gone, st2, purges: purgesAsked(o) });
+  } finally { await o.ctx.close(); }
+  // (b) An email-code sign-in from ten minutes ago: there is no sheet to ask again, so she must sign in afresh first.
+  o = await openApp(b, base, cloudPage('zz-truth-code', { appAuth: true, signedInAgo: 600000, staleLogin: true }));
+  try {
+    const uid = 'zz-truth-code';
+    const hid = await cloudBooted(o.page);
+    await sleep(1500);
+    const planted = hid ? await plantPrivate(hid, uid) : false;
+    const r = await deleteFromApp(o.page);
+    const after = hid ? await herRecords(hid, uid) : null, st = await signInSheets(o.page);
+    R.ok('S22.code-kept', 'an email-code sign-in too old to delete the login stops before anything: her place, her records and the login are kept, no purge is asked',
+      planted && allThere(after) && st.loginDeletes === 0 && purgesAsked(o) === 0, { planted, after, st, purges: purgesAsked(o) });
+    R.ok('S22.code-says', 'and the app asks her to sign in again first', r.said === 'Please log out, sign in again, then delete', r);
+  } finally { await o.ctx.close(); }
+  // (c) Past the point of no return: her Google sign-in looked recent (a minute old), so the deletion ran, but
+  //     Firebase still asks at the very end and she cancels. Her records and her place are gone; only the login is
+  //     left. "Nothing was deleted" would be untrue here. She is signed out, and the sign-in screen says what is left.
+  o = await openApp(b, base, cloudPage('zz-truth-late', { appAuth: true, provider: 'google.com', staleLogin: true, reauth: ['cancel'] }));
+  try {
+    const uid = 'zz-truth-late';
+    const hid = await cloudBooted(o.page);
+    await sleep(1500);
+    const planted = hid ? await plantPrivate(hid, uid) : false;
+    const r = await deleteFromApp(o.page);
+    const after = hid ? await herRecords(hid, uid) : null, st = await signInSheets(o.page);
+    R.ok('S22.late-staged', 'staged: the deletion ran to the login (her place and records gone, the purge asked), then she cancelled the one sign-in Firebase asked for',
+      planted && allGone(after) && purgesAsked(o) === 1 && st.asked === 1 && st.loginDeletes === 1, { planted, after, st, purges: purgesAsked(o) });
+    R.ok('S22.late-says', 'the app does not say "Nothing was deleted": signed out, the sign-in screen says "' + SIGN_IN_TO_FINISH + '"',
+      !/Nothing was deleted/i.test(r.said + r.note) && r.signedOut && r.signIn && r.note === SIGN_IN_TO_FINISH, r);
+  } finally { await o.ctx.close(); }
+  // (d) The iPhone app (the Capacitor wrapper), an Apple account signed in ten minutes ago: the app's own Apple sheet
+  //     asks at the door (reauthenticate's native branch, then Firebase takes the credential). She backs out of it,
+  //     and nothing is deleted; then she deletes again and signs in, and it all goes.
+  o = await openApp(b, base, cloudPage('zz-truth-apple', { appAuth: true, native: true, provider: 'apple.com', signedInAgo: 600000, staleLogin: true, reauth: ['cancel', 'ok'] }));
+  try {
+    const uid = 'zz-truth-apple';
+    const hid = await cloudBooted(o.page);
+    await sleep(1500);
+    const planted = hid ? await plantPrivate(hid, uid) : false;
+    const r1 = await deleteFromApp(o.page);
+    const after = hid ? await herRecords(hid, uid) : null, st = await signInSheets(o.page);
+    const how = await o.page.evaluate(() => ({ native: window.__utAuth.nativeSheets, popups: window.__utAuth.popups, credentials: window.__utAuth.credentials, isNative: window.LL.isNativeApp() }));
+    R.ok('S22.native-asked', 'staged: in the iPhone app the door asked with the app\'s own Apple sheet, not a web popup, and she backed out of it',
+      planted && how.isNative && how.native === 1 && how.popups === 0 && how.credentials === 0, { planted, how });
+    R.ok('S22.native-kept', 'backing out of the Apple sheet leaves her place, every record, the login and this phone\'s copy, and asks for no purge',
+      allThere(after) && st.loginDeletes === 0 && st.localCopy && purgesAsked(o) === 0, { after, st, purges: purgesAsked(o) });
+    R.ok('S22.native-says', 'and the app says "Nothing was deleted" (Apple\'s cancel is read as a cancel)', r1.said === 'Nothing was deleted' && !r1.signedOut, r1);
+    const r2 = await deleteFromApp(o.page);
+    const gone = await herRecords(hid, uid), st2 = await signInSheets(o.page);
+    const how2 = await o.page.evaluate(() => ({ native: window.__utAuth.nativeSheets, popups: window.__utAuth.popups, credentials: window.__utAuth.credentials, provider: window.__utAuth.lastCredential }));
+    R.ok('S22.native-companion', 'companion: she deletes again and signs in on the Apple sheet, Firebase takes that credential, the deletion runs to the end, and the goodbye is what she sees',
+      goodbyeSeen(r2) && allGone(gone) && how2.native === 2 && how2.popups === 0 && how2.credentials === 1 && how2.provider === 'apple.com' && st2.loginDeletes === 1 && purgesAsked(o) === 1,
+      { r2, gone, how2, st2, purges: purgesAsked(o) });
+  } finally { await o.ctx.close(); }
+};
+
+/* S23, S23b and S24 run under this tree's own firestore.rules, put in force on the emulator for their run (the pages
+   carry her identity, cfg.realRules), because what they prove depends on a rule: a family refuses the read of
+   someone who has left it. Under the open rules a family she had left would still let her read it, and both a
+   leave whose answer was lost (S24) and the household listener losing her (S23b) would pass for free. */
+async function emuRules(content) {
+  const r = await fetch('http://127.0.0.1:' + EMU.port + '/emulator/v1/projects/' + EMU.project + ':securityRules', { method: 'PUT',
+    headers: { 'content-type': 'application/json' }, body: JSON.stringify({ rules: { files: [{ name: 'firestore.rules', content }] } }) });
+  return r.ok;
+}
+/* A read as one person, with the same kind of unsigned token the emulator takes from the page. */
+async function readAs(docPath, uid) {
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const tok = b64({ alg: 'none', typ: 'JWT' }) + '.' + b64({ iss: 'https://securetoken.google.com/' + EMU.project, aud: EMU.project, iat: 0, exp: 3600,
+    auth_time: 0, sub: uid, user_id: uid, firebase: { sign_in_provider: 'custom', identities: {} } }) + '.';
+  const r = await fetch(emuDocs() + '/' + docPath, { headers: { authorization: 'Bearer ' + tok } });
+  return r.status;
+}
+/* Booted under the real rules, joined by Papa (so she is not the last one out), with every record S22 plants, and
+   proof of each: the rules refuse a stranger's read of her family and allow hers, and the page's calls carry her. */
+async function realRulesFamily(o, uid, R, id) {
+  const hid = await cloudBooted(o.page);
+  await sleep(1500);
+  const fam = 'households/' + encodeURIComponent(hid);
+  const joined = hid ? await emuMerge(fam, { members: { [uid]: 'owner', [uid + '-papa']: 'caregiver' } }) : false;
+  await sleep(1000);
+  const planted = hid ? await plantPrivate(hid, uid) : false;
+  const before = hid ? await herRecords(hid, uid) : null;
+  const reads = hid ? { stranger: await readAs(fam, 'zz-stranger'), her: await readAs(fam, uid) } : null;
+  const as = await o.page.evaluate(() => window.__utFsAs || '');
+  R.ok(id, 'staged: this tree\'s firestore.rules are in force (a stranger\'s read of her family is refused, hers is not), the page\'s Firestore calls carry her identity, and she shares the family with Papa, with every record S22 plants',
+    !!hid && joined && planted && allThere(before) && !!reads && reads.stranger === 403 && reads.her === 200 && as === uid, { hid, joined, planted, before, reads, as });
+  return hid;
+}
+const herTokens = (uid) => new RegExp('^tok-' + uid + '-\\d+$');
+
+/* A Firestore REST value as plain JS (families and user records read back as the server holds them). */
+const plain = (v) => {
+  if (!v || typeof v !== 'object') return v;
+  if ('stringValue' in v) return v.stringValue;
+  if ('integerValue' in v) return Number(v.integerValue);
+  if ('doubleValue' in v) return v.doubleValue;
+  if ('booleanValue' in v) return v.booleanValue;
+  if ('nullValue' in v) return null;
+  if ('timestampValue' in v) return v.timestampValue;
+  if ('arrayValue' in v) return ((v.arrayValue || {}).values || []).map(plain);
+  if ('mapValue' in v) { const o = {}, f = (v.mapValue || {}).fields || {}; Object.keys(f).forEach((k) => { o[k] = plain(f[k]); }); return o; }
+  return v;
+};
+async function familyOf(hid) { const d = hid ? await emuRead('households/' + encodeURIComponent(hid)) : null; return d && d.fields ? plain({ mapValue: { fields: d.fields } }) : null; }
+async function eventsIn(hid) {
+  const r = await fetch(emuDocs() + '/households/' + encodeURIComponent(hid) + '/events', { headers: { authorization: 'Bearer owner' } });
+  const j = r.ok ? await r.json() : {};
+  return (j.documents || []).length;
+}
+async function eventIdsIn(hid) {
+  const r = await fetch(emuDocs() + '/households/' + encodeURIComponent(hid) + '/events?pageSize=300', { headers: { authorization: 'Bearer owner' } });
+  const j = r.ok ? await r.json() : {};
+  return (j.documents || []).map((d) => decodeURIComponent(String(d.name || '').split('/').pop()));
+}
+const hasRobin = (fam) => !!(fam && fam.app && (fam.app.babies || []).some((x) => x && x.name === 'Robin'));
+/* What S23 names the family she leaves, and its Pro taste counts: neither may reach her next Cubby (SAR-3). Her units
+   (oz, where the seed has ml) may, and do: the companion that shows settings are seen at all. */
+const OLD_NAME = 'The Rivers';
+const settingsOf = (fam) => (fam && fam.app && fam.app.settings) || {};
+const carriesFamily = (st) => !!st && (st.householdName === OLD_NAME || !!st.proTaste);
+/* The family's name where the app shows it: the name row of Family & sharing (store-firebase.js openFamily, the sheet
+   that tells anyone she invites whose Cubby they join). Opened the way chaos opens it, read, and closed again. The
+   page's text alone never shows it on the screens S23 passes through, so a check of that text could not go red. */
+const familyNameShown = (page) => page.evaluate(() => {
+  try { window.openFamily(''); } catch (e) { return 'threw: ' + e.message; }
+  const v = document.querySelector('#llModalOv .ll-hhname-v'), t = v ? v.textContent.trim() : '';
+  try { const m = document.getElementById('llModalOv'); if (m) m.remove(); } catch (e) {}
+  return t;
+});
+/* What this phone keeps of a family locally (little-log-v1): what her next Cubby is made from when she signs in with
+   no family of her own (store-firebase.js buildMigrationPayload). The seed's baby is Robin. */
+const localFamily = (page) => page.evaluate(() => {
+  try { const s = JSON.parse(localStorage.getItem('little-log-v1') || 'null'); return s ? { babies: (s.babies || []).map((x) => x && x.name), events: (s.events || []).length } : null; }
+  catch (e) { return { unreadable: String(e) }; }
+});
+/* Signed in again on the same page (a fresh sign-in): the app boots into whichever family she has now. */
+async function signInAgain(page, uid, oldHid) {
+  await page.evaluate((u) => { window.__utAuth.ago = 0; window.__utAuth.stale = false; window.__utAuth.switchTo(u); }, uid);
+  try {
+    await page.waitForFunction((old) => !!(window.LL && window.LL.householdId && window.LL.householdId !== old) && !document.getElementById('llAuthOv'), { timeout: 30000 }, oldHid);
+    return await page.evaluate(() => window.LL.householdId);
+  } catch (e) { return null; }
+}
+const spyToasts = (page) => page.evaluate(() => {
+  window.__utToasts = [];
+  const t = window.toast;
+  window.toast = function (m) { window.__utToasts.push(String(m)); return t.apply(this, arguments); };
+});
+
+SECTIONS.S23 = async (b, base, R) => {
+  console.log('\nS23. a deletion stopped at the login signs her out, and signing in again then deleting finishes it, under this tree\'s firestore.rules (SA1, SA3)');
+  await emuClear();
+  const ruled = await emuRules(fs.readFileSync(path.join(ROOT, 'firestore.rules'), 'utf8'));
+  R.ok('S23.rules', 'staged: this tree\'s firestore.rules were put in force on the emulator', ruled);
+  try {
+    /* Google, signed in a minute ago, so the deletion starts; Firebase still asks at the very end (the steps outran
+       the window) and she closes that sheet after three seconds. Then she does what the sign-in screen says: signs
+       in again and deletes; ten minutes later she closes the sheet at the door; and once more, and signs in. */
+    const uid = 'zz-retry', mine = herTokens(uid);
+    const o = await openApp(b, base, cloudPage(uid, { appAuth: true, realRules: true, provider: 'google.com', staleLogin: true, reauth: ['cancel-late', 'cancel', 'ok'] }));
+    try {
+      const hid = await realRulesFamily(o, uid, R, 'S23.staged');
+      /* The family she is about to leave has a name, has used Pro tastes, reads in ounces, and holds two entries she
+         logged (SAR-3, SAR-4). Saved the app's own way, and seen on the server before anything else happens. */
+      const familyIds = await o.page.evaluate((name) => {
+        state.settings.householdName = name; state.settings.proTaste = { pdf: 2 }; state.settings.unit = 'oz';
+        const ids = [addEvent({ type: 'diaper', kind: 'wet', time: Date.now() - 60000 }), addEvent({ type: 'feed', method: 'bottle', amount: 90, time: Date.now() - 30000 })];
+        persist();
+        return ids;
+      }, OLD_NAME);
+      let famSet = {}, famIds = [];
+      for (let i = 0; i < 40; i++) {
+        famSet = settingsOf(await familyOf(hid)); famIds = await eventIdsIn(hid);
+        if (famSet.householdName === OLD_NAME && famSet.proTaste && famSet.unit === 'oz' && familyIds.every((x) => famIds.includes(x))) break;
+        await sleep(500);
+      }
+      R.ok('S23.family-staged', 'staged: on the server the family is named "' + OLD_NAME + '", has used Pro tastes, reads in ounces, and holds the two entries she logged there',
+        famSet.householdName === OLD_NAME && !!famSet.proTaste && famSet.proTaste.pdf === 2 && famSet.unit === 'oz' && familyIds.length === 2 && familyIds.every((x) => famIds.includes(x)),
+        { famSet, familyIds, famIds });
+      const shown1 = await familyNameShown(o.page);
+      R.ok('S23.name-shown', 'companion: while she is in it, Family & sharing calls the family "' + OLD_NAME + '" (the reader below can see a name)',
+        shown1 === OLD_NAME, { shown: shown1 });
+      await spyToasts(o.page);
+      await o.page.evaluate(() => window.cubbyTrack('feature.used', { feature: 'export', action: 'opened' }));
+      const s0 = await sendsUntil(o.page, (x) => named(eventsOf(x), 'feature.used', { feature: 'export' }).some((e) => mine.test(e._token || '')), 20000);
+      R.ok('S23.before', 'companion: before the deletion her events flow under her token (the matcher below can see them)',
+        named(eventsOf(s0), 'feature.used', { feature: 'export' }).some((e) => mine.test(e._token || '')), eventsOf(s0).map((e) => [e.name, e._token]));
+      const n0 = (await sent(o.page)).length;
+      const r1 = await deleteFromApp(o.page);
+      const after1 = await herRecords(hid, uid), st1 = await signInSheets(o.page);
+      R.ok('S23.stopped', 'staged: the deletion ran to the login (her place and records gone, the purge asked), then she closed the one sign-in Firebase asked for there',
+        !!r1.threw && r1.threw.stage === 'login' && allGone(after1) && purgesAsked(o) === 1 && st1.asked === 1 && st1.loginDeletes === 1, { r1, after1, st1, purges: purgesAsked(o) });
+      R.ok('S23.signed-out', 'and she is signed out, on the sign-in screen: no copy of the family she left is left open for her to use',
+        r1.signedOut && r1.signIn && !r1.goodbye, r1);
+      R.ok('S23.stopped-says', 'and the sign-in screen says what is left: "' + SIGN_IN_TO_FINISH + '"', r1.note === SIGN_IN_TO_FINISH, r1);
+      const mem1 = await o.page.evaluate(() => ({ settings: state.settings, events: (state.events || []).map((e) => e && e.id) }));
+      R.ok('S23.settings-forgotten', 'this phone no longer holds the family\'s name or its Pro taste counts, and keeps her units (ounces)',
+        !carriesFamily(mem1.settings) && mem1.settings.unit === 'oz', mem1.settings);
+      R.ok('S23.events-forgotten', 'nor the entries logged in the family she left', mem1.events.length === 0 && !familyIds.some((x) => mem1.events.includes(x)), mem1.events);
+      // From the deletion's start until she signs in again, nothing is sent or kept under the account she asked to delete.
+      await o.page.evaluate(() => window.cubbyTrack('feature.used', { feature: 'games', action: 'opened' }));
+      await settle(o.page);
+      const leakedOut = eventsOf((await sent(o.page)).slice(n0)).filter((e) => mine.test(e._token || '')), qOut = (await queue(o.page)).filter((x) => x.uid === uid);
+      R.ok('S23.silent-until-back', 'from the deletion\'s start until she signs in again nothing is sent or kept under her account',
+        leakedOut.length === 0 && qOut.length === 0, { leaked: leakedOut.map((e) => e.name), queued: qOut.map((x) => x.ev.name) });
+      /* SA1's state was a page still holding the family she had left, where a log was shown, refused, and followed by
+         "Cubby wasn't allowed to save that. If you've been removed from this circle, sign out and back in". A log made
+         the app's own way now reaches no family and draws no such toast (the kept-signed-in mutant stages it). */
+      const afterId = await o.page.evaluate(() => { try { return addEvent({ type: 'diaper', kind: 'wet', time: Date.now() }); } catch (e) { window.__utLogErr = String(e); return null; } });
+      await sleep(4000);
+      const toasts = await o.page.evaluate(() => window.__utToasts.slice()), evOld = await eventIdsIn(hid);
+      R.ok('S23.log-after-stop', 'a log made after the stop reaches no family and is never refused ("wasn\'t allowed to save"): nothing of the family she left is open to log into',
+        !toasts.some((t) => /allowed to save/.test(t)) && !!afterId && !evOld.includes(afterId) && evOld.length === familyIds.length,
+        { toasts, afterId, evOld, err: await o.page.evaluate(() => window.__utLogErr || '') });
+      const local = await localFamily(o.page);
+      R.ok('S23.forgotten', 'and what this phone then saves locally, which her next Cubby is made from, holds nothing of the family she left (no baby Robin)',
+        !!local && Array.isArray(local.babies) && !local.babies.includes('Robin'), local);
+      // She signs in again, as the sign-in screen says (a fresh sign-in).
+      const hid2 = await signInAgain(o.page, uid, hid);
+      const fam2 = await familyOf(hid2), user2 = plain({ mapValue: { fields: ((await emuRead('users/' + uid)) || {}).fields || {} } });
+      const noteAfter = await o.page.evaluate(() => { const ov = document.getElementById('llAuthOv'); return ov ? ov.textContent : ''; });
+      R.ok('S23.new-family', 'signed in again she lands in a new Cubby of her own (her user record names it), with nothing of the family she left in it (no baby Robin)',
+        !!hid2 && hid2 !== hid && user2.householdId === hid2 && !!fam2 && !hasRobin(fam2) && !noteAfter, { hid, hid2, userHid: user2.householdId, babies: fam2 && fam2.app && fam2.app.babies, noteAfter });
+      const set2 = settingsOf(fam2), ids2 = hid2 ? await eventIdsIn(hid2) : null;
+      const seen2 = await o.page.evaluate(() => ({ settings: state.settings, name: (typeof householdName === 'function') ? householdName() : '' }));
+      R.ok('S23.new-settings', 'her new Cubby is not named "' + OLD_NAME + '" and has used no Pro tastes: not on the server, not in memory, not in what the app calls it (householdName); her units (ounces) came with her',
+        !!hid2 && !carriesFamily(set2) && set2.unit === 'oz' && !carriesFamily(seen2.settings) && seen2.name !== OLD_NAME,
+        { set2, mem: seen2.settings, name: seen2.name });
+      const shown2 = await familyNameShown(o.page);
+      R.ok('S23.new-name-shown', 'and on screen her new Cubby\'s Family & sharing names it something of its own, not "' + OLD_NAME + '"',
+        !!shown2 && shown2 !== OLD_NAME && !/^threw/.test(shown2), { shown: shown2 });
+      R.ok('S23.new-no-entries', 'and holds none of the entries logged in the family she left', !!ids2 && !familyIds.some((x) => ids2.includes(x)), { familyIds, ids2 });
+      // Ten minutes on, she deletes and closes the sheet at the door.
+      await o.page.evaluate(() => { window.__utAuth.ago = 600000; });
+      const r2 = await deleteFromApp(o.page);
+      const st2 = await signInSheets(o.page);
+      R.ok('S23.door-again-staged', 'staged: on the next try her sign-in is ten minutes old, she is asked at the door and closes the sheet; nothing more is deleted or asked',
+        !!r2.threw && r2.threw.code === 'auth/user-cancelled' && st2.asked === 2 && st2.loginDeletes === 1 && purgesAsked(o) === 1 && !r2.signedOut, { r2, st2, purges: purgesAsked(o) });
+      R.ok('S23.door-again-says', 'the app does not say "Nothing was deleted" (her records went the first time): signed in, it says they are deleted and her account is still here',
+        r2.said === LOGIN_LEFT + 'Delete it once more to finish', r2);
+      // Once more, and she signs in.
+      const r3 = await deleteFromApp(o.page);
+      const st3 = await signInSheets(o.page), userDoc = await emuRead('users/' + uid), after3 = await herRecords(hid, uid);
+      const fam3 = await familyOf(hid2), old = await familyOf(hid);
+      R.ok('S23.retry-finishes', 'and it finishes: the goodbye on top of the sign-in screen Firebase\'s sign-out brings up, the login gone, her user record still gone, her new Cubby flagged with nobody left in it, the purge asked again, and the family she left keeping Papa and nothing of hers',
+        r3.goodbye && r3.signedOut && r3.overlay && r3.top === 'goodbye' && st3.asked === 3 && st3.loginDeletes === 2 && !userDoc && allGone(after3) && !!fam3 && typeof fam3.deleteAfter === 'number' && !Object.keys(fam3.members || {}).length
+          && purgesAsked(o) === 2 && !!old && Object.keys(old.members || {}).join() === uid + '-papa',
+        { r3, st3, userDoc: !!userDoc, after3, newFamily: fam3 && { members: fam3.members, deleteAfter: fam3.deleteAfter }, oldMembers: old && old.members, purges: purgesAsked(o) });
+      /* SAR-4: the note the stop left on the sign-in screen went when she signed in again. Kept, the finish's own
+         sign-out drew it again, under the goodbye: "your account is still here", about an account that is gone. */
+      R.ok('S23.finished-no-note', 'and the sign-in screen under the goodbye no longer says her account is still here',
+        r3.signedOut && r3.overlay && !/account is still here/.test(r3.note), { note: r3.note, signedOut: r3.signedOut, overlay: r3.overlay });
+      // Once it has finished, nothing more is sent or kept under the account.
+      const nEnd = (await sent(o.page)).length;
+      await o.page.evaluate(() => { window.cubbyTrack('feature.used', { feature: 'games', action: 'opened' }); window.cubbyTrackEntry('feed', 'logged'); });
+      await settle(o.page);
+      const leaked = eventsOf((await sent(o.page)).slice(nEnd)).filter((e) => mine.test(e._token || '')), q = await queue(o.page);
+      R.ok('S23.silent-after', 'and once it has finished nothing more is sent or kept under her account',
+        leaked.length === 0 && q.length === 0 && (await signInSheets(o.page)).deleting, { leaked: leaked.map((e) => e.name), queued: q.map((x) => x.ev.name), deleting: (await signInSheets(o.page)).deleting });
+    } finally { await o.ctx.close(); }
+  } finally { await emuRules(OPEN_RULES); }
+};
+
+SECTIONS.S23b = async (b, base, R) => {
+  console.log('\nS23b. the same stop with the sheet closed at once, inside the household listener\'s 1.5 s re-check: the sign-in screen stays, with no "no longer in this family" note over it');
+  await emuClear();
+  const ruled = await emuRules(fs.readFileSync(path.join(ROOT, 'firestore.rules'), 'utf8'));
+  R.ok('S23b.rules', 'staged: this tree\'s firestore.rules were put in force on the emulator', ruled);
+  try {
+    const uid = 'zz-retry-fast';
+    const o = await openApp(b, base, cloudPage(uid, { appAuth: true, realRules: true, provider: 'google.com', staleLogin: true, reauth: ['cancel'] }));
+    try {
+      const hid = await realRulesFamily(o, uid, R, 'S23b.staged');
+      const r1 = await deleteFromApp(o.page);
+      const stopAt = Date.now();   // the same clock as the page's real one (window.__utLost)
+      await sleep(3500);   // past the household listener's 1.5 s re-check, however late its refusal came
+      const lost = await o.page.evaluate(() => window.__utLost.slice());
+      const view = await o.page.evaluate(() => { const ov = document.getElementById('llAuthOv');
+        return { note: !!document.getElementById('ll-access-lost'), signIn: !!(ov && /Continue with Google/.test(ov.textContent)), out: !window.LL.auth.currentUser }; });
+      const userDoc = await emuRead('users/' + uid);
+      console.log('    the household listener lost her ' + (lost.length ? (stopAt - lost[0]) + ' ms before the stop (its re-check is 1500 ms after)' : 'never'));
+      R.ok('S23b.fast-staged', 'staged: the deletion stopped at the login with her place gone, and the household listener lost her (permission-denied) less than 1.5 s before the stop, or after it, so its re-check ran once she had been signed out',
+        !!r1.threw && r1.threw.stage === 'login' && lost.length > 0 && stopAt < lost[0] + 1500 && !(await herRecords(hid, uid)).member, { r1, lostAt: lost.map((t) => t - stopAt) });
+      R.ok('S23b.fast-signin-stays', 'once that re-check has run she is still signed out on the sign-in screen: it did not take the screen away', view.signIn && view.out, view);
+      R.ok('S23b.fast-no-note', 'and no "You\'re no longer in this family" note is up', !view.note, view);
+      R.ok('S23b.fast-user-gone', 'and her user record, deleted by the deletion, is not written back', !userDoc, { userDoc: !!userDoc });
+      const hid2 = await signInAgain(o.page, uid, hid);
+      const r2 = hid2 ? await deleteFromApp(o.page) : null;
+      R.ok('S23b.fast-finishes', 'signed in again, deleting finishes, and the goodbye is what she sees', !!hid2 && goodbyeSeen(r2), { hid2, r2 });
+    } finally { await o.ctx.close(); }
+  } finally { await emuRules(OPEN_RULES); }
+};
+
+SECTIONS.S24 = async (b, base, R) => {
+  console.log('\nS24. her leave reaches the server but its answer is lost: the same deletion finishes, under this tree\'s firestore.rules (SA2)');
+  await emuClear();
+  const ruled = await emuRules(fs.readFileSync(path.join(ROOT, 'firestore.rules'), 'utf8'));
+  R.ok('S24.rules', 'staged: this tree\'s firestore.rules were put in force on the emulator', ruled);
+  try {
+    const uid = 'zz-lostack';
+    const o = await openApp(b, base, cloudPage(uid, { appAuth: true, realRules: true, provider: 'google.com' }));
+    try {
+      const hid = await realRulesFamily(o, uid, R, 'S24.staged');
+      /* The leave's commit is passed to the emulator, which takes it, and the phone is told 503. Firestore then runs
+         the transaction again, and the rules refuse that read: she is no longer in the family. An owner removing her
+         while the deletion runs reaches the same refusal. */
+      let armed = true, forwarded = null;
+      o.ctl.hook = (r) => {
+        if (!armed || r.method() !== 'POST' || !/documents:commit/.test(r.url()) || !/formerMemberInfo/.test(r.postData() || '')) return false;
+        armed = false;
+        (async () => {
+          const h = Object.assign({}, r.headers()); delete h['content-length']; delete h.host;
+          try { const resp = await fetch(r.url(), { method: 'POST', headers: h, body: r.postData() }); forwarded = resp.status; } catch (e) { forwarded = String(e); }
+          r.respond({ status: 503, contentType: 'application/json', headers: { 'access-control-allow-origin': r.headers().origin || '*', 'access-control-allow-credentials': 'true' },
+            body: JSON.stringify({ error: { code: 503, message: 'The service is currently unavailable.', status: 'UNAVAILABLE' } }) }).catch(() => {});
+        })();
+        return true;
+      };
+      const r1 = await deleteFromApp(o.page);
+      o.ctl.hook = null;
+      const after = await herRecords(hid, uid), userDoc = await emuRead('users/' + uid), fam = await familyOf(hid);
+      R.ok('S24.lost', 'staged: her leave reached the server (the emulator took the write) and the phone was told it failed (503)',
+        forwarded === 200 && !armed && !after.member, { forwarded, armed, member: after.member });
+      R.ok('S24.finishes', 'the same deletion finds the family no longer lets her in and goes on to the end: the goodbye on top of the screen, every record of hers gone, her user record gone, the purge asked once, and Papa still in the family',
+        goodbyeSeen(r1) && allGone(after) && !userDoc && purgesAsked(o) === 1 && !!fam && Object.keys(fam.members || {}).join() === uid + '-papa',
+        { r1, after, userDoc: !!userDoc, purges: purgesAsked(o), members: fam && fam.members });
+    } finally { await o.ctx.close(); }
+  } finally { await emuRules(OPEN_RULES); }
 };
 
 /* ---------------- a run ---------------- */
@@ -1200,7 +1855,7 @@ async function run(browser, base, treeRoot, only, quiet) {
   try {
     await treeCheck(base, treeRoot, R);
     for (const k of Object.keys(SECTIONS)) {
-      if (only && !only.includes(k)) continue;
+      if (!only.includes(k)) continue;
       try { await SECTIONS[k](browser, base, R); }
       catch (e) { R.ok(k + '.ran', 'section ' + k + ' ran to the end', false, String((e && e.message) || e).slice(0, 300)); }
     }
@@ -1273,11 +1928,67 @@ const ALL_MUTANTS = [
   { id: 'deleting-at-door', file: 'app/store-firebase.js', want: ['S8.door'], sections: ['S8'],
     edits: [['window.LL.deleteAccount = async function () {\n    var u = auth.currentUser;', 'window.LL.deleteAccount = async function () {\n    window.__cubbyDeleting = true;\n    var u = auth.currentUser;']] },
   { id: 'deleting-kept-early', file: 'app/store-firebase.js', want: ['S21.early-flows'], sections: ['S21'],
-    edits: [['if (!usagePurgeAsked) window.__cubbyDeleting = false;', '']] },
+    edits: [['if (!loginLeft || !auth.currentUser) window.__cubbyDeleting = false;', '']] },
   { id: 'deleting-cleared-late', file: 'app/store-firebase.js', want: ['S21.late-silent'], sections: ['S21'],
-    edits: [['if (!usagePurgeAsked) window.__cubbyDeleting = false;', 'window.__cubbyDeleting = false;']] },
+    edits: [['if (!loginLeft || !auth.currentUser) window.__cubbyDeleting = false;', 'window.__cubbyDeleting = false;']] },
   { id: 'deleting-kept-signed-out', file: 'app/store-firebase.js', want: ['S21.again-flows'], sections: ['S21'],
-    edits: [['if (!deletingAccount) window.__cubbyDeleting = false;', '']] },
+    edits: [["    if (!deletingAccount) window.__cubbyDeleting = false;\n    householdSeen('');\n", "    householdSeen('');\n"]] },
+  /* NEW-2: teardown forgets whose family record was seen (startSync's own reset alone would leave a window). */
+  { id: 'seen-kept-signed-out', file: 'app/store-firebase.js', want: ['S21.signed-out-unseen'], sections: ['S21'],
+    edits: [["    if (!deletingAccount) window.__cubbyDeleting = false;\n    householdSeen('');\n", '    if (!deletingAccount) window.__cubbyDeleting = false;\n']] },
+  /* P5V-2: the guard on that line. A deletion that finishes signs her out, so teardown runs then too, and the flag
+     must stay up until the page reloads; cleared on every sign-out, her account would be tracked again. */
+  { id: 'deleting-cleared-on-finish', file: 'app/store-firebase.js', want: ['S23.silent-after'], sections: ['S23'],
+    edits: [['    if (!deletingAccount) window.__cubbyDeleting = false;\n', '    window.__cubbyDeleting = false;\n']] },
+  /* DELETE-TRUTH: the recent sign-in asked for only at the end (as before), how far it got not said, a stop
+     part-way said as "nothing" (F2), and the old message that read every cancel as "Nothing was deleted". */
+  { id: 'reauth-at-the-end', file: 'app/store-firebase.js', want: ['S22.door-kept', 'S22.code-kept'], sections: ['S22'],
+    edits: [["    try { await freshSignIn(u); } catch (e) { throw deletionStage(e, 'nothing', uid); }\n", '']] },
+  { id: 'stage-not-said', file: 'app/store-firebase.js', want: ['S22.late-says'], sections: ['S22'],
+    edits: [["throw deletionStage(e, loginLeft ? 'login' : 'partly', uid);", 'throw e;']] },
+  { id: 'partly-as-nothing', file: 'app/store-firebase.js', want: ['S21.early-says'], sections: ['S21'],
+    edits: [["throw deletionStage(e, loginLeft ? 'login' : 'partly', uid);", "throw deletionStage(e, loginLeft ? 'login' : 'nothing', uid);"]] },
+  { id: 'nothing-was-deleted', file: 'app/index.html', want: ['S8b.partly-refused', 'S8b.login-cancel', 'S8b.login-signed-out', 'S22.late-says'], sections: ['S8b', 'S22'],
+    edits: [["const stage=(e&&e.cubbyDeletion)||'';", "const stage='nothing';"]] },
+  { id: 'popup-closed-not-a-cancel', file: 'app/index.html', want: ['S8b.nothing-closed', 'S22.door-says'], sections: ['S8b', 'S22'],
+    edits: [['/cancel|popup-closed-by-user/i', '/cancel/i']] },
+  { id: 'unstamped-said-nothing', file: 'app/index.html', want: ['S8b.unstamped'], sections: ['S8b'],
+    edits: [["const stage=(e&&e.cubbyDeletion)||'';", "const stage=(e&&e.cubbyDeletion)||'nothing';"]] },
+  /* SA1-SA3: a stop at the login signs her out, the retry is "sign in again, then delete". Kept signed in on the
+     family she left (her logs refused there), the family she left kept in this phone's memory (and so carried into
+     her next Cubby), the household listener's re-check let loose on the sign-in screen, the note left as a toast
+     under that screen, and a later stop forgetting how far an earlier one got. And SA2: a leave refused because she
+     is already out (her own leave's answer lost) stopping the deletion every time. And the iPhone app's own sign-in
+     sheet at the door replaced by a web popup. */
+  { id: 'kept-signed-in', file: 'app/store-firebase.js', want: ['S22.late-says', 'S23.signed-out', 'S23.log-after-stop', 'S23b.fast-signin-stays'], sections: ['S22', 'S23', 'S23b'],
+    edits: [['      if (loginLeft) await signOutAfterStop();\n', '']] },
+  { id: 'family-kept-in-memory', file: 'app/store-firebase.js', want: ['S23.forgotten', 'S23.new-family'], sections: ['S23'],
+    edits: [['      applyAppBlob({ settings: units }); state.events = [];\n', '']] },
+  /* SAR-3 and SAR-4, each line of that forgetting on its own: the family's settings kept whole (its name and Pro taste
+     counts became her new Cubby's own: the line as it was), and its entries kept in memory. */
+  { id: 'settings-carried', file: 'app/store-firebase.js', want: ['S23.settings-forgotten', 'S23.new-settings', 'S23.new-name-shown'], sections: ['S23'],
+    edits: [['applyAppBlob({ settings: units }); state.events = [];', 'applyAppBlob({ settings: state.settings }); state.events = [];']] },
+  { id: 'events-kept', file: 'app/store-firebase.js', want: ['S23.events-forgotten', 'S23.new-no-entries'], sections: ['S23'],
+    edits: [['applyAppBlob({ settings: units }); state.events = [];', 'applyAppBlob({ settings: units });']] },
+  /* SAR-4: the stop's note on the sign-in screen not cleared when she signs in again, so the finish's own sign-out
+     draws it once more, under the goodbye. */
+  { id: 'note-kept', file: 'app/store-firebase.js', want: ['S23.finished-no-note'], sections: ['S23'],
+    edits: [["    signInNote = '';   // said what was left to do; she has signed in to do it\n", '']] },
+  /* SAR-1: the goodbye back at z-index 4000, under the sign-in screen Firebase's sign-out brings up. S8b in the tree
+     tier, S24 (the shortest deletion that finishes) in the emulator tier; S22, S23 and S23b check it the same way. */
+  { id: 'goodbye-under-signin', file: 'app/index.html', want: ['S8b.goodbye', 'S24.finishes'], sections: ['S8b', 'S24'],
+    edits: [["ov.setAttribute('style','position:fixed;inset:0;z-index:100003;", "ov.setAttribute('style','position:fixed;inset:0;z-index:4000;"]] },
+  { id: 'recheck-after-signout', file: 'app/store-firebase.js', want: ['S23b.fast-signin-stays'], sections: ['S23b'],
+    edits: [['if (accessLostShown || !refAtLoss || deletingAccount || refAtLoss !== hhRef) return;', 'if (accessLostShown || !refAtLoss || deletingAccount) return;'],
+      ["if (err && err.code === 'permission-denied' && refAtLoss === hhRef) showAccessLost();", "if (err && err.code === 'permission-denied') showAccessLost();"]] },
+  { id: 'note-not-on-signin', file: 'app/index.html', want: ['S8b.login-signed-out', 'S22.late-says', 'S23.stopped-says'], sections: ['S8b', 'S22', 'S23'],
+    edits: [["if(signedOut&&typeof window.LL.signInNote==='function') window.LL.signInNote(", 'if(false) window.LL.signInNote(']] },
+  { id: 'stage-forgotten', file: 'app/store-firebase.js', want: ['S23.door-again-says'], sections: ['S23'],
+    edits: [['      if (before && STAGE_RANK[before] > STAGE_RANK[stage]) stage = before;\n', '']] },
+  { id: 'leave-refusal-final', file: 'app/store-firebase.js', want: ['S24.finishes'], sections: ['S24'],
+    edits: [["if ((!out || out.prepare) && refused && refused.code === 'permission-denied' && await refusedHere(leaveRef)) {", 'if (false) {']] },
+  { id: 'native-door-popup', file: 'app/store-firebase.js', want: ['S22.native-asked'], sections: ['S22'],
+    edits: [['    if (isNativeApp() && nativeAuth()) {\n      return nativeCredential(kind).then(function (cred) { return u.reauthenticateWithCredential(cred); });\n    }\n', '']] },
   /* The hooks in the app, not the tracker: each removed, its checks must notice. */
   { id: 'entry-hooks-gone', file: 'app/index.html', want: ['S2.logged', 'S14.timers'], sections: ['S2', 'S14'],
     edits: [[/^.*window\.cubbyTrackEntry\(.*\n/gm, '']] },
@@ -1298,18 +2009,28 @@ const ALL_MUTANTS = [
     edits: [[/^.*cubbyTrackLinkOpened.*\n/gm, '']] },
 ];
 
-/* Free on every interface: serve.js listens on all of them, and on macOS a 127.0.0.1 bind can succeed beside
-   a server already listening on [::] at the same port. */
+/* Free on every address a URL can reach, as tools/gates.js asks (its PORT_HOSTS): serve.js listens on the
+   wildcard address, the checks ask 127.0.0.1, and `localhost` is ::1 first on macOS. There a socket can bind
+   127.0.0.1 beside a server on [::], and [::] beside one on 0.0.0.0, so each of the four addresses sees a
+   listener the others miss. Asking the wildcard and 127.0.0.1 alone (as before 16 Nov 2026) called a port
+   held on 0.0.0.0 free: the temp tree's serve.js then bound beside it, said it was serving, and the stranger
+   answered 127.0.0.1 (39 requests in one --self-test run, its control graded on the stranger). An address
+   family this machine lacks holds nothing. */
+const PORT_HOSTS = [undefined, '0.0.0.0', '127.0.0.1', '::1'];
 function portFreeOn(p, host) {
-  return new Promise((res) => { const s = net.createServer(); s.once('error', () => res(false)); s.listen(host ? { port: p, host } : { port: p }, () => s.close(() => res(true))); });
+  return new Promise((res) => { const s = net.createServer(); s.once('error', (e) => res(e.code === 'EAFNOSUPPORT' || e.code === 'EADDRNOTAVAIL')); s.listen(host === undefined ? { port: p } : { port: p, host }, () => s.close(() => res(true))); });
 }
-async function portFree(p) { return (await portFreeOn(p)) && (await portFreeOn(p, '127.0.0.1')); }
+async function portFree(p) { for (const h of PORT_HOSTS) if (!(await portFreeOn(p, h))) return false; return true; }
 /* Inside EMU_PORT_RANGE when one is set (gates.js takes the tree port from the TOP of it, so this searches
-   up from the bottom); otherwise any free port. */
+   up from the bottom); otherwise a port the OS offers on 127.0.0.1, kept only if it is free at every address. */
 async function pickPort() {
   const band = /^(\d+)-(\d+)$/.exec(process.env.EMU_PORT_RANGE || '');
   if (band) { for (let p = Number(band[1]); p <= Number(band[2]); p++) if (await portFree(p)) return p; throw new Error('no free port in EMU_PORT_RANGE ' + band[0]); }
-  return new Promise((res, rej) => { const s = net.createServer(); s.on('error', rej); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)); }); });
+  for (let i = 0; i < 50; i++) {
+    const p = await new Promise((res, rej) => { const s = net.createServer(); s.on('error', rej); s.listen(0, '127.0.0.1', () => { const q = s.address().port; s.close(() => res(q)); }); });
+    if (await portFree(p)) return p;
+  }
+  throw new Error('no port the OS offered was free at every address (50 tries)');
 }
 /* n distinct free ports, the same way (the emulator's two, before it binds either). */
 async function pickPorts(n) {
@@ -1364,14 +2085,23 @@ async function serveTree(tmp, port) {
   return { base, stop: () => new Promise((res) => { if (exited) return res(); child.once('exit', () => res()); try { child.kill(); } catch (e) { res(); } }) };
 }
 
+/* The mutants this tier can judge: each keeps only its sections in the tier, and only the checks those sections
+   make. family-ignored is caught by S19 in the tree tier and by S20 in the emulator tier. */
+function tierMutants() {
+  return ALL_MUTANTS.filter((m) => !PICK.length || PICK.includes(m.id)).map((m) => {
+    const sections = m.sections.filter(inTier);
+    return Object.assign({}, m, { sections, want: m.want.filter((id) => sections.includes(id.split('.')[0])) });
+  }).filter((m) => m.sections.length && m.want.length);
+}
 async function selfTest(browser) {
-  console.log('\nself-test: mutants of the tracker and its hooks, each served from its own temp copy of the tree');
-  const MUTANTS = PICK.length ? ALL_MUTANTS.filter((m) => PICK.includes(m.id)) : ALL_MUTANTS;
+  console.log('\nself-test (' + (EMU_TIER ? 'emulator' : 'tree') + ' tier): mutants of the tracker and its hooks, each served from its own temp copy of the tree');
+  const MUTANTS = tierMutants();
   if (PICK.length) console.log('  (only ' + MUTANTS.map((m) => m.id).join(', ') + ': a partial self-test, so it cannot pass)');
   const TRACKER = 'app/cubby-track.js';
   const src = fs.readFileSync(path.join(ROOT, TRACKER), 'utf8');
   let caught = 0, bad = 0;
-  // Control: an unmutated temp copy passes, so a mutant that fails is failing on its mutation.
+  // Control: an unmutated temp copy passes, so a mutant that fails is failing on its mutation. run() starts with
+  // S0.tracker, so a control answered by another server serving another tracker fails there, not silently.
   {
     const tmp = tempTree(TRACKER, src), port = await pickPort();
     const srv = await serveTree(tmp, port);
@@ -1414,10 +2144,12 @@ async function selfTest(browser) {
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'], downloadBehavior: dl.downloadBehavior() });
   let okAll = false;
   try {
-    console.log('usage-tracker: ' + BASE);
-    // S20 and S21 need the Firestore emulator; one serves this run and the self-test's.
-    if (SELF || (ONLY.length ? ONLY : Object.keys(SECTIONS)).some((k) => k === 'S20' || k === 'S21')) await startEmulator();
-    const R = await run(browser, BASE, ROOT, ONLY.length ? ONLY : null, false);
+    const sections = ONLY.length ? ONLY : Object.keys(SECTIONS).filter(inTier);
+    console.log('usage-tracker (' + (EMU_TIER ? 'emulator' : 'tree') + ' tier): ' + BASE + '  sections ' + sections.join(' '));
+    // S20-S24 need the Firestore emulator; one serves this run and the self-test's. Only the emulator tier (or an
+    // --only that names one of them) starts it, so the tree tier needs neither java nor the emulator jar.
+    if (sections.concat(SELF ? tierMutants().flatMap((m) => m.sections) : []).some((k) => EMU_SECTIONS.includes(k))) await startEmulator();
+    const R = await run(browser, BASE, ROOT, sections, false);
     console.log('\n' + R.pass + ' passed, ' + R.fail + ' failed');
     okAll = R.fail === 0;
     console.log('USAGE-TRACKER: ' + (okAll ? 'PASS' : 'FAIL'));
