@@ -71,3 +71,16 @@ catalogue behind it. Each rule below cost real time in Aug-Sep 2026 and each has
 - Every P0 or P1 gets a blameless 5-Whys in `docs/postmortems/` (template there). Date the timeline
   with `git log` BEFORE writing the whys: one root cause inverted once the dates were checked.
 - Codify the finding twice: a doc AND a gate that can go red.
+
+## The root system: how a release is run (founder, Nov 2026)
+- One primary root, the main session, owns the outcome. Subagents are roots for one use case each,
+  file-disjoint, each re-checked by a fresh skeptic. The root reads every diff that ships and can say why
+  it is right; it never relays a summary as fact. If something breaks for a family anywhere, the plant dies.
+- Aim diligence by exposure: the app opening, sign-in, saving, deletion first, then whatever is about to be
+  switched on. The 2026.46.1 beta crashed at launch on every iPhone while review rounds went into analytics
+  code that was switched off; nothing had ever opened the build on the newest iOS.
+- Fix the cause, not the list. When a review finds a cluster, find what they share and prefer the simpler
+  design: patching one finding per lane added the complexity that produced the next round's findings.
+- Prove on the real surface: `tools/ios_launch_smoke.sh` before any upload and against the live site after a
+  push that changes what the native app loads, the live site itself, and real engines (the Firestore and
+  Auth emulators, Miniflare's D1) rather than stubs.
