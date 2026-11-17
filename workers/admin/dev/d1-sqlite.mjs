@@ -4,14 +4,30 @@
  * statement rolls the whole batch back.
  *
  * `hooks.before(sql, args)` may throw, to stage a database failure on a chosen statement.
+ *
+ * CUBBY_D1_ENGINE=miniflare runs the same surface on workerd's REAL D1 instead (d1-miniflare.mjs), so a test
+ * written against this file runs on D1 with no change of its own; test/usage-d1-engine.test.js does that.
+ * Unset (or `sqlite`) it is this file's node:sqlite. Anything else is refused, never quietly ignored.
  */
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 
-const norm = (args) => args.map((a) => (a === undefined ? null : (typeof a === 'boolean' ? (a ? 1 : 0) : a)));
+/* How a bound value reaches node:sqlite. NOT how D1 binds it: D1 refuses `undefined` (D1_TYPE_ERROR), and
+   this turns it into NULL, which is why the D1 engine run exists. */
+export const norm = (args) => args.map((a) => (a === undefined ? null : (typeof a === 'boolean' ? (a ? 1 : 0) : a)));
 const plain = (r) => (r ? Object.assign({}, r) : null);
 
+const ENGINE = process.env.CUBBY_D1_ENGINE || 'sqlite';
+if (ENGINE !== 'sqlite' && ENGINE !== 'miniflare') throw new Error('CUBBY_D1_ENGINE must be sqlite or miniflare, not ' + ENGINE);
+const realD1 = ENGINE === 'miniflare' ? await import('./d1-miniflare.mjs') : null;
+
 export function makeD1(opts) {
+  if (realD1) return realD1.makeD1(opts, { makeSqliteD1, norm });
+  return makeSqliteD1(opts);
+}
+
+/* The node:sqlite database, whatever CUBBY_D1_ENGINE says (the D1 engine's shadow twin is one). */
+export function makeSqliteD1(opts) {
   opts = opts || {};
   const db = new DatabaseSync(':memory:');
   const hooks = opts.hooks || {};
