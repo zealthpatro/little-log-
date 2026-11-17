@@ -59,6 +59,13 @@ if ! xcodebuild -project "$ROOT/ios/App/App.xcodeproj" -scheme App -configuratio
 fi
 APP="$DD/Build/Products/Debug-iphonesimulator/App.app"
 
+# The name iOS puts on its own sheets: Google's sign-in sheet read "App" until 16 Nov 2026, because
+# CFBundleName was Capacitor's $(PRODUCT_NAME). tools/cap_ios_configure.rb sets both keys.
+for KEY in CFBundleName CFBundleDisplayName; do
+  GOT=$(/usr/libexec/PlistBuddy -c "Print :$KEY" "$APP/Info.plist" 2>/dev/null || true)
+  [ "$GOT" = "Cubby" ] || { echo "✖ $KEY is \"$GOT\", not \"Cubby\": iOS would call the app that on its own sheets (run ruby tools/cap_ios_configure.rb)"; exit 1; }
+done
+
 xcrun simctl terminate "$UDID" "$BUNDLE" >/dev/null 2>&1 || true
 xcrun simctl uninstall "$UDID" "$BUNDLE" >/dev/null 2>&1 || true
 xcrun simctl install "$UDID" "$APP"

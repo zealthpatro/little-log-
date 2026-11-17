@@ -186,6 +186,16 @@ if File.exist?(INFO)
   system(pb, '-c', 'Add :CFBundleURLTypes:0:CFBundleURLSchemes array', INFO)
   system(pb, '-c', "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string #{rev}", INFO)
 
+  # The name iOS puts on its own sheets. `npx cap add ios` leaves CFBundleName as $(PRODUCT_NAME), which
+  # is "App", and the system sheet before Google sign-in read "App" Wants to Use "google.com" to Sign In
+  # (device test, 16 Nov 2026), although the home screen said Cubby (CFBundleDisplayName). Both say Cubby.
+  # PRODUCT_NAME itself stays App: the Swift module, App.SceneDelegate and the storyboard depend on it.
+  APP_NAME = 'Cubby'
+  %w[CFBundleName CFBundleDisplayName].each do |k|
+    system(pb, '-c', "Delete :#{k}", INFO, out: File::NULL, err: File::NULL)
+    system(pb, '-c', "Add :#{k} string #{APP_NAME}", INFO)
+  end
+
   # Cubby only uses the OS's standard HTTPS/TLS, so declare it and skip the export-compliance prompt
   # on every upload.
   system(pb, '-c', 'Delete :ITSAppUsesNonExemptEncryption', INFO, out: File::NULL, err: File::NULL)
@@ -234,7 +244,11 @@ if File.exist?(INFO)
   # Read the scene class back by its exact path: a near miss here is a launch crash on every iPhone.
   scene_cls = `#{pb} -c "Print :UIApplicationSceneManifest:UISceneConfigurations:UIWindowSceneSessionRoleApplication:0:UISceneDelegateClassName" "#{INFO}" 2>/dev/null`.strip
   abort("✖ Scene manifest did not land in Info.plist (got #{scene_cls.inspect}); iOS 27 kills the app at launch without it") unless scene_cls == SCENE_CLASS
-  puts "✓ Info.plist: WKAppBoundDomains=#{DOMAINS.join(',')}, Google URL scheme, encryption + usage strings, scene manifest"
+  %w[CFBundleName CFBundleDisplayName].each do |k|
+    got = `#{pb} -c "Print :#{k}" "#{INFO}" 2>/dev/null`.strip
+    abort("✖ #{k} is #{got.inspect}, not #{APP_NAME.inspect}: iOS would name the app that on its own sheets") unless got == APP_NAME
+  end
+  puts "✓ Info.plist: name #{APP_NAME}, WKAppBoundDomains=#{DOMAINS.join(',')}, Google URL scheme, encryption + usage strings, scene manifest"
 end
 
 # 6. The scene delegate itself. Always rewritten (like App.entitlements) so a fix here always ships.
