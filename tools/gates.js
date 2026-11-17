@@ -10,7 +10,8 @@
  * (8080, 8099, 8123, none), so running one bare in a shared checkout graded whatever server
  * happened to be listening, which is usually a DIFFERENT tree. This starts one server on a port
  * nothing else is using and passes that URL to every gate explicitly, so a pass is always a pass
- * for THIS working tree.
+ * for THIS working tree; it proves the server is this tree's before the first gate and after the last,
+ * or refuses (see "The tree server" below).
  *
  *   node tools/gates.js              tree gates: everything that can be judged from this checkout
  *   node tools/gates.js --live       also check production (third-party trackers, shipped claims)
@@ -50,6 +51,12 @@ const TREE = [
   /* The guard that keeps gates out of ~/Downloads, and the helper that sends their files elsewhere. */
   { name: 'downloads-guard', cmd: ['node', 'tools/gates.js', '--self-test-downloads'] },
   { name: 'gate-downloads',  cmd: ['node', 'tools/gate_downloads.js', '--self-test', 'url'] },
+  /* The runner grades THIS tree or refuses: another checkout's server on the port it would pick (at any
+     address), its own serve.js dying, a server serving other bytes, the server lost mid-run, a stranger that
+     takes 127.0.0.1 at its port mid-run, and a SIGTERM, a SIGALRM (nightly.sh's watchdog) or a SIGKILL to the
+     runner alone, after which its serve.js must be gone, each staged against a real runner in a temp tree
+     (--self-test-tree-server). */
+  { name: 'tree-server',     cmd: ['node', 'tools/gates.js', '--self-test-tree-server'] },
   { name: 'preg-tick-race', cmd: ['node', 'test/preg-tick-race.test.js', 'url'] },
   { name: 'two-caregivers', cmd: ['node', 'test/two-caregiver-journey.test.js', 'url'] },
   { name: 'mkt-contrast',   cmd: ['node', 'tools/marketing_contrast_check.js', 'url'] },
@@ -57,6 +64,12 @@ const TREE = [
   /* config/app reaches every phone with no deploy and no review, so the validator in front of it is
      held to a written contract: plain text, known hosts, locked safety widgets, nothing dropped. */
   { name: 'config',         cmd: ['node', 'tools/config_check.js', '--self-test'] },
+  /* Every script holding the admin key uses firebase-admin's modular entry points: 14 dropped the
+     namespace API and Cubby Ops crashed on it (16 Nov 2026). The self-test reads main's broken ops.js. */
+  { name: 'admin-sdk',      cmd: ['node', 'tools/admin_sdk_check.js', '--self-test'] },
+  /* nav-links(live)'s matcher, held red against this repo's own 404 page, and its live half held to node:https
+     (fetch() sends no navigation header, so it passed against the broken production). */
+  { name: 'nav-links',      cmd: ['node', 'tools/live_nav_check.js', '--self-test'] },
   /* The alert pills are one component now, and their buttons are named actions run by one listener.
      The contract (escaped text, ids as data, a closed registry) is held statically here... */
   { name: 'alert-pill',     cmd: ['node', 'tools/alert_pill_check.js', '--self-test'] },
@@ -235,6 +248,9 @@ const TREE = [
      seeded app: no content leaves, nothing during her loss holding or a deletion, the notice holds linked events
      in mode on, one person's queue never leaves under another's token, the cap, the pagehide batch. --self-test
      serves mutants of app/cubby-track.js (and of its hooks) from temp copies of the tree; each must be caught.
+     This is its tree tier (S0-S19, and S8b: what account deletion says, read off index.html for every stage): Chrome
+     only, no java and no emulator jar. The sections that run the real sync layer on a Firestore emulator (S20-S23b,
+     with their mutants) are usage-tracker-emu, in EMU_GATES below.
      usage-ingest and usage-erasure (the server half) sit with tracking-plan, above. */
   { name: 'usage-tracker',  cmd: ['node', 'tools/usage_tracker_check.js', 'url', '--self-test'] },
   /* brand-py: the logo change as one tool (tools/brand.py propose, compare, zoom, set; docs/BRAND.md). Its
@@ -259,7 +275,7 @@ TREE.push(
   { name: 'prepush-tier',   cmd: ['node', 'test/prepush-tier.test.js'] },
   /* A real push from a LINKED worktree leaves the shared repository byte-identical (no gate inherits GIT_DIR). */
   { name: 'prepush-worktree', cmd: ['node', 'test/prepush-worktree.test.js'] },
-  /* The nightly bug-bash's verdict, board line and open-findings ledger, over five synthetic nights. */
+  /* The nightly bug-bash's verdict, board line and open-findings ledger, over synthetic nights in a temp dir. */
   { name: 'nightly-report', cmd: ['node', 'tools/nightly_report.js', '--self-test'] },
   /* The Worker under seeded malformed requests: never throws, never an undeclared 5xx, never reflects. */
   { name: 'fuzz-worker',    cmd: ['node', 'tools/fuzz_worker.js', '--self-test', '--seconds=20'] },
@@ -295,6 +311,9 @@ const LIVE_GATES = [
      to Access or a 401/403, and a 403 the Worker wrote carries its headers. Red until the founder's first
      admin deploy (docs/ADMIN-DEPLOY.md), which is what it is for. */
   { name: 'admin(live)',      cmd: ['node', 'tools/admin_live_check.js'] },
+  /* The sign-in link and a shared game link, asked the way a BROWSER asks (a navigation): from 8 Jul to
+     17 Nov 2026 both got the 404 page in every browser while every script still reached the Worker. */
+  { name: 'nav-links(live)',  cmd: ['node', 'tools/live_nav_check.js'] },
 ];
 /* These need a real Firestore emulator, so they cannot run in the tree tier. loss-archive and
    push-query drive the app or the Worker's query against it rather than testing rules, which is
@@ -334,6 +353,7 @@ const EMU_GATES = [
      about switching for good. */
   { name: 'invite-family-rules', emu: 'node invite-family-rules.test.js' },  // invites/{email}/from/{hid}: who reads, writes, joins, spends
   { name: 'invite-households', emu: 'node invite-households.test.js' },      // the founder's reports and the Worker's funnel query count both kinds of email invite
+  { name: 'ops-admin', emu: 'node ops-admin.test.js' },                      // Cubby Ops serves /api/data from a real Firestore on firebase-admin 14
   { name: 'invite-family', self: ['node', 'test/invite-family.test.js'] },   // several families, "Not joined yet", the empty-Cubby question
   /* The admin Worker's masked reads, Auth listing and refresh on the REAL Firestore and Auth emulators:
      every mask honoured by the server, nothing planted reaches D1 or a page, a real 404 reads as held. */
@@ -351,30 +371,41 @@ const EMU_GATES = [
    nothing is fetched from npm at push time. */
 async function emuPorts() {
   const names = ['FS_PORT', 'AUTH_PORT', 'WEB_PORT', 'STATIC_PORT', 'HUB_PORT', 'LOG_PORT', 'WS_PORT'];
-  const out = {}, used = new Set();
-  /* EMU_PORT_RANGE=7601-7639 keeps every pick inside a band a session has agreed to use (a shared Mac
-     where other sessions own other ports); without it the OS hands out free ephemeral ports. */
-  const band = /^(\d+)-(\d+)$/.exec(process.env.EMU_PORT_RANGE || '');
-  let next = band ? Number(band[1]) : 0;
-  for (const n of names) {
-    let p = 0;
-    if (band) {
-      for (; next <= Number(band[2]) && !p; next++) if (await portIsFree(next)) p = next;
-      if (!p) throw new Error('EMU_PORT_RANGE ' + band[0] + ' has no seven free ports');
-    } else {
-      p = await freePort();
-      while (used.has(p)) p = await freePort();
-    }
-    used.add(p); out[n] = p;
-  }
+  const picked = await freePorts(names.length), out = {};
+  names.forEach((n, i) => { out[n] = picked[i]; });
   return out;
 }
-function portIsFree(port) {
+/* n distinct free ports. EMU_PORT_RANGE=7601-7639 keeps every pick inside a band a session has agreed to use
+   (a shared Mac where other sessions own other ports), searched from the bottom; without it the OS hands out
+   free ephemeral ports. tools/nightly.sh takes its ports here too (--free-ports=N), so there is one picker. */
+async function freePorts(n) {
+  const band = /^(\d+)-(\d+)$/.exec(process.env.EMU_PORT_RANGE || '');
+  const out = [];
+  if (band) {
+    for (let p = Number(band[1]); p <= Number(band[2]) && out.length < n; p++) if (await portIsFree(p)) out.push(p);
+    if (out.length < n) throw new Error('EMU_PORT_RANGE ' + band[0] + ' has no ' + n + ' free ports');
+    return out;
+  }
+  while (out.length < n) { const p = await freePort(); if (!out.includes(p)) out.push(p); }
+  return out;
+}
+/* Free means nothing listens there at ANY address a gate's URL can reach. serve.js listens on the wildcard
+   address, the gates ask 127.0.0.1, and the self-hosting suites ask `localhost` (::1 first on macOS). On macOS
+   a socket can bind 127.0.0.1 beside a server already listening on [::] at the same port, and [::] beside one
+   on 0.0.0.0 (both measured on 16 Nov 2026), so asking 127.0.0.1 alone called a port held by another
+   session's serve.js free, and this run's own serve.js then died on EADDRINUSE while the other answered. An
+   address family this machine does not have (no IPv6) holds nothing, so it does not make a port busy. */
+const PORT_HOSTS = [undefined, '0.0.0.0', '127.0.0.1', '::1'];
+function portFreeOn(port, host) {
   return new Promise((res) => {
     const s = net.createServer();
-    s.once('error', () => res(false));
-    s.listen(port, '127.0.0.1', () => s.close(() => res(true)));
+    s.once('error', (e) => res(e.code === 'EAFNOSUPPORT' || e.code === 'EADDRNOTAVAIL'));
+    s.listen(host === undefined ? { port } : { port, host }, () => s.close(() => res(true)));
   });
+}
+async function portIsFree(port) {
+  for (const h of PORT_HOSTS) if (!(await portFreeOn(port, h))) return false;
+  return true;
 }
 function emuEnv(ports) {
   const env = Object.assign({}, process.env);
@@ -401,7 +432,33 @@ function firebaseCli() {
    seeded runs are nightly (tools/nightly.sh), not here. */
 EMU_GATES.push(
   { name: 'fuzz-rules',   self: ['node', 'tools/fuzz_rules.js', '--self-test'] },   // model vs real rules, every role
-  { name: 'chaos',        self: ['node', 'tools/chaos.js', '--self-test'] },        // two phones, real app, planted lost write
+  { name: 'chaos',        self: ['node', 'tools/chaos.js', '--self-test'] },        // two phones, real app, planted lost write, a deletion after a stale sign-in
+);
+/* The usage tracker's emulator tier (tools/usage_tracker_check.js --emulator): PRIV-4 through the real sign-in
+   layer (S20), a deletion that does not finish and signing out (S21), account deletion saying only what is true,
+   with the recent sign-in asked for before anything is deleted, on the web and in the iPhone app (S22), a stop at
+   the login signing her out and "sign in again, then delete" finishing it (S23, S23b), and a leave whose answer was
+   lost not stopping the deletion (S24), S23-S24 under this tree's firestore.rules; --self-test runs their
+   mutants.
+   A browser gate, so it gets 'url' (the tree server, below) like a tree gate, and FS_PORT/WS_PORT for the
+   Firestore emulator it starts itself from the jar firebase-tools caches. Kept after `rules`, which downloads
+   that jar on a fresh machine (CI). It used to run in the tree tier, which made every push need java. */
+EMU_GATES.push(
+  { name: 'usage-tracker-emu', self: ['node', 'tools/usage_tracker_check.js', 'url', '--emulator', '--self-test'] },
+);
+/* The usage events' SQL on workerd's OWN D1 (Miniflare, local and offline: started with cf: false, and any
+   socket beyond loopback is refused and fails the gate), not only on the node:sqlite shim every other usage
+   test uses: what D1 refuses (BEGIN, SAVEPOINT, a bound undefined, 101 parameters, a 6-term compound SELECT,
+   a 51-byte LIKE pattern), the real code paths on both engines with every answer compared, D1's rows_written
+   against wrangler.toml's write arithmetic, and usage-ingest, usage-route, usage-erasure and admin-screens
+   re-run on D1 with every statement shadowed on node:sqlite. --self-test: each break D1 alone can see must be
+   red on D1 and green on the shim, and a harness started without cf: false must be caught reaching out.
+   Emulator tier because it starts a runtime of its own; it finds the pinned miniflare in tools/node_modules
+   (CI's emulator job installs it) or npx's cache (MINIFLARE_PATH is held to the same pin), and fails, never
+   skips, without it. A push touching only wrangler.toml or schema/usage.sql runs this tier too. A SIGTERM,
+   SIGINT, SIGHUP or SIGALRM to a process holding a D1 stops its workerd first (section 0 checks each). */
+EMU_GATES.push(
+  { name: 'usage-d1', self: ['node', 'test/usage-d1-engine.test.js', '--self-test'] },
 );
 
 /* The tree server's port. Inside EMU_PORT_RANGE when one is set, so a session that agreed a band stays in
@@ -413,23 +470,108 @@ async function treePort() {
   for (let p = Number(band[2]); p >= Number(band[1]); p--) if (await portIsFree(p)) return p;
   throw new Error('EMU_PORT_RANGE ' + band[0] + ' has no free port for the tree server');
 }
-function freePort() {
+/* An ephemeral port the OS hands out on 127.0.0.1, kept only if it is free at every address (portIsFree). */
+async function freePort() {
+  for (let i = 0; i < 50; i++) {
+    const p = await new Promise((res, rej) => {
+      const s = net.createServer();
+      s.on('error', rej);
+      s.listen(0, '127.0.0.1', () => { const q = s.address().port; s.close(() => res(q)); });
+    });
+    if (await portIsFree(p)) return p;
+  }
+  throw new Error('no port the OS offered was free at every address (50 tries)');
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* ---- The tree server is THIS tree's, from before the first gate to after the last (Nov 2026). ----
+   A run graded another checkout while its banner said "serving THIS tree". Another session's orphaned serve.js
+   held [::]:7739; the port check asked only 127.0.0.1, so 7739 looked free; this run's serve.js died on
+   EADDRINUSE, unseen because its output was ignored; and waitFor() took any answer, which came from the
+   orphan. usage-tracker then failed a check this tree passes, on that tree's older app; the mirror case is a
+   pass for code that is broken. So the run now refuses before the first gate unless:
+     - the port was free at every address (portIsFree above);
+     - THIS run's serve.js said it is listening (its "serving" line), and had not exited;
+     - TREE_PROOF, fetched from the server, is byte for byte what this tree holds (a file this tree does not
+       have must be a 404; test/prepush-worktree.test.js runs this runner in a throwaway repo with no app/).
+   After the last gate the server must still be up and still serve those bytes, or the run fails; and no gate
+   starts after it has exited. `node tools/gates.js --self-test-tree-server` stages each of these. */
+const TREE_PROOF = ['app/index.html', 'app/store-firebase.js', 'app/sw.js'];
+/* One GET on a connection of its own (agent: false): a pooled one could be a socket the server already closed. */
+function getBytes(url) {
   return new Promise((res, rej) => {
-    const s = net.createServer();
-    s.on('error', rej);
-    s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)); });
+    const req = require('http').get(url, { agent: false }, (r) => {
+      const parts = [];
+      r.on('data', (d) => parts.push(d));
+      r.on('end', () => res({ status: r.statusCode, body: Buffer.concat(parts) }));
+      r.on('error', rej);
+    });
+    req.on('error', rej);
+    req.setTimeout(10000, () => req.destroy(Object.assign(new Error('no answer in 10 s'), { code: 'ETIMEDOUT' })));
   });
 }
-function waitFor(url, ms) {
-  const stop = Date.now() + ms;
-  return new Promise((res, rej) => {
-    (function tick() {
-      fetch(url).then(() => res()).catch(() => {
-        if (Date.now() > stop) return rej(new Error('server never came up at ' + url));
-        setTimeout(tick, 200);
-      });
-    })();
-  });
+async function treeMismatch(root, base) {
+  const bad = [];
+  for (const rel of TREE_PROOF) {
+    let want = null;
+    try { want = fs.readFileSync(path.join(root, rel)); } catch (e) { want = null; }
+    let status = 0, got = null;
+    try { const r = await getBytes(base + '/' + rel); status = r.status; got = r.body; }
+    catch (e) { bad.push(rel + ' got no answer (' + (e.code || e.message) + ')'); continue; }
+    if (want === null) { if (status !== 404) bad.push(rel + ' is not in this tree, yet it was served (' + status + ', ' + got.length + ' bytes)'); continue; }
+    if (status !== 200) { bad.push(rel + ' answered ' + status + ' (this tree has ' + want.length + ' bytes)'); continue; }
+    if (!got.equals(want)) {
+      let i = 0;
+      while (i < want.length && i < got.length && want[i] === got[i]) i++;
+      bad.push(rel + ' differs: ' + got.length + ' bytes served, ' + want.length + ' in this tree, the first difference at byte ' + i);
+    }
+  }
+  return bad;
+}
+/* Asked twice before it says no, so a file saved in the middle of the comparison is not taken for a stranger. */
+async function checkTree(root, base) {
+  const bad = await treeMismatch(root, base);
+  if (!bad.length) return bad;
+  await sleep(300);
+  return treeMismatch(root, base);
+}
+/* The tree server lives only as long as this runner. serve.js runs inside a small wrapper that exits when its
+   stdin closes, and its stdin is a pipe only this runner holds, which the OS closes however the runner ends:
+   a SIGKILL, or a signal with no handler here, included. Before (16 Nov 2026), nightly.sh's watchdog (perl's
+   alarm, then exec) ended a run with SIGALRM, which nothing caught, and its serve.js went on listening with
+   PPID 1 (seen on :7879), the same leftover as the orphans in this machine's port bands. serve.js itself is
+   unchanged and still the tree's own: the wrapper loads it by path, so it serves the folder it sits in and
+   prints its "serving" line. */
+const TETHER = 'process.stdin.on("end", () => process.exit(0)); process.stdin.on("error", () => process.exit(0));'
+  + ' process.stdin.resume(); require(process.argv[1]);';
+/* Starts root's own serve.js on port and resolves once it is listening and serving root's bytes; otherwise it
+   kills it and rejects with the reason. `track` gets the handle at once, so a signal during the start can
+   stop it. handle.gone is set if it exits on its own (not by stop()). */
+function startTreeServer(root, port, track) {
+  const proc = spawn(process.execPath, ['-e', TETHER, path.join(root, 'tools', 'serve.js')],
+    { cwd: root, env: Object.assign(childEnv(), { PORT: String(port) }), stdio: ['pipe', 'pipe', 'pipe'] });
+  const srv = { proc, port, base: 'http://127.0.0.1:' + port, said: '', gone: null, stopping: false,
+    stop() { srv.stopping = true; try { proc.kill(); } catch (e) { /* already gone */ } } };
+  if (track) track(srv);
+  const keep = (d) => { if (srv.said.length < 8000) srv.said += d; };
+  proc.stdout.on('data', keep);
+  proc.stderr.on('data', keep);
+  proc.on('close', (code, signal) => { if (!srv.stopping) srv.gone = signal ? 'killed by ' + signal : 'exit code ' + code; });
+  proc.on('error', (e) => { if (!srv.stopping) srv.gone = 'it could not start: ' + e.message; });
+  const reason = () => { const l = srv.said.split('\n').find((x) => /Error|EADDR/.test(x)) || srv.said.split('\n')[0] || 'it printed nothing'; return l.trim().slice(0, 160); };
+  const look = '\n  Another checkout\'s server may be listening there: lsof -nP -iTCP:' + port + ' -sTCP:LISTEN';
+  return (async () => {
+    const until = Date.now() + 15000;
+    while (!/^serving /m.test(srv.said) || !proc.pid) {
+      if (srv.gone) throw new Error('the tree server for ' + root + ' on port ' + port + ' exited before it was listening (' + srv.gone + '): ' + reason() + look);
+      if (Date.now() > until) throw new Error('the tree server for ' + root + ' on port ' + port + ' never said it was listening' + look);
+      await sleep(50);
+    }
+    const bad = await checkTree(root, srv.base);
+    if (srv.gone) throw new Error('the tree server for ' + root + ' on port ' + port + ' exited as it started (' + srv.gone + '): ' + reason() + look);
+    if (bad.length) throw new Error('what answers at ' + srv.base + ' is not THIS tree (' + root + '): ' + bad.join('; ') + look);
+    return srv;
+  })().catch((e) => { srv.stop(); throw e; });
 }
 /* No gate inherits the repository git handed a hook (Nov 2026). Inside a hook git exports GIT_DIR, and from a
    LINKED worktree it points into the SHARED repository (<repo>/.git/worktrees/<name>). Two gates build
@@ -445,15 +587,18 @@ function childEnv(env) {
   for (const k of GIT_REPO_ENV) delete e[k];
   return e;
 }
+/* The gate running now, so a SIGTERM, SIGHUP or SIGALRM sent to this runner reaches it too (see the handlers below). */
+let runningGate = null;
 function run(cmd, cwd, env) {
   return new Promise((res) => {
     const t0 = Date.now();
     const p = spawn(cmd[0], cmd.slice(1), { cwd: cwd || ROOT, env: childEnv(env) });
+    runningGate = p;
     let out = '';
     p.stdout.on('data', (d) => { out += d; });
     p.stderr.on('data', (d) => { out += d; });
-    p.on('close', (code) => res({ code, out, ms: Date.now() - t0 }));
-    p.on('error', (e) => res({ code: 127, out: String(e.message), ms: Date.now() - t0 }));
+    p.on('close', (code) => { if (runningGate === p) runningGate = null; res({ code, out, ms: Date.now() - t0 }); });
+    p.on('error', (e) => { if (runningGate === p) runningGate = null; res({ code: 127, out: String(e.message), ms: Date.now() - t0 }); });
   });
 }
 /* Every gate runs through here, so every gate is watched. Headless Chrome saves an <a download> into
@@ -529,20 +674,345 @@ async function selfTestDownloads() {
   return fail ? 1 : 0;
 }
 
+/* node tools/gates.js --self-test-tree-server. Every way a run could grade a server that is not THIS tree's is
+   staged against a real runner, each in a temp tree of its own (the runner, its serve.js, three small app files
+   and a gate that waits until it is let go), never the real app; each run must refuse or fail, saying why.
+   GATES_SELF_TEST_SOURCE=<a gates.js> aims those runs at another runner: on 72d7c68f's they go red. */
+async function selfTestTreeServer() {
+  const http = require('http');
+  const { spawnSync } = require('child_process');
+  let pass = 0, fail = 0;
+  const ok = (n, c, x) => {
+    if (c) { pass++; console.log('  ok   ' + n); return; }
+    fail++;
+    console.log('  FAIL ' + n + (x !== undefined ? '\n         ' + (typeof x === 'string' ? x : JSON.stringify(x)).slice(-1200).replace(/\n/g, '\n         ') : ''));
+  };
+  const SRC = path.resolve(process.env.GATES_SELF_TEST_SOURCE || __filename);
+  const RUNNER = fs.readFileSync(SRC, 'utf8');
+  const SERVE = fs.readFileSync(path.join(__dirname, 'serve.js'), 'utf8');
+  console.log('\ntree server: a run grades THIS tree, or refuses before its first gate'
+    + (SRC !== __filename ? '\n  the runner under test: ' + SRC : ''));
+  const APP = { 'app/index.html': '<!doctype html><title>the tree under test</title>\n', 'app/store-firebase.js': '// the store\n', 'app/sw.js': 'const CACHE = 1;\n' };
+  const OLDER = Object.assign({}, APP, { 'app/index.html': APP['app/index.html'] + '<!-- an older checkout -->\n' });
+  const made = [], plants = [], pids = [];
+  const HOLD_GATE = 'self-test-hold';
+  const HOLD = 'const fs = require("fs"), p = require("path"), t0 = Date.now();\n'
+    + 'fs.writeFileSync(p.join(__dirname, "hold.pid"), String(process.pid));\n'
+    + '(function w() { if (fs.existsSync(p.join(__dirname, "release")) || Date.now() - t0 > 60000) process.exit(0); setTimeout(w, 50); })();\n';
+  /* A checkout of its own. edit(src) changes the runner (a mutant), serve replaces its serve.js, noApp leaves
+     app/ out. Its TREE gains the hold gate, which writes its pid and exits 0 once `release` exists, and a gate
+     after it that passes at once. */
+  function tempTree(o) {
+    o = o || {};
+    const t = fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-gates-tree-'));
+    made.push(t);
+    fs.mkdirSync(path.join(t, 'tools'));
+    let src = o.edit ? o.edit(RUNNER) : RUNNER;
+    const at = src.indexOf('TREE.push(\n');
+    if (at >= 0) {
+      src = src.slice(0, at + 11) + '  { name: ' + JSON.stringify(HOLD_GATE) + ', cmd: ' + JSON.stringify([process.execPath, path.join(t, 'hold.js')]) + ' },\n'
+        + '  { name: ' + JSON.stringify(HOLD_GATE + '-after') + ', cmd: ' + JSON.stringify([process.execPath, '-e', '0']) + ' },\n' + src.slice(at + 11);
+    }
+    fs.writeFileSync(path.join(t, 'tools', 'gates.js'), src);
+    fs.copyFileSync(path.join(__dirname, 'gate_downloads.js'), path.join(t, 'tools', 'gate_downloads.js'));
+    fs.writeFileSync(path.join(t, 'tools', 'serve.js'), o.serve || SERVE);
+    fs.writeFileSync(path.join(t, 'hold.js'), HOLD);
+    if (!o.noApp) { fs.mkdirSync(path.join(t, 'app')); for (const rel of Object.keys(APP)) fs.writeFileSync(path.join(t, rel), APP[rel]); }
+    return t;
+  }
+  /* A server already listening, as another session's serve.js would be: it serves `files` and counts asks. */
+  function plant(port, host, files, v6only) {
+    return new Promise((res) => {
+      const s = http.createServer((q, r) => {
+        s.hits++;
+        const body = files[decodeURIComponent(String(q.url).split('?')[0]).replace(/^\/+/, '')];
+        r.writeHead(body === undefined ? 404 : 200);
+        r.end(body === undefined ? '404' : body);
+      });
+      s.hits = 0;
+      s.once('error', (e) => res({ err: e.code }));
+      s.listen(Object.assign({ port }, host === undefined ? {} : { host }, v6only ? { ipv6Only: true } : {}), () => { plants.push(s); res({ s }); });
+    });
+  }
+  const unplant = (s) => new Promise((r) => { if (!s) return r(); s.close(() => r()); if (s.closeAllConnections) s.closeAllConnections(); });
+  /* n consecutive free ports: from the bottom of EMU_PORT_RANGE (the runner that started this took the top), or
+     wherever the OS offers. */
+  async function freeRun(n) {
+    const band = /^(\d+)-(\d+)$/.exec(process.env.EMU_PORT_RANGE || '');
+    const all = async (p) => { for (let k = 0; k < n; k++) if (!(await portIsFree(p + k))) return false; return true; };
+    if (band) { for (let p = Number(band[1]); p + n - 1 <= Number(band[2]); p++) if (await all(p)) return p; throw new Error('EMU_PORT_RANGE ' + band[0] + ' has no ' + n + ' free ports in a row'); }
+    for (let i = 0; i < 100; i++) { const p = await freePort(); if (p + n - 1 <= 65535 && await all(p)) return p; }
+    throw new Error('no ' + n + ' free ports in a row');
+  }
+  /* A runner in tree t, its own band given explicitly. */
+  function child(t, args, band) {
+    const env = Object.assign(childEnv(), { EMU_PORT_RANGE: band });
+    const proc = spawn(process.execPath, [path.join(t, 'tools', 'gates.js')].concat(args), { cwd: t, env });
+    const c = { proc, out: '' };
+    proc.stdout.on('data', (d) => { c.out += d; });
+    proc.stderr.on('data', (d) => { c.out += d; });
+    const timer = setTimeout(() => { c.out += '\n[self-test: still running after 120 s, killed]'; try { proc.kill('SIGKILL'); } catch (e) { /* gone */ } }, 120000);
+    c.done = new Promise((res) => proc.on('close', (code, signal) => { clearTimeout(timer); res({ code, signal, out: c.out }); }));
+    return c;
+  }
+  const until = async (fn, ms) => { const end = Date.now() + ms; while (Date.now() < end) { if (await fn()) return true; await sleep(50); } return !!(await fn()); };
+  const alive = (pid) => { if (!pid) return false; try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+  const listening = (port) => new Promise((res) => { const s = net.connect(port, '127.0.0.1'); s.once('connect', () => { s.destroy(); res(true); }); s.once('error', () => res(false)); });
+  const childrenOf = (pid) => { const r = spawnSync('pgrep', ['-P', String(pid)], { encoding: 'utf8' }); return String(r.stdout || '').split('\n').map(Number).filter(Boolean); };
+  const holdPid = (t) => { try { return Number(fs.readFileSync(path.join(t, 'hold.pid'), 'utf8')); } catch (e) { return 0; } };
+  const refusedFirst = (r) => r.code === 2 && !/serving THIS tree/.test(r.out) && !/GATES: PASS/.test(r.out);
+  /* The picker 72d7c68f had (127.0.0.1 alone), so the checks after it can be staged on their own. It replaces the
+     runner's own PORT_HOSTS declaration, whatever that line holds (a line that starts with it, which no string in
+     this self-test does); a runner without one (72d7c68f's) is left as it is. */
+  const oldPicker = (src) => src.replace(/^const PORT_HOSTS = \[[^\]\n]*\];$/m, "const PORT_HOSTS = ['127.0.0.1'];");
+  const NONE = '--only=no-gate-has-this-name';
+
+  try {
+    /* The comparison itself, on servers planted here. */
+    {
+      const t = tempTree(), bare = tempTree({ noApp: true });
+      const p = await freeRun(1);
+      let pl = await plant(p, '127.0.0.1', APP);
+      ok('the tree check passes a server that serves this tree byte for byte', (await treeMismatch(t, 'http://127.0.0.1:' + p)).length === 0, await treeMismatch(t, 'http://127.0.0.1:' + p));
+      const asBare = await treeMismatch(bare, 'http://127.0.0.1:' + p);
+      ok('and names each file a tree without app/ (the throwaway repo of prepush-worktree) does not hold, when served', asBare.length === 3 && asBare.every((x) => /is not in this tree, yet it was served \(200/.test(x)), asBare);
+      await unplant(pl.s);
+      pl = await plant(p, '127.0.0.1', OLDER);
+      const older = await treeMismatch(t, 'http://127.0.0.1:' + p);
+      ok('it names the file and the byte where another checkout differs', older.length === 1 && older[0].startsWith('app/index.html differs') && older[0].endsWith('at byte ' + APP['app/index.html'].length), older);
+      await unplant(pl.s);
+      pl = await plant(p, '127.0.0.1', {});
+      ok('companion: for a tree without app/, 404s are the right answer', (await treeMismatch(bare, 'http://127.0.0.1:' + p)).length === 0, await treeMismatch(bare, 'http://127.0.0.1:' + p));
+      await unplant(pl.s);
+    }
+
+    /* 1. The port check: a server on any address at the one port the run may use, and the run refuses. Each
+          entry of PORT_HOSTS is the only one that sees one of these (measured on macOS, 16 Nov 2026). */
+    for (const [label, host, v6only] of [['the wildcard address (what serve.js binds)', undefined], ['the IPv6 wildcard alone', '::', true],
+      ['0.0.0.0', '0.0.0.0'], ['127.0.0.1', '127.0.0.1'], ['::1', '::1']]) {
+      const p = await freeRun(1);
+      const pl = await plant(p, host, OLDER, v6only);
+      if (pl.err) {
+        ok('(' + label + ' cannot be listened on here: ' + pl.err + ', so there is nothing to stage)', /:/.test(host || '') && (pl.err === 'EADDRNOTAVAIL' || pl.err === 'EAFNOSUPPORT'), pl.err);
+        continue;
+      }
+      const r = await child(tempTree(), [NONE], p + '-' + p).done;
+      ok('1. another checkout listening on ' + label + ' at :' + p + ', the only port the run may use: refused before any gate, "no free port"',
+        refusedFirst(r) && /no free port/.test(r.out) && pl.s.hits === 0, r.out + '\n(the planted server was asked ' + pl.s.hits + ' times)');
+      await unplant(pl.s);
+    }
+
+    /* 2. Beside it: the run takes the other port of its band, serves itself there, and never asks the plant. */
+    {
+      const p = await freeRun(2);
+      const pl = await plant(p + 1, undefined, OLDER);
+      const r = await child(tempTree(), [NONE], p + '-' + (p + 1)).done;
+      ok('2. with the top of a two-port band held on the wildcard address, the run serves THIS tree from :' + p + ' and never asks :' + (p + 1),
+        r.code === 0 && new RegExp('serving THIS tree \\(.*\\) at http://127\\.0\\.0\\.1:' + p + '\\b').test(r.out) && /GATES: PASS/.test(r.out) && pl.s.hits === 0,
+        r.out + '\n(the planted server was asked ' + pl.s.hits + ' times)');
+      await unplant(pl.s);
+    }
+
+    /* 3. Its own serve.js must be the one listening. With the picker 72d7c68f had and a server on the wildcard
+          address that even serves this tree's own bytes, only that check can see it. On Linux a 127.0.0.1 bind
+          beside a wildcard listener fails, so there the old picker already sees it and the run refuses at the pick. */
+    for (const [name, files] of [['serving this tree\'s own bytes', APP], ['serving an older checkout (the incident of 16 Nov 2026)', OLDER]]) {
+      const p = await freeRun(1);
+      const pl = await plant(p, undefined, files);
+      const bsd = await portFreeOn(p, '127.0.0.1');
+      const r = await child(tempTree({ edit: oldPicker }), [NONE], p + '-' + p).done;
+      ok('3. picker as on 72d7c68f, a server on the wildcard address ' + name + ': refused before any gate, '
+        + (bsd ? 'because its own serve.js exited on EADDRINUSE' : '(this OS refuses that 127.0.0.1 bind, so the pick itself refuses)'),
+        refusedFirst(r) && (bsd ? /exited before it was listening/.test(r.out) && /EADDRINUSE/.test(r.out) : /no free port/.test(r.out)), r.out);
+      await unplant(pl.s);
+    }
+
+    /* 4. The bytes: a serve.js that is listening and alive but answers for another checkout. */
+    {
+      const at = SERVE.indexOf('res.end(data);');
+      ok('4. (serve.js still ends a file with res.end(data), the line this stage changes)', at >= 0 && SERVE.indexOf('res.end(data);', at + 1) < 0);
+      const other = SERVE.replace('res.end(data);', 'res.end(/index\\.html$/.test(fp) ? Buffer.concat([data, Buffer.from(' + JSON.stringify('<!-- an older checkout -->\n') + ')]) : data);');
+      const p = await freeRun(1);
+      const r = await child(tempTree({ serve: other }), [NONE], p + '-' + p).done;
+      ok('4. a serve.js that listens and stays up but serves another checkout\'s app/index.html: refused before any gate, naming the file',
+        refusedFirst(r) && /is not THIS tree/.test(r.out) && /app\/index\.html differs/.test(r.out), r.out);
+      const q = await freeRun(1);
+      const c = await child(tempTree(), [NONE], q + '-' + q).done;
+      ok('4. companion: the same run on an unaltered tree serves it, says the three files were checked byte for byte, and passes',
+        c.code === 0 && /serving THIS tree/.test(c.out) && /byte for byte/.test(c.out) && /GATES: PASS/.test(c.out), c.out);
+    }
+
+    /* 5. The server must last the run: it is killed while a gate runs, and the run fails naming it. */
+    {
+      const t = tempTree();
+      const p = await freeRun(1);
+      const c = child(t, ['--only=' + HOLD_GATE], p + '-' + p);   // the hold gate, then the one after it
+      const held = await until(() => holdPid(t) > 0, 20000);
+      const serve = childrenOf(c.proc.pid).filter((x) => x !== holdPid(t));
+      pids.push(holdPid(t), ...serve);
+      serve.forEach((x) => { try { process.kill(x, 'SIGKILL'); } catch (e) { /* gone */ } });
+      const dead = await until(() => !serve.some(alive), 5000);
+      fs.writeFileSync(path.join(t, 'release'), '');
+      const r = await c.done;
+      ok('5. its serve.js killed while a gate runs: that gate ends, the next one is not started, and the run FAILS (served-tree)',
+        held && serve.length === 1 && dead && /self-test-hold\s+ok/.test(r.out) && !/self-test-hold-after/.test(r.out)
+          && /served-tree\s+FAIL/.test(r.out) && /exited during the run/.test(r.out) && r.code === 1,
+        'serve.js ' + JSON.stringify(serve) + ' dead ' + dead + '\n' + r.out);
+    }
+
+    /* 5b. A stranger takes 127.0.0.1 at the run's port while a gate runs, and its own serve.js stays up. macOS lets
+           that bind sit beside the run's wildcard serve.js, and 127.0.0.1 is the address the gates ask, so it
+           answers whatever is asked after it; the check after the last gate must see its bytes and fail the run.
+           On Linux that bind fails beside a wildcard listener (EADDRINUSE), so there is nothing to stage there. */
+    {
+      const t = tempTree();
+      const p = await freeRun(1);
+      const c = child(t, ['--only=' + HOLD_GATE], p + '-' + p);
+      const held = await until(() => holdPid(t) > 0, 20000);
+      const serve = childrenOf(c.proc.pid).filter((x) => x !== holdPid(t));
+      pids.push(holdPid(t), ...serve);
+      const pl = await plant(p, '127.0.0.1', OLDER);
+      fs.writeFileSync(path.join(t, 'release'), '');
+      const r = await c.done;
+      if (pl.err) {
+        ok('5b. (a server on 127.0.0.1:' + p + ' cannot listen beside the run\'s serve.js on this OS: ' + pl.err + ', so there is nothing to stage)',
+          process.platform !== 'darwin' && pl.err === 'EADDRINUSE', pl.err + '\n' + r.out);
+      } else {
+        ok('5b. a server that takes 127.0.0.1:' + p + ' beside the run\'s serve.js while a gate runs, serving an older checkout: the check after the last gate FAILS the run (served-tree), naming app/index.html',
+          held && serve.length === 1 && /self-test-hold\s+ok/.test(r.out) && /served-tree\s+FAIL/.test(r.out) && /app\/index\.html differs/.test(r.out) && r.code === 1 && pl.s.hits > 0,
+          r.out + '\n(the planted server was asked ' + pl.s.hits + ' times)');
+        await unplant(pl.s);
+      }
+    }
+
+    /* 6. A SIGTERM to the runner alone (what a session stopping a background run sends) takes its server and
+          the gate running with it, instead of leaving them behind with PPID 1. */
+    {
+      const t = tempTree();
+      const p = await freeRun(1);
+      const c = child(t, ['--only=' + HOLD_GATE], p + '-' + p);
+      const held = await until(() => holdPid(t) > 0, 20000);
+      const kids = childrenOf(c.proc.pid);
+      pids.push(...kids);
+      const wasListening = await listening(p);
+      c.proc.kill('SIGTERM');
+      const r = await c.done;
+      const allGone = await until(() => !kids.some(alive), 5000);
+      const portFree = await until(async () => !(await listening(p)), 3000);
+      ok('6. companion: before the SIGTERM the run was serving on :' + p + ' with its server and the gate as its children', held && wasListening && kids.length === 2, { held, wasListening, kids });
+      ok('6. a SIGTERM to the runner alone: it exits 143, its serve.js and the running gate are gone, nothing listens on :' + p,
+        r.code === 143 && allGone && portFree, { code: r.code, signal: r.signal, stillAlive: kids.filter(alive), listening: !portFree });
+    }
+
+    /* 6b. nightly.sh's watchdog (perl's alarm, then exec) ends a step that runs out of time with SIGALRM, and
+           6c. a SIGKILL cannot be caught at all. Each to the runner alone: its serve.js must not outlive it. A
+           SIGALRM also reaches the running gate (as a SIGTERM) and the runner exits 142, what nightly_report.js
+           reads as the watchdog; after a SIGKILL nothing can tell the gate, so this test lets it go itself. */
+    for (const [label, sig] of [['6b. a SIGALRM (nightly.sh\'s watchdog)', 'SIGALRM'], ['6c. a SIGKILL', 'SIGKILL']]) {
+      const t = tempTree();
+      const p = await freeRun(1);
+      const c = child(t, ['--only=' + HOLD_GATE], p + '-' + p);
+      const held = await until(() => holdPid(t) > 0, 20000);
+      const gate = holdPid(t);
+      const serve = childrenOf(c.proc.pid).filter((x) => x !== gate);
+      pids.push(gate, ...serve);
+      const wasListening = await listening(p);
+      c.proc.kill(sig);
+      const r = await c.done;
+      const serveGone = await until(() => !serve.some(alive), 5000);
+      const portFree = await until(async () => !(await listening(p)), 3000);
+      const gateGone = await until(() => !alive(gate), 3000);
+      fs.writeFileSync(path.join(t, 'release'), '');
+      ok(label.slice(0, 3) + ' companion: before the signal the run was serving on :' + p + ' from its own serve.js, a gate running', held && wasListening && serve.length === 1, { held, wasListening, serve, gate });
+      if (sig === 'SIGALRM') {
+        ok(label + ' to the runner alone: it exits 142, its serve.js and the running gate are gone, nothing listens on :' + p,
+          r.code === 142 && serveGone && gateGone && portFree, { code: r.code, signal: r.signal, serveAlive: serve.filter(alive), gateAlive: alive(gate), listening: !portFree });
+      } else {
+        ok(label + ' to the runner alone: its serve.js exits too, and nothing listens on :' + p,
+          r.signal === 'SIGKILL' && serveGone && portFree, { code: r.code, signal: r.signal, serveAlive: serve.filter(alive), listening: !portFree });
+      }
+    }
+
+    /* 7. The same picker and check, for tools/nightly.sh. */
+    if (!RUNNER.includes('--free-ports=') || !RUNNER.includes('--served-is-this-tree=')) ok('7. the runner under test has --free-ports and --served-is-this-tree (not run: an unknown flag would start the whole tree tier)', false);
+    else {
+      const p = await freeRun(3);
+      const pl = await plant(p + 1, undefined, OLDER);
+      const r = await child(tempTree(), ['--free-ports=2'], p + '-' + (p + 2)).done;
+      ok('7. --free-ports=2 over a band whose middle port is held on the wildcard address prints the other two', r.code === 0 && r.out.trim() === p + ' ' + (p + 2), r.out);
+      await unplant(pl.s);
+      const t = tempTree();
+      const q = await freeRun(1);
+      let pq = await plant(q, '127.0.0.1', APP);
+      const same = await child(t, ['--served-is-this-tree=http://127.0.0.1:' + q], q + '-' + q).done;
+      await unplant(pq.s);
+      pq = await plant(q, '127.0.0.1', OLDER);
+      const diff = await child(t, ['--served-is-this-tree=http://127.0.0.1:' + q], q + '-' + q).done;
+      await unplant(pq.s);
+      ok('7. --served-is-this-tree says yes for this tree\'s bytes and no, naming the file, for another checkout\'s',
+        same.code === 0 && diff.code === 1 && /app\/index\.html differs/.test(diff.out), same.out + '\n' + diff.out);
+    }
+  } catch (e) {
+    ok('the self-test ran to its end', false, e && e.stack || e);
+  } finally {
+    for (const s of plants) await unplant(s);
+    const left = [...new Set(pids)].filter(alive);
+    left.forEach((x) => { try { process.kill(x, 'SIGKILL'); } catch (e) { /* gone */ } });
+    if (left.length) console.log('  (killed what a red run left behind: pids ' + left.join(', ') + ')');
+    for (const t of made) { try { fs.rmSync(t, { recursive: true, force: true }); } catch (e) { /* best effort */ } }
+  }
+  console.log('\n' + pass + ' passed, ' + fail + ' failed');
+  console.log('TREE-SERVER SELF-TEST: ' + (fail ? 'FAIL' : 'PASS') + '\n');
+  return fail ? 1 : 0;
+}
+
 (async () => {
   if (ARGS.includes('--self-test-downloads')) process.exit(await selfTestDownloads());
-  const port = await treePort();
-  const base = 'http://127.0.0.1:' + port;
+  if (ARGS.includes('--self-test-tree-server')) process.exit(await selfTestTreeServer());
+  /* The same port picker and tree check for another runner (tools/nightly.sh): N free ports, inside
+     EMU_PORT_RANGE when set; and whether a URL serves this tree's TREE_PROOF bytes. */
+  const freeArg = ARGS.find((a) => a.startsWith('--free-ports='));
+  if (freeArg) {
+    try { console.log((await freePorts(Number(freeArg.slice(13)) || 1)).join(' ')); process.exit(0); }
+    catch (e) { console.error(e.message); process.exit(1); }
+  }
+  const servedArg = ARGS.find((a) => a.startsWith('--served-is-this-tree='));
+  if (servedArg) {
+    const bad = await checkTree(ROOT, servedArg.slice(22).replace(/\/$/, ''));
+    console.log(bad.length ? 'NOT THIS TREE: ' + bad.join('; ') : 'this tree: ' + TREE_PROOF.join(', ') + ' served byte for byte');
+    process.exit(bad.length ? 1 : 0);
+  }
   console.log('\nCubby gates');
-  console.log('serving THIS tree (' + ROOT + ') at ' + base);
-  console.log('every browser gate is given that URL explicitly, so none of them can grade another checkout.\n');
 
-  const server = spawn('node', ['tools/serve.js'], { cwd: ROOT, env: Object.assign(childEnv(), { PORT: String(port) }), stdio: 'ignore' });
-  const stopServer = () => { try { server.kill(); } catch (e) {} };
+  /* However this run ends, its tree server goes with it (stopped here, and tethered by TETHER above for the
+     ends nothing can catch), and a SIGTERM, SIGHUP or SIGALRM is passed on to the gate running now. A runner
+     stopped by a signal used to leave its serve.js listening with PPID 1: the orphans on 7729 and 7739 were
+     `node tools/serve.js` by that relative path with PPID 1, as the runner of 72d7c68f started it. SIGALRM is
+     what nightly.sh's watchdog sends when a step runs out of time; the gate is given a SIGTERM for it (no gate
+     handles SIGALRM), and the runner still exits 142, which nightly_report.js reads as "the watchdog killed
+     it". SIGINT is not passed on: Ctrl-C in a terminal already reaches the whole process group. */
+  let tree = null;
+  const stopServer = () => { if (tree) tree.stop(); };
   process.on('exit', stopServer);
-  process.on('SIGINT', () => { stopServer(); process.exit(130); });
-  try { await waitFor(base + '/app/', 15000); }
-  catch (e) { console.error('could not start the local server: ' + e.message); stopServer(); process.exit(2); }
+  const onSignal = (n, forward) => {
+    stopServer();
+    if (forward && runningGate) { try { runningGate.kill(forward); } catch (e) { /* already gone */ } }
+    process.exit(128 + n);
+  };
+  process.on('SIGINT', () => onSignal(2, null));
+  process.on('SIGTERM', () => onSignal(15, 'SIGTERM'));
+  process.on('SIGHUP', () => onSignal(1, 'SIGHUP'));
+  process.on('SIGALRM', () => onSignal(14, 'SIGTERM'));
+  try { await startTreeServer(ROOT, await treePort(), (s) => { tree = s; }); }
+  catch (e) {
+    console.log('REFUSED: ' + e.message + '\nNo gate was run: a gate graded by a server this run cannot vouch for proves nothing about this tree.\n\nGATES: FAIL');
+    stopServer();
+    process.exit(2);
+  }
+  const base = tree.base;
+  console.log('serving THIS tree (' + ROOT + ') at ' + base + ' (serve.js pid ' + tree.proc.pid + '):');
+  console.log(TREE_PROOF.join(', ') + ' are served byte for byte as this tree holds them, checked again after the last gate.');
+  console.log('every browser gate is given that URL explicitly, so none of them can grade another checkout.\n');
 
   let list = EMU_ONLY ? [] : TREE.slice();
   if (LIVE) list = list.concat(LIVE_GATES);
@@ -556,6 +1026,7 @@ async function selfTestDownloads() {
 
   const results = [];
   for (const g of list) {
+    if (tree.gone) break;   // no gate after the tree server has gone: it would grade another server, or none
     const cmd = g.cmd.map((a) => (a === 'url' ? base : a === 'liveurl' ? LIVE_URL : a));
     process.stdout.write('  ' + g.name.padEnd(18));
     const r = await runGate(g.name, cmd, ROOT, WATCH);
@@ -568,6 +1039,7 @@ async function selfTestDownloads() {
     console.log('\n  firestore emulator (each suite on its own free ports, never the 8080 default)');
     const emuList = ONLY ? EMU_GATES.filter((g) => onlyMatch(g.name)) : EMU_GATES;
     for (const g of emuList) {
+      if (tree.gone) break;
       process.stdout.write('  ' + g.name.padEnd(18));
       /* Free ports for THIS run (see emuPorts below). A self-hosting suite starts its own emulator and
          web server and reads them from the environment; the rest run inside one we start from a temp
@@ -575,7 +1047,8 @@ async function selfTestDownloads() {
       const ports = await emuPorts();
       const env = emuEnv(ports);
       let r, cfgDir = null;
-      if (g.self) r = await runGate(g.name, g.self, ROOT, WATCH, env);
+      /* 'url' is the tree server this run started, as for a tree gate (usage-tracker-emu drives the app there). */
+      if (g.self) r = await runGate(g.name, g.self.map((a) => (a === 'url' ? base : a)), ROOT, WATCH, env);
       else {
         cfgDir = emuConfig(ports);
         r = await runGate(g.name, firebaseCli().concat(['emulators:exec', '--only', 'firestore', '--project', 'demo-cubby',
@@ -588,7 +1061,16 @@ async function selfTestDownloads() {
     }
   }
 
+  /* The tree server, after the last gate: still up, and still serving this tree's bytes. */
+  const treeProblem = tree.gone
+    ? 'its serve.js (pid ' + tree.proc.pid + ') exited during the run (' + tree.gone + '): no gate was started after that, and the one running then may have graded another server or none'
+    : (await checkTree(ROOT, base)).join('; ');
   stopServer();
+  if (treeProblem) {
+    const out = 'the tree server at ' + base + ' for ' + ROOT + ': ' + treeProblem;
+    results.push({ name: 'served-tree', ok: false, ms: 0, out });
+    console.log('  ' + 'served-tree'.padEnd(18) + 'FAIL  ' + out.slice(0, 160));
+  }
   const failed = results.filter((r) => !r.ok);
   const blocking = failed.filter((r) => !r.live);
   console.log('\n' + '-'.repeat(72));

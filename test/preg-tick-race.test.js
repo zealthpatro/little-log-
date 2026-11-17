@@ -23,24 +23,27 @@
  * appointment in the page, and then writes the PRE-TICK document back from outside — which is exactly
  * what a snapshot carrying another member's slightly older view looks like.
  *
- *   cd test && npm i && node preg-tick-race.test.js
+ *   node test/preg-tick-race.test.js [<base url of this tree's server>]
  *
  * It must fail with the fix reverted. That is the point of it.
+ *
+ * WHERE IT RUNS (16 Nov 2026). It used to bind the emulator on 8182 and drive whatever answered
+ * localhost:8097, ignoring the URL gates.js passed it: with its ports moved into a band, given the URL of a
+ * tree with no app while another checkout's server listened on the wildcard address of its web port, it
+ * passed 8 of 8. Now the app is that URL (alone: this tree's own serve.js on a free port), proven to be this
+ * tree's before anything is graded, and every port comes from the runner's picker: test/helpers/tree-base.js.
  */
 'use strict';
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
-const { spawn, execFileSync } = require('child_process');
+const { spawn } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
-const EMU_PORT = 8182;
-const WEB_PORT = 8097;
 const UID = 'TICKMOM';
 const EXEC_PROJECT = 'demo-cubby-tick';
 const PROJECT = 'little-log-a9caa';
-const APP_URL = `http://localhost:${WEB_PORT}/app/?fsemu=${EMU_PORT}&fsuid=${UID}`;
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 let pass = 0, fail = 0;
@@ -66,41 +69,57 @@ function req(method, url, body) {
 }
 const get = (url) => req('GET', url);
 
-/* ---------- outer phase: stand the emulator up, then re-run ourselves inside it ---------- */
+/* ---------- outer phase: this tree's app server, free ports, then the emulator with ourselves inside it ---------- */
 if (!process.env.TICK_RACE_INNER) {
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-tickrace-'));
-  fs.writeFileSync(path.join(scratch, 'open.rules'),
-    "rules_version = '2';\nservice cloud.firestore { match /databases/{db}/documents { match /{document=**} { allow read, write: if true; } } }\n");
-  fs.writeFileSync(path.join(scratch, 'firebase.json'), JSON.stringify({
-    firestore: { rules: 'open.rules' },
-    emulators: { firestore: { port: EMU_PORT }, ui: { enabled: false } }
-  }));
-  const firebaseBin = path.join(__dirname, 'node_modules', '.bin', 'firebase');
-  const env = Object.assign({}, process.env, {
-    TICK_RACE_INNER: '1',
-    PATH: '/opt/homebrew/opt/openjdk/bin:' + process.env.PATH
-  });
-  try {
-    execFileSync(firebaseBin, [
+  const TB = require('./helpers/tree-base');
+  let app = { stop() {} }, inner = null;
+  for (const [sig, n] of [['SIGTERM', 15], ['SIGINT', 2], ['SIGHUP', 1]]) {
+    process.on(sig, () => { app.stop(); if (inner) { try { inner.kill(sig); } catch (e) { /* gone */ } } process.exit(128 + n); });
+  }
+  const give = (why) => { app.stop(); console.log('\nFAIL — ' + why); process.exit(1); };
+  (async () => {
+    const url = /^https?:\/\//.test(process.argv[2] || '') ? process.argv[2] : null;
+    const ports = await TB.freePorts(['FS_PORT', 'WS_PORT', 'HUB_PORT', 'LOG_PORT', 'PLANT_PORT'].concat(url ? [] : ['WEB_PORT']));
+    app = await TB.appServer(url, ports.WEB_PORT);
+    /* The THIS-tree line only once the check has passed: a refused run never claims it. */
+    console.log('\nchecking that the app server at ' + app.base + ' is THIS tree\'s (' + ROOT + ')');
+    for (const [n, c, x] of await TB.provenThisTree(app.base, ports.PLANT_PORT)) ok(n, c, c ? undefined : x);
+    if (fail) give('this run would not be grading THIS tree, so it grades nothing');
+    console.log('the app server at ' + app.base + ' is THIS tree\'s (' + ROOT + ')');
+
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-tickrace-'));
+    fs.writeFileSync(path.join(scratch, 'open.rules'),
+      "rules_version = '2';\nservice cloud.firestore { match /databases/{db}/documents { match /{document=**} { allow read, write: if true; } } }\n");
+    fs.writeFileSync(path.join(scratch, 'firebase.json'), JSON.stringify({
+      firestore: { rules: 'open.rules' },
+      emulators: { firestore: { port: ports.FS_PORT, websocketPort: ports.WS_PORT }, hub: { port: ports.HUB_PORT },
+        logging: { port: ports.LOG_PORT }, ui: { enabled: false } }
+    }));
+    const firebaseBin = path.join(__dirname, 'node_modules', '.bin', 'firebase');
+    const env = Object.assign({}, process.env, {
+      TICK_RACE_INNER: '1', TICK_RACE_BASE: app.base, TICK_RACE_FS_PORT: String(ports.FS_PORT), TICK_RACE_PASSED: String(pass),
+      PATH: '/opt/homebrew/opt/openjdk/bin:' + process.env.PATH
+    });
+    inner = spawn(firebaseBin, [
       'emulators:exec', '--only', 'firestore', '--project', EXEC_PROJECT,
       '--config', path.join(scratch, 'firebase.json'),
       `node ${JSON.stringify(__filename)}`
     ], { cwd: scratch, env, stdio: 'inherit' });
-  } catch (e) {
-    process.exitCode = e.status || 1;
-  }
+    const code = await new Promise((res) => { inner.on('close', (c) => res(c === null ? 1 : c)); inner.on('error', (e) => { console.log('FAIL — ' + e.message); res(1); }); });
+    app.stop();
+    try { fs.rmSync(scratch, { recursive: true, force: true }); } catch (e) { /* best effort */ }
+    process.exit(code);
+  })().catch((e) => give(String((e && e.message) || e)));
   return;
 }
 
 /* ---------- inner phase: drive the real app against the emulator ---------- */
+/* The outer phase checked that TICK_RACE_BASE serves this tree (its checks count in the total), and picked the
+   emulator's port. */
+pass = Number(process.env.TICK_RACE_PASSED) || 0;
+const EMU_PORT = Number(process.env.TICK_RACE_FS_PORT);
+const APP_URL = `${process.env.TICK_RACE_BASE}/app/?fsemu=${EMU_PORT}&fsuid=${UID}`;
 (async () => {
-  let serveProc = null;
-  if ((await get(`http://localhost:${WEB_PORT}/app/`)).status !== 200) {
-    serveProc = spawn('node', [path.join(ROOT, 'tools', 'serve.js')],
-      { stdio: 'ignore', env: Object.assign({}, process.env, { PORT: String(WEB_PORT) }) });
-    for (let i = 0; i < 40 && (await get(`http://localhost:${WEB_PORT}/app/`)).status !== 200; i++) await sleep(250);
-  }
-
   const puppeteer = require(path.join(ROOT, 'tools', 'node_modules', 'puppeteer-core'));
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });
   const page = await browser.newPage();
@@ -116,7 +135,7 @@ if (!process.env.TICK_RACE_INNER) {
   }
   console.log('\nthe app is signed in and syncing');
   ok('a household exists to sync into', !!hid, { hid });
-  if (!hid) { console.log('\nFAIL — never booted'); await browser.close(); if (serveProc) serveProc.kill(); process.exit(1); }
+  if (!hid) { console.log('\nFAIL — never booted'); await browser.close(); process.exit(1); }
 
   const pregUrl = `http://localhost:${EMU_PORT}/v1/projects/${PROJECT}/databases/(default)/documents/households/${hid}/pregnancy/${UID}`;
 
@@ -195,6 +214,5 @@ if (!process.env.TICK_RACE_INNER) {
 
   console.log('\n' + (fail ? 'FAIL' : 'PASS') + ' — ' + pass + ' passed, ' + fail + ' failed');
   await browser.close();
-  if (serveProc) serveProc.kill();
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

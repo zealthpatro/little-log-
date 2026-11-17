@@ -12,8 +12,9 @@ every night by tools that throw random, seeded, realistic trouble at the real ap
    │            2. tools/change_test_check.js --stdin: product code changed with no test? → refused
    │               (unless a commit carries "Test-exempt: <why>")
    │            3. tier: range touches firestore.rules, storage.rules, worker.js, workers/,
-   │               app/store-firebase.js, tools/gates.js, test/*emu*, test/*rules*, or any file
-   │               an emulator gate runs (read from tools/gates.js) → node tools/gates.js --emulator
+   │               wrangler.toml, schema/usage.sql, app/store-firebase.js, tools/gates.js,
+   │               test/*emu*, test/*rules*, or any file an emulator gate runs (read from
+   │               tools/gates.js) → node tools/gates.js --emulator
    │                                                     otherwise → node tools/gates.js
    ▼
  GitHub Actions (.github/workflows/gates.yml), every push to main and every PR
@@ -37,6 +38,36 @@ every night by tools that throw random, seeded, realistic trouble at the real ap
 | `--only=a,b` | only gates whose name contains `a` or `b`, in BOTH tiers (`--emulator --only=household-guard`) |
 | `--no-browser` | drop the tree gates that need Chrome (CI's `gates` job) |
 
+**The tree server is THIS tree's, or the run refuses.** On 16 Nov 2026 a run graded another checkout while
+its banner said it served this one: another session's orphaned `serve.js` held `[::]:7739`, the port check
+asked only `127.0.0.1` (macOS lets a socket bind there beside a wildcard listener), this run's own `serve.js`
+died on `EADDRINUSE` unseen, and the orphan answered every gate. Now a port is free only if a test bind
+succeeds at the wildcard address, `0.0.0.0`, `127.0.0.1` and `::1` alike (on macOS each of the four is the
+only one that sees one kind of listener: an IPv6-only wildcard, `0.0.0.0`, `127.0.0.1`, `::1`); the run waits
+for its own `serve.js` to say it is listening, then fetches `app/index.html`, `app/store-firebase.js` and
+`app/sw.js` from it and compares them byte for byte with the tree (a file the tree lacks must be a 404), and
+refuses before any gate if any of that fails. If the server exits during the run no further gate starts, and
+after the last gate it must still be up and serving those bytes (`served-tree` FAIL otherwise): a stranger that
+takes `127.0.0.1` at the run's port mid-run (macOS lets that bind sit beside the run's wildcard `serve.js`, and
+`127.0.0.1` is what the gates ask) answers every gate after it, and that last check is what sees it. The banner
+names the server's pid. A browser gate grades the URL it is given. The two tree gates that start their own
+emulator, `test/preg-tick-race.test.js` and `test/two-caregiver-journey.test.js`, used to ignore it and drive
+whatever answered `localhost:8097` and `localhost:8380`; through `test/helpers/tree-base.js` they now take the
+runner's URL (alone, they serve this tree themselves on a port from `--free-ports`, as every port they bind
+is), and ask `--served-is-this-tree` before they grade anything.
+
+**The tree server never outlives its run.** The orphans on 7729 and 7739 were `node tools/serve.js`, by the
+relative path the runner of 72d7c68f used, with PPID 1: a runner ended by a signal left its server listening
+for good. Now `serve.js` runs inside a small wrapper that exits when its stdin closes, and that stdin is a pipe
+only the runner holds, which the OS closes however the runner ends, a SIGKILL included. A SIGTERM or SIGHUP to
+the runner is also passed to the gate running then, and so is a SIGALRM, as a SIGTERM: SIGALRM is what
+`tools/nightly.sh`'s watchdog (`perl -e 'alarm ...; exec'`) sends a step that runs out of time, and before
+this it left the night's `serve.js` and the running gate behind (seen 16 Nov 2026: `*:7879` held with PPID 1
+after the alarm). The runner still exits 142 then, which `tools/nightly_report.js` reads as the watchdog.
+`tools/nightly.sh` takes its ports from the same picker (`node tools/gates.js --free-ports=N`) and runs its
+notes check only if `node tools/gates.js --served-is-this-tree=<url>` says yes. `tree-server`
+(`--self-test-tree-server`) stages each case against a real runner in a temp tree.
+
 **The emulator tier picks its own ports.** Each suite gets seven ports nothing is listening on
 (Firestore, Auth, web, static, hub, logging, websocket). A plain `emu` suite runs inside
 `firebase emulators:exec` with a temp `firebase.json` naming them; a self-hosting suite gets them as
@@ -45,6 +76,84 @@ which on this Mac is usually another session's server. `EMU_PORT_RANGE=7601-7639
 to a band. The CLI is `test/node_modules/.bin/firebase`, so nothing is fetched at push time. Every
 emulator suite needs `JAVA_HOME` (or java on PATH) and `test/node_modules`. The tree server takes its
 port from the top of the same band when one is set.
+
+**The tree tier needs no java.** A gate that starts a Firestore emulator belongs in the emulator tier,
+however it starts it. The usage tracker is split that way: `usage-tracker` (tree tier, S0-S19 with S8b,
+and their mutants) needs only Chrome, and `usage-tracker-emu` (`tools/usage_tracker_check.js <url> --emulator
+--self-test`, S20-S24 and their mutants) runs the app's real sync layer on a Firestore emulator it starts
+from the jar firebase-tools caches in `~/.cache/firebase/emulators` (or `$FIRESTORE_EMULATOR_JAR`), on the
+`FS_PORT`/`WS_PORT` it is handed. S20-S22 run it with open rules; S23, S23b and S24 put this tree's own
+`firestore.rules` in force for their run (the page's Firestore calls carry her identity as an emulator mock
+token), because what they prove turns on the rule that a family refuses the read of someone who has left it:
+the household listener losing her after a deletion stopped at the login (S23b), and a leave whose answer was
+lost, which Firestore runs again and the rules then refuse (S24). A fresh machine gets that jar from any CLI-run suite (`rules` runs first in
+a full emulator run; alone: `node tools/gates.js --emulator-only --only=rules`). A `self` suite that names
+`'url'` gets the tree server's address, as a tree gate does. Proof that the tree tier stays java-free:
+`env -u JAVA_HOME PATH=<a dir with only node>:/bin FIRESTORE_EMULATOR_JAR=/nonexistent node tools/gates.js --only=usage-tracker`
+passes.
+
+**Which push runs which half of account deletion.** The emulator tier runs before a push only when the range
+touches its triggers (the diagram above), so a push that changes only `app/index.html` or `app/cubby-track.js`
+runs the tree tier. Each half is placed so that push still meets it: what the app SAYS when a deletion stops
+(`doDeleteAccount`'s message for every stage, S8b) and every mutant of `app/cubby-track.js` are judged in the
+tree tier; how far a deletion really got (the stage `app/store-firebase.js` stamps) and the end-to-end paths
+(S21-S24) are judged in the emulator tier, which any push touching `app/store-firebase.js`, `tools/gates.js` or
+`tools/usage_tracker_check.js` runs. What is left to CI's `emulator` job alone, after the deploy: an
+`app/index.html` change that breaks deletion only in a way the real sync layer shows, with the message table
+intact.
+
+**The usage SQL runs on the real D1 too.** Every usage test drives D1 through the node:sqlite shim
+(`workers/admin/dev/d1-sqlite.mjs`). `usage-d1` (`test/usage-d1-engine.test.js`, emulator tier) runs the same
+code on workerd's own D1 through Miniflare, locally and offline, and compares every answer with the shim's.
+Offline is enforced: Miniflare starts with `cf: false` (without it, it fetches `workers.cloudflare.com/cf.json`,
+this machine's city, postcode and coordinates, and caches it under the working directory), and the thread
+that runs it refuses and records every socket beyond loopback, so any attempt fails the gate and none leaves
+the machine. A SIGTERM, SIGINT, SIGHUP or SIGALRM (nightly.sh's watchdog) sent to a process holding a D1
+stops its workerd before the process dies of it (Node gives the worker thread that owns Miniflare no signals,
+so a SIGTERM used to leave workerd running with PPID 1, holding its port); section 0 checks all four on every
+run. A signal the harness does not catch still leaves workerd running: a SIGKILL cannot be caught, and a
+SIGQUIT is not (measured 16 Nov 2026). The `--hold` child section 0 starts for those checks is
+tied to the test by its stdin, a pipe only the test holds: it exits, disposing its workerd, however the test
+ends, so a signal passed on by the runner between that child's start and the check's own signal no longer
+strands it (section 0 SIGKILLs a parent to check this).
+Any test written against the shim runs on D1 unchanged with `CUBBY_D1_ENGINE=miniflare` (add
+`CUBBY_D1_SHADOW=1` to have every statement checked against node:sqlite as well). What D1 does that the shim
+does not, each measured there on 16 Nov 2026 (miniflare 5.20261113.0-beta, workerd 1.20261113.1): it refuses
+`BEGIN` and `SAVEPOINT`, a bound `undefined` (the shim stores NULL), more than 100 bound parameters (the shim
+takes over 30,000), a compound `SELECT` of more than 5 terms (`orphanSweep`'s `UNION` has 4) and a `LIKE`
+pattern over 50 bytes (retention's journey patterns are 18 at most); its `meta.changes` counts the rows a
+trigger wrote too; and its `rows_written` bills an insert one
+row per index entry (13 for a stored event, as `wrangler.toml` states) but a delete one row, whatever the
+indexes. Miniflare is pinned in `workers/admin/dev/d1-miniflare.mjs`; it is found in `tools/node_modules`
+(CI installs it there), in npx's cache, or at `MINIFLARE_PATH`, and the gate fails, never skips, without it.
+`MINIFLARE_PATH` is held to the same pin; `MINIFLARE_ANY_VERSION=1` runs another build on purpose, and such a
+run cannot pass. A push that changes only `wrangler.toml` or `schema/usage.sql` runs the emulator tier, so
+`usage-d1`'s checks of the meter sentence and the rows an event bills run before that push deploys.
+
+**A deletion that stops at the login signs her out (16 Nov 2026).** By then she has left her family, her private
+records are gone and her usage purge is asked; only the login is left. Kept signed in, she was left on this
+phone's copy of the family she had left, where anything she logged was refused, and the same-page retry needed a
+ledger of what earlier attempts had done. Now the stop signs her out, the sign-in screen says "Sign in again, then
+delete it to finish", and every retry is one path: a fresh sign-in, a new Cubby of her own (her user record went in
+step 3, so she has no family to come back to), then a deletion that finishes. S23 drives that path end to end under
+the real rules, and `chaos --self-test` drives it on the real Firebase SDK and Auth emulator, with a reload after the
+stop; S23b the stop landing inside the household listener's re-check; S22 the stop's message and, with a
+stand-in Capacitor, the iPhone app's own Apple sheet at the door; S21(b) a sign-out that fails, where the tracker
+stays silent until she signs out herself. A leave refused every round is asked of the server once more: a family
+that refuses her read means she is already out (her own leave landed and only its answer was lost, or an owner
+removed her meanwhile), so her own records there go and the deletion carries on (S24). Nothing of the family she
+left travels into her next Cubby: not its entries, not its name (in memory, on the server, or in Family & sharing),
+not its Pro taste counts; only her units (S23).
+
+**A deletion that finishes ends on the goodbye (16 Nov 2026).** Firebase's `user.delete()` signs her out as it
+deletes the login, so the sign-in screen (z-index 99999) is up before `doDeleteAccount` draws the goodbye. From
+July to November 2026 the goodbye sat at 4000, under it: every family that deleted saw a plain sign-in screen with
+no word that the account had gone. The tracker's stand-in now signs her out on a delete as Firebase does, and
+S8b, S22, S23, S23b and S24 read the element at the centre of the screen, which must be the goodbye; `chaos
+--self-test` reads the same on the real SDK and Auth emulator. Her other phone, still signed in when she leaves
+the family, writes her pointer (`showAccessLost`) as an update, which Firestore refuses for a user record that
+is not there, so an account deleted on one phone stays deleted from the other; chaos drives that with Olive on
+two phones, and checks that a removed member's own record says she has no family.
 
 **No gate inherits the hook's repository.** Inside a hook git exports `GIT_DIR`, and from a linked
 worktree it names the SHARED repository. A gate that builds a throwaway repo with plain `git init`,
@@ -70,7 +179,10 @@ worktree through the real hook and compares the shared repository byte for byte.
      `test/`, reads `FIRESTORE_EMULATOR_HOST`)
    - emulator tier, self-hosting: `{ name: 'my-flow', self: ['node', 'test/my-flow.test.js'] }`; read the
      ports from the environment (`Number(process.env.FS_PORT) || <default>`) and launch Chrome with
-     `downloadBehavior` from `tools/gate_downloads.js` (every browser AND every `createBrowserContext`)
+     `downloadBehavior` from `tools/gate_downloads.js` (every browser AND every `createBrowserContext`).
+     Add `'url'` to the command to be given the tree server instead of serving the app yourself.
+   - anything that needs java or an emulator goes in the emulator tier, never the tree tier: every push
+     runs the tree tier, and a push that touches no rules, Worker or Firestore layer is not asked for java
 4. Only if it truly cannot run there, add it to `ALLOW` in `tools/test_wiring_check.js` with a reason a
    stranger can check, and `ranBy:` the file that does run it. Today that list is five files: two
    production-only checks, the Android parity check (red by design until Android lands), the real push
@@ -109,7 +221,10 @@ action; no loading overlay up more than 12 s online; nothing a person can pan si
 document only counts when its overflow is not clipped, which Cubby's `body{overflow:hidden}` does, and
 `#scroll` counts unless it clips). At every checkpoint: every acknowledged edit is on the server and on
 every member's phone (entries, the baby, medicines, milestones, the sleep timer keyed on that baby);
-nothing one member wrote is lost by another's save; a removed member can read nothing.
+nothing one member wrote is lost by another's save; a removed member can read nothing, and her own user record
+says she has no family and remembers the one she lost. A member whose account deletion resolved (through the
+app's own Delete) is no longer in the family on the server, sees the goodbye (the element at the centre of her
+screen), and her user record is gone, and stays gone once her other phones have reacted.
 
 The boot adds the baby and waits until the server holds it before Olive names herself; one boot in five
 names her inside the same 350 ms window instead (`rushName`), so that order is exercised too and a
@@ -223,6 +338,7 @@ restores the holding screen, and update `FLAKE` in the test.
 
 | gate | how it was made to fail |
 |---|---|
+| tree-server | `GATES_SELF_TEST_SOURCE=<72d7c68f's gates.js> node tools/gates.js --self-test-tree-server`: 15 of 24 red. That runner took a planted older checkout's answers when it listened on the wildcard address or on `0.0.0.0`, saying "serving THIS tree" each time, started beside one on `::1` (where a `localhost` URL reaches it), took the planted top port of a two-port band, accepted a `serve.js` serving other bytes, did not notice its server dying mid-run or a stranger answering on `127.0.0.1` mid-run, and a SIGTERM, a SIGALRM or a SIGKILL left its `serve.js` behind (the first two the running gate too). Against the runner of de27b1c7 (the first round of this fix): 2 of 25 red, nightly.sh's SIGALRM and a SIGKILL each left `serve.js` listening with PPID 1. Mutants of the new runner (16 Nov 2026), each turning its own line red: every `PORT_HOSTS` entry removed in turn (stage 1 only: stage 3 now swaps the runner's own `PORT_HOSTS` declaration; it used to swap the first match of that line's text, which in such a mutant is a string inside the self-test, so stage 3 graded the mutant's picker and went red too), the wait for its own `serve.js` to listen (stage 3), the byte comparison (4, 5b and 7), each half of the after-the-last-gate check on its own: the server gone (5) and the bytes compared (5b; before 5b, a mutant that dropped the byte half passed every stage), the stop after the server has gone (5), the watch on its exit (3 and 5), the SIGTERM handler and passing the SIGTERM on (6), the SIGALRM handler and passing the SIGALRM on (6b), the wrapper left out and the wrapper not exiting when its stdin closes (6c) |
 | test-wiring | `--self-test` plants an unwired test, a comment-only mention, a stale excuse, a missing file; on the base tree it named 12 orphans |
 | change-test | `--self-test` builds a throwaway repo: code-only push red, code + test green, `Test-exempt` green |
 | prepush-tier | `PREPUSH_HOOK=<old hook> node test/prepush-tier.test.js`: the hook before Nov 2026 fails 11 of 15; the 13 Nov hook fails the two java lines (a stub java that cannot run was waved through) |
@@ -230,6 +346,15 @@ restores the holding screen, and update `FLAKE` in the test.
 | hooks | `--self-test`, plus the old hook swapped in (a `command -v java` guard is caught) |
 | fuzz-worker | three planted bugs in a temp copy of `worker.js`; the 14 Nov value generator, run on the `worker.js` before the sign-in code field was hardened, finds the throw in 60 s (the 13 Nov generator does not) |
 | fuzz-rules | four planted rule bugs, each in its own demo project; the 13 Nov model let the planted photo-read hole through as AGREE |
-| chaos | a planted lost write (nappies never leave the phone), a generator with its lock removed, the old name-bearing signature, a baby wiped from one phone's blob and saved, a planted 420 px row in the scroller (and the night wash that must NOT count), and a replay that breaks another invariant (exit 2) |
+| chaos | a planted lost write (nappies never leave the phone), a generator with its lock removed, the old name-bearing signature, a baby wiped from one phone's blob and saved, a planted 420 px row in the scroller (and the night wash that must NOT count), and a replay that breaks another invariant (exit 2). A member whose sign-in is ten minutes old (the Auth emulator's `lastLoginAt` moved back, read from her phone) deletes her account; with the action's sign-in again taken out, the same deletion must be refused (`reauth_unsupported`), and planted to skip the leave it must break the new invariant (a resolved deletion with her still in the family). And a deletion that stops at the login on the real SDK (its account delete failing on the wire), then a reload, then signing in again and deleting: against `app/store-firebase.js` of 93730af1 she was left signed in on the family she had left, and after a reload she was still signed in ("not left signed out on the sign-in screen", "not still signed out ... after a reload"). And a family's exit (Olive on two phones removes Nina, then deletes her account): against the app files of 72d7c68f, "the goodbye is not what she sees: the centre of her screen is signin" and "her user record is on the server again (her other phone wrote it back)"; both are planted in the self-test (the goodbye at z-index 4000, the pointer as a merge). With the pointer write taken out, "nina was removed and her own record does not say so" (a replay of the same script, not a standing plant) |
 | loss-archive | pointed at another session's `:8080` it refuses by name instead of grading that tree |
-| nightly-report | eight synthetic nights; mutants: "not hit tonight means fixed", "one clean replay is enough" and "no artifact list" each turn it red, as did the four of 13 Nov |
+| nightly-report | synthetic nights in a temp dir; mutants: "not hit tonight means fixed", "one clean replay is enough" and "no artifact list" each turn it red, as did the four of 13 Nov. Before 16 Nov 2026 a notes step nightly.sh never ran (exit 3: the server it started was not this tree's) was reported "still red (exit 3)", and a gate line whose name fills gates.js's 18 columns (`removed-records-uiFAIL`), or the served-tree line (no seconds), was not read, so a red one was never named on the board: 3 of 29 checks red on the old reader. On a real log of 14 gates with 3 failures, the old reader found 13 gates and named 2 failures (`feedback-purge-emu` missing) |
+| preg-tick-race, two-caregivers | before 16 Nov 2026 each ignored the URL the runner passed and graded whatever answered on its fixed port (`localhost:8097`, `localhost:8380`); two-caregivers' "the static server is serving this checkout" asked only for a 200. Each, with its ports moved into a band and given the URL of a tree with no app while a server for another checkout listened on the wildcard address of its web port, passed: preg-tick-race 8 of 8 (that server answered 36 requests), two-caregivers 26 of 26 (139 requests). The same tree under each new test: given its own URL, red on the app's first boot (the right verdict for a tree with no app, and the stranger was never asked); given the stranger's URL, refused before the emulator started ('app/index.html differs'); alone, each served the tree itself on a free port and graded that. Their companion (`test/helpers/tree-base.js`) plants a server whose `app/index.html` has one comment more, and the check must say no. preg-tick-race's product half, re-run through the new plumbing: with the 2026-08-20 fix reverted in `applyPregJourney` (the snapshot's `appts` and signature adopted while a tick is unsaved), 3 checks red (the tick gone from the page and from the database). And each printed "the app server is THIS tree's" before checking it, so a refused run claimed THIS tree on one line and refused on the next: given a server whose `app/index.html` had one comment more, both printed that line once (16 Nov 2026). Now they print "checking that the app server at <base> is THIS tree's" first, and the THIS-tree line only once both checks pass: on the same server, 0 such lines; on this tree's own server, 1, after the checks |
+| usage-tracker | `--self-test` serves each tree-tier mutant of the tracker and its hooks from a temp tree. Before the split (16 Nov 2026) it started a Firestore emulator itself, and with java off PATH it failed `spawn java ENOENT`, with the jar hidden "no Firestore emulator jar"; it now passes with both hidden. Its temp-tree port picker asked only the wildcard address and 127.0.0.1: with a server on `0.0.0.0` at the bottom of the band (16 Nov 2026), `--only=S7 --self-test --mutants=cap-removed` graded its control on that server ("failing S0.tracker") and called cap-removed "not serving the mutant", the stranger answering 39 requests. It now asks the four addresses gates.js asks: control ok, cap-removed caught by S7.cap, 0 requests |
+| usage-tracker-emu | `--self-test`: the S20-S24 mutants, including teardown keeping the family record seen (NEW-2), the recent sign-in asked for only at the end, the old message, and a stop part-way said as "nothing" (S21.early-says). S22 against the app before the fix: a Google sheet she closed, or a stale email-code session, still took her out of her family, deleted her records and asked for her usage purge (6 checks red), and a cancel at the end read "Nothing was deleted". Against the app of 412d78a5 (16 Nov 2026), under the real rules: after a stop at the login the same-page retry was refused at the leave five times ("Could not finish deleting") and switched the tracker back on under the purged account (5 checks red then). Against the app of 93730af1 (the sign-out round, same day): a stop at the login left her signed in on the family she had left, where a log was refused with "Cubby wasn't allowed to save that", the sign-in screen never said what was left, signing in again never reached a Cubby of her own, and a leave whose answer was lost stopped the deletion (11 checks red across S21-S24, S21's being its staging, which needs the sign-out). Mutants added then: kept signed in, the family kept in memory, the listener's re-check let loose on the sign-in screen, the note left as a toast, the leave refusal taken as final, and the iPhone app's door asking with a web popup. Against the app files of 72d7c68f (the goodbye round, same day), with the stand-in signing her out on a delete as Firebase does: every finished deletion's goodbye lay under the sign-in screen (S22.door-companion, S22.native-companion, S23.retry-finishes, S23b.fast-finishes, S24.finishes), and her next Cubby after a stop was named after the family she left and counted its Pro tastes as used (S23.settings-forgotten, S23.new-settings, and S23.new-name-shown, where Family & sharing called it "The Rivers"; its companion S23.name-shown reads that name while she is still in that family): 8 checks red. Mutants added then: the goodbye under the sign-in screen, the family's settings kept whole, its entries kept in memory (S23.events-forgotten, S23.new-no-entries), and the stop's note kept after she signs in again (S23.finished-no-note). Mutant added 16 Nov 2026 (P5V-2): teardown clearing the deletion flag on every sign-out, the one a finished deletion ends with included (`deleting-cleared-on-finish`), caught by S23.silent-after |
+| usage-d1 | `--self-test`, each break in a temp tree, run on both engines: seven only D1 can see are red on D1 and green on the shim (the scope bound past 100 parameters, a household bound as `undefined`, the orphan sweep in one 300-parameter statement, a fifth index on `usage_events` billing 14 rows an event, `wrangler.toml` stating another worst day on D1's meter, the orphan sweep's `UNION` grown to 6 terms, a journey key whose `LIKE` pattern is 51 bytes), and two more are red on both (no `WITHOUT ROWID`, an erase step's deletes outside one batch). The harness of a copy started without `cf: false` is caught reaching for `workers.cloudflare.com:443`, refused before DNS; before that fix (16 Nov 2026) a run with no copy younger than 30 days fetched it and wrote `.wrangler/cache/cf.json` (or `node_modules/.mf/cf.json`) under its working directory. A fifth `UNION` term still runs on D1 (that mutant was green), so the sweep has room for one more table. Before the scope bound, 34 internal uids made the overview's saving line fail on D1 alone. On the base tree, `usage-ingest` was red on D1 (1 of 96: a `changes` read under a metering trigger) until that check read the rows back. The signal checks of section 0, on the harness of 72d7c68f: SIGTERM, SIGINT and SIGHUP each left workerd listening on its port (`"gone":false,"free":false`); built in, a copy with no signal handlers must leave workerd after a SIGTERM, and the check kills what it leaves. The `--hold` child's tether, with 7a0f15fb's `hold()` (no tether): its parent SIGKILLed after it held a D1 left it and its workerd listening (`"gone":false,"free":false`, 1 of 16 red with `--checks-only`); built in, a copy of the test without the tether must be caught the same way. SIGALRM (nightly.sh's watchdog), checked in section 0 since 16 Nov 2026: on the harness before it was handled, the process died of it and left workerd listening (`"gone":false,"free":false`, 1 of 18 red with `--checks-only`) |
+| usage-tracker (S8b) | the message table read off `doDeleteAccount` for each stage. Against `app/index.html` of 90de0d15 (before DELETE-TRUTH): 7 of 14 checks red, among them a stop at the login, and one that does not say how far it got, both called "Nothing was deleted". Against `app/index.html` of 93730af1: a stop at the login that signs her out left its message as a toast under the sign-in screen (S8b.login-signed-out red, 1 of 15). Against `app/index.html` of 72d7c68f: a finished deletion's goodbye under the sign-in screen (S8b.goodbye red, the centre of the screen "signin"); mutant goodbye-under-signin |
+| admin-sdk | `--self-test` reads main's `tools/ops.js` from before 16 Nov 2026 (or, at CI's depth 1, the same three lines) and must catch the namespace `require`, `admin.credential` and `admin.firestore()`; five staged legacy lines are caught and five modular or comment lines are left alone |
+| ops-admin | `tools/ops.js` with its old `admin.credential.cert` / `admin.firestore()` lines put back: `/api/data` answered 500 "reading 'cert'" and 12 of 14 checks failed, the crash Cubby Ops had on firebase-admin 14 |
+| nav-links, nav-links(live) | production on 17 Nov 2026, asked as a browser asks (`Sec-Fetch-Mode: navigate`): the sign-in link `/__/auth/action` and a game link `/g/<code>` both answered the 404 page with status 404 (0 of 2), while a plain request got Firebase's handler and the game page. Its first version asked with `fetch()`, whose `sec-fetch-mode` is always `cors`, and PASSED against that same production (2 of 2); the self-test now fails a live half that uses `fetch()` (seen red by putting it back). The matcher is red on this repo's 404 page at status 404 and at 200, and on the wrong page at 200 |
+| design-doc (class vocabulary) | 17 Nov 2026: red on every tree since the iPhone keyboard fix ("doc says 696, code says 698") with no CSS changed: a script that injects a `<style>` was read whole, so `r.bottom >` and `a.closest ?` counted as classes, as 157 JavaScript words already had. It now reads only such a script's strings, and a planted script must give its two CSS classes and none of `bottom`, `closest`, a comment's or a lone `'.row'`'s. Put back to whole-source reading: 698 against the doc's 536, red; with comments kept, the planted check is red |

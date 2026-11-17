@@ -23,10 +23,10 @@
  * A new branch (remote sha all zeros) is judged from its merge-base with origin/main. A deleted ref is
  * skipped. A range git cannot resolve fails closed, with the reason.
  *
- * The tier: the Firestore emulator suites run before a push whenever it touches the rules, the Worker,
- * the client's Firestore layer, the emulator runner (tools/gates.js) or any file an emulator gate runs
- * (EMU_TRIGGERS, plus the suites tools/gates.js names). Everything else runs the tree tier, which is
- * what pre-push always ran.
+ * The tier: the Firestore emulator suites run before a push whenever it touches the rules, the Worker or
+ * its config (wrangler.toml) and usage D1 schema (schema/usage.sql), the client's Firestore layer, the
+ * emulator runner (tools/gates.js) or any file an emulator gate runs (EMU_TRIGGERS, plus the suites
+ * tools/gates.js names). Everything else runs the tree tier, which is what pre-push always ran.
  */
 'use strict';
 const { execFileSync, spawnSync } = require('child_process');
@@ -39,6 +39,7 @@ const PRODUCT = [/^app\/.+\.(js|html)$/, /^worker\.js$/, /^workers\//, /^firesto
 const TESTISH = [/^test\//, /^tools\/[^/]*check[^/]*$/, /^tools\/[^/]*gate[^/]*$/, /^tools\/[^/]*_test\.js$/,
   /^tools\/chaos[^/]*\.js$/, /^tools\/fuzz_[^/]*\.js$/];
 const EMU_TRIGGERS = [/^firestore\.rules$/, /^storage\.rules$/, /^worker\.js$/, /^workers\//, /^app\/store-firebase\.js$/,
+  /^wrangler\.toml$/, /^schema\/usage\.sql$/,   // the Worker's config and its usage D1 schema: usage-d1 judges both
   /^test\/[^/]*emu[^/]*$/, /^test\/[^/]*rules[^/]*$/,
   /^tools\/gates\.js$/, /^firebase\.json$/, /^test\/package(-lock)?\.json$/];   // the emulator runner and its toolchain
 
@@ -187,6 +188,17 @@ function selfTest() {
   w('test/a.test.js', '3\n'); const plainTest = commit('a tree test');
   r = judge(t, rangesFromStdin(t, stdin(plainTest, hg)));
   ok('while a plain tree test stays on the tree tier', r.tier === 'tree', r);
+  /* The Worker's config and the usage D1 schema: usage-d1 (emulator tier) owns their D1 checks, the meter
+     sentence and the billed rows an event, so a push that changes only one of them runs it before it deploys. */
+  w('wrangler.toml', 'USAGE_DAILY_CAP = "2000"\n'); const toml = commit('the cap only');
+  r = judge(t, rangesFromStdin(t, stdin(toml, plainTest)));
+  ok('a push that changes only wrangler.toml runs the emulator tier', r.tier === 'emulator', r);
+  w('schema/usage.sql', 'CREATE INDEX x ON usage_events(name);\n'); const schema = commit('an index only');
+  r = judge(t, rangesFromStdin(t, stdin(schema, toml)));
+  ok('and so does one that changes only schema/usage.sql', r.tier === 'emulator', r);
+  w('schema/newsletter.sql', 'x\n'); const other = commit('another schema');
+  r = judge(t, rangesFromStdin(t, stdin(other, schema)));
+  ok('companion: another D1 schema, which no emulator gate reads, stays on the tree tier', r.tier === 'tree', r);
 
   /* A NEW branch: remote sha all zeros, judged from the merge-base with origin/main, so the root
      commit's own app/index.html does not count against it. */

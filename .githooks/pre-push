@@ -17,9 +17,9 @@
 # 1. tools/change_test_check.js reads those ranges: product code changed with no test or gate changed,
 #    and no "Test-exempt: <reason>" trailer, stops the push.
 # 2. The same ranges pick the tier. A push that touches firestore.rules, storage.rules, worker.js,
-#    workers/, app/store-firebase.js, tools/gates.js or any file an emulator gate runs (read from
-#    tools/gates.js) runs `node tools/gates.js --emulator` (the Firestore suites, each on its own free
-#    ports); anything else runs `node tools/gates.js`.
+#    workers/, wrangler.toml, schema/usage.sql, app/store-firebase.js, tools/gates.js or any file an
+#    emulator gate runs (read from tools/gates.js) runs `node tools/gates.js --emulator` (the Firestore
+#    suites, each on its own free ports); anything else runs `node tools/gates.js`.
 #    The emulator tier used to run nowhere automatically, so a red there was invisible.
 # test/prepush-tier.test.js feeds this file real stdin in a throwaway repo and checks both choices.
 #

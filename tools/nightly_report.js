@@ -65,12 +65,17 @@ const newest = (dir, re) => {
 };
 const cell = (s) => String(s == null ? '' : s).replace(/\|/g, '\\|').replace(/\n/g, ' ');   // a pipe in a cell is escaped, not rewritten
 
-/* One line per gate, in the shape tools/gates.js prints: "  <name>  ok|FAIL  12.3s  <gist>". */
+/* One line per gate, in the shape tools/gates.js prints: "  <name>  ok|FAIL  12.3s  <gist>". It pads the name to
+   18 columns, so a name of 18 or more runs straight into its verdict ("  removed-records-uiok   40.5s"); those
+   were dropped until 16 Nov 2026, and four gates have such names. Its after-the-last-gate check of the tree
+   server prints "  served-tree       FAIL  <why>", with no seconds. */
 function parseGates(log) {
   const out = [];
   for (const line of String(log || '').split('\n')) {
-    const m = /^  (\S+)\s+(ok  |FAIL)\s+([\d.]+)s\s*(.*)$/.exec(line);
-    if (m) out.push({ name: m[1], ok: m[2] === 'ok  ', secs: Number(m[3]), gist: m[4].trim() });
+    const m = /^  (\S+?)\s*(ok  |FAIL)\s+([\d.]+)s\s*(.*)$/.exec(line);
+    if (m) { out.push({ name: m[1], ok: m[2] === 'ok  ', secs: Number(m[3]), gist: m[4].trim() }); continue; }
+    const t = /^  served-tree\s+FAIL  (.*)$/.exec(line);
+    if (t) out.push({ name: 'served-tree', ok: false, secs: 0, gist: t[1].trim() });
   }
   return out;
 }
@@ -173,7 +178,13 @@ function build(dir, outDir, day, dry) {
     return r.runs.join(', ') + (cleanThrice(r) ? ': fixed' : r.runs[r.runs.length - 1] === 'CLEAN' ? ' (' + (r.note || 'fewer than three') + '): still open' : ': still open'); };
   const harnessDied = Object.keys(toolOk).filter((k) => !toolOk[k]);
   const failedGates = gates.filter((g) => !g.ok);
-  const notes = T.notes ? (T.notes.code === 0 ? 'PASSES now: move tools/noteshome_test.js into tools/gates.js and drop its ALLOW entry' : 'still red (exit ' + T.notes.code + ')') : 'did not run';
+  /* nightly.sh writes "notes 0 3" only when the server it started for the watched test was not this tree's (its
+     serve.js exited, or another answered there), and then the test never ran; tools/noteshome_test.js itself
+     exits 0 or 1. */
+  const notes = !T.notes ? 'did not run'
+    : T.notes.code === 0 ? 'PASSES now: move tools/noteshome_test.js into tools/gates.js and drop its ALLOW entry'
+    : T.notes.code === 3 ? 'not run: the server was not this tree\'s (see notes.log)'
+    : 'still red (exit ' + T.notes.code + ')';
   const red = gatesExit !== 0 || failedGates.length > 0 || harnessDied.length > 0 || fresh.length > 0;
 
   /* known-findings.json: every finding ever seen, by id. */
@@ -219,7 +230,7 @@ function build(dir, outDir, day, dry) {
 function selfTest() {
   let pass = 0, fail = 0;
   const ok = (n, c, x) => { if (c) { pass++; console.log('  ok   ' + n); } else { fail++; console.log('  FAIL ' + n + (x !== undefined ? '  ' + JSON.stringify(x).slice(0, 300) : '')); } };
-  console.log('\nnightly report self-test: five nights in a temp dir');
+  console.log('\nnightly report self-test: synthetic nights in a temp dir');
   const t = fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-nightly-report-'));
   const out = path.join(t, 'reports');
   const night = (name, o) => {
@@ -315,6 +326,22 @@ function selfTest() {
   r = build(night('a5', { gates: quiet, timings: okT, chaos: [], fw: [], fr: [] }), out4, '2026-11-15', false);
   const k4 = readJson(r.knownFile);
   ok('the "timer stopped" ids are not closed as artifacts (they still reproduce on the corrected harness)', !r.artifactsNow.length && !k4['CH-95c33b'].fixedOn && !k4['CH-35ee67'].fixedOn, k4);
+  /* The watched notes test, not run because the server nightly.sh started for it was not this tree's: nightly.sh
+     writes "notes 0 3" then (T5-R2-3, 16 Nov 2026), and the report used to call that "still red (exit 3)". */
+  const out5 = path.join(t, 'reports5');
+  const notesRow = (f) => (fs.readFileSync(f, 'utf8').split('\n').find((l) => /^\| notes \|/.test(l)) || '');
+  r = build(night('w1', { gates: quiet, timings: okT.replace('notes 5 1', 'notes 0 3'), chaos: [], fw: [], fr: [] }), out5, '2026-11-23', false);
+  ok('a notes step that did not run (exit 3: the server was not this tree\'s) says so, and not "still red"',
+    /not run: the server was not this tree's \(see notes\.log\)/.test(notesRow(r.reportFile)) && !/still red/.test(notesRow(r.reportFile)), notesRow(r.reportFile));
+  r = build(night('w2', { gates: quiet, timings: okT, chaos: [], fw: [], fr: [] }), out5, '2026-11-24', false);
+  ok('companion: a notes test that ran and failed (exit 1) is still red', /still red \(exit 1\)/.test(notesRow(r.reportFile)), notesRow(r.reportFile));
+  /* gates.js pads a name to 18 columns, so a name of 18 or more runs into its verdict ("removed-records-uiok"),
+     and the served-tree line has no seconds. Each must still be read, and a red one named on the board. */
+  const longNames = '  rules             ok      4.0s  PASS\n  removed-records-uiFAIL    40.5s  REMOVED-RECORDS-UI: FAIL\n'
+    + '  invite-family-rulesok       7.1s  INVITE-FAMILY-RULES: PASS\n  served-tree       FAIL  the tree server at http://127.0.0.1:7919 for /x: app/index.html differs\n';
+  r = build(night('w3', { gates: longNames, timings: okT.replace('gates 60 0', 'gates 60 1'), chaos: [], fw: [], fr: [] }), out5, '2026-11-25', false);
+  ok('a gate whose name fills its column is read, and a red one is named on the board', /failed: removed-records-ui, served-tree/.test(r.board) && /\| 2\/4 /.test(r.board), r.board);
+  ok('and the report lists every gate line, those included', /\| invite-family-rules \| ok \|/.test(fs.readFileSync(r.reportFile, 'utf8')) && /\| served-tree \| \*\*FAIL\*\* \|/.test(fs.readFileSync(r.reportFile, 'utf8')), parseGates(longNames));
   console.log('  ' + pass + ' passed, ' + fail + ' failed');
   console.log('NIGHTLY-REPORT SELF-TEST: ' + (fail ? 'FAIL' : 'PASS'));
   return fail;

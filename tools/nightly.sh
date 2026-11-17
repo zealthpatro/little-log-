@@ -110,15 +110,11 @@ mkdir -p "$RUN/chaos" "$RUN/fuzz-worker" "$RUN/fuzz-rules"
 : > "$RUN/timings.txt"
 echo "nightly $DAY on $HEAD_SHA in $REPO (dry run: $DRY), seed $SEED" > "$RUN/about.txt"
 
-# N free ports, inside STEP_BAND when there is one, as "A B C ...".
+# N free ports, inside STEP_BAND when there is one, as "A B C ...". gates.js's own picker: free means nothing
+# listens there at any address (it used to ask 127.0.0.1 alone, which on macOS calls a port held by another
+# session's serve.js on [::] free).
 ports() {
-  node -e '
-    const net = require("net"); const n = Number(process.argv[1]); const band = /^(\d+)-(\d+)$/.exec(process.argv[2] || "");
-    const free = (p) => new Promise((r) => { const s = net.createServer(); s.once("error", () => r(0)); s.listen(p, "127.0.0.1", () => { const q = s.address().port; s.close(() => r(q)); }); });
-    (async () => { const out = []; let next = band ? Number(band[1]) : 0;
-      while (out.length < n) { if (band && next > Number(band[2])) { console.error("no free ports in " + process.argv[2]); process.exit(1); }
-        const p = await free(band ? next++ : 0); if (p && !out.includes(p)) out.push(p); }
-      console.log(out.join(" ")); })();' "$1" "$STEP_BAND"
+  EMU_PORT_RANGE="$STEP_BAND" node tools/gates.js --free-ports="$1"
 }
 # step <name> <seconds allowed> <log> <command...>: run it under a watchdog, record seconds and exit.
 step() {
@@ -143,7 +139,14 @@ NP=$1
 env PORT=$NP node tools/serve.js > "$RUN/notes-server.log" 2>&1 &
 SP=$!
 i=0; while [ $i -lt 40 ] && ! curl -s -o /dev/null "http://127.0.0.1:$NP/app/"; do sleep 0.25; i=$((i + 1)); done
-step notes 600 "$RUN/notes.log" node tools/noteshome_test.js "http://127.0.0.1:$NP"
+# Graded only if that server is ours and serves THIS tree (an answer alone could be another checkout's server).
+if kill -0 $SP 2>/dev/null && node tools/gates.js --served-is-this-tree="http://127.0.0.1:$NP" > "$RUN/notes-tree.log" 2>&1; then
+  step notes 600 "$RUN/notes.log" node tools/noteshome_test.js "http://127.0.0.1:$NP"
+else
+  { echo "notes: not run, the server on $NP is not this tree's (its serve.js exited, or another answers there)"; cat "$RUN/notes-tree.log"; } > "$RUN/notes.log"
+  echo "notes 0 3" >> "$RUN/timings.txt"
+  echo "  notes: not run (exit 3), the server on $NP is not this tree's"
+fi
 kill $SP 2>/dev/null; wait $SP 2>/dev/null   # wait, so the shell does not print "Terminated" into the log
 
 # 3. Chaos: seeded family sessions against the real app, the real rules and the emulators.

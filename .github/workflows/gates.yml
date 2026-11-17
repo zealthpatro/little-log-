@@ -26,18 +26,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      # 3.12, not '3.x': the pinned Pillow and numpy (tools/requirements-brand.txt) ship wheels for it, so CI
+      # gets the same compiled image code as the Mac instead of the newest release.
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '3.12'
       # A fresh checkout has no core.hooksPath, so hooks_check would fail on the empty .git/hooks. This
       # is the same step a new clone must do; running it here makes CI the proof of the clone case
       # instead of a run that skips it. It went red for exactly this reason on 2026-09-06.
       - name: Wire the tracked hooks (what a fresh clone must do)
         run: sh tools/install_hooks.sh
       # tools/brand.py --self-test (Chrome-free, so it runs here) drives the icon generators, which need
-      # Pillow and numpy. Without them the gate fails on an import, not on the logo.
+      # Pillow and numpy, at the versions the committed icons were made with (an unpinned install took
+      # Pillow 12 and brand-py went red on CI from the logo change on, Nov 2026).
       - name: Python image libraries for the brand tools
-        run: python3 -m pip install --quiet pillow numpy
+        run: python3 -m pip install --quiet -r tools/requirements-brand.txt
       - name: Gates (no browser)
         run: node tools/gates.js --no-browser
 
@@ -53,6 +56,10 @@ jobs:
   # puppeteer-core is installed next to the gates, exactly as the live job does.
   emulator:
     runs-on: ubuntu-latest
+    # Measured on the founder's Mac (16 Nov 2026): the 34 suites of --emulator-only (ops-admin, 7.5 s, included)
+    # sum to about 37.6 min at their slowest runs across every log of that day (usage-tracker-emu 645 s, chaos
+    # 327 s, usage-d1 195 s, invite-family 185 s, blob-sync 139 s), before the installs. Not yet timed on this
+    # runner. Raise this when a run here passes 45 minutes.
     timeout-minutes: 60
     steps:
       # Full history: test/links-leave.test.js grades old app builds against the rules published BEFORE
@@ -74,8 +81,11 @@ jobs:
       # puppeteer-core AND firebase-admin in ONE install: `npm install --no-save X` prunes every package X
       # does not depend on, and the invite suites load firebase-admin from tools/node_modules (adminFrom).
       # Installing puppeteer-core alone left them failing on "Cannot find module 'firebase-admin/app'".
-      - name: Install the browser driver and the admin SDK the self-hosting suites use
-        run: npm install --no-save --prefix tools puppeteer-core firebase-admin
+      # miniflare goes in the same install for the same reason: usage-d1 (test/usage-d1-engine.test.js) runs the
+      # usage SQL on workerd's own D1 and looks for it in tools/node_modules. Pinned to the version that test pins
+      # (MINIFLARE_PIN in workers/admin/dev/d1-miniflare.mjs, what wrangler 4.162.0 ships); another one fails it.
+      - name: Install the browser driver, the admin SDK and the local D1 runtime the self-hosting suites use
+        run: npm install --no-save --prefix tools puppeteer-core firebase-admin miniflare@5.20261113.0-beta
       - name: Firestore emulator tier (each suite on its own free ports)
         env:
           CHROME_PATH: /usr/bin/google-chrome

@@ -1,6 +1,6 @@
 /* Two real people, one household, driven through the actual UI code. The wedge, end to end.
  *
- *   node test/two-caregiver-journey.test.js
+ *   node test/two-caregiver-journey.test.js [<base url of this tree's server>]
  *
  * WHY THIS EXISTS. Every Δ≥4 painkiller in the product needs a second person already logging, and
  * as of September 2026 that had never been exercised end to end anywhere: not in code, where the
@@ -23,19 +23,20 @@
  * THE NEGATIVE CONTROL. A third user with no token boots against the same emulator and must NOT
  * land in the household. Without that, "B is in A's household" could be true because everybody on
  * an open emulator ends up in the same place, and the join would be proving nothing.
+ *
+ * WHERE IT RUNS (16 Nov 2026). It used to bind the emulator on 8281 and drive whatever answered
+ * localhost:8380, ignoring the URL gates.js passed it, and its check that "the static server is serving
+ * this checkout" asked only for a 200: with its ports moved into a band, given the URL of a tree with no
+ * app while another checkout's server listened on the wildcard address of its web port, it passed 26 of 26.
+ * Now the app is that URL (alone: this tree's own serve.js on a free port), proven to be this tree's before
+ * anything is graded, and every port comes from the runner's picker: test/helpers/tree-base.js.
  */
-const { spawn, execFileSync } = require('child_process');
-const http = require('http');
+const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
 const ROOT = path.join(__dirname, '..');
-// Not 8080/8181, which other sessions' suites bind. FS_PORT / WEB_PORT (and HUB_PORT, LOG_PORT, WS_PORT
-// for the emulator's own) move it out of the way of another session running the same suite.
-const EMU_PORT = Number(process.env.FS_PORT) || 8281;
-const WEB_PORT = Number(process.env.WEB_PORT) || 8380;
-const HUB_PORT = Number(process.env.HUB_PORT) || 0, LOG_PORT = Number(process.env.LOG_PORT) || 0, WS_PORT = Number(process.env.WS_PORT) || 0;
 const EXEC_PROJECT = 'demo-cubby-app';
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
@@ -45,45 +46,58 @@ const ok = (name, cond, detail) => {
   else { fail++; console.log('  FAIL ' + name + (detail !== undefined ? '\n         ' + JSON.stringify(detail).slice(0, 400) : '')); }
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const get = (url) => new Promise((res) => {
-  http.get(url, (r) => { r.resume(); res({ status: r.statusCode }); }).on('error', () => res({ status: 0 }));
-});
 
-/* ---------- outer phase: stand the emulator up, then re-run ourselves inside it ---------- */
+/* ---------- outer phase: this tree's app server, free ports, then the emulator with ourselves inside it ---------- */
 if (!process.env.TWO_CARE_INNER) {
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-twocare-'));
-  fs.writeFileSync(path.join(scratch, 'open.rules'),
-    "rules_version = '2';\nservice cloud.firestore { match /databases/{db}/documents { match /{document=**} { allow read, write: if true; } } }\n");
-  fs.writeFileSync(path.join(scratch, 'firebase.json'), JSON.stringify({
-    firestore: { rules: 'open.rules' },
-    emulators: Object.assign({ firestore: Object.assign({ port: EMU_PORT }, WS_PORT ? { websocketPort: WS_PORT } : {}), ui: { enabled: false } },
-      HUB_PORT ? { hub: { port: HUB_PORT } } : {}, LOG_PORT ? { logging: { port: LOG_PORT } } : {})
-  }));
-  const firebaseBin = path.join(__dirname, 'node_modules', '.bin', 'firebase');
-  const javaBin = process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin') : '/opt/homebrew/opt/openjdk/bin';
-  const env = Object.assign({}, process.env, { TWO_CARE_INNER: '1', PATH: javaBin + ':' + process.env.PATH });
-  try {
-    execFileSync(firebaseBin, [
+  const TB = require('./helpers/tree-base');
+  let app = { stop() {} }, inner = null;
+  for (const [sig, n] of [['SIGTERM', 15], ['SIGINT', 2], ['SIGHUP', 1]]) {
+    process.on(sig, () => { app.stop(); if (inner) { try { inner.kill(sig); } catch (e) { /* gone */ } } process.exit(128 + n); });
+  }
+  const give = (why) => { app.stop(); console.log('\nFAIL ' + why + '\nTWO-CAREGIVER-JOURNEY: FAIL\n'); process.exit(1); };
+  (async () => {
+    const url = /^https?:\/\//.test(process.argv[2] || '') ? process.argv[2] : null;
+    const ports = await TB.freePorts(['FS_PORT', 'WS_PORT', 'HUB_PORT', 'LOG_PORT', 'PLANT_PORT'].concat(url ? [] : ['WEB_PORT']));
+    app = await TB.appServer(url, ports.WEB_PORT);
+    /* The THIS-tree line only once the check has passed: a refused run never claims it. */
+    console.log('\nchecking that the app server at ' + app.base + ' is THIS tree\'s (' + ROOT + ')');
+    for (const [n, c, x] of await TB.provenThisTree(app.base, ports.PLANT_PORT)) ok(n, c, c ? undefined : x);
+    if (fail) give('this run would not be grading THIS tree, so it grades nothing');
+    console.log('the app server at ' + app.base + ' is THIS tree\'s (' + ROOT + ')');
+
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-twocare-'));
+    fs.writeFileSync(path.join(scratch, 'open.rules'),
+      "rules_version = '2';\nservice cloud.firestore { match /databases/{db}/documents { match /{document=**} { allow read, write: if true; } } }\n");
+    fs.writeFileSync(path.join(scratch, 'firebase.json'), JSON.stringify({
+      firestore: { rules: 'open.rules' },
+      emulators: { firestore: { port: ports.FS_PORT, websocketPort: ports.WS_PORT }, hub: { port: ports.HUB_PORT },
+        logging: { port: ports.LOG_PORT }, ui: { enabled: false } }
+    }));
+    const firebaseBin = path.join(__dirname, 'node_modules', '.bin', 'firebase');
+    const javaBin = process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin') : '/opt/homebrew/opt/openjdk/bin';
+    const env = Object.assign({}, process.env, { TWO_CARE_INNER: '1', TWO_CARE_BASE: app.base, TWO_CARE_FS_PORT: String(ports.FS_PORT),
+      TWO_CARE_PASSED: String(pass), PATH: javaBin + ':' + process.env.PATH });
+    inner = spawn(firebaseBin, [
       'emulators:exec', '--only', 'firestore', '--project', EXEC_PROJECT,
       '--config', path.join(scratch, 'firebase.json'),
       `node ${JSON.stringify(__filename)}`
     ], { cwd: scratch, env, stdio: 'inherit' });
-  } catch (e) { process.exitCode = e.status || 1; }
+    const code = await new Promise((res) => { inner.on('close', (c) => res(c === null ? 1 : c)); inner.on('error', (e) => { console.log('FAIL ' + e.message); res(1); }); });
+    app.stop();
+    try { fs.rmSync(scratch, { recursive: true, force: true }); } catch (e) { /* best effort */ }
+    process.exit(code);
+  })().catch((e) => give(String((e && e.message) || e)));
   return;
 }
 
 /* ---------- inner phase: the journey ---------- */
+/* The outer phase proved TWO_CARE_BASE serves this tree (its checks count in the total) and picked the
+   emulator's port. */
+pass = Number(process.env.TWO_CARE_PASSED) || 0;
+const EMU_PORT = Number(process.env.TWO_CARE_FS_PORT);
+const BASE = process.env.TWO_CARE_BASE;
 (async () => {
   console.log('\ntwo caregivers, one household: the wedge, end to end\n');
-
-  let serveProc = null;
-  if ((await get(`http://localhost:${WEB_PORT}/app/`)).status !== 200) {
-    serveProc = spawn('node', [path.join(ROOT, 'tools', 'serve.js')],
-      { stdio: 'ignore', env: Object.assign({}, process.env, { PORT: String(WEB_PORT) }) });
-    for (let i = 0; i < 40 && (await get(`http://localhost:${WEB_PORT}/app/`)).status !== 200; i++) await sleep(250);
-  }
-  /* Serve what THIS checkout holds, or the whole run grades somebody else's tree. */
-  ok('the static server is serving this checkout', (await get(`http://localhost:${WEB_PORT}/app/`)).status === 200);
 
   const puppeteer = require(path.join(ROOT, 'tools', 'node_modules', 'puppeteer-core'));
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });
@@ -95,7 +109,7 @@ if (!process.env.TWO_CARE_INNER) {
     const page = await ctx.newPage();
     page.on('pageerror', (e) => { (page._errs = page._errs || []).push(e.message); });
     await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
-    await page.goto(`http://localhost:${WEB_PORT}/app/?fsemu=${EMU_PORT}&fsuid=${uid}${extraQuery || ''}`,
+    await page.goto(`${BASE}/app/?fsemu=${EMU_PORT}&fsuid=${uid}${extraQuery || ''}`,
       { waitUntil: 'networkidle2', timeout: 45000 });
     return page;
   };
@@ -235,7 +249,6 @@ if (!process.env.TWO_CARE_INNER) {
   ok('no page errors on any of the three phones', errs.length === 0, errs.slice(0, 3));
 
   await browser.close();
-  if (serveProc) serveProc.kill();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   console.log('TWO-CAREGIVER-JOURNEY: ' + (fail ? 'FAIL' : 'PASS') + '\n');
   process.exit(fail ? 1 : 0);
