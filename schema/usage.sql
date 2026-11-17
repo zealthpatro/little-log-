@@ -5,7 +5,12 @@
 -- Every statement is idempotent, so re-applying is safe.
 
 -- One row per accepted event. Raw rows live 90 days (30 when uid is NULL, 30 for JOURNEY_KEYS); the
--- daily run deletes a signed-in visit WHOLE once its oldest row passes 90 days (workers/usage/core.mjs).
+-- daily run deletes a signed-in visit's expired rows, head first, and with them the rest of that visit
+-- that arrived within a day after the cutoff, at most a statement's chunk of rows at a time: so a visit
+-- whose rows arrived within a day goes whole when it can, head first when a day's allowance or a
+-- statement's row limit cuts it. Head first holds for a visit as Cubby's tracker sends it (its head
+-- arrives with or before its other rows). workers/usage/core.mjs, above retentionSteps, names the one
+-- shape, sent only by another client, that keeps its head and loses older rows instead.
 -- WITHOUT ROWID: the (who, id) key is the table itself, so a write touches the table and the four
 -- indexes below and no separate key index (D1 bills one written row per row and per index it touches).
 CREATE TABLE IF NOT EXISTS usage_events (
@@ -33,7 +38,7 @@ CREATE TABLE IF NOT EXISTS usage_events (
 CREATE INDEX IF NOT EXISTS ue_uid_at ON usage_events(uid, at);
 CREATE INDEX IF NOT EXISTS ue_hid_at ON usage_events(hid, at);
 CREATE INDEX IF NOT EXISTS ue_at     ON usage_events(at);
--- Every row of one person's visit, for retention and the household purge, which remove a visit whole.
+-- Every row of one person's visit, for retention and the erasures, which take a visit's rows together.
 CREATE INDEX IF NOT EXISTS ue_visit  ON usage_events(uid, visit);
 
 -- Daily totals, per person, platform and day. Kept until the account is deleted.
@@ -59,9 +64,15 @@ CREATE TABLE IF NOT EXISTS devices (
 );
 CREATE INDEX IF NOT EXISTS dev_uid ON devices(uid);
 
+-- The server's cache of who belongs where (worker.js usageMembership). In mode on, hid and role stay NULL
+-- until the person has seen the current notice (G4); at most MEMBERSHIP_DAILY_ROWS writes a UTC day. While
+-- a person's erasure is pending (erase_uid:<uid> below), nothing is linked to her whatever her row says.
+-- No index on hid, so a household erasure step scans this table (workers/usage/core.mjs ERASE_TARGETS).
+-- One would bill a written row more for each new row, and wrangler.toml's write arithmetic with it, so
+-- adding it is a phase-3 decision (docs/ADMIN-DEPLOY.md, phase 3).
 CREATE TABLE IF NOT EXISTS membership (
   uid TEXT PRIMARY KEY, hid TEXT, role TEXT,
-  notice TEXT,                          -- the person's privacyNoticeSeen at the last read
+  notice TEXT,                          -- the current PRIVACY_NOTICE if she had seen it at the last read, else ''
   checked_at INTEGER NOT NULL
 );
 
@@ -94,6 +105,10 @@ CREATE INDEX IF NOT EXISTS se_hid ON shared_entries(hid, expires_at);
 CREATE INDEX IF NOT EXISTS se_by  ON shared_entries(shared_by);
 
 CREATE TABLE IF NOT EXISTS usage_refused (day TEXT NOT NULL, reason TEXT NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (day, reason));
--- Day ceilings (events_YYYY-MM-DD, kept 90 days), the cron's day markers, and erase_hid:<hid>: a household
--- purge whose usage rows are not erased yet, written before its document goes and retried every tick.
+-- Day ceilings (events_YYYY-MM-DD for the families' share, and its _anon, _refused, _membership and
+-- _erase counters, kept 90 days), the cron's day markers, and the pending erasures: erase_hid:<hid>,
+-- written before a household's document goes, and erase_uid:<uid>, written by the account purge whenever
+-- she has any row (and by the weekly sweep), held 6 hours after it was first written. Every tick carries
+-- them on in bounded steps until the last of the rows goes with the marker. value is when a marker was
+-- first written, at when the cron next runs a step for it (workers/usage/core.mjs eraseStep).
 CREATE TABLE IF NOT EXISTS usage_meta    (key TEXT PRIMARY KEY, value TEXT, at INTEGER);

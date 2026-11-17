@@ -7,9 +7,13 @@
  * test/usage-ingest.test.js; this is everything around it: mode off answers before the body is read; the
  * 32 KB cap holds with and without a Content-Length, counted in bytes; 50 events; the limiter keyed per
  * person and per IP; a household claim is stamped only once the members map confirms it; past a ceiling
- * the route stops touching D1 for the rest of the UTC day; and no log line names a person. Google's token,
- * JWK and Firestore endpoints are stubbed at fetch. The clock is pinned to a day AND an hour: Monday
- * 16 November 2026, 06:00 UTC, and the same hour on the next two days for the ceiling section.
+ * the route stops touching D1 for the rest of the UTC day; no log line names a person; and the membership
+ * cache links nobody to a household before she has seen the notice (G4) and writes a bounded number of
+ * rows (MEMB-BOUND). Google's token, JWK and Firestore endpoints are stubbed at fetch. The clock is pinned to
+ * a day AND an hour: Monday 16 November 2026, 06:00 UTC, the same hour on the next two days for the
+ * ceiling section, Thursday 19 November 2026 from 00:05 UTC for the membership section, and Saturday 21
+ * November 2026 from 06:00 UTC to Sunday 22 November 00:10 UTC for the account purge's reach into the
+ * membership memory: hers, and nobody else's (RE-SK-3, SE-V8).
  */
 const fs = require('fs');
 const os = require('os');
@@ -26,9 +30,16 @@ const SA = { project_id: PROJECT, client_email: 'cubby@' + PROJECT + '.iam.gserv
 const idPair = nodeCrypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
 const JWK = Object.assign(idPair.publicKey.export({ format: 'jwk' }), { kid: 'test-kid', alg: 'RS256', use: 'sig' });
 const b64u = (s) => Buffer.from(s).toString('base64url');
-/* Minted on the pinned clock, so the worker's exp and iat checks see a fresh token. */
+/* Minted on the pinned clock, so the worker's exp and iat checks see a fresh token. Kept per uid and second,
+   so the self-test's many runs of section 9 (1,100 people) sign each token once. */
+const minted = new Map();
 function idToken(uid) {
   const now = Math.floor(Date.now() / 1000);
+  const key = uid + '@' + now;
+  if (!minted.has(key)) minted.set(key, mint(uid, now));
+  return minted.get(key);
+}
+function mint(uid, now) {
   const head = b64u(JSON.stringify({ alg: 'RS256', kid: 'test-kid', typ: 'JWT' }));
   const body = b64u(JSON.stringify({ aud: PROJECT, iss: 'https://securetoken.google.com/' + PROJECT, sub: uid, iat: now - 5, exp: now + 3600 }));
   return head + '.' + body + '.' + nodeCrypto.sign('RSA-SHA256', Buffer.from(head + '.' + body), idPair.privateKey).toString('base64url');
@@ -40,15 +51,19 @@ const EMAIL = 'zz-maya7731@example.com', PAD = 'ZZPAD7731';
 /* The world outside our code: Firestore documents by path, and a count of reads. */
 const docs = new Map();
 let fsReads = 0;
+const readsOf = new Map();   // Firestore reads by document path
 const J = (o, s, h) => new Response(JSON.stringify(o), { status: s || 200, headers: Object.assign({ 'content-type': 'application/json' }, h || {}) });
 globalThis.fetch = async (input, init) => {
   const url = String(input && input.url ? input.url : input);
   const method = ((init && init.method) || 'GET').toUpperCase();
   if (url.startsWith('https://oauth2.googleapis.com/token')) return J({ access_token: 'tok', expires_in: 3600 });
   if (url === 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com') return J({ keys: [JWK] }, 200, { 'cache-control': 'max-age=3600' });
+  // The account purge's feedback query (section 10): nobody here has a note.
+  if (url === FS + ':runQuery' && method === 'POST') return J([]);
   if (url.startsWith(FS + '/') && method === 'GET') {
     fsReads++;
     const p = decodeURIComponent(url.slice(FS.length + 1).split('?')[0]);
+    readsOf.set(p, (readsOf.get(p) || 0) + 1);
     return docs.has(p) ? J({ name: FS + '/' + p, fields: docs.get(p) }) : J({ error: { status: 'NOT_FOUND' } }, 404);
   }
   throw new Error('unstubbed external call: ' + method + ' ' + url);
@@ -57,7 +72,10 @@ globalThis.caches = { default: { async match() { return undefined; }, async put(
 
 const DAY1 = Date.UTC(2026, 10, 16, 6, 0, 0), DAYMS = 86400000;
 
-async function suite(workerFile, quiet) {
+/* `opts.ceiling` (default on): also run section 9, 1,100 people through the route (about two seconds). The
+   plain run, the self-test's unaltered copy and the membership-ceiling break run it. */
+async function suite(workerFile, quiet, opts) {
+  const withCeiling = !opts || opts.ceiling !== false;
   let pass = 0, fail = 0;
   const realLog = console.log, realErr = console.error, realWarn = console.warn, realInfo = console.info;
   const ok = (n, c, x) => { if (c) pass++; else { fail++; if (!quiet) realLog('  FAIL ' + n + (x !== undefined ? '\n       ' + JSON.stringify(x).slice(0, 400) : '')); } };
@@ -109,7 +127,7 @@ async function suite(workerFile, quiet) {
   const allow = () => { const l = { keys: [], deny: false, throws: false }; l.limit = async ({ key }) => { l.keys.push(key); if (l.throws) throw new Error('limiter down for ' + key + ' ' + ME); return { success: !l.deny }; }; return l; };
   const SAJ = JSON.stringify(SA);
 
-  docs.clear();
+  docs.clear(); readsOf.clear();   // every run starts from an empty world: the self-test runs this many times
   docs.set('users/' + ME, { householdId: { stringValue: 'hhMine01' }, privacyNoticeSeen: { stringValue: 'n2' }, email: { stringValue: EMAIL } });
   docs.set('households/hhMine01', { members: { mapValue: { fields: { [ME]: { stringValue: 'owner' } } } } });
   // A caregiver removed from hhMine01: her own users doc still CLAIMS it, the members map no longer has her.
@@ -265,6 +283,169 @@ async function suite(workerFile, quiet) {
       ok('companion: the same matcher finds a uid planted on console.log', leaks(lines.slice(n0)).length === 1, lines.slice(n0));
       lines.length = n0;
     }
+    // 8. The membership cache (§8.7): nothing links a person to a household before she has seen the notice
+    //    (G4), and its writes are bounded (MEMB-BOUND). Mode on, PRIVACY_NOTICE n2. Pinned: Thursday 19
+    //    November 2026, one batch every 10 minutes and 1 second from 00:05 to 23:57 UTC (one UTC day; the
+    //    recheck is due once MORE than 10 minutes have passed).
+    {
+      const UNSEEN = 'uidUnseen0000000000000000005', SEEN = 'uidSeen00000000000000000006', TAPPER = 'uidTapper000000000000000007', FOUNDER = 'uidFounderInt0000000000008';
+      const T0 = Date.UTC(2026, 10, 19, 0, 5, 0), MIN = 60000, STEP = 10 * MIN + 1000;
+      clock = T0;
+      docs.set('households/hhCirc01', { members: { mapValue: { fields: { [UNSEEN]: { stringValue: 'caregiver' }, [SEEN]: { stringValue: 'owner' }, [TAPPER]: { stringValue: 'caregiver' }, [FOUNDER]: { stringValue: 'owner' } } } } });
+      for (const [u, n] of [[UNSEEN, 'n1'], [SEEN, 'n2'], [TAPPER, 'n1'], [FOUNDER, '']]) docs.set('users/' + u, { householdId: { stringValue: 'hhCirc01' }, privacyNoticeSeen: { stringValue: n } });
+      const m = metered();
+      // Every row written to membership, counted by a trigger (inserts and updates alike).
+      m.raw.raw.exec("CREATE TABLE _mw (uid TEXT, n INTEGER); CREATE TRIGGER _mw_i AFTER INSERT ON membership BEGIN INSERT INTO _mw VALUES (NEW.uid, 1); END; "
+        + 'CREATE TRIGGER _mw_u AFTER UPDATE ON membership BEGIN INSERT INTO _mw VALUES (NEW.uid, 1); END;');
+      const writesOf = (u) => m.rows("SELECT COUNT(*) AS c FROM _mw WHERE uid = '" + u + "'")[0].c;
+      const memRow = (u) => m.rows("SELECT hid, role, notice FROM membership WHERE uid = '" + u + "'")[0] || null;
+      const env = { USAGE_DB: m.db, USAGE_MODE: 'on', PRIVACY_NOTICE: 'n2', USAGE_DAILY_CAP: '100000', FIREBASE_SERVICE_ACCOUNT: SAJ };
+      // A row of each of two people stored earlier with no household (unconfirmed then): the backfill's target.
+      const old = (u) => m.raw.raw.prepare("INSERT INTO usage_events (who,id,at,client_at,local_day,local_hour,tz,uid,device,visit,platform,os,browser,app_version,name,props) VALUES (?, ?, ?, ?, '2026-11-19', 0, 'UTC', ?, 'd_k3j9x2m7q1aa', 'v_old00001', 'browser', 'macOS', 'Safari', 'v368', 'screen.viewed', '{\"screen\":\"home\"}')").run(u, 'old-' + u, T0 - 30 * MIN, T0 - 30 * MIN, u);
+      old(UNSEEN); old(SEEN);
+
+      // a) A whole day of batches from a person who has not seen the notice; she rewrites her stale value
+      //    every time (any value but the current one), as a script could.
+      const got = [];
+      for (let i = 0; i < 144; i++) {
+        clock = T0 + i * STEP;
+        docs.set('users/' + UNSEEN, { householdId: { stringValue: 'hhCirc01' }, privacyNoticeSeen: { stringValue: 'n1-' + i } });
+        got.push((await send(env, batch([home()], { device: 'd_unseen000001' }), bearer(UNSEEN))).body.accepted);
+      }
+      ok('(staged: 144 batches, 00:05 to 23:57 UTC on 19 Nov 2026, every one refused for the notice)', got.length === 144 && got.every((x) => x === 0) && m.count('usage_events', "uid = '" + UNSEEN + "'") === 1, got.slice(0, 3));
+      ok('G4: her membership row holds no household and no role', !!memRow(UNSEEN) && memRow(UNSEEN).hid === null && memRow(UNSEEN).role === null, memRow(UNSEEN));
+      ok('G4: her household is never even read', (readsOf.get('households/hhCirc01') || 0) === 0, readsOf.get('households/hhCirc01'));
+      ok('G4: nothing of hers is backfilled with the household', m.count('usage_events', "uid = '" + UNSEEN + "' AND hid IS NOT NULL") === 0, m.rows("SELECT id, hid FROM usage_events WHERE uid = '" + UNSEEN + "'"));
+      ok('MEMB-BOUND: her day writes her membership row at most 5 times (once, then each 6 hours), not once a recheck (' + writesOf(UNSEEN) + ')', writesOf(UNSEEN) >= 1 && writesOf(UNSEEN) <= 5, writesOf(UNSEEN));
+      ok('companion: her notice was still rechecked every 10 minutes (' + (readsOf.get('users/' + UNSEEN) || 0) + ' reads)', (readsOf.get('users/' + UNSEEN) || 0) >= 140, readsOf.get('users/' + UNSEEN));
+      // A burst inside one 10-minute window: this isolate remembers its check and asks Firestore once at most.
+      const r0 = readsOf.get('users/' + UNSEEN) || 0;
+      for (let i = 0; i < 5; i++) { clock = T0 + 143 * STEP + 30000 + i * 10000; await send(env, batch([home()], { device: 'd_unseen000001' }), bearer(UNSEEN)); }
+      ok('MEMB-BOUND: five batches inside one 10-minute window read Firestore at most once', (readsOf.get('users/' + UNSEEN) || 0) - r0 <= 1, (readsOf.get('users/' + UNSEEN) || 0) - r0);
+
+      // b) Companions: the same paths DO link a person who has seen the notice, and the founder in mode internal.
+      clock = T0 + 60 * MIN;
+      const rs = await send(env, batch([home()], { device: 'd_seen00000001' }), bearer(SEEN));
+      ok('companion: a person who has seen the notice is stored and stamped with her household', rs.body.accepted === 1 && m.count('usage_events', "uid = '" + SEEN + "' AND hid = 'hhCirc01' AND role = 'owner'") === 2
+        && memRow(SEEN).hid === 'hhCirc01' && memRow(SEEN).notice === 'n2', { rs, row: memRow(SEEN) });
+      ok('companion: and her earlier unconfirmed row is backfilled', m.count('usage_events', "id = 'old-" + SEEN + "' AND hid = 'hhCirc01'") === 1);
+      const fenv = { USAGE_DB: m.db, USAGE_MODE: 'internal', INTERNAL_UIDS: FOUNDER, PRIVACY_NOTICE: 'n2', FIREBASE_SERVICE_ACCOUNT: SAJ };
+      const rf = await send(fenv, batch([home()], { device: 'd_found0000001' }), bearer(FOUNDER));
+      ok('companion: in mode internal the founder is stamped whatever his notice (spec §8.7)', rf.body.accepted === 1 && memRow(FOUNDER).hid === 'hhCirc01', { rf, row: memRow(FOUNDER) });
+
+      // c) "Got it" still counts from her next batch after the 10-minute recheck, not 6 hours later.
+      clock = T0 + 12 * 60 * MIN;
+      const t1 = await send(env, batch([home()], { device: 'd_tapper000001' }), bearer(TAPPER));
+      docs.set('users/' + TAPPER, { householdId: { stringValue: 'hhCirc01' }, privacyNoticeSeen: { stringValue: 'n2' } });   // she taps "Got it"
+      clock = T0 + 12 * 60 * MIN + 5 * MIN;
+      const t2 = await send(env, batch([home()], { device: 'd_tapper000001' }), bearer(TAPPER));
+      clock = T0 + 12 * 60 * MIN + 11 * MIN;
+      const t3 = await send(env, batch([home()], { device: 'd_tapper000001' }), bearer(TAPPER));
+      ok('companion: refused before "Got it", still refused inside the 10 minutes, stored and stamped after them', t1.body.accepted === 0 && t2.body.accepted === 0 && t3.body.accepted === 1
+        && m.count('usage_events', "uid = '" + TAPPER + "' AND hid = 'hhCirc01'") === 1 && memRow(TAPPER).hid === 'hhCirc01', { t1: t1.body, t2: t2.body, t3: t3.body, row: memRow(TAPPER) });
+      clock = DAY1;
+    }
+
+    // 9. The membership ceiling (MEMB-BOUND): MEMBERSHIP_DAILY_ROWS rows a UTC day across everyone, however
+    //    many people sign in. 1,100 people who have seen the notice each send one batch. Pinned: Friday
+    //    20 November 2026, 06:00 UTC.
+    if (withCeiling) {
+      clock = Date.UTC(2026, 10, 20, 6, 0, 0);
+      const people = Array.from({ length: 1100 }, (x, i) => 'uidCeil' + String(i).padStart(21, '0'));
+      people.forEach((u, i) => {
+        docs.set('users/' + u, { householdId: { stringValue: 'hhBig' + i }, privacyNoticeSeen: { stringValue: 'n2' } });
+        docs.set('households/hhBig' + i, { members: { mapValue: { fields: { [u]: { stringValue: 'caregiver' } } } } });
+      });
+      const m = metered();
+      m.raw.raw.exec('CREATE TABLE _mw (n INTEGER); CREATE TRIGGER _mw_i AFTER INSERT ON membership BEGIN INSERT INTO _mw VALUES (1); END; CREATE TRIGGER _mw_u AFTER UPDATE ON membership BEGIN INSERT INTO _mw VALUES (1); END;');
+      const env = { USAGE_DB: m.db, USAGE_MODE: 'on', PRIVACY_NOTICE: 'n2', USAGE_DAILY_CAP: '100000', FIREBASE_SERVICE_ACCOUNT: SAJ };
+      let accepted = 0;
+      for (const u of people) accepted += (await send(env, batch([home()], { device: 'd_' + u.slice(-12) }), bearer(u))).body.accepted;
+      const written = m.rows('SELECT COUNT(*) AS c FROM _mw')[0].c;
+      ok('1,100 people in one UTC day write at most 1,000 membership rows (' + written + ')', written <= 1000, written);
+      ok('companion: the trigger counted writes up to the ceiling, so the count could move', written >= 1000, written);
+      const stamped = m.rows("SELECT COUNT(*) AS c FROM usage_events e WHERE e.hid = 'hhBig' || CAST(SUBSTR(e.uid, 8) AS INTEGER)")[0].c;
+      ok('and every one of them was still stored and stamped with her own household', accepted === 1100 && stamped === 1100, { accepted, stamped });
+      clock = DAY1;
+    }
+    // 10. An account purge reaches every isolate's memory of her (RE-SK-3), and only hers (SE-V8). Past the
+    //     membership ceiling no row is written, so this isolate's memo was tied to "no row", which the purge
+    //     cannot change: her erasure marker, held for a memo's whole life, is what stops it. Mode on,
+    //     PRIVACY_NOTICE n2. Pinned: Saturday 21 November 2026, 06:00 UTC onwards, and 23:20 UTC to Sunday 22
+    //     November 2026, 00:10 UTC for a memo across midnight.
+    {
+      const LEAVER = 'uidLeaving000000000000000009', ERASING = 'uidErasing000000000000000010', KEEPER = 'uidKeeping000000000000000011', NOBODY = 'uidNobody0000000000000000012', NIGHT = 'uidNight00000000000000000013';
+      const T0 = Date.UTC(2026, 10, 21, 6, 0, 0), MIN = 60000;
+      for (const [u, h] of [[LEAVER, 'hhLeave01'], [KEEPER, 'hhKeep01'], [NOBODY, 'hhNobody01'], [NIGHT, 'hhNight01']]) {
+        docs.set('users/' + u, { householdId: { stringValue: h }, privacyNoticeSeen: { stringValue: 'n2' } });
+        docs.set('households/' + h, { members: { mapValue: { fields: { [u]: { stringValue: 'owner' } } } } });
+      }
+      const m = metered();
+      m.raw.raw.prepare("INSERT INTO usage_meta (key, value, at) VALUES ('events_2026-11-21_membership', '1000', 1)").run();   // the day's membership ceiling is full
+      const env = { USAGE_DB: m.db, USAGE_MODE: 'on', PRIVACY_NOTICE: 'n2', USAGE_DAILY_CAP: '100000', FIREBASE_SERVICE_ACCOUNT: SAJ };
+      const hers = () => m.count('usage_events', "uid = '" + LEAVER + "'");
+      const reads = (u) => readsOf.get('users/' + u) || 0;
+      const purge = (u) => w.fetch(new Request(HOST + '/api/account/purge', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ idToken: idToken(u) }) }), env, ctx);
+      clock = T0;
+      const a = await send(env, batch([home()], { device: 'd_leaving00001' }), bearer(LEAVER));
+      const k0 = await send(env, batch([home()], { device: 'd_keeping00001' }), bearer(KEEPER));
+      ok('(staged: past the membership ceiling her batch is stored and stamped, and no membership row is written)', a.body.accepted === 1 && m.count('usage_events', "uid = '" + LEAVER + "' AND hid = 'hhLeave01'") === 1
+        && m.count('membership', "uid = '" + LEAVER + "'") === 0 && k0.body.accepted === 1 && m.count('membership') === 0, { a: a.body, k0: k0.body, rows: m.count('membership') });
+      const r0 = reads(LEAVER);
+      clock = T0 + 20 * MIN;
+      const b = await send(env, batch([home()], { device: 'd_leaving00001' }), bearer(LEAVER));
+      ok('companion: with no purge, 20 minutes on this isolate still answers from its memory (no Firestore read) and stamps her', b.body.accepted === 1 && reads(LEAVER) === r0 && hers() === 2, { b: b.body, reads: reads(LEAVER) - r0 });
+      // She deletes her account: the app deletes users/{uid}, then calls the purge. The cron runs at 06:30.
+      clock = T0 + 25 * MIN;
+      docs.delete('users/' + LEAVER);
+      const pr = await purge(LEAVER);
+      ok('(staged: the purge answers ok and erases her rows)', pr.status === 200 && hers() === 0, { status: pr.status, left: hers() });
+      clock = T0 + 30 * MIN;
+      await w.scheduled({}, env);
+      clock = T0 + 45 * MIN;
+      const c = await send(env, batch([home()], { device: 'd_leaving00001' }), bearer(LEAVER));
+      ok('RE-SK-3: 20 minutes after her purge, a cron tick between, a batch on her still-valid token is refused, not stamped from this isolate\'s memory', c.body.accepted === 0 && hers() === 0, { c: c.body, left: m.rows("SELECT hid FROM usage_events WHERE uid = '" + LEAVER + "'") });
+      ok('companion: refused by her erasure marker, held through the cron\'s tick, with no Firestore read', reads(LEAVER) === r0 && m.count('usage_meta', "key = 'erase_uid:" + LEAVER + "'") === 1, { reads: reads(LEAVER) - r0 });
+      // Another person past the ceiling: her purge changed nothing for him (SE-V8).
+      const k0r = reads(KEEPER);
+      const k1 = await send(env, batch([home()], { device: 'd_keeping00001' }), bearer(KEEPER));
+      ok('SE-V8: another person\'s purge leaves everyone else\'s memory alone: his batch is answered from it, with no Firestore read, and stamped', k1.body.accepted === 1 && reads(KEEPER) === k0r
+        && m.count('usage_events', "uid = '" + KEEPER + "' AND hid = 'hhKeep01'") === 2, { k1: k1.body, reads: reads(KEEPER) - k0r });
+      const metaNow = () => JSON.stringify(m.rows('SELECT key, value, at FROM usage_meta ORDER BY key'));
+      const metaBefore = metaNow();
+      const pn = await purge(NOBODY);
+      ok('SE-V8: a purge that finds nothing of hers writes nothing to cubby-usage', pn.status === 200 && metaNow() === metaBefore, { status: pn.status, before: metaBefore.slice(0, 200), after: metaNow().slice(0, 200) });
+      // A person whose erasure is still pending: a fresh membership row of hers is still there.
+      m.raw.raw.prepare("INSERT INTO membership (uid, hid, role, notice, checked_at) VALUES (?, 'hhLeave01', 'owner', 'n2', ?)").run(ERASING, T0 + 44 * MIN);
+      m.raw.raw.prepare('INSERT INTO usage_meta (key, value, at) VALUES (?, ?, ?)').run('erase_uid:' + ERASING, String(T0 + 44 * MIN), T0 + 44 * MIN);
+      const d = await send(env, batch([home()], { device: 'd_erasing00001' }), bearer(ERASING));
+      ok('while her erasure is pending, nothing links her: her batch is refused whatever her membership row says', d.body.accepted === 0 && m.count('usage_events', "uid = '" + ERASING + "'") === 0, d.body);
+      m.raw.raw.prepare('DELETE FROM usage_meta WHERE key = ?').run('erase_uid:' + ERASING);
+      const e2 = await send(env, batch([home()], { device: 'd_erasing00001' }), bearer(ERASING));
+      ok('companion: once no erasure is pending, the same fresh row stamps her', e2.body.accepted === 1 && m.count('usage_events', "uid = '" + ERASING + "' AND hid = 'hhLeave01'") >= 1, e2.body);
+      /* A memo with no row and nothing of hers stored, across midnight. At 23:20 the families' share of the
+         day is full, so her batch is refused after this isolate took its memo; she deletes her account at
+         23:30, and the purge, finding nothing of hers, writes no marker. A batch at 00:10 on the token she had
+         at 23:30 (an hour's life) must not be stamped from that memo: it ended with its UTC day. */
+      clock = Date.UTC(2026, 10, 21, 23, 20, 0);
+      m.raw.raw.prepare("INSERT INTO usage_meta (key, value, at) VALUES ('events_2026-11-21', '75000', 1) ON CONFLICT(key) DO UPDATE SET value = '75000'").run();
+      const n1 = await send(env, batch([home()], { device: 'd_night0000001' }), bearer(NIGHT));
+      const nr0 = reads(NIGHT);
+      clock = Date.UTC(2026, 10, 21, 23, 30, 0);
+      docs.delete('users/' + NIGHT);
+      const tok = bearer(NIGHT);
+      const pnight = await purge(NIGHT);
+      ok('(staged: at 23:20 her batch was refused by the full share after her memo was taken, and at 23:30 her purge found nothing of hers and wrote no marker)', n1.body.accepted === 0 && nr0 === 1
+        && pnight.status === 200 && m.count('usage_events', "uid = '" + NIGHT + "'") === 0 && m.count('usage_meta', "key = 'erase_uid:" + NIGHT + "'") === 0, { n1: n1.body, nr0 });
+      clock = Date.UTC(2026, 10, 21, 23, 40, 0);
+      const n2 = await send(env, batch([home()], { device: 'd_night0000001' }), tok);
+      ok('companion: the same day this isolate refuses her batch for the full share, without reading her memory or Firestore', n2.body.accepted === 0 && reads(NIGHT) === nr0, { n2: n2.body, reads: reads(NIGHT) - nr0 });
+      clock = Date.UTC(2026, 10, 22, 0, 10, 0);
+      const n3 = await send(env, batch([home()], { device: 'd_night0000001' }), tok);
+      ok('RE-SK-3: past midnight her memo with no row is not used: her batch is not stamped with her old household (pinned 22 November 2026, 00:10 UTC)', m.count('usage_events', "uid = '" + NIGHT + "' AND hid IS NOT NULL") === 0, { n3: n3.body, rows: m.rows("SELECT hid FROM usage_events WHERE uid = '" + NIGHT + "'") });
+      ok('companion: this isolate read Firestore again, and found her gone', reads(NIGHT) === nr0 + 1 && n3.body.accepted === 0, { reads: reads(NIGHT) - nr0, n3: n3.body });
+      clock = DAY1;
+    }
   } catch (e) {
     fail++; if (!quiet) realLog('  FAIL the suite threw: ' + (e && e.stack || e));
   } finally {
@@ -312,6 +493,17 @@ const BREAKS = [
   ['the route logs the uid on console.log (F5)', [[W, '  const now = Date.now();\n  const out = await usageIngest(body, {', "  console.log('usage_req', uid);\n  const now = Date.now();\n  const out = await usageIngest(body, {"]]],
   ['a store-failure log line carries the uid (F5)', [[W, '    log: (code) => console.error(code),', '    log: (code) => console.error(code, uid),']]],
   ['another origin is accepted', [[W, "  if (!same) return json({ error: 'forbidden' }, 403);\n  /* Mode off, or no database yet", "  /* Mode off, or no database yet"]]],
+  ['a person who has not seen the notice is linked to her household (G4)', [[W, "const linkable = mode === 'internal' ? usageInternalSet(env).has(uid) : (mode === 'on' && !!notice && seen === notice);", 'const linkable = true;']]],
+  ['the founder in mode internal waits for the notice too (G4, spec §8.7)', [[W, "const linkable = mode === 'internal' ? usageInternalSet(env).has(uid) : (mode === 'on' && !!notice && seen === notice);", "const linkable = !!notice && seen === notice;"]]],
+  ['every recheck rewrites the membership row (MEMB-BOUND)', [[W, 'if (!row || usageMemberSig(answer) !== usageMemberSig(row) || now - Number(row.checked_at || 0) >= USAGE_MEMBERSHIP_TTL) {', 'if (true) {']]],
+  ['the row keeps her raw notice value, so each new value is a write (MEMB-BOUND)', [[W, "const answer = { hid, role, notice: notice && seen === notice ? notice : '', checked_at: now };", 'const answer = { hid, role, notice: seen, checked_at: now };']]],
+  ['the membership ceiling is skipped (MEMB-BOUND)', [[W, "usageIsolate.full.get('membership') !== day && await usageTakeSlots(db, 'membership', day, 1, usageCeilingsOf(env).membership, now)", 'true']], { ceiling: true }],
+  ['the isolate forgets its own recheck, so Firestore is asked every batch (MEMB-BOUND)', [[W, '  if (memo && memo.sig === usageMemberSig(row) && usageMemberFresh(memo.answer, memo.at, notice, now)\n    && (row || usageUtcDay(memo.at) === usageUtcDay(now))) return memo.answer;\n', '']]],
+  ['a memory with no row outlives its UTC day (RE-SK-3)', [[W, '    && (row || usageUtcDay(memo.at) === usageUtcDay(now))) return memo.answer;', '    ) return memo.answer;']]],
+  ['the account purge marks her only when rows are left over (RE-SK-3)', [[C, '    await mark(done ? now + ERASE_HOLD_MS : now);', '    if (!done) await mark(now);']]],
+  ['a person\'s marker is not held for the membership memory\'s life (RE-SK-3)', [[C, 'export const ERASE_HOLD_MS = MEMBERSHIP_TTL_MS;', 'export const ERASE_HOLD_MS = 0;']]],
+  ['a purge that finds nothing of hers still writes a marker (SE-V8)', [[C, '    if (!any) return { done: true, erased: 0, ran: true };\n', '']]],
+  ['a pending erasure still links her (ERASE-CHUNK)', [[W, "  if (got.erasing) return { hid: null, role: null, notice: '', checked_at: now };\n", '']]],
 ];
 
 (async () => {
@@ -323,17 +515,17 @@ const BREAKS = [
     console.log('USAGE-ROUTE: ' + (r.fail ? 'FAIL' : 'PASS'));
     process.exit(r.fail ? 1 : 0);
   }
-  const run = async (edits) => { const dir = mutantTree(edits); try { return await suite(path.join(dir, 'worker.js'), true); } finally { fs.rmSync(dir, { recursive: true, force: true }); } };
+  const run = async (edits, o) => { const dir = mutantTree(edits); try { return await suite(path.join(dir, 'worker.js'), true, o); } finally { fs.rmSync(dir, { recursive: true, force: true }); } };
   let good = true, caught = 0;
   /* Paired: an unaltered tree copied the same way must pass every check, so each red below is its break's. */
   const clean = await run([]);
   if (clean.loadError) { good = false; console.log('  FAIL an unaltered copy did not load: ' + clean.loadError); }
   else if (clean.fail) { good = false; console.log('  FAIL an unaltered copy in a temp tree fails ' + clean.fail + ' check(s)'); }
   else console.log('  ok   an unaltered copy in a temp tree passes (' + clean.pass + ' checks)');
-  for (const [name, edits] of BREAKS) {
+  for (const [name, edits, o] of BREAKS) {
     const missing = edits.filter(([file, find]) => { const src = fs.readFileSync(path.join(ROOT, file), 'utf8'); const at = src.indexOf(find); return at < 0 || src.indexOf(find, at + 1) >= 0; });
     if (missing.length) { good = false; console.log('  FAIL anchor missing or not unique for: ' + name); continue; }
-    const r = await run(edits);
+    const r = await run(edits, { ceiling: !!(o && o.ceiling) });
     if (r.loadError) { good = false; console.log('  FAIL did not load, so not caught: ' + name + ' (' + r.loadError + ')'); }
     else if (r.fail > 0) { caught++; console.log('  ok   caught (' + r.fail + ' red): ' + name); }
     else { good = false; console.log('  FAIL not caught: ' + name); }

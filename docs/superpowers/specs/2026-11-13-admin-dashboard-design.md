@@ -184,8 +184,8 @@ reaches every family and deserves its own design.
 - **G6.** Every view, export, note and deletion is written to an access log nobody can edit without
   it showing.
 - **G7.** Erasure stays complete: deleting an account deletes its usage events, totals, devices,
-  notes, shared entries and the feedback it sent in the same purge, and the admin's copy of the person
-  is gone within one 15-minute tick.
+  notes, shared entries and the feedback it sent, starting in the same purge and finishing within the
+  daily delete allowance (§10), and the admin's copy of the person is gone within one 15-minute tick.
 - **G8.** The dashboard never spends more than a fixed share of the families' Firestore quota.
 
 ### Non-goals (this build)
@@ -458,7 +458,7 @@ deploy.
 [vars]
 MAIL_FROM = "Cubby <noreply@mail.little-cubby.com>"   # existing line, unchanged
 USAGE_MODE = "off"          # off | internal | on. "on" needs the founder's yes (phase 3).
-USAGE_DAILY_CAP = "50000"   # events a UTC day across everyone; past it, accepted and not stored
+USAGE_DAILY_CAP = "1500"    # events a UTC day across everyone (a quarter of it before sign-in); past it, accepted and not stored
 
 # [[d1_databases]]  USAGE_DB -> cubby-usage
 # [[d1_databases]]  ADMIN_DB -> cubby-admin   (two SELECTs: a person's own access-log rows; the digest's chain head)
@@ -649,7 +649,7 @@ so on, with the real start date.
 
 | Element | What it shows (canvas sample) | Source | Phase |
 |---|---|---|---|
-| System check: Saving and sync | "Working · last write 40 seconds ago"; red when saves fail | last `feature.used` with action `logged`; red when `save.failed` comes from 3 or more people in an hour (builder's call on the threshold) | 2 |
+| System check: Saving and sync | "Working · a save came in 40 seconds ago"; red "Check saves · a save failed 10 minutes ago, with no save shown since", or "Check saves · saves failed for 3 people in the last hour"; "No save to show yet" when it has none to read. Under each: "It reads only visits that ended with no medicine or health entry, so it can lag behind and miss some saves." It never calls a save the last or the newest, and never says "Not working", which it cannot know | `feature.used` with action `logged`, and `save.failed`, read only from visits that ended with no medicine or health entry, and only once the batch that carried each one's end held nothing but finished visits like that (F5: no dose's arrival moves the line; `workers/admin/src/usage.mjs` `CLEAN_MOMENT`); red when a failure it reads in the hour has no save it reads after it, or when the failures it reads come from 3 or more people in an hour (builder's call on the threshold) | 2 |
 | System check: Sign-in codes | "Working · test code 6 minutes ago" | `/api/canary` through `MAIN`: `ok`, `ageSeconds`. The canvas says "all three ways", but the canary proves only the email-code path, so the label is "Sign-in codes" (answered) | 1 |
 | System check: Reminders sending | "Working · 31 sent today, 0 failed" | `GAMES_DB` `ops_state` `push_last_run`, plus a new key `push_daily` that `recordCronRun` keeps: the day's sent and failed tally (my call: in `ops_state` for the admin to read; **not** added to the public `/api/health`) | 1 |
 | System check: Weekly report email | "Not sending · last good run 30 Aug" (red outline) | `GAMES_DB` `funnel_meta.digest_last` against the last Monday, and today's `funnel_snapshots` (`ok`, `reason`) | 1 |
@@ -1095,17 +1095,37 @@ Plus two rules that are about kindness as much as data:
 - `Authorization: Bearer <Firebase ID token>`, verified with the existing `verifyFirebaseToken`.
 - **Without a token**, only `signin.attempted`, `install.prompted`, `app.updated`, `visit.started`,
   `visit.ended` and `screen.viewed` (for the sign-in screen) are accepted, stored with no uid, per-IP
-  limited, under their own ceiling, and kept 30 days (my call).
+  limited, under their own ceiling (a quarter of `USAGE_DAILY_CAP`, so a script with no token can never
+  use up the families' share), and kept 30 days (my call). The device row of a phone that never signs
+  in goes 30 days after it was last seen.
 - **Membership stamping (my call):** the server keeps `membership(uid, hid, role, notice, checked_at)`
   in `cubby-usage`. When a uid has no row or a row older than 6 hours, it does one fresh masked read of
   `users/{uid}` (`householdId`, a claim, and `privacyNoticeSeen`, in the same read) and confirms the
   household against `households/{hid}.members[uid]` (the `_isCarer` rule, `fsGetStrict` so a 404 and an
   error stay apart). Two Firestore reads per person per 6 hours at most. Until confirmed, `hid` is
   null, and the next confirmation backfills that person's null rows from the last 24 hours.
+- **Nothing links a person before the notice (G4).** In mode `on`, the membership row of a person whose
+  `privacyNoticeSeen` is not the current `PRIVACY_NOTICE` holds no `hid` and no `role`: her household is
+  not read, and nothing is backfilled for her. The row's `notice` is the current notice if she has seen
+  it, and empty otherwise. In mode `internal` this does not apply (the founder's own accounts, below).
+- **The cache's writes are bounded.** The row is written only when its household, role or notice
+  changes, or when it is 6 hours old. A 10-minute recheck that changes nothing writes nothing; the
+  isolate remembers when it checked. All membership writes share one ceiling of 1,000 rows a UTC day
+  (`MEMBERSHIP_DAILY_ROWS`); past it the row is not written, the fresh answer still serves that request,
+  and each isolate remembers it for as long as the row would have been fresh (so past the ceiling the
+  two reads per 6 hours hold per isolate, not across them). That memory is tied to no row, so whenever
+  she has any row the account purge puts her erasure on record (`erase_uid:<uid>`, §10) before any of
+  them goes, and holds that marker for 6 hours from when it was first written, a memory's whole life.
+  While it is there nothing is linked to her at all, whatever her row or an isolate's memory says, and by
+  the time it goes every memory of her taken before her purge has expired. It is hers alone: another
+  person's purge never sends anyone else back to Firestore. A purge that finds nothing of hers writes
+  nothing, so a memory with no row also ends with its UTC day: with nothing of hers stored, the batch
+  that took it was refused, for the notice (and then it links no household) or by the full families'
+  share (and then that isolate answers no linked batch again that day).
 - **The notice, checked on the server too (G4).** A linked event from a uid whose cached `notice` is
   not the current `PRIVACY_NOTICE` is refused and counted as `notice`. A stale cache is re-read at most
-  once every 10 minutes for that uid, so a person who has just tapped "Got it" is measured from their
-  next batch, not 6 hours later. The check applies in mode `on`; in `internal` (phase 2, before the
+  once every 10 minutes for that uid in each isolate, so a person who has just tapped "Got it" is
+  measured from their next batch after that, not 6 hours later. The check applies in mode `on`; in `internal` (phase 2, before the
   card exists) only the founder's own accounts are stored, and he is the one who decided.
 - Each event: validated; `INSERT OR IGNORE` keyed by `(who, id)`, where `who` is the uid, or
   `anon_<device>` before sign-in (my call), so retries never double-count and one client cannot claim
@@ -1113,15 +1133,57 @@ Plus two rules that are about kindness as much as data:
 - **Log lines (S15):** `/api/usage`, `/api/share-entry`, `/api/me/kept` and `/api/notes/stop` log
   codes and ray ids only, never a uid, an email, a name or a body.
 - Limits: `USAGE_RATE_LIMITER` per uid (120 a minute, namespace 1007), a per-IP limit for anonymous
-  batches, and
-  `USAGE_DAILY_CAP` across everyone. Past the ceiling, events are accepted and not stored, and the
-  isolate remembers the full day so D1 is not touched again (the `recordStep` pattern). A D1 error is
-  caught: telemetry never fails a request.
+  batches, and `USAGE_DAILY_CAP` across everyone, three quarters for signed-in batches and a quarter
+  for batches with no sign-in. Each ceiling is one atomic counter row in `usage_meta`, keyed by the UTC
+  day: `events_<day>` (families), `events_<day>_anon`, `events_<day>_refused` and
+  `events_<day>_membership`, so one by-day delete retires all four. Past a ceiling, events are accepted
+  and not stored, and the isolate remembers that ceiling full for the rest of the UTC day, so D1 is not
+  touched again for it (the `recordStep` pattern). Refused events are counted under their own ceiling:
+  at most 500 reason rows a UTC day (`REFUSED_DAILY_ROWS`), each with one counter write; past it the
+  counts stop for the day. A D1 error is caught: telemetry never fails a request.
 - Answer: `200 {"mode": "on", "accepted": 12, "refused": 0}`; 400 bad shape; 401 bad token; 403 bad
   origin; 413 too large; 429 limited.
-- **D1 write allowance:** each event is one row plus one per index (§9). The founder's step 1 confirms
-  the account's D1 allowance; the builder sizes `USAGE_DAILY_CAP` so usage plus every other D1 writer
-  stays under half of it.
+- **D1 write allowance:** D1 bills one written row per row, plus one per index entry the write touches
+  (§9). The founder's step 1 confirms the account's D1 allowance; the builder sizes `USAGE_DAILY_CAP` so
+  usage stays under half of it. On Workers Free (100,000 a day for the whole account) the cap is 1,500:
+  the worst UTC day is 45,086 billed rows (storing 13 per event, the household backfill, the refusal and
+  membership ceilings, the delete allowance retention and erasures share at 5 per row, the day counters
+  and the cron's markers). `wrangler.toml` states the sum and `usage-erasure` recomputes it from the real
+  schema. Erasures delete inside it (§10), a failed step's rows included; only a household purge's
+  pending marker, and an account purge's when the day has no room left for her, two rows written once
+  per household or account, are on top.
+- **D1 read allowance:** D1 Free also allows 5,000,000 rows read a day for the whole account, and past it
+  D1 refuses every query too. A pending erasure is carried on every tick, so a tick whose day has no
+  delete allowance left runs no step and no count: it reads where the allowance stands, 7 rows. Measured
+  on workerd's own D1 at the shipped cap, one day of ticks with one erasure pending: a 10,000-row person
+  reads 4,172 rows when retention took 3,000 that day (one step) and 26,896 on a quiet day (four); a
+  12,000-row household, beside 1,000 other people's membership rows, 20,993 and 79,932. An erasure goes a
+  batch of its visits at a time (§10), so for visits as Cubby's tracker sends them (a visit's head arrives
+  with its first other rows, or shortly before them, not ahead of a batch's worth of the household's other
+  rows) a step reads about the same at any size: at most 7,647 rows for a person
+  of 10,000 or of 100,000 rows, 21,210 for a household of 12,000 or of 100,000 in visits of five rows
+  (36,014 in visits of two), and 35,538 for one whose rows are half visits of a head alone. Three costs
+  are outside those figures, and all are phase-3 decisions (`docs/ADMIN-DEPLOY.md`, phase 3). A household
+  step also reads `membership`, which has no index on `hid`: whole in every step's plan, again in the step
+  that unlinks its members (up to whole) and whole again in the step that clears its marker, so a
+  household that goes in one step reads it up to three times, and 10,000 other people's rows add 10,000 to
+  30,000 rows read a step. An index on `membership(hid)` would make those searches, but bills one more
+  written row for each new membership row (45,086 becomes 46,086 at the shipped cap). A client other than
+  Cubby's that sends many visits' heads first and their other rows later makes every household step
+  re-read all of those heads: up to 116,014 rows a step for 10,000 such visits and 316,014 for 30,000. And
+  one that reuses one visit id across many rows makes a step read every row of it several times over
+  (89,037 rows for a household step and 45,006 for a person's, with one visit of 20,000), and retention
+  about twice over on every statement that picks the visit, whatever its rows' arrival (40,017 rows to
+  delete the one expired row of a visit of 20,000). The day's delete allowance holds one erasure to at
+  most five steps a UTC day that delete rows, and to four unless its first step that day took only the
+  erasures' floor and retention then deleted under 92 rows. A person's erasure may run one more that day
+  when her marker's hold ends, which clears it and takes any row of hers stored during the hold, and any
+  erasure one more each time a row of it lands between
+  the count and the deletes of the step that takes its last rows. Before, every tick ran the counts first, a
+  person's step sorted every row she had and a household's listed every visit it had, so that household
+  read 5,096,632 rows a day, more than the whole account's allowance, and that person 1,022,630 (SK2-2).
+  `wrangler.toml` states these beside the write arithmetic, and `usage-d1` holds a household's step
+  under 50,000 rows read on D1's own meter. Retention's and the admin's reads are not budgeted yet.
 
 ### 8.8 The switch: `USAGE_MODE`
 
@@ -1145,6 +1207,7 @@ site). Column names are builder's call where marked; the shape and the rules are
 
 ```sql
 -- One row per accepted event. Raw rows live 90 days (30 when uid is NULL, 30 for JOURNEY_KEYS).
+-- WITHOUT ROWID: the (who, id) key is the table itself, so a write touches the table and its four indexes.
 CREATE TABLE IF NOT EXISTS usage_events (
   who            TEXT NOT NULL,      -- uid, or 'anon_' || device before sign-in
   id             TEXT NOT NULL,      -- client v4 uuid, validated; INSERT OR IGNORE makes retries harmless
@@ -1166,10 +1229,11 @@ CREATE TABLE IF NOT EXISTS usage_events (
   name           TEXT NOT NULL,      -- from the allowlist
   props          TEXT NOT NULL,      -- canonical JSON, sorted keys, allowlisted keys and values only
   PRIMARY KEY (who, id)
-);
+) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS ue_uid_at ON usage_events(uid, at);
 CREATE INDEX IF NOT EXISTS ue_hid_at ON usage_events(hid, at);
 CREATE INDEX IF NOT EXISTS ue_at     ON usage_events(at);
+CREATE INDEX IF NOT EXISTS ue_visit  ON usage_events(uid, visit);   -- a visit's rows, for whole-visit deletes
 
 -- Daily totals, per person, platform and day. Kept until the account is deleted.
 -- JOURNEY_KEYS (8.4) are stored here only as aggregate rows: uid = '' and hid = '' (kept 13 months).
@@ -1194,8 +1258,8 @@ CREATE TABLE IF NOT EXISTS devices (
 CREATE INDEX IF NOT EXISTS dev_uid ON devices(uid);
 
 CREATE TABLE IF NOT EXISTS membership (
-  uid TEXT PRIMARY KEY, hid TEXT, role TEXT,
-  notice TEXT,                          -- the person's privacyNoticeSeen at the last read (8.7)
+  uid TEXT PRIMARY KEY, hid TEXT, role TEXT,   -- hid and role NULL until she has seen the notice (8.7)
+  notice TEXT,                          -- the current notice if she had seen it at the last read, else ''
   checked_at INTEGER NOT NULL
 );
 
@@ -1227,7 +1291,10 @@ CREATE INDEX IF NOT EXISTS se_hid ON shared_entries(hid, expires_at);
 CREATE INDEX IF NOT EXISTS se_by  ON shared_entries(shared_by);
 
 CREATE TABLE IF NOT EXISTS usage_refused (day TEXT NOT NULL, reason TEXT NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (day, reason));
-CREATE TABLE IF NOT EXISTS usage_meta    (key TEXT PRIMARY KEY, value TEXT, at INTEGER);  -- ceilings, cursors
+CREATE TABLE IF NOT EXISTS usage_meta    (key TEXT PRIMARY KEY, value TEXT, at INTEGER);
+-- usage_meta keys: the day ceilings (events_<day>, events_<day>_anon, events_<day>_refused,
+-- events_<day>_membership, events_<day>_erase; kept 90 days), the cron's day markers, the pending
+-- erasures erase_hid:<hid> and erase_uid:<uid> (8.7, 10).
 ```
 
 Builder's call: drop `ue_hid_at` if the write allowance is tight, and erase by uid via `membership`
@@ -1316,9 +1383,11 @@ to five times. The chain must never fork. A verifier walks it from the first row
 
 | Data | Kept | Removed by |
 |---|---|---|
-| `usage_events` with a uid | 90 days | daily retention run (main cron), in chunks |
+| `usage_events` with a uid | 90 days; a visit's rows go with its first rows past 90 days, those that arrived up to a day after the cutoff included, so a visit whose rows arrived within a day of each other goes whole when it can, head first when it is cut (for a visit as Cubby's tracker sends it; below) | daily retention run (main cron), in chunks (below) |
 | `usage_events` with no uid, and every `JOURNEY_KEYS` event | 30 days | the same run |
-| `usage_daily` per-person rows, `devices`, `membership` | until the account is deleted | account purge; household purge; weekly orphan sweep |
+| `devices` of a phone that never signed in | 30 days after it was last seen | the same run |
+| `usage_daily` per-person rows, signed-in `devices`, `membership` | until the account is deleted | account purge; household purge; weekly orphan sweep |
+| `usage_meta` day ceilings | 90 days | the same run |
 | `usage_daily` aggregate rows (`uid` empty) | 13 months | daily run |
 | `nudges` | until the account is deleted | same |
 | `shared_entries` | 7 days at most; less if stopped, or if the family deletes the source entry | every cron tick; stop deletes at once; the read path ignores expired rows |
@@ -1335,12 +1404,93 @@ to five times. The chain must never fork. A verifier walks it from the first row
   `devices`, `membership`, `nudges`, and `shared_entries` they shared, and their `feedback`
   documents. The uid comes from the verified token, as it does today. It keeps deleting the `GAMES_DB`
   `hubs`, `hub_games` and `hub_guesses` rows it deletes today.
+- **Erasures go in bounded steps (ERASE-CHUNK).** An erasure's size is whatever the person or
+  household stored, so one batch could pass what D1 allows a statement, spend most of the account's D1
+  day alone, and fail on every retry. A step deletes at most 1,000 rows, every statement limited, in one
+  transaction, and takes its rows first from the daily delete allowance it shares with retention
+  (below). Whenever she has any row, the purge puts her erasure on record first, `erase_uid:<uid>` in
+  `usage_meta`, then runs the first step, from at least the erasures' floor of the day (275 rows at the
+  shipped cap), backlog or not, unless the day's erasures have used it: everything of a person who used
+  Cubby a few times. Every cron tick runs a step for the oldest pending erasures that are due, until the
+  last rows go. A tick whose day has no room left runs no step: the read that finds the due markers also
+  reads where the day's allowance stands, so on such a tick a pending erasure costs 7 rows read, not a
+  count of everything stored, and for visits as Cubby's tracker sends them a step reads about the same at
+  any size, 7,647 rows at most for a person and 21,210 for a household of 12,000 or of 100,000 rows in
+  visits of five (SK2-2; §8.7, D1 read allowance, which also gives what those figures leave out). The
+  step that finds nothing left clears the marker in the same transaction, and only if nothing of hers is
+  left; a person's marker is first held for 6 hours from when it was written (§8.7).
+  A row of hers that lands while a cron step runs goes on the next tick; one that lands while the
+  purge's own step runs, or during the hold, goes when the hold ends. A failed step changes nothing,
+  keeps what it took of the day (D1 may bill a batch that rolled back) and goes to the back of the
+  queue, so an erasure that keeps failing never holds the others back. Her membership row goes in the
+  first step, and while the marker is there nothing is linked to her. A heavy account can take more than
+  a day; that is the price of keeping the account's D1 writes bounded on Workers Free. The weekly sweep
+  puts each uid Auth no longer has on record the same way.
+- **A cut never shows a dose visit's minute (F5).** A step's limit can stop inside a visit. The admin
+  shows a visit's minute only while it holds its `visit.started` and its `visit.ended` row and no dose,
+  so every events statement of an erasure takes heads and ends before any other row: a visit a step
+  cuts has lost its head or its end, and shows its hour only, or not at all, until a later step takes
+  the rest. An erasure goes a batch of visits at a time, so a step reads about one batch whatever was
+  stored: a person's, the visits of her next 1,001 rows, oldest first. A household's visit can also hold
+  another family's rows (a caregiver who moved part-way), and the rows that carry the household are how a
+  later step finds the visit again: a row of the visit that is not its head, or, when only its head
+  carries the household, that head (its way back). So a household's batch is the visits of its next 1,001
+  rows that are a way back, oldest first, each batch in this order: the heads of its visits, except a
+  head that is its visit's way back; then their rows that do not carry the household, ends first; then
+  the batch's own rows. `usage-erasure` asks the admin's real Visits tab after every step, one row a step
+  for a moved caregiver's visits and 153 steps of a 14,745-row household with a visit of every shape and
+  4,000 visits of a head alone.
 - `purgeDeletedHouseholds` also deletes `usage_events`, `usage_daily`, `nudges` and `shared_entries`
   for that `hid`, after the household document is gone (and keeps counting `account.deleted` as now).
+  Every row of a visit that carried the household goes, and `membership` rows lose that `hid`. Before
+  the document goes, the purge writes a pending marker, `erase_hid:<hid>` in `usage_meta`; the erasure
+  clears it in the same batch as the rows, and every cron tick retries a marker still there. If
+  cubby-usage refuses even the marker, the family's data still goes on time: the document is replaced
+  by a shell of `deleteAfter`, `deletionRequestedBy`, `ownerId` and `purgeShell` only, with
+  `deleteAfter` an hour on. A family's shell is written as soon as its children are confirmed gone and its
+  marker fails, its own write, so a heavy family later in the same tick, whose children use up the tick's
+  50 subrequests, cannot keep its data in Firestore past the date (SK2-1); shells already
+  stuck go together in one `documents:batchWrite` at the end of the tick. Every shell write carries its
+  own `updateTime` precondition. So stuck shells, however many, are out of the purge query's range (the 50
+  oldest due households) and cannot keep a family's household that falls due from being found; once a
+  tick has seen D1 refuse, it does not ask again, and a shell is not listed again until D1 answers, so a
+  tick spends one D1 call and one Firestore call on its stuck shells. An hour later a shell tries the marker
+  again; once D1 answers, the purge finishes the shell and its usage rows in steps, like any other. A
+  tick takes real households before shells, so shells that come due together cannot spend its
+  subrequests before a family's household is emptied.
+- **The daily run, in order and within an allowance.** Person-linked rows go first: signed-in visits past
+  90 days, then `JOURNEY_KEYS` rows past 30, then anonymous rows and their devices, then aggregate days,
+  refusal counts and the day ceilings. A signed-in visit goes whole when it can, head first when a day's
+  allowance or a statement's row limit cuts it: every expired row before any younger one, and
+  `visit.started` first within each, and the visit's younger rows only if they arrived within a day after
+  the cutoff, so a visit id reused for longer cannot spend the day's allowance on young rows (RE-SK-1). A
+  visit lasts a day at most, but `at` is when a row arrived: a phone offline for days sends a visit's
+  later batches when it is back, and such a visit is cut like the ones below. No statement deletes more
+  than its chunk. Any visit a statement's limit cuts loses its head first: a visit longer than a chunk,
+  the visits at a chunk boundary, and any visit, an ordinary one included, that the day's allowance runs
+  out inside. What is left of it stays headless until a later statement takes it (the next tick or the
+  next UTC day), and while it is headless the admin shows it by the hour of its earliest row only, or not
+  at all if its `visit.ended` row is still there (F5). Head first holds for every visit Cubby's tracker
+  sends, whose head arrives with or before its other rows. A visit whose head arrived after some of its
+  other rows (only another client sends one) keeps its head and loses those older rows when its head
+  arrived a day or more after the cutoff, or when a statement's limit runs out between them and its head,
+  as it can when they straddle the cutoff by seconds; what is left then shows its minutes once its end is
+  stored and no dose is left in it (`workers/usage/core.mjs`, above `retentionSteps`). The run and the
+  day's erasures share one allowance of two and a quarter times `USAGE_DAILY_CAP` rows a UTC day, in two
+  parts until retention has finished its day: two caps and 100 rows are retention's, more than a steady
+  day at the cap expires (two caps and 66: aggregate days, refusal counts, day counters), and the rest, a
+  quarter cap less 100 (275 rows at 1,500), is the erasures' floor. Each takes only its own part, so an
+  erasure asked for during a backlog still has its floor every day. Once retention has finished the day an
+  erasure may take all that is left; at the day's last tick (23:45 UTC) retention takes what the erasures
+  left of their floor, through their own counter, so the two never pass the allowance together, and on a
+  day with no erasure a backlog drains at the whole allowance. So a backlog drains over days without
+  spending the account's D1 allowance, and what waits is anonymous. The day is recorded as done only once
+  every class is drained.
 - **The backstop:** the app's purge call is best-effort (a network drop skips it). So a weekly orphan
   sweep in the main cron takes the distinct uids in the usage tables, asks Auth (`accounts:lookup`, 100
-  at a time, master service account) which still exist, and deletes every row for the ones that do
-  not. Builder's trap: a lookup *failure* must never read as "does not exist".
+  at a time, master service account) which still exist, and puts each one that does not on record
+  (`erase_uid:<uid>`), so the erasure steps delete every row of it. Builder's trap: a lookup *failure*
+  must never read as "does not exist".
 - The admin directory loses the person on the next 15-minute tick, through the Auth check, not the
   Firestore read (leaving a household stamps no `updatedAt`, and the read budget can pause the daily
   pass). The `dir_*` rows are rebuilt from the live records, but the gate still checks they go.
@@ -1628,9 +1778,10 @@ Each one has a gate in §14 that can be watched going red.
   person's token; linked events wait until the person has seen the card for the current notice, and
   the server refuses them otherwise (in mode `on`).
 - **S25.** After the daily run, no usage event older than 90 days (30 with no uid) remains.
-- **S26.** Account deletion removes the person's rows from every usage table in the same purge; the
-  household purge removes that household's rows; the weekly sweep removes rows for uids Auth no longer
-  has, and treats a lookup failure as "unknown", never "gone".
+- **S26.** Account deletion removes the person's rows from every usage table, starting in the same
+  purge and finishing in bounded steps from a pending marker; the household purge removes that
+  household's rows the same way; the weekly sweep removes rows for uids Auth no longer has, and treats a
+  lookup failure as "unknown", never "gone".
 - **S27.** `/api/usage` enforces 32 KB, 50 events, per-uid and per-IP limits and a daily ceiling, and
   never fails a request the app depends on.
 - **S28.** Internal uids are excluded from every number by default; the overview warns when
@@ -1704,8 +1855,8 @@ report an absence. Clock-pinned tests pin the day and the hour.
 | `admin-hold` | `test/admin-hold.test.js` | tree | S12, §5.1 | the hold reader, in the admin and in `AdminWrites`, returns not-held for any of: the field absent, the field moved (staged as `app.loss.holding`), a non-map value, an unknown shape, a 404, a read error, a timeout. Companion stagings prove the same matcher returns not-held for `null` and `{}` and held for `{uid: {at}}` and the legacy `{at}`, so the gate is not green for free |
 | `dir-erasure` | `test/admin-dir-erasure.test.js` | tree | §4.7, §10, §12 | a uid Auth no longer returns keeps its `dir_people` row past the next tick while the Firestore budget is exhausted; an Auth *failure* drops a row; a household with no remaining member keeps its rows; a `dir_household_days` row older than 90 days survives the pinned-clock run; after `erase_outcome` the admin leaves a row for that uid |
 | `tracking-plan` (extended) | `tools/tracking_plan_check.js` | tree | §8.3 to §8.5, §15.1 | the linked events in the plan and the allowlist in `workers/usage/core.mjs` differ; a property has no enum or bound; a property name matches the content pattern (amount, ml, oz, dose, temp, weight, height, note, text, body, comment, message, mood, symptom, name, email, phone, address, value, reading, pressure, caption, photo, query, search, url), matched as whole tokens split on `_` the way the existing `IDENT` check does, so `template` is not `temp` and `screen` is not `screen_name`; a screen or feature matches the never-instrumented pattern; a loss event appears; `app/usage-allowlist.js` differs from what `core.mjs` generates; `JOURNEY_KEYS` is empty or misses a pregnancy-only screen; the allowlist is non-empty while the App Store listing §4, its review note or the runbook still says usage data is not collected or "no user id". Self-test stages each in a temporary copy |
-| `usage-ingest` | `test/usage-ingest.test.js` | tree | S15 (main routes), S20 to S23, S27, S40 | a body uid or hid is accepted; an unknown event, unknown property or free string is stored; an `id` that is not a v4 uuid, or a `native_version` like `"1.4 Maya"`, is stored as sent; the same `id` from two people collides; `hid` comes from the client; a retry double-counts; limits or the ceiling are skipped; mode `off` or `internal` stores a non-internal person; in mode `on`, a linked event is stored for a uid whose notice is not current; `JOURNEY_KEYS` reach a per-person `usage_daily` row; any of the four new routes logs a uid, email, name or body (console recorder). D1 is `node:sqlite` `DatabaseSync` |
-| `usage-erasure` | `test/usage-erasure.test.js` | tree | S25, S26 | any usage table keeps a deleted person's row (mutation: comment out one DELETE); the account purge keeps their `feedback` documents or their `GAMES_DB` hub rows; the household purge keeps its rows; the orphan sweep deletes a uid when Auth *failed* to answer; a 91-day-old row, or a 31-day-old `JOURNEY_KEYS` event, survives the pinned-clock retention run |
+| `usage-ingest` | `test/usage-ingest.test.js` | tree | S15 (main routes), S20 to S23, S27, S40 | a body uid or hid is accepted; an unknown event, unknown property or free string is stored; an `id` that is not a v4 uuid, or a `native_version` like `"1.4 Maya"`, is stored as sent; the same `id` from two people collides; `hid` comes from the client; a retry double-counts; limits or the ceiling are skipped; mode `off` or `internal` stores a non-internal person; in mode `on`, a linked event is stored for a uid whose notice is not current; `JOURNEY_KEYS` reach a per-person `usage_daily` row; any of the four new routes logs a uid, email, name or body (console recorder); in mode `on`, a membership row holds a household for a uid whose notice is not current, or the membership cache writes past its bounds, an account purge leaves an isolate's memory of a person who had no membership row, or reaches anyone else's, or a pending erasure lets her be linked (the route half, `test/usage-route.test.js`). D1 is `node:sqlite` `DatabaseSync` |
+| `usage-erasure` | `test/usage-erasure.test.js` | tree | S25, S26 | any usage table keeps a deleted person's row (mutation: comment out one DELETE); the account purge keeps their `feedback` documents or their `GAMES_DB` hub rows; the household purge keeps its rows; the orphan sweep deletes a uid when Auth *failed* to answer; a 91-day-old row, or a 31-day-old `JOURNEY_KEYS` event, survives the pinned-clock retention run; a refused pending marker keeps the family's household document whole; anonymous rows take the day's allowance before signed-in ones; one visit passes the allowance or keeps its head; one visit id's young rows take the day's allowance ahead of other families' expired rows; an erasure step deletes more than 1,000 rows, takes rows the shared allowance has no room for (before retention's run, more than lies beyond retention's hold), leaves an unfinished erasure off the record, clears its marker before its last rows go, or loses a household's visit that moved between families; a stuck shell keeps its `deleteAfter`; an erasure step that stops inside a dose visit leaves it shown to the minute, for a person or a household; a retention backlog leaves an erasure no room; a step taken while retention runs takes the day past the allowance; an erasure that keeps failing holds the others back; a row stored during a step survives it with nothing on record; the billed write arithmetic at the shipped cap passes 47,000 or differs from `wrangler.toml`'s. Its Firestore half is `feedback-purge-emu`: an account purge with more usage rows than one step stays inside 50 subrequests, with 55 stuck shells a household that falls due is still emptied within two ticks, each inside the budget, and once D1 answers, six shells due ahead of a family's household do not keep it waiting a tick |
 | `usage-tracker` | `tools/usage_tracker_check.js` | tree (browser, `url`) | S24, §8.1 | in the seeded app: no `visit.started` on load, no `screen.viewed` on a tab change, a logged feed's payload contains the typed amount (it must not), events flow while loss holding is staged with `evaluateOnNewDocument`, a linked event leaves before the card for the current notice is seen (staged both ways: unseen holds, seen sends), user A's queued event leaves under user B's token, the `pagehide` batch goes without a token, the queue passes 500 |
 | `deploy-excl` (extended) | `tools/deploy_exclusion_check.js` | tree and live | S35, S5 | a file under `workers/admin/` is not fenced; the admin wrangler file lacks `workers_dev = false` or `preview_urls = false`, or has `[assets]` without `run_worker_first`; live: production serves the admin entry file |
 | `no-personal-address` | `tools/address_check.js` | tree | S34, A3 | an address outside the S34 allowlist appears in **any tracked file** (self-test stages one, and stages `icon@2x.png` to prove it is not matched); when a local, untracked file outside the repo names the founder's address, any tracked file containing it fails (the pre-push hook runs this). Red on day one by design: it goes green only with phase 1's cleanup of `tools/asc_submit.js` and the four documents, which is how it is watched going red |
@@ -2102,7 +2253,8 @@ Added in the revision after the builder's check:
 36. The `pagehide` batch uses the last cached ID token.
 37. Event ids must be v4 uuids, and events are keyed by `(who, id)`.
 38. The Privacy footer's date is masked out of the verbatim gate.
-39. `USAGE_MODE` and `USAGE_DAILY_CAP` go into the main Worker's existing `[vars]` table.
+39. `USAGE_MODE` and `USAGE_DAILY_CAP` go into the main Worker's existing `[vars]` table
+    (`USAGE_DAILY_CAP = "1500"` on Workers Free, sized in §8.7).
 40. Step 9 confirms the hostname that step 8's deploy created.
 41. The canary is called through a `MAIN` service binding from phase 1; cron health and the digest
     are read from `GAMES_DB` directly.
@@ -2137,6 +2289,19 @@ Added in the revision after the builder's check:
 62. The manual-access form and erase confirmation take reason codes and an optional `R-0001` number,
     no free text, until F7 is answered.
 63. A note with pregnancy words goes only to the carrier.
+64. Erasures go in steps of at most 1,000 rows from the delete allowance retention already has, rather
+    than an allowance of their own: on a quiet day an erasure has nearly all 3,375 rows, the stated D1
+    figure stays one number, and a heavy account on Workers Free can take more than a day to finish.
+    Until retention has finished its day, the erasures have the last quarter cap less 100 of it to
+    themselves (275 rows at 1,500), so a retention backlog never stops a deletion: it slows to that
+    floor a day, and the backlog drains a little slower while it does. On an ordinary day at the cap,
+    once retention has run, the erasures have about 375 rows. A tick with no room left runs no count, so
+    a pending erasure reads 7 rows on it instead of everything stored, and an erasure goes a batch of
+    visits at a time, so for visits as Cubby's tracker sends them a step reads about the same whatever
+    was stored (at most 7,647 rows for a person, 21,210 for a household in visits of five rows, 35,538
+    for one of crash-loop visits, before the membership scans §8.7 names): D1 Free also caps reads, at
+    5,000,000 rows a day for the account, and a 12,000-row household's erasure read more than that a
+    day before (§8.7).
 
 ### Questions for the founder
 

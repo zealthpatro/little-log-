@@ -298,10 +298,10 @@ async function suite(coreFile, quiet) {
   //     (each first/run/all, each batch). This is NOT what D1 bills: D1 bills one more row for each index
   //     entry a write touches (an event row alone touches four in schema/usage.sql), so the billed figure
   //     is several times the rows changed counted here. Whether the cap keeps the BILLED day under half of
-  //     100,000 is the cap's own sizing (finding W4: wrangler.toml's USAGE_DAILY_CAP comment and the
-  //     billed-row arithmetic the erasure lane keeps beside it), not this section's. What this section
-  //     proves is the bound that sizing multiplies: rows changed by /api/usage stop at a fixed number a
-  //     day, however the route is hammered.
+  //     100,000 is the cap's own sizing: wrangler.toml's USAGE_DAILY_CAP comment, which test/usage-erasure.test.js
+  //     recomputes in billed rows from the real schema (storing, the household fill, refusals, membership,
+  //     retention). What this section proves is the bound that sizing multiplies: rows changed by
+  //     /api/usage stop at a fixed number a day, however the route is hammered.
   //
   //     The stated daily maximum, in rows changed, at USAGE_DAILY_CAP as wrangler.toml sets it:
   //       4 x cap      each ceiling slot buys at most its event row, its daily total, and (worst case, one
@@ -311,8 +311,8 @@ async function suite(coreFile, quiet) {
   //                    it looks back 24 hours, so on one UTC day it can fill yesterday's rows as well as
   //                    today's: at most two days of the families' share
   //     + 2 x 500      refusal counting: at most REFUSED_DAILY_ROWS reason rows, each with its counter write
-  //     The Worker's membership row (one per person per membership read, cached 6 hours, 10 minutes while
-  //     her notice is stale) is per person, not per request, and is not in this figure.
+  //     The Worker's membership rows are not in this figure: they have their own daily ceiling,
+  //     MEMBERSHIP_DAILY_ROWS (worker.js usageMembership; test/usage-route.test.js section 9 counts it).
   //     In rows changed it must stay under half of 100,000; the billed figure is larger (above).
   {
     const toml = fs.readFileSync(path.join(ROOT, 'wrangler.toml'), 'utf8');
@@ -361,8 +361,12 @@ async function suite(coreFile, quiet) {
     //    rows are what (a) bounds), so the fill is quick. Loops are bounded: a broken ceiling turns this red.
     const DAYKEY = new Date(NOW).toISOString().slice(0, 10);
     const wSeed = written();
-    const seeded = raw.raw.prepare('UPDATE usage_meta SET value = ? WHERE key = ?').run(String(lim.linked - 150), core.ceilingKey('linked', DAYKEY)).changes
-      + raw.raw.prepare('UPDATE usage_meta SET value = ? WHERE key = ?').run(String(lim.anon - 150), core.ceilingKey('anon', DAYKEY)).changes;
+    raw.raw.prepare('UPDATE usage_meta SET value = ? WHERE key = ?').run(String(lim.linked - 150), core.ceilingKey('linked', DAYKEY));
+    raw.raw.prepare('UPDATE usage_meta SET value = ? WHERE key = ?').run(String(lim.anon - 150), core.ceilingKey('anon', DAYKEY));
+    /* Read back, not counted from `changes`: on D1 (test/usage-d1-engine.test.js) a statement's changes also
+       count the rows this section's metering triggers write. */
+    const seeded = raw.raw.prepare('SELECT COUNT(*) AS c FROM usage_meta WHERE (key = ? AND value = ?) OR (key = ? AND value = ?)')
+      .get(core.ceilingKey('linked', DAYKEY), String(lim.linked - 150), core.ceilingKey('anon', DAYKEY), String(lim.anon - 150)).c;
     ok('(both share counters were found and moved)', seeded === 2, seeded);
     const wb = written(), l0 = stored('uid IS NOT NULL'), a0 = stored('uid IS NULL');
     for (let i = 0; i < 6; i++) { const r = await linked(isolates[i % 3], Array.from({ length: 50 }, (x, k) => feat(i * 50 + k))); if (!r.body.accepted) break; }
@@ -454,7 +458,7 @@ async function suite(coreFile, quiet) {
         ctxOf(db, { env, uid: u, notice: 'n2', membership: async () => ({ hid: h, role: r, notice: 'n2' }) }));
     }
     ok('(three people stored, two in the household that goes)', rows(db, "SELECT COUNT(*) AS c FROM usage_events WHERE hid = 'hhErase01'")[0].c === 2 && total(db, 'membership') === 3);
-    await core.eraseHid(db, 'hhErase01');
+    await core.eraseHid(db, 'hhErase01', NOW, { allowance: 10000, dayMax: 0 });   // one step, with room for all of it
     const mem = Object.fromEntries(rows(db, 'SELECT uid, hid, role FROM membership').map((x) => [x.uid, x]));
     ok('after its household is erased, no membership row keeps its hid or its role', rows(db, "SELECT COUNT(*) AS c FROM membership WHERE hid = 'hhErase01'")[0].c === 0
       && [ME, A2].every((u) => !mem[u] || (mem[u].hid === null && mem[u].role === null)), mem);
@@ -507,7 +511,7 @@ const BREAKS = [
   ['the refusal counter alone is keyed outside its day (VI-3)', "return 'events_' + day + CEILING_SUFFIX[kind];", "return kind === 'refused' ? 'refused_rows_' + day : 'events_' + day + CEILING_SUFFIX[kind];"],
   /* The next two are the erasure lane's statements. Each anchor is the SQL text alone, which reads the same in
      that lane's rewrite, and each replacement is valid SQL that changes nothing, so a break loads and runs. */
-  ['eraseHid leaves the household on its members\' membership rows (F2d)', "'UPDATE membership SET hid = NULL, role = NULL WHERE hid = ?'", "'UPDATE membership SET hid = hid WHERE hid = ?'"],
+  ['eraseHid leaves the household on its members\' membership rows (F2d)', "'UPDATE membership SET hid = NULL, role = NULL WHERE rowid IN (SELECT rowid FROM membership WHERE hid = ?1 LIMIT ?2)'", "'UPDATE membership SET hid = hid WHERE rowid IN (SELECT rowid FROM membership WHERE hid = ?1 LIMIT ?2)'"],
   ['retention keeps refusal counts past 90 days (F2e)', 'SELECT rowid FROM usage_refused WHERE day < ?', 'SELECT rowid FROM usage_refused WHERE 0 AND day < ?'],
 ];
 

@@ -14,7 +14,7 @@
 */
 
 import { snapshot as funnelSnapshotOf, activity as funnelActivityOf, stepKey, dayKey as funnelDay } from './workers/funnel/core.mjs';
-import { ingest as usageIngest, newIsolate as usageNewIsolate, modeOf as usageModeOf, LIMITS as USAGE_LIMITS, runRetention as usageRunRetention, eraseUid as usageEraseUid, eraseHid as usageEraseHid, orphanSweep as usageOrphanSweep, markHidErase as usageMarkHidErase, erasePendingHids as usageErasePendingHids } from './workers/usage/core.mjs';
+import { ingest as usageIngest, newIsolate as usageNewIsolate, modeOf as usageModeOf, LIMITS as USAGE_LIMITS, runRetention as usageRunRetention, eraseUid as usageEraseUid, eraseHid as usageEraseHid, orphanSweep as usageOrphanSweep, markHidErase as usageMarkHidErase, erasePending as usageErasePending, internalSet as usageInternalSet, ceilingsOf as usageCeilingsOf, takeSlots as usageTakeSlots, retentionSpent as usageRetentionSpent, ceilingKey as usageCeilingKey, MEMBERSHIP_TTL_MS as USAGE_MEMBERSHIP_TTL_MS, PENDING_UID as USAGE_PENDING_UID, ERASE_STEPS_PER_TICK as USAGE_ERASE_STEPS, RETENTION_DAY_EXTRA as USAGE_RETENTION_DAY_EXTRA } from './workers/usage/core.mjs';
 
 const OAUTH_SCOPE = 'https://www.googleapis.com/auth/identitytoolkit';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -2047,6 +2047,49 @@ function purgeMembersCount(v) {
   if (v.arrayValue) return (v.arrayValue.values || []).length;
   return 1;
 }
+/* The fields a household keeps while its usage erasure cannot be put on record (ERA-SK-1): what the
+   purge query and the account-deleted count read, and nothing a family logged. The shell also carries
+   purgeShell: true, which only this purge writes, and only once every child of the household is confirmed
+   gone. Its deleteAfter moves PURGE_SHELL_RETRY_MS on each time it is written (RE-SK-4), so while
+   cubby-usage keeps refusing, a shell is out of the purge query's range (deleteAfter <= now, oldest first,
+   50 at a time) and cannot keep a household that falls due from being found; it comes back an hour later
+   to try again. Every field it keeps is read by presence only (pushGate, /api/dose, the admin's deletion
+   pending, firestore.rules), so a later deleteAfter changes nothing else. */
+const PURGE_SHELL_FIELDS = ['deleteAfter', 'deletionRequestedBy', 'ownerId'];
+const PURGE_SHELL_RETRY_MS = 60 * 60000;
+/* Every child of one household, the same way for a real household and for a shell's last look: NULL on any
+   failure, else the number deleted. */
+async function purgeHouseholdChildren(base, token, hid) {
+  let n = 0;
+  for (const sub of HH_SUBCOLLECTIONS) {
+    const k = await fsDeleteAll(base, token, 'households/' + hid + '/' + sub);
+    if (k === null) return null;
+    n += k;
+  }
+  // pregnancy/{owner}/photos and mhealth/{owner}/cat: children first, then each parent.
+  for (const [sub, child] of HH_NESTED) {
+    const k = await fsDeleteNested(base, token, 'households/' + hid + '/' + sub, child);
+    if (k === null) return null;
+    n += k;
+  }
+  return n;
+}
+/* Household shells, written by ONE documents:batchWrite: a family's own as soon as its marker fails, and the
+   tick's already-stuck shells together at its end. batchWrite, not commit: each write stands alone, so one
+   household written since it was read (its precondition refused) does not hold back the others' shells.
+   Never throws: a failed or refused write is logged, and that household is found again on a later tick. */
+async function purgeWriteShells(base, token, list) {
+  const r = await fetch(base + ':batchWrite', {
+    method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+    body: JSON.stringify({ writes: list.map((x) => x.write) })
+  }).catch(() => null);
+  const j = r && r.ok ? await r.json().catch(() => null) : null;
+  list.forEach((x, i) => {
+    const st = j && Array.isArray(j.status) ? j.status[i] : null;
+    if (!j || (st && st.code)) console.error('purge_shell_fail', x.hid, j ? st.code : (r ? r.status : 'throw'));
+  });
+  console.log('purge_shells', list.length);
+}
 async function purgeDeletedHouseholds(env) {
   if (!env.FIREBASE_SERVICE_ACCOUNT) return { households: 0, docs: 0 };
   let sa; try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return { households: 0, docs: 0 }; }
@@ -2060,11 +2103,29 @@ async function purgeDeletedHouseholds(env) {
   {
     // No fallback here on purpose: a 30-day grace window can wait for the next tick, and a full
     // /households scan is the expensive one. A failure is logged and retried, never scanned around.
-    const found = (await fsQuery(base, token, 'households', 'deleteAfter', 'LESS_THAN_OR_EQUAL', now, 50, ['deleteAfter', 'ownerId', 'members'])).docs;
-    if (!found) return { households: 0, docs: 0 };
+    const got = (await fsQuery(base, token, 'households', 'deleteAfter', 'LESS_THAN_OR_EQUAL', now, 50, ['deleteAfter', 'ownerId', 'members', 'deletionRequestedBy', 'purgeShell'])).docs;
+    if (!got) return { households: 0, docs: 0 };
+    const isShell = (d) => !!(d.fields && d.fields.purgeShell && d.fields.purgeShell.booleanValue === true);
+    // A family's own data before a shell's last step: both are found here, and a tick has 50 subrequests.
+    const found = got.filter((d) => !isShell(d)).concat(got.filter(isShell));
+    /* Once cubby-usage refuses one marker, it is not asked again this tick: every household after it that
+       needs one is cut down to its shell (or, already a shell, moved on an hour) without a D1 call.
+       A family's shell is written as soon as its children are confirmed gone and its marker fails: its own
+       write, one subrequest, so nothing later in the tick can keep that family's data in Firestore. Before
+       (SK2-1), every shell waited for one write at the end of the tick, and a heavy family after it, whose
+       children used up the 50 subrequests, made that write throw: the light family kept its app blob and
+       members past its deletion date, tick after tick, until the heavy one's last child was gone.
+       Households that were already shells cost nothing else in the loop, so they go together in ONE
+       documents:batchWrite at the end, each write with its own precondition and its own answer. So however
+       many shells are stuck, a tick spends one D1 call and one Firestore write call on them (RE-SK-4);
+       before, each one listed its seven empty subcollections and wrote itself, and five of them used up the
+       cron's 50 subrequests. */
+    let usageRefusing = false;
+    const shells = [];
     for (const d of found) {
       const hid = d.name.split('/documents/households/')[1];
       if (!hid) continue;
+      const shell = isShell(d);
       /* Second lock behind the rules. The app flags a household only as its LAST member leaves
          (deleteAccount), so a due household with anyone still in members was flagged by somebody
          exceeding their role. Never purge it. Clear the flag instead, because pushGate and
@@ -2093,43 +2154,62 @@ async function purgeDeletedHouseholds(env) {
       try {
         // Every child must be confirmed gone before the parent goes. Any failure abandons THIS
         // household untouched: `deleteAfter` stays set, so the next tick retries the whole thing.
-        // Partial progress is safe to repeat; a deleted parent is not.
+        // Partial progress is safe to repeat; a deleted parent is not. A shell's children were
+        // confirmed gone when it was cut down; they are looked at once more below, before it goes.
         let complete = true;
-        for (const sub of HH_SUBCOLLECTIONS) {
-          const n = await fsDeleteAll(base, token, 'households/' + hid + '/' + sub);
-          if (n === null) { complete = false; break; }
-          docs += n;
-        }
-        // pregnancy/{owner}/photos and mhealth/{owner}/cat: children first, then each parent.
-        for (const [sub, child] of (complete ? HH_NESTED : [])) {
-          const n = await fsDeleteNested(base, token, 'households/' + hid + '/' + sub, child);
-          if (n === null) { complete = false; break; }
-          docs += n;
-        }
+        const children = async () => { const n = await purgeHouseholdChildren(base, token, hid); if (n === null) complete = false; else docs += n; };
+        if (!shell) await children();
         if (!complete) { console.error('purge_hh_incomplete', hid); continue; }
         /* Its usage rows go with it (§10). Once the document is gone this query never finds the household
-           again, so the erasure is put on record in cubby-usage FIRST: a pending marker that eraseHid clears
-           in the same transaction as the rows, and that usageMaintenance retries every tick until it does.
-           If even the marker cannot be written, the document stays and the next tick tries the whole
-           household again (everything under it is already gone, so that retry is a few empty listings). */
+           again, so the erasure is put on record in cubby-usage FIRST: a pending marker that the erasure
+           clears in the same transaction as the last rows, and that usageMaintenance carries on every tick
+           until it does (core.mjs erasePending).
+           If even the marker cannot be written (D1 refusing: the account's daily write limit, a table not
+           made yet), the family's data must still go on time: nothing a parent depends on waits behind
+           analytics (ERA-SK-1). So the document is cut down to a shell that holds no family data, only
+           what brings this purge back to it (PURGE_SHELL_FIELDS and purgeShell), and an hour later it is
+           found again and tries the marker again, until D1 answers.
+           Why a shell and not deleting the document anyway: no later sweep would erase this household's
+           rows. The weekly orphan sweep erases by uid, only for accounts Auth no longer has, so it misses
+           the rows of a caregiver who left earlier and kept her account, and the household's nudges.
+           A shell replaces the whole document (no updateMask), with the updateTime precondition in the
+           write, so a household written since it was read is left alone for the next tick
+           (test/feedback-purge-emulator.test.js proves both against a real Firestore). */
         if (env.USAGE_DB) {
-          try { await usageMarkHidErase(env.USAGE_DB, hid, now); }
-          catch (e) { console.error('purge_usage_mark_fail'); continue; }
+          let marked = !usageRefusing;
+          if (marked) {
+            try { await usageMarkHidErase(env.USAGE_DB, hid, now); }
+            catch (e) { marked = false; usageRefusing = true; console.error('purge_usage_mark_fail'); }
+          }
+          if (!marked) {
+            const fields = {};
+            for (const k of PURGE_SHELL_FIELDS) if (d.fields && d.fields[k]) fields[k] = d.fields[k];
+            fields.deleteAfter = { integerValue: String(now + PURGE_SHELL_RETRY_MS) };
+            fields.purgeShell = { booleanValue: true };
+            const cut = { hid, write: { update: { name: d.name, fields }, currentDocument: d.updateTime ? { updateTime: d.updateTime } : { exists: true } } };
+            if (shell) shells.push(cut);
+            else await purgeWriteShells(base, token, [cut]);
+            continue;
+          }
         }
+        if (shell) await children();
+        if (!complete) { console.error('purge_hh_incomplete', hid); continue; }
         // The household doc LAST, so an interrupted run retries rather than orphaning subcollections.
         const delHh = await fetch(base + '/households/' + hid, { method: 'DELETE', headers: { authorization: 'Bearer ' + token } });
         if (delHh.ok) {
           households++; docs++;
-          /* After the document is gone: nothing can confirm this household any more, and eraseHid clears
-             it from the membership cache in the same batch, so no later row is stamped with it. A failure
-             leaves the marker, and usageMaintenance (later in this same cron run, then every tick) retries. */
-          if (env.USAGE_DB) { try { await usageEraseHid(env.USAGE_DB, hid); } catch (e) { console.error('purge_usage_hid_fail'); } }
+          /* After the document is gone: its first erasure step, which clears it from the membership cache
+             first, so no later row is stamped with it. What one step cannot finish, or a failure, stays
+             under the marker, and usageMaintenance (later in this same cron run, then every tick) carries
+             it on. */
+          if (env.USAGE_DB) { try { await usageEraseHid(env.USAGE_DB, hid, now, usageDeleteBudget(env)); } catch (e) { console.error('purge_usage_hid_fail'); } }
           const internal = String(env.INTERNAL_UIDS || '').split(',').map((x) => x.trim());
           const owner = d.fields && d.fields.ownerId && d.fields.ownerId.stringValue;
           if (!owner || internal.indexOf(owner) < 0) await countAccountDeleted(env);
         } else console.error('purge_hh_del_fail', hid, delHh.status);
       } catch (e) { console.error('purge_hh_fail', hid, (e && e.message) || String(e)); }
     }
+    if (shells.length) await purgeWriteShells(base, token, shells);
   }
   if (households) console.log('purge_run', JSON.stringify({ households, docs }));
   return { households, docs };
@@ -2172,18 +2252,27 @@ async function purgeAccountData(request, env) {
   /* Hubs, usage rows and feedback notes go with the account (spec §10). Each part runs whatever the
      others do: the app ignores this answer (best-effort), the weekly orphan sweep backstops the usage
      rows, and a failure is logged by code and answered 500 so it is visible, never silently "ok".
+     The usage rows go in bounded steps (core.mjs eraseUid, ERASE-CHUNK). Whenever she has any row, her
+     erasure is put on record first (a pending marker, held for as long as any isolate may remember her
+     household), then the first step runs here: at most 1,000 rows, her membership row first, from what
+     today's delete allowance lets erasures take (at least their floor, 275 rows at the shipped cap,
+     backlog or not, unless the day's erasures have used it). That is everything of a person who used
+     Cubby a few times; an active parent's rows (about 10,000) take about ten steps, and the cron's next
+     ticks take the rest. That is an ok: the erasure is on record and nothing links her to a household.
      SUBREQUESTS. Workers Free allows 50 per invocation and D1 calls count, so the order and the shape
      are fixed: the hubs first, in one D1 batch (the guests' guesses are the part nobody else can
-     delete); the usage rows in one batch; feedback last, one query and one documents:commit per 500
-     notes, in a bounded number of rounds. test/feedback-purge-emulator.test.js counts every call,
-     each D1 statement included, against a real Firestore with 0, 40, 500, 1,100 and 4,001 notes, and
+     delete); the usage rows' first step (at most four D1 calls and nine statements: the count, the day's
+     counter, the marker and one batch of at most six deletes, and one call more when that batch fails);
+     feedback last, one query and one documents:commit per 500 notes, in a bounded number of rounds.
+     test/feedback-purge-emulator.test.js counts every call, each D1 statement included, against a real
+     Firestore with 0, 40, 500, 1,100 and 4,001 notes and with more usage rows than one step takes, and
      holds the total at 50 or under. */
   let failed = false, hubs = 0;
   if (env.GAMES_DB) {
     try { hubs = await purgeHubsOf(env, auth.uid); }
     catch (e) { failed = true; console.error('purge_account_fail', (e && e.message) || String(e)); }
   }
-  if (env.USAGE_DB) { try { await usageEraseUid(env.USAGE_DB, auth.uid); } catch (e) { failed = true; console.error('purge_usage_fail'); } }
+  if (env.USAGE_DB) { try { await usageEraseUid(env.USAGE_DB, auth.uid, Date.now(), usageDeleteBudget(env)); } catch (e) { failed = true; console.error('purge_usage_fail'); } }
   try { await deleteFeedbackOf(env, auth.uid); } catch (e) { failed = true; console.error('purge_feedback_fail'); }
   return failed ? json({ error: 'db_error' }, 500) : json({ ok: true, hubs });
 }
@@ -3030,20 +3119,72 @@ function funnelDigestHtml(rows) {
    is the last commit of phase 3, after families are told. Who and which household come from the
    verified token and a server-side membership read, never from the body. Log lines carry codes only:
    never a uid, an email, a name or a body. */
-const USAGE_MEMBERSHIP_TTL = 6 * 3600000;
+const USAGE_MEMBERSHIP_TTL = USAGE_MEMBERSHIP_TTL_MS;   // core.mjs: a person's erasure marker is held this long too
 const USAGE_NOTICE_RECHECK = 10 * 60000;
 
-/* Two Firestore reads per person per 6 hours at most: users/{uid} (the household CLAIM and the notice
-   they saw) and households/{hid}.members (the PROOF). A read error keeps the previous answer and never
-   invents one; until a household is confirmed, hid stays null, and the confirmation backfills that
-   person's null rows from the last 24 hours. */
+/* The membership cache (spec §8.7): the household a person's events are stamped with, and whether she has
+   seen the current notice. Two Firestore reads per person per 6 hours at most: users/{uid} (the household
+   CLAIM and the notice they saw) and households/{hid}.members (the PROOF). A read error keeps the previous
+   answer and never invents one; until a household is confirmed, hid stays null, and the confirmation
+   backfills that person's null rows from the last 24 hours.
+
+   NOTHING LINKS HER BEFORE THE NOTICE (G4). In mode on, a person whose privacyNoticeSeen is not the
+   current PRIVACY_NOTICE is stored with no hid and no role: her household is not even read, nothing is
+   backfilled for her, and the row says only that she has not seen it (the notice column keeps the current
+   notice when she has seen it, and '' otherwise). Her batches are refused anyway (core.mjs ingest), so
+   cubby-usage holds no tie between her and a household until she taps "Got it". Spec §8.7: in mode
+   internal the check does not apply; only INTERNAL_UIDS reach this, the founder's own accounts, and he is
+   the one who decided, so they are stamped whatever their notice.
+
+   WRITES ARE BOUNDED (MEMB-BOUND). The row is written only when what it says changes (household, role,
+   notice) or when it is 6 hours old (the refresh that keeps the reads at two per person per 6 hours across
+   every isolate). The 10-minute recheck of a stale notice ("Got it" counts from her next batch) writes
+   nothing when nothing changed: this isolate remembers when it checked (usageMemberMemo), against the row
+   it saw, so it does not ask Firestore again for 10 minutes. Before, every recheck rewrote checked_at:
+   about 144 writes a day for one signed-in person who never saw the notice. And every write takes a slot
+   of the day's membership ceiling (core.mjs MEMBERSHIP_DAILY_ROWS), because the number of people is not
+   bounded by anything else: past it the row is not written, this request still uses the fresh answer, and
+   this isolate remembers that answer for as long as the row would have been fresh.
+   The memo never outlives a change to the row it was taken against: eraseHid clearing a household from
+   the row changes it, so the memo stops answering and the next request reads Firestore again.
+   NOR AN ACCOUNT PURGE (RE-SK-3). A memo taken with no stored row (the ceiling's) is tied to nothing the
+   purge deletes. So while her erasure is on record (an erase_uid marker, read in the same statement as the
+   row), she is linked to nobody at all, whatever row or memo is left: the answer is no household, no role
+   and no notice, with no Firestore read and no memo taken. The account purge writes that marker whenever
+   she has any row, before the first of them goes, and it is held for USAGE_MEMBERSHIP_TTL, a memo's whole
+   life, from when it was first written (core.mjs eraseUid and ERASE_HOLD_MS), so by the time it goes every
+   memo any isolate took of her before her purge has expired. That is per person. Before, the purge moved
+   one shared epoch that dropped every memo taken with no row, so anyone calling her own purge every ten
+   minutes sent every person past the membership ceiling back to Firestore with every batch (SE-V8).
+   A purge that finds nothing of hers writes no marker, so a memo with no row also ends with its UTC day. A
+   memo is taken only here, and with no row and nothing of hers stored, the batch that took it was refused
+   (a batch that stores anything stores a row of hers): for the notice, and then the memo links her to no
+   household, or by the day's families' share, and then this isolate answers no linked batch again that
+   day without reading this memo (core.mjs ingest, the isolate's full days). The next day she is read
+   again, and her row can be written again. What is left: a store that FAILED after the memo was taken
+   (D1 refusing) leaves a memo and nothing stored, and a batch on a token from before her purge (at most
+   an hour old; Cubby's tracker sends nothing during a deletion, so a client that is not Cubby's) could be
+   stamped from it the same day; the weekly orphan sweep erases those rows. */
+const usageMemberMemo = new Map();
+const USAGE_MEMO_MAX = 5000;
+const usageMemberSig = (m) => (m ? [m.hid || '', m.role || '', m.notice || ''].join('|') : '');
+function usageMemberFresh(m, at, notice, now) {
+  const age = now - at;
+  return age < USAGE_MEMBERSHIP_TTL && !(notice && m.notice !== notice && age > USAGE_NOTICE_RECHECK);
+}
+const USAGE_MEMBER_READ = 'SELECT m.hid, m.role, m.notice, m.checked_at, p.key AS erasing FROM (SELECT 1) AS one '
+  + 'LEFT JOIN membership m ON m.uid = ?1 LEFT JOIN usage_meta p ON p.key = ?2';
+const usageUtcDay = (t) => Math.floor(t / 86400000);
 async function usageMembership(env, uid, now) {
   const db = env.USAGE_DB;
-  const row = await db.prepare('SELECT hid, role, notice, checked_at FROM membership WHERE uid = ?').bind(uid).first();
+  const got = (await db.prepare(USAGE_MEMBER_READ).bind(uid, USAGE_PENDING_UID + uid).first()) || {};
+  if (got.erasing) return { hid: null, role: null, notice: '', checked_at: now };
+  const row = got.checked_at == null ? null : { hid: got.hid, role: got.role, notice: got.notice, checked_at: got.checked_at };
   const notice = String(env.PRIVACY_NOTICE || '');
-  const age = row ? now - Number(row.checked_at || 0) : Infinity;
-  const fresh = row && age < USAGE_MEMBERSHIP_TTL && !(notice && row.notice !== notice && age > USAGE_NOTICE_RECHECK);
-  if (fresh) return row;
+  if (row && usageMemberFresh(row, Number(row.checked_at || 0), notice, now)) return row;
+  const memo = usageMemberMemo.get(uid);
+  if (memo && memo.sig === usageMemberSig(row) && usageMemberFresh(memo.answer, memo.at, notice, now)
+    && (row || usageUtcDay(memo.at) === usageUtcDay(now))) return memo.answer;
   if (!env.FIREBASE_SERVICE_ACCOUNT) return row || null;
   let sa; try { sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT); } catch (e) { return row || null; }
   const token = await getAccessToken(sa, 'https://www.googleapis.com/auth/datastore');
@@ -3053,8 +3194,10 @@ async function usageMembership(env, uid, now) {
   const f = (u.doc && u.doc.fields) || {};
   const claim = (f.householdId && f.householdId.stringValue) || '';
   const seen = (f.privacyNoticeSeen && f.privacyNoticeSeen.stringValue) || '';
+  const mode = usageModeOf(env);
+  const linkable = mode === 'internal' ? usageInternalSet(env).has(uid) : (mode === 'on' && !!notice && seen === notice);
   let hid = null, role = null;
-  if (claim && _HID_RE.test(claim)) {
+  if (linkable && claim && _HID_RE.test(claim)) {
     const hh = await fsGetStrict(base, token, '/households/' + encodeURIComponent(claim), ['members']);
     if (!hh.ok && hh.status !== 404) return row || null;
     if (hh.ok && _isCarer(hh.doc.fields, uid)) {
@@ -3062,13 +3205,23 @@ async function usageMembership(env, uid, now) {
       role = _fsStr(hh.doc.fields.members.mapValue.fields[uid]);
     }
   }
-  await db.prepare('INSERT INTO membership (uid, hid, role, notice, checked_at) VALUES (?, ?, ?, ?, ?) '
-    + 'ON CONFLICT(uid) DO UPDATE SET hid = excluded.hid, role = excluded.role, notice = excluded.notice, checked_at = excluded.checked_at')
-    .bind(uid, hid, role, seen, now).run();
+  const answer = { hid, role, notice: notice && seen === notice ? notice : '', checked_at: now };
+  let stored = row;
+  if (!row || usageMemberSig(answer) !== usageMemberSig(row) || now - Number(row.checked_at || 0) >= USAGE_MEMBERSHIP_TTL) {
+    const day = new Date(now).toISOString().slice(0, 10);
+    if (usageIsolate.full.get('membership') !== day && await usageTakeSlots(db, 'membership', day, 1, usageCeilingsOf(env).membership, now)) {
+      await db.prepare('INSERT INTO membership (uid, hid, role, notice, checked_at) VALUES (?, ?, ?, ?, ?) '
+        + 'ON CONFLICT(uid) DO UPDATE SET hid = excluded.hid, role = excluded.role, notice = excluded.notice, checked_at = excluded.checked_at')
+        .bind(uid, hid, role, answer.notice, now).run();
+      stored = answer;
+    } else usageIsolate.full.set('membership', day);
+  }
+  if (usageMemberMemo.size >= USAGE_MEMO_MAX) usageMemberMemo.clear();
+  usageMemberMemo.set(uid, { sig: usageMemberSig(stored), at: now, answer });
   if (hid) {
     await db.prepare('UPDATE usage_events SET hid = ?, role = ? WHERE uid = ? AND hid IS NULL AND at >= ?').bind(hid, role, uid, now - 86400000).run();
   }
-  return { hid, role, notice: seen, checked_at: now };
+  return answer;
 }
 
 /* What this isolate remembers between requests: the UTC day each usage ceiling was found full (the
@@ -3129,25 +3282,55 @@ async function usageRoute(request, env) {
 }
 
 /* Every cron tick (each part on its own, so one failing never stops the others):
-   1. Households whose usage erasure is still pending (the purge writes the marker before the household
-      document goes): retried, five a tick, until each one's rows and marker go together.
-   2. Retention (§10): raw rows past 90 days (a signed-in visit goes whole), anonymous and pregnancy rows
-      past 30, anonymous device rows 30 days after last seen, aggregate days past 13 months, refusal
-      counts and day ceilings past 90. At most USAGE_RETENTION_STATEMENTS D1 statements a tick, and the
-      day is marked done ONLY once every class is drained, so a day with more expired rows than one tick
-      clears keeps going on the next ticks. It also stops for the UTC day once it has deleted the day's
-      allowance (retentionDailyRows): a backlog (say, after the cron was down) drains over several days
-      instead of spending the account's D1 write allowance in one.
-   3. Sundays: the orphan sweep, which asks Auth which uids still exist. A lookup FAILURE stops the sweep
-      and deletes nothing; only an answer that leaves a uid out erases it. */
+   1. Retention (§10), person-linked rows first: raw rows past 90 days (a signed-in visit goes whole when it
+      can, head first when a day's allowance or a statement's row limit cuts it, for a visit as Cubby's
+      tracker sends it; core.mjs, above retentionSteps, names the one other shape), pregnancy and anonymous
+      rows past 30, anonymous device rows 30 days after last seen, aggregate days past 13 months, refusal
+      counts and day ceilings past 90. At most
+      USAGE_RETENTION_STATEMENTS D1 statements a tick, and the day is marked done ONLY once every class is
+      drained, so a day with more expired rows than one tick clears keeps going on the next ticks. It also
+      stops for the UTC day once its part of the day's delete allowance (retentionDailyRows) is used: a
+      backlog (say, after the cron was down) drains over several days instead of spending the account's D1
+      write allowance in one.
+   2. Sundays: the orphan sweep, which asks Auth which uids still exist. A lookup FAILURE stops the sweep
+      and marks nobody; only an answer that leaves a uid out puts that uid's erasure on record.
+   3. Pending erasures (a person or a household whose usage rows one step could not finish, or whose
+      purge failed after its marker, or a person's marker still held): a bounded step for each of the
+      oldest USAGE_ERASE_STEPS that are due, from the same daily allowance as retention (core.mjs eraseStep:
+      the erasures' floor, and all that is left once retention has finished the day). The read that finds
+      them also reads where that allowance stands, so a tick whose day has no room left runs no step and
+      no count: one statement (core.mjs erasePending, SK2-2). */
 const USAGE_RETENTION_STATEMENTS = 10;
-/* Rows retention may delete in one UTC day: one and a half times the day's event ceiling. At the cap a
-   day expires at most a cap's worth of rows (one day's inserts, 90 days on), so the extra half is what a
-   backlog drains at. The write arithmetic behind both numbers is beside USAGE_DAILY_CAP in wrangler.toml. */
+/* Rows retention and erasure together may delete in one UTC day: two and a quarter times the day's event
+   ceiling C. In steady state at the cap, a day expires at most: the signed-in rows stored 90 days before
+   (the families' share L, three quarters of C), the anonymous and pregnancy-only rows stored 30 days before
+   (C between them: the quarter A with no sign-in, and pregnancy screens inside the families' share), the
+   device rows of phones never signed in last seen 30 days before (one per batch, so at most A again), and
+   the aggregate daily rows, refusal counts and day counters of one day (66 at most, core.mjs
+   RETENTION_DAY_EXTRA). That is 2L + 2A = two caps, plus 66. The linked class also takes the rows of an
+   expired visit that arrived within a day after the cutoff (core.mjs VISIT_SPAN_MS), which are the next
+   day's to expire: so one day can take up to L more and the next day that much less, and since the classes
+   run person-linked first, the rows that then wait are anonymous ones, for a day. Erasures delete from the
+   same allowance (core.mjs eraseStep), in two parts until retention has finished the day: retention's,
+   retentionDayMax (two caps and 100), and the erasures' floor, the rest (the last quarter less 100). Each
+   side takes only its own part, so an erasure asked for during a backlog still has the floor (SE-V2); once
+   retention has finished the day an erasure may take all that is left, and at the day's last tick, if it
+   has not, retention takes what the erasures left of the floor (usageRetention). So a backlog drains at the
+   last quarter less those 66 a day, less what erasures take of the floor. The write arithmetic behind both
+   numbers is beside USAGE_DAILY_CAP in wrangler.toml, and test/usage-erasure.test.js recomputes it. */
 function retentionDailyRows(env) {
-  const capRaw = parseInt(env && env.USAGE_DAILY_CAP, 10);
-  const cap = Number.isFinite(capRaw) && capRaw >= 0 ? capRaw : 20000;
-  return Math.max(1000, Math.floor(cap * 1.5));
+  return Math.max(1000, Math.floor(usageCeilingsOf(env).cap * 9 / 4));
+}
+/* What a UTC day at the cap expires in steady state (two caps and RETENTION_DAY_EXTRA): retention's own part
+   of the allowance, all it may delete in a UTC day before the day's last tick. The rest is the erasures'. */
+function retentionDayMax(env) {
+  return 2 * usageCeilingsOf(env).cap + USAGE_RETENTION_DAY_EXTRA;
+}
+/* The day's delete allowance and retention's own part of it, never more than the whole (at every cap the
+   shipped formulas give a part below the whole; this keeps the allowance the bound if either one changes). */
+function usageDeleteBudget(env) {
+  const allowance = retentionDailyRows(env);
+  return { allowance, dayMax: Math.min(retentionDayMax(env), allowance) };
 }
 async function usageMaintenance(env, nowMs) {
   const db = env.USAGE_DB;
@@ -3155,21 +3338,33 @@ async function usageMaintenance(env, nowMs) {
   const now = nowMs || Date.now();
   const day = new Date(now).toISOString().slice(0, 10);
   let failed = false;
-  try { await usageErasePendingHids(db, 5); } catch (e) { failed = true; console.error('usage_pending_hid_fail'); }
   try { await usageRetention(env, db, now, day); } catch (e) { failed = true; console.error('usage_retention_fail'); }
   try { await usageSweep(env, db, now, day); } catch (e) { failed = true; console.error('usage_sweep_fail'); }
+  try { await usageErasePending(db, now, usageDeleteBudget(env), USAGE_ERASE_STEPS); } catch (e) { failed = true; console.error('usage_pending_erase_fail'); }
   return !failed;
 }
+/* The day's last cron tick: wrangler.toml runs the cron every 15 minutes. */
+const USAGE_LAST_TICK_MS = 15 * 60000;
 async function usageRetention(env, db, now, day) {
   const meta = {};
-  for (const r of ((await db.prepare("SELECT key, value FROM usage_meta WHERE key IN ('retention_day', 'retention_rows')").all()).results) || []) meta[r.key] = r.value;
+  const eraseKey = usageCeilingKey('erase', day);
+  for (const r of ((await db.prepare("SELECT key, value FROM usage_meta WHERE key IN ('retention_day', 'retention_rows', ?)").bind(eraseKey).all()).results) || []) meta[r.key] = r.value;
   if (meta.retention_day === day) return;
-  // 'YYYY-MM-DD:n', the rows retention has deleted so far on that UTC day.
-  const [spentDay, spentRows] = String(meta.retention_rows || '').split(':');
-  const spent = spentDay === day ? Number(spentRows) || 0 : 0;
-  const allowance = retentionDailyRows(env) - spent;
-  if (allowance <= 0) { console.log('usage_retention_allowance_spent'); return; }
-  const r = await usageRunRetention(db, now, { statements: USAGE_RETENTION_STATEMENTS, maxRows: allowance });
+  /* Retention's part of the day is retentionDayMax, less what it has deleted so far that UTC day
+     ('YYYY-MM-DD:n'). The rest of the allowance is the erasures' floor, and it is not touched before the
+     day's last tick, so an erasure asked for during a backlog still finds it (SE-V2). From the last tick
+     retention takes what the erasures left of it, through their own counter in one atomic statement
+     (takeSlots: if an erasure has taken some since the read above, retention takes none), so the two
+     never pass the allowance together (SE-V3), and a backlog drains at the whole of it. */
+  const spent = usageRetentionSpent(meta.retention_rows, day);
+  const budget = usageDeleteBudget(env), floor = budget.allowance - budget.dayMax;
+  let maxRows = budget.dayMax - spent;
+  if (now >= Date.parse(day + 'T00:00:00Z') + 86400000 - USAGE_LAST_TICK_MS) {
+    const unused = floor - (Number(meta[eraseKey]) || 0);
+    if (unused > 0 && await usageTakeSlots(db, 'erase', day, unused, floor, now)) maxRows += unused;
+  }
+  if (maxRows <= 0) { console.log('usage_retention_allowance_spent'); return; }
+  const r = await usageRunRetention(db, now, { statements: USAGE_RETENTION_STATEMENTS, maxRows });
   const put = (k, v) => db.prepare('INSERT INTO usage_meta (key, value, at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, at = excluded.at').bind(k, v, now);
   const marks = [put('retention_rows', day + ':' + (spent + r.total))];
   if (r.drained) marks.push(put('retention_day', day));
@@ -3190,12 +3385,13 @@ async function usageSweep(env, db, now, day) {
     const j = await r.json();
     return { known: new Set(((j && j.users) || []).map((x) => x.localId)) };
   };
-  const erased = await usageOrphanSweep(db, exists, 100);
+  const marked = await usageOrphanSweep(db, exists, now, 100);
   await db.prepare("INSERT INTO usage_meta (key, value, at) VALUES ('sweep_day', ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, at = excluded.at").bind(day, now).run();
-  console.log('usage_sweep', erased);
+  console.log('usage_sweep', marked);
 }
-// Test hook, same pattern as __purge: test/usage-erasure.test.js checks the D1 write arithmetic against it.
-export const __usage = { retentionDailyRows };
+// Test hooks, same pattern as __purge: test/usage-erasure.test.js checks the D1 write arithmetic against
+// retentionDailyRows, and test/usage-route.test.js counts the membership ceiling's writes through usageMembership.
+export const __usage = { retentionDailyRows, retentionDayMax, usageMembership: (env, uid, now) => usageMembership(env, uid, now) };
 
 /* The person's feedback notes go with their account (§10): they hold their address, name and a raw
    user agent, and they were written to the team. Query on uid with the master service account, then

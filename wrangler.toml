@@ -33,16 +33,71 @@ MAIL_FROM = "Cubby <noreply@mail.little-cubby.com>"
 # (INTERNAL_UIDS secret); on measures families, and is flipped only as the last step of phase 3, after
 # the privacy screens, the policy and the App Store answers are live.
 USAGE_MODE = "off"
-# Events stored per UTC day across everyone. Workers Free allows 100,000 D1 rows written a day for the
-# whole account (shared with the games and the newsletter), and D1 bills one written row per row plus one
-# per index the write touches, deletes included. Worst case per event (a batch of one, a new daily row):
-# day counter 1 + usage_events 5 (WITHOUT ROWID, four indexes) + usage_daily 4 + device 2 = 12 to store
-# it, and 5 more when retention deletes it 90 days on. Retention may delete 1.5 caps of rows a day
-# (worker.js retentionDailyRows), so a backlog can drain. At 2,400: steady state 2,400 x (12 + 5) =
-# 40,800; a catch-up day 2,400 x 12 + 3,600 x 5 = 46,800. Both stay under half, with about 3,000 left
-# for membership refreshes and the cron's markers. test/usage-erasure.test.js recomputes this from the
-# real schema and fails if the cap or an index breaks it.
-USAGE_DAILY_CAP = "2400"
+# Events stored per UTC day across everyone (a quarter of it for batches with no sign-in). Workers Free
+# allows 100,000 D1 rows written a day for the whole account (shared with the games and the newsletter),
+# and once it is spent D1 refuses every query. D1 bills one written row per row a statement inserts,
+# updates or deletes, plus one per index entry the write touches. The worst UTC day, in billed rows, at
+# cap C (families' share L = 3C/4):
+#   storing          13 x C   a batch of one: day counter 1, usage_events 5 (WITHOUT ROWID, four indexes),
+#                             a new usage_daily row 4, a device id never seen before 3 (row, key, dev_uid)
+#   household fill    4 x L   a confirmed household fills its person's null rows from the last 24 hours,
+#                             each row once (row and ue_hid_at): two days of the families' share at most
+#   refusals          1,010   REFUSED_DAILY_ROWS (500) reason rows and their 500 counter writes, plus the
+#                             key index of at most 9 new reason rows and the day's counter
+#   membership        3,001   MEMBERSHIP_DAILY_ROWS (1,000) new rows (row and key) and their counter writes
+#   retention and     5 x X   X = 9C/4 rows a day at most (worker.js retentionDailyRows), 5 each at worst,
+#   erasure                   shared: an erasure (account or household purge, orphan sweep) deletes in steps
+#                             that take their rows, and each step's own two, from the same allowance
+#                             (workers/usage/core.mjs eraseStep), so a heavy family is spread over days.
+#                             Until retention has finished a day it may take 2C + 100 of it, and erasures
+#                             the rest, their floor, so neither waits behind the other
+#   the rest            200   the first write of the two shares' and the erasures' day counters, the cron's
+#                             own markers, and retention taking the erasures' unused floor at 23:45 UTC
+# At 1,500 that is 19,500 + 4,500 + 1,010 + 3,001 + 16,875 + 200 = 45,086, under half with about 1,900 to
+# spare below 47,000. Not in it: a household purge's pending marker, two rows, once per household, and an
+# account purge's when the day has no room left for her, two rows, once per account. A step that fails
+# keeps what it took of the day (D1 may bill a batch that rolled back). test/usage-erasure.test.js
+# recomputes every term from the real schema and the real constants, and fails if the cap, an index or a
+# ceiling breaks it. test/usage-d1-engine.test.js measures them on workerd's own D1 meter (rows_written): 13 a
+# stored event, 2 a filled row, 2 a refusal, 3 a membership row, and 1 a deleted row, so the 5 above is a
+# bound there, not the measure (31,586 on that meter at 1,500). Cloudflare's bill is not measured locally.
+# Reads have a day too: D1 Free allows 5,000,000 rows read a day for the whole account, and past it D1
+# refuses every query as well. A pending erasure is carried on every cron tick, 96 a day, and a tick whose
+# day has no delete allowance left reads where the allowance stands and nothing more (core.mjs
+# erasePending). Measured on workerd's own D1 (meta.rows_read) at this cap, erasePending every 15 minutes
+# for one UTC day with one erasure pending:
+#   a tick with no room       7 rows
+#   a 10,000-row person       4,172 rows in the day when retention took 3,000 (one step, 3,507; 373 of hers
+#                             erased); 26,896 on a quiet day (four steps of 4,929 to 7,826; 3,167 erased)
+#   a 12,000-row household    20,993 (one step, 20,328) and 79,932 (four steps of 14,959 to 22,209), with
+#                             1,000 other people's membership rows stored
+# An erasure goes a batch of its visits at a time (the visits of its next 1,001 rows), so for visits as
+# Cubby's tracker sends them (a visit's head arrives with its first other rows, or shortly before them, not
+# ahead of a batch's worth of the household's other rows) a step reads about the same at any size: at most
+# 7,647 for a person of 10,000 or 100,000 rows, 21,210 for a household of 12,000
+# or 100,000 (visits of five rows, no membership rows; visits of two read up to 36,014), and 35,538 for one
+# whose rows are half visits of a head alone (a phone in a crash loop). A household step also reads the
+# membership table, which has no index on hid: whole in every step's plan, again in the step that unlinks
+# its members (up to whole: it stops once it has them all) and whole again in the step that clears its
+# marker, so a household small enough to go in one step reads it up to three times. With 10,000 other
+# people's rows that adds 10,000 to 30,000 a step (30,027 a middle step, not 20,027; 33,579 for a 200-row
+# household's one step, not 3,579), and it grows with everyone stored. An index would bill one more row for
+# each new membership row (the 45,086 above becomes 46,086), so it is a phase-3 decision. Two shapes
+# Cubby's tracker never sends cost more (an open question for phase 3, docs/ADMIN-DEPLOY.md). Many visits'
+# heads sent first and their other rows later make every household step re-read all of those heads: up to
+# 116,014 rows a step for 10,000 such visits and 316,014 for 30,000. One visit id reused across many rows
+# makes a step read every row of it several times over: 89,037 rows for a household step and 45,006 for a
+# person's, with one visit of 20,000. The day's delete allowance (3,375 rows) holds one erasure to at most
+# five steps that delete rows in a UTC day, and to four unless its first step that day took only the
+# erasures' floor (before retention finished the day) and retention then deleted under 92 rows. A person's
+# erasure may run one more that day when her marker's hold ends, which clears it and takes any row of hers
+# stored during the hold, and any erasure one more each time a row of it lands between the count and the
+# deletes of the step that takes its last rows. Before, every
+# tick ran the erasure's counts first, a person's step sorted every row she had and a household's listed
+# every visit it had: that household read 5,096,632 rows a day, more than the account's whole allowance,
+# and that person 1,022,630, every day they were pending. Retention's and the admin's reads are not
+# budgeted here.
+USAGE_DAILY_CAP = "1500"
 
 # Per-IP rate limiter for the magic-link endpoint (worker.js sendSigninLink). Configured as 5 POST
 # /api/send-signin-link calls per 60s per Cloudflare location, to stop the endpoint blasting sign-in
