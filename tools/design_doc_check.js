@@ -478,8 +478,26 @@ function checkScale(label, section, prefix, unit, docUnitStrip) {
 
   console.log('\n4. the component vocabulary');
   const s4 = sec(4);
-  const sheets = blocks.map(decomment).concat(jsNames.filter((f) => /createElement\(\s*['"]style['"]\s*\)/.test(jsSrc[f])).map((f) => jsSrc[f]));
-  const clsAll = new Set(); sheets.forEach((s) => [...s.matchAll(/\.([a-z][a-z0-9-]{1,})\s*[,{ :.]/g)].forEach((m) => clsAll.add(m[1])));
+  /* A script that injects a <style> holds its CSS in string literals, so only the text of its strings is
+     read. Until 17 Nov 2026 the WHOLE source was, and every property access followed by a space or a
+     comma read as a class: 157 of the "696" were JavaScript (accept, email, firestore, ...), and the
+     keyboard fix's `r.bottom >` and `a.closest ?` turned this gate red with no CSS changed at all. */
+  const SEL = /\.([a-z][a-z0-9-]{1,})\s*[,{ :.]/g;
+  const jsStrings = (src) => {
+    const out = []; const re = /'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`|\/\/[^\n]*|\/\*[\s\S]*?\*\//g; let m;
+    while ((m = re.exec(src))) { if (m[0][0] !== '/') out.push(m[0].slice(1, -1)); }
+    return out.join('\n;\n');   // ';' between strings: no string's last selector may run on into the next string
+  };
+  const classesOf = (texts) => { const set = new Set(); texts.forEach((t) => [...t.matchAll(SEL)].forEach((m) => set.add(m[1]))); return set; };
+  const planted = "var r = el.getBoundingClientRect(); if (r.bottom > 1) x = a.closest ? a.closest('.row') : null;\n"
+    + "st.textContent = '.planted-cls{color:red} .planted-two:hover{opacity:1}'; // .not-css, in a comment\n";
+  const pc = classesOf([jsStrings(planted)]);
+  ok('a script\'s CSS strings are read: both planted classes counted', pc.has('planted-cls') && pc.has('planted-two'), [...pc]);
+  ok('and a lone selector string (a querySelector argument) is not a rule, nor does it eat the next string\'s class', !pc.has('row'), [...pc]);
+  ok('and its code is not: `r.bottom >`, `a.closest ?` and a comment add no class', !pc.has('bottom') && !pc.has('closest') && !pc.has('not-css'), [...pc]);
+  ok('companion: read whole, the same script would have added bottom and closest', classesOf([planted]).has('bottom') && classesOf([planted]).has('closest'));
+  const sheets = blocks.map(decomment).concat(jsNames.filter((f) => /createElement\(\s*['"]style['"]\s*\)/.test(jsSrc[f])).map((f) => jsStrings(jsSrc[f])));
+  const clsAll = classesOf(sheets);
   const clsMain = new Set([...MAIN_NC.matchAll(/\.([a-z][a-z0-9-]{1,})\s*[,{ :.]/g)].map((m) => m[1]));
   const [dAllCls, dMainCls] = D.nums(s4, /\*\*(\d+)\*\* distinct class names carry a rule across the eleven stylesheets, \*\*(\d+)\*\*/) || [];
   eq('distinct class names carrying a rule, all stylesheets', dAllCls, clsAll.size);

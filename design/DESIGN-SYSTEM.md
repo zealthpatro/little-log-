@@ -362,8 +362,10 @@ feed.
 
 ## 4. Component vocabulary: one canonical name per job
 
-**696** distinct class names carry a rule across the eleven stylesheets, **318** of them in the main
-one. A name that appears only inside a CSS comment is not counted, because it does not carry a rule.
+**536** distinct class names carry a rule across the eleven stylesheets, **318** of them in the main
+one. A name that appears only inside a CSS comment is not counted, because it does not carry a rule, and
+a script that injects a stylesheet counts only the CSS in its strings (until 17 Nov 2026 its code was
+read too, and 157 JavaScript words were counted as classes).
 The component audit walked that vocabulary and found the same job built up to sixteen times under
 sixteen names. The cost is not bytes. It is that a parent taps
 *Your profile and family*, a `.prof-card`, and lands on `.ll-mem` rows inside a `.ll-modal`:
