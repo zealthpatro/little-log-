@@ -17,11 +17,58 @@
  * beside them are counted inside the scope.
  *
  * F5 (spec Questions): a visit that logged or edited medicine or a health entry shows the hour of its start
- * only, in every view and CSV. No time that could stand in for that visit's minute is shown either: not a
- * later event's own hour, not a device's batch arrival, not "last write N minutes ago". Nor may the ORDER
- * of rows give it away: every list sorts by the time it shows, and an hour-only row sits at the start of
- * its hour, after every row with minutes in that hour, wherever its own minute fell. F5 is decided over the
- * whole visit, never over the rows a time window or a page happens to hold ("a visit, read whole" below).
+ * only, in every view and CSV. Whether a visit did is final only once it has ENDED (its visit.ended row is
+ * the last it sends), so a visit that has not ended shows the hour only too: its first batch, sent before
+ * the dose, never lists its minute, in a page or in a CSV kept from that moment. No time that could stand
+ * in for a dose visit's minute is shown either: not a later event's own hour, not a device's batch
+ * arrival, and not the overview's "Saving and sync" line, which is read only from writes whose visits all
+ * finished clean at a CLOSED moment (CLEAN_MOMENT below), so no batch that carries any row of a dose
+ * visit, or of a visit still open, moves its time or its wording. Nor may the ORDER of rows give it away:
+ * every list sorts by the time it shows, and an hour-only row sits at the start of its hour, after every
+ * row with minutes in that hour, wherever its own minute fell. F5 is decided over the whole visit, never
+ * over the rows a time window or a page happens to hold ("a visit, read whole" below).
+ *   What F5 does not yet cover (F5 by arrival): everything but the saving line still changes when ANY
+ * batch of a dose visit lands, so an observer who refreshes learns the arrival of each one. Its first
+ * batch adds a row (hour only) and steps the counts, tiles and a device's last seen; the dose's own batch,
+ * sent about 5 s after the tap, adds "logged a dose" to its row and steps the Medicine or Health rows of
+ * "What people use" and "Who uses what" and the Usage events count, so it times the dose itself to about
+ * 5 s; its end's batch adds the visit's length, so that arrival minus the length gives its start to the
+ * second. "Failed saves, 7 days" and "Sign-in problems, 7 days" step with the batch that carries them.
+ * And a window keyed on arrival also moves one window after a batch, so someone who did not watch that
+ * batch land can still time it. A window that counts ROWS steps back one window after each batch that
+ * carried one: "Failed saves" and "Sign-in problems", 7 days after the batch carrying the failure (the
+ * household page's c7). A window that counts households, people or devices moves one window after the
+ * LAST batch that kept each of them in it: "Active this week" and "Went quiet" (COUNT DISTINCT hid, and
+ * MAX(at)) 7 days after a household's newest visit start; the households and people beside a pregnancy
+ * or trying tool (journeyTotals, COUNT DISTINCT) 30 days after that household's, or that person's, newest
+ * use of it; and the newest version (the devices seen in the last 24 hours, `fresh`) a day after the
+ * newest batch of the last device on it, and only if another device was seen in that day. So a dose
+ * visit's batch is timed again later when it carried a failure, held its household's newest visit start,
+ * held a household's or a person's newest use of a pregnancy or trying tool, or (a day on) was the newest
+ * batch from any device on the newest version. A batch that carries only the dose can do only the
+ * last of these: the Medicine and Health rows count usage_daily by the family's own day. The saving
+ * line's hour of failures is keyed on arrival too, but only on closed moments of clean visits, which time
+ * no dose. Any phase-3 cutoff must align these windows to whole UTC days too, or each still moves at a
+ * batch's arrival plus one window. docs/ADMIN-DEPLOY.md, "Phase 3 checklist", carries all of it as an
+ * open question.
+ *   One exception to "the hour of its start": a visit cut from its head (its visit.started row gone, or
+ * never stored) may have lost its dose, so it is shown as if it had one, at the hour of its EARLIEST
+ * STORED row. That hour can be later than its true start, and is a later event's own hour. It gives no
+ * minute away only because such a visit carries no length: one that kept its visit.ended row (its length)
+ * is not shown at all, in any list, count or CSV. Cuts happen. The 90-day retention and the erasure of a
+ * deleted person or household take a visit whole when they can, but a day's delete allowance or a
+ * statement's row limit can run out partway through one, and the retention also cuts a visit whose rows
+ * arrived more than a day apart (an offline phone's later batches). Before any other row of a visit they
+ * take its head (retention, workers/usage/core.mjs LINKED_VISITS) or its head or its end (erasure,
+ * CUT_ORDER and HEADS_OF_HID), so what is left lacks its head, its end or both until a later run. The one
+ * shape that order misses, a visit whose head arrived after some of its other rows, is one Cubby's own
+ * tracker never sends (core.mjs, above retentionSteps). And a visit can arrive without its start (events
+ * sent from the background, a first batch over the daily cap, or an offline phone's queue past 500 events,
+ * which drops its oldest: app/cubby-track.js save). The order only makes sure a cut visit has lost its
+ * head or its end; what keeps a dose visit's minute hidden after that is the rule here, SHOWN and
+ * HOUR_ONLY: a headless visit that kept its end is not shown, a headless one without it shows the hour of
+ * its earliest stored row, and one that lost only its end shows the hour of its start, like a visit still
+ * open.
  *
  * S41: per person, the screens a no-baby owner's home paints as (her journey when she has one, shared or
  * not, and Getting started when she has none) are never shown, so a private journey and none look alike.
@@ -54,13 +101,26 @@ export function readOnly(db) {
 
 const NOBODY = Object.freeze({ uids: Object.freeze([]), empty: true, has: () => false, where: () => '0' });
 
+/* HOW MANY UIDS A SCOPE MAY HOLD. D1 refuses a statement that binds more than 100 parameters ("too many SQL
+   variables"); node:sqlite, under the tests' D1 shim, takes over 30,000, so only the real engine shows it
+   (test/usage-d1-engine.test.js). Every read here binds the scope's uids, and the most any binds is three
+   times over and one more (the saving line's e, o and p, and its hour): 3 x 33 + 1 = 100. So a scope holds
+   SCOPE_MAX uids at most. A longer INTERNAL_UIDS reads as 'error' ("could not be read") in every usage
+   panel, on every engine, instead of D1 refusing only the reads that bind the most while the rest show
+   numbers. */
+export const D1_MAX_BOUND = 100;
+export const SCOPE_MAX = Math.floor((D1_MAX_BOUND - 1) / 3);
+const TOO_MANY = Object.freeze({ uids: Object.freeze([]), empty: true, tooMany: true, has: () => false, where: () => '0' });
+
 /* THE helper. Returns the uids whose usage rows this request may read, and the SQL that limits a query to
    them: `scope.where('uid')` with `...scope.uids` bound. Phase 2: INTERNAL_UIDS only, whatever any table
-   holds; and nobody at all while "Hide our own accounts" is ticked. */
+   holds; and nobody at all while "Hide our own accounts" is ticked. More than SCOPE_MAX: TOO_MANY, which
+   reads nobody and makes each panel say it could not be read. */
 export function usageScope(cfg, hideInternal) {
   if (!cfg || !cfg.usage || hideInternal) return NOBODY;
   const uids = Object.freeze([...(cfg.internal || [])].filter((u) => /^[A-Za-z0-9_-]{1,128}$/.test(u)).sort());
   if (!uids.length) return NOBODY;
+  if (uids.length > SCOPE_MAX) return TOO_MANY;
   return Object.freeze({
     uids, empty: false,
     has: (u) => uids.includes(u),
@@ -139,24 +199,33 @@ export async function anyRows(cfg, scope) {
  * visit, never over the share of it that a time window, a page or a cutoff holds: a window cut by arrival
  * can hold a visit's feed and miss its dose. Per visit:
  *   health  it logged or edited medicine or a health entry (any stored row);
- *   headed  its visit.started row is stored. A visit is cut from its head first, by whatever removes rows
- *           oldest first (the 90-day retention), so one without it may have lost the row that logged a
- *           dose. F5 cannot be decided for it, so it shows the hour only, as if it had;
- *   ended   its visit.ended row is stored. A visit that has lost its head but kept its end is not shown
- *           at all, in any list, count or CSV: its length is known (the row says it, and so did every
- *           view of it while it was whole), its true start is gone, and any hour of its own would be a
- *           later event's hour, which with that length gives the minute away. Retention takes the rest.
+ *   headed  its visit.started row is stored. Retention and erasure take a visit whole only when they can,
+ *           and a visit they cut loses its head (or, to an erasure, its head or its end) before any other
+ *           row, but for the one shape the header names, which Cubby's tracker never sends. So one
+ *           without its head may have lost the row that logged a dose. F5 cannot be decided for it, so it
+ *           shows the hour only, as if it had: the hour of its earliest stored row (HEAD), which may be
+ *           later than its true start (see the header);
+ *   ended   its visit.ended row is stored. Until it is, the visit may still log a dose (its rows arrive in
+ *           the order they were queued, app/cubby-track.js, and the end is queued last), so it shows the
+ *           hour of its start only, like a dose visit, and gains its minute when its end lands clean. An
+ *           erasure that took its end and left its head leaves it at that hour too. A visit that has lost
+ *           its head but kept its end is not shown at all, in any list, count or CSV: its length is known
+ *           (the row says it, and so did every view of it while it was whole), its true start is gone, and
+ *           any hour of its own would be a later event's hour, which with that length gives the minute
+ *           away. A later run of the retention or the erasure takes the rest.
  * HEAD is the visit's earliest stored row in one string that sorts by time: the client time zero-padded to
  * 15 digits, then the local day and hour the server stored with that row (core.mjs localParts), then its
- * time zone. Rows sort by that local day and hour, which is exactly what they show. */
+ * time zone. Rows sort by that local day and hour, which is exactly what they show.
+ * So a visit is SHOWN unless it lost its head and kept its end, and HOUR_ONLY when it had a dose or has not
+ * ended. A shown visit that lost its head has no end, so HOUR_ONLY covers it without naming `headed`. */
 const HEAD = "MIN(printf('%015d|%s|%02d|%s', client_at, local_day, local_hour, tz))";
 const HEALTH_OF = 'MAX(CASE WHEN ' + HEALTH + ' THEN 1 ELSE 0 END)';
 const HEADED_OF = "MAX(CASE WHEN name = 'visit.started' THEN 1 ELSE 0 END)";
 const ENDED_OF = "MAX(CASE WHEN name = 'visit.ended' THEN 1 ELSE 0 END)";
 /* `v` is the alias prefix of the visit facts ('' or 'v.'). */
 const SHOWN = (v) => 'NOT (' + v + 'headed = 0 AND ' + v + 'ended = 1)';
-const HOUR_ONLY = (v) => '(' + v + 'health = 1 OR ' + v + 'headed = 0)';
-const hourOnlyOf = (r) => r.health === 1 || r.headed !== 1;   // HOUR_ONLY, for a row read back
+const HOUR_ONLY = (v) => '(' + v + 'health = 1 OR ' + v + 'ended = 0)';
+const hourOnlyOf = (r) => r.health === 1 || r.ended !== 1;   // HOUR_ONLY, for a row read back
 /* Every visit in the scope, with its facts, one row each. */
 const visitFacts = (S) => '(SELECT uid, visit, MAX(device) AS device, ' + HEAD + ' AS head, ' + HEALTH_OF + ' AS health, ' + HEADED_OF + ' AS headed, '
   + ENDED_OF + ' AS ended FROM usage_events WHERE ' + S + ' GROUP BY uid, visit)';
@@ -196,15 +265,44 @@ function eventsFrom(tab, scope) {
     binds: [...scope.uids, ...scope.uids, ...(tab === 'events' ? NJ() : [])] };
 }
 
-/* Did anything that reached the server at that same moment `at` carry an event of a health visit? Then the
-   moment is as good as the minute of the dose, and is never shown (F5). Any person's batch, not only the
-   row that won the ORDER BY: two batches landing in the same millisecond must not pick the untimed one. */
-async function batchTouchesHealth(db, scope, at) {
-  if (!Number.isFinite(at)) return false;
-  const r = await one(db, 'SELECT 1 AS y FROM usage_events e WHERE e.at = ? AND ' + scope.where('e.uid')
-    + ' AND EXISTS (SELECT 1 FROM usage_events WHERE uid = e.uid AND visit = e.visit AND ' + HEALTH + ') LIMIT 1', [at, ...scope.uids]);
-  return r.y === 1;
-}
+/* "Saving and sync" (F5). Its time is a batch's ARRIVAL, as good as the minute of whatever came with it, and
+   an observer can refresh the overview as often as she likes, so she learns both the time it shows and the
+   moment it changes. Neither may be a moment when any row of a dose visit arrived. A visit's rows reach
+   the server in the order they were queued (one queue per device, app/cubby-track.js), so its visit.ended
+   row comes with or after every other row of it: a visit whose end is stored can no longer gain a dose.
+   But that end is not always alone. When the keepalive flush on hide does not go (offline, a send already
+   in flight, no token yet), the end waits in the queue and rides in the NEXT open's first batch, beside the
+   next visit's start, and perhaps its dose.
+     So a moment m is CLOSED when every scoped row that arrived at m belongs to a visit that kept its start,
+   logged or edited no medicine or health entry, and had its visit.ended row stored at or before m: only
+   finished, clean visits landed then. A row `e` is read for the line only when every scoped row that
+   arrived with it (`o`, at e.at, every person's in the scope, so two batches in one millisecond cannot time
+   a dose) has a visit.ended row (`x`) that arrived at a closed moment. A row becomes readable only when the
+   last of those ends lands, at a closed moment, and stays so (later rows cannot arrive at a past moment,
+   and a finished visit gains none), so the line moves only when nothing but finished clean visits arrived.
+   An end that rode beside a visit still open, or a dose, leaves its visit's writes unread for good, and
+   since a moment counts only the ends stored by then, no chain of held ends can carry a later batch onto
+   the line either. A visit cut from its head may have lost its dose, so it is never clean. The line can
+   therefore trail the newest save, or never show one, so views.mjs never words it as the last, the newest
+   or none at all, and says under it what it reads.
+     `e`, `o` and `p` (a row of a moment being checked) are read on ue_at (INDEXED BY): `e` newest first,
+   so the newest readable row ends the walk, and `o` and `p` by one arrival time. Left to choose, SQLite
+   checked every scoped write, each against every scoped uid, before sorting them (781 ms for the newest
+   write at 1,000 people in node:sqlite, before this rule). Each visit fact, `x` (the end of o's visit)
+   and the three VISIT_HAS lookups, is read on ue_visit (INDEXED BY) too: left to choose, SQLite read "an
+   end stored by m" from ue_uid_at, every row of that person older than m: 1.8 s for the newest write at
+   1,000 people, against 11.6 ms pinned, in a probe where 20 people share every arrival moment
+   (docs/ADMIN-DEPLOY.md, phase 3); and with statistics that misjudge ue_visit, it scanned the whole table
+   for `x`, once for every row it checked. Section 6 of test/admin-screens.test.js pins every one of these
+   plans, with this database's own statistics and with skewed ones. Each read binds the scope three times
+   (e, o, p). */
+const VISIT_HAS = (a, what) => 'EXISTS (SELECT 1 FROM usage_events INDEXED BY ue_visit WHERE uid = ' + a + '.uid AND visit = ' + a + '.visit AND ' + what + ')';
+const CLOSED = (scope, m) => 'NOT EXISTS (SELECT 1 FROM usage_events p INDEXED BY ue_at WHERE p.at = ' + m + ' AND ' + scope.where('p.uid') + ' AND NOT ('
+  + VISIT_HAS('p', "name = 'visit.started'")
+  + ' AND NOT ' + VISIT_HAS('p', HEALTH)
+  + ' AND ' + VISIT_HAS('p', "name = 'visit.ended' AND at <= " + m) + '))';
+const CLEAN_MOMENT = (scope) => 'NOT EXISTS (SELECT 1 FROM usage_events o INDEXED BY ue_at WHERE o.at = e.at AND ' + scope.where('o.uid')
+  + " AND NOT EXISTS (SELECT 1 FROM usage_events x INDEXED BY ue_visit WHERE x.uid = o.uid AND x.visit = o.visit AND x.name = 'visit.ended' AND " + CLOSED(scope, 'x.at') + '))';
 
 const median = (xs) => {
   if (!xs.length) return null;
@@ -220,6 +318,7 @@ const dayMinus = (day, n) => utcDay(Date.parse(day + 'T00:00:00Z') - n * DAY);
 export async function usageOverview(cfg, now, from, rangeDays, hideInternal) {
   if (!cfg.usage) return { state: 'unbound' };
   const scope = usageScope(cfg, hideInternal);
+  if (scope.tooMany) return { state: 'error' };
   if (scope.empty) return { state: hideInternal && cfg.internal && cfg.internal.size ? 'hidden' : 'empty' };
   try {
     if (!(await anyRows(cfg, scope))) return { state: 'empty' };
@@ -234,14 +333,19 @@ export async function usageOverview(cfg, now, from, rangeDays, hideInternal) {
     const quiet = await one(db, "SELECT COUNT(*) AS n FROM (SELECT hid FROM usage_events WHERE name = 'visit.started' AND hid IS NOT NULL AND " + S
       + ' GROUP BY hid HAVING MAX(at) < ?)', [...U, now - 7 * DAY]);
 
-    /* Saving and sync: the last save, and whether saves are failing (builder's call on the threshold:
-       three or more people in an hour, or the newest save attempt failed within the hour). Either time is
-       left out of the line when its batch carried a visit that logged a dose or a health entry (F5). */
-    const lastSave = await one(db, "SELECT at FROM usage_events WHERE name = 'feature.used' AND json_extract(props, '$.action') = 'logged' AND " + S + ' ORDER BY at DESC LIMIT 1', U);
-    const failed = await one(db, "SELECT COUNT(DISTINCT uid) AS people FROM usage_events WHERE name = 'save.failed' AND at >= ? AND " + S, [now - HOUR, ...U]);
-    const lastFail = await one(db, "SELECT at FROM usage_events WHERE name = 'save.failed' AND at >= ? AND " + S + ' ORDER BY at DESC LIMIT 1', [now - HOUR, ...U]);
-    const saving = { lastSaveAt: lastSave.at || null, lastSaveUntimed: await batchTouchesHealth(db, scope, lastSave.at),
-      failedPeople: Number(failed.people) || 0, lastFailedAt: lastFail.at || null, lastFailedUntimed: await batchTouchesHealth(db, scope, lastFail.at) };
+    /* Saving and sync: the newest save it may read, and whether saves are failing (builder's call on the
+       threshold: failures it may read from three or more people in the hour, or the newest failure it may
+       read, within the hour, has no save it may read after it; views.mjs savingCheck). Every input is
+       read only once its visits finished clean at a closed moment (CLEAN_MOMENT, F5), so no batch that
+       carries a row of a dose visit, or of a visit still open, changes anything on the line. */
+    const Se = scope.where('e.uid'), clean = CLEAN_MOMENT(scope), E = 'FROM usage_events e INDEXED BY ue_at WHERE ';
+    const lastSave = await one(db, "SELECT e.at " + E + "e.name = 'feature.used' AND json_extract(e.props, '$.action') = 'logged' AND " + Se
+      + ' AND ' + clean + ' ORDER BY e.at DESC LIMIT 1', [...U, ...U, ...U]);
+    const failed = await one(db, 'SELECT COUNT(DISTINCT e.uid) AS people ' + E + "e.name = 'save.failed' AND e.at >= ? AND " + Se
+      + ' AND ' + clean, [now - HOUR, ...U, ...U, ...U]);
+    const lastFail = await one(db, 'SELECT e.at ' + E + "e.name = 'save.failed' AND e.at >= ? AND " + Se
+      + ' AND ' + clean + ' ORDER BY e.at DESC LIMIT 1', [now - HOUR, ...U, ...U, ...U]);
+    const saving = { lastSaveAt: lastSave.at || null, failedPeople: Number(failed.people) || 0, lastFailedAt: lastFail.at || null };
 
     /* What people use: per-person daily rows (never JOURNEY_KEYS, which the server keeps only as totals). */
     const prevFrom = dayMinus(from, rangeDays);
@@ -341,6 +445,7 @@ const listedSince = (v, now) => (v.hourOnly ? hourStart(v.start, v.tz) : v.start
 export async function usageHousehold(cfg, h, now) {
   if (!cfg.usage) return { state: 'unbound' };
   const scope = usageScope(cfg, false);
+  if (scope.tooMany) return { state: 'error' };
   const members = h.members.map((p) => p.uid).filter((u) => scope.has(u));
   if (!members.length) return { state: 'empty' };
   try {
@@ -395,6 +500,7 @@ export async function usageCounts(cfg, hideInternal) {
 export async function usageTab(cfg, tab, hideInternal, pageNo, all) {
   if (!cfg.usage) return { state: 'unbound', total: 0, rows: [] };
   const scope = usageScope(cfg, hideInternal);
+  if (scope.tooMany) return { state: 'error', total: 0, rows: [] };
   if (scope.empty) return { state: hideInternal && cfg.internal && cfg.internal.size ? 'hidden' : 'empty', total: 0, rows: [] };
   const db = cfg.usage, S = scope.where('uid'), U = scope.uids;
   const c = COUNT_OF[tab](scope);
@@ -409,7 +515,7 @@ export async function usageTab(cfg, tab, hideInternal, pageNo, all) {
     /* An event of an hour-only visit is shown at that visit's start hour, never its own: a visit that crosses
        an hour would otherwise give the minute away (its end hour and its length). */
     const f = eventsFrom(tab, scope);
-    list = (await rows(db, 'SELECT e.uid, e.hid, e.client_at, e.tz, e.platform, e.app_version, e.visit, e.name, e.props, v.head, v.health, v.headed' + f.sql
+    list = (await rows(db, 'SELECT e.uid, e.hid, e.client_at, e.tz, e.platform, e.app_version, e.visit, e.name, e.props, v.head, v.health, v.ended' + f.sql
       + EVENT_ORDER + tail, [...f.binds, ...lim])).map((r) => {
       const props = keptProps(r.name, r.props);
       const hourOnly = hourOnlyOf(r);

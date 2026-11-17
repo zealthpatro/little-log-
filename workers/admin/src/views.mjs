@@ -32,6 +32,12 @@ export const WAITING = 'Waiting for usage events';
 const OWN_ONLY = 'Our own accounts only, until families are told what our team can see.';
 const HIDDEN_LINE = 'Before families are told what our team can see, only our own accounts are measured, and they are hidden here.';
 const UNREADABLE = 'Usage events could not be read just now.';
+/* Which visits show the hour only (F5, usage.mjs HOUR_ONLY): a dose or health visit, and any visit whose end
+   has not come in, since until it does it may still log a dose (a visit that lost its start and never sent an
+   end is one of these). Every note that explains an hour-only row says all of it, so an open visit is never
+   read as a dose. */
+const WHICH_HOUR_ONLY = 'A visit that logged or edited medicine or a health entry, or whose end has not come in yet,';
+const HOUR_ONLY_NOTE = (rows) => ' ' + WHICH_HOUR_ONLY + ' shows the hour only, listed after the ' + rows + ' with minutes in that hour.';
 /* Pregnancy and trying tools are stored as daily totals with no person in them (§8.4), so their uses cannot
    be limited to our own accounts the way every other row here is. The note says so, beside the rows. */
 export const JOURNEY_NOTE = '* Pregnancy and trying tools are kept only as daily totals with no person in them, so their uses count everyone the server stored, not only our own accounts. Their households and people count our own accounts over the last 30 days, whatever the range.';
@@ -109,23 +115,38 @@ const waitingCard = (title, lead, id, line) => html`<section class="card" aria-l
 </section>`;
 const check = (title, c) => html`<div class="check check-${c.state}">
 <span class="dot" aria-hidden="true"></span>
-<div><div class="check-title">${title}</div><div class="check-line">${c.line}</div></div>
+<div><div class="check-title">${title}</div><div class="check-line">${c.line}</div>${c.note ? html`<div class="check-note">${c.note}</div>` : ''}</div>
 </div>`;
 
 /* ---------------- Overview usage (phase 2) ---------------- */
 /* The four usage states usage.mjs reports: 'ok' has numbers; 'unbound', 'empty' and 'hidden' wait; 'error' says so. */
 const usageWaits = (u) => !u || u.state !== 'ok';
 const waitLine = (u) => (u && u.state === 'error' ? UNREADABLE : WAITING);
+/* "Saving and sync" reads only some saves (F5, below), so no line may claim the newest, the last or none:
+   each says what it read, and SAVING_NOTE, under every line that reads usage, says what it reads. */
+export const NO_SAVE_YET = 'No save to show yet';
+export const SAVING_NOTE = 'It reads only visits that ended with no medicine or health entry, so it can lag behind and miss some saves.';
 export function savingCheck(u, now) {
   if (!u || u.state === 'unbound' || u.state === 'empty' || u.state === 'hidden') return { state: 'off', line: WAITING };
   if (u.state === 'error') return { state: 'off', line: UNREADABLE };
   const s = u.saving;
-  if (s.failedPeople >= 3) return { state: 'bad', line: 'Not working · saves failed for ' + s.failedPeople + ' people in the last hour' };
-  /* F5: a time whose batch carried a visit that logged a dose or a health entry is left out, never rounded:
-     "N minutes ago" would give that minute away. */
-  if (s.lastFailedAt && (!s.lastSaveAt || s.lastFailedAt > s.lastSaveAt)) return { state: 'bad', line: 'Not working · the newest save failed' + (s.lastFailedUntimed ? '' : ', ' + agoWords(s.lastFailedAt, now)) };
-  if (s.lastSaveAt) return { state: 'ok', line: s.lastSaveUntimed ? 'Working · the newest save went through' : 'Working · last write ' + agoWords(s.lastSaveAt, now) };
-  return { state: 'off', line: 'No saves yet' };
+  /* F5: usage.mjs reads every input here only once its visits finished clean at a closed moment
+     (CLEAN_MOMENT), so the line is blind to every save in a visit with a dose or a health entry, in a visit
+     still open, and in a visit whose end came in beside one of those. It may not move when such a save
+     arrives (that would time a dose), so it cannot know a newer save than the ones it read: a save that
+     came in N ago need not be the last one, a failure need not be the newest, and "none" means none it may
+     read. One wording and one time serve every case, so no line is kept for "a dose came", which would say
+     when. Red on one failure stays until a save it may read comes in, or the hour passes: clearing it on
+     any other save would time that save. So that line says "Check saves", which is true, never "Not
+     working", which it cannot know: a save it may not read may have gone through since. Three people
+     failing within the hour (the spec's threshold, builder's call) is red for the hour too, and says
+     "Check saves" for the same reason: saves it may not read, and even saves it read after those failures,
+     can show saving works again. It counts only the failures it may read, so the number is never more than
+     the truth. No line here says "Not working". */
+  if (s.failedPeople >= 3) return { state: 'bad', line: 'Check saves · saves failed for ' + s.failedPeople + ' people in the last hour', note: SAVING_NOTE };
+  if (s.lastFailedAt && (!s.lastSaveAt || s.lastFailedAt > s.lastSaveAt)) return { state: 'bad', line: 'Check saves · a save failed ' + agoWords(s.lastFailedAt, now) + ', with no save shown since', note: SAVING_NOTE };
+  if (s.lastSaveAt) return { state: 'ok', line: 'Working · a save came in ' + agoWords(s.lastSaveAt, now), note: SAVING_NOTE };
+  return { state: 'off', line: NO_SAVE_YET, note: SAVING_NOTE };
 }
 const usageTile = (u, label, value, sub) => (usageWaits(u)
   ? html`<div class="tile tile-waiting"><div class="tile-label">${label}</div><div class="tile-value">–</div><div class="tile-sub">${waitLine(u)}</div></div>`
@@ -291,7 +312,7 @@ function visitsCard(hu, h, now) {
 <div><h2 id="h-act">Visits, last 48 hours</h2><p class="lead">What each person did, never what they wrote. Times are in the family's own time zone.</p></div>
 ${hu.visits.length ? html`<ul class="visits">${hu.visits.map((v) => html`<li><span class="strong">${localWhen(v.start, v.tz, v.hourOnly, now)}</span> · ${nameOf(h, v.uid)} · ${word(PLATFORM_LABEL, v.platform)}${visitSummary(v) ? ' · ' + visitSummary(v) : ''}${v.seconds != null ? ' · ' + duration(v.seconds) : ''}</li>`)}</ul>`
     : html`<p class="waiting">No visits in the last 48 hours.</p>`}
-<p class="note">${OWN_ONLY} A visit that logged medicine or a health entry shows the hour only, listed after the visits with minutes in that hour.</p>
+<p class="note">${OWN_ONLY}${HOUR_ONLY_NOTE('visits')}</p>
 </section>`;
 }
 
@@ -536,11 +557,11 @@ ${tableOf(ACCESS_COLUMNS, m.rows, 4)}
 </form>`;
   } else if (USAGE_TABS.includes(m.tab) && m.usage && m.usage.state === 'ok') {
     const what = { visits: ['visit', 'visits'], events: ['event', 'events'], signins: ['sign-in attempt', 'sign-in attempts'], devices: ['device', 'devices'] }[m.tab];
-    const SITS = ' A visit that logged medicine or a health entry shows the hour only, listed after the rows with minutes in that hour.';
+    const SITS = HOUR_ONLY_NOTE('rows');
     const kept = { visits: SITS,
       events: ' Usage events are kept for 90 days, then only the daily totals stay. Deleting an account removes its events too.' + SITS,
       signins: SITS,
-      devices: ' First and last seen are when a visit started. A visit that logged medicine or a health entry shows the hour only, and one older than 90 days shows the day only.' }[m.tab];
+      devices: ' First and last seen are when a visit started. ' + WHICH_HOUR_ONLY + ' shows the hour only, and one older than 90 days shows the day only.' }[m.tab];
     content = html`${tableOf(USAGE_COLUMNS[m.tab], m.rows, USAGE_LINK_COL[m.tab], USAGE_MONO_COL[m.tab])}<p class="note">Showing ${num(m.rows.length)} of ${num(m.total)} ${m.total === 1 ? what[0] : what[1]}. ${OWN_ONLY}${kept}</p>`;
   } else {
     const u = m.usage || {};

@@ -207,7 +207,7 @@ npx wrangler secret put INTERNAL_UIDS -c workers/admin/wrangler.toml
 | `ACCESS_TEAM_DOMAIN` | `<team>.cloudflareaccess.com` (no `https://`, no path) |
 | `ADMIN_PEOPLE` | `[{"email":"<your address>","name":"<your first name>"}]`, **exactly one** entry. Zero or two entries and the dashboard refuses everyone, you included |
 | `FIREBASE_READER_SA` | piped from the key file of step 4 (the command above reads it). The Worker accepts only `cubby-admin-reader@<project-id>.iam.gserviceaccount.com`: a `firebase-adminsdk-*` key (such as `tools/serviceAccountKey.json`) or any other account turns the dashboard off with "Not configured" |
-| `INTERNAL_UIDS` | your own account uids, comma-separated, no spaces needed (Firebase console, Authentication, Users, search your address, copy "User UID") |
+| `INTERNAL_UIDS` | your own account uids, comma-separated, no spaces needed (Firebase console, Authentication, Users, search your address, copy "User UID"). **33 at most**: a usage read binds them up to three times over, and D1 takes 100 parameters a statement, so with more every usage panel says "Usage events could not be read just now" (`SCOPE_MAX` in `workers/admin/src/usage.mjs`) |
 
 Check the names (never the values) are there:
 
@@ -351,22 +351,59 @@ again. Nothing else changes, and no secret is added.
   the overview's total (below).
 - **Read only.** The admin holds `USAGE_DB` through a handle that can only run a SELECT, and no admin code
   writes it (`admin-access-log` section 5).
-- **Times.** Usage times are the family's own time zone. A visit that logged medicine or a health entry
-  shows the hour its visit started, everywhere, CSV included (F5): every event of that visit reads that
-  same hour, even one sent after the clock turned. A device's first and last seen are when a visit started,
-  shown exactly as that visit's own row shows it, never when its data arrived (an arrival is as good as the
-  minute of a dose); a device whose oldest visit is past the 90 days shows the day it was first seen, no
-  time. "Saving and sync" leaves the time out ("Working · the newest save went through") when the newest
-  write or failure arrived with a visit that logged a dose or a health entry.
+- **Times.** Usage times are the family's own time zone. A visit that logged or edited medicine or a
+  health entry shows the hour its visit started, everywhere, CSV included (F5): every event of that visit
+  reads that same hour, even one sent after the clock turned. A visit whose end has not come in yet shows
+  the hour only too, since it can still log a dose (its first batch reaches the server before its dose
+  does); it gains its minute when its end arrives, if it logged none. The notes under the lists say both. (A visit whose
+  start row is not stored, for example events sent while Cubby was in the background, or a visit whose
+  start the retention or an erasure has taken, shows the hour of its earliest stored row, which can be
+  later than its start; it never shows a length.) A device's first and last seen are when a visit
+  started, shown exactly as that visit's own row shows it, never when its data arrived (an arrival is as
+  good as the minute of a dose); a device whose oldest visit is past the 90 days shows the day it was
+  first seen, no time.
+- **"Saving and sync"** shows when a batch arrived, and refreshing shows when it changes, so it is read
+  only from writes whose visits have all ended with no medicine or health entry, and only once the batch
+  that carried each visit's end held nothing else but finished visits like that. A phone that could not
+  send a visit's end when Cubby closed sends it with the next visit's first batch; if that next visit is
+  still open, or logs a dose, the earlier visit's writes are never read. So no dose's arrival, and no
+  visit still open, moves the line. That makes it blind to your newest saves until their visit ends, and
+  for good to saves in a dose or health visit (the household page's "Failed saves, 7 days" still counts
+  failures there), so it never calls a save the last or the newest, never says "Not working", which it
+  cannot know, and a note under it says what it reads:
+  - "Working · a save came in 5 minutes ago": a save it may read arrived then, and no failure it may
+    read came after it within the hour. A newer save, or a newer failure, may have arrived since.
+  - "Check saves · a save failed 30 minutes ago, with no save shown since": a failure it may read, and no
+    save it may read after it. Saving may well be working again: a feed logged since, in a visit still
+    open, does not clear it, because clearing it then would time that visit. It clears when a save it may
+    read comes in, or an hour after the failure.
+  - "Check saves · saves failed for 3 people in the last hour": three people's failures it may read, in
+    the hour (the threshold is the builder's call). It stays red for that hour even when a save it reads
+    comes in after them, so it says "Check saves", never "Not working", which it cannot know: that later
+    save, or one it may not read, can mean saving works again. The count leaves out failures it may not
+    read.
+  - "No save to show yet": no save it may read, whether you have none at all or only saves in dose
+    visits and visits still open. It cannot tell those apart without timing a dose.
 - **Order, and whole visits (F5).** Every list is sorted by the time it shows: by the family's own day and
   hour, then, inside an hour, the rows with minutes, then the hour-only rows, as if at the start of the
   hour. So a dose visit's place never narrows its minute, and a device's first and last seen are picked the
   same way. A visit reaches the server in several batches, so the dose is judged over every stored row of
   the visit, never the share inside a window: "Visits, last 48 hours" finds its visits by arrival, reads
   each whole, and lists one while what it shows is inside the 48 hours (an hour-only visit leaves at the
-  start of an hour). Retention removes a visit oldest batch first, so a visit whose start is gone may have
-  lost its dose: it shows the hour only (so does an event the app sent from the background, outside any
-  visit), and one that kept its end (its length) is not shown at all until retention takes the rest. A Getting started screen is never shown per person, like a pregnancy or trying
+  start of an hour). A visit can lose its start or its end. The 90-day retention and the erasure of a
+  deleted person or household take a visit whole when they can, but a day's delete allowance or a
+  statement's row limit can run out partway through one, and the retention also cuts a visit whose rows
+  arrived more than a day apart (an offline phone's later batches). Before any other row of a visit they
+  take its start (retention), or its start or its end (erasure), so what is left lacks its start, its end
+  or both until a later run. The one shape that order misses, a visit whose start arrived after some of
+  its other rows, is one Cubby's own app never sends (`workers/usage/core.mjs`, above `retentionSteps`).
+  A visit can also arrive without its start (an event the app sent from the background, outside any
+  visit, a first batch over the daily cap, or a phone offline long enough to queue more than 500 events,
+  which drops the oldest). That order only makes sure a cut visit has lost its start
+  or its end; what keeps a dose visit's minute hidden after that is the admin's rule. One whose start is
+  gone may have lost its dose: it shows the hour of its earliest stored row only, and one that kept its
+  end (its length) is not shown at all. One that lost only its end shows the hour of its start only, like
+  a visit still open. A Getting started screen is never shown per person, like a pregnancy or trying
   screen, so a journey shared with nobody and none look alike (S41).
 - **A failed read is said.** A usage CSV whose read fails answers 503, "Usage events could not be read just
   now, so nothing was exported.", with no file and no export in the log.
@@ -385,3 +422,149 @@ again. Nothing else changes, and no secret is added.
 - **Check it.** Use Cubby for a day from each way in (iPhone app, home-screen app, Android app, browser
   tab), open the dashboard, untick "Hide our own accounts", and look for your own visits on the Visits tab.
   Then delete a test account in the app and check its rows are gone from the Devices tab.
+
+## Phase 3 checklist: before `usageScope()` widens
+
+Phase 2 reads your own accounts only, a few uids, and every number below is small. Phase 3 only widens
+`usageScope()` in `workers/admin/src/usage.mjs`, and the costs below then grow with everyone in it. Work
+through this list, and measure on D1 itself, before that change ships. The numbers come from a probe that
+runs the admin's real read functions over the real schema in `node:sqlite` (SQLite 3.53.4, Node 26, an
+M1): a synthetic 1,000 people, two to a household, 6 visits a day of 5 rows each, 90 days. That is 2,700
+rows a person, against about 1,200 for the dev sample's founder (13 rows a day). `EXPLAIN QUERY PLAN` gives
+which rows each statement visits; D1 counts those as rows read, and D1's own planner can choose
+differently, so read `meta.rows_read` from a real response before trusting any of this.
+
+Below, U is the people in the scope, R the rows each keeps (90 days), S = U × R, and D the devices.
+
+- **The bound-parameter ceiling comes first.** D1 refuses a statement with more than 100 bound
+  parameters, and the scope is bound one uid at a time, up to three times. Measured per read: overview
+  3U+1 ("Saving and sync" binds it for the row read, the rows that arrived with it, and the rows that
+  arrived with each visit's end), household page 2U+2, the tab counts 2U+10, Visits U+2, Usage events
+  2U+12, Sign-ins 2U, Devices U. The first scope that breaks is **34 uids** (the overview, 103
+  parameters); Usage events follows at 45, the tab counts at 46, the household page at 50. A refused read
+  shows "Usage events could not be read just now" (a
+  count shows a dash), so phase 3 needs a scope that does not bind every uid: for example a column or
+  small table that marks who is in scope, joined on, with one parameter.
+- **Rows read per view.** Every records page, People and Households included, also runs the four tab
+  counts, and each count groups every scoped row: about 5S + D rows read for the counts alone. Then the
+  Visits tab reads about 2S more, Usage events and Sign-ins about 4S more, Devices about S + 2D more. The
+  overview reads about 4S (households measured, gone quiet, visit lengths and busiest hours each scan the
+  scope). At 1,000 people (R from 1,200 to 2,700) that is 6 to 13.5 million rows for the counts on one
+  records page and 4.8 to 10.8 million for one overview, against the Free plan's 5 million rows read a
+  day (Cloudflare's published D1 limit when this was written; check the pricing page). Even at 100 people,
+  a few views a day use it up. In `node:sqlite` the counts took 14.8 s and the Usage events page 13.9 s at
+  1,000 people.
+- **One household's page** read about 1,000 rows at any scope size in the probe (5.5 ms of SQL at 1,000
+  people): SQLite drove "Visits, last 48 hours" from that household's own recent rows (`ue_hid_at`, then
+  `ue_visit` for each visit). An earlier review, of the version before this one, saw it planned on
+  `ue_uid_at` for every scoped uid, with the household's rows only as a filter, which would read S rows
+  per view. Pin it with a shape that cannot scan the scope: pick that household's (uid, visit) keys from
+  `ue_hid_at` first, then join back for each visit's rows.
+- **Devices.** The tab reads every device in scope and runs one subquery per device to find its time
+  zone, then pages in JavaScript, where each time zone is checked by building an Intl formatter (`okTz`,
+  three a device): 101.8 ms of JavaScript at 1,000 devices (31.6 ms at 300), against the Free plan's 10 ms
+  of CPU a request, so about 100 devices is the edge. Store the order key (the last visit's shown hour) and
+  the time zone on the device row, read one page, and check each time zone once.
+- **The overview's JavaScript** builds formatters the same way for each person's recent visit starts
+  ("Active today"): 275.7 ms at 1,000 people. One formatter per time zone fixes it.
+- **"Saving and sync"** is not on this list: its three reads walk `ue_at` newest first and stop at the
+  newest row they may read, checking each moment by one arrival time on `ue_at` and each visit on
+  `ue_visit` (11.6 ms for the newest write at 1,000 people, in a probe where 20 people share every arrival
+  moment, so each check reads 40 rows of 40 visits; left to SQLite's own choice of `ue_uid_at` for one
+  visit's facts, 1.8 s, and with no plan pinned at all, 781 ms before the riding-end rule). Every table
+  each read names carries `INDEXED BY`, so D1's own statistics cannot choose another plan: with skewed
+  statistics, the one lookup that had no hint (a visit's end) became a scan of the whole table. Section 6
+  of `test/admin-screens.test.js` pins every one of those plans, with the test database's statistics and
+  with skewed ones. Read `meta.rows_read` for the three reads on D1 itself before trusting the numbers.
+- **What an erasure reads.** D1 Free also caps rows read, at 5 million a day for the account, and a pending
+  erasure is carried on every tick until it is done (at most five steps a UTC day that delete rows, and
+  one more when a person's marker's hold ends, which clears it and takes any row of hers stored during
+  the hold; `wrangler.toml` says when, and the race that can
+  add more). For visits as Cubby's own app sends them (a visit's start arrives with its first other
+  rows, or shortly before them, not ahead of a batch's worth of the household's other rows), a step reads about one batch of visits whatever was stored: measured on workerd's D1, at
+  most 7,647 rows for a person and 21,210 for a household in visits of five rows (36,014 in visits of
+  two), as `wrangler.toml` states. Two things grow once everyone is measured:
+  - **The membership table.** It has no index on its household column, so a household step reads it whole in
+    every step's plan, again in the step that unlinks its members (up to whole: it stops once it has them
+    all) and whole again in the step that clears its marker; a household small enough to go in one step
+    can do all three. With 10,000 other people's rows, that is 10,000 to 30,000 more rows a step (30,027 a
+    middle step instead of 20,027, and 33,579 instead of 3,579 for a 200-row household's one step).
+    `CREATE INDEX IF NOT EXISTS mem_hid ON membership(hid)` turns all three into lookups, but then each new
+    membership row bills 4 written rows, not 3: the worst UTC day in `wrangler.toml` goes from 45,086 to
+    46,086 (the arithmetic in `test/usage-erasure.test.js`, run with the index added), and its stated
+    figures must change with it. Decide before phase 3.
+  - **Open question: a client that is not Cubby's app.** From phase 3 the server stores the events of any
+    signed-in account, whatever client sends them, and two shapes cost far more than Cubby's app makes. One
+    visit id reused across a huge number of rows: the statements that name a step's batch read every row of
+    its visits, so the step grows with the visit. On workerd's D1, a household step read 89,037 rows with
+    one visit of 20,000 in its batch and 17,037 with one of 2,000 (four times the visit, plus about 9,000),
+    and a person's step 45,006 and 9,006 (twice the visit, plus about 5,000). Retention reads every row of
+    each visit it picks, whatever their arrival, about twice over on every statement that picks it, though
+    it deletes only the rows that arrived up to a day after its cutoff: 40,017 rows to delete the one
+    expired row of a visit of 20,000, and 88,402 for a day's 3,100 rows once all of them had expired. It
+    needs no erasure to do that, only an expired row in the visit. And many visits' starts sent first with
+    their other rows later: every household step re-reads all of those starts until their other rows go.
+    Measured on workerd's D1, a household step with 10,000 such visits read up to 116,014 rows, against up
+    to 36,014 for the same 10,000 visits sent start with body, and with 30,000 such visits up to 316,014;
+    the cost falls as their other rows go. No ingest rule stops either today beyond the daily cap on stored
+    events. Accept it and say so, or cap it at ingest (rows per visit id, or no second burst of starts),
+    before phase 3.
+- **Open question: what still moves when ANY batch of a dose visit lands (F5 by arrival).** No time is
+  shown to the minute for a dose visit, or for a visit still open, and "Saving and sync" does not move for
+  either. But every other usage surface changes when each batch of a dose visit arrives, so an observer
+  who refreshes learns the arrival of every one of them, and with it the dose's own time, not only the
+  hour:
+  - **Its first batch** (its start, sent about 5 s after Cubby opens): a new row on the Visits, Usage
+    events and Sign-ins tabs and the household page (hour only), the tab counts beside them, a device's
+    row or its last seen hour, the overview's per-arrival tiles ("Active today") and busiest hours, and,
+    on an account's very first batch, the overview turning from "Waiting for usage events" to numbers. A
+    clean visit whose end rode in with that batch also gains its minute then.
+  - **The dose's own batch** (sent about 5 s after the dose is logged): "logged a dose" appears on that
+    row on the household page and the Visits tab, the Medicine and doses (or Health log) rows of "What
+    people use" and "Who uses what" step, and the Usage events count steps. So an observer who refreshes
+    often times the dose itself to within about 5 seconds.
+  - **Its end's batch**: the visit's length appears ("5m 4s"), the Usage events count steps, and "Time in
+    Cubby" may. The end's arrival minus that length gives the visit's start to the second.
+  - **"Failed saves, 7 days" and "Sign-in problems, 7 days"** on the household page step with the batch
+    that carries the failure, often the failed dose save itself.
+  - **And again one window later.** A window keyed on arrival also moves one window after a batch, so
+    someone who refreshes later, without having watched that batch land, can still time it to the second.
+    Which batches depends on what the window counts. A window that counts rows steps back one window after
+    each batch that carried one: "Failed saves, 7 days" and "Sign-in problems, 7 days", 7 days after the
+    batch that carried the failure. A window that counts households, people or devices moves one window
+    after the last batch that kept each of them in it: "Active this week" and "Went quiet" 7 days after the
+    household's newest visit start; the households and people beside a pregnancy or trying tool on "What
+    people use" 30 days after that household's, or that person's, newest use of it; and "the newest version"
+    on "Where they use it" a day after the newest batch of the last device on it, and only if another device
+    was seen in that day. So a dose visit's batch is timed again later when it carried a failure, held its
+    household's newest visit start, held a household's or a person's newest use of a pregnancy or trying
+    tool, or (a day later) was the newest batch from any device on the newest version. A batch that carries
+    only the dose can do only the last of these, because "What people use" counts doses by the family's own
+    day. (The hour of failures behind "Saving and sync" is keyed on arrival too, but only on moments that
+    held nothing but finished visits with no dose or health entry.) A probe lands a dose visit's start at
+    T0, and its dose, a kick count, a failed save and a failed sign-in together at T1 = T0 + 3m 7s, in a
+    household with no other visit. One second before T0 + 7 days it reads "Active this week" 1 and "Went
+    quiet" 0, and one second after, 0 and 1. Either side of T1 + 7 days, "Failed saves, 7 days" and "Sign-in
+    problems, 7 days" go from 1 to None. Either side of T1 + 30 days, "Kick counts" goes from 1 household
+    and 1 person to 0 and 0, its uses staying at 1. A second probe lands the same dose visit, its dose and a
+    kick count at T1 (no failure), and then a clean visit of the same household with a kick count, landing
+    whole a day after T0. Then neither T0 + 7 days nor T1 + 30 days moves anything: "Active this week" and
+    "Went quiet" read 1 and 0 on both sides of T0 + 7 days and turn to 0 and 1 either side of the clean
+    visit's arrival plus 7 days, and "Kick counts" still reads 1 household and 1 person one second after T1
+    + 30 days, and 0 and 0 one second after the clean visit's arrival plus 30 days. And when a phone on v370
+    sends a dose batch as its last, and a laptop on v369 is seen an hour later, "the newest version" reads
+    v370 one second before that batch's arrival plus a day, and v369 one second after, the same with a
+    tablet on v370 last seen three hours before that batch; with the laptop last seen two days before that
+    batch instead, it reads v370 on both sides.
+
+  Before phase 3, decide whether these are read only from ended visits at closed moments too (as the
+  saving line is), held back to a cutoff that moves only at whole days, or accepted and said. A cutoff
+  has to align these windows to whole UTC days too (counted back from the cutoff, not from now), or each
+  still moves at a batch's arrival plus one window. A probe that lands one dose visit's three batches (its
+  start, its dose, its end, 30, 27 and 25 minutes ago) reads its household row as "Today 2pm · Sam · iPhone
+  app", then "... · logged a dose" as a Medicine and doses row appears on the overview (1 household,
+  1 person, 1 use), then "... · logged a dose · 5m 4s", with the Usage events count at 3, 4 and 5.
+- **The shape that removes most of this:** let the main Worker keep one row per visit (its uid,
+  household, device, start, health, start kept, ended) as it ingests, so the counts and the Visits and
+  Devices tabs page through an index instead of grouping 90 days of rows on every view, and the overview's
+  scans read `usage_daily` or that table. Until something like it ships, phase 3 stays off.

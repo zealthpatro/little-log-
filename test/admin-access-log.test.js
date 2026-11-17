@@ -10,7 +10,7 @@
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
-const { selfTest, controlRun } = require('./helpers/admin-selftest');
+const { selfTest, runMutant } = require('./helpers/admin-selftest');
 
 const ROOT = process.env.ADMIN_ROOT || path.join(__dirname, '..');
 const imp = (rel) => import(pathToFileURL(path.join(ROOT, rel)).href);
@@ -39,7 +39,7 @@ function walk(dir, out) {
     '/records?tab=devices&own=show', '/records.csv?tab=visits&own=show', '/records.csv?tab=events&own=show', '/records.csv?tab=signins&own=show',
     '/records.csv?tab=devices&own=show'];
   /* What a usage page or CSV would show: none of it may leave when the log row cannot be written. */
-  const USAGE_SHOWN = ['iPhone app', 'v369', 'visit.started', 'Log a feed', 'Working · last write'];
+  const USAGE_SHOWN = ['iPhone app', 'v369', 'visit.started', 'Log a feed', 'Working · a save came in'];
   {
     const fx = await F.buildFixture({ usage: 'sample' });
     await fx.tickUntilDone();
@@ -786,13 +786,28 @@ function walk(dir, out) {
   }
 
   if (process.argv.includes('--self-test') && !process.env.ADMIN_MUTANT) {
-    /* The control run itself can go red, on exactly the failure this suite swallows (section 6 catches a
-       worker.js that will not load): worker.js in the copy gains a module the copy does not hold. Without
-       the control, every mutant below would turn red for that and count as caught. */
-    console.log('\nself-test of the self-test: the control run on a copy that cannot load worker.js');
-    const broken = controlRun(__filename, (tmp) => fs.appendFileSync(path.join(tmp, 'worker.js'), "\nimport './workers/zz-not-in-the-copy/core.mjs';\n"));
-    ok('a copy whose worker.js cannot load fails the control (exit ' + broken.code + ', ' + (broken.failLine || 'no FAIL line').slice(0, 80) + '), though WRONG_REASON alone sees nothing in it',
-      !broken.passed && broken.code !== 0 && !broken.wrong && /worker\.js exposes the Monday digest/.test(broken.failLine), broken);
+    /* The self-test of the self-test (F6). selfTest() itself runs here, on a copy whose worker.js cannot load
+       (it gains a module the copy does not hold), which is exactly the failure this suite swallows: section 6
+       catches a worker.js that will not load. With one harmless mutant. What selfTest() reports through ok()
+       is collected, not counted: its control must fail, for that swallowed reason, and the mutant must be
+       reported "not counted". Without the control, or without the rule that holds mutants back when it
+       fails, the harmless mutant turns this copy red and counts as caught, and so would every mutant below. */
+    console.log('\nself-test of the self-test: selfTest() on a copy that cannot load worker.js, with one harmless mutant');
+    const breakWorker = (tmp) => fs.appendFileSync(path.join(tmp, 'worker.js'), "\nimport './workers/zz-not-in-the-copy/core.mjs';\n");
+    const HARMLESS = { name: 'a new file nothing imports', file: 'workers/admin/src/zz-harmless.mjs', find: null, replace: '// Nothing imports this file.\n' };
+    const said = [];
+    const log0 = console.log;
+    console.log = () => {};
+    try { selfTest(__filename, [HARMLESS], (name, passed, detail) => said.push({ name, passed: !!passed, detail: String(detail === undefined ? '' : detail) }), { prepare: breakWorker }); }
+    finally { console.log = log0; }
+    const control = said.find((x) => /^control: /.test(x.name));
+    ok('selfTest() reports its control as failed on that copy (' + (control ? control.detail.slice(0, 80) : 'no control line at all') + '), for the failure this suite swallows, which WRONG_REASON alone does not see',
+      !!control && !control.passed && /worker\.js exposes the Monday digest/.test(control.detail) && !/^the copy cannot run the suite/.test(control.detail), said);
+    const held = said.filter((x) => x.name.includes('"' + HARMLESS.name + '"'));
+    ok('and reports the harmless mutant "not counted: the control run failed", never as caught', held.length === 1 && !held[0].passed && /^mutant "[^"]*" not counted: the control run failed$/.test(held[0].name), said);
+    const clean = runMutant(__filename, HARMLESS);
+    ok('(companion) on a copy that loads worker.js the same harmless mutant leaves this suite green (exit ' + clean.code + '), so counting it as caught would be a false catch',
+      clean.applied && clean.code === 0, clean.out.split('\n').slice(-4).join(' | '));
     selfTest(__filename, [
       { name: 'a failed log write is swallowed and data is served', file: 'workers/admin/src/index.mjs',
         find: "    try { row = await logRow(cfg, req, t, 'view_household', { target_hid: h.hid, detail: { page: 'household' } }, []); }\n    catch (e) { console.error('admin_log_fail', code(e)); return logFailed(e); }",

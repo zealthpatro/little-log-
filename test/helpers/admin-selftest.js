@@ -66,15 +66,19 @@ function controlRun(testFile, prepare) {
 }
 
 /* Runs the control, then every mutant; reports through ok(). Each mutant must apply and must make the suite
-   exit non-zero, and counts only after the control passed. */
-function selfTest(testFile, mutants, ok) {
+   exit non-zero, and counts only after the control passed. `opts.prepare(tmp)` alters every copy, the
+   control's and each mutant's, before the run: only for the self-test of this function
+   (test/admin-access-log.test.js runs it on a copy whose worker.js cannot load, with one harmless mutant, and
+   requires the control to fail and the mutant to be reported "not counted"). */
+function selfTest(testFile, mutants, ok, opts) {
+  const prepare = opts && opts.prepare;
   console.log('\nself-test: the suite passes on an unaltered copy, then each rule broken on purpose in a temp copy must turn it RED');
-  const c = controlRun(testFile);
+  const c = controlRun(testFile, prepare);
   ok('control: the suite passes on an unaltered temp copy, so a red mutant below is red for its own rule', c.passed,
     c.wrong ? 'the copy cannot run the suite: ' + c.tail : (c.failLine || c.tail));
   for (const m of mutants) {
     if (!c.passed) { ok('mutant "' + m.name + '" not counted: the control run failed', false); continue; }
-    const r = runMutant(testFile, m);
+    const r = runMutant(testFile, m, null, prepare);
     const firstFail = (r.out.split('\n').find((l) => /^\s*FAIL /.test(l)) || '').trim();
     const wrong = WRONG_REASON.test(r.out);
     ok('mutant "' + m.name + '" goes red' + (firstFail ? ' (' + firstFail.slice(5, 120) + ')' : ''), r.applied && r.code !== 0 && !wrong,

@@ -66,6 +66,7 @@ h2{font-size:22px}
 .check-bad .dot{background:var(--danger)}
 .check-bad .check-line{color:var(--danger-ink);font-weight:700}
 .check-off .dot{background:var(--line)}
+.check-note{margin-top:2px;color:var(--ink-soft);font-size:12px;font-weight:600}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:16px}
 .tile{min-width:0;background:var(--surface);border-radius:var(--r-card);padding:20px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:6px}
 .tile-label{font-size:12px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-soft)}

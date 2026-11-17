@@ -16,7 +16,9 @@
  *      and F5 (a visit that logged a dose shows the hour only, in the page and in the CSV);
  *   8. F5 wherever else a dose visit's time could show: a device's first and last seen (its batch arrival is
  *      the dose's minute), an event of the visit after the hour turns, a sign-in inside it, the household
- *      page; each beside a companion that keeps its minutes. (§6 holds the saving check's F5 lines.)
+ *      page; each beside a companion that keeps its minutes; and a visit still open, batch by batch (8b).
+ *      (§6 holds the saving check's F5 lines and the plans of its reads under skewed statistics, 6b the
+ *      visit end that rides in the next visit's first batch, 6c what its words may claim.)
  */
 'use strict';
 const path = require('path');
@@ -46,6 +48,11 @@ const checkLine = (html, title) => {
   const m = new RegExp('class="check check-(\\w+)">\\s*<span class="dot" aria-hidden="true"></span>\\s*<div><div class="check-title">' + title
     + '</div><div class="check-line">([^<]*)</div>').exec(html);
   return m ? { state: m[1], line: m[2] } : null;
+};
+/* The note under a check's line, or null when it has none. */
+const checkNote = (html, title) => {
+  const m = new RegExp('<div class="check-title">' + title + '</div><div class="check-line">[^<]*</div>(?:<div class="check-note">([^<]*)</div>)?</div>').exec(html);
+  return m ? (m[1] === undefined ? null : m[1]) : 'no check';
 };
 const tile = (html, label) => {
   const m = new RegExp('<div class="tile-label">' + label + '</div><div class="tile-value">([^<]*)</div><div class="tile-sub">([^<]*)</div>').exec(html);
@@ -197,6 +204,16 @@ const quiet = async (fn) => { const o = [console.log, console.error]; console.lo
     const sam = { uid: 'UID_sample_sam', hid: 'HHID_sample_dana', role: 'caregiver', tz: 'America/New_York', device: 'd_sambrowser99', platform: 'browser', app_version: 'v368', ua: S.USAGE_UA.mac };
     const visit = (secs, extra) => [[0, 'visit.started', { opened_from: 'icon', start: 'cold' }]].concat(extra || []).concat([[secs, 'visit.ended', { seconds: secs, reason: 'hidden' }]]);
     const opts = { internal: INTERNAL };
+    /* Every reading of "Saving and sync" in this section, with the note under it. The line reads only some
+       saves (F5), so none may call what it shows the last or the newest, say there are none, or say saving
+       is not working (6c). */
+    const SAVING_NOTE = 'It reads only visits that ended with no medicine or health entry, so it can lag behind and miss some saves.';
+    const savingSeen = [];
+    const seeSaving = (body, where) => {
+      const x = checkLine(body, 'Saving and sync');
+      savingSeen.push({ where, line: x ? x.line : null, note: checkNote(body, 'Saving and sync') });
+      return x;
+    };
     const seed = async (d1) => {
       /* The founder: a visit started 60 seconds ago, a feed logged, received 40 seconds ago. */
       /* 9 days ago first (batches land in time order, as they do from a phone): a household with an old
@@ -219,8 +236,8 @@ const quiet = async (fn) => { const o = [console.log, console.error]; console.lo
     ok('Active this week: 1 of the 2 households we measure, "50% of households measured"', t && t.value === '1' && t.sub === '50% of households measured', t);
     t = tile(h, 'Went quiet');
     ok('Went quiet: Dana and Sam\'s household, last visit 8 days ago: 1 (the founder\'s, with visits 9 days ago and today, is not), "no visit in 7 days"', t && t.value === '1' && t.sub === 'no visit in 7 days', t);
-    let c = checkLine(h, 'Saving and sync');
-    ok('saving and sync: "Working · last write 40 seconds ago"', c && c.state === 'ok' && c.line === 'Working · last write 40 seconds ago', c);
+    let c = seeSaving(h, 'the base page');
+    ok('saving and sync: "Working · a save came in 40 seconds ago"', c && c.state === 'ok' && c.line === 'Working · a save came in 40 seconds ago', c);
     const card = (body, title) => { const i = body.indexOf('>' + title + '</h2>'); return i >= 0 ? body.slice(i, body.indexOf('</section>', i)) : ''; };
     const rowOf = (body, label) => { const m = new RegExp('<tr><td class="strong">' + label + '</td><td>([^<]*)</td><td>([^<]*)</td><td>([^<]*)</td><td>([^<]*)</td></tr>').exec(body); return m ? m.slice(1) : null; };
     const uses = card(h, 'What people use');
@@ -236,48 +253,250 @@ const quiet = async (fn) => { const o = [console.log, console.error]; console.lo
     ok('and the version line counts devices seen this range: "100% ... on the newest version (v369)"', /100% of the devices seen in this range are on the newest version \(v369\)\. None is on an older one\./.test(wc), wc.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(-200));
 
     /* Saving and sync turns red two ways. */
-    const failing = async (seedFn) => { const fy = await F.buildFixture({ usage: seedFn, env: { INTERNAL_UIDS: INTERNAL } }); await quiet(() => fy.tickUntilDone()); return checkLine(await (await fy.request('/?own=show')).text(), 'Saving and sync'); };
+    const failing = async (seedFn) => { const fy = await F.buildFixture({ usage: seedFn, env: { INTERNAL_UIDS: INTERNAL } }); await quiet(() => fy.tickUntilDone()); return seeSaving(await (await fy.request('/?own=show')).text(), 'a world of its own'); };
     const failSave = () => visit(30, [[5, 'feature.used', { feature: 'feed', action: 'logged' }], [20, 'save.failed', { error: 'unavailable', retries: 5, offline: 'yes' }]]);
     c = await failing(async (d1) => { for (const who of [me, dana, sam]) await S.ingestVisit(d1, who, S.NOW - 20 * 60000, failSave(), opts); });
-    ok('saves failing for 3 people in the last hour: red, "Not working · saves failed for 3 people in the last hour"', c && c.state === 'bad' && c.line === 'Not working · saves failed for 3 people in the last hour', c);
+    ok('saves failing for 3 people in the last hour: red, "Check saves · saves failed for 3 people in the last hour"', c && c.state === 'bad' && c.line === 'Check saves · saves failed for 3 people in the last hour', c);
     /* ingestVisit stamps the batch as received 2 seconds after its last step: visit(10) lands 12s after it
        starts, visit(30) 32s after. These start times put each landing on a whole minute. */
     c = await failing(async (d1) => {
       await S.ingestVisit(d1, me, S.NOW - 30 * 60000 - 12000, visit(10, [[5, 'feature.used', { feature: 'feed', action: 'logged' }]]), opts);
       await S.ingestVisit(d1, me, S.NOW - 10 * 60000 - 32000, visit(30, [[20, 'save.failed', { error: 'deadline', retries: 5, offline: 'no' }]]), opts);
     });
-    ok('the newest save failed 10 minutes ago, after the last write: red, "Not working · the newest save failed, 10 minutes ago"', c && c.state === 'bad' && c.line === 'Not working · the newest save failed, 10 minutes ago', c);
+    ok('a save failed 10 minutes ago, after the last one it reads: red, "Check saves · a save failed 10 minutes ago, with no save shown since"', c && c.state === 'bad' && c.line === 'Check saves · a save failed 10 minutes ago, with no save shown since', c);
     c = await failing(async (d1) => {
       await S.ingestVisit(d1, me, S.NOW - 30 * 60000 - 32000, visit(30, [[20, 'save.failed', { error: 'deadline', retries: 5, offline: 'no' }]]), opts);
       await S.ingestVisit(d1, me, S.NOW - 10 * 60000 - 12000, visit(10, [[5, 'feature.used', { feature: 'feed', action: 'logged' }]]), opts);
     });
-    ok('(companion) a failed save followed by a good one reads as working again', c && c.state === 'ok' && c.line === 'Working · last write 10 minutes ago', c);
-    /* F5: "last write N minutes ago" from a batch that carried a dose or a health entry IS that minute; such a
-       time is left out of the line, never rounded. Same landing times as above. */
+    ok('(companion) a failed save followed by a good one reads as working again', c && c.state === 'ok' && c.line === 'Working · a save came in 10 minutes ago', c);
+    /* With no save it may read, the line must say what is true both when there is none and when the only
+       ones are in dose visits or in visits still open (it cannot tell them apart without timing a dose). */
+    const NO_SAVE = 'off | No save to show yet';
+    const said = (x) => (x ? x.state + ' | ' + x.line : 'no line');
     c = await failing(async (d1) => {
-      await S.ingestVisit(d1, me, S.NOW - 30 * 60000 - 12000, visit(10, [[5, 'feature.used', { feature: 'feed', action: 'logged' }]]), opts);
-      await S.ingestVisit(d1, me, S.NOW - 4 * 60000 - 32000, visit(30, [[12, 'feature.used', { feature: 'medicine', action: 'logged' }]]), opts);
+      await S.ingestVisit(d1, me, S.NOW - 30 * 60000, visit(18, [[10, 'feature.used', { feature: 'medicine', action: 'logged' }]]), opts);
+      await S.ingestVisit(d1, me, S.NOW - 5 * 60000, [[0, 'visit.started', { opened_from: 'icon', start: 'warm' }], [10, 'feature.used', { feature: 'feed', action: 'logged' }]], opts);
     });
-    ok('F5: the newest write logged a dose 4 minutes ago: "Working · the newest save went through", with no time', c && c.state === 'ok' && c.line === 'Working · the newest save went through', c);
-    c = await failing(async (d1) => {
-      await S.ingestVisit(d1, me, S.NOW - 30 * 60000 - 32000, visit(30, [[12, 'feature.used', { feature: 'health_log', action: 'logged' }]]), opts);
-      await S.ingestVisit(d1, me, S.NOW - 10 * 60000 - 12000, visit(10, [[5, 'feature.used', { feature: 'feed', action: 'logged' }]]), opts);
-    });
-    ok('(companion) a health entry 30 minutes ago, then a feed 10 minutes ago: the feed keeps its time, "Working · last write 10 minutes ago"', c && c.state === 'ok' && c.line === 'Working · last write 10 minutes ago', c);
-    c = await failing(async (d1) => {
-      await S.ingestVisit(d1, me, S.NOW - 30 * 60000 - 12000, visit(10, [[5, 'feature.used', { feature: 'feed', action: 'logged' }]]), opts);
-      await S.ingestVisit(d1, me, S.NOW - 10 * 60000 - 32000, visit(30, [[8, 'feature.used', { feature: 'medicine', action: 'edited' }], [20, 'save.failed', { error: 'deadline', retries: 5, offline: 'no' }]]), opts);
-    });
-    ok('F5: the newest save failed 10 minutes ago in a visit that edited a dose: red, "Not working · the newest save failed", with no time', c && c.state === 'bad' && c.line === 'Not working · the newest save failed', c);
-    /* Two people's batches land in the same millisecond, 3 minutes ago: Dana's feed first, the founder's dose
-       second. Whichever row wins the newest-write tie, that moment is the dose's, so it is not shown. */
-    const same = S.NOW - 3 * 60000;
-    c = await failing(async (d1) => {
-      await S.ingestVisit(d1, dana, S.NOW - 3 * 60000 - 20000, visit(10, [[5, 'feature.used', { feature: 'feed', action: 'logged' }]]), Object.assign({ receivedAt: same }, opts));
-      await S.ingestVisit(d1, me, S.NOW - 3 * 60000 - 25000, visit(10, [[5, 'feature.used', { feature: 'medicine', action: 'logged' }]]), Object.assign({ receivedAt: same }, opts));
-    });
-    ok('F5: a feed and a dose from two people landing in the same millisecond: "Working · the newest save went through"', c && c.state === 'ok' && c.line === 'Working · the newest save went through', c);
+    const noneAtAll = await failing(async (d1) => { await S.ingestVisit(d1, me, S.NOW - 30 * 60000, visit(18), opts); });
+    ok('saves only in a dose visit and in a visit still open: "' + NO_SAVE.split(' | ')[1] + '", never "No saves yet", which would be untrue', said(c) === NO_SAVE, said(c));
+    ok('and no save at all reads exactly the same, so the line cannot tell the two apart', said(noneAtAll) === NO_SAVE, said(noneAtAll));
+    /* F5: the line's time is a batch's arrival, and its wording changes whenever its inputs do, so an observer
+       who refreshes would learn when a dose's batch landed from either. It is read only from visits that
+       ended clean (no dose or health entry, start kept). Here batches land one at a time, as from phones, and
+       the line is read after each, at the same pinned moment: every batch that carries a dose or a health
+       entry, or belongs to a visit that does, must leave it exactly as it was. Companions show the same
+       reading DOES move for a clean visit, so "unchanged" is not green for free. */
+    {
+      const MIN = 60000;
+      const C = await imp('workers/usage/core.mjs');
+      let n6 = 0;
+      const id6 = () => '6e1c0b8e-0000-4000-8000-' + (++n6).toString(16).padStart(12, '0');
+      const send = (d1, who, visitId, steps, landed) => C.ingest({ v: 1, tz: who.tz, device: who.device, platform: who.platform, app_version: who.app_version,
+        events: steps.map(([t, name, props]) => ({ id: id6(), t, visit: visitId, name, props })) }, {
+        db: d1, uid: who.uid, ua: who.ua, now: landed, notice: '', env: { USAGE_MODE: 'internal', INTERNAL_UIDS: INTERNAL, USAGE_DAILY_CAP: '1000000' },
+        membership: async () => ({ hid: who.hid, role: who.role || 'owner', notice: '' }) });
+      const ago = (m) => S.NOW - m * MIN;
+      const started = (t) => [t, 'visit.started', { opened_from: 'icon', start: 'warm' }];
+      const ended = (t, secs) => [t, 'visit.ended', { seconds: secs, reason: 'hidden' }];
+      const used = (t, feature, action) => [t, 'feature.used', { feature, action: action || 'logged' }];
+      /* A whole visit in one batch that lands at `landed`, its steps in the 20 seconds before. */
+      const whole = (d1, who, visitId, landed, mid) => send(d1, who, visitId, [started(landed - 20000)].concat(mid.map((m) => [landed - 12000].concat(m))).concat([ended(landed - 2000, 18)]), landed);
+      const savingReads = new Map();
+      const fx6 = await F.buildFixture({ usage: (d1) => whole(d1, me, 'v_s6feed01', ago(50), [['feature.used', { feature: 'feed', action: 'logged' }]]), env: { INTERNAL_UIDS: INTERNAL },
+        usageHooks: { before: (sql, args) => { if (/FROM usage_events o /.test(sql)) savingReads.set(sql, args); } } });
+      await quiet(() => fx6.tickUntilDone());
+      const d1 = fx6.usage;
+      const line = async () => { const x = seeSaving(await (await fx6.request('/?own=show')).text(), 'the §6 timeline'); return x ? x.state + ' | ' + x.line : 'no line'; };
+      const steps = [];
+      /* `same`: true when this batch must leave the line as it was; a string: what the line must read after it. */
+      const step = async (what, same, fn) => { const before = await line(); await fn(); const after = await line(); steps.push({ what, same, before, after }); };
+      await step('a dose visit lands, 45 minutes ago, after the last clean write (50 minutes ago)', true,
+        () => whole(d1, me, 'v_s6dose01', ago(45), [['feature.used', { feature: 'medicine', action: 'logged' }]]));
+      await step('a visit\'s first batch, its start and a feed, lands 40 minutes ago: not read while the visit has not ended', true,
+        () => send(d1, me, 'v_s6mixd01', [started(ago(40) - 20000), used(ago(40) - 10000, 'feed')], ago(40)));
+      await step('the same visit\'s second batch, a dose alone, lands 38 minutes ago', true,
+        () => send(d1, me, 'v_s6mixd01', [used(ago(38) - 5000, 'medicine')], ago(38)));
+      await step('and its end lands 36 minutes ago: it ended with a dose, so its feed is never read', true,
+        () => send(d1, me, 'v_s6mixd01', [ended(ago(36) - 2000, 242)], ago(36)));
+      await step('a visit that edited a dose and failed to save lands 30 minutes ago', true,
+        () => whole(d1, me, 'v_s6fdos01', ago(30), [['feature.used', { feature: 'medicine', action: 'edited' }], ['save.failed', { error: 'deadline', retries: 5, offline: 'no' }]]));
+      await step('(companion) Dana\'s clean visit with a failed save lands 25 minutes ago', 'bad | Check saves · a save failed 25 minutes ago, with no save shown since',
+        () => whole(d1, dana, 'v_s6fdan01', ago(25), [['save.failed', { error: 'unavailable', retries: 5, offline: 'yes' }]]));
+      await step('(companion) Sam\'s lands 20 minutes ago', 'bad | Check saves · a save failed 20 minutes ago, with no save shown since',
+        () => whole(d1, sam, 'v_s6fsam01', ago(20), [['save.failed', { error: 'unavailable', retries: 5, offline: 'yes' }]]));
+      await step('a third person\'s failed save, in a visit that logged a health entry, lands 15 minutes ago: not "3 people", not "15 minutes ago"', true,
+        () => whole(d1, me, 'v_s6fhea01', ago(15), [['feature.used', { feature: 'health_log', action: 'logged' }], ['save.failed', { error: 'deadline', retries: 5, offline: 'no' }]]));
+      await step('a clean visit\'s first batch, its start and a feed, lands 10 minutes ago: not read before its visit ends', true,
+        () => send(d1, me, 'v_s6late01', [started(ago(10) - 20000), used(ago(10) - 10000, 'feed')], ago(10)));
+      await step('(companion) its end lands 8 minutes ago: the feed is read now, at the minute it landed', 'ok | Working · a save came in 10 minutes ago',
+        () => send(d1, me, 'v_s6late01', [ended(ago(8) - 2000, 138)], ago(8)));
+      await step('a visit lands in two batches, its start and a dose 6 minutes ago, a feed and its end 4 minutes ago', true, async () => {
+        await send(d1, me, 'v_s6cut001', [started(ago(6) - 20000), used(ago(6) - 10000, 'medicine')], ago(6));
+        await send(d1, me, 'v_s6cut001', [used(ago(4) - 10000, 'feed'), ended(ago(4) - 2000, 138)], ago(4));
+      });
+      await step('and its first batch is cut, head first, as anything that removes rows oldest first would cut it: what is left may have lost a dose, so it is still never read', true,
+        async () => { d1.raw.prepare('DELETE FROM usage_events WHERE at = ?').run(ago(6)); });
+      await step('a clean feed (Dana) and a dose (the founder) land in the same millisecond, 2 minutes ago: that moment is the dose\'s, so it is never read', true, async () => {
+        await whole(d1, dana, 'v_s6same01', ago(2), [['feature.used', { feature: 'feed', action: 'logged' }]]);
+        await whole(d1, me, 'v_s6same02', ago(2), [['feature.used', { feature: 'medicine', action: 'logged' }]]);
+      });
+      await step('Dana\'s start and feed land in the same millisecond as a whole dose visit of the founder\'s, 90 seconds ago, and her end lands alone a minute ago: her feed would show the dose\'s arrival, so it is never read', true, async () => {
+        await send(d1, dana, 'v_s6same03', [started(ago(1.5) - 20000), used(ago(1.5) - 10000, 'feed')], ago(1.5));
+        await whole(d1, me, 'v_s6same04', ago(1.5), [['feature.used', { feature: 'medicine', action: 'logged' }]]);
+        await send(d1, dana, 'v_s6same03', [ended(ago(1) - 2000, 40)], ago(1));
+      });
+      const first = steps[0] ? steps[0].before : '';
+      ok('before any of it, the line reads the clean feed of 50 minutes ago: "Working · a save came in 50 minutes ago"', first === 'ok | Working · a save came in 50 minutes ago', first);
+      for (const x of steps) {
+        if (x.same === true) ok('F5: ' + x.what + ': the line does not move ("' + x.before.split(' | ')[1] + '")', x.before === x.after, x);
+        else ok(x.what + ': the line moves to "' + x.same.split(' | ')[1] + '"', x.after === x.same && x.before !== x.after, x);
+      }
+      const cutRows = d1.raw.prepare("SELECT COUNT(*) AS n FROM usage_events WHERE visit = 'v_s6cut001'").get().n;
+      ok('(companion) the cut took the head: ' + cutRows + ' rows of that visit are left, its feed and its end', cutRows === 2, cutRows);
+      /* Cost: each of the line's three reads walks ue_at, newest first, and checks a moment by its one arrival
+         time. Left to the planner, the newest-write read checked every scoped write before sorting them. */
+      const plans = [...savingReads].map(([sql, args]) => d1.raw.prepare('EXPLAIN QUERY PLAN ' + sql).all(...(args || [])).map((x) => x.detail).join(' ; '));
+      ok('the line\'s 3 reads each walk ue_at for the row read, and probe ue_at by one arrival time for the moment it landed and for the moment each end landed (EXPLAIN QUERY PLAN)', plans.length === 3
+        && plans.every((p) => /\b(SCAN|SEARCH) e USING (COVERING )?INDEX ue_at\b/.test(p) && /\bSEARCH o USING (COVERING )?INDEX ue_at \(at=\?\)/.test(p)
+          && /\bSEARCH p USING (COVERING )?INDEX ue_at \(at=\?\)/.test(p)), plans.map((p) => p.slice(0, 160) + ' ... ' + p.slice(-200)));
+      /* And every fact of a visit (its start, a dose, an end stored by a moment) is one visit's few rows on
+         ue_visit. Left to choose, SQLite read "an end stored by then" from ue_uid_at, every older row of
+         that person: 1.8 s for the newest write at 1,000 people in node:sqlite, against 11.6 ms (ADMIN-DEPLOY.md, phase 3). */
+      const facts = plans.map((p) => (p.match(/SEARCH (usage_events|x) USING [^;]*/g) || []));
+      ok('and each visit fact the line reads is a lookup of that one visit on ue_visit, never a person\'s older rows on ue_uid_at (EXPLAIN QUERY PLAN)', plans.length === 3
+        && facts.every((f) => f.length === 4 && f.every((d) => /^SEARCH (usage_events|x) USING (COVERING )?INDEX ue_visit \(uid=\? AND visit=\?\)/.test(d))), facts);
+      /* D1 keeps its own statistics, so the plan SQLite picks here need not be the plan D1 picks. Every table
+         the line's reads name carries INDEXED BY, so no statistics can move them: skew them against ue_visit
+         and ue_at, toward ue_uid_at, and every plan above must hold. The end of o's visit (`x`) had no hint
+         until the review of 16 Nov; this database's statistics happened to read it on ue_visit anyway. A
+         companion runs the same read with that one hint taken off and must see it leave ue_visit (it scanned
+         the whole table, once for every row checked), so the skew is strong enough to move a plan that is
+         not pinned, and this check cannot pass for free. */
+      const planHolds = (p) => /\b(SCAN|SEARCH) e USING (COVERING )?INDEX ue_at\b/.test(p) && /\bSEARCH o USING (COVERING )?INDEX ue_at \(at=\?\)/.test(p)
+        && /\bSEARCH p USING (COVERING )?INDEX ue_at \(at=\?\)/.test(p)
+        && (p.match(/(SCAN|SEARCH) (usage_events|x)\b[^;]*/g) || []).length === 4
+        && (p.match(/(SCAN|SEARCH) (usage_events|x)\b[^;]*/g) || []).every((d) => /^SEARCH (usage_events|x) USING (COVERING )?INDEX ue_visit \(uid=\? AND visit=\?\)/.test(d));
+      ok('(companion) planHolds reads the plans above as holding, and an unpinned one as not', plans.every(planHolds) && !planHolds(plans[0].replace(/SEARCH x USING INDEX ue_visit \(uid=\? AND visit=\?\)/, 'SCAN x')), plans.map((p) => p.slice(0, 120)));
+      d1.raw.exec('ANALYZE');
+      d1.raw.prepare("UPDATE sqlite_stat1 SET stat = '10000000 5000000 5000000' WHERE idx = 'ue_visit'").run();
+      d1.raw.prepare("UPDATE sqlite_stat1 SET stat = '10000000 5000000' WHERE idx = 'ue_at'").run();
+      d1.raw.prepare("UPDATE sqlite_stat1 SET stat = '10000000 2 1' WHERE idx = 'ue_uid_at'").run();
+      d1.raw.exec('ANALYZE sqlite_schema');
+      const skewed = [...savingReads].map(([sql, args]) => d1.raw.prepare('EXPLAIN QUERY PLAN ' + sql).all(...(args || [])).map((x) => x.detail).join(' ; '));
+      ok('with statistics skewed against ue_visit and ue_at, the line\'s 3 reads keep every plan above: each table they name carries INDEXED BY (EXPLAIN QUERY PLAN)',
+        skewed.length === 3 && skewed.every(planHolds), skewed.map((p) => (p.match(/(SCAN|SEARCH) (e|o|p|x|usage_events)\b[^;]*/g) || []).join(' ; ')));
+      const [sql0, args0] = [...savingReads][0] || ['', []];
+      const unhinted = sql0.split('usage_events x INDEXED BY ue_visit ').join('usage_events x ');
+      const xPlan = sql0 ? d1.raw.prepare('EXPLAIN QUERY PLAN ' + unhinted).all(...(args0 || [])).map((x) => x.detail).filter((d) => /^(SCAN|SEARCH) x\b/.test(d)) : [];
+      ok('(companion) under the same statistics, that read with no hint on the end of o\'s visit leaves ue_visit (' + xPlan.join(', ') + ')',
+        xPlan.length === 1 && !/ue_visit/.test(xPlan[0]), { hintTakenOff: unhinted !== sql0, xPlan });
 
+      /* 6b. A visit's end that rides in the NEXT open's first batch. When the keepalive flush on hide does not
+         go (offline, a send already in flight, no token yet), the end waits in the phone's one queue and leaves
+         with the next visit's start, and perhaps its dose. Its arrival must not move the line while anything
+         else in that batch belongs to a visit still open or carrying a dose: the line would change at the
+         moment a dose visit opened. Nor may a chain of held ends carry a later batch onto it. One timeline,
+         on its own fixture, base: a clean feed 50 minutes ago. A companion shows a riding end IS read when
+         nothing open or dosed came with it. */
+      const sendMixed = (d1x, who, mixed, landed) => C.ingest({ v: 1, tz: who.tz, device: who.device, platform: who.platform, app_version: who.app_version,
+        events: mixed.map(([t, visitId, name, props]) => ({ id: id6(), t, visit: visitId, name, props })) }, {
+        db: d1x, uid: who.uid, ua: who.ua, now: landed, notice: '', env: { USAGE_MODE: 'internal', INTERNAL_UIDS: INTERNAL, USAGE_DAILY_CAP: '1000000' },
+        membership: async () => ({ hid: who.hid, role: who.role || 'owner', notice: '' }) });
+      const fxb = await F.buildFixture({ usage: (d1x) => whole(d1x, me, 'v_s6bbase1', ago(50), [['feature.used', { feature: 'feed', action: 'logged' }]]), env: { INTERNAL_UIDS: INTERNAL } });
+      await quiet(() => fxb.tickUntilDone());
+      const db6 = fxb.usage;
+      const lineB = async () => { const x = seeSaving(await (await fxb.request('/?own=show')).text(), 'the 6b timeline'); return x ? x.state + ' | ' + x.line : 'no line'; };
+      const stepsB = [];
+      const stepB = async (what, same, fn) => { const before = await lineB(); await fn(); const after = await lineB(); stepsB.push({ what, same, before, after }); };
+      const opened = (t, v, from) => [t, v, 'visit.started', { opened_from: from || 'icon', start: 'warm' }];
+      const closed = (t, v, secs) => [t, v, 'visit.ended', { seconds: secs, reason: 'hidden' }];
+      const did = (t, v, feature) => [t, v, 'feature.used', { feature, action: 'logged' }];
+      await stepB('a clean visit\'s start and feed land 48 minutes ago, and its end stays in the phone\'s queue', true,
+        () => sendMixed(db6, me, [opened(ago(48) - 20000, 'v_s6bcln01'), did(ago(48) - 10000, 'v_s6bcln01', 'feed')], ago(48)));
+      await stepB('the next open\'s first batch lands 46 minutes ago: that end, then a dose visit\'s start and its dose', true,
+        () => sendMixed(db6, me, [closed(ago(47) - 30000, 'v_s6bcln01', 50), opened(ago(46) - 4000, 'v_s6bdos01', 'notification'), did(ago(46) - 2000, 'v_s6bdos01', 'medicine')], ago(46)));
+      await stepB('and the dose visit\'s end lands a minute later', true, () => sendMixed(db6, me, [closed(ago(45) - 2000, 'v_s6bdos01', 60)], ago(45)));
+      await stepB('split: a clean visit\'s start and feed land 43 minutes ago, its end held', true,
+        () => sendMixed(db6, me, [opened(ago(43) - 20000, 'v_s6bcln02'), did(ago(43) - 10000, 'v_s6bcln02', 'feed')], ago(43)));
+      await stepB('its end lands 41 minutes ago with the next visit\'s start alone, a visit still open', true,
+        () => sendMixed(db6, me, [closed(ago(42) - 30000, 'v_s6bcln02', 50), opened(ago(41) - 4000, 'v_s6bdos02', 'notification')], ago(41)));
+      await stepB('and that visit\'s dose and end land 39 minutes ago', true,
+        () => sendMixed(db6, me, [did(ago(39) - 9000, 'v_s6bdos02', 'medicine'), closed(ago(39) - 2000, 'v_s6bdos02', 120)], ago(39)));
+      await stepB('chain: a clean visit\'s start and feed land 37 minutes ago, its end held', true,
+        () => sendMixed(db6, me, [opened(ago(37) - 20000, 'v_s6bchn01'), did(ago(37) - 10000, 'v_s6bchn01', 'feed')], ago(37)));
+      await stepB('its end lands 35 minutes ago with a clean visit\'s start, whose own end is held in turn', true,
+        () => sendMixed(db6, me, [closed(ago(36) - 30000, 'v_s6bchn01', 50), opened(ago(35) - 4000, 'v_s6bchn02')], ago(35)));
+      await stepB('that end lands 33 minutes ago with a dose visit\'s start and its dose (a rule that counted ends stored later would close the first end\'s moment now, at this batch)', true,
+        () => sendMixed(db6, me, [closed(ago(34) - 30000, 'v_s6bchn02', 40), opened(ago(33) - 4000, 'v_s6bchn03', 'notification'), did(ago(33) - 2000, 'v_s6bchn03', 'medicine')], ago(33)));
+      await stepB('and the dose visit\'s end lands 32 minutes ago', true, () => sendMixed(db6, me, [closed(ago(32) - 2000, 'v_s6bchn03', 60)], ago(32)));
+      await stepB('(companion) a clean visit\'s start and feed land 30 minutes ago, its end held', true,
+        () => sendMixed(db6, me, [opened(ago(30) - 20000, 'v_s6bcmp01'), did(ago(30) - 10000, 'v_s6bcmp01', 'feed')], ago(30)));
+      await stepB('(companion) its end lands 28 minutes ago beside a whole clean visit that logged nothing: nothing open or dosed came with it, so the feed is read now', 'ok | Working · a save came in 30 minutes ago',
+        () => sendMixed(db6, me, [closed(ago(29) - 30000, 'v_s6bcmp01', 50), opened(ago(28) - 9000, 'v_s6bcmp02'), closed(ago(28) - 2000, 'v_s6bcmp02', 7)], ago(28)));
+      ok('6b: before any of it, the line reads the clean feed of 50 minutes ago', stepsB[0] && stepsB[0].before === 'ok | Working · a save came in 50 minutes ago', stepsB[0]);
+      for (const x of stepsB) {
+        if (x.same === true) ok('F5, a held end: ' + x.what + ': the line does not move ("' + x.before.split(' | ')[1] + '")', x.before === x.after, x);
+        else ok(x.what + ': the line moves to "' + x.same.split(' | ')[1] + '"', x.after === x.same && x.before !== x.after, x);
+      }
+
+      /* 6c. What the line says is true of what it read (the review of 16 Nov). The rule above leaves it blind
+         to a save in a visit still open, in a dose or health visit, or in a visit whose end came in beside
+         one of those, and it may not move when such a save arrives. So it cannot know the newest save: in
+         each world below a newer save went through that it may not read yet, and the line must not call
+         the save it shows the last one, nor a failure the newest. Each world on its own fixture, read at the
+         pinned NOW. These are the review's three worlds; the unfixed line read "Working · last write 50
+         minutes ago" in A and C, and "Not working · the newest save failed, 30 minutes ago" in B. */
+      const world = async (seedFn) => {
+        const fw = await F.buildFixture({ usage: seedFn, env: { INTERNAL_UIDS: INTERNAL } });
+        await quiet(() => fw.tickUntilDone());
+        const x = seeSaving(await (await fw.request('/?own=show')).text(), '6c');
+        return x ? x.state + ' | ' + x.line : 'no line';
+      };
+      const lap = Object.assign({}, me, { device: 'd_founderlap01', platform: 'browser', ua: S.USAGE_UA.mac });
+      const wA = await world(async (dw) => {
+        await whole(dw, me, 'v_s6ctru01', ago(50), [['feature.used', { feature: 'feed', action: 'logged' }]]);
+        await send(dw, me, 'v_s6ctru02', [started(ago(6)), used(ago(5) - 5000, 'feed')], ago(5));
+      });
+      ok('6c, A: a clean feed 50 minutes ago, then a feed 5 minutes ago in a visit still open: "Working · a save came in 50 minutes ago", true, where "last write 50 minutes ago" was not',
+        wA === 'ok | Working · a save came in 50 minutes ago', wA);
+      const wB = await world(async (dw) => {
+        await whole(dw, me, 'v_s6ctru03', ago(30), [['save.failed', { error: 'unavailable', retries: 5, offline: 'no' }]]);
+        await send(dw, lap, 'v_s6ctru04', [started(ago(6)), used(ago(5) - 5000, 'feed')], ago(5));
+      });
+      ok('6c, B: a clean visit\'s save failed 30 minutes ago, then a feed went through 5 minutes ago on the laptop, in a visit still open: "Check saves · a save failed 30 minutes ago, with no save shown since", never "the newest save failed"',
+        wB === 'bad | Check saves · a save failed 30 minutes ago, with no save shown since', wB);
+      const wC = await world(async (dw) => {
+        await whole(dw, me, 'v_s6ctru05', ago(50), [['feature.used', { feature: 'feed', action: 'logged' }]]);
+        await send(dw, me, 'v_s6ctru06', [started(ago(6)), used(ago(5) - 5000, 'feed')], ago(5));
+        await sendMixed(dw, me, [closed(ago(4), 'v_s6ctru06', 120), opened(ago(1), 'v_s6ctru07')], ago(1));
+      });
+      ok('6c, C: a whole visit with a feed 5 minutes ago, whose end rode in with the next open, still open: still "Working · a save came in 50 minutes ago"',
+        wC === 'ok | Working · a save came in 50 minutes ago', wC);
+      /* E (the second review of 16 Nov). Three people's saves failed 50 minutes ago, each in a clean visit
+         that has ended; 10 minutes ago each of them saved a feed in a clean visit that has ended too, which
+         the line reads. By what it read, saving works again, and it is blind to the saves it may not read,
+         so it can never know that saving is not working. It stays red for the hour (the spec's threshold),
+         but says "Check saves". The unfixed line read "Not working · saves failed for 3 people in the last
+         hour" here. */
+      const wE = await world(async (dw) => {
+        let k = 0;
+        for (const who of [me, dana, sam]) { k += 1; await whole(dw, who, 'v_s6ctrue' + k, ago(50) + k * 1000, [['save.failed', { error: 'unavailable', retries: 5, offline: 'no' }]]); }
+        for (const who of [me, dana, sam]) { k += 1; await whole(dw, who, 'v_s6ctrue' + k, ago(10) + k * 1000, [['feature.used', { feature: 'feed', action: 'logged' }]]); }
+      });
+      ok('6c, E: three people\'s saves failed 50 minutes ago, then each saved a feed 10 minutes ago that the line reads: red, "Check saves · saves failed for 3 people in the last hour", never "Not working"',
+        wE === 'bad | Check saves · saves failed for 3 people in the last hour', wE);
+      /* And across every reading in this section: no "Not working", no "last write", no "newest", no "no
+         saves". A companion shows the same matcher catches each wording it replaced, and leaves "Check saves"
+         and "in the last hour" alone. */
+      const claimsMore = (l) => /^Not working\b|\bnewest\b|\blatest\b|\blast (write|save|entry)\b|\bno saves\b/i.test(l);
+      ok('no reading of the line in this section (' + savingSeen.length + ') says "Not working", "last write", "newest" or "no saves", which it cannot know',
+        savingSeen.length >= 40 && savingSeen.every((x) => x.line && !claimsMore(x.line)), savingSeen.filter((x) => !x.line || claimsMore(x.line)).slice(0, 3));
+      ok('(companion) the same matcher catches "Working · last write 50 minutes ago", "Not working · the newest save failed, 30 minutes ago", "Not working · saves failed for 3 people in the last hour" and "No saves yet", and passes both "Check saves" lines',
+        ['Working · last write 50 minutes ago', 'Not working · the newest save failed, 30 minutes ago', 'Not working · saves failed for 3 people in the last hour', 'No saves yet'].every(claimsMore)
+        && !claimsMore('Check saves · saves failed for 3 people in the last hour') && !claimsMore('Check saves · a save failed 30 minutes ago, with no save shown since'));
+      ok('and under every one of them a note says what it reads: "' + SAVING_NOTE + '"', savingSeen.every((x) => x.note === SAVING_NOTE),
+        savingSeen.filter((x) => x.note !== SAVING_NOTE).slice(0, 3));
+    }
     /* Waits: unbound, bound and empty, and hidden (our own accounts are the only ones measured in phase 2). */
     const waits = (body) => ['Active today', 'Active this week', 'Went quiet'].every((l) => { const x = tile(body, l); return x && x.value === '–' && x.sub === 'Waiting for usage events'; })
       && ['What people use', 'Time in Cubby', 'Where they use it'].every((x) => /<p class="waiting">Waiting for usage events<\/p>/.test(card(body, x)))
@@ -302,6 +521,10 @@ const quiet = async (fn) => { const o = [console.log, console.error]; console.lo
     const bt = tile(bo.body, 'Active today');
     ok('cubby-usage failing: the overview still answers, and says "' + UNREAD + '" on the tiles and the saving check', bo.status === 200 && bt && bt.value === '–' && bt.sub === UNREAD
       && (checkLine(bo.body, 'Saving and sync') || {}).line === UNREAD && /<p class="waiting">Usage events could not be read just now\.<\/p>/.test(card(bo.body, 'What people use')), [bo.status, bt, checkLine(bo.body, 'Saving and sync')]);
+    /* The note says what the line reads, so it stands only under a line that read something. */
+    const hiddenBody = await (await fx.request('/')).text();
+    ok('(companion) a line that read nothing has no note: waiting (' + JSON.stringify(checkNote(hiddenBody, 'Saving and sync')) + ') or unreadable (' + JSON.stringify(checkNote(bo.body, 'Saving and sync')) + ')',
+      checkNote(hiddenBody, 'Saving and sync') === null && checkNote(bo.body, 'Saving and sync') === null && checkNote(h, 'Saving and sync') === SAVING_NOTE);
     const bh = await quiet(async () => (await bx.request('/household/' + bx.admin.raw.prepare("SELECT display_no FROM dir_households WHERE hid = 'HHID_sample_founder'").get().display_no)).text());
     ok('and so does the household page', new RegExp('Failed saves, 7 days</span><span class="sub">' + UNREAD.replace('.', '\\.') + '<').test(bh));
     const br = await quiet(async () => { const r = await bx.request('/records?tab=visits&own=show'); return { status: r.status, body: await r.text() }; });
@@ -435,6 +658,73 @@ const quiet = async (fn) => { const o = [console.log, console.error]; console.lo
       .split('</li>').map((x) => x.replace(/<[^>]+>/g, '').trim()).filter(Boolean);
     ok('F5 on the household page: "Yesterday, 9pm · Sam · iPhone app · logged a dose"', items.some((x) => x.startsWith('Yesterday, 9pm · Sam · iPhone app · logged a dose')), items);
     ok('(companion) and the laptop visit keeps its minutes: "Yesterday, 8:05am · Sam · Browser tab"', items.some((x) => x.startsWith('Yesterday, 8:05am · Sam · Browser tab')), items);
+
+    /* 8b. A visit still open. Whether a visit logged a dose is final only once it ends: the tracker sends a
+       batch 5 s after each event (app/cubby-track.js), so a dose visit's start, and a sign-in in it, reach
+       the server before its dose does. Here a dose visit lands batch by batch, and after each batch every
+       usage page and CSV, the Devices cells and the household page are read: none may show its minute,
+       2:21pm in Dubai (it opens at 10:21:03 UTC; its batches land 5, 25 and 50 seconds in), since a CSV kept
+       from that moment would keep it for good. A clean visit landed the same way at 2:08pm shows the hour
+       only too until its end lands, then keeps its minute, so the matcher below can find one. */
+    {
+      const C = await imp('workers/usage/core.mjs');
+      let n8 = 0;
+      const id8 = () => '8b1c0b8e-0000-4000-8000-' + (++n8).toString(16).padStart(12, '0');
+      const send = (d1, w, visitId, steps, landed) => C.ingest({ v: 1, tz: w.tz, device: w.device, platform: w.platform, app_version: w.app_version,
+        events: steps.map(([t, name, props]) => ({ id: id8(), t, visit: visitId, name, props })) }, {
+        db: d1, uid: w.uid, ua: w.ua, now: landed, notice: '', env: { USAGE_MODE: 'internal', INTERNAL_UIDS: S.FOUNDER_UID, USAGE_DAILY_CAP: '1000000' },
+        membership: async () => ({ hid: w.hid, role: 'owner', notice: '' }) });
+      const openPhone = dev('d_f8openphon01', 'ios_app', S.USAGE_UA.ios), openLap = dev('d_f8openlapt01', 'browser', S.USAGE_UA.mac);
+      const D0 = Date.UTC(2026, 10, 13, 10, 21, 3), K0 = Date.UTC(2026, 10, 13, 10, 8, 3);
+      const ox = await F.buildFixture({ usage: async () => {} });
+      await quiet(() => ox.tickUntilDone());
+      const d1 = ox.usage;
+      const oxNo = ox.admin.raw.prepare("SELECT display_no FROM dir_households WHERE hid = 'HHID_sample_founder'").get().display_no;
+      const look = async () => {
+        const out = {};
+        for (const tab of ['visits', 'events', 'signins', 'devices']) {
+          out['/records?tab=' + tab] = await (await ox.request('/records?tab=' + tab + '&own=show')).text();
+          out['/records.csv?tab=' + tab] = await (await ox.request('/records.csv?tab=' + tab + '&own=show')).text();
+        }
+        out['/household'] = await (await ox.request('/household/' + oxNo)).text();
+        return out;
+      };
+      const showing = (o, re) => Object.keys(o).filter((k) => re.test(o[k]));
+      const visitRowOf = (o, platform) => parseCsv(o['/records.csv?tab=visits']).slice(1).find((x) => x[2] === platform) || null;
+      const sawLap = [];
+      await send(d1, openLap, 'v_f8oplp01', [[K0, 'visit.started', { opened_from: 'icon', start: 'warm' }]], K0 + 5000);
+      sawLap.push(await look());
+      await send(d1, openLap, 'v_f8oplp01', [[K0 + 20000, 'feature.used', { feature: 'feed', action: 'logged' }]], K0 + 25000);
+      sawLap.push(await look());
+      await send(d1, openLap, 'v_f8oplp01', [[K0 + 48000, 'visit.ended', { seconds: 48, reason: 'hidden' }]], K0 + 50000);
+      const lapDone = await look();
+      const sawDose = [];
+      await send(d1, openPhone, 'v_f8opph01', [[D0, 'visit.started', { opened_from: 'notification', start: 'warm' }],
+        [D0 + 2000, 'signin.attempted', { method: 'google', step: 'signed_in', outcome: 'succeeded', error: 'none', attempt: 1, storage: 'app' }]], D0 + 5000);
+      sawDose.push({ batch: 'its start and a sign-in', o: await look() });
+      await send(d1, openPhone, 'v_f8opph01', [[D0 + 20000, 'feature.used', { feature: 'medicine', action: 'logged' }]], D0 + 25000);
+      sawDose.push({ batch: 'its dose', o: await look() });
+      await send(d1, openPhone, 'v_f8opph01', [[D0 + 48000, 'visit.ended', { seconds: 48, reason: 'hidden' }]], D0 + 50000);
+      sawDose.push({ batch: 'its end', o: await look() });
+      for (const x of sawDose) {
+        ok('OPEN: after the dose visit\'s batch with ' + x.batch + ' lands, no page, CSV, Devices cell or household line shows its minute (2:21pm)', showing(x.o, /\b2:21/).length === 0, showing(x.o, /\b2:21/));
+      }
+      ok('(companion) and it is listed from its first batch on, as "13 Nov, 2pm" on the Visits tab, with its device and its sign-in, so those reads are not empty',
+        sawDose.every((x) => (visitRowOf(x.o, 'iPhone app') || [])[4] === '13 Nov, 2pm'
+          && parseCsv(x.o['/records.csv?tab=signins']).slice(1).some((r) => r[9] === 'iPhone app')
+          && (parseCsv(x.o['/records.csv?tab=devices']).slice(1).find((r) => r[1] === 'iPhone app') || [])[8] === '13 Nov, 2pm'), sawDose.map((x) => visitRowOf(x.o, 'iPhone app')));
+      ok('a clean visit still open shows the hour only too, after its start and after its feed ("13 Nov, 2pm", no 2:08pm anywhere)',
+        sawLap.every((o) => showing(o, /\b2:08/).length === 0 && (visitRowOf(o, 'Browser tab') || [])[4] === '13 Nov, 2pm'), sawLap.map((o) => [visitRowOf(o, 'Browser tab'), showing(o, /\b2:08/)]));
+      /* The note under each list says why a row shows the hour only, and names a visit whose end has not come
+         in, so an open visit is never read as a dose (the review of 16 Nov: it named only medicine and health). */
+      const OPEN_NOTE = 'A visit that logged or edited medicine or a health entry, or whose end has not come in yet, shows the hour only';
+      const unnoted = (o) => ['/records?tab=visits', '/records?tab=events', '/records?tab=signins', '/records?tab=devices', '/household'].filter((k) => !o[k].includes(OPEN_NOTE));
+      ok('and the note under each list (Visits, Usage events, Sign-ins, Devices, the household page), read while the dose visit is open, says so: "' + OPEN_NOTE + '"',
+        unnoted(sawDose[0].o).length === 0, unnoted(sawDose[0].o));
+      ok('(companion) once its end lands it keeps its minute, "2:08pm", on the Visits, Usage events and Devices tabs, their CSVs and the household page, so the matcher above finds a minute where one shows',
+        ['/records?tab=visits', '/records.csv?tab=visits', '/records?tab=events', '/records.csv?tab=events', '/records?tab=devices', '/records.csv?tab=devices', '/household'].every((k) => /\b2:08pm/.test(lapDone[k])),
+        Object.keys(lapDone).map((k) => k + ' ' + /\b2:08pm/.test(lapDone[k])));
+    }
   }
 
   console.log('\n9. F5 by order, by window and by cut: a dose visit\'s minute moves nothing, and a visit is judged whole');
@@ -450,18 +740,26 @@ const quiet = async (fn) => { const o = [console.log, console.error]; console.lo
        nappy), the phone at 9:37 (a feed), and two dose visits, the phone's (a dose and a sign-in) and the
        home-screen app's (a health entry, its only visit), at 9:35 in one world and 9:39 in the other. A row's
        place must not bracket a dose: every page, tab and CSV that lists rows reads the same in both worlds,
-       byte for byte. Batches land in time order, one per visit at its end. */
+       byte for byte. Batches land in time order, one per visit at its end. And a tablet in Kathmandu (UTC+5:45),
+       whose 9pm hour runs from 3:15 to 4:15pm UTC, so it straddles a UTC hour: a feed at its 9:20 and a nappy at
+       its 9:50, and a dose visit at its 9:10 in one world and its 9:55 in the other, either side of 4pm UTC. A
+       list that grouped by the UTC hour would place that dose visit differently in the two worlds. */
     const at = (h, m) => Date.UTC(2026, 10, 12, h - 4, m, 0);
     const laptop = dev('d_f9laptop0001', 'browser', S.USAGE_UA.mac);
     const phone = dev('d_f9phone00001', 'ios_app', S.USAGE_UA.ios);
     const home = dev('d_f9homescr001', 'home_screen', S.USAGE_UA.ios);
-    const world = (doseMin, feedMin) => async (d1) => {
+    const ktmTab = Object.assign(dev('d_f9ktmtab0001', 'android_app', S.USAGE_UA.android), { tz: 'Asia/Kathmandu' });
+    const ktmAt = (m) => Date.UTC(2026, 10, 12, 15, 15 + m, 0);   // Kathmandu's 9:m pm on 12 Nov
+    const world = (doseMin, feedMin, ktmDoseMin) => async (d1) => {
       const plan = [
         [Object.assign({ visit: 'v_f9lap001' }, laptop), at(21, feedMin), [[0, 'visit.started', { opened_from: 'icon', start: 'warm' }], [5, ...signin(1)], [10, 'feature.used', { feature: 'feed', action: 'logged' }], [20, 'visit.ended', { seconds: 20, reason: 'hidden' }]]],
         [Object.assign({ visit: 'v_f9lap002' }, laptop), at(21, 38), [[0, 'visit.started', { opened_from: 'icon', start: 'warm' }], [10, 'feature.used', { feature: 'nappy', action: 'logged' }], [20, 'visit.ended', { seconds: 20, reason: 'hidden' }]]],
         [Object.assign({ visit: 'v_f9pho001' }, phone), at(21, 37), [[0, 'visit.started', { opened_from: 'icon', start: 'warm' }], [10, 'feature.used', { feature: 'feed', action: 'logged' }], [20, 'visit.ended', { seconds: 20, reason: 'hidden' }]]],
         [Object.assign({ visit: 'v_f9dose01' }, phone), at(21, doseMin), [[0, 'visit.started', { opened_from: 'notification', start: 'warm' }], [5, 'feature.used', { feature: 'medicine', action: 'logged' }], [10, ...signin(2)], [20, 'visit.ended', { seconds: 20, reason: 'hidden' }]]],
         [Object.assign({ visit: 'v_f9dose02' }, home), at(21, doseMin) + 1000, [[0, 'visit.started', { opened_from: 'icon', start: 'warm' }], [5, 'feature.used', { feature: 'health_log', action: 'logged' }], [20, 'visit.ended', { seconds: 20, reason: 'hidden' }]]],
+        [Object.assign({ visit: 'v_f9ktm001' }, ktmTab), ktmAt(20), [[0, 'visit.started', { opened_from: 'icon', start: 'warm' }], [10, 'feature.used', { feature: 'feed', action: 'logged' }], [20, 'visit.ended', { seconds: 20, reason: 'hidden' }]]],
+        [Object.assign({ visit: 'v_f9ktm002' }, ktmTab), ktmAt(50), [[0, 'visit.started', { opened_from: 'icon', start: 'warm' }], [10, 'feature.used', { feature: 'nappy', action: 'logged' }], [20, 'visit.ended', { seconds: 20, reason: 'hidden' }]]],
+        [Object.assign({ visit: 'v_f9ktmdos' }, ktmTab), ktmAt(ktmDoseMin), [[0, 'visit.started', { opened_from: 'notification', start: 'warm' }], [5, 'feature.used', { feature: 'medicine', action: 'logged' }], [20, 'visit.ended', { seconds: 20, reason: 'hidden' }]]],
       ].sort((a, b) => a[1] - b[1]);
       for (const [who, start, steps] of plan) await S.ingestVisit(d1, who, start, steps);
     };
@@ -476,9 +774,9 @@ const quiet = async (fn) => { const o = [console.log, console.error]; console.lo
       out['/household'] = visitsList(await (await fx.request('/household/' + founderNo(fx))).text()).join('\n');
       return out;
     };
-    const early = await render(world(35, 36)), late = await render(world(39, 36));
+    const early = await render(world(35, 36, 10)), late = await render(world(39, 36, 55));
     const moved = Object.keys(early).filter((k) => early[k] !== late[k]);
-    ok('ORDER: the dose visit at 9:35 or 9:39 (with 9:36, 9:37 and 9:38 around it): all 4 usage tabs, their CSVs and the household page read byte for byte the same', moved.length === 0,
+    ok('ORDER: the dose visit at 9:35 or 9:39 (with 9:36, 9:37 and 9:38 around it), and in Kathmandu at 9:10 or 9:55 (either side of 4pm UTC, with 9:20 and 9:50 around it): all 4 usage tabs, their CSVs and the household page read byte for byte the same', moved.length === 0,
       moved.map((k) => k + ': ' + (early[k].split('\n').find((l, i) => l !== late[k].split('\n')[i]) || '').replace(/<[^>]+>/g, ' ').slice(0, 140)));
     const whens = (w, t) => parseCsv(w['/records.csv?tab=' + t]).slice(1).map((x) => x[t === 'visits' ? 4 : 0]);
     ok('and in every list, in both worlds, the dose visit\'s "12 Nov, 9pm" rows come after every 9:3x row of that hour (Visits, Usage events, Sign-ins CSV)', [early, late].every((w) => ['visits', 'events', 'signins'].every((t) => {
@@ -488,7 +786,7 @@ const quiet = async (fn) => { const o = [console.log, console.error]; console.lo
     const devRow = (w) => parseCsv(w['/records.csv?tab=devices']).slice(1).find((x) => x[1] === 'iPhone app') || [];
     ok('the phone\'s first and last seen are picked by what they show, in both worlds: first "12 Nov, 9pm" (the dose visit stands at the start of the hour), last "12 Nov, 9:37pm"',
       [early, late].every((w) => devRow(w)[7] === '12 Nov, 9pm' && devRow(w)[8] === '12 Nov, 9:37pm'), [devRow(early), devRow(late)]);
-    const feedMoved = await render(world(35, 34));
+    const feedMoved = await render(world(35, 34, 10));
     const seen = Object.keys(early).filter((k) => early[k] !== feedMoved[k]);
     ok('(companion) moving the laptop\'s feed visit from 9:36 to 9:34 DOES change every list that shows it, so the comparison above can see a minute', ['/records?tab=visits', '/records.csv?tab=visits', '/records.csv?tab=events', '/records.csv?tab=signins', '/household'].every((k) => seen.includes(k)), seen);
 
@@ -498,7 +796,10 @@ const quiet = async (fn) => { const o = [console.log, console.error]; console.lo
        across their 48-hour edge, the dose visit never shows a minute and leaves the list at the start of an
        hour; the feed visit always shows its true start, 2:40pm, never its end's 2:43pm. So does a feed visit
        from a tablet whose clock runs 4 minutes fast, whose batches therefore land before the minute it
-       started: it is listed, with its true start, for exactly the 48 hours after it began. */
+       started: it is listed, with its true start, for exactly the 48 hours after it began. And a dose visit
+       from a home-screen app in Kathmandu (UTC+5:45), where the same moment is 4:25pm: its hour began at
+       10:15 UTC, so it must leave at that quarter past, its own hour's edge. Leaving at 10:00 UTC (the UTC
+       hour's edge) or at 11:00 would tell whether it began before or after a quarter to five, local. */
     const S0 = Date.UTC(2026, 10, 11, 10, 40, 0);
     const send = (d1, who, events, now) => (async () => {
       const C = await imp('workers/usage/core.mjs');
@@ -514,8 +815,10 @@ const quiet = async (fn) => { const o = [console.log, console.error]; console.lo
       await send(d1, who, [{ id: id9(), t: from + 190000, visit, name: 'visit.ended', props: { seconds: 190, reason: 'hidden' } }], from + 190500 - (ahead || 0));
     };
     const tablet = dev('d_f9tablet0001', 'android_app', S.USAGE_UA.android);
+    const ktmHome = Object.assign(dev('d_f9ktmhome001', 'home_screen', S.USAGE_UA.ios), { tz: 'Asia/Kathmandu' });
     const wx = await F.buildFixture({ usage: async (d1) => {
       await split(d1, phone, 'v_f9wdose1', 'medicine', S0); await split(d1, laptop, 'v_f9wfeed1', 'feed', S0); await split(d1, tablet, 'v_f9wfast1', 'feed', S0, 4 * MIN);
+      await split(d1, ktmHome, 'v_f9wktm01', 'medicine', S0);
     } });
     await quiet(() => wx.tickUntilDone());
     const sweep = [];
@@ -525,7 +828,8 @@ const quiet = async (fn) => { const o = [console.log, console.error]; console.lo
     for (const t of sweep) {
       wx.setNow(t);
       const items = visitsList(await (await wx.request('/household/' + founderNo(wx))).text());
-      seenAt.push({ t, phone: items.find((x) => / · iPhone app/.test(x)) || null, lap: items.find((x) => / · Browser tab/.test(x)) || null, fast: items.find((x) => / · Android app/.test(x)) || null });
+      seenAt.push({ t, phone: items.find((x) => / · iPhone app/.test(x)) || null, lap: items.find((x) => / · Browser tab/.test(x)) || null, fast: items.find((x) => / · Android app/.test(x)) || null,
+        ktm: items.find((x) => / · Home-screen app/.test(x)) || null });
     }
     wx.setNow(S.NOW);
     const minuteOnPhone = seenAt.filter((x) => x.phone && /, \d{1,2}:\d\d(am|pm) /.test(x.phone));
@@ -533,6 +837,10 @@ const quiet = async (fn) => { const o = [console.log, console.error]; console.lo
     const phoneShown = seenAt.filter((x) => x.phone).map((x) => x.t);
     ok('and it leaves the list at the start of an hour (48 hours after its hour began), never at a moment its batches set', phoneShown.length > 0 && phoneShown.every((t) => t <= hourEdge) && seenAt.filter((x) => !x.phone).every((x) => x.t > hourEdge)
       && seenAt.filter((x) => x.phone).every((x) => /^11 Nov, 2pm · Sam · iPhone app · logged a dose · 3m 10s$/.test(x.phone)), seenAt.filter((_, i) => i % 4 === 0).map((x) => new Date(x.t).toISOString().slice(11, 16) + ' ' + x.phone));
+    const ktmEdge = Date.UTC(2026, 10, 13, 10, 15, 0);   // 4pm Kathmandu on 13 Nov: 48 hours after that dose visit's own hour began
+    const ktmWrong = seenAt.filter((x) => (x.t <= ktmEdge) !== (x.ktm === '11 Nov, 4pm · Sam · Home-screen app · logged a dose · 3m 10s'));
+    ok('and the Kathmandu dose visit (UTC+5:45) reads "11 Nov, 4pm", no minute, and leaves at its own hour\'s edge, 10:15 UTC, never at the UTC hour\'s (listed ' + seenAt.filter((x) => x.ktm).length + ' of ' + seenAt.length + ' minutes)',
+      ktmWrong.length === 0 && seenAt.some((x) => x.ktm) && seenAt.some((x) => !x.ktm), ktmWrong.slice(0, 3).map((x) => new Date(x.t).toISOString().slice(11, 16) + ' ' + x.ktm));
     const lapWrong = seenAt.filter((x) => x.lap && !/^11 Nov, 2:40pm · Sam · Browser tab · logged a feed · 3m 10s$/.test(x.lap));
     ok('and the feed visit of the same shape is read whole: it shows its true start, "11 Nov, 2:40pm", whenever it is listed, never its end\'s 2:43pm, and is listed until 48 hours after it began (the matcher above finds a minute where one may show)',
       lapWrong.length === 0 && seenAt.filter((x) => x.lap).length > 0 && seenAt.every((x) => !!x.lap === (x.t <= S0 + 48 * 3600000)), lapWrong.slice(0, 3).map((x) => new Date(x.t).toISOString() + ' ' + x.lap));
@@ -602,11 +910,50 @@ const quiet = async (fn) => { const o = [console.log, console.error]; console.lo
       { name: 'an event of a dose visit shows its own hour', file: 'workers/admin/src/usage.mjs', find: 'at: head ? head.at : Number(r.client_at), tz: head ? head.tz : okTz(r.tz),', replace: 'at: Number(r.client_at), tz: okTz(r.tz),' },
       { name: 'the Sign-ins tab ignores F5', file: 'workers/admin/src/usage.mjs', find: 'props: props || [], hourOnly };', replace: "props: props || [], hourOnly: tab === 'events' && hourOnly };" },
       { name: 'the household page ignores F5', file: 'workers/admin/src/views.mjs', find: 'localWhen(v.start, v.tz, v.hourOnly, now)', replace: 'localWhen(v.start, v.tz, false, now)' },
-      { name: 'the last write is timed though its batch logged a dose', file: 'workers/admin/src/views.mjs', find: "line: s.lastSaveUntimed ? 'Working · the newest save went through' : 'Working · last write '", replace: "line: 'Working · last write '" },
-      { name: 'the newest failure is timed though its visit edited a dose', file: 'workers/admin/src/views.mjs', find: "(s.lastFailedUntimed ? '' : ', ' + agoWords(s.lastFailedAt, now))", replace: "(', ' + agoWords(s.lastFailedAt, now))" },
-      { name: 'the batch check never finds a health visit', file: 'workers/admin/src/usage.mjs', find: '  if (!Number.isFinite(at)) return false;\n', replace: '  return false;\n' },
-      { name: 'the batch check looks only at the row that won a same-millisecond tie', file: 'workers/admin/src/usage.mjs', find: "'SELECT 1 AS y FROM usage_events e WHERE e.at = ? AND '", replace: "'SELECT 1 AS y FROM (SELECT * FROM usage_events WHERE at = ? LIMIT 1) e WHERE '" },
-      { name: 'the batch check misses a dose that was edited, not logged', file: 'workers/admin/src/usage.mjs', find: "json_extract(props, '$.action') IN ('logged', 'edited') AND json_extract(props, '$.feature') IN ('medicine', 'health_log')", replace: "json_extract(props, '$.action') IN ('logged') AND json_extract(props, '$.feature') IN ('medicine', 'health_log')" },
+      /* The saving line read only from writes whose visits all finished clean at a closed moment (§6, F5):
+         each part of the rule broken alone. Each keeps the statement's placeholders, so a mutant goes red
+         for its rule, never for a bind count. */
+      { name: 'the last write is read from a visit that carried a dose', file: 'workers/admin/src/usage.mjs',
+        find: "' AND ' + clean + ' ORDER BY e.at DESC LIMIT 1', [...U, ...U, ...U]);", replace: "' AND (1 OR ' + clean + ') ORDER BY e.at DESC LIMIT 1', [...U, ...U, ...U]);" },
+      { name: 'the newest failed save is read from a visit that carried a dose', file: 'workers/admin/src/usage.mjs',
+        find: "' AND ' + clean + ' ORDER BY e.at DESC LIMIT 1', [now - HOUR, ...U, ...U, ...U]);", replace: "' AND (1 OR ' + clean + ') ORDER BY e.at DESC LIMIT 1', [now - HOUR, ...U, ...U, ...U]);" },
+      { name: '"saves failed for 3 people" counts one whose visit carried a health entry', file: 'workers/admin/src/usage.mjs',
+        find: "' AND ' + clean, [now - HOUR, ...U, ...U, ...U]);", replace: "' AND (1 OR ' + clean + ')', [now - HOUR, ...U, ...U, ...U]);" },
+      { name: 'a write is read once its visit has an end, whatever landed beside that end', file: 'workers/admin/src/usage.mjs',
+        find: "x.name = 'visit.ended' AND \" + CLOSED(scope, 'x.at') + '))';", replace: "x.name = 'visit.ended' AND (1 OR \" + CLOSED(scope, 'x.at') + ')))';" },
+      { name: 'a moment is closed with a dose visit in it', file: 'workers/admin/src/usage.mjs', find: "  + ' AND NOT ' + VISIT_HAS('p', HEALTH)\n", replace: '' },
+      { name: 'a moment is closed with a visit still open in it', file: 'workers/admin/src/usage.mjs',
+        find: "  + ' AND ' + VISIT_HAS('p', \"name = 'visit.ended' AND at <= \" + m) + '))';", replace: "  + ' AND 1))';" },
+      { name: 'a moment is closed by an end that landed after it (a chain of held ends)', file: 'workers/admin/src/usage.mjs',
+        find: "VISIT_HAS('p', \"name = 'visit.ended' AND at <= \" + m)", replace: "VISIT_HAS('p', \"name = 'visit.ended'\")" },
+      { name: 'a moment is closed with a visit cut from its head in it', file: 'workers/admin/src/usage.mjs', find: "  + VISIT_HAS('p', \"name = 'visit.started'\")\n", replace: "  + '1'\n" },
+      { name: 'the moment check reads only the row itself, not every row that landed with it', file: 'workers/admin/src/usage.mjs', find: 'FROM usage_events o INDEXED BY ue_at WHERE o.at = e.at AND ', replace: 'FROM usage_events o WHERE o.id = e.id AND ' },
+      { name: 'the saving line lets SQLite check every scoped write before sorting', file: 'workers/admin/src/usage.mjs', find: "E = 'FROM usage_events e INDEXED BY ue_at WHERE ';", replace: "E = 'FROM usage_events e WHERE ';" },
+      { name: 'the moment check probes every scoped uid instead of one arrival time', file: 'workers/admin/src/usage.mjs', find: 'FROM usage_events o INDEXED BY ue_at WHERE o.at = e.at AND ', replace: 'FROM usage_events o WHERE o.at = e.at AND ' },
+      { name: 'the closed check probes every scoped uid instead of one arrival time', file: 'workers/admin/src/usage.mjs', find: 'FROM usage_events p INDEXED BY ue_at WHERE p.at = ', replace: 'FROM usage_events p WHERE p.at = ' },
+      { name: 'the line lets SQLite read a visit fact from every older row of that person', file: 'workers/admin/src/usage.mjs', find: "'EXISTS (SELECT 1 FROM usage_events INDEXED BY ue_visit WHERE uid = '", replace: "'EXISTS (SELECT 1 FROM usage_events WHERE uid = '" },
+      { name: 'a visit that edited a dose, not logged one, counts as clean', file: 'workers/admin/src/usage.mjs', find: "json_extract(props, '$.action') IN ('logged', 'edited') AND json_extract(props, '$.feature') IN ('medicine', 'health_log')", replace: "json_extract(props, '$.action') IN ('logged') AND json_extract(props, '$.feature') IN ('medicine', 'health_log')" },
+      { name: 'the fallback line says "No saves yet" when saves exist that it may not read', file: 'workers/admin/src/views.mjs', find: "export const NO_SAVE_YET = 'No save to show yet';", replace: "export const NO_SAVE_YET = 'No saves yet';" },
+      /* What the line says (6c, the review of 16 Nov): it reads only some saves, so it claims no more. */
+      { name: 'the line calls the save it shows the last write', file: 'workers/admin/src/views.mjs',
+        find: "line: 'Working · a save came in ' + agoWords(s.lastSaveAt, now)", replace: "line: 'Working · last write ' + agoWords(s.lastSaveAt, now)" },
+      { name: 'the line calls a failure it read the newest save', file: 'workers/admin/src/views.mjs',
+        find: "line: 'Check saves · a save failed ' + agoWords(s.lastFailedAt, now) + ', with no save shown since'", replace: "line: 'Not working · the newest save failed, ' + agoWords(s.lastFailedAt, now)" },
+      { name: 'the line says saving is not working when 3 people\'s saves failed', file: 'workers/admin/src/views.mjs',
+        find: "line: 'Check saves · saves failed for ' + s.failedPeople", replace: "line: 'Not working · saves failed for ' + s.failedPeople" },
+      { name: 'three people failing reads as working once a save it reads comes in after them, inside the hour', file: 'workers/admin/src/views.mjs',
+        find: 'if (s.failedPeople >= 3) return', replace: 'if (s.failedPeople >= 3 && !(s.lastSaveAt > s.lastFailedAt)) return' },
+      { name: 'the line does not say what it reads', file: 'workers/admin/src/views.mjs', find: "export const SAVING_NOTE = 'It reads only", replace: "export const SAVING_NOTE = '' && 'It reads only" },
+      { name: 'a line that read nothing carries the note', file: 'workers/admin/src/views.mjs',
+        find: "|| u.state === 'hidden') return { state: 'off', line: WAITING };", replace: "|| u.state === 'hidden') return { state: 'off', line: WAITING, note: SAVING_NOTE };" },
+      { name: 'the end of o\'s visit is left to the planner, so D1\'s statistics choose its plan', file: 'workers/admin/src/usage.mjs',
+        find: 'FROM usage_events x INDEXED BY ue_visit WHERE', replace: 'FROM usage_events x WHERE' },
+      { name: 'the hour-only notes leave out a visit still open', file: 'workers/admin/src/views.mjs',
+        find: "const WHICH_HOUR_ONLY = 'A visit that logged or edited medicine or a health entry, or whose end has not come in yet,';", replace: "const WHICH_HOUR_ONLY = 'A visit that logged medicine or a health entry';" },
+      /* A visit still open shows the hour only (§8b, F5 is final only once a visit ends): in the lists, and
+         in the Devices cells, which read the SQL twin. */
+      { name: 'a visit still open keeps its minutes in the lists and CSVs', file: 'workers/admin/src/usage.mjs', find: 'const hourOnlyOf = (r) => r.health === 1 || r.ended !== 1;', replace: 'const hourOnlyOf = (r) => r.health === 1;' },
+      { name: 'a device\'s visit still open keeps its minutes', file: 'workers/admin/src/usage.mjs', find: "const HOUR_ONLY = (v) => '(' + v + 'health = 1 OR ' + v + 'ended = 0)';", replace: "const HOUR_ONLY = (v) => '(' + v + 'health = 1)';" },
       /* F5 by order, by window and by cut, and the CSV of a failed read (each found by the review of 16 Nov). */
       { name: 'the Visits tab sorts by the exact start', file: 'workers/admin/src/usage.mjs', find: "const VISIT_ORDER = ' ORDER BY substr(head, 17, 13) DESC, '", replace: "const VISIT_ORDER = ' ORDER BY substr(head, 1, 15) DESC, '" },
       { name: 'Usage events and Sign-ins sort by each row\'s own time', file: 'workers/admin/src/usage.mjs', find: "const EVENT_ORDER = ' ORDER BY ' + EVENT_BUCKET + ' DESC, '", replace: "const EVENT_ORDER = ' ORDER BY e.client_at DESC, ' + EVENT_BUCKET + ' DESC, '" },
@@ -622,11 +969,15 @@ const quiet = async (fn) => { const o = [console.log, console.error]; console.lo
       { name: 'the household page finds its visits with no slack for a fast phone clock', file: 'workers/admin/src/usage.mjs', find: 'now - 49 * HOUR, ...U]', replace: 'now - 48 * HOUR, ...U]' },
       { name: 'the household page lists whatever its batches bring in', file: 'workers/admin/src/usage.mjs',
         find: 'const listedSince = (v, now) => (v.hourOnly ? hourStart(v.start, v.tz) : v.start) >= now - 48 * HOUR;', replace: 'const listedSince = (v, now) => true;' },
+      { name: 'an hour-only visit leaves the household page at the UTC hour\'s edge, not its own', file: 'workers/admin/src/usage.mjs',
+        find: 'const listedSince = (v, now) => (v.hourOnly ? hourStart(v.start, v.tz) : v.start) >= now - 48 * HOUR;', replace: "const listedSince = (v, now) => (v.hourOnly ? hourStart(v.start, 'UTC') : v.start) >= now - 48 * HOUR;" },
+      { name: 'the Visits tab groups its rows by the UTC hour, not the family\'s', file: 'workers/admin/src/usage.mjs', find: "const VISIT_ORDER = ' ORDER BY substr(head, 17, 13) DESC, '",
+        replace: "const VISIT_ORDER = \" ORDER BY strftime('%Y-%m-%d|%H', CAST(substr(head, 1, 15) AS INTEGER) / 1000, 'unixepoch') DESC, \"" },
       { name: 'an hour-only visit leaves the household page 48 hours after its own minute', file: 'workers/admin/src/usage.mjs',
         find: 'const listedSince = (v, now) => (v.hourOnly ? hourStart(v.start, v.tz) : v.start) >= now - 48 * HOUR;', replace: 'const listedSince = (v, now) => v.start >= now - 48 * HOUR;' },
-      { name: 'a visit cut from its head keeps its minutes', file: ['workers/admin/src/usage.mjs', 'workers/admin/src/usage.mjs'],
-        find: ["const HOUR_ONLY = (v) => '(' + v + 'health = 1 OR ' + v + 'headed = 0)';", 'const hourOnlyOf = (r) => r.health === 1 || r.headed !== 1;'],
-        replace: ["const HOUR_ONLY = (v) => '(' + v + 'health = 1)';", 'const hourOnlyOf = (r) => r.health === 1;'] },
+      { name: 'a visit cut from its head, with no end, keeps its minutes', file: ['workers/admin/src/usage.mjs', 'workers/admin/src/usage.mjs'],
+        find: ["const HOUR_ONLY = (v) => '(' + v + 'health = 1 OR ' + v + 'ended = 0)';", 'const hourOnlyOf = (r) => r.health === 1 || r.ended !== 1;'],
+        replace: ["const HOUR_ONLY = (v) => '(' + v + 'health = 1 OR ' + v + 'headed = 1 AND ' + v + 'ended = 0)';", 'const hourOnlyOf = (r) => r.health === 1 || (r.headed === 1 && r.ended !== 1);'] },
       { name: 'a visit that kept its end but lost its start is listed', file: 'workers/admin/src/usage.mjs', find: "const SHOWN = (v) => 'NOT (' + v + 'headed = 0 AND ' + v + 'ended = 1)';", replace: "const SHOWN = (v) => '(1 OR ' + v + 'headed = 0)';" },
       { name: 'a usage CSV whose read failed is served as a file of no rows', file: 'workers/admin/src/index.mjs', find: "    if (csv && usage && usage.state === 'error') return notExported();\n", replace: '' },
       { name: 'a usage read failure reads as waiting', file: 'workers/admin/src/usage.mjs', find: "  } catch (e) {\n    return { state: 'error' };\n  }\n}\n\n/* Pregnancy", replace: "  } catch (e) {\n    return { state: 'empty' };\n  }\n}\n\n/* Pregnancy" },
