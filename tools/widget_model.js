@@ -144,12 +144,16 @@ function createModel(copy, actions) {
       shown = [t(merged[1]) > t(merged[0]) ? merged[1] : merged[0]];
     }
     const twinsLayout = !lock && !isSmall && shown.length === 2;
-    const sibling = twinsLayout && !app.twins;     // two babies of different ages set to Both (spec 6.4)
-    const activeOf = () => shown.find((m) => m.id === app.activeBabyId) || shown[0];
+    // The buttons follow the SELECTION, not the one row a small widget draws (D5, spec 6.4): a small widget set to
+    // Both shows one row but its buttons and intents still target both babies, as the medium twins widget does.
+    const grp = merged;
+    const grpTwins = !lock && grp.length === 2;
+    const sibling = grpTwins && !app.twins;     // two babies of different ages set to Both (spec 6.4)
+    const activeOf = () => grp.find((m) => m.id === app.activeBabyId) || grp[0];
     const names = (list) => list.map((m) => m.name).join(txt('names.and'));
     // the baby the buttons name, in a link
-    const target = twinsLayout ? (sibling ? activeOf().id : 'both') : shown[0].id;
-    const targetNames = twinsLayout ? (sibling ? activeOf().name : names(shown)) : shown[0].name;
+    const target = grpTwins ? (sibling ? activeOf().id : 'both') : grp[0].id;
+    const targetNames = grpTwins ? (sibling ? activeOf().name : names(grp)) : grp[0].name;
 
     /* ---- M13 line ----------------------------------------------------------------------------- */
     let line = null, failure = null;
@@ -300,9 +304,9 @@ function createModel(copy, actions) {
       const plain = (k) => {
         const a = act(k);
         if (k === 'health') {
-          const ill = shown.filter((m) => m.healthOpen);
-          if (twinsLayout && !sibling) {
-            return ill.length === 1 ? soft(k, a.go, ill[0].id, ill[0].name) : soft(k, a.go, 'both', names(shown));
+          const ill = grp.filter((m) => m.healthOpen);
+          if (grpTwins && !sibling) {
+            return ill.length === 1 ? soft(k, a.go, ill[0].id, ill[0].name) : soft(k, a.go, 'both', names(grp));
           }
         }
         return soft(k, a.go, target, targetNames);
@@ -312,15 +316,15 @@ function createModel(copy, actions) {
         const dim = pending;
         let btn;
         if (sibling) btn = phaseA;
-        else if (shown.some(isLong)) {
-          const l = shown.find(isLong);
+        else if (grp.some(isLong)) {
+          const l = grp.find(isLong);
           btn = {
             k: 'sleep', label: isSmall ? txt('small.sleepStop') : txt('button.stopSleep'), style: 'soft', arrow: true, url: link('sleepfix', l.id), intent: null,
             a11y: txt('a11y.stopSleepOpensFor', { names: l.name }), dim: false,
           };
         } else if (input.phase === 'B' && input.token && !(failure === 'noConnection' || failure === 'notSaved' || failure === 'pickBaby')) {
           const u = napState && napState.undo;
-          const running = shown.filter((m) => m.nap);
+          const running = grp.filter((m) => m.nap);
           const intentStop = (list) => {
             const starts = {};
             list.forEach((m) => { starts[m.id] = m.nap.start; });
@@ -332,8 +336,8 @@ function createModel(copy, actions) {
               intent: { action: 'undo', babyIds: u.babyIds.slice(), starts: Object.assign({}, u.starts), undo: u.of },
               a11y: txt('a11y.undoFor', { names: u.babyIds.map((id) => (byId(id) || { name: id }).name).join(txt('names.and')) }), dim: false,
             };
-          } else if (shown.length === 1) {
-            const m = shown[0];
+          } else if (grp.length === 1) {
+            const m = grp[0];
             const stop = !!m.nap;
             btn = {
               k: 'sleep',
@@ -345,8 +349,8 @@ function createModel(copy, actions) {
           } else if (!running.length) {
             btn = {
               k: 'sleep', label: txt('button.startBoth'), style: 'solid', arrow: false, url: null,
-              intent: { action: 'start', babyIds: shown.map((m) => m.id) },
-              a11y: txt('a11y.startSleepFor', { names: names(shown) }), dim: false,
+              intent: { action: 'start', babyIds: grp.map((m) => m.id) },
+              a11y: txt('a11y.startSleepFor', { names: names(grp) }), dim: false,
             };
           } else {
             btn = {
