@@ -296,6 +296,10 @@ TREE.push(
   { name: 'guide',          cmd: ['node', 'tools/guide_test.js', 'url'] },
   { name: 'vaxcard',        cmd: ['node', 'tools/vaxcard_test.js', 'url'] },
 );
+/* Home-screen widgets, plan 1 (web foundations). One block; each task adds its gate here. */
+TREE.push(
+  { name: 'widget-snapshot', cmd: ['node', 'test/widget-snapshot.test.js', 'url'] },   // the shared since-rules, both copies, held equal
+);
 // These judge PRODUCTION, not this checkout, so a failure is a deploy problem rather than a code
 // problem. Opt-in, because they need the network and they are the founder's to act on.
 /* The real host, for the gates that must grade what is DEPLOYED rather than what is in the tree. */

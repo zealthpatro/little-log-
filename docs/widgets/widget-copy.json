@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "snapshot": { "versions": [1] },
+  "platforms": { "ios": "on", "android": "pending" },
+  "strings": {},
+  "rules": {
+    "staleMs": 21600000, "napAskMs": 43200000, "napMaxMs": 86400000, "ackFreshMs": 21600000,
+    "dayRuleMs": 72000000, "healthReturnMs": 1209600000, "twinsToleranceMs": 86400000, "nameMax": 20,
+    "undoMs": 10000, "lineMs": 900000, "restampMs": 600000, "futureStartMs": 300000, "byMax": 12,
+    "shortcutsMax": 4, "asleepNowMinWidth": 84, "pullMinMs": 600000, "pullEveryMs": 3600000,
+    "pendingMs": 10000
+  },
+  "defaults": { "medium4": "activity", "small": ["sleep", "feed"] },
+  "differences": [],
+  "banned": ["don't forget", "last chance", "time for", "streak", "goal", "total", "Pro"],
+  "properNouns": ["Cubby", "Smart Rotate", "AM", "PM"],
+  "cases": [],
+  "napCases": []
+}

@@ -1,6 +1,6 @@
 /* Cubby service worker.
    Bump CACHE on every deploy so old assets are cleared. */
-const CACHE = 'little-log-v379';
+const CACHE = 'little-log-v380';
 const ASSETS = [
   '/app/',
   '/app/index.html',
@@ -25,6 +25,7 @@ const ASSETS = [
   '/app/pregnancy-data.js',
   '/app/reads-data.js',
   '/app/native-bridge.js',
+  '/app/since-rules.js',
   // Cubby's own usage events: the allowlist (generated from workers/usage/core.mjs) and the tracker.
   '/app/usage-allowlist.js',
   '/app/cubby-track.js',
