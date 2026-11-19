@@ -84,6 +84,15 @@ Added 17 November, after the founder reviewed the board:
   screen only: never the lock screen, StandBy, a Mac or the iPad lock screen. Nothing while loss holding is active, even
   with a living child's times on the widget (F3). Free. Counted as widget.opened with target "moment". Same on Android.
   The 6 October version that replaced the times with "Robin is 3 months old today" and "Make a card" is not built.
+- F11. Wording and discovery (approved 19 Nov from the Governor's UX review, .superpowers/sdd/governor/widgets-ux-review.md):
+  an empty status reads "not logged" (was "not yet"); the long-nap prompt reads "Still asleep?" (was "Did it end
+  earlier?"); the small widget's in-place Sleep button is the moon icon with "Start" or "Stop" (a play glyph read as
+  "play sleep sounds"), with full accessibility labels ("Start sleep for Robin"); the lock-screen gallery title is
+  "Last feed and sleep" (was "At a glance"); the Edit Widget description ends "then goes back to your pick". Also
+  approved: one gentle in-app card that tells a parent the widget exists, with three short steps for adding it, shown
+  in the iPhone app (and the Android app when it ships) only while no Cubby widget is installed, dismissible for good,
+  never a nag. Its look needs a mockup before it is built (P3's web task). Buttons are hidden in StandBy, like the lock
+  screen.
 
 ## 1. Intent
 
