@@ -249,6 +249,24 @@ async function until(fn, ms) {
   const sA2 = await settle(hid, a2, () => true);
   ok('A2 the entry reached the server', !!sA2, { id: a2, toasts: await toasts(O) });
   ok('A2 and it is authored by Olive\'s uid', !!sA2 && sA2.authorId === oliveUid, sA2 && sA2.authorId);
+  const a2Phone = await O.evaluate((id) => ({ inState: (state.events || []).some((e) => e.id === id), inStore: (JSON.parse(localStorage.getItem('little-log-v1') || '{}').events || []).some((e) => e.id === id) }), a2);
+  ok('A2 the entry is still on her phone (in state.events; little-log-v1 is only written signed out, so it is reported, not judged)', a2Phone.inState, a2Phone);
+  console.log('       (A2 phone after the push: ' + JSON.stringify(a2Phone) + ')');
+
+  /* ================================================================================================ */
+  console.log('\nR. a ritual ticked while myUid() is still local (the Firebase chain loads late)');
+  const rId = await O.evaluate(() => {
+    const b = activeBaby(); const list = ensureRoutines(b);
+    list.push({ id: 'rR', title: 'Bottle', time: '07:00', evType: 'feed', done: {} });
+    const real = myUid; myUid = function () { return 'local'; };
+    try { toggleRoutine('rR'); } finally { myUid = real; }
+    const e = state.events.find((x) => x.fromRoutine && x.authorId === 'local');
+    return e && e.id;
+  });
+  ok('(the ritual stamped the literal local on its entry)', !!rId, rId);
+  const sR = rId && await settle(hid, rId, () => true);
+  ok('R the ritual entry reached the server', !!sR, { rId, toasts: await toasts(O) });
+  ok('R and it is authored by Olive\'s uid', !!sR && sR.authorId === oliveUid, sR && sR.authorId);
 
   /* ================================================================================================ */
   console.log('\nE. a solo parent\'s first entry, made before any household exists');
