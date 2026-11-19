@@ -4593,14 +4593,15 @@ function actBtn(onclick,bg,c,ico,label,hint){ return `<button class="action" onc
    Trade-off, stated plainly: they do not follow you to a second device. For a layout preference
    that is the right way round.
 */
+/* WIDGET-QUICK-ACTIONS-BEGIN */
 const QUICK_ACTIONS=[
-  {k:'feed',        s:['baby','child'],              label:'Feed',        hint:'Breast, bottle, solids', fn:'openFeed()',            soft:'--feed-soft',   tone:'--feed',   ico:()=>I.feed},
-  {k:'sleep',       s:['baby','child'],              label:'Sleep',       hint:'Start or stop a nap',    fn:'openSleep()',           soft:'--sleep-soft',  tone:'--sleep',  ico:()=>I.sleep},
-  {k:'diaper',      s:['baby','child'],              label:'Nappy',       hint:'Wet, dirty, both',       fn:'openDiaper()',          soft:'--diaper-soft', tone:'--diaper', ico:()=>I.diaper},
-  {k:'pump',        s:['baby','child'],              label:'Pump',        hint:'Expressed milk',         fn:'openPump()',            soft:'--pump-soft',   tone:'--pump',   ico:()=>I.pump},
-  {k:'measure',     s:['baby','child'],              label:'Measure',     hint:'Weight & height',        fn:'openGrowth()',          soft:'--star-soft',   tone:'--star',   ico:()=>I.scale},
-  {k:'activity',    s:['baby','child'],              label:'Activity',    hint:'Bath, play, notes',      fn:'openActivity()',        soft:'--note-soft',   tone:'--note',   ico:()=>I.note},
-  {k:'milestone',   s:['baby','child'],              label:'Milestone',   hint:'A first to remember',    fn:'openCustomMilestone()', soft:'--diaper-soft', tone:'--diaper', ico:()=>(I.star||'🌟')},
+  {k:'feed',        s:['baby','child'],              label:'Feed',        hint:'Breast, bottle, solids', fn:'openFeed()',            soft:'--feed-soft',   tone:'--feed',   ico:()=>I.feed, widget:{go:'feed', places:['small','shortcut']}},
+  {k:'sleep',       s:['baby','child'],              label:'Sleep',       hint:'Start or stop a nap',    fn:'openSleep()',           soft:'--sleep-soft',  tone:'--sleep',  ico:()=>I.sleep, widget:{go:'sleep', inPlace:true, places:['small','shortcut']}},
+  {k:'diaper',      s:['baby','child'],              label:'Nappy',       hint:'Wet, dirty, both',       fn:'openDiaper()',          soft:'--diaper-soft', tone:'--diaper', ico:()=>I.diaper, widget:{go:'diaper', places:['small','shortcut']}},
+  {k:'pump',        s:['baby','child'],              label:'Pump',        hint:'Expressed milk',         fn:'openPump()',            soft:'--pump-soft',   tone:'--pump',   ico:()=>I.pump, widget:{go:'pump', places:['medium4','small','shortcut']}},
+  {k:'measure',     s:['baby','child'],              label:'Measure',     hint:'Weight & height',        fn:'openGrowth()',          soft:'--star-soft',   tone:'--star',   ico:()=>I.scale, widget:{go:'measure', places:['shortcut']}},
+  {k:'activity',    s:['baby','child'],              label:'Activity',    hint:'Bath, play, notes',      fn:'openActivity()',        soft:'--note-soft',   tone:'--note',   ico:()=>I.note, widget:{go:'activity', places:['medium4','small','shortcut']}},
+  {k:'milestone',   s:['baby','child'],              label:'Milestone',   hint:'A first to remember',    fn:'openCustomMilestone()', soft:'--diaper-soft', tone:'--diaper', ico:()=>(I.star||'🌟'), widget:{go:'milestone', places:['shortcut']}},
   // minWeek is the same rule renderPregHome applies to its own "This week" tiles, in one place
   // instead of two: a count-movements shortcut before 28 weeks only worries, and the 5-1-1 timer is
   // a labour tool. See quickTooEarly for how it is applied and how she can overrule it.
@@ -4628,8 +4629,11 @@ const QUICK_ACTIONS=[
   // she says is dropped to a "note for your circle" written with a null babyId that no pregnancy
   // screen renders — a marquee feature that cannot work for her, and silently loses what she said.
   // Re-add 'pregnancy' here (and to QUICK_DEFAULTS) once pregnancy intents exist in voice-log.js.
-  {k:'voice',       s:['baby','child'],              label:'Say it',      hint:()=>(window.SpeechRecognition||window.webkitSpeechRecognition)?'Log by voice ✨':'Type it naturally ✨', fn:'openVoiceLog()', soft:'--feed-soft', tone:'--feed', ico:()=>'🎙️'}
+  {k:'voice',       s:['baby','child'],              label:'Say it',      hint:()=>(window.SpeechRecognition||window.webkitSpeechRecognition)?'Log by voice ✨':'Type it naturally ✨', fn:'openVoiceLog()', soft:'--feed-soft', tone:'--feed', ico:()=>'🎙️', widget:{go:'voice', platforms:['android'], places:['medium4','small','shortcut']}},
+  // The widgets' Health button (spec 6.3). s:[] keeps it off every in-app surface: quickCatalog filters on stage.
+  {k:'health', s:[], label:'Health', hint:'While your baby is unwell', fn:"go('health')", soft:'--note-soft', tone:'--note', ico:()=>I.thermo, widget:{go:'health', perBaby:true, places:['medium4','small']}}
 ];
+/* WIDGET-QUICK-ACTIONS-END */
 // Defaults reproduce exactly what each surface showed before, so nobody's button changes under them.
 const QUICK_DEFAULTS={
   /* Pump came out of the default set (founder call, 2026-08-10). It is the one entry here that only
@@ -19924,8 +19928,8 @@ try{
 <script src="pregnancy-data.js"></script>
 <!-- Curated, week-mapped pregnancy reads (same-origin article links) for the Home good-read card + Reading room. -->
 <script src="reads-data.js"></script>
-<!-- Capacitor native bridge (push + deep links inside the App Store / Play Store wrapper). Inert on the web. -->
 <script defer src="since-rules.js"></script>
+<!-- Capacitor native bridge (push + deep links inside the App Store / Play Store wrapper). Inert on the web. -->
 <script defer src="native-bridge.js"></script>
 <script>
 /* Lazy 30-day purge of Recently deleted: once per load, after the cloud sync has had a moment

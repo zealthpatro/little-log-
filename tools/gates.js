@@ -299,6 +299,7 @@ TREE.push(
 /* Home-screen widgets, plan 1 (web foundations). One block; each task adds its gate here. */
 TREE.push(
   { name: 'widget-snapshot', cmd: ['node', 'test/widget-snapshot.test.js', 'url'] },   // the shared since-rules, both copies, held equal
+  { name: 'widget-parity', cmd: ['node', 'tools/widget_parity_check.js', '--self-test'] },   // the widget copy rules, the Quick-action fields and the generated files
 );
 // These judge PRODUCTION, not this checkout, so a failure is a deploy problem rather than a code
 // problem. Opt-in, because they need the network and they are the founder's to act on.

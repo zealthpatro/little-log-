@@ -134,5 +134,14 @@ function snapshotBaby({ baby, events, illnesses, nap, now, label }) {
   };
 }
 window.CubbySince = { sinceAnchor, babyAnchors, healthOpen, isTwins, ageOf, monthMoments, sleepEventId, snapshotBaby, RULES, DEFAULTS, SNAPSHOT_VERSIONS };
-window.CubbyWidgetCopy = {};
+window.CubbyWidgetCopy = {
+  "app.healthSwitched": "Your widget now shows Health until {name} is better.",
+  "app.lockHide": "Hide details on the lock screen",
+  "app.lockHideHelp": "The widget will show Cubby and nothing else.",
+  "app.settingsGroup": "Cubby widgets on this phone",
+  "app.stackHelp": "One widget per baby? Turn off Smart Rotate so the stack stays where you left it.",
+  "app.unwellMarker": "Unwell",
+  "app.whoFor": "Who is this for?",
+  "app.whoForWhy": "Health is kept for one baby at a time, so a dose or a temperature always lands on the right one."
+};
 })();

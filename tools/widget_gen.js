@@ -8,6 +8,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const vm = require('vm');
 
 function sortKeys(v) {
   if (Array.isArray(v)) return v.map(sortKeys);
@@ -46,7 +47,28 @@ function generate(root) {
   return { 'workers/shared/widget-rules.mjs': rulesMjs, 'app/since-rules.js': sinceJs };
 }
 
-module.exports = { generate };
+/* The array between the WIDGET-QUICK-ACTIONS markers in app/index.html, evaluated in a vm so the arrow
+ * functions in it are created and never called. Returns one row per action that carries a `widget` field. */
+const QA_BEGIN = '/* WIDGET-QUICK-ACTIONS-BEGIN */';
+const QA_END = '/* WIDGET-QUICK-ACTIONS-END */';
+function readAllActions(root) {
+  const html = fs.readFileSync(path.join(root, 'app/index.html'), 'utf8');
+  const a = html.indexOf(QA_BEGIN), b = html.indexOf(QA_END);
+  if (a < 0 || b < a) throw new Error('the QUICK_ACTIONS markers are missing from app/index.html');
+  const chunk = html.slice(a + QA_BEGIN.length, b);
+  const at = chunk.indexOf('const QUICK_ACTIONS=');
+  if (at < 0) throw new Error('const QUICK_ACTIONS= is not between the markers');
+  const arr = vm.runInNewContext('(' + chunk.slice(at + 'const QUICK_ACTIONS='.length).replace(/;\s*$/, '') + ')', {}, { timeout: 1000 });
+  return arr.map((r) => ({ key: r.k, stages: r.s, label: r.label, widget: r.widget || null }));
+}
+function readQuickActions(root) {
+  return readAllActions(root).filter((r) => r.widget).map((r) => ({
+    key: r.key, go: r.widget.go, label: r.label, inPlace: !!r.widget.inPlace, perBaby: !!r.widget.perBaby,
+    platforms: r.widget.platforms || null, places: r.widget.places.slice(),
+  }));
+}
+
+module.exports = { generate, readQuickActions, readAllActions };
 
 if (require.main === module) {
   const root = path.join(__dirname, '..');
