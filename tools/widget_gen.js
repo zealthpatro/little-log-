@@ -4,11 +4,14 @@
  *   node tools/widget_gen.js --check   exit 1, naming each path that differs from what would be written
  *
  * generate(root) -> { [relPath]: text }. Output is byte-stable: sorted keys, no dates.
- * Today: workers/shared/widget-rules.mjs and app/since-rules.js. Later tasks extend the map. */
+ * Today: workers/shared/widget-rules.mjs, app/since-rules.js and docs/widgets/widget-fixtures.json (the reference
+ * model's output over widget-copy.json's cases, in UTC). Later tasks extend the map. */
 'use strict';
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const crypto = require('crypto');
+const { createModel } = require('./widget_model');
 
 function sortKeys(v) {
   if (Array.isArray(v)) return v.map(sortKeys);
@@ -44,7 +47,21 @@ function generate(root) {
     + 'window.CubbyWidgetCopy = ' + lit(appStrings) + ';\n'
     + '})();\n';
 
-  return { 'workers/shared/widget-rules.mjs': rulesMjs, 'app/since-rules.js': sinceJs };
+  // The reference model's answer to every case, for the Swift and Kotlin goldens (plan 1 Task 5). The model formats
+  // in UTC (getUTC*), so these bytes do not depend on the machine's zone; tz tells the natives which zone to use.
+  const renderModel = createModel(copy, readQuickActions(root));
+  const fixtures = {
+    source: crypto.createHash('sha256').update(fs.readFileSync(path.join(root, 'docs/widgets/widget-copy.json'))).digest('hex'),
+    tz: 'UTC',
+    fixtures: (copy.cases || []).map((c) => ({ name: c.name, input: c.input, expect: renderModel(c.input) })),
+    napCases: copy.napCases || [],
+  };
+
+  return {
+    'workers/shared/widget-rules.mjs': rulesMjs,
+    'app/since-rules.js': sinceJs,
+    'docs/widgets/widget-fixtures.json': lit(fixtures) + '\n',
+  };
 }
 
 /* The array between the WIDGET-QUICK-ACTIONS markers in app/index.html, evaluated in a vm so the arrow

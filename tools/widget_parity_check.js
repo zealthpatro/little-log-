@@ -1,20 +1,24 @@
 /* The widgets' copy and buttons come from one file, and this holds the rules for them (plan 1, Task 4).
  *
  *   node tools/widget_parity_check.js                judge this checkout
- *   node tools/widget_parity_check.js --self-test    first stage ten failures in temporary copies of the
+ *   node tools/widget_parity_check.js --self-test    first stage thirteen failures in temporary copies of the
  *                                                    inputs (each must be caught, for its reason), then judge
  *   node tools/widget_parity_check.js --root=<dir>   judge another tree (what the self-test runs)
  *
  *   1. generated files are fresh   the generated files are what tools/widget_gen.js would write.
  *   2. QUICK_ACTIONS               the markers, the widget fields, health, and the shortcuts_check row regex.
  *   3. copy rules                  voice, placeholders, platforms, differences, a11y keys, month-day keys.
+ *   4. the reference model         docs/widgets/widget-fixtures.json is the model's output over the copy file's
+ *                                  cases; every hand-written expectation agrees; the bytes are zone-free.
  * Later tasks add the native halves. */
 'use strict';
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawn } = require('child_process');
+const crypto = require('crypto');
+const { spawn, spawnSync } = require('child_process');
 const { generate, readQuickActions, readAllActions } = require('./widget_gen');
+const { createModel } = require('./widget_model');
 
 const ARGS = process.argv.slice(2);
 const SELF_TEST = ARGS.includes('--self-test');
@@ -22,7 +26,7 @@ const ROOT_ARG = (ARGS.find((a) => a.startsWith('--root=')) || '').slice(7);
 const ROOT = ROOT_ARG ? path.resolve(ROOT_ARG) : path.join(__dirname, '..');
 const REAL = path.join(__dirname, '..');
 const INPUTS = ['docs/widgets/widget-copy.json', 'workers/shared/since-rules.mjs', 'workers/shared/widget-rules.mjs',
-  'app/since-rules.js', 'app/index.html'];
+  'app/since-rules.js', 'app/index.html', 'docs/widgets/widget-fixtures.json'];
 
 let fails = 0;
 const ok = (name, cond, detail) => {
@@ -53,6 +57,25 @@ const TABLE = {
 
 function sortK(v) { if (Array.isArray(v)) return v.map(sortK); if (v && typeof v === 'object') { const o = {}; Object.keys(v).sort().forEach((k) => { o[k] = sortK(v[k]); }); return o; } return v; }
 function sameObj(a, b) { return JSON.stringify(sortK(a)) === JSON.stringify(sortK(b)); }
+
+/* A hand-written `expect` is a deep partial of the model's answer: objects check the keys they name, arrays must
+ * be the same length (use {} for a row you do not pin), and `intent`, `url` and `moment` are compared whole, so a
+ * stray `starts` on a start or a moment where the case says null fails. Returns a description or null. */
+const WHOLE = { intent: 1, url: 1, moment: 1 };
+function diffPartial(exp, act, key, where) {
+  if (WHOLE[key]) return sameObj(exp, act) ? null : where + ': expected ' + JSON.stringify(exp) + ' got ' + JSON.stringify(act);
+  if (Array.isArray(exp)) {
+    if (!Array.isArray(act) || act.length !== exp.length) return where + ': expected ' + exp.length + ' items, got ' + (Array.isArray(act) ? act.length : JSON.stringify(act));
+    for (let i = 0; i < exp.length; i++) { const d = diffPartial(exp[i], act[i], '', where + '[' + i + ']'); if (d) return d; }
+    return null;
+  }
+  if (exp && typeof exp === 'object') {
+    if (!act || typeof act !== 'object') return where + ': expected an object, got ' + JSON.stringify(act);
+    for (const k of Object.keys(exp)) { const d = diffPartial(exp[k], act[k], k, where ? where + '.' + k : k); if (d) return d; }
+    return null;
+  }
+  return exp === act ? null : where + ': expected ' + JSON.stringify(exp) + ' got ' + JSON.stringify(act);
+}
 
 function judge() {
   section('1. generated files are fresh');
@@ -160,6 +183,35 @@ function judge() {
     });
   });
   ok('moment keys: the sixteen F10 strings are complete', !mBad.length, mBad);
+
+  section('4. the reference model and its fixtures');
+  const sha = crypto.createHash('sha256').update(fs.readFileSync(path.join(ROOT, 'docs/widgets/widget-copy.json'))).digest('hex');
+  let fx = null;
+  try { fx = JSON.parse(rd('docs/widgets/widget-fixtures.json')); } catch (e) { /* missing or not JSON */ }
+  ok('fixtures: widget-fixtures.json exists and its source is widget-copy.json\'s sha256', !!fx && fx.source === sha, fx ? { have: fx.source, want: sha } : 'missing');
+  if (fx) {
+    ok('fixtures: tz is UTC', fx.tz === 'UTC', fx.tz);
+    ok('fixtures: napCases equal widget-copy.json\'s', sameObj(fx.napCases, copy.napCases || []), fx.napCases);
+  }
+  const cases = copy.cases || [];
+  ok('fixtures: the copy file has cases with unique names', cases.length > 0 && new Set(cases.map((c) => c.name)).size === cases.length, cases.length);
+  let model = null;
+  try { model = createModel(copy, rows || readQuickActions(ROOT)); } catch (e) { ok('the model builds', false, e.message); }
+  if (model) {
+    const made = cases.map((c) => { try { return { name: c.name, input: c.input, expect: model(c.input) }; } catch (e) { return { name: c.name, error: e.message }; } });
+    ok('fixtures equal renderModel over cases', !!fx && sameObj(fx.fixtures, made), fx ? 'differs from the model\'s output; run node tools/widget_gen.js' : 'missing');
+    cases.forEach((c, n) => {
+      const got = made[n];
+      if (got.error) { ok('case ' + c.name + ' agrees', false, got.error); return; }
+      const d = c.expect ? diffPartial(c.expect, got.expect, '', '') : null;
+      ok('case ' + c.name + ' agrees', !d, d);
+    });
+  }
+  const zone = (tz) => spawnSync(process.execPath, ['-e', 'process.stdout.write(require(process.argv[1]).generate(process.argv[2])["docs/widgets/widget-fixtures.json"])',
+    path.join(__dirname, 'widget_gen.js'), ROOT], { env: Object.assign({}, process.env, { TZ: tz }), encoding: 'utf8', maxBuffer: 1 << 27 });
+  const zu = zone('UTC'), zc = zone('Pacific/Chatham');
+  ok('zone-free: the fixtures are the same bytes under TZ=Pacific/Chatham as under TZ=UTC',
+    zu.status === 0 && zc.status === 0 && zu.stdout.length > 100 && zu.stdout === zc.stdout, zu.status !== 0 ? zu.stderr : zc.status !== 0 ? zc.stderr : 'bytes differ');
 }
 
 /* ---- self-test ---------------------------------------------------------------------------------- */
@@ -176,6 +228,9 @@ const PLANTS = [
   ['h) {baby} in header.updated', 'only the six placeholders', [jsonEdit((o) => { o.strings['header.updated'].text = 'Updated {baby}'; })]],
   ['i) "total" removed from banned', 'banned equals the contract list', [jsonEdit((o) => { o.banned = o.banned.filter((b) => b !== 'total'); })]],
   ['m) twins.moment.year1 deleted', 'moment keys', [jsonEdit((o) => { delete o.strings['twins.moment.year1']; })]],
+  ['j) staleMs 21600001 without regenerating', 'fixtures: widget-fixtures.json exists and its source', [jsonEdit((o) => { o.rules.staleMs = 21600001; })]],
+  ['k) a hand-written expectation changed: Asleep now to Asleep', 'case medium-a-asleep-now agrees', [jsonEdit((o) => { o.cases.find((c) => c.name === 'medium-a-asleep-now').expect.rows[1].value = 'Asleep'; })]],
+  ['l) the fixtures file says tz Europe/London', 'fixtures: tz is UTC', [edit('docs/widgets/widget-fixtures.json', (s) => s.replace('"tz": "UTC"', '"tz": "Europe/London"'))]],
 ];
 function stage(edits) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'widget-parity-'));
