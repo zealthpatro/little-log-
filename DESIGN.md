@@ -373,6 +373,40 @@ background in the theme, so the handful of `--ink-faint` consumers that sit **di
 Both themes are a blocking check: `node tools/uitest.js` walks the app twice and fails on any
 settled, readable text below AA. See the Definition of Done in CUBBY-GUARDRAILS-AND-GOVERNANCE.md.
 
+## Home-screen widgets: colour pairs
+
+The widgets draw on `--surface-2` (the widget ground), day `#FBF7EF` and night `#2E2722`. Values below are read
+from `app/index.html`'s `:root` and `[data-theme="night"]` blocks, and `node tools/widget_parity_check.js` fails
+if a hex differs from its token or a ratio differs from the WCAG ratio rounded to two places. The background of
+every row is `--surface-2`, except "text on sleep fill", which sits on `--sleep`.
+
+<!-- WIDGET-PAIRS-BEGIN -->
+| theme | role | token | fg | bg | ratio |
+|---|---|---|---|---|---|
+| day | soft fill | `--feed-soft` | #FBEAD0 | #FBF7EF | 1.11 |
+| day | soft fill | `--diaper-soft` | #DDF0EA | #FBF7EF | 1.11 |
+| day | soft fill | `--note-soft` | #EFE9DA | #FBF7EF | 1.13 |
+| day | text on sleep fill | `--on-sleep` | #FFFFFF | #5E6AA8 | 5.12 |
+| day | not yet | `--ink-soft` | #6E635B | #FBF7EF | 5.46 |
+| night | soft fill | `--feed-soft` | #3A2E1C | #2E2722 | 1.11 |
+| night | soft fill | `--diaper-soft` | #1E2F2A | #2E2722 | 1.05 |
+| night | soft fill | `--note-soft` | #2C281D | #2E2722 | 1.00 |
+| night | stroke | `--feed` | #E0A655 | #2E2722 | 6.82 |
+| night | stroke | `--diaper` | #6FBBA8 | #2E2722 | 6.54 |
+| night | stroke | `--note` | #B6A985 | #2E2722 | 6.30 |
+| night | text on sleep fill | `--on-sleep` | #1A1614 | #8E97D4 | 6.44 |
+| night | not yet | `--ink-soft` | #C4B8AB | #2E2722 | 7.55 |
+<!-- WIDGET-PAIRS-END -->
+
+- A soft fill is a tint, never the only carrier of meaning: its ratio to the ground is 1.00 to 1.13, so every tile
+  also carries its icon and its words. Night's note fill is 1.00 against the ground; that is by design.
+- Night strokes are 1pt and clear 6:1, so a night tile reads by its edge, not its fill.
+- The sleep button's text is `--on-sleep`. At night it is the deep ink `#1A1614`, because white on night's lighter
+  sleep colour is 2.79:1, a fail.
+- The fourth slot always wears the quiet (note) kind.
+- The opens-Cubby arrow is 11pt with stroke 2 (§A6).
+- Hit frames are at least 44pt on iOS and 48dp on Android.
+
 ---
 
 *Process note: any new UI must pick from Part A (tokens, ramp, scale, icon rules). If a needed

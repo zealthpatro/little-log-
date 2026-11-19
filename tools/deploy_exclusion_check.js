@@ -33,6 +33,8 @@ const BASE = (process.argv.slice(2).find((a) => /^https?:\/\//.test(a)) || '').r
 const INTERNAL = ['.git', '.claude', '.githooks', '.github', 'tools', 'test', 'workers', 'worker.js',
   'wrangler.toml', 'firestore.rules', 'firebase.json', '.assetsignore', '.gitignore', 'package.json',
   'package-lock.json', 'node_modules', 'serviceAccountKey.json', 'articles-drafts', 'ios', 'android',
+  // The widgets' native source (plan 1 Task 6): Swift, Kotlin and Android strings, none of it a public page.
+  'native-ios', 'native-android',
   // Internal material that was publicly served until 2026-10-22, including a security dashboard.
   'design', 'docs', 'schema', 'social', 'storage.rules',
   /* Gitignored, so a git-based deploy never sees them, and that is the only reason they were safe. The
@@ -54,7 +56,9 @@ const MUST_404 = ['.githooks/pre-push', '.githooks/pre-commit', '.github/workflo
   // Was 200 until 2026-10-22: an internal security dashboard, the published rules, and the storage rules.
   'design/audit', 'design/firestore.published.rules', 'storage.rules',
   // The admin Worker's entry file and config (admin spec S35): production must 404 both.
-  'workers/admin/src/index.mjs', 'workers/admin/wrangler.toml'];
+  'workers/admin/src/index.mjs', 'workers/admin/wrangler.toml',
+  // The widgets' generated native files (plan 1 Task 6): committed, so a deploy of the folder would serve them.
+  'native-ios/CubbyWidget/Generated.swift', 'native-android/app/src/main/res/values/widget_strings.xml'];
 const MUST_200 = ['/', '/app/'];
 
 let pass = 0, fail = 0;

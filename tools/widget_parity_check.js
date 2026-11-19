@@ -1,7 +1,7 @@
 /* The widgets' copy and buttons come from one file, and this holds the rules for them (plan 1, Task 4).
  *
  *   node tools/widget_parity_check.js                judge this checkout
- *   node tools/widget_parity_check.js --self-test    first stage thirteen failures in temporary copies of the
+ *   node tools/widget_parity_check.js --self-test    first stage every failure in temporary copies of the
  *                                                    inputs (each must be caught, for its reason), then judge
  *   node tools/widget_parity_check.js --root=<dir>   judge another tree (what the self-test runs)
  *
@@ -10,6 +10,11 @@
  *   3. copy rules                  voice, placeholders, platforms, differences, a11y keys, month-day keys.
  *   4. the reference model         docs/widgets/widget-fixtures.json is the model's output over the copy file's
  *                                  cases; every hand-written expectation agrees; the bytes are zone-free.
+ *   5. native source              the generated native files carry the copy; no hand-written Swift, Kotlin or Android
+ *                                  XML holds a user-facing string literal; no stray AppIntent or ActionCallback;
+ *                                  no static shortcuts anywhere.
+ *   6. design pairs                DESIGN.md's widget colour pairs equal app/index.html's tokens, and each ratio is
+ *                                  the WCAG ratio, rounded to two places.
  * Later tasks add the native halves. */
 'use strict';
 const fs = require('fs');
@@ -17,7 +22,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
-const { generate, readQuickActions, readAllActions } = require('./widget_gen');
+const { generate, readQuickActions, readAllActions, snakeName } = require('./widget_gen');
 const { createModel } = require('./widget_model');
 
 const ARGS = process.argv.slice(2);
@@ -26,7 +31,9 @@ const ROOT_ARG = (ARGS.find((a) => a.startsWith('--root=')) || '').slice(7);
 const ROOT = ROOT_ARG ? path.resolve(ROOT_ARG) : path.join(__dirname, '..');
 const REAL = path.join(__dirname, '..');
 const INPUTS = ['docs/widgets/widget-copy.json', 'workers/shared/since-rules.mjs', 'workers/shared/widget-rules.mjs',
-  'app/since-rules.js', 'app/index.html', 'docs/widgets/widget-fixtures.json'];
+  'app/since-rules.js', 'app/index.html', 'docs/widgets/widget-fixtures.json',
+  'native-ios/CubbyWidget/Generated.swift', 'native-android/app/src/main/java/com/littlecubby/app/widget/Generated.kt',
+  'native-android/app/src/main/res/values/widget_strings.xml', 'DESIGN.md', 'tools/cap_ios_configure.rb'];
 
 let fails = 0;
 const ok = (name, cond, detail) => {
@@ -86,6 +93,16 @@ function judge() {
     try { have = rd(rel); } catch (e) { /* missing */ }
     ok('generated files are fresh: ' + rel, have === out[rel], have === null ? 'missing' : 'differs from what tools/widget_gen.js writes');
   });
+
+  try {
+    const kt = rd('native-android/app/src/main/java/com/littlecubby/app/widget/Generated.kt');
+    const cp = JSON.parse(rd('docs/widgets/widget-copy.json'));
+    const want = Object.keys(cp.strings).filter((k) => cp.strings[k].platforms.includes('android')).map((k) => '"' + k + '" to R.string.' + snakeName(k)).sort();
+    const m = /val byKey: Map<String, Int> = mapOf\(\n([\s\S]*?)\n\s*\)/.exec(kt);
+    const have = m ? m[1].split('\n').map((l) => l.trim().replace(/,$/, '')).filter(Boolean).sort() : null;
+    ok('kotlin byKey: exactly one entry per key whose platforms include android, and no other', !!have && JSON.stringify(have) === JSON.stringify(want),
+      have ? { missing: want.filter((x) => !have.includes(x)), extra: have.filter((x) => !want.includes(x)) } : 'no byKey map in Generated.kt');
+  } catch (e) { ok('kotlin byKey: Generated.kt can be read', false, e.message); }
 
   section('2. QUICK_ACTIONS');
   const html = rd('app/index.html');
@@ -222,6 +239,128 @@ function judge() {
   const zu = zone('UTC'), zc = zone('Pacific/Chatham');
   ok('zone-free: the fixtures are the same bytes under TZ=Pacific/Chatham as under TZ=UTC',
     zu.status === 0 && zc.status === 0 && zu.stdout.length > 100 && zu.stdout === zc.stdout, zu.status !== 0 ? zu.stderr : zc.status !== 0 ? zc.stderr : 'bytes differ');
+
+  nativeSource();
+  designPairs();
+}
+
+/* ---- 5. native source --------------------------------------------------------------------------- */
+const LIT = '\\s*"';
+const LITERAL_MATCHERS = [   // [name, file kind, regex]: a string literal where the copy must come from Generated.*
+  ['Text("', 'swift', new RegExp('\\bText\\(' + LIT)],
+  ['Text(verbatim: "', 'swift', new RegExp('\\bText\\(\\s*verbatim:' + LIT)],
+  ['Button("', 'swift', new RegExp('\\bButton\\(' + LIT)],
+  ['Label("', 'swift', new RegExp('\\bLabel\\(' + LIT)],
+  ['.configurationDisplayName("', 'swift', new RegExp('\\.configurationDisplayName\\(' + LIT)],
+  ['.description("', 'swift', new RegExp('\\.description\\(' + LIT)],
+  ['title: LocalizedStringResource = "', 'swift', new RegExp('\\btitle:\\s*LocalizedStringResource\\s*=' + LIT)],
+  ['@Parameter(title: "', 'swift', new RegExp('@Parameter\\(\\s*title:' + LIT)],
+  ['DisplayRepresentation(title: "', 'swift', new RegExp('DisplayRepresentation\\(\\s*title:' + LIT)],
+  ['Glance Text("', 'kt', new RegExp('\\bText\\(' + LIT)],
+  ['Glance text = "', 'kt', new RegExp('\\btext\\s*=' + LIT)],
+  ['android:label="', 'xml', /android:label="(?!@string\/)/],
+  ['android:description="', 'xml', /android:description="(?!@string\/)/],
+];
+const INTENT_DECL = /^[ \t]*(?:@\w+(?:\([^)]*\))?[ \t]+)*(?:(?:public|private|internal|fileprivate|final|open)[ \t]+)*(?:struct|class|enum|extension)[ \t]+(\w+)[^{\n]*?:[^{\n]*\b(AppIntent|OpenIntent|LiveActivityIntent|AudioPlaybackIntent)\b/gm;
+const CALLBACK_DECL = /^[ \t]*(?:(?:public|private|internal|open|data|abstract)[ \t]+)*(?:class|object)[ \t]+(\w+)[^{\n]*?:[^{\n]*\bActionCallback\b/gm;
+function walkFiles(rel) {
+  const out = [], stack = [rel];
+  while (stack.length) {
+    const r = stack.pop();
+    let ents = [];
+    try { ents = fs.readdirSync(path.join(ROOT, r), { withFileTypes: true }); } catch (e) { continue; }
+    for (const e of ents) {
+      const q = r + '/' + e.name;
+      if (e.isDirectory()) { if (!['build', '.gradle', 'Pods', 'DerivedData', 'node_modules', '.build'].includes(e.name)) stack.push(q); } else if (e.isFile()) out.push(q);
+    }
+  }
+  return out.sort();
+}
+const isGenerated = (f) => /\/Generated\.(swift|kt)$/.test(f) || /\/res\/values\/widget_strings\.xml$/.test(f);
+const lineOf = (txt, idx) => txt.slice(0, idx).split('\n').length;
+function nativeSource() {
+  section('5. native source');
+  const files = walkFiles('native-ios').concat(walkFiles('native-android'));
+  const kindOf = (f) => (/\.swift$/.test(f) ? 'swift' : /\.kt$/.test(f) ? 'kt' : /\/res\/xml\/[^/]+\.xml$/.test(f) || /\/AndroidManifest\.xml$/.test(f) ? 'xml' : null);
+  const src = files.filter((f) => kindOf(f) && !isGenerated(f));
+  const text = {};
+  src.forEach((f) => { text[f] = rd(f); });
+  LITERAL_MATCHERS.forEach(([name, kind, re]) => {
+    const hits = [];
+    src.filter((f) => kindOf(f) === kind).forEach((f) => {
+      const g = new RegExp(re.source, 'g'); let m;
+      while ((m = g.exec(text[f]))) hits.push(f + ':' + lineOf(text[f], m.index));
+    });
+    ok('native source: no string literal in ' + name, !hits.length, hits.join(', '));
+  });
+  const badIntent = [];
+  src.filter((f) => kindOf(f) === 'swift').forEach((f) => { let m; INTENT_DECL.lastIndex = 0; while ((m = INTENT_DECL.exec(text[f]))) if (m[1] !== 'NapIntent') badIntent.push(f + ': ' + m[1] + ' : ' + m[2]); });
+  ok('native source: no AppIntent, OpenIntent, LiveActivityIntent or AudioPlaybackIntent but NapIntent (sleep is the only in-place action)', !badIntent.length, badIntent.join('; '));
+  const badCb = [];
+  src.filter((f) => kindOf(f) === 'kt').forEach((f) => { let m; CALLBACK_DECL.lastIndex = 0; while ((m = CALLBACK_DECL.exec(text[f]))) if (m[1] !== 'NapActionCallback') badCb.push(f + ': ' + m[1]); });
+  ok('native source: no ActionCallback but NapActionCallback', !badCb.length, badCb.join('; '));
+  const readable = (f) => { try { const b = fs.readFileSync(path.join(ROOT, f)); return b.length < 2000000 && !b.includes(0) ? b.toString('utf8') : ''; } catch (e) { return ''; } };
+  const shortcutHits = files.filter((f) => f.startsWith('native-ios/') && /UIApplicationShortcutItems/.test(readable(f)));
+  let rb = ''; try { rb = rd('tools/cap_ios_configure.rb'); } catch (e) { /* absent */ }
+  if (/UIApplicationShortcutItems/.test(rb)) shortcutHits.push('tools/cap_ios_configure.rb');
+  ok('native source: no UIApplicationShortcutItems (home-screen quick actions are the widgets\' business, not a static list)', !shortcutHits.length, shortcutHits.join(', '));
+  const scHits = files.filter((f) => f.startsWith('native-android/') && (/\/shortcuts\.xml$/.test(f) || /android\.app\.shortcuts/.test(readable(f))));
+  ok('native source: no shortcuts.xml and no android.app.shortcuts', !scHits.length, scHits.join(', '));
+}
+
+/* ---- 6. design pairs ---------------------------------------------------------------------------- */
+const PAIRS_BEGIN = '<!-- WIDGET-PAIRS-BEGIN -->', PAIRS_END = '<!-- WIDGET-PAIRS-END -->';
+// theme, role, fg token. The background is --surface-2 (the widget ground) except where the role names a fill.
+const PAIR_ROWS = [
+  ['day', 'soft fill', '--feed-soft'], ['day', 'soft fill', '--diaper-soft'], ['day', 'soft fill', '--note-soft'],
+  ['day', 'text on sleep fill', '--on-sleep'], ['day', 'not yet', '--ink-soft'],
+  ['night', 'soft fill', '--feed-soft'], ['night', 'soft fill', '--diaper-soft'], ['night', 'soft fill', '--note-soft'],
+  ['night', 'stroke', '--feed'], ['night', 'stroke', '--diaper'], ['night', 'stroke', '--note'],
+  ['night', 'text on sleep fill', '--on-sleep'], ['night', 'not yet', '--ink-soft'],
+];
+const pairBg = (role) => (role === 'text on sleep fill' ? '--sleep' : '--surface-2');
+function themeBlock(html, start) {
+  const a = html.indexOf(start);
+  if (a < 0) return null;
+  const b = html.indexOf('\n}', a);
+  const tokens = {};
+  html.slice(a, b < 0 ? undefined : b).replace(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g, (m, k, v) => { tokens[k] = v.trim(); return m; });
+  return tokens;
+}
+function lum(hex) {
+  const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)));
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+}
+function wcag(a, b) { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+function designPairs() {
+  section('6. design pairs');
+  const html = rd('app/index.html'), doc = rd('DESIGN.md');
+  const day = themeBlock(html, ':root{'), night = themeBlock(html, '[data-theme="night"]{');
+  ok('design pairs: the day and night token blocks are found in app/index.html', !!day && !!night);
+  if (!day || !night) return;
+  const resolve = (theme, tok) => {
+    let v = (theme === 'night' ? night[tok] : undefined);
+    if (v === undefined) v = day[tok];
+    for (let n = 0; v && /^var\(/.test(v) && n < 5; n++) {
+      const inner = /^var\((--[a-z0-9-]+)/.exec(v)[1];
+      v = (theme === 'night' && night[inner] !== undefined) ? night[inner] : day[inner];
+    }
+    return v ? v.toUpperCase() : v;
+  };
+  const a = doc.indexOf(PAIRS_BEGIN), b = doc.indexOf(PAIRS_END);
+  ok('design pairs: DESIGN.md has the WIDGET-PAIRS markers, once each, in order', a >= 0 && b > a && doc.split(PAIRS_BEGIN).length === 2 && doc.split(PAIRS_END).length === 2);
+  if (!(a >= 0 && b > a)) return;
+  const rows = doc.slice(a, b).split('\n').map((l) => l.split('|').map((c) => c.trim())).filter((c) => c.length === 8 && c[1] !== 'theme' && !/^-+$/.test(c[1]))
+    .map((c) => ({ theme: c[1], role: c[2], token: c[3].replace(/`/g, ''), fg: c[4].replace(/`/g, ''), bg: c[5].replace(/`/g, ''), ratio: c[6] }));
+  const absent = PAIR_ROWS.filter(([t, r, k]) => !rows.some((x) => x.theme === t && x.role === r && x.token === k));
+  ok('design pairs: every required pair has a row', !absent.length, absent.map((x) => x.join(' ')).join('; '));
+  rows.forEach((r) => {
+    const name = 'design pairs: ' + r.theme + ' ' + r.role + ' ' + r.token;
+    const fg = resolve(r.theme, r.token), bg = resolve(r.theme, pairBg(r.role));
+    const want = fg && bg ? (Math.round(wcag(fg, bg) * 100) / 100).toFixed(2) : null;
+    ok(name + ' equals the tokens and the WCAG ratio', fg === r.fg.toUpperCase() && bg === r.bg.toUpperCase() && want === r.ratio,
+      { token: fg, onBg: bg, ratio: want, doc: [r.fg, r.bg, r.ratio] });
+  });
 }
 
 /* ---- self-test ---------------------------------------------------------------------------------- */
@@ -250,6 +389,46 @@ const PLANTS = [
   // the plant above could be red because the matcher got stricter than intended.
   ['p) the whole label "Say it" mid-sentence in a config string still passes', null, [jsonEdit((o) => { o.strings['config.description'].text += ' Tap Say it to talk.'; })], true],
 ];
+// ---- native source and design pairs (plan 1 Task 6)
+const SW = 'native-ios/CubbyWidget/Plant.swift', KT = 'native-android/app/src/main/java/com/littlecubby/app/widget/Plant.kt', XM = 'native-android/app/src/main/res/xml/plant.xml';
+const addFile = (rel, body) => edit(rel, () => body);
+const LIT_PLANTS = [   // each literal matcher gets its own tree and must be the one that catches it
+  ['Text("', SW, 'struct V { var body: some View { Text("Last feed") } }'],
+  ['Text(verbatim: "', SW, 'struct V { var body: some View { Text(verbatim: "Last feed") } }'],
+  ['Button("', SW, 'struct V { var body: some View { Button("Feed") { } } }'],
+  ['Label("', SW, 'struct V { var body: some View { Label("Feed", systemImage: "x") } }'],
+  ['.configurationDisplayName("', SW, 'let c = StaticConfiguration(kind: "k", provider: P()) { _ in V() }.configurationDisplayName("Feed")'],
+  ['.description("', SW, 'let c = StaticConfiguration(kind: "k", provider: P()) { _ in V() }.description("When your baby last fed")'],
+  ['title: LocalizedStringResource = "', SW, 'struct I { static var title: LocalizedStringResource = "Start sleep" }'],
+  ['@Parameter(title: "', SW, 'struct I { @Parameter(title: "Baby") var baby: String }'],
+  ['DisplayRepresentation(title: "', SW, 'let d = DisplayRepresentation(title: "Baby")'],
+  ['Glance Text("', KT, 'fun f() { Text("Last feed") }'],
+  ['Glance text = "', KT, 'fun f() { Text(text = "Last feed", style = s) }'],
+  ['android:label="', XM, '<appwidget-provider android:label="Last feed" />'],
+  ['android:description="', XM, '<appwidget-provider android:description="When your baby last fed" />'],
+];
+LIT_PLANTS.forEach(([name, rel, body], n) => {
+  PLANTS.push(['s' + (n + 1) + ') a literal in ' + name, 'native source: no string literal in ' + name, [addFile(rel, body + '\n')]]);
+});
+PLANTS.push(
+  ['t) a struct LogFeedIntent: AppIntent', 'native source: no AppIntent', [addFile(SW, 'struct LogFeedIntent: AppIntent { func perform() async throws -> some IntentResult { .result() } }\n')]],
+  ['u) a class LogFeedCallback : ActionCallback', 'native source: no ActionCallback', [addFile(KT, 'class LogFeedCallback : ActionCallback { }\n')]],
+  ['v) UIApplicationShortcutItems in a native-ios plist', 'native source: no UIApplicationShortcutItems', [addFile('native-ios/CubbyWidget/Info.plist', '<plist><dict><key>UIApplicationShortcutItems</key><array/></dict></plist>\n')]],
+  ['v2) UIApplicationShortcutItems in tools/cap_ios_configure.rb', 'native source: no UIApplicationShortcutItems', [edit('tools/cap_ios_configure.rb', (t) => t + '\n# UIApplicationShortcutItems\n')]],
+  ['w) native-android/.../res/xml/shortcuts.xml', 'native source: no shortcuts.xml', [addFile('native-android/app/src/main/res/xml/shortcuts.xml', '<shortcuts />\n')]],
+  ['x) one DESIGN.md hex changed (night on-sleep ink #1A1614 to #1A1615)', 'design pairs: night text on sleep fill --on-sleep', [edit('DESIGN.md', (t) => t.replace('| #1A1614 | #8E97D4 |', '| #1A1615 | #8E97D4 |'))]],
+  ['x2) one DESIGN.md ratio changed (night strokes --feed 6.82 to 6.83)', 'design pairs: night stroke --feed', [edit('DESIGN.md', (t) => t.replace('| #E0A655 | #2E2722 | 6.82 |', '| #E0A655 | #2E2722 | 6.83 |'))]],
+  ['x3) the night on-sleep row deleted', 'design pairs: every required pair has a row', [edit('DESIGN.md', (t) => t.replace(/^\| night \| text on sleep fill .*\n/m, ''))]],
+  ['y) WCopy.statusLastFeed edited in Generated.swift', 'generated files are fresh: native-ios', [edit('native-ios/CubbyWidget/Generated.swift', (t) => t.replace('static let statusLastFeed = "', 'static let statusLastFeed = "X'))]],
+  ['y2) w_status_last_feed edited in widget_strings.xml', 'generated files are fresh: native-android/app/src/main/res', [edit('native-android/app/src/main/res/values/widget_strings.xml', (t) => t.replace('name="w_status_last_feed">', 'name="w_status_last_feed">X'))]],
+  ['z) the "status.lastFeed" entry removed from Generated.kt byKey', 'kotlin byKey', [edit('native-android/app/src/main/java/com/littlecubby/app/widget/Generated.kt', (t) => t.replace(/^ {8}"status\.lastFeed" to .*\n/m, ''))]],
+  // Companion that must PASS: the allowed shapes are not tripped by the same matchers.
+  ['z2) allowed shapes pass: WCopy references, @string/ labels, NapIntent, NapActionCallback', null, [
+    addFile(SW, 'struct V { var body: some View { Text(WCopy.statusLastFeed); Button(action: go) { Label(WCopy.statusLastFeed, systemImage: "x") } } }\nstruct NapIntent: AppIntent { }\n'),
+    addFile(KT, 'fun f() { Text(WCopy.statusLastFeed) }\nclass NapActionCallback : ActionCallback { }\n'),
+    addFile(XM, '<appwidget-provider android:label="@string/w_gallery_small_title" android:description="@string/w_gallery_small_desc" />\n')]],
+);
+
 function stage(edits, regen) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'widget-parity-'));
   for (const rel of INPUTS) {
@@ -258,8 +437,9 @@ function stage(edits, regen) {
   }
   for (const [rel, fn] of edits) {
     const f = path.join(dir, rel);
-    const before = fs.readFileSync(f, 'utf8');
-    const after = fn(before);
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    const before = fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : null;   // a plant may create a file
+    const after = fn(before === null ? '' : before);
     if (after === before) { fs.rmSync(dir, { recursive: true, force: true }); return { error: 'edit changed nothing in ' + rel }; }
     fs.writeFileSync(f, after);
   }
