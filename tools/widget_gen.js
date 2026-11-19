@@ -35,6 +35,15 @@ function generate(root) {
     .replace(/^export \{[^}]*\};?\n/m, '')
     .replace(/^export (function|const|let)/gm, '$1')
     .replace(/^\n+/, '');
+  // Guard 1: any `export` the strip did not understand (export async function, export class, export default)
+  // would ship a syntax error inside the browser IIFE, so refuse rather than emit it.
+  const leftover = moduleBody.split('\n').find((l) => /^\s*export\b/.test(l));
+  if (leftover) throw new Error('since-rules.mjs has an export the generator cannot strip: ' + leftover.trim());
+  // Guard 2: FN_NAMES is what window.CubbySince exposes; it must be exactly the module's own exported functions.
+  const realFns = (body.match(/^export (?:function|const|let) +[A-Za-z_$][\w$]*/gm) || []).map((l) => l.split(/\s+/).pop()).sort();
+  if (JSON.stringify(realFns) !== JSON.stringify(FN_NAMES.slice().sort())) {
+    throw new Error('FN_NAMES differs from the exports of since-rules.mjs: module has [' + realFns.join(', ') + '], FN_NAMES has [' + FN_NAMES.slice().sort().join(', ') + ']');
+  }
   const appStrings = {};
   Object.keys(copy.strings || {}).sort().forEach((k) => {
     if ((copy.strings[k].on || []).indexOf('app') >= 0) appStrings[k] = copy.strings[k].text;

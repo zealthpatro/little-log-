@@ -137,14 +137,24 @@ function judge() {
   ok('no banned phrase', !bn.length, bn.map((k) => k + ': ' + strings[k].text));
   const cap = [];
   const properWords = new Set(PROPER.join(' ').split(' '));
-  const labelWords = new Set(labels.join(' ').split(' '));   // button names, only mid-sentence in prose that names the buttons (config, app)
+  // Button names, only mid-sentence in prose that names the buttons (config, app), and only as a WHOLE label:
+  // "Say it" is exempt, "Say Hello" is not. insideLabel(words, i) is true when word i sits in a run of words
+  // that spells one of the labels exactly.
+  const labelRuns = labels.map((l) => l.split(/\s+/).filter(Boolean));
+  const strip = (w) => w.replace(/^[^A-Za-z]+|[^A-Za-z]+$/g, '');
+  const insideLabel = (words, i) => labelRuns.some((run) => {
+    for (let st = Math.max(0, i - run.length + 1); st <= i && st + run.length <= words.length; st++) {
+      if (run.every((rw, j) => strip(words[st + j]) === rw)) return true;
+    }
+    return false;
+  });
   keys.forEach((k) => {
     const t = strings[k].text.replace(/\{[^}]*\}/g, '').trim();
     const words = t.split(/\s+/).filter(Boolean);
     words.forEach((w, i) => {
       const clean = w.replace(/^[^A-Za-z]+|[^A-Za-z]+$/g, '');
       if (!/^[A-Z]/.test(clean) || properWords.has(clean) || i === 0) return;
-      if (labelWords.has(clean) && (strings[k].on.includes('config') || strings[k].on.includes('app'))) return;
+      if (insideLabel(words, i) && (strings[k].on.includes('config') || strings[k].on.includes('app'))) return;
       if (/[.?!]$/.test(words[i - 1])) return;
       cap.push(k + ': ' + clean);
     });
@@ -203,7 +213,7 @@ function judge() {
     cases.forEach((c, n) => {
       const got = made[n];
       if (got.error) { ok('case ' + c.name + ' agrees', false, got.error); return; }
-      const d = c.expect ? diffPartial(c.expect, got.expect, '', '') : null;
+      const d = c.expect ? diffPartial(c.expect, got.expect, '', '') : 'has no hand-written expect, so nothing pins it';
       ok('case ' + c.name + ' agrees', !d, d);
     });
   }
@@ -231,8 +241,16 @@ const PLANTS = [
   ['j) staleMs 21600001 without regenerating', 'fixtures: widget-fixtures.json exists and its source', [jsonEdit((o) => { o.rules.staleMs = 21600001; })]],
   ['k) a hand-written expectation changed: Asleep now to Asleep', 'case medium-a-asleep-now agrees', [jsonEdit((o) => { o.cases.find((c) => c.name === 'medium-a-asleep-now').expect.rows[1].value = 'Asleep'; })]],
   ['l) the fixtures file says tz Europe/London', 'fixtures: tz is UTC', [edit('docs/widgets/widget-fixtures.json', (s) => s.replace('"tz": "UTC"', '"tz": "Europe/London"'))]],
+  ['n) "Say Hello" in app.healthSwitched (a word of a label is not a label)', 'sentence case', [jsonEdit((o) => { o.strings['app.healthSwitched'].text = 'Your widget now says Say Hello until {name} is better.'; })], true],
+  ['n2) "Say Feed": every word is a label word but the run is no label', 'sentence case', [jsonEdit((o) => { o.strings['app.healthSwitched'].text = 'Your widget now says Say Feed until {name} is better.'; })], true],
+  ['q) `export async function z(){}` planted in since-rules.mjs (the strip cannot read it)', 'generate() runs', [edit('workers/shared/since-rules.mjs', (s) => s + 'export async function z() {}\n')]],
+  ['r) a new exported function missing from FN_NAMES', 'generate() runs', [edit('workers/shared/since-rules.mjs', (s) => s + 'export function extra() {}\n')]],
+  ['o) a case with its hand-written expect removed', 'case medium-a-asleep-now agrees', [jsonEdit((o) => { delete o.cases.find((c) => c.name === 'medium-a-asleep-now').expect; })], true],
+  // A companion that must PASS: the whole label "Say it" mid-sentence in config prose is still exempt. Without it,
+  // the plant above could be red because the matcher got stricter than intended.
+  ['p) the whole label "Say it" mid-sentence in a config string still passes', null, [jsonEdit((o) => { o.strings['config.description'].text += ' Tap Say it to talk.'; })], true],
 ];
-function stage(edits) {
+function stage(edits, regen) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'widget-parity-'));
   for (const rel of INPUTS) {
     fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
@@ -244,6 +262,10 @@ function stage(edits) {
     const after = fn(before);
     if (after === before) { fs.rmSync(dir, { recursive: true, force: true }); return { error: 'edit changed nothing in ' + rel }; }
     fs.writeFileSync(f, after);
+  }
+  if (regen) {   // the edit is to the copy file; bring every generated file in step so only the rule under test can fail
+    const out = generate(dir);
+    Object.keys(out).forEach((rel) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), out[rel]); });
   }
   return { dir };
 }
@@ -264,11 +286,16 @@ async function selfTest() {
   fs.rmSync(base.dir, { recursive: true, force: true });
   if (b.code === 0) console.log('  ok   an unaltered copy passes, so every red below is the staging\'s');
   else { bad++; console.log('  FAIL an unaltered copy does not pass:\n' + b.out.split('\n').filter((l) => /FAIL/.test(l)).join('\n')); }
-  for (const [name, expect, edits] of PLANTS) {
-    const t = stage(edits);
+  for (const [name, expect, edits, regen] of PLANTS) {
+    const t = stage(edits, regen);
     if (t.error) { bad++; console.log('  FAIL not staged: ' + name + ' (' + t.error + ')'); continue; }
     const r = await runOn(t.dir);
     fs.rmSync(t.dir, { recursive: true, force: true });
+    if (expect === null) {
+      if (r.code === 0) { caught++; console.log('  ok   still passes: ' + name); }
+      else { bad++; console.log('  FAIL should pass: ' + name + '\n' + r.out.split('\n').filter((l) => /FAIL/.test(l)).join('\n')); }
+      continue;
+    }
     const hit = r.out.split('\n').some((l) => l.startsWith('  FAIL ' + expect));
     if (r.code !== 0 && hit) { caught++; console.log('  ok   caught: ' + name + '  [FAIL ' + expect + ']'); }
     else { bad++; console.log('  FAIL not caught: ' + name + (r.code === 0 ? ' (the gate passed)' : ' (red, but not for: ' + expect + ')')); }
