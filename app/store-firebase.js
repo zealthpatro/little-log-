@@ -66,6 +66,7 @@
   var booted = false;
   var unsub = [];
   var knownEvents = {};      // id -> JSON of last-synced event (for diffing)
+  var serverAuthor = {};     // id -> the authorId the server holds (stripMeta drops it from knownEvents; rules make it immutable)
   var applyingRemote = false;
   var pushTimer = null;
   var unackedEv = {};        // id -> { baseSer, n }: entry writes the server has not acknowledged yet (the outbox, below)
@@ -1058,7 +1059,7 @@
     unsub.forEach(function (u) { try { u(); } catch (e) {} });
     matUnsub.forEach(function (u) { try { u(); } catch (e) {} });
     pregUnsub.forEach(function (u) { try { u(); } catch (e) {} });
-    unsub = []; matUnsub = []; pregUnsub = []; booted = false; knownEvents = {};
+    unsub = []; matUnsub = []; pregUnsub = []; booted = false; knownEvents = {}; serverAuthor = {};
     _lastInviteEmail = ''; // per-uid cache: never let one account's invite email survive into the next
     matOwner = null; matShared = {}; knownMat = {};
     pregOwner = null; pregShared = []; knownPregJourney = null; knownPrecon = null; legacyBlobPreg = null; pregMigrated = false;
@@ -1504,7 +1505,7 @@
       createdAt: window.LL.serverTimestamp()
     });
     var writes = [];
-    m.events.forEach(function (ev) { writes.push(newRef.collection('events').doc(String(ev.id)).set(Object.assign({ authorId: user.uid }, ev))); });
+    m.events.forEach(function (ev) { writes.push(newRef.collection('events').doc(String(ev.id)).set(Object.assign({}, ev, { authorId: (ev.authorId && ev.authorId !== 'local') ? ev.authorId : user.uid }))); });
     Object.keys(m.photos).forEach(function (pid) { writes.push(newRef.collection('photos').doc(pid).set({ data: m.photos[pid], authorId: user.uid })); });
     await Promise.all(writes);
     writeOwnMemberEmail(newRef); // PRIV-2: email goes to the gated doc, not memberInfo
@@ -1610,6 +1611,15 @@
     state.journey = app.journey || null;
     state.lossHolding = app.lossHolding || null;
     normalizeLoadedState(state); // defensive legacy migrations
+  }
+  function noteServerAuthor(id, data) { if (data && data.authorId) serverAuthor[id] = data.authorId; }
+  /* The authorId to write for an event. One the server already holds keeps its author (rules make
+     authorId immutable on update, so an owner's edit of a caregiver's entry, or an edit from a copy that
+     lost the field, must not put the editor's uid there). A create is authored by the writer: an entry
+     stamped 'local' while nobody was signed in (importCommit, setBirthWeight via myUid()) is hers now. */
+  function authorToWrite(id, ev, uidNow) {
+    if (serverAuthor[id]) return serverAuthor[id];
+    return (ev.authorId && ev.authorId !== 'local') ? ev.authorId : uidNow;
   }
   function stripMeta(ev) { var c = Object.assign({}, ev); delete c.authorId; return c; }
   function stableStringify(o) {
@@ -3162,7 +3172,7 @@
           if ((state.events || []).some(function (e) { return String(e.id) === String(eid); })) return; // recent: owned by the live listener
           var data = ing().event(doc.data(), eid);
           (state.events = state.events || []).push(data);
-          knownEvents[eid] = JSON.stringify(stripMeta(data)); added++;
+          knownEvents[eid] = JSON.stringify(stripMeta(data)); noteServerAuthor(eid, data); added++;
         });
         applyingRemote = false;
         window.cubbyHistoryPending = false;
@@ -3176,11 +3186,11 @@
           var data = ing().event(ch.doc.data(), ingestId(ch.doc.id));
           if (ch.type === 'removed') {
             state.events = (state.events || []).filter(function (e) { return String(e.id) !== String(data.id); });
-            delete knownEvents[data.id];
+            delete knownEvents[data.id]; delete serverAuthor[data.id];
           } else {
             var i = (state.events || []).findIndex(function (e) { return String(e.id) === String(data.id); });
             if (i >= 0) state.events[i] = data; else (state.events = state.events || []).push(data);
-            knownEvents[data.id] = JSON.stringify(stripMeta(data));
+            knownEvents[data.id] = JSON.stringify(stripMeta(data)); noteServerAuthor(data.id, data);
           }
         });
         applyingRemote = false;
@@ -3424,7 +3434,7 @@
       if (knownEvents[id] !== ser) {
         var n = noteEvWrite(id, knownEvents[id]);
         knownEvents[id] = ser;
-        writes.push(eventsRef.doc(docKey(id)).set(Object.assign({ authorId: cur[id].authorId || uidNow }, cur[id]))
+        writes.push(eventsRef.doc(docKey(id)).set(Object.assign({}, cur[id], { authorId: authorToWrite(id, cur[id], uidNow) }))
           .then(function () { settleEvWrite(id, n, ser); })
           .catch(function (e) { if (knownEvents[id] === ser) delete knownEvents[id]; throw e; }));
       }

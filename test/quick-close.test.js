@@ -36,7 +36,7 @@ function lift(src, name) {
   }
   return null;
 }
-const NAMES = ['stableStringify', 'sharedSettings', 'appBlobFromState', 'stripMeta', 'hhSig', 'holdPendingBlobEdits', 'pushNow',
+const NAMES = ['stableStringify', 'sharedSettings', 'appBlobFromState', 'stripMeta', 'authorToWrite', 'hhSig', 'holdPendingBlobEdits', 'pushNow',
   'evCanon', 'noteEvWrite', 'settleEvWrite', 'outboxKey', 'buildOutbox', 'saveOutbox', 'dropOutbox', 'readOutbox',
   'replayOutboxEvents', 'flushPendingPush', 'flushOnPageHide'];
 const parts = NAMES.map((n) => [n, lift(STORE, n)]);
@@ -55,7 +55,7 @@ function phone(opts) {
   const pending = (rec) => new Promise((res, rej) => { rec.land = res; rec.refuse = rej; writes.push(rec); });
   const ctx = {
     state: clone(opts.state || { events: [], meds: [], babies: [], settings: {} }),
-    knownEvents: clone(opts.knownEvents || {}), unackedEv: {}, blobOut: 0, outboxSaved: false, replayEv: null, replayHold: null,
+    knownEvents: clone(opts.knownEvents || {}), serverAuthor: {}, unackedEv: {}, blobOut: 0, outboxSaved: false, replayEv: null, replayHold: null,
     blobBase: opts.blobBase === undefined ? null : clone(opts.blobBase),
     pushTimer: null, pushWhenHydrated: false, hhHydrated: opts.hydrated !== false, lastHhSig: null, pregOwner: null,
     auth: { currentUser: { uid: 'olive' } },
