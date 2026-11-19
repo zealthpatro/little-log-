@@ -54,15 +54,17 @@ sign-in did not complete, and a signed-in push of a `'local'` entry never reache
   phone. After the refusal settled, the entry was NOT in `state.events` (`{"inState":false,"inStore":false}`
   after 9 s; little-log-v1 is not written once signed in, so the store reading is not evidence). The rolled-back
   write reaches the listener as a `removed` change (app/store-firebase.js, the removed branch drops it from
-  `state.events`), so the entry leaves the parent's own phone, and with it any chance of a retry. The ritual
-  case R shows the same on the tree: the parent saw "Bottle done" and then the denial toast, and the entry
-  never reached the server. So "nothing is lost" was wrong: a refused entry is gone from the phone and from
-  the server.
+  `state.events`), so the entry leaves the parent's own phone, and with it any chance of a retry. So
+  "nothing is lost" was wrong for the signed-in push path: a refused entry is gone from the phone and was
+  never on the server. The ritual case R, on the broken tree, showed the parent's "Bottle done" toast, then
+  the denial toast, and no document on the server. It did not assert whether the entry stayed in
+  `state.events`, so the phone-side loss is measured by A2 only, not by R.
 - Orphan households: in the first-sign-in migration `newRef.set(...)` lands first (the household exists with
   her babies), the events follow, and `users/{uid}.householdId` is written only after `Promise.all`. A refused
   event aborted before that, so each failed first sign-in, and each relaunch after it, created another
   household holding her babies and whatever events landed, with nothing pointing at it. Clients cannot
-  delete households (rules `allow delete: if false`), so they stay.
+  delete households (firestore.rules:510, `allow delete: if false` in the `match /households/{hid}` block that
+  starts at :258; the events subtree is the separate block at :515), so they stay.
 - How many parents hit it is not measured.
 
 ## Root cause
@@ -115,17 +117,61 @@ app/store-firebase.js only; rules unchanged.
 | 5 | Hunt for lost entries and orphan households in production (founder-run, read-only, not run here): see below | Process | TODO |
 | 6 | Make the migration write `users/{uid}.householdId` with, or before, the household, so a failure leaves no orphan | Prevent | TODO |
 
-Action 5, the queries (read-only; aggregate counts only, no content):
-- Orphan households: list `households` (ids, `ownerId`, `createdAt`) and `users` (`householdId`); a household
-  is an orphan when no `users` doc points at it and it has a single member equal to `ownerId`. Count them and
-  group by `ownerId` (more than one household per owner is the signature of the relaunch loop).
-  `node tools/` has the admin helper pattern used by the funnel report; use it, not a new script.
-- Entries authored `'local'` already on the server: collection-group query
-  `db.collectionGroup('events').where('authorId','==','local')`, count only. Rules did not exist before
-  2026-07-09, so older rows may exist.
-- Lost entries cannot be found on the server by construction (they were removed from the phone and never
-  written). The only evidence is client side: `save.failed` with `error: permission_denied` events in the
-  first-party usage log; count those per day since 2026-07-09 as the exposure estimate.
+Action 5, the queries. Founder-run, read-only, NOT run by this session. Counts only: no emails, names, babies
+or document contents are printed, and nothing is written.
+
+Households and `'local'` entries (needs `tools/serviceAccountKey.json`, the same key `tools/ops.js` uses; every
+household read carries a field mask, so no `app` blob or baby data is pulled; entries are counted with a
+server-side `count()`, never read):
+
+```sh
+cd tools && node - <<'EOF'
+const { initializeApp, cert } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
+const db = getFirestore(initializeApp({ credential: cert(require('./serviceAccountKey.json')) }, 'local-author-count'));
+(async () => {
+  const users = await db.collection('users').select('householdId').get();
+  const pointed = new Set();
+  users.forEach((d) => { const h = d.get('householdId'); if (h) pointed.add(h); });
+  const hh = await db.collection('households').select('ownerId', 'createdAt', 'members').get();
+  const orphans = [], perOwner = {};
+  let localEntries = 0, householdsWithLocal = 0;
+  for (const d of hh.docs) {
+    if (!pointed.has(d.id)) { orphans.push(d.id); const o = d.get('ownerId'); perOwner[o] = (perOwner[o] || 0) + 1; }
+    const n = (await d.ref.collection('events').where('authorId', '==', 'local').count().get()).data().count;
+    if (n) { localEntries += n; householdsWithLocal++; }
+  }
+  const counts = Object.values(perOwner);
+  console.log(JSON.stringify({
+    households: hh.size,
+    orphanHouseholds: orphans.length,
+    ownersWithMoreThanOneOrphan: counts.filter((c) => c > 1).length,
+    mostOrphansForOneOwner: counts.length ? Math.max(...counts) : 0,
+    eventsAuthoredLocal: localEntries,
+    householdsHoldingLocalEvents: householdsWithLocal,
+  }, null, 2));
+})().catch((e) => { console.error(e.message); process.exit(1); });
+EOF
+```
+
+An orphan is a household no `users/{uid}.householdId` points at. More than one orphan for one owner is the
+signature of the relaunch loop. Some orphans can be innocent (a household whose owner has since moved), so
+read the count as an upper bound. Rows authored `'local'` can only exist from before 2026-07-09, when the
+rule that refuses them was deployed.
+
+Lost entries cannot be found on the server by construction: they were rolled back off the phone and never
+written. The only trace is client side. The `save.failed` usage event (with `error: permission_denied`) exists
+from 2026-11-16 (its allowlist entry is 7ae0fd66, the tracker commit f2039686) and is sent only after the usage
+notice and only once the usage D1 database is bound, so it can estimate exposure from 2026-11-16 onward and
+nothing earlier: for 2026-07-09 to 2026-11-15 the number of refused writes is not measurable from any log we
+keep. If `cubby-usage` exists and is bound, per day:
+
+```sh
+npx wrangler d1 execute cubby-usage --remote --command "SELECT local_day, COUNT(*) AS refused_saves, COUNT(DISTINCT uid) AS people FROM usage_events WHERE name = 'save.failed' AND json_extract(props, '\$.error') = 'permission_denied' GROUP BY local_day ORDER BY local_day"
+```
+
+(`people` is a count of distinct sign-ins, printed as a number only.) If the binding is still commented out in
+wrangler.toml, the answer is "not measured", and that is the answer to report.
 
 ## Lessons
 - A rule that makes a field load-bearing needs a test that sends the field's worst legal-looking value
