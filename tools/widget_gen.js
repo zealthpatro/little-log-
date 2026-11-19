@@ -103,6 +103,10 @@ function escSource(str, dollar) {
 function escXml(str) {
   let o = str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/'/g, "\\'").replace(/"/g, '\\"');
   if (/^[@?]/.test(o)) o = '\\' + o;
+  // aapt2 trims leading and trailing whitespace of an unquoted <string> BEFORE it reads escapes, so " and " would
+  // ship as "and" and joined names would render "RobinandWren". An escaped \u0020 is not whitespace to the trim.
+  // Chosen over wrapping in "..." because it leaves every other string and its apostrophe escapes byte-identical.
+  o = o.replace(/^ +/, (m) => '\\u0020'.repeat(m.length)).replace(/ +$/, (m) => '\\u0020'.repeat(m.length));
   return o;
 }
 function generateNative(copy, actions) {

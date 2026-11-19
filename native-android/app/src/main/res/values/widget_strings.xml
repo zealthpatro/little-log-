@@ -80,8 +80,8 @@
     <string name="w_moment_months">{age} months today</string>
     <string name="w_moment_year1">1 year today</string>
     <string name="w_moment_years">{age} years today</string>
-    <string name="w_names_and"> and </string>
-    <string name="w_sep_dot"> · </string>
+    <string name="w_names_and">\u0020and\u0020</string>
+    <string name="w_sep_dot">\u0020·\u0020</string>
     <string name="w_small_last_feed">last feed</string>
     <string name="w_small_moment_month1">{name} · 1 month today</string>
     <string name="w_small_moment_months">{name} · {age} months today</string>

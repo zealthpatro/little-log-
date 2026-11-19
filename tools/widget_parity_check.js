@@ -104,6 +104,18 @@ function judge() {
       have ? { missing: want.filter((x) => !have.includes(x)), extra: have.filter((x) => !want.includes(x)) } : 'no byKey map in Generated.kt');
   } catch (e) { ok('kotlin byKey: Generated.kt can be read', false, e.message); }
 
+  try {   // what aapt2 would ship: trim the raw text first, then read the escapes, and compare with the copy file
+    const xml = rd('native-android/app/src/main/res/values/widget_strings.xml');
+    const cp = JSON.parse(rd('docs/widgets/widget-copy.json'));
+    const aapt2 = (raw) => raw.trim().replace(/&lt;/g, '<').replace(/&amp;/g, '&')
+      .replace(/\\u([0-9a-fA-F]{4})/g, (m, h) => String.fromCharCode(parseInt(h, 16))).replace(/\\(.)/g, '$1');
+    const got = {}; let mm; const re = /<string name="([^"]+)">([\s\S]*?)<\/string>/g;
+    while ((mm = re.exec(xml))) got[mm[1]] = aapt2(mm[2]);
+    const wrong = Object.keys(cp.strings).filter((k) => cp.strings[k].platforms.includes('android') && got[snakeName(k)] !== cp.strings[k].text)
+      .map((k) => k + ': copy ' + JSON.stringify(cp.strings[k].text) + ', Android ' + JSON.stringify(got[snakeName(k)]));
+    ok('android strings: after aapt2 trims edge whitespace each value equals the copy file exactly', !wrong.length, wrong.join('; '));
+  } catch (e) { ok('android strings: widget_strings.xml can be read', false, e.message); }
+
   section('2. QUICK_ACTIONS');
   const html = rd('app/index.html');
   const count = (s, t) => s.split(t).length - 1;
@@ -423,6 +435,10 @@ PLANTS.push(
   ['y2) w_status_last_feed edited in widget_strings.xml', 'generated files are fresh: native-android/app/src/main/res', [edit('native-android/app/src/main/res/values/widget_strings.xml', (t) => t.replace('name="w_status_last_feed">', 'name="w_status_last_feed">X'))]],
   ['z) the "status.lastFeed" entry removed from Generated.kt byKey', 'kotlin byKey', [edit('native-android/app/src/main/java/com/littlecubby/app/widget/Generated.kt', (t) => t.replace(/^ {8}"status\.lastFeed" to .*\n/m, ''))]],
   // Companion that must PASS: the allowed shapes are not tripped by the same matchers.
+  // OLD escaping: the edge spaces of names.and written as plain spaces. generated-files-are-fresh also fails, which is
+  // why the check under test is matched by name, and the companion below regenerates so only the escaping can differ.
+  ['z3) names.and written with plain edge spaces (the old escaping), which aapt2 trims', 'android strings: after aapt2', [edit('native-android/app/src/main/res/values/widget_strings.xml', (t) => t.replace('\\u0020and\\u0020', ' and '))]],
+  ['z4) a copy string with no edge space is generated unchanged and passes', null, [jsonEdit((o) => { o.strings['gallery.smallTitle'].text = "Last feed, it's \"fine\" & <ok>"; })], true],
   ['z2) allowed shapes pass: WCopy references, @string/ labels, NapIntent, NapActionCallback', null, [
     addFile(SW, 'struct V { var body: some View { Text(WCopy.statusLastFeed); Button(action: go) { Label(WCopy.statusLastFeed, systemImage: "x") } } }\nstruct NapIntent: AppIntent { }\n'),
     addFile(KT, 'fun f() { Text(WCopy.statusLastFeed) }\nclass NapActionCallback : ActionCallback { }\n'),
