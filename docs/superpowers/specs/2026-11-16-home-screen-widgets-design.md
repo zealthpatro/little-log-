@@ -93,6 +93,13 @@ Added 17 November, after the founder reviewed the board:
   in the iPhone app (and the Android app when it ships) only while no Cubby widget is installed, dismissible for good,
   never a nag. Its look needs a mockup before it is built (P3's web task). Buttons are hidden in StandBy, like the lock
   screen.
+- F12. Small widget set to Both on twins (19 Nov; "Start both" measured 59.0pt in a ~59pt button that also holds the moon,
+  so it does not fit): the in-place button keeps the moon with "Start" or "Stop" (solid) and starts or stops BOTH twins;
+  the accessibility label names both ("Start sleep for Robin and Wren"); the label line names both babies ("Robin and
+  Wren") instead of "Robin · last feed", shortening long names before ever dropping "and"; the time shown is the newest
+  feed, and the line under it says whose: "1 hr, 5 min ago · Robin" (no logger name on the twins small widget, as on
+  twins rows). Every other small Both rule from plan 1 Task 5's fix round stands (links carry baby=both; Health to the
+  ill twin, else the chooser). Siblings are unaffected.
 
 ## 1. Intent
 
