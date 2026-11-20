@@ -1549,6 +1549,9 @@ function _medIntervalMs(medFields) {
    adding `type ==` would need a composite index this repo does not deploy (firebase.json has rules
    only), and a FAILED_PRECONDITION here would block every tap. So the medicine filter runs below. */
 const DOSE_RECENT_LIMIT = 500;
+/* An every-X slot starts just AFTER the dose that set its due time, which is exactly one interval back.
+   A minute of slack keeps that dose itself out of the slot. */
+const DOSE_SLOT_SLACK = 60000;
 async function fsRecentEvents(base, token, hid, since) {
   const sq = {
     from: [{ collectionId: 'events' }],
@@ -3514,13 +3517,13 @@ export default {
        stays valid for six hours after its dose. Every refusal is the same 401; a read that fails is
        a 503 and writes nothing.
 
-       Idempotent by construction rather than by checking: the document id is dose-<medId>-<dueTs>,
-       so a duplicate delivery, a retry, a double tap, or two caregivers acting on the same
-       notification all address the SAME document. Firestore's documentId= create returns
-       ALREADY_EXISTS, which is success here, not an error. That matters more than usual: the charter
-       says never auto-log a dose, and the flip side of a button that logs one is that it must never
-       log two. A dose logged in the app has a random id, so that case is a CHECK: the one logDose
-       makes before a second dose inside the medicine's interval. */
+       Idempotent per person by construction: the document id is dose-<medId>-<dueTs>-<uid>, so a
+       duplicate delivery, a retry or a double tap from one person address the SAME document, and
+       Firestore's documentId= create answers ALREADY_EXISTS, which is success here ("already logged").
+       The charter says never auto-log a dose; the flip side of a button that logs one is that a tap is
+       a dose the parent says she gave, so it is always saved. Two people acting on one reminder are two
+       doses, and a dose already in this slot (logged in the app, or by the other parent) is reported
+       back as facts for the notification, the same way logDose shows it in the app. */
     if (url.pathname === '/api/dose') {
       if (request.method !== 'POST') return new Response('method not allowed', { status: 405 });
       /* Per IP, before anything costs a token or a read. A tap is one request. Fails open if the
@@ -3555,28 +3558,40 @@ export default {
       if (medBaby && medBaby !== String(c.b)) return json({ error: 'bad_ticket' }, 401);
 
       const now = Date.now();
-      /* Already given? lastDose's rule: same medicine, same child, not deleted, not in the future,
-         and less than one interval ago. A notification cannot show logDose's "Log another" sheet, so
-         the Worker refuses the second write and reports the dose that is already there. */
+      /* ALWAYS SAVE the dose the parent says she gave. Refusing is the dangerous failure: told "Dose
+         logged" over nothing saved, she moves on, and a partner who sees no dose gives another. The first
+         version refused any tap less than one interval after the last dose, measured from the TAP; the
+         reminder fires about 30 minutes before the dose is due, so it refused every on-schedule tap
+         (docs/postmortems/2026-11-20-dose-button-saved-nothing.md).
+         The one question left is what to SAY: does another dose of this medicine for this child already
+         sit in this slot? Every-X hours runs from the dose that set this due time, which is exactly one
+         interval before it, so any dose after that one is in this slot. A daily schedule has fixed slots,
+         so a dose nearer this slot than the last one (after due - interval/2) is. The answer is facts for
+         the notification ("Two doses logged"), never a refusal, and a failed read only loses the note. */
+      let earlier = 0;
       const iv = _medIntervalMs(med);
+      const due = Number(c.t) || now;
       if (iv > 0) {
-        const recent = await fsRecentEvents(base, token, String(c.h), now - iv);
-        if (!recent.ok) return json({ error: 'unavailable' }, 503);
-        let prior = 0;
-        for (const d of recent.docs) {
-          const f = d.fields || {};
-          const t = _fsNum(f.time);
-          if (_fsStr(f.type) === 'medicine' && _fsStr(f.medId) === String(c.m)
-            && _fsStr(f.babyId) === String(c.b)
-            && !(f.deleted && f.deleted.booleanValue === true)
-            && t != null && t <= now && now - t < iv && t > prior) prior = t;
-        }
-        if (prior) return json({ ok: true, already: true, at: prior });
-        // A full page with no match cannot prove there is none further back. Not knowing is not "no".
-        if (recent.docs.length >= DOSE_RECENT_LIMIT) return json({ error: 'unavailable' }, 503);
+        const pat = med.pattern && med.pattern.mapValue && med.pattern.mapValue.fields;
+        const since = (pat && _fsStr(pat.type) === 'everyX') ? due - iv + DOSE_SLOT_SLACK : due - iv / 2;
+        const recent = await fsRecentEvents(base, token, String(c.h), Math.min(since, now));
+        if (recent.ok) {
+          for (const d of recent.docs) {
+            const f = d.fields || {};
+            const t = _fsNum(f.time);
+            if (_fsStr(f.type) === 'medicine' && _fsStr(f.medId) === String(c.m)
+              && _fsStr(f.babyId) === String(c.b)
+              && !(f.deleted && f.deleted.booleanValue === true)
+              && t != null && t >= since && t <= now && t > earlier) earlier = t;
+          }
+          if (!earlier && recent.docs.length >= DOSE_RECENT_LIMIT) console.error('dose_earlier_partial');
+        } else console.error('dose_earlier_unread');
       }
 
-      const docId = 'dose-' + c.m + '-' + (Number(c.t) || 0);
+      /* One id per dose time AND per person. A double tap, a retry or a redelivered push from the same
+         person addresses the same document and counts once (ALREADY_EXISTS is success, and honest:
+         "Already logged"). Two people acting on one reminder are two doses, and both are saved. */
+      const docId = 'dose-' + c.m + '-' + (Number(c.t) || 0) + '-' + c.u;
       /* `time` is NOW, not the dose time. commitDose() does the same, and it is what a doctor report
          needs: when the dose was actually given, not when it was scheduled. `id` is set equal to the
          document id because the client's listener does data.id = doc.id and keys its known-events map
@@ -3595,7 +3610,7 @@ export default {
         method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
         body: JSON.stringify({ fields })
       });
-      if (r.ok) return json({ ok: true, at: now });
+      if (r.ok) return json(earlier ? { ok: true, at: now, earlier } : { ok: true, at: now });
       const txt = await r.text();
       if (r.status === 409 || /ALREADY_EXISTS/.test(txt)) return json({ ok: true, already: true });
       console.error('dose_write_fail', r.status, txt.slice(0, 200));

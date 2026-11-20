@@ -1,6 +1,6 @@
 /* Cubby service worker.
    Bump CACHE on every deploy so old assets are cleared. */
-const CACHE = 'little-log-v372';
+const CACHE = 'little-log-v379';
 const ASSETS = [
   '/app/',
   '/app/index.html',
@@ -116,27 +116,53 @@ self.addEventListener('push', (e) => {
   e.waitUntil(self.registration.showNotification(n.title || 'Cubby', opts));
 });
 
+/* What a "Log it" tap says back, every word in one place (widgets will generate this block from
+   docs/widgets/widget-copy.json). The lock screen names no medicine and no person (founder decision C6),
+   and the words claim only what the server said: "Dose logged" when it wrote one, never for an
+   `already` or a reply it cannot read. That is the bug this block replaced: any 200 read as a save, so
+   from 2026-10-26 every on-schedule tap said "Dose logged" over nothing written
+   (docs/postmortems/2026-11-20-dose-button-saved-nothing.md; test/dose-button.test.js). */
+const DOSE_COPY = {
+  logged: { title: 'Dose logged', body: "It's on the record." },
+  twice: { title: 'Two doses logged', body: 'One at {time} and one now. Tap to check them.' },
+  already: { title: 'Already logged', body: 'This dose was already on the record.' },
+  failed: { title: 'Could not log that dose', body: 'Open Cubby and log it there, so nothing is missed.' },
+  offline: { title: 'Could not log that dose', body: 'You look offline. Open Cubby and log it there.' }
+};
+/* The app's fmtClock, in the device's own time: "1:55 AM", so the notification matches the medicine screen. */
+function doseClock(ts) {
+  const d = new Date(ts);
+  let h = d.getHours();
+  const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
+  return h + ':' + String(d.getMinutes()).padStart(2, '0') + ' ' + ap;
+}
+/* The server's answer, read for what it says and nothing more. */
+function doseWords(ok, b) {
+  if (!ok) return DOSE_COPY.failed;
+  if (b && b.ok === true && b.already) return DOSE_COPY.already;
+  if (b && b.ok === true && b.earlier) return { title: DOSE_COPY.twice.title, body: DOSE_COPY.twice.body.replace('{time}', doseClock(b.earlier)) };
+  if (b && b.ok === true) return DOSE_COPY.logged;
+  return DOSE_COPY.failed;
+}
+
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const d = e.notification.data || {};
   /* The action branch deliberately does NOT open a window. The whole point is that a parent holding
      a baby can record the dose from the lock screen and put the phone down. The ticket is opaque to
      us: everything written is decided by the signature the Worker made, so there is nothing here to
-     get wrong. Idempotent server-side on dose-<medId>-<dueTs>, so a double tap is one dose. */
+     get wrong. Idempotent server-side per person on dose-<medId>-<dueTs>-<uid>, so a double tap is one
+     dose; a second person's tap is a second dose, and the words say so. */
   if (e.action === 'dose' && d.nonce) {
+    const say = (w) => self.registration.showNotification(w.title, {
+      body: w.body, icon: '/icons/icon-192.png?v=09cba32f', badge: '/icons/icon-192.png?v=09cba32f',
+      tag: (d.tag || 'cubby') + '-done'
+    });
     e.waitUntil(
       fetch('/api/dose', { method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ n: d.nonce }) })
-        .then((r) => self.registration.showNotification(r.ok ? 'Dose logged' : 'Could not log that dose', {
-          body: r.ok ? ((d.medName ? d.medName + ' ' : '') + 'is on the record.')
-                     : 'Open Cubby and log it there, so nothing is missed.',
-          icon: '/icons/icon-192.png?v=09cba32f', badge: '/icons/icon-192.png?v=09cba32f',
-          tag: (d.tag || 'cubby') + '-done'
-        }))
-        .catch(() => self.registration.showNotification('Could not log that dose', {
-          body: 'You look offline. Open Cubby and log it there.',
-          icon: '/icons/icon-192.png?v=09cba32f', badge: '/icons/icon-192.png?v=09cba32f', tag: (d.tag || 'cubby') + '-done'
-        }))
+        .then((r) => (r.ok ? r.json().catch(() => null) : Promise.resolve(null)).then((b) => say(doseWords(r.ok, b))),
+              () => say(DOSE_COPY.offline))
     );
     return;
   }

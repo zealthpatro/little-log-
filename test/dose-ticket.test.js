@@ -109,14 +109,17 @@ const CLAIMS = { u: 'uid123', h: 'hhABC', m: 'med9', b: 'baby1', mn: 'Calpol', d
     ok('refuses ' + JSON.stringify(String(bad).slice(0, 18)), r === null, r);
   }
 
-  console.log('\n6. the document id is deterministic, which is what makes a double tap harmless');
+  console.log('\n6. the document id is deterministic per person, which is what makes a double tap harmless');
   {
-    const id = (c) => 'dose-' + c.m + '-' + (Number(c.t) || 0);
+    // Per dose time AND per person: one parent's double tap is one dose; the other parent's tap is a second dose (2026-11-20).
+    const id = (c) => 'dose-' + c.m + '-' + (Number(c.t) || 0) + '-' + c.u;
     const a = await read(FAKE_KEY, await mint(FAKE_KEY, CLAIMS));
     const b = await read(FAKE_KEY, await mint(FAKE_KEY, CLAIMS));
     ok('two mints of the same dose address the same document', id(a) === id(b), [id(a), id(b)]);
     const other = await read(FAKE_KEY, await mint(FAKE_KEY, Object.assign({}, CLAIMS, { t: CLAIMS.t + 3600000 })));
     ok('a different dose time addresses a different one', id(a) !== id(other));
+    const partner = await read(FAKE_KEY, await mint(FAKE_KEY, Object.assign({}, CLAIMS, { u: 'uidPartner' })));
+    ok('and a different person, a different one', id(a) !== id(partner));
   }
 
   console.log('\n7. worker.js really works this way');
@@ -127,7 +130,7 @@ const CLAIMS = { u: 'uid123', h: 'hhABC', m: 'med9', b: 'baby1', mn: 'Calpol', d
     ok('expiry is enforced', src.includes('if (!(Number(c.x) > Date.now())) return null;'));
     ok('the endpoint accepts ONLY the ticket, so the caller cannot choose what is written',
        src.includes('const c = await readDoseTicket(sa, (body && body.n) || \'\');'));
-    ok('the document id is deterministic', src.includes("const docId = 'dose-' + c.m + '-' + (Number(c.t) || 0);"));
+    ok('the document id is deterministic per person', src.includes("const docId = 'dose-' + c.m + '-' + (Number(c.t) || 0) + '-' + c.u;"));
     ok('ALREADY_EXISTS counts as success, so a retry is not an error',
        src.includes("if (r.status === 409 || /ALREADY_EXISTS/.test(txt)) return json({ ok: true, already: true });"));
     ok('every rejection returns the same message', src.includes("return json({ error: 'bad_ticket' }, 401);"));

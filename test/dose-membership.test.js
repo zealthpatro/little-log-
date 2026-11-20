@@ -129,7 +129,12 @@ function makeWorld(o) {
 
     m = rest.match(/^\/households\/([^/?]+)\/events\?documentId=(.+)$/);
     if (m && method === 'POST') {
-      w.writes.push({ hid: decodeURIComponent(m[1]), docId: decodeURIComponent(m[2]), fields: pv({ mapValue: JSON.parse(init.body) }) });
+      const hid = decodeURIComponent(m[1]), docId = decodeURIComponent(m[2]);
+      // As Firestore does: the same id twice is ALREADY_EXISTS, and a written dose is seen by the next query.
+      if (w.writes.some((x) => x.hid === hid && x.docId === docId)) return reply(409, 'ALREADY_EXISTS: Document already exists');
+      const fields = pv({ mapValue: JSON.parse(init.body) });
+      w.writes.push({ hid, docId, fields });
+      w.events.push(Object.assign({}, fields, { id: docId }));
       return reply(200, {});
     }
 
@@ -327,11 +332,8 @@ async function suite(mod, quiet) {
     let r = await redeem(w, {});
     ok('household read 503: no write', w.writes.length === 0, w.writes);
     ok('household read 503: says so with a 503, not a 401 the device would treat as final', r.status === 503, r);
-
-    w = makeWorld({ eventsStatus: 503 });
-    r = await redeem(w, {});
-    ok('already-logged query 503: no write', w.writes.length === 0, w.writes);
-    ok('already-logged query 503: 503', r.status === 503, r);
+    /* The earlier-dose read is different: it only decides what the notification SAYS, so its failure
+       never blocks the dose (section 10, "always save"). Membership is the read that gates the write. */
   }
 
   head('9. the family\'s own medicine is what gets written, never what the ticket says');
@@ -340,7 +342,7 @@ async function suite(mod, quiet) {
     let r = await redeem(w, {});
     const x = w.writes[0];
     ok('a caregiver logs exactly one dose', w.writes.length === 1 && r.status === 200 && r.body && r.body.ok === true, r);
-    ok('into this family, at the deterministic id', x && x.hid === HID && x.docId === 'dose-medCalpol-' + T, x && [x.hid, x.docId]);
+    ok('into this family, at an id for this dose AND this person', x && x.hid === HID && x.docId === 'dose-medCalpol-' + T + '-' + CARE, x && [x.hid, x.docId]);
     ok('medName from app.meds, not the ticket', x && x.fields.medName === 'Calpol', x && x.fields.medName);
     ok('dose from app.meds', x && x.fields.dose === '5', x && x.fields.dose);
     ok('unit from app.meds', x && x.fields.unit === 'ml', x && x.fields.unit);
@@ -358,43 +360,80 @@ async function suite(mod, quiet) {
     ok('a numeric dose comes through as the family wrote it', y && y.fields.dose === '2.5' && y.fields.unit === 'ml', y && y.fields);
   }
 
-  head('10. a dose already given inside the interval is not given again');
+  head('10. every tap is saved; a second dose in the same slot is reported, in facts');
+  /* REAL schedules, not convenient ones. The reminder fires about 30 minutes before the dose is due, so
+     a tap lands BEFORE the due time T, while the previous dose sits one interval back. The first version
+     of this section put "the last dose" an hour ago and never on schedule, so it passed while every
+     on-schedule tap was refused and the button said "Dose logged" over nothing saved (2026-11-20).
+     Every-X hours runs from the dose that set T, so that dose is at exactly T - interval. A twice-daily
+     medicine has fixed slots 12 hours apart. */
   {
-    const ev = (o) => Object.assign({ id: 'e' + Math.random().toString(36).slice(2, 8), type: 'medicine', medId: 'medCalpol', babyId: 'babyA', time: NOW - HR, authorId: OWNER }, o);
+    const ev = (o) => Object.assign({ id: 'e' + Math.random().toString(36).slice(2, 8), type: 'medicine', medId: 'medCalpol', babyId: 'babyA', time: T - 6 * HR, authorId: OWNER }, o);
+    const IBU_T = { u: OWNER, m: 'medIbu', b: 'babyB' };
+    const plain = (r, w, n) => r.status === 200 && r.body && r.body.ok === true && !r.body.already && !r.body.earlier && w.writes.length === (n || 1);
+    const twice = (r, w, at) => r.status === 200 && r.body && r.body.ok === true && !r.body.already && r.body.earlier === at;
+
     let w = makeWorld({ events: [ev({})] });
     let r = await redeem(w, {});
-    ok('Calpol logged in the app an hour ago (every 6h): nothing written', w.writes.length === 0, w.writes);
-    ok('and the device is told it is already logged', r.status === 200 && r.body && r.body.ok === true && r.body.already === true, r);
+    ok('every 6h, last dose on schedule, tapped 20 min early: the dose is saved, plain confirmation', plain(r, w), [r, w.writes.length]);
     ok('the query asked only for this household\'s events', w.eventQueries.length === 1 && w.eventQueries[0].hid === HID, w.eventQueries.map((q) => q.hid));
 
-    w = makeWorld({ events: [ev({ medId: 'medIbu', babyId: 'babyB', time: NOW - 11 * HR })] });
-    r = await redeem(w, { u: OWNER, m: 'medIbu', b: 'babyB' });
-    ok('a twice-daily medicine 11h after its last dose: nothing written (its interval is 12h)', w.writes.length === 0 && r.body && r.body.already === true, r);
+    w = makeWorld({ events: [ev({ medId: 'medIbu', babyId: 'babyB', time: T - 12 * HR })] });
+    r = await redeem(w, IBU_T);
+    ok('twice daily, last slot on time, tapped 20 min early: saved, plain', plain(r, w), [r, w.writes.length]);
 
-    /* The companions. Each one STAGES a near-miss and requires the write, so the check above cannot
-       pass by refusing everything. */
-    for (const [name, o, c] of [
-      ['the last dose was 7h ago, outside 6h', { time: NOW - 7 * HR }],
-      ['the last dose was the other child\'s', { babyId: 'babyB' }],
-      ['the last dose was deleted', { deleted: true }],
-      ['the recent dose was a different medicine', { medId: 'medIbu' }],
-      ['the "recent" dose is dated in the future', { time: NOW + 2 * HR }],
-      ['a twice-daily medicine 13h after its last dose', { medId: 'medIbu', babyId: 'babyB', time: NOW - 13 * HR }, { u: OWNER, m: 'medIbu', b: 'babyB' }]
+    w = makeWorld({ events: [ev({ medId: 'medIbu', babyId: 'babyB', time: T - 9 * HR })] });
+    r = await redeem(w, IBU_T);
+    ok('twice daily, last slot given 3h late: still the last slot\'s dose, saved, plain', plain(r, w), [r, w.writes.length]);
+
+    const partner = NOW - HR;
+    w = makeWorld({ events: [ev({}), ev({ time: partner, authorId: OWNER })] });
+    r = await redeem(w, {});
+    ok('every 6h, a partner already gave one an hour ago: saved anyway, and the earlier dose is reported', twice(r, w, partner) && w.writes.length === 1, [r, w.writes.length]);
+
+    const slot = NOW - 15 * MIN;
+    w = makeWorld({ events: [ev({ medId: 'medIbu', babyId: 'babyB', time: T - 12 * HR }), ev({ medId: 'medIbu', babyId: 'babyB', time: slot })] });
+    r = await redeem(w, IBU_T);
+    ok('twice daily, this slot logged in the app 15 min ago: saved, and that dose is reported', twice(r, w, slot) && w.writes.length === 1, [r, w.writes.length]);
+
+    w = makeWorld({ events: [ev({}), ev({ time: NOW - 2 * HR }), ev({ time: NOW - 30 * MIN })] });
+    r = await redeem(w, {});
+    ok('two earlier doses in the slot: the most recent is the one named', twice(r, w, NOW - 30 * MIN), r);
+
+    /* The companions: each stages a near-miss that must NOT read as a second dose. */
+    for (const [name, o] of [
+      ['the recent dose was the other child\'s', { babyId: 'babyB', time: NOW - HR }],
+      ['the recent dose was deleted', { deleted: true, time: NOW - HR }],
+      ['the recent dose was a different medicine', { medId: 'medIbu', time: NOW - HR }],
+      ['the "recent" dose is dated in the future', { time: NOW + 2 * HR }]
     ]) {
-      w = makeWorld({ events: [ev(o)] });
-      r = await redeem(w, c || {});
-      ok('but ' + name + ': the dose is written', w.writes.length === 1 && r.body && r.body.ok === true && !r.body.already, [w.writes.length, r]);
+      w = makeWorld({ events: [ev({}), ev(o)] });
+      r = await redeem(w, {});
+      ok('but ' + name + ': saved, plain', plain(r, w), [r, w.writes.length]);
     }
 
-    /* The query is capped. A full page with no match is not proof there is no match further back, so
-       it must fail closed rather than write. 500 feeds in the last six hours, none of them Calpol. */
+    /* Two people, one slot: both are saved, each under their own id; the second is told about the first. */
+    w = makeWorld({ events: [ev({})] });
+    const r1 = await redeem(w, { u: OWNER });
+    const r2 = await redeem(w, { u: CARE });
+    ok('two people tap the same reminder: both doses are saved', w.writes.length === 2 && r1.status === 200 && r2.status === 200, [w.writes.map((x) => x.docId), r1, r2]);
+    ok('under two ids', w.writes.length === 2 && w.writes[0].docId !== w.writes[1].docId, w.writes.map((x) => x.docId));
+    ok('and the second is told about the first, in facts', plain(r1, { writes: [1] }) && r2.body && r2.body.earlier === w.writes[0].fields.time, [r1.body, r2.body]);
+
+    /* One person, two taps: the second writes nothing and says so honestly. */
+    w = makeWorld({ events: [ev({})] });
+    await redeem(w, {});
+    r = await redeem(w, {});
+    ok('the same person taps twice: one dose, and the second tap is told it was already logged', w.writes.length === 1 && r.status === 200 && r.body && r.body.already === true && r.body.ok === true, [w.writes.length, r]);
+
+    /* Always save. The earlier-dose read only decides what to SAY, so its failure never blocks the write. */
+    w = makeWorld({ events: [ev({})], eventsStatus: 503 });
+    r = await redeem(w, {});
+    ok('the earlier-dose read fails: the dose is still saved', r.status === 200 && r.body && r.body.ok === true && w.writes.length === 1, [r, w.writes.length]);
     const feeds = Array.from({ length: 500 }, (_, k) => ev({ type: 'feed', medId: '', time: NOW - (k + 1) * 30000 }));
     w = makeWorld({ events: feeds });
     r = await redeem(w, {});
-    ok('a full page of other events cannot prove absence: 503, nothing written', r.status === 503 && w.writes.length === 0, [r.status, w.writes.length]);
-    w = makeWorld({ events: feeds.slice(0, 499) });
-    r = await redeem(w, {});
-    ok('one short of a full page is a real answer: the dose is written', r.status === 200 && w.writes.length === 1, [r.status, w.writes.length]);
+    ok('a full page of other events: the dose is still saved', r.status === 200 && w.writes.length === 1, [r.status, w.writes.length]);
   }
 
   head('11. it is rate limited before it costs anything');
@@ -471,10 +510,14 @@ async function suite(mod, quiet) {
       ['the medicine name comes from the ticket again', "medName: { stringValue: _fsScalar(med.name) || 'Medicine' },", "medName: { stringValue: String(c.mn || 'Medicine') },"],
       ['the child pinned on a medicine is ignored', 'if (medBaby && medBaby !== String(c.b)) return json({ error: \'bad_ticket\' }, 401);', ''],
       ['a failed household read is read as "no such household"', "if (hh.status !== 404) return json({ error: 'unavailable' }, 503);", ''],
-      ['the already-logged check is skipped', 'if (prior) return json({ ok: true, already: true, at: prior });', ''],
-      ['the already-logged check ignores which child', "&& _fsStr(f.babyId) === String(c.b)", ''],
-      ['a full page of events is read as proof of absence', "if (recent.docs.length >= DOSE_RECENT_LIMIT) return json({ error: 'unavailable' }, 503);", ''],
-      ['the already-logged query failing is ignored', "if (!recent.ok) return json({ error: 'unavailable' }, 503);", "if (!recent.ok) recent.docs = [];"],
+      ['an every-X slot includes the dose that set it (every on-schedule tap reads as a second dose)', 'due - iv + DOSE_SLOT_SLACK', 'due - iv'],
+      ['a daily slot reaches back a whole interval', ': due - iv / 2;', ': due - iv;'],
+      ['a dose already in the slot is not reported', '&& t != null && t >= since && t <= now && t > earlier) earlier = t;', '&& false) earlier = t;'],
+      ['the earlier dose is not sent back', 'json(earlier ? { ok: true, at: now, earlier } : { ok: true, at: now })', 'json({ ok: true, at: now })'],
+      ['the earlier-dose check ignores which child', "&& _fsStr(f.babyId) === String(c.b)", ''],
+      ['a deleted dose counts as given', '&& !(f.deleted && f.deleted.booleanValue === true)', ''],
+      ['a failed earlier-dose read blocks the write again', "} else console.error('dose_earlier_unread');", "} else return json({ error: 'unavailable' }, 503);"],
+      ['one id per slot again (the second parent cannot log)', "(Number(c.t) || 0) + '-' + c.u;", '(Number(c.t) || 0);'],
       ['the rate limiter is gone', "const limiter = env.DOSE_RATE_LIMITER || env.SIGNIN_RATE_LIMITER;", 'const limiter = null;'],
       ['the household mask stops asking for app.meds', "['members', 'deleteAfter', 'app.meds', 'app.babies']", "['members', 'deleteAfter', 'app.babies']"]
     ];

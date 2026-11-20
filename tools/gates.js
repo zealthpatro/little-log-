@@ -178,6 +178,9 @@ const TREE = [
   /* dose-ticket proves a ticket cannot be forged; this proves only a current owner or caregiver can
      get or redeem one. Drives the real worker.js; --self-test re-breaks a temp copy of it. */
   { name: 'dose-membership', cmd: ['node', 'test/dose-membership.test.js', '--self-test'] },
+  /* What the "Log it" button SAYS for every answer /api/dose gives: "Dose logged" only for a dose written,
+     facts for a second dose, nothing named on the lock screen. It said "Dose logged" over nothing saved. */
+  { name: 'dose-button',    cmd: ['node', 'test/dose-button.test.js', '--self-test'] },
   /* Every limiter call goes through rateLimited(), which fails open but never silently: a throw, a
      malformed reply and a denial are each logged. Production went months without one 429. */
   { name: 'ratelimit',      cmd: ['node', 'test/ratelimit.test.js', '--self-test'] },
@@ -332,6 +335,7 @@ const EMU_GATES = [
   { name: 'household-guard', emu: 'node household-guard.test.js' },        // caregiver cannot flag, rejoin or self-promote
   { name: 'signin-code-emu', emu: 'node signin-code-emulator.test.js' },   // the real conditional spend, race and burn
   { name: 'purge-unflag-emu', emu: 'node purge-unflag-emulator.test.js' }, // the bogus flag really clears
+  { name: 'dose-emu',     emu: 'node dose-slot-emulator.test.js' },       // "Log it": the real create, repeat and earlier-dose query
   { name: 'purge-erase-emu', emu: 'node purge-erase-emulator.test.js' },   // mhealth, pregnancy photos and memberEmails really go
   { name: 'feedback-purge-emu', emu: 'node feedback-purge-emulator.test.js' }, // her notes go by commit, and her hubs inside 50 subrequests
   { name: 'invite-consent', self: ['node', 'test/invite-consent.test.js'] },  // a newcomer is asked before joining
