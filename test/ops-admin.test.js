@@ -3,8 +3,9 @@
  * Until 16 November 2026 ops.js used the namespace API (admin.credential.cert, admin.firestore()),
  * which firebase-admin 14 no longer has, so every /api/data answered 500 "reading 'cert'" and the
  * dashboard drew nothing. A stub would not have seen it: the crash was in how the client was built.
- * So this serves ops.js's own HTTP handler on a free port against the Firestore emulator, seeds two
- * families, and reads /api/data back the way the page does.
+ * So this builds ops.js's client on its own cert(sa) line with a throwaway in-memory key, serves its own
+ * HTTP handler on a free port against the Firestore emulator, seeds two families, and reads /api/data
+ * back the way the page does.
  * tools/admin_sdk_check.js keeps the old API out of every other script.
  *
  *   node tools/gates.js --emulator --only=ops-admin
@@ -59,8 +60,22 @@ const get = (port, p) => new Promise((res, rej) => {
 
   let ops = null, loadErr = null;
   try { ops = require(path.join(ROOT, 'tools', 'ops.js')); } catch (e) { loadErr = String(e && e.message || e); }
-  ok('tools/ops.js loads without starting its own server, and hands its server over', !!(ops && ops.server && typeof ops.server.listen === 'function'), loadErr);
-  if (!ops || !ops.server) { console.log('\nOPS-ADMIN: FAIL'); process.exit(1); }
+  ok('tools/ops.js loads without starting its own server, and hands its server and initDb over',
+    !!(ops && ops.server && typeof ops.server.listen === 'function' && typeof ops.initDb === 'function'), loadErr);
+  if (!ops || !ops.server || typeof ops.initDb !== 'function') { console.log('\nOPS-ADMIN: FAIL'); process.exit(1); }
+
+  /* The client is built on the founder's own line, cert(sa), with a service-account key made here in
+     memory and thrown away: no key file is written, and against the emulator nothing real is reached.
+     A test-only branch in ops.js would leave that line untested (16 Nov review: a break in it passed). */
+  const { privateKey } = require('crypto').generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const throwaway = {
+    type: 'service_account', project_id: PROJECT, private_key_id: 'ops-admin-test',
+    private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }),
+    client_email: 'ops-admin-test@' + PROJECT + '.iam.gserviceaccount.com',
+  };
+  let initErr = null;
+  try { ops.initDb(throwaway); } catch (e) { initErr = String(e && e.message || e); }
+  ok('initDb builds its client from a service-account key, the way the founder runs it', !initErr, initErr);
 
   await new Promise((res) => ops.server.listen(0, '127.0.0.1', res));
   const port = ops.server.address().port;

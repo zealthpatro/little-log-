@@ -20,25 +20,24 @@ const dayKey = (t) => new Date(t).toISOString().slice(0, 10);
 const ageMonths = (birth) => birth ? Math.floor((Date.now() - birth) / (30.44 * DAY)) : null;
 
 let db = null;
-function initDb() {
+/* sa is the service-account key. Run from the command line it is read from tools/serviceAccountKey.json;
+   test/ops-admin.test.js hands in a throwaway key it made in memory, so the test builds the client on
+   the very line the founder's run does (cert(sa)), against the emulator, with no key file anywhere. */
+function initDb(sa) {
   if (db || DEMO) return;
   /* firebase-admin 14 is modular only: admin.credential and admin.firestore() are undefined, and the
      old lines here threw "reading 'cert'" on every /api/data, so the dashboard drew nothing.
      tools/admin_sdk_check.js keeps every script on these entry points. */
   const { initializeApp, cert } = require('firebase-admin/app');
   const { getFirestore } = require('firebase-admin/firestore');
-  // Against the emulator (test/ops-admin.test.js) there is no key to read and nothing real to reach.
-  if (process.env.FIRESTORE_EMULATOR_HOST) {
-    db = getFirestore(initializeApp({ projectId: process.env.GCLOUD_PROJECT || 'demo-cubby' }, 'cubby-ops'));
-    return;
-  }
-  let sa;
-  try { sa = require(path.join(__dirname, 'serviceAccountKey.json')); }
-  catch (e) {
-    console.error('\n  Missing tools/serviceAccountKey.json.');
-    console.error('  Firebase console -> Project settings -> Service accounts -> Generate new private key,');
-    console.error('  save it as tools/serviceAccountKey.json, then re-run. (Or: node tools/ops.js --demo)\n');
-    process.exit(1);
+  if (!sa) {
+    try { sa = require(path.join(__dirname, 'serviceAccountKey.json')); }
+    catch (e) {
+      console.error('\n  Missing tools/serviceAccountKey.json.');
+      console.error('  Firebase console -> Project settings -> Service accounts -> Generate new private key,');
+      console.error('  save it as tools/serviceAccountKey.json, then re-run. (Or: node tools/ops.js --demo)\n');
+      process.exit(1);
+    }
   }
   db = getFirestore(initializeApp({ credential: cert(sa) }, 'cubby-ops'));
 }
@@ -218,10 +217,10 @@ const server = http.createServer(async (req, res) => {
   }
 });
 // Started from the command line it serves on 8787; required (test/ops-admin.test.js) it hands the
-// server over unstarted, so the test can serve /api/data on a free port against the emulator.
+// server over unstarted, with initDb, so the test can serve /api/data on a free port against the emulator.
 if (require.main === module) {
   server.listen(PORT, '127.0.0.1', () => {
     console.log('\n  Cubby Ops ' + (DEMO ? '(DEMO data) ' : '') + 'running at  http://localhost:' + PORT + '\n  Localhost only. Ctrl-C to stop.\n');
   });
 }
-module.exports = { server };
+module.exports = { server, initDb };
