@@ -176,7 +176,7 @@ now: ms, token: bool, app: AppSnapshot|null, nap: NapState|null, pull: PullSnaps
 by, whose: string|null, value, agoAt: ms|null, day: string|null, a11y: string } ], buttons: [ { k, label, style: 'solid'|'soft', arrow:
 bool, url: string|null, intent: { action, babyIds, starts?, undo? } | null, a11y, dim: bool } ], line: string|null }`.
 `agoAt` is the anchor the live iOS ago line counts from (null on Android); native tests assert every other field exactly.
-`whose` (F12) is a row's own field, never `by`: it is set only on a small widget set to Both, or unconfigured on twins (6.4 default), on twins and not siblings, where
+`whose` (F12) is a row's own field, never `by`: it is set only on a small widget whose selection is both twins (set to Both, or left unconfigured on twins per 6.4), never siblings, where
 `row.baby` is "Robin and Wren" (`small.twinsLabel`), `row.label` is null, the body url is `?from=widget` unless a failure line or
 a month day sets it (M12), and `whose` is the
 first name of the baby with the newest feed, or null on an exact tie (then `row.a11y` is `a11y.lastFeedBoth`). Every other

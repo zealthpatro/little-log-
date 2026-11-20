@@ -288,6 +288,7 @@ function walkFiles(rel) {
   }
   return out.sort();
 }
+const SWIFT_FILL = 'native-ios/CubbyWidget/Generated.swift', KOTLIN_FILL = 'native-android/app/src/main/java/com/littlecubby/app/widget/Generated.kt';
 const isGenerated = (f) => /\/Generated\.(swift|kt)$/.test(f) || /\/res\/values\/widget_strings\.xml$/.test(f);
 const lineOf = (txt, idx) => txt.slice(0, idx).split('\n').length;
 function nativeSource() {
@@ -316,6 +317,14 @@ function nativeSource() {
   let rb = ''; try { rb = rd('tools/cap_ios_configure.rb'); } catch (e) { /* absent */ }
   if (/UIApplicationShortcutItems/.test(rb)) shortcutHits.push('tools/cap_ios_configure.rb');
   ok('native source: no UIApplicationShortcutItems (home-screen quick actions are the widgets\' business, not a static list)', !shortcutHits.length, shortcutHits.join(', '));
+  // WCopy.fill must be ONE left-to-right scan: baby names are free text, so a key-by-key replace turns a baby named
+  // "{age}" into its age. The body is read from the emitted files; the old body (replacingOccurrences, .replace) goes red.
+  [['swift', SWIFT_FILL, /\bstatic func fill\b[\s\S]*?\n    \}\n/, /replacingOccurrences|\.replacing\(|\.replace\(/],
+   ['kotlin', KOTLIN_FILL, /\bfun fill\([\s\S]*?\n    \}\n/, /\.replace\(|\.replaceAll\(|replaceFirst\(/]].forEach(([lang, rel, re, bad]) => {
+    let t = ''; try { t = rd(rel); } catch (e) { /* absent */ }
+    const body = (t.match(re) || [''])[0];
+    ok('native source: the emitted fill is one scan, ' + lang + ' (a found fill body with no key-by-key replace)', body.length > 0 && !bad.test(body), body ? (bad.exec(body) || [''])[0] : 'no fill body found in ' + rel);
+  });
   const scHits = files.filter((f) => f.startsWith('native-android/') && (/\/shortcuts\.xml$/.test(f) || /android\.app\.shortcuts/.test(readable(f))));
   ok('native source: no shortcuts.xml and no android.app.shortcuts', !scHits.length, scHits.join(', '));
 }
@@ -431,6 +440,8 @@ PLANTS.push(
   ['x) one DESIGN.md hex changed (night on-sleep ink #1A1614 to #1A1615)', 'design pairs: night text on sleep fill --on-sleep', [edit('DESIGN.md', (t) => t.replace('| #1A1614 | #8E97D4 |', '| #1A1615 | #8E97D4 |'))]],
   ['x2) one DESIGN.md ratio changed (night strokes --feed 6.82 to 6.83)', 'design pairs: night stroke --feed', [edit('DESIGN.md', (t) => t.replace('| #E0A655 | #2E2722 | 6.82 |', '| #E0A655 | #2E2722 | 6.83 |'))]],
   ['x3) the night on-sleep row deleted', 'design pairs: every required pair has a row', [edit('DESIGN.md', (t) => t.replace(/^\| night \| text on sleep fill .*\n/m, ''))]],
+  ['y3) the old key-by-key fill written into Generated.swift', 'native source: the emitted fill is one scan, swift', [edit(SWIFT_FILL, (t) => t.replace(/static func fill[\s\S]*?\n    \}\n/, 'static func fill(_ s: String, _ args: [String: String]) -> String {\n        var out = s\n        for (k, v) in args { out = out.replacingOccurrences(of: "{" + k + "}", with: v) }\n        return out\n    }\n'))]],
+  ['y4) the old key-by-key fill written into Generated.kt', 'native source: the emitted fill is one scan, kotlin', [edit(KOTLIN_FILL, (t) => t.replace(/fun fill\([\s\S]*?\n    \}\n/, 'fun fill(s: String, args: Map<String, String>): String {\n        var out = s\n        for ((k, v) in args) out = out.replace("{" + k + "}", v)\n        return out\n    }\n'))]],
   ['y) WCopy.statusLastFeed edited in Generated.swift', 'generated files are fresh: native-ios', [edit('native-ios/CubbyWidget/Generated.swift', (t) => t.replace('static let statusLastFeed = "', 'static let statusLastFeed = "X'))]],
   ['y2) w_status_last_feed edited in widget_strings.xml', 'generated files are fresh: native-android/app/src/main/res', [edit('native-android/app/src/main/res/values/widget_strings.xml', (t) => t.replace('name="w_status_last_feed">', 'name="w_status_last_feed">X'))]],
   ['z) the "status.lastFeed" entry removed from Generated.kt byKey', 'kotlin byKey', [edit('native-android/app/src/main/java/com/littlecubby/app/widget/Generated.kt', (t) => t.replace(/^ {8}"status\.lastFeed" to .*\n/m, ''))]],

@@ -12745,6 +12745,139 @@
           "age": null,
           "ask": null,
           "fresh": "Updated 3:14 AM",
+          "moment": {
+            "a11y": "Wren is 3 months old today",
+            "text": "Wren · 3 months today"
+          },
+          "name": null
+        },
+        "line": null,
+        "message": null,
+        "mode": "full",
+        "rows": [
+          {
+            "a11y": "Robin's last feed, 2:40 AM",
+            "agoAt": 1794883200000,
+            "baby": "Robin and Wren",
+            "by": null,
+            "day": null,
+            "label": null,
+            "value": "2:40 AM",
+            "whose": "Robin"
+          }
+        ],
+        "url": "https://little-cubby.com/app/?go=monthcard&baby=b2&m=3&from=widget"
+      },
+      "input": {
+        "app": {
+          "activeBabyId": "b1",
+          "at": 1794885240000,
+          "babies": [
+            {
+              "age": {
+                "n": 2,
+                "unit": "month"
+              },
+              "by": {
+                "feed": "Dad",
+                "nappy": null,
+                "sleep": null
+              },
+              "healthOpen": false,
+              "id": "b1",
+              "last": {
+                "feed": 1794883200000,
+                "nappy": 1794879600000,
+                "sleep": 1794878400000
+              },
+              "moments": [],
+              "name": "Robin",
+              "nap": null
+            },
+            {
+              "age": {
+                "n": 2,
+                "unit": "month"
+              },
+              "by": {
+                "feed": null,
+                "nappy": null,
+                "sleep": null
+              },
+              "healthOpen": false,
+              "id": "b2",
+              "last": {
+                "feed": 1794882600000,
+                "nappy": 1794880800000,
+                "sleep": 1794877200000
+              },
+              "moments": [
+                {
+                  "at": 1794873600000,
+                  "n": 3,
+                  "unit": "month"
+                }
+              ],
+              "name": "Wren",
+              "nap": null
+            }
+          ],
+          "lockScreen": {
+            "hide": false
+          },
+          "pregnancy": null,
+          "shortcuts": [
+            "feed",
+            "sleep",
+            "diaper",
+            "activity"
+          ],
+          "state": "ok",
+          "twins": true,
+          "v": 1
+        },
+        "cellWidth": 148,
+        "config": {
+          "baby": "both"
+        },
+        "family": "small",
+        "nap": null,
+        "now": 1794885240000,
+        "phase": "A",
+        "platform": "ios",
+        "pull": null,
+        "token": false
+      },
+      "name": "small-both-moment-one-fed-last"
+    },
+    {
+      "expect": {
+        "buttons": [
+          {
+            "a11y": "Sleep for Robin and Wren, opens Cubby",
+            "arrow": true,
+            "dim": false,
+            "intent": null,
+            "k": "sleep",
+            "label": "Sleep",
+            "style": "soft",
+            "url": "https://little-cubby.com/app/?go=sleep&baby=both&from=widget"
+          },
+          {
+            "a11y": "Feed for Robin and Wren, opens Cubby",
+            "arrow": true,
+            "dim": false,
+            "intent": null,
+            "k": "feed",
+            "label": "Feed",
+            "style": "soft",
+            "url": "https://little-cubby.com/app/?go=feed&baby=both&from=widget"
+          }
+        ],
+        "header": {
+          "age": null,
+          "ask": null,
+          "fresh": "Updated 3:14 AM",
           "moment": null,
           "name": null
         },
@@ -13485,6 +13618,6 @@
     }
   ],
   "napCases": [],
-  "source": "761cee81a2515577185d832ca18c8e252acdadf2154bad55bcd921274ac4ff38",
+  "source": "1c27b5bbc659301d94fe50212d0dc8926fa4c6114a36c422e8bbbd547b3bb418",
   "tz": "UTC"
 }
