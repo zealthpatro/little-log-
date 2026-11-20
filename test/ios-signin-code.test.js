@@ -56,13 +56,15 @@ const ok = (n, c, extra) => {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /* Every step waits for what its assertion needs, never for a length of time (test/helpers/wait-for.js says
    why). The card is drawn by the first onAuthStateChanged, and on an iPhone user agent Firebase Auth 10.12.2
-   holds that until it has loaded https://apis.google.com/js/api.js (a script tag, no timeout of its own),
-   run gapi.load('gapi.iframes') (30 s ceiling) and pinged the Auth emulator's iframe (5 s ceiling).
-   networkidle2 waits for none of it. BOOT is far past those ceilings, so a slow Google cannot fail this, and
-   a product that never draws the card still fails, after BOOT, naming it. NET is for a loaded emulator or
-   endpoint, UI for the app's 60 ms keyboard timer. */
+   holds that until its load of https://apis.google.com/js/api.js has ended (a script tag, no timeout of its
+   own); networkidle2 does not wait for it. So Chrome is launched below with every host but localhost
+   unresolvable, as the other suites that boot the app are: that script fails at once, the SDK goes on to
+   report "nobody", and the boot under test is this machine's alone. Until 20 Nov 2026 this test fetched the
+   script from Google: an answer seconds late read the card as null (17 Nov), and no answer at all held the
+   card past a 90 s BOOT. BOOT is now 30 s, so a card drawn late fails here, naming it. NET is for a loaded
+   emulator or endpoint, UI for the app's 60 ms keyboard timer. */
 const { waitFor } = require('./helpers/wait-for');
-const BOOT = 90000, NET = 30000, UI = 10000;
+const BOOT = 30000, NET = 30000, UI = 10000;
 function get(url) {
   return new Promise((resolve) => {
     http.get(url, (res) => { let b = ''; res.on('data', (d) => { b += d; }); res.on('end', () => resolve({ status: res.statusCode, body: b })); })
@@ -155,7 +157,10 @@ function customToken(uid) {
   await new Promise((r) => front.listen(WEB_PORT, r));
 
   const puppeteer = require(path.join(ROOT, 'tools', 'node_modules', 'puppeteer-core'));
-  const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'],
+  /* Nothing off this machine: every other host is unresolvable, so the SDK's api.js fails at once instead of
+     waiting on Google (BOOT says why that matters). */
+  const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new',
+    args: ['--no-sandbox', '--disable-gpu', '--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE localhost , EXCLUDE 127.0.0.1'],
     downloadBehavior: require(path.join(ROOT, 'tools', 'gate_downloads.js')).downloadBehavior() });
   const page = await browser.newPage();
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
@@ -189,12 +194,14 @@ function customToken(uid) {
   const URL_ = `http://localhost:${WEB_PORT}/app/?fsemu=${FS_PORT}&authemu=${AUTH_PORT}`;
   await page.goto(URL_, { waitUntil: 'networkidle2', timeout: 45000 });
   /* The sign-in card exists only once onAuthStateChanged has said "nobody" (showSignIn draws it and wires
-     it in one go). On this user agent the SDK first loads gapi from apis.google.com and pings the Auth
-     emulator's iframe, and networkidle2 does not wait for that. */
+     it in one go). On this user agent the SDK first tries to load gapi (here it fails at once, see BOOT),
+     and networkidle2 does not wait for that. How long it took is printed, so a run creeping towards BOOT
+     shows up before it fails. */
   const card = await waitFor(() => page.evaluate(() => !!document.querySelector('.ll-email-toggle')), { timeout: BOOT });
   const startHref = await page.evaluate(() => location.href);
 
   console.log('\nthe installed container is offered a code, not a link');
+  console.log('         (sign-in card ' + (card.ok ? 'drawn ' + card.ms + ' ms' : 'not drawn ' + card.ms + ' ms') + ' after page.goto resolved; BOOT ' + BOOT / 1000 + ' s)');
   const offer = await page.evaluate(() => {
     const t = document.querySelector('.ll-email-toggle'), ov = document.getElementById('llAuthOv');
     return { text: t ? t.textContent.trim() : null, standalone: navigator.standalone === true, screen: t ? undefined : (ov ? ov.textContent.trim().slice(0, 80) : '(no #llAuthOv)') };
@@ -213,10 +220,20 @@ function customToken(uid) {
     return { top: Math.round(r.top), bottom: Math.round(r.bottom), keysTop: document.documentElement.clientHeight - kk, focused: f.contains(document.activeElement) };
   }, sel, k);
   /* Above the keys / room gone are the app's 60 ms fitAboveKeys timer after a visualViewport resize, so each
-     is polled until it holds or UI ms pass, and asserted on the last thing seen. kb0 is not: the toggle's
+     is polled until it holds or UI ms pass. Holding once is not the claim; staying is. The fixed reads this
+     replaced (300 and 400 ms after the event) also proved the state had stayed, so a lift undone 250 ms later,
+     or padding put back after 200 ms, turned them red. So once it holds, the page runs one 400 ms timer and
+     the assertion is on the reading taken after it. Timers fire in order of due time, so every timer the app
+     has set to fire within those 400 ms runs first, however slow the machine. kb0 is not polled: the toggle's
      click (openForm) shows and focuses the field synchronously, and with no keys up that timer changes
      nothing, so the 300 ms before kb0 waits for nothing and cannot race. */
-  const settled = async (read, holds) => { let last; await waitFor(async () => { last = await read(); return holds(last); }, { timeout: UI }); return last; };
+  const settled = async (read, holds) => {
+    let last;
+    await waitFor(async () => { last = await read(); return holds(last); }, { timeout: UI });
+    if (!holds(last)) return last;
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 400)));
+    return read();
+  };
   const above = (b) => !!b && b.bottom <= b.keysTop && b.top >= 0;
   await page.evaluate(() => document.querySelector('.ll-email-toggle').click());
   await sleep(300);
