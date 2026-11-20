@@ -3,10 +3,11 @@
 - **Date:** 2026-11-19
 - **Severity:** P1 (one parent's babies, entries and photos written into ANOTHER account's family on the server)
 - **Duration:** from 2026-06-06 (320f617a) for a phone holding a pre-Firebase record, widened on 2026-08-23
-  (5554c2e6) to anyone who logged with no family attached; found 2026-11-19; fixed in a5799200 (not yet live)
-- **Status:** RESOLVED in code (a5799200 on claude/admiring-mirzakhani-30b4f6, built on v370 909bd480), waiting
-  for the release owner to fold it into v371
-- **Author:** Claude session (pre-sign-in leak lane)
+  (5554c2e6) to anyone who logged with no family attached; found 2026-11-19; fixed in 1a488e43 and 3da1bdef on the
+  release branch (not yet live)
+- **Status:** RESOLVED in code: 1a488e43 (cherry-picked from f9ee6699), and 3da1bdef for a history read that lands
+  after a sign-out, on the release branch built on v370 909bd480. The release ships as CACHE v372.
+- **Author:** Claude session (pre-sign-in leak lane); the review round's conditions folded in by its own lane
 
 > Policy: **every breakage gets a documented, blameless 5-Whys post-mortem.** Blameless = focus on
 > systems and decisions, not people. Be honest, including our own contributing actions. If a "why"
@@ -37,6 +38,11 @@ fix/local-author-sync (b3236bab) and on v370 (909bd480):
   before her push, she is signed out by another tab or a revoked session. Jo signs in on that tab and logs. Jo's
   first push carried Ivy's unsent entry into Jo's family, authored by Jo, and Jo's screen showed it. Ivy's own
   family never got it.
+- **H, a history read that lands late** (found by the review of the fix, 2026-11-20). The full history read
+  (`hydrateFullHistory`) can still be out when she signs out. With only the first fix, Nora's older entries came
+  back into memory when it landed, a moment after the sign-out had emptied it. The next save with no family
+  attached wrote them into the record with Nora's uid, and Pam's sign-in after that was refused and never
+  finished. A late failure of the same read also cleared the next family's `cubbyHistoryPending` (H2).
 
 ## Impact
 - **What crossed:** babies (name, birth date, sex, routines, doctors, allergies), entries (feeds, nappies,
@@ -62,7 +68,10 @@ fix/local-author-sync (b3236bab) and on v370 (909bd480):
 | 2026-08-23 | 5554c2e6 | `persist()` writes `little-log-v1` again whenever no family is attached, so solo parents stop losing every write on reload. The record is live again, and is written from whatever memory holds, the previous family included. |
 | 2026-11-17 | 86928b51 (v370) | A deletion that stopped at the login signs her out and empties memory first (`signOutAfterStop`, keeps `UNIT_KEYS`). Its comment names this mechanism, for that one door only. |
 | 2026-11-19 | (review) | The local-author hotfix's reviewer reads the migration and suspects the leak. |
-| 2026-11-19 | a5799200 | Reproduced red on 909bd480 and b3236bab. Fixed and gated (`next-account-cache-emu`). |
+| 2026-11-19 | (emulator run) | Reproduced red on 909bd480 and b3236bab. |
+| 2026-11-20 | f9ee6699 | Fixed and gated (`next-account-cache-emu`), built on v370. |
+| 2026-11-20 | 1a488e43 | f9ee6699 cherry-picked onto the release branch. Its review finds H (P2), and J and X (see Residual risk). |
+| 2026-11-20 | 3da1bdef | The full history read drops an answer, or a failure, that lands after a sign-out (probes H and H2). S22's companions see deletion step 4 run. CACHE v372. |
 
 ## Root cause
 The phone's record had no owner and no end of life: it was copied into whichever account first made a family
@@ -101,8 +110,8 @@ the red runs below.
 - The migration writes the household before the `users` pointer, so a refused entry leaves a family nobody
   points at (also in the local-author post-mortem).
 
-## What fixed it (a5799200)
-Three parts in app/store-firebase.js, each seen red on its own:
+## What fixed it (1a488e43, and 3da1bdef for part 4)
+Four parts in app/store-firebase.js, each seen red on its own:
 1. **At the migration** (`letGoOfRecord(heldFromMigration(m))`, after `users/{uid}` lands): the record lets go
    of exactly what the new family was given. Entries and babies go by id and photos by id. Each copied blob
    part goes only while it still equals what was given. Anything else stays; with nothing left, the key goes.
@@ -113,15 +122,24 @@ Three parts in app/store-firebase.js, each seen red on its own:
 3. **For a copy an older build kept** (`letGoOfHeldHere`, once the family's whole history is read): whatever
    the signed-in family already holds leaves the record. Its blob parts go only when every entry and baby in
    the record is that family's. An entry no family holds is never let go.
+4. **For a history read that lands after a sign-out** (`hydrateFullHistory`, 3da1bdef): the read keeps the
+   events collection it was asked of and drops its answer once that is not the attached family's: none of it
+   goes into memory, `knownEvents` or `serverAuthor`. Its failure clears `cubbyHistoryPending` only for the family
+   it belongs to. Without it, part 2's "every sign-out empties memory" held only until that read landed (H, H2).
 
 ### A gate whose premise changed
 `tools/usage_tracker_check.js` S22 (door-kept, native-kept) proved that a deletion stopped at the reauth door
 deleted nothing local by reading `little-log-v1`. With this fix a phone signed in to a family no longer keeps a
-copy of what that family holds, so the key was gone whether or not a deletion ran: both went red on a5799200's
+copy of what that family holds, so the key was gone whether or not a deletion ran: both went red on the fix's
 first run, for that reason only. The probe now reads `cubby-member`, which every sign-in writes and only
 deletion step 4 removes. Seen red: a one-off mutant that clears `cubby-member` before the door turned both red,
 with every other S22 check green. The `family-kept-in-memory` mutant edited the line this fix moved into
 `dropFamilyFromMemory`, so it no longer applied; it now edits that function.
+The review then found that deletion step 4 itself could be skipped with every gate green: the door checks see the
+keys kept, and nothing saw them go (review mutant mut-s4skip: S22 and S23 38 ok, 0 failed). Since 3da1bdef both
+companions (door-companion, native-companion) also read the same key gone once the deletion has run to the end.
+The self-test's new `local-traces-kept` mutant skips step 4: S22 is 14 passed, 2 failed (the two companions,
+nothing else), where the checker before 3da1bdef gave 16 passed, 0 failed on the same mutant.
 
 ### Keys let go, checked against the deletion purge list and `UNIT_KEYS`
 - `little-log-v1`: only the parts a family holds; the whole key only when nothing else remains. Account
@@ -143,39 +161,62 @@ with every other S22 check green. The `family-kept-in-memory` mutant edited the 
   signed-in boot of this build cleans whatever that family holds.
 
 ## Measurements
-- Red on v370 (909bd480), real client and real rules: 24 passed, 13 failed. R (reload): Bea's family held
-  `Baby-of-Ann`, `Ann-before-sign-in` and photo `pann`. T (same tab): Dana's family held Cleo's baby and
-  pre-sign-in entry. U: Gail never booted (`users/{uid}` null); a household she owns held `Baby-of-Hana`; her
-  screen showed Hana's baby and both entries.
-- The same red on b3236bab (the local-author hotfix stack).
-- Green on a5799200: 68 passed, 0 failed, including Ann signing back in to all of hers (family and screen),
-  N (a refused migration lets go of nothing) and D (a deletion leaves no outbox of hers).
-- Each part reverted on its own turns its own assertions red, on the real client against the emulators:
+Re-measured on 2026-11-20 with the test as it ships (89 checks: R, T, U, V, O, D, K, N, H, H2), real client and
+real rules, each `app/store-firebase.js` served from a tree of its own beside the release branch's other files
+(the store is the only app file besides `sw.js` that differs from 909bd480):
+- Red on v370 (909bd480): 59 passed, 30 failed. R (reload): Bea's family held `Baby-of-Ann`, `Ann-before-sign-in`
+  and photo `pann`, and her screen showed them. T (same tab): Dana's family held Cleo's baby and pre-sign-in
+  entry. U: Gail never booted (`users/{uid}` null); a household she owns held `Baby-of-Hana`; her screen showed
+  Hana's baby and both entries. V: Ivy's unsent entry landed in Jo's family and never in Ivy's. O: Lia's family
+  got Kim's baby and entry. H: Nora's baby stayed in memory and went into a household Pam owns; her older entries
+  went into the record with her uid, and Pam's sign-in never finished. H2 red. D, K and N green.
+- Red on 1a488e43 (the release branch before 3da1bdef): 83 passed, 6 failed, all in H and H2. When the read
+  landed after Nora's sign-out, her two older entries came back into memory, the next signed-out save wrote them
+  into the record with her uid, Pam's sign-in was refused (no `users/{uid}`, so her own entry never reached a
+  family), and both entries were still in memory under Pam. The late failure set `cubbyHistoryPending` false
+  while Sue's own history read was still out.
+- Green on 3da1bdef: 89 passed, 0 failed, including Ann signing back in to all of hers (family and screen), N (a
+  refused migration lets go of nothing), D (a deletion leaves no outbox of hers) and Pam's own entry reaching
+  her family in H.
+- First measured on 2026-11-19 with shorter versions of the test: 24 passed, 13 failed on 909bd480, the same red
+  on b3236bab (the local-author hotfix stack), and 68 passed, 0 failed with the fix.
+- Each part reverted on its own turns its own assertions red. Re-run on 2026-11-20 against 3da1bdef with the
+  89-check test; M1 to M7 rebuilt from the 2026-11-19 descriptions, M8 and M9 new for part 4:
 
-| Mutation of a5799200 | Red |
+| Mutation of 3da1bdef | Red (failed of 89) |
 |---|---|
-| M1 no release at the migration | R: at her family's first snapshot the record still held Ann's baby, entry and photo (63 of 64). Everything else stays green because the later cleanup catches it once her history is read, which is why R asks at the first snapshot |
-| M2 sign-out keeps the family in memory | T: Dana's screen showed Cleo's two entries. U: Gail never booted, a household she owns held Hana's baby, and her screen showed Hana's. V: Ivy's unsent entry landed in Jo's family and on Jo's screen, and never in Ivy's (53 of 64) |
-| M3 no outbox for a sign-out from elsewhere | V: Ivy's unsent entry never reached her family (62 of 64) |
-| M4 an older build's copy is never let go | O: the record kept Kim's copy, and Lia's family and screen got Kim's baby and entry (61 of 64) |
-| M5 an older build's copy is let go whole | O: the entry no family holds was deleted from the phone (63 of 64) |
-| M6 let go before the migration lands | N: after a refused migration the phone held none of her entries and not her baby (62 of 64) |
-| M7 a deletion's own sign-out saves an outbox | D: `cubby-outbox:<her uid>:<family>` was left on the phone after her account was deleted (67 of 68) |
+| M1 no release at the migration | R: at her family's first snapshot the record still held Ann's baby, entry and photo (1). Everything else stays green because the later cleanup catches it once her history is read, which is why R asks at the first snapshot |
+| M2 sign-out keeps the family in memory (`leaveFamily` without `dropFamilyFromMemory`) | T: Dana's screen showed Cleo's two entries. U: Gail never booted, a household she owns held Hana's baby, and her screen showed Hana's. V: Ivy's unsent entry stayed in memory and landed in Jo's family and on Jo's screen. H: Nora's baby stayed in memory and went into a household Pam owns (13) |
+| M3 no outbox for a sign-out from elsewhere | V: Ivy's unsent entry never reached her family (2) |
+| M4 an older build's copy is never let go | O: the record kept Kim's copy, and Lia's family and screen got Kim's baby and entry (3) |
+| M5 an older build's copy is let go whole | O: the entry no family holds was deleted from the phone (1) |
+| M6 let go before the migration lands | N: after a refused migration the phone held none of her entries and not her baby (2) |
+| M7 a deletion's own sign-out saves an outbox | D: `cubby-outbox:<her uid>:<family>` was left on the phone after her account was deleted (1) |
+| M8 the history read's answer taken after a sign-out (no `histRef !== eventsRef` return) | H: Nora's older entries came back into memory and into the record with her uid, Pam's sign-in was refused, and both entries were in memory under Pam (5). H2 green |
+| M9 the history read's failure clears the flag whoever is signed in | H2: Sue's family was told its history was in while her own read was still out (1). H green |
 
 ## Corrective actions
 | # | Action | Type | Status |
 |---|--------|------|--------|
-| 1 | Release the record at the migration, empty memory at every sign-out, release an older build's copy | Fix | DONE a5799200 (unpushed; v371 via the release owner) |
-| 2 | `next-account-cache-emu` gate in the emulator tier: reload, same tab, next person logs first, sign-out from elsewhere, older build's copy, migration still works, refused migration keeps all | Prevent | DONE a5799200 |
+| 1 | Release the record at the migration, empty memory at every sign-out, release an older build's copy, drop a history read that lands after a sign-out | Fix | DONE 1a488e43 and 3da1bdef (not yet live; the release ships as CACHE v372) |
+| 2 | `next-account-cache-emu` gate in the emulator tier: reload, same tab, next person logs first, sign-out from elsewhere, older build's copy, migration still works, refused migration keeps all, a history read that lands or fails after a sign-out | Prevent | DONE 1a488e43 (H and H2 in 3da1bdef) |
 | 3 | A fix to one sign-out path lists every `teardown` caller (the `leaveFamily` comment names all three) | Process | DONE (this doc + comment) |
 | 4 | Aggregate count of households that share a baby id or entry id with another household, no content read, to size who was hit | Measure | TODO, founder's call |
 | 5 | Decide what happens to data already copied into another family, and to orphan households (removals from production need the founder's explicit OK) | Decide | TODO, founder |
-| 6 | A parent who JOINS a family never has her pre-sign-in record migrated; it stays on the phone for the next account that makes one | Fix | TODO, separate lane |
+| 6 | J: a record left by an older build can still reach the next new account on that phone after its owner JOINS a family. Fix: stamp the record with its owner's uid when she is placed in a family without a migration, and copy only a record with no stamp or her own | Fix | TODO, own lane |
 | 7 | Reset `window.LL.householdId` on sign-out | Fix | TODO, small |
-| 8 | Account deletion leaves `cubby-seen-<uid>` on the phone (seen in case D; coach-mark flags, no health data, but it names her uid). Not in the purge list | Fix | TODO, small |
+| 8 | Account deletion leaves keys naming her uid on the phone: `cubby-seen-<uid>`, `cubby-teach:<uid>` and `cubby-teach-since-<uid>` (all three seen in case D), and any `cubby-outbox:<uid>:*` written outside the deletion's own sign-out. None is in the purge list. Only her own uid's sign-in ever reads them, so this is leftover data, not a leak. Fix: step 4 removes every key that names her uid | Fix | TODO, own lane |
+| 9 | X: the same as 6 after its owner RETURNS to the family she already has. Same fix and lane as 6 | Fix | TODO, own lane |
+| 10 | The next sign-in in a tab can stay on the loader after a sign-out in one of two open tabs, or with the history read still out (see Residual risk). Find why the first-boot failsafe misses after a change of account | Fix | TODO, own lane |
 
 ## Residual risk (known, not closed by this fix)
 - A phone that migrated under an older build keeps that copy until its owner opens this build signed in.
+- J and X: a record left by an older build can still reach the next new account on that phone after a join (J)
+  or a return to an existing family (X). Both behave the same on v370 (909bd480), so this release does not make
+  them worse. Actions 6 and 9.
+- The next sign-in can stay on the loader after a sign-out in one of two open tabs, or with the full history read
+  still out. Seen on 909bd480 too. Nothing crosses to the next account in either (the review's two-tab probe, and
+  H and H2 here), and H and H2 assert where the data goes, not that the screen boots. Action 10.
 - What someone logs signed out and never signs in with goes to the next account that makes a family on that
   phone. The app cannot know who logged it. This is the migration working as designed (case K, and U's Gail).
 - Data already copied into another family before this fix stays there until action 5 is decided.
@@ -186,4 +227,6 @@ with every other S22 check green. The `family-kept-in-memory` mutant edited the 
 - When a fix closes one door, list every caller of the same path before calling it done.
 - A suite that gives every person her own browser profile cannot see a shared phone. Model the shared device
   on purpose.
+- "Every sign-out empties memory" is only true until a read that was already out lands. Each async answer that
+  writes into memory checks it is still for the family that asked.
 - Assert identity. "Booted" must mean booted as this account, into the family the server names.
