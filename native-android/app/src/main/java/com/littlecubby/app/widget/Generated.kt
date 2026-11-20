@@ -234,11 +234,22 @@ object WCopy {
         "weekday.wed" to R.string.w_weekday_wed,
         "word.cubby" to R.string.w_word_cubby,
     )
-    /** Replaces each {key} in s with its value. */
+    /** Replaces each {key} in s with its value in ONE left-to-right scan: a value is never rescanned (baby names are
+     *  free text, so a baby named "{age}" stays "{age}"), and an unknown {key} stays as written. */
     fun fill(s: String, args: Map<String, String>): String {
-        var out = s
-        for ((k, v) in args) out = out.replace("{" + k + "}", v)
-        return out
+        val out = StringBuilder()
+        var i = 0
+        while (i < s.length) {
+            val c = s[i]
+            if (c == '{') {
+                val close = s.indexOf('}', i + 1)
+                val v = if (close > i) args[s.substring(i + 1, close)] else null
+                if (v != null) { out.append(v); i = close + 1; continue }
+            }
+            out.append(c)
+            i++
+        }
+        return out.toString()
     }
 }
 

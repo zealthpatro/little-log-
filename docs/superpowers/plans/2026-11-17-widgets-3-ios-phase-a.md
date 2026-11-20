@@ -1,6 +1,7 @@
 # iOS Widgets Phase A Implementation Plan
 
 > **Contract note (F12, roadmap 2.3):** the small widget renders `row.whose` where `by` would go (after the ago line: "1 hr, 5 min ago · Robin"). Native `WCopy.fill` substitutes placeholders in ONE pass (baby names are free text; a baby named "{age}" must not be re-substituted), with a fixture named "{age}" in the golden tests (`small-both-name-is-a-placeholder`).
+> Row gains `whose: String?` and `label` becomes optional (`String?` in Swift and Kotlin). When `label` is null the label line is `row.baby` alone, never "Robin and Wren · ". `whose` is a baby's name, not the logger, so `WidgetPrivacy.located` and `WidgetPrivacy.wordmarkOnly` do NOT strip it. On iOS `whose` follows the ago line ("1 hr, 5 min ago · Robin"). The generated `WCopy.fill` is ONE left-to-right scan (a value is never rescanned; an unknown {key} stays literal), so a baby named "{age}" or "{time}" is safe: the goldens must run `moment-small-name-is-age`, `small-both-name-is-time` and `small-both-name-is-a-placeholder`. Swift Dictionary order is random, so a golden over those cases cannot rely on order to catch a key-by-key fill: P3 must also assert the generated `fill` is a scan (a unit test with `["name": "{age}", "age": "3"]` over "{name} · {age} months", expecting "{age} · 3 months").
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

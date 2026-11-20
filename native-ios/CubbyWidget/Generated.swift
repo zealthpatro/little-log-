@@ -122,11 +122,23 @@ enum WCopy {
     static let weekdayTue = "Tue"
     static let weekdayWed = "Wed"
     static let wordCubby = "Cubby"
-    /// Replaces each {key} in s with its value.
+    /// Replaces each {key} in s with its value in ONE left-to-right scan: a value is never rescanned (baby names are
+    /// free text, so a baby named "{age}" stays "{age}"), and an unknown {key} stays as written.
     static func fill(_ s: String, _ args: [String: String]) -> String {
-        var out = s
-        for (k, v) in args { out = out.replacingOccurrences(of: "{" + k + "}", with: v) }
-        return out
+        var out = ""
+        var rest = Substring(s)
+        while let open = rest.firstIndex(of: "{") {
+            out += rest[rest.startIndex..<open]
+            let after = rest.index(after: open)
+            if let close = rest[after...].firstIndex(of: "}"), let v = args[String(rest[after..<close])] {
+                out += v
+                rest = rest[rest.index(after: close)...]
+            } else {
+                out += "{"
+                rest = rest[after...]
+            }
+        }
+        return out + rest
     }
 }
 

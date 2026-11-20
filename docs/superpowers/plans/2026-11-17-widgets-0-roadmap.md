@@ -176,10 +176,13 @@ now: ms, token: bool, app: AppSnapshot|null, nap: NapState|null, pull: PullSnaps
 by, whose: string|null, value, agoAt: ms|null, day: string|null, a11y: string } ], buttons: [ { k, label, style: 'solid'|'soft', arrow:
 bool, url: string|null, intent: { action, babyIds, starts?, undo? } | null, a11y, dim: bool } ], line: string|null }`.
 `agoAt` is the anchor the live iOS ago line counts from (null on Android); native tests assert every other field exactly.
-`whose` (F12) is a row's own field, never `by`: it is set only on a small widget set to Both on twins (not siblings), where
-`row.baby` is "Robin and Wren" (`small.twinsLabel`), `row.label` is null, the body url is `?from=widget`, and `whose` is the
+`whose` (F12) is a row's own field, never `by`: it is set only on a small widget set to Both, or unconfigured on twins (6.4 default), on twins and not siblings, where
+`row.baby` is "Robin and Wren" (`small.twinsLabel`), `row.label` is null, the body url is `?from=widget` unless a failure line or
+a month day sets it (M12), and `whose` is the
 first name of the baby with the newest feed, or null on an exact tie (then `row.a11y` is `a11y.lastFeedBoth`). Every other
 row has `whose: null`. The small Sleep button on those twins reads `small.sleepStart` / `small.sleepStop`, never "Start both".
+A month day on that widget follows the medium twins rule (`twins.moment.*`, now also on `small`): both twins have it, "Robin and
+Wren · 3 months today" and the first baby's month card; one twin has it, that twin's name and card; whoever fed last is irrelevant.
 Long names: the model returns full names; natives shorten names (measured, tested in P3 and P6) before ever dropping " and ".
 `row.day` carries any fixed second line (the day word over 20 h, "since 2:40 AM" under a running nap). A start intent
 omits `starts`. `url` is the widget body link on 2.7's base: `?baby=<id>&from=widget` for one baby, `?from=widget`

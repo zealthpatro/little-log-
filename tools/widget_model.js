@@ -179,12 +179,13 @@ function createModel(copy, actions) {
     let moment = null, momentBaby = null, momentTotal = null;
     if (!stale && !lock && !ask) {
       const total = (m) => (m.unit === 'year' ? 12 * m.n : m.n);
-      if (twinsLayout) {
-        const act = shown.map((m) => ({ m, a: activeMoment(m) }));
+      if (twinsLayout || twinsSmall) {
+        const pair = twinsSmall ? merged : shown;   // F12: a small Both on twins follows the medium twins rule, whoever fed last
+        const act = pair.map((m) => ({ m, a: activeMoment(m) }));
         const on = act.filter((x) => x.a);
         const a11yOf = (x) => txt('a11y.moment.' + suffix(x.a), { name: x.m.name, age: x.a.n });
         if (on.length === 2 && on[0].a.unit === on[1].a.unit && on[0].a.n === on[1].a.n) {
-          moment = { text: txt('twins.moment.' + suffix(on[0].a), { names: names(shown), age: on[0].a.n }), a11y: on.map(a11yOf).join(txt('names.and')) };
+          moment = { text: txt('twins.moment.' + suffix(on[0].a), { names: names(pair), age: on[0].a.n }), a11y: on.map(a11yOf).join(txt('names.and')) };
           momentBaby = on[0].m.id; momentTotal = total(on[0].a);
         } else if (on.length === 1) {
           moment = { text: txt('twins.moment.' + suffix(on[0].a), { names: on[0].m.name, age: on[0].a.n }), a11y: a11yOf(on[0]) };
