@@ -152,13 +152,20 @@ const history = (author, n, endedDaysAgo) => {
      LL exists, state is the empty default, render() draws the no-baby screen, painted() is null. The
      run of 17 Nov 2026 (~01:16, machine load ~51) printed exactly that, "with nothing logged the card
      is up, got: null", and then passed "one real nappy takes it down" and "a second save does not
-     resurrect it" on the same unbooted page, because null is what those two expect. A reload in which
-     store-firebase.js does not run reproduces that run line for line (77 passed, 1 failed, no page
-     errors), and so does a reload that returns before it has run; CPU throttling does not, and nor
-     does the uid carry-over below.
+     resurrect it" on the same unbooted page, because null is what those two expect.
+     A reload that loses store-firebase.js reproduces that run line for line (77 passed, 1 failed, no
+     page errors), with the service worker in control and without it. Holding the script back does
+     not: it is deferred, so DOMContentLoaded, and with it networkidle2, waits for it. Only a probe
+     that forced the reload to return before the boot gave the same line. CPU throttling does not, and
+     nor does the uid carry-over below. What lost the file on 17 Nov is not known, because the old
+     check recorded neither failed requests nor console errors.
      So the reload is now followed by a wait for the thing every block needs: a NEW document, booted
      by the e2e path (LL.role is set there), holding exactly this seed, with the shell painted and the
-     fonts in. A boot that never comes is a failure that says so, never a null.
+     fonts in. A boot that never comes is a failure that names every app file the reload lost, never a
+     null, and it is not retried. A lost file is not excused as the harness's transport: it can be the
+     app's own failure (a service worker cache miss, then a lost fetch), and an app that loses that file
+     is left on a screen that never recovers by itself. So a recurrence goes red, and leaves the
+     evidence the 17 Nov run did not.
 
      And it boots signed OUT, which is what every block assumes before it calls asMember(). asMember()
      plants a stand-in user on LL.auth, quickUid() files any uid it finds there into cubby-quick-uid,
@@ -166,7 +173,6 @@ const history = (author, n, endedDaysAgo) => {
      lastOpenKey). So the 'local' written below was overwritten on the way out, and block 7's
      "signed-out parent" booted as uidNana. Signing the old document out first, and checking the new
      one really is 'local', keeps every block on the premise it is named for. */
-  const retried = [];
   const bootFacts = () => page.evaluate(() => {
     const f = { newDoc: !window.__gsOldDoc, readyState: document.readyState, ll: !!window.LL, role: window.LL && window.LL.role };
     try { f.babies = state.babies.length; f.events = state.events.length; f.view = view; } catch (e) { f.state = String(e.message); }
@@ -174,7 +180,7 @@ const history = (author, n, endedDaysAgo) => {
     f.scroll = !!document.getElementById('scroll'); f.fonts = document.fonts && document.fonts.status;
     return f;
   }).catch((e) => ({ unreadable: String(e && e.message) }));
-  const load = async (s, again) => {
+  const load = async (s) => {
     await page.evaluate((x) => {
       if (window.LL) window.LL.auth = { currentUser: null };   // signed out before the teardown runs
       window.__gsOldDoc = 1;                                     // the new document will not carry this
@@ -201,19 +207,16 @@ const history = (author, n, endedDaysAgo) => {
       }, want), { timeout: 20000 });
       if (!w.ok) {
         const facts = await bootFacts();
-        /* A reload that lost one of the app's own files is the harness's transport, not the product:
-           it is reloaded ONCE, and the verdict line says so. A reload that lost nothing and still did
-           not boot is a failure, because that is the app not opening. */
-        if (lost.length && !again) {
-          retried.push(lost.join(', '));
-          console.log('    note: the reload lost ' + lost.join(', ') + ' and the app never booted ' + JSON.stringify(facts) + '; reloading once more');
-          return await load(s, true);
-        }
-        throw new Error('the reload never booted this seed in 20 s: ' + JSON.stringify(facts) + (lost.length ? ' lost: ' + lost.join(', ') : ''));
+        throw new Error('the reload never booted this seed in 20 s (' + (lost.length ? 'it lost ' + lost.join(', ') : 'it lost no app file') + '): ' + JSON.stringify(facts));
       }
     } finally { page.off('requestfailed', onFail); page.off('response', onResp); }
     const who = await page.evaluate(() => quickUid());
     if (who !== 'local') throw new Error('load() boots a signed-out parent, and this boot is reading as ' + who);
+    /* Not a bet on readiness: the boot is already proven above. This keeps the window the old fixed
+       sleep gave (networkidle2, then 1.4 s), so no block reads any sooner after boot than it used to.
+       Without it every read moved about 1.4 s closer to the boot, and a build that put the card away
+       a second after load, which the old sleep caught, passed. */
+    await new Promise((r) => setTimeout(r, 1400));
   };
 
   /* Assigned ONTO the existing LL rather than replacing it, because Store is wired through that same
@@ -572,9 +575,6 @@ const history = (author, n, endedDaysAgo) => {
   ok('no page errors throughout', errs.length === 0, errs.slice(0, 3));
   await browser.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
-  // A reload retried for a lost file is said on the verdict line, the one line the runner keeps.
-  const many = retried.length > 1;
-  const note = retried.length ? ' (' + retried.length + ' reload' + (many ? 's' : '') + ' lost an app file and ' + (many ? 'were' : 'was') + ' reloaded once: ' + retried.join('; ') + ')' : '';
-  console.log((fail ? 'GETSTARTED-AUTHOR: FAIL' : 'GETSTARTED-AUTHOR: PASS') + note);
+  console.log(fail ? 'GETSTARTED-AUTHOR: FAIL' : 'GETSTARTED-AUTHOR: PASS');
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(2); });
