@@ -73,9 +73,22 @@ const get = (port, p) => new Promise((res, rej) => {
     private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }),
     client_email: 'ops-admin-test@' + PROJECT + '.iam.gserviceaccount.com',
   };
+  /* emulators:exec exports the project id, and the emulator never checks a credential, so a client
+     built with NO key would pass everything below (second review, 20 Nov). Take the project id away
+     first: then the only place the client can learn it is the key it was handed, as on the founder's
+     machine, and dropping the credential fails here. */
+  delete process.env.GCLOUD_PROJECT; delete process.env.GOOGLE_CLOUD_PROJECT; delete process.env.GCP_PROJECT;
   let initErr = null;
   try { ops.initDb(throwaway); } catch (e) { initErr = String(e && e.message || e); }
   ok('initDb builds its client from a service-account key, the way the founder runs it', !initErr, initErr);
+
+  /* The founder's run reads the key from tools/serviceAccountKey.json, the path .gitignore fences and
+     tools/deploy_exclusion_check.js walks for. This test hands the key in, so that one line is held
+     to its exact path here instead (second review: a typo in it passed every gate). */
+  const opsSrc = require('fs').readFileSync(path.join(ROOT, 'tools', 'ops.js'), 'utf8');
+  const ignore = require('fs').readFileSync(path.join(ROOT, '.gitignore'), 'utf8').split('\n').map((l) => l.trim());
+  ok("with no key handed in, ops.js reads tools/serviceAccountKey.json, the path .gitignore fences",
+    /sa = require\(path\.join\(__dirname, 'serviceAccountKey\.json'\)\)/.test(opsSrc) && ignore.includes('tools/serviceAccountKey.json'));
 
   await new Promise((res) => ops.server.listen(0, '127.0.0.1', res));
   const port = ops.server.address().port;
