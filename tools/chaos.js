@@ -990,8 +990,8 @@ const EXIT_SCRIPT = [
 ];
 const PLANT = {
   file: '/app/store-firebase.js',
-  from: '        writes.push(eventsRef.doc(docKey(id)).set(Object.assign({ authorId: cur[id].authorId || uidNow }, cur[id]))',
-  to: '        if (cur[id].type === \'diaper\') return; // PLANTED BY tools/chaos.js --self-test: nappies never leave the phone\n        writes.push(eventsRef.doc(docKey(id)).set(Object.assign({ authorId: cur[id].authorId || uidNow }, cur[id]))',
+  from: '        writes.push(eventsRef.doc(docKey(id)).set(Object.assign({}, cur[id], { authorId: authorToWrite(id, cur[id], uidNow) }))',
+  to: '        if (cur[id].type === \'diaper\') return; // PLANTED BY tools/chaos.js --self-test: nappies never leave the phone\n        writes.push(eventsRef.doc(docKey(id)).set(Object.assign({}, cur[id], { authorId: authorToWrite(id, cur[id], uidNow) }))',
 };
 
 (async () => {
