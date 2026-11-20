@@ -46,6 +46,22 @@
  * ("You have timed 6 contractions over about 20 minutes, around 5 minutes apart and about a minute
  * each") and names the hour as what the rule looks for, not as something she has done.
  *
+ * THE CLOCK IS PINNED, because section 4 once failed on a loaded machine (17 Nov 2026, load ~51).
+ * It read Date.now() to place the due date, then asked pregWeek(), which reads the clock again
+ * through now(), to agree with that placement to the millisecond: one ms early must answer n-1. If
+ * the clock ticked between the two reads, and a descheduled renderer makes that likely, the ms
+ * vanished and `before` came back n. Midnight was not the cause: that run reached this gate at
+ * about 00:39, the page clock sat at 1 pm of the day the runner started, and pregWeek() and
+ * pregWeekStart() read no local date at all. A page clock that ticks on every read fails the old
+ * section 4 on all 36 weeks; a CPU-throttled page (rate 4) failed it in 2 runs of 60. So the
+ * instants are pinned, not raced:
+ *   - every document starts at 1 pm on 18 Nov 2026, local, however long the run has taken, so no
+ *     seed made from CLOCK drifts (section 6's twelve contractions have only a three-minute margin,
+ *     and the old once-per-run offset failed it when the page was reached four minutes in);
+ *   - section 4 freezes the page clock (window.__clockPin) at the exact instant pregWeekStart(n)
+ *     names and at the ms before it, on a plain afternoon, both sides of a local midnight, a month
+ *     end and a year end, in both of pregWeek()'s branches.
+ *
  * WHAT THIS DOES NOT COVER, so a PASS is not read as more than it is.
  *   - The lmp branch of pregWeek() is unchanged and was always correct. Section 2 pins the two
  *     branches to each other across a full 42-week sweep, which is what makes "fixed at source"
@@ -56,6 +72,12 @@
  *     asserts only that the sentence describes the data actually timed. Whether six contractions is
  *     the right trigger is a clinical question this gate does not answer.
  *   - Section 5 reads pregVisitSummary()'s text, not the rendered PDF.
+ *   - Section 4 proves the screen's week and pregWeekStart() agree at every instant. It does not
+ *     say the week turns at local midnight: it turns at the time of day the anchor was stored
+ *     (08:00 for a picked date, the minute she pressed save for "weeks along"). The surfaces that
+ *     count calendar days can disagree with it for part of a day and are not under test here:
+ *     pregDaysToGo() rounds where pregWeek() floors, and the weekly calendar marker is all-day on
+ *     the date of pregWeekStart(n) with a 9 am alarm.
  *
  *   PORT=19437 node tools/serve.js &
  *   node tools/preg_week_rounding_check.js http://localhost:19437
@@ -71,8 +93,8 @@ const DAY = 86400000, MIN = 60000;
 let pass = 0, fail = 0;
 const ok = (n, c, x) => { if (c) { pass++; console.log('  ok   ' + n); } else { fail++; console.log('  FAIL ' + n + (x !== undefined ? '\n         got: ' + JSON.stringify(x) : '')); } };
 
-const CLOCK = (() => { const d = new Date(); d.setHours(13, 0, 0, 0); return d.getTime(); })();
-const OFFSET = CLOCK - Date.now();
+// Pinned to a DAY and an hour (18 Nov 2026, 1 pm local). Each document starts here (see the shim).
+const CLOCK = new Date(2026, 10, 18, 13, 0, 0, 0).getTime();
 const now = CLOCK;
 
 /* Seeded the way savePregnancy() itself converts "how many weeks along are you?" into a stored
@@ -111,12 +133,17 @@ const contractions = (n, gapMin, durSec) => {
   const page = await browser.newPage();
   const errs = []; page.on('pageerror', (e) => errs.push(e.message));
   await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
-  await page.evaluateOnNewDocument((shift) => {
-    const R = Date;
-    function D(...a) { return a.length === 0 ? new R(R.now() + shift) : new R(...a); }
-    D.prototype = R.prototype; D.now = () => R.now() + shift; D.parse = R.parse; D.UTC = R.UTC;
+  /* The shift is taken when each document starts, so every reload begins at CLOCK rather than at
+     CLOCK plus however long the run has taken so far. __clockPin, when set, IS the time: section 4
+     sets it and clears it inside one synchronous evaluate, so nothing else ever sees it. */
+  await page.evaluateOnNewDocument((start) => {
+    const R = Date, shift = start - R.now();
+    window.__clockPin = null;
+    const t = () => (window.__clockPin != null ? window.__clockPin : R.now() + shift);
+    function D(...a) { return a.length === 0 ? new R(t()) : new R(...a); }
+    D.prototype = R.prototype; D.now = t; D.parse = R.parse; D.UTC = R.UTC;
     window.Date = D;
-  }, OFFSET);
+  }, CLOCK);
   await page.setViewport({ width: 390, height: 844 });
   await page.goto(BASE + '/app/?e2e=1', { waitUntil: 'networkidle2', timeout: 40000 });
   await page.evaluate(() => localStorage.setItem('cubby-quick-uid', 'local'));
@@ -214,26 +241,78 @@ const contractions = (n, gapMin, durSec) => {
   {
     await load(seed(preg(20, 0)));
     const r = await page.evaluate(() => {
-      const bad = []; let checked = 0;
-      const p = state.pregnancy;
-      for (let n = 5; n <= 40; n++) {
-        // Put "now" exactly on the instant pregWeekStart(n) names, by moving the due date instead
-        // of the clock, then ask pregWeek() what week it is. It must answer n, and one ms earlier
-        // it must answer n-1.
-        p.lmp = null; p.dueDate = Date.now() + (40 - n) * 7 * 86400000;
-        const at = pregWeek();
-        p.dueDate = Date.now() + (40 - n) * 7 * 86400000 + 1;
-        const before = pregWeek();
-        p.dueDate = Date.now() + (40 - n) * 7 * 86400000;
-        const start = pregWeekStart(n);
-        checked++;
-        if (at !== n || before !== n - 1) bad.push({ n: n, at: at, before: before });
-        if (Math.abs(start - (p.dueDate - (40 - n) * 7 * 86400000)) > 1000) bad.push({ n: n, start: start });
-      }
-      return { bad: bad, checked: checked };
+      /* The instants week n is made to begin on, built in the PAGE's own local time so "midnight" is
+         the page's midnight whatever TZ the runner has: a plain afternoon, then both sides of a local
+         midnight, of a month end and of a year end. */
+      const L = (y, mo, d, h, mi, s, ms) => new Date(y, mo, d, h, mi, s, ms).getTime();
+      const anchors = [
+        ['1 pm', L(2026, 10, 18, 13, 0, 0, 0)],
+        ['23:59:59.999', L(2026, 10, 18, 23, 59, 59, 999)],
+        ['midnight', L(2026, 10, 19, 0, 0, 0, 0)],
+        ['last ms of November', L(2026, 10, 30, 23, 59, 59, 999)],
+        ['first ms of December', L(2026, 11, 1, 0, 0, 0, 0)],
+        ['last ms of 2026', L(2026, 11, 31, 23, 59, 59, 999)],
+        ['first ms of 2027', L(2027, 0, 1, 0, 0, 0, 0)],
+      ];
+      const W = 7 * 86400000, p = state.pregnancy;
+      const saved = { lmp: p.lmp, dueDate: p.dueDate };
+      // One matcher grades the real pair and three staged breaks, one aimed at each of its halves.
+      const invert = (week, weekStart) => {
+        const bad = []; let checked = 0;
+        for (const [name, T] of anchors) {
+          for (const branch of ['due', 'lmp']) {
+            for (let n = 5; n <= 40; n++) {
+              // Make week n begin at T in this branch, read the instant back out of weekStart(n), and
+              // pin the clock ON it and one ms before it. Nothing here reads a running clock.
+              if (branch === 'due') { p.lmp = null; p.dueDate = T + (40 - n) * W; }
+              else { p.dueDate = null; p.lmp = T - n * W; }
+              const start = weekStart(n);
+              window.__clockPin = start; const at = week();
+              window.__clockPin = start - 1; const before = week();
+              window.__clockPin = null;
+              checked++;
+              if (start !== T || at !== n || before !== n - 1) bad.push({ anchor: name, branch: branch, n: n, at: at, before: before, startMinusT: start - T });
+            }
+          }
+        }
+        return { bad: bad, checked: checked };
+      };
+      try {
+        const real = invert(pregWeek, pregWeekStart);
+        // Start half: the pre-fix pair, Math.round in the due branch and the 40.5-n offset that mirrored it.
+        const rounded = invert(
+          () => (p.dueDate ? Math.max(1, Math.min(42, 40 - Math.round((p.dueDate - now()) / W))) : pregWeek()),
+          (n) => (p.dueDate ? p.dueDate - (40.5 - n) * W : pregWeekStart(n)));
+        // "at" half: a week counted from the start of the local day instead of the instant. It agrees
+        // with pregWeekStart only at the three anchors that ARE a local midnight, which also proves those
+        // anchors are the page's own midnights and not the runner's.
+        const localDay = invert(() => {
+          const d = new Date(now()); d.setHours(0, 0, 0, 0); const t = d.getTime();
+          return Math.max(1, Math.min(42, p.dueDate ? Math.floor((PREG_TERM - (p.dueDate - t)) / W) : Math.floor((t - p.lmp) / W)));
+        }, pregWeekStart);
+        // "before" half: a week read one ms late, which is what a clock that ticked between two reads
+        // did to the old version of this section on 17 Nov 2026.
+        const late = invert(() => {
+          const c = window.__clockPin; window.__clockPin = c + 1;
+          try { return pregWeek(); } finally { window.__clockPin = c; }
+        }, pregWeekStart);
+        const sum = (x) => ({ checked: x.checked, bad: x.bad.length, anchors: Array.from(new Set(x.bad.map((b) => b.anchor))), branches: Array.from(new Set(x.bad.map((b) => b.branch))), sample: x.bad.slice(0, 2) });
+        return {
+          real: real,
+          rounded: Object.assign(sum(rounded), { onStart: rounded.bad.every((b) => b.startMinusT === -W / 2) }),
+          localDay: Object.assign(sum(localDay), { onAt: localDay.bad.every((b) => b.startMinusT === 0 && b.at === b.n - 1 && b.before === b.n - 1) }),
+          late: Object.assign(sum(late), { onBefore: late.bad.every((b) => b.startMinusT === 0 && b.at === b.n && b.before === b.n) }),
+        };
+      } finally { window.__clockPin = null; p.lmp = saved.lmp; p.dueDate = saved.dueDate; }
     });
-    ok('36 week-starts checked, not an empty loop', r.checked === 36, r.checked);
-    ok('every pregWeekStart(n) is the exact instant pregWeek() first answers n', r.bad.length === 0, r.bad.slice(0, 6));
+    ok('504 week-starts checked (36 weeks, 7 pinned instants, both branches), not an empty loop', r.real.checked === 504, r.real.checked);
+    ok('every pregWeekStart(n) is the exact instant pregWeek() first answers n', r.real.bad.length === 0, r.real.bad.slice(0, 6));
+    ok('the same matcher catches the pre-fix rounding pair, every due-branch start half a week early',
+      r.rounded.bad === 252 && r.rounded.branches.join() === 'due' && r.rounded.onStart, r.rounded);
+    ok('it catches a week counted from the local day, on "at", at every anchor except the three local midnights',
+      r.localDay.bad === 288 && r.localDay.anchors.join() === '1 pm,23:59:59.999,last ms of November,last ms of 2026' && r.localDay.onAt, r.localDay);
+    ok('it catches a week read one ms late, the old race, on "before", at all 504',
+      r.late.bad === 504 && r.late.onBefore, r.late);
     const half = await page.evaluate(() => {
       // The old code offset by 40.5-n, which is half a week (302400000 ms) away from pregApptDate's
       // arithmetic for the very same week. If that offset came back, this catches it by name.
