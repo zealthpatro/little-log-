@@ -24,6 +24,17 @@
  *      is for a sign-out from elsewhere, never for a deletion)
  *   K  a parent's own pre-sign-in entries still reach her own new family (the migration still works)
  *   N  a migration the server refuses keeps every entry on the phone: nothing is let go before it lands
+ *   H  Nora signs out while her family's full history read (hydrateFullHistory) is still out, and it lands
+ *      after: none of her older entries comes back into memory, the next signed-out save writes none of them
+ *      into the phone's record, and Pam, who signs in next in that tab, finishes her sign-in into a family of
+ *      her own that holds her own entry and none of Nora's, with none of Nora's in memory
+ *   H2 the same read FAILS after Rosa signed out and Sue's family is attached: Sue's family is still told its
+ *      history is loading (window.cubbyHistoryPending), because that failure was about Rosa's family
+ *
+ * H and H2 hold the read in the SDK, not in the app: the server answers it as usual and the test decides when
+ * the answer reaches the app. Neither asserts that the next account's screen boots: after a sign-out with that
+ * read still out it can stay on the loader, on v370 as well, which is its own lane (the post-mortem's residual
+ * risk). What they assert is where the first family's data goes.
  *
  * R also signs Ann back in at the end: everything of hers is still in her family and on her screen.
  *
@@ -245,6 +256,40 @@ const marksOnScreen = (page, mk) => page.evaluate((k) => ({
     eventIds: [logged.eventId].concat((extra && extra.eventIds) || []), notes: [logged.note].concat((extra && extra.notes) || []),
     photoIds: logged.photoId ? [logged.photoId] : []
   });
+  /* A slow full-history read, staged in the SDK and not in the app, from the next document on: every one-shot read
+     of a family's whole events collection (hydrateFullHistory's get) is answered by the server as usual, and its
+     answer reaches the app only when the test says so: heldRead(page, n, 'land') hands the snapshot over, 'fail'
+     an error. A read's state turns 'landed' or 'failed' a task AFTER the app's own handlers have run on it, so a
+     wait on that state is a wait for the app to have taken the answer. */
+  const holdHistoryReads = (page) => page.evaluateOnNewDocument(() => {
+    window.__heldReads = [];
+    window.__releaseRead = (n, how) => { const r = window.__heldReads[n]; if (!r || r.state !== 'held') return false; r.go(how); return true; };
+    const t = setInterval(() => {
+      const f = window.firebase && window.firebase.firestore;
+      if (!f || !f.Query || !f.CollectionReference) return;
+      clearInterval(t);
+      const orig = f.Query.prototype.get;
+      f.Query.prototype.get = function () {
+        const p = orig.apply(this, arguments);
+        if (!(this instanceof f.CollectionReference) || !/\/events$/.test(this.path || '')) return p;
+        const rec = { path: this.path, state: 'held' };
+        window.__heldReads.push(rec);
+        return new Promise((res, rej) => {
+          rec.go = (how) => p.then((v) => {
+            if (how === 'fail') rej(Object.assign(new Error('the held history read failed (staged by the test)'), { code: 'unavailable' }));
+            else res(v);
+            setTimeout(() => { rec.state = how === 'fail' ? 'failed' : 'landed'; }, 0);
+          }, (e) => { rej(e); setTimeout(() => { rec.state = 'failed'; }, 0); });
+        });
+      };
+    }, 2);
+  });
+  const heldReads = (page) => page.evaluate(() => ({ reads: (window.__heldReads || []).map((r) => ({ path: r.path, state: r.state })), pending: window.cubbyHistoryPending }));
+  const heldRead = async (page, n, how) => {
+    const went = await page.evaluate((i, h) => window.__releaseRead(i, h), n, how);
+    const want = how === 'fail' ? 'failed' : 'landed';
+    return went && !!(await until(async () => ((await heldReads(page)).reads[n] || {}).state === want, 10000));
+  };
 
   /* ================================================================================================ */
   console.log('R. Ann logs signed out, signs in, signs out; the page reloads; Bea signs in on the same phone');
@@ -487,6 +532,87 @@ const marksOnScreen = (page, mk) => page.evaluate((k) => ({
     const cN = await cacheOf(P);
     ok('N both of her entries are still on the phone', cN.events.some((e) => e.id === fay.eventId) && cN.events.some((e) => e.id === foreignId), cN);
     ok('N and her baby', cN.babies.some((b) => b.id === fay.babyId), cN);
+    await P.browserContext().close();
+  }
+
+  /* ================================================================================================ */
+  console.log('\nH. Nora signs out while her family\'s full history read is still out; it lands after; Pam signs in in that tab');
+  {
+    const P = await openPhone();
+    const noraUid = await makeAccount('nora@nextaccount.test');
+    await signIn(P, 'nora@nextaccount.test');
+    ok('Nora signs in and boots into a family of her own', await booted(P, noraUid));
+    const hidN = await hidOf(noraUid);
+    /* Two entries older than the four-month boot window: only the full history read brings them into memory. */
+    const bN = { id: 'bnora', name: 'Baby-of-Nora', birth: Date.now() - 300 * 86400000, sex: 'F', routines: [], doctors: [], allergies: [] };
+    const oldIds = (await P.evaluate((b) => {
+      state.babies = [b]; state.activeBabyId = b.id;
+      const ids = [addEvent({ type: 'diaper', kind: 'wet', time: Date.now() - 200 * 86400000, notes: 'Nora-old-1' }),
+        addEvent({ type: 'feed', method: 'bottle', amount: 60, time: Date.now() - 210 * 86400000, notes: 'Nora-old-2' })];
+      persist(); return ids;
+    }, bN)).map(String);
+    const mk = { babyIds: ['bnora'], babyNames: ['Baby-of-Nora'], eventIds: oldIds, notes: ['Nora-old-1', 'Nora-old-2'], photoIds: [] };
+    ok('(the matcher finds her baby and both older entries in Nora\'s own family)',
+      !!(await until(async () => { const m = await marksIn(hidN, mk); return (m.babies.length === 1 && m.events.length === 2) ? m : null; }, 10000)), await marksIn(hidN, mk));
+    await holdHistoryReads(P);
+    await P.reload({ waitUntil: 'networkidle2', timeout: 45000 }); await ready(P);
+    ok('Nora opens Cubby again, still signed in', await booted(P, noraUid));
+    const out = await until(async () => { const h = await heldReads(P); return h.reads.length ? h : null; }, 10000);
+    const scr0 = await marksOnScreen(P, mk);
+    ok('(her family\'s full history read is out, held, when she signs out: her older entries are not in memory yet)',
+      !!out && out.reads.length === 1 && out.reads[0].state === 'held' && /\/events$/.test(out.reads[0].path) && out.pending === true && scr0.events.length === 0 && scr0.babies.length === 1, { out, scr0 });
+    ok('Nora taps Log out', await signOut(P));
+    ok('(memory is empty right after Log out)', countOf(await marksOnScreen(P, mk)) === 0, await marksOnScreen(P, mk));
+    ok('(the read lands after she signed out, and the app has taken its answer)', await heldRead(P, 0, 'land'), await heldReads(P));
+    const late = await marksOnScreen(P, mk);
+    ok('H none of Nora\'s entries comes back into memory when that read lands', countOf(late) === 0, late);
+    // The next person logs before she signs in: a save with no family attached writes memory into the phone's record.
+    const pamId = String(await P.evaluate(() => addEvent({ type: 'diaper', kind: 'dirty', time: Date.now() - 120000, notes: 'Pam-before-sign-in' })));
+    const rec = await until(async () => { const c = await cacheOf(P); return c.events.some((e) => e.id === pamId) ? c : null; }, 8000);
+    ok('H that save writes none of Nora\'s entries into the phone\'s record', !!rec && !rec.events.some((e) => oldIds.includes(e.id)), rec || await cacheOf(P));
+    const pamUid = await makeAccount('pam@nextaccount.test');
+    await signIn(P, 'pam@nextaccount.test');
+    const hidP = await until(() => hidOf(pamUid), 20000);
+    ok('H Pam\'s sign-in finishes: the server names a family of her own', !!hidP && hidP !== hidN && (((await adminGet('households/' + hidP)) || {}).ownerId === pamUid), { hidP, hidN, users: await adminGet('users/' + pamUid) });
+    const pamIn = hidP ? await until(async () => (await adminGet('households/' + hidP + '/events/' + pamId)), 10000) : null;
+    ok('H and her own entry, logged before she signed in, reaches it', !!pamIn && pamIn.notes === 'Pam-before-sign-in', pamIn);
+    await sleep(1500); // anything the sign-in would write has landed
+    const inP = await marksInOwned(pamUid, mk);
+    ok('H no family Pam owns holds any of Nora\'s entries or her baby', inP.events.length + inP.babies.length === 0, inP);
+    const scrP = await marksOnScreen(P, mk);
+    ok('H and none of Nora\'s is in memory under Pam', countOf(scrP) === 0, scrP);
+    const pamScreen = await P.evaluate(() => ({ householdId: window.LL.householdId || null, door: ((document.getElementById('llAuthOv') || {}).innerText || '').slice(0, 60) }));
+    console.log('    (Pam\'s screen, for reading and not asserted: ' + JSON.stringify(pamScreen) + ')');
+    await P.browserContext().close();
+  }
+
+  /* ================================================================================================ */
+  console.log('\nH2. the same read fails after Rosa signed out and Sue\'s family is attached in that tab');
+  {
+    const P = await openPhone();
+    const rosaUid = await makeAccount('rosa@nextaccount.test');
+    await signIn(P, 'rosa@nextaccount.test');
+    ok('Rosa signs in and boots into a family of her own', await booted(P, rosaUid));
+    ok('(once a family\'s whole history is read, the page says so: cubbyHistoryPending is false)',
+      !!(await until(() => P.evaluate(() => window.cubbyHistoryPending === false), 10000)), await heldReads(P));
+    await holdHistoryReads(P);
+    await P.reload({ waitUntil: 'networkidle2', timeout: 45000 }); await ready(P);
+    ok('Rosa opens Cubby again, still signed in', await booted(P, rosaUid));
+    const out = await until(async () => { const h = await heldReads(P); return h.reads.length ? h : null; }, 10000);
+    ok('(her family\'s full history read is out, held, and the page says history is still loading)',
+      !!out && out.reads.length === 1 && out.reads[0].state === 'held' && out.pending === true, out);
+    ok('Rosa taps Log out', await signOut(P));
+    const sueUid = await makeAccount('sue@nextaccount.test');
+    await signIn(P, 'sue@nextaccount.test');
+    const hidS = await until(async () => { const h = await hidOf(sueUid); return (h && await P.evaluate((x) => window.LL.householdId === x, h)) ? h : null; }, 20000);
+    ok('(Sue\'s own family is attached in that tab)', !!hidS, { hidS, page: await P.evaluate(() => window.LL.householdId || null) });
+    const before = await heldReads(P);
+    ok('(the read Rosa left behind fails now, and the app has taken that failure)', await heldRead(P, 0, 'fail'), await heldReads(P));
+    const after = await heldReads(P);
+    ok('H2 Sue\'s family is still told its history is loading: that failure was about Rosa\'s family', after.pending === true, { before, after });
+    // Let anything still held go, so nothing waits on this test after it.
+    await P.evaluate(() => (window.__heldReads || []).forEach((r, i) => { if (r.state === 'held') window.__releaseRead(i, 'land'); }));
+    await sleep(300);
     await P.browserContext().close();
   }
 

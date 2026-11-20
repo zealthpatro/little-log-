@@ -1481,7 +1481,8 @@ const SIGN_IN_TO_FINISH = LOGIN_LEFT + 'Sign in again, then delete it to finish.
 /* localKeys: this phone's own keys are where they were, read off cubby-member, which every sign-in writes and only the
    deletion's step 4 (local traces) removes. It used to read little-log-v1, but a phone signed in to a family no longer
    keeps a copy of what that family holds (store-firebase.js letGoOfRecord, 2026-11-19 post-mortem), so that key is gone
-   whether or not a deletion ran. */
+   whether or not a deletion ran. The same read is each door's companion: kept at the door, gone once the deletion
+   has run to the end (the local-traces-kept mutant below skips step 4, and only the companions notice). */
 const signInSheets = (page) => page.evaluate(() => ({ asked: window.__utAuth.reauths, loginDeletes: window.__utAuth.deletes, deleting: window.__cubbyDeleting === true,
   localKeys: localStorage.getItem('cubby-member') === '1' }));
 const purgesAsked = (o) => o.local.filter((x) => x.method === 'POST' && /\/api\/account\/purge/.test(x.url)).length;
@@ -1510,7 +1511,7 @@ SECTIONS.S22 = async (b, base, R) => {
     const r2 = await deleteFromApp(o.page);
     const gone = await herRecords(hid, uid), st2 = await signInSheets(o.page);
     R.ok('S22.door-companion', 'companion: she tries again and signs in, the deletion runs to the end, the same probes see every one of them go, and the goodbye is what she sees',
-      goodbyeSeen(r2) && allGone(gone) && st2.asked === 2 && purgesAsked(o) === 1, { r2, gone, st2, purges: purgesAsked(o) });
+      goodbyeSeen(r2) && allGone(gone) && st2.asked === 2 && purgesAsked(o) === 1 && !st2.localKeys, { r2, gone, st2, purges: purgesAsked(o) });
   } finally { await o.ctx.close(); }
   // (b) An email-code sign-in from ten minutes ago: there is no sheet to ask again, so she must sign in afresh first.
   o = await openApp(b, base, cloudPage('zz-truth-code', { appAuth: true, signedInAgo: 600000, staleLogin: true }));
@@ -1562,7 +1563,7 @@ SECTIONS.S22 = async (b, base, R) => {
     const gone = await herRecords(hid, uid), st2 = await signInSheets(o.page);
     const how2 = await o.page.evaluate(() => ({ native: window.__utAuth.nativeSheets, popups: window.__utAuth.popups, credentials: window.__utAuth.credentials, provider: window.__utAuth.lastCredential }));
     R.ok('S22.native-companion', 'companion: she deletes again and signs in on the Apple sheet, Firebase takes that credential, the deletion runs to the end, and the goodbye is what she sees',
-      goodbyeSeen(r2) && allGone(gone) && how2.native === 2 && how2.popups === 0 && how2.credentials === 1 && how2.provider === 'apple.com' && st2.loginDeletes === 1 && purgesAsked(o) === 1,
+      goodbyeSeen(r2) && allGone(gone) && how2.native === 2 && how2.popups === 0 && how2.credentials === 1 && how2.provider === 'apple.com' && st2.loginDeletes === 1 && purgesAsked(o) === 1 && !st2.localKeys,
       { r2, gone, how2, st2, purges: purgesAsked(o) });
   } finally { await o.ctx.close(); }
 };
@@ -1950,6 +1951,10 @@ const ALL_MUTANTS = [
     edits: [["    try { await freshSignIn(u); } catch (e) { throw deletionStage(e, 'nothing', uid); }\n", '']] },
   { id: 'stage-not-said', file: 'app/store-firebase.js', want: ['S22.late-says'], sections: ['S22'],
     edits: [["throw deletionStage(e, loginLeft ? 'login' : 'partly', uid);", 'throw e;']] },
+  /* Step 4 (local traces) skipped: a finished deletion leaves this phone's own keys behind. Only the S22 companions
+     read them after the deletion; every other check stays green on this mutant. */
+  { id: 'local-traces-kept', file: 'app/store-firebase.js', want: ['S22.door-companion', 'S22.native-companion'], sections: ['S22'],
+    edits: [[".forEach(function (k) { try { localStorage.removeItem(k); } catch (e2) {} });", ".forEach(function () {});"]] },
   { id: 'partly-as-nothing', file: 'app/store-firebase.js', want: ['S21.early-says'], sections: ['S21'],
     edits: [["throw deletionStage(e, loginLeft ? 'login' : 'partly', uid);", "throw deletionStage(e, loginLeft ? 'login' : 'nothing', uid);"]] },
   { id: 'nothing-was-deleted', file: 'app/index.html', want: ['S8b.partly-refused', 'S8b.login-cancel', 'S8b.login-signed-out', 'S22.late-says'], sections: ['S8b', 'S22'],

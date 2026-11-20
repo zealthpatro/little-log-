@@ -1687,10 +1687,13 @@
     normalizeLoadedState(state); // defensive legacy migrations
   }
   function noteServerAuthor(id, data) { if (data && data.authorId) serverAuthor[id] = data.authorId; }
-  /* The authorId to write for an event. One the server already holds keeps its author (rules make
-     authorId immutable on update, so an owner's edit of a caregiver's entry, or an edit from a copy that
-     lost the field, must not put the editor's uid there). A create is authored by the writer: an entry
-     stamped 'local' while nobody was signed in (importCommit, setBirthWeight via myUid()) is hers now. */
+  /* The authorId to write for an event: the author the server already holds for it wins, then a real author
+     stored on the entry, then the writer. The server's author comes first because the rules make authorId
+     immutable on update, so an owner's edit of a caregiver's entry, or an edit from a copy that lost the field,
+     must not put the editor's uid there. 'local' (stamped while nobody was signed in: importCommit,
+     setBirthWeight via myUid()) is not a real author, so an entry carrying it is the writer's now. A stored
+     author that is another account's uid is kept, and the rules refuse that create (authorId must be the
+     writer's on create), as they did before 'local' was handled here. */
   function authorToWrite(id, ev, uidNow) {
     if (serverAuthor[id]) return serverAuthor[id];
     return (ev.authorId && ev.authorId !== 'local') ? ev.authorId : uidNow;
@@ -3240,7 +3243,14 @@
     window.cubbyHistoryPending = true;
     function hydrateFullHistory() {
       if (hydratedHistory) return; hydratedHistory = true;
-      eventsRef.get().then(function (snap) {
+      /* This read can still be out when she signs out (teardown nulls eventsRef) or another family is attached
+         (startSync makes a new eventsRef). What it brings back then is the family she left: none of it goes into
+         memory, knownEvents or serverAuthor, where the next save with no family attached would write it into this
+         phone's record, and its failure says nothing about the next family's history, whose pending flag is its
+         own (docs/postmortems/2026-11-19-pre-sign-in-data-reaches-next-account.md, case H). */
+      var histRef = eventsRef;
+      histRef.get().then(function (snap) {
+        if (histRef !== eventsRef) return;
         applyingRemote = true; var added = 0;
         snap.forEach(function (doc) {
           var eid = ingestId(doc.id);
@@ -3253,7 +3263,7 @@
         window.cubbyHistoryPending = false;
         if (gotApp && hhRef && hhRef.id === hid) letGoOfHeldHere(); // all of this family is known now: what it holds leaves the phone's record
         if (booted) rerender(); // even with nothing added: surfaces that were waiting can now answer
-      }).catch(function (e) { window.cubbyHistoryPending = false; console.warn('events hydrate', e); });
+      }).catch(function (e) { if (histRef === eventsRef) window.cubbyHistoryPending = false; console.warn('events hydrate', e); });
     }
     function subscribeEvents(query, isFallback) {
       return query.onSnapshot(function (snap) {
