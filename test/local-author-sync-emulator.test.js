@@ -13,6 +13,10 @@
  *   B  a caregiver logs an entry; the owner edits it: the edit lands and the author stays the caregiver
  *   C  a caregiver edits her own entry whose local copy has no authorId: it lands, author unchanged
  *   D  an ordinary entry by a signed-in parent: the server holds it, authored by her uid
+ *   H  an entry older than the boot window, which only the history read has seen on the owner's second phone,
+ *      edited there from a copy that has lost its authorId: the edit lands and the author stays the caregiver
+ *   X  the owner deletes a caregiver's entry and the same id comes back stamped local: a create, authored by
+ *      the owner (the phone let go of the caregiver as its author when the entry was removed)
  *   E  a solo parent's first entry, made before any household exists: reaches the server once it does
  *
  *   node test/local-author-sync-emulator.test.js
@@ -242,6 +246,33 @@ async function until(fn, ms) {
   const dId = await O.evaluate(() => addEvent({ type: 'feed', method: 'bottle', amount: 80, time: Date.now(), notes: 'D ordinary' }));
   const sD = await settle(hid, dId, () => true);
   ok('D it reached the server, authored by Olive\'s uid', !!sD && sD.authorId === oliveUid, sD);
+
+  /* ================================================================================================ */
+  console.log('\nH. an entry only the history read has seen, edited by the owner from a copy that lost its authorId');
+  const hId = await Cp.evaluate(() => addEvent({ type: 'feed', method: 'bottle', amount: 50, time: Date.now() - 200 * 86400000, notes: 'H old, by Cara' }));
+  ok('(H is on the server, authored by Cara)', !!(await settle(hid, hId, (e) => e.authorId === caraUid)));
+  const O2 = await openPhone(); await hookToasts(O2);
+  await signIn(O2, 'olive@localauthor.test');
+  ok('(Olive\'s second phone boots)', await booted(O2));
+  ok('(the history read brought H in: it is older than the 120-day window the live listener watches)',
+    !!(await until(() => O2.evaluate((id) => window.cubbyHistoryPending === false && (state.events || []).some((e) => e.id === id), hId), 20000)));
+  await O2.evaluate((id) => { const e = state.events.find((x) => x.id === id); delete e.authorId; e.notes = 'H edited by Olive'; persist(); }, hId);
+  const sH = await settle(hid, hId, (e) => e.notes === 'H edited by Olive');
+  ok('H the owner\'s edit reached the server', !!sH && sH.notes === 'H edited by Olive', { sH, toasts: await toasts(O2) });
+  ok('H and the author is still Cara', !!sH && sH.authorId === caraUid, sH && sH.authorId);
+
+  /* ================================================================================================ */
+  console.log('\nX. Olive deletes Cara\'s entry, and the same id comes back stamped local');
+  const xId = await Cp.evaluate(() => addEvent({ type: 'feed', method: 'bottle', amount: 75, time: Date.now() - 600000, notes: 'X by Cara' }));
+  await settle(hid, xId, (e) => e.authorId === caraUid);
+  ok('(Olive\'s phone has X)', !!(await until(() => O.evaluate((id) => (state.events || []).some((e) => e.id === id), xId), 8000)));
+  await O.evaluate((id) => { state.events = state.events.filter((e) => e.id !== id); persist(); }, xId);
+  ok('(the delete landed)', !!(await until(async () => (await serverEvent(hid, xId)) === null, 9000)));
+  await sleep(800); // the listener's removed change has been applied
+  await O.evaluate(() => { window.__toasts.length = 0; });
+  await O.evaluate((id) => { state.events.push({ id, type: 'feed', method: 'bottle', amount: 75, time: Date.now() - 600000, babyId: state.activeBabyId, notes: 'X back, stamped local', authorId: 'local' }); persist(); }, xId);
+  const sX = await settle(hid, xId, () => true);
+  ok('X it is created again, authored by Olive', !!sX && sX.authorId === oliveUid, { sX, toasts: await toasts(O) });
 
   /* ================================================================================================ */
   console.log('\nA2. signed in, household exists: an entry carrying authorId local is pushed');
