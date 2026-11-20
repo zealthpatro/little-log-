@@ -124,6 +124,16 @@ async function family(seed) {
   r = await tap(hid2, { u: OWNER, t: T, m: 'medIbu', b: 'babyB' });
   ok('saved, with no earlier dose: that was the last slot\'s', r.status === 200 && r.body && r.body.ok === true && !r.body.earlier && (await events(hid2)).length === 2, r);
 
+  console.log('\n4b. every 6h on a STALE schedule: the previous slot was tapped 5 min after its due');
+  /* push.due is projected from the last synced dose and a Worker write never re-syncs it, so the previous
+     slot's dose sits a little after its due time, not exactly one interval back (release review 2026-11-20). */
+  const hid3 = await family([sched({ id: 'evLateTap', time: T - 6 * HR + 5 * MIN, authorId: CARE })]);
+  r = await tap(hid3, { u: OWNER, t: T });
+  ok('saved, plain: that late tap was the previous slot, not a second dose', r.status === 200 && r.body && r.body.ok === true && !r.body.earlier, r);
+  const hid4 = await family([sched({ id: 'evLateTap2', time: T - 6 * HR + 5 * MIN, authorId: CARE }), sched({ id: 'evThisSlot', time: NOW - 10 * MIN, authorId: CARE })]);
+  r = await tap(hid4, { u: OWNER, t: T });
+  ok('control: a dose 10 min ago in THIS slot is still reported, from the real query', r.status === 200 && r.body && r.body.earlier === NOW - 10 * MIN, r);
+
   console.log('\n5. a stranger, on the real store');
   r = await tap(hid, { u: STRANGER, t: T });
   ev = await events(hid);

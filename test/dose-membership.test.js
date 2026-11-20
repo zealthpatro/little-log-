@@ -400,6 +400,23 @@ async function suite(mod, quiet) {
     r = await redeem(w, {});
     ok('two earlier doses in the slot: the most recent is the one named', twice(r, w, NOW - 30 * MIN), r);
 
+    /* The schedule a phone really holds is STALE. push.due is projected from the last dose that phone
+       synced (medFireTimes: medNextDue + k * step), and a Worker write never re-syncs it. So the previous
+       slot's dose is wherever the parent really logged it, usually AFTER its due time, not exactly one
+       interval back. The first every-X boundary (due - interval + 1 min) read that dose as "in this slot"
+       and said "Two doses logged" at every reminder after a tap that came a few minutes late (found by the
+       release review, 2026-11-20). */
+    const P = T - 6 * HR;   // the previous slot's due time, in the same stale projection
+    w = makeWorld({ events: [ev({ time: P + 5 * MIN, authorId: CARE })] });
+    r = await redeem(w, {});
+    ok('every 6h, stale schedule, the previous slot tapped 5 min after its due: plain, not "two doses"', plain(r, w), [r, w.writes.length]);
+    w = makeWorld({ events: [ev({ time: P + 8 * MIN, authorId: OWNER })] });
+    r = await redeem(w, {});
+    ok('every 6h, the partner logged the previous slot in the app 8 min late: plain', plain(r, w), [r, w.writes.length]);
+    w = makeWorld({ events: [ev({ time: P + 5 * MIN, authorId: CARE }), ev({ time: NOW - 10 * MIN, authorId: OWNER })] });
+    r = await redeem(w, {});
+    ok('control: with that late dose there, a dose 10 min ago in THIS slot is still reported', twice(r, w, NOW - 10 * MIN), r);
+
     /* The companions: each stages a near-miss that must NOT read as a second dose. */
     for (const [name, o] of [
       ['the recent dose was the other child\'s', { babyId: 'babyB', time: NOW - HR }],
@@ -510,8 +527,8 @@ async function suite(mod, quiet) {
       ['the medicine name comes from the ticket again', "medName: { stringValue: _fsScalar(med.name) || 'Medicine' },", "medName: { stringValue: String(c.mn || 'Medicine') },"],
       ['the child pinned on a medicine is ignored', 'if (medBaby && medBaby !== String(c.b)) return json({ error: \'bad_ticket\' }, 401);', ''],
       ['a failed household read is read as "no such household"', "if (hh.status !== 404) return json({ error: 'unavailable' }, 503);", ''],
-      ['an every-X slot includes the dose that set it (every on-schedule tap reads as a second dose)', 'due - iv + DOSE_SLOT_SLACK', 'due - iv'],
-      ['a daily slot reaches back a whole interval', ': due - iv / 2;', ': due - iv;'],
+      ['a slot reaches back a whole interval (every on-schedule tap reads as a second dose)', 'const since = due - iv / 2;', 'const since = due - iv;'],
+      ['a slot starts just after the previous due (a late tap reads as a second dose)', 'const since = due - iv / 2;', 'const since = due - iv + 60000;'],
       ['a dose already in the slot is not reported', '&& t != null && t >= since && t <= now && t > earlier) earlier = t;', '&& false) earlier = t;'],
       ['the earlier dose is not sent back', 'json(earlier ? { ok: true, at: now, earlier } : { ok: true, at: now })', 'json({ ok: true, at: now })'],
       ['the earlier-dose check ignores which child', "&& _fsStr(f.babyId) === String(c.b)", ''],

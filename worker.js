@@ -1549,9 +1549,6 @@ function _medIntervalMs(medFields) {
    adding `type ==` would need a composite index this repo does not deploy (firebase.json has rules
    only), and a FAILED_PRECONDITION here would block every tap. So the medicine filter runs below. */
 const DOSE_RECENT_LIMIT = 500;
-/* An every-X slot starts just AFTER the dose that set its due time, which is exactly one interval back.
-   A minute of slack keeps that dose itself out of the slot. */
-const DOSE_SLOT_SLACK = 60000;
 async function fsRecentEvents(base, token, hid, since) {
   const sq = {
     from: [{ collectionId: 'events' }],
@@ -3564,16 +3561,17 @@ export default {
          reminder fires about 30 minutes before the dose is due, so it refused every on-schedule tap
          (docs/postmortems/2026-11-20-dose-button-saved-nothing.md).
          The one question left is what to SAY: does another dose of this medicine for this child already
-         sit in this slot? Every-X hours runs from the dose that set this due time, which is exactly one
-         interval before it, so any dose after that one is in this slot. A daily schedule has fixed slots,
-         so a dose nearer this slot than the last one (after due - interval/2) is. The answer is facts for
-         the notification ("Two doses logged"), never a refusal, and a failed read only loses the note. */
+         sit in this slot? A dose belongs to the slot it is nearer: after due - interval/2, for every-X and
+         daily alike. Not "just after the dose that set this due time": a phone's push.due is projected
+         from the last dose IT synced and a Worker write never re-syncs it, so the previous slot's dose is
+         wherever the parent really logged it, usually a few minutes after its due. Anchoring there said
+         "Two doses logged" at every reminder after a late tap (release review, 2026-11-20). The answer is
+         facts for the notification, never a refusal, and a failed read only loses the note. */
       let earlier = 0;
       const iv = _medIntervalMs(med);
       const due = Number(c.t) || now;
       if (iv > 0) {
-        const pat = med.pattern && med.pattern.mapValue && med.pattern.mapValue.fields;
-        const since = (pat && _fsStr(pat.type) === 'everyX') ? due - iv + DOSE_SLOT_SLACK : due - iv / 2;
+        const since = due - iv / 2;
         const recent = await fsRecentEvents(base, token, String(c.h), Math.min(since, now));
         if (recent.ok) {
           for (const d of recent.docs) {

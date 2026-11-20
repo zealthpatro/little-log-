@@ -66,20 +66,28 @@ reminder actually produces.
   one dose (Firestore's ALREADY_EXISTS, answered as `already`); a second person's tap is a second dose.
 - **A second dose in the same slot is reported as facts**, never refused: `earlier: <ms>` in the reply,
   shown as "Two doses logged / One at 1:55 AM and one now. Tap to check them." The founder chose facts
-  only, no spacing advice, matching the app's "one question, made of facts". The slot: every-X hours
-  runs from the dose that set the due time, so any later dose is in it; a daily schedule has fixed
-  slots, so a dose after due minus half the interval is. A failed read only loses the note.
+  only, no spacing advice, matching the app's "one question, made of facts". The slot: a dose belongs to
+  the slot it is nearer, after due minus half the interval, for every-X and daily alike. A failed read
+  only loses the note.
+- **Caught in release review, before shipping:** the first version anchored an every-X slot just after
+  "the dose that set the due time", assumed to be exactly one interval back. It is not: a phone's
+  `push.due` is projected from the last dose that phone synced, and a Worker write never re-syncs it, so
+  the previous slot's dose sits wherever it was really logged, usually minutes after its due. Every
+  reminder after a late tap would have said "Two doses logged" falsely, at night, teaching parents to
+  ignore the real one. Both release reviewers found it independently (correctness C1, safety MS-1). The
+  convenient-timeline mistake again: the fixture put the previous dose at exactly due minus six hours.
 - **Honest words.** `app/sw.js` holds every confirmation in one `DOSE_COPY` block, says "Dose logged" only
   for a dose written, "Already logged" for a repeat, "Could not log that dose" for anything it cannot
   read, and names no medicine and no person on the lock screen (C6). Cache v379.
 - **Gates**, each seen red on the release tip's code first:
-  - `test/dose-membership.test.js` section 10 rebuilt on real schedules, 8 new mutants: 17 of 75 failed
-    on the old route; 93/93 with `--self-test` on the fix.
+  - `test/dose-membership.test.js` section 10 rebuilt on real schedules, 9 new mutants: 17 of 75 failed
+    on the old route; the stale-schedule fixtures added after review failed 2 of 78 on the first fix;
+    96/96 with `--self-test` on the final one.
   - `test/dose-button.test.js` (new, gate `dose-button`): the real sw.js in a sandbox for every answer
     the route gives: 20 of 39 failed on the old sw.js; 44/44 with 5 mutants on the fix.
   - `test/dose-slot-emulator.test.js` (new, gate `dose-emu`): the real route on the Firestore emulator.
-    On the old route 7 of 9 failed and Firestore saw zero writes; on the fix 9/9, three real creates and
-    one real ALREADY_EXISTS.
+    On the old route 7 of 9 failed and Firestore saw zero writes; the stale-schedule case failed on the
+    first fix; on the final one 11/11, five real creates and one real ALREADY_EXISTS.
 
 ## Corrective actions
 | # | Action | Type | Status |
@@ -94,6 +102,7 @@ reminder actually produces.
 
 ## Lessons
 - A test timeline is a claim about the product. Build it from when things really happen (the reminder
-  fires 30 minutes early), not from round numbers.
+  fires 30 minutes early; the parent taps a few minutes after giving the dose; the phone's schedule is
+  stale), not from round numbers. This fix repeated the original mistake once, and review caught it.
 - "Refuse" and "save" are not implementation details for a medicine record. Ask.
 - Words that confirm an action read the server's answer, not its status code.
