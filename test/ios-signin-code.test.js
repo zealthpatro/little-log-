@@ -54,6 +54,15 @@ const ok = (n, c, extra) => {
   else { fail++; console.log('  FAIL ' + n + (extra !== undefined ? ('  ' + JSON.stringify(extra)) : '')); }
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/* Every step waits for what its assertion needs, never for a length of time (test/helpers/wait-for.js says
+   why). The card is drawn by the first onAuthStateChanged, and on an iPhone user agent Firebase Auth 10.12.2
+   holds that until it has loaded https://apis.google.com/js/api.js (a script tag, no timeout of its own),
+   run gapi.load('gapi.iframes') (30 s ceiling) and pinged the Auth emulator's iframe (5 s ceiling).
+   networkidle2 waits for none of it. BOOT is far past those ceilings, so a slow Google cannot fail this, and
+   a product that never draws the card still fails, after BOOT, naming it. NET is for a loaded emulator or
+   endpoint, UI for the app's 60 ms keyboard timer. */
+const { waitFor } = require('./helpers/wait-for');
+const BOOT = 90000, NET = 30000, UI = 10000;
 function get(url) {
   return new Promise((resolve) => {
     http.get(url, (res) => { let b = ''; res.on('data', (d) => { b += d; }); res.on('end', () => resolve({ status: res.statusCode, body: b })); })
@@ -103,8 +112,12 @@ function customToken(uid) {
     ok('port ' + STATIC_PORT + ' is free for this run\'s own static server (set STATIC_PORT)', false);
     process.exit(1);
   }
-  const staticProc = spawn('node', [path.join(ROOT, 'tools', 'serve.js')],
-    { stdio: 'ignore', env: Object.assign({}, process.env, { PORT: String(STATIC_PORT) }) });
+  /* Gone however this run ends: tethered to the stdin pipe only this process holds (test/helpers/tree-base.js
+     does the same), so even a signal that skips 'exit' ends it, and stopped on 'exit' too. Only the passing
+     path used to stop it, so the throw in the pre-push run of 17 Nov 2026 left one serving on :7944 for days. */
+  const staticProc = spawn(process.execPath, ['-e', 'process.stdin.on("end", () => process.exit(0)); process.stdin.on("error", () => process.exit(0)); process.stdin.resume(); require(process.argv[1]);',
+    path.join(ROOT, 'tools', 'serve.js')], { stdio: ['pipe', 'ignore', 'ignore'], env: Object.assign({}, process.env, { PORT: String(STATIC_PORT) }) });
+  process.on('exit', () => { try { staticProc.kill(); } catch (e) { /* gone */ } });
   for (let i = 0; i < 40 && (await get(`http://localhost:${STATIC_PORT}/app/`)).status !== 200; i++) await sleep(250);
   // The served client must be THIS checkout's, byte for byte, or every verdict below is about another tree.
   const servedStore = (await get(`http://localhost:${STATIC_PORT}/app/store-firebase.js`)).body;
@@ -175,16 +188,20 @@ function customToken(uid) {
 
   const URL_ = `http://localhost:${WEB_PORT}/app/?fsemu=${FS_PORT}&authemu=${AUTH_PORT}`;
   await page.goto(URL_, { waitUntil: 'networkidle2', timeout: 45000 });
-  await sleep(3500);
+  /* The sign-in card exists only once onAuthStateChanged has said "nobody" (showSignIn draws it and wires
+     it in one go). On this user agent the SDK first loads gapi from apis.google.com and pings the Auth
+     emulator's iframe, and networkidle2 does not wait for that. */
+  const card = await waitFor(() => page.evaluate(() => !!document.querySelector('.ll-email-toggle')), { timeout: BOOT });
   const startHref = await page.evaluate(() => location.href);
 
   console.log('\nthe installed container is offered a code, not a link');
   const offer = await page.evaluate(() => {
-    const t = document.querySelector('.ll-email-toggle');
-    return { text: t ? t.textContent.trim() : null, standalone: navigator.standalone === true };
+    const t = document.querySelector('.ll-email-toggle'), ov = document.getElementById('llAuthOv');
+    return { text: t ? t.textContent.trim() : null, standalone: navigator.standalone === true, screen: t ? undefined : (ov ? ov.textContent.trim().slice(0, 80) : '(no #llAuthOv)') };
   });
   ok('we are emulating a standalone iOS app', offer.standalone, offer);
-  ok('and the email row offers a CODE, because a link cannot come back here', /code/i.test(offer.text || ''), offer);
+  ok('and the email row offers a CODE, because a link cannot come back here', /code/i.test(offer.text || ''),
+    card.ok ? offer : Object.assign({ never: 'the sign-in card (.ll-email-toggle) within ' + BOOT / 1000 + ' s of page.goto' }, offer));
 
   /* Device test, 16 Nov 2026 (iPhone 18 Pro, the TestFlight app): she tapped "Prefer email? Get a
      sign-in code" and typed her address with the field and Send code under the keys. The screen is one
@@ -195,17 +212,21 @@ function customToken(uid) {
     const f = document.querySelector(s), r = f.getBoundingClientRect();
     return { top: Math.round(r.top), bottom: Math.round(r.bottom), keysTop: document.documentElement.clientHeight - kk, focused: f.contains(document.activeElement) };
   }, sel, k);
+  /* Above the keys / room gone are the app's 60 ms fitAboveKeys timer after a visualViewport resize, so each
+     is polled until it holds or UI ms pass, and asserted on the last thing seen. kb0 is not: the toggle's
+     click (openForm) shows and focuses the field synchronously, and with no keys up that timer changes
+     nothing, so the 300 ms before kb0 waits for nothing and cannot race. */
+  const settled = async (read, holds) => { let last; await waitFor(async () => { last = await read(); return holds(last); }, { timeout: UI }); return last; };
+  const above = (b) => !!b && b.bottom <= b.keysTop && b.top >= 0;
   await page.evaluate(() => document.querySelector('.ll-email-toggle').click());
   await sleep(300);
   const kb0 = await formBox('.ll-email-form', KEYS);
   ok('the email field has focus and sits where the keys come up, so the next check can fail', kb0.focused && kb0.bottom > kb0.keysTop, kb0);
   await page.evaluate((k) => window.__keys(k), KEYS);
-  await sleep(400);
-  const kb1 = await formBox('.ll-email-form', KEYS);
-  ok('with the keys up, the email field and Send code are above them', kb1.bottom <= kb1.keysTop && kb1.top >= 0, kb1);
+  const kb1 = await settled(() => formBox('.ll-email-form', KEYS), above);
+  ok('with the keys up, the email field and Send code are above them', above(kb1), kb1);
   await page.evaluate(() => window.__keys(0));
-  await sleep(300);
-  const pad = await page.evaluate(() => document.getElementById('llAuthOv').style.paddingBottom);
+  const pad = await settled(() => page.evaluate(() => document.getElementById('llAuthOv').style.paddingBottom), (p) => p === '');
   ok('and when the keys go, the room made for them goes too', pad === '', { paddingBottom: pad });
 
   console.log('\nshe asks for the code and types it in, without leaving');
@@ -215,14 +236,14 @@ function customToken(uid) {
     f.querySelector('input').value = email;
     f.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
   }, EMAIL);
-  await sleep(1200);
+  await waitFor(() => issued, { timeout: NET });
   ok('the code endpoint was asked for one', !!issued, { issued: !!issued });
 
-  const codeFormShown = await page.evaluate(() => {
+  const codeFormShown = !!(await waitFor(() => page.evaluate(() => {
     const cf = document.querySelector('.ll-code-form');
     return !!cf && cf.style.display !== 'none';
-  });
-  ok('and she is shown somewhere to type it', codeFormShown);
+  }), { timeout: NET })).value;
+  ok('and she is shown somewhere to type it', codeFormShown, { never: 'the code form, within ' + NET / 1000 + ' s of Send code' });
 
   /* Guarded, because a gate whose failure mode is a stack trace is a worse gate. On the pre-fix build
      there is no code form at all — the old path emails a LINK, which the Auth emulator helpfully prints
@@ -231,16 +252,24 @@ function customToken(uid) {
      report everything. */
   if (codeFormShown) {
     await page.evaluate((k) => window.__keys(k), KEYS);
-    await sleep(400);
-    const kb2 = await formBox('.ll-code-form', KEYS);
-    ok('the code box has focus, and with the keys up it is above them too', kb2.focused && kb2.bottom <= kb2.keysTop && kb2.top >= 0, kb2);
+    const kb2 = await settled(() => formBox('.ll-code-form', KEYS), (b) => !!b && b.focused && above(b));
+    ok('the code box has focus, and with the keys up it is above them too', !!kb2 && kb2.focused && above(kb2), kb2);
     await page.evaluate(() => window.__keys(0));
+    const submittedAt = Date.now();
     await page.evaluate((code) => {
       const cf = document.querySelector('.ll-code-form');
       cf.querySelector('input').value = code;
       cf.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
     }, '314159');
-    await sleep(4000);
+    /* Signed in and the card gone is what the three checks below read; then the app replacing "Setting
+       things up", so 'no uncaught page errors' has watched the whole boot after sign-in. The 4 s from
+       Send that this used to sleep stays as the floor of that watch: it is a window for errors to
+       arrive in, not a wait for anything, and being slow cannot turn it red. */
+    const landed = await waitFor(() => page.evaluate(() => {
+      try { return !!(window.LL && LL.auth && LL.auth.currentUser) && !document.querySelector('.ll-email-toggle'); } catch (e) { return false; }
+    }), { timeout: NET });
+    if (landed.ok) await waitFor(() => page.evaluate(() => !document.getElementById('llAuthOv')), { timeout: NET });
+    await sleep(Math.max(0, 4000 - (Date.now() - submittedAt)));
   } else {
     console.log('         (no code form to fill — the build under test is still on the link path)');
   }
