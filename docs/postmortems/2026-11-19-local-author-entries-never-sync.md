@@ -3,7 +3,7 @@
 - **Date:** 2026-11-19
 - **Severity:** P0 for the signed-in push path (SILENT DATA LOSS: the refused entry disappears from the parent's own phone); P1 for the first sign-in path (she cannot get in)
 - **Duration:** from 2026-07-09 (the rule that refuses it) until the fix; found 2026-11-19
-- **Status:** RESOLVED (commit ____)  (fix on fix/local-author-sync as 4eaa425f; the fold-in commit number is filled in by the release owner)
+- **Status:** RESOLVED (commit ____)  (4eaa425f on fix/local-author-sync, d40eabfe on fix/local-author-sync-v370; the release owner fills in the fold-in commit)
 - **Author:** Claude session (hotfix lane)
 
 > Policy: **every breakage gets a documented, blameless 5-Whys post-mortem.** Blameless = focus on
@@ -15,7 +15,7 @@ Some writers stamp an entry's `authorId` themselves with `myUid()` (app/index.ht
 literal string `'local'` when nobody is signed in OR when Firebase has not loaded yet (the chain is deferred,
 so this is true on the first paint for a signed-in parent too, as the comment at app/index.html:3342 says). The sync layer let an
 entry's own `authorId` win, so `'local'` was sent to Firestore. `firestore.rules` accepts an event create
-only when `authorId == request.auth.uid`, so the write was refused. Two places sent it:
+only when `authorId == request.auth.uid` (firestore.rules:518-519), so the write was refused. Two places sent it:
 
 - the first sign-in into a new family (the migration in `resolveHousehold`) wrote
   `Object.assign({ authorId: user.uid }, ev)`, so the entry's `'local'` replaced her uid. The whole
@@ -47,7 +47,8 @@ sign-in did not complete, and a signed-in push of a `'local'` entry never reache
   Signed out it blocked her first sign-in (new family) or sat unsynced; signed in it was refused at once.
 - An owner editing a caregiver's entry was NOT broken as long as the local copy kept the caregiver's
   `authorId`. It was broken for a copy that had lost the field (B2 in the test): the push wrote the
-  editor's uid and the immutable-author rule refused it. Whether a real UI path drops the field is not
+  editor's uid and the immutable-author rule refused it (an update needs the author unchanged,
+  firestore.rules:523-525, the immutability clause at :525). Whether a real UI path drops the field is not
   proven; the hardening is cheap and is in the fix.
 - Not affected: the server rules, other families, data already on the server.
 - Silent data loss, measured: case A2 on a clean 58733b16 checkout, entry stamped 'local' on a signed-in
@@ -56,9 +57,12 @@ sign-in did not complete, and a signed-in push of a `'local'` entry never reache
   write reaches the listener as a `removed` change (app/store-firebase.js, the removed branch drops it from
   `state.events`), so the entry leaves the parent's own phone, and with it any chance of a retry. So
   "nothing is lost" was wrong for the signed-in push path: a refused entry is gone from the phone and was
-  never on the server. The ritual case R, on the broken tree, showed the parent's "Bottle done" toast, then
-  the denial toast, and no document on the server. It did not assert whether the entry stayed in
-  `state.events`, so the phone-side loss is measured by A2 only, not by R.
+  never on the server. On the broken tree, case R
+  showed only "Bottle done", and no document reached the server. The one denial toast in the earlier run's
+  output was raised by case B2: the test cleared its toast list only before B2, and `pushNow` shows at most one
+  denial every 2 minutes, so the A2 and R refusals were both silent (the test now clears the list before each
+  case, so each reports its own). R did not check whether the entry stayed in `state.events`, so the
+  phone-side loss is measured by A2 only, not by R.
 - Orphan households: in the first-sign-in migration `newRef.set(...)` lands first (the household exists with
   her babies), the events follow, and `users/{uid}.householdId` is written only after `Promise.all`. A refused
   event aborted before that, so each failed first sign-in, and each relaunch after it, created another
@@ -100,6 +104,7 @@ require the real uid. Confirmed by the red test run.
 
 ## What fixed it
 app/store-firebase.js only; rules unchanged.
+- Rules unchanged: the create rule (:518-519) and the author-immutability clause (:525) are what it satisfies.
 - `serverAuthor[id]` remembers the author the server holds for each event (set where events are read, before
   `stripMeta`). An update writes that author (an edit never back-fills the editor's uid).
 - A create writes the entry's `authorId` unless it is missing or `'local'`, then the signed-in uid.
@@ -133,7 +138,7 @@ const db = getFirestore(initializeApp({ credential: cert(require('./serviceAccou
   const users = await db.collection('users').select('householdId').get();
   const pointed = new Set();
   users.forEach((d) => { const h = d.get('householdId'); if (h) pointed.add(h); });
-  const hh = await db.collection('households').select('ownerId', 'createdAt', 'members').get();
+  const hh = await db.collection('households').select('ownerId').get();
   const orphans = [], perOwner = {};
   let localEntries = 0, householdsWithLocal = 0;
   for (const d of hh.docs) {
@@ -160,18 +165,21 @@ read the count as an upper bound. Rows authored `'local'` can only exist from be
 rule that refuses them was deployed.
 
 Lost entries cannot be found on the server by construction: they were rolled back off the phone and never
-written. The only trace is client side. The `save.failed` usage event (with `error: permission_denied`) exists
-from 2026-11-16 (its allowlist entry is 7ae0fd66, the tracker commit f2039686) and is sent only after the usage
-notice and only once the usage D1 database is bound, so it can estimate exposure from 2026-11-16 onward and
-nothing earlier: for 2026-07-09 to 2026-11-15 the number of refused writes is not measurable from any log we
-keep. If `cubby-usage` exists and is bound, per day:
+written. **The number of refused writes from 2026-07-09 until the fix is NOT measured, and no log we keep can
+measure it.** The usage log has stored nothing for any family: `USAGE_MODE = "off"` (wrangler.toml:44) and the
+`USAGE_DB` binding is commented out in wrangler.toml, on 909bd480, 58733b16 and origin/main. The `save.failed`
+event exists only from 2026-11-16 (allowlist entry 7ae0fd66, tracker f2039686), is emitted only from
+`pushNow`'s catch inside its 2-minute throttle, and never on the first-sign-in path (A1). Its
+`permission_denied` also counts removed members. So even once usage is switched on, the query below is a
+throttled count of `pushNow` denials from any cause, not a measure of this bug. Run it only if both
+conditions hold (`USAGE_MODE` is not `"off"` and the `cubby-usage` binding is uncommented); otherwise the
+answer is "not measured":
 
 ```sh
-npx wrangler d1 execute cubby-usage --remote --command "SELECT local_day, COUNT(*) AS refused_saves, COUNT(DISTINCT uid) AS people FROM usage_events WHERE name = 'save.failed' AND json_extract(props, '\$.error') = 'permission_denied' GROUP BY local_day ORDER BY local_day"
+npx wrangler d1 execute cubby-usage --remote --command "SELECT local_day, COUNT(*) AS throttled_denials, COUNT(DISTINCT uid) AS people FROM usage_events WHERE name = 'save.failed' AND json_extract(props, '\$.error') = 'permission_denied' GROUP BY local_day ORDER BY local_day"
 ```
 
-(`people` is a count of distinct sign-ins, printed as a number only.) If the binding is still commented out in
-wrangler.toml, the answer is "not measured", and that is the answer to report.
+(`people` is a count of distinct sign-ins, printed as a number only.)
 
 ## Lessons
 - A rule that makes a field load-bearing needs a test that sends the field's worst legal-looking value
