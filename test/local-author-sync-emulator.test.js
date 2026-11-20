@@ -245,6 +245,7 @@ async function until(fn, ms) {
 
   /* ================================================================================================ */
   console.log('\nA2. signed in, household exists: an entry carrying authorId local is pushed');
+  await O.evaluate(() => { window.__toasts.length = 0; }); // each case reports only its own toasts
   const a2 = await O.evaluate(() => { const id = 'a2' + uid(); state.events.push({ id, type: 'diaper', kind: 'dirty', time: Date.now(), babyId: state.activeBabyId, notes: 'A2 stamped local', authorId: 'local' }); persist(); return id; });
   const sA2 = await settle(hid, a2, () => true);
   ok('A2 the entry reached the server', !!sA2, { id: a2, toasts: await toasts(O) });
@@ -255,6 +256,7 @@ async function until(fn, ms) {
 
   /* ================================================================================================ */
   console.log('\nR. a ritual ticked while myUid() is still local (the Firebase chain loads late)');
+  await O.evaluate(() => { window.__toasts.length = 0; });
   const rId = await O.evaluate(() => {
     const b = activeBaby(); const list = ensureRoutines(b);
     list.push({ id: 'rR', title: 'Bottle', time: '07:00', evType: 'feed', done: {} });
