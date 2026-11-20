@@ -686,3 +686,49 @@ fed 2h 10m ago"; C1 makes the clock the headline); "Private until you unlock" on
 on the lock screen); "Nothing logged yet" (F11 fixed "not logged"); a "Say it" pill plus four unlabelled icons (D4, F9,
 the Say it hold); "Napping" and "Feeding" as status words (C2's "Asleep now"); "Snooze 1 hour" (the app's own "In 15
 min" and "Not now"); a sleep card forced dark (P3 follows the system).
+
+## 7. Re-check, 20 November
+
+Nine findings were re-read against the code by nine separate readers, each told to refute its finding, on this branch
+(e9b07e28) and on live production (origin/main 58733b16, sw little-log-v369). None was refuted at its core. Raw
+verdicts with file:line evidence and the smallest red test for each: the session scratch file `glass-audit/verify.json`.
+Line numbers in app/index.html are 4 lower on origin/main than in this tree.
+
+| # | Verdict | Live on main | What changed |
+|---|---|---|---|
+| G-01 | worse than written | yes | See below. The finding and both of its fixes are corrected. |
+| G-02 | partly | partly | "Log it" exists only on Chromium web push. No CUBBY_DOSE category is registered anywhere (tools/cap_ios_configure.rb has none), so iOS shows no button. The written dose IS named (W:3389-3394); only the reminder goes unnamed, and only after C6. One ticket is bound to one medId, so a tap cannot log another medicine; the risk is choosing the wrong one of two identical alerts once names go. The 2 AM example cannot fire today (G-03 drops it). `.authenticationRequired` reverses docs/plans/2026-08-13-dose-from-notification.md:172, which called Face ID at 3 AM hostile; Q3 now says so. |
+| G-03 | confirmed | yes | Every line exact. iOS and Android have no separate local reminder, so they lose the same doses. The sheet's untruth is the due-time framing ("a dose due in those hours"), and "no notification between 21:00 and 7:00" is false while a page is open (I:15066-15070). |
+| G-04 | worse than written | yes | After sign-out myUid() is 'local', so the dose-alert ledger and the per-device mute switch to fresh keys (I:14597, I:14627): a dose already alerted raises "Medicine due" again within about 5 seconds. The web push keeps a signed nonce, so whoever is at the device can tap "Log it" into the family. Narrower on removal: pushGate (W:1881-1885) already refuses dose pushes to a removed caregiver; the page alert and campaigns survive. Native has no sign-out hook either. The fix deletes only this device's key (`push.tokens.<token>` by FieldPath). |
+| G-05 | partly | yes | Campaigns and week markers confirmed (`lossHolding` never appears in worker.js). The vaccine and visit line is wrong: holding is set only by endPregnancy, and vaccine and visit files exist only for a born baby; Cubby has no loss flow after birth (a separate gap; vaccine files have no METHOD:CANCEL). Take-back receipts live in this device's localStorage only (I:9965, I:9774), so another device or the installed iPhone PWA shows no take-back card. "One tap takes everything back" is withdrawn: L1 deliberately offers, never acts ("Offered, never done for her"). |
+| G-06 | confirmed | yes | The ticket also carries the dose amount and unit (W:1888 `d`, `n`), not only `mn`; /api/dose reads none of them, so all three can go. The page alert names the baby only in multi-baby families and mostly reaches desktop browsers (Chrome on Android refuses the page Notification constructor; the native WebViews do not expose it). tools/dosecal_test.js:62 asserts the calendar SUMMARY names "Amoxicillin 5ml" and flips under Q2. |
+| G-07 | partly | yes | Core holds; production has no copy gate at all (PG and J are not on main). Overstated: PG section 5 already fails hand-written Swift literals in Text(, Button(, Label( and any LiveActivityIntent but NapIntent; the real Live Activity gaps are Swift constants passed as Text(variable) and ActivityKit content-state strings sent by the Worker. StandBy's rules exist only in P3 T6 and spec prose today, not in Swift. J's banned list is now at :147. |
+| G-10 | worse than written | yes (in-app) | The 58.1% figure had no source; recomputed: about 57.8% of month days disagree after 08:00, 88.5% before 08:00 (night feeds). On a first birthday in a non-leap year Home reads "11 months old" (364 or 365 days / 30.44), already in test case A10's inputs. Live in-app today: the topbar's "2 months old" beside Home's "Robin is 3 months 🎉" pill (I:2865, I:4154). The fix must also cover ageString's week band (days < 60). P3 cite is :600. |
+| G-13 | partly | yes | SEQUENCE is already bumped on every export (I:16806). The wired gate `vax-calendar` asserts the bug (tools/vax_calendar_check.js:59 requires `TRIGGER:-P2D`) and must be rewritten with the fix. Copy the antenatal export's guard too (I:9440-9441): -PT39H and no VALARM once that 9 AM has passed (vaxUpcomingVisits keeps a visit due tomorrow). |
+
+### G-01, corrected
+
+/api/dose tests `now - t < iv` against the moment of the tap (W:3365-3378), not against the ticket's due time. A
+reminder fires 30 to 15 minutes before the dose is due, and for an every-X medicine due = last + iv, so a tap on
+arrival always finds the parent's own previous dose and answers `{ ok: true, already: true, at }`; a twice-daily
+medicine almost always does the same (test/dose-membership.test.js:372 locks "nothing written" in). sw.js reads only
+`r.ok` and shows "Dose logged" / "<medName> is on the record." (SW:131-132). So on Chromium web push, "Dose logged"
+with nothing written is the normal result of tapping "Log it" early, partner or not. No second dose is ever recorded;
+the harm is the opposite: the dose given is not on the record, the partner sees it still due, and may give it again.
+The 409 path (W:3404) returns `already` with no `at`.
+
+The audit's fix (a), dropping a reminder when the route's own "within one interval" test is true at send time, would
+silence almost every reminder, because the anchor dose is always less than one interval old. Replacement: anchor
+"already" to this reminder's due time (a dose newer than the previous slot, with tolerance for daily slots), and fail
+open (send on a read error, unlike the route's 503). Fix (b)'s "Already logged / A dose went on the record at 1:55 PM"
+would show the previous dose's time in the common case. Replacement: on any `already` the confirmation reads as not
+logged and opens Cubby, unless the route can show the dose was given for this reminder.
+
+Red tests: in test/dose-membership.test.js, a world with a push.due entry (due = now + 20 min) and a partner's dose 5
+minutes ago asserts no FCM send (red today), with a companion whose only event is the anchor dose at due minus 6 hours
+asserting one send (green today, red on the literal fix (a)); then the same on the emulator tier. In P1 T10's
+test/dose-push-copy.test.js, run sw.js's notificationclick in a vm with action 'dose' and fetch answering
+`{ ok: true, already: true }`, and assert the title is not "Dose logged" (red today).
+
+This is live on production (REMINDERS_LIVE is true on main) and needs its own small change ahead of the widgets
+(sw.js and the dose route), not P1 T10. If it is confirmed as P1, it gets a postmortem in docs/postmortems/.
