@@ -387,7 +387,7 @@ every row is `--surface-2`, except "text on sleep fill", which sits on `--sleep`
 | day | soft fill | `--diaper-soft` | #DDF0EA | #FBF7EF | 1.11 |
 | day | soft fill | `--note-soft` | #EFE9DA | #FBF7EF | 1.13 |
 | day | text on sleep fill | `--on-sleep` | #FFFFFF | #5E6AA8 | 5.12 |
-| day | not yet | `--ink-soft` | #6E635B | #FBF7EF | 5.46 |
+| day | not logged | `--ink-soft` | #6E635B | #FBF7EF | 5.46 |
 | night | soft fill | `--feed-soft` | #3A2E1C | #2E2722 | 1.11 |
 | night | soft fill | `--diaper-soft` | #1E2F2A | #2E2722 | 1.05 |
 | night | soft fill | `--note-soft` | #2C281D | #2E2722 | 1.00 |
@@ -395,7 +395,7 @@ every row is `--surface-2`, except "text on sleep fill", which sits on `--sleep`
 | night | stroke | `--diaper` | #6FBBA8 | #2E2722 | 6.54 |
 | night | stroke | `--note` | #B6A985 | #2E2722 | 6.30 |
 | night | text on sleep fill | `--on-sleep` | #1A1614 | #8E97D4 | 6.44 |
-| night | not yet | `--ink-soft` | #C4B8AB | #2E2722 | 7.55 |
+| night | not logged | `--ink-soft` | #C4B8AB | #2E2722 | 7.55 |
 <!-- WIDGET-PAIRS-END -->
 
 - A soft fill is a tint, never the only carrier of meaning: its ratio to the ground is 1.00 to 1.13, so every tile

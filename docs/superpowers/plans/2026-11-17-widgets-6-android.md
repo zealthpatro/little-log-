@@ -1,5 +1,7 @@
 # Android shell and Glance widgets (P6) Implementation Plan
 
+> **Contract note (F12, roadmap 2.3):** the small widget renders `row.whose` where `by` would go (Android has no ago line: draw "last feed · Robin", or just "last feed" when `whose` is null, never a lone "Robin"). Native `WCopy.fill` substitutes placeholders in ONE pass (baby names are free text; a baby named "{age}" must not be re-substituted), with a fixture named "{age}" in the golden tests (`small-both-name-is-a-placeholder`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the Android shell shippable (a signed AAB that signs in, App Links, no key ever committed) and give it the medium and small widgets, Sleep in place, long-press shortcuts and partner freshness that P3 to P5 give iOS, then end the declared iOS-only window.

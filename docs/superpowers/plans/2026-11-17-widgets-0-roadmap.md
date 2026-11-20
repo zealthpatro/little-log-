@@ -173,9 +173,14 @@ FixtureInput: `{ platform: 'ios'|'android', phase: 'A'|'B', family: 'medium'|'sm
 { baby: id|'both'|null, button?: k, first?: k, second?: k }, cellWidth: number (fractional; Double in Swift and Kotlin),
 now: ms, token: bool, app: AppSnapshot|null, nap: NapState|null, pull: PullSnapshot|null }`. ViewModel: `{ mode:
 'full'|'wordmark'|'message', message: key|null, url: string, header: { name, age, fresh, ask, moment }, rows: [ { baby, label,
-by, value, agoAt: ms|null, day: string|null, a11y: string } ], buttons: [ { k, label, style: 'solid'|'soft', arrow:
+by, whose: string|null, value, agoAt: ms|null, day: string|null, a11y: string } ], buttons: [ { k, label, style: 'solid'|'soft', arrow:
 bool, url: string|null, intent: { action, babyIds, starts?, undo? } | null, a11y, dim: bool } ], line: string|null }`.
 `agoAt` is the anchor the live iOS ago line counts from (null on Android); native tests assert every other field exactly.
+`whose` (F12) is a row's own field, never `by`: it is set only on a small widget set to Both on twins (not siblings), where
+`row.baby` is "Robin and Wren" (`small.twinsLabel`), `row.label` is null, the body url is `?from=widget`, and `whose` is the
+first name of the baby with the newest feed, or null on an exact tie (then `row.a11y` is `a11y.lastFeedBoth`). Every other
+row has `whose: null`. The small Sleep button on those twins reads `small.sleepStart` / `small.sleepStop`, never "Start both".
+Long names: the model returns full names; natives shorten names (measured, tested in P3 and P6) before ever dropping " and ".
 `row.day` carries any fixed second line (the day word over 20 h, "since 2:40 AM" under a running nap). A start intent
 omits `starts`. `url` is the widget body link on 2.7's base: `?baby=<id>&from=widget` for one baby, `?from=widget`
 otherwise, `?go=sleep&baby=<id|both>&from=widget` while a noConnection or notSaved line shows. widget-fixtures.json =

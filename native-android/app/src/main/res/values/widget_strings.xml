@@ -6,6 +6,7 @@
     <string name="w_a11y_feed_for">Feed for {names}, opens Cubby</string>
     <string name="w_a11y_health_for">Health for {names}, opens Cubby</string>
     <string name="w_a11y_last_feed">{name}\'s last feed, {time}</string>
+    <string name="w_a11y_last_feed_both">{names}\'s last feed, {time}</string>
     <string name="w_a11y_last_nappy">{name}\'s last nappy, {time}</string>
     <string name="w_a11y_last_sleep">{name}\'s last sleep, {time}</string>
     <string name="w_a11y_moment_month1">{name} is 1 month old today</string>
@@ -89,6 +90,7 @@
     <string name="w_small_moment_years">{name} · {age} years today</string>
     <string name="w_small_sleep_start">Start</string>
     <string name="w_small_sleep_stop">Stop</string>
+    <string name="w_small_twins_label">{names}</string>
     <string name="w_state_checking">Checking</string>
     <string name="w_status_asleep">Asleep</string>
     <string name="w_status_asleep_now">Asleep now</string>

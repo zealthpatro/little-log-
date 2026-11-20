@@ -39,7 +39,7 @@ function createModel(copy, actions) {
     const app = input.app;
 
     const result = (mode, message, url, header, rows, buttons, line) => ({
-      mode, message, url, header: header || emptyHeader(), rows: rows || [], buttons: buttons || [], line: line || null,
+      mode, message, url, header: header || emptyHeader(), rows: (rows || []).map((r) => Object.assign({ whose: null }, r)), buttons: buttons || [], line: line || null,
     });
     const wordmark = () => result('wordmark', null, BASE + 'from=widget');
 
@@ -143,6 +143,9 @@ function createModel(copy, actions) {
       const t = (m) => (m.last.feed === null ? -Infinity : m.last.feed);
       shown = [t(merged[1]) > t(merged[0]) ? merged[1] : merged[0]];
     }
+    // F12: a small widget set to Both on twins (not siblings) names both babies, shows the newest feed and whose it is.
+    const twinsSmall = isSmall && merged.length === 2 && !!app.twins;
+    const twinsFeedTie = twinsSmall && (merged[0].last.feed === merged[1].last.feed);
     const twinsLayout = !lock && !isSmall && shown.length === 2;
     // The buttons follow the SELECTION, not the one row a small widget draws (D5, spec 6.4): a small widget set to
     // Both shows one row but its buttons and intents still target both babies, as the medium twins widget does.
@@ -220,6 +223,7 @@ function createModel(copy, actions) {
     let url;
     if (failure === 'noConnection' || failure === 'notSaved') url = link('sleep', target);
     else if (moment) url = BASE + 'go=monthcard&baby=' + momentBaby + '&m=' + momentTotal + '&from=widget';
+    else if (twinsSmall) url = BASE + 'from=widget';   // the label names both, so the body opens Home as it is
     else if (shown.length === 1) url = BASE + 'baby=' + shown[0].id + '&from=widget';
     else url = BASE + 'from=widget';
 
@@ -264,7 +268,12 @@ function createModel(copy, actions) {
           }
         }
       } else if (isSmall) {
-        rows.push(feedRow(shown[0], txt('small.lastFeed'), true, shown[0].name));
+        if (twinsSmall) {
+          const r = feedRow(shown[0], null, false, txt('small.twinsLabel', { names: names(merged) }));
+          r.whose = twinsFeedTie ? null : shown[0].name;
+          if (twinsFeedTie) r.a11y = txt('a11y.lastFeedBoth', { names: names(merged), time: timeParts(shown[0].last.feed).said });
+          rows.push(r);
+        } else rows.push(feedRow(shown[0], txt('small.lastFeed'), true, shown[0].name));
       } else if (twinsLayout) {
         shown.forEach((m) => {
           rows.push(m.nap ? runningRow(m, txt('status.asleepSince'), m.name, clock(m.nap.start), null)
@@ -348,13 +357,13 @@ function createModel(copy, actions) {
             };
           } else if (!running.length) {
             btn = {
-              k: 'sleep', label: txt('button.startBoth'), style: 'solid', arrow: false, url: null,
+              k: 'sleep', label: isSmall ? txt('small.sleepStart') : txt('button.startBoth'), style: 'solid', arrow: false, url: null,
               intent: { action: 'start', babyIds: grp.map((m) => m.id) },
               a11y: txt('a11y.startSleepFor', { names: names(grp) }), dim: false,
             };
           } else {
             btn = {
-              k: 'sleep', label: txt(running.length === 2 ? 'button.stopBoth' : 'button.stopSleep'), style: 'solid', arrow: false, url: null,
+              k: 'sleep', label: isSmall ? txt('small.sleepStop') : txt(running.length === 2 ? 'button.stopBoth' : 'button.stopSleep'), style: 'solid', arrow: false, url: null,
               intent: intentStop(running), a11y: txt('a11y.stopSleepFor', { names: names(running) }), dim: false,
             };
           }

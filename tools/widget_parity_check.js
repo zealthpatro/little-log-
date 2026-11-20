@@ -325,10 +325,10 @@ const PAIRS_BEGIN = '<!-- WIDGET-PAIRS-BEGIN -->', PAIRS_END = '<!-- WIDGET-PAIR
 // theme, role, fg token. The background is --surface-2 (the widget ground) except where the role names a fill.
 const PAIR_ROWS = [
   ['day', 'soft fill', '--feed-soft'], ['day', 'soft fill', '--diaper-soft'], ['day', 'soft fill', '--note-soft'],
-  ['day', 'text on sleep fill', '--on-sleep'], ['day', 'not yet', '--ink-soft'],
+  ['day', 'text on sleep fill', '--on-sleep'], ['day', 'not logged', '--ink-soft'],
   ['night', 'soft fill', '--feed-soft'], ['night', 'soft fill', '--diaper-soft'], ['night', 'soft fill', '--note-soft'],
   ['night', 'stroke', '--feed'], ['night', 'stroke', '--diaper'], ['night', 'stroke', '--note'],
-  ['night', 'text on sleep fill', '--on-sleep'], ['night', 'not yet', '--ink-soft'],
+  ['night', 'text on sleep fill', '--on-sleep'], ['night', 'not logged', '--ink-soft'],
 ];
 const pairBg = (role) => (role === 'text on sleep fill' ? '--sleep' : '--surface-2');
 function themeBlock(html, start) {

@@ -1,5 +1,7 @@
 # iOS Widgets Phase A Implementation Plan
 
+> **Contract note (F12, roadmap 2.3):** the small widget renders `row.whose` where `by` would go (after the ago line: "1 hr, 5 min ago · Robin"). Native `WCopy.fill` substitutes placeholders in ONE pass (baby names are free text; a baby named "{age}" must not be re-substituted), with a fixture named "{age}" in the golden tests (`small-both-name-is-a-placeholder`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Put Cubby's medium, small and lock-screen widgets on testers' iPhones through TestFlight, where every tap opens Cubby on the right sheet with the right baby (or Both), fed only by the snapshot the app writes.

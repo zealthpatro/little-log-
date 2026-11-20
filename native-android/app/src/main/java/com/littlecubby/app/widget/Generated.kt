@@ -9,6 +9,7 @@ object WCopy {
     val a11yFeedFor: Int get() = R.string.w_a11y_feed_for
     val a11yHealthFor: Int get() = R.string.w_a11y_health_for
     val a11yLastFeed: Int get() = R.string.w_a11y_last_feed
+    val a11yLastFeedBoth: Int get() = R.string.w_a11y_last_feed_both
     val a11yLastNappy: Int get() = R.string.w_a11y_last_nappy
     val a11yLastSleep: Int get() = R.string.w_a11y_last_sleep
     val a11yMomentMonth1: Int get() = R.string.w_a11y_moment_month1
@@ -92,6 +93,7 @@ object WCopy {
     val smallMomentYears: Int get() = R.string.w_small_moment_years
     val smallSleepStart: Int get() = R.string.w_small_sleep_start
     val smallSleepStop: Int get() = R.string.w_small_sleep_stop
+    val smallTwinsLabel: Int get() = R.string.w_small_twins_label
     val stateChecking: Int get() = R.string.w_state_checking
     val statusAsleep: Int get() = R.string.w_status_asleep
     val statusAsleepNow: Int get() = R.string.w_status_asleep_now
@@ -122,6 +124,7 @@ object WCopy {
         "a11y.feedFor" to R.string.w_a11y_feed_for,
         "a11y.healthFor" to R.string.w_a11y_health_for,
         "a11y.lastFeed" to R.string.w_a11y_last_feed,
+        "a11y.lastFeedBoth" to R.string.w_a11y_last_feed_both,
         "a11y.lastNappy" to R.string.w_a11y_last_nappy,
         "a11y.lastSleep" to R.string.w_a11y_last_sleep,
         "a11y.moment.month1" to R.string.w_a11y_moment_month1,
@@ -205,6 +208,7 @@ object WCopy {
         "small.moment.years" to R.string.w_small_moment_years,
         "small.sleepStart" to R.string.w_small_sleep_start,
         "small.sleepStop" to R.string.w_small_sleep_stop,
+        "small.twinsLabel" to R.string.w_small_twins_label,
         "state.checking" to R.string.w_state_checking,
         "status.asleep" to R.string.w_status_asleep,
         "status.asleepNow" to R.string.w_status_asleep_now,
