@@ -38,10 +38,10 @@
  *   node tools/getstarted_author_check.js --self-test        (asserts the fingerprints are findable)
  */
 const puppeteer = require(__dirname + '/node_modules/puppeteer-core');
+const { waitFor } = require(__dirname + '/../test/helpers/wait-for.js');
 const http = require('http');
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const BASE = process.argv[2];
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const DAY = 86400000, HOUR = 3600000;
 let pass = 0, fail = 0;
 const ok = (n, c, x) => { if (c) { pass++; console.log('  ok   ' + n); } else { fail++; console.log('  FAIL ' + n + (x !== undefined ? '\n         got: ' + JSON.stringify(x) : '')); } };
@@ -92,7 +92,10 @@ if (!BASE) {
   process.exit(2);
 }
 
-const CLOCK = (() => { const d = new Date(); d.setHours(13, 0, 0, 0); return d.getTime(); })();
+/* The DAY is pinned as well as the hour. Today-at-13:00 made the baby's age, her month mark and every
+   "ended N days ago" fixture a function of the date the run started on, so two runs a day apart graded
+   two different households. Wednesday 18 November 2026, 13:00 local, is the household every run sees. */
+const CLOCK = new Date(2026, 10, 18, 13, 0, 0, 0).getTime();
 const OFFSET = CLOCK - Date.now();
 const now = CLOCK;
 
@@ -141,17 +144,76 @@ const history = (author, n, endedDaysAgo) => {
 
   /* Every seen map is wiped between blocks, because the card's first line is hasSeen('tip_getstarted')
      and a dismissal left over from an earlier block would make every assertion below it pass by
-     rendering nothing at all. The retirement latch lives in the same map, so it goes too. */
-  const load = async (s) => {
+     rendering nothing at all. The retirement latch lives in the same map, so it goes too.
+
+     load() used to reload and then sleep 1.4 s, and every block read whatever was on the page after
+     that. Nothing asked whether the reload had produced a booted app at all. The ?e2e=1 boot fills
+     `state` inside store-firebase.js, so a document in which that script did not run is still a page:
+     LL exists, state is the empty default, render() draws the no-baby screen, painted() is null. The
+     run of 17 Nov 2026 (~01:16, machine load ~51) printed exactly that, "with nothing logged the card
+     is up, got: null", and then passed "one real nappy takes it down" and "a second save does not
+     resurrect it" on the same unbooted page, because null is what those two expect. A reload in which
+     store-firebase.js does not run reproduces that run line for line (77 passed, 1 failed, no page
+     errors), and so does a reload that returns before it has run; CPU throttling does not, and nor
+     does the uid carry-over below.
+     So the reload is now followed by a wait for the thing every block needs: a NEW document, booted
+     by the e2e path (LL.role is set there), holding exactly this seed, with the shell painted and the
+     fonts in. A boot that never comes is a failure that says so, never a null.
+
+     And it boots signed OUT, which is what every block assumes before it calls asMember(). asMember()
+     plants a stand-in user on LL.auth, quickUid() files any uid it finds there into cubby-quick-uid,
+     and the reload's own teardown calls quickUid() (visibilitychange -> noteHidden -> stampLastOpen ->
+     lastOpenKey). So the 'local' written below was overwritten on the way out, and block 7's
+     "signed-out parent" booted as uidNana. Signing the old document out first, and checking the new
+     one really is 'local', keeps every block on the premise it is named for. */
+  const retried = [];
+  const bootFacts = () => page.evaluate(() => {
+    const f = { newDoc: !window.__gsOldDoc, readyState: document.readyState, ll: !!window.LL, role: window.LL && window.LL.role };
+    try { f.babies = state.babies.length; f.events = state.events.length; f.view = view; } catch (e) { f.state = String(e.message); }
+    try { f.quickUid = quickUid(); } catch (e) {}
+    f.scroll = !!document.getElementById('scroll'); f.fonts = document.fonts && document.fonts.status;
+    return f;
+  }).catch((e) => ({ unreadable: String(e && e.message) }));
+  const load = async (s, again) => {
     await page.evaluate((x) => {
+      if (window.LL) window.LL.auth = { currentUser: null };   // signed out before the teardown runs
+      window.__gsOldDoc = 1;                                     // the new document will not carry this
       localStorage.setItem('little-log-v1', JSON.stringify(x));
       Object.keys(localStorage).forEach((k) => {
         if (k.indexOf('cubby-theme') === 0 || k.indexOf('cubby-seen-') === 0 || k.indexOf('cubby-last-open') === 0) localStorage.removeItem(k);
       });
       localStorage.setItem('cubby-quick-uid', 'local');
     }, s);
-    await page.reload({ waitUntil: 'networkidle2' });
-    await sleep(1400);
+    // Any app request this reload loses, so a boot that never comes can say why.
+    const lost = [];
+    const onFail = (r) => { if (/\/app\//.test(r.url())) lost.push(r.url().replace(/^https?:\/\/[^/]+/, '') + ' ' + ((r.failure() && r.failure().errorText) || '')); };
+    const onResp = (r) => { if (/\/app\//.test(r.url()) && r.status() >= 400) lost.push(r.url().replace(/^https?:\/\/[^/]+/, '') + ' HTTP ' + r.status()); };
+    page.on('requestfailed', onFail); page.on('response', onResp);
+    try {
+      await page.reload({ waitUntil: 'networkidle2' });
+      const want = { babies: s.babies.length, events: s.events.length };
+      const w = await waitFor(() => page.evaluate((n) => {
+        try {
+          return !window.__gsOldDoc && !!window.LL && window.LL.role === 'owner'
+            && state.babies.length === n.babies && state.events.length === n.events
+            && !!document.getElementById('scroll') && (!document.fonts || document.fonts.status === 'loaded');
+        } catch (e) { return false; }
+      }, want), { timeout: 20000 });
+      if (!w.ok) {
+        const facts = await bootFacts();
+        /* A reload that lost one of the app's own files is the harness's transport, not the product:
+           it is reloaded ONCE, and the verdict line says so. A reload that lost nothing and still did
+           not boot is a failure, because that is the app not opening. */
+        if (lost.length && !again) {
+          retried.push(lost.join(', '));
+          console.log('    note: the reload lost ' + lost.join(', ') + ' and the app never booted ' + JSON.stringify(facts) + '; reloading once more');
+          return await load(s, true);
+        }
+        throw new Error('the reload never booted this seed in 20 s: ' + JSON.stringify(facts) + (lost.length ? ' lost: ' + lost.join(', ') : ''));
+      }
+    } finally { page.off('requestfailed', onFail); page.off('response', onResp); }
+    const who = await page.evaluate(() => quickUid());
+    if (who !== 'local') throw new Error('load() boots a signed-out parent, and this boot is reading as ' + who);
   };
 
   /* Assigned ONTO the existing LL rather than replacing it, because Store is wired through that same
@@ -301,10 +363,11 @@ const history = (author, n, endedDaysAgo) => {
   });
 
   await block('4b. and it is still gone when they come back tomorrow', async () => {
-    /* Re-seeded rather than reloaded in place, because under ?e2e=1 Store.save does not write
-       little-log-v1 back, so a plain reload would replay the SEED and only ever measure the
-       harness. This is the state a returning caregiver actually boots into: the family's history
-       plus the one entry of theirs, stamped by the sync layer on the way up. */
+    /* Re-seeded rather than reloaded in place, because a plain reload would boot whatever the last
+       save left in little-log-v1 (persist() writes it whenever no family is attached, ?e2e=1
+       included), not a state this block chose. This is the state a returning caregiver actually
+       boots into: the family's history plus the one entry of theirs, stamped by the sync layer on
+       the way up. */
     await load(seed({ events: history('uidMama', 40).concat([{ id: 'mine', type: 'diaper', babyId: 'b1', kind: 'wet', time: now - HOUR, authorId: 'uidNana' }]) }));
     await asMember('uidNana', 'caregiver', MAMA, INFO);
     ok('their own stamped entry keeps it retired', (await painted()) === null, await painted());
@@ -465,7 +528,10 @@ const history = (author, n, endedDaysAgo) => {
     await asMember('uidNana', 'caregiver', MAMA, INFO);
     ok('and a joiner\'s unstamped entry retires hers too', (await card()).empty === true, await card());
 
-    // And from scratch, through the real button path, twice.
+    /* And from scratch, through the real button path, twice. The one read in this file with no
+       asMember() after its load(), so it is the signed-out parent itself. Before load() signed the old
+       document out it booted as uidNana, the joiner from the step above, and a build that never showed
+       a signed-out parent the card passed it 78 of 78. */
     await load(seed());
     ok('with nothing logged the card is up', ((await painted()) || []).length === 5, await painted());
     await page.evaluate(() => { saveDiaper('wet'); });
@@ -506,6 +572,9 @@ const history = (author, n, endedDaysAgo) => {
   ok('no page errors throughout', errs.length === 0, errs.slice(0, 3));
   await browser.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
-  console.log(fail ? 'GETSTARTED-AUTHOR: FAIL' : 'GETSTARTED-AUTHOR: PASS');
+  // A reload retried for a lost file is said on the verdict line, the one line the runner keeps.
+  const many = retried.length > 1;
+  const note = retried.length ? ' (' + retried.length + ' reload' + (many ? 's' : '') + ' lost an app file and ' + (many ? 'were' : 'was') + ' reloaded once: ' + retried.join('; ') + ')' : '';
+  console.log((fail ? 'GETSTARTED-AUTHOR: FAIL' : 'GETSTARTED-AUTHOR: PASS') + note);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(2); });
