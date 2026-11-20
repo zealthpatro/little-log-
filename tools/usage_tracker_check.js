@@ -1478,8 +1478,12 @@ const deleteFromApp = (page) => page.evaluate(async () => {
 const goodbyeSeen = (r) => !!r && r.goodbye && r.signedOut && r.overlay && r.top === 'goodbye' && !/account is still here/.test(r.note);
 const LOGIN_LEFT = 'Your private records are deleted, but your account is still here. ';
 const SIGN_IN_TO_FINISH = LOGIN_LEFT + 'Sign in again, then delete it to finish.';
+/* localKeys: this phone's own keys are where they were, read off cubby-member, which every sign-in writes and only the
+   deletion's step 4 (local traces) removes. It used to read little-log-v1, but a phone signed in to a family no longer
+   keeps a copy of what that family holds (store-firebase.js letGoOfRecord, 2026-11-19 post-mortem), so that key is gone
+   whether or not a deletion ran. */
 const signInSheets = (page) => page.evaluate(() => ({ asked: window.__utAuth.reauths, loginDeletes: window.__utAuth.deletes, deleting: window.__cubbyDeleting === true,
-  localCopy: !!localStorage.getItem('little-log-v1') }));
+  localKeys: localStorage.getItem('cubby-member') === '1' }));
 const purgesAsked = (o) => o.local.filter((x) => x.method === 'POST' && /\/api\/account\/purge/.test(x.url)).length;
 
 SECTIONS.S22 = async (b, base, R) => {
@@ -1499,8 +1503,8 @@ SECTIONS.S22 = async (b, base, R) => {
     const r1 = await deleteFromApp(o.page);
     const after = await herRecords(hid, uid), st = await signInSheets(o.page);
     R.ok('S22.door-asked', 'staged: she was asked to sign in again, and closed the sheet', st.asked === 1, st);
-    R.ok('S22.door-kept', 'a sign-in she closes leaves her place in the family and every record where it was, the login and this phone\'s copy too, and asks for no usage purge',
-      allThere(after) && st.loginDeletes === 0 && st.localCopy && purgesAsked(o) === 0, { after, st, purges: purgesAsked(o) });
+    R.ok('S22.door-kept', 'a sign-in she closes leaves her place in the family and every record where it was, the login and this phone\'s own keys too, and asks for no usage purge',
+      allThere(after) && st.loginDeletes === 0 && st.localKeys && purgesAsked(o) === 0, { after, st, purges: purgesAsked(o) });
     R.ok('S22.door-says', 'and the app says "Nothing was deleted", which is now true', r1.said === 'Nothing was deleted', r1);
     R.ok('S22.door-tracked', 'and the tracker was never silenced: the deletion never started', !st.deleting, st);
     const r2 = await deleteFromApp(o.page);
@@ -1551,8 +1555,8 @@ SECTIONS.S22 = async (b, base, R) => {
     const how = await o.page.evaluate(() => ({ native: window.__utAuth.nativeSheets, popups: window.__utAuth.popups, credentials: window.__utAuth.credentials, isNative: window.LL.isNativeApp() }));
     R.ok('S22.native-asked', 'staged: in the iPhone app the door asked with the app\'s own Apple sheet, not a web popup, and she backed out of it',
       planted && how.isNative && how.native === 1 && how.popups === 0 && how.credentials === 0, { planted, how });
-    R.ok('S22.native-kept', 'backing out of the Apple sheet leaves her place, every record, the login and this phone\'s copy, and asks for no purge',
-      allThere(after) && st.loginDeletes === 0 && st.localCopy && purgesAsked(o) === 0, { after, st, purges: purgesAsked(o) });
+    R.ok('S22.native-kept', 'backing out of the Apple sheet leaves her place, every record, the login and this phone\'s own keys, and asks for no purge',
+      allThere(after) && st.loginDeletes === 0 && st.localKeys && purgesAsked(o) === 0, { after, st, purges: purgesAsked(o) });
     R.ok('S22.native-says', 'and the app says "Nothing was deleted" (Apple\'s cancel is read as a cancel)', r1.said === 'Nothing was deleted' && !r1.signedOut, r1);
     const r2 = await deleteFromApp(o.page);
     const gone = await herRecords(hid, uid), st2 = await signInSheets(o.page);
@@ -1963,7 +1967,7 @@ const ALL_MUTANTS = [
   { id: 'kept-signed-in', file: 'app/store-firebase.js', want: ['S22.late-says', 'S23.signed-out', 'S23.log-after-stop', 'S23b.fast-signin-stays'], sections: ['S22', 'S23', 'S23b'],
     edits: [['      if (loginLeft) await signOutAfterStop();\n', '']] },
   { id: 'family-kept-in-memory', file: 'app/store-firebase.js', want: ['S23.forgotten', 'S23.new-family'], sections: ['S23'],
-    edits: [['      applyAppBlob({ settings: units }); state.events = [];\n', '']] },
+    edits: [['    applyAppBlob({ settings: units }); state.events = []; state.activeBabyId = null;\n', '']] }, // dropFamilyFromMemory: every sign-out's forgetting
   /* SAR-3 and SAR-4, each line of that forgetting on its own: the family's settings kept whole (its name and Pro taste
      counts became her new Cubby's own: the line as it was), and its entries kept in memory. */
   { id: 'settings-carried', file: 'app/store-firebase.js', want: ['S23.settings-forgotten', 'S23.new-settings', 'S23.new-name-shown'], sections: ['S23'],

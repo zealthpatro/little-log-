@@ -70,6 +70,7 @@
   var applyingRemote = false;
   var pushTimer = null;
   var unackedEv = {};        // id -> { baseSer, n }: entry writes the server has not acknowledged yet (the outbox, below)
+  var syncUid = null;        // whose family this phone's memory holds (startSync), for a sign-out that lands after auth has gone
   var blobOut = 0;           // blob writes issued and not yet settled
   var outboxSaved = false;   // an outbox for this page is in localStorage now (it is hidden or going away)
   var replayEv = null, replayHold = null; // a stored outbox read at boot, not yet put back by its first snapshot
@@ -1045,6 +1046,8 @@
   };
 
   function teardown() {
+    if (hhRef) leaveFamily(); // before anything below forgets what this phone still owed the family
+    syncUid = null;
     // Sign-out flushed and waited for the push; nothing of this person's is left in the outbox.
     if (auth.currentUser && hhRef) dropOutbox(auth.currentUser.uid, hhRef.id);
     /* The usage tracker (app/cubby-track.js). A deletion that stopped after her usage rows were asked to go
@@ -1304,25 +1307,94 @@
     return s;
   }
 
+  /* The shared blob a brand-new family is given from this phone's own record (little-log-v1). One definition,
+     read by the migration and by letGoOfRecord below, so the two can never disagree about what was copied. */
+  function appFromRecord(s) {
+    return {
+      babies: s.babies || [], settings: sharedSettings(s.settings),
+      milestones: s.milestones || [], meds: s.meds || [],
+      vaccines: s.vaccines || {}, illnesses: s.illnesses || [],
+      photos: s.photos || []
+    };
+  }
   async function buildMigrationPayload() {
     var app = { babies: [], settings: sharedSettings(), milestones: [], meds: [], vaccines: {}, illnesses: [], photos: [] };
     var events = [], photos = {};
     try {
-      var raw = localStorage.getItem('little-log-v1');
+      var raw = localStorage.getItem(LOCAL_RECORD);
       if (raw) {
         var s = JSON.parse(raw);
         if (s) {
-          app.babies = s.babies || []; app.settings = sharedSettings(s.settings);
-          app.milestones = s.milestones || []; app.meds = s.meds || [];
-          app.vaccines = s.vaccines || {}; app.illnesses = s.illnesses || [];
-          app.photos = s.photos || [];
+          app = appFromRecord(s);
           events = s.events || [];
         }
       }
-      var praw = localStorage.getItem('little-log-photos-v1');
+      var praw = localStorage.getItem(LOCAL_PHOTOS);
       if (praw) photos = JSON.parse(praw) || {};
     } catch (e) {}
     return { app: app, events: events, photos: photos };
+  }
+
+  /* ---------- this phone's own record, let go of once a family holds it ----------
+     While no family is attached, persist() keeps the whole state in this phone's own record (little-log-v1,
+     Store.save in app/index.html), beside a pre-Firebase build's photo bytes (little-log-photos-v1), and the
+     first sign-in that makes a family copies both into it (buildMigrationPayload). Nothing let go of them after
+     that copy, so the next account with no family to sign in on this phone was given the same babies, entries
+     and photos, and its screen showed them (docs/postmortems/2026-11-19-pre-sign-in-data-reaches-next-account.md).
+     So whatever a family holds leaves the record: entries and babies by id, photos by id, and each copied part
+     of the shared blob while it still equals what that family was given. Anything a family does not hold stays,
+     so nothing that has not reached the server is lost from the phone; with nothing left, the key goes. The
+     record keeps its format, so an older build on this phone reads what is left as it always did.
+     held: { events: {id: true}, babies: {id: true}, photos: {id: true}, blob: {part: stableStringify} or 'whole' }.
+     'whole' (a family already on this phone, letGoOfHeldHere) lets the copied parts go only when the record is
+     entirely that family's: every entry and baby in it is held there, and it has at least one. */
+  var LOCAL_RECORD = 'little-log-v1', LOCAL_PHOTOS = 'little-log-photos-v1';
+  var RECORD_PARTS = ['settings', 'milestones', 'meds', 'vaccines', 'illnesses', 'photos'];
+  function emptyish(v) { return v == null || v === '' || (typeof v === 'object' && !Object.keys(v).length); }
+  function letGoOfRecord(held) {
+    try {
+      var raw = localStorage.getItem(LOCAL_RECORD), s = raw ? JSON.parse(raw) : null;
+      if (s && typeof s === 'object') {
+        var evs = Array.isArray(s.events) ? s.events : [], bbs = Array.isArray(s.babies) ? s.babies : [];
+        var isHeldEv = function (e) { return !!(e && held.events[String(e.id)]); };
+        var isHeldBaby = function (b) { return !!(b && held.babies[b.id]); };
+        var whole = held.blob === 'whole' && (evs.length + bbs.length) > 0 && evs.every(isHeldEv) && bbs.every(isHeldBaby);
+        var app = appFromRecord(s);
+        RECORD_PARTS.forEach(function (k) {
+          if (!(k in s)) return;
+          if (whole || (held.blob && held.blob !== 'whole' && stableStringify(app[k]) === held.blob[k])) delete s[k];
+        });
+        if (Array.isArray(s.events)) s.events = evs.filter(function (e) { return !isHeldEv(e); });
+        if (Array.isArray(s.babies)) s.babies = bbs.filter(function (b) { return !isHeldBaby(b); });
+        if (s.activeBabyId && held.babies[s.activeBabyId]) delete s.activeBabyId;
+        if (s.timers && typeof s.timers === 'object') Object.keys(held.babies).forEach(function (id) { if (emptyish(s.timers[id])) delete s.timers[id]; });
+        if (Object.keys(s).every(function (k) { return emptyish(s[k]); })) localStorage.removeItem(LOCAL_RECORD);
+        else localStorage.setItem(LOCAL_RECORD, JSON.stringify(s));
+      }
+      var praw = localStorage.getItem(LOCAL_PHOTOS), p = praw ? JSON.parse(praw) : null;
+      if (p && typeof p === 'object') {
+        Object.keys(p).forEach(function (k) { if (held.photos[k]) delete p[k]; });
+        if (!Object.keys(p).length) localStorage.removeItem(LOCAL_PHOTOS); else localStorage.setItem(LOCAL_PHOTOS, JSON.stringify(p));
+      }
+    } catch (e) {}
+  }
+  // What a brand-new family was just given (resolveHousehold): every write of it acknowledged by the server.
+  function heldFromMigration(m) {
+    var held = { events: {}, babies: {}, photos: {}, blob: {} };
+    m.events.forEach(function (e) { if (e) held.events[String(e.id)] = true; });
+    (m.app.babies || []).forEach(function (b) { if (b && b.id) held.babies[b.id] = true; });
+    Object.keys(m.photos).forEach(function (k) { held.photos[k] = true; });
+    RECORD_PARTS.forEach(function (k) { held.blob[k] = stableStringify(m.app[k]); });
+    return held;
+  }
+  /* What the family on this phone holds, once its whole history has been read (hydrateFullHistory). This is
+     how a record an older build copied and kept is let go: the next time its owner opens this build. */
+  function letGoOfHeldHere() {
+    var held = { events: {}, babies: {}, photos: {}, blob: 'whole' };
+    Object.keys(knownEvents).forEach(function (id) { held.events[String(id)] = true; });
+    (state.babies || []).forEach(function (b) { if (b && b.id) held.babies[b.id] = true; });
+    Object.keys(circlePhotoIds).forEach(function (id) { held.photos[id] = true; });
+    letGoOfRecord(held);
   }
 
   async function resolveHousehold(user) {
@@ -1526,6 +1598,8 @@
       if (acqRaw && !snap.exists) userDoc.acq = JSON.parse(acqRaw);
     } catch (e) {}
     await userRef.set(userDoc, { merge: true });
+    // The family is hers now and the server holds all of it: the phone's record lets go of what was copied.
+    letGoOfRecord(heldFromMigration(m));
     return newRef.id;
   }
 
@@ -2995,6 +3069,7 @@
 
   function startSync(hid, user) {
     householdSeen('');
+    syncUid = user.uid;
     hhRef = db.collection('households').doc(hid);
     eventsRef = hhRef.collection('events');
     photosRef = hhRef.collection('photos');
@@ -3176,6 +3251,7 @@
         });
         applyingRemote = false;
         window.cubbyHistoryPending = false;
+        if (gotApp && hhRef && hhRef.id === hid) letGoOfHeldHere(); // all of this family is known now: what it holds leaves the phone's record
         if (booted) rerender(); // even with nothing added: surfaces that were waiting can now answer
       }).catch(function (e) { window.cubbyHistoryPending = false; console.warn('events hydrate', e); });
     }
@@ -3771,13 +3847,41 @@
      into a family that now refuses her).
      tools/usage_tracker_check.js S23 and S23b drive it under this tree's firestore.rules. */
   var UNIT_KEYS = ['unit', 'wUnit', 'hUnit', 'hcUnit', 'tempUnit'];
+  function dropFamilyFromMemory() {
+    var units = {}, was = state.settings || {};
+    UNIT_KEYS.forEach(function (k) { if (was[k] != null) units[k] = was[k]; });
+    applyAppBlob({ settings: units }); state.events = []; state.activeBabyId = null;
+  }
+  /* Every sign-out from a family empties this phone's memory of it the same way: Log out (LL.signOut), a
+     deletion that stopped (above), and a sign-out that arrives from elsewhere (another tab, a revoked session).
+     Only the deletion stop used to; the others left the family's babies and entries in memory, and
+     the next save with no family attached wrote them into this phone's record (persist), where the next account
+     to sign in here with no family of its own was given them: copied into her new family, or, carrying entries
+     the rules refuse her, a sign-in that never finished and a half-made family holding them. Her screen showed
+     them meanwhile (docs/postmortems/2026-11-19-pre-sign-in-data-reaches-next-account.md).
+     A sign-out from elsewhere lands after auth has gone, so LL.signOut's flush never ran: what this phone still
+     owed the family is put into HER outbox first (keyed by her uid and that family; startSync replays it to her
+     alone at her next sign-in), so emptying memory loses nothing of hers. Never for an account being deleted
+     (its own sign-out lands here too): nothing of hers is kept on the phone. */
+  function leaveFamily() {
+    if (!auth.currentUser && syncUid && hhHydrated && !deletingAccount) saveOwedFor(syncUid);
+    if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
+    try { dropFamilyFromMemory(); } catch (e) {}
+  }
+  // The entries pushNow would have written (its own diff), marked owed so buildOutbox carries them, then saved.
+  function saveOwedFor(uid) {
+    try {
+      var cur = {};
+      (state.events || []).forEach(function (e) { cur[e.id] = e; });
+      Object.keys(cur).forEach(function (id) { if (knownEvents[id] !== JSON.stringify(stripMeta(cur[id]))) noteEvWrite(id, knownEvents[id]); });
+      Object.keys(knownEvents).forEach(function (id) { if (!cur[id]) noteEvWrite(id, knownEvents[id]); });
+      var ob = buildOutbox();
+      if (ob) localStorage.setItem(outboxKey(uid, hhRef.id), JSON.stringify(ob));
+    } catch (e) {}
+  }
   async function signOutAfterStop() {
     if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
-    try {
-      var units = {}, was = state.settings || {};
-      UNIT_KEYS.forEach(function (k) { if (was[k] != null) units[k] = was[k]; });
-      applyAppBlob({ settings: units }); state.events = [];
-    } catch (e) {}
+    try { dropFamilyFromMemory(); } catch (e) {}
     teardown();
     try { await auth.signOut(); } catch (e) { console.warn('sign-out after a deletion stopped at the login', e && (e.code || e.message)); }
   }
