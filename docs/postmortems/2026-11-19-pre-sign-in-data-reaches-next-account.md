@@ -6,7 +6,7 @@
   (5554c2e6) to anyone who logged with no family attached; found 2026-11-19; fixed in 1a488e43 and 3da1bdef on the
   release branch (not yet live)
 - **Status:** RESOLVED in code: 1a488e43 (cherry-picked from f9ee6699), and 3da1bdef for a history read that lands Shipped in the release whose service worker is little-log-v379 (one CACHE bump for the whole release, not v372).
-  after a sign-out, on the release branch built on v370 909bd480. The release ships as CACHE v372.
+  after a sign-out, on the release branch built on v370 909bd480. The release ships as CACHE v379.
 - **Author:** Claude session (pre-sign-in leak lane); the review round's conditions folded in by its own lane
 
 > Policy: **every breakage gets a documented, blameless 5-Whys post-mortem.** Blameless = focus on
@@ -42,7 +42,9 @@ fix/local-author-sync (b3236bab) and on v370 (909bd480):
   (`hydrateFullHistory`) can still be out when she signs out. With only the first fix, Nora's older entries came
   back into memory when it landed, a moment after the sign-out had emptied it. The next save with no family
   attached wrote them into the record with Nora's uid, and Pam's sign-in after that was refused and never
-  finished. A late failure of the same read also cleared the next family's `cubbyHistoryPending` (H2).
+  finished. A late failure of the same read also cleared the next family's `cubbyHistoryPending` (H2). The same
+  read landing after the NEXT family is attached (H3, added 2026-11-24) put the first family's older entries into
+  memory under the next account and told her family its history was in while her own read was still out.
 
 ## Impact
 - **What crossed:** babies (name, birth date, sex, routines, doctors, allergies), entries (feeds, nappies,
@@ -71,7 +73,7 @@ fix/local-author-sync (b3236bab) and on v370 (909bd480):
 | 2026-11-19 | (emulator run) | Reproduced red on 909bd480 and b3236bab. |
 | 2026-11-20 | f9ee6699 | Fixed and gated (`next-account-cache-emu`), built on v370. |
 | 2026-11-20 | 1a488e43 | f9ee6699 cherry-picked onto the release branch. Its review finds H (P2), and J and X (see Residual risk). |
-| 2026-11-20 | 3da1bdef | The full history read drops an answer, or a failure, that lands after a sign-out (probes H and H2). S22's companions see deletion step 4 run. CACHE v372. |
+| 2026-11-20 | 3da1bdef | The full history read drops an answer, or a failure, that lands after a sign-out (probes H and H2). S22's companions see deletion step 4 run. CACHE v379. |
 
 ## Root cause
 The phone's record had no owner and no end of life: it was copied into whichever account first made a family
@@ -125,7 +127,7 @@ Four parts in app/store-firebase.js, each seen red on its own:
 4. **For a history read that lands after a sign-out** (`hydrateFullHistory`, 3da1bdef): the read keeps the
    events collection it was asked of and drops its answer once that is not the attached family's: none of it
    goes into memory, `knownEvents` or `serverAuthor`. Its failure clears `cubbyHistoryPending` only for the family
-   it belongs to. Without it, part 2's "every sign-out empties memory" held only until that read landed (H, H2).
+   it belongs to. Without it, part 2's "every sign-out empties memory" held only until that read landed (H, H2, H3).
 
 ### A gate whose premise changed
 `tools/usage_tracker_check.js` S22 (door-kept, native-kept) proved that a deletion stopped at the reauth door
@@ -161,7 +163,7 @@ nothing else), where the checker before 3da1bdef gave 16 passed, 0 failed on the
   signed-in boot of this build cleans whatever that family holds.
 
 ## Measurements
-Re-measured on 2026-11-20 with the test as it ships (89 checks: R, T, U, V, O, D, K, N, H, H2), real client and
+Re-measured on 2026-11-20 with the test as it stood then (89 checks: R, T, U, V, O, D, K, N, H, H2), real client and
 real rules, each `app/store-firebase.js` served from a tree of its own beside the release branch's other files
 (the store is the only app file besides `sw.js` that differs from 909bd480):
 - Red on v370 (909bd480): 59 passed, 30 failed. R (reload): Bea's family held `Baby-of-Ann`, `Ann-before-sign-in`
@@ -180,10 +182,15 @@ real rules, each `app/store-firebase.js` served from a tree of its own beside th
   her family in H.
 - First measured on 2026-11-19 with shorter versions of the test: 24 passed, 13 failed on 909bd480, the same red
   on b3236bab (the local-author hotfix stack), and 68 passed, 0 failed with the fix.
+- Re-measured on 2026-11-24 with H3 added (106 checks): 73 passed, 33 failed on v370 (909bd480); 97 passed,
+  9 failed on 1a488e43, all in H, H2 and H3; 106 passed, 0 failed on 3da1bdef. The three new red lines on both
+  are H3's: Olive's two older entries in memory under Quinn, and Quinn's family told its history was in while her
+  own read was still held. H3's "no family Quinn owns" line stays green on both, because the entries that read
+  brings are marked as already on the server; its matcher finds them in Olive's own family first.
 - Each part reverted on its own turns its own assertions red. Re-run on 2026-11-20 against 3da1bdef with the
   89-check test; M1 to M7 rebuilt from the 2026-11-19 descriptions, M8 and M9 new for part 4:
 
-| Mutation of 3da1bdef | Red (failed of 89) |
+| Mutation of 3da1bdef | Red (failed of 89; M10 and M11 of 106) |
 |---|---|
 | M1 no release at the migration | R: at her family's first snapshot the record still held Ann's baby, entry and photo (1). Everything else stays green because the later cleanup catches it once her history is read, which is why R asks at the first snapshot |
 | M2 sign-out keeps the family in memory (`leaveFamily` without `dropFamilyFromMemory`) | T: Dana's screen showed Cleo's two entries. U: Gail never booted, a household she owns held Hana's baby, and her screen showed Hana's. V: Ivy's unsent entry stayed in memory and landed in Jo's family and on Jo's screen. H: Nora's baby stayed in memory and went into a household Pam owns (13) |
@@ -194,16 +201,18 @@ real rules, each `app/store-firebase.js` served from a tree of its own beside th
 | M7 a deletion's own sign-out saves an outbox | D: `cubby-outbox:<her uid>:<family>` was left on the phone after her account was deleted (1) |
 | M8 the history read's answer taken after a sign-out (no `histRef !== eventsRef` return) | H: Nora's older entries came back into memory and into the record with her uid, Pam's sign-in was refused, and both entries were in memory under Pam (5). H2 green |
 | M9 the history read's failure clears the flag whoever is signed in | H2: Sue's family was told its history was in while her own read was still out (1). H green |
+| M10 (2026-11-24, 106 checks) the answer taken whenever a family is attached (`if (!eventsRef) return`) | H3: Olive's two older entries came into memory under Quinn and stayed there, and Quinn's family was told its history was in while her own read was still out (3). H and H2 green, which is why H3 exists |
+| M11 (2026-11-24, 106 checks) the answer taken whenever anyone is signed in (`if (!auth.currentUser) return`) | The same three H3 lines (3). H and H2 green |
 
 ## Corrective actions
 | # | Action | Type | Status |
 |---|--------|------|--------|
-| 1 | Release the record at the migration, empty memory at every sign-out, release an older build's copy, drop a history read that lands after a sign-out | Fix | DONE 1a488e43 and 3da1bdef (not yet live; the release ships as CACHE v372) |
-| 2 | `next-account-cache-emu` gate in the emulator tier: reload, same tab, next person logs first, sign-out from elsewhere, older build's copy, migration still works, refused migration keeps all, a history read that lands or fails after a sign-out | Prevent | DONE 1a488e43 (H and H2 in 3da1bdef) |
+| 1 | Release the record at the migration, empty memory at every sign-out, release an older build's copy, drop a history read that lands after a sign-out | Fix | DONE 1a488e43 and 3da1bdef (not yet live; the release ships as CACHE v379) |
+| 2 | `next-account-cache-emu` gate in the emulator tier: reload, same tab, next person logs first, sign-out from elsewhere, older build's copy, migration still works, refused migration keeps all, a history read that lands or fails after a sign-out | Prevent | DONE 1a488e43 (H and H2 in 3da1bdef, H3 2026-11-24) |
 | 3 | A fix to one sign-out path lists every `teardown` caller (the `leaveFamily` comment names all three) | Process | DONE (this doc + comment) |
 | 4 | Aggregate count of households that share a baby id or entry id with another household, no content read, to size who was hit | Measure | TODO, founder's call |
 | 5 | Decide what happens to data already copied into another family, and to orphan households (removals from production need the founder's explicit OK) | Decide | TODO, founder |
-| 6 | J: a record left by an older build can still reach the next new account on that phone after its owner JOINS a family. Fix: stamp the record with its owner's uid when she is placed in a family without a migration, and copy only a record with no stamp or her own | Fix | TODO, own lane |
+| 6 | J: a record still on the phone can still reach the next new account on that phone after its owner JOINS a family. Fix: stamp the record with its owner's uid when she is placed in a family without a migration, and copy only a record with no stamp or her own | Fix | TODO, own lane |
 | 7 | Reset `window.LL.householdId` on sign-out | Fix | TODO, small |
 | 8 | Account deletion leaves keys naming her uid on the phone: `cubby-seen-<uid>`, `cubby-teach:<uid>` and `cubby-teach-since-<uid>` (all three seen in case D), and any `cubby-outbox:<uid>:*` written outside the deletion's own sign-out. None is in the purge list. Only her own uid's sign-in ever reads them, so this is leftover data, not a leak. Fix: step 4 removes every key that names her uid | Fix | TODO, own lane |
 | 9 | X: the same as 6 after its owner RETURNS to the family she already has. Same fix and lane as 6 | Fix | TODO, own lane |
@@ -211,12 +220,13 @@ real rules, each `app/store-firebase.js` served from a tree of its own beside th
 
 ## Residual risk (known, not closed by this fix)
 - A phone that migrated under an older build keeps that copy until its owner opens this build signed in.
-- J and X: a record left by an older build can still reach the next new account on that phone after a join (J)
-  or a return to an existing family (X). Both behave the same on v370 (909bd480), so this release does not make
-  them worse. Actions 6 and 9.
+- J and X: a record still on the phone can still reach the next new account on that phone after a join (J)
+  or a return to an existing family (X). Both were reproduced with a record this build wrote, not only with one
+  an older build left. Both behave the same on v370 (909bd480), so this release does not make them worse.
+  Actions 6 and 9.
 - The next sign-in can stay on the loader after a sign-out in one of two open tabs, or with the full history read
   still out. Seen on 909bd480 too. Nothing crosses to the next account in either (the review's two-tab probe, and
-  H and H2 here), and H and H2 assert where the data goes, not that the screen boots. Action 10.
+  H, H2 and H3 here), and H, H2 and H3 assert where the data goes, not that the screen boots. Action 10.
 - What someone logs signed out and never signs in with goes to the next account that makes a family on that
   phone. The app cannot know who logged it. This is the migration working as designed (case K, and U's Gail).
 - Data already copied into another family before this fix stays there until action 5 is decided.
@@ -227,6 +237,9 @@ real rules, each `app/store-firebase.js` served from a tree of its own beside th
 - When a fix closes one door, list every caller of the same path before calling it done.
 - A suite that gives every person her own browser profile cannot see a shared phone. Model the shared device
   on purpose.
+- A probe has to separate the right guard from the weaker ones next to it. H let its late read land with nobody
+  signed in, so "is anyone signed in" passed it as well as "is this the family that asked"; H3 lands it with the
+  next family attached.
 - "Every sign-out empties memory" is only true until a read that was already out lands. Each async answer that
   writes into memory checks it is still for the family that asked.
 - Assert identity. "Booted" must mean booted as this account, into the family the server names.

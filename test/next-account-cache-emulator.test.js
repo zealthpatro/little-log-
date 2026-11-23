@@ -30,9 +30,15 @@
  *      her own that holds her own entry and none of Nora's, with none of Nora's in memory
  *   H2 the same read FAILS after Rosa signed out and Sue's family is attached: Sue's family is still told its
  *      history is loading (window.cubbyHistoryPending), because that failure was about Rosa's family
+ *   H3 Olive signs out with that read still out, Quinn (who has older entries of her own) signs in and her family
+ *      attaches, and only THEN does Olive's read land: none of Olive's entries comes into memory under Quinn or
+ *      into any family Quinn owns, Quinn's own history state is untouched (still loading, memory as it was), and
+ *      Quinn's own read, landing after, still brings her older entries in. H lands its read while nobody is signed
+ *      in, so a guard that only asks "is anyone signed in" or "is any family attached" passes H; H3 is the case
+ *      that needs the read to be for the family attached now.
  *
- * H and H2 hold the read in the SDK, not in the app: the server answers it as usual and the test decides when
- * the answer reaches the app. Neither asserts that the next account's screen boots: after a sign-out with that
+ * H, H2 and H3 hold the read in the SDK, not in the app: the server answers it as usual and the test decides when
+ * the answer reaches the app. None of them asserts that the next account's screen boots: after a sign-out with that
  * read still out it can stay on the loader, on v370 as well, which is its own lane (the post-mortem's residual
  * risk). What they assert is where the first family's data goes.
  *
@@ -611,6 +617,88 @@ const marksOnScreen = (page, mk) => page.evaluate((k) => ({
     const after = await heldReads(P);
     ok('H2 Sue\'s family is still told its history is loading: that failure was about Rosa\'s family', after.pending === true, { before, after });
     // Let anything still held go, so nothing waits on this test after it.
+    await P.evaluate(() => (window.__heldReads || []).forEach((r, i) => { if (r.state === 'held') window.__releaseRead(i, 'land'); }));
+    await sleep(300);
+    await P.browserContext().close();
+  }
+
+  /* ================================================================================================ */
+  console.log('\nH3. Olive signs out with her family\'s full history read still out; Quinn signs in and her family attaches; THEN that read lands');
+  {
+    /* Quinn already has a family with two older entries of her own, logged on another phone: her own full
+       history read then has something to bring, and her history state has something to be disturbed. */
+    const quinnUid = await makeAccount('quinn@nextaccount.test');
+    const Q = await openPhone();
+    await signIn(Q, 'quinn@nextaccount.test');
+    ok('Quinn signs in on her own phone and boots into a family of her own', await booted(Q, quinnUid));
+    const hidQ = await hidOf(quinnUid);
+    const bQ = { id: 'bquinn', name: 'Baby-of-Quinn', birth: Date.now() - 300 * 86400000, sex: 'M', routines: [], doctors: [], allergies: [] };
+    const qOldIds = (await Q.evaluate((b) => {
+      state.babies = [b]; state.activeBabyId = b.id;
+      const ids = [addEvent({ type: 'diaper', kind: 'dirty', time: Date.now() - 190 * 86400000, notes: 'Quinn-old-1' }),
+        addEvent({ type: 'feed', method: 'bottle', amount: 70, time: Date.now() - 220 * 86400000, notes: 'Quinn-old-2' })];
+      persist(); return ids;
+    }, bQ)).map(String);
+    const mkQ = { babyIds: ['bquinn'], babyNames: ['Baby-of-Quinn'], eventIds: qOldIds, notes: ['Quinn-old-1', 'Quinn-old-2'], photoIds: [] };
+    ok('(the matcher finds her baby and both older entries in Quinn\'s own family)',
+      !!(await until(async () => { const m = await marksIn(hidQ, mkQ); return (m.babies.length === 1 && m.events.length === 2) ? m : null; }, 10000)), await marksIn(hidQ, mkQ));
+    await Q.browserContext().close();
+
+    const P = await openPhone();
+    const oliveUid = await makeAccount('olive@nextaccount.test');
+    await signIn(P, 'olive@nextaccount.test');
+    ok('Olive signs in and boots into a family of her own', await booted(P, oliveUid));
+    const hidO = await hidOf(oliveUid);
+    const bO = { id: 'bolive', name: 'Baby-of-Olive', birth: Date.now() - 300 * 86400000, sex: 'F', routines: [], doctors: [], allergies: [] };
+    const oOldIds = (await P.evaluate((b) => {
+      state.babies = [b]; state.activeBabyId = b.id;
+      const ids = [addEvent({ type: 'diaper', kind: 'wet', time: Date.now() - 200 * 86400000, notes: 'Olive-old-1' }),
+        addEvent({ type: 'feed', method: 'bottle', amount: 60, time: Date.now() - 210 * 86400000, notes: 'Olive-old-2' })];
+      persist(); return ids;
+    }, bO)).map(String);
+    const mkO = { babyIds: ['bolive'], babyNames: ['Baby-of-Olive'], eventIds: oOldIds, notes: ['Olive-old-1', 'Olive-old-2'], photoIds: [] };
+    ok('(the matcher finds her baby and both older entries in Olive\'s own family)',
+      !!(await until(async () => { const m = await marksIn(hidO, mkO); return (m.babies.length === 1 && m.events.length === 2) ? m : null; }, 10000)), await marksIn(hidO, mkO));
+    await holdHistoryReads(P);
+    await P.reload({ waitUntil: 'networkidle2', timeout: 45000 }); await ready(P);
+    ok('Olive opens Cubby again, still signed in', await booted(P, oliveUid));
+    const readOf = (h, hid) => h.reads.findIndex((r) => r.path === 'households/' + hid + '/events');
+    const out = await until(async () => { const h = await heldReads(P); return readOf(h, hidO) >= 0 ? h : null; }, 10000);
+    const scr0 = await marksOnScreen(P, mkO);
+    ok('(her family\'s full history read is out, held, when she signs out: her older entries are not in memory yet)',
+      !!out && out.reads.length === 1 && out.reads[0].state === 'held' && out.pending === true && scr0.events.length === 0 && scr0.babies.length === 1, { out, scr0 });
+    ok('Olive taps Log out', await signOut(P));
+    await signIn(P, 'quinn@nextaccount.test');
+    /* Quinn's family is attached when ITS full history read is out: startSync made eventsRef for her events
+       and her first events snapshot asked for the rest. Hers is held too, so her history state can be read
+       before and after Olive's read lands. */
+    const both = await until(async () => { const h = await heldReads(P); return readOf(h, hidQ) >= 0 ? h : null; }, 20000);
+    const nQ = both ? readOf(both, hidQ) : -1, nO = both ? readOf(both, hidO) : -1;
+    ok('(Quinn\'s family is attached in that tab: her own full history read is out, held, and Olive\'s is still held)',
+      !!both && nQ >= 0 && both.reads[nQ].state === 'held' && both.reads[nO].state === 'held' && (await P.evaluate((x) => window.LL.householdId === x, hidQ)), both);
+    const quinnBefore = await P.evaluate(() => ({ pending: window.cubbyHistoryPending, ids: (state.events || []).map((e) => String(e.id)).sort() }));
+    const qScr0 = await marksOnScreen(P, mkQ);
+    ok('(Quinn\'s history is still loading: her older entries are not in memory yet)', quinnBefore.pending === true && qScr0.events.length === 0, { quinnBefore, qScr0 });
+    ok('(the read Olive left behind lands now, with Quinn\'s family attached, and the app has taken its answer)', await heldRead(P, nO, 'land'), await heldReads(P));
+    const late = await marksOnScreen(P, mkO);
+    ok('H3 none of Olive\'s entries comes into memory under Quinn when that read lands', countOf(late) === 0, late);
+    const quinnAfter = await P.evaluate(() => ({ pending: window.cubbyHistoryPending, ids: (state.events || []).map((e) => String(e.id)).sort() }));
+    ok('H3 Quinn\'s own history state is undisturbed: still loading, and memory holds exactly what it held',
+      quinnAfter.pending === true && JSON.stringify(quinnAfter.ids) === JSON.stringify(quinnBefore.ids), { quinnBefore, quinnAfter });
+    // Quinn logs, so a push runs with whatever memory now holds.
+    const qNewId = String(await P.evaluate(() => addEvent({ type: 'diaper', kind: 'wet', time: Date.now() - 60000, notes: 'Quinn-after-the-late-read' })));
+    const qNew = await until(async () => (await adminGet('households/' + hidQ + '/events/' + qNewId)), 10000);
+    ok('(Quinn\'s new entry reaches her family)', !!qNew && qNew.notes === 'Quinn-after-the-late-read', qNew);
+    await sleep(1500); // anything that push would carry has landed
+    const inQ = await marksInOwned(quinnUid, mkO);
+    ok('H3 no family Quinn owns holds any of Olive\'s entries or her baby', inQ.events.length + inQ.babies.length === 0, inQ);
+    ok('(Quinn\'s own history read lands now)', await heldRead(P, nQ, 'land'), await heldReads(P));
+    const qDone = await until(async () => { const m = await marksOnScreen(P, mkQ); return m.events.length === 2 ? m : null; }, 8000);
+    const pendingDone = await P.evaluate(() => window.cubbyHistoryPending);
+    ok('H3 and it still does its work: Quinn\'s two older entries come into memory and her family is told its history is in',
+      !!qDone && pendingDone === false, { qDone: qDone || await marksOnScreen(P, mkQ), pendingDone });
+    const end = await marksOnScreen(P, mkO);
+    ok('H3 and still none of Olive\'s is in memory under Quinn', countOf(end) === 0, end);
     await P.evaluate(() => (window.__heldReads || []).forEach((r, i) => { if (r.state === 'held') window.__releaseRead(i, 'land'); }));
     await sleep(300);
     await P.browserContext().close();
