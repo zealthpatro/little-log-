@@ -5,7 +5,7 @@
 - **Duration:** from 2026-06-06 (320f617a) for a phone holding a pre-Firebase record, widened on 2026-08-23
   (5554c2e6) to anyone who logged with no family attached; found 2026-11-19; fixed in 1a488e43 and 3da1bdef on the
   release branch (not yet live)
-- **Status:** RESOLVED in code: 1a488e43 (cherry-picked from f9ee6699), and 3da1bdef for a history read that lands
+- **Status:** RESOLVED in code: 1a488e43 (cherry-picked from f9ee6699), and 3da1bdef for a history read that lands Shipped in the release whose service worker is little-log-v379 (one CACHE bump for the whole release, not v372).
   after a sign-out, on the release branch built on v370 909bd480. The release ships as CACHE v372.
 - **Author:** Claude session (pre-sign-in leak lane); the review round's conditions folded in by its own lane
 

@@ -7,7 +7,7 @@
 - **Duration:** 2026-10-26 16:07Z (Worker version d1855c05, which carried 6ea571dd) until this fix is
   live. The words that hid it ("Dose logged" for any 200) date from d8337da0 (2026-08-14), but until
   2026-10-26 the route said `already` only for a genuine repeat.
-- **Status:** FIX READY on the release tip, not yet live.
+- **Status:** RESOLVED in 55876b99 and 344f8725, shipped in the release whose service worker is little-log-v379.
 - **Author:** Claude (Opus 5.5), for the founder. The rule that failed was written by the same author.
 
 > Policy: **every breakage gets a documented, blameless 5-Whys post-mortem.** Blameless = focus on

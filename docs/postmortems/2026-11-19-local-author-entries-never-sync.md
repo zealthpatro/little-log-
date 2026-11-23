@@ -3,7 +3,7 @@
 - **Date:** 2026-11-19
 - **Severity:** P0 for the signed-in push path (SILENT DATA LOSS: the refused entry disappears from the parent's own phone); P1 for the first sign-in path (she cannot get in)
 - **Duration:** from 2026-07-09 (the rule that refuses it) until the fix; found 2026-11-19
-- **Status:** RESOLVED (commit ____)  (4eaa425f on fix/local-author-sync, d40eabfe on fix/local-author-sync-v370; the release owner fills in the fold-in commit)
+- **Status:** RESOLVED in d40eabfe, shipped in the release whose service worker is little-log-v379  (4eaa425f on fix/local-author-sync, d40eabfe on fix/local-author-sync-v370; the release owner fills in the fold-in commit)
 - **Author:** Claude session (hotfix lane)
 
 > Policy: **every breakage gets a documented, blameless 5-Whys post-mortem.** Blameless = focus on
