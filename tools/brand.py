@@ -1193,14 +1193,66 @@ def _tree_hashes(d):
     return out
 
 
+# The PNG encoder the committed icons were approved with, by its fingerprint: encoder_fingerprint() on the
+# founder's Mac (arm64, the pinned Pillow 11.3.0, whose wheel bundles zlib-ng 2.2.4). The same pinned Pillow on
+# CI's Linux writes other bytes (brand-py red there since 16 Nov 2026, run 43826307386), so the self-test checks
+# round trips byte for byte only where this matches, and pixel for pixel elsewhere. Nothing in the committed tree
+# can move it: a file re-saved by an optimiser is tree drift and fails, it never switches the mode. If the pinned
+# Pillow is ever changed on purpose, `python3 tools/brand.py --encoder-fingerprint` prints the new value.
+ENCODER_FINGERPRINT = 'c3b382df617767097ac24e06ab6307e0096415852726cae4721a8d766648c76e'
+
+
+def _fingerprint_images(n=1024):
+    """Three fixed images the size of the master, made in code from integers and SHAKE-256 bytes only (no
+    resampling, no floats), varied so every PNG filter and the deflate matcher get work: smooth ramps (Up and
+    Paeth), noise (None), stripes and a checkerboard (long matches), a ring of alpha, and a palette image with
+    transparency as gen_brand_icons.py writes its palette icons. Returns [(image, save options)]."""
+    ramp = bytes((x * 255) // (n - 1) for x in range(n))
+    gx = Image.frombytes('L', (n, n), ramp * n)
+    gy = gx.transpose(Image.Transpose.TRANSPOSE)
+    noise = Image.frombytes('L', (n, n), hashlib.shake_256(b'cubby brand encoder fingerprint').digest(n * n))
+    rows = [bytes(((x // 16 + y // 16) % 2) * 200 + 30 for x in range(n)) for y in range(32)]
+    checker = Image.frombytes('L', (n, n), b''.join(rows[y % 32] for y in range(n)))
+    stripes = Image.frombytes('L', (n, n), b''.join(bytes([((y // 5) % 7) * 36]) * n for y in range(n)))
+    r, g, b = gx.copy(), gy.copy(), ImageChops.add(gx, gy, scale=2)
+    q = n // 2
+    tr, bl, br = (q, 0, n, q), (0, q, q, n), (q, q, n, n)
+    g.paste(noise.crop(tr), tr)
+    r.paste(ImageChops.add_modulo(gx, noise.point(lambda v: v & 31)).crop(tr), tr)
+    b.paste(checker.crop(bl), bl)
+    r.paste(stripes.crop(bl), bl)
+    g.paste(ImageChops.add_modulo(gx, gy.transpose(Image.Transpose.FLIP_LEFT_RIGHT)).crop(br), br)
+    b.paste(ImageChops.multiply(gx, gy).crop(br), br)
+    a = Image.new('L', (n, n), 0)
+    d = ImageDraw.Draw(a)
+    for k in range(16):
+        e = n // 20 + k * 3
+        d.ellipse((e, e, n - 1 - e, n - 1 - e), fill=(k + 1) * 15 + 15)
+    rgba = Image.merge('RGBA', (r, g, b, a))
+    p = Image.frombytes('P', (n, n), ImageChops.add_modulo(ImageChops.add_modulo(checker, gy), noise.point(lambda v: v & 7)).tobytes())
+    p.putpalette([(k * c) % 256 for k in range(256) for c in (37, 91, 151)])
+    return [(rgba, {}), (rgba.convert('RGB'), {}), (p, {'transparency': bytes([255] * 240 + [k * 17 for k in range(16)])})]
+
+
+def encoder_fingerprint():
+    """sha256 of the fingerprint images saved as the generators save PNGs (optimize=True; the palette one with
+    its transparency): which encoder this machine has, decided without reading a single committed file."""
+    import io
+    h = hashlib.sha256()
+    for im, kw in _fingerprint_images():
+        buf = io.BytesIO()
+        im.save(buf, 'PNG', optimize=True, **kw)
+        h.update(buf.getvalue())
+    return h.hexdigest()
+
+
 def png_encoder_reproduces(root=None):
-    """Whether this machine's PNG encoder can make the committed icons' BYTES, decided by evidence: every PNG
-    the registry pins as made from the master (the master itself aside: it is the founder's file, taken byte for
-    byte, never encoded here) is decoded and saved again as the generators save it (optimize, and a palette
-    file's transparency), and must come out as the committed file. Returns (files probed, files that came out
-    other). On the Mac the hashes were approved on, none does. On CI's Linux the same pinned Pillow writes other
-    bytes than the committed ones (brand-py red there since 16 Nov 2026, run 43826307386), so there a round
-    trip can only promise the same pixels. Not the OS's name: the bytes decide."""
+    """Which committed icons and cards are this machine's encoder's own bytes: every PNG the registry pins as
+    made from the master (the master itself aside: it is the founder's file, taken byte for byte, never encoded
+    here) is decoded and saved again as the generators save it (optimize, and a palette file's transparency),
+    and compared with the committed file. Returns (files probed, files that came out other). Where the
+    fingerprint matches (ENCODER_FINGERPRINT) none may: one that does is tree drift (a file re-saved by
+    something other than the generators), and the self-test fails naming it. This never decides the mode."""
     import io
     root = root or ROOT
     probed, other = 0, []
@@ -1219,6 +1271,22 @@ def png_encoder_reproduces(root=None):
         if buf.getvalue() != open(path, 'rb').read():
             other.append(p)
     return probed, other
+
+
+SELFTEST_PREFIX = 'cubby-brandpy-selftest-'
+
+
+def sim_refused(root, env=None):
+    """Whether `set` or `native` must refuse to run here: the simulated encoder (CUBBY_BRAND_SIM_ENCODER, a test
+    switch) is on and this tree is not one of the self-test's scratch trees (a folder made by mkdtemp with
+    SELFTEST_PREFIX in the system temp). A switch left in a shell must never write real icons."""
+    if not (os.environ if env is None else env).get(brand_style.SIM_ENCODER_ENV):
+        return False
+    tmp = os.path.realpath(tempfile.gettempdir())
+    r = os.path.realpath(root)
+    if not r.startswith(tmp + os.sep):
+        return True
+    return not os.path.relpath(r, tmp).split(os.sep)[0].startswith(SELFTEST_PREFIX)
 
 
 def _seen(path):
@@ -1240,7 +1308,7 @@ def _tree_seen(d):
     return OrderedDict((p, _seen(os.path.join(d, p))) for p in _tree_hashes(d))
 
 
-NEVER_DIRS =('.git', 'node_modules', '.wrangler', '_local', 'native-build')
+NEVER_DIRS = ('.git', 'node_modules', '.wrangler', '_local', 'native-build')
 
 
 def _is_checkout(d):
@@ -1880,29 +1948,90 @@ def self_test():
        bool(wrong) and 'pillow' in wrong and '0.0.1' in wrong and 'requirements-brand.txt' in wrong, wrong)
 
     # The same pinned Pillow on CI's Linux writes other PNG bytes than the Mac that made the committed icons,
-    # so they cannot come back byte for byte there. Which promise a round trip keeps is
-    # decided by evidence, never by the OS's name: byte for byte where this machine's encoder makes the committed
-    # bytes, else the same mode, size and decoded pixels, with the registry, URLs and app/sw.js still exact.
-    print('\nthe PNG encoder: does this machine make the committed icons\' bytes?')
-    n_probe, other = png_encoder_reproduces()
-    byte_mode = not other
+    # so they cannot come back byte for byte there. Which promise a round trip keeps is decided by the encoder's
+    # fingerprint (fixed images made in code), never by the OS's name and never by the committed tree: byte for
+    # byte where it is the recorded one, else the same mode, size and decoded pixels, with the registry, URLs and
+    # app/sw.js still exact. Where it is the recorded one, a committed icon that is not the encoder's own bytes is
+    # tree drift and fails here (an optimiser's re-save once moved the whole run to pixel mode instead).
+    print('\nthe PNG encoder: is it the one the committed icons were approved with?')
+    fp = encoder_fingerprint()
+    byte_mode = fp == ENCODER_FINGERPRINT
     MODE = 'byte for byte' if byte_mode else 'pixel for pixel'
-    print('  note %d committed icons saved again from their own pixels as the generators save them: %s, so round trips are checked %s%s' % (
-        n_probe, 'every one is its committed bytes' if byte_mode else '%d come out as other bytes (%s)' % (len(other), ', '.join(other[:4])), MODE,
+    print('  note its fingerprint is %s the recorded one (%s), so round trips are checked %s%s' % (
+        'exactly' if byte_mode else 'NOT', fp[:16], MODE,
         '' if byte_mode else ' (same mode, size and decoded pixels; the registry\'s files, the logo URLs and app/sw.js exactly)'))
+    n_probe, other = png_encoder_reproduces()
+    if byte_mode:
+        ok('and every committed icon and card made from the master is its own bytes (%d saved again from their own pixels as the generators '
+           'save them); one that is not is tree drift, never a reason to check by pixels' % n_probe,
+           n_probe >= 10 and not other, {'tree drift (re-saved by something other than the generators)': other})
+    else:
+        print('  note %d of the %d committed icons and cards come out as other bytes here: %s' % (len(other), n_probe, ', '.join(other)))
+        ok('and the recorded fingerprint is not stale: this encoder does not make every committed icon\'s bytes '
+           '(if it did, it is the approving one and ENCODER_FINGERPRINT wants `brand.py --encoder-fingerprint`)', n_probe >= 10 and bool(other), (n_probe, fp))
     prev = brand_style.simulate_other_encoder()
     try:
+        fp_sim = encoder_fingerprint()
         n_sim, other_sim = png_encoder_reproduces()
     finally:
         Image.register_save('PNG', prev)
-    ok('and the probe can tell: with another encoder (zlib\'s Z_RLE, the same pixels) none of the %d comes back as committed' % n_sim,
+    ok('and the fingerprint can tell: with another encoder (zlib\'s Z_RLE, the same pixels) it is not the recorded one', fp_sim != ENCODER_FINGERPRINT, fp_sim)
+    ok('and so can the drift probe: with that encoder none of the %d comes back as committed' % n_sim,
        n_sim >= 10 and len(other_sim) == n_sim, (n_sim, other_sim))
 
     t0 = time.time()
-    tmp = tempfile.mkdtemp(prefix='cubby-brandpy-selftest-')
+    tmp = tempfile.mkdtemp(prefix=SELFTEST_PREFIX)
     print('\nbrand.py self-test (scratch: %s)' % tmp)
     tracked = [MASTER_REL, REG_REL] + list(from_master_files(load_registry()))
     tree_before = _hash_all(ROOT, tracked)
+
+    # The drift check's companion: the probe must name a committed file whose bytes something else wrote, with
+    # its pixels unchanged (an optimiser's re-save, its pin replaced). Only where the encoder is the approving one.
+    # Staged from scratch: every file is first this encoder's own bytes, pinned so, whatever the tree holds.
+    if byte_mode:
+        import io
+        drift = os.path.join(tmp, 'drift')
+        dreg = load_registry()
+        staged = ['icons/icon-192.png', 'og/faq.png']
+        same_px = True
+        for fam in dreg.get('families', []):
+            for p in list(fam.get('files', {})) if fam.get('from_master') else []:
+                if p == MASTER_REL or not p.endswith('.png'):
+                    continue
+                dst = os.path.join(drift, p)
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                with Image.open(os.path.join(ROOT, p)) as im:
+                    im.load()
+                    kw = {'transparency': im.info['transparency']} if 'transparency' in im.info else {}
+                    buf = io.BytesIO()
+                    im.save(buf, 'PNG', optimize=True, **kw)
+                    open(dst, 'wb').write(buf.getvalue())
+                    if p in staged:
+                        im.save(dst, 'PNG', compress_level=1, **kw)
+                        same_px = same_px and _seen(dst) == _seen(os.path.join(ROOT, p)) and open(dst, 'rb').read() != buf.getvalue()
+                fam['files'][p] = hashlib.sha256(buf.getvalue()).hexdigest()
+        os.makedirs(os.path.join(drift, os.path.dirname(REG_REL)), exist_ok=True)
+        write_registry(dreg, drift)
+        n_d, other_d = png_encoder_reproduces(drift)
+        ok('and that drift check is not blind: %s re-saved at compress_level=1 (the same pixels, other bytes) are the files it names, and only they'
+           % ' and '.join(staged), all(p in from_master_files(dreg) for p in staged) and same_px and n_d >= 10 and sorted(other_d) == sorted(staged),
+           (same_px, n_d, other_d))
+    else:
+        print('  note the drift check\'s companion needs the approving encoder; not run here')
+
+    # A simulated encoder left in a shell must never reach real files: set and native refuse it outside the
+    # self-test's own scratch trees (which run them under it to prove pixel mode).
+    print('\nCUBBY_BRAND_SIM_ENCODER: set and native refuse it outside the self-test\'s scratch')
+    senv = dict(os.environ, **{brand_style.SIM_ENCODER_ENV: 'rle'})
+    refusals = [subprocess.run([sys.executable, os.path.abspath(__file__)] + args, cwd=ROOT, capture_output=True, text=True, env=senv)
+                for args in (['set', os.path.join(tmp, 'no-such-master.png'), '--yes'], ['native', '--check'])]
+    ok('on this tree, `set` and `native --check` with it set are refused before they read or write anything, naming the switch',
+       all(r.returncode == 2 and 'REFUSED' in r.stdout and brand_style.SIM_ENCODER_ENV in r.stdout and 'Nothing was written' in r.stdout for r in refusals),
+       [(r.returncode, (r.stdout + r.stderr)[-300:]) for r in refusals])
+    ok('and only where it is set, and only outside the self-test\'s scratch trees: %s, a tree in this run\'s scratch is allowed' % os.path.basename(tmp),
+       sim_refused(ROOT, senv) and not sim_refused(ROOT, {}) and not sim_refused(os.path.join(tmp, 'mini'), senv)
+       and sim_refused(os.path.join(tempfile.gettempdir(), 'cubby-other-tree'), senv) and sim_refused(os.path.dirname(tmp), senv),
+       [sim_refused(ROOT, senv), sim_refused(ROOT, {}), sim_refused(os.path.join(tmp, 'mini'), senv)])
 
     # -- the production recipe: brand.py draws sizes exactly as gen_brand_icons.py makes them.
     print('\nthe recipe brand.py renders with is the one the generators use')
@@ -2445,7 +2574,7 @@ def self_test():
            and [reg3['master']['sha256'], brand_style.canonical(brand_style.frame_of(reg3)), reg3.get('url_version')]
            == [reg0['master']['sha256'], brand_style.canonical(F0), brand_style.version_for(reg0['master']['sha256'], F0)]
            and not any(h in approved for st in reg3.get('retired') or [] for h in (st.get('sha256') or {}).values()),
-           {'mode': MODE, 'set ok': ok3, 'files not back': diff[:6], 'sw back': sw_text() == sw_t0, 'cache': (swn0, sw_n()), 'native back': nat_back,
+           {'mode': MODE, 'set ok': ok3, 'files not back': diff, 'sw back': sw_text() == sw_t0, 'cache': (swn0, sw_n()), 'native back': nat_back,
             'registry pins back': pins_back, 'registry': [reg3['master']['sha256'][:12], reg3.get('frame'), reg3.get('url_version')], 'out': o3[-600:]})
         # Its companion: one pixel of one round-tripped icon one level off, saved as the generators save, must be
         # the one file this check finds not back, in either mode.
@@ -2479,8 +2608,16 @@ def main(argv=None):
         if tp:
             print('brand.py: ' + tp)
             return 1
+    if argv[:1] in (['set'], ['native']) and sim_refused(ROOT):
+        print('brand.py %s: REFUSED: %s=%s is set, so every PNG would be written with a simulated encoder (a test switch '
+              'for --self-test). Unset it and run again. Nothing was written.' % (argv[0], brand_style.SIM_ENCODER_ENV, os.environ[brand_style.SIM_ENCODER_ENV]))
+        return 2
     if argv[:1] == ['--self-test']:
         return self_test()
+    if argv[:1] == ['--encoder-fingerprint']:
+        fp = encoder_fingerprint()
+        print('%s  (recorded: %s, %s)' % (fp, ENCODER_FINGERPRINT, 'the same' if fp == ENCODER_FINGERPRINT else 'OTHER'))
+        return 0
     ap = argparse.ArgumentParser(prog='brand.py', description='Change Cubby\'s logo. docs/BRAND.md is the one-page flow.')
     sub = ap.add_subparsers(dest='cmd')
     c = sub.add_parser('compare', help='render and measure candidates side by side')

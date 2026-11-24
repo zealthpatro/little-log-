@@ -64,7 +64,8 @@ from PIL import Image, ImageDraw
 # same pixels come out as other bytes, as the same pinned Pillow on CI's Linux writes other bytes than the Mac
 # that made the committed icons (brand-py red there since 16 Nov 2026). tools/brand.py --self-test is run with
 # it to prove its pixel mode without a Linux box (docs/TESTING.md). Every brand writer imports this module,
-# so one switch reaches them all, the self-test's subprocesses included. Never set it for a real `set`.
+# so one switch reaches them all, the self-test's subprocesses included. brand.py set and native refuse to run
+# with it set outside the self-test's own scratch trees (brand.py sim_refused).
 SIM_ENCODER_ENV = 'CUBBY_BRAND_SIM_ENCODER'
 
 
