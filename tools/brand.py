@@ -1193,7 +1193,54 @@ def _tree_hashes(d):
     return out
 
 
-NEVER_DIRS = ('.git', 'node_modules', '.wrangler', '_local', 'native-build')
+def png_encoder_reproduces(root=None):
+    """Whether this machine's PNG encoder can make the committed icons' BYTES, decided by evidence: every PNG
+    the registry pins as made from the master (the master itself aside: it is the founder's file, taken byte for
+    byte, never encoded here) is decoded and saved again as the generators save it (optimize, and a palette
+    file's transparency), and must come out as the committed file. Returns (files probed, files that came out
+    other). On the Mac the hashes were approved on, none does. On CI's Linux the same pinned Pillow writes other
+    bytes than the committed ones (brand-py red there since 16 Nov 2026, run 43826307386), so there a round
+    trip can only promise the same pixels. Not the OS's name: the bytes decide."""
+    import io
+    root = root or ROOT
+    probed, other = 0, []
+    for p in from_master_files(load_registry(root)):
+        path = os.path.join(root, p)
+        if p == MASTER_REL or not p.endswith('.png') or not os.path.exists(path):
+            continue
+        with Image.open(path) as im:
+            im.load()
+            kw = {'optimize': True}
+            if 'transparency' in im.info:
+                kw['transparency'] = im.info['transparency']
+            buf = io.BytesIO()
+            im.save(buf, 'PNG', **kw)
+        probed += 1
+        if buf.getvalue() != open(path, 'rb').read():
+            other.append(p)
+    return probed, other
+
+
+def _seen(path):
+    """A file as it is seen: a PNG's mode, size and decoded pixels (as RGBA, so a palette is read through its
+    colours and transparency), any other file's bytes. None if it is not there."""
+    if not os.path.exists(path):
+        return None
+    if path.endswith('.png'):
+        with Image.open(path) as im:
+            return ('png', im.mode, im.size, hashlib.sha256(im.convert('RGBA').tobytes()).hexdigest())
+    return sha256_file(path)
+
+
+def _seen_all(root, paths):
+    return OrderedDict((p, _seen(os.path.join(root, p))) for p in paths)
+
+
+def _tree_seen(d):
+    return OrderedDict((p, _seen(os.path.join(d, p))) for p in _tree_hashes(d))
+
+
+NEVER_DIRS =('.git', 'node_modules', '.wrangler', '_local', 'native-build')
 
 
 def _is_checkout(d):
@@ -1832,6 +1879,25 @@ def self_test():
     ok('and a pin this machine does not have is refused, naming what it has and what it needs',
        bool(wrong) and 'pillow' in wrong and '0.0.1' in wrong and 'requirements-brand.txt' in wrong, wrong)
 
+    # The same pinned Pillow on CI's Linux writes other PNG bytes than the Mac that made the committed icons,
+    # so they cannot come back byte for byte there. Which promise a round trip keeps is
+    # decided by evidence, never by the OS's name: byte for byte where this machine's encoder makes the committed
+    # bytes, else the same mode, size and decoded pixels, with the registry, URLs and app/sw.js still exact.
+    print('\nthe PNG encoder: does this machine make the committed icons\' bytes?')
+    n_probe, other = png_encoder_reproduces()
+    byte_mode = not other
+    MODE = 'byte for byte' if byte_mode else 'pixel for pixel'
+    print('  note %d committed icons saved again from their own pixels as the generators save them: %s, so round trips are checked %s%s' % (
+        n_probe, 'every one is its committed bytes' if byte_mode else '%d come out as other bytes (%s)' % (len(other), ', '.join(other[:4])), MODE,
+        '' if byte_mode else ' (same mode, size and decoded pixels; the registry\'s files, the logo URLs and app/sw.js exactly)'))
+    prev = brand_style.simulate_other_encoder()
+    try:
+        n_sim, other_sim = png_encoder_reproduces()
+    finally:
+        Image.register_save('PNG', prev)
+    ok('and the probe can tell: with another encoder (zlib\'s Z_RLE, the same pixels) none of the %d comes back as committed' % n_sim,
+       n_sim >= 10 and len(other_sim) == n_sim, (n_sim, other_sim))
+
     t0 = time.time()
     tmp = tempfile.mkdtemp(prefix='cubby-brandpy-selftest-')
     print('\nbrand.py self-test (scratch: %s)' % tmp)
@@ -2168,10 +2234,16 @@ def self_test():
         os.makedirs(os.path.dirname(os.path.join(mini, p)), exist_ok=True)
         shutil.copyfile(os.path.join(mini, CAP_LOGO), os.path.join(mini, p))
     nat0 = OrderedDict((t + '/' + p, h) for t in NATIVE_TOPS for p, h in _tree_hashes(os.path.join(mini, t)).items())
-    ok('the miniature tree has built-app native folders: ios/ from gen_app_icon.py and gen_splash.py, android/ res, both public/ logos (%d files)' % len(nat0),
-       all(r.returncode == 0 for r in seeded) and len(nat0) > 50 and 'ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-iphone-60x60@3x.png' in nat0
-       and all(p in nat0 for p in NATIVE_PUBLIC) and nat0['ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-iphone-60x60@3x.png'] == sha256_file(os.path.join(mini, 'icons/apple-touch-icon.png')),
-       [(r.stdout + r.stderr)[-300:] for r in seeded])
+    # The 60pt@3x AppIcon, made here, is the committed apple-touch icon: its bytes on the machine the hashes were
+    # approved on, its pixels where the encoder makes other bytes (CI's Linux; see png_encoder_reproduces).
+    app60 = 'ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-iphone-60x60@3x.png'
+    same60 = (nat0.get(app60) == sha256_file(os.path.join(mini, 'icons/apple-touch-icon.png')) if byte_mode
+              else _seen(os.path.join(mini, app60)) == _seen(os.path.join(mini, 'icons/apple-touch-icon.png')))
+    ok('the miniature tree has built-app native folders: ios/ from gen_app_icon.py and gen_splash.py, android/ res, both public/ logos (%d files), '
+       'its 60pt@3x AppIcon the apple-touch icon %s' % (len(nat0), MODE),
+       all(r.returncode == 0 for r in seeded) and len(nat0) > 50 and app60 in nat0
+       and all(p in nat0 for p in NATIVE_PUBLIC) and same60,
+       [(r.stdout + r.stderr)[-300:] for r in seeded] + [{'mode': MODE, 'AppIcon 60@3x is the apple-touch icon': same60}])
     fm = list(from_master_files(reg))
     mcards = [l for l in subprocess.run([sys.executable, os.path.join(mini, 'tools', 'card_logo.py'), '--list'], cwd=mini, capture_output=True, text=True).stdout.split('\n') if l]
     h0 = _hash_all(mini, fm + mcards)
@@ -2318,13 +2390,14 @@ def self_test():
        r.returncode == 1 and plant in r.stdout and 'git add' in r.stdout and open(os.path.join(mini, REG_REL), 'rb').read() == reg_bytes, (r.stdout + r.stderr)[-600:])
 
     # -- two masters and two frames, there and back (the founder's frame is a setting: one command each way)
-    print('\nset --frame: two masters and two frames, there and back, byte for byte')
+    print('\nset --frame: two masters and two frames, there and back, %s' % MODE)
     os.remove(os.path.join(mini, plant))
     reg0 = load_registry(mini)
     F0 = brand_style.frame_of(reg0)
     F1 = 'ring' if F0['style'] != 'ring' else 'rim'
     track = fm + mcards + mrefs
     s0, nat_s0 = _hash_all(mini, track), OrderedDict((t + '/' + p, h) for t in NATIVE_TOPS for p, h in _tree_hashes(os.path.join(mini, t)).items())
+    seen0 = None if byte_mode else (_seen_all(mini, track), OrderedDict((t + '/' + p, v) for t in NATIVE_TOPS for p, v in _tree_seen(os.path.join(mini, t)).items()))
     swn0, sw_text = sw_n(), lambda: re.sub(r"little-log-v\d+", 'little-log-vN', open(os.path.join(mini, SW_REL)).read())
     sw_t0 = sw_text()
 
@@ -2350,25 +2423,49 @@ def self_test():
        and len(last.get('sha256', {})) == len(fm) - 2 and F1 in last.get('name', ''), (o2[-1500:], still, last.get('name')))
     if brand_style.canonical(F0) == brand_style.canonical(brand_style.FRAMES[F0['style']]):
         ok3, o3 = run_set(os.path.join(ROOT, MASTER_REL), F0['style'], 'd', '--name', reg0['master'].get('name', ''), '--provenance', reg0['master'].get('provenance', ''))
-        s3 = _hash_all(mini, track)
         reg3 = load_registry(mini)
-        nat_s3 = OrderedDict((t + '/' + p, h) for t in NATIVE_TOPS for p, h in _tree_hashes(os.path.join(mini, t)).items())
-        diff = [p for p in track if s3[p] != s0[p] and p != SW_REL]
-        ok('and the first master in the first frame again: every icon, card, logo URL and native file is back byte for byte (%d + %d files; app/sw.js but for its '
-           'CACHE, v%d -> v%d), the registry pins what it pinned, and no approved hash is left retired' % (len(track), len(nat_s3), swn0, sw_n()),
-           ok3 and not diff and sw_text() == sw_t0 and sw_n() == swn0 + 3 and nat_s3 == nat_s0
-           and [reg3['master']['sha256'], brand_style.canonical(brand_style.frame_of(reg3)), reg3.get('url_version'), from_master_files(reg3)]
-           == [reg0['master']['sha256'], brand_style.canonical(F0), brand_style.version_for(reg0['master']['sha256'], F0), from_master_files(reg0)]
-           and not any(h in set(s0.values()) for st in reg3.get('retired') or [] for h in (st.get('sha256') or {}).values()),
-           {'set ok': ok3, 'files not back': diff[:6], 'sw back': sw_text() == sw_t0, 'cache': (swn0, sw_n()), 'native back': nat_s3 == nat_s0,
-            'registry': [reg3['master']['sha256'][:12], reg3.get('frame'), reg3.get('url_version')], 'out': o3[-600:]})
+
+        def back():
+            """What did not come back: (files, native back, registry pins back, the hashes approved now)."""
+            s3 = _hash_all(mini, track)
+            nat_s3 = OrderedDict((t + '/' + p, h) for t in NATIVE_TOPS for p, h in _tree_hashes(os.path.join(mini, t)).items())
+            if byte_mode:
+                return ([p for p in track if s3[p] != s0[p] and p != SW_REL], nat_s3 == nat_s0,
+                        from_master_files(reg3) == from_master_files(reg0), set(s0.values()))
+            seen3 = _seen_all(mini, track)
+            nat_seen3 = OrderedDict((t + '/' + p, v) for t in NATIVE_TOPS for p, v in _tree_seen(os.path.join(mini, t)).items())
+            fm3 = from_master_files(reg3)
+            return ([p for p in track if seen3[p] != seen0[0][p] and p != SW_REL], nat_seen3 == seen0[1],
+                    list(fm3) == list(from_master_files(reg0)) and all(fm3[p] == s3[p] for p in fm3), set(s3.values()) | set(fm3.values()))
+        diff, nat_back, pins_back, approved = back()
+        ok('and the first master in the first frame again: every icon, card, logo URL and native file is back %s (%d + %d files; app/sw.js but for its '
+           'CACHE, v%d -> v%d), the registry %s, and no approved hash is left retired'
+           % (MODE, len(track), len(nat_s0), swn0, sw_n(), 'pins what it pinned' if byte_mode else 'pins the same files, at the bytes now in the tree'),
+           ok3 and not diff and sw_text() == sw_t0 and sw_n() == swn0 + 3 and nat_back and pins_back
+           and [reg3['master']['sha256'], brand_style.canonical(brand_style.frame_of(reg3)), reg3.get('url_version')]
+           == [reg0['master']['sha256'], brand_style.canonical(F0), brand_style.version_for(reg0['master']['sha256'], F0)]
+           and not any(h in approved for st in reg3.get('retired') or [] for h in (st.get('sha256') or {}).values()),
+           {'mode': MODE, 'set ok': ok3, 'files not back': diff[:6], 'sw back': sw_text() == sw_t0, 'cache': (swn0, sw_n()), 'native back': nat_back,
+            'registry pins back': pins_back, 'registry': [reg3['master']['sha256'][:12], reg3.get('frame'), reg3.get('url_version')], 'out': o3[-600:]})
+        # Its companion: one pixel of one round-tripped icon one level off, saved as the generators save, must be
+        # the one file this check finds not back, in either mode.
+        mut = 'icons/apple-touch-icon.png'
+        with Image.open(os.path.join(mini, mut)) as im:
+            im.load()
+            im = im.copy()
+        c = im.getpixel((90, 90))
+        im.putpixel((90, 90), tuple([(c[0] + 1) % 256] + list(c[1:])))
+        im.save(os.path.join(mini, mut), 'PNG', optimize=True)
+        diff_m = back()[0]
+        ok('and that check is not blind: with one pixel of %s one level off, it finds that file not back, and only it (%s)' % (mut, MODE),
+           mut in track and mut not in diff and sorted(diff_m) == sorted(diff + [mut]), (diff, diff_m))
     else:
         print('  note the registry\'s frame is tuned by hand (%s), so --frame cannot name it: the way back is not checked' % brand_style.canonical(F0))
     ok('the real tree is still untouched', _hash_all(ROOT, tracked) == tree_before)
 
     shutil.rmtree(tmp, ignore_errors=True)
     print('\n%d passed, %d failed  (%.0fs)' % (passed[0], failed[0], time.time() - t0))
-    print('BRAND-PY: ' + ('FAIL' if failed[0] else 'PASS') + '\n')
+    print('BRAND-PY: ' + ('FAIL' if failed[0] else 'PASS') + ' (round trips %s)\n' % MODE)
     return 1 if failed[0] else 0
 
 

@@ -60,6 +60,33 @@ from collections import OrderedDict
 
 from PIL import Image, ImageDraw
 
+# TEST ONLY: CUBBY_BRAND_SIM_ENCODER=rle makes every PNG any brand tool writes deflate with Z_RLE, so the
+# same pixels come out as other bytes, as the same pinned Pillow on CI's Linux writes other bytes than the Mac
+# that made the committed icons (brand-py red there since 16 Nov 2026). tools/brand.py --self-test is run with
+# it to prove its pixel mode without a Linux box (docs/TESTING.md). Every brand writer imports this module,
+# so one switch reaches them all, the self-test's subprocesses included. Never set it for a real `set`.
+SIM_ENCODER_ENV = 'CUBBY_BRAND_SIM_ENCODER'
+
+
+def simulate_other_encoder():
+    """Make every PNG this process saves deflate with Z_RLE (same pixels, other bytes). Returns the save
+    handler it replaced, so a caller can put it back with Image.register_save('PNG', it)."""
+    from PIL import PngImagePlugin
+    Image.preinit()
+    before = Image.SAVE['PNG']
+
+    def _rle_png_save(im, fp, filename):
+        im.encoderinfo = dict(im.encoderinfo, compress_type=3)        # zlib's Z_RLE strategy
+        return PngImagePlugin._save(im, fp, filename)
+    Image.register_save('PNG', _rle_png_save)
+    return before
+
+
+if os.environ.get(SIM_ENCODER_ENV):
+    if os.environ[SIM_ENCODER_ENV] != 'rle':
+        raise SystemExit('%s=%r: the only simulated encoder is "rle"' % (SIM_ENCODER_ENV, os.environ[SIM_ENCODER_ENV]))
+    simulate_other_encoder()
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REG_REL = 'tools/brand-images.json'
 
