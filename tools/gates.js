@@ -47,6 +47,9 @@ const TREE = [
   /* Health copy: no reviewer notes in a served page or its JSON-LD, no other country's crisis line on a
      country's page, and the rewritten health FAQs held in lockstep with their JSON-LD. Each staged red first. */
   { name: 'health-copy',    cmd: ['node', 'tools/health_copy_check.js', '--self-test'] },
+  /* Health caution: every MEDICAL article carries the one caution under its title and links an official
+     source in its sources list (docs/HEALTH-COPY-RULES.md); NON-MEDICAL ones carry the general line. */
+  { name: 'health-caution', cmd: ['node', 'tools/health_caution_check.js', '--self-test'] },
   { name: 'claude-md',      cmd: ['node', 'tools/claudemd_check.js', '--self-test'] },
   { name: 'hooks',          cmd: ['node', 'tools/hooks_check.js', '--self-test'] },
   { name: 'harness',        cmd: ['node', 'tools/harness_check.js', '--self-test'] },
