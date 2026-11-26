@@ -44,6 +44,9 @@ const onlyMatch = (name) => ONLY.split(',').filter(Boolean).some((x) => name.inc
 // Gates that need a browser get `url`; the runner substitutes the real base URL it started.
 const TREE = [
   { name: 'seo',            cmd: ['python3', 'tools/seo_check.py'] },
+  /* Health copy: no reviewer notes in a served page or its JSON-LD, no other country's crisis line on a
+     country's page, and the rewritten health FAQs held in lockstep with their JSON-LD. Each staged red first. */
+  { name: 'health-copy',    cmd: ['node', 'tools/health_copy_check.js', '--self-test'] },
   { name: 'claude-md',      cmd: ['node', 'tools/claudemd_check.js', '--self-test'] },
   { name: 'hooks',          cmd: ['node', 'tools/hooks_check.js', '--self-test'] },
   { name: 'harness',        cmd: ['node', 'tools/harness_check.js', '--self-test'] },
