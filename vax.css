@@ -86,7 +86,7 @@ footer.src a{color:var(--faint)}
 @media(max-width:640px){h1{font-size:27px}.lede{font-size:17px}th,td{padding:9px 9px;font-size:13px}}
 
 /* A11y: visible keyboard focus everywhere (DESIGN.md) */
-a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--pump);outline-offset:2px;border-radius:4px}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--pink);outline-offset:2px;border-radius:4px}
 /* Breadcrumbs: a visible trail on deep pages, mirrors the BreadcrumbList JSON-LD. In vax.css
    (loaded by every page) so it works on articles, vaccine pages and marketing alike. */
 .crumbs{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px;font-weight:700;line-height:1.5;margin:0 0 14px;color:var(--soft,#6E635B)}

@@ -25,7 +25,11 @@ const path = require('path');
 const BASE = process.argv.find((a) => a.startsWith('http')) || 'http://localhost:8080';
 const SELFTEST = process.argv.includes('--self-test');
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const PAGES = ['/', '/pregnancy/', '/features/', '/how-it-works/', '/why/', '/pricing/', '/faq/', '/vaccination-schedule/in/'];
+const PAGES = ['/', '/pregnancy/', '/features/', '/how-it-works/', '/why/', '/pricing/', '/faq/', '/vaccination-schedule/in/',
+  /* The trust pages. On 2026-11-16 an audit measured "Start free" here at 1.07:1: these five loaded
+     site.css alone, and site.css borrows every token (--pink, --ink, the fonts) from vax.css. The
+     gate never visited them, so it stayed green the whole time. */
+  '/privacy/', '/about/', '/terms/', '/refund/', '/contact/'];
 /* The four selectors that were red, named so their status is legible in the output rather than
    buried in a count. */
 const NAMED = ['.hx-eyebrow', '.hx-more a', '.nav-cta', '.hero-cta', '.hx-bigcta'];
@@ -129,6 +133,26 @@ if (SELFTEST) {
       if (r < need) pageFails.push(`${r} < ${need} "${row.txt}" ${row.px}px/${row.w}${row.tags.length ? ' ' + row.tags.join(',') : ''}`);
     }
     if (pageWorst.r < worst.r) worst = { page: p, ...pageWorst };
+
+    /* The keyboard focus ring (SC 1.4.11, 3:1 against what is next to it). A real Tab press, so
+       :focus-visible applies; the ring sits OUTSIDE the element, so it is judged against the
+       element's surroundings, not its own fill. On 2026-11-16 it was --pump #C97FA0 at ~2.9 on cream. */
+    await page.keyboard.press('Tab');
+    const ring = await page.evaluate(() => {
+      const parse = (c) => { const m = String(c).match(/[\d.]+/g); return m ? m.slice(0, 4).map(Number) : null; };
+      const el = document.activeElement; if (!el || el === document.body) return null;
+      const cs = getComputedStyle(el);
+      if (cs.outlineStyle === 'none' || !parseFloat(cs.outlineWidth)) return { none: true, tag: el.tagName };
+      let bg = parse(getComputedStyle(document.body).backgroundColor) || [255, 255, 255];
+      for (let n = el.parentElement; n && n !== document.documentElement; n = n.parentElement) {
+        const c = parse(getComputedStyle(n).backgroundColor);
+        if (c && (c[3] === undefined || c[3] >= 1)) { bg = c; break; }
+      }
+      return { fg: parse(cs.outlineColor).slice(0, 3), bg: bg.slice(0, 3), txt: (el.textContent || '').trim().slice(0, 20) };
+    });
+    if (!ring) bad(`${p} Tab focused nothing`);
+    else if (ring.none) bad(`${p} the first focused ${ring.tag} shows no outline`);
+    else { const rr = ratio(ring.fg, ring.bg); if (rr >= 3) ok(`${p} focus ring ${rr}:1 on "${ring.txt}"`); else bad(`${p} focus ring ${rr} < 3 on "${ring.txt}"`); }
     if (pageFails.length) bad(`${p} ${pageFails.length} below AA: ${pageFails.slice(0, 3).join(' · ')}`);
     else ok(`${p} every measured text clears AA (worst ${pageWorst.r} "${pageWorst.txt}")`);
   }
