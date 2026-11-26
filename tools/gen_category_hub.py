@@ -174,6 +174,7 @@ def build(slug):
   <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span class="sep" aria-hidden="true">›</span><a href="/articles/">Articles</a><span class="sep" aria-hidden="true">›</span><span class="cur">{h["h1"]}</span></nav>
   <h1>{h["h1"]}</h1>
   <p class="art-meta">{len(arts)} guides · {h["crumb"]}</p>
+  <div class="art-caution" role="note">Please check with your own doctor before acting on any health information, including what you read here. Information online can never replace a doctor who knows you and your baby. In an emergency, call your local emergency number straight away.</div>
 
   <p>{h["intro"]}</p>
 

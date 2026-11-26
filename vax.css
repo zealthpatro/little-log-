@@ -83,6 +83,11 @@ footer.src a{color:var(--faint)}
 .article ul,.article ol{margin:0 0 16px;padding-left:22px}
 .article li{margin:7px 0;line-height:1.6;color:#3a322c}
 .article strong{color:var(--ink)}
+/* Health caution: one note under every health article's title (docs/HEALTH-COPY-RULES.md,
+   tools/health_caution_check.js). Calm, not an alarm: note tones, ink text, wraps at 320px. */
+.art-caution{background:var(--note-soft);border:1px solid var(--line);border-left:4px solid var(--note);
+  border-radius:var(--radius-xs);padding:12px 14px;margin:0 0 20px;font-size:15px;line-height:1.55;
+  font-weight:600;color:var(--ink);overflow-wrap:break-word}
 @media(max-width:640px){h1{font-size:27px}.lede{font-size:17px}th,td{padding:9px 9px;font-size:13px}}
 
 /* A11y: visible keyboard focus everywhere (DESIGN.md) */
