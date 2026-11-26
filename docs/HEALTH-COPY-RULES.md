@@ -14,8 +14,10 @@ docs/health-caution-scope.md) and to health lines anywhere on the site.
 3. **List the sources.** Every MEDICAL article links its official sources in a sources list at the end
    (footer.src or a "Sources" section). Charities, research papers and news are welcome as extra reading,
    but they do not count as the source.
-4. **No claims of review.** Never say or imply a doctor, nurse or expert reviewed a page unless one did and
-   the founder has said so. Our pages are summaries of official guidance, nothing more.
+4. **No new review claims without a recorded sign-off.** Never add a line that says or implies a doctor,
+   nurse or expert reviewed a page unless one did and the sign-off is recorded. The existing "Reviewed
+   <date> by the Cubby editorial team" bylines stay exactly as they are: the team exists (founder, 27 Nov
+   2026). Our pages are summaries of official guidance.
 5. **The caution, word for word, under the title:**
    "In an emergency, call your local emergency number straight away. For anything else, please check
    with your own doctor before acting on health information, including what you read here. Information
@@ -24,10 +26,14 @@ docs/health-caution-scope.md) and to health lines anywhere on the site.
    wait before calling for help or starting first aid. The words name no baby, so they fit loss, fertility
    and pregnancy pages too. The same words close the page if it has a bottom
    disclaimer. NON-MEDICAL articles carry "This is general information. Rules change, so check with the
-   official body for your country."
+   official body for your country." PRODUCT pages (a pure Cubby product page with no health guidance,
+   listed in `product` in tools/health_caution_scope.json) carry neither line. A product page that shows
+   a dose, a temperature or when to call a doctor is MEDICAL.
 6. **Voice.** DESIGN.md §A1 and §A7: warm, brief, second person, sentence case, no em-dashes.
 
 The gate: `node tools/health_caution_check.js --self-test` (wired in tools/gates.js). It checks the words,
 the place, and that a sources list links an official host. It cannot check that a page says only what its
 source says; that is a reading job for whoever edits the page. `--apply` puts the caution on every page
 in scope; `--write-doc` refreshes the scope list after you change tools/health_caution_scope.json.
+`sourcesGap` is frozen: `sourcesGapPin` pins its count and hash and the gate caps it, so a page can only
+leave the list (once it links an official source), never join it.
