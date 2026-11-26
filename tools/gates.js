@@ -195,7 +195,10 @@ const TREE = [
   /* The funnel: derivation, Worker, client, and the plan they all answer to. Each proven red. */
   { name: 'funnel-core',    cmd: ['node', 'test/funnel-core.test.js'] },
   { name: 'funnel-worker',  cmd: ['node', 'test/funnel-worker.test.js'] },
-  { name: 'native-deeplink', cmd: ['node', 'test/native-deeplink.test.js'] },   // the native wrapper keeps a token invite link
+  /* The native wrapper routes each link once per open (getLaunchUrl answers with the process's LAST link on
+     every page load; a sign-in link looped on it, 16 Nov 2026) and keeps a token invite link. --self-test
+     first turns every rule red on a mutated copy of app/native-bridge.js. */
+  { name: 'native-deeplink', cmd: ['node', 'test/native-deeplink.test.js', '--self-test'] },
   { name: 'sender-name', cmd: ['node', 'test/sender-name.test.js'] },   // a sender's own name never reads as an address or a claim
   { name: 'funnel-steps',   cmd: ['node', 'tools/funnel_steps_check.js', 'url'] },
   /* The plan, both allowlists and the App Store answers agree (admin spec §14 tracking-plan, extended).
@@ -365,6 +368,7 @@ const EMU_GATES = [
   { name: 'invite-consent', self: ['node', 'test/invite-consent.test.js'] },  // a newcomer is asked before joining
   { name: 'invite-cleanup', self: ['node', 'test/invite-cleanup.test.js'] },  // the one-off cleanup closes every lingering way back in
   { name: 'ios-signin', self: ['node', 'test/ios-signin-code.test.js'] },       // the installed iOS app signs in by code, in its own container
+  { name: 'native-signin-link', self: ['node', 'test/native-signin-link.test.js'] }, // the email's link signs her in to the iPhone app once, nothing asked (real Auth emulator)
   { name: 'circle-manage', self: ['node', 'test/circle-manage.test.js'] },    // remove/cancel tap through, a removal closes every live link
   { name: 'signin-claim-auth', self: ['node', 'test/signin-claim-auth-emu.test.js'] }, // claiming an unproven account keeps HER one account (real Auth emulator)
   { name: 'next-account-cache-emu', self: ['node', 'test/next-account-cache-emulator.test.js'] }, // what one person logged before signing in never reaches the next account on that phone (real client, real rules)
