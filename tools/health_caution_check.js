@@ -38,9 +38,11 @@ const ROOT_DEFAULT = path.join(__dirname, '..');
 const SCOPE_REL = 'tools/health_caution_scope.json';
 const DOC_REL = 'docs/health-caution-scope.md';
 
-const CAUTION = 'Please check with your own doctor before acting on any health information, including what you read here. ' +
-  'Information online can never replace a doctor who knows you and your baby. ' +
-  'In an emergency, call your local emergency number straight away.';
+/* Emergency line first, and no "your baby", so the same words fit loss, fertility and pregnancy pages
+   (root decision, 27 Nov 2026). */
+const CAUTION = 'In an emergency, call your local emergency number straight away. ' +
+  'For anything else, please check with your own doctor before acting on health information, including what you read here. ' +
+  'Information online can never replace a doctor who knows you.';
 const GENERAL = 'This is general information. Rules change, so check with the official body for your country.';
 const CAUTION_HTML = `<div class="art-caution" role="note">${CAUTION}</div>`;
 

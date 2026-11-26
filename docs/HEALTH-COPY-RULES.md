@@ -17,11 +17,12 @@ docs/health-caution-scope.md) and to health lines anywhere on the site.
 4. **No claims of review.** Never say or imply a doctor, nurse or expert reviewed a page unless one did and
    the founder has said so. Our pages are summaries of official guidance, nothing more.
 5. **The caution, word for word, under the title:**
-   "Please check with your own doctor before acting on any health information, including what you read
-   here. Information online can never replace a doctor who knows you and your baby. In an emergency, call
-   your local emergency number straight away."
-   The last sentence is the one that matters on emergency pages: nothing on a page may make a parent wait
-   before calling for help or starting first aid. The same words close the page if it has a bottom
+   "In an emergency, call your local emergency number straight away. For anything else, please check
+   with your own doctor before acting on health information, including what you read here. Information
+   online can never replace a doctor who knows you."
+   The emergency line comes first because it is the one that matters: nothing on a page may make a parent
+   wait before calling for help or starting first aid. The words name no baby, so they fit loss, fertility
+   and pregnancy pages too. The same words close the page if it has a bottom
    disclaimer. NON-MEDICAL articles carry "This is general information. Rules change, so check with the
    official body for your country."
 6. **Voice.** DESIGN.md §A1 and §A7: warm, brief, second person, sentence case, no em-dashes.
