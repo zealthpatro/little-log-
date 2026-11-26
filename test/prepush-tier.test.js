@@ -106,19 +106,23 @@ ok('and prints the reason in the push output', /a word in a heading, nothing a t
 /* 5. A new branch: remote sha all zeros, judged from the merge-base with origin/main. */
 git(['checkout', '-q', '-b', 'feature', root]);
 const feat = commit({ 'worker.js': 'w\n', 'test/worker-routes.test.js': 'x\n' }, 'worker + test');
-r = hook('refs/heads/feature ' + feat + ' refs/heads/feature ' + ZERO + '\n');
+r = hook('refs/heads/feature ' + feat + ' refs/heads/main ' + root + '\n');
 ok('a new branch touching worker.js runs the emulator tier', r.code === 0 && r.calls.length === 1 && r.calls[0].join(' ') === '--emulator', r.out);
 
 /* 6. A gate fails: the push stops. */
+r = hook('refs/heads/feature ' + feat + ' refs/heads/feature ' + ZERO + '\n');
+ok('a branch push (not main) runs only the Chrome-free gates, even when it touches worker.js', r.code === 0 && r.calls.length === 1 && r.calls[0].join(' ') === '--no-browser', JSON.stringify(r.calls) + '\n' + r.out);
+r = hook('refs/heads/feature ' + feat + ' refs/heads/feature ' + ZERO + '\n', { STUB_GATES_FAIL: '1' });
+ok('and a failing gate still stops a branch push', r.code === 1 && /Push stopped: a gate failed/.test(r.out), r.out);
 r = hook(line(docs), { STUB_GATES_FAIL: '1' });
 ok('a failing gate still stops the push', r.code === 1 && /Push stopped: a gate failed/.test(r.out), r.out);
 
 /* 6b. java must RUN, not merely exist. On a Mac /usr/bin/java is Apple's stub, there with or without a JDK,
    so the old `command -v java` guard never refused anything there. */
 const stubPath = path.join(JAVA_STUB, 'bin') + path.delimiter + PATH0;
-r = hook('refs/heads/feature ' + feat + ' refs/heads/feature ' + ZERO + '\n', { PATH: stubPath });
+r = hook('refs/heads/feature ' + feat + ' refs/heads/main ' + root + '\n', { PATH: stubPath });
 ok('an emulator-tier push where java is only a stub that cannot run is refused, before any gate', r.code === 1 && r.calls.length === 0 && /does not run/.test(r.out), r.out);
-r = hook('refs/heads/feature ' + feat + ' refs/heads/feature ' + ZERO + '\n', { JAVA_HOME: JAVA_STUB });
+r = hook('refs/heads/feature ' + feat + ' refs/heads/main ' + root + '\n', { JAVA_HOME: JAVA_STUB });
 ok('and so is one whose JAVA_HOME holds a java that cannot run (the java the suites would use)', r.code === 1 && r.calls.length === 0 && /does not run/.test(r.out), r.out);
 r = hook(line(docs), { PATH: stubPath });
 ok('a tree-tier push never asks for java', r.code === 0 && r.calls.length === 1 && r.calls[0].length === 0, r.out);
@@ -127,7 +131,7 @@ ok('a tree-tier push never asks for java', r.code === 0 && r.calls.length === 1 
    security push of Nov 2026 died after 56 minutes on exactly this, when the suites that need it were
    finally reached. A docs-only push is refused too, because several tree gates load firebase. */
 fs.renameSync(path.join(W, 'test', 'node_modules'), path.join(W, 'test', 'node_modules-away'));
-r = hook('refs/heads/feature ' + feat + ' refs/heads/feature ' + ZERO + '\n');
+r = hook('refs/heads/feature ' + feat + ' refs/heads/main ' + root + '\n');
 ok('an emulator-tier push without test/node_modules is refused, not waved through', r.code === 1 && r.calls.length === 0 && /test\/node_modules is missing/.test(r.out), r.out);
 r = hook(line(docs));
 ok('and so is a tree-tier push, before any gate runs (no 56-minute surprise)', r.code === 1 && r.calls.length === 0 && /test\/node_modules is missing/.test(r.out), r.out);

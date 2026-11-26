@@ -12,6 +12,8 @@ batch: many PRs, one suite, one push.
 2. Opens a PR into `main` instead of pushing to `main`. `.github/workflows/gates.yml` runs the
    Chrome-free gates and the emulator suites on the PR, on GitHub, in parallel.
 3. Is done when the PR is green. It does not push `main`.
+   Pushing the branch runs only the Chrome-free gates (`.githooks/pre-push`); the full suite runs once, on the
+   train's push to `main`.
 
 **The release root (one chat, today Cubbydesign), once or twice a day**
 1. In a clean checkout: `node tools/train.js`. It lists the open PRs, cuts `train/<stamp>` from
