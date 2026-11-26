@@ -8,14 +8,13 @@ sleep safety, development or behaviour concern, or mental health. Every article 
 NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products, Cubby features).
 
 - Articles: 660
-- MEDICAL: 579 (caution block under the title, official sources)
-- NON-MEDICAL: 81 (general line)
-- MEDICAL pages still without an official source in their sources list: 271
+- MEDICAL: 589 (caution block under the title, official sources)
+- NON-MEDICAL: 71 (general line)
+- MEDICAL pages still without an official source in their sources list: 277
 
 ## NON-MEDICAL
 
 - australian-parental-leave: leave, pay or rights
-- baby-and-older-siblings: family life; borderline, no health guidance found
 - baby-care-decade-innovations: product or comparison
 - baby-health-insurance-uae: leave, pay or rights
 - baby-naming-ceremonies-worldwide: custom or ceremony
@@ -23,13 +22,10 @@ NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products
 - baby-tracking-app-vs-paper: product or comparison
 - bai-ri-man-yue-baby-naming: custom or ceremony
 - baptism-first-religious-ceremonies: custom or ceremony
-- best-baby-monitor-2026: product comparison; borderline, it mentions monitors and safe sleep
 - best-baby-tracker-app: product or comparison
 - birth-registration-india: paperwork
 - birth-registration-uae: paperwork
 - child-benefit-uk: leave, pay or rights
-- childcare-options-australia: childcare
-- childcare-starting-settling-in: childcare; borderline, it mentions illness and separation anxiety
 - congedo-maternita: leave, pay or rights
 - cubby: Cubby feature or comparison
 - cubby-article-library: Cubby feature or comparison
@@ -39,10 +35,8 @@ NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products
 - cubby-for-expat-families: Cubby feature or comparison
 - cubby-for-grandparents: Cubby feature or comparison
 - cubby-for-new-parents: Cubby feature or comparison
-- cubby-for-single-parents: Cubby feature; borderline, it shows logging a medicine dose
 - cubby-night-feed-problem: Cubby feature or comparison
 - cubby-notes: Cubby feature or comparison
-- cubby-one-app: Cubby feature; borderline, it shows logging a medicine dose
 - cubby-pregnancy-tracking: Cubby feature or comparison
 - cubby-privacy: Cubby feature or comparison
 - cubby-privacy-layers: Cubby feature or comparison
@@ -61,7 +55,6 @@ NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products
 - elternzeit-both-parents: leave, pay or rights
 - flexible-working-request-rights: leave, pay or rights
 - fmla-parental-leave: leave, pay or rights
-- free-prescriptions-dental-pregnancy-uk: entitlement paperwork
 - free-resources-uk-new-parents: services directory; borderline, it names the 6 to 8 week check and health visitors
 - godh-bharai: custom or ceremony
 - hatsu-zekku-first-festival: custom or ceremony
@@ -87,9 +80,6 @@ NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products
 - red-egg-ceremony: custom or ceremony
 - redundancy-during-maternity-leave: leave, pay or rights
 - registering-birth-uk: paperwork
-- returning-to-work-after-baby: leave, pay or rights
-- returning-to-work-after-maternity-leave: leave, pay or rights
-- returning-to-work-after-paternity-leave: leave, pay or rights
 - sure-start-maternity-grant: leave, pay or rights
 - tagesmutter-vs-krippe: childcare
 - us-maternity-leave: leave, pay or rights
@@ -98,24 +88,31 @@ NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products
 
 ## MEDICAL, classified with less confidence
 
+- baby-and-older-siblings: reclassified 27 Nov (F3): when to see a GP about a sibling's behaviour
 - baby-carrier-types-compared: a product comparison built on the TICKS airway checklist
+- best-baby-monitor-2026: reclassified 27 Nov (F3): safe sleep and a SIDS claim
 - best-breast-pump-uk-2026: a product comparison with milk storage safety
 - bonding-as-a-father: bonding, with paternal depression signs
 - boshi-techo: a handbook, but it records checks, growth and vaccines
 - breastfeeding-us-support-rights: workplace rights, with breastfeeding problems and infection signs
 - building-support-network-baby: a services list, with mental health helplines
+- childcare-options-australia: reclassified 27 Nov (F3): fever and vomiting exclusion periods
+- childcare-starting-settling-in: reclassified 27 Nov (F3): fever exclusion (38°C)
 - chinese-baby-care-traditions: customs, with bathing, swaddling and cord care guidance
 - chinese-pregnancy-traditions: customs, with diet and activity guidance in pregnancy
 - cubby-after-the-appointment: a Cubby feature page that talks about new medicines and doses
 - cubby-before-the-appointment: a Cubby feature page that talks about fevers, doses and symptoms
 - cubby-for-nannies-helpers: a Cubby feature page with medicine dose handover
+- cubby-for-single-parents: reclassified 27 Nov (F3): giving paracetamol and logging the dose
 - cubby-growth-tracker: a Cubby feature page about reading weight trends
 - cubby-nanny-handover: a Cubby feature page with medicine dose handover
+- cubby-one-app: reclassified 27 Nov (F3): paracetamol for a temperature, and dosing
 - cubby-symptom-diary: a Cubby feature page with symptom and dose guidance
 - cubby-vaccine-tracker: a Cubby feature page about vaccine schedules
 - daycare-sick-day-policies: childcare policy, built on fever and exclusion advice
 - extended-family-baby-care: family life, with safe sleep and allergy guidance
 - flying-with-baby-long-haul: travel, with age to fly and ear pressure advice
+- free-prescriptions-dental-pregnancy-uk: reclassified 27 Nov (F3): folic acid and vitamin D dose in pregnancy
 - grandparents-baby-care-chinese-families: family life, with current guidance on old practices
 - italian-maternity-system: a system guide, with newborn screening and jaundice
 - iwata-obi: a custom, with evidence on abdominal support
@@ -130,6 +127,9 @@ NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products
 - nursery-sick-day-return: childcare policy, built on illness exclusion periods
 - pregnancy-traditions-india: customs, with diet and activity guidance in pregnancy
 - relationship-changes-after-baby: relationships, with sex after birth and depression signs
+- returning-to-work-after-baby: reclassified 27 Nov (F3): postnatal depression signposting
+- returning-to-work-after-maternity-leave: reclassified 27 Nov (F3): postnatal depression signposting
+- returning-to-work-after-paternity-leave: reclassified 27 Nov (F3): paternal postnatal depression signposting
 - returning-to-work-emotions: feelings, with anxiety and depression signs
 - toddler-tantrums: behaviour, classed with development; all toddler behaviour pages are MEDICAL on the same call
 - yuezi-zhongxin-confinement-centre: a service, with infection and mood guidance
@@ -144,6 +144,7 @@ NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products
 - antenatal-care-uae
 - anterior-placenta-pregnancy
 - baby
+- baby-and-older-siblings
 - baby-blues-explained
 - baby-breathing-normal
 - baby-carrier-types-compared
@@ -171,6 +172,7 @@ NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products
 - baby-wheezing
 - baby-wont-sleep-in-cot
 - babyschwimmen-baby-swimming
+- best-baby-monitor-2026
 - bilingual-baby-language-development
 - birth-plan-how-to-write
 - birth-trauma-ptsd-after-birth
@@ -197,6 +199,7 @@ NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products
 - car-seat-safety-rear-facing
 - cdc-immunisation-schedule
 - centile-drops-baby-growth
+- childcare-options-australia
 - chinese-vaccine-schedule
 - circumcision-what-parents-need-to-know
 - colic-and-unsettled-evenings-newborn
@@ -208,9 +211,11 @@ NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products
 - cubby-after-the-appointment
 - cubby-before-the-appointment
 - cubby-for-nannies-helpers
+- cubby-for-single-parents
 - cubby-growth-tracker
 - cubby-medicine-log
 - cubby-nanny-handover
+- cubby-one-app
 - cubby-symptom-diary
 - cubby-temperature-tracker
 - cubby-vaccine-tracker
@@ -331,6 +336,7 @@ NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products
 - relationship-changes-after-baby
 - restoring-core-strength-after-birth
 - returning-to-exercise-after-birth
+- returning-to-work-after-paternity-leave
 - returning-to-work-emotions
 - ringworm-babies
 - round-ligament-pain-pregnancy
@@ -425,6 +431,7 @@ NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products
 - ayurvedic-colic-remedies
 - baby
 - baby-acne-newborn-rash
+- baby-and-older-siblings
 - baby-appetite-loss-illness
 - baby-bedtime-routine
 - baby-biting-why-and-how-to-respond
@@ -509,6 +516,7 @@ NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products
 - basal-body-temperature-tracking
 - bathing-washing-and-nappy-care
 - bcg-vaccination-stamp-method
+- best-baby-monitor-2026
 - best-breast-pump-uk-2026
 - bilingual-baby-language-development
 - birth-choices-australia
@@ -552,6 +560,8 @@ NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products
 - cdc-immunisation-schedule
 - centile-drops-baby-growth
 - chickenpox-babies
+- childcare-options-australia
+- childcare-starting-settling-in
 - chinese-baby-care-traditions
 - chinese-family-co-sleeping
 - chinese-pregnancy-traditions
@@ -580,9 +590,11 @@ NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products
 - cubby-after-the-appointment
 - cubby-before-the-appointment
 - cubby-for-nannies-helpers
+- cubby-for-single-parents
 - cubby-growth-tracker
 - cubby-medicine-log
 - cubby-nanny-handover
+- cubby-one-app
 - cubby-symptom-diary
 - cubby-temperature-tracker
 - cubby-vaccine-tracker
@@ -641,6 +653,7 @@ NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products
 - four-month-sleep-regression
 - fourth-trimester
 - fourth-trimester-physical-recovery
+- free-prescriptions-dental-pregnancy-uk
 - fussy-eating-in-babies
 - fussy-eating-toddlers
 - genetic-testing-pregnancy
@@ -846,6 +859,9 @@ NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products
 - relationship-changes-after-baby
 - restoring-core-strength-after-birth
 - returning-to-exercise-after-birth
+- returning-to-work-after-baby
+- returning-to-work-after-maternity-leave
+- returning-to-work-after-paternity-leave
 - returning-to-work-emotions
 - ringworm-babies
 - roseola-babies
