@@ -1,5 +1,5 @@
 {
- "_about": "Read by tools/health_caution_check.js. Every article not in nonMedical is MEDICAL. sourcesGap may only shrink.",
+ "_about": "Read by tools/health_caution_check.js. Every article not in nonMedical is MEDICAL. sourcesGap may only shrink: sourcesGapPin pins its count and the sha256 of the sorted list joined by newlines.",
  "nonMedical": {
   "australian-parental-leave": "leave, pay or rights",
   "baby-and-older-siblings": "family life; borderline, no health guidance found",
@@ -392,5 +392,9 @@
   "your-baby-week-4",
   "your-body-after-birth-weeks-1-6",
   "your-body-after-birth-weeks-6-12"
- ]
+ ],
+ "sourcesGapPin": {
+  "count": 271,
+  "sha256": "ce14a37a0e79cd9b84b6f4438126ec5579bd5b57b0bfcec5bb94284f2527e5e3"
+ }
 }

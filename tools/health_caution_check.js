@@ -23,6 +23,8 @@
  *        sources, references or further reading) links at least one OFFICIAL host. A body link alone
  *        does not count. Pages in sourcesGap are the known debt of 27 Nov 2026: they are let through,
  *        the list may only shrink (a listed page that now has a source goes red until it is removed).
+ *        F2: sourcesGapPin in the scope file pins its count and a hash of the sorted list, and GAP_CEILING
+ *        here caps it, so adding a slug is red and removing one means re-pinning.
  *   NON-MEDICAL: a p.art-disclaimer with GENERAL, word for word, and no other disclaimer wording.
  *   Scope: every listed slug exists, nothing is both non-medical and in the gap, and
  *   docs/health-caution-scope.md is exactly what --write-doc would write.
@@ -30,6 +32,7 @@
  *   page says. That is a reading job (docs/HEALTH-COPY-RULES.md); this gate keeps the floor.
  */
 'use strict';
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -80,7 +83,26 @@ function articles(root) {
 }
 function readScope(root) {
   const s = JSON.parse(fs.readFileSync(path.join(root, SCOPE_REL), 'utf8'));
-  return { nonMedical: Object.keys(s.nonMedical || {}), sourcesGap: s.sourcesGap || [], notes: s.nonMedical || {}, borderline: s.borderlineMedical || {} };
+  return { nonMedical: Object.keys(s.nonMedical || {}), sourcesGap: s.sourcesGap || [], notes: s.nonMedical || {}, borderline: s.borderlineMedical || {}, gapPin: s.sourcesGapPin || null };
+}
+
+/* F2: sourcesGap is frozen. The scope file pins its count and a hash of the sorted list, and the gate holds
+   a ceiling of its own, so the debt can only shrink. Adding a slug is red whatever the pin says; removing
+   one (required once the page lists an official source) means re-pinning to the printed count and hash. */
+const GAP_CEILING = 271;
+const gapHash = (list) => crypto.createHash('sha256').update([...list].sort().join('\n')).digest('hex');
+const gapPinOf = (list) => ({ count: list.length, sha256: gapHash(list) });
+function judgeGapPin(scope) {
+  const list = scope.sourcesGap; const pin = scope.gapPin; const want = gapPinOf(list);
+  const fix = `"sourcesGapPin": ${JSON.stringify(want)}`;
+  if (new Set(list).size !== list.length) return [`${SCOPE_REL}: sourcesGap lists a slug twice`];
+  if (list.length > GAP_CEILING) return [`${SCOPE_REL}: sourcesGap has ${list.length} slugs, more than the frozen ${GAP_CEILING}; never add to it, give the page an official source`];
+  if (!pin || typeof pin.count !== 'number' || typeof pin.sha256 !== 'string') return [`${SCOPE_REL}: sourcesGapPin is missing (${fix})`];
+  if (pin.count > GAP_CEILING) return [`${SCOPE_REL}: sourcesGapPin.count ${pin.count} is above the frozen ${GAP_CEILING}`];
+  if (list.length > pin.count) return [`${SCOPE_REL}: sourcesGap grew from ${pin.count} to ${list.length}; never add to it, give the page an official source`];
+  if (list.length === pin.count && want.sha256 !== pin.sha256) return [`${SCOPE_REL}: sourcesGap changed but did not shrink (a slug was swapped or added); never add to it`];
+  if (list.length < pin.count) return [`${SCOPE_REL}: sourcesGap shrank to ${list.length}; re-pin it: ${fix}`];
+  return [];
 }
 
 /* The stretch a source list lives in: the two footers, and the section under a sources heading. */
@@ -166,6 +188,7 @@ function judge(root) {
   for (const s of [...scope.nonMedical, ...scope.sourcesGap, ...Object.keys(scope.borderline)]) if (!have.has(s)) fails.push(`${SCOPE_REL}: lists "${s}", which is not an article`);
   for (const s of scope.sourcesGap) if (non.has(s)) fails.push(`${SCOPE_REL}: "${s}" is NON-MEDICAL and in sourcesGap`);
   for (const s of Object.keys(scope.borderline)) if (non.has(s)) fails.push(`${SCOPE_REL}: "${s}" is NON-MEDICAL and borderline MEDICAL`);
+  fails.push(...judgeGapPin(scope));
   for (const s of all) fails.push(...judgePage(s, fs.readFileSync(path.join(root, 'articles', s, 'index.html'), 'utf8'), !non.has(s), gap.has(s)));
   const docPath = path.join(root, DOC_REL);
   if (!fs.existsSync(docPath) || fs.readFileSync(docPath, 'utf8') !== renderDoc(root, scope)) fails.push(`${DOC_REL}: out of date, run --write-doc`);
@@ -225,7 +248,7 @@ ${body}
   const BODY = '  <p>First body paragraph.</p>';
   const good = page(`  ${CAUTION_HTML}\n${BODY}`);
   const goodNon = page(BODY, `<p class="art-disclaimer">${GENERAL}</p><footer class="src">x</footer>`);
-  const scope = { nonMedical: { leave: 'leave and pay' }, sourcesGap: [], borderlineMedical: {} };
+  const scope = { nonMedical: { leave: 'leave and pay' }, sourcesGap: [], sourcesGapPin: gapPinOf([]), borderlineMedical: {} };
   const stage = (files, sc = scope) => {
     const t = path.join(tmp, 't');
     fs.rmSync(t, { recursive: true, force: true });
@@ -273,11 +296,22 @@ ${body}
     expect('an official link under a "Trusted sources" heading passes', r.fails.length === 0);
     r = judge(stage({ 'articles/fever/index.html': page(`  ${CAUTION_HTML}\n${BODY}`, '<footer class="src">Sources: <a href="https://nhs.uk.example.com/">x</a>.</footer>') }));
     expect('a lookalike host (nhs.uk.example.com) is not official', red(r, 'lists no official source'));
-    const gapScope = { ...scope, sourcesGap: ['fever'] };
+    const gapScope = { ...scope, sourcesGap: ['fever'], sourcesGapPin: gapPinOf(['fever']) };
     r = judge(stage({ 'articles/fever/index.html': page(`  ${CAUTION_HTML}\n${BODY}`, '<footer class="src">Sources: NHS.</footer>') }, gapScope));
     expect('a known-gap page without a source is let through', r.fails.length === 0);
     r = judge(stage({ 'articles/fever/index.html': good }, gapScope));
     expect('a known-gap page that now has a source goes red until it leaves the list', red(r, 'remove it from sourcesGap'));
+    const two = { 'articles/fever/index.html': page(`  ${CAUTION_HTML}\n${BODY}`, '<footer class="src">Sources: NHS.</footer>'), 'articles/rash/index.html': page(`  ${CAUTION_HTML}\n${BODY}`, '<footer class="src">None.</footer>') };
+    r = judge(stage(two, { ...gapScope, sourcesGap: ['fever', 'rash'] }));
+    expect('adding a slug to sourcesGap without touching the pin goes red', red(r, 'grew from 1 to 2'));
+    r = judge(stage(two, { ...gapScope, sourcesGap: ['fever', 'rash'], sourcesGapPin: gapPinOf(['fever', 'rash']) }));
+    expect('adding a slug and re-pinning still goes red against the frozen ceiling', GAP_CEILING === 271 && judgeGapPin({ sourcesGap: Array.from({ length: GAP_CEILING + 1 }, (_, i) => 's' + i), gapPin: gapPinOf(Array.from({ length: GAP_CEILING + 1 }, (_, i) => 's' + i)) }).some((f) => f.includes('more than the frozen')));
+    r = judge(stage(two, { ...gapScope, sourcesGap: ['rash'] }));
+    expect('swapping one gap slug for another goes red', red(r, 'did not shrink'));
+    r = judge(stage({ 'articles/fever/index.html': good }, { ...gapScope, sourcesGap: [] }));
+    expect('removing a slug without re-pinning goes red and prints the new pin', red(r, 'shrank to 0; re-pin it'));
+    r = judge(stage({ 'articles/fever/index.html': good }, { ...scope, sourcesGapPin: undefined }));
+    expect('a scope with no pin goes red', red(r, 'sourcesGapPin is missing'));
     r = judge(stage({ 'articles/leave/index.html': page(BODY, '<footer class="src">x</footer>') }));
     expect('a NON-MEDICAL page without the general line goes red', red(r, 'needs the general line'));
     r = judge(stage({ 'articles/leave/index.html': page(BODY, `<p class="art-disclaimer">${GENERAL}</p><p class="art-disc">Old words.</p>`) }));
