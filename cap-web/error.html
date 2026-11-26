@@ -1,10 +1,10 @@
 <!doctype html>
-<!-- Bundled error page for the native app: capacitor.config.json server.errorPath. Capacitor loads it from
-     the app bundle (capacitor://localhost/error.html) whenever a main-frame load of the live site fails at
-     the network level: no connection and no cached shell yet, DNS, TLS, a timeout. An HTTP error from the
-     site is a successful load and never lands here. Capacitor also sends a CANCELLED load here (a second
-     navigation that interrupts the first), so when the phone is online the page goes straight back once,
-     at most every 30 seconds, and a family mid-use barely sees it. Copy: DESIGN.md §A1 and §A7. -->
+<!-- Bundled error page for the native app (capacitor://localhost/error.html). CubbyBridgeViewController
+     (native-ios/) loads it only when a page load of the live site really fails: no connection and no cached
+     app yet, the site unreachable, a timeout, a broken secure connection (native-ios/CubbyLoadFailure.swift).
+     A cancelled load or a link handed to Safari never lands here, and an HTTP error from the site is a
+     successful load. The link that failed arrives in the fragment, so trying again reopens the same sign-in
+     or invite link. Copy: DESIGN.md §A1 and §A7; true whether the phone is online or not. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -34,32 +34,31 @@ button[disabled]{opacity:.7}
 <main>
   <img src="logo.png?v=09cba32f" alt="" width="64" height="64">
   <h1>Cubby can't open just now</h1>
-  <p>Cubby needs a connection the first time it opens. Check your Wi-Fi or mobile data, then try again.</p>
+  <p>Check your connection, then try again.</p>
   <button id="retry" type="button">Try again</button>
-  <p class="small" id="note" aria-live="polite">When your connection comes back, we'll try again for you.</p>
+  <p class="small" id="note" aria-live="polite"></p>
 </main>
 <script>
 (function () {
   var APP = 'https://little-cubby.com/app/';
-  var KEY = 'cubby-error-autoretry';
+  // The failed link, if CubbyBridgeViewController passed one: only ever this site, never anywhere else.
+  var to = APP;
+  try {
+    var h = decodeURIComponent(location.hash.slice(1));
+    if (h.indexOf('https://little-cubby.com/') === 0) to = h;
+  } catch (e) {}
   var btn = document.getElementById('retry');
   var note = document.getElementById('note');
   function go() {
     btn.disabled = true;
     btn.textContent = 'Opening Cubby';
-    location.replace(APP);
+    location.replace(to);
   }
   btn.addEventListener('click', go);
+  // No automatic retry on load: the native side only sends a real failure here, and retrying a site that
+  // cannot answer would bounce between this page and a failed load. The connection coming back is the cue.
   window.addEventListener('online', go);
-  // One automatic return while online, then wait for the person: a site that is unreachable while the
-  // phone is online would otherwise bounce between here and a failed load forever.
-  var last = 0;
-  try { last = Number(sessionStorage.getItem(KEY)) || 0; } catch (e) {}
-  if (navigator.onLine !== false && Date.now() - last > 30000) {
-    try { sessionStorage.setItem(KEY, String(Date.now())); } catch (e) {}
-    go();
-  }
-  if (navigator.onLine === false) note.textContent = "Your phone looks offline. When the connection comes back, we'll try again for you.";
+  if (navigator.onLine === false) note.textContent = "Your phone looks offline. When it's back online, we'll try again for you.";
 })();
 </script>
 </body>

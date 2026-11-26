@@ -197,9 +197,12 @@ const TREE = [
   { name: 'funnel-core',    cmd: ['node', 'test/funnel-core.test.js'] },
   { name: 'funnel-worker',  cmd: ['node', 'test/funnel-worker.test.js'] },
   { name: 'native-deeplink', cmd: ['node', 'test/native-deeplink.test.js'] },   // the native wrapper keeps a token invite link
-  /* Apple's privacy manifest: parses, tracking false, no tracking domains, bundled by cap_ios_configure.rb and,
-     where ios/ exists, in the App target's resources. --self-test stages ten failures first. */
+  /* Apple's privacy manifest: parses, tracking false, no tracking domains, and bundled by cap_ios_configure.rb.
+     Tracked files only, never the local ios/ project. --self-test stages nine failures first. */
   { name: 'privacy-manifest', cmd: ['node', 'tools/privacy_manifest_check.js', '--self-test'] },
+  /* The native error page shows only for a real failure (offline, site unreachable), never for a cancelled load
+     (-999) that is a sign-in or invite link arriving. Compiles native-ios/CubbyLoadFailure.swift on a Mac. */
+  { name: 'native-error-page', cmd: ['node', 'tools/native_error_page_check.js', '--self-test'] },
   { name: 'sender-name', cmd: ['node', 'test/sender-name.test.js'] },   // a sender's own name never reads as an address or a claim
   { name: 'funnel-steps',   cmd: ['node', 'tools/funnel_steps_check.js', 'url'] },
   /* The plan, both allowlists and the App Store answers agree (admin spec §14 tracking-plan, extended).

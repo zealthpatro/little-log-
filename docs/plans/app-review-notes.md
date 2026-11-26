@@ -72,8 +72,10 @@ Do not say so to App Review unless that review has actually happened and is writ
 ## Other things a reviewer may meet
 
 - **No connection on first open.** If the site cannot load and nothing is cached yet, the app shows a bundled
-  page (`cap-web/error.html`, `server.errorPath`): "Cubby can't open just now", a Try again button, and an
-  automatic retry when the connection comes back. Not a blank screen.
+  page (`cap-web/error.html`): "Cubby can't open just now", a Try again button, and an automatic retry when
+  the connection comes back. Not a blank screen. Capacitor's `server.errorPath` is off because it also fired
+  on cancelled loads; `native-ios/CubbyBridgeViewController.swift` shows the page only for a real failure
+  (no connection, site unreachable, timeout), gated by `tools/native_error_page_check.js`.
 - **iPad.** The target builds for iPhone and iPad (`TARGETED_DEVICE_FAMILY` 1,2). The app caps its width at
   480 points and centres it; from 900 points wide it is drawn inside a frame. Checked at 820 x 1180 and
   1180 x 820 for this build, which found and fixed a closed sheet peeking under the frame on wide screens
@@ -81,4 +83,8 @@ Do not say so to App Review unless that review has actually happened and is writ
 - **Pregnancy loss.** If a loss is recorded, the app becomes a quiet holding screen and stops its prompts.
   Nothing is graphic.
 - **Purchases.** None in this version. The Cubby Pro screen describes a planned subscription and collects
-  interest by email only; it takes no payment and links to no store.
+  interest by email only; as shipped it takes no payment and links to no store. What that rests on: the
+  checkout is switched off by a server setting (`pro.checkoutUrl`, empty), not by the binary. Nothing in the
+  native code blocks a checkout link, so setting `pro.checkoutUrl` would show buy buttons and an outside
+  checkout in the iOS app too (guideline 3.1.1). Keep it empty for the iOS app until Pro is sold through
+  in-app purchase in a build Apple has reviewed, and claim no more than this to the reviewer.

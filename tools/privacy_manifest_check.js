@@ -9,14 +9,14 @@
  *
  * ios/ is gitignored and regenerated, so the tracked source is native-ios/PrivacyInfo.xcprivacy and
  * tools/cap_ios_configure.rb copies it into ios/App/App and adds it to Copy Bundle Resources. This gate
- * checks the source on every machine (CI has no Xcode project), the configure script's wiring, and, where
- * an ios/ project exists, that the project bundles the same bytes. tools/ios_launch_smoke.sh checks the
- * built .app itself.
+ * checks only tracked files: the source and the configure script's wiring. It never reads a local ios/
+ * project, whose state is whatever the last build left (the main checkout's would fail every push from
+ * there). tools/ios_launch_smoke.sh checks the built .app itself.
  *
  * What it refuses: a missing or malformed manifest; NSPrivacyTracking anything but false; any tracking
  * domain; a collected data type marked as used for tracking, or with no purpose; a required-reason API with
- * no reason; a configure script that no longer copies and bundles it; a local project whose App target does
- * not bundle it, or bundles different bytes. Parses the XML itself so it runs on Linux CI without plutil.
+ * no reason; a configure script that no longer copies and bundles it, or no longer stops when it is not
+ * bundled. Parses the XML itself so it runs on Linux CI without plutil.
  */
 'use strict';
 const fs = require('fs');
@@ -28,8 +28,6 @@ const ARGS = process.argv.slice(2);
 const ROOT = (ARGS.find((a) => a.startsWith('--root=')) || '').slice(7) || path.join(__dirname, '..');
 const SRC = 'native-ios/PrivacyInfo.xcprivacy';
 const CONFIGURE = 'tools/cap_ios_configure.rb';
-const PBX = 'ios/App/App.xcodeproj/project.pbxproj';
-const BUNDLED = 'ios/App/App/PrivacyInfo.xcprivacy';
 
 /* A small XML property-list parser: dict, array, key, string, integer, real, date, data, true, false. */
 function parsePlist(xml) {
@@ -127,20 +125,8 @@ function judge(root) {
   if (!/File\.join\(ROOT, 'native-ios', 'PrivacyInfo\.xcprivacy'\)/.test(rb)) fails.push(`${CONFIGURE} no longer reads ${SRC}`);
   if (!/FileUtils\.cp\(PRIVACY_SRC, PRIVACY_DST\)/.test(rb)) fails.push(`${CONFIGURE} no longer copies the manifest into ios/App/App`);
   if (!/target\.add_resources\(\[priv_ref\]\)/.test(rb)) fails.push(`${CONFIGURE} no longer adds the manifest to Copy Bundle Resources`);
+  if (!/abort\([^\n]*\) unless target\.resources_build_phase\.files_references\.include\?\(priv_ref\)/.test(rb)) fails.push(`${CONFIGURE} no longer stops when the manifest is not in the App target resources`);
 
-  // Only where a native project exists (the Mac that builds it): the App target must bundle these bytes.
-  const pbx = read(PBX);
-  if (pbx !== null) {
-    const bf = /([0-9A-F]{24}) \/\* PrivacyInfo\.xcprivacy in Resources \*\/ = \{isa = PBXBuildFile;/.exec(pbx);
-    const app = /\/\* App \*\/ = \{\s*isa = PBXNativeTarget;[\s\S]*?buildPhases = \(([\s\S]*?)\);/.exec(pbx);
-    const resId = app && (/([0-9A-F]{24}) \/\* Resources \*\//.exec(app[1]) || [])[1];
-    const phase = resId && new RegExp(`${resId} /\\* Resources \\*/ = \\{\\s*isa = PBXResourcesBuildPhase;[\\s\\S]*?files = \\(([\\s\\S]*?)\\);`).exec(pbx);
-    if (!bf) fails.push(`${PBX}: PrivacyInfo.xcprivacy is not a resource of any target (run ruby ${CONFIGURE})`);
-    else if (!phase || !phase[1].includes(bf[1])) fails.push(`${PBX}: PrivacyInfo.xcprivacy is not in the App target's Copy Bundle Resources`);
-    const bundled = read(BUNDLED);
-    if (bundled === null) fails.push(`${BUNDLED} is missing (run ruby ${CONFIGURE})`);
-    else if (bundled !== src) fails.push(`${BUNDLED} differs from ${SRC} (run ruby ${CONFIGURE})`);
-  }
   return fails;
 }
 
@@ -148,26 +134,9 @@ function selfTest() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'privacy-manifest-'));
   const src = fs.readFileSync(path.join(ROOT, SRC), 'utf8');
   const rb = fs.readFileSync(path.join(ROOT, CONFIGURE), 'utf8');
-  // A minimal real-shaped project: the App target, its Resources phase, the manifest in it.
-  const pbx = [
-    '\t\tAAAAAAAAAAAAAAAAAAAAAAA1 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAAAAAAAAAAAAAAAAA2 /* PrivacyInfo.xcprivacy */; };',
-    '\t\tAAAAAAAAAAAAAAAAAAAAAAA3 /* App */ = {',
-    '\t\t\tisa = PBXNativeTarget;',
-    '\t\t\tbuildPhases = (',
-    '\t\t\t\tAAAAAAAAAAAAAAAAAAAAAAA5 /* Sources */,',
-    '\t\t\t\tAAAAAAAAAAAAAAAAAAAAAAA4 /* Resources */,',
-    '\t\t\t);',
-    '\t\t};',
-    '\t\tAAAAAAAAAAAAAAAAAAAAAAA4 /* Resources */ = {',
-    '\t\t\tisa = PBXResourcesBuildPhase;',
-    '\t\t\tfiles = (',
-    '\t\t\t\tAAAAAAAAAAAAAAAAAAAAAAA1 /* PrivacyInfo.xcprivacy in Resources */,',
-    '\t\t\t);',
-    '\t\t};',
-  ].join('\n');
   const stage = (name, mut) => {
     const d = path.join(tmp, name);
-    const files = { [SRC]: src, [CONFIGURE]: rb, [PBX]: pbx, [BUNDLED]: src };
+    const files = { [SRC]: src, [CONFIGURE]: rb };
     mut(files);
     for (const [rel, body] of Object.entries(files)) {
       if (body === null) continue;
@@ -179,16 +148,15 @@ function selfTest() {
   const swap = (s, a, b) => { if (!s.includes(a)) throw new Error(`self-test cannot stage: ${a.slice(0, 60)} not found`); return s.replace(a, b); };
   const trackKey = '<key>NSPrivacyTracking</key>\n\t<false/>';
   const cases = [
-    ['tracking true', (f) => { f[SRC] = f[BUNDLED] = swap(src, trackKey, '<key>NSPrivacyTracking</key>\n\t<true/>'); }],
-    ['tracking key missing', (f) => { f[SRC] = f[BUNDLED] = swap(src, trackKey, ''); }],
-    ['malformed XML', (f) => { f[SRC] = f[BUNDLED] = swap(src, '</dict>\n</plist>', '</plist>'); }],
+    ['tracking true', (f) => { f[SRC] = swap(src, trackKey, '<key>NSPrivacyTracking</key>\n\t<true/>'); }],
+    ['tracking key missing', (f) => { f[SRC] = swap(src, trackKey, ''); }],
+    ['malformed XML', (f) => { f[SRC] = swap(src, '</dict>\n</plist>', '</plist>'); }],
     ['manifest missing', (f) => { f[SRC] = null; }],
-    ['a tracking domain', (f) => { f[SRC] = f[BUNDLED] = swap(src, '<array/>', '<array>\n\t\t<string>ads.example.com</string>\n\t</array>'); }],
-    ['a collected type used for tracking', (f) => { f[SRC] = f[BUNDLED] = swap(src, '<key>NSPrivacyCollectedDataTypeTracking</key>\n\t\t\t<false/>', '<key>NSPrivacyCollectedDataTypeTracking</key>\n\t\t\t<true/>'); }],
-    ['an API with no reason', (f) => { f[SRC] = f[BUNDLED] = swap(src, '<string>C617.1</string>', ''); }],
+    ['a tracking domain', (f) => { f[SRC] = swap(src, '<array/>', '<array>\n\t\t<string>ads.example.com</string>\n\t</array>'); }],
+    ['a collected type used for tracking', (f) => { f[SRC] = swap(src, '<key>NSPrivacyCollectedDataTypeTracking</key>\n\t\t\t<false/>', '<key>NSPrivacyCollectedDataTypeTracking</key>\n\t\t\t<true/>'); }],
+    ['an API with no reason', (f) => { f[SRC] = swap(src, '<string>C617.1</string>', ''); }],
     ['configure does not bundle it', (f) => { f[CONFIGURE] = swap(rb, 'target.add_resources([priv_ref])', 'nil'); }],
-    ['project lacks it in App resources', (f) => { f[PBX] = swap(pbx, '\t\t\t\tAAAAAAAAAAAAAAAAAAAAAAA1 /* PrivacyInfo.xcprivacy in Resources */,\n', ''); }],
-    ['project bundles stale bytes', (f) => { f[BUNDLED] = swap(src, 'NSPrivacyCollectedDataTypeHealth', 'NSPrivacyCollectedDataTypeFitness'); }],
+    ['configure no longer checks it is bundled', (f) => { f[CONFIGURE] = swap(rb, "abort('✖ PrivacyInfo.xcprivacy is not in the App target resources') unless target.resources_build_phase.files_references.include?(priv_ref)", 'nil'); }],
   ];
   let bad = 0;
   const clean = judge(stage('clean', () => {}));
@@ -198,8 +166,16 @@ function selfTest() {
     if (r.length) console.log(`  ✓ red as it should be: ${name} (${r[0]})`);
     else { console.log(`  ✖ self-test: "${name}" was NOT caught`); bad++; }
   }
+  // Local ios/ state must never decide the verdict: a stale project is the main checkout's normal state.
+  const stale = stage('stale-ios', () => {});
+  for (const d of ['ios/App/App.xcodeproj', 'ios/App/App']) fs.mkdirSync(path.join(stale, d), { recursive: true });
+  fs.writeFileSync(path.join(stale, 'ios/App/App.xcodeproj/project.pbxproj'), '// no PrivacyInfo here\n');
+  fs.writeFileSync(path.join(stale, 'ios/App/App/PrivacyInfo.xcprivacy'), 'stale');
+  const st = judge(stale);
+  if (st.length) { console.log(`  ✖ self-test: local ios/ state changed the verdict: ${st.join('; ')}`); bad++; }
+  else console.log('  ✓ a stale local ios/ project is ignored (the gate grades tracked files only)');
   // The CLI exit code too, not only judge(): a gate that prints red and exits 0 is green to gates.js.
-  const cli = spawnSync(process.execPath, [__filename, `--root=${stage('cli', (f) => { f[SRC] = f[BUNDLED] = swap(src, trackKey, '<key>NSPrivacyTracking</key>\n\t<true/>'); })}`], { encoding: 'utf8' });
+  const cli = spawnSync(process.execPath, [__filename, `--root=${stage('cli', (f) => { f[SRC] = swap(src, trackKey, '<key>NSPrivacyTracking</key>\n\t<true/>'); })}`], { encoding: 'utf8' });
   if (cli.status === 0) { console.log('  ✖ self-test: the CLI exited 0 on a tracking manifest'); bad++; }
   fs.rmSync(tmp, { recursive: true, force: true });
   if (bad) { console.log(`✖ privacy manifest self-test: ${bad} problem(s)`); process.exit(1); }
@@ -213,5 +189,4 @@ if (fails.length) {
   process.exit(1);
 }
 const m = parsePlist(fs.readFileSync(path.join(ROOT, SRC), 'utf8'));
-const where = fs.existsSync(path.join(ROOT, PBX)) ? 'source, configure wiring and the local App target' : 'source and configure wiring (no local ios/ project)';
-console.log(`✓ privacy manifest: tracking false, no tracking domains, ${m.NSPrivacyCollectedDataTypes.length} collected types, ${m.NSPrivacyAccessedAPITypes.length} required-reason API(s); checked ${where}`);
+console.log(`✓ privacy manifest: tracking false, no tracking domains, ${m.NSPrivacyCollectedDataTypes.length} collected types, ${m.NSPrivacyAccessedAPITypes.length} required-reason API(s); checked the tracked source and configure wiring`);

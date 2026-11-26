@@ -4,8 +4,7 @@
   "webDir": "cap-web",
   "server": {
     "url": "https://little-cubby.com/app/",
-    "cleartext": false,
-    "errorPath": "error.html"
+    "cleartext": false
   },
   "ios": {
     "contentInset": "always",

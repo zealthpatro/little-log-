@@ -38,6 +38,11 @@
 #      data types, required-reason APIs). The tracked source is native-ios/PrivacyInfo.xcprivacy, because
 #      ios/ is regenerated; it is copied in on every run and added to Copy Bundle Resources.
 #      tools/privacy_manifest_check.js gates it; tools/ios_launch_smoke.sh asserts it is in the built .app.
+#   8. Shows the bundled error page (cap-web/error.html) only for a real failure. Capacitor's
+#      server.errorPath fires on cancelled loads too (-999: a sign-in or invite link interrupting the first
+#      load), which stranded a parent on a false error page and dropped the link, so errorPath is off and
+#      native-ios/CubbyBridgeViewController.swift (the storyboard's root, set here) asks
+#      native-ios/CubbyLoadFailure.swift instead. tools/native_error_page_check.js gates it.
 #
 # Requires: gem install --user-install xcodeproj
 # See docs/plans/2026-07-15-native-wrapper-app-store.md
@@ -57,6 +62,10 @@ ENTITLEMENTS = File.join(APP_DIR, 'App.entitlements')
 SCENEDELEGATE = File.join(APP_DIR, 'SceneDelegate.swift')
 PRIVACY_SRC = File.join(ROOT, 'native-ios', 'PrivacyInfo.xcprivacy')
 PRIVACY_DST = File.join(APP_DIR, 'PrivacyInfo.xcprivacy')
+NATIVE_SWIFT = %w[CubbyLoadFailure.swift CubbyBridgeViewController.swift]
+STORYBOARD = File.join(APP_DIR, 'Base.lproj', 'Main.storyboard')
+CAP_ROOT_VC = 'customClass="CAPBridgeViewController" customModule="Capacitor"'
+CUBBY_ROOT_VC = 'customClass="CubbyBridgeViewController" customModule="App" customModuleProvider="target"'
 SCENE_CONFIG = 'Default Configuration'
 # Xcode expands $(PRODUCT_MODULE_NAME) in Info.plist at build time (to "App"), the same way it expands
 # $(PRODUCT_BUNDLE_IDENTIFIER). A bare "SceneDelegate" would not resolve: Swift classes are module-qualified.
@@ -329,6 +338,23 @@ else
   puts '✓ Added PrivacyInfo.xcprivacy to Copy Bundle Resources'
 end
 abort('✖ PrivacyInfo.xcprivacy is not in the App target resources') unless target.resources_build_phase.files_references.include?(priv_ref)
+
+# 8. The error-page guard (see header): both Swift files re-copied and compiled, the storyboard's root
+# view controller pointed at the subclass. A storyboard still naming CAPBridgeViewController would build and
+# launch fine with no error page at all for a phone that is offline at first launch.
+NATIVE_SWIFT.each do |name|
+  src = File.join(ROOT, 'native-ios', name)
+  abort("✖ Missing #{src}") unless File.exist?(src)
+  FileUtils.cp(src, File.join(APP_DIR, name))
+  ref = group.files.find { |f| f.display_name == name } || group.new_reference(File.join(APP_DIR, name))
+  target.source_build_phase.add_file_reference(ref) unless target.source_build_phase.files_references.include?(ref)
+  abort("✖ #{name} is not in the App target sources") unless target.source_build_phase.files_references.include?(ref)
+end
+board = File.read(STORYBOARD)
+board = board.sub(CAP_ROOT_VC, CUBBY_ROOT_VC) unless board.include?(CUBBY_ROOT_VC)
+File.write(STORYBOARD, board)
+abort('✖ Main.storyboard root is not CubbyBridgeViewController: Capacitor changed the template. Fix this script.') unless board.include?(CUBBY_ROOT_VC)
+puts '✓ Error-page guard: CubbyLoadFailure + CubbyBridgeViewController compiled, Main.storyboard root points at it'
 
 # 6. SceneDelegate.swift must be COMPILED into the target, not just referenced: the manifest names the
 # class, and a missing class is the same launch crash with a different message.
