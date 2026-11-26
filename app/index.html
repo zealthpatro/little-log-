@@ -1757,7 +1757,9 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 @media(min-width:900px){
   body{padding:28px 0;}
   #app{height:calc(100dvh - 56px);border-radius:34px;border:1px solid var(--line);box-shadow:var(--elev-modal);overflow:hidden;}
-  .sheet{bottom:28px;border-radius:var(--r-xl);}
+  /* Lifted 28px into the frame, so closed it must drop 28px further than its own height, or a white strip
+     sits under the frame (test/wide-sheet.test.js). .sheet.show still wins on specificity. */
+  .sheet{bottom:28px;border-radius:var(--r-xl);transform:translate(-50%,calc(100% + 28px));}
 }
 
 /* The doctor reports (#reportOv, built by openTtcDoctorReport and openPregDoctorReport) are

@@ -65,6 +65,7 @@ const TREE = [
   { name: 'tree-server',     cmd: ['node', 'tools/gates.js', '--self-test-tree-server'] },
   { name: 'preg-tick-race', cmd: ['node', 'test/preg-tick-race.test.js', 'url'] },
   { name: 'two-caregivers', cmd: ['node', 'test/two-caregiver-journey.test.js', 'url'] },
+  { name: 'wide-sheet',     cmd: ['node', 'test/wide-sheet.test.js', 'url'] },   // a closed sheet never peeks under the framed wide layout (iPad, desktop)
   { name: 'mkt-contrast',   cmd: ['node', 'tools/marketing_contrast_check.js', 'url'] },
   { name: 'type',           cmd: ['node', 'tools/type_check.js', 'url'] },
   /* config/app reaches every phone with no deploy and no review, so the validator in front of it is
@@ -196,6 +197,9 @@ const TREE = [
   { name: 'funnel-core',    cmd: ['node', 'test/funnel-core.test.js'] },
   { name: 'funnel-worker',  cmd: ['node', 'test/funnel-worker.test.js'] },
   { name: 'native-deeplink', cmd: ['node', 'test/native-deeplink.test.js'] },   // the native wrapper keeps a token invite link
+  /* Apple's privacy manifest: parses, tracking false, no tracking domains, bundled by cap_ios_configure.rb and,
+     where ios/ exists, in the App target's resources. --self-test stages ten failures first. */
+  { name: 'privacy-manifest', cmd: ['node', 'tools/privacy_manifest_check.js', '--self-test'] },
   { name: 'sender-name', cmd: ['node', 'test/sender-name.test.js'] },   // a sender's own name never reads as an address or a claim
   { name: 'funnel-steps',   cmd: ['node', 'tools/funnel_steps_check.js', 'url'] },
   /* The plan, both allowlists and the App Store answers agree (admin spec §14 tracking-plan, extended).

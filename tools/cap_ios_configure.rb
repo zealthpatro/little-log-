@@ -34,6 +34,10 @@
 #      only project. Under scenes, links arrive at the scene delegate, not the app delegate, so it
 #      forwards them the same way (Firebase Auth first, then Capacitor). tools/ios_launch_smoke.sh is
 #      the gate: cap_ios_build.sh refuses to upload a build that does not stay running on a simulator.
+#   7. Bundles the privacy manifest. Apple requires PrivacyInfo.xcprivacy in the app (tracking, collected
+#      data types, required-reason APIs). The tracked source is native-ios/PrivacyInfo.xcprivacy, because
+#      ios/ is regenerated; it is copied in on every run and added to Copy Bundle Resources.
+#      tools/privacy_manifest_check.js gates it; tools/ios_launch_smoke.sh asserts it is in the built .app.
 #
 # Requires: gem install --user-install xcodeproj
 # See docs/plans/2026-07-15-native-wrapper-app-store.md
@@ -51,6 +55,8 @@ PLIST_SRC = File.join(ROOT, 'native-build', 'GoogleService-Info.plist')
 PLIST_DST = File.join(APP_DIR, 'GoogleService-Info.plist')
 ENTITLEMENTS = File.join(APP_DIR, 'App.entitlements')
 SCENEDELEGATE = File.join(APP_DIR, 'SceneDelegate.swift')
+PRIVACY_SRC = File.join(ROOT, 'native-ios', 'PrivacyInfo.xcprivacy')
+PRIVACY_DST = File.join(APP_DIR, 'PrivacyInfo.xcprivacy')
 SCENE_CONFIG = 'Default Configuration'
 # Xcode expands $(PRODUCT_MODULE_NAME) in Info.plist at build time (to "App"), the same way it expands
 # $(PRODUCT_BUNDLE_IDENTIFIER). A bare "SceneDelegate" would not resolve: Swift classes are module-qualified.
@@ -310,6 +316,19 @@ if group.files.none? { |f| f.display_name == 'GoogleService-Info.plist' }
 else
   puts '· GoogleService-Info.plist already in the project'
 end
+
+# 7. The privacy manifest, always re-copied (like App.entitlements) so the tracked source always ships.
+abort("✖ Missing #{PRIVACY_SRC}") unless File.exist?(PRIVACY_SRC)
+abort('✖ native-ios/PrivacyInfo.xcprivacy does not lint') unless system('plutil', '-lint', PRIVACY_SRC, out: File::NULL)
+FileUtils.cp(PRIVACY_SRC, PRIVACY_DST)
+priv_ref = group.files.find { |f| f.display_name == 'PrivacyInfo.xcprivacy' } || group.new_reference(PRIVACY_DST)
+if target.resources_build_phase.files_references.include?(priv_ref)
+  puts '· PrivacyInfo.xcprivacy already in Copy Bundle Resources'
+else
+  target.add_resources([priv_ref])
+  puts '✓ Added PrivacyInfo.xcprivacy to Copy Bundle Resources'
+end
+abort('✖ PrivacyInfo.xcprivacy is not in the App target resources') unless target.resources_build_phase.files_references.include?(priv_ref)
 
 # 6. SceneDelegate.swift must be COMPILED into the target, not just referenced: the manifest names the
 # class, and a missing class is the same launch crash with a different message.

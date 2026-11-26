@@ -1,0 +1,66 @@
+<!doctype html>
+<!-- Bundled error page for the native app: capacitor.config.json server.errorPath. Capacitor loads it from
+     the app bundle (capacitor://localhost/error.html) whenever a main-frame load of the live site fails at
+     the network level: no connection and no cached shell yet, DNS, TLS, a timeout. An HTTP error from the
+     site is a successful load and never lands here. Capacitor also sends a CANCELLED load here (a second
+     navigation that interrupts the first), so when the phone is online the page goes straight back once,
+     at most every 30 seconds, and a family mid-use barely sees it. Copy: DESIGN.md §A1 and §A7. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Cubby</title>
+<style>
+:root{--bg:#F7F2E8;--ink:#2C2521;--ink-soft:#6E635B;--btn:#E29A3B;--on-btn:#1A1614;--focus:#2C2521}
+@media (prefers-color-scheme: dark){:root{--bg:#1A1614;--ink:#F2EADF;--ink-soft:#C4B8AB;--btn:#E0A655;--on-btn:#1A1614;--focus:#F2EADF}}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+body{display:flex;align-items:center;justify-content:center;min-height:100vh;box-sizing:border-box;
+  padding:calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom))}
+main{width:100%;max-width:360px;text-align:center}
+img{display:block;margin:0 auto 20px;border-radius:16px}
+h1{font-size:22px;line-height:1.3;margin:0 0 10px;font-weight:800}
+p{font-size:16px;line-height:1.5;margin:0 0 12px;color:var(--ink-soft)}
+button{width:100%;min-height:52px;margin-top:12px;border:none;border-radius:16px;background:var(--btn);
+  color:var(--on-btn);font:inherit;font-size:17px;font-weight:800;cursor:pointer}
+button:active{transform:scale(.97)}
+button:focus-visible{outline:3px solid var(--focus);outline-offset:3px}
+button[disabled]{opacity:.7}
+.small{font-size:14px;margin-top:16px}
+</style>
+</head>
+<body>
+<main>
+  <img src="logo.png?v=09cba32f" alt="" width="64" height="64">
+  <h1>Cubby can't open just now</h1>
+  <p>Cubby needs a connection the first time it opens. Check your Wi-Fi or mobile data, then try again.</p>
+  <button id="retry" type="button">Try again</button>
+  <p class="small" id="note" aria-live="polite">When your connection comes back, we'll try again for you.</p>
+</main>
+<script>
+(function () {
+  var APP = 'https://little-cubby.com/app/';
+  var KEY = 'cubby-error-autoretry';
+  var btn = document.getElementById('retry');
+  var note = document.getElementById('note');
+  function go() {
+    btn.disabled = true;
+    btn.textContent = 'Opening Cubby';
+    location.replace(APP);
+  }
+  btn.addEventListener('click', go);
+  window.addEventListener('online', go);
+  // One automatic return while online, then wait for the person: a site that is unreachable while the
+  // phone is online would otherwise bounce between here and a failed load forever.
+  var last = 0;
+  try { last = Number(sessionStorage.getItem(KEY)) || 0; } catch (e) {}
+  if (navigator.onLine !== false && Date.now() - last > 30000) {
+    try { sessionStorage.setItem(KEY, String(Date.now())); } catch (e) {}
+    go();
+  }
+  if (navigator.onLine === false) note.textContent = "Your phone looks offline. When the connection comes back, we'll try again for you.";
+})();
+</script>
+</body>
+</html>
