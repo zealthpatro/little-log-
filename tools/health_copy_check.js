@@ -72,11 +72,12 @@ const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const LABEL = new RegExp('\\((' + ALL_LABELS.map(esc).join('|') + ')\\b[^)]*\\)', 'g');
 const CRISIS = /crisis|urgent|reach out now|harm(ing)? yourself|suicid|helpline|hotline|emergenc|in danger/i;
 
-/* Pages whose FAQ was rewritten for health accuracy on 26 Nov 2026. Add a page here when you fix its FAQ. */
+/* Pages whose health copy was fixed on 26 Nov 2026 (two rounds). Add a page here when you fix its copy. */
 const LOCKSTEP = [
   'aap-safe-sleep-guidelines', 'cubby-medicine-log', 'postpartum-depression-japan', 'baby-breathing-normal',
   'when-to-call-ambulance-baby', 'postnatal-psychosis-signs-and-emergency-response', 'head-injury-babies',
   'febrile-seizures-babies', 'safe-sleep-italy-iss', 'is-this-normal-newborn',
+  'cubby-temperature-tracker', 'baby-medication-guide', 'emergency-numbers-uae', 'sids-red-nose-australia',
 ].map((s) => 'articles/' + s + '/index.html');
 
 const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', rsquo: '’', lsquo: '‘',
@@ -186,7 +187,9 @@ function checkLockstep(rel, html, fails) {
   if (!faq) { fails.push(`${rel}: no FAQPage JSON-LD to hold in lockstep`); return; }
   const body = html.split('</head>')[1] || '';
   const vis = new Map();
-  const re = /<h3[^>]*>([\s\S]*?)<\/h3>\s*<p[^>]*>([\s\S]*?)<\/p>/g;
+  /* One heading at a time: a lazy match from an <h3> with no <p> after it ("<h3>Dubai</h3><ul>")
+     would run on to the next heading's </h3> and swallow both into one question. */
+  const re = /<h3[^>]*>((?:(?!<\/?h3)[\s\S])*?)<\/h3>\s*<p[^>]*>([\s\S]*?)<\/p>/g;
   let m;
   while ((m = re.exec(body))) vis.set(text(m[1]), text(m[2]));
   /* The visible FAQ section: from the "Frequently asked questions" heading to the next <h2> or block. */
@@ -324,6 +327,8 @@ function selfTest() {
     expect('a JSON-LD question with no visible twin goes red', r.fails.some((f) => f.includes('no visible twin')));
     r = judge(stage({ 'articles/f/index.html': page('F', faqBody([...vis, ['Visible only?', 'Yes.']]), faqLd(Q)) }), ['articles/f/index.html']);
     expect('a visible FAQ question missing from the JSON-LD goes red', r.fails.some((f) => f.includes('missing from the JSON-LD')));
+    r = judge(stage({ 'articles/f/index.html': page('F', '<h3>Dubai</h3><ul><li>A hospital</li></ul>' + faqBody(vis), faqLd(Q)) }), ['articles/f/index.html']);
+    expect('a list heading with no <p> before the FAQ does not swallow the first question', r.fails.length === 0);
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
