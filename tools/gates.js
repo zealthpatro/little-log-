@@ -47,6 +47,9 @@ const TREE = [
   { name: 'claude-md',      cmd: ['node', 'tools/claudemd_check.js', '--self-test'] },
   { name: 'hooks',          cmd: ['node', 'tools/hooks_check.js', '--self-test'] },
   { name: 'harness',        cmd: ['node', 'tools/harness_check.js', '--self-test'] },
+  /* The daily merge train (docs/RELEASE-TRAIN.md): green PRs only, CACHE-only sw.js conflicts settled,
+     real conflicts skipped and aborted, CACHE ends above production. Real git in a temp repo. */
+  { name: 'train',          cmd: ['node', 'tools/train.js', '--self-test'] },
   { name: 'deploy-excl',    cmd: ['node', 'tools/deploy_exclusion_check.js', '--self-test'] },
   /* The guard that keeps gates out of ~/Downloads, and the helper that sends their files elsewhere. */
   { name: 'downloads-guard', cmd: ['node', 'tools/gates.js', '--self-test-downloads'] },
