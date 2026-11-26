@@ -214,6 +214,7 @@ const TREE = [
   { name: 'usage-erasure',  cmd: ['node', 'test/usage-erasure.test.js'] },
   { name: 'usage-erasure-mut', cmd: ['node', 'test/usage-erasure.test.js', '--self-test'] },
   { name: 'funnel-report',  cmd: ['node', 'tools/funnel_report.js', '--self-test'] },
+  { name: 'prod-counts',    cmd: ['node', 'tools/prod_counts.js', '--self-test'] },  // read-only aggregate counts; the self-test fails on any write call
   { name: 'signin-email',   cmd: ['node', 'test/signin-email.test.js', '--self-test'] },
   { name: 'signin-flow',    cmd: ['node', 'test/signin-flow.test.js', '--self-test'] },
   { name: 'signin-boot',    cmd: ['node', 'test/signin-boot.test.js', '--self-test'] },
