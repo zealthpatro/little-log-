@@ -12,7 +12,10 @@
  *
  *   a. leaked review notes: no served HTML page carries a reviewer marker in its visible text or its
  *      JSON-LD. Markers are case-sensitive whole tokens (MARKERS below), so "confirmed" in a sentence a
- *      parent reads ("your midwife confirmed") is not one; "CONFIRMED" in capitals is.
+ *      parent reads ("your midwife confirmed") is not one; "CONFIRMED" in capitals is. Visible text also
+ *      never names the page's own markup ("JSON-LD", "FAQPage", "structured data"): the safe-medicines
+ *      leak on the review branch carried no older marker, only "Apply the same fix to all three places
+ *      ... the FAQPage structured data".
  *   b. wrong-country crisis numbers: a page whose slug or title names a country must not label a line
  *      for ANOTHER country inside an urgent or crisis block. A block is an element whose class says
  *      urgent or crisis, or a <p> or <li> whose own text is about a crisis (CRISIS below). A label is a
@@ -43,6 +46,17 @@ const MARKERS = [
   ['DISCLAIMER CHECK', /DISCLAIMER CHECK/],
   ['Fix all three copies', /Fix all three copies/],
   ['ADDED BY ME', /ADDED BY ME/],
+  ['Apply the same fix', /\bApply the same fix\b/],
+  ['all three places', /\ball three places\b/],
+];
+/* Words about the page's own markup. A parent never needs them, so in VISIBLE text they mean an
+   editing note reached the page ("the identical string inside the FAQPage structured data", "the
+   same text inside the FAQPage JSON-LD in the head"). They are not judged inside the JSON-LD itself,
+   where "FAQPage" is the schema's own type. */
+const MARKUP_WORDS = [
+  ['JSON-LD', /\bJSON-LD\b/i],
+  ['FAQPage', /\bFAQPage\b/],
+  ['structured data', /\bstructured data\b(?! points?\b)/i],   /* "a structured data point" is copy (cubby-vs-whatsapp-group) */
 ];
 
 /* Slug token or title word -> the labels that count as "this country". */
@@ -120,7 +134,7 @@ function checkMarkers(rel, html, fails) {
     zones.push(['JSON-LD', strings(parsed, []).join(' \n ')]);
   }
   for (const [zone, t] of zones) {
-    for (const [name, re] of MARKERS) {
+    for (const [name, re] of zone === 'visible text' ? MARKERS.concat(MARKUP_WORDS) : MARKERS) {
       const m = re.exec(t);
       if (m) fails.push(`${rel}: reviewer marker "${name}" in ${zone}: "${t.slice(Math.max(0, m.index - 40), m.index + 60).trim()}"`);
     }
@@ -251,6 +265,8 @@ function selfTest() {
       'DISCLAIMER CHECK': 'DISCLAIMER CHECK, not an error.',
       'Fix all three copies': '(Fix all three copies: this sentence and the FAQ.)',
       'ADDED BY ME': 'ADDED BY ME, the proposer missed it.',
+      'Apply the same fix': 'Apply the same fix to the FAQ answer.',
+      'all three places': 'Change it in all three places the absolute appears.',
     };
     for (const name of MARKERS.map((x) => x[0])) {
       r = judge(stage({ 'articles/leak/index.html': page('Leak', `<p>${samples[name]}</p>`) }), []);
@@ -258,6 +274,25 @@ function selfTest() {
       r = judge(stage({ 'articles/leak/index.html': page('Leak', '<p>Plain copy.</p>', faqLd([['Q?', samples[name]]])) }), []);
       expect(`JSON-LD marker "${name}" goes red`, r.fails.some((f) => f.includes(`marker "${name}" in JSON-LD`)));
     }
+    const markupSamples = {
+      'JSON-LD': 'and the same text inside the FAQPage JSON-LD in the head',
+      'FAQPage': 'the identical string inside the FAQPage data',
+      'structured data': 'or the structured data will keep publishing it',
+    };
+    for (const [name, sample] of Object.entries(markupSamples)) {
+      r = judge(stage({ 'articles/leak/index.html': page('Leak', `<p>The NHS advises it. ${sample}.</p>`) }), []);
+      expect(`markup word "${name}" in visible text goes red`, r.fails.some((f) => f.includes(`marker "${name}" in visible text`)));
+    }
+    r = judge(stage({ 'articles/leak/index.html': page('Leak', '<p>Plain copy.</p>', faqLd([['Q?', 'A plain answer.']])) }), []);
+    expect('"FAQPage" as the JSON-LD\'s own @type is not a leak', r.fails.length === 0);
+    r = judge(stage({ 'articles/leak/index.html': page('Leak', '<p>A Cubby log entry is a structured data point: a type and a time.</p>') }), []);
+    expect('"a structured data point" in a sentence a parent reads is copy, not a leak', r.fails.length === 0);
+    /* The shape that shipped on the review branch (H1 65751dbf, safe medicines in pregnancy): the note
+       sat at the end of a real health sentence, with none of the older markers in it. */
+    const H1_MEDS = '<p>The NHS advises avoiding ibuprofen during pregnancy unless a doctor or pharmacist tells you to use it. ' +
+      'Apply the same fix to all three places the absolute appears: this body sentence, the visible FAQ answer, and the identical string inside the FAQPage structured data.</p>';
+    r = judge(stage({ 'articles/safe-medicines-in-pregnancy/index.html': page('Safe medicines in pregnancy', H1_MEDS) }), []);
+    for (const name of ['Apply the same fix', 'all three places', 'FAQPage', 'structured data']) expect(`the H1 safe-medicines leak goes red on "${name}"`, r.fails.some((f) => f.includes(`marker "${name}" in visible text`)));
     r = judge(stage({ 'articles/leak/index.html': page('Leak', '<p>Fine.</p><!-- CONFIRMED in a comment --><script>var CONFIRMED=1</script>') }), []);
     expect('a marker in an HTML comment or a plain script is not served copy', r.fails.length === 0);
     r = judge(stage({ 'articles-drafts/leak/index.html': page('Leak', '<p>CONFIRMED.</p>'), '.assetsignore': 'articles-drafts\n' }), []);
