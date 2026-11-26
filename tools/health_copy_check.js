@@ -62,7 +62,7 @@ const CRISIS = /crisis|urgent|reach out now|harm(ing)? yourself|suicid|helpline|
 const LOCKSTEP = [
   'aap-safe-sleep-guidelines', 'cubby-medicine-log', 'postpartum-depression-japan', 'baby-breathing-normal',
   'when-to-call-ambulance-baby', 'postnatal-psychosis-signs-and-emergency-response', 'head-injury-babies',
-  'febrile-seizures-babies',
+  'febrile-seizures-babies', 'safe-sleep-italy-iss', 'is-this-normal-newborn',
 ].map((s) => 'articles/' + s + '/index.html');
 
 const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', rsquo: '’', lsquo: '‘',
