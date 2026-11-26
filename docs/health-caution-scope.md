@@ -5,11 +5,13 @@ the gate fails when this file and the scope differ. Rules: docs/HEALTH-COPY-RULE
 
 MEDICAL means any symptom, illness, medicine, dose, first aid, emergency, pregnancy health, birth, feeding health,
 sleep safety, development or behaviour concern, or mental health. Every article is MEDICAL unless it is listed as
-NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products, Cubby features).
+NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products) or PRODUCT (a pure Cubby
+product page with no health guidance, which carries neither line).
 
 - Articles: 660
 - MEDICAL: 589 (caution block under the title, official sources)
-- NON-MEDICAL: 71 (general line)
+- NON-MEDICAL: 49 (general line)
+- PRODUCT: 22 (neither line)
 - MEDICAL pages still without an official source in their sources list: 277
 
 ## NON-MEDICAL
@@ -27,28 +29,7 @@ NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products
 - birth-registration-uae: paperwork
 - child-benefit-uk: leave, pay or rights
 - congedo-maternita: leave, pay or rights
-- cubby: Cubby feature or comparison
-- cubby-article-library: Cubby feature or comparison
-- cubby-care-team: Cubby feature or comparison
-- cubby-family-circle: Cubby feature or comparison
-- cubby-for-dads-partners: Cubby feature or comparison
 - cubby-for-expat-families: Cubby feature or comparison
-- cubby-for-grandparents: Cubby feature or comparison
-- cubby-for-new-parents: Cubby feature or comparison
-- cubby-night-feed-problem: Cubby feature or comparison
-- cubby-notes: Cubby feature or comparison
-- cubby-pregnancy-tracking: Cubby feature or comparison
-- cubby-privacy: Cubby feature or comparison
-- cubby-privacy-layers: Cubby feature or comparison
-- cubby-pwa: Cubby feature or comparison
-- cubby-rituals: Cubby feature or comparison
-- cubby-vs-babyconnect: Cubby feature or comparison
-- cubby-vs-glow-baby: Cubby feature or comparison
-- cubby-vs-huckleberry: Cubby feature or comparison
-- cubby-vs-nara-baby: Cubby feature or comparison
-- cubby-vs-sticky-notes: Cubby feature or comparison
-- cubby-vs-tinybeans: Cubby feature or comparison
-- cubby-vs-whatsapp-group: Cubby feature or comparison
 - early-childhood-education-japan: childcare
 - elterngeld: leave, pay or rights
 - elterngeld-parental-leave: leave, pay or rights
@@ -83,8 +64,32 @@ NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products
 - sure-start-maternity-grant: leave, pay or rights
 - tagesmutter-vs-krippe: childcare
 - us-maternity-leave: leave, pay or rights
-- what-is-cubby: Cubby feature or comparison
 - wic-program-families: benefit programme; borderline, it touches breastfeeding support
+
+## PRODUCT
+
+- cubby: Cubby product page, no health guidance
+- cubby-article-library: Cubby product page, no health guidance
+- cubby-care-team: Cubby product page, no health guidance
+- cubby-family-circle: Cubby product page, no health guidance
+- cubby-for-dads-partners: Cubby product page, no health guidance
+- cubby-for-grandparents: Cubby product page, no health guidance
+- cubby-for-new-parents: Cubby product page, no health guidance
+- cubby-night-feed-problem: Cubby product page, no health guidance
+- cubby-notes: Cubby product page, no health guidance
+- cubby-pregnancy-tracking: Cubby product page, no health guidance
+- cubby-privacy: Cubby product page, no health guidance
+- cubby-privacy-layers: Cubby product page, no health guidance
+- cubby-pwa: Cubby product page, no health guidance
+- cubby-rituals: Cubby product page, no health guidance
+- cubby-vs-babyconnect: Cubby product page, no health guidance
+- cubby-vs-glow-baby: Cubby product page, no health guidance
+- cubby-vs-huckleberry: Cubby product page, no health guidance
+- cubby-vs-nara-baby: Cubby product page, no health guidance
+- cubby-vs-sticky-notes: Cubby product page, no health guidance
+- cubby-vs-tinybeans: Cubby product page, no health guidance
+- cubby-vs-whatsapp-group: Cubby product page, no health guidance
+- what-is-cubby: Cubby product page, no health guidance
 
 ## MEDICAL, classified with less confidence
 

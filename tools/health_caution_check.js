@@ -26,6 +26,8 @@
  *        F2: sourcesGapPin in the scope file pins its count and a hash of the sorted list, and GAP_CEILING
  *        here caps it, so adding a slug is red and removing one means re-pinning.
  *   NON-MEDICAL: a p.art-disclaimer with GENERAL, word for word, and no other disclaimer wording.
+ *   PRODUCT (listed in product): a pure Cubby product page with no health guidance carries neither line,
+ *   no caution block and no bottom disclaimer.
  *   Scope: every listed slug exists, nothing is both non-medical and in the gap, and
  *   docs/health-caution-scope.md is exactly what --write-doc would write.
  *   Honest limits: it proves the words and a link exist, not that the page says only what the linked
@@ -83,7 +85,7 @@ function articles(root) {
 }
 function readScope(root) {
   const s = JSON.parse(fs.readFileSync(path.join(root, SCOPE_REL), 'utf8'));
-  return { nonMedical: Object.keys(s.nonMedical || {}), sourcesGap: s.sourcesGap || [], notes: s.nonMedical || {}, borderline: s.borderlineMedical || {}, gapPin: s.sourcesGapPin || null };
+  return { nonMedical: Object.keys(s.nonMedical || {}), product: Object.keys(s.product || {}), productNotes: s.product || {}, sourcesGap: s.sourcesGap || [], notes: s.nonMedical || {}, borderline: s.borderlineMedical || {}, gapPin: s.sourcesGapPin || null };
 }
 
 /* F2: sourcesGap is frozen. The scope file pins its count and a hash of the sorted list, and the gate holds
@@ -123,7 +125,8 @@ function sourceRegions(main) {
 }
 const officialLinks = (html) => [...html.matchAll(/href="https?:\/\/([^\/"?#:]+)/g)].map((m) => m[1]).filter(isOfficial);
 
-function judgePage(slug, html, medical, inGap) {
+function judgePage(slug, html, kind, inGap) {
+  const medical = kind === 'medical';
   const fails = [];
   const main = mainOf(html);
   const at = `articles/${slug}`;
@@ -148,6 +151,9 @@ function judgePage(slug, html, medical, inGap) {
     const has = sourceRegions(main).some((r) => officialLinks(r).length);
     if (!has && !inGap) fails.push(`${at}: MEDICAL page lists no official source (a link to ${OFFICIAL.slice(0, 6).join(', ')}, ... in its sources)`);
     if (has && inGap) fails.push(`${at}: now lists an official source, remove it from sourcesGap in ${SCOPE_REL}`);
+  } else if (kind === 'product') {
+    if (/class="art-caution"/.test(main)) fails.push(`${at}: PRODUCT page carries the caution block; it carries neither line`);
+    for (const d of discl) fails.push(`${at}: PRODUCT page carries a bottom disclaimer; it carries neither line: "${d.slice(0, 70)}"`);
   } else {
     if (!discl.includes(GENERAL)) fails.push(`${at}: NON-MEDICAL page needs the general line "${GENERAL}"`);
     for (const d of discl) if (d !== GENERAL) fails.push(`${at}: NON-MEDICAL disclaimer is not the general line: "${d.slice(0, 70)}"`);
@@ -157,7 +163,7 @@ function judgePage(slug, html, medical, inGap) {
 
 function renderDoc(root, scope) {
   const all = articles(root);
-  const non = new Set(scope.nonMedical);
+  const non = new Set([...scope.nonMedical, ...scope.product]);
   const med = all.filter((s) => !non.has(s));
   const L = [];
   L.push('# Health caution scope', '');
@@ -165,13 +171,17 @@ function renderDoc(root, scope) {
   L.push('the gate fails when this file and the scope differ. Rules: docs/HEALTH-COPY-RULES.md.', '');
   L.push('MEDICAL means any symptom, illness, medicine, dose, first aid, emergency, pregnancy health, birth, feeding health,');
   L.push('sleep safety, development or behaviour concern, or mental health. Every article is MEDICAL unless it is listed as');
-  L.push('NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products, Cubby features).', '');
+  L.push('NON-MEDICAL below (leave, pay, paperwork, childcare logistics, customs, products) or PRODUCT (a pure Cubby');
+  L.push('product page with no health guidance, which carries neither line).', '');
   L.push(`- Articles: ${all.length}`);
   L.push(`- MEDICAL: ${med.length} (caution block under the title, official sources)`);
   L.push(`- NON-MEDICAL: ${scope.nonMedical.length} (general line)`);
+  L.push(`- PRODUCT: ${scope.product.length} (neither line)`);
   L.push(`- MEDICAL pages still without an official source in their sources list: ${scope.sourcesGap.length}`, '');
   L.push('## NON-MEDICAL', '');
   for (const s of [...scope.nonMedical].sort()) L.push(`- ${s}${scope.notes[s] ? ': ' + scope.notes[s] : ''}`);
+  L.push('', '## PRODUCT', '');
+  for (const s of [...scope.product].sort()) L.push(`- ${s}${scope.productNotes[s] ? ': ' + scope.productNotes[s] : ''}`);
   L.push('', '## MEDICAL, classified with less confidence', '');
   for (const s of Object.keys(scope.borderline).sort()) L.push(`- ${s}: ${scope.borderline[s]}`);
   L.push('', '## MEDICAL without an official source yet (fix these, then remove them from sourcesGap)', '');
@@ -187,20 +197,25 @@ function judge(root) {
   const all = articles(root);
   const have = new Set(all);
   const non = new Set(scope.nonMedical);
+  const prod = new Set(scope.product);
   const gap = new Set(scope.sourcesGap);
-  for (const s of [...scope.nonMedical, ...scope.sourcesGap, ...Object.keys(scope.borderline)]) if (!have.has(s)) fails.push(`${SCOPE_REL}: lists "${s}", which is not an article`);
+  for (const s of scope.product) if (non.has(s)) fails.push(`${SCOPE_REL}: "${s}" is both NON-MEDICAL and PRODUCT`);
+  for (const s of [...scope.sourcesGap, ...Object.keys(scope.borderline)]) if (prod.has(s)) fails.push(`${SCOPE_REL}: "${s}" is PRODUCT and listed as MEDICAL debt or borderline`);
+  for (const s of [...scope.nonMedical, ...scope.product, ...scope.sourcesGap, ...Object.keys(scope.borderline)]) if (!have.has(s)) fails.push(`${SCOPE_REL}: lists "${s}", which is not an article`);
   for (const s of scope.sourcesGap) if (non.has(s)) fails.push(`${SCOPE_REL}: "${s}" is NON-MEDICAL and in sourcesGap`);
   for (const s of Object.keys(scope.borderline)) if (non.has(s)) fails.push(`${SCOPE_REL}: "${s}" is NON-MEDICAL and borderline MEDICAL`);
   fails.push(...judgeGapPin(scope));
-  for (const s of all) fails.push(...judgePage(s, fs.readFileSync(path.join(root, 'articles', s, 'index.html'), 'utf8'), !non.has(s), gap.has(s)));
+  const kindOf = (s) => (prod.has(s) ? 'product' : non.has(s) ? 'non' : 'medical');
+  for (const s of all) fails.push(...judgePage(s, fs.readFileSync(path.join(root, 'articles', s, 'index.html'), 'utf8'), kindOf(s), gap.has(s)));
   const docPath = path.join(root, DOC_REL);
   if (!fs.existsSync(docPath) || fs.readFileSync(docPath, 'utf8') !== renderDoc(root, scope)) fails.push(`${DOC_REL}: out of date, run --write-doc`);
-  return { n: all.length, med: all.length - scope.nonMedical.length, gap: scope.sourcesGap.length, fails };
+  return { n: all.length, med: all.filter((s) => kindOf(s) === 'medical').length, non: scope.nonMedical.length, product: scope.product.length, gap: scope.sourcesGap.length, fails };
 }
 
 /* --apply: one command puts every page in line with its scope. Idempotent. */
 const CRISIS_UK = 'In a crisis, contact Samaritans on 116 123 (UK) or your local emergency services.';
-function applyPage(html, medical) {
+function applyPage(html, kind) {
+  const medical = kind === 'medical';
   const i = html.indexOf('<main'); const j = html.lastIndexOf('</main>');
   if (i < 0 || j < 0) return html;
   let m = html.slice(i, j);
@@ -212,6 +227,8 @@ function applyPage(html, medical) {
       const keep = crisis || (/Samaritans/.test(inner) ? `\n  <p class="art-crisis">${CRISIS_UK}</p>` : '');
       return `<p class="art-disclaimer"${attrs}>${CAUTION}</p>${keep}`;
     });
+  } else if (kind === 'product') {
+    m = m.replace(/\n?[ \t]*<p class="art-disc(?:laimer)?"[^>]*>[\s\S]*?<\/p>/g, '');
   } else {
     if (/<p class="art-disc(?:laimer)?"/.test(m)) m = m.replace(/<p class="art-disc(?:laimer)?"([^>]*)>[\s\S]*?<\/p>/g, (all, attrs) => `<p class="art-disclaimer"${attrs}>${GENERAL}</p>`);
     else {
@@ -225,11 +242,12 @@ function applyPage(html, medical) {
 function apply(root) {
   const scope = readScope(root);
   const non = new Set(scope.nonMedical);
+  const prod = new Set(scope.product);
   let changed = 0;
   for (const s of articles(root)) {
     const f = path.join(root, 'articles', s, 'index.html');
     const before = fs.readFileSync(f, 'utf8');
-    const after = applyPage(before, !non.has(s));
+    const after = applyPage(before, prod.has(s) ? 'product' : non.has(s) ? 'non' : 'medical');
     if (after !== before) { fs.writeFileSync(f, after); changed++; }
   }
   return changed;
@@ -319,6 +337,18 @@ ${body}
     expect('a NON-MEDICAL page without the general line goes red', red(r, 'needs the general line'));
     r = judge(stage({ 'articles/leave/index.html': page(BODY, `<p class="art-disclaimer">${GENERAL}</p><p class="art-disc">Old words.</p>`) }));
     expect('a NON-MEDICAL page with a second, older disclaimer goes red', red(r, 'not the general line'));
+    const prodScope = { ...scope, product: { 'cubby-vs-x': 'Cubby comparison' } };
+    const prodPage = page(BODY, '<footer class="src">Cubby editorial team.</footer>');
+    r = judge(stage({ 'articles/cubby-vs-x/index.html': prodPage }, prodScope));
+    expect('a PRODUCT page with neither line passes', r.fails.length === 0 && r.product === 1 && r.med === 0);
+    r = judge(stage({ 'articles/cubby-vs-x/index.html': page(BODY, `<p class="art-disclaimer">${GENERAL}</p><footer class="src">x</footer>`) }, prodScope));
+    expect('a PRODUCT page with the general line goes red', red(r, 'PRODUCT page carries a bottom disclaimer'));
+    r = judge(stage({ 'articles/cubby-vs-x/index.html': page(`  ${CAUTION_HTML}\n${BODY}`, '<footer class="src">x</footer>') }, prodScope));
+    expect('a PRODUCT page with the caution goes red', red(r, 'PRODUCT page carries the caution'));
+    r = judge(stage({ 'articles/cubby-vs-x/index.html': prodPage }));
+    expect('the same page unlisted is MEDICAL and goes red', red(r, 'articles/cubby-vs-x: MEDICAL page needs exactly one'));
+    r = judge(stage({ 'articles/cubby-vs-x/index.html': prodPage }, { ...prodScope, nonMedical: { leave: 'x', 'cubby-vs-x': 'y' } }));
+    expect('a slug both NON-MEDICAL and PRODUCT goes red', red(r, 'both NON-MEDICAL and PRODUCT'));
     r = judge(stage({ 'articles/new-topic/index.html': page(BODY) }));
     expect('a new article nobody classified is MEDICAL and goes red without the caution', red(r, 'articles/new-topic: MEDICAL page needs exactly one'));
     r = judge(stage({}, { ...scope, nonMedical: { leave: 'x', gone: 'y' } }));
@@ -329,11 +359,12 @@ ${body}
     expect('a scope doc that differs from the scope goes red', red(r, 'out of date'));
     /* --apply and the judge agree: raw pages in, a green tree out, and a second run changes nothing. */
     const mh = page(BODY, `<p class="art-disclaimer">This article is for general information only. In a crisis, contact Samaritans on 116 123 (UK) or your local emergency services.</p>${NHS}`);
-    t = stage({ 'articles/fever/index.html': page(`  <img src="h.png" alt="">\n${BODY}`), 'articles/mh/index.html': mh, 'articles/leave/index.html': page(BODY, '<footer class="src">x</footer>') });
+    t = stage({ 'articles/fever/index.html': page(`  <img src="h.png" alt="">\n${BODY}`), 'articles/mh/index.html': mh, 'articles/leave/index.html': page(BODY, '<footer class="src">x</footer>'),
+      'articles/cubby-vs-x/index.html': page(`  ${CAUTION_HTML}\n${BODY}`, `<p class="art-disclaimer">${GENERAL}</p><footer class="src">x</footer>`) }, prodScope);
     const n1 = apply(t); const n2 = apply(t);
     r = judge(t);
     const mhOut = fs.readFileSync(path.join(t, 'articles/mh/index.html'), 'utf8');
-    expect('--apply turns raw pages green and is idempotent', n1 === 3 && n2 === 0 && r.fails.length === 0);
+    expect('--apply turns raw pages green (a PRODUCT page loses both lines) and is idempotent', n1 === 4 && n2 === 0 && r.fails.length === 0);
     expect('--apply keeps the only crisis line when it replaces a mental-health disclaimer', mhOut.includes(`<p class="art-crisis">${CRISIS_UK}</p>`) && mhOut.split('Samaritans').length === 2);
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
@@ -352,9 +383,9 @@ if (require.main === module) {
   }
   if (process.argv.includes('--apply')) console.log(`apply: ${apply(root)} article(s) changed`);
   if (process.argv.includes('--write-doc')) { fs.writeFileSync(path.join(root, DOC_REL), renderDoc(root, readScope(root))); console.log('wrote ' + DOC_REL); }
-  const { n, med, gap, fails } = judge(root);
+  const { n, med, non, product, gap, fails } = judge(root);
   for (const f of fails) console.log('FAIL ' + f);
-  console.log(`health-caution: ${n} articles, ${med} MEDICAL, ${n - med} NON-MEDICAL, ${gap} known source gaps, ${fails.length} failure(s)`);
+  console.log(`health-caution: ${n} articles, ${med} MEDICAL, ${non} NON-MEDICAL, ${product} PRODUCT, ${gap} known source gaps, ${fails.length} failure(s)`);
   process.exit(failed || fails.length ? 1 : 0);
 }
 module.exports = { CAUTION, GENERAL, isOfficial, judge, applyPage };
