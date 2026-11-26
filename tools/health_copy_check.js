@@ -220,7 +220,7 @@ const OLD_JAPAN_BOX = `<div class="callout callout-urgent"><strong>If you are ha
 const NEW_JAPAN_BOX = `<div class="callout callout-urgent"><strong>If you are having thoughts of harming yourself or your baby, please reach out now.</strong><ul>
   <li><strong>Emergency in Japan:</strong> call 119 for an ambulance</li>
   <li><strong>TELL Lifeline, in English:</strong> 0800-300-8355, free</li>
-  <li><strong>Yorisoi Hotline:</strong> 0120-279-338, free and open 24 hours. Press 2 for English and other languages.</li>
+  <li><strong>Yorisoi Hotline:</strong> 0120-279-338, free and open 24 hours in Japanese. For English and other languages, press 2 after the first message, every day from 10am to 10pm.</li>
   <li><strong>Outside Japan:</strong> call your local emergency number</li></ul></div>`;
 
 function selfTest() {
