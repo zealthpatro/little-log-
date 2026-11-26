@@ -385,6 +385,7 @@ const EMU_GATES = [
   { name: 'circle-manage', self: ['node', 'test/circle-manage.test.js'] },    // remove/cancel tap through, a removal closes every live link
   { name: 'signin-claim-auth', self: ['node', 'test/signin-claim-auth-emu.test.js'] }, // claiming an unproven account keeps HER one account (real Auth emulator)
   { name: 'next-account-cache-emu', self: ['node', 'test/next-account-cache-emulator.test.js'] }, // what one person logged before signing in never reaches the next account on that phone (real client, real rules)
+  { name: 'stale-family-emu', self: ['node', 'test/stale-family-memory-emulator.test.js'] }, // after a sign-out nothing on the page still names the family left: no stale id on feedback, roster or Pro (real client, real rules)
   { name: 'removed-records', emu: 'node removed-records.test.js' },                  // a removed mother lists and deletes her own records; nobody else gains anything
   { name: 'removed-records-ui', self: ['node', 'test/removed-records-ui.test.js'] }, // ...from the note, and from account deletion
   { name: 'join-offline', self: ['node', 'test/join-offline.test.js'] },             // Join the family offline: the card, not an endless loader, and the join still lands

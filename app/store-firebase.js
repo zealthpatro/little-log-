@@ -1304,6 +1304,12 @@
     if (configUnsub) { try { configUnsub(); } catch (e) {} configUnsub = null; }
     if (avatarClaimT) { clearTimeout(avatarClaimT); avatarClaimT = null; } // never claim a bear into the account being left
     window.LL.memberEmails = {}; memberEmailsMigrated = false; ownEmailWritten = false;
+    /* What the household snapshot says about the family (startSync) goes with it, back to how a fresh page
+       starts: unknown until the next account's own snapshot lands. Left behind, the next account's feedback
+       was stamped with the previous family's id, and its family sheet listed that family's people, invites
+       and Pro (test/stale-family-memory-emulator.test.js). */
+    ['householdId', 'members', 'memberInfo', 'formerMemberInfo', 'hhPending', 'hhPendingLinks', 'pro', 'role']
+      .forEach(function (k) { delete window.LL[k]; });
     hhRef = eventsRef = photosRef = notesRef = null;
     // The next account starts unhydrated with no baseline, or this account's blob would be the
     // thing the next one's first push is diffed against.
