@@ -23,6 +23,11 @@
  *   b   entries still stamped authorId 'local'.
  *   c   orphan households: no members, or every member's account is gone from Auth.
  *   d   totals, and households with an entry written (server createTime/updateTime) in the last 7 and 30 days.
+ *   e   users docs with no Auth account (deleteAccount deletes users/{uid} before the login, so one left behind
+ *       is a deletion that did not take it, or a write that re-created it). Field NAMES and counts only; a name
+ *       that is not a plain identifier is counted as "(other)" so no value keyed as a field can be printed.
+ *       push_only = the doc holds nothing but push.nextAt/sentUpTo, the shape the Worker's push cron PATCH
+ *       (no exists precondition) would leave if it re-created a deleted doc.
  */
 const path = require('path');
 
@@ -48,7 +53,7 @@ async function collect(ro) {
   do { const page = await ro.listUsers(token); page.users.forEach((u) => authUids.add(u.uid)); token = page.pageToken; } while (token);
   const households = hhSnap.docs.map((d) => {
     const h = d.data() || {};
-    return { id: d.id, members: Object.keys(h.members || {}), babyIds: ((h.app && h.app.babies) || []).map((b) => b && b.id).filter(Boolean).map(String) };
+    return { id: d.id, members: Object.keys(h.members || {}), infoKeys: Object.keys(h.memberInfo || {}), babyIds: ((h.app && h.app.babies) || []).map((b) => b && b.id).filter(Boolean).map(String) };
   });
   const events = evSnap.docs.map((d) => {
     const e = d.data() || {};
@@ -56,11 +61,21 @@ async function collect(ro) {
     return { hh: parent ? parent.id : null, id: d.id, authorId: e.authorId || '', type: e.type || '', time: msOf(e.time),
       written: Math.max(msOf(d.createTime), msOf(d.updateTime)), created: msOf(d.createTime) };
   }).filter((e) => e.hh);
-  return { households, events, authUids, userDocs: usersSnap.size };
+  const users = usersSnap.docs.map((d) => {
+    const u = d.data() || {};
+    const push = (u.push && typeof u.push === 'object' && !Array.isArray(u.push)) ? Object.keys(u.push) : [];
+    const hv = u.householdId;
+    const hType = !('householdId' in u) ? 'absent' : hv === null ? 'null' : hv === '' ? 'empty_string' : typeof hv;
+    return { id: d.id, fields: Object.keys(u), pushKeys: push, hType, householdId: typeof u.householdId === 'string' ? u.householdId : '',
+      formerIds: Array.isArray(u.formerHouseholdIds) ? u.formerHouseholdIds.map(String) : [],
+      created: msOf(d.createTime), updated: msOf(d.updateTime) };
+  });
+  return { households, events, authUids, userDocs: usersSnap.size, users };
 }
 
 function count(data, now) {
   const { households, events, authUids, userDocs } = data;
+  const users = data.users || [];
   const byId = new Map(households.map((h) => [h.id, h]));
   const memberOf = new Map(households.map((h) => [h.id, new Set(h.members)]));
 
@@ -114,7 +129,41 @@ function count(data, now) {
   const memberAccounts = new Set(households.flatMap((h) => h.members));
   const orphanEvents = events.filter((e) => !byId.has(e.hh)).length;
 
+  // e: users docs with no Auth account
+  const NAME = /^[A-Za-z][A-Za-z0-9_]{0,40}$/;
+  const tally = (into, names) => names.forEach((n) => { const k = NAME.test(n) ? n : '(other)'; into[k] = (into[k] || 0) + 1; });
+  const month = (ms) => ms ? new Date(ms).toISOString().slice(0, 7) : '(none)';
+  const userIds = new Set(users.map((u) => u.id));
+  const memberAnywhere = new Set(households.flatMap((h) => h.members));
+  const infoAnywhere = new Set(households.flatMap((h) => h.infoKeys || []));
+  const orphanUsers = users.filter((u) => !authUids.has(u.id));
+  const eFields = {}, ePush = {}, eCreated = {}, eUpdated = {}, eHType = {};
+  let eEmpty = 0, ePushOnly = 0, eMember = 0, eInfo = 0, eHhExists = 0, eHhListsThem = 0, eFormer = 0, eAuthored = 0, eEntries = 0, eRewritten = 0;
+  for (const u of orphanUsers) {
+    tally(eFields, u.fields); tally(ePush, u.pushKeys); if (u.hType) eHType[u.hType] = (eHType[u.hType] || 0) + 1;
+    const m = month(u.created); eCreated[m] = (eCreated[m] || 0) + 1;
+    const mu = month(u.updated); eUpdated[mu] = (eUpdated[mu] || 0) + 1;
+    if (u.updated && u.created && u.updated > u.created) eRewritten++;
+    if (!u.fields.length) eEmpty++;
+    if (u.fields.length && u.fields.every((f) => f === 'push') && u.pushKeys.every((k) => k === 'nextAt' || k === 'sentUpTo')) ePushOnly++;
+    if (memberAnywhere.has(u.id)) eMember++;
+    if (infoAnywhere.has(u.id)) eInfo++;
+    if (u.householdId && byId.has(u.householdId)) { eHhExists++; if (memberOf.get(u.householdId).has(u.id)) eHhListsThem++; }
+    if (u.formerIds.length) eFormer++;
+    const n = events.filter((e) => e.authorId === u.id).length;
+    if (n) { eAuthored++; eEntries += n; }
+  }
+  const eHhIds = new Set(orphanUsers.map((u) => u.householdId).filter(Boolean)).size;
+  const authNoDoc = [...authUids].filter((uid) => !userIds.has(uid)).length;
+
   return {
+    e_user_docs_without_auth: orphanUsers.length, e_auth_accounts_without_user_doc: authNoDoc,
+    e_orphan_docs_empty: eEmpty, e_orphan_docs_push_only: ePushOnly, e_orphan_docs_written_after_create: eRewritten,
+    e_orphan_docs_in_some_household_members: eMember, e_orphan_docs_in_some_household_memberInfo: eInfo,
+    e_orphan_docs_householdId_exists: eHhExists, e_orphan_docs_householdId_lists_them: eHhListsThem,
+    e_orphan_docs_distinct_householdIds: eHhIds, e_orphan_docs_with_formerHouseholdIds: eFormer, e_orphan_docs_that_authored_entries: eAuthored, e_entries_by_orphan_doc_uids: eEntries,
+    e_orphan_doc_householdId_shape: eHType, e_orphan_doc_field_counts: eFields, e_orphan_doc_push_key_counts: ePush,
+    e_orphan_docs_created_by_month: eCreated, e_orphan_docs_updated_by_month: eUpdated,
     a1_households_with_nonmember_author: a1.size, a1_of_which_author_account_deleted: a1Gone.size,
     a2_households_sharing_an_entry_or_baby_id: anyShared.size,
     a2_households_sharing_an_entry_id: sharedEvHh.size, a2_shared_entry_ids: sharedEvIds,
@@ -143,7 +192,8 @@ function recorder(calls, fixture) {
   } });
   const query = (docs) => wrap({ get: async () => snap(docs), doc: () => wrap({ set: async () => {}, update: async () => {}, delete: async () => {} }), add: async () => {} });
   const db = wrap({
-    collection: (n) => query(n === 'households' ? fixture.households.map((h) => docOf(h.id, h.data)) : fixture.users.map((u) => docOf(u, {}))),
+    collection: (n) => query(n === 'households' ? fixture.households.map((h) => docOf(h.id, h.data))
+      : fixture.users.map((u) => typeof u === 'string' ? docOf(u, {}) : docOf(u.id, u.data, null, u.created))),
     collectionGroup: () => query(fixture.events.map((e) => docOf(e.id, e.data, e.hh, e.created))),
     batch: () => ({}), runTransaction: async () => {}, recursiveDelete: async () => {}, bulkWriter: () => ({}),
   });
@@ -158,7 +208,9 @@ async function selfTest() {
   const old = Date.parse('2026-11-10T08:00:00Z');
   const fixture = {
     auth: ['ann', 'bea', 'cy'],
-    users: ['ann', 'bea', 'cy'],
+    users: ['ann', 'bea', 'cy',
+      { id: 'zed', data: { push: { nextAt: 9, sentUpTo: 8 } }, created: now - DAY },                    // re-created by the cron's PATCH
+      { id: 'gone', data: { householdId: 'H4', pregnancyArchive: [], 'x@y.z': 1 }, created: old }],      // deleted login, doc left behind
     households: [
       { id: 'H1', data: { members: { ann: 'owner', cy: 'caregiver' }, app: { babies: [{ id: 'b1' }] } } },
       { id: 'H2', data: { members: { bea: 'owner' }, app: { babies: [{ id: 'b1' }] } } },         // got Ann's baby
@@ -185,14 +237,21 @@ async function selfTest() {
     ok(c.b_entries_authorId_local === 1, 'b finds the entry stamped local');
     ok(c.c_orphan_households_no_members === 1 && c.c_orphan_households_all_members_deleted === 1, 'c finds both kinds of orphan');
     ok(c.d_households_total === 4 && c.d_auth_accounts === 3 && c.d_households_active_7d === 1 && c.d_households_active_30d === 2, 'd counts totals and the 7 and 30 day windows');
+    ok(c.e_user_docs_without_auth === 2 && c.e_auth_accounts_without_user_doc === 0, 'e finds the two users docs with no Auth account');
+    ok(c.e_orphan_docs_push_only === 1 && c.e_orphan_doc_push_key_counts.nextAt === 1 && c.e_orphan_doc_field_counts.push === 1, 'e names the push-only doc the cron would re-create');
+    ok(c.e_orphan_docs_in_some_household_members === 1 && c.e_orphan_docs_householdId_lists_them === 1 && c.e_orphan_doc_field_counts.pregnancyArchive === 1, 'e finds the left-behind doc still listed in its family, with its archive field');
+    ok(c.e_orphan_doc_field_counts['(other)'] === 1 && !('x@y.z' in c.e_orphan_doc_field_counts), 'e counts a field name that is not an identifier as (other), never by name');
+    ok(c.e_orphan_docs_created_by_month['2026-11'] === 2, 'e buckets creation by month');
+    ok(c.e_orphan_docs_distinct_householdIds === 1, 'e counts the distinct families the left-behind docs point at');
+    ok(c.e_orphan_doc_householdId_shape.string === 1 && c.e_orphan_doc_householdId_shape.absent === 1, 'e reads the shape of householdId, never its value');
     const text = JSON.stringify(c);
-    ok(!/ann|bea|cy|H[1-4]|e[1-3]|b1|removed|gone/.test(text.replace(/"[a-z0-9_]+":/g, '')), 'the output holds numbers only, no id from the fixture');
+    ok(!/ann|bea|cy|zed|H[1-4]|e[1-3]|b1|removed|gone|x@y/.test(text.replace(/"[A-Za-z0-9_()-]+":/g, '')), 'the output holds numbers only, no id from the fixture');
   }
   // Absence companion: a clean base reads zero on every leak signal.
   const clean = { auth: ['ann'], users: ['ann'], households: [{ id: 'H1', data: { members: { ann: 'owner' }, app: { babies: [{ id: 'b1' }] } } }],
     events: [{ hh: 'H1', id: 'e1', data: { authorId: 'ann', type: 'feed', time: 1 }, created: now - DAY }] };
   const cc = count(await collect(readOnly(recorder([], clean).db, recorder([], clean).auth)), now);
-  ok(cc.a1_households_with_nonmember_author + cc.a2_households_sharing_an_entry_or_baby_id + cc.b_entries_authorId_local + cc.c_orphan_households_no_members + cc.c_orphan_households_all_members_deleted === 0, 'a clean base reads zero on a, b and c');
+  ok(cc.a1_households_with_nonmember_author + cc.a2_households_sharing_an_entry_or_baby_id + cc.b_entries_authorId_local + cc.c_orphan_households_no_members + cc.c_orphan_households_all_members_deleted + cc.e_user_docs_without_auth === 0, 'a clean base reads zero on a, b, c and e');
   // Red: the recorder must catch a write, or its green above means nothing.
   const planted = [];
   const r = recorder(planted, fixture);
