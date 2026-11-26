@@ -1406,17 +1406,31 @@ SECTIONS.S21 = async (b, base, R) => {
     const s1 = (await sent(o.page)).slice(n0), q1 = await queue(o.page);
     R.ok('S21.late-silent', 'after it nothing more is sent or kept under the account she asked to delete', s1.length === 0 && q1.length === 0,
       { sent: s1.map((x) => x.body.events.map((e) => e.name)), queued: q1.map((x) => x.ev.name) });
-    // She signs out herself (this time it works), then in again on the same page.
+    // She signs out herself (this time it works), then in again on the same page. Back means THIS sign-in has
+    // booted: her new family (she left the old one, so it is another id) is drawn, and its server copy has named
+    // her (window.__cubbyHouseholdSeen), which is all the tracker waits for. cloudBooted alone is no wait here:
+    // window.LL.householdId still holds the family she left (sign-out does not clear it) and the sign-in screen is
+    // gone while her new family is made, so it passed at once, and the 20 s below timed the whole sign-in too. With
+    // each emulator answer held 3.5 s that sign-in took 21 s and this went red, as on CI (run 45383173709), while
+    // her event flowed under her token a moment after the window closed. The sign-in now has its own minute, the
+    // send its own 20 s.
+    const oldHid = await o.page.evaluate(() => window.LL.householdId);
     await o.page.evaluate(async () => { await window.LL.signOut(); });
     await sleep(300);
     await o.page.evaluate((u) => window.__utAuth.switchTo(u), uid);
-    const back = await cloudBooted(o.page);
+    let back = null;
+    try {
+      await o.page.waitForFunction((old, u) => !!(window.LL && window.LL.householdId && window.LL.householdId !== old)
+        && !document.getElementById('llAuthOv') && typeof window.__cubbyScreen === 'string' && window.__cubbyHouseholdSeen === u,
+      { timeout: 60000 }, oldHid, uid);
+      back = await o.page.evaluate(() => window.LL.householdId);
+    } catch (e) {}
     const n1 = (await sent(o.page)).length;
     await o.page.evaluate(() => window.cubbyTrack('feature.used', { feature: 'pro', action: 'opened' }));
     s = await sendsUntil(o.page, (x) => named(eventsOf(x.slice(n1)), 'feature.used', { feature: 'pro' }).length > 0, 20000);
     R.ok('S21.again-flows', 'signed out and in again on the same page: her events flow again (signing out ended the silence)',
       !!back && named(eventsOf(s.slice(n1)), 'feature.used', { feature: 'pro' }).some((e) => tokOf.test(e._token || '')),
-      { back, deleting: await o.page.evaluate(() => window.__cubbyDeleting), seen: await o.page.evaluate(() => window.__cubbyHouseholdSeen), sent: eventsOf(s.slice(n1)).map((e) => [e.name, e._token]) });
+      { oldHid, back, deleting: await o.page.evaluate(() => window.__cubbyDeleting), seen: await o.page.evaluate(() => window.__cubbyHouseholdSeen), sent: eventsOf(s.slice(n1)).map((e) => [e.name, e._token]) });
   } finally { await o.ctx.close(); }
 };
 
