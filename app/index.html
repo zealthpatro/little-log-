@@ -4319,8 +4319,10 @@ function renderHome(){
     // returns true when this card must wait because an earlier one already has the place
     const take=(id,has)=>{ if(!has) return false; offered.push(id); if(kept) return true; kept=id; return false; };
     if(take(promptCard?'prompt':'teach', w.teach)) w.teach='';
+    // The birth poster is what the first log gives back, so it waits only for a prompt, not for the checklist.
+    if(take('poster', al.poster)) al.poster='';
     if(take('get-started', w['get-started'])) w['get-started']='';
-    gentle.forEach(id=>{ if(take(id, al[id])) al[id]=''; });
+    gentle.filter(id=>id!=='poster').forEach(id=>{ if(take(id, al[id])) al[id]=''; });
     ['guide','nudge','coach','tips','good-read'].forEach(id=>{ if(take(id, w[id])) w[id]=''; });
     window.__homeOneCard={offered:offered, kept:kept};   // read by test/home-one-card.test.js
   }
@@ -7228,9 +7230,10 @@ function openOnboardInvite(){
     ${vaxProofLine()?`<div class="sub" style="margin-top:12px;text-align:left">💉 ${vaxProofLine()}</div>`:''}
     <img class="ob-invite-art" src="spot-art/invite_bears.webp" alt="" width="112" height="112">
     <button class="btn-primary" style="background:var(--feed);--accent-ink:var(--on-feed,var(--on-accent));margin-top:14px" onclick="window.openFamily&&window.openFamily('invite','onboarding')">Invite someone</button>
+    ${/* The second beat stays a beat: what she gets back, straight under the ask, not folded away. */''}
+    ${posterOfferRow()}
     <button class="btn-ghost" onclick="closeSheet()">Maybe later</button>
     <details class="ob-more ob-setup"><summary>More you can set up</summary>
-    ${posterOfferRow()}
     ${vaxProofLine()?`<button class="btn-ghost" onclick="closeSheet();healthTab='vaccines';go('health')">💉 See their vaccine plan</button>`:''}
     ${vaxN?`<button class="btn-ghost" onclick="exportVaccineSchedule()">${vaxCalendarLabel(vaxN)}</button>`:''}
     <button class="btn-ghost" onclick="openAddBaby({onboarding:true,birth:lastBabyBirth})">＋ Add another little one</button>

@@ -135,6 +135,10 @@ const SHEET = `(function(){
       localStorage.setItem('cubby-quick-uid', uid);
       localStorage.setItem('little-log-v1', JSON.stringify(x));
       localStorage.setItem('cubby-seen-' + uid, JSON.stringify(o.seen || {}));
+      /* Home shows one card at a time since 27 Nov 2026, and the first-log invite prompt outranks the poster
+         (canvas board 6: invite first, then what she gets back). Answered here, so what is graded is the
+         poster's own path; test/home-one-card.test.js grades the ranking. */
+      localStorage.setItem('cubby-prompts:' + uid, JSON.stringify({ first_log_invite: { done: 1, day: 'answered' } }));
       Object.keys(localStorage).forEach((k) => { if (k.indexOf('cubby-theme') === 0) localStorage.removeItem(k); });
     }, s, opts);
     await page.reload({ waitUntil: 'networkidle2' });
@@ -156,7 +160,12 @@ const SHEET = `(function(){
                invite:b.findIndex(function(t){return /^invite someone$/i.test(t);}),
                another:b.findIndex(function(t){return /another little one/i.test(t);}) };
     })()`);
-    ok('it sits above the invite', order.poster > -1 && order.invite > order.poster, order);
+    /* Since 27 Nov 2026 the sheet leads with the invite once something is logged (canvas board 4A), and this
+       seed has logs. The poster is still the second beat: straight under the ask, before "Maybe later",
+       and never folded into "More you can set up". */
+    const later = await page.evaluate(`(function(){ var b=[].slice.call(document.querySelectorAll('#sheet button')).map(function(x){return x.textContent.trim();}); return b.findIndex(function(t){return /^maybe later$/i.test(t);}); })()`);
+    const folded = await page.evaluate(`(function(){ var r=[].slice.call(document.querySelectorAll('#sheet button')).find(function(x){return /birth poster/i.test(x.textContent);}); return !!(r && r.closest('details')); })()`);
+    ok('it sits straight under the invite, before "Maybe later", and is not folded', order.poster > -1 && order.poster === order.invite + 1 && later > order.poster && !folded, { order, later, folded });
     // Both halves, because a row that is not there at all has index -1 and would sail past a bare
     // "is it above" comparison. An absent thing is not an early thing.
     ok('and above "add another little one"', order.poster > -1 && order.another > order.poster, order);
