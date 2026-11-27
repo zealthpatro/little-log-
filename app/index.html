@@ -1177,7 +1177,7 @@ input,textarea,select,[contenteditable]{caret-color:var(--ink);}
 .ring{position:relative;width:74px;height:74px;flex-shrink:0;}
 .ring svg{transform:rotate(-90deg);}
 .ring .rt{font-family:var(--font-display);font-weight:600;font-size:var(--fs-head);position:absolute;inset:0;display:grid;place-items:center;}
-.ms-hero .mh-body .a{font-family:var(--font-display);font-size:var(--fs-title);font-weight:600;}
+.ms-hero .mh-body .a,.hub-ill-t{font-family:var(--font-display);font-size:var(--fs-title);font-weight:600;}
 .ms-hero .mh-body .b{font-size:var(--fs-body);color:var(--ink-soft);font-weight:600;margin-top:3px;}
 .ms-row{display:flex;align-items:center;gap:13px;background:var(--surface);border-radius:var(--r-card);padding:12px 14px;margin-bottom:var(--row);box-shadow:var(--elev-card);cursor:pointer;transition:transform .12s;}
 .ms-row:active{transform:scale(.985);}
@@ -1434,14 +1434,14 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 
 /* ---- vaccines ---- */
 .fl-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0 10px;}
-.fl-tile{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-card);padding:16px 14px;display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;font-family:var(--font-body);color:var(--ink);cursor:pointer;min-height:44px;}
+.fl-tile{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-card);padding:16px 14px;display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;font-family:var(--font-body);color:var(--ink);cursor:pointer;min-height:var(--tap-min);}
 .fl-tile b{font-size:var(--fs-base);}
 .fl-tile span:not(.fl-ico){font-size:var(--fs-small);color:var(--ink-soft);}
-.fl-ico{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;}
+.fl-ico{width:40px;height:40px;border-radius:var(--r-ctl);display:grid;place-items:center;}
 .fl-ico svg{width:20px;height:20px;}
 .fl-none{background:transparent;border-style:dashed;justify-content:center;}
 .ob-more{margin:6px 0 4px;}
-.ob-more>summary{cursor:pointer;font-weight:700;color:var(--ink-soft);min-height:44px;display:flex;align-items:center;}
+.ob-more>summary{cursor:pointer;font-weight:700;color:var(--ink-soft);min-height:var(--tap-min);display:flex;align-items:center;}
 .ob-country{margin:-4px 0 12px;}
 .ob-invite-art{display:block;margin:10px auto 0;width:112px;height:112px;object-fit:contain;}
 .ob-setup{margin-top:10px;}
@@ -1451,9 +1451,9 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .home-prompt{display:flex;gap:14px;align-items:flex-start;margin-bottom:var(--stack);}
 .home-prompt .hp-art{width:72px;height:72px;object-fit:contain;flex:none;}
 .home-prompt .hp-body{flex:1;min-width:0;display:flex;flex-direction:column;}
-.home-prompt .hp-t{font-family:var(--font-display);font-size:var(--fs-title);font-weight:600;line-height:1.2;}
+.home-prompt .hp-t,.vx-next-t{font-family:var(--font-display);font-size:var(--fs-title);font-weight:600;line-height:1.2;}
 .home-prompt .hp-s{font-size:var(--fs-body);color:var(--ink-soft);margin:4px 0 4px;}
-.hub-row{display:flex;align-items:center;gap:13px;background:var(--surface);border-radius:var(--r-card);padding:12px 14px;margin-bottom:var(--row);box-shadow:var(--elev-card);cursor:pointer;min-height:44px;}
+.hub-row{display:flex;align-items:center;gap:13px;background:var(--surface);border-radius:var(--r-card);padding:12px 14px;margin-bottom:var(--row);box-shadow:var(--elev-card);cursor:pointer;min-height:var(--tap-min);}
 .hub-row .lead{width:36px;height:36px;border-radius:var(--r-ctl);display:grid;place-items:center;flex-shrink:0;}
 .hub-row .lead svg{width:19px;height:19px;}
 .hub-row .chev{color:var(--ink-faint);display:flex;}
@@ -1465,24 +1465,21 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .hub-list{background:var(--surface);border-radius:var(--r-card);overflow:hidden;box-shadow:var(--elev-card);margin-bottom:var(--stack);}
 .hub-list .hub-row:last-child{border-bottom:none;}
 .hub-ill{background:var(--pump-soft);border-radius:var(--r-card);padding:14px 16px;margin-bottom:var(--row);cursor:pointer;}
-.hub-ill-t{font-family:var(--font-display);font-size:var(--fs-title);font-weight:600;}
 .hub-ill-s{font-size:var(--fs-small);color:var(--ink-soft);margin:2px 0 10px;}
 .hub-ill .row2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
-.hub-btn{background:var(--surface);border-radius:var(--r-ctl);margin-top:0;color:var(--ink);min-height:44px;min-width:0;padding:10px 6px;gap:6px;}
+.hub-btn{background:var(--surface);border-radius:var(--r-ctl);margin-top:0;color:var(--ink);min-height:var(--tap-min);min-width:0;padding:10px 6px;gap:6px;}
 .hub-visit{margin-bottom:var(--stack);background:var(--surface);box-shadow:var(--elev-card);}
 .vx-visit:not([open])>.ms-row{display:none;}
-.hub-back{border:none;background:none;font-family:var(--font-body);font-weight:700;font-size:var(--fs-body);color:var(--ink-soft);padding:8px 0;min-height:44px;cursor:pointer;display:flex;align-items:center;gap:4px;margin-bottom:var(--stack);}
+.hub-back{border:none;background:none;font-family:var(--font-body);font-weight:700;font-size:var(--fs-body);color:var(--ink-soft);padding:8px 0;min-height:var(--tap-min);cursor:pointer;display:flex;align-items:center;gap:4px;margin-bottom:var(--stack);}
 .hub-h{font-family:var(--font-display);font-size:var(--fs-title);font-weight:600;margin:0 0 var(--stack);}
 .vx-next{display:flex;flex-direction:column;gap:8px;margin-bottom:var(--stack);}
-.vx-next-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
 .vx-next-eb{font-size:var(--fs-small);font-weight:700;color:var(--diaper-ink);}
 .vx-next-when{font-size:var(--fs-small);color:var(--ink-soft);}
-.vx-next-t{font-family:var(--font-display);font-size:var(--fs-title);font-weight:600;line-height:1.2;}
 .vx-next-s{font-size:var(--fs-body);color:var(--ink-soft);}
 .vx-chips{display:flex;flex-wrap:wrap;gap:6px;}
-.vx-chip{font-size:var(--fs-small);font-weight:600;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:4px 10px;}
+.vx-chip{font-size:var(--fs-small);font-weight:600;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-pill);padding:4px 10px;}
 .vx-visit{background:var(--surface);border-radius:var(--r-card);margin-bottom:var(--stack);box-shadow:var(--elev-card);}
-.vx-visit>summary{list-style:none;display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:12px 16px;min-height:44px;box-sizing:border-box;cursor:pointer;}
+.vx-visit>summary{list-style:none;display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:12px 16px;min-height:var(--tap-min);box-sizing:border-box;cursor:pointer;}
 .vx-visit>summary::-webkit-details-marker{display:none;}
 .vx-visit-t{font-weight:700;}
 .vx-visit-m{font-size:var(--fs-small);color:var(--ink-soft);}
@@ -1490,7 +1487,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .vx-visit[open]>.ms-row{margin:0 8px var(--row);box-shadow:none;background:var(--surface-2);}
 .add-row + .disclaimer{margin-top:var(--stack);}
 .vx-tick{display:flex;flex-direction:column;gap:2px;margin:4px 0 8px;}
-.vx-tick-row{display:flex;align-items:center;gap:12px;min-height:44px;font-weight:600;}
+.vx-tick-row{display:flex;align-items:center;gap:12px;min-height:var(--tap-min);font-weight:600;}
 .vx-tick-row input{width:22px;height:22px;accent-color:var(--diaper);}
 .vx-status{font-size:var(--fs-micro);font-weight:800;padding:5px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0;}
 /* Ink on a soft wash comes from the --*-ink rung, never from the accent itself: the accent is a
@@ -1585,7 +1582,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .preg-pill h1{font-family:var(--font-display);font-size:var(--fs-title);font-weight:600;letter-spacing:-.01em;line-height:1.1;}
 .preg-pill span{font-size:var(--fs-small);color:var(--ink-soft);font-weight:700;}
 .week-hero{background:linear-gradient(140deg,var(--preg-soft),var(--surface));border-radius:var(--r-card);padding:20px 20px 22px;margin-bottom:16px;box-shadow:var(--elev-lift);}
-.week-hero .wh-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;}
+.week-hero .wh-top,.vx-next-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;}
 .week-hero .wh-week{font-family:var(--font-display);font-size:var(--fs-display);font-weight:600;letter-spacing:-.02em;color:var(--ink);line-height:1;}
 .week-hero .wh-tri{font-size:var(--fs-body);font-weight:800;color:var(--preg-ink);text-transform:uppercase;letter-spacing:.04em;}
 .week-hero .wh-count{font-size:var(--fs-body);color:var(--ink-soft);font-weight:700;margin-top:7px;}
@@ -3241,7 +3238,8 @@ function alertPill(p){
                    the guide's where that has not loaded. The dot stops its own click, so tapping it
                    never fires the row.
      value         short text at the right edge (Appearance: Light, Night or System)
-     chev          the chevron, for a row that leads somewhere deeper */
+     chev          the chevron, for a row that leads somewhere deeper
+     seg           an On/Off switch at the right edge: [{label, on, act, args}], each a UI_ACTIONS name */
 function setItem(p){
   const dot=!p.teach?'':(window.CubbyTeachUI?CubbyTeachUI.dot(p.teach.id,p.teach.label)
     :((window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info(p.teach.guide):''));
@@ -3249,7 +3247,8 @@ function setItem(p){
       ${uiIco('si-ico',p,uiTok(p.tint))}
       <div class="si-body"><div class="a"${p.danger?' style="color:var(--danger-ink)"':''}>${uiTxt(p.title)}${dot}</div><div class="b">${uiTxt(p.sub)}</div></div>${p.value!=null?`
       <span style="font-weight:800;font-size:var(--fs-body);color:var(--ink-soft)">${uiTxt(p.value)}</span>`:''}${p.chev?`
-      <span class="chev">${I.chev}</span>`:''}
+      <span class="chev">${I.chev}</span>`:''}${p.seg?`
+      <div class="seg">${p.seg.map(b=>`<button class="${b.on?'on':''}"${uiAct(b.act,b.args)}>${uiTxt(b.label)}</button>`).join('')}</div>`:''}
     </div>`;
 }
 
@@ -7251,7 +7250,7 @@ function openOnboardInvite(){
     ${vaxProofLine()?`<button class="btn-ghost" onclick="closeSheet();healthTab='vaccines';go('health')">💉 See their vaccine plan</button>`:''}
     ${vaxN?`<button class="btn-ghost" onclick="exportVaccineSchedule()">${vaxCalendarLabel(vaxN)}</button>`:''}
     <button class="btn-ghost" onclick="openAddBaby({onboarding:true,birth:lastBabyBirth})">＋ Add another little one</button>
-    ${(typeof canShowInstall==='function'&&canShowInstall())?`<div class="sub" style="margin-top:14px;font-size:13px">Use Cubby right here, or add it to your home screen to open it like an app, one tap away.</div><button class="btn-ghost" onclick="addToHomeScreen('obInstallMsg')">Add Cubby to your home screen</button><div id="obInstallMsg" class="sub" style="display:none;text-align:left"></div>`:''}
+    ${(typeof canShowInstall==='function'&&canShowInstall())?`<div class="sub" style="margin-top:14px;font-size:var(--fs-small)">Use Cubby right here, or add it to your home screen to open it like an app, one tap away.</div><button class="btn-ghost" onclick="addToHomeScreen('obInstallMsg')">Add Cubby to your home screen</button><div id="obInstallMsg" class="sub" style="display:none;text-align:left"></div>`:''}
     <button class="btn-ghost" onclick="closeSheet();window.cubbyOpenGuide&&cubbyOpenGuide()">Show me what to log</button>
     </details>`,'feed');
     return;
@@ -8341,13 +8340,13 @@ function quietHoursBlock(cfg){
   const on=cfg.quietStart!==cfg.quietEnd;
   const opt=(sel)=>Array.from({length:24},(_,h)=>`<option value="${h}" ${h===sel?'selected':''}>${String(h).padStart(2,'0')}:00</option>`).join('');
   return `<div class="sec-title" style="margin-top:18px">Quiet hours</div>
-    <div class="set-item"><div class="si-body"><div class="a">Quiet hours</div><div class="b">${on?`From ${String(cfg.quietStart).padStart(2,'0')}:00 to ${String(cfg.quietEnd).padStart(2,'0')}:00 on this phone`:'Off on this phone'}</div></div>
-      <div class="seg"><button class="${on?'on':''}"${uiAct('setQuietHours',[true])}>On</button><button class="${!on?'on':''}"${uiAct('setQuietHours',[false])}>Off</button></div></div>
+    ${setItem({tint:'sleep', icon:'moon', title:'Quiet hours', sub:on?`From ${String(cfg.quietStart).padStart(2,'0')}:00 to ${String(cfg.quietEnd).padStart(2,'0')}:00 on this phone`:'Off on this phone',
+      seg:[{label:'On', on:on, act:'setQuietHours', args:[true]}, {label:'Off', on:!on, act:'setQuietHours', args:[false]}]})}
     ${on?`<div class="field qh-times"><label for="qhFrom">From</label><select id="qhFrom" onchange="setQuietHours(true,this.value,null)">${opt(cfg.quietStart)}</select>
       <label for="qhTo">To</label><select id="qhTo" onchange="setQuietHours(true,null,this.value)">${opt(cfg.quietEnd)}</select></div>
     <div class="csub" style="margin:10px 0 6px">What can still reach you in quiet hours</div>
-    <div class="set-item"><div class="si-body"><div class="a">Medicine reminders</div><div class="b">A nudge when a dose is due, at any hour</div></div>
-      <div class="seg"><button class="${cfg.quietAllow.critical?'on':''}"${uiAct('setQuietAllow',['critical',true])}>On</button><button class="${!cfg.quietAllow.critical?'on':''}"${uiAct('setQuietAllow',['critical',false])}>Off</button></div></div>`:''}
+    ${setItem({tint:'med', icon:'pill', title:'Medicine reminders', sub:'A nudge when a dose is due, at any hour',
+      seg:[{label:'On', on:!!cfg.quietAllow.critical, act:'setQuietAllow', args:['critical',true]}, {label:'Off', on:!cfg.quietAllow.critical, act:'setQuietAllow', args:['critical',false]}]})}`:''}
     <div class="qh-caution">During quiet hours we won't disturb you with tips, suggestions or news from Cubby, so you might miss a few until the morning. Medicine reminders still come through unless you turn them off here, and anything that needs you now, like a dose that is due, still shows when you open Cubby.</div>`;
 }
 /* The server needs consent, quiet hours and timezone even when no token is being minted, so every
