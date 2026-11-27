@@ -61,6 +61,7 @@ const PASS_THROUGH = {
   openConsentReview: 1, downloadExport: 1, ackDecline: 1,
   // 27 Nov 2026 UX review: vaccine visits, the Health hub, the first-run step and the Home prompts
   openVisitDone: 1, markVisit: 1, healthRowGo: 1, obLogNappy: 1, pickColor: 1, promptAct: 2,
+  setQuietHours: 1, setQuietAllow: 2,
   // setItem rows in the Settings and Data sheets
   openAppearance: 0, addToHomeScreen: 1, openBabySheet: 0, openPregArchive: 0, openBabyProfile: 0, shareCubby: 0,
   openReminders: 0, openQuickSettings: 0, openMoodNote: 0, openLogBP: 0, openTrash: 0, openDataSheet: 0,
@@ -76,7 +77,7 @@ const HANDLERS = ['logDose', 'snoozeMedAlert', 'dismissMedAlert', 'go', 'render'
   'openAppearance', 'addToHomeScreen', 'closeSheet', 'goDen', 'openBabySheet', 'openPregArchive', 'openBabyProfile',
   'openPro', 'shareCubby', 'openReminders', 'openQuickSettings', 'openMoodNote', 'openLogBP', 'openTrash',
   'openDataSheet', 'confirmLogout', 'requestExport', 'openImport', 'openDeleteRequest', 'openGuardians', 'openDeleteAccount',
-  'openVisitDone', 'markVisit', 'healthRowGo', 'obLogNappy', 'pickColor', 'promptAct'];
+  'openVisitDone', 'markVisit', 'healthRowGo', 'obLogNappy', 'pickColor', 'promptAct', 'setQuietHours', 'setQuietAllow'];
 // Attached to window by store-firebase.js, which can load after the inline script.
 const WINDOW_HANDLERS = ['openFamily', 'openFeedback'];
 const NOW = 1800000000000;   // pinned; fmtDue and now are stubs, so no check reads the real clock

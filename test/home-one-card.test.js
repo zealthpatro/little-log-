@@ -43,7 +43,7 @@ function seed(now, o) {
     events: [ev('f1', 'feed', now - 1 * H, { method: 'bottle', amount: 90, unit: 'ml' })]
       .concat(o.nap ? [ev('s1', 'sleep', now - 3 * H, { end: now - 2 * H })] : [])
       .concat(o.fever ? [ev('t1', 'temperature', now - 2 * H, { temp: 38.4, unit: 'C' })] : []),
-    settings: { unit: 'ml', wUnit: 'kg', hUnit: 'cm', tempUnit: 'C', country: 'us' },
+    settings: Object.assign({ unit: 'ml', wUnit: 'kg', hUnit: 'cm', tempUnit: 'C', country: 'us' }, o.push ? { push: o.push } : {}),
     meds: o.dose ? [{ id: 'm1', babyId: 'b1', name: 'Vitamin D drops', dose: '1', unit: 'drop', pattern: { type: 'daily', times: [hhmm(now - 30 * 60000)] }, remind: true, active: true, createdAt: now - 5 * DAY }] : [],
     timers: {}, milestones: [], photos: [], vaccines: {}, illnesses: [], notes: [], pregnancy: null,
   };
@@ -117,8 +117,9 @@ function seed(now, o) {
   await p.close();
 
   console.log('\nC. the clock does not move it, and a fever day');
-  // Home never rearranges by the clock (tools/night_home_check.js), so 03:00 holds the same card as 10:00.
-  p = await open(3, {});
+  // With quiet hours off, Home never rearranges by the clock (tools/night_home_check.js), so 03:00 holds the
+  // same card as 10:00. Quiet hours on (the default) is graded in test/quiet-hours.test.js.
+  p = await open(3, { push: { enabled: false, quietStart: 0, quietEnd: 0 } });
   h = await home(p);
   ok('at 03:00 the same card holds the place as by day', h.one && h.one.kept === 'prompt' && h.prompt === 'first_log_invite', h.one);
   await p.close();
