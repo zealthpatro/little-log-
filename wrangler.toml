@@ -31,7 +31,10 @@ not_found_handling = "404-page"
 # "That page moved or never existed" to every parent and guest who opened one in a browser, while every
 # script and test (no navigation header) still reached the Worker. So the Worker runs first for these
 # paths only; tools/live_nav_check.js asks production as a browser does (gates.js --live).
-run_worker_first = ["/__/*", "/g/*"]
+# The list REPLACES the default: an unlisted path the Worker serves is answered by the asset layer (404 page,
+# or 405 for a POST). /api/* and both AASA paths were missing from 24 to 27 Nov 2026, and every API call
+# failed in production. tools/worker_first_check.js fails any route in worker.js that this list misses.
+run_worker_first = ["/__/*", "/g", "/g/*", "/api/*", "/.well-known/apple-app-site-association", "/apple-app-site-association"]
 
 # Non-secret config. Secrets (RESEND_API_KEY, FIREBASE_SERVICE_ACCOUNT) are set with
 # `wrangler secret put` and never live in this file or the repo.
