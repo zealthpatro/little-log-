@@ -30,6 +30,14 @@
  *      nothing on either tree (and the rules would refuse it).
  *   E  Ann signs back in (everything of hers is back), then is signed out from elsewhere (auth.signOut, the way
  *      another tab or a revoked session lands): the eight fields are cleared there too.
+ *   L  Ann signs in again and starts two invite steps whose answers are HELD in the SDK (the server gets each
+ *      request as usual): an invite link (its batch commit) and an email invite from the family sheet's form (the
+ *      rules check it asks before writing). She logs out, Bea signs in and boots, and only then do both answers
+ *      land:
+ *        L1 Ann's late link token does not land in Bea's memory (window.LL.ownerLinks), and no link is handed back
+ *        L2 nothing on the page tries a write naming Ann's invitee after Bea signed in (the invite itself, or its
+ *           row on Bea's family), and the address is not filed as Bea's last invite, even past the form's
+ *           six-second optimistic exit
  *
  * Every "none of X" assertion uses the same matcher that first finds X in Ann's own session (section A, and the
  * staged sign-in state just before S).
@@ -237,6 +245,31 @@ async function until(fn, ms) {
   });
   const writesNaming = (page, hid) => page.evaluate((h) => (window.__writes || []).filter((w) => (w.path || '').includes(h) || (w.data || '').includes(h)).map((w) => w.op + ' ' + w.path), hid);
   const resetWrites = (page) => page.evaluate(() => { window.__writes = []; });
+  /* Two holds for section L, each on a call made while its flag is on: a batch commit (the server gets it; the app
+     hears it resolve only on release) and a one-shot read of an invites/{email}/from/{hid} doc (the rules check
+     createEmailInvite asks before it writes). window.__releaseLate() lets every held answer through. */
+  const installLateHolds = (page) => page.evaluate(() => {
+    if (window.__lateHeld) return true;
+    window.__lateHeld = []; window.__holdCommit = false; window.__holdInviteGet = false;
+    const f = window.firebase && window.firebase.firestore;
+    if (!f || !f.WriteBatch || !f.DocumentReference) return false;
+    const hold = (p, kind) => {
+      const rec = { kind, held: true };
+      window.__lateHeld.push(rec);
+      return new Promise((res, rej) => { rec.go = () => { rec.held = false; p.then(res, rej); }; });
+    };
+    const commit = f.WriteBatch.prototype.commit;
+    f.WriteBatch.prototype.commit = function () { const p = commit.apply(this, arguments); return window.__holdCommit ? hold(p, 'commit') : p; };
+    const get = f.DocumentReference.prototype.get;
+    f.DocumentReference.prototype.get = function () {
+      const p = get.apply(this, arguments);
+      return (window.__holdInviteGet && /^invites\/[^/]+\/from\/[^/]+$/.test(this.path || '')) ? hold(p, 'invite-get') : p;
+    };
+    window.__releaseLate = () => { window.__holdCommit = false; window.__holdInviteGet = false; window.__lateHeld.forEach((r) => { if (r.held) r.go(); }); };
+    return true;
+  });
+  const lateHeld = (page) => page.evaluate(() => (window.__lateHeld || []).filter((r) => r.held).map((r) => r.kind));
+  const ownerLinkTokens = (page) => page.evaluate(() => Object.keys(window.LL.ownerLinks || {}).map((k) => (window.LL.ownerLinks[k] || {}).token).filter(Boolean));
   /* The family sheet's text, as a person would read it, then closed again. */
   const familySheetText = async (page) => {
     const t = await page.evaluate(async () => {
@@ -404,6 +437,51 @@ async function until(fn, ms) {
   await sleep(300);
   const elsewhere = await traceOf(P, mk);
   ok('E none of the eight fields names her family after a sign-out from elsewhere', elsewhere.hits.length === 0 && elsewhere.isPro === false, elsewhere);
+
+  /* ================================================================================================ */
+  console.log('L. Two invite steps Ann starts answer only after she has left and Bea is in');
+  {
+    const LATE_EM = 'late-invitee@stalefamily.test';
+    ok('(the late-answer holds are installed in the SDK)', await installLateHolds(P));
+    await signIn(P, 'ann@stalefamily.test');
+    ok('Ann boots into her own family again', await booted(P, annUid));
+    const linksBefore = (await linksFor(hidA, annUid)).map((d) => d.id);
+    const hers = await until(async () => { const t = await ownerLinkTokens(P); return linksBefore.some((x) => t.includes(x)) ? t : null; }, 10000);
+    ok('(the matcher finds her section A link\'s token in her memory, window.LL.ownerLinks)', !!hers, { linksBefore, tokens: await ownerLinkTokens(P) });
+    await P.evaluate(() => {
+      window.__holdCommit = true; window.__lateLink = 'pending';
+      window.LL.createInviteLink({ relationship: 'Cousin' }).then((r) => { window.__lateLink = r ? r.token : null; }, () => { window.__lateLink = 'threw'; });
+    });
+    await until(async () => (await lateHeld(P)).includes('commit'), 8000);
+    await P.evaluate(() => { window.__holdCommit = false; window.__holdInviteGet = true; window.openFamily('invite'); });
+    await sleep(500);
+    const formUp = await P.evaluate((em) => {
+      const e = document.getElementById('llInvEmail'), b = document.getElementById('llInvBtn');
+      if (!e || !b) return false;
+      e.value = em; b.click(); return true;
+    }, LATE_EM);
+    await until(async () => (await lateHeld(P)).includes('invite-get'), 8000);
+    await P.evaluate(() => { window.__holdInviteGet = false; });
+    ok('(both answers are held: the link\'s commit and the invite form\'s rules check)', formUp && (await lateHeld(P)).length === 2, { formUp, held: await lateHeld(P) });
+    ok('(the spy sees her invite\'s row go onto her family, naming the address)', (await writesNaming(P, LATE_EM)).some((w) => w.includes('households/' + hidA)), await writesNaming(P, LATE_EM));
+    await P.evaluate(() => { const ov = document.getElementById('llModalOv'); if (ov) ov.remove(); window.LL.signOut(); });
+    ok('Ann is at the door, both answers still held', await atDoor(P) && (await lateHeld(P)).length === 2, await lateHeld(P));
+    await resetWrites(P);
+    await signIn(P, 'bea@stalefamily.test');
+    ok('Bea boots into her own family', await booted(P, beaUid));
+    await sleep(1000); // her own owner-only link listener has answered
+    const lateTokens = (await linksFor(hidA, annUid)).map((d) => d.id).filter((x) => !linksBefore.includes(x));
+    ok('(Ann\'s late link was made on the server, in her family, before she left)', lateTokens.length === 1, { lateTokens });
+    await P.evaluate(() => window.__releaseLate());
+    await sleep(7000); // past the invite form's six-second optimistic exit
+    const beaTokens = await ownerLinkTokens(P);
+    ok('L1 Ann\'s late link token does not land in Bea\'s memory', !lateTokens.some((x) => beaTokens.includes(x)), { lateTokens, beaTokens });
+    const handed = await P.evaluate(() => window.__lateLink);
+    ok('L1 and no link is handed back once she has left', handed === null, { handed });
+    ok('L2 nothing tries a write naming Ann\'s invitee after Bea signed in', (await writesNaming(P, LATE_EM)).length === 0, await writesNaming(P, LATE_EM));
+    const filed = await P.evaluate((em, uid) => localStorage.getItem('cubby-lastinvite-' + uid) === em, LATE_EM, beaUid);
+    ok('L2 and the address is not filed as Bea\'s last invite', !filed, { filed });
+  }
 
   await P.browserContext().close();
   /* ================================================================================================ */
