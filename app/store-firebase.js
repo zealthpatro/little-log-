@@ -3323,11 +3323,15 @@
     if (replayHold && !Object.keys(replayHold).length) replayHold = null;
     function outboxBack() { if (outbox && !replayEv && !replayHold && hhHydrated) { outbox = null; dropOutbox(user.uid, hid); } }
 
+    var attached = hhRef; // this call's family: a fresh reference every time, even for the same family
     function maybeBoot(force) {
       // Always need the app blob (babies/settings) to render a meaningful home. Normally also wait
       // for the first events snapshot so the activity is complete on first paint — but `force` (the
       // boot failsafe below) skips that wait so a slow/hanging events query can never pin the loader.
-      if (booted || !gotApp || (!gotEvents && !force)) return;
+      // Never for a family she has since signed out of: the failsafe timer outlives teardown, and run
+      // after it, it hid the sign-in screen and marked the app booted, so her next sign-in on this page
+      // never drew her family and the loader turned for good (tools/usage_tracker_check.js S21 part c).
+      if (booted || !gotApp || (!gotEvents && !force) || hhRef !== attached) return;
       if (!state.timers) state.timers = {}; // timers come from the cloud app blob
       if (prefs.theme) state.settings.theme = prefs.theme;
       state.activeBabyId = prefs.activeBabyId || (state.babies[0] && state.babies[0].id) || null;

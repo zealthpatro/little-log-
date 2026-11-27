@@ -198,6 +198,12 @@ function boot(cfg) {
   function D(...a) { return a.length === 0 ? new R(R.now() + C.shift) : new R(...a); }
   D.prototype = R.prototype; D.now = () => R.now() + C.shift; D.parse = R.parse; D.UTC = R.UTC;
   window.Date = D;
+  if (cfg.holdFailsafe) {
+    // The sign-in layer's boot failsafe (startSync, 3.5 s after a family is attached), held here so a test runs
+    // it at the moment it chooses: after a sign-out that came sooner than 3.5 s (S21 part c).
+    const st = window.setTimeout; window.__utFailsafe = [];
+    window.setTimeout = function (f, ms, ...a) { if (ms === 3500 && typeof f === 'function' && /maybeBoot\(true\)/.test(String(f))) { window.__utFailsafe.push(f); return 0; } return st.call(window, f, ms, ...a); };
+  }
   if (cfg.captureIdle) {
     // The tracker's 30-minute idle check runs every 60 s; kept here so a test can run it after moving the clock.
     const si = window.setInterval; window.__utIdle = [];
@@ -381,6 +387,11 @@ function boot(cfg) {
   }
 }
 
+/* CI-like slowness, for reproducing a flake here (never set by tools/gates.js): UT_CPU_THROTTLE=4 slows every page's
+   CPU four times (CDP; S21.again-flows went red about 1 run in 3 that way before S21 part c's fix), UT_EMU_DELAY_MS=1500
+   holds every request to the Firestore emulator that long, UT_EMU_JITTER_MS=800 adds up to that much more at random. */
+const STRESS = { cpu: Number(process.env.UT_CPU_THROTTLE) || 0, emuMs: Number(process.env.UT_EMU_DELAY_MS) || 0, jitter: Number(process.env.UT_EMU_JITTER_MS) || 0 };
+const emuWait = () => STRESS.emuMs + (STRESS.jitter ? Math.floor(Math.random() * STRESS.jitter) : 0);
 /* cfg.search replaces ?e2e=1 (the cloud path, ?fsemu=, in S20-S24); ctxIn opens the page in a context
    that already exists (the same phone, opened again). ctl.refuse(url, method) answers a request as Firestore
    does when its rules refuse it, ctl.delay(url, method) holds one back that many ms, ctl.hook(request) takes a
@@ -389,6 +400,7 @@ function boot(cfg) {
 async function openApp(browser, base, cfg, ctxIn) {
   const ctx = ctxIn || await browser.createBrowserContext({ downloadBehavior: dl.downloadBehavior() });
   const page = await ctx.newPage();
+  if (STRESS.cpu > 1) await page.emulateCPUThrottling(STRESS.cpu);
   const errs = [], usageReqs = [], foreign = [], local = [], ctl = { refuse: null, delay: null, hook: null };
   page.on('pageerror', (e) => errs.push(String(e.message || e)));
   await page.setBypassServiceWorker(true);
@@ -406,7 +418,8 @@ async function openApp(browser, base, cfg, ctxIn) {
           headers: { 'access-control-allow-origin': r.headers().origin || '*', 'access-control-allow-credentials': 'true' },
           body: JSON.stringify({ error: { code: 403, message: 'Missing or insufficient permissions.', status: 'PERMISSION_DENIED' } }) });
       }
-      const wait = ctl.delay ? ctl.delay(u, r.method()) : 0;
+      const wait = (ctl.delay ? ctl.delay(u, r.method()) : 0)
+        || ((STRESS.emuMs || STRESS.jitter) && EMU.port && new URL(u).port === String(EMU.port) && r.method() !== 'OPTIONS' ? emuWait() : 0);
       if (wait) { setTimeout(() => { r.continue().catch(() => {}); }, wait); return; }
       return r.continue();
     }
@@ -1419,18 +1432,52 @@ SECTIONS.S21 = async (b, base, R) => {
     await sleep(300);
     await o.page.evaluate((u) => window.__utAuth.switchTo(u), uid);
     let back = null;
+    const t0 = Date.now();
     try {
       await o.page.waitForFunction((old, u) => !!(window.LL && window.LL.householdId && window.LL.householdId !== old)
         && !document.getElementById('llAuthOv') && typeof window.__cubbyScreen === 'string' && window.__cubbyHouseholdSeen === u,
       { timeout: 60000 }, oldHid, uid);
       back = await o.page.evaluate(() => window.LL.householdId);
     } catch (e) {}
-    const n1 = (await sent(o.page)).length;
+    const msBack = Date.now() - t0, n1 = (await sent(o.page)).length, t1 = Date.now();
     await o.page.evaluate(() => window.cubbyTrack('feature.used', { feature: 'pro', action: 'opened' }));
     s = await sendsUntil(o.page, (x) => named(eventsOf(x.slice(n1)), 'feature.used', { feature: 'pro' }).length > 0, 20000);
+    const msSend = Date.now() - t1;
     R.ok('S21.again-flows', 'signed out and in again on the same page: her events flow again (signing out ended the silence)',
       !!back && named(eventsOf(s.slice(n1)), 'feature.used', { feature: 'pro' }).some((e) => tokOf.test(e._token || '')),
-      { oldHid, back, deleting: await o.page.evaluate(() => window.__cubbyDeleting), seen: await o.page.evaluate(() => window.__cubbyHouseholdSeen), sent: eventsOf(s.slice(n1)).map((e) => [e.name, e._token]) });
+      { oldHid, back, msBack, msSend, sent: eventsOf(s.slice(n1)).map((e) => [e.name, e._token]), queued: (await queue(o.page)).map((x) => [x.ev.name, x.uid]),
+        now: await o.page.evaluate(() => ({ deleting: window.__cubbyDeleting, seen: window.__cubbyHouseholdSeen, hid: window.LL.householdId,
+          who: window.LL.auth.currentUser && window.LL.auth.currentUser.uid, screen: window.__cubbyScreen, authOv: !!document.getElementById('llAuthOv'),
+          mode: localStorage.getItem('cubby-usage-mode') })) });
+  } finally { await o.ctx.close(); }
+  // (c) Signed out sooner than 3.5 s after her family was attached, then in again on the same page. Attaching a
+  //     family arms a boot failsafe (startSync: show the app after 3.5 s even if the entries are slow). Until Nov
+  //     2026 it outlived the sign-out: firing after it, it booted the family she had left, hid the sign-in screen,
+  //     and marked the app booted, so her next sign-in on that page never drew her family and the loader turned
+  //     for good (S21.again-flows went red on CI three times, and about 1 run in 3 here with the page's CPU slowed 4x).
+  //     The failsafe is held (cfg.holdFailsafe) and run right after the sign-out, every time.
+  o = await openApp(b, base, cloudPage('zz-quick-out', { appAuth: true, holdFailsafe: true }));
+  try {
+    const uid = 'zz-quick-out';
+    const hid = await cloudBooted(o.page);
+    const armed = await o.page.evaluate(() => window.__utFailsafe.length);
+    await o.page.evaluate(async () => { await window.LL.signOut(); });
+    await sleep(300);
+    const ran = await o.page.evaluate(() => { const f = window.__utFailsafe.splice(0); f.forEach((x) => x()); return f.length; });
+    await sleep(300);
+    const door = await o.page.evaluate(() => { const ov = document.getElementById('llAuthOv'); return { landing: !!ov && ov.classList.contains('landing'), signedIn: !!window.LL.auth.currentUser }; });
+    R.ok('S21.quick-out-door', 'signed out sooner than the boot failsafe, which then ran: the sign-in screen is still there',
+      !!hid && armed > 0 && ran === armed && door.landing && !door.signedIn, { hid, armed, ran, door });
+    await o.page.evaluate((u) => window.__utAuth.switchTo(u), uid);
+    let back = false;
+    try {
+      await o.page.waitForFunction((u) => !document.getElementById('llAuthOv') && window.LL.householdId && window.__cubbyHouseholdSeen === u,
+        { timeout: 30000 }, uid);
+      back = true;
+    } catch (e) {}
+    R.ok('S21.quick-out-back', 'and signing in again on the same page draws her family: the loader goes',
+      back, await o.page.evaluate(() => ({ hid: window.LL.householdId, seen: window.__cubbyHouseholdSeen, screen: window.__cubbyScreen,
+        overlay: (document.getElementById('llAuthOv') || {}).textContent || null })));
   } finally { await o.ctx.close(); }
 };
 
@@ -1952,6 +1999,9 @@ const ALL_MUTANTS = [
     edits: [['if (!loginLeft || !auth.currentUser) window.__cubbyDeleting = false;', 'window.__cubbyDeleting = false;']] },
   { id: 'deleting-kept-signed-out', file: 'app/store-firebase.js', want: ['S21.again-flows'], sections: ['S21'],
     edits: [["    if (!deletingAccount) window.__cubbyDeleting = false;\n    householdSeen('');\n", "    householdSeen('');\n"]] },
+  /* S21 part c: the boot failsafe of a family she has signed out of does nothing. */
+  { id: 'stale-failsafe-boots', file: 'app/store-firebase.js', want: ['S21.quick-out-door', 'S21.quick-out-back'], sections: ['S21'],
+    edits: [['      if (booted || !gotApp || (!gotEvents && !force) || hhRef !== attached) return;', '      if (booted || !gotApp || (!gotEvents && !force)) return;']] },
   /* NEW-2: teardown forgets whose family record was seen (startSync's own reset alone would leave a window). */
   { id: 'seen-kept-signed-out', file: 'app/store-firebase.js', want: ['S21.signed-out-unseen'], sections: ['S21'],
     edits: [["    if (!deletingAccount) window.__cubbyDeleting = false;\n    householdSeen('');\n", '    if (!deletingAccount) window.__cubbyDeleting = false;\n']] },
