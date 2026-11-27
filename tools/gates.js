@@ -203,6 +203,7 @@ const TREE = [
      malformed reply and a denial are each logged. Production went months without one 429. */
   { name: 'ratelimit',      cmd: ['node', 'test/ratelimit.test.js', '--self-test'] },
   { name: 'push-delivery',  cmd: ['node', 'test/push-delivery.test.js'] },
+  { name: 'push-reminder-cats', cmd: ['node', 'test/push-reminder-cats.test.js'] },
   { name: 'signin-canary',  cmd: ['node', 'test/signin-canary.test.js'] },
   /* The funnel: derivation, Worker, client, and the plan they all answer to. Each proven red. */
   { name: 'funnel-core',    cmd: ['node', 'test/funnel-core.test.js'] },
