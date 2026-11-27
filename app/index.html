@@ -1447,6 +1447,24 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .ob-setup{margin-top:10px;}
 .qh-times{display:grid;grid-template-columns:auto minmax(0,1fr) auto minmax(0,1fr);gap:8px;align-items:center;margin-top:8px;}
 .qh-times label{margin:0;}
+/* Parent-chosen reminders (board 8A). A reminder's controls sit in a panel under its setItem row. Every
+   target is --tap-min; everything wraps at 320px. */
+.rm-panel{display:flex;flex-direction:column;gap:10px;min-width:0;background:var(--surface);border-radius:var(--r-card);padding:var(--pad-card);margin:-4px 0 10px;box-shadow:var(--elev-card);}
+.rm-mode{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);}
+.rm-mode button{white-space:normal;line-height:1.25;min-height:var(--tap-min);}
+.rm-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.rm-chip,.rm-step button,.rm-add button,.rm-add input{min-height:var(--tap-min);border:1px solid var(--line);background:var(--surface-2);font:inherit;font-weight:700;color:var(--ink);}
+.rm-chip{padding:0 14px;border-radius:var(--r-pill);}
+.rm-chip.on{background:var(--feed-soft);border-color:var(--feed);}
+.rm-step{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.rm-step button{min-width:var(--tap-min);border-radius:var(--r-ctl);font-size:var(--fs-head);}
+.rm-step .v{font-weight:800;font-size:var(--fs-lead);}
+.rm-times{display:grid;grid-template-columns:repeat(auto-fill,minmax(136px,1fr));gap:8px;}
+.rm-time{display:flex;align-items:center;justify-content:space-between;gap:6px;white-space:nowrap;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-ctl);padding:2px 2px 2px 12px;font-weight:700;min-width:0;}
+.rm-time button{flex:none;width:var(--tap-min);height:var(--tap-min);border:0;background:none;color:var(--ink-soft);font:inherit;font-size:var(--fs-title);}
+.rm-add{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;}
+.rm-add button{padding:0 14px;border-radius:var(--r-ctl);}
+.rm-add input{min-width:0;width:100%;box-sizing:border-box;padding:0 12px;border-radius:var(--r-ctl);}
 .qh-caution{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-card);padding:12px 14px;margin-top:12px;font-size:var(--fs-small);line-height:1.5;color:var(--ink-soft);}
 .home-prompt{display:flex;gap:14px;align-items:flex-start;margin-bottom:var(--stack);}
 .home-prompt .hp-art{width:72px;height:72px;object-fit:contain;flex:none;}
@@ -3147,6 +3165,13 @@ const UI_ACTIONS={
   promptAct:(id,a)=>promptAct(id,a),
   setQuietHours:(on)=>setQuietHours(on),
   setQuietAllow:(c,on)=>setQuietAllow(c,on),
+  setRemind:(c,on)=>setRemind(c,on),
+  setFeedMode:(m)=>setFeedMode(m),
+  setRemindGap:(c,m)=>setRemindGap(c,m),
+  openRemindCustom:(c)=>openRemindCustom(c),
+  stepRemindGap:(c,d)=>stepRemindGap(c,d),
+  addFeedTime:()=>addFeedTime(),
+  removeFeedTime:(t)=>removeFeedTime(t),
   dismissPosterOffer:()=>dismissPosterOffer(),
   ackChild:()=>ackChild(),
   openWeeksTakeBack:()=>openWeeksTakeBack(),
@@ -8295,7 +8320,16 @@ function pushSupported(){ try{ if(isNativeApp()) return true; /* the wrapper reg
    send. marketing defaults FALSE and can only become true from an explicit tap: App Store 4.5.4
    requires promotional push to be opted into, never pre-ticked. `tz` is what lets the WORKER apply
    quiet hours; without it a campaign has no way to know it is 3am where the parent is. */
-const PUSH_CATS=['critical','feature','marketing'];
+const PUSH_CATS=['critical','feature','marketing','feed','pump','visit'];
+/* PARENT-CHOSEN REMINDERS (27 Nov 2026, founder approved canvas board 8A). Feeds, pumping and vaccine
+   visits: each OFF until she turns it on, one nudge per feed, pump or visit, never repeated and never red.
+   A feed logged by anyone in the circle moves or skips the nudge; quiet hours let it go unless she says
+   feeds may come through at night. The Worker enforces the same rules server side (pushEntryVerdict),
+   because this queue is written by the client and the client is not the authority. */
+const REMIND_CATS=['feed','pump','visit'];
+const FEED_GAPS=[120,150,180,210,240];
+function remindGapOk(m){ return typeof m==='number' && m>=60 && m<=360 && m%15===0; }
+function isHHMM(t){ return typeof t==='string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(t); }
 function pushCfg(){
   var c=state.settings.push;
   if(!c) c=state.settings.push={enabled:false,quietStart:21,quietEnd:7};
@@ -8303,7 +8337,17 @@ function pushCfg(){
   // What may still reach her during quiet hours (27 Nov 2026). Medicine reminders come through by default.
   if(!c.quietAllow) c.quietAllow={critical:true};
   if(typeof c.quietAllow.critical!=='boolean') c.quietAllow.critical=true;
-  PUSH_CATS.forEach(function(k){ if(typeof c.allow[k]!=='boolean') c.allow[k]=(k!=='marketing'); });
+  // Absence is never consent for anything new: only medicine and product news default on (as before).
+  PUSH_CATS.forEach(function(k){ if(typeof c.allow[k]!=='boolean') c.allow[k]=(k==='critical'||k==='feature'); });
+  REMIND_CATS.forEach(function(k){ if(typeof c.quietAllow[k]!=='boolean') c.quietAllow[k]=false; });
+  if(!c.remind||typeof c.remind!=='object') c.remind={};
+  const r=c.remind;
+  if(r.feedMode!=='times') r.feedMode='after';
+  if(!remindGapOk(r.feedGap)) r.feedGap=180;
+  if(!remindGapOk(r.pumpGap)) r.pumpGap=180;
+  r.feedTimes=(Array.isArray(r.feedTimes)?r.feedTimes:[]).filter(isHHMM).filter(function(t,i,a){ return a.indexOf(t)===i; }).sort().slice(0,12);
+  // Which of these THIS device has actually chosen (see cubbyAdoptRemindPrefs): only those are written.
+  if(!c.remindChosen||typeof c.remindChosen!=='object') c.remindChosen={};
   if(!c.tz){ try{ c.tz=Intl.DateTimeFormat().resolvedOptions().timeZone||''; }catch(e){ c.tz=''; } }
   return c;
 }
@@ -8327,15 +8371,71 @@ function setQuietHours(on, start, end){
   }
   persist(); pushSyncPrefs(); try{ syncReminderIndex(); }catch(e){} openReminders(); render();
 }
-// One rule for what quiet hours hold back on the push queue: a dose only when she has turned that off.
+// One rule for what quiet hours hold back on the push queue: a dose only when she has turned that off,
+// a feed, pump or visit nudge unless she has let it through. Held back means let go, never sent at 7am.
 function quietDropsPush(e, cfg){
   const qs=cfg.quietStart, qe=cfg.quietEnd;
   if(qs==null||qe==null||qs===qe) return false;
   const h=new Date(e.at).getHours(); const inQ = qs<qe ? (h>=qs&&h<qe) : (h>=qs||h<qe);
   if(!inQ) return false;
-  return !(e.cat==='critical' && (!cfg.quietAllow || cfg.quietAllow.critical!==false));
+  const qa=cfg.quietAllow||{};
+  if(e.cat==='critical') return qa.critical===false;   // medicine comes through unless she said not to
+  return qa[e.cat]!==true;                              // anything else only when she let it through
 }
-function setQuietAllow(cat,on){ const cfg=pushCfg(); cfg.quietAllow[cat]=!!on; persist(); try{ syncReminderIndex(); }catch(e){} openReminders(); }
+function setQuietAllow(cat,on){ if(cat!=='critical'&&REMIND_CATS.indexOf(cat)<0) return; const cfg=pushCfg(); cfg.quietAllow[cat]=!!on; if(cat!=='critical') cfg.remindChosen[cat]=true; persist(); pushSyncPrefs(); try{ syncReminderIndex(); }catch(e){} openReminders(); }
+/* ---------- Parent-chosen reminders: the choice list (board 8A) ---------- */
+const REMIND_LABEL={critical:'Medicine doses', feed:'Feeds', pump:'Pumping', visit:'Vaccine visits'};
+const REMIND_TINT={critical:'med', feed:'feed', pump:'pump', visit:'diaper'};
+const REMIND_ICON={critical:'pill', feed:'bottle', pump:'pump', visit:'vaccine'};
+var _remindCustom={};   // which gap pickers she opened this time; a gap off the chips opens its own
+function remindSave(){ pushCfg().remindChosen.remind=true; persist(); pushSyncPrefs(); try{ syncReminderIndex(); }catch(e){} openReminders(); }
+function setRemind(cat,on){ if(cat!=='critical'&&REMIND_CATS.indexOf(cat)<0) return; if(cat!=='critical') pushCfg().remindChosen[cat]=true; setPushAllow(cat,on); try{ if(window.cubbyTrack) window.cubbyTrack('reminders.choice',{kind:({critical:'medicine',feed:'feed',pump:'pump',visit:'vaccine_visit'})[cat],state:on?'on':'off'}); }catch(_ut){} }
+function setFeedMode(m){ const c=pushCfg(); c.remind.feedMode=(m==='times'?'times':'after'); try{ if(window.cubbyTrack) window.cubbyTrack('reminders.feed_mode',{mode:c.remind.feedMode==='times'?'set_times':'after_last'}); }catch(_ut){} remindSave(); }
+function setRemindGap(cat,min){ if(cat!=='feed'&&cat!=='pump') return; min=+min; if(!remindGapOk(min)) return; const c=pushCfg(); c.remind[cat+'Gap']=min; _remindCustom[cat]=FEED_GAPS.indexOf(min)<0; remindSave(); }
+function openRemindCustom(cat){ if(cat!=='feed'&&cat!=='pump') return; _remindCustom[cat]=true; openReminders(); }
+function stepRemindGap(cat,d){ if(cat!=='feed'&&cat!=='pump') return; const c=pushCfg(); const v=Math.max(60,Math.min(360,(c.remind[cat+'Gap']||180)+(d>0?15:-15))); _remindCustom[cat]=true; c.remind[cat+'Gap']=v; remindSave(); }
+function addFeedTime(){
+  const el=document.getElementById('feedTimeNew'); const t=el&&el.value;
+  if(!isHHMM(t)){ toast('Pick a time first'); return; }
+  const c=pushCfg(); if(c.remind.feedTimes.indexOf(t)>=0){ toast('That time is already there'); return; }
+  if(c.remind.feedTimes.length>=12){ toast('Twelve times is the most'); return; }
+  c.remind.feedTimes.push(t); c.remind.feedTimes.sort(); remindSave();
+}
+function removeFeedTime(t){ const c=pushCfg(); c.remind.feedTimes=c.remind.feedTimes.filter(function(x){ return x!==t; }); remindSave(); }
+function hhmmLabel(t){ const d=new Date(); d.setHours(+t.slice(0,2),+t.slice(3,5),0,0); return fmtClock(d.getTime()); }
+function remindSeg(cat,on){ return [{label:'On', on:on, act:'setRemind', args:[cat,true]}, {label:'Off', on:!on, act:'setRemind', args:[cat,false]}]; }
+// One row per reminder, drawn by setItem like every other Settings row; a reminder's own controls sit in a panel just under it.
+function remindRow(cat,on,sub){ return setItem({tint:REMIND_TINT[cat], icon:REMIND_ICON[cat], title:REMIND_LABEL[cat], sub:sub, seg:remindSeg(cat,on)}); }
+function remindGapPicker(cat,gap){
+  const custom=_remindCustom[cat]||FEED_GAPS.indexOf(gap)<0;
+  const chips=FEED_GAPS.map(function(m){ return `<button class="rm-chip ${!custom&&gap===m?'on':''}"${uiAct('setRemindGap',[cat,m])}>${uiTxt(gapWords(m).replace(' hours','h').replace(' hour','h'))}</button>`; }).join('')
+    +`<button class="rm-chip ${custom?'on':''}"${uiAct('openRemindCustom',[cat])}>${custom?uiTxt('Custom · '+gapWords(gap)):'Custom'}</button>`;
+  return `<div class="rm-chips" role="group" aria-label="${cat==='feed'?'Hours after the last feed':'Hours after you last pumped'}">${chips}</div>
+    ${custom?`<div class="rm-step"><button aria-label="15 minutes less"${uiAct('stepRemindGap',[cat,-1])}${gap<=60?' disabled':''}>−</button><div class="v">${uiTxt(gapWords(gap))}</div><button aria-label="15 minutes more"${uiAct('stepRemindGap',[cat,1])}${gap>=360?' disabled':''}>+</button></div>
+    <div class="csub" style="text-align:center">Anywhere from 1 to 6 hours, in 15 minute steps.</div>`:''}`;
+}
+function remindChoices(cfg, ready){
+  const r=cfg.remind, a=cfg.allow;
+  const hasPump=(state.events||[]).some(function(e){ return e&&!e.deleted&&e.type==='pump'; });
+  let hasVisits=false; try{ hasVisits=(state.babies||[]).some(function(b){ const pl=b&&b.birth&&state.vaccines&&state.vaccines[b.id]; return !!(pl&&vaxUpcomingVisits(pl).length); }); }catch(e){}
+  const feedSub=!a.feed?'Off':(r.feedMode==='times'?(r.feedTimes.length?('At '+r.feedTimes.length+' set '+(r.feedTimes.length===1?'time':'times')+' each day'):'At times you choose'):('About '+gapWords(r.feedGap)+' after the last feed'));
+  const needPush=(a.feed||a.pump||a.visit)&&!(ready&&cfg.enabled)?`<div class="csub">These arrive as notifications, so they need Gentle reminders on for this phone, further down.</div>`:'';
+  const feedPanel=a.feed?`<div class="rm-panel">
+      <div class="seg rm-mode" role="group" aria-label="When to remind you"><button class="${r.feedMode==='after'?'on':''}"${uiAct('setFeedMode',['after'])}>After the last feed</button><button class="${r.feedMode==='times'?'on':''}"${uiAct('setFeedMode',['times'])}>At set times</button></div>
+      ${r.feedMode==='times'?`${r.feedTimes.length?`<div class="rm-times">${r.feedTimes.map(function(t){ return `<div class="rm-time">${uiTxt(hhmmLabel(t))}<button aria-label="Remove ${uiTxt(hhmmLabel(t))}"${uiAct('removeFeedTime',[t])}>×</button></div>`; }).join('')}</div>`:''}
+        <div class="rm-add"><input type="time" id="feedTimeNew" value="09:00" aria-label="New feed time"><button${uiAct('addFeedTime')}>Add a time</button></div>
+        <div class="csub">One nudge at each time. If someone logs a feed in the half hour before, that one is skipped.</div>`
+      :`${remindGapPicker('feed',r.feedGap)}
+        <div class="csub">Cubby doesn't set a feeding schedule. Pick what your midwife or doctor suggested, or what feels right for you. If someone logs a feed first, that nudge is skipped.</div>`}
+    </div>`:'';
+  return `<div class="sec-title" style="margin-top:14px">What would you like reminding about?</div>
+    ${remindRow('critical',!!a.critical,'When a dose is due')}
+    ${remindRow('feed',!!a.feed,feedSub)}${feedPanel}
+    ${hasPump||a.pump?remindRow('pump',!!a.pump,a.pump?'About '+gapWords(r.pumpGap)+' after you last pumped':'Off')+(a.pump?`<div class="rm-panel">${remindGapPicker('pump',r.pumpGap)}</div>`:''):''}
+    ${hasVisits||a.visit?remindRow('visit',!!a.visit,'The evening before each visit'):''}
+    ${needPush}
+    <div class="csub" style="margin-top:6px">Nothing here is on until you turn it on, apart from medicine doses. Each one nudges once, and never turns red.</div>`;
+}
 function quietHoursBlock(cfg){
   const on=cfg.quietStart!==cfg.quietEnd;
   const opt=(sel)=>Array.from({length:24},(_,h)=>`<option value="${h}" ${h===sel?'selected':''}>${String(h).padStart(2,'0')}:00</option>`).join('');
@@ -8346,20 +8446,56 @@ function quietHoursBlock(cfg){
       <label for="qhTo">To</label><select id="qhTo" onchange="setQuietHours(true,null,this.value)">${opt(cfg.quietEnd)}</select></div>
     <div class="csub" style="margin:10px 0 6px">What can still reach you in quiet hours</div>
     ${setItem({tint:'med', icon:'pill', title:'Medicine reminders', sub:'A nudge when a dose is due, at any hour',
-      seg:[{label:'On', on:!!cfg.quietAllow.critical, act:'setQuietAllow', args:['critical',true]}, {label:'Off', on:!cfg.quietAllow.critical, act:'setQuietAllow', args:['critical',false]}]})}`:''}
-    <div class="qh-caution">During quiet hours we won't disturb you with tips, suggestions or news from Cubby, so you might miss a few until the morning. Medicine reminders still come through unless you turn them off here, and anything that needs you now, like a dose that is due, still shows when you open Cubby.</div>`;
+      seg:[{label:'On', on:!!cfg.quietAllow.critical, act:'setQuietAllow', args:['critical',true]}, {label:'Off', on:!cfg.quietAllow.critical, act:'setQuietAllow', args:['critical',false]}]})}
+    ${REMIND_CATS.filter(function(k){ return cfg.allow[k]; }).map(function(k){ const q=!!cfg.quietAllow[k];
+      return setItem({tint:REMIND_TINT[k], icon:REMIND_ICON[k], title:REMIND_LABEL[k],
+        sub:k==='feed'?'Off at night unless you want it. Turn on if you have been asked to wake for feeds.':'Off at night unless you want it.',
+        seg:[{label:'On', on:q, act:'setQuietAllow', args:[k,true]}, {label:'Off', on:!q, act:'setQuietAllow', args:[k,false]}]}); }).join('')}`:''}
+    <div class="qh-caution">During quiet hours we won't disturb you with tips, suggestions or news from Cubby, so you might miss a few until the morning. A reminder held back at night is let go, not saved for later. Medicine reminders still come through unless you turn them off here, and anything that needs you now, like a dose that is due, still shows when you open Cubby.</div>`;
 }
 /* The server needs consent, quiet hours and timezone even when no token is being minted, so every
    path that changes them writes the same shape. Never writes `tokens`: that is storePushToken's. */
+/* The one shape both writers send. quietAllow goes to the server too: the Worker re-applies quiet hours
+   to feed, pump and visit nudges, and it can only honour a choice it can read. */
+function pushPrefsShape(cfg){
+  const allow={}, quietAllow={};
+  PUSH_CATS.forEach(function(k){ allow[k]=!!cfg.allow[k]; });
+  quietAllow.critical=!!cfg.quietAllow.critical;
+  /* users/{uid}.push is ONE doc for every device she signs in on, and a merge write replaces each key it
+     names. So a device writes a feed, pump or visit choice only once she has made it there; a tablet
+     that never chose leaves her phone's choice alone instead of writing its own default over it. */
+  const ch=cfg.remindChosen||{};
+  REMIND_CATS.forEach(function(k){ if(ch[k]){ allow[k]=!!cfg.allow[k]; quietAllow[k]=!!cfg.quietAllow[k]; } else delete allow[k]; });
+  const out={enabled:!!cfg.enabled, quietStart:cfg.quietStart, quietEnd:cfg.quietEnd, tz:cfg.tz||'', allow:allow, quietAllow:quietAllow};
+  if(ch.remind&&cfg.remind) out.remind={feedMode:cfg.remind.feedMode, feedGap:cfg.remind.feedGap, pumpGap:cfg.remind.pumpGap, feedTimes:cfg.remind.feedTimes.slice()};
+  return out;
+}
+/* At sign-in (store-firebase.js resolveHousehold, on the user doc it already reads): a device that has
+   not chosen takes the account's answer, so feeds turned on on her phone are on here too and this
+   device's queue keeps them. A choice made on this device always wins over the account's. */
+window.cubbyAdoptRemindPrefs=function(sp){
+  try{
+    if(!sp||typeof sp!=='object') return false;
+    const c=pushCfg(), ch=c.remindChosen; let changed=false;
+    REMIND_CATS.forEach(function(k){
+      if(ch[k]) return;
+      if(sp.allow&&typeof sp.allow[k]==='boolean'&&c.allow[k]!==sp.allow[k]){ c.allow[k]=sp.allow[k]; changed=true; }
+      if(sp.quietAllow&&typeof sp.quietAllow[k]==='boolean'&&c.quietAllow[k]!==sp.quietAllow[k]){ c.quietAllow[k]=sp.quietAllow[k]; changed=true; }
+    });
+    if(!ch.remind&&sp.remind&&typeof sp.remind==='object'){
+      ['feedMode','feedGap','pumpGap','feedTimes'].forEach(function(k){ if(sp.remind[k]!=null) c.remind[k]=sp.remind[k]; });
+      pushCfg(); changed=true;               // pushCfg re-validates every adopted value
+    }
+    if(changed) persist();
+    return changed;
+  }catch(e){ return false; }
+};
 async function pushSyncPrefs(){
   const cfg=pushCfg();
   const uid=(window.LL&&LL.auth&&LL.auth.currentUser&&LL.auth.currentUser.uid)||null;
   if(!(window.LL&&LL.db&&uid)) return false;
   try{
-    await LL.db.collection('users').doc(uid).set({push:{
-      enabled:!!cfg.enabled, quietStart:cfg.quietStart, quietEnd:cfg.quietEnd,
-      tz:cfg.tz||'', allow:{critical:!!cfg.allow.critical, feature:!!cfg.allow.feature, marketing:!!cfg.allow.marketing}
-    }},{merge:true});
+    await LL.db.collection('users').doc(uid).set({push:pushPrefsShape(cfg)},{merge:true});
     return true;
   }catch(e){ console.warn('[cubby] could not save notification choices', e); return false; }
 }
@@ -8367,7 +8503,7 @@ function setPushAllow(cat,on){
   const cfg=pushCfg();
   if(PUSH_CATS.indexOf(cat)<0) return;
   cfg.allow[cat]=!!on;
-  persist(); pushSyncPrefs(); openReminders();
+  persist(); pushSyncPrefs(); if(REMIND_CATS.indexOf(cat)>=0){ try{ syncReminderIndex(); }catch(e){} } openReminders();
   toast(on?'On':'Off');
 }
 /* Which calendar routes this parent can actually reach right now. Reachability, not stage, because
@@ -8414,7 +8550,9 @@ function openReminders(){
   const sup=pushSupported(), cfg=pushCfg(), ready=remindersLive()&&sup&&(isNativeApp()||!!CUBBY_VAPID);  // VAPID is a web-push concept; the wrapper goes via APNs
   const muted=medAlertsMuted();
   const calLine=reminderCalendarLine();
-  openSheet(`<h2>Reminders 🔔</h2><div class="sub">A gentle nudge when a medicine is due. One nudge per dose, always with a way out, and never for feeds, naps, rituals or milestones.</div>
+  openSheet(`<h2>Reminders 🔔</h2><div class="sub">Choose what you would like a nudge for. One nudge each time, always with a way out.</div>
+    ${remindChoices(cfg, ready)}
+    <div class="sec-title" style="margin-top:18px">While Cubby is open</div>
     <div class="set-item"><div class="si-ico" style="background:var(--med-soft);color:var(--med);font-size:18px">⏰</div><div class="si-body"><div class="a">Dose alerts in the app</div><div class="b">${muted?'Off on this device':'One nudge per dose, while Cubby is open'}</div></div>
       <div class="seg"><button class="${!muted?'on':''}" onclick="setMedAlerts(true)">On</button><button class="${muted?'on':''}" onclick="setMedAlerts(false)">Off</button></div></div>
     <div class="csub" style="margin-top:8px">Every alert gives you two ways out. In 15 min hides it and brings it back once, at a time it tells you. Not now ends it for that dose. Neither one logs a dose you did not give.</div>
@@ -8425,10 +8563,9 @@ function openReminders(){
           vaccine list and openDoseCalendar off a saved medicine with set times, neither of which a
           parent would think to look for from here. Omitted outright when neither screen exists. */''}
     ${calLine?`<div class="csub" style="margin-top:6px">${calLine}</div>`:''}
-    <div class="sec-title" style="margin-top:18px">What we may send you</div>
-    <div class="csub" style="margin-bottom:8px">These are separate on purpose. Turning one off never touches the others, and a dose reminder is never counted as news.</div>
-    ${[['critical','Dose reminders','A nudge when a medicine is due. No limit, because a missed dose is not marketing.'],
-       ['feature','New in Cubby','An occasional note when we add something. At most five a month.'],
+    <div class="sec-title" style="margin-top:18px">News from Cubby</div>
+    <div class="csub" style="margin-bottom:8px">Separate from your reminders on purpose. Turning one off never touches the others, and a reminder is never counted as news.</div>
+    ${[['feature','New in Cubby','An occasional note when we add something. At most five a month.'],
        ['marketing','Offers','News about Pro and anything we charge for. At most two a month, and never if you are on Pro.']]
       .map(function(r){ var on=!!cfg.allow[r[0]]; return `<div class="set-item"><div class="si-body"><div class="a">${r[1]}</div><div class="b">${r[2]}</div></div>
         <div class="seg"><button class="${on?'on':''}" onclick="setPushAllow('${hArg(r[0])}',true)">On</button><button class="${!on?'on':''}" onclick="setPushAllow('${hArg(r[0])}',false)">Off</button></div></div>`; }).join('')}
@@ -8438,7 +8575,7 @@ function openReminders(){
       <div class="seg"><button class="${cfg.enabled?'on':''}" onclick="enablePush()">On</button><button class="${!cfg.enabled?'on':''}" onclick="disablePush()">Off</button></div></div>
     `}
     ${quietHoursBlock(cfg)}
-    <div class="preg-disclaim" style="margin-top:12px">Cubby never sends feed reminders. Delivery uses Firebase, our own sign-in and database provider, not a third-party ad tracker.</div>`,'star');
+    <div class="preg-disclaim" style="margin-top:12px">Delivery uses Firebase, our own sign-in and database provider, not a third-party ad tracker.</div>`,'star');
 }
 /* Store a push token the Worker cron can deliver to. Shared by the web (VAPID/service-worker token)
    and the wrapper (native FCM token) — both are FCM registration tokens, so the cron, the quiet hours
@@ -8463,9 +8600,7 @@ async function storePushToken(tok, explicit){
   if(!(window.LL&&LL.db&&uid)){ _pendingPushTok={tok:tok,explicit:!!explicit}; return false; }
   const t={}; t[tok]={ua:(navigator.userAgent||'').slice(0,120),at:Date.now()};
   try{
-    await LL.db.collection('users').doc(uid).set({push:{enabled:true,quietStart:cfg.quietStart,quietEnd:cfg.quietEnd,
-      tz:cfg.tz||'', allow:{critical:!!cfg.allow.critical,feature:!!cfg.allow.feature,marketing:!!cfg.allow.marketing},
-      tokens:t}},{merge:true});
+    await LL.db.collection('users').doc(uid).set({push:Object.assign(pushPrefsShape(cfg),{enabled:true,tokens:t})},{merge:true});
   }catch(e){ console.warn('[cubby] could not store the push token', e); return false; }
   persist(); syncReminderIndex();
   return true;
@@ -8534,7 +8669,80 @@ function disablePush(){
    into users/{uid}.push.due; the Worker cron only reads + sends, so it needs no domain logic.
    Refreshed on app use (throttled), on enabling push, and on any medicine change. */
 var _remSync=0;
-function maybeSyncReminders(){ try{ if(state.settings&&state.settings.push&&state.settings.push.enabled && Date.now()-_remSync>600000){ _remSync=Date.now(); syncReminderIndex(); } }catch(e){} }
+/* A feed or pump nudge hangs off the LAST one logged, so the queue is rebuilt the moment that changes
+   (a feed logged here, or one from another phone arriving), not on the 10-minute throttle: a nudge
+   for a feed that already happened is the one thing this feature must not send. */
+var _remSig='';
+function remindSig(){
+  const c=state.settings&&state.settings.push; if(!c||!c.allow||!(c.allow.feed||c.allow.pump)) return '';
+  const last={}; (state.events||[]).forEach(function(e){ if(!e||e.deleted||(e.type!=='feed'&&e.type!=='pump')) return; const k=e.type+(e.type==='feed'?':'+e.babyId:''); if(!last[k]||e.time>last[k]) last[k]=e.time; });
+  return Object.keys(last).sort().map(function(k){ return k+'='+last[k]; }).join('|');
+}
+function maybeSyncReminders(){ try{
+  if(!(state.settings&&state.settings.push&&state.settings.push.enabled)) return;
+  const sig=remindSig();
+  if(sig!==_remSig || Date.now()-_remSync>600000){ _remSig=sig; _remSync=Date.now(); syncReminderIndex(); }
+}catch(e){} }
+function gapWords(min){ const h=Math.floor(min/60), m=min%60; if(!m) return h+(h===1?' hour':' hours'); if(m===30) return h+'½ hours'; return (h?h+'h ':'')+m+'m'; }
+function visitAgeWords(age){ return age===0?'birth check':(age<24||age%12)?(age+'-month check'):((age/12)+'-year check'); }
+/* The newest non-deleted entry of a type. mineOnly: logged on this account (an entry with no author yet
+   is a local one, so it is hers). */
+function lastLogged(type, babyId, mineOnly){
+  let best=null; const me=myUid();
+  (state.events||[]).forEach(function(e){
+    if(!e||e.deleted||e.type!==type) return;
+    if(babyId&&e.babyId!==babyId) return;
+    if(mineOnly&&e.authorId&&e.authorId!==me&&e.authorId!=='local') return;
+    if(!best||e.time>best.time) best=e;
+  });
+  return best;
+}
+/* Parent-chosen reminder entries for the push queue. Feeds: one per baby with a feed in the last three
+   days (a baby she has stopped logging gets nothing), either about N hours after the last feed or at her
+   set times. skipIfSince is what the Worker checks against the household's events before sending:
+   any feed for that baby at or after it means the nudge is let go. */
+function remindEntries(cfg, now, windowEnd){
+  const out=[], r=cfg.remind||{}, me=myUid();
+  const nameOf=function(id){ const b=(state.babies||[]).find(function(x){ return x.id===id; }); return (b&&b.name)||'your little one'; };
+  const who=function(e){ return (!e.authorId||e.authorId===me||e.authorId==='local')?'you':(loggerName(e.authorId)||'someone in your circle'); };
+  if(cfg.allow.feed){
+    const ids=[]; (state.events||[]).forEach(function(e){ if(e&&!e.deleted&&e.type==='feed'&&e.time>=now-3*86400000&&ids.indexOf(e.babyId)<0) ids.push(e.babyId); });
+    ids.forEach(function(bid){
+      const last=lastLogged('feed',bid,false); if(!last) return; const nm=nameOf(bid);
+      if(r.feedMode==='times'){
+        for(let day=0; day<2; day++){
+          const d0=new Date(now); d0.setHours(0,0,0,0); d0.setDate(d0.getDate()+day);
+          (r.feedTimes||[]).forEach(function(t){
+            const at=new Date(d0); at.setHours(+t.slice(0,2),+t.slice(3,5),0,0); const ms=at.getTime();
+            if(ms<=now||ms>windowEnd) return;
+            out.push({at:ms, cat:'feed', title:nm+'\u2019s '+fmtClock(ms)+' feed', body:'One of the feed times you chose.', tag:'feed-'+bid+'-'+ms, babyId:bid, skipIfSince:ms-30*60000});
+          });
+        }
+      } else {
+        const at=last.time+r.feedGap*60000; if(at<=now||at>windowEnd) return;
+        out.push({at:at, cat:'feed', title:'About '+gapWords(r.feedGap)+' since '+nm+'\u2019s last feed', body:'Last one was '+fmtClock(last.time)+', logged by '+who(last)+'.', tag:'feed-'+bid+'-'+last.time, babyId:bid, skipIfSince:last.time+1});
+      }
+    });
+  }
+  if(cfg.allow.pump){
+    const last=lastLogged('pump',null,true);
+    if(last){ const at=last.time+r.pumpGap*60000;
+      if(at>now&&at<=windowEnd) out.push({at:at, cat:'pump', title:'About '+gapWords(r.pumpGap)+' since you last pumped', body:'Last time was '+fmtClock(last.time)+'.', tag:'pump-'+last.time, skipIfSince:last.time+1}); }
+  }
+  if(cfg.allow.visit){
+    (state.babies||[]).forEach(function(b){
+      if(!b||!b.birth) return;
+      const plan=state.vaccines&&state.vaccines[b.id]; if(!plan) return;   // read the stored plan; never generate (and persist) one from here
+      let visits=[]; try{ visits=vaxUpcomingVisits(plan); }catch(e){}
+      visits.forEach(function(v){
+        const d=new Date(v.due); d.setHours(0,0,0,0); d.setDate(d.getDate()-1); d.setHours(18,0,0,0);
+        const at=d.getTime(); if(at<=now||at>windowEnd) return;
+        out.push({at:at, cat:'visit', title:(b.name||'Your little one')+'\u2019s '+visitAgeWords(v.age)+' is tomorrow', body:'Your vaccine list has what is due, and you can mark the visit done after.', tag:'visit-'+b.id+'-'+v.age, babyId:b.id});
+      });
+    });
+  }
+  return out;
+}
 function medFireTimes(m,fromTs,toTs){
   var out=[]; if(!m||!m.pattern) return out;
   if(m.pattern.type==='everyX'){
@@ -8555,9 +8763,10 @@ async function syncReminderIndex(){
   try{
     if(!(window.LL&&LL.db&&myUid())) return;
     var cfg=state.settings.push; if(!cfg||!cfg.enabled) return;
-    // ONLY medicine is critical enough to push. Two kinds, nothing else ever:
+    // Medicine is the only CRITICAL push, in two kinds:
     //  (1) a per-medicine reminder ~30 min before each due dose, and
     //  (2) one gentle morning digest of the day's medicines.
+    // (3) below adds only what she chose herself: feeds, pumping, vaccine visits (remindEntries).
     var meds=(state.meds||[]).filter(function(m){return m.remind&&m.active!==false;});
     var now=Date.now(), windowEnd=now+48*3600000, due=[], baby=(((activeBaby()||{}).name)||'your little one');
     function clock(at){ var t=new Date(at), h=t.getHours(), mm=t.getMinutes(), ap=h>=12?'pm':'am', h12=(h%12)||12; return h12+':'+(mm<10?'0':'')+mm+ap; }
@@ -8583,6 +8792,7 @@ async function syncReminderIndex(){
       if(!names.length) continue; var fireAt=ds+9*3600000; if(fireAt<=now) continue;
       due.push({at:fireAt, cat:'critical', title:'Today with '+baby, body:names.length<=3?('Medicines today: '+names.join(', ')):(names.length+' medicines to give today'), tag:'digest-'+ds});
     }
+    due=due.concat(remindEntries(cfg, now, windowEnd));
     // Quiet hours applied client-side (the client knows the timezone). A dose reminder inside her quiet
     // hours comes through when she has said medicine reminders may (the default since 27 Nov 2026).
     due=due.filter(function(e){ return !quietDropsPush(e, cfg); });
@@ -8591,7 +8801,10 @@ async function syncReminderIndex(){
     // written with every index refresh. Without it the cron had to page the entire /users collection
     // 96 times a day. Deleted rather than nulled when nothing is due, so the doc leaves the
     // single-field index altogether instead of just failing to match.
-    var slice=due.slice(0,60);
+    /* Medicine first: the queue holds 60, and a parent's feed times (up to 12 a day, per baby) must never
+       push a dose reminder out of it. Her own reminders get whatever room the medicine leaves. */
+    var crit=due.filter(function(e){ return e.cat==='critical'; }), mine=due.filter(function(e){ return e.cat!=='critical'; });
+    var slice=crit.slice(0,60).concat(mine.slice(0,Math.max(0,60-crit.length))).sort(function(a,b){return a.at-b.at;});
     await LL.db.collection('users').doc(myUid()).set({push:{due:slice,
       nextAt: slice.length ? slice[0].at : firebase.firestore.FieldValue.delete()}},{merge:true});
   }catch(e){}

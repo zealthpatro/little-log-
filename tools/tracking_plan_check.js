@@ -494,15 +494,15 @@ const STAGES = [
   ['the plan\'s pattern drifts', 'the plan\'s never-instrumented pattern is core.mjs\'s', [[P, "|blood|archive|private'", "|blood|archive'"]]],
   ['an event named mood.logged', 'no linked event name matches the never-instrumented pattern', [[C, "  'install.prompted': {", "  'mood.logged': { anon: false, props: { action: e('logged') } },\n  'install.prompted': {"],
     [P, '    - name: install.prompted\n', '    - name: mood.logged\n      source: new\n      before_sign_in: false\n      properties:\n        - { name: action, type: string, enum: [logged] }\n\n    - name: install.prompted\n'],
-    [P, '13 of the 18 linked', '14 of the 19 linked']]],
+    [P, '15 of the 20 linked', '16 of the 21 linked']]],
   ['a push kind named mood', 'no linked property value matches the never-instrumented pattern', [[C, "'team_note', 'other'];", "'team_note', 'mood', 'other'];"],
-    [P, 'enum: [medicine, feed, sleep, appointment, vaccine, feature, marketing, team_note, other]', 'enum: [medicine, feed, sleep, appointment, vaccine, feature, marketing, team_note, mood, other]']]],
+    [P, 'enum: [medicine, feed, pump, sleep, appointment, vaccine, feature, marketing, team_note, other]', 'enum: [medicine, feed, pump, sleep, appointment, vaccine, feature, marketing, team_note, mood, other]']]],
   // 4. loss
   ['a loss event in the linked plan', 'no event measures a pregnancy loss', [[P, '    - name: nudge.acted\n', '    - name: pregnancy.ended\n      source: derived\n      before_sign_in: false\n      properties: []\n\n    - name: nudge.acted\n']]],
   ['a loss event in core.mjs', 'no event measures a pregnancy loss', [[C, "  'install.prompted': {", "  'loss.recorded': { anon: false, props: {} },\n  'install.prompted': {"]]],
   ['a loss event in the household plan', 'no event measures a pregnancy loss', [[P, '  - name: pro.waitlist_joined\n', '  - name: pregnancy.ended\n    source: derived\n    properties: []\n\n  - name: pro.waitlist_joined\n']]],
   ['a loss value in a push kind (miscarriage_followup), outside the never pattern', 'no linked property value names a loss', [[C, "'team_note', 'other'];", "'team_note', 'miscarriage_followup', 'other'];"],
-    [P, 'enum: [medicine, feed, sleep, appointment, vaccine, feature, marketing, team_note, other]', 'enum: [medicine, feed, sleep, appointment, vaccine, feature, marketing, team_note, miscarriage_followup, other]']]],
+    [P, 'enum: [medicine, feed, pump, sleep, appointment, vaccine, feature, marketing, team_note, other]', 'enum: [medicine, feed, pump, sleep, appointment, vaccine, feature, marketing, team_note, miscarriage_followup, other]']]],
   // 9. the phone's copy
   ['app/usage-allowlist.js hand-edited', 'app/usage-allowlist.js is exactly what core.mjs generates', [[A, '"ios_instructions"', '"ios_instruction"']]],
   // 10. journey keys
@@ -519,7 +519,7 @@ const STAGES = [
   ['rule 1 stops saying families are not measured', 'while families are not measured, the plan says so', [[P, '#      FAMILIES ARE NOT MEASURED until the last step of phase 3', '#      Families are measured from phase 2']]],
   ['the privacy label goes back to Not Linked', 'the plan\'s privacy_label declares Usage Data linked', [[P, '{ data: "Usage Data: Product Interaction", linked: true,', '{ data: "Usage Data: Product Interaction", linked: false,']]],
   // 5. counts
-  ['the linked count is wrong', 'its header states the true linked counts', [[P, '13 of the 18 linked', '13 of the 17 linked']]],
+  ['the linked count is wrong', 'its header states the true linked counts', [[P, '15 of the 20 linked', '15 of the 19 linked']]],
   ['the household count is wrong', 'its header states the true derived and total counts', [[P, '13 of the 19 events here are', '12 of the 19 events here are']]],
   // 1 and 3, kept from version 1
   ['the funnel allowlist gains a value', 'onboarding.step_reached.step: same values in plan and allowlist', [[F, "step: ['stage_chosen', 'details_entered', 'first_log_offered', 'invite_offered'],", "step: ['stage_chosen', 'details_entered', 'first_log_offered', 'invite_offered', 'x_step'],"]]],

@@ -1,6 +1,6 @@
 /* Cubby service worker.
    Bump CACHE on every deploy so old assets are cleared. */
-const CACHE = 'little-log-v389';
+const CACHE = 'little-log-v390';
 const ASSETS = [
   '/app/',
   '/app/index.html',
@@ -172,7 +172,8 @@ self.addEventListener('notificationclick', (e) => {
   /* The page records the tap as push.opened (app/cubby-track.js), by KIND only: a marker in the fragment
      of the URL it opens, which the page reads and then takes off the address bar, or a message to a page
      already open. A fragment is never part of the request, so /app/ still opens from the cache at once. */
-  const nk = (d.medId || /^(med|digest)-/.test(String(d.tag || ''))) ? 'medicine' : (d.cat === 'marketing' || d.cat === 'feature') ? d.cat : 'other';
+  const tg = String(d.tag || '');
+  const nk = (d.medId || /^(med|digest)-/.test(tg)) ? 'medicine' : /^feed-/.test(tg) ? 'feed' : /^pump-/.test(tg) ? 'pump' : /^visit-/.test(tg) ? 'vaccine' : (d.cat === 'marketing' || d.cat === 'feature') ? d.cat : 'other';
   e.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cl) => {
       for (const c of cl) { if (c.url.indexOf('/app') >= 0 && 'focus' in c) { try { c.postMessage({ cubbyNotification: nk }); } catch (err) {} return c.focus(); } }

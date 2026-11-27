@@ -325,7 +325,8 @@
       var tag = String(d.tag || ''), cat = String(d.cat || '');
       // Shapes from worker.js: a dose reminder or the day's digest carries tag med-... or digest-...
       // (and medId when it has a ticket); a campaign carries tag camp-... and its cat.
-      var k = (d.medId || /^(med|digest)-/.test(tag)) ? 'medicine' : (cat === 'team_note' || /^note-/.test(tag)) ? 'team_note' : cat;
+      // Parent-chosen reminders carry feed-, pump- or visit- tags (app/index.html remindEntries).
+      var k = (d.medId || /^(med|digest)-/.test(tag)) ? 'medicine' : /^feed-/.test(tag) ? 'feed' : /^pump-/.test(tag) ? 'pump' : /^visit-/.test(tag) ? 'vaccine' : (cat === 'team_note' || /^note-/.test(tag)) ? 'team_note' : cat;
       return kinds.indexOf(k) >= 0 ? k : 'other';
     } catch (e) { return 'other'; }
   }

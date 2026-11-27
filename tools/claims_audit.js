@@ -167,7 +167,7 @@ async function shoot(page, file, height) {
     const s = document.getElementById('sheet');
     const t = (s.textContent || '').replace(/\s+/g, ' ');
     const cfg = (typeof pushCfg === 'function') ? pushCfg() : {};
-    return { hasDose: /Dose reminders/.test(t), hasFeature: /New in Cubby/.test(t), hasOffers: /Offers/.test(t),
+    return { hasDose: /Dose reminders|Medicine doses/.test(t),   // Medicine doses since the 27 Nov 2026 choice list hasFeature: /New in Cubby/.test(t), hasOffers: /Offers/.test(t),
       fiveAMonth: /five a month/i.test(t), twoAMonth: /two a month/i.test(t), neverPro: /never if you are on Pro/i.test(t),
       marketingOff: cfg && cfg.allow ? cfg.allow.marketing === false : null, noEmDash: t.indexOf('—') < 0 };
   });

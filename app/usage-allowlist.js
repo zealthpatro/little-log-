@@ -240,6 +240,7 @@ window.CUBBY_USAGE_ALLOWLIST = {
      "enum": [
       "medicine",
       "feed",
+      "pump",
       "sleep",
       "appointment",
       "vaccine",
@@ -247,6 +248,36 @@ window.CUBBY_USAGE_ALLOWLIST = {
       "marketing",
       "team_note",
       "other"
+     ]
+    }
+   }
+  },
+  "reminders.choice": {
+   "anon": false,
+   "props": {
+    "kind": {
+     "enum": [
+      "medicine",
+      "feed",
+      "pump",
+      "vaccine_visit"
+     ]
+    },
+    "state": {
+     "enum": [
+      "on",
+      "off"
+     ]
+    }
+   }
+  },
+  "reminders.feed_mode": {
+   "anon": false,
+   "props": {
+    "mode": {
+     "enum": [
+      "after_last",
+      "set_times"
      ]
     }
    }

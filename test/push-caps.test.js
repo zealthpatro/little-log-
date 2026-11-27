@@ -213,7 +213,8 @@ const camp = (cat, id, over) => Object.assign({ id: id || (cat + '1'), cat, titl
 
     const app = fs.readFileSync(path.join(__dirname, '..', 'app', 'index.html'), 'utf8');
     ok('the client stamps its own queue as critical', app.includes("cat:'critical'"));
-    ok('marketing is off until it is tapped', app.includes('c.allow[k]=(k!==\'marketing\')'));
+    // Only medicine and product news default on; marketing and the parent-chosen reminders wait for a tap.
+    ok('marketing is off until it is tapped', app.includes("c.allow[k]=(k==='critical'||k==='feature')"));
     ok('the client sends its timezone', app.includes('tz:cfg.tz||\'\''));
     ok('opting out really deletes the tokens', app.includes('tokens:firebase.firestore.FieldValue.delete()'));
   }

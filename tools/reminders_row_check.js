@@ -142,20 +142,26 @@ const DAILY_MED = { id: 'm1', babyId: 'b1', name: 'Infant paracetamol', dose: '2
       s.subs.filter((t) => /calendar/i.test(t)));
     ok('and it says it once, not twice', s.subs.filter((t) => /can go into your own calendar/i.test(t)).length === 1,
       s.subs.filter((t) => /calendar/i.test(t)));
-    ok('the sheet states plainly that rituals are not nudged',
-      s.subs.some((t) => /never for feeds, naps, rituals or milestones/i.test(t)), s.subs[0]);
-    /* Three consent rows and no more. A fourth called Vaccines or Rituals would be the promise
-       coming back in a different place. The other rows in this sheet are per-device switches
-       ("Dose alerts in the app", and "Gentle reminders" wherever push is live), so account for
-       every row rather than only counting the ones that look right. */
-    const cats = s.toggles.filter((t) => /^(Dose reminders|New in Cubby|Offers)$/i.test(t));
-    /* Since 27 Nov 2026 quiet hours are the parent's own per-device setting, with one per-device exception
-       (medicine reminders may still reach her). Device switches, not a fourth thing Cubby may send. */
-    const devs = s.toggles.filter((t) => /^(Dose alerts in the app|Gentle reminders|Quiet hours|Medicine reminders)$/i.test(t));
-    ok('exactly three things Cubby may send you', cats.length === 3 && cats.every((t) => t.length > 0), s.toggles);
-    ok('and every other row in the sheet is a device switch, nothing unaccounted for',
-      s.toggles.length > 0 && s.toggles.length === cats.length + devs.length, s.toggles);
-    ok('no toggle offers a vaccine or ritual channel', !s.toggles.some((t) => /vaccine|ritual/i.test(t)), s.toggles);
+    /* Since 27 Nov 2026 the parent chooses (founder, canvas board 8A): medicine, feeds, pumping and vaccine
+       visits are HER reminders, each off until she turns it on apart from medicine. The old "never for
+       feeds" promise is gone with that decision, and must not linger anywhere in the sheet. */
+    ok('the sheet says nothing new is on until she turns it on',
+      s.subs.some((t) => /Nothing here is on until you turn it on, apart from medicine doses/.test(t)), s.subs);
+    ok('the old no-feed-reminders promise is gone', !s.subs.some((t) => /never sends feed reminders|never for feeds/i.test(t)), s.subs);
+    ok('rituals and milestones are still never nudged (no row offers them)', !s.toggles.some((t) => /ritual|milestone|nap/i.test(t)), s.toggles);
+    /* Every row accounted for: her reminders, Cubby's news, and per-device switches. A row that fits none
+       is a new channel nobody approved. */
+    const mine = s.toggles.filter((t) => /^(Medicine doses|Feeds|Pumping|Vaccine visits)$/.test(t));
+    const news = s.toggles.filter((t) => /^(New in Cubby|Offers)$/.test(t));
+    const devs = s.toggles.filter((t) => /^(Dose alerts in the app|Gentle reminders|Quiet hours|Medicine reminders)$/.test(t));
+    ok('her reminders: medicine and feeds, and vaccine visits because this baby has visits ahead',
+      ['Medicine doses', 'Feeds', 'Vaccine visits'].every((t) => mine.includes(t)), s.toggles);
+    ok('pumping is not offered to someone who has never logged a pump', !mine.includes('Pumping'), s.toggles);
+    ok('exactly two kinds of news from Cubby', news.length === 2, s.toggles);
+    ok('and every row in the sheet is one of those, nothing unaccounted for',
+      s.toggles.length > 0 && s.toggles.length === mine.length + news.length + devs.length, s.toggles);
+    const offByDefault = await page.evaluate(() => { const c = pushCfg(); return [c.allow.feed, c.allow.pump, c.allow.visit]; });
+    ok('feeds, pumping and vaccine visits start off', offByDefault.every((v) => v === false), offByDefault);
   }
 
   console.log('\n3. every clause of the new row is backed by a control that exists');

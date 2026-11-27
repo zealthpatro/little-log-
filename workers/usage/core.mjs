@@ -37,7 +37,9 @@ export const NEVER_INSTRUMENTED = /loss|mood|mhealth|wellbeing|(^|_)bp($|_)|bloo
 export const SIGNIN_ERRORS = ['popup_closed', 'popup_blocked', 'network', 'no_session', 'invalid_link', 'expired_code',
   'wrong_code', 'too_many', 'cancelled', 'other'];
 export const SAVE_ERRORS = ['permission_denied', 'unavailable', 'deadline', 'quota', 'too_large', 'other'];
-export const NOTIFICATION_KINDS = ['medicine', 'feed', 'sleep', 'appointment', 'vaccine', 'feature', 'marketing', 'team_note', 'other'];
+export const NOTIFICATION_KINDS = ['medicine', 'feed', 'pump', 'sleep', 'appointment', 'vaccine', 'feature', 'marketing', 'team_note', 'other'];
+// Parent-chosen reminders (27 Nov 2026, canvas board 8A): which kinds she turns on, never their times or gaps.
+export const REMINDER_KINDS = ['medicine', 'feed', 'pump', 'vaccine_visit'];
 export const PLATFORMS = ['ios_app', 'android_app', 'home_screen', 'browser'];
 // The contextual Home prompts (27 Nov 2026, canvas board 7A). One card at a time, each tied to her own data.
 export const PROMPTS = ['first_log_invite', 'first_nap', 'visit_passed', 'visit_week_ahead', 'solo_night_invite'];
@@ -60,6 +62,8 @@ export const USAGE_EVENTS = {
   'app.updated': { anon: true, props: { from_version: fmt('version'), to_version: fmt('version') } },
   'push.permission': { anon: false, props: { state: e('asked', 'granted', 'denied', 'revoked') } },
   'push.opened': { anon: false, props: { kind: e(...NOTIFICATION_KINDS) } },
+  'reminders.choice': { anon: false, props: { kind: e(...REMINDER_KINDS), state: e('on', 'off') } },
+  'reminders.feed_mode': { anon: false, props: { mode: e('after_last', 'set_times') } },
   'nudge.seen': { anon: false, props: { nudge_id: fmt('nudge_id'), channel: e('note', 'email', 'push') } },
   'install.prompted': { anon: true, props: { outcome: e('shown', 'accepted', 'dismissed'), prompt: e('android_chrome', 'ios_instructions') } },
   'prompt.shown': { anon: false, props: { prompt: e(...PROMPTS) } },
