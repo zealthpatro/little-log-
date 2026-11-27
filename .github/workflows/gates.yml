@@ -4,14 +4,19 @@ name: Gates
 # quietly: the FAB gate had been failing for as long as nobody ran it, against a sessionStorage
 # key the app renamed underneath it, and nothing said so.
 #
-# The Chrome-free subset runs here on every push and PR. The browser gates (perf, home-truth,
-# report-truth, offline, pad, type, and the rest) need a real Chrome and a local server, so they
-# run on the founder's machine via the pre-push hook that tools/install_hooks.sh installs:
+# The Chrome-free subset and the emulator tier run here on every PR: they are required checks, and
+# main takes merges only through a PR whose required checks passed with strict=true (up to date with
+# main), so the PR run is a run of the very tree that merges. A push to main runs only `live`: by then
+# Cloudflare has deployed it, so re-running gates there gated nothing (38 runner-minutes a merge, until
+# 28 Nov 2026). tools/ci_tier_check.js (the ci-tier gate) holds this file, seo.yml and teach.yml to that.
+# The browser gates (perf, home-truth, report-truth, offline, pad, type, and the rest) still run on the
+# founder's machine, in the train's full local run (docs/RELEASE-TRAIN.md), until CI runs them too.
 #
 #   node tools/gates.js               everything judged from the checkout
 #   node tools/gates.js --live        also audit what is actually deployed
-#   node tools/gates.js --emulator    also the Firestore rules suites (the `emulator` job below
-#                                     runs them here too, on every push to main and every PR)
+#   node tools/gates.js --emulator    also the Firestore rules suites (the `emulator` job below)
+#   node tools/gates.js --mutants     every mutation pass (nightly); without it only those whose inputs
+#                                     changed run (--changed=<rev>, below: what this PR changed)
 
 on:
   push:
@@ -21,8 +26,12 @@ on:
 jobs:
   gates:
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
     steps:
+      # Depth 2: the PR's merge commit and main under it, so --changed=HEAD^1 is exactly what this PR changes.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -41,14 +50,14 @@ jobs:
       # Pillow 12 and brand-py went red on CI from the logo change on, Nov 2026).
       - name: Python image libraries for the brand tools
         run: python3 -m pip install --quiet -r tools/requirements-brand.txt
+      # A mutation pass runs here only when this PR changed its inputs or added it; nightly runs every one.
       - name: Gates (no browser)
-        run: node tools/gates.js --no-browser
+        run: node tools/gates.js --no-browser --changed=HEAD^1
 
   # THE SECOND NET for the Firestore emulator tier (Nov 2026). The rules suites, the Worker-against-
   # Firestore suites and the chaos/fuzz self-tests ran on nothing automatic: the founder's pre-push
-  # hook now runs them when a push touches the rules, the Worker or the Firestore layer, and this job
-  # runs them on EVERY push to main and every PR, so a bypassed hook (--no-verify) or a push from a
-  # machine without java is still judged before anyone else builds on it.
+  # hook used to run them when a push touched the rules, the Worker or the Firestore layer. This job runs
+  # them on every PR (a required check), so nothing merges unjudged; a push to main skips it (above).
   #
   # tools/gates.js --emulator-only gives each suite its own free ports (never the 8080 default) and
   # uses test/node_modules' own firebase-tools, which `npm install --prefix test` puts there. The
@@ -56,6 +65,7 @@ jobs:
   # puppeteer-core is installed next to the gates, exactly as the live job does.
   emulator:
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
     # Measured on the founder's Mac (16 Nov 2026): the 34 suites of --emulator-only (ops-admin, 7.5 s, included)
     # sum to about 37.6 min at their slowest runs across every log of that day (usage-tracker-emu 645 s, chaos
     # 327 s, usage-d1 195 s, invite-family 185 s, blob-sync 139 s), before the installs. Not yet timed on this
@@ -89,7 +99,7 @@ jobs:
       - name: Firestore emulator tier (each suite on its own free ports)
         env:
           CHROME_PATH: /usr/bin/google-chrome
-        run: node tools/gates.js --emulator-only
+        run: node tools/gates.js --emulator-only --changed=HEAD^1
 
   # Production is a separate job on purpose, and it BLOCKS.
   #

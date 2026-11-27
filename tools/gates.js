@@ -19,6 +19,9 @@
  *   node tools/gates.js --emulator-only   only the Firestore suites (what CI's emulator job runs)
  *   node tools/gates.js --all
  *   --only=<name> filters the emulator tier too, so --emulator --only=household-guard runs one suite.
+ *   --mutants          every mutation pass (nightly). Without it a pass runs only when this change touched
+ *                      what it guards (its `mut` inputs, tools/mut_select.js), against --changed=<rev>
+ *                      (CI: HEAD^1) or, by default, the merge-base with origin/main.
  *
  * Exit code is non-zero if any REQUIRED gate fails, so CI and a pre-commit hook can both use it.
  */
@@ -40,6 +43,20 @@ const NO_BROWSER = ARGS.includes('--no-browser');
 const ONLY = (ARGS.find((a) => a.startsWith('--only=')) || '').slice(7);
 /* --only=a,b runs every gate whose name contains a OR b (the nightly dry-run picks one of each tier). */
 const onlyMatch = (name) => ONLY.split(',').filter(Boolean).some((x) => name.includes(x));
+const MUTANTS = has('--mutants');
+const CHANGED = (ARGS.find((a) => a.startsWith('--changed=')) || '').slice(10);
+
+/* What each mutation pass guards (`mut`), for tools/mut_select.js: a pass runs on a PR only when one of these
+   changed (or the gate is new, or its entry or the runner changed); nightly runs every one with --mutants. The
+   founder's call of 28 Nov 2026 (test-speed plan item 14). A trailing / is a directory. Wide on purpose: a
+   missed input ships a weakened assertion for up to a day, an extra one costs a few minutes. mut_select's
+   --self-test fails any entry whose file reads a repo path these leave out. mutOnly: the gate is only the
+   mutants (its suite is a gate of its own, or it has none), so off means not run; otherwise off means the
+   suite alone, without --self-test. */
+const MUT_WORKER = ['worker.js', 'workers/', 'schema/', 'wrangler.toml', '.assetsignore', 'test/helpers/'];
+const MUT_ADMIN = MUT_WORKER.concat(['tools/admin_assets_build.js', 'app/fonts/']);
+const MUT_APP = ['app/', 'firestore.rules', 'storage.rules', 'firebase.json', 'tools/serve.js', 'tools/gate_downloads.js', 'test/helpers/'];
+const mutOf = (...xs) => [...new Set([].concat(...xs))];
 
 // Gates that need a browser get `url`; the runner substitutes the real base URL it started.
 const TREE = [
@@ -224,11 +241,11 @@ const TREE = [
      a 100-day steady state through the real cron. Each -mut gate is that file's --self-test: an unaltered
      temp copy must pass, then every mutant must turn its own named check red. */
   { name: 'usage-ingest',   cmd: ['node', 'test/usage-ingest.test.js'] },
-  { name: 'usage-ingest-mut', cmd: ['node', 'test/usage-ingest.test.js', '--self-test'] },
+  { name: 'usage-ingest-mut', cmd: ['node', 'test/usage-ingest.test.js', '--self-test'], mut: mutOf('test/usage-ingest.test.js', MUT_WORKER, 'app/usage-allowlist.js'), mutOnly: true },
   { name: 'usage-route',    cmd: ['node', 'test/usage-route.test.js'] },
-  { name: 'usage-route-mut', cmd: ['node', 'test/usage-route.test.js', '--self-test'] },
+  { name: 'usage-route-mut', cmd: ['node', 'test/usage-route.test.js', '--self-test'], mut: mutOf('test/usage-route.test.js', MUT_WORKER), mutOnly: true },
   { name: 'usage-erasure',  cmd: ['node', 'test/usage-erasure.test.js'] },
-  { name: 'usage-erasure-mut', cmd: ['node', 'test/usage-erasure.test.js', '--self-test'] },
+  { name: 'usage-erasure-mut', cmd: ['node', 'test/usage-erasure.test.js', '--self-test'], mut: mutOf('test/usage-erasure.test.js', MUT_WORKER), mutOnly: true },
   { name: 'funnel-report',  cmd: ['node', 'tools/funnel_report.js', '--self-test'] },
   { name: 'prod-counts',    cmd: ['node', 'tools/prod_counts.js', '--self-test'] },  // read-only aggregate counts; the self-test fails on any write call
   { name: 'signin-email',   cmd: ['node', 'test/signin-email.test.js', '--self-test'] },
@@ -250,19 +267,19 @@ const TREE = [
      xss_leaf_check.js as its last section (each leaf field, each sink, mutants included). */
   /* Cubby Ops, the admin Worker (workers/admin), phase 1 of docs/superpowers/specs/2026-11-13-admin-dashboard-design.md.
      Each runs its --self-test: every rule is broken in a temp copy and the suite must go red on it. */
-  { name: 'admin-access',     cmd: ['node', 'test/admin-access.test.js', '--self-test'] },      // Access JWT re-checked, fail closed, headers on every answer (S1-S8)
-  { name: 'admin-access-log', cmd: ['node', 'test/admin-access-log.test.js', '--self-test'] },  // logged before shown, hash chain, fixed vocabulary, digest head (S16-S19)
-  { name: 'admin-no-content', cmd: ['node', 'test/admin-no-content.test.js', '--self-test'] },  // masked reads, no log content anywhere, private pregnancy, read budget
-  { name: 'admin-hold',       cmd: ['node', 'test/admin-hold.test.js', '--self-test'] },        // the loss-hold reader fails closed (S12)
-  { name: 'dir-erasure',      cmd: ['node', 'test/admin-dir-erasure.test.js', '--self-test'] }, // gone from Auth = gone from the admin next tick; failure is never "gone"
-  { name: 'admin-screens',    cmd: ['node', 'test/admin-screens.test.js', '--self-test'] },     // formula-safe CSV, the three system checks, "Waiting", two-people = digest, own accounts hidden
+  { name: 'admin-access',     cmd: ['node', 'test/admin-access.test.js', '--self-test'], mut: mutOf('test/admin-access.test.js', MUT_ADMIN) },      // Access JWT re-checked, fail closed, headers on every answer (S1-S8)
+  { name: 'admin-access-log', cmd: ['node', 'test/admin-access-log.test.js', '--self-test'], mut: mutOf('test/admin-access-log.test.js', MUT_ADMIN, 'docs/ADMIN-DEPLOY.md') },  // logged before shown, hash chain, fixed vocabulary, digest head (S16-S19)
+  { name: 'admin-no-content', cmd: ['node', 'test/admin-no-content.test.js', '--self-test'], mut: mutOf('test/admin-no-content.test.js', MUT_ADMIN) },  // masked reads, no log content anywhere, private pregnancy, read budget
+  { name: 'admin-hold',       cmd: ['node', 'test/admin-hold.test.js', '--self-test'], mut: mutOf('test/admin-hold.test.js', MUT_ADMIN) },        // the loss-hold reader fails closed (S12)
+  { name: 'dir-erasure',      cmd: ['node', 'test/admin-dir-erasure.test.js', '--self-test'], mut: mutOf('test/admin-dir-erasure.test.js', MUT_ADMIN) }, // gone from Auth = gone from the admin next tick; failure is never "gone"
+  { name: 'admin-screens',    cmd: ['node', 'test/admin-screens.test.js', '--self-test'], mut: mutOf('test/admin-screens.test.js', MUT_ADMIN) },     // formula-safe CSV, the three system checks, "Waiting", two-people = digest, own accounts hidden
   /* No personal email address in any tracked file (admin spec S34). The repo is public. */
   { name: 'no-personal-address', cmd: ['node', 'tools/address_check.js', '--self-test'] },
   { name: 'admin-live-self', cmd: ['node', 'tools/admin_live_check.js', '--self-test'] },   // admin(live) can go red: a page, a missing header, a stray redirect, a 404
   { name: 'push-daily',       cmd: ['node', 'test/push-daily.test.js', '--self-test'] },                       // the day's reminders tally the admin reads; not on the public /api/health
   /* The admin's pages in Chrome: a hostile name stays text, nothing loads from another origin, 44px targets,
      no sideways scroll at 390 or 320. --self-test also breaks escaping, wrapping and the fonts in a temp copy. */
-  { name: 'admin-ui',         cmd: ['node', 'test/admin-ui.test.js', 'url', '--self-test'] },
+  { name: 'admin-ui',         cmd: ['node', 'test/admin-ui.test.js', 'url', '--self-test'], mut: mutOf('test/admin-ui.test.js', MUT_ADMIN, 'tools/gate_downloads.js') },
   { name: 'xss-sink',       cmd: ['node', 'tools/xss_sink_check.js', 'url'] },
   { name: 'xss-leaf-static', cmd: ['node', 'tools/xss_leaf_check.js', '--static-only'] },
   /* No tab scrolls sideways at 320px, Light or Night: the Night wash behind the header slid the app 80px. */
@@ -278,7 +295,7 @@ const TREE = [
      only, no java and no emulator jar. The sections that run the real sync layer on a Firestore emulator (S20-S23b,
      with their mutants) are usage-tracker-emu, in EMU_GATES below.
      usage-ingest and usage-erasure (the server half) sit with tracking-plan, above. */
-  { name: 'usage-tracker',  cmd: ['node', 'tools/usage_tracker_check.js', 'url', '--self-test'] },
+  { name: 'usage-tracker',  cmd: ['node', 'tools/usage_tracker_check.js', 'url', '--self-test'], mut: mutOf('tools/usage_tracker_check.js', MUT_APP) },
   /* brand-py: the logo change as one tool (tools/brand.py propose, compare, zoom, set; docs/BRAND.md). Its
      self-test measures made-up subjects, proves compare byte-deterministic and draws sizes exactly as
      gen_brand_icons.py does, runs propose dry with fetch cut off, holds set to its refusals, and runs
@@ -297,10 +314,18 @@ TREE.push(
   { name: 'test-wiring',    cmd: ['node', 'tools/test_wiring_check.js', '--self-test'] },
   /* The pre-push refusal of product code with no test, proven in a throwaway repo. */
   { name: 'change-test',    cmd: ['node', 'tools/change_test_check.js', '--self-test'] },
-  /* The real .githooks/pre-push, fed git's stdin: emulator tier for rules/Worker pushes, refusal works. */
+  /* The real .githooks/pre-push, fed git's stdin: main refused up front, no gates on a branch push, and the
+     change-needs-test refusal. */
   { name: 'prepush-tier',   cmd: ['node', 'test/prepush-tier.test.js'] },
   /* One push suite at a time per machine (a kernel flock): a live holder is waited for, a dead one never is. */
   { name: 'push-lock',      cmd: ['node', 'test/push-lock.test.js'] },
+  /* CI: a push to main runs only live and the IndexNow ping; a PR runs every required check (test-speed item 1). */
+  { name: 'ci-tier',        cmd: ['node', 'tools/ci_tier_check.js', '--self-test'] },
+  /* Mutation passes: the selection rules, and each mut gate's inputs against what its file reads (item 14). */
+  { name: 'mut-select',     cmd: ['node', 'tools/mut_select.js', '--self-test'] },
+  /* ...and through a real runner in a throwaway repo: off on an unrelated PR, on when touched or new, every one
+     with --mutants (nightly), and red there on a weakened assertion. */
+  { name: 'mutants-tier',   cmd: ['node', 'test/mutants-tier.test.js'] },
   /* A real push from a LINKED worktree leaves the shared repository byte-identical (no gate inherits GIT_DIR). */
   { name: 'prepush-worktree', cmd: ['node', 'test/prepush-worktree.test.js'] },
   /* The nightly bug-bash's verdict, board line and open-findings ledger, over synthetic nights in a temp dir. */
@@ -500,8 +525,8 @@ function firebaseCli() {
 /* Bug-bashing on the emulator: each self-test plants a known bug and must catch it (Nov 2026). The long
    seeded runs are nightly (tools/nightly.sh), not here. */
 EMU_GATES.push(
-  { name: 'fuzz-rules',   self: ['node', 'tools/fuzz_rules.js', '--self-test'] },   // model vs real rules, every role
-  { name: 'chaos',        self: ['node', 'tools/chaos.js', '--self-test'] },        // two phones, real app, planted lost write, a deletion after a stale sign-in
+  { name: 'fuzz-rules',   self: ['node', 'tools/fuzz_rules.js', '--self-test'], mut: mutOf('tools/fuzz_rules.js', 'firestore.rules', 'firebase.json', 'test/helpers/'), mutOnly: true },   // model vs real rules, every role
+  { name: 'chaos',        self: ['node', 'tools/chaos.js', '--self-test'], mut: mutOf('tools/chaos.js', MUT_APP), mutOnly: true },        // two phones, real app, planted lost write, a deletion after a stale sign-in
 );
 /* The usage tracker's emulator tier (tools/usage_tracker_check.js --emulator): PRIV-4 through the real sign-in
    layer (S20), a deletion that does not finish and signing out (S21), account deletion saying only what is true,
@@ -513,7 +538,7 @@ EMU_GATES.push(
    Firestore emulator it starts itself from the jar firebase-tools caches. Kept after `rules`, which downloads
    that jar on a fresh machine (CI). It used to run in the tree tier, which made every push need java. */
 EMU_GATES.push(
-  { name: 'usage-tracker-emu', self: ['node', 'tools/usage_tracker_check.js', 'url', '--emulator', '--self-test'] },
+  { name: 'usage-tracker-emu', self: ['node', 'tools/usage_tracker_check.js', 'url', '--emulator', '--self-test'], mut: mutOf('tools/usage_tracker_check.js', MUT_APP) },
 );
 /* The usage events' SQL on workerd's OWN D1 (Miniflare, local and offline: started with cf: false, and any
    socket beyond loopback is refused and fails the gate), not only on the node:sqlite shim every other usage
@@ -527,7 +552,7 @@ EMU_GATES.push(
    skips, without it. A push touching only wrangler.toml or schema/usage.sql runs this tier too. A SIGTERM,
    SIGINT, SIGHUP or SIGALRM to a process holding a D1 stops its workerd first (section 0 checks each). */
 EMU_GATES.push(
-  { name: 'usage-d1', self: ['node', 'test/usage-d1-engine.test.js', '--self-test'] },
+  { name: 'usage-d1', self: ['node', 'test/usage-d1-engine.test.js', '--self-test'], mut: mutOf('test/usage-d1-engine.test.js', MUT_WORKER, 'test/usage-ingest.test.js', 'test/usage-route.test.js', 'test/usage-erasure.test.js', 'test/admin-screens.test.js') },
 );
 /* The same delivery checks on workerd itself (Miniflare, offline): the sendRef entry and the hashed cooldown in
    workerd's own Cache API (nothing under the address), AbortSignal.timeout, a real rate-limit binding, and
@@ -1132,7 +1157,9 @@ async function selfTestTreeServer() {
   return fail ? 1 : 0;
 }
 
-(async () => {
+/* require('./gates.js') gives the lists (tools/mut_select.js checks the mut inputs against them) and runs nothing. */
+if (require.main !== module) module.exports = { TREE, EMU_GATES, LIVE_GATES };
+else (async () => {
   if (ARGS.includes('--self-test-downloads')) process.exit(await selfTestDownloads());
   if (ARGS.includes('--self-test-excerpt')) process.exit(selfTestExcerpt());
   if (ARGS.includes('--self-test-tree-server')) process.exit(await selfTestTreeServer());
@@ -1185,6 +1212,24 @@ async function selfTestTreeServer() {
   if (LIVE) list = list.concat(LIVE_GATES);
   if (NO_BROWSER) list = list.filter((g) => !g.cmd.includes('url'));
   if (ONLY) list = list.filter((g) => onlyMatch(g.name));
+  let emuList = EMU ? (ONLY ? EMU_GATES.filter((g) => onlyMatch(g.name)) : EMU_GATES) : [];
+
+  /* Mutation passes: every one with --mutants (nightly), otherwise only what this change touched. */
+  /* A runner copied into a temp tree without tools/mut_select.js (the tree-server and worktree self-tests copy
+     only what they need) runs every pass as written: the safe direction, said out loud. */
+  let ms = null;
+  try { ms = require('./mut_select'); } catch (e) { console.log('(tools/mut_select.js not loadable here, so every mutation pass runs: ' + e.message.split('\n')[0] + ')'); }
+  const mplan = ms ? ms.plan(list.concat(emuList), { all: MUTANTS, change: MUTANTS ? null : ms.changeSet(ROOT, CHANGED || null),
+    headSrc: fs.readFileSync(__filename, 'utf8') }) : new Map();
+  if (mplan.size) {
+    const on = [...mplan].filter(([, v]) => v.run), off = [...mplan].filter(([, v]) => !v.run);
+    console.log('mutation passes: ' + on.length + ' of ' + mplan.size + ' run' + (on.length ? ' (' + on.map(([n, v]) => n + ': ' + v.why).join('; ') + ')' : '') + '.');
+    if (off.length) console.log('  off, nightly runs them (--mutants): ' + off.map(([n]) => n).join(', ') + ' (' + off[0][1].why + ').');
+    console.log('');
+  }
+  const viaPlan = (g) => (ms ? ms.apply(g, mplan.get(g.name)) : g);
+  list = list.map(viaPlan).filter(Boolean);
+  emuList = emuList.map(viaPlan).filter(Boolean);
 
   const WATCH = dl.userDownloads();
   console.log(WATCH
@@ -1204,7 +1249,6 @@ async function selfTestTreeServer() {
 
   if (EMU) {
     console.log('\n  firestore emulator (each suite on its own free ports, never the 8080 default)');
-    const emuList = ONLY ? EMU_GATES.filter((g) => onlyMatch(g.name)) : EMU_GATES;
     for (const g of emuList) {
       if (tree.gone) break;
       process.stdout.write('  ' + g.name.padEnd(18));

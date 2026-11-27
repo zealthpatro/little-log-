@@ -16,14 +16,17 @@
  *
  * WHAT. A throwaway main repo with a linked worktree and a bare origin, holding the REAL .githooks/pre-push,
  * tools/gates.js and the two git-writing self-tests. A docs-only commit is pushed from the worktree with a
- * real `git push`, so git runs the hook with its own GIT_DIR, the hook runs gates.js, and gates.js runs
- * the self-tests. The shared repository is snapshotted before and after: config bytes, core.bare,
+ * real `git push`, so git runs the hook with its own GIT_DIR. Since 28 Nov 2026 the real hook runs no gates
+ * on a branch push (CI runs them on the PR), only tools/change_test_check.js; so the gate runner is put
+ * inside the push by a two-line test hook (SHIM below: the real hook, then gates.js --no-browser, as the hook
+ * of 4e50b5e6 did), because any hook that ever runs gates again inherits the same GIT_DIR. The shared repository is snapshotted before and after: config bytes, core.bare,
  * core.hooksPath, user.email, every ref, both HEADs, both indexes' contents, the bare origin's refs.
  * They must be byte-identical. Every other gate fails fast here (its file is not copied), which is fine:
  * the push is refused and nothing is meant to land; the question is only what the push did on the way.
  *
- * Four scenarios, so a green here cannot be an absence that proves nothing:
- *   A. the real files: identical, AND change-test and prepush-tier really ran (ok) inside the push.
+ * Five scenarios, so a green here cannot be an absence that proves nothing:
+ *   A. the real hook alone: identical, it ran change_test_check, and it ran no gate.
+ *   A2. the real files under SHIM: identical, AND change-test and prepush-tier really ran (ok) inside the push.
  *   B. the real gates.js with a LEAKY gate planted (it writes user.email through whatever GIT_DIR it is
  *      handed): identical. gates.js alone keeps a careless gate out of the shared repo.
  *   C. B with gates.js's scrub cut out: the snapshot MUST differ. This proves git really exports GIT_DIR
@@ -84,6 +87,14 @@ function diff(a, b) {
   return Object.keys(a).filter((k) => a[k] !== b[k]).map((k) => k + ':\n  before ' + JSON.stringify(a[k]).slice(0, 300) + '\n  after  ' + JSON.stringify(b[k]).slice(0, 300)).join('\n');
 }
 
+/* The gate runner inside a push: the real hook first (it reads git's stdin), then gates.js, as a hook that runs
+   gates would. B, C and D push through it; A pushes through the real hook alone. */
+/* It lives in .shimhooks (core.hooksPath points there in its scenarios), so .githooks/pre-push stays the real hook,
+   which test/prepush-tier.test.js copies and grades inside the push. */
+const SHIM = '#!/bin/sh\nROOT=$(git rev-parse --show-toplevel)\nsh "$ROOT/.githooks/pre-push" "$@" || exit 1\n' +
+  'echo "Running gates before push (test shim)"\nnode "$ROOT/tools/gates.js" --no-browser || { echo "Push stopped: a gate failed."; exit 1; }\n';
+const shimmed = (files) => Object.assign({}, files, { '.shimhooks/pre-push': SHIM });
+
 /* One throwaway: main repo, linked worktree on feature-wt, bare origin, then a real push from the worktree. */
 function scenario(label, files) {
   const T = fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-prepush-wt-'));
@@ -97,6 +108,7 @@ function scenario(label, files) {
     fs.writeFileSync(path.join(M, rel), files[rel]);
   }
   fs.chmodSync(path.join(M, '.githooks', 'pre-push'), 0o755);
+  if (files['.shimhooks/pre-push']) { fs.chmodSync(path.join(M, '.shimhooks', 'pre-push'), 0o755); git(M, ['config', 'core.hooksPath', '.shimhooks']); }
   fs.writeFileSync(path.join(M, 'README.md'), 'throwaway\n');
   fs.writeFileSync(path.join(M, '.gitignore'), 'tools/node_modules\ntest/node_modules\n');
   git(M, ['add', '-A']); git(M, ['commit', '-q', '-m', 'root']);
@@ -118,6 +130,7 @@ function scenario(label, files) {
   const after = snapshot(M, WT, BARE);
   try { fs.rmSync(T, { recursive: true, force: true }); } catch (e) { /* best effort: only this scenario's own temp dir */ }
   return { label, before, after, out, same: diff(before, after) === '', diff: diff(before, after),
+    ranCheck: /change needs test:|CHANGE-TEST: PASS/.test(out),
     ranHook: /change needs test:|CHANGE-TEST: PASS/.test(out) && /Running gates before push/.test(out) };
 }
 
@@ -132,16 +145,31 @@ if (fail) { console.log('\n' + pass + ' passed, ' + fail + ' failed\nPREPUSH-WOR
 const noScrub = src['tools/gates.js'].includes(SCRUB) ? src['tools/gates.js'].replace(SCRUB, '') : null;
 const tail = (s) => s.split('\n').filter((l) => /^\s{2}\S/.test(l) && /(change-test|prepush-tier)\s/.test(l)).join('\n');
 
-/* A. The real files. */
+/* A. The real hook alone: a branch push asks change_test_check.js and runs no gate. */
 const A = scenario('A', src);
-ok('A. git ran the real hook on the worktree push, and the hook ran gates.js', A.ranHook, A.out.slice(-1200));
-ok('A. inside it, the change-test self-test ran and passed', /\n\s*change-test\s+ok/.test(A.out), tail(A.out) || A.out.slice(-1200));
-ok('A. and so did prepush-tier', /\n\s*prepush-tier\s+ok/.test(A.out), tail(A.out) || A.out.slice(-1200));
-ok('A. the shared repository is byte-identical afterwards (config, core.bare, hooksPath, user.email, refs, HEADs, indexes, origin)', A.same, A.diff);
+ok('A. git ran the real hook on the worktree push, and it asked change_test_check.js', A.ranCheck, A.out.slice(-1200));
+ok('A. and ran no gate (it says so, and no gate line is in the push output)', /no gates run here/.test(A.out) && !/Running gates before push|\n\s*change-test\s+ok/.test(A.out), A.out.slice(-1200));
+/* This push LANDS (the hook passes it), so two ref lists move, and only by the branch it pushed: origin gains
+   refs/heads/feature-wt, the shared repo its remote-tracking ref. Everything else must be byte-identical. */
+const added = (k) => { const was = new Set(A.before[k].split('\n')); const now = A.after[k].split('\n');
+  return { gone: [...was].filter((l) => !now.includes(l)), extra: now.filter((l) => !was.has(l)) }; };
+const oRefs = added('origin refs'), mRefs = added('refs');
+ok('A. the push landed: origin gained feature-wt and the shared repo only its remote-tracking ref',
+  oRefs.gone.length === 0 && oRefs.extra.length === 1 && /^refs\/heads\/feature-wt /.test(oRefs.extra[0]) &&
+  mRefs.gone.length === 0 && mRefs.extra.every((l) => /^refs\/remotes\/origin\/feature-wt /.test(l)), JSON.stringify({ oRefs, mRefs }));
+ok('A. and the shared repository is otherwise byte-identical (config, core.bare, hooksPath, user.email, HEADs, indexes)',
+  Object.keys(A.before).filter((k) => k !== 'origin refs' && k !== 'refs' && A.before[k] !== A.after[k]).length === 0, A.diff);
+
+/* A2. The real files, the gate runner inside the push. */
+const A2 = scenario('A2', shimmed(src));
+ok('A2. git ran the hook on the worktree push, and the hook ran gates.js', A2.ranHook, A2.out.slice(-1200));
+ok('A2. inside it, the change-test self-test ran and passed', /\n\s*change-test\s+ok/.test(A2.out), tail(A2.out) || A2.out.slice(-1200));
+ok('A2. and so did prepush-tier', /\n\s*prepush-tier\s+ok/.test(A2.out), tail(A2.out) || A2.out.slice(-1200));
+ok('A2. the shared repository is byte-identical afterwards (config, core.bare, hooksPath, user.email, refs, HEADs, indexes, origin)', A2.same, A2.diff);
 
 /* B. The real gates.js, with a gate that would leak if it could. */
 /* B and C leave prepush-tier out (it fails fast as missing), so the only git writer is the planted one. */
-const leakyFiles = (gates) => { const f = Object.assign({}, src, { 'tools/gates.js': gates, 'tools/change_test_check.js': LEAKY }); delete f['test/prepush-tier.test.js']; return f; };
+const leakyFiles = (gates) => { const f = shimmed(Object.assign({}, src, { 'tools/gates.js': gates, 'tools/change_test_check.js': LEAKY })); delete f['test/prepush-tier.test.js']; return f; };
 const B = scenario('B', leakyFiles(src['tools/gates.js']));
 ok('B. a leaky gate ran inside the push', /leaky gate: git config exited/.test(B.out), B.out.slice(-1200));
 ok('B. and tools/gates.js alone kept it out of the shared repository (identical)', B.same, B.diff + '\n' + (B.out.match(/leaky gate:[^\n]*/) || [''])[0]);
@@ -153,7 +181,7 @@ if (noScrub !== null) {
   ok('C. without the scrub the leaky gate DOES rewrite the shared repo (git exports GIT_DIR to a worktree hook)',
     !C.same && /leak@example\.test/.test(C.after['user.email']), C.diff || C.out.slice(-1200));
   /* D. Defence in depth: a runner that leaks, and the real self-tests still write nothing shared. */
-  const D = scenario('D', Object.assign({}, src, { 'tools/gates.js': noScrub }));
+  const D = scenario('D', shimmed(Object.assign({}, src, { 'tools/gates.js': noScrub })));
   ok('D. with a runner that leaks GIT_DIR, the real change-test and prepush-tier still ran',
     /\n\s*change-test\s+ok/.test(D.out) && /\n\s*prepush-tier\s+ok/.test(D.out), tail(D.out) || D.out.slice(-1200));
   ok('D. and they scrub their own git: the shared repository is identical', D.same, D.diff);

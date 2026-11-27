@@ -1,29 +1,31 @@
 # Testing Cubby: gates, the push hook, CI, chaos, fuzz and the nightly run
 
-A push to `main` is a deploy. Everything below exists so that the last honest place to stop a bad
-change (the push) asks the right questions, and so that the questions nobody thought to ask are asked
-every night by tools that throw random, seeded, realistic trouble at the real app.
+A merge to `main` is a deploy, and `main` takes merges only through a PR whose required checks passed
+(`gates`, `emulator`, `seo-guard`, `teach-guard`; strict, so the PR is up to date with `main` and its run
+is a run of the tree that merges; enforce_admins). Everything below exists so that the PR asks the right
+questions once, and so that the questions nobody thought to ask are asked every night by tools that throw
+random, seeded, realistic trouble at the real app.
 
 ```
  edit ──► pre-commit (.githooks/pre-commit: SW bump, JS syntax, page SEO)
    │
- git push ──► pre-push (.githooks/pre-push)
-   │            1. tools/node_modules and test/node_modules present?  no → refused up front
-   │            2. tools/change_test_check.js --stdin: product code changed with no test? → refused
+ git push ──► pre-push (.githooks/pre-push), seconds, no gates
+   │            1. a main ref (push, or delete)? → refused up front: open a PR (node tools/train.js --go)
+   │            2. the machine push lock: one push at a time on this Mac
+   │            3. tools/change_test_check.js --stdin: product code changed with no test? → refused
    │               (unless a commit carries "Test-exempt: <why>")
-   │            3. tier: range touches firestore.rules, storage.rules, worker.js, workers/,
-   │               wrangler.toml, schema/usage.sql, app/store-firebase.js, tools/gates.js,
-   │               test/*emu*, test/*rules*, or any file an emulator gate runs (read from
-   │               tools/gates.js) → node tools/gates.js --emulator
-   │                                                     otherwise → node tools/gates.js
    ▼
- GitHub Actions (.github/workflows/gates.yml), every push to main and every PR
-   gates     node tools/gates.js --no-browser          (Chrome-free tree gates)
-   emulator  node tools/gates.js --emulator-only       (Java 21, firebase-tools, Chrome: the second net)
-   live      production checks, after a push to main
+ GitHub Actions on the PR (.github/workflows/gates.yml, seo.yml, teach.yml), the one gating run
+   gates     node tools/gates.js --no-browser --changed=HEAD^1   (Chrome-free tree gates)
+   emulator  node tools/gates.js --emulator-only --changed=HEAD^1 (Java 21, firebase-tools, Chrome)
+   seo-guard, teach-guard
+   (a mutation pass runs here only if this PR changed what it guards; see "Mutation passes")
+   ▼
+ merge = deploy. GitHub Actions on the push to main: only these, nothing that re-grades the tree
+   live      production checks, after the deploy;  seo-guard's IndexNow ping
    ▼
  02:30 every night, from ~/cubby-ops/little-log-pwa (tools/nightly.sh, launchd com.cubby.nightly)
-   gates --emulator, 30 min of chaos, 5 min of each fuzzer
+   gates --emulator --mutants (every mutation pass), 30 min of chaos, 5 min of each fuzzer
    → ~/cubby-reports/nightly-<date>.md, one line on ~/cubby-reports/BOARD.md, a notification if red or new
 ```
 
@@ -37,6 +39,43 @@ every night by tools that throw random, seeded, realistic trouble at the real ap
 | `node tools/gates.js --live` | also production |
 | `--only=a,b` | only gates whose name contains `a` or `b`, in BOTH tiers (`--emulator --only=household-guard`) |
 | `--no-browser` | drop the tree gates that need Chrome (CI's `gates` job) |
+| `--mutants` | every mutation pass (nightly). Without it, only the passes this change touched (below) |
+| `--changed=<rev>` | the base the change is measured from (CI: `HEAD^1`, `main` under the PR's merge commit); default: the merge-base with `origin/main` |
+
+**Where each check runs (28 Nov 2026).** The same suite used to run up to seven times per change, mostly on
+the Mac: the branch push ran `--no-browser` (23 min), the PR's CI ran the identical command, the train ran
+the full suite, the train's push ran `--no-browser` again, and the push to `main` re-ran `gates` and
+`emulator` after Cloudflare had already deployed it. Now:
+- **A branch push runs no gates.** The hook asks change-needs-test and takes the push lock, then stops. A
+  red result shows on the PR minutes later, and a red PR cannot merge (`test/prepush-tier.test.js`).
+- **A push to `main` is refused by the hook up front.** GitHub refuses it anyway (required checks, strict),
+  and the old hook found that out after 104-140 min of suite. `node tools/train.js --go` pushes
+  `train/<stamp>` and opens its PR; that PR's CI is the train's run.
+- **CI on a push to `main` runs only `live` and the IndexNow ping.** `tools/ci_tier_check.js` (gate
+  `ci-tier`) reads the three workflows and fails if `gates`, `emulator`, the seo guard or `teach-guard`
+  runs on that push, or if any required check stops running on a PR (it would never report). This is only
+  safe while strict=true; re-check whenever protection changes:
+  `gh api repos/zealthpatro/little-log-/branches/main/protection/required_status_checks --jq .strict`.
+- **The browser tier still runs only on the Mac**, in the train's manual full run (docs/RELEASE-TRAIN.md),
+  until CI runs it as a required check (test-speed plan items 4-6). Until then that run is its only net.
+
+**Mutation passes: nightly every one, on a PR only what it touched** (the founder's call, 28 Nov 2026). A
+mutation pass breaks the code in a temp copy and requires the suite to go red; it proves the suite can still
+see. In `tools/gates.js` such a gate carries `mut: [inputs]` (a trailing `/` is a directory), and
+`mutOnly: true` when the gate is nothing but mutants. `tools/mut_select.js` decides per run:
+- runs: `--mutants`; or the gate is new, or its entry line changed; or a changed file is one of its inputs;
+  or the change set is unknown (no base, git fails), the runner part of `tools/gates.js` changed, or
+  `tools/mut_select.js` changed: then every pass runs. Unknown never means skip.
+- off: a suite + mutants gate runs as its suite alone (`--self-test` dropped); a `mutOnly` gate does not run.
+  The run prints which passes are off.
+Today: usage-ingest-mut, usage-route-mut, usage-erasure-mut, the seven admin gates, usage-tracker,
+fuzz-rules, chaos, usage-tracker-emu and usage-d1. The inputs are declared by hand, wide on purpose, until the
+traced input sets of plan item 15 exist; `mut-select`'s self-test reads each gate's script, follows its
+relative requires, and fails any repo path they name that the inputs leave out (it found
+`docs/ADMIN-DEPLOY.md` and `firebase.json` missing on its first run). A missed input means a loosened
+assertion is found by the nightly run, within 24 hours, instead of before merge.
+`test/mutants-tier.test.js` (gate `mutants-tier`) proves it through a real runner in a throwaway repo, and that
+`tools/nightly.sh` passes `--mutants`.
 
 **The tree server is THIS tree's, or the run refuses.** On 16 Nov 2026 a run graded another checkout while
 its banner said it served this one: another session's orphaned `serve.js` held `[::]:7739`, the port check
@@ -162,7 +201,8 @@ worktree it names the SHARED repository. A gate that builds a throwaway repo wit
 `GIT_INDEX_FILE`, `GIT_COMMON_DIR`, `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES` and
 `GIT_PREFIX` from every child, and any test that makes a temp repo deletes `GIT_*` from its own
 environment before its first git call. `test/prepush-worktree.test.js` pushes from a real linked
-worktree through the real hook and compares the shared repository byte for byte.
+worktree through the real hook (which runs no gates now) and, through a two-line test hook that adds
+`gates.js --no-browser` after it, through the runner too, and compares the shared repository byte for byte.
 
 ## Adding a test so the wiring gate is happy
 
@@ -181,8 +221,10 @@ worktree through the real hook and compares the shared repository byte for byte.
      ports from the environment (`Number(process.env.FS_PORT) || <default>`) and launch Chrome with
      `downloadBehavior` from `tools/gate_downloads.js` (every browser AND every `createBrowserContext`).
      Add `'url'` to the command to be given the tree server instead of serving the app yourself.
-   - anything that needs java or an emulator goes in the emulator tier, never the tree tier: every push
-     runs the tree tier, and a push that touches no rules, Worker or Firestore layer is not asked for java
+   - anything that needs java or an emulator goes in the emulator tier, never the tree tier: CI's `gates`
+     job has no java
+   - a gate whose `--self-test` is a mutation pass gets `mut: [what it reads]` (see "Mutation passes";
+     `mut-select` names any path its file reads that the list leaves out)
 4. Only if it truly cannot run there, add it to `ALLOW` in `tools/test_wiring_check.js` with a reason a
    stranger can check, and `ranBy:` the file that does run it. Today that list is five files: two
    production-only checks, the Android parity check (red by design until Android lands), the real push
@@ -200,12 +242,13 @@ worktree through the real hook and compares the shared repository byte for byte.
 
   By hand: `node tools/change_test_check.js origin/main..HEAD`. A new branch is judged from its
   merge-base with `origin/main`.
-- `test/node_modules is missing` / `tools/node_modules is missing`: in a worktree,
-  `ln -s "$(git rev-parse --git-common-dir)/../tools/node_modules" tools/node_modules` and the same for `test/`.
-- `... does not run (no JDK, or a JAVA_HOME without one)`: an emulator-tier push asks the java the suites
-  will use (`$JAVA_HOME/bin/java`, else `java` on PATH) to run `-version`. A Mac always has `/usr/bin/java`,
-  Apple's stub, so merely finding one proves nothing. `export JAVA_HOME=$(/usr/libexec/java_home)`.
-- A gate failed: fix it. `--no-verify` is for a failure you have decided to accept AND written down why.
+- `This push targets main`: main takes merges only through a PR with green checks. Push your branch and
+  `gh pr create --base main`; the daily train is `node tools/train.js --go`. `--no-verify` does not help:
+  GitHub refuses the push itself.
+- `Waiting for another push on this machine to finish`: another push holds the lock; its holder is named. A
+  holder whose pid is gone is taken over by itself.
+- A gate failed on the PR: fix it on the branch and push again. Nothing gates a branch push locally any more;
+  run what you touched first with `node tools/gates.js --only=<name>`.
 
 ## Chaos: tools/chaos.js
 
@@ -304,7 +347,8 @@ sh tools/install_nightly.sh --install  # write ~/Library/LaunchAgents/com.cubby.
 ```
 
 It runs from `~/cubby-ops/little-log-pwa` (never `~/Downloads`, which launchd cannot read), moves it to
-`origin/main` (detached; a dirty clone is reported, not reset), runs `gates.js --emulator`, the one
+`origin/main` (detached; a dirty clone is reported, not reset), runs `gates.js --emulator --mutants` (every
+mutation pass, the ones a PR left off included), the one
 excused test, chaos for 30 minutes with the date as seed, and both fuzzers for 5 minutes, each under a
 watchdog. `tools/nightly_report.js` then writes `~/cubby-reports/nightly-<date>.md` (what ran, every
 gate, every finding with its repro, timings), appends one line to `~/cubby-reports/BOARD.md` (date,
@@ -341,9 +385,15 @@ restores the holding screen, and update `FLAKE` in the test.
 | tree-server | `GATES_SELF_TEST_SOURCE=<72d7c68f's gates.js> node tools/gates.js --self-test-tree-server`: 15 of 24 red. That runner took a planted older checkout's answers when it listened on the wildcard address or on `0.0.0.0`, saying "serving THIS tree" each time, started beside one on `::1` (where a `localhost` URL reaches it), took the planted top port of a two-port band, accepted a `serve.js` serving other bytes, did not notice its server dying mid-run or a stranger answering on `127.0.0.1` mid-run, and a SIGTERM, a SIGALRM or a SIGKILL left its `serve.js` behind (the first two the running gate too). Against the runner of de27b1c7 (the first round of this fix): 2 of 25 red, nightly.sh's SIGALRM and a SIGKILL each left `serve.js` listening with PPID 1. Mutants of the new runner (16 Nov 2026), each turning its own line red: every `PORT_HOSTS` entry removed in turn (stage 1 only: stage 3 now swaps the runner's own `PORT_HOSTS` declaration; it used to swap the first match of that line's text, which in such a mutant is a string inside the self-test, so stage 3 graded the mutant's picker and went red too), the wait for its own `serve.js` to listen (stage 3), the byte comparison (4, 5b and 7), each half of the after-the-last-gate check on its own: the server gone (5) and the bytes compared (5b; before 5b, a mutant that dropped the byte half passed every stage), the stop after the server has gone (5), the watch on its exit (3 and 5), the SIGTERM handler and passing the SIGTERM on (6), the SIGALRM handler and passing the SIGALRM on (6b), the wrapper left out and the wrapper not exiting when its stdin closes (6c) |
 | test-wiring | `--self-test` plants an unwired test, a comment-only mention, a stale excuse, a missing file; on the base tree it named 12 orphans |
 | change-test | `--self-test` builds a throwaway repo: code-only push red, code + test green, `Test-exempt` green |
-| prepush-tier | `PREPUSH_HOOK=<old hook> node test/prepush-tier.test.js`: the hook before Nov 2026 fails 11 of 15; the 13 Nov hook fails the two java lines (a stub java that cannot run was waved through) |
+| prepush-tier | 28 Nov 2026 rewrite: `PREPUSH_HOOK=<old hook> node test/prepush-tier.test.js`, the hook of 4e50b5e6 and the push-lock hook after it each fail 16 of 23 (main not refused, gates on a branch push, node_modules demanded); the new hook passes 23 of 23. Before that: the hook before Nov 2026 failed 11 of 15; the 13 Nov hook failed the two java lines (a stub java that cannot run was waved through) |
 | prepush-worktree | `PREPUSH_WT_FROM=<tree before the scrub>`: the shared config came back `bare = true`, `hooksPath = /dev/null`, a test `user.email`, moved heads. Built in: gates.js with its scrub line cut must let a planted leaky gate through, and each self-test with its own scrub cut goes red |
-| hooks | `--self-test`, plus the old hook swapped in (a `command -v java` guard is caught) |
+| prepush-worktree (28 Nov) | `PREPUSH_WT_FROM=<the push-lock tree>`: A red twice (the hook ran gates on a branch push, and the push did not land); A2-D, the runner under a test hook, stay green on both |
+| hooks | `--self-test`, plus the old hook swapped in (a `command -v java` guard is caught). 28 Nov 2026: the push-lock hook swapped in fails "refuses a push to main up front" and "runs no gates on a branch push" |
+| push-lock | `PREPUSH_HOOK=<push-lock hook of fix/concurrent-runs>`: 8 of 16 red once the lock wraps change_test_check (its gates-stub cases see no check run) and a push to main must not wait for the lock |
+| ci-tier | `--dir=<4e50b5e6's .github/workflows>`: red on gates, emulator, the seo guard step and teach-guard running on the push to main. `--self-test` stages each one back, a required check that stops running on a PR, an unreadable `if`, the IndexNow ping gone and `live` on a PR |
+| mut-select | `--self-test`: the selection rules (unrelated change off, `--mutants` all, input dir on, whole paths only, new gate, changed entry, runner change, unknown base, a git-show base without its last newline); its input check found two real gaps on its first run and flags admin-access declared as only its own file |
+| mutants-tier | `GATES_FROM=<the push-lock gates.js>`: 8 of 14 red (it ignores `mut`, so every pass runs on every PR), and F red on the nightly.sh without `--mutants`. A runner with `--mutants` cut out: B red ("the weakened assertion turns the run RED" never happens). A selector that never runs a pass: 6 red |
+| train (--go) | the old `--go` put back in a temp copy (push `train/<stamp>:main`, no `gh pr create`): 5 of 20 red, origin main moved |
 | fuzz-worker | three planted bugs in a temp copy of `worker.js`; the 14 Nov value generator, run on the `worker.js` before the sign-in code field was hardened, finds the throw in 60 s (the 13 Nov generator does not) |
 | fuzz-rules | four planted rule bugs, each in its own demo project; the 13 Nov model let the planted photo-read hole through as AGREE |
 | chaos | a planted lost write (nappies never leave the phone), a generator with its lock removed, the old name-bearing signature, a baby wiped from one phone's blob and saved, a planted 420 px row in the scroller (and the night wash that must NOT count), and a replay that breaks another invariant (exit 2). A member whose sign-in is ten minutes old (the Auth emulator's `lastLoginAt` moved back, read from her phone) deletes her account; with the action's sign-in again taken out, the same deletion must be refused (`reauth_unsupported`), and planted to skip the leave it must break the new invariant (a resolved deletion with her still in the family). And a deletion that stops at the login on the real SDK (its account delete failing on the wire), then a reload, then signing in again and deleting: against `app/store-firebase.js` of 93730af1 she was left signed in on the family she had left, and after a reload she was still signed in ("not left signed out on the sign-in screen", "not still signed out ... after a reload"). And a family's exit (Olive on two phones removes Nina, then deletes her account): against the app files of 72d7c68f, "the goodbye is not what she sees: the centre of her screen is signin" and "her user record is on the server again (her other phone wrote it back)"; both are planted in the self-test (the goodbye at z-index 4000, the pointer as a merge). With the pointer write taken out, "nina was removed and her own record does not say so" (a replay of the same script, not a standing plant) |

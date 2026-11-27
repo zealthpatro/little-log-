@@ -1,8 +1,9 @@
 name: SEO guard
 
-# Seamless SEO, enforced. Every push and PR runs the same static guard as the local
-# pre-commit hook (so a --no-verify bypass can't sneak broken SEO past), and every push
-# to main pings IndexNow so Bing/Yandex/Seznam/Naver recrawl the changed pages in minutes.
+# Seamless SEO, enforced. Every PR runs the same static guard as the local pre-commit hook
+# (so a --no-verify bypass can't sneak broken SEO past), and every push to main pings IndexNow
+# so Bing/Yandex/Seznam/Naver recrawl the changed pages in minutes. The guard does not run on
+# the push: the PR already ran it on the tree that merged (tools/ci_tier_check.js).
 # The guard uses only the Python standard library, so there is nothing to install.
 
 on:
@@ -25,6 +26,7 @@ jobs:
         with:
           python-version: '3.x'
       - name: Guard (broken links, social images, JSON-LD, sitemap)
+        if: github.event_name != 'push'
         run: python3 tools/seo_check.py
       - name: Ping IndexNow for changed pages (push to main)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

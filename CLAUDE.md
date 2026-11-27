@@ -50,7 +50,7 @@ until you link it:
 - HANDOFF.md — master build spec. docs/postmortems/ — every P0 or P1 gets a 5-whys.
 - tools/ — every gate and generator. Hooks are TRACKED in .githooks/ (core.hooksPath
   points there, so .git/hooks is never read): pre-commit guards SW bumps, JS syntax and
-  page SEO; pre-push runs the full suite, because push = deploy. tools/hooks_check.js
+  page SEO; pre-push refuses main (a PR's CI gates it) and runs no gates. tools/hooks_check.js
   asserts git resolves both — a hook installed elsewhere is a hook that never runs.
 - firestore.rules, storage.rules — security rules; test/ holds their suites.
 

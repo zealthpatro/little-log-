@@ -12,8 +12,8 @@ if [ -d "$ROOT/.githooks" ] && [ "$(git -C "$ROOT" config core.hooksPath 2>/dev/
   git -C "$ROOT" config core.hooksPath .githooks 2>/dev/null && echo "Cubby: wired core.hooksPath -> .githooks for this checkout (it was unset, so no hook could run)."
 fi
 if node "$ROOT/tools/hooks_check.js" >/dev/null 2>&1; then
-  echo "Cubby: pre-push suite enforcement is LIVE (tools/hooks_check.js green). Working rules: .claude/rules/ways-of-working.md"
+  echo "Cubby: pre-push guard is LIVE (tools/hooks_check.js green: main refused, change-needs-test). The PR's CI is the gating run. Working rules: .claude/rules/ways-of-working.md"
 else
-  echo "Cubby: WARNING pre-push suite enforcement is NOT live (node tools/hooks_check.js is red). A push to main deploys unverified. Run: sh tools/install_hooks.sh. Working rules: .claude/rules/ways-of-working.md"
+  echo "Cubby: WARNING the pre-push guard is NOT live (node tools/hooks_check.js is red). A code change with no test can reach a PR unasked. Run: sh tools/install_hooks.sh. Working rules: .claude/rules/ways-of-working.md"
 fi
 exit 0

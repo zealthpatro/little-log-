@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 /* The daily merge train (docs/RELEASE-TRAIN.md).
  *
- * Push = deploy, and every push runs the full pre-push suite on one Mac (~45-60 min). Five chats pushing
- * five times is five suites queued behind each other and a machine too loaded to finish any of them
- * (26 Nov 2026). The train turns N green PRs into ONE push: it merges every green, non-draft PR into a
- * local train branch cut from origin/main, makes the service-worker CACHE end above production's, and
- * pushes once, so the pre-push hook runs the suite once for all of them.
+ * A merge to main is a deploy. The train turns N green PRs into ONE merge: it merges every green, non-draft
+ * PR into a local train branch cut from origin/main, makes the service-worker CACHE end above production's,
+ * and ships that once.
  *
  *   node tools/train.js             build the train branch locally and report; pushes nothing
- *   node tools/train.js --go        same, then `git push origin HEAD:main` (pre-push runs the suite)
+ *   node tools/train.js --go        same, then push train/<stamp> and open its PR into main (gh pr create)
  *   node tools/train.js --self-test stage the conflicts it must handle in a temp repo, then judge
+ *
+ * --go never pushes main. It used to (`git push origin train/<stamp>:main`), and main's protection (required
+ * checks, strict, enforce_admins) refuses that, after the pre-push hook had run the full suite for 104-140
+ * min. The hook now refuses a main ref up front too. The train's PR is the run: its CI goes green, then the
+ * release root merges it (gh pr merge --merge, never auto-merge).
  *
  * Every branch bumps CACHE (pre-commit demands it), so two PRs collide on that one line. The train
  * settles a conflict ONLY when app/sw.js is the sole conflicted file and the CACHE line is the sole
@@ -99,13 +102,16 @@ function ensureCacheAbove(git, cwd, baseVersion) {
   return next;
 }
 
-function run(go) {
-  const cwd = process.cwd();
+/* deps: { cwd, gh(args) -> stdout, log }. The self-test passes its own gh and a temp repo; nothing else does. */
+function run(go, deps = {}) {
+  const cwd = deps.cwd || process.cwd();
   const git = makeGit(cwd);
-  if (git(['status', '--porcelain'])) { console.error('✋ Working tree not clean. The train needs a clean checkout.'); process.exit(1); }
+  const gh = deps.gh || ((args) => execFileSync('gh', args, { cwd, encoding: 'utf8' }));
+  const console = deps.log ? { log: deps.log, error: deps.log } : global.console;
+  if (git(['status', '--porcelain'])) { console.error('✋ Working tree not clean. The train needs a clean checkout.'); if (deps.cwd) return { error: 'dirty' }; process.exit(1); }
   git(['fetch', 'origin', 'main']);
-  const raw = execFileSync('gh', ['pr', 'list', '--state', 'open', '--base', 'main', '--limit', '50',
-    '--json', 'number,title,headRefName,isDraft,baseRefName,statusCheckRollup'], { encoding: 'utf8' });
+  const raw = gh(['pr', 'list', '--state', 'open', '--base', 'main', '--limit', '50',
+    '--json', 'number,title,headRefName,isDraft,baseRefName,statusCheckRollup']);
   const all = JSON.parse(raw);
   const green = all.filter(isGreen).sort((a, b) => a.number - b.number);
   const waiting = all.filter((p) => !isGreen(p));
@@ -123,10 +129,20 @@ function run(go) {
   const v = ensureCacheAbove(git, cwd, base);
   console.log(`▸ ${branch}: ${merged.length} PRs, CACHE v${base} → v${v}`);
   for (const m of merged) console.log(`   riding   #${m.number} ${m.title}`);
-  if (!go) { console.log(`▸ Dry run. To ship:  git push origin ${branch}:main   (or rerun with --go)`); return; }
-  console.log('▸ Pushing. The pre-push hook runs the full suite once for the whole train.');
-  execFileSync('git', ['push', 'origin', `${branch}:main`], { stdio: 'inherit' });
-  console.log('▸ Pushed. Next: node tools/gates.js --live, then confirm the live CACHE.');
+  if (!go) { console.log(`▸ Dry run. To ship: node tools/train.js --go (pushes ${branch} and opens its PR into main)`); return { branch, merged, skipped }; }
+  console.log(`▸ Pushing ${branch} (a branch, never main: main takes merges through a PR with green checks).`);
+  const env = { ...process.env };
+  for (const k of Object.keys(env)) if (k.startsWith('GIT_')) delete env[k];
+  // The pre-push hook runs here (change-needs-test and the push lock; it refuses main, so this is never main).
+  execFileSync('git', ['push', '-u', 'origin', `refs/heads/${branch}:refs/heads/${branch}`], { cwd, env, stdio: deps.cwd ? 'pipe' : 'inherit' });
+  const body = ['Daily merge train (docs/RELEASE-TRAIN.md), cut from origin/main.', '', `CACHE v${base} → v${v}`, '', 'Riding:']
+    .concat(merged.map((m) => `- #${m.number} ${m.title}`))
+    .concat(skipped.length ? ['', 'Skipped (each chat rebases its own):'].concat(skipped.map((x) => `- #${x.pr.number} ${x.pr.title}: ${x.why}`)) : [])
+    .join('\n');
+  const url = String(gh(['pr', 'create', '--base', 'main', '--head', branch, '--title', `Train ${stamp}: ${merged.map((m) => '#' + m.number).join(' ')}`, '--body', body]) || '').trim();
+  console.log(`▸ Opened ${url || 'the train PR'}. Its CI is the run: gh pr checks ${branch} --watch, then gh pr merge --merge (never auto-merge).`);
+  console.log('▸ After it lands: node tools/gates.js --live, then confirm the live CACHE.');
+  return { branch, merged, skipped, url };
 }
 
 /* ---------- self-test: every case must be able to go red ---------- */
@@ -175,6 +191,48 @@ function selfTest() {
     const mixed = `<<<<<<< a\nconst CACHE = 'little-log-v5';\nconst Y = 1;\n=======\nconst CACHE = 'little-log-v6';\nconst Y = 2;\n>>>>>>> b\n`;
     ok(resolveSwConflict(mixed) === null, 'sw.js conflict beyond the CACHE line is refused');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+
+  /* --go, end to end: a bare origin with main and one green rider, a clone, and a gh that answers pr list and
+     records pr create. The train must land as its own branch on origin with a PR opened from it, and origin's
+     main must not move. (The train of 4e50b5e6 pushed train/<stamp>:main here and opened nothing.) */
+  const T = fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-train-go-'));
+  try {
+    const BARE = path.join(T, 'origin.git'), SEED = path.join(T, 'seed'), W = path.join(T, 'work');
+    makeGit(T)(['init', '-q', '--bare', '-b', 'main', BARE]);
+    fs.mkdirSync(SEED);
+    const sg = makeGit(SEED);
+    sg(['init', '-q', '-b', 'main']); sg(['config', 'user.email', 't@t']); sg(['config', 'user.name', 't']); sg(['config', 'commit.gpgsign', 'false']);
+    const put = (d, f, txt) => { fs.mkdirSync(path.dirname(path.join(d, f)), { recursive: true }); fs.writeFileSync(path.join(d, f), txt); };
+    put(SEED, 'app/sw.js', "const CACHE = 'little-log-v200';\n"); put(SEED, 'app/a.js', 'a\n');
+    sg(['add', '.']); sg(['commit', '-qm', 'base']); sg(['remote', 'add', 'origin', BARE]); sg(['push', '-q', 'origin', 'main']);
+    sg(['checkout', '-qb', 'rider']); put(SEED, 'app/sw.js', "const CACHE = 'little-log-v201';\n"); put(SEED, 'app/a.js', 'a rider\n');
+    sg(['commit', '-qam', 'rider']); sg(['push', '-q', 'origin', 'rider']);
+    const mainBefore = makeGit(BARE)(['rev-parse', 'refs/heads/main']);
+    makeGit(T)(['clone', '-q', BARE, W]);
+    const wg = makeGit(W);
+    wg(['config', 'user.email', 't@t']); wg(['config', 'user.name', 't']); wg(['config', 'commit.gpgsign', 'false']);
+    const calls = [];
+    const fakeGh = (args) => {
+      calls.push(args);
+      if (args[0] === 'pr' && args[1] === 'list') return JSON.stringify([{ number: 7, title: 'rider', headRefName: 'rider', isDraft: false, baseRefName: 'main', statusCheckRollup: [chk('SUCCESS')] }]);
+      if (args[0] === 'pr' && args[1] === 'create') return 'https://example.test/pull/8\n';
+      return '';
+    };
+    const said = [];
+    const res = run(true, { cwd: W, gh: fakeGh, log: (m) => said.push(String(m)) }) || {};
+    const og = makeGit(BARE);
+    const trainSha = res.branch ? (() => { try { return og(['rev-parse', 'refs/heads/' + res.branch]); } catch (_) { return ''; } })() : '';
+    ok(og(['rev-parse', 'refs/heads/main']) === mainBefore, '--go leaves origin main where it was (it never pushes main)');
+    ok(!!trainSha && og(['show', trainSha + ':app/a.js']) === 'a rider', `--go pushes the train branch itself to origin (${res.branch || 'no branch'})`);
+    const create = calls.find((a) => a[0] === 'pr' && a[1] === 'create') || [];
+    const flag = (f) => { const i = create.indexOf(f); return i >= 0 ? create[i + 1] : undefined; };
+    ok(flag('--base') === 'main' && !!res.branch && flag('--head') === res.branch, '--go opens a PR from the train branch into main (gh pr create --base main --head train/<stamp>)');
+    ok(/#7 rider/.test(flag('--body') || ''), 'and the PR body lists every rider');
+    ok(calls.indexOf(create) > calls.findIndex((a) => a[1] === 'list') && !!trainSha, 'the PR is opened after the branch is on origin');
+    ok(said.some((l) => /gh pr checks/.test(l)) && !said.some((l) => /:main\b/.test(l)), 'and it says the PR\'s checks are the run, never to push :main');
+  } catch (e) {
+    ok(false, '--go self-test ran to its end: ' + (e && e.stack || e));
+  } finally { fs.rmSync(T, { recursive: true, force: true }); }
 
   console.log(fails ? `TRAIN: FAIL (${fails})` : 'TRAIN: PASS');
   process.exit(fails ? 1 : 0);

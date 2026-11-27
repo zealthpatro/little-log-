@@ -1,18 +1,20 @@
-/* Does .githooks/pre-push pick the right tier, and refuse a code change with no test?
+/* Does .githooks/pre-push refuse main up front, run no gates on a branch push, and refuse a code change
+ * with no test?
  *
  *   node test/prepush-tier.test.js
  *
- * WHY. The pre-push hook is the only thing that runs the suite before a deploy, and a hook is a shell
- * script nobody watches run. It now makes two decisions from git's stdin: whether the push changes
- * product code without a test (tools/change_test_check.js), and whether it needs the Firestore emulator
- * tier. Both are only worth something if they are made from what git really hands the hook, so this
- * builds a throwaway repo in os.tmpdir(), copies in the REAL hook and the REAL change_test_check.js,
- * stands a stub in for tools/gates.js that records how it was called, and drives the hook two ways:
- * with git's stdin lines written by hand, and through a real `git push` to a bare repo next to it.
+ * WHY. A hook is a shell script nobody watches run. Since 28 Nov 2026 it makes three decisions from git's
+ * stdin: a push to main is refused before anything else runs (GitHub refuses it anyway: main needs passing
+ * status checks, so the old hook spent 104-140 min of suite on a push that could not land); a branch push
+ * runs NO gates (CI runs them on the PR); and a push that changes product code without a test is stopped
+ * (tools/change_test_check.js). Each is only worth something if it is made from what git really hands the
+ * hook, so this builds a throwaway repo in os.tmpdir(), copies in the REAL hook and the REAL
+ * change_test_check.js, stands a stub in for tools/gates.js that records any call, and drives the hook two
+ * ways: with git's stdin lines written by hand, and through a real `git push` to a bare repo next to it.
  * Nothing outside the temp dir is touched; nothing is pushed anywhere real.
  *
  *   PREPUSH_HOOK=/path/to/old/pre-push node test/prepush-tier.test.js   grade another hook (the red run:
- *   the hook before Nov 2026 fails 11 of these 15 lines)
+ *   the hook of 4e50b5e6, and the push-lock one after it, each fail 16 of these 23 lines; see docs/TESTING.md)
  */
 'use strict';
 const fs = require('fs');
@@ -50,7 +52,7 @@ const PATH0 = process.env.PATH;
 process.env.PATH = path.join(JAVA_OK, 'bin') + path.delimiter + PATH0;
 const ZERO = '0000000000000000000000000000000000000000';
 
-console.log('\npre-push: the tier and the change-needs-test refusal, from git\'s own stdin\n');
+console.log('\npre-push: main refused up front, no gates on a branch push, change-needs-test, from git\'s own stdin\n');
 fs.mkdirSync(W);
 git(['init', '-q', '-b', 'main']);
 git(['config', 'user.email', 'prepush@example.test']); git(['config', 'user.name', 'prepush test']); git(['config', 'commit.gpgsign', 'false']);
@@ -80,80 +82,81 @@ const hook = (stdin, env) => {
 };
 const line = (head, remote) => 'refs/heads/main ' + head + ' refs/heads/main ' + (remote || root) + '\n';
 
-/* 1. Rules + their test: the emulator tier. */
-const rules = commit({ 'firestore.rules': 'r2\n', 'test/rules-test.js': 't2\n' }, 'tighten a rule, with its test');
-let r = hook(line(rules));
-ok('a push that touches firestore.rules runs `gates.js --emulator`', r.code === 0 && r.calls.length === 1 && r.calls[0].join(' ') === '--emulator', JSON.stringify(r.calls) + '\n' + r.out);
-ok('and says why', /running the emulator tier too/.test(r.out), r.out);
-
-/* 2. Docs only: the tree tier, exactly as before. */
+/* 1. main is refused UP FRONT: before change_test_check, before the lock, before any gate. GitHub refuses a
+   direct push to main (required checks, strict), so the old hook ran 104-140 min of suite and was refused after. */
+const noLock = () => !fs.existsSync(process.env.CUBBY_PUSH_LOCK);
+const MAIN_MSG = /This push targets main[\s\S]*open a PR instead/;
+const codeOnly = commit({ 'app/index.html': '<p>2</p>\n' }, 'app change, no test');
+let r = hook(line(codeOnly));
+ok('1. a push to main is refused', r.code === 1 && MAIN_MSG.test(r.out), r.out);
+ok('1. before any gate runs (no gates.js call at all)', r.calls.length === 0, JSON.stringify(r.calls));
+ok('1. and before change_test_check is asked (a code-only commit gets the main refusal, not the test one)',
+  !/product code changed and no test/.test(r.out), r.out);
+ok('1. and it names the way in: a PR, and the train that opens one', /gh pr create --base main/.test(r.out) && /tools\/train\.js --go/.test(r.out), r.out);
+r = hook('refs/heads/feature ' + codeOnly + ' refs/heads/main ' + root + '\n');
+ok('1. a local branch pushed onto remote main is refused the same way', r.code === 1 && MAIN_MSG.test(r.out) && r.calls.length === 0, r.out);
+r = hook('refs/heads/a ' + codeOnly + ' refs/heads/a ' + ZERO + '\nrefs/heads/main ' + codeOnly + ' refs/heads/main ' + root + '\n');
+ok('1. one main ref among branch refs refuses the whole push', r.code === 1 && MAIN_MSG.test(r.out) && r.calls.length === 0, r.out);
+r = hook('(delete) ' + ZERO + ' refs/heads/main ' + root + '\n');
+ok('1. and so does deleting main', r.code === 1 && MAIN_MSG.test(r.out), r.out);
+ok('1. a refused push never took the machine push lock', noLock(), process.env.CUBBY_PUSH_LOCK);
+/* Companion: the matcher is the whole ref, not a prefix. */
 git(['reset', '-q', '--hard', root]);
 const docs = commit({ 'docs/notes.md': 'words\n' }, 'docs');
-r = hook(line(docs));
-ok('a docs-only push runs plain `gates.js` (the tree tier)', r.code === 0 && r.calls.length === 1 && r.calls[0].length === 0, JSON.stringify(r.calls) + '\n' + r.out);
+r = hook('refs/heads/mainline ' + docs + ' refs/heads/mainline ' + ZERO + '\n');
+ok('1. companion: a branch called mainline is a branch push, not main', r.code === 0 && !MAIN_MSG.test(r.out), r.out);
 
-/* 3. Product code, no test: stopped before any gate runs. */
-git(['reset', '-q', '--hard', root]);
-const codeOnly = commit({ 'app/index.html': '<p>2</p>\n' }, 'app change, no test');
-r = hook(line(codeOnly));
-ok('a code change with no test stops the push', r.code === 1 && r.calls.length === 0, r.out);
-ok('naming the file and the way out', /app\/index\.html/.test(r.out) && /Test-exempt: <why no test can see this>/.test(r.out), r.out);
-
-/* 4. The same change, exempted in writing: allowed, and the reason is printed. */
-git(['reset', '-q', '--hard', root]);
-const exempt = commit({ 'app/index.html': '<p>3</p>\n' }, 'copy only\n\nTest-exempt: a word in a heading, nothing a test can see');
-r = hook(line(exempt));
-ok('a Test-exempt trailer lets it through, on the tree tier', r.code === 0 && r.calls.length === 1 && r.calls[0].length === 0, r.out);
-ok('and prints the reason in the push output', /a word in a heading, nothing a test can see/.test(r.out), r.out);
-
-/* 5. A new branch: remote sha all zeros, judged from the merge-base with origin/main. */
+/* 2. A branch push runs NO gates, whatever it touches. CI runs them on the PR. */
+const BRANCH = (head, name) => 'refs/heads/' + (name || 'feature') + ' ' + head + ' refs/heads/' + (name || 'feature') + ' ' + ZERO + '\n';
+r = hook(BRANCH(docs));
+ok('2. a docs-only branch push passes and runs no gate', r.code === 0 && r.calls.length === 0, JSON.stringify(r.calls) + '\n' + r.out);
+ok('2. and says so (CI runs them on the PR)', /no gates run here/.test(r.out), r.out);
 git(['checkout', '-q', '-b', 'feature', root]);
 const feat = commit({ 'worker.js': 'w\n', 'test/worker-routes.test.js': 'x\n' }, 'worker + test');
-r = hook('refs/heads/feature ' + feat + ' refs/heads/main ' + root + '\n');
-ok('a new branch touching worker.js runs the emulator tier', r.code === 0 && r.calls.length === 1 && r.calls[0].join(' ') === '--emulator', r.out);
+r = hook(BRANCH(feat));
+ok('2. a branch push touching worker.js runs no gate either (no emulator tier here; CI runs it on the PR)', r.code === 0 && r.calls.length === 0, JSON.stringify(r.calls) + '\n' + r.out);
+const rules = commit({ 'firestore.rules': 'r2\n', 'test/rules-test.js': 't2\n' }, 'tighten a rule, with its test');
+r = hook(BRANCH(rules), { PATH: path.join(JAVA_STUB, 'bin') + path.delimiter + PATH0 });
+ok('2. nor asks for java on a rules change', r.code === 0 && r.calls.length === 0 && !/does not run/.test(r.out), r.out);
+r = hook(BRANCH(rules), { STUB_GATES_FAIL: '1' });
+ok('2. so a failing gate cannot stop a branch push here (the PR is where it goes red)', r.code === 0 && r.calls.length === 0, r.out);
 
-/* 6. A gate fails: the push stops. */
-r = hook('refs/heads/feature ' + feat + ' refs/heads/feature ' + ZERO + '\n');
-ok('a branch push (not main) runs only the Chrome-free gates, even when it touches worker.js', r.code === 0 && r.calls.length === 1 && r.calls[0].join(' ') === '--no-browser', JSON.stringify(r.calls) + '\n' + r.out);
-r = hook('refs/heads/feature ' + feat + ' refs/heads/feature ' + ZERO + '\n', { STUB_GATES_FAIL: '1' });
-ok('and a failing gate still stops a branch push', r.code === 1 && /Push stopped: a gate failed/.test(r.out), r.out);
-r = hook(line(docs), { STUB_GATES_FAIL: '1' });
-ok('a failing gate still stops the push', r.code === 1 && /Push stopped: a gate failed/.test(r.out), r.out);
+/* 3. Product code, no test: stopped on a branch push too. */
+git(['checkout', '-q', '-b', 'code-only', root]);
+const code2 = commit({ 'app/index.html': '<p>4</p>\n' }, 'app change, no test');
+r = hook(BRANCH(code2, 'code-only'));
+ok('3. a code change with no test stops a branch push', r.code === 1 && r.calls.length === 0 && /product code changed and no test/.test(r.out), r.out);
+ok('3. naming the file and the way out', /app\/index\.html/.test(r.out) && /Test-exempt: <why no test can see this>/.test(r.out), r.out);
 
-/* 6b. java must RUN, not merely exist. On a Mac /usr/bin/java is Apple's stub, there with or without a JDK,
-   so the old `command -v java` guard never refused anything there. */
-const stubPath = path.join(JAVA_STUB, 'bin') + path.delimiter + PATH0;
-r = hook('refs/heads/feature ' + feat + ' refs/heads/main ' + root + '\n', { PATH: stubPath });
-ok('an emulator-tier push where java is only a stub that cannot run is refused, before any gate', r.code === 1 && r.calls.length === 0 && /does not run/.test(r.out), r.out);
-r = hook('refs/heads/feature ' + feat + ' refs/heads/main ' + root + '\n', { JAVA_HOME: JAVA_STUB });
-ok('and so is one whose JAVA_HOME holds a java that cannot run (the java the suites would use)', r.code === 1 && r.calls.length === 0 && /does not run/.test(r.out), r.out);
-r = hook(line(docs), { PATH: stubPath });
-ok('a tree-tier push never asks for java', r.code === 0 && r.calls.length === 1 && r.calls[0].length === 0, r.out);
+/* 4. The same change, exempted in writing: allowed, and the reason is printed. */
+git(['checkout', '-q', '-b', 'exempt', root]);
+const exempt = commit({ 'app/index.html': '<p>3</p>\n' }, 'copy only\n\nTest-exempt: a word in a heading, nothing a test can see');
+r = hook(BRANCH(exempt, 'exempt'));
+ok('4. a Test-exempt trailer lets it through, with no gate', r.code === 0 && r.calls.length === 0, r.out);
+ok('4. and prints the reason in the push output', /a word in a heading, nothing a test can see/.test(r.out), r.out);
 
-/* 7. No test/node_modules: refused UP FRONT, on either tier, before a single gate runs. The first
-   security push of Nov 2026 died after 56 minutes on exactly this, when the suites that need it were
-   finally reached. A docs-only push is refused too, because several tree gates load firebase. */
+/* 5. No node_modules needed: a branch push runs no gate, so it has nothing to load. */
+fs.renameSync(path.join(W, 'tools', 'node_modules'), path.join(W, 'tools', 'node_modules-away'));
 fs.renameSync(path.join(W, 'test', 'node_modules'), path.join(W, 'test', 'node_modules-away'));
-r = hook('refs/heads/feature ' + feat + ' refs/heads/main ' + root + '\n');
-ok('an emulator-tier push without test/node_modules is refused, not waved through', r.code === 1 && r.calls.length === 0 && /test\/node_modules is missing/.test(r.out), r.out);
-r = hook(line(docs));
-ok('and so is a tree-tier push, before any gate runs (no 56-minute surprise)', r.code === 1 && r.calls.length === 0 && /test\/node_modules is missing/.test(r.out), r.out);
+r = hook(BRANCH(docs, 'docs'));
+ok('5. a branch push from a tree with no tools/ or test/node_modules passes (nothing it runs needs them)', r.code === 0 && r.calls.length === 0, r.out);
+fs.renameSync(path.join(W, 'tools', 'node_modules-away'), path.join(W, 'tools', 'node_modules'));
 fs.renameSync(path.join(W, 'test', 'node_modules-away'), path.join(W, 'test', 'node_modules'));
-fs.rmdirSync(path.join(W, 'tools', 'node_modules'));
-r = hook(line(docs));
-ok('a push without tools/node_modules is refused as before', r.code === 1 && r.calls.length === 0 && /tools\/node_modules is missing/.test(r.out), r.out);
-fs.mkdirSync(path.join(W, 'tools', 'node_modules'));
 
-/* 8. The real thing: git itself runs the hook on `git push`, with its own stdin. */
+/* 6. The real thing: git itself runs the hook on `git push`, with its own stdin. */
 git(['config', 'core.hooksPath', '.githooks']);
-git(['checkout', '-q', 'main']); git(['reset', '-q', '--hard', rules]);
+git(['checkout', '-q', 'feature']);
 try { fs.unlinkSync(CALLS); } catch (e) {}
-const push = spawnSync('git', ['push', 'origin', 'main'], { cwd: W, encoding: 'utf8' });
-ok('a real `git push` of the rules change runs the hook, which asks for --emulator', push.status === 0 && calls().length === 1 && calls()[0].join(' ') === '--emulator', (push.stdout || '') + (push.stderr || '') + JSON.stringify(calls()));
+const push = spawnSync('git', ['push', 'origin', 'feature'], { cwd: W, encoding: 'utf8' });
+ok('6. a real `git push` of a branch runs the hook, which runs no gate, and the branch lands',
+  push.status === 0 && calls().length === 0 && git(['rev-parse', 'refs/heads/feature'], BARE) === rules, (push.stdout || '') + (push.stderr || '') + JSON.stringify(calls()));
 const onTop = commit({ 'app/store-firebase.js': 'changed\n' }, 'a Firestore-layer change on top, no test');
-const push2 = spawnSync('git', ['push', 'origin', 'main'], { cwd: W, encoding: 'utf8' });
-ok('and a real `git push` of a code-only change is refused by it', push2.status !== 0 && /product code changed and no test/.test(push2.stdout + push2.stderr), push2.stdout + push2.stderr);
-ok('so the bare origin still holds the rules commit', git(['rev-parse', 'main'], BARE) === rules, git(['rev-parse', 'main'], BARE));
+const push2 = spawnSync('git', ['push', 'origin', 'feature'], { cwd: W, encoding: 'utf8' });
+ok('6. a real `git push` of a code-only change is refused by it', push2.status !== 0 && /product code changed and no test/.test(push2.stdout + push2.stderr), push2.stdout + push2.stderr);
+const push3 = spawnSync('git', ['push', 'origin', 'feature:main'], { cwd: W, encoding: 'utf8' });
+ok('6. and a real `git push origin feature:main` is refused up front', push3.status !== 0 && MAIN_MSG.test(push3.stdout + push3.stderr) && calls().length === 0, push3.stdout + push3.stderr);
+ok('6. so the bare origin\'s main is still the root commit, and its feature the rules commit',
+  git(['rev-parse', 'main'], BARE) === root && git(['rev-parse', 'refs/heads/feature'], BARE) === rules && onTop !== rules, git(['rev-parse', 'main'], BARE));
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 console.log('PREPUSH-TIER: ' + (fail ? 'FAIL' : 'PASS'));
