@@ -40,13 +40,68 @@ function pathTokens(text) {
 }
 
 let pass = 0, fail = 0;
-const ok = (n, c, x) => { if (c) { pass++; console.log('  ok   ' + n); } else { fail++; console.log('  FAIL ' + n + (x !== undefined ? '\n         ' + String(x).slice(0, 300) : '')); } };
+const failedNames = []; // the self-test counts which lines went red, not only how many
+const ok = (n, c, x) => { if (c) { pass++; console.log('  ok   ' + n); } else { fail++; failedNames.push(n); console.log('  FAIL ' + n + (x !== undefined ? '\n         ' + String(x).slice(0, 300) : '')); } };
 
-function runHook(script, stdinJson) {
-  const r = spawnSync('sh', [script], { input: stdinJson, encoding: 'utf8', env: Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: ROOT }), timeout: 20000 });
+function runHook(script, stdinJson, extraEnv) {
+  const env = Object.assign({}, process.env, { CLAUDE_PROJECT_DIR: ROOT }, extraEnv || {});
+  if (!extraEnv || !('CUBBY_BIG_READ_LINES' in extraEnv)) delete env.CUBBY_BIG_READ_LINES; // a value in the caller's shell must not move the threshold under test
+  const r = spawnSync('sh', [script], { input: stdinJson, encoding: 'utf8', env, timeout: 20000 });
   return { code: r.status, out: (r.stdout || '').trim(), err: (r.stderr || '').trim() };
 }
-const bashCall = (command) => JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command } });
+const bashCall = (command, cwd) => JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command }, cwd });
+const readCall = (input) => JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: input });
+
+/* Fixtures for the big-read hook: a file over the 400-line default, one under it, and a big one Read pages
+   itself. In a temp dir, never in the repo, so the verdict does not move when a repo file grows. */
+const os = require('os');
+const FIX = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-bigread-'));
+const BIG = path.join(FIX, 'big file.txt'), SMALL = path.join(FIX, 'small.txt'), BIGPDF = path.join(FIX, 'big.pdf');
+fs.writeFileSync(BIG, Array.from({ length: 1000 }, (_, i) => 'line ' + i).join('\n') + '\n');
+fs.writeFileSync(SMALL, Array.from({ length: 10 }, (_, i) => 'line ' + i).join('\n') + '\n');
+fs.writeFileSync(BIGPDF, fs.readFileSync(BIG));
+const BIG_Q = JSON.stringify(BIG); // the name has a space, so the shell form is quoted
+
+/* Is the big-read hook wired on BOTH tools, and does it block a whole read of a big file and nothing else?
+   Every line here is named "big-read ..." so the self-test can require these lines, not just any, go red. */
+function checkBigRead(root, hooks) {
+  const pre = (hooks && hooks.PreToolUse) || [];
+  const wiredOn = (tool) => pre.some((g) => { let m = false; try { m = new RegExp('^(?:' + (g.matcher || '.*') + ')$').test(tool); } catch (e) {}
+    return m && (g.hooks || []).some((h) => /\/\.claude\/hooks\/big-read\.sh$/.test(String(h.command || ''))); });
+  ok('big-read hook is wired on PreToolUse Read', wiredOn('Read'));
+  ok('big-read hook is wired on PreToolUse Bash', wiredOn('Bash'));
+  const br = path.join(root, '.claude', 'hooks', 'big-read.sh');
+  ok('big-read hook script exists', fs.existsSync(br), br);
+  if (!fs.existsSync(br)) return;
+  const blocks = (r, n) => r.code === 2 && /"permissionDecision":"deny"/.test(r.out) && r.err.indexOf('This file has ' + n + ' lines') === 0 && /cfind/.test(r.err) && /bulk-read --question/.test(r.err);
+  const passes = (r) => r.code === 0 && r.out === '';
+  const show = (r) => 'exit ' + r.code + ' out=' + r.out.slice(0, 80) + ' err=' + r.err.slice(0, 80);
+  const B = [
+    ['big-read BLOCKS a whole Read of a 1000-line file', readCall({ file_path: BIG }), 1000],
+    ['big-read BLOCKS an unpiped cat of it', bashCall('cat ' + BIG_Q), 1000],
+    ['big-read BLOCKS cat -n of it after a cd', bashCall('cd /tmp && cat -n ' + BIG_Q), 1000],
+    ['big-read BLOCKS a relative cat, resolved against the call\'s cwd', bashCall('cat "big file.txt"', FIX), 1000],
+  ];
+  for (const [n, j, lines] of B) { const r = runHook(br, j); ok(n, blocks(r, lines), show(r)); }
+  const r5 = runHook(br, readCall({ file_path: SMALL }), { CUBBY_BIG_READ_LINES: '5' });
+  ok('big-read honours CUBBY_BIG_READ_LINES (5: the 10-line file is blocked)', blocks(r5, 10), show(r5));
+  const P = [
+    ['big-read passes a Read of it with offset', readCall({ file_path: BIG, offset: 200 })],
+    ['big-read passes a Read of it with limit', readCall({ file_path: BIG, limit: 50 })],
+    ['big-read passes a whole Read of a 10-line file', readCall({ file_path: SMALL })],
+    ['big-read passes a file that does not exist (Read reports it)', readCall({ file_path: path.join(FIX, 'nope.txt') })],
+    ['big-read passes a PDF (Read pages it)', readCall({ file_path: BIGPDF })],
+    ['big-read passes a piped cat', bashCall('cat ' + BIG_Q + ' | head -50')],
+    ['big-read passes cat into a file', bashCall('cat ' + BIG_Q + ' > /tmp/harness-bigread-copy.txt')],
+    ['big-read passes cat of a 10-line file', bashCall('cat ' + SMALL)],
+    ['big-read passes a MENTION of cat in a string', bashCall('echo "cat ' + BIG + '"')],
+    ['big-read passes grep -n on it', bashCall('grep -n "line 5" ' + BIG_Q)],
+    ['big-read passes a heredoc cat that writes a file', bashCall("cat > /tmp/harness-bigread-x <<'EOF'\n" + BIG + "\nEOF")],
+  ];
+  for (const [n, j] of P) { const r = runHook(br, j); ok(n, passes(r), show(r)); }
+  const bad = runHook(br, 'not json at all');
+  ok('big-read fails OPEN on malformed input', bad.code === 0, 'exit ' + bad.code);
+}
 
 function check(root, label) {
   console.log('\n' + label);
@@ -72,6 +127,7 @@ function check(root, label) {
     if (committed) ok('and committed as 100755, so a clone can run it', committed === '100755', rel + ' is ' + committed + ' (fix: git update-index --chmod=+x ' + rel + ')');
   }
   ok('PreToolUse is guarded on Bash', cmds.some((c) => c.ev === 'PreToolUse'));
+  checkBigRead(root, hooks);
   ok('SessionStart reports enforcement state', cmds.some((c) => c.ev === 'SessionStart'));
 
   /* Behaviour, not existence. */
@@ -131,7 +187,6 @@ check(ROOT, 'this checkout');
 
 if (SELF_TEST) {
   /* Stage the failures this gate exists to catch, in a scratch tree, and require red. */
-  const os = require('os');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-red-'));
   fs.mkdirSync(path.join(tmp, '.claude', 'hooks'), { recursive: true });
   fs.mkdirSync(path.join(tmp, '.claude', 'rules'), { recursive: true });
@@ -148,7 +203,39 @@ if (SELF_TEST) {
   console.log('\nself-test');
   ok('a missing hook script, a bogus event, a guard that never denies, and a stale path all go RED (' + staged + ' lines)', staged >= 8, staged);
   fs.rmSync(tmp, { recursive: true, force: true });
+
+  /* The big-read hook, two ways it can die while looking installed: the settings stop naming it, and its
+     threshold test is removed so it passes everything. Each must turn ITS lines red. */
+  const realBR = fs.readFileSync(path.join(ROOT, '.claude', 'hooks', 'big-read.sh'), 'utf8');
+  const realSettings = JSON.parse(fs.readFileSync(path.join(ROOT, '.claude', 'settings.json'), 'utf8'));
+  const stage = (settings, script) => {
+    const t = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-bigread-red-'));
+    fs.mkdirSync(path.join(t, '.claude', 'hooks'), { recursive: true });
+    fs.writeFileSync(path.join(t, '.claude', 'settings.json'), JSON.stringify(settings));
+    fs.writeFileSync(path.join(t, '.claude', 'hooks', 'big-read.sh'), script);
+    fs.chmodSync(path.join(t, '.claude', 'hooks', 'big-read.sh'), 0o755);
+    const f0 = fail, n0 = failedNames.length;
+    console.log = () => {};
+    check(t, 'big-read scratch');
+    console.log = quiet;
+    const red = failedNames.slice(n0).filter((n) => n.indexOf('big-read') === 0);
+    fail = f0; failedNames.length = n0;
+    fs.rmSync(t, { recursive: true, force: true });
+    return red;
+  };
+  const unwired = JSON.parse(JSON.stringify(realSettings));
+  unwired.hooks.PreToolUse = unwired.hooks.PreToolUse.filter((g) => !(g.hooks || []).some((h) => /big-read/.test(h.command || '')));
+  const redUnwired = stage(unwired, realBR);
+  ok('big-read UNWIRED from settings goes RED on both wiring lines (' + redUnwired.length + ')',
+    redUnwired.includes('big-read hook is wired on PreToolUse Read') && redUnwired.includes('big-read hook is wired on PreToolUse Bash'), redUnwired.join(' | '));
+  const THRESH = 'if(n>LIMIT) block(n,f);';
+  const occurrences = realBR.split(THRESH).length - 1;
+  ok('the threshold test the mutation removes is in big-read.sh (' + occurrences + ' places)', occurrences === 2, occurrences);
+  const redNoThreshold = stage(realSettings, realBR.split(THRESH).join(''));
+  const blockLines = redNoThreshold.filter((n) => /BLOCKS|honours/.test(n));
+  ok('big-read with its THRESHOLD REMOVED goes RED on every block line (' + blockLines.length + ' of 5)', blockLines.length === 5, redNoThreshold.join(' | '));
 }
+fs.rmSync(FIX, { recursive: true, force: true });
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 console.log('HARNESS: ' + (fail ? 'FAIL' : 'PASS') + '\n');

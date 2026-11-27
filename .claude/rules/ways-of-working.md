@@ -11,6 +11,8 @@ catalogue behind it. Each rule below cost real time in Aug-Sep 2026 and each has
   (`grep -o "little-log-v[0-9]*" app/sw.js`) and confirm your change is in it.
 - Prefer `git commit -o <paths>` in the shared checkout; never `git add -A`. Re-read `app/sw.js` before
   bumping CACHE: another session may have bumped it first.
+- Big files are read by range: find the spot (cfind or `grep -n`), then Read with offset and limit.
+  `.claude/hooks/big-read.sh` blocks a whole Read or bare cat of a file over 400 lines.
 
 ## A gate must be able to go red
 - Red-then-green: watch every new assertion fail on a real or mutated tree before trusting it.
