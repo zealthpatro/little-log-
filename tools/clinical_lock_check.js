@@ -136,6 +136,10 @@ function clinicalCopy(html) {
     .replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<nav\b[\s\S]*?<\/nav>/gi, ' ')
     .replace(/<div class="cta">[\s\S]*?<\/div>/gi, ' ')
+    // The standard health caution and its matching bottom line are site-wide boilerplate set by
+    // tools/health_caution_check.js, not this page's clinical copy; changing that wording must not unlock pages.
+    .replace(/<div class="art-caution"[^>]*>[\s\S]*?<\/div>/gi, ' ')
+    .replace(/<p class="art-disc(?:laimer)?"[^>]*>[\s\S]*?<\/p>/gi, ' ')
     .replace(/<h2[^>]*>\s*Related articles\s*<\/h2>\s*<ul>[\s\S]*?<\/ul>/gi, ' ');
   const title = text((/<title>([\s\S]*?)<\/title>/i.exec(html) || [])[1] || '');
   const meta = text(unent((/<meta\s+name="description"\s+content="([^"]*)"/i.exec(html) || [])[1] || ''));
@@ -311,6 +315,7 @@ function selfTest() {
     ['a changed meta description only', /may not change/, { html: page(A0, F0, { meta: 'A fever rarely needs a doctor.' }) }],
     ['a changed BlogPosting headline only', /may not change/, { html: page(A0, F0, { headline: 'Fevers are fine' }) }],
     ['a changed BlogPosting description only', /may not change/, { html: page(A0, F0, { desc: 'A fever rarely needs a doctor.' }) }],
+    ['adding the standard caution and bottom disclaimer stays green', true, { html: A.replace('<h1>Fever</h1>', '<h1>Fever</h1><div class="art-caution" role="note">In an emergency, call now.</div>').replace('</main>', '<p class="art-disclaimer">In an emergency, call now.</p></main>') }],
     ['a change outside the clinical copy (byline, related list, cta, site footer)', true, { html: A.replace('Other', 'Another').replace('Start free', 'Try it').replace('site footer', 'new footer').replace('Cubby editorial team. ', '') }],
     ['approved at 2 sign-offs, no private file (CI)', true, { html: 'B', appr: { signoffs: 2 }, wantNote: /counts checked only/ }],
     ['approved at 1 sign-off', /1 sign-off\(s\); 2 are needed/, { html: 'B', appr: { signoffs: 1 } }],
