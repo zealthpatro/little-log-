@@ -100,8 +100,8 @@ const seed = (over) => Object.assign({
       borderStyle: el ? getComputedStyle(el).borderTopStyle : null,
       iCal: el ? kids.indexOf(el) : -1,
       iHero: at('.ms-hero'), iSetup: at('.vx-setup'), iDisc: at('.disclaimer'),
-      iFirstDose: at('.ms-row'), iAdd: kids.findIndex((e) => /Add a vaccine/.test(e.textContent || '')),
-      doseRows: kids.filter((e) => e.matches('.ms-row')).length,
+      iFirstDose: kids.findIndex((e) => e.matches('.ms-row') || !!e.querySelector('.ms-row')), iAdd: kids.findIndex((e) => /Add a vaccine/.test(e.textContent || '')),
+      doseRows: host ? host.querySelectorAll('.ms-row').length : 0,
       top: el ? Math.round(el.getBoundingClientRect().top) : null,
       bottom: el ? Math.round(el.getBoundingClientRect().bottom) : null,
       // The row moved from the end of a list to the head of the tab, so the 8px row rhythm it
@@ -112,6 +112,7 @@ const seed = (over) => Object.assign({
       navTop: nav ? Math.round(nav.getBoundingClientRect().top) : 844,
       upcoming: vaxUpcomingVisits(vaccinePlan()).length,
       planned: new Set(vaccinePlan().map((v) => v.dueMonths)).size,
+      plannedDoses: vaccinePlan().length,
     };
   });
 
@@ -142,14 +143,16 @@ const seed = (over) => Object.assign({
   };
   const uidCount = (ics) => (String(ics).match(/^UID:/gm) || []).length;
 
-  console.log('\n1. a ten-day-old: the row sits with the ring, not three screens under it');
+  console.log('\n1. a ten-day-old: the row sits under the next-visit card, not three screens down');
   {
     await load(seed());
     const r = await VAX();
     ok('the calendar row is on the vaccines screen, exactly one of it', r.count === 1, r);
-    ok('it comes straight after the ring hero', r.prev === 'ms-hero', r);
-    ok('and that really is the completion ring', r.prevHasRing === true, r);
-    ok('the screen still lists the doses', r.doseRows > 6, r.doseRows);
+    /* 27 Nov 2026: the tab opens on the next VISIT (test/vax-visits.test.js), not a completion ring. The row
+       keeps its place: straight under the card that answers "what's next", above every dose. */
+    ok('it comes straight after the next-visit card', /\bvx-next\b/.test(r.prev || ''), r);
+    ok('and the tab has no completion ring any more', r.prevHasRing === false, r);
+    ok('the screen still holds every dose, folded into visits', r.doseRows > 6, r.doseRows);
     ok('the row is above every dose row', r.iCal >= 0 && r.iCal < r.iFirstDose, r);
     ok('above the disclaimer', r.iCal < r.iDisc, r);
     ok('above "Add a vaccine"', r.iCal < r.iAdd, r);
@@ -164,7 +167,7 @@ const seed = (over) => Object.assign({
        0 of 27 recorded"). This row used to print "these 7 visits" 16px under it, so the only reading
        available to a parent was that twenty of the twenty-seven were being left out, on the vaccine
        screen. And "these" pointed at a list that is now BELOW it. The row carries no count at all. */
-    ok('the ring above it really does print the plan total', /\b\d+\b/.test(r.prevText) && r.planned !== r.upcoming, { prev: r.prevText, planned: r.planned, upcoming: r.upcoming });
+    ok('the card above it counts only its own visit, never the plan total', !new RegExp('\\b' + r.plannedDoses + '\\b').test(r.prevText), { prev: r.prevText, plannedDoses: r.plannedDoses });
     ok('so the row prints no number of its own to collide with it', !/\d/.test(r.text), r.text);
     ok('and it does not say "these", which had nothing left to point at', !/\bthese\b/i.test(r.text), r.text);
     ok('it names what it offers: the visits still ahead of her', /Put the visits still ahead in my calendar/.test(r.text), r.text);
@@ -273,7 +276,7 @@ const seed = (over) => Object.assign({
     const mine = await VAX();
     ok('switching to the one with a birthday brings it back', mine.count === 1, mine);
     ok('driven by HER dates, and still the one label', mine.upcoming > 0 && mine.text === '📅 Put the visits still ahead in my calendar', mine);
-    ok('still directly under the ring', mine.prev === 'ms-hero', mine);
+    ok('still directly under the next-visit card', /\bvx-next\b/.test(mine.prev || ''), mine);
   }
 
   console.log('\n7. a catch-up card does not push it back down');
@@ -283,7 +286,7 @@ const seed = (over) => Object.assign({
     await load(seed({ babies: [{ id: 'b1', name: 'Wren', birth: now - 275 * DAY, country: 'GB', routines: [] }] }));
     const r = await VAX();
     ok('the catch-up card is on screen', r.iSetup >= 0, r);
-    ok('the calendar row is still first after the ring', r.prev === 'ms-hero', r);
+    ok('the calendar row is still first after the next-visit card', /\bvx-next\b/.test(r.prev || ''), r);
     ok('and above the catch-up card', r.iCal < r.iSetup, r);
     ok('with a block gap into it, not a row gap', r.gapBelow === 16, r);
     ok('there are still visits ahead at nine months', r.upcoming > 0, r);
@@ -308,7 +311,7 @@ const seed = (over) => Object.assign({
     ok('the doses were really recorded', marked.given === marked.cleared && marked.cleared > 0, marked);
     ok('the whole visit drops off the offer, not one dose of it', after.upcoming === before.upcoming - 1, { before: before.upcoming, after: after.upcoming });
     ok('the row survives the re-render unchanged, no number to go stale', after.count === 1 && after.text === before.text, { before: before.text, after: after.text });
-    ok('it is still with the ring after the re-render', after.prev === 'ms-hero', after);
+    ok('it is still under the next-visit card after the re-render', /\bvx-next\b/.test(after.prev || ''), after);
 
     /* THE SECOND EXPORT IS THE WHOLE POINT OF MOVING THIS ROW. Promoted to the head of the tab and
        into the onboarding sheet, it will be tapped more than once, which is exactly what the old file
@@ -342,7 +345,7 @@ const seed = (over) => Object.assign({
     await load(seed({ vaccines: { b1: recorded } }));
     const back = await VAX();
     ok('the row is there on a cold boot with doses already recorded', back.count === 1, back);
-    ok('still with the ring', back.prev === 'ms-hero', back);
+    ok('still under the next-visit card', /\bvx-next\b/.test(back.prev || ''), back);
     const cold = await clickForIcs({ sel: '.add-row', re: 'in my calendar' });
     ok('and it does not re-offer the visit she has already been to', back.upcoming === after.upcoming && cold.vevents === back.upcoming, { back: back.upcoming, after: after.upcoming, vevents: cold.vevents });
   }

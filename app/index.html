@@ -1431,6 +1431,25 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .pick-item.sel .pk{display:grid;}
 
 /* ---- vaccines ---- */
+.vx-next{display:flex;flex-direction:column;gap:8px;margin-bottom:var(--stack);}
+.vx-next-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
+.vx-next-eb{font-size:var(--fs-small);font-weight:700;color:var(--diaper-ink);}
+.vx-next-when{font-size:var(--fs-small);color:var(--ink-soft);}
+.vx-next-t{font-family:var(--font-display);font-size:var(--fs-title);font-weight:600;line-height:1.2;}
+.vx-next-s{font-size:var(--fs-body);color:var(--ink-soft);}
+.vx-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.vx-chip{font-size:var(--fs-small);font-weight:600;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:4px 10px;}
+.vx-visit{background:var(--surface);border-radius:var(--r-card);margin-bottom:var(--stack);box-shadow:var(--elev-card);}
+.vx-visit>summary{list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 16px;min-height:44px;box-sizing:border-box;cursor:pointer;}
+.vx-visit>summary::-webkit-details-marker{display:none;}
+.vx-visit-t{font-weight:700;}
+.vx-visit-m{font-size:var(--fs-small);color:var(--ink-soft);text-align:right;}
+.vx-visit[open]{padding-bottom:4px;}
+.vx-visit[open]>.ms-row{margin:0 8px var(--row);box-shadow:none;background:var(--surface-2);}
+.add-row + .disclaimer{margin-top:var(--stack);}
+.vx-tick{display:flex;flex-direction:column;gap:2px;margin:4px 0 8px;}
+.vx-tick-row{display:flex;align-items:center;gap:12px;min-height:44px;font-weight:600;}
+.vx-tick-row input{width:22px;height:22px;accent-color:var(--diaper);}
 .vx-status{font-size:var(--fs-micro);font-weight:800;padding:5px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0;}
 /* Ink on a soft wash comes from the --*-ink rung, never from the accent itself: the accent is a
    FILL. These four were the accent, at 10px/800 on its own tint, and "Due soon" measured 1.99:1 in
@@ -16732,49 +16751,118 @@ function vaccineOverdue(){
   const v=od[0]; v._due=vxDueDate(v); return v;
 }
 
+/* VACCINES AS VISITS (27 Nov 2026 UX review, canvas board 1A).
+   A parent asks "what's next and when", not "how many are left". The tab used to open on a ring reading
+   "0 of 25 done" over 25 dose rows, five screens deep, all labelled Upcoming, two years out. Now it opens
+   on the next VISIT: the doses given together at one appointment, when, the calendar, and one tap to
+   record the whole visit. Later and recorded visits fold away; every dose is still one tap inside them.
+   The schedule data, the country choice, the disclaimer's wording and every per-dose sheet are unchanged. */
+function vxVisitGroups(plan){
+  const groups={}; plan.forEach(v=>{ (groups[v.group]=groups[v.group]||[]).push(v); });
+  const order=[...VX_GROUPS.filter(g=>groups[g]), ...Object.keys(groups).filter(g=>!VX_GROUPS.includes(g))];
+  return order.map(g=>({ group:g, doses:groups[g], pending:groups[g].filter(v=>!v.given),
+    due:Math.min(...groups[g].map(v=>vxDueDate(v))), months:Math.min(...groups[g].map(v=>v.dueMonths)) }));
+}
+function vxVisitTitle(g){
+  if(/birth/i.test(g)) return 'Birth dose';
+  const m=String(g).match(/^(\d+)\s*(month|week|year)s?$/i);
+  return m ? `${m[1]}-${m[2].toLowerCase()} check` : `${g} check`;
+}
+function vxShortDate(t){ return new Date(t).toLocaleDateString(undefined,{day:'numeric',month:'short'}); }
+// "Due soon" on a date that has already passed read as a mistake; inside the same window a past date is "Due now".
+function vxLabel(v,st){ return (st==='soon' && vxDueDate(v)<now()) ? 'Due now' : VX_LABEL[st]; }
+function vxDoseRow(v,bb){
+  const st=vxStatus(v);
+  const dueStr=(bb&&bb.birth)?new Date(vxDueDate(v)).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):(v.dueMonths===0?'at birth':'at ~'+v.dueMonths+' mo');
+  const estTag=(v.given&&v.estimated)?' <span class="vx-est">est.</span>':'';
+  const sub=v.given?('given '+new Date(v.givenAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})+estTag):('due '+dueStr);
+  return `<div class="ms-row ${v.given?'done':''}" onclick="openVaccine('${hArg(v.id)}')">
+        <div class="ms-check" style="${v.given?'background:var(--diaper);border-color:var(--diaper)':''}">${I.check}</div>
+        <div class="ms-body"><div class="a">${escapeHtml(v.name)}</div><div class="b">${sub}</div></div>
+        <div class="vx-status ${st}">${vxLabel(v,st)}</div></div>`;
+}
+function vxWhen(due){
+  const d=due-now(), day=86400000;
+  if(d>14*day) return d>=21*day ? `in about ${Math.round(d/(7*day))} weeks` : `in ${Math.round(d/day)} days`;
+  if(d>=-14*day) return 'due around now';
+  return 'not recorded yet';
+}
+function vxNextVisitCard(bb,visits){
+  const next=visits.find(x=>x.pending.length);
+  if(!next){
+    const n=visits.reduce((a,x)=>a+x.doses.length,0);
+    return `<div class="card vx-next"><div class="vx-next-eb">Vaccines</div>
+      <div class="vx-next-t">Everything on the plan is recorded</div>
+      <div class="vx-next-s">${n} vaccine${n===1?'':'s'} recorded. Anything extra your doctor gives can be added below.</div></div>`;
+  }
+  const hasBirth=!!(bb&&bb.birth);
+  const title=vxVisitTitle(next.group)+(hasBirth&&next.months>0?`, around ${vxShortDate(next.due)}`:'');
+  const n=next.pending.length;
+  const names=next.pending.map(v=>escapeHtml(String(v.name).replace(/\s*\([^)]*\)\s*$/,'')));
+  const ready=!hasBirth || next.due-now()<=14*86400000;
+  const sub=next.months===0
+    ? 'Usually given in hospital before you come home.'
+    : `${n} vaccine${n===1?'':'s'}, usually given at one appointment.`;
+  return `<div class="card vx-next" data-group="${escapeHtml(next.group)}">
+      <div class="vx-next-row"><div class="vx-next-eb">Next visit</div>${hasBirth?`<div class="vx-next-when">${vxWhen(next.due)}</div>`:''}</div>
+      <div class="vx-next-t">${escapeHtml(title)}</div>
+      <div class="vx-next-s">${sub}</div>
+      <div class="vx-chips">${names.map(x=>`<span class="vx-chip">${x}</span>`).join('')}</div>
+      ${ready?`<button class="btn-primary btn-calm" onclick="openVisitDone('${hArg(next.group)}')">${I.check} ${next.months===0?'Yes, it was given':'Mark the visit done'}</button>`:''}
+    </div>`;
+}
+function vxVisitFold(x,bb,kind){
+  const hasBirth=!!(bb&&bb.birth);
+  const n=x.doses.length;
+  const meta = kind==='done'
+    ? `${n} vaccine${n===1?'':'s'} recorded`
+    : `${hasBirth?'around '+vxShortDate(x.due)+' · ':''}${x.pending.length} vaccine${x.pending.length===1?'':'s'}`;
+  return `<details class="vx-visit ${kind}"><summary><span class="vx-visit-t">${escapeHtml(vxVisitTitle(x.group))}</span><span class="vx-visit-m">${meta}</span></summary>
+      ${x.doses.map(v=>vxDoseRow(v,bb)).join('')}</details>`;
+}
 function renderVaccines(){
   const plan=vaccinePlan();
   const bb=activeBaby();
-  const done=plan.filter(v=>v.given).length;
   const toConfirm=plan.filter(v=>vxStatus(v)==='toconfirm').length;
-  const catchup=plan.filter(v=>vxStatus(v)==='catchup').length;
-  const R=30,C=2*Math.PI*R,off=C-(done/(plan.length||1))*C;
-  const groups={}; plan.forEach(v=>{ (groups[v.group]=groups[v.group]||[]).push(v); });
-  const order=[...VX_GROUPS.filter(g=>groups[g]), ...Object.keys(groups).filter(g=>!VX_GROUPS.includes(g))];
-  let list='';
-  order.forEach(g=>{
-    list+=`<div class="sec-title">${g}</div>`;
-    groups[g].forEach(v=>{
-      const st=vxStatus(v);
-      const dueStr=(bb&&bb.birth)?new Date(vxDueDate(v)).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):(v.dueMonths===0?'at birth':'at ~'+v.dueMonths+' mo');
-      const estTag=(v.given&&v.estimated)?' <span class="vx-est">est.</span>':'';
-      const sub=v.given?('given '+new Date(v.givenAt).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})+estTag):('due '+dueStr);
-      list+=`<div class="ms-row ${v.given?'done':''}" onclick="openVaccine('${hArg(v.id)}')">
-        <div class="ms-check" style="${v.given?'background:var(--diaper);border-color:var(--diaper)':''}">${I.check}</div>
-        <div class="ms-body"><div class="a">${escapeHtml(v.name)}</div><div class="b">${sub}</div></div>
-        <div class="vx-status ${st}">${VX_LABEL[st]}</div></div>`;
-    });
-  });
-  // Calm, age-aware hero: never lead with red. "On track" is the resting state.
-  const heroSub = catchup ? (catchup+' to catch up · talk to your doctor') : (toConfirm ? 'tap a dose to confirm it was given' : 'tap any vaccine to update it');
-  const heroTitle = (toConfirm && !catchup) ? `${escapeHtml((bb||{}).name||'Baby')} is on track 🌿` : `${done} of ${plan.length} done`;
+  const visits=vxVisitGroups(plan);
+  const nextIdx=visits.findIndex(x=>x.pending.length);
+  const later=nextIdx<0?[]:visits.slice(nextIdx+1);
+  const done=visits.filter((x,i)=>!x.pending.length && (nextIdx<0||i<nextIdx));
+  const next=nextIdx<0?null:visits[nextIdx];
   return `
-    <div class="ms-hero">
-      <div class="ring"><svg width="74" height="74"><circle cx="37" cy="37" r="${R}" fill="none" stroke="var(--line)" stroke-width="7"/>
-        <circle cx="37" cy="37" r="${R}" fill="none" stroke="var(--diaper)" stroke-width="7" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${off}"/></svg>
-        <div class="rt">${done}</div></div>
-      <div class="mh-body"><div class="a">${heroTitle}</div><div class="b">${done} of ${plan.length} recorded · ${heroSub}</div></div>
-    </div>
-    ${/* The calendar row used to be the LAST thing on this sub-tab, below the ring, the catch-up
-         card, the disclaimer, twenty-odd vaccine rows and two add-rows. The one action here that
-         survives closing the app was the one action nobody scrolled to. It sits with the ring now,
-         because the ring is the answer to "where are we" and this is the answer to "and when". */''}
+    ${vxNextVisitCard(bb,visits)}
     ${vaxCalendarRow(bb,plan)}
     ${vaxSetupCard(bb,plan,toConfirm)}
-    <div class="disclaimer">⚕️ Showing the ${vaxCountryName((bb&&bb.country)||detectCountry())} schedule as a starting template. <span class="link-inline" onclick="openVaccineCountry()">Change country</span>. Always follow your doctor and local health authority, and edit any item to match your child's actual plan.</div>
-    ${list}
+    ${next?`<details class="vx-visit next"><summary><span class="vx-visit-t">Each vaccine in this visit</span><span class="vx-visit-m">${next.doses.length}</span></summary>${next.doses.map(v=>vxDoseRow(v,bb)).join('')}</details>`:''}
+    ${later.length?`<div class="sec-title">Later visits</div>${later.map(x=>vxVisitFold(x,bb,'later')).join('')}`:''}
+    ${done.length?`<div class="sec-title">Recorded</div>${done.map(x=>vxVisitFold(x,bb,'done')).join('')}`:''}
     <div class="add-row" onclick="openAddVaccine()">${I.plus} Add a vaccine</div>
-    ${window.CubbyVaxCard?`<div class="add-row" onclick="CubbyVaxCard.open()">📷 Fill these in from their card</div>`:''}`;
+    ${window.CubbyVaxCard?`<div class="add-row" onclick="CubbyVaxCard.open()">📷 Fill these in from their card</div>`:''}
+    <div class="disclaimer">⚕️ Showing the ${vaxCountryName((bb&&bb.country)||detectCountry())} schedule as a starting template. <span class="link-inline" onclick="openVaccineCountry()">Change country</span>. Always follow your doctor and local health authority, and edit any item to match your child's actual plan.</div>`;
+}
+/* Record a whole visit in one go: the doses given together, each still its own record and its own timeline
+   entry (the same write markVaccine makes), each still editable alone afterwards. */
+function openVisitDone(group){
+  const visits=vxVisitGroups(vaccinePlan()); const x=visits.find(v=>v.group===group); if(!x) return;
+  const bb=activeBaby();
+  const def=(x.months===0&&bb&&bb.birth)?new Date(bb.birth).toISOString().slice(0,10):new Date().toISOString().slice(0,10);
+  openSheet(`<h2>${escapeHtml(vxVisitTitle(group))}</h2><div class="sub">Untick any that were not given. You can change each one later.</div>
+    <div class="field"><label>Date given</label>${datePicker('vxvDate', def, {max:now()})}</div>
+    <div class="vx-tick">${x.pending.map(v=>`<label class="vx-tick-row"><input type="checkbox" class="vxv" value="${escapeHtml(v.id)}" checked> <span>${escapeHtml(v.name)}</span></label>`).join('')}</div>
+    <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent))" onclick="markVisit('${hArg(group)}')">${I.check} Mark as given</button>`,'diaper');
+}
+function markVisit(group){
+  const plan=vaccinePlan();
+  const dt=$('#vxvDate')?$('#vxvDate').value:'';
+  const at=dt?new Date(dt+'T12:00').getTime():now();
+  const ids=[...document.querySelectorAll('#sheet .vxv:checked')].map(e=>e.value);
+  let n=0;
+  plan.forEach(v=>{ if(v.group===group && !v.given && ids.includes(v.id)){
+    v.given=true; v.givenAt=at; v.estimated=false; v.missed=false; n++;
+    addEvent({type:'vaccine',vName:v.name,notes:v.note||'',time:at});
+  }});
+  persist(); closeSheet(); render();
+  if(n) toast(`${vxVisitTitle(group)}: ${n} vaccine${n===1?'':'s'} recorded`);
 }
 /* Six marketing surfaces promise vaccine reminders. syncReminderIndex has only ever iterated
    state.meds and says so in its own comment ("ONLY medicine is critical enough to push"), so no

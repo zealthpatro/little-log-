@@ -239,6 +239,9 @@ const TREE = [
   /* Calm Health (27 Nov UX review, board 3A): no danger-red Health button, never "overdue", a measurement-only
      day is not a zero day, nothing clips at 320px. Seen red on main 747bfdfe. */
   { name: 'calm-health',    cmd: ['node', 'test/calm-health.test.js', 'url'] },
+  /* Vaccines as visits (board 1A): the next visit leads, no 0-of-25 score, a whole visit in one tap, a past
+     date never reads "Due soon". Seen red on main 747bfdfe. */
+  { name: 'vax-visits',     cmd: ['node', 'test/vax-visits.test.js', 'url'] },
   /* The November 2026 security fixes. Each was watched failing on the live code (1a6df125) first.
      page-stats: a stranger looping 404s must make zero Firestore writes and stay under the D1 cap. */
   { name: 'page-stats',     cmd: ['node', 'test/page-stats.test.js'] },
