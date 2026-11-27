@@ -208,8 +208,9 @@ const marksOnScreen = (page, mk) => page.evaluate((k) => ({
     return page;
   };
   /* Booted AS this account: signed in as her, the door gone, and the family on screen is the one her own
-     users/{uid} doc names on the server. window.LL.householdId alone is not enough: sign-out leaves the
-     last account's id there, so a phone still on its way in reads as booted into the previous family. */
+     users/{uid} doc names on the server. window.LL.householdId alone was not enough: sign-out used to leave the
+     last account's id there, so a phone still on its way in read as booted into the previous family. Teardown
+     clears it now (test/stale-family-memory-emulator.test.js); the server check stays, as the stronger proof. */
   const booted = async (page, uid, ms) => {
     const stop = Date.now() + (ms || 45000);
     while (Date.now() < stop) {
