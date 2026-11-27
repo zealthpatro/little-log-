@@ -507,7 +507,9 @@ const history = (author, n, endedDaysAgo) => {
     await asMember('uidMama', 'owner', { uidMama: 'owner', uidDad: 'caregiver' }, INFO);
     const h = await homeState();
     ok('still no card', h.cardOnHome === false, h);
-    ok('and the tips ticker is back on, which the card would have muted', h.tips === true, h);
+    /* Since 27 Nov 2026 Home shows one card at a time, and an unseen first-open coach mark ranks above the
+       ticker. Either way the teaching layer is speaking again, which is what the card used to switch off. */
+    ok('and the teaching layer is back on (the tips ticker, or the first-open coach mark ahead of it)', h.tips === true || h.coach === true, h);
 
     // Control: the same fixture with the household log emptied really does raise the card, so the
     // two assertions above are reading the retire gate and not a dismissal or a loss holding.

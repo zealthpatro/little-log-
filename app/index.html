@@ -1015,7 +1015,9 @@ input,textarea,select,[contenteditable]{caret-color:var(--ink);}
 .btn-ghost{width:100%;border:none;background:none;padding:14px;font-family:var(--font-body);font-weight:800;font-size:var(--fs-base);color:var(--ink-soft);cursor:pointer;margin-top:6px;display:flex;align-items:center;justify-content:center;gap:8px;}
 .btn-primary svg,.btn-ghost svg,.dose-btn svg{width:18px;height:18px;flex-shrink:0;}
 .btn-danger{color:var(--danger-ink);}
-.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.row2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
+/* At 320px two 1fr columns grew to their labels and pushed "Symptom" off the screen. */
+.row2>.btn-primary,.row2>.btn-ghost{min-width:0;padding-left:8px;padding-right:8px;}
 
 /* settings */
 .set-item{display:flex;align-items:center;gap:14px;background:var(--surface);border-radius:var(--r-card);padding:var(--pad-card);margin-bottom:10px;box-shadow:var(--elev-card);}
@@ -1477,10 +1479,10 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .vx-chips{display:flex;flex-wrap:wrap;gap:6px;}
 .vx-chip{font-size:var(--fs-small);font-weight:600;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:4px 10px;}
 .vx-visit{background:var(--surface);border-radius:var(--r-card);margin-bottom:var(--stack);box-shadow:var(--elev-card);}
-.vx-visit>summary{list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 16px;min-height:44px;box-sizing:border-box;cursor:pointer;}
+.vx-visit>summary{list-style:none;display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:12px 16px;min-height:44px;box-sizing:border-box;cursor:pointer;}
 .vx-visit>summary::-webkit-details-marker{display:none;}
 .vx-visit-t{font-weight:700;}
-.vx-visit-m{font-size:var(--fs-small);color:var(--ink-soft);text-align:right;}
+.vx-visit-m{font-size:var(--fs-small);color:var(--ink-soft);}
 .vx-visit[open]{padding-bottom:4px;}
 .vx-visit[open]>.ms-row{margin:0 8px var(--row);box-shadow:none;background:var(--surface-2);}
 .add-row + .disclaimer{margin-top:var(--stack);}
@@ -15437,8 +15439,8 @@ function renderHealthHub(b){
   const visit=`<div class="prof-card hub-visit" onclick="openVisitSummary()"><span class="lead" style="background:var(--sleep-soft);color:var(--sleep)">${I.stetho}</span>
       <div class="cflex"><div class="a">Going to the doctor?${dot}</div><div class="b">The last week on one page, ready to read out</div></div><span class="chev">${I.chev}</span></div>`;
   return `<div class="fade-in">${coachMark('health','This is Health','What needs you right now, then every record: medicines, vaccines, growth and illnesses.')}
-    ${now_.length?`<div class="sec-title">Right now</div>${now_.join('')}`:''}
-    ${visit}
+    ${/* With an illness running, the doctor summary sits straight under it: that is when it is wanted. */''}
+    ${now_.length?`<div class="sec-title">Right now</div>${activeIllness()?now_[0]+visit+now_.slice(1).join(''):now_.join('')+visit}`:visit}
     <div class="sec-title">${escapeHtml(b.name||'Baby')}'s records</div>
     <div class="hub-list">
       ${healthRecordRow(I.pill,'var(--med-soft)','var(--med-ink)','Medicines',meds.length?meds.length+' regular · reminders '+(meds.some(m=>m.remind)?'on':'off'):'None added yet','meds')}
@@ -15456,7 +15458,7 @@ function renderHealth(){
   if(!healthTab || !HEALTH_VIEWS[healthTab]) return renderHealthHub(b);
   const body = healthTab==='vaccines'?renderVaccines() : healthTab==='illness'?renderIllness() : healthTab==='growth'?renderGrowthSection() : renderHomeMeds();
   return `<div class="fade-in"><button class="hub-back" onclick="setHealthTab(null)">‹ Health</button>
-    ${healthTab==='growth'?'':`<h2 class="hub-h">${HEALTH_VIEWS[healthTab]}</h2>`}${body}</div>`;
+    ${(healthTab==='growth'||healthTab==='meds')?'':`<h2 class="hub-h">${HEALTH_VIEWS[healthTab]}</h2>`}${body}</div>`;
 }
 
 /* ---- illness episodes, temperature & symptoms ---- */

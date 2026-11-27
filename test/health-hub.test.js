@@ -72,7 +72,7 @@ function seed(now, sick) {
     const kids = [...sc.querySelector('.fade-in').children];
     const iNow = kids.findIndex((e) => /right now/i.test(e.textContent) && e.matches('.sec-title'));
     const iRec = kids.findIndex((e) => /records/i.test(e.textContent) && e.matches('.sec-title'));
-    const nowItems = iNow < 0 ? [] : kids.slice(iNow + 1, kids.findIndex((e, i) => i > iNow && /Going to the doctor/.test(e.textContent))).map((e) => e.innerText.replace(/\s+/g, ' ').trim());
+    const nowItems = iNow < 0 ? [] : kids.slice(iNow + 1, iRec < 0 ? undefined : iRec).filter((e) => !/Going to the doctor/.test(e.textContent)).map((e) => e.innerText.replace(/\s+/g, ' ').trim());
     const doc = [...sc.querySelectorAll('.hub-row')].find((e) => /Going to the doctor/.test(e.textContent));
     const nav = document.querySelector('.nav');
     return {
