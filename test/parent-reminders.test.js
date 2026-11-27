@@ -234,6 +234,18 @@ const seed = (now, push) => ({
   ok('unchanged feeds wait for the throttle', iq.idle === iq.first, iq);
   ok('a new feed (from anyone) syncs straight away', iq.after === iq.idle + 1, iq);
 
+  console.log('\nL. every reminder row in the sheet is drawn whole');
+  const lq = await p.evaluate(async () => {
+    const c = pushCfg(); c.allow.feed = true; c.allow.pump = true; c.allow.visit = true;
+    const b = activeBaby(); state.vaccines = { b1: scheduleFor(b).map((x) => ({ name: x[0], group: x[1], dueMonths: x[2], given: false })) };
+    if (!state.events.some((e) => e.type === 'pump')) state.events.push({ id: 'p9', type: 'pump', babyId: 'b1', time: Date.now() - 3600000, authorId: 'local' });
+    openReminders(); await new Promise((r) => setTimeout(r, 300));
+    const rows = Array.from(document.querySelectorAll('#sheet .set-item')).filter((r) => /^(Medicine doses|Feeds|Pumping|Vaccine visits)$/.test(((r.querySelector('.si-body .a') || {}).textContent || '').trim()));
+    return rows.map((r) => ({ t: r.querySelector('.si-body .a').textContent.trim(), icon: !!r.querySelector('.si-ico svg'), seg: r.querySelectorAll('.seg button').length }));
+  });
+  ok('all four choices are shown when each applies', lq.length === 4, lq);
+  ok('each has its icon and its On/Off', lq.every((r) => r.icon && r.seg === 2), lq);
+
   ok('no page errors', errs.length === 0, errs);
   console.log(`\n${pass} passed, ${fail} failed`);
   await b.close();

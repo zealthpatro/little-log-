@@ -1452,10 +1452,9 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .rm-panel{display:flex;flex-direction:column;gap:10px;min-width:0;background:var(--surface);border-radius:var(--r-card);padding:var(--pad-card);margin:-4px 0 10px;box-shadow:var(--elev-card);}
 .rm-mode{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);}
 .rm-mode button{white-space:normal;line-height:1.25;min-height:var(--tap-min);}
-.rm-chips{display:flex;flex-wrap:wrap;gap:6px;}
 .rm-chip,.rm-step button,.rm-add button,.rm-add input{min-height:var(--tap-min);border:1px solid var(--line);background:var(--surface-2);font:inherit;font-weight:700;color:var(--ink);}
 .rm-chip{padding:0 14px;border-radius:var(--r-pill);}
-.rm-chip.on{background:var(--feed-soft);border-color:var(--feed);}
+.rm-chip.sel{background:var(--feed-soft);border-color:var(--feed);}
 .rm-step{display:flex;align-items:center;justify-content:space-between;gap:12px;}
 .rm-step button{min-width:var(--tap-min);border-radius:var(--r-ctl);font-size:var(--fs-head);}
 .rm-step .v{font-weight:800;font-size:var(--fs-lead);}
@@ -1494,7 +1493,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .vx-next-eb{font-size:var(--fs-small);font-weight:700;color:var(--diaper-ink);}
 .vx-next-when{font-size:var(--fs-small);color:var(--ink-soft);}
 .vx-next-s{font-size:var(--fs-body);color:var(--ink-soft);}
-.vx-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.vx-chips,.rm-chips{display:flex;flex-wrap:wrap;gap:6px;}
 .vx-chip{font-size:var(--fs-small);font-weight:600;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-pill);padding:4px 10px;}
 .vx-visit{background:var(--surface);border-radius:var(--r-card);margin-bottom:var(--stack);box-shadow:var(--elev-card);}
 .vx-visit>summary{list-style:none;display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:12px 16px;min-height:var(--tap-min);box-sizing:border-box;cursor:pointer;}
@@ -8386,7 +8385,7 @@ function setQuietAllow(cat,on){ if(cat!=='critical'&&REMIND_CATS.indexOf(cat)<0)
 /* ---------- Parent-chosen reminders: the choice list (board 8A) ---------- */
 const REMIND_LABEL={critical:'Medicine doses', feed:'Feeds', pump:'Pumping', visit:'Vaccine visits'};
 const REMIND_TINT={critical:'med', feed:'feed', pump:'pump', visit:'diaper'};
-const REMIND_ICON={critical:'pill', feed:'bottle', pump:'pump', visit:'vaccine'};
+const REMIND_ICON={critical:'pill', feed:'bottle', pump:'pump', visit:'syringe'};
 var _remindCustom={};   // which gap pickers she opened this time; a gap off the chips opens its own
 function remindSave(){ pushCfg().remindChosen.remind=true; persist(); pushSyncPrefs(); try{ syncReminderIndex(); }catch(e){} openReminders(); }
 function setRemind(cat,on){ if(cat!=='critical'&&REMIND_CATS.indexOf(cat)<0) return; if(cat!=='critical') pushCfg().remindChosen[cat]=true; setPushAllow(cat,on); try{ if(window.cubbyTrack) window.cubbyTrack('reminders.choice',{kind:({critical:'medicine',feed:'feed',pump:'pump',visit:'vaccine_visit'})[cat],state:on?'on':'off'}); }catch(_ut){} }
@@ -8403,13 +8402,13 @@ function addFeedTime(){
 }
 function removeFeedTime(t){ const c=pushCfg(); c.remind.feedTimes=c.remind.feedTimes.filter(function(x){ return x!==t; }); remindSave(); }
 function hhmmLabel(t){ const d=new Date(); d.setHours(+t.slice(0,2),+t.slice(3,5),0,0); return fmtClock(d.getTime()); }
-function remindSeg(cat,on){ return [{label:'On', on:on, act:'setRemind', args:[cat,true]}, {label:'Off', on:!on, act:'setRemind', args:[cat,false]}]; }
 // One row per reminder, drawn by setItem like every other Settings row; a reminder's own controls sit in a panel just under it.
-function remindRow(cat,on,sub){ return setItem({tint:REMIND_TINT[cat], icon:REMIND_ICON[cat], title:REMIND_LABEL[cat], sub:sub, seg:remindSeg(cat,on)}); }
+function remindRow(cat,on,sub){ return setItem({tint:REMIND_TINT[cat], icon:REMIND_ICON[cat], title:REMIND_LABEL[cat], sub:sub,
+  seg:[{label:'On', on:on, act:'setRemind', args:[cat,true]}, {label:'Off', on:!on, act:'setRemind', args:[cat,false]}]}); }
 function remindGapPicker(cat,gap){
   const custom=_remindCustom[cat]||FEED_GAPS.indexOf(gap)<0;
-  const chips=FEED_GAPS.map(function(m){ return `<button class="rm-chip ${!custom&&gap===m?'on':''}"${uiAct('setRemindGap',[cat,m])}>${uiTxt(gapWords(m).replace(' hours','h').replace(' hour','h'))}</button>`; }).join('')
-    +`<button class="rm-chip ${custom?'on':''}"${uiAct('openRemindCustom',[cat])}>${custom?uiTxt('Custom · '+gapWords(gap)):'Custom'}</button>`;
+  const chips=FEED_GAPS.map(function(m){ return `<button class="rm-chip ${!custom&&gap===m?'sel':''}"${uiAct('setRemindGap',[cat,m])}>${uiTxt(gapWords(m).replace(' hours','h').replace(' hour','h'))}</button>`; }).join('')
+    +`<button class="rm-chip ${custom?'sel':''}"${uiAct('openRemindCustom',[cat])}>${custom?uiTxt('Custom · '+gapWords(gap)):'Custom'}</button>`;
   return `<div class="rm-chips" role="group" aria-label="${cat==='feed'?'Hours after the last feed':'Hours after you last pumped'}">${chips}</div>
     ${custom?`<div class="rm-step"><button aria-label="15 minutes less"${uiAct('stepRemindGap',[cat,-1])}${gap<=60?' disabled':''}>−</button><div class="v">${uiTxt(gapWords(gap))}</div><button aria-label="15 minutes more"${uiAct('stepRemindGap',[cat,1])}${gap>=360?' disabled':''}>+</button></div>
     <div class="csub" style="text-align:center">Anywhere from 1 to 6 hours, in 15 minute steps.</div>`:''}`;
