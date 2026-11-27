@@ -1,0 +1,4 @@
+{
+  "_about": "Urgent safety fixes that go live before sign-off. Entry shape: {\"slug\": \"head-injury-babies\", \"sha256\": \"<hash of the fixed page>\", \"source\": \"https://<official source the fix follows>\", \"date\": \"YYYY-MM-DD\", \"signoff_due\": \"YYYY-MM-DD, at most 14 days after date\"}. Past due, the gate warns, and fails under --strict. Once the page is signed off at that hash, move it to approved.json and remove the entry here.",
+  "pages": []
+}

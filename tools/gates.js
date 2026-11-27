@@ -56,6 +56,10 @@ const TREE = [
   /* The daily merge train (docs/RELEASE-TRAIN.md): green PRs only, CACHE-only sw.js conflicts settled,
      real conflicts skipped and aborted, CACHE ends above production. Real git in a temp repo. */
   { name: 'train',          cmd: ['node', 'tools/train.js', '--self-test'] },
+  /* Clinical lock: a health page's words change only with 2+ clinician sign-offs at the new hash
+     (docs/clinical-review/approved.json; reviewer details stay private in $CUBBY_SIGNOFFS) or a 14-day
+     safety fix (docs/clinical-review/safety-fixes.json); other pages hold at tools/clinical-lock-baseline.json. */
+  { name: 'clinical-lock',  cmd: ['node', 'tools/clinical_lock_check.js', '--self-test'] },
   { name: 'deploy-excl',    cmd: ['node', 'tools/deploy_exclusion_check.js', '--self-test'] },
   /* The guard that keeps gates out of ~/Downloads, and the helper that sends their files elsewhere. */
   { name: 'downloads-guard', cmd: ['node', 'tools/gates.js', '--self-test-downloads'] },

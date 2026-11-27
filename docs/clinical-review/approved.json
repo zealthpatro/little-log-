@@ -1,0 +1,4 @@
+{
+  "_about": "Public record of clinical sign-offs: per page only the approved hash (node tools/clinical_lock_check.js --hash=<slug>), the number of sign-offs and the date. Reviewer names, credentials and registrations stay private, in $CUBBY_SIGNOFFS (default ~/cubby-reports/clinical-signoffs/signoffs.json). Entry shape: {\"slug\": \"head-injury-babies\", \"sha256\": \"<hash>\", \"signoffs\": 2, \"date\": \"YYYY-MM-DD\"}.",
+  "pages": []
+}
