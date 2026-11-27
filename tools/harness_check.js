@@ -52,6 +52,11 @@ function runHook(script, stdinJson, extraEnv) {
 const bashCall = (command, cwd) => JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command }, cwd });
 const readCall = (input) => JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: input });
 
+/* Executing these must be denied by guard-bash. Module scope, so the self-test can require every one red. */
+const DENY_CASES = ['git push origin main --no-verify', 'git worktree remove ../x', 'git branch -D claude/foo',
+  'git stash pop', 'git reset --hard origin/main', 'rm -rf .claude/worktrees/abc', 'rm -rf /', 'rm -rf app',
+  'rm -rf ./tools/node_modules', 'cd /tmp && git stash drop', 'M=/x; cd $M && git clean -fd'];
+
 /* Fixtures for the big-read hook: a file over the 400-line default, one under it, and a big one Read pages
    itself. In a temp dir, never in the repo, so the verdict does not move when a repo file grows. */
 const os = require('os');
@@ -61,6 +66,8 @@ fs.writeFileSync(BIG, Array.from({ length: 1000 }, (_, i) => 'line ' + i).join('
 fs.writeFileSync(SMALL, Array.from({ length: 10 }, (_, i) => 'line ' + i).join('\n') + '\n');
 fs.writeFileSync(BIGPDF, fs.readFileSync(BIG));
 const BIG_Q = JSON.stringify(BIG); // the name has a space, so the shell form is quoted
+const EMPTY = path.join(FIX, 'empty'); fs.mkdirSync(EMPTY); // a cwd where "big file.txt" does not exist
+let bigReadBlockLines = 0; // how many lines must go red when the threshold is removed
 
 /* Is the big-read hook wired on BOTH tools, and does it block a whole read of a big file and nothing else?
    Every line here is named "big-read ..." so the self-test can require these lines, not just any, go red. */
@@ -81,7 +88,9 @@ function checkBigRead(root, hooks) {
     ['big-read BLOCKS an unpiped cat of it', bashCall('cat ' + BIG_Q), 1000],
     ['big-read BLOCKS cat -n of it after a cd', bashCall('cd /tmp && cat -n ' + BIG_Q), 1000],
     ['big-read BLOCKS a relative cat, resolved against the call\'s cwd', bashCall('cat "big file.txt"', FIX), 1000],
+    ['big-read BLOCKS a relative cat after a cd INTO its directory (not the call\'s cwd)', bashCall('cd ' + JSON.stringify(FIX) + ' && cat "big file.txt"', EMPTY), 1000],
   ];
+  bigReadBlockLines = B.length + 1;
   for (const [n, j, lines] of B) { const r = runHook(br, j); ok(n, blocks(r, lines), show(r)); }
   const r5 = runHook(br, readCall({ file_path: SMALL }), { CUBBY_BIG_READ_LINES: '5' });
   ok('big-read honours CUBBY_BIG_READ_LINES (5: the 10-line file is blocked)', blocks(r5, 10), show(r5));
@@ -93,6 +102,9 @@ function checkBigRead(root, hooks) {
     ['big-read passes a PDF (Read pages it)', readCall({ file_path: BIGPDF })],
     ['big-read passes a piped cat', bashCall('cat ' + BIG_Q + ' | head -50')],
     ['big-read passes cat into a file', bashCall('cat ' + BIG_Q + ' > /tmp/harness-bigread-copy.txt')],
+    ['big-read passes cat into a file with &>', bashCall('cat ' + BIG_Q + ' &>/tmp/harness-bigread-copy.txt')],
+    ['big-read passes a relative cat after a cd AWAY from it (the call\'s cwd has it)', bashCall('cd ' + JSON.stringify(EMPTY) + ' && cat "big file.txt"', FIX)],
+    ['big-read passes a relative cat after a cd it cannot resolve', bashCall('cd $SOMEWHERE && cat "big file.txt"', FIX)],
     ['big-read passes cat of a 10-line file', bashCall('cat ' + SMALL)],
     ['big-read passes a MENTION of cat in a string', bashCall('echo "cat ' + BIG + '"')],
     ['big-read passes grep -n on it', bashCall('grep -n "line 5" ' + BIG_Q)],
@@ -134,10 +146,7 @@ function check(root, label) {
   const guard = path.join(root, '.claude', 'hooks', 'guard-bash.sh');
   if (fs.existsSync(guard)) {
     /* Executing these must be denied. */
-    const denyCases = ['git push origin main --no-verify', 'git worktree remove ../x', 'git branch -D claude/foo',
-      'git stash pop', 'git reset --hard origin/main', 'rm -rf .claude/worktrees/abc', 'rm -rf /', 'rm -rf app',
-      'rm -rf ./tools/node_modules', 'cd /tmp && git stash drop', 'M=/x; cd $M && git clean -fd'];
-    for (const c of denyCases) {
+    for (const c of DENY_CASES) {
       const r = runHook(guard, bashCall(c));
       ok('guard DENIES: ' + c, r.code === 2 && /"permissionDecision":"deny"/.test(r.out), 'exit ' + r.code + ' ' + r.out.slice(0, 80));
     }
@@ -194,14 +203,19 @@ if (SELF_TEST) {
   fs.writeFileSync(path.join(tmp, '.claude', 'hooks', 'guard-bash.sh'), '#!/bin/sh\nexit 0\n'); // a guard that never denies
   fs.chmodSync(path.join(tmp, '.claude', 'hooks', 'guard-bash.sh'), 0o755);
   fs.writeFileSync(path.join(tmp, '.claude', 'rules', 'r.md'), '# r\nSee tools/does_not_exist.js\n');
-  const before = fail;
+  const before = fail, n0 = failedNames.length;
   const quiet = console.log; console.log = () => {};
   check(tmp, 'self-test scratch');
   console.log = quiet;
-  const staged = fail - before;
-  fail = before; // the scratch failures are the point, not a verdict on this checkout
+  /* The scratch tree has no big-read hook, so check() adds big-read lines of its own. They are left out
+     of this count: three of them once padded it to 8 while every guard line had stopped going red. */
+  const redNames = failedNames.slice(n0).filter((n) => n.indexOf('big-read') !== 0);
+  const staged = redNames.length;
+  const guardRed = redNames.filter((n) => n.indexOf('guard DENIES: ') === 0).length;
+  fail = before; failedNames.length = n0; // the scratch failures are the point, not a verdict on this checkout
   console.log('\nself-test');
-  ok('a missing hook script, a bogus event, a guard that never denies, and a stale path all go RED (' + staged + ' lines)', staged >= 8, staged);
+  ok('a missing hook script, a bogus event, a guard that never denies, and a stale path all go RED (' + staged + ' lines, big-read lines not counted)', staged >= 8, staged);
+  ok('a guard that never denies goes RED on every guard DENIES line (' + guardRed + ' of ' + DENY_CASES.length + ')', guardRed === DENY_CASES.length, redNames.join(' | '));
   fs.rmSync(tmp, { recursive: true, force: true });
 
   /* The big-read hook, two ways it can die while looking installed: the settings stop naming it, and its
@@ -233,7 +247,7 @@ if (SELF_TEST) {
   ok('the threshold test the mutation removes is in big-read.sh (' + occurrences + ' places)', occurrences === 2, occurrences);
   const redNoThreshold = stage(realSettings, realBR.split(THRESH).join(''));
   const blockLines = redNoThreshold.filter((n) => /BLOCKS|honours/.test(n));
-  ok('big-read with its THRESHOLD REMOVED goes RED on every block line (' + blockLines.length + ' of 5)', blockLines.length === 5, redNoThreshold.join(' | '));
+  ok('big-read with its THRESHOLD REMOVED goes RED on every block line (' + blockLines.length + ' of ' + bigReadBlockLines + ')', bigReadBlockLines >= 6 && blockLines.length === bigReadBlockLines, redNoThreshold.join(' | '));
 }
 fs.rmSync(FIX, { recursive: true, force: true });
 

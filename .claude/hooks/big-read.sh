@@ -12,7 +12,12 @@
 # HOW IT MATCHES the Bash case, the same way .claude/hooks/guard-bash.sh does and for the same reason:
 # heredoc bodies are dropped, quoted strings cannot split a command, and each shell segment is judged by
 # what it BEGINS with, so `echo "cat app/index.html"` or a grep for the word cat is never blocked.
+# A relative path resolves against the call's cwd, moved by any cd earlier in the command (cd /x && cat f
+# reads /x/f); after a cd it cannot resolve ($VAR, -) a relative path passes rather than guess.
 # This hook only ever blocks reads; it never allows anything guard-bash denies (both run, either can deny).
+#
+# NOT COVERED, on purpose or not yet: it counts newlines, so a minified file with few lines passes (Read
+# truncates long lines itself); sed -n, head, tail, less, git show and bash -c "cat f" are not judged.
 #
 # Test it: tools/harness_check.js pipes synthetic Read and Bash calls through here and asserts block AND
 # pass, and its --self-test removes the threshold and unwires the hook and requires red.
@@ -24,7 +29,7 @@ let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
   let j; try{ j=JSON.parse(s); }catch(e){ process.exit(0); }
   const LIMIT=(()=>{ const n=parseInt(process.env.CUBBY_BIG_READ_LINES||"",10); return n>0?n:400; })();
   const base=String(j.cwd||process.env.BIGREAD_ROOT||process.cwd());
-  const resolve=(p)=>{ p=String(p); if(p==="~"||p.startsWith("~/")) p=path.join(os.homedir(),p.slice(1)); return path.resolve(base,p); };
+  const resolve=(p,b)=>{ p=String(p); if(p==="~"||p.startsWith("~/")) p=path.join(os.homedir(),p.slice(1)); return path.resolve(b===undefined?base:b,p); };
   // Read pages these itself (images, PDFs by pages, notebooks by cell), so a line count means nothing.
   const PAGED=/\.(png|jpe?g|gif|webp|bmp|ico|svgz|pdf|ipynb|heic|tiff?)$/i;
   const lines=(f)=>{ let st; try{ st=fs.statSync(f); }catch(e){ return 0; } if(!st.isFile()||PAGED.test(f)) return 0;
@@ -50,17 +55,30 @@ let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
   // 3. split into simple commands, remembering which separator FOLLOWS each one: a single | means the
   //    output goes to another program, not into the context
   const parts=cmd.split(/(\n|;|&&|\|\||\|&|\|)/);
+  const unq=(t)=>t.replace(/\u0000(\d+)\u0000/g,(m,k)=>q[+k]);
+  // 4. a cd moves where the NEXT segments resolve relative paths; a cd it cannot resolve ($VAR, -, a
+  //    substitution) leaves them unknown (null), and an unknown relative path passes rather than guess
+  let dir=base;
   for(let i=0;i<parts.length;i+=2){
     const next=parts[i+1]||"";
-    if(next==="|"||next==="|&") continue;
     const seg=parts[i].replace(/^[\s(]+/,"").replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*/,"").replace(/^(?:sudo|env|command|exec|nohup|time)\s+/,"").trim();
+    if(/^cd(\s|$)/.test(seg)){
+      const a=seg.split(/\s+/).slice(1).filter(t=>t&&!/^-[LPe@]+$/.test(t));
+      const t=a.length?unq(a[0]):"~";
+      dir=(/[$`\u0000]/.test(t)||t==="-"||(dir===null&&!t.startsWith("/")&&t!=="~"&&!t.startsWith("~/")))?null:resolve(t,dir===null?base:dir);
+      continue;
+    }
+    if(next==="|"||next==="|&") continue;
     if(!/^cat(\s|$)/.test(seg)) continue;
-    // output sent to a file is not read into the context
-    if(/(^|[^<0-9&])>/.test(seg.replace(/\d?>&\d/g,""))) continue;
-    const toks=seg.split(/\s+/).slice(1).map(t=>t.replace(/\u0000(\d+)\u0000/g,(m,k)=>q[+k]));
+    // output sent to a file is not read into the context: >f, >>f, 1>f, &>f, &>>f (but not 2>f, >&2, 2>&1)
+    const rs=seg.replace(/\d?>&(\d|-)/g,"");
+    if(/(^|[^<0-9&])>|(^|\s)1>|&>/.test(rs)) continue;
+    const toks=seg.split(/\s+/).slice(1).map(unq);
     for(const t of toks){
       if(!t||t==="-"||/^-/.test(t)||/^[<>|&]/.test(t)) continue;
-      const f=resolve(t), n=lines(f);
+      const abs=t.startsWith("/")||t==="~"||t.startsWith("~/");
+      if(!abs&&dir===null) continue;
+      const f=resolve(t,abs?base:dir), n=lines(f);
       if(n>LIMIT) block(n,f);
     }
   }
