@@ -49,6 +49,9 @@ const TREE = [
   { name: 'health-copy',    cmd: ['node', 'tools/health_copy_check.js', '--self-test'] },
   { name: 'claude-md',      cmd: ['node', 'tools/claudemd_check.js', '--self-test'] },
   { name: 'hooks',          cmd: ['node', 'tools/hooks_check.js', '--self-test'] },
+  /* Every route worker.js serves is in run_worker_first; an unlisted one is answered by the asset layer
+     (/api/* and AASA failed in production 24-27 Nov 2026). */
+  { name: 'worker-first',   cmd: ['node', 'tools/worker_first_check.js', '--self-test'] },
   { name: 'harness',        cmd: ['node', 'tools/harness_check.js', '--self-test'] },
   /* The daily merge train (docs/RELEASE-TRAIN.md): green PRs only, CACHE-only sw.js conflicts settled,
      real conflicts skipped and aborted, CACHE ends above production. Real git in a temp repo. */
