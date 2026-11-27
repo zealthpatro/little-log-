@@ -1443,6 +1443,11 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .ob-country{margin:-4px 0 12px;}
 .ob-invite-art{display:block;margin:10px auto 0;width:112px;height:112px;object-fit:contain;}
 .ob-setup{margin-top:10px;}
+.home-prompt{display:flex;gap:14px;align-items:flex-start;margin-bottom:var(--stack);}
+.home-prompt .hp-art{width:72px;height:72px;object-fit:contain;flex:none;}
+.home-prompt .hp-body{flex:1;min-width:0;display:flex;flex-direction:column;}
+.home-prompt .hp-t{font-family:var(--font-display);font-size:var(--fs-title);font-weight:600;line-height:1.2;}
+.home-prompt .hp-s{font-size:var(--fs-body);color:var(--ink-soft);margin:4px 0 4px;}
 .hub-row{display:flex;align-items:center;gap:13px;background:var(--surface);border-radius:var(--r-card);padding:12px 14px;margin-bottom:var(--row);box-shadow:var(--elev-card);cursor:pointer;min-height:44px;}
 .hub-row .lead{width:36px;height:36px;border-radius:var(--r-ctl);display:grid;place-items:center;flex-shrink:0;}
 .hub-row .lead svg{width:19px;height:19px;}
@@ -4298,11 +4303,25 @@ function renderHome(){
   w.tips = tipsBlock;
   w['get-started'] = gsCard;
   w.guide = guideCard;
-  w.teach = (gsCard || guideCard || homeHidden('teach')) ? '' : teachCue();
+  const promptCard = homeHidden('teach') ? '' : homePromptCard();
+  w.teach = promptCard || ((gsCard || guideCard || homeHidden('teach')) ? '' : teachCue());
   w.nudge = (gsCard || homeHidden('nudge')) ? '' : renderNudge();
+  w['good-read'] = homeHidden('good-read') ? '' : goodReadCard('baby');
+  /* One card at a time (board 6): the first of these that has something shows, the rest wait. A prompt or
+     an earned teach cue first, then the Get started list, then the gentle celebrations, then the rest. */
+  {
+    const gentle=['month','poster','child','install'];
+    let kept=null; const offered=[];
+    // returns true when this card must wait because an earlier one already has the place
+    const take=(id,has)=>{ if(!has) return false; offered.push(id); if(kept) return true; kept=id; return false; };
+    if(take(promptCard?'prompt':'teach', w.teach)) w.teach='';
+    if(take('get-started', w['get-started'])) w['get-started']='';
+    gentle.forEach(id=>{ if(take(id, al[id])) al[id]=''; });
+    ['guide','nudge','coach','tips','good-read'].forEach(id=>{ if(take(id, w[id])) w[id]=''; });
+    window.__homeOneCard={offered:offered, kept:kept};   // read by test/home-one-card.test.js
+  }
   w.alerts = homeOrder('alerts').filter(id=>!homeHidden(id)).map(id=>al[id]).join('');
   w.ask = homeHidden('ask') ? '' : askBoxRow();
-  w['good-read'] = homeHidden('good-read') ? '' : goodReadCard('baby');
   const slot = a => homeOrder(a).filter(id=>!homeHidden(id)).map(id=>w[id]).join('\n    ');
 
   return `<div class="fade-in home-today">
@@ -4897,8 +4916,88 @@ function teachFire(name){ try{ if(window.CubbyTeach) window.CubbyTeach.fire(name
    to say one thing. Returns '' far more often than not, which is the point.
    The caller also holds it back while the home coach mark is still up, so a first-time parent never
    gets a mark and a cue stacked in the same paint. */
+/* ONE CARD AT A TIME, AND ONLY WHEN IT HELPS (27 Nov 2026 UX review, canvas boards 6 and 7A).
+   The teach ledger (app/teach.js) already rations its own cues, but five other Home surfaces did not share
+   that allowance, so the Home after a first log carried six suggestions at once. Now everything that
+   speaks first on Home is ranked and only the first one shows (homeOneCard, in renderHome). Live state is
+   never rationed: a dose due, an illness, a fever, an appointment, a nap running.
+
+   The contextual prompts below are the cues no ledger row covers, each tied to something her own data
+   just made true. One new prompt a day at most, nothing from 23:00 to 05:00, nothing in loss holding,
+   nothing on a fever day (health has the screen), and "Not now" twice means never again. */
+function quietHours(){ const h=new Date(now()).getHours(); return h>=23 || h<5; }
+const PROMPT_IDS=['first_log_invite','first_nap','visit_passed','visit_week_ahead','solo_night_invite'];
+function promptKey(){ return 'cubby-prompts:'+quickUid(); }
+function promptLoad(){ try{ return JSON.parse(localStorage.getItem(promptKey())||'{}')||{}; }catch(e){ return {}; } }
+function promptSave(o){ try{ localStorage.setItem(promptKey(), JSON.stringify(o)); }catch(e){} }
+function promptOpen(r){ return !!r && !r.done && (r.no||0)<2 && !(r.snooze && now()<r.snooze); }
+function promptWants(id, b){
+  const evs=babyEvents(), care=evs.filter(e=>/^(feed|sleep|diaper|pump)$/.test(e.type));
+  const solo=Object.keys((window.LL&&window.LL.members)||{}).length<=1;
+  const next=(b&&b.birth)?vxVisitGroups(vaccinePlan()).find(x=>x.pending.length):null;
+  const day=86400000;
+  if(id==='first_log_invite') return solo && care.length>=1;
+  if(id==='first_nap'){ const naps=evs.filter(e=>e.type==='sleep'&&e.end); return naps.length>=1 && naps.length<=2; }
+  if(id==='visit_passed') return !!next && next.months>0 && now()-next.due>=day && now()-next.due<=14*day;
+  if(id==='visit_week_ahead') return !!next && next.months>0 && next.due-now()>0 && next.due-now()<=7*day;
+  if(id==='solo_night_invite'){
+    const me=myUid();
+    const nights=care.filter(e=>(!e.authorId||e.authorId===me) && (()=>{ const h=new Date(e.time).getHours(); return h>=22||h<5; })()).length;
+    return solo && nights>=3;
+  }
+  return false;
+}
+function homePromptId(){
+  if(quietHours()) return null;
+  try{ if(myLossHolding()) return null; }catch(e){}
+  const b=activeBaby(); if(!b) return null;
+  if(babyEvents().some(e=>e.type==='temperature' && now()-e.time<86400000 && isFever(e.temp,e.unit))) return null;
+  const o=promptLoad(), today=dayKey(now());
+  // A prompt already started today keeps its place; once it is answered, no other prompt starts today.
+  const started=PROMPT_IDS.find(id=>o[id] && o[id].day===today);
+  if(started) return (promptOpen(o[started]) && promptWants(started,b)) ? started : null;
+  const id=PROMPT_IDS.find(x=>promptOpen(o[x]||{}) && !(o[x]&&o[x].day) && promptWants(x,b))
+        || PROMPT_IDS.find(x=>o[x] && promptOpen(o[x]) && promptWants(x,b));
+  if(!id) return null;
+  o[id]=Object.assign(o[id]||{}, {day:today}); promptSave(o);
+  try{ if(window.cubbyTrack) window.cubbyTrack('prompt.shown',{prompt:id}); }catch(e){}
+  return id;
+}
+function homePromptCard(){
+  const id=homePromptId(); if(!id) return '';
+  const b=activeBaby()||{}, nm=escapeHtml(b.name||'your baby');
+  const next=(b.birth)?vxVisitGroups(vaccinePlan()).find(x=>x.pending.length):null;
+  const vt=next?escapeHtml(vxVisitTitle(next.group)):'';
+  const C={
+    first_log_invite:{art:'spot-art/invite_bears.webp', t:"That's the first one. Who's on the next?", s:'Invite your partner, a grandparent or the nanny. What they log shows up here with their name on it.', p:'Invite someone', n:'Not now'},
+    first_nap:{t:'Naps add up on their own', s:`Each sleep you log joins today's total for ${nm}, on every phone in your circle.`, p:"See today's sleep", n:'Got it'},
+    visit_passed:{t:`Back from the ${vt}?`, s:'Mark the whole visit in one tap, or fill it in from their vaccination card. You can change any dose after.', p:'Mark the visit done', q:'Fill in from their card', n:'Not yet'},
+    visit_week_ahead:{t:`${nm}'s ${vt} is coming up`, s:`Around ${next?vxShortDate(next.due):''}. Put it in your calendar and it will remind you two days before.`, p:'Put it in my calendar', n:'Not now'},
+    solo_night_invite:{art:'spot-art/invite_bears.webp', t:'Want someone to take the next one?', s:'They see the last feed the moment they open Cubby.', p:'Invite someone', n:'Not now'},
+  }[id];
+  return `<div class="card home-prompt" data-prompt="${id}">
+    ${C.art?`<img class="hp-art" src="${C.art}" alt="" width="72" height="72">`:''}
+    <div class="hp-body"><div class="hp-t">${C.t}</div><div class="hp-s">${C.s}</div>
+    <button class="btn-primary btn-calm" onclick="promptAct('${id}','primary')">${C.p}</button>
+    ${C.q?`<button class="btn-ghost" onclick="promptAct('${id}','secondary')">${C.q}</button>`:''}
+    <button class="btn-ghost" onclick="promptAct('${id}','not_now')">${C.n}</button></div></div>`;
+}
+function promptAct(id, action){
+  const o=promptLoad(); const r=o[id]=o[id]||{};
+  if(action==='not_now'){ r.no=(r.no||0)+1; r.snooze=now()+3*86400000; } else { r.done=1; }
+  promptSave(o);
+  try{ if(window.cubbyTrack) window.cubbyTrack('prompt.acted',{prompt:id, action:action}); }catch(e){}
+  if(action==='not_now'){ render(); return; }
+  const b=activeBaby()||{}; const next=(b.birth)?vxVisitGroups(vaccinePlan()).find(x=>x.pending.length):null;
+  if(id==='first_log_invite'||id==='solo_night_invite'){ render(); if(window.openFamily) window.openFamily('invite','home'); return; }
+  if(id==='first_nap'){ go('log'); try{ setLogTab('stats'); }catch(e){} return; }
+  if(id==='visit_week_ahead'){ render(); exportVaccineSchedule(); return; }
+  if(id==='visit_passed'){ render(); if(action==='secondary' && window.CubbyVaxCard) CubbyVaxCard.open(); else if(next) openVisitDone(next.group); return; }
+  render();
+}
 function teachCue(){
   try{
+    if(quietHours()) return '';      // nothing new is introduced at night; the allowance waits for the morning
     if(!window.CubbyTeachUI) return '';
     return window.CubbyTeachUI.homeCue()||'';
   }catch(e){ return ''; }
@@ -4916,6 +5015,8 @@ function teachScan(){
     if(n>=10) teachFire('logs-10');
     if(n>=25) teachFire('logs-25');
     if(b&&b.birth) teachFire('birthday-set');
+    // the vaccine cue speaks a week before a visit, not on the day the birthday is typed (board 6)
+    if(b&&b.birth){ const nx=vxVisitGroups(vaccinePlan()).find(x=>x.pending.length); if(nx&&nx.months>0&&nx.due-now()<=7*86400000) teachFire('visit-due-7d'); }
     if((state.meds||[]).length) teachFire('med-added');
     if((state.photos||[]).length>=1) teachFire('first-photo');
     if((state.photos||[]).length>=3) teachFire('3-photos');

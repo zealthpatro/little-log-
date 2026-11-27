@@ -248,6 +248,9 @@ const TREE = [
   /* First log in under a minute, then invite first (boards 5A and 4A): name + Today, "What just happened?",
      Nappy, Wet; identity and the invite follow the log. Seen red on main 747bfdfe. */
   { name: 'first-log-path', cmd: ['node', 'test/first-log-path.test.js', 'url'] },
+  /* One card at a time on Home, and the contextual prompts (boards 6 and 7A): one proactive card, live state
+     never rationed, one prompt a day, quiet hours, fever days, Not-now twice. Seen red on main 747bfdfe. */
+  { name: 'home-one-card',  cmd: ['node', 'test/home-one-card.test.js', 'url'] },
   /* The November 2026 security fixes. Each was watched failing on the live code (1a6df125) first.
      page-stats: a stranger looping 404s must make zero Firestore writes and stay under the D1 cap. */
   { name: 'page-stats',     cmd: ['node', 'test/page-stats.test.js'] },

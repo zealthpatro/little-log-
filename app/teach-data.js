@@ -386,7 +386,7 @@
     openVaccine: { label: 'A vaccine', fn: 'openVaccine()', domain: 'health', depth: 'chapter',
       one: 'One vaccine, when it is due, and whether it has been given.',
       who: { stage: ['baby','child'] },
-      earn: { on: 'birthday-set' },
+      earn: { on: 'visit-due-7d' },
       what: 'One vaccine: when it is due, whether it has been given, and on what date.',
       get: 'The answer to what has she had, and when, is on your phone rather than in a folder at home.'
     },
@@ -1013,6 +1013,10 @@
   };
 
   var NO_TEACH = {
+    /* First-run steps and one-sheet shortcuts (27 Nov 2026): reached only from the flow they belong to */
+    openAddBabyFirstRun: 'The first-run form of Add a baby. Reached only from the stage picker; the capability is openAddBaby.',
+    openFirstLogStep: 'The "What just happened?" step, shown once, straight after the first baby is added. A step, not a capability.',
+    openVisitDone: 'Records a whole vaccine visit from its card. The capability, recording a vaccine, is taught on openVaccine.',
     /* Plumbing, not capability */
     openDateTimePicker: 'The shared date and time picker. One component, reused everywhere, by design.',
     openTimePicker: 'Time half of the same component.',

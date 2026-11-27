@@ -283,6 +283,41 @@ window.CUBBY_USAGE_ALLOWLIST = {
      ]
     }
    }
+  },
+  "prompt.shown": {
+   "anon": false,
+   "props": {
+    "prompt": {
+     "enum": [
+      "first_log_invite",
+      "first_nap",
+      "visit_passed",
+      "visit_week_ahead",
+      "solo_night_invite"
+     ]
+    }
+   }
+  },
+  "prompt.acted": {
+   "anon": false,
+   "props": {
+    "prompt": {
+     "enum": [
+      "first_log_invite",
+      "first_nap",
+      "visit_passed",
+      "visit_week_ahead",
+      "solo_night_invite"
+     ]
+    },
+    "action": {
+     "enum": [
+      "primary",
+      "secondary",
+      "not_now"
+     ]
+    }
+   }
   }
  },
  "formats": {

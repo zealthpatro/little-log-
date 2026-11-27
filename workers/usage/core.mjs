@@ -39,6 +39,8 @@ export const SIGNIN_ERRORS = ['popup_closed', 'popup_blocked', 'network', 'no_se
 export const SAVE_ERRORS = ['permission_denied', 'unavailable', 'deadline', 'quota', 'too_large', 'other'];
 export const NOTIFICATION_KINDS = ['medicine', 'feed', 'sleep', 'appointment', 'vaccine', 'feature', 'marketing', 'team_note', 'other'];
 export const PLATFORMS = ['ios_app', 'android_app', 'home_screen', 'browser'];
+// The contextual Home prompts (27 Nov 2026, canvas board 7A). One card at a time, each tied to her own data.
+export const PROMPTS = ['first_log_invite', 'first_nap', 'visit_passed', 'visit_week_ahead', 'solo_night_invite'];
 
 const e = (...v) => ({ enum: v });
 const int = (min, max) => ({ int: [min, max] });
@@ -60,6 +62,8 @@ export const USAGE_EVENTS = {
   'push.opened': { anon: false, props: { kind: e(...NOTIFICATION_KINDS) } },
   'nudge.seen': { anon: false, props: { nudge_id: fmt('nudge_id'), channel: e('note', 'email', 'push') } },
   'install.prompted': { anon: true, props: { outcome: e('shown', 'accepted', 'dismissed'), prompt: e('android_chrome', 'ios_instructions') } },
+  'prompt.shown': { anon: false, props: { prompt: e(...PROMPTS) } },
+  'prompt.acted': { anon: false, props: { prompt: e(...PROMPTS), action: e('primary', 'secondary', 'not_now') } },
 };
 
 export const FORMATS = {

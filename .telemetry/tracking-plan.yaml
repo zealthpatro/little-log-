@@ -2,7 +2,7 @@
 #
 # Two parts. `events` is the household plan of September 2026: in `events`, 13 of the 19 events here are
 # derived. `linked_usage` is Cubby's own usage events, linked to a signed-in person, built in phase 2 of
-# docs/superpowers/specs/2026-11-13-admin-dashboard-design.md (§8, §9.1, §10): 11 of the 16 linked
+# docs/superpowers/specs/2026-11-13-admin-dashboard-design.md (§8, §9.1, §10): 13 of the 18 linked
 # events are sent by a device, 4 are derived and 1 is written by the server.
 #
 # Five rules, in priority order. Every event below was checked against all five.
@@ -580,6 +580,23 @@ linked_usage:
       properties:
         - { name: outcome, type: string, enum: [shown, accepted, dismissed] }
         - { name: prompt, type: string, enum: [android_chrome, ios_instructions] }
+
+    - name: prompt.shown
+      source: new
+      before_sign_in: false
+      fires_when: A contextual Home prompt is shown, once a day at most. One card at a time, each tied to something her own data just made true (27 Nov 2026, canvas board 7A).
+      how: "homePromptId() in app/index.html, the first render of the day that shows it."
+      properties:
+        - { name: prompt, type: string, enum: [first_log_invite, first_nap, visit_passed, visit_week_ahead, solo_night_invite] }
+
+    - name: prompt.acted
+      source: new
+      before_sign_in: false
+      fires_when: She answers a Home prompt. "not_now" twice and that prompt never shows again.
+      how: "promptAct() in app/index.html."
+      properties:
+        - { name: prompt, type: string, enum: [first_log_invite, first_nap, visit_passed, visit_week_ahead, solo_night_invite] }
+        - { name: action, type: string, enum: [primary, secondary, not_now] }
 
 # ── Monitoring ────────────────────────────────────────────────────────────────────────────────────
 snapshot_sync:
