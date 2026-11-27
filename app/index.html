@@ -3138,6 +3138,13 @@ const UI_ACTIONS={
   // The photo is chosen when the pill is drawn, as it always was, so the card she opens is the one offered.
   openMonthCard:(month,photoId)=>{ openMemoryCard(month,photoId); dismissTip('bday'+month); },
   openPosterOffer:()=>openPosterOffer(),
+  // 27 Nov 2026 UX review: visits, the Health hub, the first-run step and the Home prompts
+  openVisitDone:(g)=>openVisitDone(g),
+  markVisit:(g)=>markVisit(g),
+  healthRowGo:(k)=>healthRowGo(k),
+  obLogNappy:(k)=>obLogNappy(k),
+  pickColor:(c)=>pickColor(c),
+  promptAct:(id,a)=>promptAct(id,a),
   dismissPosterOffer:()=>dismissPosterOffer(),
   ackChild:()=>ackChild(),
   openWeeksTakeBack:()=>openWeeksTakeBack(),
@@ -4307,28 +4314,29 @@ function renderHome(){
   w.tips = tipsBlock;
   w['get-started'] = gsCard;
   w.guide = guideCard;
-  const promptCard = homeHidden('teach') ? '' : homePromptCard();
+  // Prompts wait for the Get started list and the one-time guide, exactly as earned teach cues do: the list
+  // already carries the invite, and the guide is her one orientation (app/log-guide.js homeCard).
+  const promptCard = (gsCard || guideCard || homeHidden('teach')) ? '' : homePromptCard();
   w.teach = promptCard || ((gsCard || guideCard || homeHidden('teach')) ? '' : teachCue());
   w.nudge = (gsCard || homeHidden('nudge')) ? '' : renderNudge();
   w['good-read'] = homeHidden('good-read') ? '' : goodReadCard('baby');
   /* One card at a time (board 6): the first of these that has something shows, the rest wait. A prompt or
      an earned teach cue first, then the Get started list, then the gentle celebrations, then the rest. */
+  const homeWait={};
   {
     const gentle=['month','poster','child','install'];
     let kept=null; const offered=[];
-    // returns true when this card must wait because an earlier one already has the place
-    const take=(id,has)=>{ if(!has) return false; offered.push(id); if(kept) return true; kept=id; return false; };
-    if(take(promptCard?'prompt':'teach', w.teach)) w.teach='';
-    // The birth poster is what the first log gives back, so it waits only for a prompt, not for the checklist.
-    if(take('poster', al.poster)) al.poster='';
-    if(take('get-started', w['get-started'])) w['get-started']='';
-    gentle.filter(id=>id!=='poster').forEach(id=>{ if(take(id, al[id])) al[id]=''; });
-    ['guide','nudge','coach','tips','good-read'].forEach(id=>{ if(take(id, w[id])) w[id]=''; });
+    // true when this card must wait because an earlier one already has the place
+    const waits=(id,has)=>{ if(!has) return false; offered.push(id); if(kept) return true; kept=id; return false; };
+    if(waits(promptCard?'prompt':'teach', w.teach)) homeWait.teach=1;
+    if(waits('get-started', w['get-started'])) homeWait['get-started']=1;
+    gentle.forEach(id=>{ if(waits(id, al[id])) al[id]=''; });
+    ['guide','nudge','coach','tips','good-read'].forEach(id=>{ if(waits(id, w[id])) homeWait[id]=1; });
     window.__homeOneCard={offered:offered, kept:kept};   // read by test/home-one-card.test.js
   }
   w.alerts = homeOrder('alerts').filter(id=>!homeHidden(id)).map(id=>al[id]).join('');
   w.ask = homeHidden('ask') ? '' : askBoxRow();
-  const slot = a => homeOrder(a).filter(id=>!homeHidden(id)).map(id=>w[id]).join('\n    ');
+  const slot = a => homeOrder(a).filter(id=>!homeHidden(id) && !homeWait[id]).map(id=>w[id]).join('\n    ');
 
   return `<div class="fade-in home-today">
     <div class="greeting">${greet}</div>
@@ -4929,9 +4937,11 @@ function teachFire(name){ try{ if(window.CubbyTeach) window.CubbyTeach.fire(name
    never rationed: a dose due, an illness, a fever, an appointment, a nap running.
 
    The contextual prompts below are the cues no ledger row covers, each tied to something her own data
-   just made true. One new prompt a day at most, nothing from 23:00 to 05:00, nothing in loss holding,
-   nothing on a fever day (health has the screen), and "Not now" twice means never again. */
-function quietHours(){ const h=new Date(now()).getHours(); return h>=23 || h<5; }
+   just made true. One new prompt a day at most, nothing in loss holding, nothing while an illness runs or
+   on a fever day (health has the screen), and "Not now" twice means never again.
+   No quiet hours: the board proposed none from 23:00 to 05:00, but Home never rearranges itself by the
+   clock (tools/night_home_check.js: day and night draw the same blocks), so a card that is there at ten
+   in the morning is there at three. Raised with the founder rather than decided here. */
 const PROMPT_IDS=['first_log_invite','first_nap','visit_passed','visit_week_ahead','solo_night_invite'];
 function promptKey(){ return 'cubby-prompts:'+quickUid(); }
 function promptLoad(){ try{ return JSON.parse(localStorage.getItem(promptKey())||'{}')||{}; }catch(e){ return {}; } }
@@ -4956,7 +4966,6 @@ function promptWants(id, b){
   return false;
 }
 function homePromptId(){
-  if(quietHours()) return null;
   try{ if(myLossHolding()) return null; }catch(e){}
   const b=activeBaby(); if(!b) return null;
   if(activeIllness() || babyEvents().some(e=>e.type==='temperature' && now()-e.time<86400000 && isFever(e.temp,e.unit))) return null;
@@ -4986,9 +4995,9 @@ function homePromptCard(){
   return `<div class="card home-prompt" data-prompt="${id}">
     ${C.art?`<img class="hp-art" src="${C.art}" alt="" width="72" height="72">`:''}
     <div class="hp-body"><div class="hp-t">${C.t}</div><div class="hp-s">${C.s}</div>
-    <button class="btn-primary btn-calm" onclick="promptAct('${id}','primary')">${C.p}</button>
-    ${C.q?`<button class="btn-ghost" onclick="promptAct('${id}','secondary')">${C.q}</button>`:''}
-    <button class="btn-ghost" onclick="promptAct('${id}','not_now')">${C.n}</button></div></div>`;
+    <button class="btn-primary btn-calm"${uiAct('promptAct',[id,'primary'])}>${C.p}</button>
+    ${C.q?`<button class="btn-ghost"${uiAct('promptAct',[id,'secondary'])}>${C.q}</button>`:''}
+    <button class="btn-ghost"${uiAct('promptAct',[id,'not_now'])}>${C.n}</button></div></div>`;
 }
 function promptAct(id, action){
   const o=promptLoad(); const r=o[id]=o[id]||{};
@@ -5006,7 +5015,6 @@ function promptAct(id, action){
 }
 function teachCue(){
   try{
-    if(quietHours()) return '';      // nothing new is introduced at night; the allowance waits for the morning
     if(!window.CubbyTeachUI) return '';
     return window.CubbyTeachUI.homeCue()||'';
   }catch(e){ return ''; }
@@ -7129,7 +7137,7 @@ function openAddBabyFirstRun(){
     <div class="csub ob-country">Their vaccine plan follows the ${escapeHtml(vaxCountryName(cc))} schedule. <span class="link-inline" onclick="this.parentElement.hidden=true;document.querySelector('.ob-country-pick').hidden=false">Change</span></div>
     <div class="field ob-country-pick" hidden><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', vaxCountryList(), cc, 'Search your country')}</div>
     <details class="ob-more"><summary>More details, optional</summary>
-      <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${hArg(c)}')"></div>`).join('')}</div>
+      <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" ${uiAct('pickColor',[c])}></div>`).join('')}</div>
       <div class="field"><label>Sex (optional, for growth charts)</label>${sexSegHtml('bSex','')}</div>
       ${birthWeightHtml('bWt','bWtU')}
     </details>
@@ -7341,7 +7349,7 @@ function openFirstLogStep(){
 function obFirstLog(k){
   if(k==='diaper'){
     const m=$('#flMore'); if(!m) return;
-    m.innerHTML=`<div class="unit-toggle fl-kind">${[['wet','Wet'],['dirty','Dirty'],['both','Both']].map(o=>`<button type="button" onclick="obLogNappy('${o[0]}')">${o[1]}</button>`).join('')}</div>
+    m.innerHTML=`<div class="unit-toggle fl-kind">${[['wet','Wet'],['dirty','Dirty'],['both','Both']].map(o=>`<button type="button"${uiAct('obLogNappy',[o[0]])}>${o[1]}</button>`).join('')}</div>
       <div class="csub" style="text-align:center;margin-top:8px">Just now. You can change the time after.</div>`;
     return;
   }
@@ -15409,7 +15417,7 @@ const HEALTH_ROW_GO={meds:()=>setHealthTab('meds'), vaccines:()=>setHealthTab('v
   illness:()=>setHealthTab('illness'), doctor:()=>openDoctor(), food:()=>openFoodPrefs(), visit:()=>openVisitSummary()};
 function healthRowGo(k){ const f=HEALTH_ROW_GO[k]; if(f) f(); }
 function healthRecordRow(icon, tint, ink, title, meta, key, extra){
-  return `<div class="hub-row" onclick="healthRowGo('${hArg(key)}')"><span class="lead" style="background:${tint};color:${ink}">${icon}</span>
+  return `<div class="hub-row"${uiAct('healthRowGo',[key])}><span class="lead" style="background:${tint};color:${ink}">${icon}</span>
     <div class="cflex"><div class="a">${title}${extra||''}</div><div class="b">${meta}</div></div><span class="chev">${I.chev}</span></div>`;
 }
 function healthNow(b){
@@ -15426,7 +15434,7 @@ function healthNow(b){
     const due=medNextDue(m); if(due===null || now()<due) return;
     out.push(`<div class="hub-row"><span class="lead" style="background:var(--med-soft);color:var(--med-ink)">${I.pill}</span>
       <div class="cflex"><div class="a">${escapeHtml(m.name||'')}</div><div class="b">${escapeHtml(String(m.dose==null?'':m.dose))} ${escapeHtml(m.unit||'')} · ${fmtDue(due-now())}</div></div>
-      <button class="dose-btn" onclick="logDose('${hArg(m.id)}')">Given</button></div>`);
+      <button class="dose-btn"${uiAct('logDose',[m.id])}>Given</button></div>`);
   });
   if(b && b.birth){
     const next=vxNextVisit(vxVisitGroups(vaccinePlan()));
@@ -17111,7 +17119,7 @@ function vxNextVisitCard(bb,visits){
       <div class="vx-next-t">${escapeHtml(title)}</div>
       <div class="vx-next-s">${sub}</div>
       <div class="vx-chips">${names.map(x=>`<span class="vx-chip">${x}</span>`).join('')}</div>
-      ${ready?`<button class="btn-primary btn-calm" onclick="openVisitDone('${hArg(next.group)}')">${I.check} ${next.months===0?'Yes, it was given':'Mark the visit done'}</button>`:''}
+      ${ready?`<button class="btn-primary btn-calm"${uiAct('openVisitDone',[next.group])}>${I.check} ${next.months===0?'Yes, it was given':'Mark the visit done'}</button>`:''}
     </div>`;
 }
 function vxVisitFold(x,bb,kind){
@@ -17158,7 +17166,7 @@ function openVisitDone(group){
   openSheet(`<h2>${escapeHtml(vxVisitTitle(group))}</h2><div class="sub">Untick any that were not given. You can change each one later.</div>
     <div class="field"><label>Date given</label>${datePicker('vxvDate', def, {max:now()})}</div>
     <div class="vx-tick">${x.pending.map(v=>`<label class="vx-tick-row"><input type="checkbox" class="vxv" value="${escapeHtml(v.id)}" checked> <span>${escapeHtml(v.name)}</span></label>`).join('')}</div>
-    <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent))" onclick="markVisit('${hArg(group)}')">${I.check} Mark as given</button>`,'diaper');
+    <button class="btn-primary" style="background:var(--diaper);--accent-ink:var(--on-diaper,var(--on-accent))" ${uiAct('markVisit',[group])}>${I.check} Mark as given</button>`,'diaper');
 }
 function markVisit(group){
   const plan=vaccinePlan();

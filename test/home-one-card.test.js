@@ -8,7 +8,7 @@
  *
  *   A. after a first log, solo: one card, and it is the invite prompt; the dose alert still shows
  *   B. one new prompt a day; "Not now" snoozes, twice is never again
- *   C. nothing new at 03:00, nothing on a fever day
+ *   C. the clock does not move it (same card at 03:00); nothing on a fever day
  *   D. a visit a week out offers the calendar; a visit just passed offers to mark it done
  *   E. the first nap; every prompt is counted shown and answered (prompt.shown, prompt.acted)
  *
@@ -60,12 +60,14 @@ function seed(now, o) {
     await p.evaluateOnNewDocument(() => { window.__track = []; Object.defineProperty(window, 'cubbyTrack', { configurable: true, get() { return (n, pr) => window.__track.push([n, pr]); }, set() {} }); });
     await p.goto(BASE + '/app/?e2e=1', { waitUntil: 'networkidle2', timeout: 60000 });
     const now = await p.evaluate(() => Date.now());
-    await p.evaluate((s, keep) => {
+    await p.evaluate((s, keep, fresh) => {
       const prompts = localStorage.getItem('cubby-prompts:local');
       localStorage.clear(); localStorage.setItem('little-log-v1', JSON.stringify(s)); localStorage.setItem('cubby-quick-uid', 'local');
       if (keep && prompts) localStorage.setItem('cubby-prompts:local', prompts);
       if (keep && keep !== true) localStorage.setItem('cubby-prompts:local', keep);
-    }, seed(now, o), keepPrompts);
+      // the setup checklist and the one-time guide are done, so the prompts are what is graded (section F grades the order)
+      if (!fresh) localStorage.setItem('cubby-seen-local', JSON.stringify({ tip_getstarted: 1, tip_logguide: 1 }));
+    }, seed(now, o), keepPrompts, !!o.fresh);
     await p.reload({ waitUntil: 'networkidle2' }); await sleep(1300);
     // the member list as production loads it: just her, or her and a partner
     await p.evaluate((two) => { window.LL = window.LL || {}; window.LL.members = two ? { local: 'owner', uidSam: 'caregiver' } : { local: 'owner' }; }, !!o.two);
@@ -88,7 +90,7 @@ function seed(now, o) {
   ok('more than one card wanted the place', h.one && h.one.offered.length >= 2, h.one);
   ok('one is kept, and it is the invite prompt', h.one && h.one.kept === 'prompt' && h.prompt === 'first_log_invite', h);
   ok('it says what the review promised', /That's the first one\. Who's on the next\?/.test(h.promptText) && /Invite someone/.test(h.promptText), h.promptText);
-  ok('none of the others is on the screen', !/Get started|See what to log|A GOOD READ FOR YOU/i.test(h.text), h.text.slice(0, 500));
+  ok('none of the others is on the screen', !/Get started|See what to log|What to log, and why|A GOOD READ FOR YOU/i.test(h.text), h.text.slice(0, 500));
   ok('the dose that is due is not rationed', /Vitamin D drops due/.test(h.text), h.text.slice(0, 300));
   ok('the prompt is counted shown, once', h.track.filter((t) => t[0] === 'prompt.shown' && t[1].prompt === 'first_log_invite').length === 1, h.track);
 
@@ -114,11 +116,11 @@ function seed(now, o) {
   ok('"Not now" twice is never again', h.prompt !== 'first_log_invite', h);
   await p.close();
 
-  console.log('\nC. quiet hours, and a fever day');
+  console.log('\nC. the clock does not move it, and a fever day');
+  // Home never rearranges by the clock (tools/night_home_check.js), so 03:00 holds the same card as 10:00.
   p = await open(3, {});
   h = await home(p);
-  ok('at 03:00 there is no prompt', h.prompt === null, h);
-  ok('and no teach cue either', !(h.one && (h.one.offered || []).includes('teach')), h.one);
+  ok('at 03:00 the same card holds the place as by day', h.one && h.one.kept === 'prompt' && h.prompt === 'first_log_invite', h.one);
   await p.close();
   p = await open(10, { fever: true });
   h = await home(p);
@@ -156,6 +158,12 @@ function seed(now, o) {
   ok('after the first nap: "Naps add up on their own"', h.prompt === 'first_nap' && /Naps add up on their own/.test(h.promptText), h);
   const got = await p.evaluate(async () => { document.querySelector('.home-prompt .btn-ghost:last-child').click(); await new Promise((r) => setTimeout(r, 300)); return JSON.parse(localStorage.getItem('cubby-prompts:local')).first_nap; });
   ok('"Got it" is an answer, not a snooze', got && got.done === 1 && !got.snooze, got);
+  await p.close();
+
+  console.log('\nF. the setup list and the guide come first (getstarted_author_check grades the list itself)');
+  p = await open(10, { fresh: true, dose: true });
+  h = await home(p);
+  ok('while the one-time guide is still to come, no prompt is offered at all', h.one && h.one.offered.includes('guide') && !h.one.offered.includes('prompt') && h.prompt === null, h.one);
   await p.close();
 
   ok('no page errors', errs.length === 0, errs.slice(0, 3));

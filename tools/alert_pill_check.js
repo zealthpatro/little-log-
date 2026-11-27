@@ -59,6 +59,8 @@ const PASS_THROUGH = {
   logDose: 1, snoozeMedAlert: 2, dismissMedAlert: 2, openTemp: 0, openFeverSafetyNet: 0, openVisitSummary: 0,
   openPosterOffer: 0, dismissPosterOffer: 0, ackChild: 0, openWeeksTakeBack: 0,
   openConsentReview: 1, downloadExport: 1, ackDecline: 1,
+  // 27 Nov 2026 UX review: vaccine visits, the Health hub, the first-run step and the Home prompts
+  openVisitDone: 1, markVisit: 1, healthRowGo: 1, obLogNappy: 1, pickColor: 1, promptAct: 2,
   // setItem rows in the Settings and Data sheets
   openAppearance: 0, addToHomeScreen: 1, openBabySheet: 0, openPregArchive: 0, openBabyProfile: 0, shareCubby: 0,
   openReminders: 0, openQuickSettings: 0, openMoodNote: 0, openLogBP: 0, openTrash: 0, openDataSheet: 0,
@@ -73,7 +75,8 @@ const HANDLERS = ['logDose', 'snoozeMedAlert', 'dismissMedAlert', 'go', 'render'
   'openWeeksTakeBack', 'openConsentReview', 'downloadExport', 'ackDecline',
   'openAppearance', 'addToHomeScreen', 'closeSheet', 'goDen', 'openBabySheet', 'openPregArchive', 'openBabyProfile',
   'openPro', 'shareCubby', 'openReminders', 'openQuickSettings', 'openMoodNote', 'openLogBP', 'openTrash',
-  'openDataSheet', 'confirmLogout', 'requestExport', 'openImport', 'openDeleteRequest', 'openGuardians', 'openDeleteAccount'];
+  'openDataSheet', 'confirmLogout', 'requestExport', 'openImport', 'openDeleteRequest', 'openGuardians', 'openDeleteAccount',
+  'openVisitDone', 'markVisit', 'healthRowGo', 'obLogNappy', 'pickColor', 'promptAct'];
 // Attached to window by store-firebase.js, which can load after the inline script.
 const WINDOW_HANDLERS = ['openFamily', 'openFeedback'];
 const NOW = 1800000000000;   // pinned; fmtDue and now are stubs, so no check reads the real clock
@@ -574,6 +577,15 @@ const CHECKS = [
         if (!own(api.UI_ACTIONS, lit[2])) wrong.push(`line ${line}: act '${lit[2]}' is not in UI_ACTIONS`);
       }
     });
+    /* A control can also name its action straight through uiAct('name', [args]), the helper alertPill and
+       setItem use themselves. Same rules: a quoted name, and an own UI_ACTIONS key. */
+    { const ur = /(?<![\w$.])uiAct\(\s*/g; let u;
+      while ((u = ur.exec(src))) {
+        const lit = /^(['"])([A-Za-z_$][\w$]*)\1/.exec(src.slice(u.index + u[0].length));
+        if (!lit) continue;   // the helper's own definition and the components pass a variable through
+        used[lit[2]] = 1;
+        if (!own(api.UI_ACTIONS, lit[2])) wrong.push(`line ${lineOf(src, u.index)}: uiAct '${lit[2]}' is not in UI_ACTIONS`);
+      } }
     keys.filter((k) => !used[k]).forEach((k) => wrong.push(`UI_ACTIONS.${k} is used by no call`));
     if (!Object.keys(used).length) wrong.push('the matcher found no act at all');
     return wrong.length ? wrong : true;
@@ -661,6 +673,7 @@ function run(src) {
 const swap = (from, to) => (s) => (s.split(from).length === 2 ? s.replace(from, () => to) : s);
 const MUTATIONS = [
   ['text printed without escaping', 1, swap("const uiTxt=v=>escapeHtml(String(v==null?'':v));", "const uiTxt=v=>String(v==null?'':v);")],
+  ['a uiAct names an action that is not registered', 15, swap("uiAct('obLogNappy',", "uiAct('obLogNappyGone',")],
   ['the button label printed raw', 1, swap('${uiAct(a.act,a.args)}>${uiTxt(a.label)}</button>', '${uiAct(a.act,a.args)}>${a.label}</button>')],
   ['the glyph printed raw', 1, swap('">${uiTxt(p.glyph)}</div>', '">${p.glyph}</div>')],
   ['text goes straight to escapeHtml, which drops 0', 2, swap("const uiTxt=v=>escapeHtml(String(v==null?'':v));", 'const uiTxt=v=>escapeHtml(v);')],

@@ -109,7 +109,7 @@ const EMPTY = { babies: [], activeBabyId: null, events: [], settings: { unit: 'm
   sh = await sheet();
   ok('the invite sheet is up', /Get home, and the day is already there/.test(sh.h2), sh.h2);
   ok('"Invite someone" is the one primary action', sh.primary === 'Invite someone', sh.primary);
-  ok('"Maybe later" is right under it', /Invite someone\s*\n?\s*Maybe later/.test(sh.text), sh.text.slice(0, 600));
+  ok('then the birth poster (what she gets back), then "Maybe later"', /Invite someone\s*\n\s*.*birth poster\s*\n\s*Maybe later/i.test(sh.text), sh.text.slice(0, 600));
   ok('everything else folds under "More you can set up"', sh.folded.includes('More you can set up') && !/Show me what to log/.test(sh.text.split('More you can set up')[0]), sh.folded);
   ok('invite_offered is counted after the first log', (await p.evaluate(() => window.__steps)).slice(-1)[0] === 'invite_offered');
 

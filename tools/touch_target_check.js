@@ -330,7 +330,8 @@ const EXPANDERS = ['lg-i', 'link-inline', 'wwa-t', 'sec-act', 'gr-more', 'tip-x'
   ok('the explainer dot was on screen', count('lg-i') >= 12, count('lg-i') + ' .lg-i');
   // Since 27 Nov 2026 the vaccine disclaimer sits at the foot of its own view, so it is seen once per theme, not twice.
   ok('the inline links were on screen', count('link-inline') >= 2, count('link-inline') + ' .link-inline');
-  ok('the vaccine setup answers were on screen', count('vs-btn') >= 8, count('vs-btn') + ' .vs-btn');
+  // Three answers, on the vaccines view's first screen, in each theme.
+  ok('the vaccine setup answers were on screen', count('vs-btn') >= 6, count('vs-btn') + ' .vs-btn');
 
   console.log('\n3. every measured hit area clears the floor');
   const failures = all.filter((c) => short(c, FLOOR));
