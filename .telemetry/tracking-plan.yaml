@@ -168,7 +168,7 @@ events:
     group_level: none
     description: A person reached a step of the first-run setup. The count per step is the drop-off curve.
     properties:
-      - { name: step, type: string, enum: [stage_chosen, details_entered, invite_offered], required: true, note: "the wizard has three steps; all three stages converge on openOnboardInvite, which carries the invite and the first-log button together, and completion is household.activated" }
+      - { name: step, type: string, enum: [stage_chosen, details_entered, first_log_offered, invite_offered], required: true, note: "stage, details, then (baby path, since 27 Nov 2026) the 'What just happened?' first-log step, then openOnboardInvite; completion is household.activated" }
       - { name: stage, type: string, enum: [trying, pregnancy, baby, none], required: true }
     expected_frequency: low
 

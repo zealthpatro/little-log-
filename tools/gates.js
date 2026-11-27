@@ -245,6 +245,9 @@ const TREE = [
   /* Health as one calm hub (board 2A): Right now first, the doctor summary on the first screen, every record
      a row, nothing said twice, the nav always returns to the hub. Seen red on main 747bfdfe. */
   { name: 'health-hub',     cmd: ['node', 'test/health-hub.test.js', 'url'] },
+  /* First log in under a minute, then invite first (boards 5A and 4A): name + Today, "What just happened?",
+     Nappy, Wet; identity and the invite follow the log. Seen red on main 747bfdfe. */
+  { name: 'first-log-path', cmd: ['node', 'test/first-log-path.test.js', 'url'] },
   /* The November 2026 security fixes. Each was watched failing on the live code (1a6df125) first.
      page-stats: a stranger looping 404s must make zero Firestore writes and stay under the D1 cap. */
   { name: 'page-stats',     cmd: ['node', 'test/page-stats.test.js'] },

@@ -1431,6 +1431,18 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .pick-item.sel .pk{display:grid;}
 
 /* ---- vaccines ---- */
+.fl-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0 10px;}
+.fl-tile{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-card);padding:16px 14px;display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;font-family:var(--font-body);color:var(--ink);cursor:pointer;min-height:44px;}
+.fl-tile b{font-size:var(--fs-base);}
+.fl-tile span:not(.fl-ico){font-size:var(--fs-small);color:var(--ink-soft);}
+.fl-ico{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;}
+.fl-ico svg{width:20px;height:20px;}
+.fl-none{background:transparent;border-style:dashed;justify-content:center;}
+.ob-more{margin:6px 0 4px;}
+.ob-more>summary{cursor:pointer;font-weight:700;color:var(--ink-soft);min-height:44px;display:flex;align-items:center;}
+.ob-country{margin:-4px 0 12px;}
+.ob-invite-art{display:block;margin:10px auto 0;width:112px;height:112px;object-fit:contain;}
+.ob-setup{margin-top:10px;}
 .hub-row{display:flex;align-items:center;gap:13px;background:var(--surface);border-radius:var(--r-card);padding:12px 14px;margin-bottom:var(--row);box-shadow:var(--elev-card);cursor:pointer;min-height:44px;}
 .hub-row .lead{width:36px;height:36px;border-radius:var(--r-ctl);display:grid;place-items:center;flex-shrink:0;}
 .hub-row .lead svg{width:19px;height:19px;}
@@ -2731,6 +2743,7 @@ function refreshTickTargets(){
 }
 
 function render(){
+  try{ if(obAwaitFirstLog) obFirstLogDone(); }catch(e){}   // the first-run log step carries on after any save (board 5A)
   // Scroll position: paintShell keeps the #scroll node alive, so the browser holds the offset for
   // us. Only a real rebuild (a different shell shape, or another screen having painted over #app)
   // needs it put back by hand. Reading and writing scrollTop on every render forced two extra
@@ -6266,7 +6279,7 @@ function renderSleepSheet(){
     </div>
     <button class="btn-ghost" onclick="openPastSleep(true)">Log a nap that finished earlier</button>`,'sleep');
 }
-function startSleep(){ const targets=targetsResolved(); targets.forEach(bid=>{ timersFor(bid).sleep={start:now()}; }); persist(); closeSheet(); go('home'); toast(targets.length>1?'Sleep timers started · sweet dreams':'Sleep timer started · sweet dreams'); }
+function startSleep(){ const targets=targetsResolved(); targets.forEach(bid=>{ timersFor(bid).sleep={start:now()}; }); persist(); closeSheet(); go('home'); toast(targets.length>1?'Sleep timers started · sweet dreams':'Sleep timer started · sweet dreams');  obFirstLogDone(); }
 function openSleepOngoing(){
   logTimes={ when: now()-1800000, end: now() }; // default: fell asleep 30 min ago
   openSheet(`<h2>Already napping</h2><div class="sub">When did they fall asleep? We'll keep a live timer running until they wake.</div>
@@ -6970,6 +6983,11 @@ function openAddBaby(opts){
   /* "Just a name to get started" was not true: saveBaby blocks on the birthday too, so the very
      first form in the product promised one field and then refused on a second. Say what is actually
      needed. Everything below the birthday genuinely is optional, and stays optional. */
+  /* FIRST LOG IN UNDER A MINUTE (27 Nov 2026 UX review, canvas board 5A). On the first run the sheet
+     asks only what the first log needs: a name and when they were born, as three taps rather than a date
+     picker. Colour, sex and birth weight fold under "More details"; the country is one line with a
+     Change. Every field is still here, and "Add another little one" keeps the full form. */
+  if(addBabyCtx.onboarding) return openAddBabyFirstRun();
   openSheet(`<h2>Add a baby</h2><div class="sub">Their name and birthday is all it takes for their vaccine plan to be waiting for you, on your country's schedule. You can add another little one any time.</div>
     <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${hArg(c)}')"></div>`).join('')}</div>
     <div class="field"><label>Name</label><input id="bName" placeholder="Baby's name" autofocus></div>
@@ -6978,6 +6996,36 @@ function openAddBaby(opts){
     <div class="field"><label>Sex (optional, for growth charts)</label>${sexSegHtml('bSex','')}</div>
     ${birthWeightHtml('bWt','bWtU')}
     <button class="btn-primary" onclick="saveBaby()">Add baby</button>`,'diaper');
+}
+function openAddBabyFirstRun(){
+  const cc=(state.pregnancy&&state.pregnancy.country)||detectCountry();
+  openSheet(`<h2>Who are we looking after?</h2>
+    <div class="field"><label for="bName">Their name</label><input id="bName" placeholder="Baby's name" autofocus></div>
+    <div class="field"><label>Born</label>
+      <div class="unit-toggle ob-born" role="group" aria-label="Born">
+        <button type="button" data-born="0" onclick="obBorn(0,this)">Today</button>
+        <button type="button" data-born="1" onclick="obBorn(1,this)">Yesterday</button>
+        <button type="button" data-born="x" onclick="obBorn('x',this)">Earlier</button>
+      </div>
+      <div class="ob-born-pick" hidden>${datePicker('bDate',addBabyCtx.birth,{max:now(),empty:true})}</div>
+    </div>
+    <div class="csub ob-country">Their vaccine plan follows the ${escapeHtml(vaxCountryName(cc))} schedule. <span class="link-inline" onclick="this.parentElement.hidden=true;document.querySelector('.ob-country-pick').hidden=false">Change</span></div>
+    <div class="field ob-country-pick" hidden><label>Country (sets the vaccine schedule, editable anytime)</label>${searchPickerHtml('bCountry', vaxCountryList(), cc, 'Search your country')}</div>
+    <details class="ob-more"><summary>More details, optional</summary>
+      <div class="avatar-pick" id="apick">${AVATAR_COLORS.map(c=>`<div class="ap ${c===newBabyColor?'sel':''}" data-c="${c}" style="background:${c}" onclick="pickColor('${hArg(c)}')"></div>`).join('')}</div>
+      <div class="field"><label>Sex (optional, for growth charts)</label>${sexSegHtml('bSex','')}</div>
+      ${birthWeightHtml('bWt','bWtU')}
+    </details>
+    <button class="btn-primary" onclick="saveBaby()">Continue</button>`,'diaper');
+}
+function obBorn(k,btn){
+  document.querySelectorAll('.ob-born button').forEach(b=>b.classList.toggle('on',b===btn));
+  const pick=document.querySelector('.ob-born-pick');
+  if(k==='x'){ if(pick) pick.hidden=false; return; }
+  if(pick) pick.hidden=true;
+  const d=new Date(now()-k*86400000);
+  const v=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const el=$('#bDate'); if(el) el.value=v;
 }
 function pickColor(c){
   newBabyColor=c;
@@ -7009,10 +7057,9 @@ function saveBaby(){
   closeSheet(); go('home');
   if(onb){
     cubbyStep('onboarding.step_reached',{step:'details_entered', stage:'baby'});
-    // New-owner wizard: now that the baby exists, collect identity (so "relationship to baby" makes
-    // sense), then offer the invite. Returning/secondary adds skip straight to the invite.
-    if(window.LL && window.LL.needsIdentity && typeof window.LL.collectIdentity==='function'){ window.LL.collectIdentity('baby', openOnboardInvite); }
-    else { openOnboardInvite(); }
+    // The first log comes straight after the name, before anything else is asked (board 5A). Who she is
+    // to the baby and the invite follow it, in obAfterFirstLog.
+    openFirstLogStep();
   } else { toast('Welcome, '+name+'!'); }
 }
 /* The post-setup hub: affirm they're set up, offer the activation (invite), and quietly make it
@@ -7055,6 +7102,28 @@ function openOnboardInvite(){
      counts every distinct due age including the ones already behind her, and two numbers that
      disagree that close together read as a bug. */
   const vaxN=vaxCalendarCount(activeBaby());
+  /* INVITE FIRST, ONCE THERE IS SOMETHING TO SHARE (27 Nov 2026 UX review, canvas board 4A). The log-first
+     layout below exists because the invite used to be asked before she had any reason to believe the log
+     was worth sharing. The first run now logs before this sheet (openFirstLogStep), so when an entry exists
+     the invite leads: one primary action, "Maybe later", and everything else folded under one line. */
+  const logged=babyEvents().some(e=>/^(feed|sleep|diaper|pump)$/.test(e.type));
+  if(logged){
+    openSheet(`<h2>Get home, and the day is already there</h2><div class="sub">You're set up. Invite whoever else has ${n>1?'them':'your little one'}, your partner, a grandparent or the nanny, and what they log shows up on your screen with their name on it.</div>
+    <div class="preg-card"><div class="pc-ico" style="background:var(--feed-soft)">👨‍👩‍👧</div><div><div class="pc-t">Nobody has to remember it for you</div><div class="pc-b">Feeds, sleep and nappies with their names on them, waiting when you get in. Tap it for the whole day.</div></div></div>
+    ${vaxProofLine()?`<div class="sub" style="margin-top:12px;text-align:left">💉 ${vaxProofLine()}</div>`:''}
+    <img class="ob-invite-art" src="spot-art/invite_bears.webp" alt="" width="112" height="112">
+    <button class="btn-primary" style="background:var(--feed);--accent-ink:var(--on-feed,var(--on-accent));margin-top:14px" onclick="window.openFamily&&window.openFamily('invite','onboarding')">Invite someone</button>
+    <button class="btn-ghost" onclick="closeSheet()">Maybe later</button>
+    <details class="ob-more ob-setup"><summary>More you can set up</summary>
+    ${posterOfferRow()}
+    ${vaxProofLine()?`<button class="btn-ghost" onclick="closeSheet();healthTab='vaccines';go('health')">💉 See their vaccine plan</button>`:''}
+    ${vaxN?`<button class="btn-ghost" onclick="exportVaccineSchedule()">${vaxCalendarLabel(vaxN)}</button>`:''}
+    <button class="btn-ghost" onclick="openAddBaby({onboarding:true,birth:lastBabyBirth})">＋ Add another little one</button>
+    ${(typeof canShowInstall==='function'&&canShowInstall())?`<div class="sub" style="margin-top:14px;font-size:13px">Use Cubby right here, or add it to your home screen to open it like an app, one tap away.</div><button class="btn-ghost" onclick="addToHomeScreen('obInstallMsg')">Add Cubby to your home screen</button><div id="obInstallMsg" class="sub" style="display:none;text-align:left"></div>`:''}
+    <button class="btn-ghost" onclick="closeSheet();window.cubbyOpenGuide&&cubbyOpenGuide()">Show me what to log</button>
+    </details>`,'feed');
+    return;
+  }
   openSheet(`<h2>Get home, and the day is already there</h2><div class="sub">You're set up. Invite whoever else has ${n>1?'them':'your little one'}, your partner, a grandparent or the nanny, and what they log shows up on your screen with their name on it.</div>
     <div class="preg-card"><div class="pc-ico" style="background:var(--feed-soft)">👨‍👩‍👧</div><div><div class="pc-t">Nobody has to remember it for you</div><div class="pc-b">Feeds, sleep and nappies with their names on them, waiting when you get in. Tap it for the whole day.</div></div></div>
     ${vaxProofLine()?`<div class="sub" style="margin-top:12px;text-align:left">💉 ${vaxProofLine()}</div>`:''}
@@ -7135,6 +7204,52 @@ window.cubbyAppOpened=cubbyAppOpened;
    it. Anyone can mark their own device: the only effect is that it stops being counted. */
 try{ const iq=new URLSearchParams(location.search).get('internal');
   if(iq==='1') localStorage.setItem('cubby-internal','1'); else if(iq==='0') localStorage.removeItem('cubby-internal'); }catch(e){}
+/* "What just happened?" The last thing the baby did, in two taps, the moment the baby exists. A nappy logs
+   in place; a feed and a sleep open their usual sheets. Whatever she logs, or "Nothing yet", the wizard
+   then continues with who she is to the baby and the invite (obAfterFirstLog). */
+let obAwaitFirstLog=false;
+function openFirstLogStep(){
+  cubbyStep('onboarding.step_reached',{step:'first_log_offered', stage:'baby'});
+  const b=activeBaby()||{};
+  openSheet(`<h2>What just happened?</h2><div class="sub">Log the last thing ${escapeHtml(b.name||'your baby')} did. It takes two taps, and it starts the day everyone sees.</div>
+    <div class="fl-tiles">
+      <button type="button" class="fl-tile" onclick="obFirstLog('feed')"><span class="fl-ico" style="background:var(--feed-soft);color:var(--feed)">${I.bottle||I.feed}</span><b>Feed</b><span>Breast, bottle, solids</span></button>
+      <button type="button" class="fl-tile" onclick="obFirstLog('sleep')"><span class="fl-ico" style="background:var(--sleep-soft);color:var(--sleep)">${I.moon||I.sleep}</span><b>Sleep</b><span>Asleep now, or a nap</span></button>
+      <button type="button" class="fl-tile" onclick="obFirstLog('diaper')"><span class="fl-ico" style="background:var(--diaper-soft);color:var(--diaper)">${I.diaper}</span><b>Nappy</b><span>Wet, dirty, both</span></button>
+      <button type="button" class="fl-tile fl-none" onclick="obFirstLog('none')"><b>Nothing yet</b><span>Have a look around first</span></button>
+    </div>
+    <div id="flMore"></div>`,'feed');
+}
+function obFirstLog(k){
+  if(k==='diaper'){
+    const m=$('#flMore'); if(!m) return;
+    m.innerHTML=`<div class="unit-toggle fl-kind">${[['wet','Wet'],['dirty','Dirty'],['both','Both']].map(o=>`<button type="button" onclick="obLogNappy('${o[0]}')">${o[1]}</button>`).join('')}</div>
+      <div class="csub" style="text-align:center;margin-top:8px">Just now. You can change the time after.</div>`;
+    return;
+  }
+  if(k==='none'){ closeSheet(); obAfterFirstLog(); return; }
+  obAwaitFirstLog=true; closeSheet();
+  if(k==='feed') openFeed(); else openSleep();
+}
+function obLogNappy(kind){
+  addEvent({type:'diaper',kind:kind,time:now()});
+  closeSheet(); render(); toast('Nappy logged');
+  obAfterFirstLog();
+}
+/* A feed or a sleep logged from the step, or a timer started from it, carries the wizard on. Checked from
+   render(), because the logging sheets write their entries several ways (addEvent, commitEvent, a timer)
+   and every one of them re-renders; persist() is replaced by store-firebase.js, so it is not a safe hook. */
+function obFirstLogDone(){
+  if(!obAwaitFirstLog) return;
+  const b=activeBaby(); if(!b) return;
+  const t=timersFor(b.id)||{};
+  if(!(babyEvents().some(e=>/^(feed|sleep|diaper|pump)$/.test(e.type)) || t.sleep || t.feed)) return;
+  obAwaitFirstLog=false; setTimeout(obAfterFirstLog,650);
+}
+function obAfterFirstLog(){
+  if(window.LL && window.LL.needsIdentity && typeof window.LL.collectIdentity==='function'){ window.LL.collectIdentity('baby', openOnboardInvite); }
+  else { openOnboardInvite(); }
+}
 function obStage(kind){
   obFunnel=true;
   cubbyStep('onboarding.step_reached',{step:'stage_chosen', stage:kind==='expecting'?'pregnancy':(kind==='planning'?'trying':'baby')});

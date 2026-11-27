@@ -240,7 +240,7 @@ export const STEP_EVENTS = {
      openOnboardInvite, which carries the invite AND the first-log button, so "invite offered" and
      "first entry offered" are one moment. Completion is household.activated, derived. */
   'onboarding.step_reached': {
-    step: ['stage_chosen', 'details_entered', 'invite_offered'],
+    step: ['stage_chosen', 'details_entered', 'first_log_offered', 'invite_offered'],
     stage: ['trying', 'pregnancy', 'baby', 'none'],
   },
   'invite.sheet_opened': {
