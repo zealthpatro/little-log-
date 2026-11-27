@@ -1431,6 +1431,24 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border:none;border-ra
 .pick-item.sel .pk{display:grid;}
 
 /* ---- vaccines ---- */
+.hub-row{display:flex;align-items:center;gap:13px;background:var(--surface);border-radius:var(--r-card);padding:12px 14px;margin-bottom:var(--row);box-shadow:var(--elev-card);cursor:pointer;min-height:44px;}
+.hub-row .lead{width:36px;height:36px;border-radius:var(--r-ctl);display:grid;place-items:center;flex-shrink:0;}
+.hub-row .lead svg{width:19px;height:19px;}
+.hub-row .chev{color:var(--ink-faint);display:flex;}
+.hub-row .chev svg{width:16px;height:16px;}
+.hub-row .cflex{flex:1;min-width:0;}
+.hub-row .a{font-weight:700;}
+.hub-row .b{font-size:var(--fs-small);color:var(--ink-soft);margin-top:2px;}
+.hub-list .hub-row{margin-bottom:0;border-radius:0;box-shadow:none;border-bottom:1px solid var(--line);}
+.hub-list{background:var(--surface);border-radius:var(--r-card);overflow:hidden;box-shadow:var(--elev-card);margin-bottom:var(--stack);}
+.hub-list .hub-row:last-child{border-bottom:none;}
+.hub-ill{background:var(--pump-soft);border-radius:var(--r-card);padding:14px 16px;margin-bottom:var(--row);cursor:pointer;}
+.hub-ill-t{font-family:var(--font-display);font-size:var(--fs-title);font-weight:600;}
+.hub-ill-s{font-size:var(--fs-small);color:var(--ink-soft);margin:2px 0 10px;}
+.hub-ill .row2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+.hub-btn{background:var(--surface);border-radius:var(--r-ctl);margin-top:0;color:var(--ink);min-height:44px;min-width:0;padding:10px 6px;gap:6px;}
+.hub-back{border:none;background:none;font-family:var(--font-body);font-weight:700;font-size:var(--fs-body);color:var(--ink-soft);padding:8px 0;min-height:44px;cursor:pointer;display:flex;align-items:center;gap:4px;}
+.hub-h{font-family:var(--font-display);font-size:var(--fs-title);font-weight:600;margin:0 0 var(--stack);}
 .vx-next{display:flex;flex-direction:column;gap:8px;margin-bottom:var(--stack);}
 .vx-next-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
 .vx-next-eb{font-size:var(--fs-small);font-weight:700;color:var(--diaper-ink);}
@@ -2897,7 +2915,7 @@ function _renderView(){
       <button class="nav-btn ${view==='home'?'active':''}" onclick="go('home')">${I.home}Home</button>
       <button class="nav-btn ${view==='log'?'active':''}" onclick="go('log')">${I.list}Log</button>
       <button class="nav-btn ${view==='album'?'active':''}" onclick="go('album')">${I.camera}Album</button>
-      <button class="nav-btn ${view==='health'?'active':''}" onclick="go('health')">${I.cross}Health</button>
+      <button class="nav-btn ${view==='health'?'active':''}" onclick="healthTab=null;go('health')">${I.cross}Health</button>
     </div></div>`);
   startTick();
   paintTimeline();      // the days live in the DOM, not in the shell string
@@ -15149,31 +15167,73 @@ function checkMedReminders(){
    Medicine, because then it is the answer to the question they opened the app with. */
 let healthTab=null;
 function setHealthTab(t){ healthTab=t; render(); $('#scroll')&&$('#scroll').scrollTo(0,0); }
+/* HEALTH AS ONE CALM HUB (27 Nov 2026 UX review, canvas board 2A).
+   Three sub-tabs each ended in the same footer, the visit summary sat at the bottom of all three, a running
+   illness hid behind the third tab, and growth lived in Log, Stats. Now Health opens on what needs her right
+   now, then the records as plain rows. Every sub-view is still one tap away (setHealthTab keeps every route
+   that already pointed into it), and the Health nav button always comes back here. */
+function healthRecordRow(icon, tint, ink, title, meta, act, extra){
+  return `<div class="hub-row" onclick="${act}"><span class="lead" style="background:${tint};color:${ink}">${icon}</span>
+    <div class="cflex"><div class="a">${title}${extra||''}</div><div class="b">${meta}</div></div><span class="chev">${I.chev}</span></div>`;
+}
+function healthNow(b){
+  const out=[];
+  const ill=activeIllness();
+  if(ill){
+    const lt=lastTemp(ill.id);
+    out.push(`<div class="hub-ill" onclick="setHealthTab('illness')"><div class="hub-ill-t">${escapeHtml(ill.name)}, day ${illnessDays(ill)}</div>
+      <div class="hub-ill-s">${lt?('Last temperature '+escapeHtml(String(lt.temp))+'°'+escapeHtml(String(lt.unit||'C'))+', '+fmtClock(lt.time)):'No temperature logged yet'}</div>
+      <div class="row2" onclick="event.stopPropagation()"><button class="btn-ghost hub-btn" onclick="openTemp()">${I.thermo} Temperature</button><button class="btn-ghost hub-btn" onclick="openSymptom()">${I.pulse} Symptom</button></div></div>`);
+  }
+  medsForBaby(state.activeBabyId).forEach(m=>{
+    if(m.active===false) return;
+    const due=medNextDue(m); if(due===null || now()<due) return;
+    out.push(`<div class="hub-row"><span class="lead" style="background:var(--med-soft);color:var(--med-ink)">${I.pill}</span>
+      <div class="cflex"><div class="a">${escapeHtml(m.name||'')}</div><div class="b">${escapeHtml(String(m.dose==null?'':m.dose))} ${escapeHtml(m.unit||'')} · ${fmtDue(due-now())}</div></div>
+      <button class="dose-btn" onclick="logDose('${hArg(m.id)}')">Given</button></div>`);
+  });
+  if(b && b.birth){
+    const next=vxVisitGroups(vaccinePlan()).find(x=>x.pending.length);
+    if(next && next.due-now()<=14*86400000){
+      out.push(healthRecordRow(I.syringe,'var(--diaper-soft)','var(--diaper-ink)',escapeHtml(vxVisitTitle(next.group)),
+        `${vxWhen(next.due)} · ${next.pending.length} vaccine${next.pending.length===1?'':'s'}`,"setHealthTab('vaccines')"));
+    }
+  }
+  return out;
+}
+function renderHealthHub(b){
+  const now_=healthNow(b);
+  const meds=medsForBaby(state.activeBabyId).filter(m=>m.active!==false);
+  const next=vxVisitGroups(vaccinePlan()).find(x=>x.pending.length);
+  const g=babyEvents().find(e=>e.type==='growth');
+  const gDays=g?Math.floor((dayStartMs(now())-dayStartMs(g.time))/86400000):0;
+  const gMeta=g?[g.weight?g.weight+' '+(g.wUnit||'kg'):'', g.height?g.height+' '+(g.hUnit||'cm'):''].filter(Boolean).join(' · ')+' · '+(gDays===0?'today':gDays===1?'yesterday':gDays+' days ago'):'No measurements yet';
+  const ills=babyIllnesses(); const live=ills.filter(i=>!i.endedAt).length;
+  const illMeta=ills.length?[live?live+' now':'', (ills.length-live)?(ills.length-live)+' before':''].filter(Boolean).join(' · '):'None logged';
+  const al=(b.allergies||[]); const docs=(b.doctors||[]).length;
+  const dot=(window.CubbyTeachUI)?CubbyTeachUI.dot('openVisitSummary','the visit summary'):((window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('health'):'');
+  const visit=healthRecordRow(I.stetho,'var(--sleep-soft)','var(--sleep)','Going to the doctor?','The last week on one page, ready to read out','openVisitSummary()',dot);
+  return `<div class="fade-in">${coachMark('health','This is Health','What needs you right now, then every record: medicines, vaccines, growth and illnesses.')}
+    ${now_.length?`<div class="sec-title">Right now</div>${now_.join('')}`:''}
+    ${visit}
+    <div class="sec-title">${escapeHtml(b.name||'Baby')}'s records</div>
+    <div class="hub-list">
+      ${healthRecordRow(I.pill,'var(--med-soft)','var(--med-ink)','Medicines',meds.length?meds.length+' regular · reminders '+(meds.some(m=>m.remind)?'on':'off'):'None added yet',"setHealthTab('meds')")}
+      ${healthRecordRow(I.syringe,'var(--diaper-soft)','var(--diaper-ink)','Vaccines',next?'Next: '+escapeHtml(vxVisitTitle(next.group))+' · '+escapeHtml(vaxCountryName((b&&b.country)||detectCountry())):'Everything on the plan is recorded',"setHealthTab('vaccines')")}
+      ${healthRecordRow(I.ruler,'var(--feed-soft)','var(--feed-ink)','Growth',escapeHtml(gMeta),"setHealthTab('growth')")}
+      ${healthRecordRow(I.thermo,'var(--pump-soft)','var(--pump-ink,var(--pump))','Illnesses',illMeta,"setHealthTab('illness')")}
+      ${healthRecordRow(I.stetho,'var(--sleep-soft)','var(--sleep)','Care team',docs?docs+' doctor'+(docs===1?'':'s'):'Add a doctor and log visits','openDoctor()')}
+      ${healthRecordRow(I.cross,'var(--med-soft)','var(--med-ink)','Allergies and diet',al.length?escapeHtml(al.map(capWord).join(', ')):'None noted','openFoodPrefs()')}
+    </div>
+    ${askBoxRow()}</div>`;
+}
+const HEALTH_VIEWS={meds:'Medicines',vaccines:'Vaccines',illness:'Illnesses',growth:'Growth'};
 function renderHealth(){
   const b=activeBaby();
-  const tab = healthTab || (medsForBaby(state.activeBabyId).length ? 'meds' : 'vaccines');
-  const seg=`<div class="seg seg-full">
-    <button class="${tab==='meds'?'on':''}" onclick="setHealthTab('meds')">Medicine</button>
-    <button class="${tab==='vaccines'?'on':''}" onclick="setHealthTab('vaccines')">Vaccines</button>
-    <button class="${tab==='illness'?'on':''}" onclick="setHealthTab('illness')">Illness</button></div>`;
-  const body = tab==='vaccines'?renderVaccines() : tab==='illness'?renderIllness() : renderHomeMeds();
-  const al=(b.allergies||[]); const diet=b.diet&&b.diet!=='all'?(b.diet==='veg'?'Vegetarian':'Vegan'):'';
-  const docCount=(b.doctors||[]).length;
-  const care=`<div class="sec-title" style="margin-top:var(--stack)">Doctors &amp; allergies</div>
-    <div class="prof-cards">
-      <div class="prof-card" onclick="openDoctor()"><span class="lead" style="background:var(--sleep-soft);color:var(--sleep)">${I.stetho}</span><div class="cflex"><div class="a">Care team</div><div class="b">${docCount?docCount+' doctor'+(docCount===1?'':'s')+' · visit log':'Add a doctor & log visits'}</div></div><span class="chev">${I.chev}</span></div>
-      <div class="prof-card" onclick="openFoodPrefs()"><span class="lead" style="background:var(--med-soft);color:var(--med)">${I.cross}</span><div class="cflex"><div class="a">Allergies &amp; diet</div><div class="b">${al.length?escapeHtml(al.map(capWord).join(', ')):'None noted'}${diet?' · '+diet:''}</div></div><span class="chev">${I.chev}</span></div>
-    </div>
-    <div class="csub" style="margin-top:2px">Tap either to update. Changes show on ${escapeHtml(b.name)}'s profile too.</div>`;
-  /* The visit summary was reachable from four places and every one of them needed a SICK baby or a
-     doctor record with a date already typed in. A parent with a well baby and a routine Friday
-     check had no path to it at all, which is the one thing an exhausted first-timer said she
-     actually wanted from this app. It is free: only openDoctorReport inside it spends a taste. */
-  const visit=`<div class="prof-card" style="margin-top:var(--stack)" onclick="openVisitSummary()">
-      <span class="lead" style="background:var(--sleep-soft);color:var(--sleep)">${I.stetho}</span>
-      <div class="cflex"><div class="a">Going to the doctor?${(window.CubbyTeachUI)?CubbyTeachUI.dot('openVisitSummary','the visit summary'):((window.CubbyGuide&&CubbyGuide.info)?CubbyGuide.info('health'):'')}</div><div class="b">A one-tap summary of the last week, ready to read out</div></div>
-      <span class="chev">${I.chev}</span></div>`;
-  return `<div class="fade-in">${coachMark('health','This is Health','Regular medicines with reminders, the vaccine schedule, and any illness to manage, all in one place.')}${seg}${body}${askBoxRow()}${care}${visit}</div>`;
+  if(!healthTab || !HEALTH_VIEWS[healthTab]) return renderHealthHub(b);
+  const body = healthTab==='vaccines'?renderVaccines() : healthTab==='illness'?renderIllness() : healthTab==='growth'?renderGrowthSection() : renderHomeMeds();
+  return `<div class="fade-in"><button class="hub-back" onclick="setHealthTab(null)">‹ Health</button>
+    ${healthTab==='growth'?'':`<h2 class="hub-h">${HEALTH_VIEWS[healthTab]}</h2>`}${body}</div>`;
 }
 
 /* ---- illness episodes, temperature & symptoms ---- */

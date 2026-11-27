@@ -80,7 +80,7 @@ const seed = (over) => Object.assign({
      produced the row as happily as the row itself, and an assertion on it passes with the feature
      deleted from the render. */
   const VAX = () => page.evaluate(() => {
-    go('health'); if (typeof healthGo === 'function') { try { healthGo('vaccines'); } catch (e) {} }
+    go('health'); setHealthTab('vaccines'); // Health opens on the hub since 27 Nov; vaccines is one row in
     const rows = [...document.querySelectorAll('.add-row')];
     const cal = rows.filter((e) => /in my calendar/.test(e.textContent || ''));
     const host = (cal[0] || rows[0] || document.querySelector('.ms-hero') || {}).parentElement;
