@@ -60,6 +60,8 @@ const TREE = [
   /* The guard that keeps gates out of ~/Downloads, and the helper that sends their files elsewhere. */
   { name: 'downloads-guard', cmd: ['node', 'tools/gates.js', '--self-test-downloads'] },
   { name: 'gate-downloads',  cmd: ['node', 'tools/gate_downloads.js', '--self-test', 'url'] },
+  /* What the summary prints of a failing gate: every FAIL line and the 3 after it survive the elision. */
+  { name: 'failure-excerpt', cmd: ['node', 'tools/gates.js', '--self-test-excerpt'] },
   /* The runner grades THIS tree or refuses: another checkout's server on the port it would pick (at any
      address), its own serve.js dying, a server serving other bytes, the server lost mid-run, a stranger that
      takes 127.0.0.1 at its port mid-run, and a SIGTERM, a SIGALRM (nightly.sh's watchdog) or a SIGKILL to the
@@ -648,6 +650,72 @@ function gist(out, okRun) {
   return (bad || lines[lines.length - 1] || 'no output').slice(0, 96);
 }
 
+/* What the summary prints of a failing gate's output. Keep the HEAD as well as the tail. A gate names the host,
+   port or tree it graded in its opening lines; the assertions come last. Tail-only truncation threw away the one
+   line that identified the run and kept 14 that misdescribed it: deploy-excl(live) spent 17 days reporting
+   localhost's contents as production's, and the "live, <BASE>" header that would have shown it at a glance was
+   exactly what fell off the top. */
+const EXCERPT_HEAD = 10, EXCERPT_TAIL = 25;
+/* And every FAIL line, with the 3 after it (a check's got: detail is the line after), wherever it falls: a
+   long gate's failure sits in its middle, and S21.again-flows failed on CI three times in Nov 2026 with its
+   detail among the elided lines. */
+const EXCERPT_AFTER = 3;
+function excerpt(out) {
+  const lines = String(out).split('\n');
+  const HEAD = EXCERPT_HEAD, TAIL = EXCERPT_TAIL;
+  if (lines.length <= HEAD + TAIL) return lines.join('\n');
+  const keep = lines.map((l, i) => i < HEAD || i >= lines.length - TAIL);
+  lines.forEach((l, i) => { if (/\bFAIL\b/.test(l)) for (let j = i; j <= i + EXCERPT_AFTER && j < lines.length; j++) keep[j] = true; });
+  const shown = [];
+  for (let i = 0; i < lines.length;) {
+    if (keep[i]) { shown.push(lines[i]); i++; continue; }
+    let j = i; while (j < lines.length && !keep[j]) j++;
+    shown.push('  … ' + (j - i) + (j - i === 1 ? ' line' : ' lines') + ' elided …');
+    i = j;
+  }
+  return shown.join('\n');
+}
+
+/* node tools/gates.js --self-test-excerpt. A long failing output, as usage-tracker-emu's is on CI (its run,
+   then 26 mutants), with the one FAIL and its got: detail in the middle: the printed excerpt must carry them.
+   S21.again-flows failed on CI three times in Nov 2026 and each time its detail was among the elided lines. */
+function selfTestExcerpt() {
+  let pass = 0, fail = 0;
+  const ok = (n, c, x) => { if (c) { pass++; console.log('  ok   ' + n); } else { fail++; console.log('  FAIL ' + n + (x !== undefined ? '\n         ' + String(x).slice(0, 600) : '')); } };
+  console.log('\nfailure excerpt: a failing gate\'s FAIL lines and their detail survive the elision');
+  const pad = (k, n) => Array.from({ length: n }, (_, i) => '  ok   ' + k + '.' + i + ' a check that passed');
+  const out = ['usage-tracker (emulator tier): http://127.0.0.1:1  sections S21', 'firestore emulator: jar on 127.0.0.1:2']
+    .concat(pad('S20', 40), [
+      '  FAIL S21.again-flows signed out and in again on the same page: her events flow again',
+      '         got: {"oldHid":"h1","back":"h2","seen":"zz-del-late","sent":[]}',
+      '  ok   S21.next one',
+      '  ok   S21.and the next',
+      '  ok   S21.fourth after: may go',
+    ], pad('S22', 40), [
+      '  FAIL S23.second a second failure',
+      '         got: {"second":true}',
+    ], pad('S24', 40), ['self-test: 26 of 26 mutants caught', 'USAGE-TRACKER SELF-TEST: PASS']).join('\n');
+  const got = excerpt(out), gl = got.split('\n');
+  ok('the first FAIL line is printed', gl.includes('  FAIL S21.again-flows signed out and in again on the same page: her events flow again'), got);
+  ok('with its got: detail', /got: \{"oldHid":"h1","back":"h2","seen":"zz-del-late","sent":\[\]\}/.test(got), got);
+  ok('and the two lines after that', gl.includes('  ok   S21.next one') && gl.includes('  ok   S21.and the next'), got);
+  ok('a second FAIL and its detail too', gl.includes('  FAIL S23.second a second failure') && gl.includes('         got: {"second":true}'), got);
+  ok('the head is kept (the run names what it graded)', gl[0] === 'usage-tracker (emulator tier): http://127.0.0.1:1  sections S21', gl[0]);
+  ok('the tail is kept', gl[gl.length - 1] === 'USAGE-TRACKER SELF-TEST: PASS', gl[gl.length - 1]);
+  ok('the rest is still elided, and says how much', /lines elided/.test(got) && gl.length < out.split('\n').length && !gl.includes('  ok   S22.20 a check that passed'), gl.length);
+  ok('the fourth line after a FAIL is elided', !gl.includes('  ok   S21.fourth after: may go'), got);
+  const n = got.match(/… (\d+) lines? elided …/g) || [];
+  const shown = gl.filter((l) => !/lines? elided/.test(l)).length, hidden = n.reduce((a, x) => a + Number(/\d+/.exec(x)[0]), 0);
+  ok('every line is either printed or counted as elided', shown + hidden === out.split('\n').length, { shown, hidden, total: out.split('\n').length });
+  const short = 'a\nFAIL b\nc';
+  ok('a short output is printed whole', excerpt(short) === short, excerpt(short));
+  const src = fs.readFileSync(__filename, 'utf8');
+  ok('the summary prints each failed gate through excerpt()', /failed\.forEach\(\(f\) => \{[^}]*console\.log\(excerpt\(f\.out\)\)/.test(src));
+  console.log('\n' + pass + ' passed, ' + fail + ' failed');
+  console.log('FAILURE-EXCERPT SELF-TEST: ' + (fail ? 'FAIL' : 'PASS') + '\n');
+  return fail ? 1 : 0;
+}
+
 /* node tools/gates.js --self-test-downloads. Real gates, run through the real runGate(), against a
    temp folder standing in for ~/Downloads, so proving the guard never writes to the real one. */
 async function selfTestDownloads() {
@@ -988,6 +1056,7 @@ async function selfTestTreeServer() {
 
 (async () => {
   if (ARGS.includes('--self-test-downloads')) process.exit(await selfTestDownloads());
+  if (ARGS.includes('--self-test-excerpt')) process.exit(selfTestExcerpt());
   if (ARGS.includes('--self-test-tree-server')) process.exit(await selfTestTreeServer());
   /* The same port picker and tree check for another runner (tools/nightly.sh): N free ports, inside
      EMU_PORT_RANGE when set; and whether a URL serves this tree's TREE_PROOF bytes. */
@@ -1100,17 +1169,7 @@ async function selfTestTreeServer() {
     console.log('\nfull output from what failed:');
     failed.forEach((f) => {
       console.log('\n=== ' + f.name + ' ===');
-      /* Keep the HEAD of the output as well as the tail. A gate names the host, port or tree it
-         graded in its opening lines; the assertions come last. Tail-only truncation threw away the
-         one line that identified the run and kept 14 that misdescribed it — deploy-excl(live) spent
-         17 days reporting localhost's contents as production's, and the "live, <BASE>" header that
-         would have shown it at a glance was exactly what fell off the top. */
-      const lines = f.out.split('\n');
-      const HEAD = 10, TAIL = 25;
-      if (lines.length <= HEAD + TAIL) console.log(lines.join('\n'));
-      else console.log(lines.slice(0, HEAD)
-        .concat(['  … ' + (lines.length - HEAD - TAIL) + ' lines elided …'], lines.slice(-TAIL))
-        .join('\n'));
+      console.log(excerpt(f.out)); // head, tail, and every FAIL with its detail (excerpt, above)
     });
   }
   if (failed.some((r) => r.live) && !blocking.length) {
