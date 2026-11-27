@@ -1304,12 +1304,16 @@
     if (configUnsub) { try { configUnsub(); } catch (e) {} configUnsub = null; }
     if (avatarClaimT) { clearTimeout(avatarClaimT); avatarClaimT = null; } // never claim a bear into the account being left
     window.LL.memberEmails = {}; memberEmailsMigrated = false; ownEmailWritten = false;
-    /* What the household snapshot says about the family (startSync) goes with it, back to how a fresh page
-       starts: unknown until the next account's own snapshot lands. Left behind, the next account's feedback
-       was stamped with the previous family's id, and its family sheet listed that family's people, invites
-       and Pro (test/stale-family-memory-emulator.test.js). */
-    ['householdId', 'members', 'memberInfo', 'formerMemberInfo', 'hhPending', 'hhPendingLinks', 'pro', 'role']
+    /* What this page knew about her family (set from the household snapshot, startSync) and about her own
+       sign-in (an invite still to offer her, a join just made, her first run) goes with her, back to how a
+       fresh page starts: unknown until the next account's own snapshot and sign-in say. Left behind, the next
+       account's feedback was stamped with the previous family's id, its family sheet listed that family's
+       people, invites and Pro, an invite meant for her could be offered to him, and his own first run was
+       skipped (test/stale-family-memory-emulator.test.js). */
+    ['householdId', 'members', 'memberInfo', 'formerMemberInfo', 'hhPending', 'hhPendingLinks', 'pro', 'role',
+      'pendingInvite', 'pendingInviteQueue', 'justJoined', 'needsIdentity']
       .forEach(function (k) { delete window.LL[k]; });
+    firstRunShown = false;
     hhRef = eventsRef = photosRef = notesRef = null;
     // The next account starts unhydrated with no baseline, or this account's blob would be the
     // thing the next one's first push is diffed against.

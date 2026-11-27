@@ -2,30 +2,37 @@
  * for its own.
  *
  * The REAL app/store-firebase.js client against the Firestore + Auth emulators and the real rules, one tab, two
- * accounts, no reload. Only the household snapshot writes window.LL.householdId, members, memberInfo,
- * formerMemberInfo, hhPending, hhPendingLinks, pro and role, and sign-out (teardown) used to leave all eight
- * behind: from the door until the next account's first household snapshot, the page still named the previous
- * family, its roster, its owner role and its Pro (S21 skeptic, 26 Nov 2026; the same family of bug as
- * docs/postmortems/2026-11-19-pre-sign-in-data-reaches-next-account.md).
+ * accounts, no reload. The household snapshot sets window.LL.householdId, members, memberInfo, formerMemberInfo,
+ * hhPending, hhPendingLinks, pro and role, and sign-out (teardown) used to leave all eight behind: from the door
+ * until the next account's first household snapshot, the page still named the previous family, its roster, its
+ * owner role and its Pro (S21 skeptic, 26 Nov 2026; the same family of bug as
+ * docs/postmortems/2026-11-19-pre-sign-in-data-reaches-next-account.md). Her sign-in's own state stayed too: an
+ * invite still to offer her (pendingInvite, pendingInviteQueue), a join just made (justJoined), her first run
+ * (needsIdentity, and the flag that it was shown, so the next account's own first run was skipped).
  *
  *   A  Ann (owner; her family has a caregiver, Zinnia, a former nanny, a pending invite, a link and Pro) signs in. Every
  *      matcher below first finds Ann's family in her own session: her id and roster in window.LL, Pro on,
  *      her family sheet naming Zinnia, her feedback stamped with her family's id.
- *   S  Ann logs out (LL.signOut). At the door, none of the eight fields names her family.
+ *   S  Ann logs out (LL.signOut). At the door, none of the eight fields names her family, and nothing of her
+ *      sign-in's own state is left (staged in her session as resolveHousehold leaves it when she is mid-identity).
  *   G  Bea, a new account, signs in on the same tab and her household snapshot is HELD in the SDK (the server
  *      answers as usual; the test decides when the app hears it). In that gap:
  *        G1 none of the eight fields names Ann's family (Bea's own family is not known yet either)
  *        G2 feedback Bea sends is not stamped with Ann's family id (the feedback rule checks only the uid,
  *           so a stale id is accepted by the server: this is the one write a stale value really lands)
- *        G3 an invite link Bea asks for is not made for Ann's family
- *        G4 the family sheet shows none of Ann's roster
+ *        G3 nothing on the page so much as TRIES a write naming Ann's family (feedback, an invite link Bea asks
+ *           for): a spy on the SDK's write calls, since the rules refuse the link on either tree
+ *        G4 the family sheet (seen to render) shows none of Ann's roster
  *        G5 Pro is not on (Ann's family has it, Bea's does not)
- *        G6 the avatar claim writes nothing into Ann's family
- *      Then the snapshot is let through: Bea boots into her own family, and window.LL describes it.
+ *      Then the snapshot is let through: Bea boots into her own family, window.LL describes it, and she gets her
+ *      own first run, as Ann did.
+ *      Not staged: the avatar claim. It writes only for a uid in memberInfo, and Bea is never in Ann's, so it tries
+ *      nothing on either tree (and the rules would refuse it).
  *   E  Ann signs back in (everything of hers is back), then is signed out from elsewhere (auth.signOut, the way
  *      another tab or a revoked session lands): the eight fields are cleared there too.
  *
- * Every "none of X" assertion uses the same matcher that first finds X in Ann's own session (section A).
+ * Every "none of X" assertion uses the same matcher that first finds X in Ann's own session (section A, and the
+ * staged sign-in state just before S).
  *
  *   node test/stale-family-memory-emulator.test.js
  *
@@ -194,6 +201,42 @@ async function until(fn, ms) {
     let pro = null; try { pro = typeof isPro === 'function' ? isPro() : null; } catch (e) {}
     return { hits, isPro: pro, hid: LL.householdId === undefined ? null : LL.householdId, role: LL.role === undefined ? null : LL.role };
   }, mk, FIELDS);
+  /* What of one sign-in's own state the page holds: an invite to offer, a queue of them, a join just made, a
+     first run still owed. */
+  const sessionOf = (page) => page.evaluate(() => {
+    const LL = window.LL || {}, hits = [];
+    if (LL.pendingInvite) hits.push('pendingInvite');
+    if ((LL.pendingInviteQueue || []).length) hits.push('pendingInviteQueue');
+    if (LL.justJoined) hits.push('justJoined');
+    if (LL.needsIdentity) hits.push('needsIdentity');
+    return hits;
+  });
+  /* A spy on every write the SDK is asked for (set, update, add, in a batch or not), kept as path + data text. It
+     records what the page TRIES, whatever the rules then say. */
+  const installWriteSpy = (page) => page.evaluate(() => {
+    if (window.__writes) return true;
+    window.__writes = [];
+    const f = window.firebase && window.firebase.firestore;
+    if (!f || !f.WriteBatch || !f.DocumentReference || !f.CollectionReference) return false;
+    const text = (a) => { try { return JSON.stringify(a); } catch (e) { return String(a); } };
+    const wrap = (proto, name, pathOf) => {
+      const orig = proto[name];
+      proto[name] = function () {
+        try { window.__writes.push({ op: name, path: pathOf(this, arguments), data: text(Array.prototype.slice.call(arguments, pathOf.skip || 0)) }); } catch (e) {}
+        return orig.apply(this, arguments);
+      };
+    };
+    const refPath = (self) => self.path, argPath = (self, a) => (a[0] && a[0].path) || '';
+    argPath.skip = 1;
+    wrap(f.DocumentReference.prototype, 'set', refPath);
+    wrap(f.DocumentReference.prototype, 'update', refPath);
+    wrap(f.CollectionReference.prototype, 'add', refPath);
+    wrap(f.WriteBatch.prototype, 'set', argPath);
+    wrap(f.WriteBatch.prototype, 'update', argPath);
+    return true;
+  });
+  const writesNaming = (page, hid) => page.evaluate((h) => (window.__writes || []).filter((w) => (w.path || '').includes(h) || (w.data || '').includes(h)).map((w) => w.op + ' ' + w.path), hid);
+  const resetWrites = (page) => page.evaluate(() => { window.__writes = []; });
   /* The family sheet's text, as a person would read it, then closed again. */
   const familySheetText = async (page) => {
     const t = await page.evaluate(async () => {
@@ -259,10 +302,13 @@ async function until(fn, ms) {
   console.log('A. Ann signs in, makes an invite link; her family has a caregiver, a former nanny, a pending invite and Pro');
   const annUid = await makeAccount('ann@stalefamily.test');
   const beaUid = await makeAccount('bea@stalefamily.test');
+  ok('(the write spy is installed in the SDK)', await installWriteSpy(P));
   await signIn(P, 'ann@stalefamily.test');
   ok('Ann boots into a family of her own', await booted(P, annUid));
   const hidA = await hidOf(annUid);
+  ok('(a brand-new owner with nothing logged, she is owed her first run: needsIdentity)', (await sessionOf(P)).includes('needsIdentity'), await sessionOf(P));
   const annLink = await P.evaluate(() => window.LL.createInviteLink({ relationship: 'Friend' }).then((r) => !!r, (e) => 'threw: ' + e.message));
+  ok('(the write spy sees her link\'s writes naming her family)', (await writesNaming(P, hidA)).some((w) => /inviteLinks/.test(w)), await writesNaming(P, hidA));
   ok('(an invite link she asks for is made for her family, and its row is on the household)', annLink === true && (await linksFor(hidA, annUid)).length === 1, { annLink, links: await linksFor(hidA, annUid) });
   const zinUid = 'zinniaCaregiver0001';
   const hhA = (await adminGet('households/' + hidA)) || {};
@@ -283,9 +329,18 @@ async function until(fn, ms) {
     !!mine && FIELDS.every((f) => mine.hits.some((h) => h.split(':')[0] === f)), mine || await traceOf(P, mk));
   ok('(and Pro is on for her: isPro())', !!mine && mine.isPro === true, mine);
   const annSheet = await familySheetText(P);
-  ok('(her family sheet names Zinnia)', namesIn(annSheet, mk).includes('Zinnia'), annSheet.slice(0, 300));
+  ok('(her family sheet renders and names Zinnia)', annSheet.includes('Family & sharing') && namesIn(annSheet, mk).includes('Zinnia'), annSheet.slice(0, 300));
   const annFb = await sendFeedback(P, annUid, 'ann-feedback-stalefamily');
   ok('(feedback she sends is stamped with her family\'s id)', !!annFb && annFb.householdId === hidA, annFb);
+  /* What resolveHousehold leaves when she has an offer from another family and is still finishing her identity
+     (maybePromptPendingInvite waits for her), and a join it just made. */
+  await P.evaluate(() => {
+    window.LL.pendingInvite = { householdId: 'otherFamilyOffer01', invitedByName: 'Wren', relationship: 'Auntie' };
+    window.LL.pendingInviteQueue = [{ householdId: 'otherFamilyOffer02', invitedByName: 'Moss' }];
+    window.LL.justJoined = { invitedBy: 'wrenUid0001', role: 'caregiver' };
+  });
+  const annSession = await sessionOf(P);
+  ok('(the matcher finds all four of her sign-in\'s own state)', ['pendingInvite', 'pendingInviteQueue', 'justJoined', 'needsIdentity'].every((k) => annSession.includes(k)), annSession);
 
   /* ================================================================================================ */
   console.log('S. Ann logs out: at the door nothing names her family');
@@ -295,6 +350,9 @@ async function until(fn, ms) {
   const door = await traceOf(P, mk);
   ok('S none of the eight fields names Ann\'s family at the door', door.hits.length === 0, door);
   ok('S Pro is off at the door', door.isPro === false, door);
+  const doorSession = await sessionOf(P);
+  ok('S and nothing of her sign-in\'s own state is left: no invite to offer, no join, no first run owed', doorSession.length === 0, doorSession);
+  await resetWrites(P);
 
   /* ================================================================================================ */
   console.log('G. Bea signs in on the same tab; her household snapshot is held');
@@ -317,21 +375,21 @@ async function until(fn, ms) {
   ok('G2 and is not stamped with Ann\'s family id', !!beaFb && beaFb.householdId !== hidA, beaFb);
   const beaLink = await P.evaluate(() => window.LL.createInviteLink({ relationship: 'Friend' }).then((r) => (r ? 'made' : null), (e) => 'threw: ' + e.message));
   await sleep(500);
-  ok('G3 an invite link Bea asks for in the gap is not made for Ann\'s family', (await linksFor(hidA, beaUid)).length === 0, { beaLink, links: await linksFor(hidA, beaUid) });
+  ok('G3 nothing on the page tried a write naming Ann\'s family since she left (feedback, the link Bea asked for)', (await writesNaming(P, hidA)).length === 0, { beaLink, writes: await writesNaming(P, hidA) });
   const gapSheet = await familySheetText(P);
-  ok('G4 the family sheet in the gap shows none of Ann\'s roster, invites or links', namesIn(gapSheet, mk).length === 0, { names: namesIn(gapSheet, mk), text: gapSheet.slice(0, 300) });
+  ok('G4 the family sheet renders in the gap', gapSheet.includes('Family & sharing'), gapSheet.slice(0, 200));
+  ok('G4 and shows none of Ann\'s roster, invites or links', namesIn(gapSheet, mk).length === 0, { names: namesIn(gapSheet, mk), text: gapSheet.slice(0, 300) });
   ok('G5 Pro is not on in the gap', gap.isPro === false, gap);
-  const before = JSON.stringify(((await adminGet('households/' + hidA)) || {}).memberInfo || {});
-  await P.evaluate(() => { try { window.cubbyClaimAvatar && window.cubbyClaimAvatar(); } catch (e) {} });
-  await sleep(800);
-  const after = (await adminGet('households/' + hidA)) || {};
-  ok('G6 the avatar claim in the gap writes nothing into Ann\'s family', JSON.stringify(after.memberInfo || {}) === before && !(after.memberInfo || {})[beaUid], after.memberInfo);
   await P.evaluate(() => window.__releaseHh());
   ok('the snapshot let through: Bea boots into her own family', await booted(P, beaUid));
   const beaOn = await P.evaluate(() => ({ hid: window.LL.householdId, role: window.LL.role, members: Object.keys(window.LL.members || {}), pro: window.LL.pro }));
   ok('and window.LL describes it: her id, her owner role, herself alone, no Pro', beaOn.hid === hidB && beaOn.role === 'owner' && beaOn.members.length === 1 && beaOn.members[0] === beaUid && !beaOn.pro, beaOn);
   const beaTrace = await traceOf(P, mk);
   ok('and still nothing of Ann\'s family', beaTrace.hits.filter((h) => h !== 'role:owner').length === 0, beaTrace);
+  /* A tree that clears needsIdentity but still remembers Ann's first run was shown leaves Bea none owed. */
+  const beaSession = await until(async () => { const x = await sessionOf(P); return x.includes('needsIdentity') ? x : null; }, 5000);
+  ok('F Bea, a brand-new owner too, is owed her own first run, as Ann was', !!beaSession, await sessionOf(P));
+  ok('F and is offered none of Ann\'s invites or joins', !!beaSession && beaSession.length === 1, beaSession);
 
   /* ================================================================================================ */
   console.log('E. Ann signs back in; then she is signed out from elsewhere');
