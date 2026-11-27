@@ -128,6 +128,7 @@ globalThis.fetch = async (input, init) => {
 const ROUTES = [
   ['GET', '/api/invite-peek'], ['POST', '/api/send-invite'], ['POST', '/api/step'], ['GET', '/api/canary'],
   ['POST', '/api/signin-code'], ['POST', '/api/signin-verify'], ['POST', '/api/send-signin-link'], ['POST', '/api/newsletter'],
+  ['POST', '/api/signin-status'],
   ['POST', '/api/dose'], ['GET', '/api/health'], ['POST', '/api/account/purge'],
   ['POST', '/api/game/create'], ['GET', '/api/game/abcd1234'], ['POST', '/api/game/abcd1234/guess'], ['POST', '/api/game/abcd1234/reveal'],
   ['POST', '/api/hub/create'], ['GET', '/api/hub/abcd1234'], ['POST', '/api/hub/abcd1234/game'], ['POST', '/api/hub/abcd1234/guess'],
@@ -163,7 +164,7 @@ function oddValue(r, depth) {
 /* toString and valueOf as keys make nested objects that String(), `+ ''` and template literals cannot
    convert ({"code":{"toString":1}} threw out of /api/signin-verify after the .trim() sites were fixed). */
 const FIELDS = ['idToken', 'token', 'email', 'code', 'n', 'event', 'props', 'name', 'nickname', 'guess', 'note', 'title', 'hostKey',
-  'key', 'result', 'consent', 'source', 'redirect', 'continueUrl', 't', '__proto__', 'constructor', 'familyName', 'toString', 'valueOf'];
+  'key', 'result', 'consent', 'source', 'redirect', 'continueUrl', 't', '__proto__', 'constructor', 'familyName', 'toString', 'valueOf', 'ref'];
 function oddBody(r, depth) {
   const o = {};
   const n = r.int(6);

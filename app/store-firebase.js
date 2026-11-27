@@ -454,8 +454,13 @@
      the device holding the mail and leaves the other exactly where it was. It is one tap when it works
      and a dead end when it does not, so it is offered second. */
   var SEND_LABEL = 'Send code';
+  /* width:100% as the Google button beside it has (.lp-cta). In the app's sign-in column (.lp-app-auth, a
+     flex column) a child with auto side margins is sized to its content, not to the column, and the code
+     box's own width (an input's intrinsic size, plus Sign in) is wider than a 320 px phone's column: the row
+     ran from the left gutter to the screen's edge, with the button's corner cut off (round-6 skeptic
+     R6M2-5). Filling the column, capped at 340 px and centred, gives it the same gutter on both sides. */
   function emailRowHtml() {
-    return '<div class="ll-email-row" style="margin:14px auto 0;max-width:340px;text-align:center">'
+    return '<div class="ll-email-row" style="margin:14px auto 0;width:100%;max-width:340px;text-align:center">'
       + '<button type="button" class="ll-email-toggle" style="border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;color:var(--ink-soft,#6E635B);text-decoration:underline;padding:6px">'
       + 'Prefer email? Get a sign-in code</button>'
       + '<form class="ll-email-form" style="display:none;gap:8px;margin-top:8px">'
@@ -506,19 +511,31 @@
      bring the field up, and the address and Send code sat under the keys (device test, 16 Nov 2026). The
      code step only escaped because its longer note made the screen taller than the phone. So while a
      field of the email row has focus and the keys cover part of the screen, the overlay gets that much
-     room below its content and the row is moved up above the keys; when the keys go, the room goes. */
+     room below its content and the row is moved up above the keys; when the keys go, the room goes.
+     WHAT ELSE STAYS ABOVE THE KEYS (round 7, 17 Nov 2026). She waits in the code box with the keys up,
+     which is the designed flow (iOS offers the code from Mail there), and the note about her email sits
+     under the box. "We couldn't get that email to you" arrived under the keys and was never seen, which is
+     the incident itself, again. So in the code box, once the note has something new to say (the status
+     line or a code error has words), the block kept above the keys runs from the box to the end of the
+     note, "Wrong email?" included; if it cannot all fit, the box wins, because it is where she is typing. */
+  function keysHeight() {
+    var vv = window.visualViewport;
+    return vv ? Math.max(0, Math.round(document.documentElement.clientHeight - vv.height)) : 0;
+  }
   function fitAboveKeys() {
     var vv = window.visualViewport, ov = document.getElementById('llAuthOv');
     if (!vv || !ov) return;
     var a = document.activeElement, row = a && a.closest ? a.closest('.ll-email-row') : null;
-    var keys = row && ov.contains(row) && ov.classList.contains('landing')
-      ? Math.max(0, Math.round(document.documentElement.clientHeight - vv.height)) : 0;
+    var keys = row && ov.contains(row) && ov.classList.contains('landing') ? keysHeight() : 0;
     if (keys < 80) { ov.style.paddingBottom = ''; return; }
     ov.style.paddingBottom = keys + 'px';
-    var f = a.closest('form') || a, r = f.getBoundingClientRect();
+    var f = a.closest('form') || a, r = f.getBoundingClientRect(), rTop = r.top, rBottom = r.bottom;
+    var nt = f.classList && f.classList.contains('ll-code-form') ? row.querySelector('.ll-email-note') : null;
+    var said = nt && [nt.querySelector('.ll-mail-status'), nt.querySelector('.ll-code-err')].some(function (x) { return x && x.textContent; });
+    if (said) rBottom = Math.max(rBottom, nt.getBoundingClientRect().bottom);
     var top = vv.offsetTop + 12, bottom = vv.offsetTop + vv.height - 16;
-    if (r.bottom > bottom) ov.scrollTop += Math.min(r.bottom - bottom, r.top - top);
-    else if (r.top < top) ov.scrollTop -= top - r.top;
+    if (rBottom > bottom) ov.scrollTop += Math.min(rBottom - bottom, rTop - top);
+    else if (rTop < top) ov.scrollTop -= top - rTop;
   }
   (function () {
     var vv = window.visualViewport, t = null;
@@ -538,6 +555,10 @@
     /* SEND_LABEL is module-level and used by the markup too: the button label had been hardcoded
        separately from the mode that chose it, so the toggle once read "Sign in with an email code"
        over a button reading "Send link". One variable, so they cannot disagree again. */
+    /* It leaves the mail watch alone (skeptic M-S1, 16 Nov 2026). The undeliverable note says "Check the
+       address", so "Wrong email?" is exactly where she goes next, and dropping what the panel knew here meant
+       the same address sent again inside the minute came back "We already sent an email ... so use that
+       one". Whatever she sends next decides the watch (showEmailSent); until then it draws nowhere. */
     function openForm() { if (cdTimer) { clearInterval(cdTimer); cdTimer = null; } note.textContent = ''; toggle.style.display = 'none'; form.style.display = 'flex'; btn.disabled = false; btn.textContent = SEND_LABEL; input.focus(); input.select(); }
     toggle.onclick = openForm;
 
@@ -565,12 +586,152 @@
         : 'Check your inbox: we just emailed <b>' + escHtml(email) + '</b>.';
     }
 
+    /* ---- did that email actually go? (16 Nov 2026) ----
+       Resend accepting an email is not the email arriving. It accepts one for an address on its
+       suppression list and then never sends it, and a bounce comes after it accepted. A new Gmail
+       address met exactly that: "we just emailed you", three times, and nothing in any folder, Spam
+       included, with no hint that Google or Apple would let her straight in. So when the sender hands
+       back a sendRef, the panel asks the Worker what became of that email a few times while she waits
+       (MAIL_CHECKS, seconds after the send), and stops at the first settled answer or after the last.
+         undeliverable: say so plainly, drop "check your inbox", and point to the other doors.
+         delivered:     say it arrived, and where it may be hiding.
+         anything else: sent, delayed or unknown (a sending-only Resend key, another colo, a timeout)
+                        changes nothing on her screen until about 45 seconds have passed (below).
+       A status answer only ever writes into its own line. It never touches what she has typed, because a
+       code that did arrive must always still work.
+       The line is a polite live region, and it is on the page, empty, from the moment the note is drawn: a
+       screen reader reads out a change to a region it already has, and may skip one that was hidden until
+       the words arrived (skeptic M-S4). So the words go in after the region (fresh: a note just drawn).
+       NO ANSWER YET (round 7). Production's Resend key may only be allowed to send, and then every ask is
+       unknown; an ask can land in another data centre; Resend can still be trying (delayed); an older
+       Worker sends no sendRef; a reload or a second panel inside the minute gets only the cooldown's
+       answer. Each of those left her with "check your inbox" and nothing else, which is the incident. So
+       when nothing is settled about 45 seconds after the email went, the line says, once, that it can take
+       a few minutes and that Google or Apple will let her in now (SLOW_LINE). Never over delivered or
+       undeliverable, which say more; a settled answer that comes later replaces it.
+       It is timed from the send, on the page's own clock (a timer of MAIL_SLOW), not from a step of the
+       asking chain: the chain's steps are each counted from the answer before, and iOS suspends the app
+       while she looks in Mail, so on her return the chain is wherever it stopped. Back 60 seconds after
+       the send, she had the line 37 seconds later, at the chain's 45-second step (round 7, R7M-1). A
+       suspended page runs its overdue timers the moment she is back, so the timer is due at once. A phone
+       that slept (locked, its screen off) can come back with its timers behind the wall clock instead, so
+       any answer that is not settled also brings the line once Date.now() is 45 seconds past the send. It
+       still never draws the line by itself while an ask could contradict it a moment later: with an ask
+       on its way, the line comes with that answer if it is not settled (an ask gives up after
+       MAIL_ASK_GIVE_UP); with none, the chain's next ask is made now instead, and the line comes with it.
+       ABOVE THE KEYS (round 7). The line is under the code box, so under the keys while she waits in the
+       box. A line with words is fitted above the keys with the box (fitAboveKeys). Undeliverable over an
+       EMPTY box lets go of the box instead, so the keys go down and she sees the note and the Google and
+       Apple buttons; a box she has typed into is never let go, and neither is any other line's. */
+    var MAIL_CHECKS = [8000, 20000, 45000, 90000];
+    var MAIL_SLOW = 45000;          // from the send: the next answer that is not settled brings the slow line
+    var MAIL_SLOW_AGAIN = 15000;    // after a cooldown answer: that email went out before it, up to a minute ago
+    var MAIL_ASK_GIVE_UP = 7000;    // an ask that hangs must not hold the line back (the Worker answers inside ~5 s)
+    var SLOW_LINE = 'It can take a few minutes to arrive. You can also continue with Google or Apple now.';
+    var mailWatch = null;   // { email, ref, hasCode, state, slow, timer, t0, due, dueTimer, asking }: the one send this panel is about
+    function stopMailWatch() {
+      if (mailWatch) { if (mailWatch.timer) clearTimeout(mailWatch.timer); if (mailWatch.dueTimer) clearTimeout(mailWatch.dueTimer); }
+      mailWatch = null;
+    }
+    function drawMailStatus(fresh) {
+      var el = note.querySelector('.ll-mail-status'), lead = note.querySelector('.ll-sent-lead'), ask = note.querySelector('.ll-resend-ask');
+      var w = mailWatch, st = w ? w.state : '';
+      var html = st === 'undeliverable'
+        ? 'We couldn’t get that email to <b>' + escHtml(w.email) + '</b>, so ' + (w.hasCode ? 'no code is on its way' : 'it won’t arrive') + '. Check the address, or continue with Google or Apple.'
+        : st === 'delivered'
+          ? 'It’s been delivered. If it isn’t in your inbox, have a look in Spam or Promotions.'
+          : w && w.slow ? SLOW_LINE : '';
+      if (lead) lead.style.display = st === 'undeliverable' ? 'none' : '';   // "check your inbox" is no longer true
+      /* A resend to an address Resend could not reach is not sent either (a suppressed address stays
+         suppressed), and each one spends a code from the address's hourly allowance. "Wrong email?" stays. */
+      if (ask) ask.style.display = st === 'undeliverable' ? 'none' : '';
+      if (!el) return;
+      var put = function () { el.innerHTML = html; el.style.marginTop = html ? '7px' : '0'; if (html) inSight(st); };
+      if (fresh && html) setTimeout(put, 150); else put();
+    }
+    /* Make a line that just got its words visible while she is in the code box (ABOVE THE KEYS). */
+    function inSight(st) {
+      var ci = codeForm.querySelector('input');
+      if (st === 'undeliverable' && ci && document.activeElement === ci && !ci.value && keysHeight() >= 80) ci.blur();
+      else fitAboveKeys();
+    }
+    /* The Worker already knows what became of the email (a cooldown answer carries its settled state): no
+       asking, just say so. */
+    function knownMail(email, state, hasCode) {
+      stopMailWatch();
+      mailWatch = { email: email, ref: '', hasCode: !!hasCode, state: state, slow: false, timer: null };
+    }
+    /* Nothing to ask with (no sendRef: an older Worker, Firebase's own sender, a cooldown answer): only the
+       slow line can come, `after` milliseconds from now, unless something replaces this watch first. */
+    function waitMail(email, hasCode, after) {
+      stopMailWatch();
+      var w = mailWatch = { email: email, ref: '', hasCode: !!hasCode, state: '', slow: false, timer: null };
+      w.timer = setTimeout(function () {
+        if (mailWatch !== w) return;
+        w.timer = null;
+        if (!row.isConnected) { stopMailWatch(); return; }
+        w.slow = true; drawMailStatus();
+      }, after);
+    }
+    function watchMail(email, ref, hasCode) {
+      stopMailWatch();
+      var w = mailWatch = { email: email, ref: ref, hasCode: !!hasCode, state: '', slow: false, timer: null, t0: Date.now(), due: false, dueTimer: null, asking: false }, i = 0;
+      function ask() {
+        w.timer = null;
+        if (mailWatch !== w) return;
+        /* This panel is no longer on screen: stop. That is also how a sign-in stops it, because every
+           sign-in that changes who is signed in redraws the overlay (onAuthStateChanged -> showStatus),
+           which takes this row with it. It used to stop on auth.currentUser as well, which no sign-in
+           ever needed (round-6 mutant: removing it turned nothing red) and which silenced the whole
+           watch for a parent who is already signed in and on this screen ("Could not load your data
+           just now"), the one case where the panel stays up with someone signed in. */
+        if (!row.isConnected) { stopMailWatch(); return; }
+        i++;
+        w.asking = true;
+        var ac = typeof AbortController === 'function' ? new AbortController() : null;
+        var giveUp = ac ? setTimeout(function () { ac.abort(); }, MAIL_ASK_GIVE_UP) : null;
+        fetch('/api/signin-status', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ref: ref }), signal: ac ? ac.signal : undefined })
+          .then(function (r) { return r.ok ? r.json() : {}; })
+          .catch(function () { return {}; })
+          .then(function (d) {
+            if (giveUp) clearTimeout(giveUp);
+            w.asking = false;
+            if (mailWatch !== w) return;
+            var st = d && d.state;
+            if (st === 'undeliverable' || st === 'delivered') { w.state = st; drawMailStatus(); return; }   // the due timer then does nothing
+            if (!w.slow && (w.due || Date.now() - w.t0 >= MAIL_SLOW)) { w.slow = true; drawMailStatus(); }
+            next();
+          });
+      }
+      function next() {
+        if (mailWatch !== w || i >= MAIL_CHECKS.length) return;
+        w.timer = setTimeout(ask, MAIL_CHECKS[i] - (i ? MAIL_CHECKS[i - 1] : 0));
+      }
+      /* NO ANSWER YET, from the send (above). Never the line on its own here: an answer on its way brings
+         it, and with none on its way the next ask goes now. */
+      w.dueTimer = setTimeout(function () {
+        w.dueTimer = null;
+        if (mailWatch !== w || w.state) return;
+        w.due = true;
+        if (w.asking) return;
+        if (w.timer) clearTimeout(w.timer);
+        ask();
+      }, MAIL_SLOW);
+      next();
+    }
+
     /* ---- the code path: the way in, everywhere ---- */
     var codeForm = row.querySelector('.ll-code-form');
     function sendCode(email) {
       signinTrack('email_code', 'started', 'succeeded');
       return fetch('/api/signin-code', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: email }) })
-        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) { var er = new Error(d.error || 'send_failed'); er.retryAfter = Number(d.retryAfter) || 0; er.liveCode = d.liveCode === true; er.liveFor = Number(d.liveFor) || 0; throw er; } return d; }); });
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) { var er = new Error(d.error || 'send_failed'); er.retryAfter = Number(d.retryAfter) || 0; er.liveCode = d.liveCode === true; er.liveFor = Number(d.liveFor) || 0; throw er; } return d; }); })
+        /* The code email carries the sign-in link too, and on this phone the link opens this app, which
+           needs her address to finish it (maybeFinishEmailLink). Only sendLink kept it, so the link met a
+           bare "Confirm your email" box every time (founder's simulator, 16 Nov 2026). Kept as sendLink
+           keeps it, when the answer says that email has a link: hasLink, or cached (the email this exact
+           address got in the last minute, which every client reads as code and link). */
+        .then(function (d) { if (d && (d.hasLink === true || d.cached === true)) { try { localStorage.setItem('cubby-email-signin', email); } catch (e) {} } return d; });
     }
     /* How long codes are paused, in words. The worker's hourly ceilings say when a slot frees
        (retryAfter, seconds); a pause from the per-IP limiter carries none and lasts about a minute. */
@@ -594,6 +755,16 @@
       try { return typeof isStandaloneApp === 'function' && isStandaloneApp() && typeof isIOSDevice === 'function' && isIOSDevice(); }
       catch (e) { return false; }
     }
+    /* A code that did not work is said in its own line at the top of the note (skeptic M-S2). It used to
+       replace the whole note, which wiped what the panel had learned about the email (an undeliverable note
+       arriving after that had nowhere to go) and took Resend and "Wrong email?" with it, so an expired code
+       left her nothing to tap but the box. */
+    function codeError(m) {
+      var el = note.querySelector('.ll-code-err');
+      if (!el) { note.textContent = m; return; }
+      el.textContent = m; el.style.marginBottom = m ? '6px' : '0';
+      if (m) fitAboveKeys();   // she is in the box with the keys up: the error comes up with it (round 7)
+    }
     /* Reveal the six-digit box and wire it. ONE implementation for one control: two copies of a
        sign-in submit is how the two routes drifted apart in the first place. */
     function showCodeBox(email) {
@@ -602,7 +773,7 @@
       codeForm.onsubmit = function (ev2) {
         ev2.preventDefault();
         var code = (ci.value || '').replace(/\D/g, '');
-        if (code.length !== 6) { note.textContent = 'That code should be six digits.'; ci.focus(); return; }
+        if (code.length !== 6) { codeError('That code should be six digits.'); ci.focus(); return; }
         var cb = codeForm.querySelector('button');
         cb.disabled = true; cb.textContent = 'Signing in…';
         fetch('/api/signin-verify', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: email, code: code }) })
@@ -627,7 +798,7 @@
                   ? 'There have been a lot of tries for this email, so codes are paused for ' + pauseWords(err.retryAfter) + '. Nothing is wrong with your account. Try again then.'
                   : 'That was a lot of tries in a minute. Wait a moment, then type your code again.')
                 : errText(err, 'Could not finish signing in just now. Mind trying again?');
-            note.textContent = m; ci.select();
+            codeError(m); ci.select();
           });
       };
       return ci;
@@ -663,8 +834,24 @@
       var lead = res.liveCode
         ? 'New codes are paused for ' + pauseWords(res.retryAfter) + ', but the code in your most recent email still works for ' + liveWords(res.liveFor) + '. Type it here.'
         : sentLine(email, res.cached) + how;
-      note.innerHTML = lead
-        + '<div class="ll-resend-row" style="margin-top:8px">Not arrived yet? <button type="button" class="ll-resend" style="' + LINKBTN + '">Resend email</button> &middot; <button type="button" class="ll-changeemail" style="' + LINKBTN + '">Wrong email?</button></div>';
+      /* What became of the email. A sendRef is a new email to ask about. A cooldown answer that carries a
+         settled state is the Worker saying what it already found (a reload, or a second panel, inside the
+         minute). Any other answer for the same address with no sendRef sent no new email of ours (the
+         cooldown, cached or not, or codes paused with her newest still live), so the email being asked about
+         is still the one in question: keep asking, and keep saying what is known. Firebase's own sender
+         (fallback) is a different email by a different road, and a different address is a different email. */
+      if (res.sendRef && !res.liveCode) watchMail(email, String(res.sendRef), hasCode);
+      else if (res.state === 'undeliverable' || res.state === 'delivered') knownMail(email, res.state, hasCode);
+      else if (!(mailWatch && mailWatch.email === email && !res.fallback)) stopMailWatch();
+      /* Nothing to ask about and nothing known (round 7, NO ANSWER YET): the slow line, in time. A cooldown
+         answer (cached) is about an email that went out before it, so its wait is shorter. Not when codes are
+         paused and her newest code still works: that email went long ago, and the lead says so. */
+      if (!mailWatch && !res.liveCode) waitMail(email, hasCode, res.cached ? MAIL_SLOW_AGAIN : MAIL_SLOW);
+      note.innerHTML = '<div class="ll-code-err" role="alert"></div>'
+        + '<span class="ll-sent-lead">' + lead + '</span>'
+        + '<div class="ll-mail-status" role="status" aria-live="polite" style="margin-top:0;color:var(--ink,#2C2521)"></div>'
+        + '<div class="ll-resend-row" style="margin-top:8px"><span class="ll-resend-ask">Not arrived yet? <button type="button" class="ll-resend" style="' + LINKBTN + '">Resend email</button> &middot; </span><button type="button" class="ll-changeemail" style="' + LINKBTN + '">Wrong email?</button></div>';
+      drawMailStatus(true);
       if (hasCode) showCodeBox(email).focus(); else codeForm.style.display = 'none';
       var rb = note.querySelector('.ll-resend');
       note.querySelector('.ll-changeemail').onclick = function () { codeForm.style.display = 'none'; input.value = email; openForm(); }; // fix a typo or use a different address
@@ -712,18 +899,21 @@
         .catch(function (err) { btn.disabled = false; btn.textContent = SEND_LABEL; note.textContent = errText(err, 'Could not send that just now. Mind trying again?'); });
     };
   }
-  function maybeFinishEmailLink() {
+  function maybeFinishEmailLink(notKept) {
     try {
       if (!auth.isSignInWithEmailLink(window.location.href)) return;
     } catch (e) { return; }
-    var email = null;
-    try { email = localStorage.getItem('cubby-email-signin'); } catch (e) {}
+    var email = null, kept = false;
+    if (!notKept) { try { email = localStorage.getItem('cubby-email-signin'); kept = !!email; } catch (e) {} }
     if (!email) email = window.prompt('Confirm your email to finish signing in');
     /* This used to `return` in silence. The key is missing whenever the link is opened in a DIFFERENT
        storage container from the one that asked for it — which on iOS is every time, because Mail opens
        Safari and the request was made in the home-screen app. So the person is shown a bare prompt with
        no context, dismisses it, and lands on a sign-in screen that says nothing at all. */
-    if (!email) { showSignIn('To finish signing in, we need the email address you asked for the link with.'); return; }
+    /* As a note (window.LL.signInNote), not a message of the moment: this runs at boot, before the first
+       auth answer, and that answer (signed out) redraws the screen with showSignIn(''), which wiped the
+       line a moment after it appeared. She saw a plain sign-in screen (test/native-signin-link.test.js S1). */
+    if (!email) { window.LL.signInNote('To finish signing in, we need the email address you asked for the link with.'); return; }
     auth.signInWithEmailLink(email.trim(), window.location.href)
       .then(function (res) {
         try { localStorage.removeItem('cubby-email-signin'); } catch (e) {}
@@ -733,8 +923,40 @@
         }
       })
       .catch(function (err) {
+        var code = (err && err.code) || '';
+        /* The address kept on this phone is not this link's: she asked for a code here for one address
+           and opened a link asked for with another. Forgotten, and she is asked once, as if nothing had
+           been kept; it used to end on "doesn't look right" with no box to fix it (test K). */
+        if (kept && code === 'auth/invalid-email') {
+          try { localStorage.removeItem('cubby-email-signin'); } catch (e) {}
+          maybeFinishEmailLink(true);
+          return;
+        }
         signinTrack('email_link', 'verified', 'failed', err);
-        showSignIn(errText(err, 'That sign-in didn’t finish. Send yourself a fresh link and try once more.'));
+        /* A used or expired code never works, so it comes off the address, or every later load of this
+           page (a join's reload, Try again) runs it again over whatever she is doing then (test X). */
+        var dead = code === 'auth/invalid-action-code' || code === 'auth/expired-action-code';
+        if (dead) { try { history.replaceState(null, '', location.pathname); } catch (e) {} }
+        /* Who is signed in is known only from the first auth answer, which on a phone can come before or
+           after this one. Signed in (a link she had already used, tapped again after iOS closed the app),
+           she stays on her app with a short note; the sign-in screen used to come down over it and stay
+           (test D). Signed out, the sign-in screen says what went wrong, drawn after that answer's own
+           plain one, so it is not wiped. */
+        var answered = false, off = auth.onAuthStateChanged(function (user) {
+          if (answered) return; answered = true;
+          if (off) off();
+          if (user) {
+            var said = dead ? 'That sign-in link was already used. You’re still signed in.' : 'That sign-in didn’t finish. You’re still signed in.';
+            // Her app is still behind "Setting things up…" for a moment, and that cover hides toasts.
+            (function note(tries) {
+              if (document.getElementById('llAuthOv') && tries < 40) { setTimeout(function () { note(tries + 1); }, 250); return; }
+              try { if (window.toast) window.toast(said, { ms: 4000 }); } catch (e) {}
+            })(0);
+            return;
+          }
+          showSignIn(errText(err, 'That sign-in didn’t finish. Send yourself a fresh link and try once more.'));
+        });
+        if (answered && off) off();
       });
   }
 
@@ -1043,6 +1265,8 @@
     // (confirmLogout promises "your data stays safely synced").
     if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; try { await pushNow(); } catch (e) {} }
     teardown(); auth.signOut();
+    // The address kept for her sign-in link (sendCode, sendLink) goes with her: a shared phone keeps nothing of hers.
+    try { localStorage.removeItem('cubby-email-signin'); } catch (e) {}
   };
 
   function teardown() {
@@ -3099,11 +3323,15 @@
     if (replayHold && !Object.keys(replayHold).length) replayHold = null;
     function outboxBack() { if (outbox && !replayEv && !replayHold && hhHydrated) { outbox = null; dropOutbox(user.uid, hid); } }
 
+    var attached = hhRef; // this call's family: a fresh reference every time, even for the same family
     function maybeBoot(force) {
       // Always need the app blob (babies/settings) to render a meaningful home. Normally also wait
       // for the first events snapshot so the activity is complete on first paint — but `force` (the
       // boot failsafe below) skips that wait so a slow/hanging events query can never pin the loader.
-      if (booted || !gotApp || (!gotEvents && !force)) return;
+      // Never for a family she has since signed out of: the failsafe timer outlives teardown, and run
+      // after it, it hid the sign-in screen and marked the app booted, so her next sign-in on this page
+      // never drew her family and the loader turned for good (tools/usage_tracker_check.js S21 part c).
+      if (booted || !gotApp || (!gotEvents && !force) || hhRef !== attached) return;
       if (!state.timers) state.timers = {}; // timers come from the cloud app blob
       if (prefs.theme) state.settings.theme = prefs.theme;
       state.activeBabyId = prefs.activeBabyId || (state.babies[0] && state.babies[0].id) || null;

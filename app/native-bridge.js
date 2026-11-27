@@ -158,26 +158,62 @@
     } catch (e) {}
 
     // Deep links from a universal link / custom scheme (Associated Domains).
-    function routeUrl(rawUrl) {
+    /* ONE ROUTE PER OPEN. getLaunchUrl is not "the link that launched the app": Capacitor answers it
+       with ApplicationDelegateProxy.lastURL (@capacitor/ios 8.4.2), which every open sets and nothing
+       clears while the app process lives, and boot() asks it on every page load. A sign-in link answers
+       with location.replace, a page load, which asked again: on the founder's simulator (16 Nov 2026)
+       one tapped sign-in link reloaded the app five times in a minute, each time with the bare "Confirm
+       your email" box, and she was never signed in. Every join, go, stage, read and tab link was routed
+       again on every later load of the process too. So the last link routed is remembered for the
+       webview's session: sessionStorage survives location.replace in this webview and ends with it
+       (localStorage would outlive both, and a relaunch by the same link would do nothing). That is
+       nearly lastURL's lifetime, not quite: lastURL belongs to the process and the webview to its scene
+       (ios SceneDelegate), so if iOS drops the scene and reconnects it while the process lives, the new
+       webview routes the last link once more. A used sign-in link then gets maybeFinishEmailLink's answer
+       to a dead code; only a native change (clearing lastURL once read, a store build) closes it fully.
+       Only a short hash is kept, so a sign-in link's one-time code is never written down.
+       appUrlOpen is a real tap, so it routes a link even if it was routed before, except as the second
+       delivery of this page's own cold-launch link, or as a sign-in link that already signed her in
+       (its code is spent: loading it again could only ask for her email and fail).
+       test/native-deeplink.test.js proves each of these, and test/native-signin-link.test.js the whole
+       sign-in through the real pages and the Auth emulator. */
+    var ROUTED = 'cubby-link-routed', bootRouted = null, bootAt = 0;
+    function linkMark(raw) {   // FNV-1a: tells two links apart, keeps nothing that was in them
+      var h = 2166136261, s = String(raw || '');
+      for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+      return h.toString(36) + '.' + s.length;
+    }
+    function signedIn() { try { return !!(window.LL && window.LL.auth && window.LL.auth.currentUser); } catch (e) { return false; } }
+    function routeUrl(rawUrl, fromLaunch) {
+      var mark = linkMark(rawUrl), seen = null, u, code;
+      try { u = new URL(rawUrl); code = u.searchParams.get('oobCode'); } catch (e) { return; }
+      var signin = /[?&](oobCode|mode=signIn)/.test(u.search);
+      try { seen = sessionStorage.getItem(ROUTED); } catch (e) {}
+      if (fromLaunch && seen === mark) return;
+      // The page that IS this sign-in link is finishing it (store-firebase.js maybeFinishEmailLink), storage or not.
+      if (fromLaunch && code && code === new URLSearchParams(location.search).get('oobCode')) return;
+      if (!fromLaunch && bootRouted === mark && Date.now() - bootAt < 3000) { bootRouted = null; return; }
       // Usage visits (app/cubby-track.js): a link brought the app forward. Only that it was a link, never which.
       try { if (window.cubbyTrackLinkOpened) window.cubbyTrackLinkOpened(); } catch (e) {}
+      if (!fromLaunch && signin && seen === mark && signedIn()) return;
+      if (fromLaunch) { bootRouted = mark; bootAt = Date.now(); }
+      try { sessionStorage.setItem(ROUTED, mark); } catch (e) {}
       try {
-        var u = new URL(rawUrl);
         // An email sign-in link must be HANDLED, not just parsed for deep-link keys: hand the whole
         // URL to the web app so signInWithEmailLink() can finish inside the webview (in Safari it
         // would sign in to the wrong place entirely).
-        if (/[?&](oobCode|mode=signIn)/.test(u.search)) { location.replace('/app/' + u.search + u.hash); return; }
+        if (signin) { location.replace('/app/' + u.search + u.hash); return; }
         var q = u.searchParams;
         routeDeepLink({ join: q.get('join'), go: q.get('go'), stage: q.get('stage'), read: q.get('read'), tab: q.get('tab') });
       } catch (e) {}
     }
     try {
-      P.App && P.App.addListener && P.App.addListener('appUrlOpen', function (ev) { routeUrl(ev && ev.url); });
+      P.App && P.App.addListener && P.App.addListener('appUrlOpen', function (ev) { routeUrl(ev && ev.url, false); });
       // A universal link that COLD-LAUNCHES the app does not always fire appUrlOpen — the tapped URL
       // arrives via getLaunchUrl instead. Without this, tapping an invite link on a freshly-killed app
       // (the common tester case) dropped the ?join=1 entirely.
       if (P.App && P.App.getLaunchUrl) {
-        P.App.getLaunchUrl().then(function (r) { if (r && r.url) routeUrl(r.url); }).catch(function () {});
+        P.App.getLaunchUrl().then(function (r) { if (r && r.url) routeUrl(r.url, true); }).catch(function () {});
       }
     } catch (e) {}
     // Usage visits (app/cubby-track.js): the app coming to the front or going away. JavaScript only, no store review.

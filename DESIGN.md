@@ -182,6 +182,7 @@ on each of the three sub-tabs, so a sibling rule would have landed 16 on one and
 ## A7. Voice
 Warm, brief, second person, no jargon, no guilt ("rough nights happen"), no em-dashes,
 sentence case everywhere (no SHOUTING buttons). Numbers humanized ("1h 12m", "3 feeds").
+Health copy says only what its listed official sources say, with their limits: docs/HEALTH-COPY-RULES.md.
 
 ---
 
