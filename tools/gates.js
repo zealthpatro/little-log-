@@ -47,6 +47,9 @@ const TREE = [
   /* Health copy: no reviewer notes in a served page or its JSON-LD, no other country's crisis line on a
      country's page, and the rewritten health FAQs held in lockstep with their JSON-LD. Each staged red first. */
   { name: 'health-copy',    cmd: ['node', 'tools/health_copy_check.js', '--self-test'] },
+  /* Health caution: every MEDICAL article carries the one caution under its title and links an official
+     source in its sources list (docs/HEALTH-COPY-RULES.md); NON-MEDICAL ones carry the general line. */
+  { name: 'health-caution', cmd: ['node', 'tools/health_caution_check.js', '--self-test'] },
   { name: 'claude-md',      cmd: ['node', 'tools/claudemd_check.js', '--self-test'] },
   { name: 'hooks',          cmd: ['node', 'tools/hooks_check.js', '--self-test'] },
   /* Every route worker.js serves is in run_worker_first; an unlisted one is answered by the asset layer
@@ -56,6 +59,10 @@ const TREE = [
   /* The daily merge train (docs/RELEASE-TRAIN.md): green PRs only, CACHE-only sw.js conflicts settled,
      real conflicts skipped and aborted, CACHE ends above production. Real git in a temp repo. */
   { name: 'train',          cmd: ['node', 'tools/train.js', '--self-test'] },
+  /* Clinical lock: a health page's words change only with 2+ clinician sign-offs at the new hash
+     (docs/clinical-review/approved.json; reviewer details stay private in $CUBBY_SIGNOFFS) or a 14-day
+     safety fix (docs/clinical-review/safety-fixes.json); other pages hold at tools/clinical-lock-baseline.json. */
+  { name: 'clinical-lock',  cmd: ['node', 'tools/clinical_lock_check.js', '--self-test'] },
   { name: 'deploy-excl',    cmd: ['node', 'tools/deploy_exclusion_check.js', '--self-test'] },
   /* The guard that keeps gates out of ~/Downloads, and the helper that sends their files elsewhere. */
   { name: 'downloads-guard', cmd: ['node', 'tools/gates.js', '--self-test-downloads'] },
