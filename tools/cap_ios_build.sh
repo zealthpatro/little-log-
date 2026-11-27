@@ -48,7 +48,7 @@ LOCAL=${1:-}
 echo "▸ Copying the offline fallback (cap-web/) into the native projects…"
 npx --no-install cap copy ios
 if [ -d android ]; then npx --no-install cap copy android; fi
-for F in index.html logo.png; do
+for F in index.html error.html logo.png; do
   cmp -s "cap-web/$F" "ios/App/App/public/$F" \
     || { echo "✖ ios/App/App/public/$F is not cap-web/$F after cap copy: the build would ship a stale offline page. Stopping."; exit 1; }
 done

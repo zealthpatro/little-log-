@@ -1,0 +1,65 @@
+<!doctype html>
+<!-- Bundled error page for the native app (capacitor://localhost/error.html). CubbyBridgeViewController
+     (native-ios/) loads it only when a page load of the live site really fails: no connection and no cached
+     app yet, the site unreachable, a timeout, a broken secure connection (native-ios/CubbyLoadFailure.swift).
+     A cancelled load or a link handed to Safari never lands here, and an HTTP error from the site is a
+     successful load. The link that failed arrives in the fragment, so trying again reopens the same sign-in
+     or invite link. Copy: DESIGN.md §A1 and §A7; true whether the phone is online or not. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Cubby</title>
+<style>
+:root{--bg:#F7F2E8;--ink:#2C2521;--ink-soft:#6E635B;--btn:#E29A3B;--on-btn:#1A1614;--focus:#2C2521}
+@media (prefers-color-scheme: dark){:root{--bg:#1A1614;--ink:#F2EADF;--ink-soft:#C4B8AB;--btn:#E0A655;--on-btn:#1A1614;--focus:#F2EADF}}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+body{display:flex;align-items:center;justify-content:center;min-height:100vh;box-sizing:border-box;
+  padding:calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom))}
+main{width:100%;max-width:360px;text-align:center}
+img{display:block;margin:0 auto 20px;border-radius:16px}
+h1{font-size:22px;line-height:1.3;margin:0 0 10px;font-weight:800}
+p{font-size:16px;line-height:1.5;margin:0 0 12px;color:var(--ink-soft)}
+button{width:100%;min-height:52px;margin-top:12px;border:none;border-radius:16px;background:var(--btn);
+  color:var(--on-btn);font:inherit;font-size:17px;font-weight:800;cursor:pointer}
+button:active{transform:scale(.97)}
+button:focus-visible{outline:3px solid var(--focus);outline-offset:3px}
+button[disabled]{opacity:.7}
+.small{font-size:14px;margin-top:16px}
+</style>
+</head>
+<body>
+<main>
+  <img src="logo.png?v=09cba32f" alt="" width="64" height="64">
+  <h1>Cubby can't open just now</h1>
+  <p>Check your connection, then try again.</p>
+  <button id="retry" type="button">Try again</button>
+  <p class="small" id="note" aria-live="polite"></p>
+</main>
+<script>
+(function () {
+  var APP = 'https://little-cubby.com/app/';
+  // The failed link, if CubbyBridgeViewController passed one: only ever this site, never anywhere else.
+  var to = APP;
+  try {
+    var h = decodeURIComponent(location.hash.slice(1));
+    if (h.indexOf('https://little-cubby.com/') === 0) to = h;
+  } catch (e) {}
+  var btn = document.getElementById('retry');
+  var note = document.getElementById('note');
+  function go() {
+    btn.disabled = true;
+    btn.textContent = 'Opening Cubby';
+    location.replace(to);
+  }
+  btn.addEventListener('click', go);
+  // No automatic retry on load: the native side only sends a real failure here, and retrying a site that
+  // cannot answer would bounce between this page and a failed load. The connection coming back is the cue.
+  window.addEventListener('online', go);
+  if (navigator.onLine === false) note.textContent = "Your phone looks offline. When it's back online, we'll try again for you.";
+})();
+</script>
+</body>
+</html>

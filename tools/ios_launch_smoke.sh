@@ -66,6 +66,14 @@ for KEY in CFBundleName CFBundleDisplayName; do
   [ "$GOT" = "Cubby" ] || { echo "✖ $KEY is \"$GOT\", not \"Cubby\": iOS would call the app that on its own sheets (run ruby tools/cap_ios_configure.rb)"; exit 1; }
 done
 
+# Apple's privacy manifest must be IN the built app, not only in the project (tools/cap_ios_configure.rb step 7).
+plutil -lint "$APP/PrivacyInfo.xcprivacy" >/dev/null 2>&1 \
+  || { echo "✖ No valid PrivacyInfo.xcprivacy in the built app (run ruby tools/cap_ios_configure.rb)"; exit 1; }
+# The root view controller must be Cubby's subclass, or a phone offline at first launch gets no error page
+# at all (tools/cap_ios_configure.rb step 8; tools/native_error_page_check.js grades the source).
+grep -rqa CubbyBridgeViewController "$APP/Base.lproj/Main.storyboardc" \
+  || { echo "✖ The built Main.storyboard does not use CubbyBridgeViewController (run ruby tools/cap_ios_configure.rb)"; exit 1; }
+
 xcrun simctl terminate "$UDID" "$BUNDLE" >/dev/null 2>&1 || true
 xcrun simctl uninstall "$UDID" "$BUNDLE" >/dev/null 2>&1 || true
 xcrun simctl install "$UDID" "$APP"
