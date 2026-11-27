@@ -66,7 +66,7 @@ fi
 # train's one push to main, which still runs the full tier below. Without this every PR branch cost a
 # 95-minute suite on this Mac and the train saved nothing. test/prepush-tier.test.js checks both paths.
 if ! printf '%s\n' "$RANGES" | awk '$3 == "refs/heads/main" { found = 1 } END { exit !found }'; then
-  echo "Branch push (not main): Chrome-free gates only. CI checks the PR; the train's push to main runs the full suite."
+  echo "Running gates before push (branch push, not main: Chrome-free gates only; CI checks the PR, the train's push to main runs the full suite)..."
   if ! node "$ROOT/tools/gates.js" --no-browser; then
     echo ""
     echo "Push stopped: a gate failed. Fix it, or push with --no-verify if you have decided"
