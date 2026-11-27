@@ -540,7 +540,7 @@ function pageSetup(tags) {
     'dose (hers)': { find: [V.kidMedName], shows: [V.kidMedName, V.kidDose, V.kidUnit], taps: ['Log', 'In 15 min', 'Not now'] },
     'dose (a sibling\'s)': { find: [V.otherName, 'Iron'], shows: [V.otherName], taps: ['Log', 'In 15 min', 'Not now'] },
     illness: { find: [V.illName], shows: [V.illName, V.illTemp, V.illUnit], taps: ['Temp'] },
-    vaccine: { find: ['Vaccine overdue'], shows: [V.vxName], taps: ['Open'] },
+    vaccine: { find: ['A vaccine to catch up'], shows: [V.vxName], taps: ['Open'] },
     fever: { find: ['Fever logged'], shows: [V.fevUnit], taps: ['When to call', 'Summary'] },
     visit: { find: ['Appointment soon'], shows: [V.visitName], taps: ['Summary'] },
     'consent (needs your OK)': { find: [V.cAskBy], shows: [V.cAskBy, V.cAskLabel], taps: ['Review'] },
