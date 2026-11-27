@@ -136,7 +136,8 @@ const LINK = 'https://little-cubby.com/__/auth/action?mode=signIn&oobCode=abc123
     ok('the attempt is spent BEFORE the compare', spendAt > -1 && compareAt > -1 && spendAt < compareAt, [spendAt, compareAt]);
     /* Burned on success, and only against THIS request's own spend, so a double tap signs in once. */
     ok('a good code is burned, always, against its own spend', /const burn = await signinCommit\(sa, token, \{ delete: name, currentDocument: \{ updateTime: paidAt \} \}\);\s*if \(burn\.ok\) return 'ok';/.test(WORKER));
-    ok('both new endpoints sit behind the same-origin guard', (WORKER.match(/const bad = await signinGuard\(request, env\); if \(bad\) return bad;/g) || []).length === 2);
+    /* Three since 16 Nov 2026: the code sender, the code check, and /api/signin-status (did the email go?). */
+    ok('all three code-path endpoints sit behind the same-origin guard', (WORKER.match(/const bad = await signinGuard\(request, env\); if \(bad\) return bad;/g) || []).length === 3);
     const cools = WORKER.match(/await cache\.put\(cooldown,/g) || [];
     ok('both senders still arm a per-address cooldown', cools.length === 2, cools.length);
     ok('and only ever after a real send', !/await cache\.put\(cooldown[\s\S]{0,200}?if \(!r\.ok\)/.test(WORKER));
@@ -197,7 +198,7 @@ const LINK = 'https://little-cubby.com/__/auth/action?mode=signIn&oobCode=abc123
   if (SELF) {
     console.log('\n7. --self-test: each assertion catches the break it exists for');
     const mut = [
-      ['link dropped from the code email', WORKER.replace('html: signinEmailHtml(code, link)\n      })\n    });\n    if (!r.ok) return json({ error: \'send_failed\' }, 502);\n    await cache.put(cooldown', 'html: signinEmailHtml(code, \'\')\n      })\n    });\n    if (!r.ok) return json({ error: \'send_failed\' }, 502);\n    await cache.put(cooldown'),
+      ['link dropped from the code email', WORKER.replace('html: signinEmailHtml(code, link)\n      })\n    });\n    const sendRef = await signinSent(r, \'code\');', 'html: signinEmailHtml(code, \'\')\n      })\n    });\n    const sendRef = await signinSent(r, \'code\');'),
         (s) => (s.match(/html: signinEmailHtml\(code, link\)/g) || []).length === 2],
       ['the two subjects drift apart again', WORKER.replace("subject: 'Your Cubby sign-in code',", "subject: 'Your Cubby sign-in link',"),
         (s) => { const x = s.match(/subject: 'Your Cubby sign-in[^']*'/g) || []; return x.length === 2 && x[0] === x[1]; }],

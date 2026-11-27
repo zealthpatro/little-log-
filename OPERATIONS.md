@@ -25,6 +25,7 @@ node tools/stack_check.js          # vertical rhythm: 16 / 12 / 8 / 2 across ten
 node tools/rerender_gate.js        # entering a screen animates; a background sync repainting it does not
 cd test && node preg-tick-race.test.js   # the antenatal tick survives a snapshot landing mid-push (needs Java)
 cd test && node ios-signin-code.test.js  # an installed iOS app signs in WITHOUT leaving its container (needs Java)
+cd test && node native-signin-link.test.js  # the email's link signs her in to the iPhone app ONCE, nothing asked (needs Java)
 node tools/type_check.js           # the type contract: who may wear the handwriting face, heading rank
 node tools/sitesw_gate.js          # the ROOT service worker: caches no content, bypasses /app/, offline page
 node tools/sitesw_gate.js https://little-cubby.com   # AND against the live host, AFTER deploying. Not optional.
