@@ -4937,8 +4937,10 @@ function promptSave(o){ try{ localStorage.setItem(promptKey(), JSON.stringify(o)
 function promptOpen(r){ return !!r && !r.done && (r.no||0)<2 && !(r.snooze && now()<r.snooze); }
 function promptWants(id, b){
   const evs=babyEvents(), care=evs.filter(e=>/^(feed|sleep|diaper|pump)$/.test(e.type));
-  const solo=Object.keys((window.LL&&window.LL.members)||{}).length<=1;
-  const next=(b&&b.birth)?vxVisitGroups(vaccinePlan()).find(x=>x.pending.length):null;
+  // Solo only once the member list has loaded and includes her: a cold start must not invite a caregiver to invite.
+  const mem=(window.LL&&window.LL.members)||null;
+  const solo=!!(mem && mem[myUid()] && Object.keys(mem).length<=1);
+  const next=(b&&b.birth)?vxNextVisit(vxVisitGroups(vaccinePlan())):null;
   const day=86400000;
   if(id==='first_log_invite') return solo && care.length>=1;
   if(id==='first_nap'){ const naps=evs.filter(e=>e.type==='sleep'&&e.end); return naps.length>=1 && naps.length<=2; }
@@ -4955,7 +4957,7 @@ function homePromptId(){
   if(quietHours()) return null;
   try{ if(myLossHolding()) return null; }catch(e){}
   const b=activeBaby(); if(!b) return null;
-  if(babyEvents().some(e=>e.type==='temperature' && now()-e.time<86400000 && isFever(e.temp,e.unit))) return null;
+  if(activeIllness() || babyEvents().some(e=>e.type==='temperature' && now()-e.time<86400000 && isFever(e.temp,e.unit))) return null;
   const o=promptLoad(), today=dayKey(now());
   // A prompt already started today keeps its place; once it is answered, no other prompt starts today.
   const started=PROMPT_IDS.find(id=>o[id] && o[id].day===today);
@@ -4970,7 +4972,7 @@ function homePromptId(){
 function homePromptCard(){
   const id=homePromptId(); if(!id) return '';
   const b=activeBaby()||{}, nm=escapeHtml(b.name||'your baby');
-  const next=(b.birth)?vxVisitGroups(vaccinePlan()).find(x=>x.pending.length):null;
+  const next=(b.birth)?vxNextVisit(vxVisitGroups(vaccinePlan())):null;
   const vt=next?escapeHtml(vxVisitTitle(next.group)):'';
   const C={
     first_log_invite:{art:'spot-art/invite_bears.webp', t:"That's the first one. Who's on the next?", s:'Invite your partner, a grandparent or the nanny. What they log shows up here with their name on it.', p:'Invite someone', n:'Not now'},
@@ -4988,11 +4990,12 @@ function homePromptCard(){
 }
 function promptAct(id, action){
   const o=promptLoad(); const r=o[id]=o[id]||{};
-  if(action==='not_now'){ r.no=(r.no||0)+1; r.snooze=now()+3*86400000; } else { r.done=1; }
+  // "Got it" on the nap prompt is an answer, not a snooze.
+  if(action==='not_now' && id!=='first_nap'){ r.no=(r.no||0)+1; r.snooze=now()+3*86400000; } else { r.done=1; }
   promptSave(o);
   try{ if(window.cubbyTrack) window.cubbyTrack('prompt.acted',{prompt:id, action:action}); }catch(e){}
   if(action==='not_now'){ render(); return; }
-  const b=activeBaby()||{}; const next=(b.birth)?vxVisitGroups(vaccinePlan()).find(x=>x.pending.length):null;
+  const b=activeBaby()||{}; const next=(b.birth)?vxNextVisit(vxVisitGroups(vaccinePlan())):null;
   if(id==='first_log_invite'||id==='solo_night_invite'){ render(); if(window.openFamily) window.openFamily('invite','home'); return; }
   if(id==='first_nap'){ go('log'); try{ setLogTab('stats'); }catch(e){} return; }
   if(id==='visit_week_ahead'){ render(); exportVaccineSchedule(); return; }
@@ -5020,7 +5023,7 @@ function teachScan(){
     if(n>=25) teachFire('logs-25');
     if(b&&b.birth) teachFire('birthday-set');
     // the vaccine cue speaks a week before a visit, not on the day the birthday is typed (board 6)
-    if(b&&b.birth){ const nx=vxVisitGroups(vaccinePlan()).find(x=>x.pending.length); if(nx&&nx.months>0&&nx.due-now()<=7*86400000) teachFire('visit-due-7d'); }
+    if(b&&b.birth){ const nx=vxNextVisit(vxVisitGroups(vaccinePlan())); if(nx&&nx.months>0&&nx.due-now()<=7*86400000) teachFire('visit-due-7d'); }
     if((state.meds||[]).length) teachFire('med-added');
     if((state.photos||[]).length>=1) teachFire('first-photo');
     if((state.photos||[]).length>=3) teachFire('3-photos');
@@ -5812,7 +5815,14 @@ function openSheet(html,accent){
   refreshTickTargets();   // a sheet can hold a running timer, and the tick works off this list now
 }
 function sheetBack(){ var prev=_sheetStack.pop(); var s=$('#sheet'); if(!prev){ closeSheet(); return; } s.dataset.accent=prev.accent; _sheetAccent(s,prev.accent); s.innerHTML=prev.html; refreshTickTargets(); }
-function closeSheet(){ var _no=__confirmNo; __confirmNo=null; if(_no) setTimeout(function(){ _no('dismiss'); },50); _sheetStack=[]; var s=document.getElementById('sheet'); if(s){ s.style.transition=''; s.style.transform=''; s.style.zIndex=''; } var sc=document.getElementById('scrim'); if(sc){ sc.classList.remove('show'); sc.style.zIndex=''; } if(s)s.classList.remove('show'); refreshTickTargets(); }
+/* The first-run step opened Feed or Sleep and she closed it without logging: carry the wizard on now (who she
+   is, then the invite), rather than leaving it to pop up over whatever she logs next. A save also closes the
+   sheet, but render() has already cleared the flag by the time this looks. */
+function obSheetClosed(){
+  if(!obAwaitFirstLog) return;
+  setTimeout(()=>{ if(obAwaitFirstLog && !document.querySelector('#sheet.show')){ obAwaitFirstLog=false; obAfterFirstLog(); } },700);
+}
+function closeSheet(){ try{ obSheetClosed(); }catch(e){} var _no=__confirmNo; __confirmNo=null; if(_no) setTimeout(function(){ _no('dismiss'); },50); _sheetStack=[]; var s=document.getElementById('sheet'); if(s){ s.style.transition=''; s.style.transform=''; s.style.zIndex=''; } var sc=document.getElementById('scrim'); if(sc){ sc.classList.remove('show'); sc.style.zIndex=''; } if(s)s.classList.remove('show'); refreshTickTargets(); }
 /* One calm confirm sheet, reused everywhere instead of the native window.confirm (which is jarring
    and off-brand). Stands alone (closes any trigger sheet first, so no stray back button). */
 var __confirmCb=null, __confirmNo=null;
@@ -15416,7 +15426,7 @@ function healthNow(b){
       <button class="dose-btn" onclick="logDose('${hArg(m.id)}')">Given</button></div>`);
   });
   if(b && b.birth){
-    const next=vxVisitGroups(vaccinePlan()).find(x=>x.pending.length);
+    const next=vxNextVisit(vxVisitGroups(vaccinePlan()));
     if(next && next.due-now()<=14*86400000){
       out.push(healthRecordRow(I.syringe,'var(--diaper-soft)','var(--diaper-ink)',escapeHtml(vxVisitTitle(next.group)),
         `${vxWhen(next.due)} · ${next.pending.length} vaccine${next.pending.length===1?'':'s'}`,'vaccines'));
@@ -15427,7 +15437,7 @@ function healthNow(b){
 function renderHealthHub(b){
   const now_=healthNow(b);
   const meds=medsForBaby(state.activeBabyId).filter(m=>m.active!==false);
-  const next=vxVisitGroups(vaccinePlan()).find(x=>x.pending.length);
+  const next=vxNextVisit(vxVisitGroups(vaccinePlan()));
   const g=babyEvents().find(e=>e.type==='growth');
   const gDays=g?Math.floor((dayStartMs(now())-dayStartMs(g.time))/86400000):0;
   const gMeta=g?[g.weight?g.weight+' '+(g.wUnit||'kg'):'', g.height?g.height+' '+(g.hUnit||'cm'):''].filter(Boolean).join(' · ')+' · '+(gDays===0?'today':gDays===1?'yesterday':gDays+' days ago'):'No measurements yet';
@@ -17048,6 +17058,11 @@ function vxVisitGroups(plan){
   return order.map(g=>({ group:g, doses:groups[g], pending:groups[g].filter(v=>!v.given),
     due:Math.min(...groups[g].map(v=>vxDueDate(v))), months:Math.min(...groups[g].map(v=>v.dueMonths)) }));
 }
+/* The visit that leads: the first one with a dose still to record that is not more than two weeks past
+   its date. Older unrecorded visits do not hold the card for months; they sit under "Not recorded yet". */
+function vxNextVisit(visits){
+  return visits.find(x=>x.pending.length && x.due>=now()-14*86400000) || visits.find(x=>x.pending.length) || null;
+}
 function vxVisitTitle(g){
   if(/birth/i.test(g)) return 'Birth dose';
   const m=String(g).match(/^(\d+)\s*(month|week|year)s?$/i);
@@ -17073,7 +17088,7 @@ function vxWhen(due){
   return 'not recorded yet';
 }
 function vxNextVisitCard(bb,visits){
-  const next=visits.find(x=>x.pending.length);
+  const next=vxNextVisit(visits);
   if(!next){
     const n=visits.reduce((a,x)=>a+x.doses.length,0);
     return `<div class="card vx-next"><div class="vx-next-eb">Vaccines</div>
@@ -17086,7 +17101,7 @@ function vxNextVisitCard(bb,visits){
   const names=next.pending.map(v=>escapeHtml(String(v.name).replace(/\s*\([^)]*\)\s*$/,'')));
   const ready=!hasBirth || next.due-now()<=14*86400000;
   const sub=next.months===0
-    ? 'Usually given in hospital before you come home.'
+    ? 'If it was given before you came home, record it here.'
     : `${n} vaccine${n===1?'':'s'}, usually given at one appointment.`;
   return `<div class="card vx-next" data-group="${escapeHtml(next.group)}">
       <div class="vx-next-row"><div class="vx-next-eb">Next visit</div>${hasBirth?`<div class="vx-next-when">${vxWhen(next.due)}</div>`:''}</div>
@@ -17099,9 +17114,12 @@ function vxNextVisitCard(bb,visits){
 function vxVisitFold(x,bb,kind){
   const hasBirth=!!(bb&&bb.birth);
   const n=x.doses.length;
-  const meta = kind==='done'
+  const p=x.pending.length;
+  const meta = (kind==='done' || !p)
     ? `${n} vaccine${n===1?'':'s'} recorded`
-    : `${hasBirth?'around '+vxShortDate(x.due)+' · ':''}${x.pending.length} vaccine${x.pending.length===1?'':'s'}`;
+    : kind==='owed'
+    ? `${p} vaccine${p===1?'':'s'} to record`
+    : `${hasBirth?'around '+vxShortDate(x.due)+' · ':''}${p} vaccine${p===1?'':'s'}`;
   return `<details class="vx-visit ${kind}"><summary><span class="vx-visit-t">${escapeHtml(vxVisitTitle(x.group))}</span><span class="vx-visit-m">${meta}</span></summary>
       ${x.doses.map(v=>vxDoseRow(v,bb)).join('')}</details>`;
 }
@@ -17110,16 +17128,18 @@ function renderVaccines(){
   const bb=activeBaby();
   const toConfirm=plan.filter(v=>vxStatus(v)==='toconfirm').length;
   const visits=vxVisitGroups(plan);
-  const nextIdx=visits.findIndex(x=>x.pending.length);
+  const next=vxNextVisit(visits);
+  const nextIdx=next?visits.indexOf(next):-1;
   const later=nextIdx<0?[]:visits.slice(nextIdx+1);
   const done=visits.filter((x,i)=>!x.pending.length && (nextIdx<0||i<nextIdx));
-  const next=nextIdx<0?null:visits[nextIdx];
+  const owed=visits.filter((x,i)=>x.pending.length && nextIdx>=0 && i<nextIdx);
   return `
     ${vxNextVisitCard(bb,visits)}
     ${vaxCalendarRow(bb,plan)}
     ${vaxSetupCard(bb,plan,toConfirm)}
     ${next?`<details class="vx-visit next"><summary><span class="vx-visit-t">Each vaccine in this visit</span><span class="vx-visit-m">${next.doses.length}</span></summary>${next.doses.map(v=>vxDoseRow(v,bb)).join('')}</details>`:''}
     ${later.length?`<div class="sec-title">Later visits</div>${later.map(x=>vxVisitFold(x,bb,'later')).join('')}`:''}
+    ${owed.length?`<div class="sec-title">Not recorded yet</div>${owed.map(x=>vxVisitFold(x,bb,'owed')).join('')}`:''}
     ${done.length?`<div class="sec-title">Recorded</div>${done.map(x=>vxVisitFold(x,bb,'done')).join('')}`:''}
     <div class="add-row" onclick="openAddVaccine()">${I.plus} Add a vaccine</div>
     ${window.CubbyVaxCard?`<div class="add-row" onclick="CubbyVaxCard.open()">📷 Fill these in from their card</div>`:''}
@@ -17130,7 +17150,8 @@ function renderVaccines(){
 function openVisitDone(group){
   const visits=vxVisitGroups(vaccinePlan()); const x=visits.find(v=>v.group===group); if(!x) return;
   const bb=activeBaby();
-  const def=(x.months===0&&bb&&bb.birth)?new Date(bb.birth).toISOString().slice(0,10):new Date().toISOString().slice(0,10);
+  // Local calendar dates, like every other date field here (toISOString is UTC: yesterday or tomorrow near midnight).
+  const def=(x.months===0&&bb&&bb.birth)?_dpYMD(bb.birth):_dpYMD(now());
   openSheet(`<h2>${escapeHtml(vxVisitTitle(group))}</h2><div class="sub">Untick any that were not given. You can change each one later.</div>
     <div class="field"><label>Date given</label>${datePicker('vxvDate', def, {max:now()})}</div>
     <div class="vx-tick">${x.pending.map(v=>`<label class="vx-tick-row"><input type="checkbox" class="vxv" value="${escapeHtml(v.id)}" checked> <span>${escapeHtml(v.name)}</span></label>`).join('')}</div>
@@ -17139,7 +17160,7 @@ function openVisitDone(group){
 function markVisit(group){
   const plan=vaccinePlan();
   const dt=$('#vxvDate')?$('#vxvDate').value:'';
-  const at=dt?new Date(dt+'T12:00').getTime():now();
+  const at=Math.min(dt?new Date(dt+'T12:00').getTime():now(), now());   // never a dose given in the future
   const ids=[...document.querySelectorAll('#sheet .vxv:checked')].map(e=>e.value);
   let n=0;
   plan.forEach(v=>{ if(v.group===group && !v.given && ids.includes(v.id)){

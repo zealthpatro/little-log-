@@ -132,6 +132,15 @@ const EMPTY = { babies: [], activeBabyId: null, events: [], settings: { unit: 'm
   ok('the feed is logged', feed.feeds === 1, feed);
   ok('and the wizard carries on to who she is', feed.idn, feed);
 
+  console.log('\nE2. closing the feed sheet without logging');
+  await fresh();
+  await tap("Our baby's here"); await p.type('#bName', 'Bo'); await tap('Today', '#sheet'); await tap('Continue', '#sheet');
+  await tap('Feed', '#sheet');
+  await p.evaluate(() => closeSheet()); await sleep(1300);
+  const closed = await p.evaluate(() => ({ events: state.events.length, idn: !!(document.getElementById('llFrName') && document.getElementById('llFrName').getClientRects().length), waiting: obAwaitFirstLog }));
+  ok('nothing is logged', closed.events === 0, closed);
+  ok('and the wizard carries on to who she is, instead of waiting for her next log', closed.idn && closed.waiting === false, closed);
+
   console.log('\nF. a second baby later keeps the full form');
   const full = await p.evaluate(async () => {
     document.querySelectorAll('.ll-modal, .ll-overlay, #llFirstRun').forEach((e) => e.remove());

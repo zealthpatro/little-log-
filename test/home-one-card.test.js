@@ -67,6 +67,9 @@ function seed(now, o) {
       if (keep && keep !== true) localStorage.setItem('cubby-prompts:local', keep);
     }, seed(now, o), keepPrompts);
     await p.reload({ waitUntil: 'networkidle2' }); await sleep(1300);
+    // the member list as production loads it: just her, or her and a partner
+    await p.evaluate((two) => { window.LL = window.LL || {}; window.LL.members = two ? { local: 'owner', uidSam: 'caregiver' } : { local: 'owner' }; }, !!o.two);
+    if (o.ill) await p.evaluate(() => { state.illnesses = [{ id: 'i1', babyId: 'b1', name: 'Cold', startedAt: Date.now() - 86400000, endedAt: null, notes: '', by: 'local' }]; persist(); });
     if (o.given) await p.evaluate((g) => { const plan = vaccinePlan(); plan.forEach((v) => { if (v.dueMonths === 0) { v.given = true; v.givenAt = activeBaby().birth; } }); persist(); }, o.given);
     await p.evaluate(() => { go('home'); }); await sleep(500);
     return p;
@@ -123,6 +126,15 @@ function seed(now, o) {
   ok('the fever is still on the screen', /Fever logged/.test(h.text), h.text.slice(0, 400));
   await p.close();
 
+  p = await open(10, { two: true });
+  h = await home(p);
+  ok('with a partner already in the circle, no invite prompt', h.prompt !== 'first_log_invite', h.prompt);
+  await p.close();
+  p = await open(10, { ill: true });
+  h = await home(p);
+  ok('with an illness running, no prompt at all', h.prompt === null, h.prompt);
+  await p.close();
+
   console.log('\nD. the vaccine visit');
   const done = JSON.stringify({ first_log_invite: { done: 1, day: 'x' }, solo_night_invite: { done: 1, day: 'x' } });
   p = await open(10, { age: 55, given: true }, done);
@@ -142,6 +154,8 @@ function seed(now, o) {
   p = await open(10, { nap: true }, done);
   h = await home(p);
   ok('after the first nap: "Naps add up on their own"', h.prompt === 'first_nap' && /Naps add up on their own/.test(h.promptText), h);
+  const got = await p.evaluate(async () => { document.querySelector('.home-prompt .btn-ghost:last-child').click(); await new Promise((r) => setTimeout(r, 300)); return JSON.parse(localStorage.getItem('cubby-prompts:local')).first_nap; });
+  ok('"Got it" is an answer, not a snooze', got && got.done === 1 && !got.snooze, got);
   await p.close();
 
   ok('no page errors', errs.length === 0, errs.slice(0, 3));

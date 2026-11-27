@@ -77,7 +77,7 @@ const seed = (now, ageDays) => ({
   let r = await read();
   ok('the tab shows a next-visit card (the probe is live)', !!r.card, r.text.slice(0, 200));
   ok('no "0 of 25" score and no completion ring', !r.ring && !/\b\d+ of \d+ (done|recorded)\b/.test(r.text), r.text.slice(0, 200));
-  ok('the birth dose leads, with the hospital question', /Birth dose/.test(r.card || '') && /in hospital/.test(r.card || ''), r.card);
+  ok('the birth dose leads, asking if it was given before they came home', /Birth dose/.test(r.card || '') && /before you came home/.test(r.card || ''), r.card);
   ok('it is one tap to say it was given', r.cardBtn === 'Yes, it was given', r.cardBtn);
   ok('the calendar row sits straight under the card', r.calAfterCard, r);
   ok('the card is on the first screen', r.cardBottom !== null && r.cardBottom < r.navTop, r);
@@ -137,6 +137,12 @@ const seed = (now, ageDays) => ({
   ok('some open dose rows are already past their date (the probe is live)', labels.some((x) => x.past), labels.slice(0, 4));
   ok('a past date never reads "Due soon"', !labels.some((x) => x.past && x.label === 'Due soon'), labels.filter((x) => x.past));
 
+  console.log('\nC2. a birth dose nobody recorded');
+  await load(70, 0);
+  r = await read();
+  ok('the 2-month check leads, not a birth dose ten weeks old', /2-month check, around/.test(r.card || ''), r.card);
+  ok('the unrecorded birth dose waits under "Not recorded yet"', /Not recorded yet/i.test(r.text) && r.folds.some((f) => /^Birth dose 1 vaccine to record$/.test(f)), r.folds);
+
   console.log('\nD. 320px');
   await p.setViewport({ width: 320, height: 640, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
   await sleep(300);
@@ -149,6 +155,24 @@ const seed = (now, ageDays) => ({
   });
   ok('the next-visit card fits at 320px', fit.over.length === 0, fit.over);
   ok('no folded visit row overflows', fit.sums === 0, fit.sums);
+
+  console.log('\nE. half past midnight, local time');
+  {
+    const q = await b.newPage(); q.on('pageerror', (x) => errs.push(x.message));
+    const d = new Date(); d.setHours(0, 30, 0, 0); const shift = d.getTime() - Date.now();
+    await q.evaluateOnNewDocument((sh) => { const R = Date; function D(...a) { return a.length === 0 ? new R(R.now() + sh) : new R(...a); } D.prototype = R.prototype; D.now = () => R.now() + sh; D.parse = R.parse; D.UTC = R.UTC; window.Date = D; }, shift);
+    await q.goto(BASE + '/app/?e2e=1', { waitUntil: 'networkidle2', timeout: 60000 });
+    const nowq = await q.evaluate(() => Date.now());
+    await q.evaluate((s) => { localStorage.clear(); localStorage.setItem('little-log-v1', JSON.stringify(s)); localStorage.setItem('cubby-quick-uid', 'local'); }, seed(nowq, 70));
+    await q.reload({ waitUntil: 'networkidle2' }); await sleep(1200);
+    const dd = await q.evaluate(async () => {
+      openVisitDone('2 months'); await new Promise((x) => setTimeout(x, 400));
+      const t = new Date(); const local = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
+      return { picked: document.getElementById('vxvDate').value, local };
+    });
+    ok('the default date is today on her calendar, not the UTC date', dd.picked === dd.local, dd);
+    await q.close();
+  }
 
   ok('no page errors', errs.length === 0, errs.slice(0, 3));
   await b.close();
