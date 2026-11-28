@@ -22,7 +22,10 @@ const os = require('os');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const MAC = '/Applications/Google Chrome.app';
+/* Built from its parts, here and in the self-test's fixtures, so this file never names the path it judges and
+   is judged like every other file (it named it whole until 28 Nov 2026 and flagged its own two lines on CI).
+   No file is exempt by name: the self-test plants a bare path in a file called chrome_path_check.js too. */
+const MAC = ['', 'Applications', 'Google Chrome.app'].join('/');
 
 /* files: { relPath: source }. Returns the problems, one per line or file. */
 function judge(files) {
@@ -55,7 +58,7 @@ function selfTest() {
   let pass = 0, fail = 0;
   const ok = (n, c, x) => { if (c) { pass++; console.log('  ok   ' + n); } else { fail++; console.log('  FAIL ' + n + (x !== undefined ? '\n         ' + JSON.stringify(x).slice(0, 500) : '')); } };
   console.log('\nself-test: each way a gate can hard-code the Mac Chrome, staged\n');
-  const P = "'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'";
+  const P = "'" + MAC + "/Contents/MacOS/Google Chrome'";
   const cases = [
     ['a bare constant (household_name, support_reach before 28 Nov)', { 'tools/a_check.js': "const C=" + P + ";\nconst b=await p.launch({executablePath:C});\n" }, /a_check\.js:1 names the Mac Chrome/],
     ['a bare path inside the launch (duedate-cycle before 28 Nov)', { 'test/b.test.js': "const b=await puppeteer.launch({executablePath:" + P + ",headless:'new'});\n" }, /b\.test\.js:1 names the Mac Chrome/],
@@ -68,16 +71,20 @@ function selfTest() {
   const T = fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-chrome-path-'));
   try {
     /* The file walk itself: a tracked bare file is found, an untracked one and one under node_modules are not
-       this check's business. */
+       this check's business. And a bare path in a file that has this checker's own name is found as well: the
+       checker keeps clear of its own rule by spelling the path in parts, never by an exemption. */
     const env = { ...process.env }; for (const k of Object.keys(env)) if (k.startsWith('GIT_')) delete env[k];
     const git = (a) => execFileSync('git', a, { cwd: T, env, stdio: 'ignore' });
     git(['init', '-q']);
     fs.mkdirSync(path.join(T, 'tools', 'node_modules', 'x'), { recursive: true });
     fs.writeFileSync(path.join(T, 'tools', 'bare_check.js'), 'const C=' + P + ';\n');
     fs.writeFileSync(path.join(T, 'tools', 'node_modules', 'x', 'index.js'), 'const C=' + P + ';\n');
-    git(['add', '-f', 'tools/bare_check.js', 'tools/node_modules/x/index.js']);
+    fs.writeFileSync(path.join(T, 'tools', 'chrome_path_check.js'), '// a copy that names the path whole\nconst MAC = ' + P + ';\n');
+    git(['add', '-f', 'tools/bare_check.js', 'tools/node_modules/x/index.js', 'tools/chrome_path_check.js']);
     const found = judge(trackedSources(T));
-    ok('the walk finds a tracked bare file and leaves node_modules alone', found.length === 1 && /tools\/bare_check\.js:1/.test(found[0]), found);
+    ok('the walk finds a tracked bare file and leaves node_modules alone', found.some((x) => /^tools\/bare_check\.js:1 /.test(x)) && !found.some((x) => /node_modules/.test(x)), found);
+    ok('and a bare path in a file named chrome_path_check.js is red too (no file is exempt by name)',
+      found.length === 2 && found.some((x) => /^tools\/chrome_path_check\.js:2 names the Mac Chrome/.test(x)), found);
   } catch (e) { ok('the walk stage ran', false, String(e && e.message || e)); }
   finally { fs.rmSync(T, { recursive: true, force: true }); }
   const p = report();
