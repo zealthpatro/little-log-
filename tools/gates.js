@@ -1090,19 +1090,31 @@ async function selfTestTreeServer() {
       delete process.env.EMU_PORT_RANGE;
       let p;
       try { p = await freeRun(3); } finally { if (saved !== undefined) process.env.EMU_PORT_RANGE = saved; }
-      /* The old picker, inline: listen(0) gave q, the run was q..q+2. */
-      const q = await new Promise((res, rej) => { const s = net.createServer(); s.on('error', rej); s.listen(0, '127.0.0.1', () => { const x = s.address().port; s.close(() => res(x)); }); });
-      const socks = [];
-      for (let i = 0; i < 20; i++) socks.push(await new Promise((res) => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => res(s)); }));
-      const os0 = socks.map((s) => s.address().port);
-      await Promise.all(socks.map((s) => new Promise((r) => s.close(() => r()))));
+      /* The old picker, inline: listen(0) gave q, the run was q..q+2. Then the next twenty listen(0) ports. */
+      const stage = async () => {
+        const q = await new Promise((res, rej) => { const s = net.createServer(); s.on('error', rej); s.listen(0, '127.0.0.1', () => { const x = s.address().port; s.close(() => res(x)); }); });
+        const socks = [];
+        for (let i = 0; i < 20; i++) socks.push(await new Promise((res) => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => res(s)); }));
+        const gave = socks.map((s) => s.address().port);
+        await Promise.all(socks.map((s) => new Promise((r) => s.close(() => r()))));
+        return { q, gave };
+      };
       const inside = (ports, start, n) => ports.filter((x) => x >= start && x <= start + n - 1);
       /* Companion, where the OS hands ports out in order (macOS): the same matcher finds the next listen(0) ports
-         inside the OLD picker's run, so the line below can go red. Linux hands them out at random, so no
-         companion can be staged there; the line below still holds because OWN_BAND is under its range. */
+         inside the OLD picker's run, so the line below can go red. Another process on a busy Mac can take q+1 and
+         q+2 between the probe and the twenty, so the stage is tried up to 3 times and red only if all 3 miss.
+         Linux hands them out at random, so no companion can be staged there; the line below still holds because
+         OWN_BAND is under its range. */
+      const tries = [];
+      do tries.push(await stage());
+      while (process.platform === 'darwin' && tries.length < 3 && inside(tries[tries.length - 1].gave, tries[tries.length - 1].q, 3).length === 0);
+      const last = tries[tries.length - 1];
       if (process.platform === 'darwin') {
-        ok('7b. companion: the old picker\'s run (:' + q + '-' + (q + 2) + ') holds some of the next 20 ports the OS hands out', inside(os0, q, 3).length >= 1, { oldRun: [q, q + 2], osGave: os0 });
+        ok('7b. companion: the old picker\'s run (:' + last.q + '-' + (last.q + 2) + ') holds some of the next 20 ports the OS hands out (try ' + tries.length + ' of 3)',
+          inside(last.gave, last.q, 3).length >= 1, tries.map((t) => ({ oldRun: [t.q, t.q + 2], osGave: t.gave })));
       }
+      /* Every port the OS gave in every try, so a retry can only make this line harder to pass. */
+      const os0 = [].concat(...tries.map((t) => t.gave));
       ok('7b. a 3-port run with no EMU_PORT_RANGE (:' + p + '-' + (p + 2) + ') holds none of the next 20 ports the OS hands out for listen(0)',
         inside(os0, p, 3).length === 0, { run: [p, p + 2], osGave: os0 });
     }
