@@ -599,14 +599,15 @@ async function precacheSelfTest() {
 /* ---------------- self-test of gen_brand_icons.py --check, in both of its modes ---------------- */
 /* Staged in the generator itself from the bytes the master gives here, so it holds on any machine: byte mode refuses
    the same pixels saved as other bytes, pixel mode accepts them, and both refuse a changed pixel, a lost palette and
-   a missing icon. */
+   a missing icon. Then, on scratch git trees (R1-R5), where each judgement reads: the icons on disk are graded, and
+   a stale fingerprint is judged on what HEAD holds, so set --yes in pixel mode (CI) is not called STALE. */
 function iconCheckSelfTest() {
   console.log('\nself-test (icons): what gen_brand_icons.py --check refuses, byte for byte and pixel for pixel');
   const r = spawnSync('python3', [path.join(ROOT, 'tools/gen_brand_icons.py'), '--self-test-check'], { cwd: ROOT, encoding: 'utf8' });
   const all = ((r.stdout || '') + (r.stderr || '')).trim();
   const lines = all.split('\n').filter((l) => /^\s+(ok|FAIL)\s/.test(l));
   lines.forEach((l) => console.log('    | ' + l.trim()));
-  ok('each staged case is judged as it must be in both modes (' + lines.length + ' judgements)', r.status === 0 && lines.length >= 12 && lines.every((l) => /^\s+ok\s/.test(l)),
+  ok('each staged case is judged as it must be in both modes (' + lines.length + ' judgements)', r.status === 0 && lines.length >= 22 && lines.every((l) => /^\s+ok\s/.test(l)),
     lines.filter((l) => !/^\s+ok\s/.test(l)).concat(r.status === 0 ? [] : [all.split('\n').slice(-3).join(' | ')]).join('\n         '));
 }
 

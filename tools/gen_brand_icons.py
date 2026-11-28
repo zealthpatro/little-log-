@@ -530,6 +530,53 @@ def differing(web, committed, mode):
     return bad
 
 
+def tree_icons(root, rels):
+    """The web icons on disk under root, rel -> bytes, or None when missing: what --check grades in both modes
+    (`set` has just written them from the new master; nothing in git is the reference for that)."""
+    out = {}
+    for rel in rels:
+        f = os.path.join(root, rel)
+        out[rel] = open(f, 'rb').read() if os.path.exists(f) else None
+    return out
+
+
+def committed_icons(root, rels):
+    """The web icons as root's git HEAD holds them, rel -> bytes, or None when not committed there. None as a
+    whole when root is not the top of a git work tree (with GIT_* cleared, as brand.py's git_env: a hook's GIT_DIR
+    names the shared repo). Read only to judge a stale fingerprint, never to grade an icon."""
+    import subprocess
+    import brand  # noqa: E402
+    env = brand.git_env()
+    try:
+        top = subprocess.run(['git', 'rev-parse', '--show-toplevel'], cwd=root, capture_output=True, text=True, env=env)
+    except OSError:
+        return None
+    if top.returncode or os.path.realpath(top.stdout.strip()) != os.path.realpath(root):
+        return None
+    out = {}
+    for rel in rels:
+        r = subprocess.run(['git', 'cat-file', 'blob', 'HEAD:./' + rel], cwd=root, capture_output=True, env=env)
+        out[rel] = r.stdout if r.returncode == 0 else None
+    return out
+
+
+def judge(root, web, mode):
+    """--check's verdict on the tree at root: the web icons that are not what the master gives (tree_icons, in
+    `mode`), plus 'fingerprint' when pixel mode would pass on the approving encoder. That encoder is the one that
+    makes every COMMITTED icon's own bytes (committed_icons; the files on disk only where root is not a git tree).
+    The files on disk cannot tell: `set` or the generator has just written this encoder's own bytes there, so on
+    CI's Linux every icon is its own bytes after `set` (PR #16, 28 Nov 2026: BRAND ICONS: FAIL inside brand-py's
+    set --yes). Byte mode reads nothing but the tree, as before."""
+    tree = tree_icons(root, web)
+    bad = differing(web, tree, mode)
+    if mode == 'pixels' and not bad:
+        head = committed_icons(root, web)
+        approved = tree if head is None else head
+        if all(approved[rel] == data for rel, data in web.items()):
+            bad.append('fingerprint')
+    return bad
+
+
 def self_test_check(web):
     """Stage, from the bytes the master gives on this machine, what --check must refuse and accept in each mode.
     Independent of the committed tree and of which encoder this machine has. Returns the exit code."""
@@ -560,7 +607,13 @@ def self_test_check(web):
             im.convert('RGBA').save(buf, 'PNG', optimize=True)
             return buf.getvalue()
 
-    other = {pal: resave(web[pal], compress_level=1), rgba: resave(web[rgba], compress_level=1)}
+    # Another encoder's bytes for the same pixels. compress_level=1 alone is not enough under the simulated
+    # encoder (CUBBY_BRAND_SIM_ENCODER=rle forces Z_RLE whatever the level, and the palette icon came out as the
+    # master's own bytes), so a text chunk is added: other bytes on any encoder, the decoded pixels untouched.
+    from PIL import PngImagePlugin
+    note = PngImagePlugin.PngInfo()
+    note.add_text('cubby-self-test', 'another encoder')
+    other = {pal: resave(web[pal], compress_level=1, pnginfo=note), rgba: resave(web[rgba], compress_level=1, pnginfo=note)}
     cases = [
         ('every icon as the master gives it', {}, {'bytes': [], 'pixels': []}),
         ('the same pixels saved as other bytes (another encoder, the CI case)', other, {'bytes': [pal, rgba], 'pixels': []}),
@@ -581,6 +634,56 @@ def self_test_check(web):
             print('  %-4s %s, %s: %s' % ('ok' if good else 'FAIL', label, 'byte mode' if mode == 'bytes' else 'pixel mode',
                                         ('refused, naming ' + ', '.join(got)) if got else 'accepted')
                   + ('' if good else '  (want %s%s)' % (want[mode] or 'accepted', '; the staged edit changed nothing' if moved else '')))
+
+    # Which files each judgement reads, through judge() on a scratch git tree: the icons are graded on disk in
+    # both modes, and the stale fingerprint is judged on what HEAD holds. Either read from the other place is red:
+    # the guard on disk refuses R1 (CI's set --yes); grading HEAD accepts R3 and refuses R4.
+    import shutil
+    import subprocess
+    import tempfile
+    import brand  # noqa: E402
+    env = brand.git_env()
+    gitc = ['git', '-c', 'user.name=self-test', '-c', 'user.email=self-test@localhost', '-c', 'commit.gpgsign=false',
+            '-c', 'core.hooksPath=' + os.devnull]
+    px = one_pixel(web[rgba])
+
+    def lay(root, files):
+        for rel, data in files.items():
+            f = os.path.join(root, rel)
+            os.makedirs(os.path.dirname(f), exist_ok=True)
+            open(f, 'wb').write(data)
+
+    refs = [
+        ('R1 set has just written this encoder\'s icons over another encoder\'s committed ones (CI\'s set --yes)',
+         {**web, **other}, dict(web), {'bytes': [], 'pixels': []}),
+        ('R2 every committed icon is this encoder\'s own bytes, the tree untouched (a stale fingerprint)',
+         dict(web), dict(web), {'bytes': [], 'pixels': ['fingerprint']}),
+        ('R3 the tree one pixel off in the cap-web logo, HEAD the same pixels as the master gives',
+         {**web, **other}, {**web, rgba: px}, {'bytes': [rgba], 'pixels': [rgba]}),
+        ('R4 the tree as the master gives, HEAD an older master (one pixel off in the cap-web logo)',
+         {**web, pal: other[pal], rgba: px}, dict(web), {'bytes': [], 'pixels': []}),
+        ('R5 not a git tree, every icon this encoder\'s own bytes (the tree is all there is)',
+         None, dict(web), {'bytes': [], 'pixels': ['fingerprint']}),
+    ]
+    print('self-test: where --check reads its reference (a scratch git tree)')
+    for label, head, tree, want in refs:
+        root = tempfile.mkdtemp(prefix='cubby-brand-icons-check-')
+        try:
+            if head is not None:
+                lay(root, head)
+                for args in (['init', '-q'], ['add', '-A'], ['commit', '-q', '-m', 'committed icons']):
+                    subprocess.run(gitc + args, cwd=root, check=True, capture_output=True, env=env)
+            lay(root, tree)
+            staged = (head is None or committed_icons(root, web) == head) and tree_icons(root, web) == tree
+            for mode in ('bytes', 'pixels'):
+                got = judge(root, web, mode)
+                good = sorted(got) == sorted(want[mode]) and staged
+                passed, failed = passed + good, failed + (not good)
+                print('  %-4s %s, %s: %s' % ('ok' if good else 'FAIL', label, 'byte mode' if mode == 'bytes' else 'pixel mode',
+                                            ('refused, naming ' + ', '.join(got)) if got else 'accepted')
+                      + ('' if good else '  (want %s%s)' % (want[mode] or 'accepted', '' if staged else '; not staged as described')))
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
     print('%d passed, %d failed' % (passed, failed))
     print('BRAND ICONS CHECK SELF-TEST: ' + ('FAIL' if failed else 'PASS'))
     return 1 if failed else 0
@@ -616,16 +719,11 @@ def main():
     if a.check:
         mode, fp = check_mode()
         print('  mode: %s' % (CHECK_MODES[mode] if mode == 'bytes' else CHECK_MODES[mode] % fp[:16]))
-        committed = {}
-        for rel in web:
-            f = os.path.join(ROOT, rel)
-            committed[rel] = open(f, 'rb').read() if os.path.exists(f) else None
-        bad = differing(web, committed, mode)
+        bad = judge(ROOT, web, mode)
         # Pixel mode on a machine whose encoder makes every committed icon's own bytes is the approving encoder
         # with a stale ENCODER_FINGERPRINT (as brand.py's self-test says): never a quiet pass at the weaker promise.
-        if mode == 'pixels' and not bad and all(committed[rel] == data for rel, data in web.items()):
-            bad.append('fingerprint')
-            print('  STALE pixel mode, yet every web icon is this encoder\'s own bytes: this is the approving encoder and '
+        if 'fingerprint' in bad:
+            print('  STALE pixel mode, yet every committed web icon is this encoder\'s own bytes: this is the approving encoder and '
                   'ENCODER_FINGERPRINT in tools/brand.py is stale (python3 tools/brand.py --encoder-fingerprint)')
         for rel in bad:
             if rel == 'fingerprint':
