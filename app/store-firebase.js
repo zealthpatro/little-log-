@@ -1304,6 +1304,16 @@
     if (configUnsub) { try { configUnsub(); } catch (e) {} configUnsub = null; }
     if (avatarClaimT) { clearTimeout(avatarClaimT); avatarClaimT = null; } // never claim a bear into the account being left
     window.LL.memberEmails = {}; memberEmailsMigrated = false; ownEmailWritten = false;
+    /* What this page knew about her family (set from the household snapshot, startSync) and about her own
+       sign-in (an invite still to offer her, a join just made, her first run) goes with her, back to how a
+       fresh page starts: unknown until the next account's own snapshot and sign-in say. Left behind, the next
+       account's feedback was stamped with the previous family's id, its family sheet listed that family's
+       people, invites and Pro, an invite meant for her could be offered to the next account, and that account's
+       own first run was skipped (test/stale-family-memory-emulator.test.js). */
+    ['householdId', 'members', 'memberInfo', 'formerMemberInfo', 'hhPending', 'hhPendingLinks', 'pro', 'role',
+      'pendingInvite', 'pendingInviteQueue', 'justJoined', 'needsIdentity']
+      .forEach(function (k) { delete window.LL[k]; });
+    firstRunShown = false;
     hhRef = eventsRef = photosRef = notesRef = null;
     // The next account starts unhydrated with no baseline, or this account's blob would be the
     // thing the next one's first push is diffed against.
@@ -2600,10 +2610,19 @@
     for (var k in ol) { if (Object.prototype.hasOwnProperty.call(ol, k) && ol[k] && ol[k].token === token) return k; }
     return token;
   }
+  /* An invite step started for one family can answer after she has left it (signed out, or another account's
+     family attached in this tab): its answer belongs to nobody on this page now. So each async invite step
+     captures the family it was started for (attached = hhRef), writes only to that one, and drops what comes
+     back once hhRef is no longer it. Without this a late answer put her link token into the next account's
+     memory, tried her invite for her family as the next account, and filed her invitee as that account's last
+     invite
+     (test/stale-family-memory-emulator.test.js, L). */
+  function leftSince(attached) { return !attached || attached !== hhRef; }
   window.LL.createInviteLink = async function (opts) {
     opts = opts || {};
     var u = auth.currentUser;
     if (!u || !hhRef || window.LL.role !== 'owner') return null;
+    var attached = hhRef;
     var token = newInviteToken();
     var linkDoc = {
       householdId: window.LL.householdId,
@@ -2634,10 +2653,11 @@
     var rowId = newLinkRowId();
     try {
       var b = db.batch();
-      b.set(hhRef.collection('ownerLinks').doc(rowId), { token: token, at: row.at, expiresAt: row.expiresAt });
+      b.set(attached.collection('ownerLinks').doc(rowId), { token: token, at: row.at, expiresAt: row.expiresAt });
       b.set(db.collection('inviteLinks').doc(token), Object.assign({ rowId: rowId }, linkDoc));
-      b.update(hhRef, new firebase.firestore.FieldPath('pendingLinks', rowId), row);
+      b.update(attached, new firebase.firestore.FieldPath('pendingLinks', rowId), row);
       await b.commit();
+      if (leftSince(attached)) return null; // made, in her family; this page is somebody else's now
       window.LL.ownerLinks[rowId] = { token: token, at: row.at, expiresAt: row.expiresAt };
       // The rules have ownerLinks now. If this session's listener was refused under the ones before,
       // attach it now, so the tidy moves the rows made the old way without a relaunch.
@@ -2651,7 +2671,8 @@
          AND a refused read of ownerLinks. A refusal under rules that do have it is some other
          problem, and the old shape would put the token back where every member can read it. */
       var older = false;
-      try { await hhRef.collection('ownerLinks').limit(1).get(); } catch (e2) { older = !!e2 && e2.code === 'permission-denied'; }
+      try { await attached.collection('ownerLinks').limit(1).get(); } catch (e2) { older = !!e2 && e2.code === 'permission-denied'; }
+      if (leftSince(attached)) return null;
       if (!older) { console.warn('createInviteLink', e); return null; }
       if (!ownerLinksDenied) { ownerLinksDenied = true; ownerLinksDeniedAt = Date.now(); }
       rowId = '';
@@ -2660,10 +2681,12 @@
       try {
         await db.collection('inviteLinks').doc(token).set(linkDoc);
       } catch (e) { console.warn('createInviteLink', e); return null; }
+      if (leftSince(attached)) return null;
       try {
-        await hhRef.update(new firebase.firestore.FieldPath('pendingLinks', token), row);
+        await attached.update(new firebase.firestore.FieldPath('pendingLinks', token), row);
       } catch (e) { /* the link still works; only the owner's list of it is poorer */ }
     }
+    if (leftSince(attached)) return null;
     return { token: token, rowId: rowId || token, url: location.origin + '/app/?join=' + token, hours: INVITE_LINK_HOURS };
   };
   /* Read a token WITHOUT joining. Returns null for anything a person should not walk through:
@@ -4810,12 +4833,13 @@
      list, so it goes second and its failure cannot leave a live link behind. */
   async function cancelInviteLink(rowKey) {
     if (!rowKey || !hhRef) return;
+    var attached = hhRef;
     // Lane B, D1: the row key opens nothing; the token is the owner-only copy (or the key itself, for
     // a row written before row ids). If this device has not loaded it yet, ask the server once.
     var token = linkTokenFor(rowKey), copyGone = false;
     if (!token && isLinkRowId(rowKey)) {
       try {
-        var os = await hhRef.collection('ownerLinks').doc(rowKey).get();
+        var os = await attached.collection('ownerLinks').doc(rowKey).get();
         token = (os.exists && (os.data() || {}).token) || '';
         copyGone = !os.exists && !os.metadata.fromCache;
       } catch (e) {}
@@ -4825,9 +4849,11 @@
        the link first, and the tidy drops a copy with its link or after the link is used. So this row
        points at nothing that still opens a door (an interrupted removal can leave one behind), and
        clearing it strands nothing. Without this it would sit on her list for good. */
+    if (leftSince(attached)) return;
     if (!token && copyGone) {
-      try { await hhRef.update(new firebase.firestore.FieldPath('pendingLinks', rowKey), firebase.firestore.FieldValue.delete()); }
-      catch (e) { try { if (window.toast) window.toast('Could not cancel that link just now. Try again in a moment.'); } catch (e2) {} return; }
+      try { await attached.update(new firebase.firestore.FieldPath('pendingLinks', rowKey), firebase.firestore.FieldValue.delete()); }
+      catch (e) { if (leftSince(attached)) return; try { if (window.toast) window.toast('Could not cancel that link just now. Try again in a moment.'); } catch (e2) {} return; }
+      if (leftSince(attached)) return;
       try { if (window.toast) window.toast('That link was already gone, so it has been tidied away.'); } catch (e) {}
       reopenFamily();
       return;
@@ -4840,9 +4866,11 @@
       return;
     }
     try { await db.collection('inviteLinks').doc(token).delete(); }
-    catch (e) { try { if (window.toast) window.toast('Could not cancel that link'); } catch (e2) {} return; }
-    try { await hhRef.update(new firebase.firestore.FieldPath('pendingLinks', rowKey), firebase.firestore.FieldValue.delete()); } catch (e) {}
-    if (isLinkRowId(rowKey)) { try { await hhRef.collection('ownerLinks').doc(rowKey).delete(); } catch (e) {} }
+    catch (e) { if (leftSince(attached)) return; try { if (window.toast) window.toast('Could not cancel that link'); } catch (e2) {} return; }
+    // The link is closed; its row and copy are tidied in the family it was in, wherever this page is now.
+    try { await attached.update(new firebase.firestore.FieldPath('pendingLinks', rowKey), firebase.firestore.FieldValue.delete()); } catch (e) {}
+    if (isLinkRowId(rowKey)) { try { await attached.collection('ownerLinks').doc(rowKey).delete(); } catch (e) {} }
+    if (leftSince(attached)) return;
     try { if (window.toast) window.toast('Link cancelled'); } catch (e) {}
     reopenFamily();
   }
@@ -4851,7 +4879,7 @@
      when she closes it. The endpoint verifies her ID token AND that she owns the household the link
      points at, so this cannot become a relay for sending Cubby-branded mail to strangers. */
   window.LL.sendInviteEmail = async function (token, email) {
-    var u = auth.currentUser;
+    var u = auth.currentUser, attached = hhRef;
     if (!u || !token || !email) return { error: 'bad_request' };
     var idToken;
     try { idToken = await u.getIdToken(); } catch (e) { return { error: 'unauthorized' }; }
@@ -4864,13 +4892,14 @@
       out = await r.json().catch(function () { return {}; });
     } catch (e) { return { error: 'network' }; }
     if (!r.ok || !out.ok) return { error: (out && out.error) || 'failed' };
+    if (leftSince(attached)) return { ok: true }; // sent; whose row it was is not this page's to mark now
     // Record who it went to, so the pending row can say so instead of just "waiting". On the row,
     // which is keyed by its row id now (lane B, D1), or by the token for a row written before.
     // Only onto a row that is there: a field path write to a missing row would make one, keyed by
     // the token, which is exactly what every member must not be able to read.
     var rk = linkRowFor(token);
     if (Object.prototype.hasOwnProperty.call(window.LL.hhPendingLinks || {}, rk)) {
-      try { await hhRef.update(new firebase.firestore.FieldPath('pendingLinks', rk, 'sentTo'), String(email).trim().toLowerCase()); } catch (e) {}
+      try { await attached.update(new firebase.firestore.FieldPath('pendingLinks', rk, 'sentTo'), String(email).trim().toLowerCase()); } catch (e) {}
     }
     return { ok: true };
   };
@@ -4919,11 +4948,12 @@
   // Ask the server about each of this family's own invites. Offline, refused, or any doubt: the row
   // stays as it is drawn. Only a definite "not there" from the server turns a row to "Not joined yet".
   function checkPendingInvites(emails) {
-    var hid = window.LL.householdId; if (!hid) return;
+    var hid = window.LL.householdId, attached = hhRef; if (!hid) return;
     (emails || []).forEach(function (em) {
       var pv = (window.LL.hhPending || {})[em] || {};
       if (pv.perFamily !== true) return;
       familyInviteRef(em, hid).get({ source: 'server' }).then(function (snap) {
+        if (leftSince(attached)) return;
         var gone = !snap.exists, k = hid + '|' + em;
         if ((inviteGone[k] === true) === gone) return;
         if (gone) inviteGone[k] = true; else delete inviteGone[k];
@@ -4933,18 +4963,20 @@
   }
   // "Invite again": the same invite, made again through the one path that makes invites.
   function inviteAgain(em, btn) {
-    var pv = (window.LL.hhPending || {})[em] || {};
+    var pv = (window.LL.hhPending || {})[em] || {}, attached = hhRef;
     if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
     var settle = function (text) {
       redrawPendingRow(em);
       try { window.toast && window.toast(text); } catch (e) {}
     };
     createEmailInvite({ email: em, name: pv.name || '', rel: pv.relationship || '', role: pv.role || 'caregiver' }).then(function (kind) {
+      if (leftSince(attached)) return;
       if (kind === 'withdrawn') { redrawPendingRow(em); return; }
       // The mirror row was rewritten by createEmailInvite; keep the local copy in step for the redraw.
       if (window.LL.hhPending) window.LL.hhPending[em] = Object.assign({}, pv, { perFamily: kind === 'family' });
       settle('Invite ready for ' + em + '.');
     }, function (e) {
+      if (leftSince(attached)) return;
       if (btn) { btn.disabled = false; btn.textContent = 'Invite again'; }
       try {
         window.toast && window.toast((e && e.code === 'permission-denied')
@@ -4960,9 +4992,10 @@
   // her household. Both doors are closed, because an older build may have written the other one.
   function cancelInvite(email) {
     if (!email || !hhRef) return;
-    var hid = window.LL.householdId;
+    var hid = window.LL.householdId, attached = hhRef;
     function tidy(text) {
-      try { hhRef.update(new firebase.firestore.FieldPath('pendingInvites', email), firebase.firestore.FieldValue.delete()).catch(function () {}); } catch (e) {}
+      if (leftSince(attached)) return;
+      try { attached.update(new firebase.firestore.FieldPath('pendingInvites', email), firebase.firestore.FieldValue.delete()).catch(function () {}); } catch (e) {}
       if (window.LL.hhPending) delete window.LL.hhPending[email];
       delete inviteGone[goneKey(email)];
       if (getLastInvite() === email) setLastInvite('');
@@ -4985,6 +5018,7 @@
       var settled = function (p) { return p.then(function () { return null; }, function (e) { return e || { code: 'unknown' }; }); };
       Promise.all([settled(familyInviteRef(email, hid).delete()), settled(db.collection('invites').doc(email).delete())]).then(function (r) {
         if (done) return; done = true; clearTimeout(t);
+        if (leftSince(attached)) return;
         if (!r[0] || !r[1]) { tidy('Invite cancelled.'); return; }
         // Both refused: under the rules live before this change the per-family delete always is, and
         // a refused address-keyed delete almost always means that invite is already gone (used, or
@@ -5399,8 +5433,9 @@
     var msg = document.getElementById('llInvMsg');
     if (!email || email.indexOf('@') < 1) { msg.textContent = 'Please enter a valid email.'; return; }
     var btn = document.getElementById('llInvBtn'); btn.disabled = true; btn.textContent = 'Creating…';
-    var done = false;
+    var done = false, attached = hhRef;
     function showReady() {
+      if (leftSince(attached)) return; // her invite's answer, and her last-invite address, are not the next account's
       // One message, used by every route out of here. It used to be composed twice, and only the
       // mailto: copy carried the "sign in with this address" line that makes the invite work at all.
       setLastInvite(email);
@@ -5430,6 +5465,7 @@
       if (done) return; done = true; clearTimeout(t); showReady();
     }).catch(function (e) {
         if (done) return; done = true; clearTimeout(t);
+        if (leftSince(attached)) return;
         /* Refused. With one invite per family this is no longer another family holding the address;
            it is the rules saying no to this owner (an address nobody proved, say). Saying more would
            tell anyone with a Cubby who else has invited an address, so the copy names the way
@@ -5470,7 +5506,7 @@
     });
   }
   function createEmailInvite(o) {
-    var hid = window.LL.householdId;
+    var hid = window.LL.householdId, attached = hhRef, byUid = auth.currentUser && auth.currentUser.uid;
     var mySeq = ++inviteSeq;
     var invDoc = {
       householdId: hid, role: o.role === 'owner' ? 'owner' : 'caregiver',
@@ -5492,10 +5528,10 @@
        who was never invited. */
     var pendingRow = new firebase.firestore.FieldPath('pendingInvites', o.email);
     try {
-      if (hhRef) hhRef.update(pendingRow, { name: invDoc.name, relationship: invDoc.relationship, role: invDoc.role, at: Date.now() }).catch(function () {});
+      if (attached) attached.update(pendingRow, { name: invDoc.name, relationship: invDoc.relationship, role: invDoc.role, at: Date.now() }).catch(function () {});
     } catch (e) {}
     var dropRow = function () {
-      try { if (hhRef) hhRef.update(pendingRow, firebase.firestore.FieldValue.delete()).catch(function () {}); } catch (e2) {}
+      try { if (attached) attached.update(pendingRow, firebase.firestore.FieldValue.delete()).catch(function () {}); } catch (e2) {}
     };
     var legacy = function () {
       return db.collection('invites').doc(o.email).set(invDoc).then(function () { delete inviteGone[hid + '|' + o.email]; return 'legacy'; }, function (e2) {
@@ -5505,6 +5541,10 @@
       });
     };
     return familyInvitesAllowed(o.email, hid).then(function (allowed) {
+      /* She left the family before the rules answered: nothing more is made for it from this page. Its mirror
+         row, queued above, comes off again only if she is the one signed in now (back in, say); nobody else on
+         this page writes to her family. */
+      if (leftSince(attached)) { if (byUid && auth.currentUser && auth.currentUser.uid === byUid) dropRow(); return 'withdrawn'; }
       /* Cancelled while Cubby was still asking which invite to write (a slow connection): her Cancel
          had nothing to delete yet, so writing it now would leave a live invite she has withdrawn. */
       if ((inviteCancelled[hid + '|' + o.email] || 0) > mySeq) return 'withdrawn';
@@ -5517,7 +5557,7 @@
         var withdrawn = (inviteCancelled[hid + '|' + o.email] || 0) > mySeq;
         var listed = !!(window.LL.hhPending && window.LL.hhPending[o.email]);
         if (!withdrawn && listed) {
-          try { if (hhRef) hhRef.update(new firebase.firestore.FieldPath('pendingInvites', o.email, 'perFamily'), true).catch(function () {}); } catch (e) {}
+          try { if (!leftSince(attached)) attached.update(new firebase.firestore.FieldPath('pendingInvites', o.email, 'perFamily'), true).catch(function () {}); } catch (e) {}
         }
         delete inviteGone[hid + '|' + o.email];
         return 'family';
