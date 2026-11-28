@@ -259,6 +259,7 @@ const TREE = [
      promise "nothing is sent" (CEO follow-up on #11, 28 Nov). The self-test stages the old line and 3 more breaks. */
   { name: 'quiet-hours-copy', cmd: ['node', 'tools/quiet_hours_copy_check.js', '--self-test'] },
   { name: 'parent-reminders', cmd: ['node', 'test/parent-reminders.test.js', 'url'] },
+  { name: 'news-optin',       cmd: ['node', 'test/news-optin.test.js', 'url'] },
   /* The November 2026 security fixes. Each was watched failing on the live code (1a6df125) first.
      page-stats: a stranger looping 404s must make zero Firestore writes and stay under the D1 cap. */
   { name: 'page-stats',     cmd: ['node', 'test/page-stats.test.js'] },

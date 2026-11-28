@@ -44,6 +44,7 @@ function deliver({ camp, user, ledger, pro, fcmOk = true, now }) {
   const tokens = Object.keys(push.tokens || {});
   if (!tokens.length) return 'off';
   if (!(push.allow && push.allow[camp.cat] === true)) return 'noConsent';
+  if (camp.cat === 'feature' && !(push.chosen && push.chosen.feature === true)) return 'noConsent';   // campaignConsent
 
   const tz = push.tz || '';
   const hr = hourIn(tz, now);
@@ -73,7 +74,7 @@ const NIGHT = Date.UTC(2026, 7, 13, 22, 0, 0);        // 02:00 in Dubai
 const user = (over) => Object.assign({
   householdId: 'hh1',
   push: { enabled: true, tokens: { tk: {} }, tz: TZ, quietStart: 21, quietEnd: 7,
-          allow: { critical: true, feature: true, marketing: true } }
+          allow: { critical: true, feature: true, marketing: true }, chosen: { feature: true } }
 }, over || {});
 // mirrors the Worker: marketing always excludes Pro; a feature nudge goes to everyone.
 const camp = (cat, id, over) => Object.assign({ id: id || (cat + '1'), cat, title: 't', body: 'b', nonPayingOnly: cat === 'marketing' }, over || {});
@@ -195,7 +196,7 @@ const camp = (cat, id, over) => Object.assign({ id: id || (cat + '1'), cat, titl
   {
     const src = fs.readFileSync(path.join(__dirname, '..', 'worker.js'), 'utf8');
     ok('the caps are the founder\'s numbers', src.includes('const PUSH_CAP = { marketing: 2, feature: 5 };'));
-    ok('consent is required and absence is not consent', src.includes("allow[camp.cat].booleanValue === true"));
+    ok('consent is required and absence is not consent', src.includes("allow[cat].booleanValue === true"));
     ok('the counter is only written after a real delivery', src.indexOf("if (!anyOk) return 'failed';") < src.indexOf('const newCaps'));
     ok('a campaign is idempotent per user', src.includes("if (sends && sends[camp.id]) return 'already';"));
     ok('quiet hours are evaluated in the user timezone', src.includes('_hourIn(tz, now)'));
@@ -213,8 +214,9 @@ const camp = (cat, id, over) => Object.assign({ id: id || (cat + '1'), cat, titl
 
     const app = fs.readFileSync(path.join(__dirname, '..', 'app', 'index.html'), 'utf8');
     ok('the client stamps its own queue as critical', app.includes("cat:'critical'"));
-    // Only medicine and product news default on; marketing and the parent-chosen reminders wait for a tap.
-    ok('marketing is off until it is tapped', app.includes("c.allow[k]=(k==='critical'||k==='feature')"));
+    // Only medicine defaults on; news, offers and the parent-chosen reminders wait for a tap.
+    ok('news and offers are off until tapped', app.includes("c.allow[k]=(k==='critical')"));
+    ok('consent is decided by campaignConsent', src.includes("if (!campaignConsent(push, camp.cat)) return 'noConsent';"));
     ok('the client sends its timezone', app.includes('tz:cfg.tz||\'\''));
     ok('opting out really deletes the tokens', app.includes('tokens:firebase.firestore.FieldValue.delete()'));
   }

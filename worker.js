@@ -1862,6 +1862,20 @@ async function fsPatch(base, token, path, masks, fields) {
 
 /* One user, one campaign. Returns why it did or did not go, so the campaign's own counters can say
    what happened instead of only how many landed. */
+/* Consent for a campaign, per category. Absent means not granted: nobody is opted in by silence.
+   News about a new feature (`feature`) also needs push.chosen.feature === true. Until 28 Nov 2026 the
+   app defaulted allow.feature to true and every device wrote it, so a stored true alone cannot tell
+   "she chose news" from "she never chose". privacy/index.html promises news is a separate opt in, so
+   only a recorded tap counts (test/news-optin.test.js). Offers (`marketing`) always defaulted off. */
+function campaignConsent(push, cat) {
+  const f = (m) => (m && m.mapValue && m.mapValue.fields) || null;
+  const allow = f(push && push.allow);
+  if (!(allow && allow[cat] && allow[cat].booleanValue === true)) return false;
+  if (cat !== 'feature') return true;
+  const chosen = f(push.chosen);
+  return !!(chosen && chosen.feature && chosen.feature.booleanValue === true);
+}
+
 async function deliverCampaign(base, token, now, camp, uid, userFields) {
   const push = userFields && userFields.push && userFields.push.mapValue && userFields.push.mapValue.fields;
   if (!push || !(push.enabled && push.enabled.booleanValue)) return 'off';
@@ -1869,10 +1883,7 @@ async function deliverCampaign(base, token, now, camp, uid, userFields) {
   const tokens = tokensMap ? Object.keys(tokensMap) : [];
   if (!tokens.length) return 'off';
 
-  // Consent, per category. Absent means not granted: nobody is opted in by silence.
-  const allow = push.allow && push.allow.mapValue && push.allow.mapValue.fields;
-  const okCat = allow && allow[camp.cat] && allow[camp.cat].booleanValue === true;
-  if (!okCat) return 'noConsent';
+  if (!campaignConsent(push, camp.cat)) return 'noConsent';
 
   const tz = _fsStr(push.tz);
   // Quiet hours, in their time. Deferred, not dropped, and the cap is NOT consumed: a deferred offer

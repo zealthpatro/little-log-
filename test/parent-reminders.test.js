@@ -67,7 +67,7 @@ const seed = (now, push) => ({
   console.log('A. off until she turns it on');
   const a = await p.evaluate(() => { const c = pushCfg(); return { allow: c.allow, qa: c.quietAllow, r: c.remind, n: remindEntries(c, Date.now(), Date.now() + 48 * 3600000).length }; });
   ok('feeds, pumping and visits are off for a parent who never chose them', a.allow.feed === false && a.allow.pump === false && a.allow.visit === false, a.allow);
-  ok('medicine and product news keep their defaults', a.allow.critical === true && a.allow.feature === true && a.allow.marketing === false, a.allow);
+  ok('medicine is on; news and offers wait for a tap (an old saved news true is not a choice)', a.allow.critical === true && a.allow.feature === false && a.allow.marketing === false, a.allow);
   ok('feeds do not come through quiet hours by default', a.qa.feed === false && a.qa.pump === false && a.qa.visit === false && a.qa.critical === true, a.qa);
   ok('defaults: about 3 hours after the last feed, no set times', a.r.feedMode === 'after' && a.r.feedGap === 180 && a.r.pumpGap === 180 && Array.isArray(a.r.feedTimes) && a.r.feedTimes.length === 0, a.r);
   ok('and with all of them off, the queue gains nothing', a.n === 0, a.n);
@@ -172,7 +172,7 @@ const seed = (now, push) => ({
     const afterGap = pushPrefsShape(pushCfg());
     return { fresh, afterPump, afterGap };
   });
-  ok('medicine, news and offers always travel, as explicit booleans', ['critical', 'feature', 'marketing'].every((k) => typeof hq.fresh.allow[k] === 'boolean'), hq.fresh.allow);
+  ok('medicine and offers always travel, as explicit booleans; news only once chosen (test/news-optin.test.js)', ['critical', 'marketing'].every((k) => typeof hq.fresh.allow[k] === 'boolean') && !('feature' in hq.fresh.allow), hq.fresh.allow);
   ok('a device that never chose writes no feed, pump or visit key (so it cannot switch another phone off)',
     !['feed', 'pump', 'visit'].some((k) => k in hq.fresh.allow || k in hq.fresh.quietAllow) && !('remind' in hq.fresh), hq.fresh);
   ok('once she chooses here, that choice travels, and only that one',

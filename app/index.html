@@ -8332,12 +8332,12 @@ function isHHMM(t){ return typeof t==='string' && /^([01]\d|2[0-3]):[0-5]\d$/.te
 function pushCfg(){
   var c=state.settings.push;
   if(!c) c=state.settings.push={enabled:false,quietStart:21,quietEnd:7};
-  if(!c.allow) c.allow={critical:true,feature:true,marketing:false};
+  if(!c.allow) c.allow={critical:true,feature:false,marketing:false};
   // What may still reach her during quiet hours (27 Nov 2026). Medicine reminders come through by default.
   if(!c.quietAllow) c.quietAllow={critical:true};
   if(typeof c.quietAllow.critical!=='boolean') c.quietAllow.critical=true;
-  // Absence is never consent for anything new: only medicine and product news default on (as before).
-  PUSH_CATS.forEach(function(k){ if(typeof c.allow[k]!=='boolean') c.allow[k]=(k==='critical'||k==='feature'); });
+  // Absence is never consent: only medicine defaults on. News is a separate opt in (privacy/index.html).
+  PUSH_CATS.forEach(function(k){ if(typeof c.allow[k]!=='boolean') c.allow[k]=(k==='critical'); });
   REMIND_CATS.forEach(function(k){ if(typeof c.quietAllow[k]!=='boolean') c.quietAllow[k]=false; });
   if(!c.remind||typeof c.remind!=='object') c.remind={};
   const r=c.remind;
@@ -8347,6 +8347,9 @@ function pushCfg(){
   r.feedTimes=(Array.isArray(r.feedTimes)?r.feedTimes:[]).filter(isHHMM).filter(function(t,i,a){ return a.indexOf(t)===i; }).sort().slice(0,12);
   // Which of these THIS device has actually chosen (see cubbyAdoptRemindPrefs): only those are written.
   if(!c.remindChosen||typeof c.remindChosen!=='object') c.remindChosen={};
+  /* Before 28 Nov 2026 news defaulted on and every device saved that true, so a saved true is not a choice.
+     It counts only once she taps it here (remindChosen.feature) or her account recorded a tap (newsAdopted). */
+  if(!c.remindChosen.feature&&!c.newsAdopted) c.allow.feature=false;
   if(!c.tz){ try{ c.tz=Intl.DateTimeFormat().resolvedOptions().timeZone||''; }catch(e){ c.tz=''; } }
   return c;
 }
@@ -8466,6 +8469,8 @@ function pushPrefsShape(cfg){
   const ch=cfg.remindChosen||{};
   REMIND_CATS.forEach(function(k){ if(ch[k]){ allow[k]=!!cfg.allow[k]; quietAllow[k]=!!cfg.quietAllow[k]; } else delete allow[k]; });
   const out={enabled:!!cfg.enabled, quietStart:cfg.quietStart, quietEnd:cfg.quietEnd, tz:cfg.tz||'', allow:allow, quietAllow:quietAllow};
+  // News the same way, plus the record that she chose: the Worker sends it only when both say yes.
+  if(ch.feature){ allow.feature=!!cfg.allow.feature; out.chosen={feature:true}; } else delete allow.feature;
   if(ch.remind&&cfg.remind) out.remind={feedMode:cfg.remind.feedMode, feedGap:cfg.remind.feedGap, pumpGap:cfg.remind.pumpGap, feedTimes:cfg.remind.feedTimes.slice()};
   return out;
 }
@@ -8481,6 +8486,10 @@ window.cubbyAdoptRemindPrefs=function(sp){
       if(sp.allow&&typeof sp.allow[k]==='boolean'&&c.allow[k]!==sp.allow[k]){ c.allow[k]=sp.allow[k]; changed=true; }
       if(sp.quietAllow&&typeof sp.quietAllow[k]==='boolean'&&c.quietAllow[k]!==sp.quietAllow[k]){ c.quietAllow[k]=sp.quietAllow[k]; changed=true; }
     });
+    // News: only a choice the account recorded (push.chosen.feature), never an old default true.
+    if(!ch.feature&&sp.chosen&&sp.chosen.feature===true&&sp.allow&&typeof sp.allow.feature==='boolean'&&(c.allow.feature!==sp.allow.feature||!c.newsAdopted)){
+      c.allow.feature=sp.allow.feature; c.newsAdopted=true; changed=true;
+    }
     if(!ch.remind&&sp.remind&&typeof sp.remind==='object'){
       ['feedMode','feedGap','pumpGap','feedTimes'].forEach(function(k){ if(sp.remind[k]!=null) c.remind[k]=sp.remind[k]; });
       pushCfg(); changed=true;               // pushCfg re-validates every adopted value
@@ -8501,6 +8510,7 @@ async function pushSyncPrefs(){
 function setPushAllow(cat,on){
   const cfg=pushCfg();
   if(PUSH_CATS.indexOf(cat)<0) return;
+  if(cat==='feature') cfg.remindChosen.feature=true;
   cfg.allow[cat]=!!on;
   persist(); pushSyncPrefs(); if(REMIND_CATS.indexOf(cat)>=0){ try{ syncReminderIndex(); }catch(e){} } openReminders();
   toast(on?'On':'Off');
