@@ -59,8 +59,8 @@ catalogue behind it. Each rule below cost real time in Aug-Sep 2026 and each has
   CI is the one gating run. pre-push refuses a main ref up front and runs no gates on a branch push: it
   asks one question, product code with no test changed is refused unless a commit says `Test-exempt: <why>`
   (`tools/change_test_check.js`). A push to main runs only `live` and IndexNow in CI (`tools/ci_tier_check.js`).
-  Mutation passes run nightly and on a PR that touched what they guard (`tools/mut_select.js`). Chaos and
-  both fuzzers run nightly (`tools/nightly.sh`); see `docs/TESTING.md`.
+  Mutation passes run nightly and on every CI job while item 14 is held; locally, only the ones a change
+  touched (`tools/mut_select.js`). Chaos and both fuzzers run nightly (`tools/nightly.sh`); see `docs/TESTING.md`.
 - Two suites on one Mac clash on ports and load (27 Nov 2026, a tree-server FAIL neither run had alone).
   Port runs come from 20000-32000, outside every ephemeral range, never from listen(0) plus one. The push
   lock in `.githooks/pre-push` (a kernel flock on push.flock in the user cache) serializes pushes against
