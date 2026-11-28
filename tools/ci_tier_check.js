@@ -26,6 +26,12 @@
  *   SKIPS a plain dependant, and a skipped required check counts as passed), passes the matrix's result as
  *   --legs, checks --of=N, and lists the gates with the very flags the legs ran with.
  *
+ * THE TIER AND NO SWALLOWING (28 Nov 2026 skeptic). Matching legs to aggregator is not enough: both edited
+ * together (--only=type, or --no-browser for --emulator-only) agreed and were green while grading one gate or no
+ * Firestore suite. So each gates.js job's selecting flags are pinned exactly (TIER below), --mutants included
+ * while plan item 14 is held on CI. And none of the six jobs, nor the step doing its work, may turn a failure
+ * into a pass: no continue-on-error, no step if:, no shell:, no defaults:, and the step is the one command.
+ *
  * HOW. A small YAML reader for the subset these files use (mappings, lists, flow lists, quoted scalars,
  * comments, block scalars), and an evaluator for `if:` that knows github.event_name and github.ref with
  * ==, !=, && and ||. Anything it cannot evaluate counts as "runs", so an unreadable condition fails the push
@@ -153,10 +159,53 @@ const SPLITS = [['tree', 'tree-complete'], ['emulator-shard', 'emulator-complete
 /* A run line's words, with ${{ x }} kept as one word. */
 const words = (run) => String(run || '').replace(/\$\{\{[^}]*\}\}/g, (m) => m.replace(/\s+/g, '')).split(/\s+/).filter(Boolean);
 const legFlags = (ws) => ws.slice(ws.indexOf('tools/gates.js') + 1).filter((w) => !/^--(shard|record-times)=/.test(w)).sort();
+/* THE TIER each gates.js job runs: its flags that choose WHICH gates, exactly (--shard and --record-times are the
+   split's own, judged below). A -complete check must list with its matrix's set. Pinned, not only matched leg to
+   aggregator: --only=type on both, or --no-browser for --emulator-only on both, agreed with itself and was green
+   while it graded one gate or no Firestore suite (28 Nov 2026).
+   --mutants everywhere: test-speed plan item 14 (mutation passes only where a PR touched their inputs) is held on
+   CI until branch protection requires tree-complete and emulator-complete AND plan item 15 traces the inputs.
+   Swapping --mutants for --changed=HEAD^1 here is that switch, made on purpose, once both hold. */
+const TIER = {
+  gates: ['--mutants', '--no-browser'],
+  emulator: ['--emulator-only', '--mutants'],
+  tree: ['--mutants'],
+  'emulator-shard': ['--emulator-only', '--mutants'],
+};
+const same = (a, b) => JSON.stringify(a.slice().sort()) === JSON.stringify(b.slice().sort());
+/* A required job, or the step that does its work, must not turn a failure into a pass: continue-on-error (job or
+   step), a step `if:` that can skip it, or a `shell:` that can ignore its exit. And the step is the one command:
+   `|| true` after it or `true;` before it is refused by shape, not only when it happens to break a flag match. */
+function judgeWork(job, name, tool) {
+  const out = [];
+  if (!job) return out;
+  const coe = (v) => v !== undefined && v !== null && v !== false;
+  if (coe(job['continue-on-error'])) out.push(name + ' has continue-on-error: ' + job['continue-on-error'] + ': it would report success when it failed');
+  if (job.defaults !== undefined) out.push(name + ' has a defaults: block: it can set a shell that ignores the exit of ' + tool);
+  const step = (job.steps || []).find((s) => s && new RegExp('tools/' + tool.replace('.', '\\.')).test(String(s.run || '')));
+  if (!step) return out;
+  if (coe(step['continue-on-error'])) out.push(name + "'s " + tool + ' step has continue-on-error: ' + step['continue-on-error'] + ': the job goes green when ' + tool + ' fails');
+  if (step.if !== undefined) out.push(name + "'s " + tool + ' step has if: ' + step.if + ': when it skips, the job passes without it');
+  if (step.shell !== undefined) out.push(name + "'s " + tool + ' step has shell: ' + step.shell + ': a shell can ignore its exit');
+  const run = String(step.run).trim();
+  if (!new RegExp('^node tools/' + tool.replace('.', '\\.') + '(\\s+--\\S*)*$').test(run.replace(/\$\{\{[^}]*\}\}/g, 'X')) || /[;&|`]/.test(run.replace(/\$\{\{[^}]*\}\}/g, 'X')))
+    out.push(name + "'s step is not only the " + tool + ' command (one line of --flags, nothing before or after): ' + run.slice(0, 200));
+  return out;
+}
 function judgeSplits(wf) {
   const out = [];
   const jobs = (wf && wf.jobs) || {};
+  if (wf && wf.defaults !== undefined) out.push('gates.yml has a defaults: block: it sets the shell of every step, and a shell can ignore an exit');
+  for (const name of ['gates', 'emulator']) {
+    const j = jobs[name];
+    if (!j) continue;   // a missing required job is reported by the PR rule
+    out.push(...judgeWork(j, name, 'gates.js'));
+    const run = (j.steps || []).map((x) => x && x.run).find((r) => /tools\/gates\.js/.test(String(r || '')));
+    const got = run ? words(run).slice(words(run).indexOf('tools/gates.js') + 1) : null;
+    if (!got || !same(got, TIER[name])) out.push(name + ' runs gates.js with ' + JSON.stringify(got) + ', not exactly ' + JSON.stringify(TIER[name]) + ' (its tier, tools/ci_tier_check.js TIER)');
+  }
   for (const [mj, aj] of SPLITS) {
+    out.push(...judgeWork(jobs[mj], mj, 'gates.js'), ...judgeWork(jobs[aj], aj, 'shard.js'));
     const m = jobs[mj], a = jobs[aj];
     if (!m || !a) { out.push('gates.yml has no ' + (!m ? mj : aj) + ' job (the ' + mj + ' split and its ' + aj + ' check go together)'); continue; }
     const st = m.strategy || {};
@@ -170,6 +219,8 @@ function judgeSplits(wf) {
     else {
       if (!lw.includes('--shard=${{matrix.shard}}/' + N)) out.push(mj + ' does not run --shard=${{ matrix.shard }}/' + N + ' (' + lw.filter((w) => /^--shard/.test(w)).join(' ') + ')');
       if (!lw.some((w) => /^--record-times=/.test(w))) out.push(mj + ' records no results (--record-times): ' + aj + ' would have nothing to check');
+      if (lw.filter((w) => /^--shard=/.test(w)).length > 1 || lw.filter((w) => /^--record-times=/.test(w)).length > 1) out.push(mj + ' passes --shard or --record-times twice: which one gates.js reads is not this check\'s to guess');
+      if (!TIER[mj] || !same(legFlags(lw), TIER[mj])) out.push(mj + ' runs gates.js with ' + JSON.stringify(legFlags(lw)) + ', not exactly ' + JSON.stringify(TIER[mj] || null) + ' (its tier, tools/ci_tier_check.js TIER)');
     }
     const needs = [].concat(a.needs || []);
     if (!needs.includes(mj)) out.push(aj + ' does not need ' + mj + ': it could report before the shards ran');
@@ -183,6 +234,7 @@ function judgeSplits(wf) {
       if (!aw.includes('--legs=${{needs.' + mj + '.result}}')) out.push(aj + ' does not pass --legs=${{ needs.' + mj + '.result }}: a failed or cancelled leg would go unread');
       const af = aw.indexOf('--') >= 0 ? aw.slice(aw.indexOf('--') + 1).sort() : null;
       if (legRun && JSON.stringify(af) !== JSON.stringify(legFlags(lw))) out.push(aj + ' lists the gates with ' + JSON.stringify(af) + ' but the legs ran ' + JSON.stringify(legFlags(lw)) + ': it would check another list');
+      if (!af || !TIER[mj] || !same(af, TIER[mj])) out.push(aj + ' lists the gates with ' + JSON.stringify(af) + ', not exactly ' + JSON.stringify(TIER[mj] || null) + ' (' + mj + "'s tier): it would prove a smaller list complete");
     }
   }
   return out;
@@ -262,13 +314,37 @@ function selfTest() {
       ['tree-complete checking 7 shards of 8', ['--of=8', '--of=7'], /tree-complete checks --of=7, but tree has 8 shards/],
       ['shard 8 left out of the matrix', ['shard: [1, 2, 3, 4, 5, 6, 7, 8]', 'shard: [1, 2, 3, 4, 5, 6, 7]'], /tree does not run --shard=\$\{\{ matrix\.shard \}\}\/7|tree-complete checks --of=8, but tree has 7/],
       ['the tree matrix failing fast', ['fail-fast: false\n      matrix:\n        shard: [1, 2, 3, 4, 5, 6, 7, 8]', 'fail-fast: true\n      matrix:\n        shard: [1, 2, 3, 4, 5, 6, 7, 8]'], /tree fails fast/],
-      ['tree-complete listing with other flags than the legs', ['--of=8 --legs=${{ needs.tree.result }} -- --changed=HEAD^1', '--of=8 --legs=${{ needs.tree.result }} -- --no-browser --changed=HEAD^1'], /tree-complete lists the gates with/],
+      ['tree-complete listing with other flags than the legs', ['--of=8 --legs=${{ needs.tree.result }} -- --mutants', '--of=8 --legs=${{ needs.tree.result }} -- --no-browser --mutants'], /tree-complete lists the gates with/],
       ['tree-complete not reading the legs\' result', [' --legs=${{ needs.tree.result }}', ''], /does not pass --legs/],
       ['the legs recording nothing', [' --record-times=${{ runner.temp }}/results/shard-${{ matrix.shard }}-of-8.json', ''], /tree records no results/],
       ['emulator-complete checking 3 shards of 4', ['--of=4', '--of=3'], /emulator-complete checks --of=3, but emulator-shard has 4 shards/],
       ['emulator-complete renamed (protection would wait for a check that never reports)', ['  emulator-complete:\n    runs-on: ubuntu-latest\n', '  emulator-complete:\n    name: emulator complete\n    runs-on: ubuntu-latest\n'], /emulator-complete is named "emulator complete"/],
     ];
     for (const [label, [a, b], want] of SP) { const q = judge(G(a, b)); ok(label + ': red', q.some((x) => want.test(x)), q); }
+    /* The tier each job runs, pinned exactly, and nothing that turns a failure into a pass (28 Nov 2026 skeptic:
+       each of these was CI-TIER: PASS before). Several edits at once, because a pair edited together (the legs
+       AND their -complete) is the case the flag-match rule alone cannot see. */
+    const GG = (pairs) => stage((f, s) => (f === 'gates.yml' ? pairs.reduce((t, [a, b]) => must(t, a, b), s) : s));
+    const TREE_STEP = '      - name: Every shard ran and passed, and each gate ran in exactly one\n';
+    const EMU_STEP = '      - name: Every emulator shard ran and passed, and each suite ran in exactly one\n';
+    const TP = [
+      ['--only=type on both the tree legs and tree-complete (tree-complete would grade one gate)', [['/8 --mutants --record', '/8 --mutants --only=type --record'], ['-- --mutants\n', '-- --mutants --only=type\n']], /^tree runs gates\.js with .*--only=type/],
+      ['--no-browser for --emulator-only on emulator-shard and emulator-complete (no Firestore suite would run)', [['gates.js --emulator-only --shard=', 'gates.js --no-browser --shard='], ['-- --emulator-only --mutants', '-- --no-browser --mutants']], /^emulator-shard runs gates\.js with .*--no-browser/],
+      ['the tree pair on --changed=HEAD^1 (item 14 switched on before protection and the trace)', [['/8 --mutants --record', '/8 --changed=HEAD^1 --record'], ['-- --mutants\n', '-- --changed=HEAD^1\n']], /^tree runs gates\.js with .*--changed=HEAD\^1/],
+      ['the required gates job without --mutants', [['gates.js --no-browser --mutants', 'gates.js --no-browser --changed=HEAD^1']], /^gates runs gates\.js with/],
+      ['the required emulator job without --mutants', [['run: node tools/gates.js --emulator-only --mutants\n', 'run: node tools/gates.js --emulator-only\n']], /^emulator runs gates\.js with/],
+      ['continue-on-error on the tree-complete step (green while shard.js says INCOMPLETE)', [[TREE_STEP, TREE_STEP + '        continue-on-error: true\n']], /^tree-complete's shard\.js step has continue-on-error/],
+      ['continue-on-error on the tree-complete job', [['  tree-complete:\n    runs-on: ubuntu-latest\n', '  tree-complete:\n    runs-on: ubuntu-latest\n    continue-on-error: true\n']], /^tree-complete has continue-on-error/],
+      ['continue-on-error on the emulator-complete job', [['  emulator-complete:\n    runs-on: ubuntu-latest\n', '  emulator-complete:\n    runs-on: ubuntu-latest\n    continue-on-error: true\n']], /^emulator-complete has continue-on-error/],
+      ['continue-on-error on the required gates job', [['  gates:\n    runs-on: ubuntu-latest\n', '  gates:\n    runs-on: ubuntu-latest\n    continue-on-error: true\n']], /^gates has continue-on-error/],
+      ['continue-on-error on a tree leg\'s gates.js step', [['      - name: Tree gates, one shard of 8\n', '      - name: Tree gates, one shard of 8\n        continue-on-error: true\n']], /^tree's gates\.js step has continue-on-error/],
+      ['"|| true" after the tree-complete command', [['-- --mutants\n', '-- --mutants || true\n']], /^tree-complete's step is not only the shard\.js command/],
+      ['a command before shard.js on the tree-complete step', [['run: node tools/shard.js --complete=${{ runner.temp }}/results --of=8', 'run: true; node tools/shard.js --complete=${{ runner.temp }}/results --of=8']], /^tree-complete's step is not only the shard\.js command/],
+      ['an if: on the tree-complete step (skipped, and the job passes)', [[TREE_STEP, TREE_STEP + "        if: github.event_name == 'push'\n"]], /^tree-complete's shard\.js step has if/],
+      ['a shell: on the emulator-complete step', [[EMU_STEP, EMU_STEP + '        shell: bash {0}\n']], /^emulator-complete's shard\.js step has shell/],
+      ['a workflow defaults: block (it sets the shell of every step)', [['\njobs:\n', '\ndefaults:\n  run:\n    shell: bash {0}\n\njobs:\n']], /gates\.yml has a defaults: block/],
+    ];
+    for (const [label, pairs, want] of TP) { const q = judge(GG(pairs)); ok(label + ': red', q.some((x) => want.test(x)), q); }
     ok('companion: the unaltered copy is green', judge(stage((f, s) => s)).length === 0, judge(stage((f, s) => s)));
   } catch (e) { ok('the self-test ran to its end', false, e && e.stack || e); }
   finally { fs.rmSync(T, { recursive: true, force: true }); }

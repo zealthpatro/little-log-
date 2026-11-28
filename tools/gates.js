@@ -19,9 +19,9 @@
  *   node tools/gates.js --emulator-only   only the Firestore suites (what CI's emulator job runs)
  *   node tools/gates.js --all
  *   --only=<name> filters the emulator tier too, so --emulator --only=household-guard runs one suite.
- *   --mutants          every mutation pass (nightly). Without it a pass runs only when this change touched
- *                      what it guards (its `mut` inputs, tools/mut_select.js), against --changed=<rev>
- *                      (CI: HEAD^1) or, by default, the merge-base with origin/main.
+ *   --mutants          every mutation pass (nightly, and every CI job while plan item 14 is held there). Without
+ *                      it a pass runs only when this change touched what it guards (its `mut` inputs,
+ *                      tools/mut_select.js), against --changed=<rev> or, by default, the merge-base with origin/main.
  *   --browser-only     only the tree gates that need Chrome (the complement of --no-browser)
  *   --shard=i/N        only shard i of N (1-based) of whatever the other flags chose, split longest first by
  *                      tools/gate-times.json (tools/shard.js); CI runs N of these side by side and its
@@ -59,9 +59,10 @@ const LIST = ARGS.includes('--list');
 const SHARD = (() => { const a = ARGS.find((x) => x.startsWith('--shard=')); return a === undefined ? undefined : a.slice(8); })();
 const RECORD = (ARGS.find((a) => a.startsWith('--record-times=')) || '').slice(15);
 
-/* What each mutation pass guards (`mut`), for tools/mut_select.js: a pass runs on a PR only when one of these
-   changed (or the gate is new, or its entry or the runner changed); nightly runs every one with --mutants. The
-   founder's call of 28 Nov 2026 (test-speed plan item 14). A trailing / is a directory. Wide on purpose: a
+/* What each mutation pass guards (`mut`), for tools/mut_select.js: without --mutants a pass runs only when one of
+   these changed (or the gate is new, or its entry or the runner changed); nightly runs every one with --mutants.
+   The founder's call of 28 Nov 2026 (test-speed plan item 14). CI still passes --mutants on every job (ci-tier
+   pins it) until branch protection requires tree-complete and emulator-complete and plan item 15 traces these. A trailing / is a directory. Wide on purpose: a
    missed input ships a weakened assertion for up to a day, an extra one costs a few minutes. mut_select's
    --self-test fails any entry whose file reads a repo path these leave out. mutOnly: the gate is only the
    mutants (its suite is a gate of its own, or it has none), so off means not run; otherwise off means the
@@ -838,6 +839,30 @@ async function selfTestDownloads() {
   const e = await runGate('ci', plant('anything.ics'), ROOT, dl.userDownloads(noHome));
   ok('and there the guard skips instead of failing', e.code === 0, e.out);
 
+  /* ...but not on CI. There a missing ~/Downloads is a workflow that forgot its mkdir step, and the guard would be
+     off without a word (28 Nov 2026 skeptic: the gates and emulator jobs had none). So with CI set the runner
+     refuses before its first gate. The real runner, a gate list of nothing, HOME pointed at a temp folder. */
+  const { spawnSync } = require('child_process');
+  const withDl = fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-with-downloads-'));
+  fs.mkdirSync(path.join(withDl, 'Downloads'));
+  const runner = (home, ci) => {
+    const env = { ...process.env, HOME: home };
+    for (const k of Object.keys(env)) if (k.startsWith('GIT_')) delete env[k];
+    delete env.CI; delete env.GITHUB_ACTIONS;
+    if (ci !== undefined) env.CI = ci;
+    const r = spawnSync(process.execPath, [__filename, '--no-browser', '--only=__no_such_gate__'], { cwd: ROOT, env, encoding: 'utf8', timeout: 120000 });
+    return { code: r.status, out: String(r.stdout || '') + String(r.stderr || '') };
+  };
+  const f1 = runner(noHome, 'true');
+  ok('on CI (CI=true) with no ~/Downloads the runner refuses before any gate: exit 2', f1.code === 2 && /REFUSED: on CI with no .*Downloads/.test(f1.out) && !/serving THIS tree/.test(f1.out), f1.code + ' ' + f1.out.slice(0, 300));
+  const f2 = runner(withDl, 'true');
+  ok('companion: on CI with a ~/Downloads it runs and watches it', f2.code === 0 && /watching .*cubby-with-downloads-[^/]*\/Downloads/.test(f2.out), f2.code + ' ' + f2.out.slice(-300));
+  const f3 = runner(noHome, undefined);
+  ok('companion: off CI with no ~/Downloads it runs, and says the guard has nothing to watch', f3.code === 0 && /no ~\/Downloads on this machine/.test(f3.out), f3.code + ' ' + f3.out.slice(-300));
+  const f4 = runner(noHome, 'false');
+  ok('companion: CI=false is not CI', f4.code === 0, f4.code + ' ' + f4.out.slice(-200));
+  fs.rmSync(withDl, { recursive: true, force: true });
+
   /* runGate() is only worth something if the suite cannot run a gate around it. */
   const src = fs.readFileSync(__filename, 'utf8');
   ok('every gate the suite runs goes through runGate()', (src.match(/await run\(/g) || []).length === 1, (src.match(/await run\(/g) || []).length);
@@ -1233,6 +1258,15 @@ else (async () => {
   list = list.map(viaPlan).filter(Boolean);
   emuList = emuList.map(viaPlan).filter(Boolean);
   if (LIST) { for (const g of list.concat(emuList)) console.log(g.name); process.exit(0); }
+  /* On CI the downloads guard must be on: a runner with no ~/Downloads there is a workflow that dropped its
+     `mkdir -p ~/Downloads` step, and the guard would be off without a word (docs/TESTING.md, every run, CI included).
+     --list (tree-complete) runs no gate, so it is above this. --self-test-downloads stages it. */
+  const ci = String(process.env.CI || '').toLowerCase();
+  if (ci && ci !== 'false' && ci !== '0' && !dl.userDownloads()) {
+    console.log('REFUSED: on CI with no ' + path.join(os.homedir(), 'Downloads') + ', so the downloads guard would have nothing to watch.\n' +
+      'Add a step `mkdir -p ~/Downloads` before this one (as every gates.js job in .github/workflows/gates.yml has).\nNo gate was run.\n\nGATES: FAIL');
+    process.exit(2);
+  }
 
   console.log('\nCubby gates');
   if (shardNote) console.log(shardNote + '\n');

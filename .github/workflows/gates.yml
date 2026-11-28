@@ -23,8 +23,15 @@ name: Gates
 #   node tools/gates.js               everything judged from the checkout
 #   node tools/gates.js --live        also audit what is actually deployed
 #   node tools/gates.js --emulator    also the Firestore rules suites (the `emulator` job below)
-#   node tools/gates.js --mutants     every mutation pass (nightly); without it only those whose inputs
-#                                     changed run (--changed=<rev>, below: what this PR changed)
+#   node tools/gates.js --mutants     every mutation pass. EVERY job here passes it, for now.
+#
+# MUTATION PASSES STAY ON IN CI (test-speed plan item 14 is held, 28 Nov 2026). Item 14 runs a mutation pass on a
+# PR only when the PR touched its inputs (--changed=HEAD^1, tools/mut_select.js), and it is only safe once
+# (a) branch protection requires tree-complete and emulator-complete, and (b) plan item 15 traces each pass's
+# inputs instead of the hand-declared `mut` lists. Neither holds yet, so turning them off here would leave
+# chaos, fuzz-rules, the usage and admin self-tests and usage-d1 with nightly as their only net. ci-tier fails
+# this file if any gates.js job (or its -complete check) runs without --mutants; dropping it is an edit to
+# tools/ci_tier_check.js's TIER list, made on purpose once (a) and (b) hold.
 
 on:
   push:
@@ -42,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
-      # Depth 2: the PR's merge commit and main under it, so --changed=HEAD^1 is exactly what this PR changes.
+      # Depth 2: the PR's merge commit and main under it (what --changed=HEAD^1 will read once item 14 is on).
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
@@ -66,9 +73,12 @@ jobs:
       # Pillow 12 and brand-py went red on CI from the logo change on, Nov 2026).
       - name: Python image libraries for the brand tools
         run: python3 -m pip install --quiet -r tools/requirements-brand.txt
-      # A mutation pass runs here only when this PR changed its inputs or added it; nightly runs every one.
+      # On CI gates.js refuses to start without a ~/Downloads to watch (the guard would be off, unsaid).
+      - name: A Downloads folder, so the downloads guard is on
+        run: mkdir -p ~/Downloads
+      # Every mutation pass, as nightly (item 14 held: see the top of this file).
       - name: Gates (no browser)
-        run: node tools/gates.js --no-browser --changed=HEAD^1
+        run: node tools/gates.js --no-browser --mutants
 
   # The whole tree tier in 8 shards (gates.js --shard=i/8: longest first by tools/gate-times.json, the same
   # split on every leg). Linux, so: Chrome named in CHROME_PATH (tools/chrome_path_check.js holds every gate to
@@ -108,7 +118,7 @@ jobs:
       - name: A Downloads folder, so the downloads guard is on
         run: mkdir -p ~/Downloads
       - name: Tree gates, one shard of 8
-        run: node tools/gates.js --shard=${{ matrix.shard }}/8 --changed=HEAD^1 --record-times=${{ runner.temp }}/results/shard-${{ matrix.shard }}-of-8.json
+        run: node tools/gates.js --shard=${{ matrix.shard }}/8 --mutants --record-times=${{ runner.temp }}/results/shard-${{ matrix.shard }}-of-8.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -137,7 +147,7 @@ jobs:
           merge-multiple: true
           path: ${{ runner.temp }}/results
       - name: Every shard ran and passed, and each gate ran in exactly one
-        run: node tools/shard.js --complete=${{ runner.temp }}/results --of=8 --legs=${{ needs.tree.result }} -- --changed=HEAD^1
+        run: node tools/shard.js --complete=${{ runner.temp }}/results --of=8 --legs=${{ needs.tree.result }} -- --mutants
 
   # THE SECOND NET for the Firestore emulator tier (Nov 2026). The rules suites, the Worker-against-
   # Firestore suites and the chaos/fuzz self-tests ran on nothing automatic: the founder's pre-push
@@ -181,10 +191,12 @@ jobs:
       # (MINIFLARE_PIN in workers/admin/dev/d1-miniflare.mjs, what wrangler 4.162.0 ships); another one fails it.
       - name: Install the browser driver, the admin SDK and the local D1 runtime the self-hosting suites use
         run: npm install --no-save --prefix tools puppeteer-core@25.2.1 firebase-admin miniflare@5.20261113.0-beta
+      - name: A Downloads folder, so the downloads guard is on
+        run: mkdir -p ~/Downloads
       - name: Firestore emulator tier (each suite on its own free ports)
         env:
           CHROME_PATH: /usr/bin/google-chrome
-        run: node tools/gates.js --emulator-only --changed=HEAD^1
+        run: node tools/gates.js --emulator-only --mutants
 
   # The emulator tier in 4 shards, on 4 machines (one VM each, never suites side by side on one). Measured
   # serially it is about 38 min; split by tools/gate-times.json each shard is about 10-11 min, the floor being
@@ -223,7 +235,7 @@ jobs:
       - name: A Downloads folder, so the downloads guard is on
         run: mkdir -p ~/Downloads
       - name: Firestore emulator tier, one shard of 4
-        run: node tools/gates.js --emulator-only --shard=${{ matrix.shard }}/4 --changed=HEAD^1 --record-times=${{ runner.temp }}/results/shard-${{ matrix.shard }}-of-4.json
+        run: node tools/gates.js --emulator-only --shard=${{ matrix.shard }}/4 --mutants --record-times=${{ runner.temp }}/results/shard-${{ matrix.shard }}-of-4.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -250,7 +262,7 @@ jobs:
           merge-multiple: true
           path: ${{ runner.temp }}/results
       - name: Every emulator shard ran and passed, and each suite ran in exactly one
-        run: node tools/shard.js --complete=${{ runner.temp }}/results --of=4 --legs=${{ needs.emulator-shard.result }} -- --emulator-only --changed=HEAD^1
+        run: node tools/shard.js --complete=${{ runner.temp }}/results --of=4 --legs=${{ needs.emulator-shard.result }} -- --emulator-only --mutants
 
   # Production is a separate job on purpose, and it BLOCKS.
   #

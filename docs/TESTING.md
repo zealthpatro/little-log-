@@ -16,15 +16,15 @@ random, seeded, realistic trouble at the real app.
    │               (unless a commit carries "Test-exempt: <why>")
    ▼
  GitHub Actions on the PR (.github/workflows/gates.yml, seo.yml, teach.yml), the one gating run
-   gates     node tools/gates.js --no-browser --changed=HEAD^1   (Chrome-free tree gates)
-   emulator  node tools/gates.js --emulator-only --changed=HEAD^1 (Java 21, firebase-tools, Chrome)
-   tree (1/8 .. 8/8)      gates.js --shard=i/8: the WHOLE tree tier, browser gates included, on Linux
+   gates     node tools/gates.js --no-browser --mutants   (Chrome-free tree gates)
+   emulator  node tools/gates.js --emulator-only --mutants (Java 21, firebase-tools, Chrome)
+   tree (1/8 .. 8/8)      gates.js --shard=i/8 --mutants: the WHOLE tree tier, browser gates included, on Linux
      └► tree-complete     tools/shard.js --complete: every leg passed, every shard's results file is
-                          there, and the union is exactly gates.js --list with the same flags
-   emulator (1/4 .. 4/4)  gates.js --emulator-only --shard=i/4, one VM each
+                          there, and the union is exactly gates.js --list with the same flags (20 gates at least)
+   emulator (1/4 .. 4/4)  gates.js --emulator-only --shard=i/4 --mutants, one VM each
      └► emulator-complete the same proof for the emulator tier
    seo-guard, teach-guard
-   (a mutation pass runs here only if this PR changed what it guards; see "Mutation passes")
+   (every mutation pass runs here, for now: plan item 14 is held on CI; see "Mutation passes")
    ▼
  merge = deploy. GitHub Actions on the push to main: only these, nothing that re-grades the tree
    live      production checks, after the deploy;  seo-guard's IndexNow ping
@@ -48,8 +48,11 @@ random, seeded, realistic trouble at the real app.
 | `--shard=i/N` | only shard `i` of `N` (1-based) of whatever the other flags chose, split longest first by `tools/gate-times.json` (`tools/shard.js`); a gate with no time counts 60 s. An invalid `i/N` exits 2 and runs nothing |
 | `--list` | print the names the other flags choose (shard and mutation plan applied), one per line, and exit: no tree server, no gate |
 | `--record-times=<f>` | write the shard, the flags and each gate's verdict and time to `<f>` (JSON), however the run went |
-| `--mutants` | every mutation pass (nightly). Without it, only the passes this change touched (below) |
-| `--changed=<rev>` | the base the change is measured from (CI: `HEAD^1`, `main` under the PR's merge commit); default: the merge-base with `origin/main` |
+| `--mutants` | every mutation pass (nightly, and every CI job for now). Without it, only the passes this change touched (below) |
+| `--changed=<rev>` | the base the change is measured from (once item 14 is on CI: `HEAD^1`, `main` under the PR's merge commit); default: the merge-base with `origin/main` |
+
+On CI (`CI` set) the runner refuses to start, exit 2, when there is no `~/Downloads`: the downloads guard would be
+off without a word. Every gates.js job in gates.yml makes one first (`--self-test-downloads` stages the refusal).
 
 **Where each check runs (28 Nov 2026).** The same suite used to run up to seven times per change, mostly on
 the Mac: the branch push ran `--no-browser` (23 min), the PR's CI ran the identical command, the train ran
@@ -73,6 +76,11 @@ the full suite, the train's push ran `--no-browser` again, and the push to `main
   fails by itself. Each aggregator runs `always()`, reads the matrix result, demands one results file per
   shard and compares the union with `gates.js --list` run with the legs' own flags, each gate exactly once.
   `ci-tier` holds the workflow to all of that; `shard` stages each way the split or the proof can go wrong.
+  `ci-tier` also pins each gates.js job's tier exactly (`TIER` in `tools/ci_tier_check.js`: `--only=type` on
+  the legs and their check together, or `--no-browser` for `--emulator-only` on both, agreed with itself and
+  was green), and refuses anything that turns a failure into a pass on the six jobs or the step doing their work:
+  `continue-on-error`, a step `if:`, `shell:`, `defaults:`, or any text before or after the one command.
+  `shard.js --complete` refuses a list of fewer than 20 gates (a filter that leaves nothing was COMPLETE).
   The switch, once three PRs in a row are green on both (the founder runs it; `strict` and `enforce_admins`
   are untouched, `gates` and `emulator` stay required until their jobs are removed in the same step):
 
@@ -88,8 +96,14 @@ the full suite, the train's push ran `--no-browser` again, and the push to `main
   `node tools/shard.js --times-from=<shard-*.json,...>` (the `tree-shard-*` artifacts); a stale time only
   unbalances the shards, it can never drop a gate.
 
-**Mutation passes: nightly every one, on a PR only what it touched** (the founder's call, 28 Nov 2026). A
-mutation pass breaks the code in a temp copy and requires the suite to go red; it proves the suite can still
+**Mutation passes: nightly every one, on a PR only what it touched** (the founder's call, 28 Nov 2026), **held
+on CI for now.** Every CI job passes `--mutants`, and `ci-tier` fails the workflow if one does not. The PR half
+is only safe once (a) branch protection requires `tree-complete` and `emulator-complete` (the command above),
+and (b) plan item 15 traces each pass's inputs instead of the hand-declared lists below. Turning it on before
+both would leave chaos, fuzz-rules, the usage and admin self-tests, usage-tracker(-emu) and usage-d1 with the
+nightly run as their only net on any PR that misses a declared input. The switch, once (a) and (b) hold, is
+`--mutants` to `--changed=HEAD^1` in gates.yml and in `TIER` together. Locally, a run without `--mutants`
+already selects. A mutation pass breaks the code in a temp copy and requires the suite to go red; it proves the suite can still
 see. In `tools/gates.js` such a gate carries `mut: [inputs]` (a trailing `/` is a directory), and
 `mutOnly: true` when the gate is nothing but mutants. `tools/mut_select.js` decides per run:
 - runs: `--mutants`; or the gate is new, or its entry line changed; or a changed file is one of its inputs;
@@ -422,6 +436,9 @@ restores the holding screen, and update `FLAKE` in the test.
 | shard | 28 Nov 2026: run against the runner before `--list` existed, section 3 went red ("--list is understood": the old runner printed a run banner, not a list). Built in: five one-line mutants of the partition (shard `i` read 0-based, the last bin never chosen, the tie-break dropped, one gate dropped from every shard, the load never added) and `0/8` accepted each turn a property red for N=1..12; the aggregator is red on a failed or cancelled leg, a missing shard file, a gate dropped from every shard, a gate run twice, a failed gate, a failed served-tree, a gate the list does not name, a shard run with other flags, a file from another split and no results at all |
 | chrome-path | 28 Nov 2026, before the fix: 20 FAILs, two for each of the ten files that named the Mac Chrome bare (household_name, support_reach, family_portrait, vax_calendar, report_truth, invite_arrival, home_truth, marketing_type, duedate-cycle, fab-quicklog). `--self-test` stages a bare constant, a bare path in the launch, a path built elsewhere and a bare path beside a CHROME_PATH read |
 | ci-tier (splits) | 28 Nov 2026: the workflow before the split is red (no `tree`, `tree-complete`, `emulator-shard`, `emulator-complete`). `--self-test` stages tree-complete without `always()`, `--of=7` of 8, shard 8 left out of the matrix, fail-fast on, other list flags than the legs, `--legs` dropped, no `--record-times`, emulator-complete `--of=3` and renamed |
+| ci-tier (tier, swallowing) | 28 Nov 2026: the 15 new staged cases were each red on the checker before `TIER` and `judgeWork` (20 passed, 15 failed), among them `--only=type` on the tree legs and tree-complete together, `--no-browser` for `--emulator-only` on both emulator jobs, `--changed=HEAD^1` on the tree pair, `gates` and `emulator` without `--mutants`, `continue-on-error` on the tree-complete step, on the tree-complete, emulator-complete and gates jobs and on a leg's step, `\|\| true` after and `true;` before shard.js, a step `if:`, a step `shell:` and a workflow `defaults:`. With them: 35 of 35. `--dir=` the workflows of 45c121ec: red on all six jobs running `--changed=HEAD^1` |
+| shard (floor) | 28 Nov 2026: on `complete()` with no floor, a list of 0 gates with four empty results files, a list of 5, and a 1-gate run at the default floor each came back COMPLETE (3 red); with `MIN_EXPECTED` = 20 all three are refused |
+| downloads-guard (CI) | 28 Nov 2026: on the runner before the CI refusal, `CI=true` with `HOME` at a folder with no `Downloads` started the tree server and exited 0 (1 red); now exit 2, "REFUSED: on CI with no ...Downloads", no tree server. Companions: CI with a Downloads folder watches it, off CI it says there is nothing to watch, `CI=false` is not CI |
 | ci-tier | `--dir=<4e50b5e6's .github/workflows>`: red on gates, emulator, the seo guard step and teach-guard running on the push to main. `--self-test` stages each one back, a required check that stops running on a PR, an unreadable `if`, the IndexNow ping gone and `live` on a PR |
 | mut-select | `--self-test`: the selection rules (unrelated change off, `--mutants` all, input dir on, whole paths only, new gate, changed entry, runner change, unknown base, a git-show base without its last newline); its input check found two real gaps on its first run and flags admin-access declared as only its own file |
 | mutants-tier | `GATES_FROM=<the push-lock gates.js>`: 8 of 14 red (it ignores `mut`, so every pass runs on every PR), and F red on the nightly.sh without `--mutants`. A runner with `--mutants` cut out: B red ("the weakened assertion turns the run RED" never happens). A selector that never runs a pass: 6 red |

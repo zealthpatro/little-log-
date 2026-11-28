@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 /* Which mutation passes run on this run: all of them nightly, and on a PR only those whose inputs changed.
+ * HELD ON CI (28 Nov 2026): every CI job passes --mutants, pinned by tools/ci_tier_check.js, until protection
+ * requires tree-complete and emulator-complete and plan item 15 traces the inputs (docs/TESTING.md).
  *
  *   used by tools/gates.js (--mutants, --changed=<rev>)
  *   node tools/mut_select.js --self-test     the selection rules, staged; then every mut gate's declared
@@ -45,8 +47,8 @@ const covers = (inputs, f) => (inputs || []).some((i) => (i.endsWith('/') ? f.st
 
 function cleanEnv() { const e = { ...process.env }; for (const k of Object.keys(e)) if (k.startsWith('GIT_')) delete e[k]; return e; }
 /* The change set: files changed between the base and this working tree (committed, staged, unstaged and
-   untracked), and the base's tools/gates.js. rev given: that is the base (CI passes HEAD^1, main under the
-   PR's merge commit). No rev: the merge-base of HEAD and origin/main. Any failure: { error }, and every pass
+   untracked), and the base's tools/gates.js. rev given: that is the base (CI will pass HEAD^1, main under the
+   PR's merge commit, once item 14 is on there). No rev: the merge-base of HEAD and origin/main. Any failure: { error }, and every pass
    runs. */
 function changeSet(root, rev) {
   const git = (args) => execFileSync('git', args, { cwd: root, env: cleanEnv(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();

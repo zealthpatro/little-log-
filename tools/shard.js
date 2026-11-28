@@ -98,9 +98,15 @@ function buildTimes(files) {
 /* The flags that choose WHICH gates run: everything but the shard, where times go, and --list itself. */
 const filterFlags = (args) => (args || []).filter((a) => !/^--(shard|record-times)=/.test(a) && a !== '--list').sort();
 
+/* The floor under a tier's list. A filter that leaves 0 gates, with empty shard files, was COMPLETE; one that
+   leaves 1 graded that one (28 Nov 2026 skeptic). Every real tier is far above it (37 emulator suites, 73
+   Chrome-free, 175 tree), so a list under it is a filter gone wrong, never a tier. The CLI never lowers it. */
+const MIN_EXPECTED = 20;
 /* The aggregator. expected: the runner's own --list for `flags`. Returns the problems (none = complete). */
-function complete({ dir, of, legs, flags, expected }) {
+function complete({ dir, of, legs, flags, expected, min }) {
   const problems = [];
+  const floor = min === undefined ? MIN_EXPECTED : min;
+  if (!Array.isArray(expected) || expected.length < floor) problems.push('gates.js --list ' + filterFlags(flags).join(' ') + ' names only ' + (Array.isArray(expected) ? expected.length : 0) + ' gates, under the floor of ' + floor + ': a filter that leaves (almost) nothing proves nothing complete');
   if (legs !== undefined && legs !== 'success') problems.push('the matrix legs did not all succeed (needs.*.result = ' + legs + ')');
   if (!(Number.isInteger(of) && of >= 1)) return problems.concat(['--of=N is required (got ' + of + ')']);
   let files = [];
@@ -235,21 +241,25 @@ function selfTest() {
     const r = spawnSync(process.execPath, [path.join(ROOT, 'tools', 'gates.js'), ...runFlags, '--shard=1/1', '--record-times=' + path.join(rec, 'shard-1-of-1.json')], { cwd: ROOT, env: cleanEnv(), encoding: 'utf8', timeout: 300000 });
     let j = null; try { j = JSON.parse(fs.readFileSync(path.join(rec, 'shard-1-of-1.json'), 'utf8')); } catch (e) {}
     ok('--record-times writes the shard, the flags and each gate\'s verdict and time', r.status === 0 && j && j.shard === '1/1' && j.results.length === 1 && j.results[0].name === 'type-scale' && j.results[0].ok === true && Number.isFinite(j.results[0].ms), (r.status + ' ' + JSON.stringify(j) + ' ' + String(r.stdout).slice(-400)));
-    const p0 = complete({ dir: rec, of: 1, legs: 'success', flags: runFlags, expected: L(runFlags).names });
+    /* min: 1 here only: one gate is far under the floor the CLI always applies, which the next line proves. */
+    const p0 = complete({ dir: rec, of: 1, legs: 'success', flags: runFlags, expected: L(runFlags).names, min: 1 });
     ok('that recorded run is complete against the runner\'s own --list', p0.length === 0, p0);
+    const p0f = complete({ dir: rec, of: 1, legs: 'success', flags: runFlags, expected: L(runFlags).names });
+    ok('the same run at the default floor: red (one gate is not a tier)', p0f.some((x) => /under the floor/.test(x)), p0f);
     ok('timings read back from a results file, in seconds', j && readTimingFile(path.join(rec, 'shard-1-of-1.json'))['type-scale'] === Math.round(j.results[0].ms / 100) / 10);
 
     } catch (e) { ok('section 3 ran to its end', false, e && e.message || e); }
 
     /* 4. The aggregator, each way a run can be incomplete, staged. */
     console.log('\n4. the aggregator (tree-complete, emulator-complete): each incomplete run staged\n');
-    const names = Array.from({ length: 17 }, (_, k) => 'gate-' + k);
-    const flags = ['--changed=HEAD^1'];
+    /* 40: above the floor (MIN_EXPECTED), as every real tier is (37 emulator suites, 73 Chrome-free, 175 tree). */
+    const names = Array.from({ length: 40 }, (_, k) => 'gate-' + k);
+    const flags = ['--mutants'];
     let k = 0;
-    const stage = (edit) => {
+    const stage = (edit, list) => {
       const d = path.join(T, 'agg' + (k++)); fs.mkdirSync(d);
       for (let i = 1; i <= 4; i++) {
-        const res = shardOf(names, i + '/4', {}).map((n) => ({ name: n, ok: true, ms: 1000 }));
+        const res = shardOf(list || names, i + '/4', {}).map((n) => ({ name: n, ok: true, ms: 1000 }));
         let file = { shard: i + '/4', args: flags.concat(['--shard=' + i + '/4', '--record-times=/x/s' + i + '.json']), results: res };
         file = edit ? edit(i, file) : file;
         if (file) fs.writeFileSync(path.join(d, 'shard-' + i + '-of-4.json'), JSON.stringify(file));
@@ -271,6 +281,10 @@ function selfTest() {
       ['a shard run with other flags (--no-browser)', stage((i, f) => (i === 4 ? Object.assign(f, { args: f.args.concat(['--no-browser']) }) : f)), {}, /ran with flags/],
       ['a results file from an 8-way split', stage((i, f) => (i === 2 ? Object.assign(f, { shard: '2/8' }) : f)), {}, /is shard 2\/8, not one of 4/],
       ['no results at all', path.join(T, 'nothing-here'), {}, /no results directory|left no results file/],
+      /* A filter that leaves nothing (or almost): every shard's file is there, empty or tiny, and each gate ran once.
+         Before the floor this was COMPLETE (28 Nov 2026 skeptic). */
+      ['a list of 0 gates, with four empty results files', stage(null, []), { expected: [] }, /names only 0 gates.*under the floor/],
+      ['a list of 5 gates, each run once', stage(null, names.slice(0, 5)), { expected: names.slice(0, 5) }, /names only 5 gates.*under the floor/],
     ];
     for (const [label, d, o, want] of S) {
       const p = run(d, o);
@@ -320,4 +334,4 @@ if (require.main === module) {
   console.log('usage: node tools/shard.js --self-test | --complete=<dir> --of=N [--legs=<result>] -- <gates.js flags> | --times-from=<files>');
   process.exit(64);
 }
-module.exports = { parseShard, bins, shardOf, loadTimes, readTimingFile, buildTimes, complete, runnerList, filterFlags, UNKNOWN_S };
+module.exports = { parseShard, bins, shardOf, loadTimes, readTimingFile, buildTimes, complete, runnerList, filterFlags, UNKNOWN_S, MIN_EXPECTED };

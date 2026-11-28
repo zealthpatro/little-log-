@@ -14,7 +14,7 @@ gates on the PR, and only `live` and the IndexNow ping on the push to `main`.
 **Each chat**
 1. Works on its own branch and bumps `CACHE` in `app/sw.js` as usual (pre-commit still demands it).
 2. Opens a PR into `main`. `.github/workflows/gates.yml` runs the Chrome-free gates and the emulator suites
-   on the PR, on GitHub, in parallel (a mutation pass only if the PR touched what it guards).
+   on the PR, on GitHub, in parallel (every mutation pass: plan item 14 is held on CI, docs/TESTING.md).
 3. Is done when the PR is green. It cannot push `main`: the hook refuses it, and so does GitHub.
    Pushing the branch runs no gates (`.githooks/pre-push`: change-needs-test and the push lock). Run what
    you touched first: `node tools/gates.js --only=<name>`.
