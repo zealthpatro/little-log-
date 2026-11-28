@@ -104,7 +104,7 @@ the red runs below.
 ## Contributing factors (blameless)
 - `window.LL.householdId` is never reset on sign-out. This repro's own harness was fooled by it: its first
   `booted` check passed on the previous family's id. It now requires the family the server's `users/{uid}`
-  names. (Reset with the rest of the family's snapshot fields since a9756539, action 7; the harness keeps the
+  names. (Reset with the rest of the family's snapshot fields since 4efa86d7, action 7; the harness keeps the
   server check.)
 - The record is written whole from memory (`JSON(state)`), so it mixes whatever memory holds: the previous
   family's synced entries beside the next person's own.
@@ -214,7 +214,7 @@ real rules, each `app/store-firebase.js` served from a tree of its own beside th
 | 4 | Aggregate count of households that share a baby id or entry id with another household, no content read, to size who was hit | Measure | TODO, founder's call |
 | 5 | Decide what happens to data already copied into another family, and to orphan households (removals from production need the founder's explicit OK) | Decide | TODO, founder |
 | 6 | J: a record still on the phone can still reach the next new account on that phone after its owner JOINS a family. Fix: stamp the record with its owner's uid when she is placed in a family without a migration, and copy only a record with no stamp or her own | Fix | TODO, own lane |
-| 7 | Reset `window.LL.householdId` on sign-out | Fix | DONE a9756539: teardown clears it with the seven other fields only the household snapshot writes (members, memberInfo, formerMemberInfo, hhPending, hhPendingLinks, pro, role). Left behind, the next account's feedback was stamped with the previous family's id and its family sheet listed that family's people, invites and Pro until its own snapshot landed. Gate: `stale-family-emu` |
+| 7 | Reset `window.LL.householdId` on sign-out | Fix | DONE 4efa86d7 (sign-in state in 055c594a, late invite answers in bdbf4023): teardown clears it with the seven other fields only the household snapshot writes (members, memberInfo, formerMemberInfo, hhPending, hhPendingLinks, pro, role). Left behind, the next account's feedback was stamped with the previous family's id and its family sheet listed that family's people, invites and Pro until its own snapshot landed. Gate: `stale-family-emu` |
 | 8 | Account deletion leaves keys naming her uid on the phone: `cubby-seen-<uid>`, `cubby-teach:<uid>` and `cubby-teach-since-<uid>` (all three seen in case D), and any `cubby-outbox:<uid>:*` written outside the deletion's own sign-out. None is in the purge list. Only her own uid's sign-in ever reads them, so this is leftover data, not a leak. Fix: step 4 removes every key that names her uid | Fix | TODO, own lane |
 | 9 | X: the same as 6 after its owner RETURNS to the family she already has. Same fix and lane as 6 | Fix | TODO, own lane |
 | 10 | The next sign-in in a tab can stay on the loader after a sign-out in one of two open tabs, or with the history read still out (see Residual risk). Find why the first-boot failsafe misses after a change of account | Fix | TODO, own lane |
