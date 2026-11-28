@@ -157,7 +157,7 @@ async function shoot(page, file, height) {
   });
   record('A missed fixed-time dose stays overdue instead of rolling to tomorrow', path.join(OUT, '06-overdue.png'), [
     { ok: overdue.isMissedSlot, label: 'the missed slot is still the due dose' },
-    { ok: /^overdue/.test(overdue.text), label: 'and reads as overdue, not a countdown', detail: '"' + overdue.text + '"' },
+    { ok: /^due .+ ago$/.test(overdue.text), label: 'and reads as due-and-when, not a countdown', detail: '"' + overdue.text + '"' },
   ]);
 
   // ---- CLAIM 4: the Reminders sheet offers three separate consents, marketing off ---------------
@@ -167,7 +167,7 @@ async function shoot(page, file, height) {
     const s = document.getElementById('sheet');
     const t = (s.textContent || '').replace(/\s+/g, ' ');
     const cfg = (typeof pushCfg === 'function') ? pushCfg() : {};
-    return { hasDose: /Dose reminders/.test(t), hasFeature: /New in Cubby/.test(t), hasOffers: /Offers/.test(t),
+    return { hasDose: /Dose reminders|Medicine doses/.test(t),   // Medicine doses since the 27 Nov 2026 choice list hasFeature: /New in Cubby/.test(t), hasOffers: /Offers/.test(t),
       fiveAMonth: /five a month/i.test(t), twoAMonth: /two a month/i.test(t), neverPro: /never if you are on Pro/i.test(t),
       marketingOff: cfg && cfg.allow ? cfg.allow.marketing === false : null, noEmDash: t.indexOf('—') < 0 };
   });

@@ -281,15 +281,19 @@ const GEO = (s) => {
      Custom-property substitution is lazy, so this still works, but "still works" is a claim and this
      is the measurement of it. A future level that hard-codes an rgba() instead of taking the colour
      token would print a shadow onto a clinical page and nobody would notice until it was on paper. */
+  /* Since 27 Nov 2026 Home shows one suggestion card at a time, so the tips strip is not always up. Take the
+     first element on screen that really casts a shadow, mark it, and measure that same element in print. */
   const shadowOn = await page.evaluate(() => {
-    const e = document.querySelector('.tip-static') || document.querySelector('.since-card') || document.querySelector('.set-item');
+    const real = (x) => x && x !== 'none' && !/rgba\([^)]*,\s*0\)/.test(x);
+    const e = document.querySelector('.tip-static') || [...document.querySelectorAll('#scroll *')].find((n) => real(getComputedStyle(n).boxShadow));
+    if (e) e.setAttribute('data-shadow-probe', '1');
     return e ? getComputedStyle(e).boxShadow : null;
   });
   ok('a card is casting a real shadow on screen to begin with', !!shadowOn && shadowOn !== 'none' && !/rgba\([^)]*,\s*0\)/.test(shadowOn), shadowOn);
   await page.emulateMediaType('print');
   await sleep(300);
   const shadowPrint = await page.evaluate(() => {
-    const e = document.querySelector('.tip-static') || document.querySelector('.since-card') || document.querySelector('.set-item');
+    const e = document.querySelector('[data-shadow-probe]');
     return e ? getComputedStyle(e).boxShadow : null;
   });
   ok('and printing turns that shadow fully transparent, through the new token', /rgba\([^)]*,\s*0\)/.test(String(shadowPrint)), shadowPrint);

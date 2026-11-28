@@ -48,7 +48,9 @@ const SELF_TEST = process.argv.includes('--self-test');
 // guardian's and the read-only one, import, delete data, guardians, delete account). A row added or removed
 // changes this on purpose: edit the number here in the same commit and name the row in the commit message.
 // It is fixed so that a row cannot appear or vanish without someone deciding it did.
-const EXPECTED_CALLS = 23;
+// 27 Nov 2026 parent-chosen reminders: +2, one remindRow for every reminder in the choice list (medicine,
+// feeds, pumping, vaccine visits) and one for each reminder she lets through quiet hours.
+const EXPECTED_CALLS = 27;
 // Hand-written class="set-item" rows in app/index.html outside function setItem. 63 before the SetItemRow
 // migration, 40 after it (the 23 rows above). A ratchet, not a target: it may fall and may not rise. Lower
 // it when a migration takes more, never raise it to make a run go green.

@@ -22,7 +22,7 @@ Scope (deliberately narrow, charter-driven):
 - Medicine due (the one reminder users asked for), with Snooze and Log-dose actions in the notification.
 - Confirmed-missed vaccine only (reuses the existing calm 5-state model; never fires on un-recorded "to confirm").
 - Assigned-routine nudge to the right caregiver (the `assignee` uid already exists).
-- Hard non-goal: no feed reminders. That is the anxiety machine we refuse to build.
+- Feed reminders: no longer a non-goal (founder, 27 Nov 2026). Built only as the parent's own choice: off by default, one nudge, never repeated, never red, quiet at night (canvas board 8A). The anxiety machine we refuse to build is the on-by-default repeating "feed overdue" alarm (board 8C).
 
 Architecture:
 - New `app/firebase-messaging-sw.js` (separate from the precache `sw.js`) with `onBackgroundMessage` and `notificationclick` routing into `/app/`.

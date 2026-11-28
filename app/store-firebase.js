@@ -1627,6 +1627,9 @@
     // Kept-after-loss memories ride this same read (no extra fetch), and this await sits BEFORE
     // startSync/booted — so renderLossHolding and the look-back see them on the very first paint.
     applyPregArchive(user.uid, snap.exists ? snap.data() : null);
+    // Feed, pump and visit reminders are chosen per account: a device that has not chosen takes the
+    // account's answer from this same read (app/index.html cubbyAdoptRemindPrefs).
+    try { if (snap.exists && window.cubbyAdoptRemindPrefs) window.cubbyAdoptRemindPrefs(snap.data().push || null); } catch (e) {}
     if (snap.exists && snap.data().householdId) {
       var curHid = snap.data().householdId;
       // If a DIFFERENT pending invite also exists for this email, stash it so we can surface it
