@@ -236,6 +236,27 @@ const TREE = [
   { name: 'push-caps',      cmd: ['node', 'test/push-caps.test.js'] },
   { name: 'duedate-cycle',  cmd: ['node', 'test/duedate-cycle.test.js', 'url'] },
   { name: 'fab-quicklog',   cmd: ['node', 'test/fab-quicklog.test.js', 'url'] },
+  /* Calm Health (27 Nov UX review, board 3A): no danger-red Health button, never "overdue", a measurement-only
+     day is not a zero day, nothing clips at 320px. Seen red on main 747bfdfe. */
+  { name: 'calm-health',    cmd: ['node', 'test/calm-health.test.js', 'url'] },
+  /* Vaccines as visits (board 1A): the next visit leads, no 0-of-25 score, a whole visit in one tap, a past
+     date never reads "Due soon". Seen red on main 747bfdfe. */
+  { name: 'vax-visits',     cmd: ['node', 'test/vax-visits.test.js', 'url'] },
+  /* Health as one calm hub (board 2A): Right now first, the doctor summary on the first screen, every record
+     a row, nothing said twice, the nav always returns to the hub. Seen red on main 747bfdfe. */
+  { name: 'health-hub',     cmd: ['node', 'test/health-hub.test.js', 'url'] },
+  /* First log in under a minute, then invite first (boards 5A and 4A): name + Today, "What just happened?",
+     Nappy, Wet; identity and the invite follow the log. Seen red on main 747bfdfe. */
+  { name: 'first-log-path', cmd: ['node', 'test/first-log-path.test.js', 'url'] },
+  /* One card at a time on Home, and the contextual prompts (boards 6 and 7A): one proactive card, live state
+     never rationed, one prompt a day, quiet hours, fever days, Not-now twice. Seen red on main 747bfdfe. */
+  { name: 'home-one-card',  cmd: ['node', 'test/home-one-card.test.js', 'url'] },
+  /* Quiet hours chosen by the parent (founder, 27 Nov): the setting, the caution, what may still reach her,
+     suggestions wait, medicine reminders come through. Seen red on 7058d033. */
+  { name: 'quiet-hours',    cmd: ['node', 'test/quiet-hours.test.js', 'url'] },
+  /* What the FAQ says about quiet hours matches the app's default: medicine comes through, so no page may
+     promise "nothing is sent" (CEO follow-up on #11, 28 Nov). The self-test stages the old line and 3 more breaks. */
+  { name: 'quiet-hours-copy', cmd: ['node', 'tools/quiet_hours_copy_check.js', '--self-test'] },
   /* The November 2026 security fixes. Each was watched failing on the live code (1a6df125) first.
      page-stats: a stranger looping 404s must make zero Firestore writes and stay under the D1 cap. */
   { name: 'page-stats',     cmd: ['node', 'test/page-stats.test.js'] },

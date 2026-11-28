@@ -149,7 +149,9 @@ const DAILY_MED = { id: 'm1', babyId: 'b1', name: 'Infant paracetamol', dose: '2
        ("Dose alerts in the app", and "Gentle reminders" wherever push is live), so account for
        every row rather than only counting the ones that look right. */
     const cats = s.toggles.filter((t) => /^(Dose reminders|New in Cubby|Offers)$/i.test(t));
-    const devs = s.toggles.filter((t) => /^(Dose alerts in the app|Gentle reminders)$/i.test(t));
+    /* Since 27 Nov 2026 quiet hours are the parent's own per-device setting, with one per-device exception
+       (medicine reminders may still reach her). Device switches, not a fourth thing Cubby may send. */
+    const devs = s.toggles.filter((t) => /^(Dose alerts in the app|Gentle reminders|Quiet hours|Medicine reminders)$/i.test(t));
     ok('exactly three things Cubby may send you', cats.length === 3 && cats.every((t) => t.length > 0), s.toggles);
     ok('and every other row in the sheet is a device switch, nothing unaccounted for',
       s.toggles.length > 0 && s.toggles.length === cats.length + devs.length, s.toggles);

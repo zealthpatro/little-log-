@@ -157,7 +157,7 @@ async function shoot(page, file, height) {
   });
   record('A missed fixed-time dose stays overdue instead of rolling to tomorrow', path.join(OUT, '06-overdue.png'), [
     { ok: overdue.isMissedSlot, label: 'the missed slot is still the due dose' },
-    { ok: /^overdue/.test(overdue.text), label: 'and reads as overdue, not a countdown', detail: '"' + overdue.text + '"' },
+    { ok: /^due .+ ago$/.test(overdue.text), label: 'and reads as due-and-when, not a countdown', detail: '"' + overdue.text + '"' },
   ]);
 
   // ---- CLAIM 4: the Reminders sheet offers three separate consents, marketing off ---------------

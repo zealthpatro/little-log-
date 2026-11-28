@@ -24,7 +24,7 @@ let pass=0,fail=0; const ok=(n,c,x)=>{c?(pass++,console.log('  ok   '+n)):(fail+
  await pg.reload({waitUntil:'networkidle2'}); await s(2000);
 
  const r=await pg.evaluate(()=>{
-   go('health'); if(typeof healthGo==='function'){try{healthGo('vaccines')}catch(e){}}
+   go('health'); setHealthTab('vaccines'); /* Health opens on the hub since 27 Nov; vaccines is one row in */
    const plan=vaccinePlan();
    const visits=vaxUpcomingVisits(plan);
    // Build the file without downloading it, by intercepting the blob.

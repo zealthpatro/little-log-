@@ -325,9 +325,9 @@ const dose = (o) => Object.assign({ id: 'd1', type: 'medicine', babyId: 'b1', me
     ok('this morning\'s 8am dose is still owed', missed === at(8, 0), { got: missed, want: at(8, 0), ifFutureCounted: at(20, 0) });
     await openMeds();
     const row = await medRow();
-    ok('and the row says so plainly', /overdue/i.test(row), row);
+    ok('and the row says so plainly', /\bdue \S+ ago\b/i.test(row), row);
 
-    // Paired the other way, or "always overdue" would pass the assertion above for free.
+    // Paired the other way, or "always due ... ago" would pass the assertion above for free.
     await load(seed({ meds: [amox({ pattern: daily })], events: [dose({ id: 'd0', time: at(8, 5) }), dose({ id: 'd2', time: at(20, 0) })] }));
     const covered = await page.evaluate(() => medNextDue(medById('m1')));
     ok('a real 8:05 dose does clear that slot', covered === at(20, 0), { got: covered, want: at(20, 0) });

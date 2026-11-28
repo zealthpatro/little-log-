@@ -536,11 +536,10 @@ function pageSetup(tags) {
   ok('pills: the older child is on her month day (staging)', older.mv != null, older);
   const OLDER = {
     month: { find: [V.kidName, ' month'], shows: [V.kidName], taps: ['See it'] },
-    child: { find: [V.kidName, 'growing up'], shows: [V.kidName], taps: ['Lovely'] },
     'dose (hers)': { find: [V.kidMedName], shows: [V.kidMedName, V.kidDose, V.kidUnit], taps: ['Log', 'In 15 min', 'Not now'] },
     'dose (a sibling\'s)': { find: [V.otherName, 'Iron'], shows: [V.otherName], taps: ['Log', 'In 15 min', 'Not now'] },
     illness: { find: [V.illName], shows: [V.illName, V.illTemp, V.illUnit], taps: ['Temp'] },
-    vaccine: { find: ['Vaccine overdue'], shows: [V.vxName], taps: ['Open'] },
+    vaccine: { find: ['A vaccine to catch up'], shows: [V.vxName], taps: ['Open'] },
     fever: { find: ['Fever logged'], shows: [V.fevUnit], taps: ['When to call', 'Summary'] },
     visit: { find: ['Appointment soon'], shows: [V.visitName], taps: ['Summary'] },
     'consent (needs your OK)': { find: [V.cAskBy], shows: [V.cAskBy, V.cAskLabel], taps: ['Review'] },
@@ -550,7 +549,6 @@ function pageSetup(tags) {
   };
   await checkPills('an older child on her month day', OLDER, (key, g) => ({
     month: { 'See it': [['openMemoryCard', [older.mv, V.monthPh]], ['dismissTip', ['bday' + older.mv]]] },
-    child: { Lovely: [['ackChild', []]] },
     'dose (hers)': { Log: [['logDose', [V.kidMed]]], 'In 15 min': [['snoozeMedAlert', [V.kidMed, g.due]]], 'Not now': [['dismissMedAlert', [V.kidMed, g.due]]] },
     'dose (a sibling\'s)': { Log: [['logDose', [V.otherMed]]], 'In 15 min': [['snoozeMedAlert', [V.otherMed, g.due]]], 'Not now': [['dismissMedAlert', [V.otherMed, g.due]]] },
     illness: { Temp: [['openTemp', []]] },
@@ -562,6 +560,12 @@ function pageSetup(tags) {
     'consent (ready)': { Download: [['downloadExport', [V.cReady]]] },
     'consent (declined)': { OK: [['ackDecline', [V.cDecl]]] },
   })[key]);
+  /* Home shows one gentle card at a time since 27 Nov 2026: "growing up" waits while the month card is up.
+     Answer the month card, and the same pill is graded on its own, hostile name and all. */
+  await page.evaluate((mv) => { try { dismissTip('bday' + mv); } catch (e) {} go('home'); }, older.mv);
+  await checkPills('an older child, once her month card is answered', {
+    child: { find: [V.kidName, 'growing up'], shows: [V.kidName], taps: ['Lovely'] },
+  }, (key) => ({ child: { Lovely: [['ackChild', []]] } })[key]);
 
   /* The Settings and Data rows, on the same household: the profile row names the active child, the
      Guardians row names the guardians, and a caregiver's read-only export row names them too. */

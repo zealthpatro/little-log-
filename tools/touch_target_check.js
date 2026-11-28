@@ -240,6 +240,18 @@ const EXPANDERS = ['lg-i', 'link-inline', 'wwa-t', 'sec-act', 'gr-more', 'tip-x'
       await page.evaluate(() => { const s = document.getElementById('scroll'); if (s) s.scrollTop = 0; });
       await sleep(300);
     }
+    /* Health opens on its hub since 27 Nov 2026; each record is one tap in. Sweep every view, top and
+       bottom, so the vaccine setup answers and the inline links at its foot are still measured. */
+    for (const hv of ['vaccines', 'meds', 'illness', 'growth']) {
+      await page.evaluate((v) => { try { go('health'); setHealthTab(v); } catch (e) {} }, hv);
+      await sleep(700);
+      await take('health/' + hv);
+      await page.evaluate(() => { const s = document.getElementById('scroll'); if (s) s.scrollTop = s.scrollHeight; });
+      await sleep(400);
+      await take('health/' + hv + ':bottom');
+      await page.evaluate(() => { const s = document.getElementById('scroll'); if (s) s.scrollTop = 0; try { setHealthTab(null); } catch (e) {} });
+      await sleep(300);
+    }
     for (const op of ['openQuickLog', 'openSymptom', 'openActivity', 'openSettings', 'openFeed', 'openDiaper', 'openGrowth', 'openFamily']) {
       const opened = await page.evaluate((o) => { try { if (!window[o]) return false; window[o](); return true; } catch (e) { return false; } }, op);
       await sleep(800);
@@ -277,7 +289,8 @@ const EXPANDERS = ['lg-i', 'link-inline', 'wwa-t', 'sec-act', 'gr-more', 'tip-x'
      dot share the page and sameSurface is true. If this comes back empty the detector is broken, not
      the app, and the line below it is worthless. */
   await boot('light');
-  await page.evaluate(() => { try { go('health'); } catch (e) {} });
+  // Health opens on its hub since 27 Nov 2026; the vaccines view is where the buttons this needs live.
+  await page.evaluate(() => { try { go('health'); setHealthTab('vaccines'); } catch (e) {} });
   await sleep(900);
   const bait = await page.evaluate(() => {
     const v = Array.prototype.slice.call(document.querySelectorAll('.add-row,.btn-ghost,.btn-primary'))
@@ -315,8 +328,10 @@ const EXPANDERS = ['lg-i', 'link-inline', 'wwa-t', 'sec-act', 'gr-more', 'tip-x'
      of them, the absence assertion below would go green for the wrong reason; this is the pairing. */
   ok('the symptom and food chips were on screen', count('chip') >= 20, count('chip') + ' .chip');
   ok('the explainer dot was on screen', count('lg-i') >= 12, count('lg-i') + ' .lg-i');
-  ok('the inline links were on screen', count('link-inline') >= 4, count('link-inline') + ' .link-inline');
-  ok('the vaccine setup answers were on screen', count('vs-btn') >= 10, count('vs-btn') + ' .vs-btn');
+  // Since 27 Nov 2026 the vaccine disclaimer sits at the foot of its own view, so it is seen once per theme, not twice.
+  ok('the inline links were on screen', count('link-inline') >= 2, count('link-inline') + ' .link-inline');
+  // Three answers, on the vaccines view's first screen, in each theme.
+  ok('the vaccine setup answers were on screen', count('vs-btn') >= 6, count('vs-btn') + ' .vs-btn');
 
   console.log('\n3. every measured hit area clears the floor');
   const failures = all.filter((c) => short(c, FLOOR));
@@ -349,12 +364,14 @@ const EXPANDERS = ['lg-i', 'link-inline', 'wwa-t', 'sec-act', 'gr-more', 'tip-x'
   console.log('\n4. the fix is a hit area, not a redesign, and it does not steal from its neighbour');
   /* The point of the pseudo-element mechanism is that the DOT STAYS 20px. If a later change grows
      the box instead, the picture has changed and somebody should have to say so out loud. */
-  const dots = all.filter((a) => a.cls === 'lg-i');
+  /* A dot that a bar is sitting on is judged by section 3 (built to the floor), like every other control:
+     since Home shows one card at a time (27 Nov 2026), the guide pass can scroll a dot under the nav. */
+  const dots = all.filter((a) => a.cls === 'lg-i' && !chromeCut(a));
   ok('the explainer dot is still drawn at 20px', dots.length > 0 && dots.every((d) => d.boxW <= 22 && d.boxH <= 22),
     dots.slice(0, 2).map((d) => d.boxW + 'x' + d.boxH));
   ok('and its measured hit area is 44 anyway, which is the whole trick',
     dots.length > 0 && dots.every((d) => d.hitW >= FLOOR && d.hitH >= FLOOR),
-    dots.slice(0, 2).map((d) => d.hitW + 'x' + d.hitH));
+    dots.filter((d) => d.hitW < FLOOR || d.hitH < FLOOR).slice(0, 4).map((d) => d.surface + ' "' + d.txt + '" ' + d.hitW + 'x' + d.hitH));
   const inline = all.filter((a) => a.cls === 'link-inline');
   ok('an inline link keeps its 16px line box', inline.length > 0 && inline.every((d) => d.boxH <= 22), inline.slice(0, 2).map((d) => d.boxW + 'x' + d.boxH));
   ok('and reaches ' + FLOOR + ' in the hand', inline.length > 0 && inline.every((d) => d.hitH >= FLOOR), inline.slice(0, 2).map((d) => d.hitW + 'x' + d.hitH));
