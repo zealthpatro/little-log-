@@ -2838,12 +2838,17 @@ function _renderView(){
   // completely unreachable the instant welcomeBaby() set bornBabyId, while the birth screen was
   // telling her "your pregnancy is saved as part of their story" — true only in the sense that the
   // rows were still in the database. She could never look at it again.
+  /* Her quiet state comes BEFORE the pregnancy. A loss syncs as two writes: her lossHolding and the
+     journey's removal. When the first lands before the second, the pregnancy check below used to win
+     and a bereaved phone painted "You and baby, week 30 · about the size of a large carrot" until the
+     second arrived. Nothing on the holding screen starts a new journey, so this cannot hide one she
+     chose (tools/preg_fruit_check.js stages the race). */
+  if(state.babies.length===0 && myLossHolding()){ renderLossHolding(); return; }
   if(state.pregnancy && (viewingPreg || (!state.pregnancy.bornBabyId && state.babies.length===0))){ renderPregShell(); return; }
   /* No passive clear. This used to read `if(myLossHolding() && state.babies.length) clearMyLossHolding()`,
      which meant a surviving twin silently ended the quiet state on the very next paint and dropped a
      bereaved mother onto "A fresh day with Aria 🌿". Quiet ends when she says so, never because the
      app noticed a baby. The takeover below is still gated on having none. */
-  if(state.babies.length===0 && myLossHolding()){ renderLossHolding(); return; }
   // A caregiver in a family that has no baby yet (expecting, or the pregnancy is owner-private and not
   // shared with them) must NOT see the owner's "Where are you on the journey?" stage picker — tapping
   // it would start a SECOND pregnancy inside the family they joined. Only owners set up a stage.
@@ -10435,7 +10440,7 @@ function openWeekDetail(kind){
       +`<div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
     return;
   }
-  const fruitSm=pregFruitImg(data.size,'pc-fruit'), fruitBig=pregFruitImg(data.size,'fruit-big');
+  const fruitSm=pregFruitImg(data.size,'pc-fruit',{fallback:'🌱'}), fruitBig=pregFruitImg(data.size,'fruit-big');
   const na=pregNextAppt();
   let title, body;
   if(kind==='baby'){
@@ -11216,11 +11221,15 @@ let momentDraft={photoData:null, week:null, note:''};
 /* The week's painting (PREG.sizeArt, app/fruit-art/), or nothing. Never after a loss: a painted pumpkin
    on a screen she reaches from the holding screen would be the cruellest thing left behind, so the guard
    is here as well as in the screens that call it (tools/preg_fruit_check.js strips it and must see paint).
-   Decorative, so alt="": the words beside it already say the size. */
-function pregFruitImg(size, cls){
+   Decorative, so alt="": the words beside it already say the size. A file that never arrives
+   (offline before it was ever fetched) is removed, or swapped for o.fallback where an empty box would
+   show. o.lazy for lists: an album of moments fetches only the cards that scroll into view. */
+function pregFruitImg(size, cls, o){
   if(typeof myLossHolding==='function' && myLossHolding()) return '';
   const src=(window.PREG&&PREG.sizeArt)?PREG.sizeArt(size):'';
-  return src?`<img class="${cls}" src="${src}" alt="" decoding="async" onerror="this.remove()">`:'';
+  o=o||{};
+  const onerr=o.fallback?`this.replaceWith('${o.fallback}')`:'this.remove()';
+  return src?`<img class="${cls}" src="${src}" alt="" decoding="async"${o.lazy?' loading="lazy"':''} onerror="${onerr}">`:'';
 }
 function momentSize(week){ const w=Math.max(4,Math.min(41,+week||4)); return (window.PREG&&PREG.weeks[w]&&PREG.weeks[w].size)||''; }
 function renderPregMoments(lookBack){
@@ -11241,7 +11250,7 @@ function renderPregMoments(lookBack){
     return `<div class="moment-card">
       ${src?`<img src="${escapeHtml(src)}" alt="Week ${escapeHtml(String(m.week))} scan">`:''}
       <div class="moment-cap">
-        <div class="mc-top"><div class="mc-week">Week ${m.week}</div><div class="mc-size">${size?'about the size of a '+escapeHtml(size)+pregFruitImg(size,'mc-fruit'):''}</div></div>
+        <div class="mc-top"><div class="mc-week">Week ${m.week}</div><div class="mc-size">${size?'about the size of a '+escapeHtml(size)+pregFruitImg(size,'mc-fruit',{lazy:true}):''}</div></div>
         ${m.note?`<div class="mc-note">${escapeHtml(m.note)}</div>`:''}
         <div class="mc-row"><span class="mc-date">${dayLabel(m.at)}</span>${mine?`<button class="lli-x" onclick="deleteMoment('${hArg(m.id)}')">${I.trash}</button>`:''}</div>
       </div>

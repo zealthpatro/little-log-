@@ -52,9 +52,10 @@ window.PREG = (function () {
   // A painting for each "size of a..." comparison, every week from 4 to 41 (founder, 28 Nov 2026:
   // "vibrant and better than the emojis"). The emoji they replace drew differently on every phone,
   // and sixteen weeks had none that was true (a carved jack-o'-lantern at week 40). One painting
-  // can serve two sizes that look alike. Only the current week's file is fetched; the service
-  // worker keeps it after that. Never shown after a loss (index.html pregFruitImg), and kept
-  // memories stay words only. tools/preg_fruit_check.js holds every week, the files and their weight.
+  // can serve two sizes that look alike. Nothing is precached: a file is fetched when a screen shows
+  // it (her current week on Home and in the week sheets, and the weeks of her own moments, lazily)
+  // and the service worker keeps it after that. Never shown after a loss (index.html pregFruitImg),
+  // and kept memories stay words only. tools/preg_fruit_check.js holds every week, the files and their weight.
   var SIZE_ART = {
     'poppy seed': 'poppy-seed', 'sesame seed': 'sesame-seed', 'lentil': 'lentil', 'blueberry': 'blueberry',
     'raspberry': 'raspberry', 'cherry': 'cherry', 'kumquat': 'kumquat', 'fig': 'fig', 'lime': 'lime',

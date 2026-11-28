@@ -16,9 +16,13 @@
  *    Plant: the map emptied must leave the card without its painting.
  * 3. The week sheets: the size sheet shows the painting large, the baby tile shows it small.
  * 4. Her moments: each card shows its own week's painting, no emoji, no pear.
- * 5. A loss: nothing painted on the holding screen (with and without a living child, and in the
- *    race where the loss has synced but the journey has not), and kept memories in words only.
- *    Plant: pregFruitImg with its loss guard stripped must paint during the race.
+ * 5. A loss: nothing painted on the holding screen (with and without a living child), and in the
+ *    race where the loss has synced but the journey has not, she lands on the quiet screen, never
+ *    on her week. Plant: pregFruitImg with its loss guard stripped must paint during the race.
+ * 6. Kept memories months later, the quiet state over (so pregFruitImg's own guard is off): words
+ *    only. Plant: the same sheet with pregFruitImg added must be caught.
+ * Also: nothing is precached, pregFruitImg keeps alt="", an onerror fallback and its guard, a
+ * failed tile falls back to the sprout, and moments paintings load lazily.
  *
  * Runs the app in local mode (cubby-quick-uid=local): a PASS attests to index.html,
  * pregnancy-data.js and app/fruit-art/, not to sync. It does not judge how the paintings look.
@@ -91,6 +95,16 @@ if (typeof PREG.sizeArt === 'function') {
   planted('an oversized painting', setProblems(PREG.sizeArt, (f) => (f === 'lime.webp' ? Buffer.concat([Buffer.from('RIFF\0\0\0\0WEBP'), Buffer.alloc(40000)]) : realRead(f)), realList).length === 0);
 }
 planted('an emoji fallback staged in index.html', !emojiLeft(dataSrc, indexSrc + "\nconst e=PREG.sizeEmoji(size)||'';"));
+/* Paintings are fetched when a screen shows them, never precached: the set would add 700 KB to install. */
+const assetsBlock = ((fs.readFileSync(path.join(ROOT, 'app', 'sw.js'), 'utf8').match(/const ASSETS\s*=\s*\[([\s\S]*?)\]/) || [])[1]) || '';
+const noArtIn = (block) => !!block && !/fruit-art/.test(block);
+ok('nothing painted is precached (sw.js ASSETS has no fruit-art)', noArtIn(assetsBlock), assetsBlock.length + ' chars of ASSETS');
+planted('a painting staged in ASSETS', noArtIn(assetsBlock + "\n  '/app/fruit-art/lime.webp',"));
+/* The one function that draws a painting: decorative alt, a fallback when the file fails, its loss guard. */
+const fnSrc = (indexSrc.match(/function pregFruitImg\([\s\S]*?\n\}/) || [''])[0];
+const fnOk = (src) => /alt=""/.test(src) && /onerror=/.test(src) && /myLossHolding\(\)/.test(src);
+ok('pregFruitImg: alt="", an onerror fallback and its loss guard', fnOk(fnSrc), fnSrc.slice(0, 160));
+planted('pregFruitImg without alt, onerror or guard', fnOk(fnSrc.replace(/alt=""/g, '').replace(/onerror=/g, '').replace(/myLossHolding\(\)/g, '')));
 
 (async () => {
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'], downloadBehavior: dl.downloadBehavior() });
@@ -108,6 +122,9 @@ planted('an emoji fallback staged in index.html', !emojiLeft(dataSrc, indexSrc +
   const loss = Object.assign({}, base, { lossHolding: { local: { at: now } }, pregnancyArchive: ARCHIVE });
   const lossWithChild = Object.assign({}, loss, { babies: [ROBIN], activeBabyId: 'b1' });
   const lossRace = Object.assign({}, loss, { pregnancy: preg(30) });
+  /* Months later: a baby since, the quiet state ended, the archive still there. pregFruitImg's own
+     guard is OFF here, so only the kept-memories code itself can keep the paintings out. */
+  const keptLater = Object.assign({}, base, { babies: [ROBIN], activeBabyId: 'b1', pregnancyArchive: ARCHIVE });
 
   const arrive = async (state) => {
     const p = await browser.newPage();
@@ -153,6 +170,17 @@ planted('an emoji fallback staged in index.html', !emojiLeft(dataSrc, indexSrc +
     ok('week 40 size sheet: one large pumpkin painting, loaded', s40.length === 1 && /pumpkin\.webp$/.test(s40[0].src) && s40[0].loaded, JSON.stringify(s40));
     const b40 = await sheet(p40, 'baby');
     ok('week 40 "Baby this week": the tile holds the pumpkin painting', b40.length === 1 && /pumpkin\.webp$/.test(b40[0].src) && b40[0].loaded, JSON.stringify(b40));
+    /* Offline, or a file that never arrives: the tile keeps the sprout, never an empty 40 px box. */
+    const tile = await p40.evaluate(async () => {
+      openWeekDetail('baby');
+      const i = document.querySelector('#sheet .pc-ico img'); if (!i) return 'no img';
+      i.src = '/app/fruit-art/not-there.webp';
+      await new Promise((r) => setTimeout(r, 900));
+      const t = document.querySelector('#sheet .pc-ico'); const out = t ? t.textContent.trim() + '|' + t.querySelectorAll('img').length : 'no tile';
+      closeSheet(); return out;
+    });
+    await sleep(300);
+    ok('a painting that fails to load leaves the sprout in the tile', tile === '🌱|0', tile);
 
     console.log('\n4. her moments');
     const m = await p40.evaluate(() => {
@@ -164,6 +192,8 @@ planted('an emoji fallback staged in index.html', !emojiLeft(dataSrc, indexSrc +
     ok('week 30 card: words and the carrot painting', by(30).text === 'about the size of a large carrot' && /carrot\.webp$/.test(by(30).art), JSON.stringify(by(30)));
     ok('week 40 card: words and the pumpkin painting', by(40).text === 'about the size of a pumpkin' && /pumpkin\.webp$/.test(by(40).art), JSON.stringify(by(40)));
     ok('no emoji or pear on any card', m.every((c) => !PICTO.test(c.text)), JSON.stringify(m));
+    const lazy = await p40.evaluate(() => { const d = document.createElement('div'); d.innerHTML = renderPregMoments(); return [...d.querySelectorAll('.mc-size img')].map((i) => i.getAttribute('loading')); });
+    ok('moments paintings load lazily (a long album fetches only what scrolls into view)', lazy.length === 2 && lazy.every((v) => v === 'lazy'), JSON.stringify(lazy));
     /* Laid out for real: the moments photo rule (.moment-card img, width 100%) once stretched the
        small painting into a banner across the card. */
     const sz = await p40.evaluate(() => {
@@ -194,6 +224,10 @@ planted('an emoji fallback staged in index.html', !emojiLeft(dataSrc, indexSrc +
         ok('kept memories: the size in words, no painting, no emoji', kept.art === 0 && /about the size of a pumpkin/.test(kept.text) && !/about the size of a (pumpkin|large carrot) *\p{Extended_Pictographic}/u.test(kept.text), JSON.stringify(kept).slice(0, 200));
       }
       if (st === lossRace) {
+        /* The Anxiety Test: the loss has reached this phone, the journey has not cleared. She must
+           land on the quiet screen, never on her week. */
+        const raceText = await p.evaluate(() => (document.body.innerText || '').replace(/\s+/g, ' '));
+        ok('race: the quiet screen, never her week (no "week 30", no "about the size of")', /Take all the time you need/.test(raceText) && !/about the size of/i.test(raceText) && !/\bweek 30\b/i.test(raceText), raceText.slice(0, 200));
         const real = await p.evaluate(() => /fruit-art/.test(typeof renderPregHome === 'function' ? renderPregHome() : ''));
         ok('race: renderPregHome itself paints nothing', real === false);
         const plant = await p.evaluate(() => {
@@ -207,6 +241,22 @@ planted('an emoji fallback staged in index.html', !emojiLeft(dataSrc, indexSrc +
       }
       await p.close();
     }
+    console.log('\n6. kept memories, with the quiet state long over');
+    const pk = await arrive(keptLater);
+    await pk.evaluate(() => openKeptMemories()); await sleep(600);
+    const kept2 = await pk.evaluate(() => { const s = document.getElementById('sheet'); return { open: !!(s && s.classList.contains('show')), text: s ? s.innerText.replace(/\s+/g, ' ') : '', art: s ? s.querySelectorAll('img[src*="fruit-art"]').length : -1 }; });
+    ok('kept memories open with both cards', kept2.open && /Week 40/.test(kept2.text) && /Week 30/.test(kept2.text), kept2.text.slice(0, 160));
+    ok('kept memories: the size in words, no painting', kept2.art === 0 && /about the size of a pumpkin/.test(kept2.text), JSON.stringify(kept2).slice(0, 200));
+    const plantK = await pk.evaluate(async () => {
+      const real = openKeptMemories.toString();
+      const src = real.replace("'about the size of a '+escapeHtml(size):''", "'about the size of a '+escapeHtml(size)+pregFruitImg(size,'mc-fruit'):''");
+      if (src === real) return -1;
+      const keep = window.openKeptMemories; window.openKeptMemories = eval('(' + src + ')');
+      try { closeSheet(); await new Promise((r) => setTimeout(r, 300)); window.openKeptMemories(); await new Promise((r) => setTimeout(r, 500)); return document.querySelectorAll('#sheet img[src*="fruit-art"]').length; }
+      finally { window.openKeptMemories = keep; closeSheet(); }
+    });
+    planted('kept memories with pregFruitImg added', !(plantK > 0));
+    await pk.close();
   } catch (e) {
     ok('the run finished', false, e.stack);
   }
