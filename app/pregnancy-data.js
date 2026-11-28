@@ -49,20 +49,20 @@ window.PREG = (function () {
   var weeks = {};
   Object.keys(W).forEach(function (k) { var w = +k; weeks[w] = { week: w, trimester: tri(w), size: W[k][0], baby: W[k][1], mum: W[k][2] }; });
 
-  // Friendly emoji for each "size of a..." comparison (presentational; falls back to a sprout).
+  // The emoji for each "size of a..." comparison, ONLY where the emoji is that fruit or vegetable.
+  // The other weeks (a poppy seed, a kumquat, a fig, a lime, a pomegranate, a papaya, a squash, a
+  // pumpkin...) have no true emoji and get the words alone: a coloured circle reads as a stray mark,
+  // and the only pumpkin emoji is a carved jack-o'-lantern, at week 40 of all weeks. Founder, 28 Nov
+  // 2026. Home, the moments cards and the week card widget all read this one map;
+  // tools/preg_fruit_check.js holds it week by week.
   var SIZE_EMOJI = {
-    'poppy seed': '⚫', 'sesame seed': '⚪', 'lentil': '🫘', 'blueberry': '🫐',
-    'raspberry': '🍓', 'cherry': '🍒', 'kumquat': '🟠', 'fig': '🟣',
-    'lime': '🟢', 'pea pod': '🫛', 'lemon': '🍋', 'apple': '🍎',
-    'avocado': '🥑', 'pomegranate': '🔴', 'bell pepper': '🫑', 'mango': '🥭',
-    'banana': '🍌', 'carrot': '🥕', 'papaya': '🥭', 'grapefruit': '🍊',
-    'corn cob': '🌽', 'cauliflower': '🥦', 'lettuce': '🥬', 'cabbage': '🥬',
-    'aubergine': '🍆', 'butternut squash': '🎃', 'large carrot': '🥕', 'coconut': '🥥',
-    'squash': '🎃', 'pineapple': '🍍', 'cantaloupe': '🍈', 'honeydew melon': '🍈',
-    'romaine lettuce': '🥬', 'chard': '🥬', 'leek': '🥬', 'small watermelon': '🍉',
-    'pumpkin': '🎃'
+    'blueberry': '🫐', 'cherry': '🍒', 'pea pod': '🫛', 'lemon': '🍋', 'apple': '🍎',
+    'avocado': '🥑', 'bell pepper': '🫑', 'mango': '🥭', 'banana': '🍌', 'carrot': '🥕',
+    'corn cob': '🌽', 'lettuce': '🥬', 'cabbage': '🥬', 'aubergine': '🍆', 'large carrot': '🥕',
+    'coconut': '🥥', 'pineapple': '🍍', 'cantaloupe': '🍈', 'honeydew melon': '🍈',
+    'romaine lettuce': '🥬', 'chard': '🥬', 'small watermelon': '🍉'
   };
-  function sizeEmoji(s) { return SIZE_EMOJI[(s || '').toLowerCase()] || '🌱'; }
+  function sizeEmoji(s) { return SIZE_EMOJI[(s || '').toLowerCase()] || ''; }
 
   // Antenatal appointment schedules. item: {week, title, note}
   var antenatal = {

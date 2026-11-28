@@ -10427,12 +10427,12 @@ function openWeekDetail(kind){
       +`<div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
     return;
   }
-  const emoji=(window.PREG&&PREG.sizeEmoji)?PREG.sizeEmoji(data.size):'🌱';
+  const emoji=(window.PREG&&PREG.sizeEmoji)?PREG.sizeEmoji(data.size):'';   // '' when the week has no true fruit emoji
   const na=pregNextAppt();
   let title, body;
   if(kind==='baby'){
     title='Baby this week';
-    body=`<div class="preg-card"><div class="pc-ico">${emoji}</div><div><div class="pc-t">Week ${wk} · about the size of a ${escapeHtml(data.size)}</div><div class="pc-b">${escapeHtml(data.baby)}</div></div></div>`
+    body=`<div class="preg-card"><div class="pc-ico">${emoji||'🌱'}</div><div><div class="pc-t">Week ${wk} · about the size of a ${escapeHtml(data.size)}</div><div class="pc-b">${escapeHtml(data.baby)}</div></div></div>`
       +(na?`<div class="next-appt" onclick="closeSheet();pregGo('care')"><div class="pc-ico" style="background:var(--preg-soft)">📅</div><div class="na-body"><div class="na-t">Next: ${escapeHtml(na.title)}</div><div class="na-s">${na.when?escapeHtml(apptWhenLine(na,wk)):('Around week '+na.week+(na.place?' · '+escapeHtml(na.place):''))}</div></div><span class="chev">${I.chev}</span></div>`:'');
   } else if(kind==='you'){
     title='You this week';
@@ -10441,7 +10441,7 @@ function openWeekDetail(kind){
       +`<button class="btn-ghost" onclick="openDangerSigns()" style="color:var(--danger-ink);margin-top:8px">⚠️ Urgent warning signs, when to seek care</button>`;
   } else {
     title='About the size of a '+data.size;
-    body=`<div style="text-align:center;font-size:60px;line-height:1;margin:4px 0 12px">${emoji}</div>`
+    body=(emoji?`<div style="text-align:center;font-size:60px;line-height:1;margin:4px 0 12px">${emoji}</div>`:'')
       +`<div class="preg-card"><div class="pc-ico">📏</div><div><div class="pc-t">Week ${wk} of about 40 · ${triName(tri)}</div><div class="pc-b">These "size of a..." comparisons are a friendly way to picture how your baby is growing. They are gentle guides, not measurements, and every baby grows at their own pace.</div></div></div>`
       +`<div class="preg-card"><div class="pc-ico">👶</div><div><div class="pc-t">What's developing</div><div class="pc-b">${escapeHtml(data.baby)}</div></div></div>`;
   }
@@ -11205,6 +11205,8 @@ function renderPlanningHome(){
 
 /* ---- Moments: ultrasounds and bump photos, paired with the week's size ---- */
 let momentDraft={photoData:null, week:null, note:''};
+/* ' 🥕' after a size, or nothing when the week has no true fruit emoji (PREG.sizeEmoji). */
+function pregSizeEmojiAfter(size){ const e=(window.PREG&&PREG.sizeEmoji)?PREG.sizeEmoji(size):''; return e?' '+e:''; }
 function momentSize(week){ const w=Math.max(4,Math.min(41,+week||4)); return (window.PREG&&PREG.weeks[w]&&PREG.weeks[w].size)||''; }
 function renderPregMoments(lookBack){
   const p=state.pregnancy;
@@ -11224,7 +11226,7 @@ function renderPregMoments(lookBack){
     return `<div class="moment-card">
       ${src?`<img src="${escapeHtml(src)}" alt="Week ${escapeHtml(String(m.week))} scan">`:''}
       <div class="moment-cap">
-        <div class="mc-top"><div class="mc-week">Week ${m.week}</div><div class="mc-size">${size?'🍐 about the size of a '+escapeHtml(size):''}</div></div>
+        <div class="mc-top"><div class="mc-week">Week ${m.week}</div><div class="mc-size">${size?'about the size of a '+escapeHtml(size)+pregSizeEmojiAfter(size):''}</div></div>
         ${m.note?`<div class="mc-note">${escapeHtml(m.note)}</div>`:''}
         <div class="mc-row"><span class="mc-date">${dayLabel(m.at)}</span>${mine?`<button class="lli-x" onclick="deleteMoment('${hArg(m.id)}')">${I.trash}</button>`:''}</div>
       </div>
@@ -12211,7 +12213,7 @@ function renderPregHome(){
   const nn=pregNoNumbers(), al=pregAfterLoss();  // R4: quiet (no-numbers) + pregnancy-after-loss softening
   // No countdown, no filling birth bar (they spike anxiety and break the no-countdowns promise): lead
   // with the qualitative week + baby size. In quiet mode the week number is dropped entirely.
-  const heroLine=data?`${carrier?'You and baby':'Baby'}${nn?'':', week '+wk} · about the size of a ${escapeHtml(data.size)}${(window.PREG&&PREG.sizeEmoji)?' '+PREG.sizeEmoji(data.size):''}`:`${carrier?'You and baby':'Baby'}${nn?'':' · week '+wk}`;
+  const heroLine=data?`${carrier?'You and baby':'Baby'}${nn?'':', week '+wk} · about the size of a ${escapeHtml(data.size)}${pregSizeEmojiAfter(data.size)}`:`${carrier?'You and baby':'Baby'}${nn?'':' · week '+wk}`;
   const p=state.pregnancy;
   /* The third place that seeds the list, and the first one a shared partner reaches, because Home is
      where he lands. Same reason as renderPregLog: seeding is a write to her owner-owned journey doc,
@@ -13761,9 +13763,9 @@ function openKeptMemories(id){
   const withMem=pregKeptOrder(arr.filter(a=>(a.moments||[]).length||Object.keys(a.journey||{}).length));
   const multi=withMem.length>1;
   const momentHtml=m=>{
-    const src=photoSrc(m.photoId), size=momentSize(m.week);
+    const src=photoSrc(m.photoId), size=momentSize(m.week);   // kept after the pregnancy ended, a loss included: the size in words alone, never a fruit
     return `<div class="moment-card">${src?`<img src="${escapeHtml(src)}" alt="Week ${escapeHtml(String(m.week))}">`:''}
-      <div class="moment-cap"><div class="mc-top"><div class="mc-week">Week ${m.week}</div><div class="mc-size">${size?'🍐 about the size of a '+escapeHtml(size):''}</div></div>
+      <div class="moment-cap"><div class="mc-top"><div class="mc-week">Week ${m.week}</div><div class="mc-size">${size?'about the size of a '+escapeHtml(size):''}</div></div>
       ${m.note?`<div class="mc-note">${escapeHtml(m.note)}</div>`:''}
       <div class="mc-row"><span class="mc-date">${dayLabel(m.at)}</span></div></div></div>`;
   };

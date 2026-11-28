@@ -151,6 +151,7 @@ const TREE = [
   { name: 'preg-bp-row',     cmd: ['node', 'tools/preg_bp_row_check.js', 'url'] },
   { name: 'cycle-median',    cmd: ['node', 'tools/cycle_median_check.js', 'url'] },
   { name: 'preg-weeks-cal',  cmd: ['node', 'tools/preg_weeks_cal_check.js', 'url'] },
+  { name: 'preg-fruit',      cmd: ['node', 'tools/preg_fruit_check.js', 'url'] },   // the week's fruit emoji only where it is that fruit; week 40 is not a jack-o'-lantern
   { name: 'timer-banner',    cmd: ['node', 'tools/timer_banner_tap_check.js', 'url'] },
   { name: 'jaundice',        cmd: ['node', 'tools/jaundice_symptom_check.js', 'url'] },
   { name: 'relative-when',   cmd: ['node', 'tools/relative_when_check.js', 'url'] },
