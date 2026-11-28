@@ -135,9 +135,38 @@ function checkDeclaration() {
   return files;
 }
 
+/* The absolute ceiling on how far a shipped PNG may sit from the live render of its own scene, per renderer.
+   Chrome on macOS made the PNGs (tools/gen_manifest_shots.js), so there the limit is 6, unchanged: measured
+   own 0.00 to 1.37, another scene 16.4 to 31.7. Chrome on CI's Linux draws the same screen with other glyph
+   rasters and measured 8.18 on 01-two-names, while 02 and 03 passed under 6 (PR #16's first CI run, job tree
+   4/8, 28 Nov 2026). So Linux is held to 10: above the 8.18 it measured, below the 16.4 a wrong scene sits at
+   on the Mac, so a PNG of the right screen gone stale enough to move ~12 is refused there too. Section 2b also
+   asserts, on the numbers it measured, that the ceiling in force is under every PNG's distance to another
+   scene: a ceiling that could not refuse a wrong screen would be no ceiling. */
+const LIMITS = { darwin: 6, linux: 10 };
+function shotLimit(platform) { return LIMITS[platform] !== undefined ? LIMITS[platform] : LIMITS.linux; }
+function shotProblem(d, platform) {
+  const lim = shotLimit(platform);
+  return typeof d === 'number' && isFinite(d) && d < lim ? null : 'mean grey diff ' + d + ' is not under ' + lim + ' (' + platform + ')';
+}
+/* Pure, so the gate grades each renderer's branch on the Mac every push, not only on whichever OS runs it. */
+function checkLimits() {
+  console.log('\n1b. the ceiling each renderer is held to (graded here for both, whatever this OS is)');
+  ok('the Mac, the reference renderer, is held to 6', shotLimit('darwin') === 6, shotLimit('darwin'));
+  ok('Linux is held to 10, an absolute ceiling, not only the nearest-scene rule', shotLimit('linux') === 10, shotLimit('linux'));
+  ok('a renderer not named is held to the Linux ceiling, never to none', shotLimit('win32') === 10, shotLimit('win32'));
+  ok('Linux at its measured 8.18: green', shotProblem(8.18, 'linux') === null, shotProblem(8.18, 'linux'));
+  ok('Linux at 12, a stale PNG of the right screen: red', shotProblem(12, 'linux') !== null);
+  ok('Linux at exactly its ceiling: red (strictly under)', shotProblem(10, 'linux') !== null);
+  ok('the Mac at Linux\'s 8.18: red (the Mac keeps 6)', shotProblem(8.18, 'darwin') !== null);
+  ok('the Mac at its measured 1.37: green', shotProblem(1.37, 'darwin') === null, shotProblem(1.37, 'darwin'));
+  ok('a diff that is not a number (NaN, missing): red', shotProblem(NaN, 'linux') !== null && shotProblem(undefined, 'darwin') !== null);
+}
+
 if (process.argv[2] === '--self-test') {
   console.log('\nself-test: the manifest declaration on its own, no browser');
   checkDeclaration();
+  checkLimits();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   console.log(fail ? 'MANIFEST-SHOTS SELF-TEST: FAIL' : 'MANIFEST-SHOTS SELF-TEST: PASS');
   process.exit(fail ? 1 : 0);
@@ -170,9 +199,28 @@ async function meanDiff(page, aDataUrl, bDataUrl) {
   }, aDataUrl, bDataUrl);
 }
 
+/* m[i][j]: the shipped PNG of scene i against the live render of scene j. The problems: each PNG that is not
+   strictly nearest its own scene. */
+function nearestOwn(m, order) {
+  const out = [];
+  m.forEach((row, i) => {
+    const others = row.filter((x, j) => j !== i);
+    if (!(row[i] < Math.min(...others))) out.push(order[i] + '.png is ' + row[i].toFixed(2) + ' from its own scene and ' + Math.min(...others).toFixed(2) + ' from another');
+  });
+  return out;
+}
+/* Chrome on macOS made the shipped PNGs, so only there is the limit of 6 a statement about them; elsewhere the
+   ceiling is LIMIT (10 on Linux, see LIMITS above). */
+const REFERENCE_RENDERER = process.platform === 'darwin';
+const LIMIT = shotLimit(process.platform);
+const lives = {};
+
 (async () => {
   console.log('\n1. what the manifest declares');
+  console.log('renderer: ' + (REFERENCE_RENDERER ? 'Chrome on macOS, the one the PNGs were made with: each PNG is held to the limit of 6 and to being nearest its own scene'
+    : 'Chrome on ' + process.platform + ', not the one the PNGs were made with: each PNG is held to the ceiling of ' + LIMIT + ' and to being nearest its own scene; the limit of 6 is graded only on the Mac'));
   const files = checkDeclaration();
+  checkLimits();
 
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });
   const page = await browser.newPage();
@@ -201,15 +249,43 @@ async function meanDiff(page, aDataUrl, bDataUrl) {
       ok('the manifest ships a file for this scene', !!shipped, s.file);
       if (!shipped) return;
       const live = await page.screenshot({ encoding: 'base64' });
+      lives[s.file] = live;
       const d = await meanDiff(page,
         'data:image/png;base64,' + live,
         'data:image/png;base64,' + fs.readFileSync(shipped).toString('base64'));
       /* 6/255 is roughly "the same screen, re-rendered". The drawn posters this replaces sit around
          40 against any of these, and a shot of the wrong tab is further still. Printed either way so
-         a drift that is creeping toward the line is visible before it crosses it. */
-      ok('the shipped PNG is this screen (mean grey diff ' + d.toFixed(2) + ', limit 6)', d < 6, d);
+         a drift that is creeping toward the line is visible before it crosses it.
+         The PNGs are made by Chrome on the Mac (tools/gen_manifest_shots.js), and that is the only renderer this
+         limit means anything for: Chrome on CI's Linux draws the same screen with other glyph rasters and measured
+         8.18 on shot 1 (PR #16, 28 Nov 2026). So the limit of 6 is graded on the Mac, unchanged, and elsewhere
+         the ceiling is 10 (LIMITS above); section 2b below (every platform) also asserts which screen each PNG is. */
+      if (REFERENCE_RENDERER) ok('the shipped PNG is this screen (mean grey diff ' + d.toFixed(2) + ', limit 6)', shotProblem(d, process.platform) === null, d);
+      else ok('the shipped PNG is this screen (mean grey diff ' + d.toFixed(2) + ' against the Mac-made PNG, ceiling ' + LIMIT + ' on ' + process.platform + '; the limit 6 is graded only on the Mac)', shotProblem(d, process.platform) === null, d);
     });
   }
+
+  await block('2b. each shipped PNG is nearer its own scene than any other scene (every platform)', async () => {
+    const order = SCENES.SHOTS.map((s) => s.file);
+    ok('all ' + order.length + ' scenes were rendered above', order.length === 3 && order.every((f) => lives[f]), order.filter((f) => !lives[f]));
+    const shippedB64 = order.map((f) => fs.readFileSync(files.find((x) => x.endsWith(f + '.png'))).toString('base64'));
+    const m = [];
+    for (let i = 0; i < order.length; i++) {
+      m.push([]);
+      for (let j = 0; j < order.length; j++) m[i].push(await meanDiff(page, 'data:image/png;base64,' + lives[order[j]], 'data:image/png;base64,' + shippedB64[i]));
+    }
+    console.log('  note mean grey diff, shipped PNG (row) against each live scene (column): ' + m.map((r, i) => order[i] + ' [' + r.map((x) => x.toFixed(2)).join(', ') + ']').join('; '));
+    const wrong = nearestOwn(m, order);
+    ok('every shipped PNG is nearest the scene it is declared for', wrong.length === 0, wrong);
+    /* The ceiling's own companion, on the same measured numbers: every PNG against every OTHER scene sits above
+       the ceiling in force here, so section 2's line can refuse a wrong screen on this renderer, not only pass. */
+    const nearOther = Math.min(...m.map((r, i) => Math.min(...r.filter((x, j) => j !== i))));
+    ok('companion: the ceiling ' + LIMIT + ' is under every PNG\'s distance to another scene (nearest ' + nearOther.toFixed(2) + ')', nearOther > LIMIT, nearOther);
+    /* The companion, on the same measured numbers: the PNGs declared for each other's scenes (rows rotated by
+       one) must be refused, or the line above would pass whatever the files showed. */
+    const rotated = m.map((r, i) => m[(i + 1) % m.length]);
+    ok('companion: the same PNGs declared for each other\'s scenes are refused', nearestOwn(rotated, order).length === order.length, nearestOwn(rotated, order));
+  });
 
   await block('3. no data: the two-names claim cannot be captured from an empty account', async () => {
     /* The seeded day first, counted, because "zero rows on an empty account" proves nothing on its

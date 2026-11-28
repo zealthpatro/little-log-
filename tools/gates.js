@@ -19,6 +19,17 @@
  *   node tools/gates.js --emulator-only   only the Firestore suites (what CI's emulator job runs)
  *   node tools/gates.js --all
  *   --only=<name> filters the emulator tier too, so --emulator --only=household-guard runs one suite.
+ *   --mutants          every mutation pass (nightly, and every CI job while plan item 14 is held there). Without
+ *                      it a pass runs only when this change touched what it guards (its `mut` inputs,
+ *                      tools/mut_select.js), against --changed=<rev> or, by default, the merge-base with origin/main.
+ *   --browser-only     only the tree gates that need Chrome (the complement of --no-browser)
+ *   --shard=i/N        only shard i of N (1-based) of whatever the other flags chose, split longest first by
+ *                      tools/gate-times.json (tools/shard.js); CI runs N of these side by side and its
+ *                      tree-complete job proves their union is the whole list. An invalid i/N exits 2.
+ *   --list             print the names the other flags choose (mutation plan and shard applied), one per line,
+ *                      and exit: no tree server, no gate. tree-complete compares the shards against it.
+ *   --record-times=<f> write each gate's verdict and time to <f> as JSON (the shard, the flags, the results);
+ *                      tree-complete reads these, and tools/shard.js --times-from=<f>,... refreshes the times.
  *
  * Exit code is non-zero if any REQUIRED gate fails, so CI and a pre-commit hook can both use it.
  */
@@ -40,6 +51,26 @@ const NO_BROWSER = ARGS.includes('--no-browser');
 const ONLY = (ARGS.find((a) => a.startsWith('--only=')) || '').slice(7);
 /* --only=a,b runs every gate whose name contains a OR b (the nightly dry-run picks one of each tier). */
 const onlyMatch = (name) => ONLY.split(',').filter(Boolean).some((x) => name.includes(x));
+const MUTANTS = has('--mutants');
+const CHANGED = (ARGS.find((a) => a.startsWith('--changed=')) || '').slice(10);
+const BROWSER_ONLY = ARGS.includes('--browser-only');
+const LIST = ARGS.includes('--list');
+/* undefined when not given; '' when given empty, which is refused like any other bad shard. */
+const SHARD = (() => { const a = ARGS.find((x) => x.startsWith('--shard=')); return a === undefined ? undefined : a.slice(8); })();
+const RECORD = (ARGS.find((a) => a.startsWith('--record-times=')) || '').slice(15);
+
+/* What each mutation pass guards (`mut`), for tools/mut_select.js: without --mutants a pass runs only when one of
+   these changed (or the gate is new, or its entry or the runner changed); nightly runs every one with --mutants.
+   The founder's call of 28 Nov 2026 (test-speed plan item 14). CI still passes --mutants on every job (ci-tier
+   pins it) until branch protection requires tree-complete and emulator-complete and plan item 15 traces these. A trailing / is a directory. Wide on purpose: a
+   missed input ships a weakened assertion for up to a day, an extra one costs a few minutes. mut_select's
+   --self-test fails any entry whose file reads a repo path these leave out. mutOnly: the gate is only the
+   mutants (its suite is a gate of its own, or it has none), so off means not run; otherwise off means the
+   suite alone, without --self-test. */
+const MUT_WORKER = ['worker.js', 'workers/', 'schema/', 'wrangler.toml', '.assetsignore', 'test/helpers/'];
+const MUT_ADMIN = MUT_WORKER.concat(['tools/admin_assets_build.js', 'app/fonts/']);
+const MUT_APP = ['app/', 'firestore.rules', 'storage.rules', 'firebase.json', 'tools/serve.js', 'tools/gate_downloads.js', 'test/helpers/'];
+const mutOf = (...xs) => [...new Set([].concat(...xs))];
 
 // Gates that need a browser get `url`; the runner substitutes the real base URL it started.
 const TREE = [
@@ -224,11 +255,11 @@ const TREE = [
      a 100-day steady state through the real cron. Each -mut gate is that file's --self-test: an unaltered
      temp copy must pass, then every mutant must turn its own named check red. */
   { name: 'usage-ingest',   cmd: ['node', 'test/usage-ingest.test.js'] },
-  { name: 'usage-ingest-mut', cmd: ['node', 'test/usage-ingest.test.js', '--self-test'] },
+  { name: 'usage-ingest-mut', cmd: ['node', 'test/usage-ingest.test.js', '--self-test'], mut: mutOf('test/usage-ingest.test.js', MUT_WORKER, 'app/usage-allowlist.js'), mutOnly: true },
   { name: 'usage-route',    cmd: ['node', 'test/usage-route.test.js'] },
-  { name: 'usage-route-mut', cmd: ['node', 'test/usage-route.test.js', '--self-test'] },
+  { name: 'usage-route-mut', cmd: ['node', 'test/usage-route.test.js', '--self-test'], mut: mutOf('test/usage-route.test.js', MUT_WORKER), mutOnly: true },
   { name: 'usage-erasure',  cmd: ['node', 'test/usage-erasure.test.js'] },
-  { name: 'usage-erasure-mut', cmd: ['node', 'test/usage-erasure.test.js', '--self-test'] },
+  { name: 'usage-erasure-mut', cmd: ['node', 'test/usage-erasure.test.js', '--self-test'], mut: mutOf('test/usage-erasure.test.js', MUT_WORKER), mutOnly: true },
   { name: 'funnel-report',  cmd: ['node', 'tools/funnel_report.js', '--self-test'] },
   { name: 'prod-counts',    cmd: ['node', 'tools/prod_counts.js', '--self-test'] },  // read-only aggregate counts; the self-test fails on any write call
   { name: 'signin-email',   cmd: ['node', 'test/signin-email.test.js', '--self-test'] },
@@ -250,19 +281,19 @@ const TREE = [
      xss_leaf_check.js as its last section (each leaf field, each sink, mutants included). */
   /* Cubby Ops, the admin Worker (workers/admin), phase 1 of docs/superpowers/specs/2026-11-13-admin-dashboard-design.md.
      Each runs its --self-test: every rule is broken in a temp copy and the suite must go red on it. */
-  { name: 'admin-access',     cmd: ['node', 'test/admin-access.test.js', '--self-test'] },      // Access JWT re-checked, fail closed, headers on every answer (S1-S8)
-  { name: 'admin-access-log', cmd: ['node', 'test/admin-access-log.test.js', '--self-test'] },  // logged before shown, hash chain, fixed vocabulary, digest head (S16-S19)
-  { name: 'admin-no-content', cmd: ['node', 'test/admin-no-content.test.js', '--self-test'] },  // masked reads, no log content anywhere, private pregnancy, read budget
-  { name: 'admin-hold',       cmd: ['node', 'test/admin-hold.test.js', '--self-test'] },        // the loss-hold reader fails closed (S12)
-  { name: 'dir-erasure',      cmd: ['node', 'test/admin-dir-erasure.test.js', '--self-test'] }, // gone from Auth = gone from the admin next tick; failure is never "gone"
-  { name: 'admin-screens',    cmd: ['node', 'test/admin-screens.test.js', '--self-test'] },     // formula-safe CSV, the three system checks, "Waiting", two-people = digest, own accounts hidden
+  { name: 'admin-access',     cmd: ['node', 'test/admin-access.test.js', '--self-test'], mut: mutOf('test/admin-access.test.js', MUT_ADMIN) },      // Access JWT re-checked, fail closed, headers on every answer (S1-S8)
+  { name: 'admin-access-log', cmd: ['node', 'test/admin-access-log.test.js', '--self-test'], mut: mutOf('test/admin-access-log.test.js', MUT_ADMIN, 'docs/ADMIN-DEPLOY.md') },  // logged before shown, hash chain, fixed vocabulary, digest head (S16-S19)
+  { name: 'admin-no-content', cmd: ['node', 'test/admin-no-content.test.js', '--self-test'], mut: mutOf('test/admin-no-content.test.js', MUT_ADMIN) },  // masked reads, no log content anywhere, private pregnancy, read budget
+  { name: 'admin-hold',       cmd: ['node', 'test/admin-hold.test.js', '--self-test'], mut: mutOf('test/admin-hold.test.js', MUT_ADMIN) },        // the loss-hold reader fails closed (S12)
+  { name: 'dir-erasure',      cmd: ['node', 'test/admin-dir-erasure.test.js', '--self-test'], mut: mutOf('test/admin-dir-erasure.test.js', MUT_ADMIN) }, // gone from Auth = gone from the admin next tick; failure is never "gone"
+  { name: 'admin-screens',    cmd: ['node', 'test/admin-screens.test.js', '--self-test'], mut: mutOf('test/admin-screens.test.js', MUT_ADMIN) },     // formula-safe CSV, the three system checks, "Waiting", two-people = digest, own accounts hidden
   /* No personal email address in any tracked file (admin spec S34). The repo is public. */
   { name: 'no-personal-address', cmd: ['node', 'tools/address_check.js', '--self-test'] },
   { name: 'admin-live-self', cmd: ['node', 'tools/admin_live_check.js', '--self-test'] },   // admin(live) can go red: a page, a missing header, a stray redirect, a 404
   { name: 'push-daily',       cmd: ['node', 'test/push-daily.test.js', '--self-test'] },                       // the day's reminders tally the admin reads; not on the public /api/health
   /* The admin's pages in Chrome: a hostile name stays text, nothing loads from another origin, 44px targets,
      no sideways scroll at 390 or 320. --self-test also breaks escaping, wrapping and the fonts in a temp copy. */
-  { name: 'admin-ui',         cmd: ['node', 'test/admin-ui.test.js', 'url', '--self-test'] },
+  { name: 'admin-ui',         cmd: ['node', 'test/admin-ui.test.js', 'url', '--self-test'], mut: mutOf('test/admin-ui.test.js', MUT_ADMIN, 'tools/gate_downloads.js') },
   { name: 'xss-sink',       cmd: ['node', 'tools/xss_sink_check.js', 'url'] },
   { name: 'xss-leaf-static', cmd: ['node', 'tools/xss_leaf_check.js', '--static-only'] },
   /* No tab scrolls sideways at 320px, Light or Night: the Night wash behind the header slid the app 80px. */
@@ -278,7 +309,7 @@ const TREE = [
      only, no java and no emulator jar. The sections that run the real sync layer on a Firestore emulator (S20-S23b,
      with their mutants) are usage-tracker-emu, in EMU_GATES below.
      usage-ingest and usage-erasure (the server half) sit with tracking-plan, above. */
-  { name: 'usage-tracker',  cmd: ['node', 'tools/usage_tracker_check.js', 'url', '--self-test'] },
+  { name: 'usage-tracker',  cmd: ['node', 'tools/usage_tracker_check.js', 'url', '--self-test'], mut: mutOf('tools/usage_tracker_check.js', MUT_APP) },
   /* brand-py: the logo change as one tool (tools/brand.py propose, compare, zoom, set; docs/BRAND.md). Its
      self-test measures made-up subjects, proves compare byte-deterministic and draws sizes exactly as
      gen_brand_icons.py does, runs propose dry with fetch cut off, holds set to its refusals, and runs
@@ -297,8 +328,23 @@ TREE.push(
   { name: 'test-wiring',    cmd: ['node', 'tools/test_wiring_check.js', '--self-test'] },
   /* The pre-push refusal of product code with no test, proven in a throwaway repo. */
   { name: 'change-test',    cmd: ['node', 'tools/change_test_check.js', '--self-test'] },
-  /* The real .githooks/pre-push, fed git's stdin: emulator tier for rules/Worker pushes, refusal works. */
+  /* The real .githooks/pre-push, fed git's stdin: main refused up front, no gates on a branch push, and the
+     change-needs-test refusal. */
   { name: 'prepush-tier',   cmd: ['node', 'test/prepush-tier.test.js'] },
+  /* One push suite at a time per machine (a kernel flock): a live holder is waited for, a dead one never is. */
+  { name: 'push-lock',      cmd: ['node', 'test/push-lock.test.js'] },
+  /* CI: a push to main runs only live and the IndexNow ping; a PR runs every required check (test-speed item 1). */
+  { name: 'ci-tier',        cmd: ['node', 'tools/ci_tier_check.js', '--self-test'] },
+  /* Mutation passes: the selection rules, and each mut gate's inputs against what its file reads (item 14). */
+  { name: 'mut-select',     cmd: ['node', 'tools/mut_select.js', '--self-test'] },
+  /* ...and through a real runner in a throwaway repo: off on an unrelated PR, on when touched or new, every one
+     with --mutants (nightly), and red there on a weakened assertion. */
+  { name: 'mutants-tier',   cmd: ['node', 'test/mutants-tier.test.js'] },
+  /* CI's split (items 5-7): --shard's partition disjoint, complete and order-free for N=1..12 (its mutants red),
+     --list and --shard through this runner, and tree-complete red on a missing shard, a dropped or doubled gate. */
+  { name: 'shard',          cmd: ['node', 'tools/shard.js', '--self-test'] },
+  /* Every browser gate finds Chrome through CHROME_PATH, so it runs on CI's Linux as on the Mac (item 4). */
+  { name: 'chrome-path',    cmd: ['node', 'tools/chrome_path_check.js', '--self-test'] },
   /* A real push from a LINKED worktree leaves the shared repository byte-identical (no gate inherits GIT_DIR). */
   { name: 'prepush-worktree', cmd: ['node', 'test/prepush-worktree.test.js'] },
   /* The nightly bug-bash's verdict, board line and open-findings ledger, over synthetic nights in a temp dir. */
@@ -424,8 +470,8 @@ async function emuPorts() {
   return out;
 }
 /* n distinct free ports. EMU_PORT_RANGE=7601-7639 keeps every pick inside a band a session has agreed to use
-   (a shared Mac where other sessions own other ports), searched from the bottom; without it the OS hands out
-   free ephemeral ports. tools/nightly.sh takes its ports here too (--free-ports=N), so there is one picker. */
+   (a shared Mac where other sessions own other ports), searched from the bottom; without it they come from
+   OWN_BAND (freeRun, below). tools/nightly.sh takes its ports here too (--free-ports=N), so there is one picker. */
 async function freePorts(n) {
   const band = /^(\d+)-(\d+)$/.exec(process.env.EMU_PORT_RANGE || '');
   const out = [];
@@ -434,8 +480,27 @@ async function freePorts(n) {
     if (out.length < n) throw new Error('EMU_PORT_RANGE ' + band[0] + ' has no ' + n + ' free ports');
     return out;
   }
-  while (out.length < n) { const p = await freePort(); if (!out.includes(p)) out.push(p); }
+  while (out.length < n) { const p = await freeRun(1); if (!out.includes(p)) out.push(p); }
   return out;
+}
+/* n consecutive free ports; the first is returned. Inside EMU_PORT_RANGE when set, from its bottom. Otherwise
+   from OWN_BAND, 20000-32000, below the ephemeral ranges of macOS (49152-65535) and Linux (32768-60999), from
+   an offset this process picks at random and moves past each pick. It used to take the port the OS handed out
+   for listen(0) and use the ones after it; macOS hands those out in order, so p+1 was the very next port any
+   other process was given, and two suites at once took each other's ports (27 Nov 2026, tree-server case 7). */
+const OWN_BAND = [20000, 32000];
+let ownCursor = OWN_BAND[0] + Math.floor(Math.random() * (OWN_BAND[1] - OWN_BAND[0] + 1));
+async function freeRun(n) {
+  const band = /^(\d+)-(\d+)$/.exec(process.env.EMU_PORT_RANGE || '');
+  const all = async (p) => { for (let k = 0; k < n; k++) if (!(await portIsFree(p + k))) return false; return true; };
+  if (band) { for (let p = Number(band[1]); p + n - 1 <= Number(band[2]); p++) if (await all(p)) return p; throw new Error('EMU_PORT_RANGE ' + band[0] + ' has no ' + n + ' free ports in a row'); }
+  const [lo, hi] = OWN_BAND, size = hi - lo + 1;
+  for (let i = 0; i < size; i++) {
+    const p = lo + ((ownCursor - lo + i) % size);
+    if (p + n - 1 > hi) continue;
+    if (await all(p)) { ownCursor = p + n > hi ? lo : p + n; return p; }
+  }
+  throw new Error('no ' + n + ' free ports in a row in ' + lo + '-' + hi);
 }
 /* Free means nothing listens there at ANY address a gate's URL can reach. serve.js listens on the wildcard
    address, the gates ask 127.0.0.1, and the self-hosting suites ask `localhost` (::1 first on macOS). On macOS
@@ -479,8 +544,8 @@ function firebaseCli() {
 /* Bug-bashing on the emulator: each self-test plants a known bug and must catch it (Nov 2026). The long
    seeded runs are nightly (tools/nightly.sh), not here. */
 EMU_GATES.push(
-  { name: 'fuzz-rules',   self: ['node', 'tools/fuzz_rules.js', '--self-test'] },   // model vs real rules, every role
-  { name: 'chaos',        self: ['node', 'tools/chaos.js', '--self-test'] },        // two phones, real app, planted lost write, a deletion after a stale sign-in
+  { name: 'fuzz-rules',   self: ['node', 'tools/fuzz_rules.js', '--self-test'], mut: mutOf('tools/fuzz_rules.js', 'firestore.rules', 'firebase.json', 'test/helpers/'), mutOnly: true },   // model vs real rules, every role
+  { name: 'chaos',        self: ['node', 'tools/chaos.js', '--self-test'], mut: mutOf('tools/chaos.js', MUT_APP), mutOnly: true },        // two phones, real app, planted lost write, a deletion after a stale sign-in
 );
 /* The usage tracker's emulator tier (tools/usage_tracker_check.js --emulator): PRIV-4 through the real sign-in
    layer (S20), a deletion that does not finish and signing out (S21), account deletion saying only what is true,
@@ -492,7 +557,7 @@ EMU_GATES.push(
    Firestore emulator it starts itself from the jar firebase-tools caches. Kept after `rules`, which downloads
    that jar on a fresh machine (CI). It used to run in the tree tier, which made every push need java. */
 EMU_GATES.push(
-  { name: 'usage-tracker-emu', self: ['node', 'tools/usage_tracker_check.js', 'url', '--emulator', '--self-test'] },
+  { name: 'usage-tracker-emu', self: ['node', 'tools/usage_tracker_check.js', 'url', '--emulator', '--self-test'], mut: mutOf('tools/usage_tracker_check.js', MUT_APP) },
 );
 /* The usage events' SQL on workerd's OWN D1 (Miniflare, local and offline: started with cf: false, and any
    socket beyond loopback is refused and fails the gate), not only on the node:sqlite shim every other usage
@@ -506,7 +571,7 @@ EMU_GATES.push(
    skips, without it. A push touching only wrangler.toml or schema/usage.sql runs this tier too. A SIGTERM,
    SIGINT, SIGHUP or SIGALRM to a process holding a D1 stops its workerd first (section 0 checks each). */
 EMU_GATES.push(
-  { name: 'usage-d1', self: ['node', 'test/usage-d1-engine.test.js', '--self-test'] },
+  { name: 'usage-d1', self: ['node', 'test/usage-d1-engine.test.js', '--self-test'], mut: mutOf('test/usage-d1-engine.test.js', MUT_WORKER, 'test/usage-ingest.test.js', 'test/usage-route.test.js', 'test/usage-erasure.test.js', 'test/admin-screens.test.js') },
 );
 /* The same delivery checks on workerd itself (Miniflare, offline): the sendRef entry and the hashed cooldown in
    workerd's own Cache API (nothing under the address), AbortSignal.timeout, a real rate-limit binding, and
@@ -518,24 +583,12 @@ EMU_GATES.push(
 
 /* The tree server's port. Inside EMU_PORT_RANGE when one is set, so a session that agreed a band stays in
    it for every port this runner binds, taken from the TOP of the band so the emulator picks (which start
-   at the bottom) are not pushed out of it; otherwise any free port, as before. */
+   at the bottom) are not pushed out of it; otherwise freeRun's own band, like every other port. */
 async function treePort() {
   const band = /^(\d+)-(\d+)$/.exec(process.env.EMU_PORT_RANGE || '');
-  if (!band) return freePort();
+  if (!band) return freeRun(1);
   for (let p = Number(band[2]); p >= Number(band[1]); p--) if (await portIsFree(p)) return p;
   throw new Error('EMU_PORT_RANGE ' + band[0] + ' has no free port for the tree server');
-}
-/* An ephemeral port the OS hands out on 127.0.0.1, kept only if it is free at every address (portIsFree). */
-async function freePort() {
-  for (let i = 0; i < 50; i++) {
-    const p = await new Promise((res, rej) => {
-      const s = net.createServer();
-      s.on('error', rej);
-      s.listen(0, '127.0.0.1', () => { const q = s.address().port; s.close(() => res(q)); });
-    });
-    if (await portIsFree(p)) return p;
-  }
-  throw new Error('no port the OS offered was free at every address (50 tries)');
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -786,6 +839,30 @@ async function selfTestDownloads() {
   const e = await runGate('ci', plant('anything.ics'), ROOT, dl.userDownloads(noHome));
   ok('and there the guard skips instead of failing', e.code === 0, e.out);
 
+  /* ...but not on CI. There a missing ~/Downloads is a workflow that forgot its mkdir step, and the guard would be
+     off without a word (28 Nov 2026 skeptic: the gates and emulator jobs had none). So with CI set the runner
+     refuses before its first gate. The real runner, a gate list of nothing, HOME pointed at a temp folder. */
+  const { spawnSync } = require('child_process');
+  const withDl = fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-with-downloads-'));
+  fs.mkdirSync(path.join(withDl, 'Downloads'));
+  const runner = (home, ci) => {
+    const env = { ...process.env, HOME: home };
+    for (const k of Object.keys(env)) if (k.startsWith('GIT_')) delete env[k];
+    delete env.CI; delete env.GITHUB_ACTIONS;
+    if (ci !== undefined) env.CI = ci;
+    const r = spawnSync(process.execPath, [__filename, '--no-browser', '--only=__no_such_gate__'], { cwd: ROOT, env, encoding: 'utf8', timeout: 120000 });
+    return { code: r.status, out: String(r.stdout || '') + String(r.stderr || '') };
+  };
+  const f1 = runner(noHome, 'true');
+  ok('on CI (CI=true) with no ~/Downloads the runner refuses before any gate: exit 2', f1.code === 2 && /REFUSED: on CI with no .*Downloads/.test(f1.out) && !/serving THIS tree/.test(f1.out), f1.code + ' ' + f1.out.slice(0, 300));
+  const f2 = runner(withDl, 'true');
+  ok('companion: on CI with a ~/Downloads it runs and watches it', f2.code === 0 && /watching .*cubby-with-downloads-[^/]*\/Downloads/.test(f2.out), f2.code + ' ' + f2.out.slice(-300));
+  const f3 = runner(noHome, undefined);
+  ok('companion: off CI with no ~/Downloads it runs, and says the guard has nothing to watch', f3.code === 0 && /no ~\/Downloads on this machine/.test(f3.out), f3.code + ' ' + f3.out.slice(-300));
+  const f4 = runner(noHome, 'false');
+  ok('companion: CI=false is not CI', f4.code === 0, f4.code + ' ' + f4.out.slice(-200));
+  fs.rmSync(withDl, { recursive: true, force: true });
+
   /* runGate() is only worth something if the suite cannot run a gate around it. */
   const src = fs.readFileSync(__filename, 'utf8');
   ok('every gate the suite runs goes through runGate()', (src.match(/await run\(/g) || []).length === 1, (src.match(/await run\(/g) || []).length);
@@ -856,15 +933,8 @@ async function selfTestTreeServer() {
     });
   }
   const unplant = (s) => new Promise((r) => { if (!s) return r(); s.close(() => r()); if (s.closeAllConnections) s.closeAllConnections(); });
-  /* n consecutive free ports: from the bottom of EMU_PORT_RANGE (the runner that started this took the top), or
-     wherever the OS offers. */
-  async function freeRun(n) {
-    const band = /^(\d+)-(\d+)$/.exec(process.env.EMU_PORT_RANGE || '');
-    const all = async (p) => { for (let k = 0; k < n; k++) if (!(await portIsFree(p + k))) return false; return true; };
-    if (band) { for (let p = Number(band[1]); p + n - 1 <= Number(band[2]); p++) if (await all(p)) return p; throw new Error('EMU_PORT_RANGE ' + band[0] + ' has no ' + n + ' free ports in a row'); }
-    for (let i = 0; i < 100; i++) { const p = await freePort(); if (p + n - 1 <= 65535 && await all(p)) return p; }
-    throw new Error('no ' + n + ' free ports in a row');
-  }
+  /* freeRun is the runner's own (above): from the bottom of EMU_PORT_RANGE, which the runner that started this
+     took the top of, or from OWN_BAND. */
   /* A runner in tree t, its own band given explicitly. */
   function child(t, args, band) {
     const env = Object.assign(childEnv(), { EMU_PORT_RANGE: band });
@@ -1072,6 +1142,49 @@ async function selfTestTreeServer() {
       await unplant(pq.s);
       ok('7. --served-is-this-tree says yes for this tree\'s bytes and no, naming the file, for another checkout\'s',
         same.code === 0 && diff.code === 1 && /app\/index\.html differs/.test(diff.out), same.out + '\n' + diff.out);
+      /* 7a. Without a band the ports come from outside every ephemeral range (Linux from 32768, macOS from 49152):
+             a port the OS hands out for listen(0) is the one the next process is given too (27 Nov 2026). */
+      const nb = await child(tempTree(), ['--free-ports=3'], '').done;
+      const got = /^(\d+) (\d+) (\d+)$/.exec(nb.out.trim());
+      ok('7a. --free-ports=3 with no EMU_PORT_RANGE prints three distinct ports, each in 1024-32767 (below every ephemeral range)',
+        nb.code === 0 && !!got && new Set(got.slice(1)).size === 3 && got.slice(1).map(Number).every((x) => x >= 1024 && x <= 32767), nb.out);
+    }
+
+    /* 7b. A run picked here must not be where the OS's next listen(0) lands. macOS hands those out in order, so
+           the old picker (listen(0) gave p, the run was p..p+n-1) put p+1 in the next process's hands. Twenty
+           sockets held open at once, as the next twenty asks on this machine would be. */
+    {
+      const saved = process.env.EMU_PORT_RANGE;
+      delete process.env.EMU_PORT_RANGE;
+      let p;
+      try { p = await freeRun(3); } finally { if (saved !== undefined) process.env.EMU_PORT_RANGE = saved; }
+      /* The old picker, inline: listen(0) gave q, the run was q..q+2. Then the next twenty listen(0) ports. */
+      const stage = async () => {
+        const q = await new Promise((res, rej) => { const s = net.createServer(); s.on('error', rej); s.listen(0, '127.0.0.1', () => { const x = s.address().port; s.close(() => res(x)); }); });
+        const socks = [];
+        for (let i = 0; i < 20; i++) socks.push(await new Promise((res) => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => res(s)); }));
+        const gave = socks.map((s) => s.address().port);
+        await Promise.all(socks.map((s) => new Promise((r) => s.close(() => r()))));
+        return { q, gave };
+      };
+      const inside = (ports, start, n) => ports.filter((x) => x >= start && x <= start + n - 1);
+      /* Companion, where the OS hands ports out in order (macOS): the same matcher finds the next listen(0) ports
+         inside the OLD picker's run, so the line below can go red. Another process on a busy Mac can take q+1 and
+         q+2 between the probe and the twenty, so the stage is tried up to 3 times and red only if all 3 miss.
+         Linux hands them out at random, so no companion can be staged there; the line below still holds because
+         OWN_BAND is under its range. */
+      const tries = [];
+      do tries.push(await stage());
+      while (process.platform === 'darwin' && tries.length < 3 && inside(tries[tries.length - 1].gave, tries[tries.length - 1].q, 3).length === 0);
+      const last = tries[tries.length - 1];
+      if (process.platform === 'darwin') {
+        ok('7b. companion: the old picker\'s run (:' + last.q + '-' + (last.q + 2) + ') holds some of the next 20 ports the OS hands out (try ' + tries.length + ' of 3)',
+          inside(last.gave, last.q, 3).length >= 1, tries.map((t) => ({ oldRun: [t.q, t.q + 2], osGave: t.gave })));
+      }
+      /* Every port the OS gave in every try, so a retry can only make this line harder to pass. */
+      const os0 = [].concat(...tries.map((t) => t.gave));
+      ok('7b. a 3-port run with no EMU_PORT_RANGE (:' + p + '-' + (p + 2) + ') holds none of the next 20 ports the OS hands out for listen(0)',
+        inside(os0, p, 3).length === 0, { run: [p, p + 2], osGave: os0 });
     }
   } catch (e) {
     ok('the self-test ran to its end', false, e && e.stack || e);
@@ -1087,7 +1200,9 @@ async function selfTestTreeServer() {
   return fail ? 1 : 0;
 }
 
-(async () => {
+/* require('./gates.js') gives the lists (tools/mut_select.js checks the mut inputs against them) and runs nothing. */
+if (require.main !== module) module.exports = { TREE, EMU_GATES, LIVE_GATES };
+else (async () => {
   if (ARGS.includes('--self-test-downloads')) process.exit(await selfTestDownloads());
   if (ARGS.includes('--self-test-excerpt')) process.exit(selfTestExcerpt());
   if (ARGS.includes('--self-test-tree-server')) process.exit(await selfTestTreeServer());
@@ -1104,7 +1219,57 @@ async function selfTestTreeServer() {
     console.log(bad.length ? 'NOT THIS TREE: ' + bad.join('; ') : 'this tree: ' + TREE_PROOF.join(', ') + ' served byte for byte');
     process.exit(bad.length ? 1 : 0);
   }
+  /* Which gates, before anything starts: --list prints them and stops, and a bad --shard is refused here, so a
+     bad shard can never mean "ran nothing, passed". */
+  if (NO_BROWSER && BROWSER_ONLY) { console.error('--no-browser and --browser-only together choose no gate at all; refused.'); process.exit(2); }
+  let shard = null;
+  if (SHARD !== undefined) {
+    try { shard = require('./shard'); shard.parseShard(SHARD); }
+    catch (e) { console.error('REFUSED: ' + e.message.split('\n')[0] + '\nNo gate was run.'); process.exit(2); }
+  }
+  let list = EMU_ONLY ? [] : TREE.slice();
+  if (LIVE) list = list.concat(LIVE_GATES);
+  if (NO_BROWSER) list = list.filter((g) => !g.cmd.includes('url'));
+  if (BROWSER_ONLY) list = list.filter((g) => g.cmd.includes('url'));
+  if (ONLY) list = list.filter((g) => onlyMatch(g.name));
+  let emuList = EMU ? (ONLY ? EMU_GATES.filter((g) => onlyMatch(g.name)) : EMU_GATES) : [];
+  /* The shard is cut before the mutation plan: the plan is per gate, so cutting first or last gives the same
+     names, and cutting first keeps the split independent of what this change touched. Each tier is split on
+     its own, the same way, so a combined run's shard i is tree shard i plus emulator shard i. */
+  let shardNote = '';
+  if (shard) {
+    const times = shard.loadTimes();
+    const [t0, e0] = [list.length, emuList.length];
+    const keep = (xs) => { const names = new Set(shard.shardOf(xs.map((g) => g.name), SHARD, times)); return xs.filter((g) => names.has(g.name)); };
+    list = keep(list); emuList = keep(emuList);
+    const est = list.concat(emuList).reduce((s, g) => s + (g.name in times ? Number(times[g.name]) : shard.UNKNOWN_S), 0);
+    shardNote = 'shard ' + SHARD + ': ' + list.length + ' of ' + t0 + ' tree gates' + (EMU ? ', ' + emuList.length + ' of ' + e0 + ' emulator suites' : '') + ', about ' + Math.round(est / 60) + ' min by tools/gate-times.json (the other shards run the rest; tree-complete checks that they did).';
+  }
+
+  /* Mutation passes: every one with --mutants (nightly), otherwise only what this change touched. */
+  /* A runner copied into a temp tree without tools/mut_select.js (the tree-server and worktree self-tests copy
+     only what they need) runs every pass as written: the safe direction, said out loud. */
+  const say = LIST ? (x) => console.error(x) : (x) => console.log(x);
+  let ms = null;
+  try { ms = require('./mut_select'); } catch (e) { say('(tools/mut_select.js not loadable here, so every mutation pass runs: ' + e.message.split('\n')[0] + ')'); }
+  const mplan = ms ? ms.plan(list.concat(emuList), { all: MUTANTS, change: MUTANTS ? null : ms.changeSet(ROOT, CHANGED || null),
+    headSrc: fs.readFileSync(__filename, 'utf8') }) : new Map();
+  const viaPlan = (g) => (ms ? ms.apply(g, mplan.get(g.name)) : g);
+  list = list.map(viaPlan).filter(Boolean);
+  emuList = emuList.map(viaPlan).filter(Boolean);
+  if (LIST) { for (const g of list.concat(emuList)) console.log(g.name); process.exit(0); }
+  /* On CI the downloads guard must be on: a runner with no ~/Downloads there is a workflow that dropped its
+     `mkdir -p ~/Downloads` step, and the guard would be off without a word (docs/TESTING.md, every run, CI included).
+     --list (tree-complete) runs no gate, so it is above this. --self-test-downloads stages it. */
+  const ci = String(process.env.CI || '').toLowerCase();
+  if (ci && ci !== 'false' && ci !== '0' && !dl.userDownloads()) {
+    console.log('REFUSED: on CI with no ' + path.join(os.homedir(), 'Downloads') + ', so the downloads guard would have nothing to watch.\n' +
+      'Add a step `mkdir -p ~/Downloads` before this one (as every gates.js job in .github/workflows/gates.yml has).\nNo gate was run.\n\nGATES: FAIL');
+    process.exit(2);
+  }
+
   console.log('\nCubby gates');
+  if (shardNote) console.log(shardNote + '\n');
 
   /* However this run ends, its tree server goes with it (stopped here, and tethered by TETHER above for the
      ends nothing can catch), and a SIGTERM, SIGHUP or SIGALRM is passed on to the gate running now. A runner
@@ -1136,10 +1301,12 @@ async function selfTestTreeServer() {
   console.log(TREE_PROOF.join(', ') + ' are served byte for byte as this tree holds them, checked again after the last gate.');
   console.log('every browser gate is given that URL explicitly, so none of them can grade another checkout.\n');
 
-  let list = EMU_ONLY ? [] : TREE.slice();
-  if (LIVE) list = list.concat(LIVE_GATES);
-  if (NO_BROWSER) list = list.filter((g) => !g.cmd.includes('url'));
-  if (ONLY) list = list.filter((g) => onlyMatch(g.name));
+  if (mplan.size) {
+    const on = [...mplan].filter(([, v]) => v.run), off = [...mplan].filter(([, v]) => !v.run);
+    console.log('mutation passes: ' + on.length + ' of ' + mplan.size + ' run' + (on.length ? ' (' + on.map(([n, v]) => n + ': ' + v.why).join('; ') + ')' : '') + '.');
+    if (off.length) console.log('  off, nightly runs them (--mutants): ' + off.map(([n]) => n).join(', ') + ' (' + off[0][1].why + ').');
+    console.log('');
+  }
 
   const WATCH = dl.userDownloads();
   console.log(WATCH
@@ -1159,7 +1326,6 @@ async function selfTestTreeServer() {
 
   if (EMU) {
     console.log('\n  firestore emulator (each suite on its own free ports, never the 8080 default)');
-    const emuList = ONLY ? EMU_GATES.filter((g) => onlyMatch(g.name)) : EMU_GATES;
     for (const g of emuList) {
       if (tree.gone) break;
       process.stdout.write('  ' + g.name.padEnd(18));
@@ -1195,6 +1361,16 @@ async function selfTestTreeServer() {
   }
   const failed = results.filter((r) => !r.ok);
   const blocking = failed.filter((r) => !r.live);
+  /* What ran, for tree-complete (it must find every shard's file and every gate once) and for gate-times.json.
+     Written however the gates went; a run refused before its first gate writes none, and that is caught too. */
+  if (RECORD) {
+    try {
+      fs.mkdirSync(path.dirname(path.resolve(RECORD)), { recursive: true });
+      fs.writeFileSync(path.resolve(RECORD), JSON.stringify({ shard: SHARD === undefined ? null : SHARD, args: ARGS, root: ROOT,
+        results: results.map((r) => ({ name: r.name, ok: r.ok, ms: r.ms })) }, null, 1) + '\n');
+      console.log('recorded ' + results.length + ' results in ' + RECORD);
+    } catch (e) { console.log('could not record results in ' + RECORD + ': ' + e.message); blocking.push({ name: 'record-times', ok: false }); }
+  }
   console.log('\n' + '-'.repeat(72));
   console.log(results.length + ' gates, ' + (results.length - failed.length) + ' passed, ' + failed.length + ' failed');
 

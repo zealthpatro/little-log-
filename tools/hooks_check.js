@@ -14,7 +14,8 @@
  * sign anybody in, and a canary that runs every fifteen minutes and mails an address nobody set. A
  * safeguard that looks present and does nothing is worse than an absent one, because it is budgeted
  * for. So the assertion here is never "a file exists somewhere" but "the exact path git resolves is
- * a real executable, and its contents run the suite".
+ * a real executable, and its contents do what the push needs" (since 28 Nov 2026: refuse main up front,
+ * ask change-needs-test, take the push lock, run no gates; the PR's CI is the gating run).
  */
 const { execSync } = require('child_process');
 const fs = require('fs');
@@ -65,43 +66,37 @@ for (const h of ['pre-commit', 'pre-push']) {
   }
 }
 
-/* A pre-push that exists but does not run the gates is the same failure wearing a different hat. */
+/* What the pre-push must do (28 Nov 2026, docs/TESTING.md). main takes merges only through a PR whose CI is green,
+   so the hook refuses a main ref UP FRONT (before the lock, the check or anything else: the old hook ran the full
+   suite for 104-140 min on a push GitHub then refused), stops a product change that came with no test
+   (tools/change_test_check.js) under the machine push lock (a kernel flock, never a mkdir with a pid in it: a
+   skeptic broke that one three ways on 28 Nov), and runs NO gates on a branch push: CI runs them on the PR, and a
+   red PR cannot merge. Behaviour is proven by test/prepush-tier.test.js and test/push-lock.test.js
+   in throwaway repos; these lines only stop the wiring being edited out. */
 const pp = resolved['pre-push'];
 const body = fs.existsSync(pp) ? fs.readFileSync(pp, 'utf8') : '';
-ok('pre-push actually runs the gate suite', /tools\/gates\.js/.test(body),
-  'the hook exists but never invokes tools/gates.js');
-ok('and it fails the push when a gate fails', /exit 1/.test(body),
-  'the hook runs the suite but does not stop the push on failure');
-/* The worktree trap: no tools/node_modules means every browser gate dies. A hook that skipped
-   quietly there would hand back a green push that ran almost nothing. */
-ok('and it refuses to pass when the browser gates cannot run',
-  /node_modules/.test(body) && /exit 1/.test(body),
-  'a worktree without tools/node_modules would push unverified');
-
-/* Nov 2026: the hook reads git's stdin and makes two decisions with it. A push that changes product code
-   with no test is stopped (tools/change_test_check.js), and a push that touches the rules, the Worker or
-   the Firestore layer runs the emulator tier, which ran nowhere automatically before. Behaviour is proven
-   by test/prepush-tier.test.js in a throwaway repo; these lines only stop the wiring being edited out. */
-const hookAsks = (b) => ({
-  changeTest: /tools\/change_test_check\.js"? --stdin/.test(b) && /change_test_check[\s\S]*?exit 1/.test(b),
-  tier: /--stdin --tier/.test(b) && /GATE_ARGS="--emulator"/.test(b) && /gates\.js"? \$GATE_ARGS/.test(b),
-  /* test/node_modules refused BEFORE the stdin is read and any gate runs: the first security push of
-     Nov 2026 died 56 minutes in on its absence. */
-  /* The java guard asks java to RUN. `command -v java` is always true on a Mac (Apple's /usr/bin/java stub). */
-  javaRuns: (() => { const code = b.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');   // comments may name the old way
-    return /JAVA_BIN[^\n]*-version/.test(code) && !/command -v java/.test(code); })(),
-  testModsFirst: (() => { const g = b.search(/!\s*-d\s+"\$ROOT\/test\/node_modules"/), c = b.indexOf('RANGES=$(cat)');
-    return g >= 0 && c > g && /test\/node_modules"[\s\S]*?exit 1/.test(b.slice(g)); })(),
-});
+const codeOf = (b) => b.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');   // comments may name the old way
+const hookAsks = (b) => {
+  const code = codeOf(b);
+  const mainAt = code.search(/\$3 == "refs\/heads\/main"/), checkAt = code.indexOf('change_test_check.js'), lockAt = code.search(/flock\(\$fh, LOCK_EX/);
+  return {
+    mainFirst: mainAt >= 0 && /refs\/heads\/main"[^\n]*\n(?:[^\n]*\n){0,6}?\s*exit 1/.test(code.slice(mainAt)) &&
+      (checkAt < 0 || mainAt < checkAt) && (lockAt < 0 || mainAt < lockAt),
+    changeTest: /tools\/change_test_check\.js"? --stdin/.test(code) && /change_test_check[\s\S]*?exit 1/.test(code),
+    /* The kernel flock (released by the kernel however its holder ends), and the check runs inside it. A mkdir
+       lock is refused outright: six waiters behind a dead mkdir holder all took it over (test/push-lock.test.js). */
+    pushLock: lockAt >= 0 && /with_push_lock node "\$ROOT\/tools\/change_test_check\.js"/.test(code) && !/mkdir "\$PUSH_LOCK"/.test(code),
+    noGates: !/tools\/gates\.js/.test(code),
+  };
+};
 const asks = hookAsks(body);
+ok('pre-push refuses a push to main up front, before the lock, the check or any gate', asks.mainFirst,
+  'a push to main would run here and then be refused by GitHub (main needs passing status checks)');
 ok('pre-push stops a product change that came with no test (change_test_check.js --stdin)', asks.changeTest,
   'the hook never asks tools/change_test_check.js, or does not stop the push when it says no');
-ok('and runs the emulator tier when the push touches the rules, the Worker or the Firestore layer', asks.tier,
-  'the hook never passes --emulator to tools/gates.js, so the Firestore suites run nowhere before a deploy');
-ok('and, for the emulator tier, refuses unless java actually runs (not just exists)', asks.javaRuns,
-  'the hook checks for java with command -v, which Apple\'s /usr/bin/java stub always satisfies');
-ok('and refuses up front, before any gate, when test/node_modules is missing', asks.testModsFirst,
-  'the hook only finds out test/node_modules is gone when a suite needs it, maybe an hour in');
+ok('and runs that check under the machine push lock, a kernel flock', asks.pushLock, 'no flock($fh, LOCK_EX) around change_test_check.js (with_push_lock), or a mkdir "$PUSH_LOCK" lock');
+ok('and runs no gates on a branch push (CI runs them on the PR)', asks.noGates,
+  'the hook still calls tools/gates.js: the 23-minute run CI repeats on the PR minutes later');
 
 /* Paired, so the lines above cannot pass on a technicality: the resolved path must be the TRACKED
    directory. If it points back into .git/hooks, a fresh clone or a new worktree gets nothing. */
@@ -137,20 +132,33 @@ ok('and tools/sw_cache_guard.js is there to be called',
    indistinguishable from a check that stopped checking. Stage the real failure and make the same
    predicate catch it. */
 if (SELF_TEST) {
-  console.log('\nself-test: the same assertions against a hook that does nothing');
+  console.log('\nself-test: the same assertions against hooks that do the wrong thing');
   const fake = '#!/bin/sh\necho "I look like a hook"\nexit 0\n';
-  const runsSuite = /tools\/gates\.js/.test(fake);
-  const stops = /exit 1/.test(fake);
-  ok('a hook that never calls gates.js is caught', runsSuite === false);
-  const oldHook = '#!/bin/sh\nROOT=$(git rev-parse --show-toplevel)\nif ! node "$ROOT/tools/gates.js"; then exit 1; fi\n';
-  ok('a hook that runs the suite but never asks change_test_check.js is caught', hookAsks(oldHook).changeTest === false);
-  ok('a hook that never passes --emulator is caught', hookAsks(oldHook).tier === false);
-  const stubGuard = '#!/bin/sh\nif ! command -v java >/dev/null 2>&1 && [ -z "$JAVA_HOME" ]; then exit 1; fi\n';
-  ok('a java guard that only asks whether java exists (command -v) is caught', hookAsks(stubGuard).javaRuns === false && hookAsks(oldHook).javaRuns === false);
-  const lateGuard = '#!/bin/sh\nRANGES=$(cat)\nif [ ! -d "$ROOT/test/node_modules" ]; then exit 1; fi\nnode "$ROOT/tools/gates.js"\n';
-  ok('a hook that checks test/node_modules only after reading the push (or never) is caught',
-    hookAsks(oldHook).testModsFirst === false && hookAsks(lateGuard).testModsFirst === false);
-  ok('a hook that cannot stop a push is caught', stops === false);
+  const f = hookAsks(fake);
+  ok('a hook that does nothing is caught (no main refusal, no change-test, no lock)', !f.mainFirst && !f.changeTest && !f.pushLock);
+  /* The hook of 4e50b5e6: change-test, then the Chrome-free gates on a branch push, the full suite on main. */
+  const oldHook = '#!/bin/sh\nROOT=$(git rev-parse --show-toplevel)\nRANGES=$(cat)\n' +
+    'if ! printf \'%s\\n\' "$RANGES" | node "$ROOT/tools/change_test_check.js" --stdin; then\n  exit 1\nfi\n' +
+    'if ! printf \'%s\\n\' "$RANGES" | awk \'$3 == "refs/heads/main" { found = 1 } END { exit !found }\'; then\n' +
+    '  if ! node "$ROOT/tools/gates.js" --no-browser; then\n    exit 1\n  fi\n  exit 0\nfi\nnode "$ROOT/tools/gates.js" || exit 1\n';
+  const o = hookAsks(oldHook);
+  ok('the hook of 4e50b5e6 is caught: it runs gates on a branch push', o.changeTest && !o.noGates);
+  ok('and its main test only picks a tier (no exit 1 after it), after change-test: not a refusal up front', !o.mainFirst);
+  const flockFn = 'with_push_lock() {\n  perl -MFcntl=:flock -e \'\n    open(my $fh, ">>", shift) or exit 1;\n    flock($fh, LOCK_EX) or exit 1;\n    exit(system(@ARGV) >> 8);\n  \' "$PUSH_LOCK" "$@"\n}\n';
+  const lateMain = '#!/bin/sh\nRANGES=$(cat)\n' + flockFn +
+    'printf \'%s\\n\' "$RANGES" | with_push_lock node "$ROOT/tools/change_test_check.js" --stdin || exit 1\n' +
+    'if printf \'%s\\n\' "$RANGES" | awk \'$3 == "refs/heads/main" { found = 1 } END { exit !found }\'; then\n  exit 1\nfi\n';
+  ok('a hook that refuses main only after the lock and the check is caught', !hookAsks(lateMain).mainFirst && hookAsks(lateMain).pushLock);
+  /* The first push lock of 28 Nov: a mkdir with a pid in it, released by a trap. */
+  const mkdirHook = '#!/bin/sh\nRANGES=$(cat)\n' +
+    'if printf \'%s\\n\' "$RANGES" | awk \'$3 == "refs/heads/main" { found = 1 } END { exit !found }\'; then\n  exit 1\nfi\n' +
+    'until mkdir "$PUSH_LOCK" 2>/dev/null; do sleep 15; done\ntrap \'rm -f x; rmdir "$PUSH_LOCK"\' EXIT\n' +
+    'printf \'%s\\n\' "$RANGES" | node "$ROOT/tools/change_test_check.js" --stdin || exit 1\n';
+  ok('a mkdir push lock (the design a skeptic broke) is caught', hookAsks(mkdirHook).mainFirst && hookAsks(mkdirHook).changeTest && !hookAsks(mkdirHook).pushLock);
+  ok('and so is a flock that the check does not run inside', !hookAsks('#!/bin/sh\nRANGES=$(cat)\n' + flockFn + 'node "$ROOT/tools/change_test_check.js" --stdin || exit 1\n').pushLock);
+  ok('and its companion, the real hook, passes all four (the matchers can say yes)', (() => { const r = hookAsks(body); return r.mainFirst && r.changeTest && r.pushLock && r.noGates; })());
+  const commented = '#!/bin/sh\n# it used to run node "$ROOT/tools/gates.js"\n';
+  ok('a gates.js named only in a comment does not count as running gates', hookAsks(commented).noGates);
   const deadPath = root + '/.git/hooks/pre-push';
   ok('an untracked hook path is caught', /\.githooks\//.test(deadPath) === false, deadPath);
   const m644 = execSync('git ls-tree HEAD -- CLAUDE.md', { encoding: 'utf8' }).split(/\s+/)[0];

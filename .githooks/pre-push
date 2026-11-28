@@ -1,59 +1,83 @@
 #!/bin/sh
-# Run the gates before a push, because on this repo a push to main IS a deploy.
+# The last local question before a push. On this repo a merge to main IS a deploy, and main only takes
+# merges through a PR whose CI is green (branch protection: required checks, strict, enforce_admins).
 #
 # WHY THIS FILE EXISTS HERE AND NOT IN .git/hooks. It used to live in .git/hooks, installed by
 # tools/install_hooks.sh. Then core.hooksPath was pointed at .githooks so the pre-commit hook could
 # be tracked and travel with a clone. Git then stops looking in .git/hooks ENTIRELY, so the pre-push
-# hook was still sitting there, still executable, and had not run before a single push since. The
-# full suite has never once gated a deploy automatically. Nothing said so, because a hook that is
-# never invoked cannot report anything.
+# hook was still sitting there, still executable, and had not run before a single push since.
 #
 #   git rev-parse --git-path hooks/pre-push     <- tells you the ONE path git will use
 #
 # tools/hooks_check.js asserts that path exists and is executable, so this cannot rot again.
 #
-# WHAT IT RUNS (Nov 2026). Git hands this hook one line per ref on stdin:
+# WHAT IT RUNS (28 Nov 2026, docs/TESTING.md). Git hands this hook one line per ref on stdin:
 #   <local ref> <local sha> <remote ref> <remote sha>
-# 1. tools/change_test_check.js reads those ranges: product code changed with no test or gate changed,
+# 1. A push to main is refused UP FRONT, before anything else runs. GitHub refuses it anyway (main needs
+#    passing status checks), so it used to fail only after the full suite had run here for 104-140 min.
+#    The way in is a PR: the daily train is `node tools/train.js --go`, which pushes train/<stamp> and
+#    opens its PR.
+# 2. One push at a time on this machine (the push lock, below).
+# 3. tools/change_test_check.js reads the ranges: product code changed with no test or gate changed,
 #    and no "Test-exempt: <reason>" trailer, stops the push.
-# 2. The same ranges pick the tier. A push that touches firestore.rules, storage.rules, worker.js,
-#    workers/, wrangler.toml, schema/usage.sql, app/store-firebase.js, tools/gates.js or any file an
-#    emulator gate runs (read from tools/gates.js) runs `node tools/gates.js --emulator` (the Firestore
-#    suites, each on its own free ports); anything else runs `node tools/gates.js`.
-#    The emulator tier used to run nowhere automatically, so a red there was invisible.
-# test/prepush-tier.test.js feeds this file real stdin in a throwaway repo and checks both choices.
-#
-# Bypass with --no-verify when you have decided the failure is acceptable AND written down why.
+# That is all. A branch push runs NO gates here: CI runs them on the PR (.github/workflows/gates.yml), and a
+# red PR cannot merge. The 23-minute Chrome-free run this hook used to make was the very command CI's `gates`
+# job runs again on the same tree minutes later.
+# test/prepush-tier.test.js feeds this file real stdin in a throwaway repo and checks each of these.
 
 ROOT=$(git rev-parse --show-toplevel)
 
-# A worktree has no tools/node_modules of its own (it is gitignored), so puppeteer is missing and
-# every browser gate dies. Refuse loudly rather than skip: a green push that ran nothing is the exact
-# failure this hook exists to prevent.
-if [ ! -d "$ROOT/tools/node_modules" ]; then
-  echo "✋ tools/node_modules is missing at $ROOT"
-  echo "   The browser gates cannot run, so this push would be unverified."
-  echo "   → ln -s /Users/m1promax/Downloads/little-log-pwa/tools/node_modules $ROOT/tools/node_modules"
-  echo "     or push with --no-verify if you have decided that is acceptable."
-  exit 1
-fi
-
-# The same for test/node_modules, and UP FRONT, before a minute of gates has run. The first security
-# push of Nov 2026 died after 56 minutes on exactly this: the suites that need firebase and
-# rules-unit-testing were reached last, found nothing to require, and the whole run was thrown away.
-# Several tree gates load it too, so every push needs it, not only the emulator tier.
-if [ ! -d "$ROOT/test/node_modules" ]; then
-  echo "✋ test/node_modules is missing at $ROOT"
-  echo "   The Firestore suites and the gates that load firebase cannot run, so this push would be unverified."
-  echo "   → ln -s /Users/m1promax/Downloads/little-log-pwa/test/node_modules $ROOT/test/node_modules"
-  echo "     or push with --no-verify if you have decided that is acceptable."
-  exit 1
-fi
-
-# git's stdin can be read once; keep it for both questions below.
+# git's stdin can be read once; keep it.
 RANGES=$(cat)
 
-if ! printf '%s\n' "$RANGES" | node "$ROOT/tools/change_test_check.js" --stdin; then
+if printf '%s\n' "$RANGES" | awk '$3 == "refs/heads/main" { found = 1 } END { exit !found }'; then
+  echo "✋ This push targets main. main requires passing status checks, so GitHub refuses a direct push:"
+  echo "   open a PR instead. Push your branch (git push origin HEAD:<your-branch>) and run"
+  echo "   gh pr create --base main. The daily train does both: node tools/train.js --go"
+  exit 1
+fi
+
+# One push at a time on this machine. Two pushes ran their suites together on 27 Nov 2026: they clashed on
+# ports and load, and a self-test failed that passes alone. A branch push runs no gates now, so what the lock
+# holds is the hook's one remaining job, tools/change_test_check.js, which goes through with_push_lock: perl
+# takes an exclusive flock on one file (waiting, and saying for whom, while another push holds it), writes
+# "pid name branch" into it for the next waiter's message, and runs the check.
+# A kernel flock and not a mkdir with a pid in it, because a flock has no stale state: the kernel lets it go
+# when perl exits, however it exits, SIGKILL and reboot included. The first version was a mkdir lock and a
+# skeptic broke it three ways (28 Nov): six waiters behind a dead holder all took it over and ran at once, a
+# lock left with no name was waited on forever, and so was a lock path that could not be made.
+# The lock fd is close-on-exec (perl's default above fd 2), so a process the check leaks cannot keep it.
+# CUBBY_PUSH_LOCK moves it (tests point it at temp dirs, never the real one). A job that already holds this
+# lock and pushes (e.g. a queued train run) exports CUBBY_PUSH_LOCK_HELD=<the lock>, and the push runs
+# at once instead of waiting forever on its own parent; with_push_lock exports it for
+# everything it runs. A push to main is refused above, before the lock, so it never waits behind a holder.
+# test/push-lock.test.js stages a live holder, a SIGKILLed one, six pushes at once and an unmakeable path.
+PUSH_LOCK=${CUBBY_PUSH_LOCK:-${XDG_CACHE_HOME:-$HOME/.cache}/cubby/push.flock}
+if ! { mkdir -p "$(dirname "$PUSH_LOCK")" && : >> "$PUSH_LOCK"; } 2>/dev/null || ! command -v perl >/dev/null 2>&1; then
+  echo "✋ the machine push lock $PUSH_LOCK cannot be made (or perl, which takes it, is missing)."
+  echo "   Point CUBBY_PUSH_LOCK at a writable file, or push with --no-verify if you have decided that is acceptable."
+  exit 1
+fi
+PUSH_OWNER="$$ $(basename "$ROOT") $(git rev-parse --abbrev-ref HEAD 2>/dev/null)"
+with_push_lock() {
+  if [ "${CUBBY_PUSH_LOCK_HELD:-}" = "$PUSH_LOCK" ]; then "$@"; return; fi
+  perl -MFcntl=:flock -e '
+    $| = 1;
+    my ($lock, $who) = (shift, shift);
+    open(my $fh, ">>", $lock) or do { print "Push lock: cannot open $lock ($!).\n"; exit 1 };
+    unless (flock($fh, LOCK_EX | LOCK_NB)) {
+      my $h = ""; if (open(my $r, "<", $lock)) { $h = <$r> // ""; chomp $h; close $r }
+      print "Waiting for another push on this machine to finish (holder: ", ($h eq "" ? "unknown" : $h), "; lock $lock).\n";
+      flock($fh, LOCK_EX) or do { print "Push lock: cannot lock $lock ($!).\n"; exit 1 };
+    }
+    truncate($fh, 0); syswrite($fh, "$who\n");
+    $ENV{CUBBY_PUSH_LOCK_HELD} = $lock;
+    my $rc = system { $ARGV[0] } @ARGV;
+    exit($rc == -1 ? 127 : ($rc & 127) ? 128 + ($rc & 127) : $rc >> 8);
+  ' "$PUSH_LOCK" "$PUSH_OWNER" "$@"
+}
+
+if ! printf '%s\n' "$RANGES" | with_push_lock node "$ROOT/tools/change_test_check.js" --stdin; then
   echo ""
   echo "Push stopped: product code changed and no test did. Add the test that proves it, or put"
   echo "   Test-exempt: <why no test can see this>"
@@ -61,45 +85,5 @@ if ! printf '%s\n' "$RANGES" | node "$ROOT/tools/change_test_check.js" --stdin; 
   exit 1
 fi
 
-# Only a push to main deploys. A branch push (a PR for the daily train, docs/RELEASE-TRAIN.md) runs the
-# change-needs-test check above and the Chrome-free gates, then leaves the rest to CI on the PR and to the
-# train's one push to main, which still runs the full tier below. Without this every PR branch cost a
-# 95-minute suite on this Mac and the train saved nothing. test/prepush-tier.test.js checks both paths.
-if ! printf '%s\n' "$RANGES" | awk '$3 == "refs/heads/main" { found = 1 } END { exit !found }'; then
-  echo "Running gates before push (branch push, not main: Chrome-free gates only; CI checks the PR, the train's push to main runs the full suite)..."
-  if ! node "$ROOT/tools/gates.js" --no-browser; then
-    echo ""
-    echo "Push stopped: a gate failed. Fix it, or push with --no-verify if you have decided"
-    echo "the failure is acceptable and written down why."
-    exit 1
-  fi
-  exit 0
-fi
-
-TIER=$(printf '%s\n' "$RANGES" | node "$ROOT/tools/change_test_check.js" --stdin --tier)
-GATE_ARGS=""
-if [ "$TIER" = "emulator" ]; then
-  # The emulator suites also need java (test/node_modules was checked above). Refuse rather than skip,
-  # for the same reason: this push touches exactly what only those suites can judge.
-  # Ask the java the suites will actually use to RUN (tools/gates.js puts $JAVA_HOME/bin first on PATH).
-  # `command -v java` was always satisfied on a Mac: /usr/bin/java is Apple's stub, present with or without
-  # a JDK, and it only fails when called ("Unable to locate a Java Runtime").
-  JAVA_BIN=java
-  [ -n "$JAVA_HOME" ] && JAVA_BIN="$JAVA_HOME/bin/java"
-  if ! "$JAVA_BIN" -version >/dev/null 2>&1; then
-    echo "✋ this push needs the Firestore emulator suites and $JAVA_BIN does not run (no JDK, or a JAVA_HOME without one)."
-    echo "   → export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-26.jdk/Contents/Home"
-    echo "     or push with --no-verify if you have decided that is acceptable."
-    exit 1
-  fi
-  GATE_ARGS="--emulator"
-  echo "This push touches the rules, the Worker or the Firestore layer: running the emulator tier too."
-fi
-
-echo "Running gates before push (skip with --no-verify)..."
-if ! node "$ROOT/tools/gates.js" $GATE_ARGS; then
-  echo ""
-  echo "Push stopped: a gate failed. Fix it, or push with --no-verify if you have decided"
-  echo "the failure is acceptable and written down why."
-  exit 1
-fi
+echo "Branch push: no gates run here. CI runs them on the PR, and a red PR cannot merge."
+exit 0

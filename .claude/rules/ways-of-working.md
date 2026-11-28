@@ -11,6 +11,8 @@ catalogue behind it. Each rule below cost real time in Aug-Sep 2026 and each has
   (`grep -o "little-log-v[0-9]*" app/sw.js`) and confirm your change is in it.
 - Prefer `git commit -o <paths>` in the shared checkout; never `git add -A`. Re-read `app/sw.js` before
   bumping CACHE: another session may have bumped it first.
+- Big files are read by range: find the spot (cfind or `grep -n`), then Read with offset and limit.
+  `.claude/hooks/big-read.sh` blocks a whole Read or bare cat of a file over 400 lines.
 
 ## A gate must be able to go red
 - Red-then-green: watch every new assertion fail on a real or mutated tree before trusting it.
@@ -53,10 +55,17 @@ catalogue behind it. Each rule below cost real time in Aug-Sep 2026 and each has
   `.claude/settings.json`, `.claude/hooks/` and this file.
 - A test not in `tools/gates.js` does not exist: wire it or delete it. `tools/test_wiring_check.js` now
   fails any test file that nothing runs (12 were orphaned on 13 Nov 2026, two of them red).
-- Push = deploy, so pre-push asks two questions of the pushed range: product code with no test changed
-  is refused unless a commit says `Test-exempt: <why>` (`tools/change_test_check.js`), and a range that
-  touches rules, Worker or `app/store-firebase.js` runs `--emulator` too, on free ports; CI runs that
-  tier on every push. Chaos and both fuzzers run nightly (`tools/nightly.sh`); see `docs/TESTING.md`.
+- Merge = deploy, and main takes merges only through a PR with green required checks (strict). So the PR's
+  CI is the one gating run. pre-push refuses a main ref up front and runs no gates on a branch push: it
+  asks one question, product code with no test changed is refused unless a commit says `Test-exempt: <why>`
+  (`tools/change_test_check.js`). A push to main runs only `live` and IndexNow in CI (`tools/ci_tier_check.js`).
+  Mutation passes run nightly and on every CI job while item 14 is held; locally, only the ones a change
+  touched (`tools/mut_select.js`). Chaos and both fuzzers run nightly (`tools/nightly.sh`); see `docs/TESTING.md`.
+- Two suites on one Mac clash on ports and load (27 Nov 2026, a tree-server FAIL neither run had alone).
+  Port runs come from 20000-32000, outside every ephemeral range, never from listen(0) plus one. The push
+  lock in `.githooks/pre-push` (a kernel flock on push.flock in the user cache) serializes pushes against
+  pushes only: a suite started any other way does not take it. A machine lock is a kernel flock, never a
+  mkdir with a pid in it: six waiters behind a dead mkdir holder all took it over (`test/push-lock.test.js`).
 - "Does it exist?" is the wrong question. "What would it do right now?" is the right one. It found a
   dead pre-push hook, a mute canary, an Android build that cannot sign anyone in, and five orphaned tests.
 

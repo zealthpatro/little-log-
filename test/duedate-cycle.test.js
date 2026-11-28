@@ -19,7 +19,7 @@ let pass=0,fail=0;
 const ok=(n,c,x)=>{ if(c){pass++;console.log('  ok   '+n);} else {fail++;console.log('  FAIL '+n+(x!==undefined?('  '+x):''));} };
 const DAY=86400000;
 (async()=>{
- const b=await puppeteer.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:'new',args:['--no-sandbox']});
+ const b=await puppeteer.launch({executablePath:process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:'new',args:['--no-sandbox']});
  const p=await b.newPage(); const errs=[]; p.on('pageerror',e=>errs.push(e.message));
  // Base URL first, because a bare 8080 in a shared checkout is another tree's dev server and this
  // passes cheerfully against code that is not the code under test.

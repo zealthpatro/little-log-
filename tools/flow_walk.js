@@ -85,11 +85,21 @@ const EMPTY = { babies: [], activeBabyId: null, events: [], settings: { unit: 'm
   /* This walk taps every entry point, the calendar exports included, and each one is a real
      download. Redirected into a temp dir, not stubbed: those exports are flows like any other. Before
      this it left a pregnancy-weeks and a vaccines .ics in ~/Downloads on every run. */
+  /* protocolTimeout: on CI's Linux runner one page call outlived puppeteer's 180 s default (PR #16, 28 Nov 2026:
+     Runtime.callFunctionOn timed out at 193 s; the whole walk takes about 57 s on the Mac). A slow runner is not a
+     failed flow; every assertion below is unchanged. */
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'],
-    downloadBehavior: require('./gate_downloads').downloadBehavior() });
+    downloadBehavior: require('./gate_downloads').downloadBehavior(), protocolTimeout: 600000 });
   const page = await browser.newPage();
   const pageErrs = [];
   page.on('pageerror', (e) => pageErrs.push(e.message));
+  /* A flow that opens a native dialog (confirm, alert, prompt) or window.print() freezes the page
+     until it is answered: on CI's headless Linux Chrome the walk hung for 600 s on one call
+     (28 Nov, PR #16). Answer each dialog, stub print(), and REPORT both, so nothing is hidden. */
+  const dialogs = [];
+  page.on('dialog', async (d) => { dialogs.push(d.type() + ': ' + d.message().slice(0, 80)); try { await d.dismiss(); } catch (e) {} });
+  await page.evaluateOnNewDocument(() => { window.__printed = 0; window.print = () => { window.__printed++; }; });
+  process.on('exit', () => { if (dialogs.length) console.log('flow-walk: answered ' + dialogs.length + ' native dialog(s): ' + dialogs.join(' | ')); });
   await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
   await page.evaluateOnNewDocument((shift) => {
     const R = Date;

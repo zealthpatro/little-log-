@@ -1,6 +1,6 @@
 name: Teaching layer guard
 
-# The teaching registry, enforced. Every push and PR re-runs the three checks that keep
+# The teaching registry, enforced. Every PR re-runs the three checks that keep
 # app/teach-data.js honest:
 #
 #   coverage  every entry point across the shell AND the runtime modules is either taught or
@@ -20,9 +20,9 @@ name: Teaching layer guard
 # The gate uses only the Node standard library and reads the app files directly, so there is
 # nothing to install and no server to start.
 
+# Not on a push to main: the PR ran it on the tree that merged, and the deploy has happened by then
+# (tools/ci_tier_check.js holds this).
 on:
-  push:
-    branches: [main]
   pull_request:
 
 jobs:

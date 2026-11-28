@@ -482,7 +482,8 @@ function pyCheck(script, root) {
   const p = path.join(root, script);
   if (!fs.existsSync(p)) return { ok: false, out: script + ' is not in this tree' };
   const r = spawnSync('python3', [p, '--check'], { cwd: root, encoding: 'utf8' });
-  return { ok: r.status === 0, out: ((r.stdout || '') + (r.stderr || '')).trim().split('\n').slice(-3).join(' | ') };
+  const all = ((r.stdout || '') + (r.stderr || '')).trim();
+  return { ok: r.status === 0, all, out: all.split('\n').slice(-3).join(' | ') };
 }
 
 function runStatic(root, label) {
@@ -524,8 +525,14 @@ function runStatic(root, label) {
     R.shadows.every((x) => x.ok), R.shadows.filter((x) => !x.ok).map((x) => x.file + ' ' + x.sel + ': ' + x.why));
   const integ = registryIntegrity(root);
   ok('the approved set is intact: every file exists with the bytes it was approved with', integ.length === 0, integ.slice(0, 8).join('\n         '));
+  /* Byte for byte where this machine's PNG encoder is the one the icons were approved with (the Mac), else the
+     same PNG mode, size and decoded pixels (CI's Linux: other bytes from the same pinned Pillow). The encoder's
+     fingerprint decides, never the committed tree, and the line says which ran (gen_brand_icons.py CHECK_MODES). */
   const ic = pyCheck('tools/gen_brand_icons.py', root);
-  ok('the web icons are exactly what the painted master gives', ic.ok, ic.out);
+  const icPixels = /mode: pixel for pixel/.test(ic.all || '');
+  if (icPixels) console.log('  note the web icons are checked ' + ((ic.all || '').match(/mode: (pixel for pixel[^\n]*)/) || [])[1]);
+  ok(icPixels ? 'the web icons are what the painted master gives, pixel for pixel (their bytes are checked on the Mac)'
+    : 'the web icons are exactly what the painted master gives, byte for byte', ic.ok, ic.out);
   const cl = pyCheck('tools/card_logo.py', root);
   ok('every share card, hero card and promo card carries the current master\'s logo (no drawn bear, no retired logo)', cl.ok, cl.out);
   if (R.pending.size) console.log('  note pending the founder\'s decision, unchanged: ' + [...R.pending].join(', '));
@@ -587,6 +594,21 @@ async function precacheSelfTest() {
   // The 2026-11-14 build: every icon at its bare name, so a month-old cached copy answered the precache.
   const bare = gradePrecache((await swPrecache(src.replace(/\?v=[0-9a-f]{8}/g, ''))).reqs);
   ok('catches a SW that precaches the logo files without ?v= (the 2026-11-14 build)', bare.unversioned.some((x) => x === '/icons/logo-512.png'), bare.unversioned);
+}
+
+/* ---------------- self-test of gen_brand_icons.py --check, in both of its modes ---------------- */
+/* Staged in the generator itself from the bytes the master gives here, so it holds on any machine: byte mode refuses
+   the same pixels saved as other bytes, pixel mode accepts them, and both refuse a changed pixel, a lost palette and
+   a missing icon. Then, on scratch git trees (R1-R5), where each judgement reads: the icons on disk are graded, and
+   a stale fingerprint is judged on what HEAD holds, so set --yes in pixel mode (CI) is not called STALE. */
+function iconCheckSelfTest() {
+  console.log('\nself-test (icons): what gen_brand_icons.py --check refuses, byte for byte and pixel for pixel');
+  const r = spawnSync('python3', [path.join(ROOT, 'tools/gen_brand_icons.py'), '--self-test-check'], { cwd: ROOT, encoding: 'utf8' });
+  const all = ((r.stdout || '') + (r.stderr || '')).trim();
+  const lines = all.split('\n').filter((l) => /^\s+(ok|FAIL)\s/.test(l));
+  lines.forEach((l) => console.log('    | ' + l.trim()));
+  ok('each staged case is judged as it must be in both modes (' + lines.length + ' judgements)', r.status === 0 && lines.length >= 22 && lines.every((l) => /^\s+ok\s/.test(l)),
+    lines.filter((l) => !/^\s+ok\s/.test(l)).concat(r.status === 0 ? [] : [all.split('\n').slice(-3).join(' | ')]).join('\n         '));
 }
 
 /* ---------------- self-test of the static half: a scratch copy with six plants ---------------- */
@@ -1046,7 +1068,7 @@ if (flag('--approve-cards')) {
   console.log('tree ' + ROOT + (BASE ? ', served at ' + BASE : '') + ', registry ' + path.relative(process.cwd(), REG_PATH));
   runStatic(ROOT, 'this tree');
   await runPrecache(ROOT);
-  if (SELF) { staticSelfTest(); await precacheSelfTest(); }
+  if (SELF) { staticSelfTest(); iconCheckSelfTest(); await precacheSelfTest(); }
   if (!STATIC_ONLY) {
     const R = await runtime(BASE);
     if (!SELF) gradeRuntime(R, 'runtime: every screen');

@@ -1,5 +1,5 @@
 #!/bin/sh
-# The nightly bug-bash: the whole gate suite with the Firestore emulator tier, then half an hour of
+# The nightly bug-bash: the whole gate suite with the Firestore emulator tier and every mutation pass, then half an hour of
 # seeded chaos against the real app and rules, then both fuzzers, then a replay of every chaos finding
 # still open, into a dated report and one line on the running bug board. A notification only when
 # something is red or new.
@@ -47,7 +47,8 @@ if [ "$DRY" = 1 ]; then
   OUT_DIR="${NIGHTLY_OUT:-$HERE/reports-dryrun}"
   CHAOS_MIN=2; FUZZ_S=60; REPLAY_S=300
   # One gate of each kind: the wiring gate (tree), the hook's range check (tree), a rules suite (emu).
-  GATE_ARGS="--emulator --only=test-wiring,change-test,household-guard"
+  # --mutants as the real run, so the dry run proves the flag reaches gates.js.
+  GATE_ARGS="--emulator --mutants --only=test-wiring,change-test,household-guard"
   # A dry run on a shared Mac stays inside the band its session was given.
   EMU_PORT_RANGE="${EMU_PORT_RANGE:-7627-7639}"; export EMU_PORT_RANGE
   STEP_BAND="$EMU_PORT_RANGE"
@@ -55,7 +56,9 @@ else
   REPO="${CUBBY_REPO:-$HOME/cubby-ops/little-log-pwa}"
   OUT_DIR="$HOME/cubby-reports"
   CHAOS_MIN=30; FUZZ_S=300; REPLAY_S=1800
-  GATE_ARGS="--emulator"
+  # --mutants: every mutation pass, every night. A PR runs only the passes whose inputs it changed
+  # (tools/mut_select.js), so this run is what finds a loosened assertion the day it lands (test/mutants-tier.test.js).
+  GATE_ARGS="--emulator --mutants"
   STEP_BAND=""
 fi
 mkdir -p "$OUT_DIR"

@@ -17,7 +17,7 @@
  *   node tools/home_truth_check.js http://localhost:8123
  */
 const puppeteer = require(__dirname + '/node_modules/puppeteer-core');
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const BASE = process.argv[2] || 'http://localhost:8123';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const DAY = 86400000;
