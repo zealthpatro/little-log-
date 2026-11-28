@@ -94,6 +94,7 @@ if (SELFTEST) {
     ['one bucket of the motion distribution is wrong', (s) => s.replace('| 200 | 11 |', '| 200 | 12 |'), false],
     ['the longest transition is wrong', (s) => s.replace('is **900ms**', 'is **800ms**'), false],
     ['the distance from the AI-default cream is flattering', (s) => s.replace('**7/255**', '**3/255**'), false],
+    ['the cited skill path is moved to a skill the sentence does not name', (s) => s.replace('/skills/frontend-design/SKILL.md', '/skills/frontend-designs/SKILL.md'), false],
     ['a measured component geometry is stale', (s) => s.replace('| `.icon-btn` | 44 x 44 |', '| `.icon-btn` | 48 x 48 |'), true],
     ['a sentence around a number is REWORDED, and the number is untouched',
       (s) => s.replace(/They\s*\nare the smear between card and control/, 'They are the smear between a card corner and a control corner'), false, 'green'],
@@ -128,6 +129,20 @@ if (SELFTEST) {
   console.log('\n' + sp + ' passed, ' + sf + ' failed');
   console.log(sf ? 'DESIGN-DOC-SELFTEST: FAIL' : 'DESIGN-DOC-SELFTEST: PASS');
   process.exit(sf ? 1 : 0);
+}
+
+/* The skill section 5 cites: { ok, why, path, name }. Exactly one (`~/...SKILL.md`) path, shaped as a Claude
+   plugin skill (~/.claude/plugins/marketplaces/<market>/plugins/<plugin>/skills/<skill>/SKILL.md), whose
+   <skill> folder is the skill the doc names in backticks just before it ("The `frontend-design` skill"). */
+function citedSkill(s5) {
+  const all = s5.match(/\(`(~[^`]*SKILL\.md)`\)/g) || [];
+  if (all.length !== 1) return { ok: false, why: all.length + ' SKILL.md paths cited, want exactly 1' };
+  const p = all[0].slice(2, -2);
+  const m = /^~\/\.claude\/plugins\/marketplaces\/[\w.-]+\/plugins\/[\w.-]+\/skills\/([\w.-]+)\/SKILL\.md$/.exec(p);
+  if (!m) return { ok: false, path: p, why: p + ' is not a plugin skill path' };
+  const named = (new RegExp('`([\\w.-]+)` skill\\s*\\n?\\s*\\(`' + p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '`\\)').exec(s5) || [])[1];
+  if (named !== m[1]) return { ok: false, path: p, name: m[1], why: 'the path is skill ' + m[1] + ', the sentence names ' + JSON.stringify(named) };
+  return { ok: true, path: p, name: m[1] };
 }
 
 let pass = 0, fail = 0;
@@ -537,9 +552,23 @@ function checkScale(label, section, prefix, unit, docUnitStrip) {
   const delta = Math.max(...chan(dOurs).map((c, i) => Math.abs(c - chan(dDefault)[i])));
   eq('the channel distance from the AI-default cream', D.num(s5, /\*\*(\d+)\/255\*\*/), delta);
   eq('and the contrast ratio between them', D.num(s5, /ratio of \*\*([\d.]+):1\*\*/), ratio(dOurs, dDefault));
-  ok('the skill the doc cites is a file that exists on this machine',
-    fs.existsSync((s5.match(/\(`(~[^`]*SKILL\.md)`\)/) || [])[1] ? (s5.match(/\(`(~[^`]*SKILL\.md)`\)/) || [])[1].replace('~', process.env.HOME) : '/nope'),
-    'cited path not found');
+  /* The skill the doc cites lives in the founder's Claude plugins, on the Mac, never in this repo. So the file
+     itself is looked for only on the Mac (darwin); a CI runner has no ~/.claude and can only fail that half,
+     which says nothing about the doc. What holds everywhere is checked everywhere: the doc cites exactly one
+     SKILL.md path, it is a well-formed plugin skill path, and its skill folder is the skill the sentence names
+     (this repo keeps no index of skills to check it against). Both halves are held red by inline companions. */
+  const cite = citedSkill(s5);
+  ok('the doc cites one skill by a well-formed plugin path, and it is the skill its sentence names (' + (cite.name || 'none') + ')', cite.ok, cite.why);
+  [['no SKILL.md path at all', s5.replace(/\(`~[^`]*SKILL\.md`\)/g, '')],
+    ['a path that is not a plugin skill path', s5.replace(/\(`~[^`]*SKILL\.md`\)/, '(`~/Downloads/SKILL.md`)')],
+    ['a path to another skill than the one named', s5.replace(/(\(`~[^`]*\/skills\/)[^/`]+(\/SKILL\.md`\))/, '$1some-other-skill$2')]]
+    .forEach(([what, bad]) => ok('companion: ' + what + ' is refused', bad !== s5 && !citedSkill(bad).ok, citedSkill(bad)));
+  if (process.platform === 'darwin') {
+    ok('the skill the doc cites is a file that exists on this machine',
+      cite.path ? fs.existsSync(cite.path.replace('~', process.env.HOME)) : false, 'cited path not found: ' + cite.path);
+  } else {
+    console.log('  note the skill file itself is looked for only on the Mac (this is ' + process.platform + ', with no ~/.claude plugins): its path and name were checked above');
+  }
   /* An anchor nobody links to is an anchor nobody reads. DESIGN.md and design/README.md are where a
      person actually lands, so both have to point here or this file quietly becomes a private note. */
   ['DESIGN.md', 'design/README.md'].forEach((f) => {
