@@ -134,7 +134,7 @@ const CLAIMS = { u: 'uid123', h: 'hhABC', m: 'med9', b: 'baby1', mn: 'Calpol', d
     ok('ALREADY_EXISTS counts as success, so a retry is not an error',
        src.includes("if (r.status === 409 || /ALREADY_EXISTS/.test(txt)) return json({ ok: true, already: true });"));
     ok('every rejection returns the same message', src.includes("return json({ error: 'bad_ticket' }, 401);"));
-    ok('a ticket is minted only for a real per-medicine reminder', src.includes('const ticket = msg.medId ? await mintDoseTicket'));
+    ok('a ticket is minted only for a real per-medicine reminder, never a feed, pump or visit nudge', src.includes('const ticket = isCrit && msg.medId ? await mintDoseTicket'));
     ok('the digest therefore carries no category and no button', src.includes('} : {}) })'));
 
     const sw = fs.readFileSync(path.join(__dirname, '..', 'app', 'sw.js'), 'utf8');

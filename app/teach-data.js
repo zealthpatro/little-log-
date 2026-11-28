@@ -1016,6 +1016,7 @@
     /* First-run steps and one-sheet shortcuts (27 Nov 2026): reached only from the flow they belong to */
     openAddBabyFirstRun: 'The first-run form of Add a baby. Reached only from the stage picker; the capability is openAddBaby.',
     openFirstLogStep: 'The "What just happened?" step, shown once, straight after the first baby is added. A step, not a capability.',
+    openRemindCustom: 'The Custom gap stepper inside the Reminders sheet, under Feeds or Pumping. A step inside openReminders, which is taught, and the stepper explains itself on screen.',
     openVisitDone: 'Records a whole vaccine visit from its card. The capability, recording a vaccine, is taught on openVaccine.',
     /* Plumbing, not capability */
     openDateTimePicker: 'The shared date and time picker. One component, reused everywhere, by design.',
