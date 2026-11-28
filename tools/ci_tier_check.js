@@ -18,6 +18,14 @@
  *                  the required checks; a required check whose job is skipped never reports, and the PR
  *                  waits forever (or, worse, someone loosens protection to get it in). `live` does not run.
  *
+ * THE SPLIT (items 5-7). The tree tier runs as an N-way matrix (`tree`, gates.js --shard=i/N) and the emulator
+ * tier as a 4-way one (`emulator-shard`); `tree-complete` and `emulator-complete` are what branch protection
+ * requires. Each pair must hold together, or a gate can drop out of every shard while the check is green:
+ *   the matrix lists every shard 1..N, does not fail fast (a red leg must not cancel the rest unrecorded), and
+ *   each leg records its results; the aggregator needs the matrix and runs always() (a needed job that failed
+ *   SKIPS a plain dependant, and a skipped required check counts as passed), passes the matrix's result as
+ *   --legs, checks --of=N, and lists the gates with the very flags the legs ran with.
+ *
  * HOW. A small YAML reader for the subset these files use (mappings, lists, flow lists, quoted scalars,
  * comments, block scalars), and an evaluator for `if:` that knows github.event_name and github.ref with
  * ==, !=, && and ||. Anything it cannot evaluate counts as "runs", so an unreadable condition fails the push
@@ -139,7 +147,46 @@ function whatRuns(dir, ctx) {
   return out;
 }
 
-const REQUIRED_ON_PR = { 'gates.yml': ['gates', 'emulator'], 'seo.yml': ['seo-guard'], 'teach.yml': ['teach-guard'] };
+const REQUIRED_ON_PR = { 'gates.yml': ['gates', 'emulator', 'tree', 'tree-complete', 'emulator-shard', 'emulator-complete'], 'seo.yml': ['seo-guard'], 'teach.yml': ['teach-guard'] };
+/* [matrix job, aggregator job] in gates.yml. */
+const SPLITS = [['tree', 'tree-complete'], ['emulator-shard', 'emulator-complete']];
+/* A run line's words, with ${{ x }} kept as one word. */
+const words = (run) => String(run || '').replace(/\$\{\{[^}]*\}\}/g, (m) => m.replace(/\s+/g, '')).split(/\s+/).filter(Boolean);
+const legFlags = (ws) => ws.slice(ws.indexOf('tools/gates.js') + 1).filter((w) => !/^--(shard|record-times)=/.test(w)).sort();
+function judgeSplits(wf) {
+  const out = [];
+  const jobs = (wf && wf.jobs) || {};
+  for (const [mj, aj] of SPLITS) {
+    const m = jobs[mj], a = jobs[aj];
+    if (!m || !a) { out.push('gates.yml has no ' + (!m ? mj : aj) + ' job (the ' + mj + ' split and its ' + aj + ' check go together)'); continue; }
+    const st = m.strategy || {};
+    const shards = [].concat((st.matrix || {}).shard || []);
+    const N = shards.length;
+    if (!N || shards.some((x, k) => x !== k + 1)) out.push(mj + "'s matrix.shard is " + JSON.stringify(shards) + ', not 1..N: a shard that is not listed never runs');
+    if (st['fail-fast'] !== false) out.push(mj + ' fails fast: one red leg cancels the others before they record what they held');
+    const legRun = (m.steps || []).map((x) => x && x.run).find((r) => /tools\/gates\.js/.test(String(r || '')));
+    const lw = words(legRun);
+    if (!legRun) out.push(mj + ' has no gates.js step');
+    else {
+      if (!lw.includes('--shard=${{matrix.shard}}/' + N)) out.push(mj + ' does not run --shard=${{ matrix.shard }}/' + N + ' (' + lw.filter((w) => /^--shard/.test(w)).join(' ') + ')');
+      if (!lw.some((w) => /^--record-times=/.test(w))) out.push(mj + ' records no results (--record-times): ' + aj + ' would have nothing to check');
+    }
+    const needs = [].concat(a.needs || []);
+    if (!needs.includes(mj)) out.push(aj + ' does not need ' + mj + ': it could report before the shards ran');
+    if (!/\balways\(\)/.test(String(a.if || ''))) out.push(aj + " has no always() in its if: when a leg fails, a plain dependant is SKIPPED, and a skipped required check passes");
+    if (a.name !== undefined && a.name !== aj) out.push(aj + ' is named "' + a.name + '": branch protection requires the check by its name, ' + aj);
+    const aggRun = (a.steps || []).map((x) => x && x.run).find((r) => /tools\/shard\.js/.test(String(r || '')));
+    const aw = words(aggRun);
+    if (!aggRun || !aw.some((w) => /^--complete=/.test(w))) out.push(aj + ' does not run tools/shard.js --complete');
+    else {
+      if (!aw.includes('--of=' + N)) out.push(aj + ' checks ' + (aw.find((w) => /^--of=/.test(w)) || 'no --of') + ', but ' + mj + ' has ' + N + ' shards');
+      if (!aw.includes('--legs=${{needs.' + mj + '.result}}')) out.push(aj + ' does not pass --legs=${{ needs.' + mj + '.result }}: a failed or cancelled leg would go unread');
+      const af = aw.indexOf('--') >= 0 ? aw.slice(aw.indexOf('--') + 1).sort() : null;
+      if (legRun && JSON.stringify(af) !== JSON.stringify(legFlags(lw))) out.push(aj + ' lists the gates with ' + JSON.stringify(af) + ' but the legs ran ' + JSON.stringify(legFlags(lw)) + ': it would check another list');
+    }
+  }
+  return out;
+}
 function judge(dir) {
   const problems = [];
   let push, pr;
@@ -166,13 +213,15 @@ function judge(dir) {
   const seoPr = pr.find((x) => x.wf === 'seo.yml' && x.job === 'seo-guard');
   if (seoPr && !seoPr.steps.some((s) => /seo_check\.py/.test(s))) problems.push('a PR runs seo-guard without its guard step (tools/seo_check.py)');
   if (pr.some((x) => x.wf === 'gates.yml' && x.job === 'live')) problems.push('a PR runs gates.yml:live, which checks production, not the PR');
+  try { problems.push(...judgeSplits(parseYaml(fs.readFileSync(path.join(dir, 'gates.yml'), 'utf8')))); }
+  catch (e) { problems.push('gates.yml could not be read for its splits: ' + e.message); }
   return problems;
 }
 
 function report(dir) {
   const p = judge(dir);
   console.log('\nCI tiers: what a push to main and a PR run (' + path.relative(ROOT, dir) + ')\n');
-  if (!p.length) console.log('  ok   push to main runs only live and the IndexNow ping; a PR runs gates, emulator, seo-guard and teach-guard');
+  if (!p.length) console.log('  ok   push to main runs only live and the IndexNow ping; a PR runs every required check, and each split holds with its -complete check');
   for (const x of p) console.log('  FAIL ' + x);
   return p;
 }
@@ -206,6 +255,20 @@ function selfTest() {
     ok('the IndexNow ping gone from push: red', p.some((x) => /no longer pings IndexNow/.test(x)), p);
     p = judge(stage((f, s) => f === 'gates.yml' ? must(s, "if: github.event_name == 'push' && github.ref == 'refs/heads/main'", "if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'") : s));
     ok('live on a PR: red', p.some((x) => /a PR runs gates\.yml:live/.test(x)), p);
+    /* The splits: each way a gate can fall out of every shard while the check stays green. */
+    const G = (a, b) => stage((f, s) => (f === 'gates.yml' ? must(s, a, b) : s));
+    const SP = [
+      ['tree-complete without always() (a failed leg skips it, and skipped passes)', ["if: always() && github.event_name == 'pull_request'\n    needs: tree\n", "if: github.event_name == 'pull_request'\n    needs: tree\n"], /tree-complete has no always\(\)/],
+      ['tree-complete checking 7 shards of 8', ['--of=8', '--of=7'], /tree-complete checks --of=7, but tree has 8 shards/],
+      ['shard 8 left out of the matrix', ['shard: [1, 2, 3, 4, 5, 6, 7, 8]', 'shard: [1, 2, 3, 4, 5, 6, 7]'], /tree does not run --shard=\$\{\{ matrix\.shard \}\}\/7|tree-complete checks --of=8, but tree has 7/],
+      ['the tree matrix failing fast', ['fail-fast: false\n      matrix:\n        shard: [1, 2, 3, 4, 5, 6, 7, 8]', 'fail-fast: true\n      matrix:\n        shard: [1, 2, 3, 4, 5, 6, 7, 8]'], /tree fails fast/],
+      ['tree-complete listing with other flags than the legs', ['--of=8 --legs=${{ needs.tree.result }} -- --changed=HEAD^1', '--of=8 --legs=${{ needs.tree.result }} -- --no-browser --changed=HEAD^1'], /tree-complete lists the gates with/],
+      ['tree-complete not reading the legs\' result', [' --legs=${{ needs.tree.result }}', ''], /does not pass --legs/],
+      ['the legs recording nothing', [' --record-times=${{ runner.temp }}/results/shard-${{ matrix.shard }}-of-8.json', ''], /tree records no results/],
+      ['emulator-complete checking 3 shards of 4', ['--of=4', '--of=3'], /emulator-complete checks --of=3, but emulator-shard has 4 shards/],
+      ['emulator-complete renamed (protection would wait for a check that never reports)', ['  emulator-complete:\n    runs-on: ubuntu-latest\n', '  emulator-complete:\n    name: emulator complete\n    runs-on: ubuntu-latest\n'], /emulator-complete is named "emulator complete"/],
+    ];
+    for (const [label, [a, b], want] of SP) { const q = judge(G(a, b)); ok(label + ': red', q.some((x) => want.test(x)), q); }
     ok('companion: the unaltered copy is green', judge(stage((f, s) => s)).length === 0, judge(stage((f, s) => s)));
   } catch (e) { ok('the self-test ran to its end', false, e && e.stack || e); }
   finally { fs.rmSync(T, { recursive: true, force: true }); }
@@ -222,4 +285,4 @@ if (require.main === module) {
   console.log('\nCI-TIER: ' + (p.length ? 'FAIL' : 'PASS'));
   process.exit(p.length ? 1 : 0);
 }
-module.exports = { parseYaml, evalIf, whatRuns, judge };
+module.exports = { parseYaml, evalIf, whatRuns, judge, judgeSplits };

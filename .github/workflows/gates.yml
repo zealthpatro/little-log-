@@ -9,8 +9,16 @@ name: Gates
 # main), so the PR run is a run of the very tree that merges. A push to main runs only `live`: by then
 # Cloudflare has deployed it, so re-running gates there gated nothing (38 runner-minutes a merge, until
 # 28 Nov 2026). tools/ci_tier_check.js (the ci-tier gate) holds this file, seo.yml and teach.yml to that.
-# The browser gates (perf, home-truth, report-truth, offline, pad, type, and the rest) still run on the
-# founder's machine, in the train's full local run (docs/RELEASE-TRAIN.md), until CI runs them too.
+#
+# THE SPLIT (test-speed plan items 4-7, 28 Nov 2026). The whole tree tier, browser gates included, runs here
+# as 8 shards side by side (`tree`, gates.js --shard=i/8, about 13 min each by tools/gate-times.json), and the
+# emulator tier as 4 (`emulator-shard`). `tree-complete` and `emulator-complete` are the checks branch
+# protection is to require: each passes only if every leg passed, every shard left its results file, and the
+# union of what the shards ran is exactly `gates.js --list` with the same flags, each gate once
+# (tools/shard.js --complete). A gate that falls out of every shard turns them red, not green.
+# Until protection requires them (the command is in docs/TESTING.md), `gates` and `emulator` below stay as
+# they are, required, and the split runs beside them; after the switch those two are removed. Until then the
+# browser tier also still runs in the train's full local run (docs/RELEASE-TRAIN.md).
 #
 #   node tools/gates.js               everything judged from the checkout
 #   node tools/gates.js --live        also audit what is actually deployed
@@ -22,6 +30,12 @@ on:
   push:
     branches: [main]
   pull_request:
+
+# A new push to a PR cancels that PR's older run (15 jobs a run, about 20 the Free plan runs at once). A push to
+# main is its own group (its sha), so a deploy's live check is never cancelled by the next merge.
+concurrency:
+  group: gates-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   gates:
@@ -40,6 +54,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: tools/requirements-brand.txt
       # A fresh checkout has no core.hooksPath, so hooks_check would fail on the empty .git/hooks. This
       # is the same step a new clone must do; running it here makes CI the proof of the clone case
       # instead of a run that skips it. It went red for exactly this reason on 2026-09-06.
@@ -53,6 +69,75 @@ jobs:
       # A mutation pass runs here only when this PR changed its inputs or added it; nightly runs every one.
       - name: Gates (no browser)
         run: node tools/gates.js --no-browser --changed=HEAD^1
+
+  # The whole tree tier in 8 shards (gates.js --shard=i/8: longest first by tools/gate-times.json, the same
+  # split on every leg). Linux, so: Chrome named in CHROME_PATH (tools/chrome_path_check.js holds every gate to
+  # reading it), puppeteer-core pinned to the version on the founder's Mac, the clock in Dubai as on the Mac
+  # the gates were written on, and a ~/Downloads, without which the downloads guard has nothing to watch.
+  # fail-fast off: a red leg must not cancel the others before they record what they held.
+  tree:
+    name: tree (${{ matrix.shard }}/8)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    env:
+      TZ: Asia/Dubai
+      CHROME_PATH: /usr/bin/google-chrome
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: tools/requirements-brand.txt
+      - name: Wire the tracked hooks (what a fresh clone must do)
+        run: sh tools/install_hooks.sh
+      - name: Python image libraries for the brand tools
+        run: python3 -m pip install --quiet -r tools/requirements-brand.txt
+      - name: The browser driver, at the version the Mac runs
+        run: npm install --no-save --prefix tools puppeteer-core@25.2.1
+      - name: A Downloads folder, so the downloads guard is on
+        run: mkdir -p ~/Downloads
+      - name: Tree gates, one shard of 8
+        run: node tools/gates.js --shard=${{ matrix.shard }}/8 --changed=HEAD^1 --record-times=${{ runner.temp }}/results/shard-${{ matrix.shard }}-of-8.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tree-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # The required tree check. always(): when a leg fails, a plain dependant is SKIPPED, and branch protection
+  # counts a skipped check as passed. The results go to runner.temp, outside the checkout, so they are not an
+  # untracked change that could move the mutation plan --list computes.
+  tree-complete:
+    runs-on: ubuntu-latest
+    if: always() && github.event_name == 'pull_request'
+    needs: tree
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: tree-shard-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/results
+      - name: Every shard ran and passed, and each gate ran in exactly one
+        run: node tools/shard.js --complete=${{ runner.temp }}/results --of=8 --legs=${{ needs.tree.result }} -- --changed=HEAD^1
 
   # THE SECOND NET for the Firestore emulator tier (Nov 2026). The rules suites, the Worker-against-
   # Firestore suites and the chaos/fuzz self-tests ran on nothing automatic: the founder's pre-push
@@ -95,11 +180,77 @@ jobs:
       # usage SQL on workerd's own D1 and looks for it in tools/node_modules. Pinned to the version that test pins
       # (MINIFLARE_PIN in workers/admin/dev/d1-miniflare.mjs, what wrangler 4.162.0 ships); another one fails it.
       - name: Install the browser driver, the admin SDK and the local D1 runtime the self-hosting suites use
-        run: npm install --no-save --prefix tools puppeteer-core firebase-admin miniflare@5.20261113.0-beta
+        run: npm install --no-save --prefix tools puppeteer-core@25.2.1 firebase-admin miniflare@5.20261113.0-beta
       - name: Firestore emulator tier (each suite on its own free ports)
         env:
           CHROME_PATH: /usr/bin/google-chrome
         run: node tools/gates.js --emulator-only --changed=HEAD^1
+
+  # The emulator tier in 4 shards, on 4 machines (one VM each, never suites side by side on one). Measured
+  # serially it is about 38 min; split by tools/gate-times.json each shard is about 10-11 min, the floor being
+  # usage-tracker-emu alone. Each suite already takes its own free ports. The Firestore jar is fetched up front:
+  # usage-tracker-emu starts it from firebase-tools' cache, which `rules` used to fill first, and a shard need
+  # not hold `rules`.
+  emulator-shard:
+    name: emulator (${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      CHROME_PATH: /usr/bin/google-chrome
+    steps:
+      # Full history, as the emulator job: links-leave grades old builds against rules from older commits.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install firebase-tools and the rules-testing SDK (test/package.json)
+        run: npm install --prefix test --no-audit --no-fund
+      - name: Install the browser driver, the admin SDK and the local D1 runtime the self-hosting suites use
+        run: npm install --no-save --prefix tools puppeteer-core@25.2.1 firebase-admin miniflare@5.20261113.0-beta
+      - name: The Firestore emulator jar, before any suite needs it
+        run: test/node_modules/.bin/firebase setup:emulators:firestore
+      - name: A Downloads folder, so the downloads guard is on
+        run: mkdir -p ~/Downloads
+      - name: Firestore emulator tier, one shard of 4
+        run: node tools/gates.js --emulator-only --shard=${{ matrix.shard }}/4 --changed=HEAD^1 --record-times=${{ runner.temp }}/results/shard-${{ matrix.shard }}-of-4.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: emulator-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # The required emulator check, built as tree-complete is (always(), the legs' result, the same flags).
+  emulator-complete:
+    runs-on: ubuntu-latest
+    if: always() && github.event_name == 'pull_request'
+    needs: emulator-shard
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: emulator-shard-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/results
+      - name: Every emulator shard ran and passed, and each suite ran in exactly one
+        run: node tools/shard.js --complete=${{ runner.temp }}/results --of=4 --legs=${{ needs.emulator-shard.result }} -- --emulator-only --changed=HEAD^1
 
   # Production is a separate job on purpose, and it BLOCKS.
   #
@@ -124,7 +275,7 @@ jobs:
       # failed on MODULE_NOT_FOUND every run, never once reaching the assertion it exists to make.
       # A blocking job that cannot pass is worse than no job: it trains everyone to ignore red.
       - name: Install the gate's dependencies
-        run: npm install --no-save --prefix tools puppeteer-core
+        run: npm install --no-save --prefix tools puppeteer-core@25.2.1
       - name: Third-party trackers on live surfaces
         env:
           CHROME_PATH: /usr/bin/google-chrome

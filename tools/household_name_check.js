@@ -1,6 +1,6 @@
 /* The family has a name, it falls back sensibly, and the fallback is never treated as chosen. */
 const p=require(__dirname+'/node_modules/puppeteer-core');
-const C='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const C=process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const s=ms=>new Promise(r=>setTimeout(r,ms));
 const B=(process.argv[2]||'http://localhost:8123').replace(/\/$/,''), DAY=86400000;
 const d=new Date(); d.setHours(13,0,0,0); const CLOCK=d.getTime(), OFF=CLOCK-Date.now();

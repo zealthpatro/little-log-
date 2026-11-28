@@ -2,7 +2,7 @@
    appSignIn (the iOS wrapper and the installed PWA) and inviteSignIn (arriving from an invite)
    both used to end at "Free · Private to your family" with no outbound link at all. */
 const p=require(__dirname+'/node_modules/puppeteer-core');
-const C='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const C=process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const s=ms=>new Promise(r=>setTimeout(r,ms));
 const B=process.argv[2]||'http://localhost:8123';
 let pass=0,fail=0; const ok=(n,c,x)=>{c?(pass++,console.log('  ok   '+n)):(fail++,console.log('  FAIL '+n+(x!==undefined?'  '+JSON.stringify(x).slice(0,200):'')))};

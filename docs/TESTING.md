@@ -18,6 +18,11 @@ random, seeded, realistic trouble at the real app.
  GitHub Actions on the PR (.github/workflows/gates.yml, seo.yml, teach.yml), the one gating run
    gates     node tools/gates.js --no-browser --changed=HEAD^1   (Chrome-free tree gates)
    emulator  node tools/gates.js --emulator-only --changed=HEAD^1 (Java 21, firebase-tools, Chrome)
+   tree (1/8 .. 8/8)      gates.js --shard=i/8: the WHOLE tree tier, browser gates included, on Linux
+     └► tree-complete     tools/shard.js --complete: every leg passed, every shard's results file is
+                          there, and the union is exactly gates.js --list with the same flags
+   emulator (1/4 .. 4/4)  gates.js --emulator-only --shard=i/4, one VM each
+     └► emulator-complete the same proof for the emulator tier
    seo-guard, teach-guard
    (a mutation pass runs here only if this PR changed what it guards; see "Mutation passes")
    ▼
@@ -39,6 +44,10 @@ random, seeded, realistic trouble at the real app.
 | `node tools/gates.js --live` | also production |
 | `--only=a,b` | only gates whose name contains `a` or `b`, in BOTH tiers (`--emulator --only=household-guard`) |
 | `--no-browser` | drop the tree gates that need Chrome (CI's `gates` job) |
+| `--browser-only` | only the tree gates that need Chrome (the complement of `--no-browser`; both together exit 2) |
+| `--shard=i/N` | only shard `i` of `N` (1-based) of whatever the other flags chose, split longest first by `tools/gate-times.json` (`tools/shard.js`); a gate with no time counts 60 s. An invalid `i/N` exits 2 and runs nothing |
+| `--list` | print the names the other flags choose (shard and mutation plan applied), one per line, and exit: no tree server, no gate |
+| `--record-times=<f>` | write the shard, the flags and each gate's verdict and time to `<f>` (JSON), however the run went |
 | `--mutants` | every mutation pass (nightly). Without it, only the passes this change touched (below) |
 | `--changed=<rev>` | the base the change is measured from (CI: `HEAD^1`, `main` under the PR's merge commit); default: the merge-base with `origin/main` |
 
@@ -56,8 +65,28 @@ the full suite, the train's push ran `--no-browser` again, and the push to `main
   runs on that push, or if any required check stops running on a PR (it would never report). This is only
   safe while strict=true; re-check whenever protection changes:
   `gh api repos/zealthpatro/little-log-/branches/main/protection/required_status_checks --jq .strict`.
-- **The browser tier still runs only on the Mac**, in the train's manual full run (docs/RELEASE-TRAIN.md),
-  until CI runs it as a required check (test-speed plan items 4-6). Until then that run is its only net.
+- **The browser tier runs on CI, not yet as a required check** (test-speed plan items 4-7, 28 Nov 2026).
+  The `tree` matrix runs the whole tree tier in 8 shards on Linux (`CHROME_PATH=/usr/bin/google-chrome`,
+  `TZ=Asia/Dubai`, puppeteer-core@25.2.1, a `~/Downloads` so the downloads guard is on), and the emulator
+  tier runs in 4 (`emulator-shard`). Neither matrix is what protection requires: `tree-complete` and
+  `emulator-complete` are, once switched on, because a leg that is skipped, cancelled or refused never
+  fails by itself. Each aggregator runs `always()`, reads the matrix result, demands one results file per
+  shard and compares the union with `gates.js --list` run with the legs' own flags, each gate exactly once.
+  `ci-tier` holds the workflow to all of that; `shard` stages each way the split or the proof can go wrong.
+  The switch, once three PRs in a row are green on both (the founder runs it; `strict` and `enforce_admins`
+  are untouched, `gates` and `emulator` stay required until their jobs are removed in the same step):
+
+  ```
+  gh api -X PATCH repos/zealthpatro/little-log-/branches/main/protection/required_status_checks --input - <<'JSON'
+  {"strict":true,"checks":[{"context":"gates","app_id":15368},{"context":"emulator","app_id":15368},{"context":"seo-guard","app_id":15368},{"context":"teach-guard","app_id":15368},{"context":"tree-complete","app_id":15368},{"context":"emulator-complete","app_id":15368}]}
+  JSON
+  ```
+
+  Until then the train's manual full run (docs/RELEASE-TRAIN.md) stays the browser tier's only enforced net.
+- **Shard times** live in `tools/gate-times.json` (from `~/cubby-work/suite-times.txt`, the serial run of
+  28 Nov 2026, plus four emulator suites timed on 16 Nov). Refresh from CI's results with
+  `node tools/shard.js --times-from=<shard-*.json,...>` (the `tree-shard-*` artifacts); a stale time only
+  unbalances the shards, it can never drop a gate.
 
 **Mutation passes: nightly every one, on a PR only what it touched** (the founder's call, 28 Nov 2026). A
 mutation pass breaks the code in a temp copy and requires the suite to go red; it proves the suite can still
@@ -390,6 +419,9 @@ restores the holding screen, and update `FLAKE` in the test.
 | prepush-worktree (28 Nov) | `PREPUSH_WT_FROM=<the push-lock tree>`: A red twice (the hook ran gates on a branch push, and the push did not land); A2-D, the runner under a test hook, stay green on both |
 | hooks | `--self-test`, plus the old hook swapped in (a `command -v java` guard is caught). 28 Nov 2026: the push-lock hook swapped in fails "refuses a push to main up front" and "runs no gates on a branch push" |
 | push-lock | `PREPUSH_HOOK=<push-lock hook of fix/concurrent-runs>`: 8 of 16 red once the lock wraps change_test_check (its gates-stub cases see no check run) and a push to main must not wait for the lock |
+| shard | 28 Nov 2026: run against the runner before `--list` existed, section 3 went red ("--list is understood": the old runner printed a run banner, not a list). Built in: five one-line mutants of the partition (shard `i` read 0-based, the last bin never chosen, the tie-break dropped, one gate dropped from every shard, the load never added) and `0/8` accepted each turn a property red for N=1..12; the aggregator is red on a failed or cancelled leg, a missing shard file, a gate dropped from every shard, a gate run twice, a failed gate, a failed served-tree, a gate the list does not name, a shard run with other flags, a file from another split and no results at all |
+| chrome-path | 28 Nov 2026, before the fix: 20 FAILs, two for each of the ten files that named the Mac Chrome bare (household_name, support_reach, family_portrait, vax_calendar, report_truth, invite_arrival, home_truth, marketing_type, duedate-cycle, fab-quicklog). `--self-test` stages a bare constant, a bare path in the launch, a path built elsewhere and a bare path beside a CHROME_PATH read |
+| ci-tier (splits) | 28 Nov 2026: the workflow before the split is red (no `tree`, `tree-complete`, `emulator-shard`, `emulator-complete`). `--self-test` stages tree-complete without `always()`, `--of=7` of 8, shard 8 left out of the matrix, fail-fast on, other list flags than the legs, `--legs` dropped, no `--record-times`, emulator-complete `--of=3` and renamed |
 | ci-tier | `--dir=<4e50b5e6's .github/workflows>`: red on gates, emulator, the seo guard step and teach-guard running on the push to main. `--self-test` stages each one back, a required check that stops running on a PR, an unreadable `if`, the IndexNow ping gone and `live` on a PR |
 | mut-select | `--self-test`: the selection rules (unrelated change off, `--mutants` all, input dir on, whole paths only, new gate, changed entry, runner change, unknown base, a git-show base without its last newline); its input check found two real gaps on its first run and flags admin-access declared as only its own file |
 | mutants-tier | `GATES_FROM=<the push-lock gates.js>`: 8 of 14 red (it ignores `mut`, so every pass runs on every PR), and F red on the nightly.sh without `--mutants`. A runner with `--mutants` cut out: B red ("the weakened assertion turns the run RED" never happens). A selector that never runs a pass: 6 red |

@@ -22,6 +22,14 @@
  *   --mutants          every mutation pass (nightly). Without it a pass runs only when this change touched
  *                      what it guards (its `mut` inputs, tools/mut_select.js), against --changed=<rev>
  *                      (CI: HEAD^1) or, by default, the merge-base with origin/main.
+ *   --browser-only     only the tree gates that need Chrome (the complement of --no-browser)
+ *   --shard=i/N        only shard i of N (1-based) of whatever the other flags chose, split longest first by
+ *                      tools/gate-times.json (tools/shard.js); CI runs N of these side by side and its
+ *                      tree-complete job proves their union is the whole list. An invalid i/N exits 2.
+ *   --list             print the names the other flags choose (mutation plan and shard applied), one per line,
+ *                      and exit: no tree server, no gate. tree-complete compares the shards against it.
+ *   --record-times=<f> write each gate's verdict and time to <f> as JSON (the shard, the flags, the results);
+ *                      tree-complete reads these, and tools/shard.js --times-from=<f>,... refreshes the times.
  *
  * Exit code is non-zero if any REQUIRED gate fails, so CI and a pre-commit hook can both use it.
  */
@@ -45,6 +53,11 @@ const ONLY = (ARGS.find((a) => a.startsWith('--only=')) || '').slice(7);
 const onlyMatch = (name) => ONLY.split(',').filter(Boolean).some((x) => name.includes(x));
 const MUTANTS = has('--mutants');
 const CHANGED = (ARGS.find((a) => a.startsWith('--changed=')) || '').slice(10);
+const BROWSER_ONLY = ARGS.includes('--browser-only');
+const LIST = ARGS.includes('--list');
+/* undefined when not given; '' when given empty, which is refused like any other bad shard. */
+const SHARD = (() => { const a = ARGS.find((x) => x.startsWith('--shard=')); return a === undefined ? undefined : a.slice(8); })();
+const RECORD = (ARGS.find((a) => a.startsWith('--record-times=')) || '').slice(15);
 
 /* What each mutation pass guards (`mut`), for tools/mut_select.js: a pass runs on a PR only when one of these
    changed (or the gate is new, or its entry or the runner changed); nightly runs every one with --mutants. The
@@ -326,6 +339,11 @@ TREE.push(
   /* ...and through a real runner in a throwaway repo: off on an unrelated PR, on when touched or new, every one
      with --mutants (nightly), and red there on a weakened assertion. */
   { name: 'mutants-tier',   cmd: ['node', 'test/mutants-tier.test.js'] },
+  /* CI's split (items 5-7): --shard's partition disjoint, complete and order-free for N=1..12 (its mutants red),
+     --list and --shard through this runner, and tree-complete red on a missing shard, a dropped or doubled gate. */
+  { name: 'shard',          cmd: ['node', 'tools/shard.js', '--self-test'] },
+  /* Every browser gate finds Chrome through CHROME_PATH, so it runs on CI's Linux as on the Mac (item 4). */
+  { name: 'chrome-path',    cmd: ['node', 'tools/chrome_path_check.js', '--self-test'] },
   /* A real push from a LINKED worktree leaves the shared repository byte-identical (no gate inherits GIT_DIR). */
   { name: 'prepush-worktree', cmd: ['node', 'test/prepush-worktree.test.js'] },
   /* The nightly bug-bash's verdict, board line and open-findings ledger, over synthetic nights in a temp dir. */
@@ -1176,7 +1194,48 @@ else (async () => {
     console.log(bad.length ? 'NOT THIS TREE: ' + bad.join('; ') : 'this tree: ' + TREE_PROOF.join(', ') + ' served byte for byte');
     process.exit(bad.length ? 1 : 0);
   }
+  /* Which gates, before anything starts: --list prints them and stops, and a bad --shard is refused here, so a
+     bad shard can never mean "ran nothing, passed". */
+  if (NO_BROWSER && BROWSER_ONLY) { console.error('--no-browser and --browser-only together choose no gate at all; refused.'); process.exit(2); }
+  let shard = null;
+  if (SHARD !== undefined) {
+    try { shard = require('./shard'); shard.parseShard(SHARD); }
+    catch (e) { console.error('REFUSED: ' + e.message.split('\n')[0] + '\nNo gate was run.'); process.exit(2); }
+  }
+  let list = EMU_ONLY ? [] : TREE.slice();
+  if (LIVE) list = list.concat(LIVE_GATES);
+  if (NO_BROWSER) list = list.filter((g) => !g.cmd.includes('url'));
+  if (BROWSER_ONLY) list = list.filter((g) => g.cmd.includes('url'));
+  if (ONLY) list = list.filter((g) => onlyMatch(g.name));
+  let emuList = EMU ? (ONLY ? EMU_GATES.filter((g) => onlyMatch(g.name)) : EMU_GATES) : [];
+  /* The shard is cut before the mutation plan: the plan is per gate, so cutting first or last gives the same
+     names, and cutting first keeps the split independent of what this change touched. Each tier is split on
+     its own, the same way, so a combined run's shard i is tree shard i plus emulator shard i. */
+  let shardNote = '';
+  if (shard) {
+    const times = shard.loadTimes();
+    const [t0, e0] = [list.length, emuList.length];
+    const keep = (xs) => { const names = new Set(shard.shardOf(xs.map((g) => g.name), SHARD, times)); return xs.filter((g) => names.has(g.name)); };
+    list = keep(list); emuList = keep(emuList);
+    const est = list.concat(emuList).reduce((s, g) => s + (g.name in times ? Number(times[g.name]) : shard.UNKNOWN_S), 0);
+    shardNote = 'shard ' + SHARD + ': ' + list.length + ' of ' + t0 + ' tree gates' + (EMU ? ', ' + emuList.length + ' of ' + e0 + ' emulator suites' : '') + ', about ' + Math.round(est / 60) + ' min by tools/gate-times.json (the other shards run the rest; tree-complete checks that they did).';
+  }
+
+  /* Mutation passes: every one with --mutants (nightly), otherwise only what this change touched. */
+  /* A runner copied into a temp tree without tools/mut_select.js (the tree-server and worktree self-tests copy
+     only what they need) runs every pass as written: the safe direction, said out loud. */
+  const say = LIST ? (x) => console.error(x) : (x) => console.log(x);
+  let ms = null;
+  try { ms = require('./mut_select'); } catch (e) { say('(tools/mut_select.js not loadable here, so every mutation pass runs: ' + e.message.split('\n')[0] + ')'); }
+  const mplan = ms ? ms.plan(list.concat(emuList), { all: MUTANTS, change: MUTANTS ? null : ms.changeSet(ROOT, CHANGED || null),
+    headSrc: fs.readFileSync(__filename, 'utf8') }) : new Map();
+  const viaPlan = (g) => (ms ? ms.apply(g, mplan.get(g.name)) : g);
+  list = list.map(viaPlan).filter(Boolean);
+  emuList = emuList.map(viaPlan).filter(Boolean);
+  if (LIST) { for (const g of list.concat(emuList)) console.log(g.name); process.exit(0); }
+
   console.log('\nCubby gates');
+  if (shardNote) console.log(shardNote + '\n');
 
   /* However this run ends, its tree server goes with it (stopped here, and tethered by TETHER above for the
      ends nothing can catch), and a SIGTERM, SIGHUP or SIGALRM is passed on to the gate running now. A runner
@@ -1208,28 +1267,12 @@ else (async () => {
   console.log(TREE_PROOF.join(', ') + ' are served byte for byte as this tree holds them, checked again after the last gate.');
   console.log('every browser gate is given that URL explicitly, so none of them can grade another checkout.\n');
 
-  let list = EMU_ONLY ? [] : TREE.slice();
-  if (LIVE) list = list.concat(LIVE_GATES);
-  if (NO_BROWSER) list = list.filter((g) => !g.cmd.includes('url'));
-  if (ONLY) list = list.filter((g) => onlyMatch(g.name));
-  let emuList = EMU ? (ONLY ? EMU_GATES.filter((g) => onlyMatch(g.name)) : EMU_GATES) : [];
-
-  /* Mutation passes: every one with --mutants (nightly), otherwise only what this change touched. */
-  /* A runner copied into a temp tree without tools/mut_select.js (the tree-server and worktree self-tests copy
-     only what they need) runs every pass as written: the safe direction, said out loud. */
-  let ms = null;
-  try { ms = require('./mut_select'); } catch (e) { console.log('(tools/mut_select.js not loadable here, so every mutation pass runs: ' + e.message.split('\n')[0] + ')'); }
-  const mplan = ms ? ms.plan(list.concat(emuList), { all: MUTANTS, change: MUTANTS ? null : ms.changeSet(ROOT, CHANGED || null),
-    headSrc: fs.readFileSync(__filename, 'utf8') }) : new Map();
   if (mplan.size) {
     const on = [...mplan].filter(([, v]) => v.run), off = [...mplan].filter(([, v]) => !v.run);
     console.log('mutation passes: ' + on.length + ' of ' + mplan.size + ' run' + (on.length ? ' (' + on.map(([n, v]) => n + ': ' + v.why).join('; ') + ')' : '') + '.');
     if (off.length) console.log('  off, nightly runs them (--mutants): ' + off.map(([n]) => n).join(', ') + ' (' + off[0][1].why + ').');
     console.log('');
   }
-  const viaPlan = (g) => (ms ? ms.apply(g, mplan.get(g.name)) : g);
-  list = list.map(viaPlan).filter(Boolean);
-  emuList = emuList.map(viaPlan).filter(Boolean);
 
   const WATCH = dl.userDownloads();
   console.log(WATCH
@@ -1284,6 +1327,16 @@ else (async () => {
   }
   const failed = results.filter((r) => !r.ok);
   const blocking = failed.filter((r) => !r.live);
+  /* What ran, for tree-complete (it must find every shard's file and every gate once) and for gate-times.json.
+     Written however the gates went; a run refused before its first gate writes none, and that is caught too. */
+  if (RECORD) {
+    try {
+      fs.mkdirSync(path.dirname(path.resolve(RECORD)), { recursive: true });
+      fs.writeFileSync(path.resolve(RECORD), JSON.stringify({ shard: SHARD === undefined ? null : SHARD, args: ARGS, root: ROOT,
+        results: results.map((r) => ({ name: r.name, ok: r.ok, ms: r.ms })) }, null, 1) + '\n');
+      console.log('recorded ' + results.length + ' results in ' + RECORD);
+    } catch (e) { console.log('could not record results in ' + RECORD + ': ' + e.message); blocking.push({ name: 'record-times', ok: false }); }
+  }
   console.log('\n' + '-'.repeat(72));
   console.log(results.length + ' gates, ' + (results.length - failed.length) + ' passed, ' + failed.length + ' failed');
 

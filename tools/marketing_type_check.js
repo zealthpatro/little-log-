@@ -24,7 +24,7 @@
  */
 const puppeteer = require('puppeteer-core');
 
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const BASE = process.argv.find(a => a.startsWith('http')) || 'http://localhost:8080';
 const SELFTEST = process.argv.includes('--self-test');
 

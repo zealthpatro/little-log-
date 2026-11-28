@@ -13,7 +13,7 @@
  *   node tools/invite_arrival_check.js http://localhost:8123
  */
 const p = require(__dirname + '/node_modules/puppeteer-core');
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const B = process.argv[2] || 'http://localhost:8123';
 const TOK = 'Ab3xQ7mZ9pLk2RtVwY5nQz';
 const s = (ms) => new Promise((r) => setTimeout(r, ms));
