@@ -167,7 +167,7 @@ async function killedPush() {
 
     /* 4. A failing check stops the push and still lets the lock go. */
     reset();
-    r = await hook({ STUB_GATES_FAIL: '1' }).done;
+    r = await hook({ STUB_CHECK_FAIL: '1' }).done;
     ok('4. a failing change-test check stops the push and the lock is free afterwards', r.code === 1 && /Push stopped: product code changed/.test(r.out) && !lockHeld(), r.out);
 
     /* 5. Two pushes at once: their checks never overlap. */
