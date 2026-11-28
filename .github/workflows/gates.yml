@@ -115,6 +115,29 @@ jobs:
         run: python3 -m pip install --quiet -r tools/requirements-brand.txt
       - name: The browser driver, at the version the Mac runs
         run: npm install --no-save --prefix tools puppeteer-core@25.2.1
+      # test/'s own dependencies, as on the Mac and in the emulator jobs. Two tree gates load puppeteer-core from
+      # test/ (fab-quicklog, duedate-cycle) and two start their own Firestore emulator through test/'s firebase-tools
+      # (preg-tick-race, two-caregivers: tree-tier by design, test/helpers/tree-base.js, so every push runs them).
+      # Without these steps all four failed at the door on PR #16's first run (ENOENT, Cannot find module), never
+      # on what they test. Cached by test/package.json; the emulator is Java, and its jar is cached beside it.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Cache test/ dependencies
+        id: test-deps
+        uses: actions/cache@v4
+        with:
+          path: test/node_modules
+          key: test-deps-${{ runner.os }}-node22-${{ hashFiles('test/package.json') }}
+      - name: Install firebase-tools, the rules-testing SDK and puppeteer-core (test/package.json)
+        if: steps.test-deps.outputs.cache-hit != 'true'
+        run: npm install --prefix test --no-audit --no-fund
+      - name: Cache the Firestore emulator jar
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ hashFiles('test/package.json') }}
       - name: A Downloads folder, so the downloads guard is on
         run: mkdir -p ~/Downloads
       - name: Tree gates, one shard of 8
