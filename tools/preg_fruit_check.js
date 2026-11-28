@@ -1,27 +1,27 @@
 #!/usr/bin/env node
-/* THE WEEK'S FRUIT: an emoji only when it really is that fruit.
+/* THE WEEK'S FRUIT, PAINTED: every week has its painting, and none of it outlives a loss.
  *
- * Home says "about the size of a ..." every week of a pregnancy and puts an emoji after it
- * (PREG.sizeEmoji in app/pregnancy-data.js). Sixteen of the 38 weeks had no true emoji, so the map
- * filled them with stand-ins: coloured circles for a poppy seed, a kumquat, a fig, a lime and a
- * pomegranate; a strawberry for a raspberry, beans for a lentil, a mango for a papaya, broccoli for
- * a cauliflower, a tangerine for a grapefruit, a lettuce for a leek, and a carved jack-o'-lantern
- * for butternut squash, squash and pumpkin. So week 40, the week she is due, read "about the size
- * of a pumpkin" next to a Halloween face. The moments cards were worse: every card said
- * "🍐 about the size of a ..." whatever the week. Founder, 28 Nov 2026: show the fruit only where
- * the emoji is the fruit; every other week has the words alone. The week card widget (F4) reads
- * the same function, so this is the one map for every surface.
+ * Home says "about the size of a ..." every week of a pregnancy. It used to put an emoji after it
+ * (sixteen weeks had none that was true; week 40, the week she is due, got a carved jack-o'-lantern;
+ * every moments card got a pear). Founder, 28 Nov 2026: paint them, "vibrant and better than the
+ * emojis". PREG.sizeArt(size) names one painting per size in app/fruit-art/, shown on the Home week
+ * card, in the week detail sheets and on her pregnancy moments. Kept memories, which outlive the
+ * pregnancy and a loss, keep the size in words alone.
  *
- * 1. The map itself, week by week (no browser). Plant: the old map must fail the same table.
- * 2. Home's hero line at week 30 (an emoji week) and week 40 (words only, nothing after them).
- *    Plant: the old sizeEmoji swapped back in must put an emoji after "pumpkin" again.
- * 3. The week sheets: the "Baby this week" tile keeps a neutral sprout when there is no fruit, and
- *    the size sheet draws no big empty emoji block.
- * 4. The moments cards: no pear, the week's own fruit or none. The kept memories (after the pregnancy
- *    ended, a loss included) show the size in words alone; section 1 holds that no pear is left.
+ * 1. The set (no browser): every week 4 to 41 names a painting, each file exists, is a real WebP
+ *    within its weight, nothing in app/fruit-art/ is orphaned, the set's total is bounded, and no
+ *    emoji map or emoji fallback is left in the data or in index.html.
+ *    Plants: a week dropped from the map, an oversized file, a stray emoji fallback.
+ * 2. Home's week card at weeks 30 and 40: the painting is there, loaded, and the line ends in words.
+ *    Plant: the map emptied must leave the card without its painting.
+ * 3. The week sheets: the size sheet shows the painting large, the baby tile shows it small.
+ * 4. Her moments: each card shows its own week's painting, no emoji, no pear.
+ * 5. A loss: nothing painted on the holding screen (with and without a living child, and in the
+ *    race where the loss has synced but the journey has not), and kept memories in words only.
+ *    Plant: pregFruitImg with its loss guard stripped must paint during the race.
  *
- * Runs the app in local mode (cubby-quick-uid=local): a PASS attests to index.html and
- * pregnancy-data.js, not to sync. It does not judge how each emoji looks on every phone's font.
+ * Runs the app in local mode (cubby-quick-uid=local): a PASS attests to index.html,
+ * pregnancy-data.js and app/fruit-art/, not to sync. It does not judge how the paintings look.
  *
  *   node tools/serve.js &   &&   node tools/preg_fruit_check.js http://localhost:8123
  */
@@ -38,47 +38,59 @@ let pass = 0, fail = 0;
 const ok = (n, c, x) => { if (c) { pass++; console.log('  ok   ' + n); } else { fail++; console.log('  FAIL ' + n + (x !== undefined ? '\n         ' + String(x).slice(0, 240) : '')); } };
 const planted = (n, real) => { ok('plant caught: ' + n, real === false, 'the check stayed green on broken code'); };
 
-/* Week -> the emoji it must show, or '' for words alone. */
-const EXPECT = {
-  4: '', 5: '', 6: '', 7: '🫐', 8: '', 9: '🍒', 10: '', 11: '', 12: '', 13: '🫛', 14: '🍋', 15: '🍎',
-  16: '🥑', 17: '', 18: '🫑', 19: '🥭', 20: '🍌', 21: '🥕', 22: '', 23: '', 24: '🌽', 25: '', 26: '🥬',
-  27: '🥬', 28: '🍆', 29: '', 30: '🥕', 31: '🥥', 32: '', 33: '🍍', 34: '🍈', 35: '🍈', 36: '🥬', 37: '🥬',
-  38: '', 39: '🍉', 40: '', 41: '',
-};
+const ROOT = path.join(__dirname, '..');
+const ART_DIR = path.join(ROOT, 'app', 'fruit-art');
+const MAX_FILE = 28 * 1024;      // one painting, fetched for her current week only
+const MAX_SET = 800 * 1024;      // the whole folder, so the set cannot quietly grow
+const PICTO = /\p{Extended_Pictographic}/u;
+const WEEKS = []; for (let w = 4; w <= 41; w++) WEEKS.push(w);
 
-/* The map as it stood before this fix, kept verbatim so the plant is the real old behaviour. */
-const OLD_MAP = {
-  'poppy seed': '⚫', 'sesame seed': '⚪', 'lentil': '🫘', 'blueberry': '🫐', 'raspberry': '🍓', 'cherry': '🍒',
-  'kumquat': '🟠', 'fig': '🟣', 'lime': '🟢', 'pea pod': '🫛', 'lemon': '🍋', 'apple': '🍎', 'avocado': '🥑',
-  'pomegranate': '🔴', 'bell pepper': '🫑', 'mango': '🥭', 'banana': '🍌', 'carrot': '🥕', 'papaya': '🥭',
-  'grapefruit': '🍊', 'corn cob': '🌽', 'cauliflower': '🥦', 'lettuce': '🥬', 'cabbage': '🥬', 'aubergine': '🍆',
-  'butternut squash': '🎃', 'large carrot': '🥕', 'coconut': '🥥', 'squash': '🎃', 'pineapple': '🍍',
-  'cantaloupe': '🍈', 'honeydew melon': '🍈', 'romaine lettuce': '🥬', 'chard': '🥬', 'leek': '🥬',
-  'small watermelon': '🍉', 'pumpkin': '🎃',
-};
-const oldSizeEmoji = (s) => OLD_MAP[(s || '').toLowerCase()] || '🌱';
-
-/* ---- 1. the map ---------------------------------------------------------------------------- */
+/* ---- 1. the set ---------------------------------------------------------------------------- */
 const sandbox = { window: {} };
 vm.createContext(sandbox);
-vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'app', 'pregnancy-data.js'), 'utf8'), sandbox);
+const dataSrc = fs.readFileSync(path.join(ROOT, 'app', 'pregnancy-data.js'), 'utf8');
+vm.runInContext(dataSrc, sandbox);
 const PREG = sandbox.window.PREG;
-const tableMisses = (fn) => Object.keys(EXPECT).filter((w) => fn(PREG.weeks[w].size) !== EXPECT[w])
-  .map((w) => w + ' ' + PREG.weeks[w].size + ' -> ' + JSON.stringify(fn(PREG.weeks[w].size)));
+const indexSrc = fs.readFileSync(path.join(ROOT, 'app', 'index.html'), 'utf8');
 
-console.log('\n1. the map, week by week');
-ok('every week 4 to 41 has a size', Object.keys(EXPECT).every((w) => PREG.weeks[w] && PREG.weeks[w].size));
-const miss = tableMisses(PREG.sizeEmoji);
-ok('sizeEmoji gives each week its true fruit, or nothing (38 weeks)', miss.length === 0, miss.join('; '));
-ok('an unknown size gets nothing, not a sprout', PREG.sizeEmoji('quince') === '' && PREG.sizeEmoji('') === '');
-ok('22 weeks with a fruit, 16 with the words alone',
-  Object.values(EXPECT).filter(Boolean).length === 22 && Object.values(EXPECT).filter((e) => !e).length === 16);
-planted('the old map (circles, jack-o\'-lantern, sprout fallback)', tableMisses(oldSizeEmoji).length === 0);
-/* The moments cards and the kept memories once hard-coded a pear before every size. */
-const pears = (src) => (src.match(/🍐/gu) || []).length;
-const indexSrc = fs.readFileSync(path.join(__dirname, '..', 'app', 'index.html'), 'utf8');
-ok('no hard-coded pear left in index.html', pears(indexSrc) === 0, pears(indexSrc) + ' found');
-planted('a pear staged in the old moments line', pears("${size?'🍐 about the size of a '+escapeHtml(size):''}") === 0);
+const isWebp = (buf) => buf.length > 12 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP';
+const setProblems = (artOf, readFile, listDir) => {
+  const out = [];
+  const used = new Set();
+  for (const w of WEEKS) {
+    const size = PREG.weeks[w] && PREG.weeks[w].size;
+    const url = artOf(size);
+    if (!url) { out.push('week ' + w + ' (' + size + ') has no painting'); continue; }
+    const m = /^\/app\/fruit-art\/([a-z0-9-]+)\.webp$/.exec(url);
+    if (!m) { out.push('week ' + w + ' names ' + url); continue; }
+    used.add(m[1] + '.webp');
+    const buf = readFile(m[1] + '.webp');
+    if (!buf) out.push(m[1] + '.webp is missing');
+    else if (!isWebp(buf)) out.push(m[1] + '.webp is not a WebP');
+    else if (buf.length > MAX_FILE) out.push(m[1] + '.webp is ' + buf.length + ' bytes, over ' + MAX_FILE);
+  }
+  const files = listDir();
+  for (const f of files) if (!used.has(f)) out.push('orphan ' + f);
+  const total = files.reduce((t, f) => t + ((readFile(f) || []).length || 0), 0);
+  if (total > MAX_SET) out.push('the set is ' + total + ' bytes, over ' + MAX_SET);
+  return out;
+};
+const realRead = (f) => { try { return fs.readFileSync(path.join(ART_DIR, f)); } catch (e) { return null; } };
+const realList = () => { try { return fs.readdirSync(ART_DIR).filter((f) => !f.startsWith('.')); } catch (e) { return []; } };
+const emojiLeft = (data, html) => /sizeEmoji|SIZE_EMOJI/.test(data) || /sizeEmoji|pregSizeEmojiAfter/.test(html) || /🍐/u.test(html);
+
+console.log('\n1. the set');
+ok('PREG.sizeArt exists', typeof PREG.sizeArt === 'function');
+const probs = typeof PREG.sizeArt === 'function' ? setProblems(PREG.sizeArt, realRead, realList) : ['no sizeArt'];
+ok('every week 4 to 41 has a painting, each a WebP of at most 28 KB, no orphans, set at most 800 KB', probs.length === 0, probs.slice(0, 6).join('; '));
+const names = new Set(WEEKS.map((w) => PREG.sizeArt && PREG.sizeArt(PREG.weeks[w].size)).filter(Boolean));
+ok('one painting can serve two look-alike sizes, so 34 paintings cover 38 weeks', names.size === 34, names.size);
+ok('no emoji map, emoji fallback or pear left in the data or index.html', !emojiLeft(dataSrc, indexSrc));
+if (typeof PREG.sizeArt === 'function') {
+  planted('a week dropped from the map', setProblems((s) => (s === 'pumpkin' ? '' : PREG.sizeArt(s)), realRead, realList).length === 0);
+  planted('an oversized painting', setProblems(PREG.sizeArt, (f) => (f === 'lime.webp' ? Buffer.concat([Buffer.from('RIFF\0\0\0\0WEBP'), Buffer.alloc(40000)]) : realRead(f)), realList).length === 0);
+}
+planted('an emoji fallback staged in index.html', !emojiLeft(dataSrc, indexSrc + "\nconst e=PREG.sizeEmoji(size)||'';"));
 
 (async () => {
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'], downloadBehavior: dl.downloadBehavior() });
@@ -86,12 +98,17 @@ planted('a pear staged in the old moments line', pears("${size?'🍐 about the s
   const now = Date.now(), DAY = 86400000, HOUR = 3600000;
   const base = { babies: [], activeBabyId: null, events: [], illnesses: [],
     settings: { unit: 'ml', wUnit: 'kg', hUnit: 'cm', tempUnit: 'C', seen: { home: 1, welcome: 1, log: 1 } },
-    timers: {}, milestones: [], meds: [], photos: [], vaccines: {}, notes: [] };
+    timers: {}, milestones: [], meds: [], photos: [], vaccines: {}, notes: [], pregnancy: null };
+  const ROBIN = { id: 'b1', name: 'Robin', birth: now - 400 * DAY, sex: 'F', routines: [], doctors: [], allergies: [] };
+  const MOMENTS = [{ id: 'm40', week: 40, note: '', at: now - 2 * DAY }, { id: 'm30', week: 30, note: '', at: now - 3 * DAY }];
   /* An hour of margin either side of the week turn; the page clock only moves further along. */
-  const atWeek = (w) => Object.assign({}, base, { pregnancy: {
-    id: 'p1', stage: 'expecting', dueDate: now + (40 - w) * 7 * DAY - HOUR, appts: [], bp: [], weights: [], periods: [],
-    moments: [{ id: 'm40', week: 40, note: '', at: now - 2 * DAY }, { id: 'm30', week: 30, note: '', at: now - 3 * DAY }],
-  } });
+  const preg = (w) => ({ id: 'p1', stage: 'expecting', dueDate: now + (40 - w) * 7 * DAY - HOUR, appts: [], bp: [], weights: [], periods: [], moments: MOMENTS });
+  const atWeek = (w) => Object.assign({}, base, { pregnancy: preg(w) });
+  const ARCHIVE = [{ id: 'p0', endedAt: now - DAY, outcome: 'loss', moments: MOMENTS, journey: {} }];
+  const loss = Object.assign({}, base, { lossHolding: { local: { at: now } }, pregnancyArchive: ARCHIVE });
+  const lossWithChild = Object.assign({}, loss, { babies: [ROBIN], activeBabyId: 'b1' });
+  const lossRace = Object.assign({}, loss, { pregnancy: preg(30) });
+
   const arrive = async (state) => {
     const p = await browser.newPage();
     p.on('pageerror', (e) => errs.push(e.message));
@@ -104,62 +121,92 @@ planted('a pear staged in the old moments line', pears("${size?'🍐 about the s
     await sleep(2200);
     return p;
   };
-  const text = (p) => p.evaluate(() => { const s = document.getElementById('scroll'); return ((s && s.innerText) || '').replace(/\s+/g, ' '); });
-  const sheet = (p, kind) => p.evaluate((k) => {
-    openWeekDetail(k);
-    const s = document.getElementById('sheet');
-    const big = s ? [...s.querySelectorAll('div')].filter((d) => d.style && d.style.fontSize === '60px') : [];
-    const ico = s ? s.querySelector('.preg-card .pc-ico') : null;
-    const out = { text: s ? s.innerText.replace(/\s+/g, ' ') : '', big: big.map((d) => d.textContent.trim()), ico: ico ? ico.textContent.trim() : null };
-    closeSheet();
-    return out;
-  }, kind);
+  /* Every painted fruit in the document: where it points and whether it really loaded. */
+  const fruits = (p, sel) => p.evaluate((s) => [...document.querySelectorAll(s || 'img')]
+    .filter((i) => /\/fruit-art\//.test(i.getAttribute('src') || ''))
+    .map((i) => ({ src: i.getAttribute('src'), loaded: i.complete && i.naturalWidth > 0, cls: i.className })), sel);
+  const settle = (p) => p.evaluate(() => Promise.all([...document.images].map((i) => i.complete ? 1 : new Promise((r) => { i.onload = i.onerror = r; }))));
   const hero = (p) => p.evaluate(() => { const h = document.querySelector('.wh-count'); return h ? h.textContent.trim() : null; });
-  const after = (t, size) => { const i = t.indexOf('about the size of a ' + size); return i < 0 ? null : t.slice(i + ('about the size of a ' + size).length, i + ('about the size of a ' + size).length + 4); };
 
   try {
-    const probe = await arrive(atWeek(30));
-    const wk = await probe.evaluate(() => typeof pregWeek === 'function' ? pregWeek() : null);
-    console.log('\n  [checkout] ' + BASE + (wk === 30 ? ' boots a pregnancy at week 30. Good.' : ' answered week ' + wk + '. Wrong port or a changed pregWeek.'));
+    console.log('\n2. Home\'s week card');
+    const p30 = await arrive(atWeek(30));
+    const wk = await p30.evaluate(() => typeof pregWeek === 'function' ? pregWeek() : null);
+    console.log('  [checkout] ' + BASE + (wk === 30 ? ' boots a pregnancy at week 30. Good.' : ' answered week ' + wk + '. Wrong port or a changed pregWeek.'));
+    await settle(p30);
+    const f30 = await fruits(p30, '.week-hero img');
+    ok('week 30: the card shows the carrot painting, loaded', f30.length === 1 && /\/carrot\.webp$/.test(f30[0].src) && f30[0].loaded, JSON.stringify(f30));
+    ok('week 30: the line ends in words', /about the size of a large carrot$/.test(await hero(p30) || ''), await hero(p30));
+    const planH = await p30.evaluate(() => { const keep = PREG.sizeArt; PREG.sizeArt = () => ''; render(); const n = document.querySelectorAll('.week-hero img[src*="fruit-art"]').length; PREG.sizeArt = keep; render(); return n; });
+    planted('the map emptied leaves the card without a painting', planH === 1);
 
-    console.log('\n2. Home\'s hero line');
-    const t30 = await text(probe);
-    ok('week 30: "about the size of a large carrot 🥕"', /about the size of a large carrot 🥕/u.test(t30), t30.slice(0, 160));
     const p40 = await arrive(atWeek(40));
-    const t40 = await text(p40);
+    await settle(p40);
+    const f40 = await fruits(p40, '.week-hero img');
+    ok('week 40: the card shows the pumpkin painting, loaded', f40.length === 1 && /\/pumpkin\.webp$/.test(f40[0].src) && f40[0].loaded, JSON.stringify(f40));
     const h40 = await hero(p40);
-    ok('week 40: "about the size of a pumpkin" is on Home', after(t40, 'pumpkin') !== null, t40.slice(0, 160));
-    ok('week 40: the hero line ends at "pumpkin", no jack-o\'-lantern', !!h40 && /about the size of a pumpkin$/.test(h40), JSON.stringify(h40));
-    ok('no 🎃 anywhere on Home at week 40', !t40.includes('🎃'));
-    const planH = await p40.evaluate((src) => { PREG.sizeEmoji = eval('(' + src + ')'); render(); const h = document.querySelector('.wh-count'); return h ? h.textContent.trim() : null; },
-      '(s) => (' + JSON.stringify(OLD_MAP) + ')[(s || "").toLowerCase()] || "🌱"');
-    planted('old sizeEmoji on Home', !!planH && /about the size of a pumpkin$/.test(planH));
-    await p40.close();
+    ok('week 40: the line ends at "pumpkin", no emoji', !!h40 && /about the size of a pumpkin$/.test(h40) && !PICTO.test(h40), JSON.stringify(h40));
 
     console.log('\n3. the week sheets');
-    const p40b = await arrive(atWeek(40));
-    const b40 = await sheet(p40b, 'baby');
-    ok('week 40 "Baby this week": tile is the neutral sprout', b40.ico === '🌱', JSON.stringify(b40.ico));
-    const s40 = await sheet(p40b, 'size');
-    ok('week 40 size sheet: no big emoji block at all', s40.big.length === 0, JSON.stringify(s40.big));
-    ok('week 40 size sheet: still names the pumpkin', /About the size of a pumpkin/.test(s40.text), s40.text.slice(0, 120));
-    const b30 = await sheet(probe, 'baby');
-    ok('week 30 "Baby this week": tile is the carrot', b30.ico === '🥕', JSON.stringify(b30.ico));
-    const s30 = await sheet(probe, 'size');
-    ok('week 30 size sheet: one big carrot', s30.big.length === 1 && s30.big[0] === '🥕', JSON.stringify(s30.big));
+    const sheet = (p, kind) => p.evaluate((k) => { openWeekDetail(k); return 1; }, kind).then(() => sleep(400)).then(() => settle(p)).then(() => fruits(p, '#sheet img')).then(async (f) => { await p.evaluate(() => closeSheet()); await sleep(300); return f; });
+    const s40 = await sheet(p40, 'size');
+    ok('week 40 size sheet: one large pumpkin painting, loaded', s40.length === 1 && /pumpkin\.webp$/.test(s40[0].src) && s40[0].loaded, JSON.stringify(s40));
+    const b40 = await sheet(p40, 'baby');
+    ok('week 40 "Baby this week": the tile holds the pumpkin painting', b40.length === 1 && /pumpkin\.webp$/.test(b40[0].src) && b40[0].loaded, JSON.stringify(b40));
 
-    console.log('\n4. the moments cards');
-    const m = await p40b.evaluate(() => {
+    console.log('\n4. her moments');
+    const m = await p40.evaluate(() => {
       const d = document.createElement('div'); d.innerHTML = renderPregMoments();
-      return [...d.querySelectorAll('.moment-card')].map((c) => ({ week: (c.querySelector('.mc-week') || {}).textContent, size: ((c.querySelector('.mc-size') || {}).textContent || '').trim() }));
+      return [...d.querySelectorAll('.moment-card')].map((c) => { const i = c.querySelector('.mc-size img'); return { week: (c.querySelector('.mc-week') || {}).textContent, text: ((c.querySelector('.mc-size') || {}).textContent || '').trim(), art: i ? i.getAttribute('src') : '' }; });
     });
-    const by = (w) => (m.find((c) => c.week === 'Week ' + w) || {}).size;
+    const by = (w) => m.find((c) => c.week === 'Week ' + w) || {};
     ok('two moment cards drawn', m.length === 2, JSON.stringify(m));
-    ok('no pear on any card', m.every((c) => !c.size.includes('🍐')), JSON.stringify(m));
-    ok('week 30 card: "about the size of a large carrot 🥕"', by(30) === 'about the size of a large carrot 🥕', JSON.stringify(by(30)));
-    ok('week 40 card: "about the size of a pumpkin", nothing after', by(40) === 'about the size of a pumpkin', JSON.stringify(by(40)));
-    await p40b.close();
-    await probe.close();
+    ok('week 30 card: words and the carrot painting', by(30).text === 'about the size of a large carrot' && /carrot\.webp$/.test(by(30).art), JSON.stringify(by(30)));
+    ok('week 40 card: words and the pumpkin painting', by(40).text === 'about the size of a pumpkin' && /pumpkin\.webp$/.test(by(40).art), JSON.stringify(by(40)));
+    ok('no emoji or pear on any card', m.every((c) => !PICTO.test(c.text)), JSON.stringify(m));
+    /* Laid out for real: the moments photo rule (.moment-card img, width 100%) once stretched the
+       small painting into a banner across the card. */
+    const sz = await p40.evaluate(() => {
+      const s = document.getElementById('scroll'); s.innerHTML = renderPregMoments();
+      return [...s.querySelectorAll('.mc-size img')].map((i) => { const r = i.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; });
+    });
+    ok('the moments painting is a small square, not a banner (at most 32 by 32)', sz.length === 2 && sz.every(([w, h]) => w > 0 && w <= 32 && h <= 32 && Math.abs(w - h) <= 1), JSON.stringify(sz));
+    await p30.close(); await p40.close();
+
+    console.log('\n5. after a loss');
+    for (const [name, st] of [['loss', loss], ['loss with a living child', lossWithChild], ['loss synced, journey not yet gone', lossRace]]) {
+      const p = await arrive(st);
+      const f = await fruits(p);
+      /* Rendered elements only: the app's own inline script mentions fruit-art in a comment. */
+      const refs = await p.evaluate(() => document.querySelectorAll('[src*="fruit-art"],[style*="fruit-art"],[srcset*="fruit-art"]').length);
+      ok(name + ': nothing painted anywhere', f.length === 0 && refs === 0, JSON.stringify(f) + ' refs=' + refs);
+      if (st === loss) {
+        /* The companion: stage one painting on this same screen and the same two matchers must see it. */
+        const staged = await p.evaluate(() => { const i = document.createElement('img'); i.src = '/app/fruit-art/pumpkin.webp'; document.body.appendChild(i); return document.querySelectorAll('[src*="fruit-art"],[style*="fruit-art"],[srcset*="fruit-art"]').length; });
+        const stagedF = await fruits(p);
+        planted('a painting staged on the holding screen', !(stagedF.length || staged));
+        await p.evaluate(() => { document.querySelectorAll('img[src*="fruit-art"]').forEach((i) => i.remove()); });
+      }
+      if (st === loss) {
+        await p.evaluate(() => openKeptMemories()); await sleep(500);
+        const kept = await p.evaluate(() => { const s = document.getElementById('sheet'); return { open: !!(s && s.classList.contains('show')), text: s ? s.innerText.replace(/\s+/g, ' ') : '', art: s ? s.querySelectorAll('img[src*="fruit-art"]').length : -1 }; });
+        ok('kept memories open with both cards', kept.open && /Week 40/.test(kept.text) && /Week 30/.test(kept.text), kept.text.slice(0, 160));
+        ok('kept memories: the size in words, no painting, no emoji', kept.art === 0 && /about the size of a pumpkin/.test(kept.text) && !/about the size of a (pumpkin|large carrot) *\p{Extended_Pictographic}/u.test(kept.text), JSON.stringify(kept).slice(0, 200));
+      }
+      if (st === lossRace) {
+        const real = await p.evaluate(() => /fruit-art/.test(typeof renderPregHome === 'function' ? renderPregHome() : ''));
+        ok('race: renderPregHome itself paints nothing', real === false);
+        const plant = await p.evaluate(() => {
+          if (typeof pregFruitImg !== 'function') return false;
+          const src = pregFruitImg.toString().replace(/if\s*\(\s*typeof myLossHolding[^;]*;/, '');
+          const keep = window.pregFruitImg; window.pregFruitImg = eval('(' + src + ')');
+          let out = ''; try { out = renderPregHome(); } finally { window.pregFruitImg = keep; }
+          return /fruit-art/.test(out);
+        });
+        planted('pregFruitImg without its loss guard paints during the race', !plant);   // the check is "paints nothing"; stripped, it must paint
+      }
+      await p.close();
+    }
   } catch (e) {
     ok('the run finished', false, e.stack);
   }

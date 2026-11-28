@@ -49,20 +49,24 @@ window.PREG = (function () {
   var weeks = {};
   Object.keys(W).forEach(function (k) { var w = +k; weeks[w] = { week: w, trimester: tri(w), size: W[k][0], baby: W[k][1], mum: W[k][2] }; });
 
-  // The emoji for each "size of a..." comparison, ONLY where the emoji is that fruit or vegetable.
-  // The other weeks (a poppy seed, a kumquat, a fig, a lime, a pomegranate, a papaya, a squash, a
-  // pumpkin...) have no true emoji and get the words alone: a coloured circle reads as a stray mark,
-  // and the only pumpkin emoji is a carved jack-o'-lantern, at week 40 of all weeks. Founder, 28 Nov
-  // 2026. Home, the moments cards and the week card widget all read this one map;
-  // tools/preg_fruit_check.js holds it week by week.
-  var SIZE_EMOJI = {
-    'blueberry': '🫐', 'cherry': '🍒', 'pea pod': '🫛', 'lemon': '🍋', 'apple': '🍎',
-    'avocado': '🥑', 'bell pepper': '🫑', 'mango': '🥭', 'banana': '🍌', 'carrot': '🥕',
-    'corn cob': '🌽', 'lettuce': '🥬', 'cabbage': '🥬', 'aubergine': '🍆', 'large carrot': '🥕',
-    'coconut': '🥥', 'pineapple': '🍍', 'cantaloupe': '🍈', 'honeydew melon': '🍈',
-    'romaine lettuce': '🥬', 'chard': '🥬', 'small watermelon': '🍉'
+  // A painting for each "size of a..." comparison, every week from 4 to 41 (founder, 28 Nov 2026:
+  // "vibrant and better than the emojis"). The emoji they replace drew differently on every phone,
+  // and sixteen weeks had none that was true (a carved jack-o'-lantern at week 40). One painting
+  // can serve two sizes that look alike. Only the current week's file is fetched; the service
+  // worker keeps it after that. Never shown after a loss (index.html pregFruitImg), and kept
+  // memories stay words only. tools/preg_fruit_check.js holds every week, the files and their weight.
+  var SIZE_ART = {
+    'poppy seed': 'poppy-seed', 'sesame seed': 'sesame-seed', 'lentil': 'lentil', 'blueberry': 'blueberry',
+    'raspberry': 'raspberry', 'cherry': 'cherry', 'kumquat': 'kumquat', 'fig': 'fig', 'lime': 'lime',
+    'pea pod': 'pea-pod', 'lemon': 'lemon', 'apple': 'apple', 'avocado': 'avocado', 'pomegranate': 'pomegranate',
+    'bell pepper': 'bell-pepper', 'mango': 'mango', 'banana': 'banana', 'carrot': 'carrot', 'papaya': 'papaya',
+    'grapefruit': 'grapefruit', 'corn cob': 'corn-cob', 'cauliflower': 'cauliflower', 'lettuce': 'lettuce',
+    'cabbage': 'cabbage', 'aubergine': 'aubergine', 'butternut squash': 'butternut-squash', 'large carrot': 'carrot',
+    'coconut': 'coconut', 'squash': 'butternut-squash', 'pineapple': 'pineapple', 'cantaloupe': 'cantaloupe',
+    'honeydew melon': 'honeydew-melon', 'romaine lettuce': 'lettuce', 'chard': 'chard', 'leek': 'leek',
+    'small watermelon': 'small-watermelon', 'pumpkin': 'pumpkin'
   };
-  function sizeEmoji(s) { return SIZE_EMOJI[(s || '').toLowerCase()] || ''; }
+  function sizeArt(s) { var k = SIZE_ART[(s || '').toLowerCase()]; return k ? '/app/fruit-art/' + k + '.webp' : ''; }
 
   // Antenatal appointment schedules. item: {week, title, note}
   var antenatal = {
@@ -394,5 +398,5 @@ window.PREG = (function () {
     }
   };
 
-  return { weeks: weeks, antenatal: antenatal, dangerSigns: dangerSigns, conditions: conditions, tri: tri, sizeEmoji: sizeEmoji };
+  return { weeks: weeks, antenatal: antenatal, dangerSigns: dangerSigns, conditions: conditions, tri: tri, sizeArt: sizeArt };
 })();
