@@ -39,10 +39,7 @@ const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 
 for (const k of Object.keys(process.env)) if (/^GIT_/.test(k)) delete process.env[k];
-/* CUBBY_PUSH_LOCK: the hook's machine push lock in a temp dir of its own, never the real one, which a real push
-   holds while this runs inside it. */
-const ENV = Object.assign({}, process.env, { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: os.devNull,
-  CUBBY_PUSH_LOCK: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-wt-lock-')), 'push.lock') });
+const ENV = Object.assign({}, process.env, { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: os.devNull });
 
 const ROOT = path.join(__dirname, '..');
 const SRC = path.resolve(process.env.PREPUSH_WT_FROM || ROOT);
@@ -113,9 +110,13 @@ function scenario(label, files) {
   git(WT, ['add', 'docs/notes.md']); git(WT, ['commit', '-q', '--no-verify', '-m', 'docs only']);
 
   const before = snapshot(M, WT, BARE);
-  const push = spawnSync('git', ['push', 'origin', 'feature-wt'], { cwd: WT, env: ENV, encoding: 'utf8', timeout: 300000 });
+  /* CUBBY_PUSH_LOCK: the hook's machine push lock inside this scenario's temp dir, never the real one, which a
+     real push holds while this runs inside it. */
+  const push = spawnSync('git', ['push', 'origin', 'feature-wt'], { cwd: WT, encoding: 'utf8', timeout: 300000,
+    env: Object.assign({}, ENV, { CUBBY_PUSH_LOCK: path.join(T, 'push.flock') }) });
   const out = (push.stdout || '') + (push.stderr || '');
   const after = snapshot(M, WT, BARE);
+  try { fs.rmSync(T, { recursive: true, force: true }); } catch (e) { /* best effort: only this scenario's own temp dir */ }
   return { label, before, after, out, same: diff(before, after) === '', diff: diff(before, after),
     ranHook: /change needs test:|CHANGE-TEST: PASS/.test(out) && /Running gates before push/.test(out) };
 }

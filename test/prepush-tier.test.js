@@ -39,7 +39,7 @@ const w = (p, s) => { fs.mkdirSync(path.dirname(path.join(W, p)), { recursive: t
 const CALLS = path.join(T, 'gates-calls.txt');
 /* The hook's machine push lock, here and in every run below, never the real one (a real push holds that while
    this runs inside it, and would be waited for forever). */
-process.env.CUBBY_PUSH_LOCK = path.join(T, 'push.lock');
+process.env.CUBBY_PUSH_LOCK = path.join(T, 'push.flock');
 /* java, hermetic: every hook run sees a fake java that runs (or, where a line says so, one that cannot), never
    this machine's. JAVA_HOME is dropped so the hook asks the java on PATH unless a line sets one. */
 const fakeJava = (dir, code) => { fs.mkdirSync(path.join(dir, 'bin'), { recursive: true }); const f = path.join(dir, 'bin', 'java');

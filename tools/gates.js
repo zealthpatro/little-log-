@@ -299,7 +299,7 @@ TREE.push(
   { name: 'change-test',    cmd: ['node', 'tools/change_test_check.js', '--self-test'] },
   /* The real .githooks/pre-push, fed git's stdin: emulator tier for rules/Worker pushes, refusal works. */
   { name: 'prepush-tier',   cmd: ['node', 'test/prepush-tier.test.js'] },
-  /* One push suite at a time per machine: a live push-lock holder is waited for, a dead one taken over. */
+  /* One push suite at a time per machine (a kernel flock): a live holder is waited for, a dead one never is. */
   { name: 'push-lock',      cmd: ['node', 'test/push-lock.test.js'] },
   /* A real push from a LINKED worktree leaves the shared repository byte-identical (no gate inherits GIT_DIR). */
   { name: 'prepush-worktree', cmd: ['node', 'test/prepush-worktree.test.js'] },
@@ -1090,12 +1090,19 @@ async function selfTestTreeServer() {
       delete process.env.EMU_PORT_RANGE;
       let p;
       try { p = await freeRun(3); } finally { if (saved !== undefined) process.env.EMU_PORT_RANGE = saved; }
+      /* The old picker, inline: listen(0) gave q, the run was q..q+2. */
+      const q = await new Promise((res, rej) => { const s = net.createServer(); s.on('error', rej); s.listen(0, '127.0.0.1', () => { const x = s.address().port; s.close(() => res(x)); }); });
       const socks = [];
       for (let i = 0; i < 20; i++) socks.push(await new Promise((res) => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => res(s)); }));
       const os0 = socks.map((s) => s.address().port);
       await Promise.all(socks.map((s) => new Promise((r) => s.close(() => r()))));
       const inside = (ports, start, n) => ports.filter((x) => x >= start && x <= start + n - 1);
-      ok('7b. companion: the matcher finds an OS-assigned port when a run is placed over it', inside(os0, os0[0] - 1, 3).length >= 1, os0);
+      /* Companion, where the OS hands ports out in order (macOS): the same matcher finds the next listen(0) ports
+         inside the OLD picker's run, so the line below can go red. Linux hands them out at random, so no
+         companion can be staged there; the line below still holds because OWN_BAND is under its range. */
+      if (process.platform === 'darwin') {
+        ok('7b. companion: the old picker\'s run (:' + q + '-' + (q + 2) + ') holds some of the next 20 ports the OS hands out', inside(os0, q, 3).length >= 1, { oldRun: [q, q + 2], osGave: os0 });
+      }
       ok('7b. a 3-port run with no EMU_PORT_RANGE (:' + p + '-' + (p + 2) + ') holds none of the next 20 ports the OS hands out for listen(0)',
         inside(os0, p, 3).length === 0, { run: [p, p + 2], osGave: os0 });
     }

@@ -62,27 +62,43 @@ if ! printf '%s\n' "$RANGES" | node "$ROOT/tools/change_test_check.js" --stdin; 
 fi
 
 # One push suite at a time on this machine. Two pushes ran their suites together on 27 Nov 2026: they
-# clashed on ports and load, and a self-test failed that passes alone. The lock is a directory (mkdir is
-# atomic) holding "pid name". A live holder is waited for; a holder whose pid is gone is taken over. It is
-# released when this hook exits. CUBBY_PUSH_LOCK moves it (tests point it at a temp dir, never the real one).
+# clashed on ports and load, and a self-test failed that passes alone. Each gates run below goes through
+# with_push_lock: perl takes an exclusive flock on one file (waiting, and saying for whom, while another
+# push holds it), writes "pid name branch" into it for the next waiter's message, and runs the gates.
+# A kernel flock and not a mkdir with a pid in it, because a flock has no stale state: the kernel lets it go
+# when perl exits, however it exits, SIGKILL and reboot included. The first version was a mkdir lock and a
+# skeptic broke it three ways (28 Nov): six waiters behind a dead holder all took it over and ran at once, a
+# lock left with no name was waited on forever, and so was a lock path that could not be made.
+# The lock fd is close-on-exec (perl's default above fd 2), so a server a gate leaks cannot keep it.
+# CUBBY_PUSH_LOCK moves it (tests point it at temp dirs, never the real one). A job that already holds this
+# lock and pushes (e.g. a queued train run) exports CUBBY_PUSH_LOCK_HELD=<the lock>, and the push runs at
+# once instead of waiting forever on its own parent; with_push_lock exports it for everything it runs.
 # The lock is here, not in tools/gates.js, whose self-tests start runners inside runners.
-# test/push-lock.test.js stages a live holder and a dead one.
-PUSH_LOCK=${CUBBY_PUSH_LOCK:-${XDG_CACHE_HOME:-$HOME/.cache}/cubby/push.lock}
-mkdir -p "$(dirname "$PUSH_LOCK")"
-until mkdir "$PUSH_LOCK" 2>/dev/null; do
-  HOLDER=$(cat "$PUSH_LOCK/owner" 2>/dev/null)
-  HOLDER_PID=${HOLDER%% *}
-  if [ -n "$HOLDER_PID" ] && ! kill -0 "$HOLDER_PID" 2>/dev/null; then
-    echo "Push lock: its holder ($HOLDER) is no longer running, so this push takes it."
-    if [ "$(cat "$PUSH_LOCK/owner" 2>/dev/null)" = "$HOLDER" ]; then rm -f "$PUSH_LOCK/owner"; rmdir "$PUSH_LOCK" 2>/dev/null; fi
-    continue
-  fi
-  echo "Waiting for another push on this machine to finish its gates (holder: ${HOLDER:-just starting}; lock $PUSH_LOCK)."
-  sleep "${CUBBY_PUSH_LOCK_POLL:-15}"
-done
-echo "$$ $(basename "$ROOT") $(git rev-parse --abbrev-ref HEAD 2>/dev/null)" > "$PUSH_LOCK/owner"
-trap 'rm -f "$PUSH_LOCK/owner"; rmdir "$PUSH_LOCK" 2>/dev/null' EXIT
-trap 'exit 130' INT TERM HUP
+# test/push-lock.test.js stages a live holder, a SIGKILLed one, six pushes at once and an unmakeable path.
+PUSH_LOCK=${CUBBY_PUSH_LOCK:-${XDG_CACHE_HOME:-$HOME/.cache}/cubby/push.flock}
+if ! { mkdir -p "$(dirname "$PUSH_LOCK")" && : >> "$PUSH_LOCK"; } 2>/dev/null || ! command -v perl >/dev/null 2>&1; then
+  echo "✋ the machine push lock $PUSH_LOCK cannot be made (or perl, which takes it, is missing)."
+  echo "   Point CUBBY_PUSH_LOCK at a writable file, or push with --no-verify if you have decided that is acceptable."
+  exit 1
+fi
+PUSH_OWNER="$$ $(basename "$ROOT") $(git rev-parse --abbrev-ref HEAD 2>/dev/null)"
+with_push_lock() {
+  if [ "${CUBBY_PUSH_LOCK_HELD:-}" = "$PUSH_LOCK" ]; then "$@"; return; fi
+  perl -MFcntl=:flock -e '
+    $| = 1;
+    my ($lock, $who) = (shift, shift);
+    open(my $fh, ">>", $lock) or do { print "Push lock: cannot open $lock ($!).\n"; exit 1 };
+    unless (flock($fh, LOCK_EX | LOCK_NB)) {
+      my $h = ""; if (open(my $r, "<", $lock)) { $h = <$r> // ""; chomp $h; close $r }
+      print "Waiting for another push on this machine to finish its gates (holder: ", ($h eq "" ? "unknown" : $h), "; lock $lock).\n";
+      flock($fh, LOCK_EX) or do { print "Push lock: cannot lock $lock ($!).\n"; exit 1 };
+    }
+    truncate($fh, 0); syswrite($fh, "$who\n");
+    $ENV{CUBBY_PUSH_LOCK_HELD} = $lock;
+    my $rc = system { $ARGV[0] } @ARGV;
+    exit($rc == -1 ? 127 : ($rc & 127) ? 128 + ($rc & 127) : $rc >> 8);
+  ' "$PUSH_LOCK" "$PUSH_OWNER" "$@"
+}
 
 # Only a push to main deploys. A branch push (a PR for the daily train, docs/RELEASE-TRAIN.md) runs the
 # change-needs-test check above and the Chrome-free gates, then leaves the rest to CI on the PR and to the
@@ -90,7 +106,7 @@ trap 'exit 130' INT TERM HUP
 # 95-minute suite on this Mac and the train saved nothing. test/prepush-tier.test.js checks both paths.
 if ! printf '%s\n' "$RANGES" | awk '$3 == "refs/heads/main" { found = 1 } END { exit !found }'; then
   echo "Running gates before push (branch push, not main: Chrome-free gates only; CI checks the PR, the train's push to main runs the full suite)..."
-  if ! node "$ROOT/tools/gates.js" --no-browser; then
+  if ! with_push_lock node "$ROOT/tools/gates.js" --no-browser; then
     echo ""
     echo "Push stopped: a gate failed. Fix it, or push with --no-verify if you have decided"
     echo "the failure is acceptable and written down why."
@@ -120,7 +136,7 @@ if [ "$TIER" = "emulator" ]; then
 fi
 
 echo "Running gates before push (skip with --no-verify)..."
-if ! node "$ROOT/tools/gates.js" $GATE_ARGS; then
+if ! with_push_lock node "$ROOT/tools/gates.js" $GATE_ARGS; then
   echo ""
   echo "Push stopped: a gate failed. Fix it, or push with --no-verify if you have decided"
   echo "the failure is acceptable and written down why."
