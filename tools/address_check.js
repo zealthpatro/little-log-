@@ -96,6 +96,10 @@ function scan(root, priv) {
     if (text === null) continue;
     const lower = text.toLowerCase();
     for (const p of priv) if (lower.includes(p)) hits.push({ file: rel, line: lower.slice(0, lower.indexOf(p)).split('\n').length, why: 'an address from the private list' });
+    /* A generated npm lockfile carries third-party package authors' public addresses (28 Nov: izs.me in
+       test/package-lock.json). It is not ours to edit, so the allowlist scan skips it; the PRIVATE list
+       above still applies to it, so a personal address can never hide there. */
+    if (/(^|\/)package-lock\.json$/.test(rel)) continue;
     const lines = text.split('\n');
     for (let i = 0; i < lines.length; i++) {
       ADDRESS.lastIndex = 0;
@@ -135,6 +139,9 @@ if (process.argv.includes('--self-test')) {
   /* The private list is for an address the allowlist would pass: say the founder signs in as a role inbox. */
   const alias = at('hello', 'little-cubby.com');
   ok('an address on the private list goes RED even when the allowlist would pass it', scan(scratch({ 'b.md': 'ask ' + alias }), [alias]).length === 1);
+  ok('a package author address in a package-lock.json passes, but the same address in any other file goes RED',
+    scan(scratch({ 'test/package-lock.json': '{"author": "a' + '@' + 'izs.me"}' }), []).length === 0 && scan(scratch({ 'test/notes.json': '{"author": "a' + '@' + 'izs.me"}' }), []).length === 1);
+  ok('a PRIVATE-list address inside a package-lock.json still goes RED', scan(scratch({ 'test/package-lock.json': '{"x": "' + alias + '"}' }), [alias]).length === 1);
   ok('in any case', scan(scratch({ 'b.md': 'ask ' + at('HELLO', 'Little-Cubby.com') }), [alias]).length === 1);
   /* At the brand's own domains, only named role inboxes: a personal one there is still personal (S34). */
   for (const a of [at('zeal', 'little-cubby.com'), at('founder', 'mail.little-cubby.com'), at('first.last', 'little-cubby.com'), at('cubby-appt-a1', 'little-cubby.com')]) {
