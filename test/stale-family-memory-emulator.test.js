@@ -35,9 +35,9 @@
  *      rules check it asks before writing). She logs out, Bea signs in and boots, and only then do both answers
  *      land:
  *        L1 Ann's late link token does not land in Bea's memory (window.LL.ownerLinks), and no link is handed back
- *        L2 nothing on the page tries a write naming Ann's invitee after Bea signed in (the invite itself, or its
- *           row on Bea's family), and the address is not filed as Bea's last invite, even past the form's
- *           six-second optimistic exit
+ *        L2 nothing on the page tries a write naming Ann's invitee after she left (the invite itself, or its
+ *           row), and the address is filed as nobody else's last invite (Bea's, or the signed-out page's), even
+ *           past the form's six-second optimistic exit
  *
  * Every "none of X" assertion uses the same matcher that first finds X in Ann's own session (section A, and the
  * staged sign-in state just before S).
@@ -458,7 +458,7 @@ async function until(fn, ms) {
     const formUp = await P.evaluate((em) => {
       const e = document.getElementById('llInvEmail'), b = document.getElementById('llInvBtn');
       if (!e || !b) return false;
-      e.value = em; b.click(); return true;
+      e.value = em; b.click(); window.__clickedAt = Date.now(); return true;
     }, LATE_EM);
     await until(async () => (await lateHeld(P)).includes('invite-get'), 8000);
     await P.evaluate(() => { window.__holdInviteGet = false; });
@@ -466,21 +466,32 @@ async function until(fn, ms) {
     ok('(the spy sees her invite\'s row go onto her family, naming the address)', (await writesNaming(P, LATE_EM)).some((w) => w.includes('households/' + hidA)), await writesNaming(P, LATE_EM));
     await P.evaluate(() => { const ov = document.getElementById('llModalOv'); if (ov) ov.remove(); window.LL.signOut(); });
     ok('Ann is at the door, both answers still held', await atDoor(P) && (await lateHeld(P)).length === 2, await lateHeld(P));
+    /* The form's optimistic exit fires six seconds after the click; it only tests the guard if she has left by then. */
+    const leftAfter = await P.evaluate(() => Date.now() - window.__clickedAt);
+    ok('(she left ' + leftAfter + ' ms after the click, inside the form\'s six-second exit)', leftAfter < 5500, { leftAfter });
     await resetWrites(P);
     await signIn(P, 'bea@stalefamily.test');
     ok('Bea boots into her own family', await booted(P, beaUid));
     await sleep(1000); // her own owner-only link listener has answered
     const lateTokens = (await linksFor(hidA, annUid)).map((d) => d.id).filter((x) => !linksBefore.includes(x));
     ok('(Ann\'s late link was made on the server, in her family, before she left)', lateTokens.length === 1, { lateTokens });
+    /* The slow-network case: the form's six-second optimistic exit fires before the server's answer lands, with
+       Bea signed in. An answer let through sooner cancels that exit, and the exit's own guard is never asked. */
+    await until(async () => (await P.evaluate(() => Date.now() - window.__clickedAt)) > 6500, 15000);
+    ok('(the form\'s six-second exit has fired with Bea signed in, before either answer is let through)', (await P.evaluate(() => Date.now() - window.__clickedAt)) > 6500);
     await P.evaluate(() => window.__releaseLate());
-    await sleep(7000); // past the invite form's six-second optimistic exit
+    await sleep(2500); // both answers and anything they start have landed
     const beaTokens = await ownerLinkTokens(P);
     ok('L1 Ann\'s late link token does not land in Bea\'s memory', !lateTokens.some((x) => beaTokens.includes(x)), { lateTokens, beaTokens });
     const handed = await P.evaluate(() => window.__lateLink);
     ok('L1 and no link is handed back once she has left', handed === null, { handed });
     ok('L2 nothing tries a write naming Ann\'s invitee after Bea signed in', (await writesNaming(P, LATE_EM)).length === 0, await writesNaming(P, LATE_EM));
-    const filed = await P.evaluate((em, uid) => localStorage.getItem('cubby-lastinvite-' + uid) === em, LATE_EM, beaUid);
-    ok('L2 and the address is not filed as Bea\'s last invite', !filed, { filed });
+    /* Her invite form's answer files the address as the last invite of whoever is signed in when it lands
+       (cubby-lastinvite-<uid>, or -local with nobody): anyone but Ann is the wrong one. */
+    const filed = await P.evaluate((em, uid) => Object.keys(localStorage).filter((k) => k.startsWith('cubby-lastinvite-') && k !== 'cubby-lastinvite-' + uid && localStorage.getItem(k) === em), LATE_EM, annUid);
+    const allFiled = await P.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('cubby-lastinvite-')).map((k) => k + '=' + localStorage.getItem(k)));
+    ok('L2 and the address is filed as nobody else\'s last invite (Bea\'s, or the signed-out page\'s)', filed.length === 0, { filed, allFiled, annUid, beaUid });
+    console.log('    (every last-invite key now: ' + JSON.stringify(allFiled) + ')');
   }
 
   await P.browserContext().close();

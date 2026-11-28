@@ -5505,7 +5505,7 @@
     });
   }
   function createEmailInvite(o) {
-    var hid = window.LL.householdId, attached = hhRef;
+    var hid = window.LL.householdId, attached = hhRef, byUid = auth.currentUser && auth.currentUser.uid;
     var mySeq = ++inviteSeq;
     var invDoc = {
       householdId: hid, role: o.role === 'owner' ? 'owner' : 'caregiver',
@@ -5540,9 +5540,10 @@
       });
     };
     return familyInvitesAllowed(o.email, hid).then(function (allowed) {
-      /* She left the family before the rules answered: nothing more is made for it from this page (its mirror
-         row, queued above, comes off again where the rules let it). */
-      if (leftSince(attached)) { dropRow(); return 'withdrawn'; }
+      /* She left the family before the rules answered: nothing more is made for it from this page. Its mirror
+         row, queued above, comes off again only if she is the one signed in now (back in, say); nobody else on
+         this page writes to her family. */
+      if (leftSince(attached)) { if (byUid && auth.currentUser && auth.currentUser.uid === byUid) dropRow(); return 'withdrawn'; }
       /* Cancelled while Cubby was still asking which invite to write (a slow connection): her Cancel
          had nothing to delete yet, so writing it now would leave a live invite she has withdrawn. */
       if ((inviteCancelled[hid + '|' + o.email] || 0) > mySeq) return 'withdrawn';
