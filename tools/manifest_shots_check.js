@@ -170,8 +170,24 @@ async function meanDiff(page, aDataUrl, bDataUrl) {
   }, aDataUrl, bDataUrl);
 }
 
+/* m[i][j]: the shipped PNG of scene i against the live render of scene j. The problems: each PNG that is not
+   strictly nearest its own scene. */
+function nearestOwn(m, order) {
+  const out = [];
+  m.forEach((row, i) => {
+    const others = row.filter((x, j) => j !== i);
+    if (!(row[i] < Math.min(...others))) out.push(order[i] + '.png is ' + row[i].toFixed(2) + ' from its own scene and ' + Math.min(...others).toFixed(2) + ' from another');
+  });
+  return out;
+}
+/* Chrome on macOS made the shipped PNGs, so only there is the absolute limit a statement about them. */
+const REFERENCE_RENDERER = process.platform === 'darwin';
+const lives = {};
+
 (async () => {
   console.log('\n1. what the manifest declares');
+  console.log('renderer: ' + (REFERENCE_RENDERER ? 'Chrome on macOS, the one the PNGs were made with: each PNG is held to the limit of 6 and to being nearest its own scene'
+    : 'Chrome on ' + process.platform + ', not the one the PNGs were made with: each PNG is held to being nearest its own scene; the limit of 6 is graded only on the Mac'));
   const files = checkDeclaration();
 
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'] });
@@ -201,15 +217,39 @@ async function meanDiff(page, aDataUrl, bDataUrl) {
       ok('the manifest ships a file for this scene', !!shipped, s.file);
       if (!shipped) return;
       const live = await page.screenshot({ encoding: 'base64' });
+      lives[s.file] = live;
       const d = await meanDiff(page,
         'data:image/png;base64,' + live,
         'data:image/png;base64,' + fs.readFileSync(shipped).toString('base64'));
       /* 6/255 is roughly "the same screen, re-rendered". The drawn posters this replaces sit around
          40 against any of these, and a shot of the wrong tab is further still. Printed either way so
-         a drift that is creeping toward the line is visible before it crosses it. */
-      ok('the shipped PNG is this screen (mean grey diff ' + d.toFixed(2) + ', limit 6)', d < 6, d);
+         a drift that is creeping toward the line is visible before it crosses it.
+         The PNGs are made by Chrome on the Mac (tools/gen_manifest_shots.js), and that is the only renderer this
+         limit means anything for: Chrome on CI's Linux draws the same screen with other glyph rasters and measured
+         8.18 on shot 1 (PR #16, 28 Nov 2026). So the limit is graded on the Mac, unchanged, and elsewhere the
+         number is printed and section 2b below (every platform) asserts which screen each PNG is. */
+      if (REFERENCE_RENDERER) ok('the shipped PNG is this screen (mean grey diff ' + d.toFixed(2) + ', limit 6)', d < 6, d);
+      else console.log('  note mean grey diff ' + d.toFixed(2) + ' against the Mac-made PNG; the limit 6 is graded only on the Mac (this is ' + process.platform + ', another renderer)');
     });
   }
+
+  await block('2b. each shipped PNG is nearer its own scene than any other scene (every platform)', async () => {
+    const order = SCENES.SHOTS.map((s) => s.file);
+    ok('all ' + order.length + ' scenes were rendered above', order.length === 3 && order.every((f) => lives[f]), order.filter((f) => !lives[f]));
+    const shippedB64 = order.map((f) => fs.readFileSync(files.find((x) => x.endsWith(f + '.png'))).toString('base64'));
+    const m = [];
+    for (let i = 0; i < order.length; i++) {
+      m.push([]);
+      for (let j = 0; j < order.length; j++) m[i].push(await meanDiff(page, 'data:image/png;base64,' + lives[order[j]], 'data:image/png;base64,' + shippedB64[i]));
+    }
+    console.log('  note mean grey diff, shipped PNG (row) against each live scene (column): ' + m.map((r, i) => order[i] + ' [' + r.map((x) => x.toFixed(2)).join(', ') + ']').join('; '));
+    const wrong = nearestOwn(m, order);
+    ok('every shipped PNG is nearest the scene it is declared for', wrong.length === 0, wrong);
+    /* The companion, on the same measured numbers: the PNGs declared for each other's scenes (rows rotated by
+       one) must be refused, or the line above would pass whatever the files showed. */
+    const rotated = m.map((r, i) => m[(i + 1) % m.length]);
+    ok('companion: the same PNGs declared for each other\'s scenes are refused', nearestOwn(rotated, order).length === order.length, nearestOwn(rotated, order));
+  });
 
   await block('3. no data: the two-names claim cannot be captured from an empty account', async () => {
     /* The seeded day first, counted, because "zero rows on an empty account" proves nothing on its
