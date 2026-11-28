@@ -57,6 +57,9 @@ catalogue behind it. Each rule below cost real time in Aug-Sep 2026 and each has
   is refused unless a commit says `Test-exempt: <why>` (`tools/change_test_check.js`), and a range that
   touches rules, Worker or `app/store-firebase.js` runs `--emulator` too, on free ports; CI runs that
   tier on every push. Chaos and both fuzzers run nightly (`tools/nightly.sh`); see `docs/TESTING.md`.
+- Two suites on one Mac clash on ports and load (27 Nov 2026, a tree-server FAIL neither run had alone).
+  Pushes take the machine push lock in `.githooks/pre-push` (`test/push-lock.test.js`), and port runs
+  come from 20000-32000, outside every ephemeral range, never from listen(0) plus one.
 - "Does it exist?" is the wrong question. "What would it do right now?" is the right one. It found a
   dead pre-push hook, a mute canary, an Android build that cannot sign anyone in, and five orphaned tests.
 

@@ -39,7 +39,10 @@ const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 
 for (const k of Object.keys(process.env)) if (/^GIT_/.test(k)) delete process.env[k];
-const ENV = Object.assign({}, process.env, { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: os.devNull });
+/* CUBBY_PUSH_LOCK: the hook's machine push lock in a temp dir of its own, never the real one, which a real push
+   holds while this runs inside it. */
+const ENV = Object.assign({}, process.env, { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: os.devNull,
+  CUBBY_PUSH_LOCK: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cubby-wt-lock-')), 'push.lock') });
 
 const ROOT = path.join(__dirname, '..');
 const SRC = path.resolve(process.env.PREPUSH_WT_FROM || ROOT);

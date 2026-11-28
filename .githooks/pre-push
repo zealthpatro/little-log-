@@ -61,6 +61,29 @@ if ! printf '%s\n' "$RANGES" | node "$ROOT/tools/change_test_check.js" --stdin; 
   exit 1
 fi
 
+# One push suite at a time on this machine. Two pushes ran their suites together on 27 Nov 2026: they
+# clashed on ports and load, and a self-test failed that passes alone. The lock is a directory (mkdir is
+# atomic) holding "pid name". A live holder is waited for; a holder whose pid is gone is taken over. It is
+# released when this hook exits. CUBBY_PUSH_LOCK moves it (tests point it at a temp dir, never the real one).
+# The lock is here, not in tools/gates.js, whose self-tests start runners inside runners.
+# test/push-lock.test.js stages a live holder and a dead one.
+PUSH_LOCK=${CUBBY_PUSH_LOCK:-${XDG_CACHE_HOME:-$HOME/.cache}/cubby/push.lock}
+mkdir -p "$(dirname "$PUSH_LOCK")"
+until mkdir "$PUSH_LOCK" 2>/dev/null; do
+  HOLDER=$(cat "$PUSH_LOCK/owner" 2>/dev/null)
+  HOLDER_PID=${HOLDER%% *}
+  if [ -n "$HOLDER_PID" ] && ! kill -0 "$HOLDER_PID" 2>/dev/null; then
+    echo "Push lock: its holder ($HOLDER) is no longer running, so this push takes it."
+    if [ "$(cat "$PUSH_LOCK/owner" 2>/dev/null)" = "$HOLDER" ]; then rm -f "$PUSH_LOCK/owner"; rmdir "$PUSH_LOCK" 2>/dev/null; fi
+    continue
+  fi
+  echo "Waiting for another push on this machine to finish its gates (holder: ${HOLDER:-just starting}; lock $PUSH_LOCK)."
+  sleep "${CUBBY_PUSH_LOCK_POLL:-15}"
+done
+echo "$$ $(basename "$ROOT") $(git rev-parse --abbrev-ref HEAD 2>/dev/null)" > "$PUSH_LOCK/owner"
+trap 'rm -f "$PUSH_LOCK/owner"; rmdir "$PUSH_LOCK" 2>/dev/null' EXIT
+trap 'exit 130' INT TERM HUP
+
 # Only a push to main deploys. A branch push (a PR for the daily train, docs/RELEASE-TRAIN.md) runs the
 # change-needs-test check above and the Chrome-free gates, then leaves the rest to CI on the PR and to the
 # train's one push to main, which still runs the full tier below. Without this every PR branch cost a

@@ -299,6 +299,8 @@ TREE.push(
   { name: 'change-test',    cmd: ['node', 'tools/change_test_check.js', '--self-test'] },
   /* The real .githooks/pre-push, fed git's stdin: emulator tier for rules/Worker pushes, refusal works. */
   { name: 'prepush-tier',   cmd: ['node', 'test/prepush-tier.test.js'] },
+  /* One push suite at a time per machine: a live push-lock holder is waited for, a dead one taken over. */
+  { name: 'push-lock',      cmd: ['node', 'test/push-lock.test.js'] },
   /* A real push from a LINKED worktree leaves the shared repository byte-identical (no gate inherits GIT_DIR). */
   { name: 'prepush-worktree', cmd: ['node', 'test/prepush-worktree.test.js'] },
   /* The nightly bug-bash's verdict, board line and open-findings ledger, over synthetic nights in a temp dir. */
@@ -424,8 +426,8 @@ async function emuPorts() {
   return out;
 }
 /* n distinct free ports. EMU_PORT_RANGE=7601-7639 keeps every pick inside a band a session has agreed to use
-   (a shared Mac where other sessions own other ports), searched from the bottom; without it the OS hands out
-   free ephemeral ports. tools/nightly.sh takes its ports here too (--free-ports=N), so there is one picker. */
+   (a shared Mac where other sessions own other ports), searched from the bottom; without it they come from
+   OWN_BAND (freeRun, below). tools/nightly.sh takes its ports here too (--free-ports=N), so there is one picker. */
 async function freePorts(n) {
   const band = /^(\d+)-(\d+)$/.exec(process.env.EMU_PORT_RANGE || '');
   const out = [];
@@ -434,8 +436,27 @@ async function freePorts(n) {
     if (out.length < n) throw new Error('EMU_PORT_RANGE ' + band[0] + ' has no ' + n + ' free ports');
     return out;
   }
-  while (out.length < n) { const p = await freePort(); if (!out.includes(p)) out.push(p); }
+  while (out.length < n) { const p = await freeRun(1); if (!out.includes(p)) out.push(p); }
   return out;
+}
+/* n consecutive free ports; the first is returned. Inside EMU_PORT_RANGE when set, from its bottom. Otherwise
+   from OWN_BAND, 20000-32000, below the ephemeral ranges of macOS (49152-65535) and Linux (32768-60999), from
+   an offset this process picks at random and moves past each pick. It used to take the port the OS handed out
+   for listen(0) and use the ones after it; macOS hands those out in order, so p+1 was the very next port any
+   other process was given, and two suites at once took each other's ports (27 Nov 2026, tree-server case 7). */
+const OWN_BAND = [20000, 32000];
+let ownCursor = OWN_BAND[0] + Math.floor(Math.random() * (OWN_BAND[1] - OWN_BAND[0] + 1));
+async function freeRun(n) {
+  const band = /^(\d+)-(\d+)$/.exec(process.env.EMU_PORT_RANGE || '');
+  const all = async (p) => { for (let k = 0; k < n; k++) if (!(await portIsFree(p + k))) return false; return true; };
+  if (band) { for (let p = Number(band[1]); p + n - 1 <= Number(band[2]); p++) if (await all(p)) return p; throw new Error('EMU_PORT_RANGE ' + band[0] + ' has no ' + n + ' free ports in a row'); }
+  const [lo, hi] = OWN_BAND, size = hi - lo + 1;
+  for (let i = 0; i < size; i++) {
+    const p = lo + ((ownCursor - lo + i) % size);
+    if (p + n - 1 > hi) continue;
+    if (await all(p)) { ownCursor = p + n > hi ? lo : p + n; return p; }
+  }
+  throw new Error('no ' + n + ' free ports in a row in ' + lo + '-' + hi);
 }
 /* Free means nothing listens there at ANY address a gate's URL can reach. serve.js listens on the wildcard
    address, the gates ask 127.0.0.1, and the self-hosting suites ask `localhost` (::1 first on macOS). On macOS
@@ -518,24 +539,12 @@ EMU_GATES.push(
 
 /* The tree server's port. Inside EMU_PORT_RANGE when one is set, so a session that agreed a band stays in
    it for every port this runner binds, taken from the TOP of the band so the emulator picks (which start
-   at the bottom) are not pushed out of it; otherwise any free port, as before. */
+   at the bottom) are not pushed out of it; otherwise freeRun's own band, like every other port. */
 async function treePort() {
   const band = /^(\d+)-(\d+)$/.exec(process.env.EMU_PORT_RANGE || '');
-  if (!band) return freePort();
+  if (!band) return freeRun(1);
   for (let p = Number(band[2]); p >= Number(band[1]); p--) if (await portIsFree(p)) return p;
   throw new Error('EMU_PORT_RANGE ' + band[0] + ' has no free port for the tree server');
-}
-/* An ephemeral port the OS hands out on 127.0.0.1, kept only if it is free at every address (portIsFree). */
-async function freePort() {
-  for (let i = 0; i < 50; i++) {
-    const p = await new Promise((res, rej) => {
-      const s = net.createServer();
-      s.on('error', rej);
-      s.listen(0, '127.0.0.1', () => { const q = s.address().port; s.close(() => res(q)); });
-    });
-    if (await portIsFree(p)) return p;
-  }
-  throw new Error('no port the OS offered was free at every address (50 tries)');
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -856,15 +865,8 @@ async function selfTestTreeServer() {
     });
   }
   const unplant = (s) => new Promise((r) => { if (!s) return r(); s.close(() => r()); if (s.closeAllConnections) s.closeAllConnections(); });
-  /* n consecutive free ports: from the bottom of EMU_PORT_RANGE (the runner that started this took the top), or
-     wherever the OS offers. */
-  async function freeRun(n) {
-    const band = /^(\d+)-(\d+)$/.exec(process.env.EMU_PORT_RANGE || '');
-    const all = async (p) => { for (let k = 0; k < n; k++) if (!(await portIsFree(p + k))) return false; return true; };
-    if (band) { for (let p = Number(band[1]); p + n - 1 <= Number(band[2]); p++) if (await all(p)) return p; throw new Error('EMU_PORT_RANGE ' + band[0] + ' has no ' + n + ' free ports in a row'); }
-    for (let i = 0; i < 100; i++) { const p = await freePort(); if (p + n - 1 <= 65535 && await all(p)) return p; }
-    throw new Error('no ' + n + ' free ports in a row');
-  }
+  /* freeRun is the runner's own (above): from the bottom of EMU_PORT_RANGE, which the runner that started this
+     took the top of, or from OWN_BAND. */
   /* A runner in tree t, its own band given explicitly. */
   function child(t, args, band) {
     const env = Object.assign(childEnv(), { EMU_PORT_RANGE: band });
@@ -1072,6 +1074,30 @@ async function selfTestTreeServer() {
       await unplant(pq.s);
       ok('7. --served-is-this-tree says yes for this tree\'s bytes and no, naming the file, for another checkout\'s',
         same.code === 0 && diff.code === 1 && /app\/index\.html differs/.test(diff.out), same.out + '\n' + diff.out);
+      /* 7a. Without a band the ports come from outside every ephemeral range (Linux from 32768, macOS from 49152):
+             a port the OS hands out for listen(0) is the one the next process is given too (27 Nov 2026). */
+      const nb = await child(tempTree(), ['--free-ports=3'], '').done;
+      const got = /^(\d+) (\d+) (\d+)$/.exec(nb.out.trim());
+      ok('7a. --free-ports=3 with no EMU_PORT_RANGE prints three distinct ports, each in 1024-32767 (below every ephemeral range)',
+        nb.code === 0 && !!got && new Set(got.slice(1)).size === 3 && got.slice(1).map(Number).every((x) => x >= 1024 && x <= 32767), nb.out);
+    }
+
+    /* 7b. A run picked here must not be where the OS's next listen(0) lands. macOS hands those out in order, so
+           the old picker (listen(0) gave p, the run was p..p+n-1) put p+1 in the next process's hands. Twenty
+           sockets held open at once, as the next twenty asks on this machine would be. */
+    {
+      const saved = process.env.EMU_PORT_RANGE;
+      delete process.env.EMU_PORT_RANGE;
+      let p;
+      try { p = await freeRun(3); } finally { if (saved !== undefined) process.env.EMU_PORT_RANGE = saved; }
+      const socks = [];
+      for (let i = 0; i < 20; i++) socks.push(await new Promise((res) => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => res(s)); }));
+      const os0 = socks.map((s) => s.address().port);
+      await Promise.all(socks.map((s) => new Promise((r) => s.close(() => r()))));
+      const inside = (ports, start, n) => ports.filter((x) => x >= start && x <= start + n - 1);
+      ok('7b. companion: the matcher finds an OS-assigned port when a run is placed over it', inside(os0, os0[0] - 1, 3).length >= 1, os0);
+      ok('7b. a 3-port run with no EMU_PORT_RANGE (:' + p + '-' + (p + 2) + ') holds none of the next 20 ports the OS hands out for listen(0)',
+        inside(os0, p, 3).length === 0, { run: [p, p + 2], osGave: os0 });
     }
   } catch (e) {
     ok('the self-test ran to its end', false, e && e.stack || e);
