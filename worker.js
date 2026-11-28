@@ -1617,8 +1617,13 @@ function _inQuiet(hr, qs, qe){ if(qs==null||qe==null||qs===qe) return false; ret
    campaigns therefore live in collections no client may touch (`allow read, write: if false`), and
    only the service account, which bypasses rules, can move them.
 
-   The client-written push.due queue is trusted for `cat: "critical"` and nothing else, so a modified
-   client cannot promote its own message into an uncapped category or invent a campaign. */
+   The client-written push.due queue is NOT trusted: firestore.rules lets a user write it but does not
+   validate it. pushEntryVerdict (below) decides every entry, and the cron loop calls nothing else to
+   decide. What it enforces: the queue may carry medicine (`critical`, or no cat from a pre-v301 client)
+   and the three parent-chosen reminders (`feed`, `pump`, `visit`). Any other cat, `marketing` and
+   `feature` included, is dropped, so a modified client cannot promote its own message into a capped
+   category or invent a campaign. The three parent-chosen ones need explicit consent, a timezone, and
+   quiet-hours permission, and are at most one per category and baby per tick. */
 const PUSH_CAP = { marketing: 2, feature: 5 };   // per calendar month, per user. critical is uncapped.
 
 /* The month key is decided in the USER's timezone. Doing it in UTC would roll someone in Auckland
@@ -1645,6 +1650,102 @@ function _hourIn(tz, now) {
     const h = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', hour12: false }).format(new Date(now));
     const n = parseInt(h, 10); return isNaN(n) ? null : n;
   } catch (e) { return null; }
+}
+
+/* ---- One queue entry, one verdict: 'send' | 'drop' | 'wait' ---------------------------------------
+   Pure, so test/push-reminder-cats.test.js lifts it out of this file and proves every rule. `entry` is
+   the plain shape the cron loop reads off push.due: { at, due, cat, babyId, skipIfSince, ... }.
+   `prefs` = { allow:{critical,feed,pump,visit}, quietStart, quietEnd, quietAllow:{...}, tz } as booleans
+   or undefined. `hourNow` is _hourIn(prefs.tz, now). `recentEvents` is the household's events as
+   _fsEventPlain gives them: an array, null when the read FAILED, undefined when it was never made.
+   'wait' = not due yet, keep it (the loop leaves it in the queue, exactly as it always skipped at > now).
+   'drop' = done with it, never send (advances the cursor). 'send' = deliver now. */
+function pushEntryVerdict(entry, prefs, nowMs, hourNow, recentEvents, uid) {
+  const e = entry || {}, p = prefs || {}, allow = p.allow || {};
+  const at = e.at;
+  if (typeof at !== 'number' || !isFinite(at)) return 'drop';
+  if (at > nowMs) return 'wait';
+  /* No cat means medicine. Every client since sw v301 (b86abf02, 13 Aug 2026) stamps cat:'critical' on
+     both entry kinds it writes, but a build older than that wrote the same medicine entries with no cat
+     at all, and until this change the cron ignored cat entirely and sent them. Dropping them would
+     silence a parent's medicine reminders for as long as an old cached build keeps her queue fresh.
+     Treating them as critical grants nothing a modified client could not already get by writing
+     cat:'critical' itself, so it opens no door. Any OTHER cat we do not know is dropped. */
+  const cat = (e.cat == null || e.cat === '') ? 'critical' : e.cat;
+  if (cat === 'critical') {
+    // Exactly the rule the loop always had. Consent: absent means granted (every token minted before
+    // categories existed opted in by enabling reminders); only an explicit false silences it. Quiet
+    // hours are NOT applied here: the client already filters medicine by her quiet-hours choice
+    // (quietDropsPush in app/index.html), and the default lets medicine through. Moving that to the
+    // server is a separate change.
+    if (allow.critical === false) return 'drop';
+    const stale = e.due != null ? (nowMs > e.due) : (at < nowMs - 20 * 60000);
+    return stale ? 'drop' : 'send';
+  }
+  // The parent-chosen reminders. `marketing` and `feature` only ever come from campaigns.
+  if (cat !== 'feed' && cat !== 'pump' && cat !== 'visit') return 'drop';
+  if (allow[cat] !== true) return 'drop';                 // off by default: silence is not consent
+  if (!p.tz || hourNow == null) return 'drop';            // never guess her timezone
+  // Inside her quiet hours and she has not let this one through: let it go. Never deferred to the
+  // morning, where a nudge about a feed six hours ago is noise.
+  if (_inQuiet(hourNow, p.quietStart, p.quietEnd) && !(p.quietAllow && p.quietAllow[cat] === true)) return 'drop';
+  if (nowMs > at + 20 * 60000) return 'drop';             // too late to be useful
+  if (cat === 'visit') return 'send';
+  /* feed / pump: drop if the thing has already happened since the client queued this. skipIfSince must
+     be a number between a day before the fire time and the fire time itself; anything else is a
+     malformed or hostile entry, and the day bound is what keeps the events read small. */
+  const since = e.skipIfSince;
+  if (typeof since !== 'number' || !isFinite(since) || since > at || since < at - 24 * 3600000) return 'drop';
+  // The read failed (null) or was never made: drop rather than nudge her toward a feed that a partner
+  // may have logged ten minutes ago. A missed nudge is cheaper than a wrong one at 4am.
+  if (!Array.isArray(recentEvents)) return 'drop';
+  for (const ev of recentEvents) {
+    if (!ev || ev.deleted === true || ev.type !== cat) continue;
+    if (typeof ev.time !== 'number' || ev.time < since) continue;
+    if (cat === 'feed' && (ev.babyId || '') !== (e.babyId || '')) continue;  // a twin's feed is not hers
+    if (cat === 'pump' && (!uid || ev.authorId !== uid)) continue;           // a pump is hers, any baby
+    return 'drop';
+  }
+  return 'send';
+}
+/* Every live entry, decided, in fire order. At most one send per (category, baby) per tick for the
+   parent-chosen kinds: if a closed app left three feed nudges for one baby due at once, the latest is
+   the only one still true, so it goes and the others are dropped. Twins each keep their own. Medicine
+   is never thinned: each dose is its own reminder. */
+function pushPlan(entries, prefs, nowMs, hourNow, recentEvents, uid, sentUpTo) {
+  const plan = [];
+  for (const e of entries || []) {
+    if (!e || e.at == null || e.at <= sentUpTo) continue;
+    const v = pushEntryVerdict(e, prefs, nowMs, hourNow, recentEvents, uid);
+    if (v === 'wait') continue;
+    plan.push(Object.assign({}, e, { drop: v !== 'send' }));
+  }
+  plan.sort((a, b) => a.at - b.at);
+  const taken = {};
+  for (let i = plan.length - 1; i >= 0; i--) {
+    const m = plan[i];
+    if (m.drop || m.cat == null || m.cat === '' || m.cat === 'critical') continue;
+    const k = m.cat + '|' + (m.babyId || '');
+    if (taken[k]) m.drop = true; else taken[k] = true;
+  }
+  return plan;
+}
+/* Whether this tick needs the household's events at all, and from when: the earliest skipIfSince of
+   the feed/pump entries that would SEND if nothing had been logged. Null = no read. Asking the same
+   verdict (with no events) means an entry dropped for consent, quiet hours or staleness costs nothing. */
+function pushEventsSince(entries, prefs, nowMs, hourNow, uid, sentUpTo) {
+  let since = null;
+  for (const e of entries || []) {
+    if (!e || (e.cat !== 'feed' && e.cat !== 'pump') || e.at == null || e.at <= sentUpTo) continue;
+    if (pushEntryVerdict(e, prefs, nowMs, hourNow, [], uid) !== 'send') continue;
+    if (since == null || e.skipIfSince < since) since = e.skipIfSince;
+  }
+  return since;
+}
+function _fsEventPlain(doc) {
+  const f = (doc && doc.fields) || {};
+  return { type: _fsStr(f.type), babyId: _fsStr(f.babyId), authorId: _fsStr(f.authorId), time: _fsNum(f.time),
+           deleted: !!(f.deleted && f.deleted.booleanValue === true) };
 }
 
 async function fsGet(base, token, path) {
@@ -1735,7 +1836,8 @@ async function fsRecentEvents(base, token, hid, since) {
     from: [{ collectionId: 'events' }],
     where: { fieldFilter: { field: { fieldPath: 'time' }, op: 'GREATER_THAN_OR_EQUAL', value: { integerValue: String(Math.floor(since)) } } },
     orderBy: [{ field: { fieldPath: 'time' }, direction: 'DESCENDING' }],
-    select: { fields: ['type', 'medId', 'babyId', 'time', 'deleted'].map(f => ({ fieldPath: f })) },
+    // authorId: the pump reminder's skip rule counts only her own pumps (pushEntryVerdict).
+    select: { fields: ['type', 'medId', 'babyId', 'time', 'deleted', 'authorId'].map(f => ({ fieldPath: f })) },
     limit: DOSE_RECENT_LIMIT
   };
   let r;
@@ -2020,7 +2122,11 @@ async function sendPushReminders(env){
       // yes to. Only an explicit false silences it.
       const allowF = push && push.allow && push.allow.mapValue && push.allow.mapValue.fields;
       const criticalOff = !!(allowF && allowF.critical && allowF.critical.booleanValue === false);
-      if (!push || !(push.enabled && push.enabled.booleanValue) || !tokens.length || criticalOff) {
+      // A parent who silenced medicine but chose feed, pump or visit reminders still has a queue to
+      // serve; pushEntryVerdict then drops her medicine entries one by one. Everyone else who
+      // silenced medicine is skipped exactly as before.
+      const optedIn = ['feed', 'pump', 'visit'].some(k => allowF && allowF[k] && allowF[k].booleanValue === true);
+      if (!push || !(push.enabled && push.enabled.booleanValue) || !tokens.length || (criticalOff && !optedIn)) {
         if (id && _fsNum(push && push.nextAt) != null) await clearPushNextAt(base, token, id);
         continue;
       }
@@ -2038,34 +2144,61 @@ async function sendPushReminders(env){
          NEVER after still holds: a dose reminder carries its dose time, and once that has passed we
          drop it rather than nudge someone toward a dose they should no longer take. The digest (no
          due) is dropped once stale so a long-closed app never bursts. Both are DROPS, which do
-         advance the cursor, and both are now counted so they are visible instead of invisible. */
-      const plan = [];
+         advance the cursor, and both are now counted so they are visible instead of invisible.
+         Every rule (category, consent, quiet hours, staleness, the feed/pump skip, one per category
+         and baby) lives in pushEntryVerdict / pushPlan, so it is proved by test/push-reminder-cats.test.js. */
+      const entries = [];
       for (const v of dueArr) {
         const f = v.mapValue && v.mapValue.fields; if (!f) continue;
-        const at = _fsNum(f.at); if (at == null || at <= sentUpTo || at > now) continue;
-        const due = _fsNum(f.due);
-        const stale = due != null ? (now > due) : (at < now - 20 * 60000);
-        plan.push({ at, drop: stale, title: _fsStr(f.title) || 'Cubby', body: _fsStr(f.body), tag: _fsStr(f.tag) || 'cubby',
+        const at = _fsNum(f.at); if (at == null) continue;
+        entries.push({ at, cat: _fsStr(f.cat), title: _fsStr(f.title) || 'Cubby', body: _fsStr(f.body), tag: _fsStr(f.tag) || 'cubby',
           // Present only on a pre-dose reminder. The digest names several medicines and has no medId,
           // so it never gets a ticket and never renders a button.
-          due, medId: _fsStr(f.medId), babyId: _fsStr(f.babyId), medName: _fsStr(f.medName),
-          dose: _fsStr(f.dose), unit: _fsStr(f.unit), iv: _fsNum(f.iv) || 0 });
+          due: _fsNum(f.due), medId: _fsStr(f.medId), babyId: _fsStr(f.babyId), medName: _fsStr(f.medName),
+          dose: _fsStr(f.dose), unit: _fsStr(f.unit), iv: _fsNum(f.iv) || 0, skipIfSince: _fsNum(f.skipIfSince) });
       }
-      plan.sort((a, b) => a.at - b.at);
+      const qaF = push.quietAllow && push.quietAllow.mapValue && push.quietAllow.mapValue.fields;
+      const _bool = (m, k) => (m && m[k] && typeof m[k].booleanValue === 'boolean') ? m[k].booleanValue : undefined;
+      const prefs = {
+        allow: { critical: _bool(allowF, 'critical'), feed: _bool(allowF, 'feed'), pump: _bool(allowF, 'pump'), visit: _bool(allowF, 'visit') },
+        quietAllow: { critical: _bool(qaF, 'critical'), feed: _bool(qaF, 'feed'), pump: _bool(qaF, 'pump'), visit: _bool(qaF, 'visit') },
+        quietStart: _fsNum(push.quietStart), quietEnd: _fsNum(push.quietEnd), tz: _fsStr(push.tz)
+      };
+      const hourNow = _hourIn(prefs.tz, now);
+      let gate = null;
+      /* The household's events, read only when a feed or pump nudge is actually live this tick, once per
+         user, from the earliest moment any of them asks about. Only for a uid the household counts as
+         an owner or caregiver: householdId is the user's own claim. Undefined = not read; null = could
+         not read (or not theirs), and pushEntryVerdict drops a feed/pump entry on either. */
+      let recent;
+      const evSince = pushEventsSince(entries, prefs, now, hourNow, id, sentUpTo);
+      if (evSince != null) {
+        gate = await pushGate(base, token, hid, id);
+        recent = null;
+        if (gate === 'member') {
+          const r = await fsRecentEvents(base, token, hid, evSince);
+          if (r.ok) recent = r.docs.map(_fsEventPlain);
+        }
+      }
+      const plan = pushPlan(entries, prefs, now, hourNow, recent, id, sentUpTo);
 
-      let maxAt = sentUpTo, stuck = false, gate = null;
+      let maxAt = sentUpTo, stuck = false;
       for (const msg of plan) {
         if (msg.drop) { dropped++; if (!stuck) maxAt = msg.at; continue; }
-        /* Every entry here names this family's medicines (the digest lists them too), so nothing goes
-           out until Firestore says this uid is an owner or caregiver of the household its own user
-           doc points at. Asked once per user per tick, and only when something is live to send. */
+        /* Every entry here is about this family (medicines, a baby's feeds, a vaccine visit), so nothing
+           goes out until Firestore says this uid is an owner or caregiver of the household its own user
+           doc points at. Asked once per user per tick (the events read above may already have asked),
+           and only when something is live to send. */
         if (gate == null) gate = await pushGate(base, token, hid, id);
         // Could not tell: send nothing and hold the cursor here, so the next tick asks again.
         if (gate === 'error') { failed++; stuck = true; continue; }
         // Not theirs to hear: refused for good, which moves the cursor like any other drop.
         if (gate !== 'member') { refused++; if (!stuck) maxAt = msg.at; continue; }
-        /* One ticket per due dose, not per token: it authorises an ACTION, not a device. */
-        const ticket = msg.medId ? await mintDoseTicket(sa, {
+        /* One ticket per due dose, not per token: it authorises an ACTION, not a device. Only a medicine
+           entry may carry one: a feed, pump or visit entry that names a medId (a modified client) gets
+           no ticket, no "Log it" button and no CUBBY_DOSE category. */
+        const isCrit = !msg.cat || msg.cat === 'critical';
+        const ticket = isCrit && msg.medId ? await mintDoseTicket(sa, {
           u: id, h: hid, m: msg.medId, b: msg.babyId || '', mn: msg.medName || '',
           d: msg.dose || '', n: msg.unit || '', t: msg.due || msg.at, i: msg.iv || 0
         }) : '';

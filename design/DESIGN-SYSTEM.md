@@ -76,7 +76,7 @@ Measured live: the note field in the symptom sheet computes to **16px** and stan
 
 **Where the scale actually reaches.** The app has **11** stylesheets: 4 `<style>` blocks in
 `app/index.html` and 7 injected at runtime from `app/*.js`. The scale governs one of them. In that
-one, `font-size` is written as a token **269** times and as a literal **0** times. Across the other
+one, `font-size` is written as a token **286** times and as a literal **0** times. Across the other
 ten, **341** literals survive at **33** distinct values.
 
 | Ratchet | Today | Held by |
@@ -130,7 +130,7 @@ sheet as a bug, because the fallback is what will ship.
 | properties referenced but declared in no stylesheet | 12 | 3 of them (`--accent`, `--accent-soft`, `--accent-tint-ink`) are legitimate: `_sheetAccent` sets them at runtime. |
 | properties referenced and declared nowhere at all | 9 | `--on-feed`, `--on-note`, `--on-diaper`, `--on-pump`, `--on-star`, `--on-preg`, `--on-danger`, `--on-med`, plus `--on-`, which is what `var(--on-${accent},…)` leaves behind when the template runs dry. |
 
-Only `--on-sleep` was ever declared. The other eight are referenced **101** times as
+Only `--on-sleep` was ever declared. The other eight are referenced **95** times as
 `var(--on-X, …)`. Every one falls through to `--on-accent`. The call sites read as tuned. They are
 inert. Either declare them or delete the escape hatch, but do not keep writing new ones.
 
@@ -170,7 +170,7 @@ rungs now, and the colour steps with the height: near the page a shadow takes `-
 | `--elev-over` | 0 12px 30px | lifted clear of it all: the FAB, the timer banner |
 | `--elev-modal` | 0 24px 60px | a card sitting on a full-screen scrim |
 
-The main stylesheet reaches for `var(--elev-*)` **64** times. Against that, hand-typed
+The main stylesheet reaches for `var(--elev-*)` **69** times. Against that, hand-typed
 `box-shadow` triples still left there: **11**, and that one is a ratchet.
 
 ### The motion scale
@@ -362,7 +362,7 @@ feed.
 
 ## 4. Component vocabulary: one canonical name per job
 
-**536** distinct class names carry a rule across the eleven stylesheets, **318** of them in the main
+**577** distinct class names carry a rule across the eleven stylesheets, **359** of them in the main
 one. A name that appears only inside a CSS comment is not counted, because it does not carry a rule, and
 a script that injects a stylesheet counts only the CSS in its strings (until 17 Nov 2026 its code was
 read too, and 157 JavaScript words were counted as classes).
@@ -396,7 +396,7 @@ Build with the canonical name. If it does not fit, extend it here first.
 | Tick | `.ms-check` | 4 others |
 | Toast | `.toast` | |
 
-**Selected is spelled `.sel`.** Fixed. `.sel` carries 11 selector uses in the main stylesheet against
+**Selected is spelled `.sel`.** Fixed. `.sel` carries 12 selector uses in the main stylesheet against
 9 for `.on`, 2 for `.active` and 1 for `.icon-on`.
 
 **Selection follows the sheet accent.** `.chip.sel` (`app/index.html:1033`) hardcodes
@@ -409,10 +409,10 @@ screen, two answers to "this one". Screenshot it and you cannot unsee it.
 | non-canonical spellings of "selected" | 12 | `.on` x9, `.active` x2, `.icon-on` x1 |
 | components whose selected state hardcodes a hue instead of `--accent` | 1 | `.chip.sel` |
 
-Counted as `class="…"` occurrences in `app/index.html`: `.btn-ghost` **180**, `.btn-primary` **144**,
-`.chip` **72**, `.set-item` **41** (63 until the Settings and Data sheets moved onto `setItem` on 27 October
+Counted as `class="…"` occurrences in `app/index.html`: `.btn-ghost` **190**, `.btn-primary` **149**,
+`.chip` **75**, `.set-item` **41** (63 until the Settings and Data sheets moved onto `setItem` on 27 October
 2026; the component's own template is one of the 41). The app's most-used button is the one with no visual chrome, and
-it outnumbers the primary 1.25 to 1. That is not automatically wrong, but only 23 of those ghosts are
+it outnumbers the primary 1.28 to 1. That is not automatically wrong, but only 23 of those ghosts are
 a bare `closeSheet()`. The rest carry forward actions, so "ghost means cancel" is not a rule you can
 rely on when you are reading a screen you did not write.
 
@@ -574,3 +574,5 @@ Then look at the rendered app at **390px in both themes**, not at the file.
 | 2026-08-30 | Reconciled against the merged tree: 13 red assertions, all of them the doc trailing the code. Radius is 7 tokens and not 5. Elevation and motion had no entry at all. The focus ring is fixed and two-tone, so the "one open contrast defect" paragraph was describing a defect that no longer exists, which is the worse direction for a doc to be wrong in. `.chip` is 44 and not 40. The sheet arrives in 350ms, not 360. Class vocabulary recounted with CSS comments stripped, because a name mentioned only in a comment carries no rule: 702 to 700 across the sheets and 314 to 308 in the main one. Literal transition durations 56 to 37, and reduced-motion blocks 11 to 12. |
 | 2026-11-13 | The emoji bear that stood in for art at the top of five full-screen notes (44px and 52px glyphs) is the painted Cubby face as an image now, so those five font-size literals went with it: 366 to 361 outside the main sheet (the prose said 373, a count that had already drifted), 35 to 33 distinct values. The ratchet ceiling stays at 373 while other lanes are in flight; lower it to the merged count. |
 | 2026-11-14 | Merged onto the component and security release: 341 literals outside the main sheet (346 there, less the five above), still 33 distinct values. The ratchet row and `tools/type_scale_check.js` both hold the ceiling at 341 now (the row still said 373, the script 346). |
+| 2026-11-27 | UX review build (claude/journey-health): vaccines as visits, the Health hub, the first-run log step, Home prompts and quiet hours add their own components, so class names rose 536 to 569 (318 to 351 in the main sheet) and elevation uses 64 to 68. Font-size token uses rose 269 to 283 and literals stayed at the 341 ceiling (the copied setup-sheet line takes a token). The red Health buttons moved to `.btn-calm`, so references to the undeclared per-accent inks fell 101 to 95. Three new rules that repeated existing bodies were folded into them as extra selectors, and two new Reminders rows use `setItem` (23 to 25 call sites). Class uses: `.btn-ghost` 180 to 190, `.btn-primary` 144 to 149, `.chip` 72 to 73; new tap areas take `var(--tap-min)`, not a 44px literal. |
+| 2026-11-27 | Parent-chosen reminders (claude/parent-reminders): the Reminders sheet's choice list adds the `.rm-*` panel, chips, stepper and set times. Class names rose 569 to 577 (351 to 359 in the main sheet), font-size token uses 283 to 286 with no new literal, elevation uses 68 to 69, `.sel` 11 to 12 (the chosen gap chip), `.chip` 73 to 75 (`.rm-chip`). Its rows go through `setItem` (25 to 27 call sites), and `.rm-chips` joined `.vx-chips` rather than repeat its body. |

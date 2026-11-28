@@ -2,7 +2,7 @@
 #
 # Two parts. `events` is the household plan of September 2026: in `events`, 13 of the 19 events here are
 # derived. `linked_usage` is Cubby's own usage events, linked to a signed-in person, built in phase 2 of
-# docs/superpowers/specs/2026-11-13-admin-dashboard-design.md (§8, §9.1, §10): 11 of the 16 linked
+# docs/superpowers/specs/2026-11-13-admin-dashboard-design.md (§8, §9.1, §10): 15 of the 20 linked
 # events are sent by a device, 4 are derived and 1 is written by the server.
 #
 # Five rules, in priority order. Every event below was checked against all five.
@@ -168,7 +168,7 @@ events:
     group_level: none
     description: A person reached a step of the first-run setup. The count per step is the drop-off curve.
     properties:
-      - { name: step, type: string, enum: [stage_chosen, details_entered, invite_offered], required: true, note: "the wizard has three steps; all three stages converge on openOnboardInvite, which carries the invite and the first-log button together, and completion is household.activated" }
+      - { name: step, type: string, enum: [stage_chosen, details_entered, first_log_offered, invite_offered], required: true, note: "stage, details, then (baby path, since 27 Nov 2026) the 'What just happened?' first-log step, then openOnboardInvite; completion is household.activated" }
       - { name: stage, type: string, enum: [trying, pregnancy, baby, none], required: true }
     expected_frequency: low
 
@@ -532,7 +532,24 @@ linked_usage:
       fires_when: A notification is tapped.
       how: "apps: FirebaseMessaging notificationActionPerformed. Web: the service worker's notificationclick, recorded by the page it opens."
       properties:
-        - { name: kind, type: string, enum: [medicine, feed, sleep, appointment, vaccine, feature, marketing, team_note, other] }
+        - { name: kind, type: string, enum: [medicine, feed, pump, sleep, appointment, vaccine, feature, marketing, team_note, other] }
+
+    - name: reminders.choice
+      source: new
+      before_sign_in: false
+      fires_when: She turns one of her reminders on or off in the Reminders sheet (medicine, feeds, pumping, vaccine visits).
+      how: "setRemind() in app/index.html. Which kind and on or off, never a time, gap or baby."
+      properties:
+        - { name: kind, type: string, enum: [medicine, feed, pump, vaccine_visit] }
+        - { name: state, type: string, enum: ["on", "off"] }
+
+    - name: reminders.feed_mode
+      source: new
+      before_sign_in: false
+      fires_when: She switches feed reminders between after the last feed and set times.
+      how: "setFeedMode() in app/index.html."
+      properties:
+        - { name: mode, type: string, enum: [after_last, set_times] }
 
     - name: invite.sent
       source: derived
@@ -580,6 +597,23 @@ linked_usage:
       properties:
         - { name: outcome, type: string, enum: [shown, accepted, dismissed] }
         - { name: prompt, type: string, enum: [android_chrome, ios_instructions] }
+
+    - name: prompt.shown
+      source: new
+      before_sign_in: false
+      fires_when: A contextual Home prompt is shown, once a day at most. One card at a time, each tied to something her own data just made true (27 Nov 2026, canvas board 7A).
+      how: "homePromptId() in app/index.html, the first render of the day that shows it."
+      properties:
+        - { name: prompt, type: string, enum: [first_log_invite, first_nap, visit_passed, visit_week_ahead, solo_night_invite] }
+
+    - name: prompt.acted
+      source: new
+      before_sign_in: false
+      fires_when: She answers a Home prompt. "not_now" twice and that prompt never shows again.
+      how: "promptAct() in app/index.html."
+      properties:
+        - { name: prompt, type: string, enum: [first_log_invite, first_nap, visit_passed, visit_week_ahead, solo_night_invite] }
+        - { name: action, type: string, enum: [primary, secondary, not_now] }
 
 # ── Monitoring ────────────────────────────────────────────────────────────────────────────────────
 snapshot_sync:

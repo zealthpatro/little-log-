@@ -57,7 +57,9 @@ const seed = (now, over) => Object.assign({
   babies: [{ id: 'b1', name: 'Robin', birth: now - 60 * DAY, sex: 'F', routines: [], doctors: [], allergies: [] }],
   activeBabyId: 'b1', events: [{ id: 'f1', type: 'feed', babyId: 'b1', method: 'bottle', amount: 120, unit: 'ml', time: now - 2 * HOUR, authorId: 'local' }],
   illnesses: [],
-  settings: { unit: 'ml', wUnit: 'kg', hUnit: 'cm', tempUnit: 'C', seen: { home: 1, log: 1, album: 1, health: 1, welcome: 1 } },
+  /* Quiet hours off: this gate holds that the CLOCK alone never rearranges Home. Since 27 Nov 2026 quiet hours
+     are the parent's own setting, and while they are on, suggestions wait (test/quiet-hours.test.js). */
+  settings: { unit: 'ml', wUnit: 'kg', hUnit: 'cm', tempUnit: 'C', seen: { home: 1, log: 1, album: 1, health: 1, welcome: 1 }, push: { enabled: false, quietStart: 0, quietEnd: 0 } },
   timers: {}, milestones: [], meds: [], photos: photoRows(3), vaccines: {}, pregnancy: null, notes: [],
 }, over || {});
 

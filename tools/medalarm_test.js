@@ -426,7 +426,7 @@ async function tapText(page, selector, text) {
   const rolled = daily.missed === daily.slotEnd;
   check(daily.missed === daily.slot0, 'a missed dose is still the dose that is due',
     rolled ? '(it silently rolled forward to tonight — the exact regression)' : `(due ${new Date(daily.missed).toTimeString().slice(0, 5)})`);
-  check(/^overdue/.test(String(daily.missedText)), 'and the parent reads it as overdue, not as a countdown',
+  check(/^due .+ ago$/.test(String(daily.missedText)), 'and the parent reads when it was due ("due 41m ago"), not a countdown',
     `(row says "${daily.missedText}")`);
   check(daily.afterDose === daily.slotEnd, 'once the dose is logged it moves on to the next time');
   check(daily.freshlyAdded === daily.slotEnd, 'a medicine added after the slot never opens on a retro-nag');

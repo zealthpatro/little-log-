@@ -240,6 +240,7 @@ window.CUBBY_USAGE_ALLOWLIST = {
      "enum": [
       "medicine",
       "feed",
+      "pump",
       "sleep",
       "appointment",
       "vaccine",
@@ -247,6 +248,36 @@ window.CUBBY_USAGE_ALLOWLIST = {
       "marketing",
       "team_note",
       "other"
+     ]
+    }
+   }
+  },
+  "reminders.choice": {
+   "anon": false,
+   "props": {
+    "kind": {
+     "enum": [
+      "medicine",
+      "feed",
+      "pump",
+      "vaccine_visit"
+     ]
+    },
+    "state": {
+     "enum": [
+      "on",
+      "off"
+     ]
+    }
+   }
+  },
+  "reminders.feed_mode": {
+   "anon": false,
+   "props": {
+    "mode": {
+     "enum": [
+      "after_last",
+      "set_times"
      ]
     }
    }
@@ -280,6 +311,41 @@ window.CUBBY_USAGE_ALLOWLIST = {
      "enum": [
       "android_chrome",
       "ios_instructions"
+     ]
+    }
+   }
+  },
+  "prompt.shown": {
+   "anon": false,
+   "props": {
+    "prompt": {
+     "enum": [
+      "first_log_invite",
+      "first_nap",
+      "visit_passed",
+      "visit_week_ahead",
+      "solo_night_invite"
+     ]
+    }
+   }
+  },
+  "prompt.acted": {
+   "anon": false,
+   "props": {
+    "prompt": {
+     "enum": [
+      "first_log_invite",
+      "first_nap",
+      "visit_passed",
+      "visit_week_ahead",
+      "solo_night_invite"
+     ]
+    },
+    "action": {
+     "enum": [
+      "primary",
+      "secondary",
+      "not_now"
      ]
     }
    }
