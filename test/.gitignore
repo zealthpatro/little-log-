@@ -1,5 +1,6 @@
 node_modules/
-package-lock.json
+# package-lock.json is tracked (28 Nov 2026): CI installs test/ with npm ci from it, so a CI cache miss gets
+# the Mac's exact versions, never a newer one in range. tools/ci_tier_check.js fails if it is ignored again.
 firebase-debug.log
 firestore-debug.log
 ui-debug.log

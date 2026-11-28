@@ -119,7 +119,9 @@ jobs:
       # test/ (fab-quicklog, duedate-cycle) and two start their own Firestore emulator through test/'s firebase-tools
       # (preg-tick-race, two-caregivers: tree-tier by design, test/helpers/tree-base.js, so every push runs them).
       # Without these steps all four failed at the door on PR #16's first run (ENOENT, Cannot find module), never
-      # on what they test. Cached by test/package.json; the emulator is Java, and its jar is cached beside it.
+      # on what they test. Installed with npm ci from test/package-lock.json, the Mac's own tree committed (721
+      # packages, each the version installed there), and cached by that lockfile: a cache miss installs exactly
+      # those versions, never a newer one in range. The emulator is Java, and its jar is cached beside it.
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -129,15 +131,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: test/node_modules
-          key: test-deps-${{ runner.os }}-node22-${{ hashFiles('test/package.json') }}
-      - name: Install firebase-tools, the rules-testing SDK and puppeteer-core (test/package.json)
+          key: test-deps-${{ runner.os }}-node22-${{ hashFiles('test/package-lock.json') }}
+      - name: Install firebase-tools, the rules-testing SDK and puppeteer-core (test/package-lock.json)
         if: steps.test-deps.outputs.cache-hit != 'true'
-        run: npm install --prefix test --no-audit --no-fund
+        run: npm ci --prefix test --no-audit --no-fund
       - name: Cache the Firestore emulator jar
         uses: actions/cache@v4
         with:
           path: ~/.cache/firebase/emulators
-          key: firebase-emulators-${{ runner.os }}-${{ hashFiles('test/package.json') }}
+          key: firebase-emulators-${{ runner.os }}-${{ hashFiles('test/package-lock.json') }}
       - name: A Downloads folder, so the downloads guard is on
         run: mkdir -p ~/Downloads
       - name: Tree gates, one shard of 8
@@ -178,7 +180,7 @@ jobs:
   # them on every PR (a required check), so nothing merges unjudged; a push to main skips it (above).
   #
   # tools/gates.js --emulator-only gives each suite its own free ports (never the 8080 default) and
-  # uses test/node_modules' own firebase-tools, which `npm install --prefix test` puts there. The
+  # uses test/node_modules' own firebase-tools, which `npm ci --prefix test` puts there. The
   # self-hosting suites drive the app in Chrome, so this runner's Chrome is named in CHROME_PATH and
   # puppeteer-core is installed next to the gates, exactly as the live job does.
   emulator:
@@ -204,8 +206,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Install firebase-tools and the rules-testing SDK (test/package.json)
-        run: npm install --prefix test --no-audit --no-fund
+      - name: Install firebase-tools and the rules-testing SDK (test/package-lock.json)
+        run: npm ci --prefix test --no-audit --no-fund
       # puppeteer-core AND firebase-admin in ONE install: `npm install --no-save X` prunes every package X
       # does not depend on, and the invite suites load firebase-admin from tools/node_modules (adminFrom).
       # Installing puppeteer-core alone left them failing on "Cannot find module 'firebase-admin/app'".
@@ -249,8 +251,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Install firebase-tools and the rules-testing SDK (test/package.json)
-        run: npm install --prefix test --no-audit --no-fund
+      - name: Install firebase-tools and the rules-testing SDK (test/package-lock.json)
+        run: npm ci --prefix test --no-audit --no-fund
       - name: Install the browser driver, the admin SDK and the local D1 runtime the self-hosting suites use
         run: npm install --no-save --prefix tools puppeteer-core@25.2.1 firebase-admin miniflare@5.20261113.0-beta
       - name: The Firestore emulator jar, before any suite needs it

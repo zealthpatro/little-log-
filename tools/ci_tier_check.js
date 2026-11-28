@@ -239,6 +239,48 @@ function judgeSplits(wf) {
   }
   return out;
 }
+/* test/'s dependencies install from the committed lockfile (28 Nov 2026, PR #16 review). With only package.json
+   behind them, a CI cache miss resolved newer in-range versions than the Mac runs, and the cache key, hashed on
+   package.json alone, never noticed the difference. So: every install into test/ is `npm ci` (it refuses a lock
+   out of step with package.json, and installs only what the lock names), every cache of test/node_modules or of
+   the emulator jar keys on test/package-lock.json, and the lock is there, not ignored, and agrees with
+   package.json. */
+function judgeTestDeps(wf) {
+  const out = [];
+  for (const [name, j] of Object.entries((wf && wf.jobs) || {})) for (const st of (j && j.steps) || []) {
+    if (!st) continue;
+    const run = String(st.run || '');
+    if (/--prefix[ =]test\b/.test(run) && !/^npm ci --prefix test(\s+--\S+)*$/.test(run.trim()))
+      out.push(name + ' installs test/ with "' + run.trim().slice(0, 120) + '", not npm ci: a cache miss could take versions the Mac does not run');
+    const w = st.with || {};
+    if (/actions\/cache/.test(String(st.uses || '')) && /test\/node_modules|firebase\/emulators/.test(String(w.path || ''))
+        && !/hashFiles\('test\/package-lock\.json'\)/.test(String(w.key || '')))
+      out.push(name + ' caches ' + w.path + ' under "' + w.key + '", not keyed on test/package-lock.json: a changed lock would restore the old tree');
+  }
+  return out;
+}
+function judgeLock(root) {
+  const out = [];
+  const lp = path.join(root, 'test', 'package-lock.json');
+  if (!fs.existsSync(lp)) return ['test/package-lock.json is missing: npm ci cannot install test/, and nothing pins what CI runs to the Mac'];
+  let lock, pkg;
+  try { lock = JSON.parse(fs.readFileSync(lp, 'utf8')); pkg = JSON.parse(fs.readFileSync(path.join(root, 'test', 'package.json'), 'utf8')); }
+  catch (e) { return ['test/package-lock.json or test/package.json could not be read: ' + e.message]; }
+  const top = (lock.packages || {})[''] || {};
+  for (const k of ['dependencies', 'devDependencies']) if (JSON.stringify(top[k] || {}) !== JSON.stringify(pkg[k] || {}))
+    out.push('test/package-lock.json\'s ' + k + ' ' + JSON.stringify(top[k] || {}) + ' are not test/package.json\'s ' + JSON.stringify(pkg[k] || {}) + ': npm ci would refuse it');
+  if (!(lock.lockfileVersion >= 2)) out.push('test/package-lock.json is lockfileVersion ' + lock.lockfileVersion + ', not 2 or 3: it does not list every package');
+  /* The patterns that would ignore test/package-lock.json from each file. The root's own `/package-lock.json` is
+     anchored to the root and does not, so it is not one of them. */
+  const IGN = [[path.join(root, '.gitignore'), /^((\*\*\/)?package-lock\.json|\/?test\/package-lock\.json)$/],
+    [path.join(root, 'test', '.gitignore'), /^\/?(\*\*\/)?package-lock\.json$/]];
+  for (const [gi, re] of IGN) {
+    if (!fs.existsSync(gi)) continue;
+    const hit = fs.readFileSync(gi, 'utf8').split('\n').map((l) => l.trim()).find((l) => re.test(l));
+    if (hit) out.push(path.relative(root, gi) + ' ignores "' + hit + '": the lockfile CI installs from would never be committed');
+  }
+  return out;
+}
 function judge(dir) {
   const problems = [];
   let push, pr;
@@ -265,13 +307,13 @@ function judge(dir) {
   const seoPr = pr.find((x) => x.wf === 'seo.yml' && x.job === 'seo-guard');
   if (seoPr && !seoPr.steps.some((s) => /seo_check\.py/.test(s))) problems.push('a PR runs seo-guard without its guard step (tools/seo_check.py)');
   if (pr.some((x) => x.wf === 'gates.yml' && x.job === 'live')) problems.push('a PR runs gates.yml:live, which checks production, not the PR');
-  try { problems.push(...judgeSplits(parseYaml(fs.readFileSync(path.join(dir, 'gates.yml'), 'utf8')))); }
+  try { const gy = parseYaml(fs.readFileSync(path.join(dir, 'gates.yml'), 'utf8')); problems.push(...judgeSplits(gy), ...judgeTestDeps(gy)); }
   catch (e) { problems.push('gates.yml could not be read for its splits: ' + e.message); }
   return problems;
 }
 
 function report(dir) {
-  const p = judge(dir);
+  const p = judge(dir).concat(judgeLock(ROOT));
   console.log('\nCI tiers: what a push to main and a PR run (' + path.relative(ROOT, dir) + ')\n');
   if (!p.length) console.log('  ok   push to main runs only live and the IndexNow ping; a PR runs every required check, and each split holds with its -complete check');
   for (const x of p) console.log('  FAIL ' + x);
@@ -345,6 +387,35 @@ function selfTest() {
       ['a workflow defaults: block (it sets the shell of every step)', [['\njobs:\n', '\ndefaults:\n  run:\n    shell: bash {0}\n\njobs:\n']], /gates\.yml has a defaults: block/],
     ];
     for (const [label, pairs, want] of TP) { const q = judge(GG(pairs)); ok(label + ': red', q.some((x) => want.test(x)), q); }
+    /* test/ from the lockfile: each way CI could drift from the Mac's tree, then the lock itself, staged. */
+    const DP = [
+      ['a tree leg back on npm install for test/', [["if: steps.test-deps.outputs.cache-hit != 'true'\n        run: npm ci --prefix test", "if: steps.test-deps.outputs.cache-hit != 'true'\n        run: npm install --prefix test"]], /^tree installs test\/ with "npm install --prefix test/],
+      ['the emulator job on npm install for test/', [['      - name: Install firebase-tools and the rules-testing SDK (test/package-lock.json)\n        run: npm ci --prefix test', '      - name: Install firebase-tools and the rules-testing SDK (test/package-lock.json)\n        run: npm install --prefix test']], /^emulator installs test\/ with/],
+      ['npm ci with something after it', [["if: steps.test-deps.outputs.cache-hit != 'true'\n        run: npm ci --prefix test --no-audit --no-fund", "if: steps.test-deps.outputs.cache-hit != 'true'\n        run: npm ci --prefix test --no-audit --no-fund && npm update --prefix test"]], /^tree installs test\/ with "npm ci --prefix test --no-audit --no-fund && npm update/],
+      ['the test/ cache keyed on package.json again', [["test-deps-${{ runner.os }}-node22-${{ hashFiles('test/package-lock.json') }}", "test-deps-${{ runner.os }}-node22-${{ hashFiles('test/package.json') }}"]], /^tree caches test\/node_modules under .*not keyed on test\/package-lock\.json/],
+      ['the emulator jar cache keyed on package.json again', [["firebase-emulators-${{ runner.os }}-${{ hashFiles('test/package-lock.json') }}", "firebase-emulators-${{ runner.os }}-${{ hashFiles('test/package.json') }}"]], /^tree caches ~\/\.cache\/firebase\/emulators under/],
+    ];
+    for (const [label, pairs, want] of DP) { const q = judge(GG(pairs)); ok(label + ': red', q.some((x) => want.test(x)), q); }
+    const realLock = fs.readFileSync(path.join(ROOT, 'test', 'package-lock.json'), 'utf8');
+    const realPkg = fs.readFileSync(path.join(ROOT, 'test', 'package.json'), 'utf8');
+    const realGi = fs.readFileSync(path.join(ROOT, 'test', '.gitignore'), 'utf8');
+    const rootGi = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8');
+    const root = (lock, pkg, gi, rgi) => {
+      const d = path.join(T, 'r' + (k++)); fs.mkdirSync(path.join(d, 'test'), { recursive: true });
+      if (lock !== null) fs.writeFileSync(path.join(d, 'test', 'package-lock.json'), lock);
+      fs.writeFileSync(path.join(d, 'test', 'package.json'), pkg);
+      fs.writeFileSync(path.join(d, 'test', '.gitignore'), gi); fs.writeFileSync(path.join(d, '.gitignore'), rgi);
+      return d;
+    };
+    const bumped = JSON.stringify(Object.assign(JSON.parse(realPkg), { devDependencies: Object.assign({}, JSON.parse(realPkg).devDependencies, { 'puppeteer-core': '^26.0.0' }) }), null, 2);
+    const LP = [
+      ['the lockfile missing', root(null, realPkg, realGi, rootGi), /test\/package-lock\.json is missing/],
+      ['package.json moved on and the lock not (npm ci would refuse it)', root(realLock, bumped, realGi, rootGi), /devDependencies .* are not test\/package\.json's/],
+      ['test/.gitignore ignoring the lock again', root(realLock, realPkg, realGi + 'package-lock.json\n', rootGi), /test\/\.gitignore ignores "package-lock\.json"/],
+      ['the root .gitignore ignoring test/package-lock.json', root(realLock, realPkg, realGi, rootGi + 'test/package-lock.json\n'), /^\.gitignore ignores "test\/package-lock\.json"/],
+    ];
+    for (const [label, d, want] of LP) { const q = judgeLock(d); ok(label + ': red', q.some((x) => want.test(x)), q); }
+    ok('companion: the real lock, package.json and ignores staged unaltered are green', judgeLock(root(realLock, realPkg, realGi, rootGi)).length === 0, judgeLock(root(realLock, realPkg, realGi, rootGi)));
     ok('companion: the unaltered copy is green', judge(stage((f, s) => s)).length === 0, judge(stage((f, s) => s)));
   } catch (e) { ok('the self-test ran to its end', false, e && e.stack || e); }
   finally { fs.rmSync(T, { recursive: true, force: true }); }
@@ -361,4 +432,4 @@ if (require.main === module) {
   console.log('\nCI-TIER: ' + (p.length ? 'FAIL' : 'PASS'));
   process.exit(p.length ? 1 : 0);
 }
-module.exports = { parseYaml, evalIf, whatRuns, judge, judgeSplits };
+module.exports = { parseYaml, evalIf, whatRuns, judge, judgeSplits, judgeTestDeps, judgeLock };
