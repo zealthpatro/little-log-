@@ -485,12 +485,114 @@ def preflight(path):
     print('PREFLIGHT: PASS')
 
 
+# --check compares what the master gives with the committed web icons. Byte for byte only where this machine's
+# PNG encoder is the one they were approved with: tools/brand.py's ENCODER_FINGERPRINT, the sha256 of fixed images
+# made in code and saved as png_bytes() saves (the founder's Mac, pinned Pillow). The same pinned Pillow on CI's
+# Linux writes other bytes for some of them (PR #16, 28 Nov 2026: icons/icon-maskable-512.png and cap-web/logo.png),
+# so there the promise is the same PNG mode, size and decoded pixels, as brand-py's round trips (cd556b4d). Nothing
+# in the committed tree can choose the mode, and the mode is printed. --self-test-check stages both modes' reds.
+CHECK_MODES = {
+    'bytes': 'byte for byte (this PNG encoder is the one the icons were approved with)',
+    'pixels': 'pixel for pixel: same PNG mode, size and decoded pixels (this PNG encoder, fingerprint %s, is not the '
+              'one the icons were approved with, so the bytes are checked only on the Mac)',
+}
+
+
+def check_mode():
+    """('bytes' or 'pixels', this machine's encoder fingerprint), decided without reading a committed file."""
+    import brand  # noqa: E402  tools/ is on sys.path; brand.py does not import this file
+    fp = brand.encoder_fingerprint()
+    return ('bytes' if fp == brand.ENCODER_FINGERPRINT else 'pixels'), fp
+
+
+def _decoded(data):
+    """A PNG as it is seen: its mode, size and decoded pixels (as RGBA, so a palette is read through its
+    colours and transparency)."""
+    with Image.open(io.BytesIO(data)) as im:
+        return (im.mode, im.size, im.convert('RGBA').tobytes())
+
+
+def differing(web, committed, mode):
+    """The files in `web` (rel -> the bytes the master gives) whose committed bytes (rel -> bytes, or None when
+    missing) are not those: byte for byte in 'bytes' mode; in 'pixels' mode a PNG may differ in bytes only."""
+    bad = []
+    for rel, data in web.items():
+        have = committed.get(rel)
+        if have == data:
+            continue
+        if have is not None and mode == 'pixels' and rel.endswith('.png'):
+            try:
+                if _decoded(have) == _decoded(data):
+                    continue
+            except Exception:  # noqa: BLE001  not a PNG that decodes: it differs
+                pass
+        bad.append(rel)
+    return bad
+
+
+def self_test_check(web):
+    """Stage, from the bytes the master gives on this machine, what --check must refuse and accept in each mode.
+    Independent of the committed tree and of which encoder this machine has. Returns the exit code."""
+    passed = failed = 0
+    pal, rgba = 'icons/icon-maskable-512.png', 'cap-web/logo.png'
+
+    def resave(data, **kw):
+        with Image.open(io.BytesIO(data)) as im:
+            im.load()
+            buf = io.BytesIO()
+            im.save(buf, 'PNG', **kw)
+            return buf.getvalue()
+
+    def one_pixel(data):
+        with Image.open(io.BytesIO(data)) as im:
+            im.load()
+            im = im.copy()
+            x, y = im.size[0] // 2, im.size[1] // 2
+            v = im.getpixel((x, y))
+            im.putpixel((x, y), (v + 1) % 240 if isinstance(v, int) else tuple((c + 9) % 256 for c in v[:3]) + tuple(v[3:]))
+            buf = io.BytesIO()
+            im.save(buf, 'PNG', optimize=True)
+            return buf.getvalue()
+
+    def as_rgba(data):
+        with Image.open(io.BytesIO(data)) as im:
+            buf = io.BytesIO()
+            im.convert('RGBA').save(buf, 'PNG', optimize=True)
+            return buf.getvalue()
+
+    other = {pal: resave(web[pal], compress_level=1), rgba: resave(web[rgba], compress_level=1)}
+    cases = [
+        ('every icon as the master gives it', {}, {'bytes': [], 'pixels': []}),
+        ('the same pixels saved as other bytes (another encoder, the CI case)', other, {'bytes': [pal, rgba], 'pixels': []}),
+        ('one pixel changed in the full-colour cap-web logo', {rgba: one_pixel(web[rgba])}, {'bytes': [rgba], 'pixels': [rgba]}),
+        ('one palette index changed in the maskable icon', {pal: one_pixel(web[pal])}, {'bytes': [pal], 'pixels': [pal]}),
+        ('the maskable icon as full colour, the same picture (its palette lost)', {pal: as_rgba(web[pal])}, {'bytes': [pal], 'pixels': [pal]}),
+        ('a web icon missing', {rgba: None}, {'bytes': [rgba], 'pixels': [rgba]}),
+    ]
+    print('self-test: what --check refuses and accepts, in each mode')
+    for label, edits, want in cases:
+        committed = dict(web)
+        committed.update(edits)
+        moved = [k for k, v in edits.items() if v == web[k]]
+        for mode in ('bytes', 'pixels'):
+            got = differing(web, committed, mode)
+            good = sorted(got) == sorted(want[mode]) and not moved
+            passed, failed = passed + good, failed + (not good)
+            print('  %-4s %s, %s: %s' % ('ok' if good else 'FAIL', label, 'byte mode' if mode == 'bytes' else 'pixel mode',
+                                        ('refused, naming ' + ', '.join(got)) if got else 'accepted')
+                  + ('' if good else '  (want %s%s)' % (want[mode] or 'accepted', '; the staged edit changed nothing' if moved else '')))
+    print('%d passed, %d failed' % (passed, failed))
+    print('BRAND ICONS CHECK SELF-TEST: ' + ('FAIL' if failed else 'PASS'))
+    return 1 if failed else 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--native', action='store_true')
     ap.add_argument('--native-out')
     ap.add_argument('--no-web', action='store_true', help='with --native-out: write only the native sets')
     ap.add_argument('--check', action='store_true')
+    ap.add_argument('--self-test-check', action='store_true', help='stage what --check must refuse and accept, in both modes')
     ap.add_argument('--strip')
     ap.add_argument('--measure', action='store_true')
     ap.add_argument('--preflight', metavar='FILE')
@@ -508,10 +610,26 @@ def main():
         return
     web = web_set(master, frame)
 
+    if a.self_test_check:
+        sys.exit(self_test_check(web))
+
     if a.check:
-        bad = [rel for rel, data in web.items()
-               if not os.path.exists(os.path.join(ROOT, rel)) or open(os.path.join(ROOT, rel), 'rb').read() != data]
+        mode, fp = check_mode()
+        print('  mode: %s' % (CHECK_MODES[mode] if mode == 'bytes' else CHECK_MODES[mode] % fp[:16]))
+        committed = {}
+        for rel in web:
+            f = os.path.join(ROOT, rel)
+            committed[rel] = open(f, 'rb').read() if os.path.exists(f) else None
+        bad = differing(web, committed, mode)
+        # Pixel mode on a machine whose encoder makes every committed icon's own bytes is the approving encoder
+        # with a stale ENCODER_FINGERPRINT (as brand.py's self-test says): never a quiet pass at the weaker promise.
+        if mode == 'pixels' and not bad and all(committed[rel] == data for rel, data in web.items()):
+            bad.append('fingerprint')
+            print('  STALE pixel mode, yet every web icon is this encoder\'s own bytes: this is the approving encoder and '
+                  'ENCODER_FINGERPRINT in tools/brand.py is stale (python3 tools/brand.py --encoder-fingerprint)')
         for rel in bad:
+            if rel == 'fingerprint':
+                continue
             print('  DIFFERS %s: not what the master and its frame give; run python3 tools/gen_brand_icons.py' % rel)
         # The version every logo URL carries is the master's and the frame's (brand_style.version_for):
         # a registry that names another was edited by hand, and its URLs would not change with the logo.
@@ -524,7 +642,8 @@ def main():
                       '(python3 tools/brand.py stamp writes it and every URL)' % (reg.get('url_version'), want))
         except FileNotFoundError:
             pass
-        print('BRAND ICONS: ' + ('FAIL' if bad else 'PASS (%d web icons match the master and its frame)' % len(web)))
+        print('BRAND ICONS: ' + ('FAIL' if bad else 'PASS (%d web icons match the master and its frame, %s)'
+                                 % (len(web), 'byte for byte' if mode == 'bytes' else 'pixel for pixel')))
         sys.exit(1 if bad else 0)
 
     if a.no_web and not a.native_out:
