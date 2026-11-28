@@ -254,6 +254,9 @@ const TREE = [
   /* Quiet hours chosen by the parent (founder, 27 Nov): the setting, the caution, what may still reach her,
      suggestions wait, medicine reminders come through. Seen red on 7058d033. */
   { name: 'quiet-hours',    cmd: ['node', 'test/quiet-hours.test.js', 'url'] },
+  /* What the FAQ says about quiet hours matches the app's default: medicine comes through, so no page may
+     promise "nothing is sent" (CEO follow-up on #11, 28 Nov). The self-test stages the old line and 3 more breaks. */
+  { name: 'quiet-hours-copy', cmd: ['node', 'tools/quiet_hours_copy_check.js', '--self-test'] },
   /* The November 2026 security fixes. Each was watched failing on the live code (1a6df125) first.
      page-stats: a stranger looping 404s must make zero Firestore writes and stay under the D1 cap. */
   { name: 'page-stats',     cmd: ['node', 'test/page-stats.test.js'] },
