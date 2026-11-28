@@ -93,6 +93,13 @@ const EMPTY = { babies: [], activeBabyId: null, events: [], settings: { unit: 'm
   const page = await browser.newPage();
   const pageErrs = [];
   page.on('pageerror', (e) => pageErrs.push(e.message));
+  /* A flow that opens a native dialog (confirm, alert, prompt) or window.print() freezes the page
+     until it is answered: on CI's headless Linux Chrome the walk hung for 600 s on one call
+     (28 Nov, PR #16). Answer each dialog, stub print(), and REPORT both, so nothing is hidden. */
+  const dialogs = [];
+  page.on('dialog', async (d) => { dialogs.push(d.type() + ': ' + d.message().slice(0, 80)); try { await d.dismiss(); } catch (e) {} });
+  await page.evaluateOnNewDocument(() => { window.__printed = 0; window.print = () => { window.__printed++; }; });
+  process.on('exit', () => { if (dialogs.length) console.log('flow-walk: answered ' + dialogs.length + ' native dialog(s): ' + dialogs.join(' | ')); });
   await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
   await page.evaluateOnNewDocument((shift) => {
     const R = Date;
