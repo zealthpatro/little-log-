@@ -1308,8 +1308,8 @@
        sign-in (an invite still to offer her, a join just made, her first run) goes with her, back to how a
        fresh page starts: unknown until the next account's own snapshot and sign-in say. Left behind, the next
        account's feedback was stamped with the previous family's id, its family sheet listed that family's
-       people, invites and Pro, an invite meant for her could be offered to him, and his own first run was
-       skipped (test/stale-family-memory-emulator.test.js). */
+       people, invites and Pro, an invite meant for her could be offered to the next account, and that account's
+       own first run was skipped (test/stale-family-memory-emulator.test.js). */
     ['householdId', 'members', 'memberInfo', 'formerMemberInfo', 'hhPending', 'hhPendingLinks', 'pro', 'role',
       'pendingInvite', 'pendingInviteQueue', 'justJoined', 'needsIdentity']
       .forEach(function (k) { delete window.LL[k]; });
@@ -2613,8 +2613,9 @@
   /* An invite step started for one family can answer after she has left it (signed out, or another account's
      family attached in this tab): its answer belongs to nobody on this page now. So each async invite step
      captures the family it was started for (attached = hhRef), writes only to that one, and drops what comes
-     back once hhRef is no longer it. Without this a late answer wrote her link token into the next account's
-     memory, touched her invitee's row on his family, and filed her invitee as his last invite
+     back once hhRef is no longer it. Without this a late answer put her link token into the next account's
+     memory, tried her invite for her family as the next account, and filed her invitee as that account's last
+     invite
      (test/stale-family-memory-emulator.test.js, L). */
   function leftSince(attached) { return !attached || attached !== hhRef; }
   window.LL.createInviteLink = async function (opts) {
