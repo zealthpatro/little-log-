@@ -85,8 +85,11 @@ const EMPTY = { babies: [], activeBabyId: null, events: [], settings: { unit: 'm
   /* This walk taps every entry point, the calendar exports included, and each one is a real
      download. Redirected into a temp dir, not stubbed: those exports are flows like any other. Before
      this it left a pregnancy-weeks and a vaccines .ics in ~/Downloads on every run. */
+  /* protocolTimeout: on CI's Linux runner one page call outlived puppeteer's 180 s default (PR #16, 28 Nov 2026:
+     Runtime.callFunctionOn timed out at 193 s; the whole walk takes about 57 s on the Mac). A slow runner is not a
+     failed flow; every assertion below is unchanged. */
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-gpu'],
-    downloadBehavior: require('./gate_downloads').downloadBehavior() });
+    downloadBehavior: require('./gate_downloads').downloadBehavior(), protocolTimeout: 600000 });
   const page = await browser.newPage();
   const pageErrs = [];
   page.on('pageerror', (e) => pageErrs.push(e.message));
