@@ -10440,7 +10440,7 @@ function openWeekDetail(kind){
       +`<div class="preg-disclaim">${PREG_DISCLAIM}</div>`,'preg');
     return;
   }
-  const fruitSm=pregFruitImg(data.size,'pc-fruit',{fallback:'🌱'}), fruitBig=pregFruitImg(data.size,'fruit-big');
+  const fruitSm=pregFruitImg(data.size,'pc-fruit',{sprout:true}), fruitBig=pregFruitImg(data.size,'fruit-big');
   const na=pregNextAppt();
   let title, body;
   if(kind==='baby'){
@@ -11222,14 +11222,17 @@ let momentDraft={photoData:null, week:null, note:''};
    on a screen she reaches from the holding screen would be the cruellest thing left behind, so the guard
    is here as well as in the screens that call it (tools/preg_fruit_check.js strips it and must see paint).
    Decorative, so alt="": the words beside it already say the size. A file that never arrives
-   (offline before it was ever fetched) is removed, or swapped for o.fallback where an empty box would
-   show. o.lazy for lists: an album of moments fetches only the cards that scroll into view. */
+   (offline before it was ever fetched) is removed, or swapped for the sprout (o.sprout) where an empty box would
+   show. o.lazy for lists: an album of moments fetches only the cards that scroll into view. Both
+   handlers are literal strings on purpose: xss-leaf-static and alert-pill refuse a value interpolated
+   into an inline handler. */
 function pregFruitImg(size, cls, o){
   if(typeof myLossHolding==='function' && myLossHolding()) return '';
   const src=(window.PREG&&PREG.sizeArt)?PREG.sizeArt(size):'';
+  if(!src) return '';
   o=o||{};
-  const onerr=o.fallback?`this.replaceWith('${o.fallback}')`:'this.remove()';
-  return src?`<img class="${cls}" src="${src}" alt="" decoding="async"${o.lazy?' loading="lazy"':''} onerror="${onerr}">`:'';
+  const head=`<img class="${cls}" src="${src}" alt="" decoding="async"${o.lazy?' loading="lazy"':''}`;
+  return o.sprout?head+` onerror="this.replaceWith('🌱')">`:head+` onerror="this.remove()">`;
 }
 function momentSize(week){ const w=Math.max(4,Math.min(41,+week||4)); return (window.PREG&&PREG.weeks[w]&&PREG.weeks[w].size)||''; }
 function renderPregMoments(lookBack){
